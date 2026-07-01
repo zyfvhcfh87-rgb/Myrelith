@@ -1,0 +1,18 @@
+# WebCut — assistant rules (applied to every edit)
+
+Read ARCHITECTURE.md before editing. Enforce these on every change:
+
+1. Dependency direction is one-way: ui/ → state/ → domain/. engine/,
+   pipeline/, workers/ → domain/ only. domain/ imports nothing (pure TS, no
+   React, no browser APIs). Never import React outside ui/.
+2. Close every VideoFrame / AudioData / ImageBitmap in a finally block or
+   immediately after use. Never store one in React state or a long-lived
+   closure.
+3. Timeline math is integer frames + RationalTime, never raw float seconds.
+   Convert to seconds only at the encoder/decoder/audio boundary.
+4. Playback is driven by the audio clock (AudioContext.currentTime); video
+   re-derives which frame to show from it.
+5. UI (.tsx) imports from state/ only — never pipeline/, workers/, engine/.
+6. Drag/scrub updates transportStore preview state only during the gesture;
+   commit to documentStore (one undo entry) on pointerup.
+7. One module per change. If it needs more than one layer, stop and split.
