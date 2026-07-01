@@ -44,14 +44,24 @@ gesture (coalesced to one update per animation frame). The `documentStore`
 mutation — which creates an undo-history entry — happens once, on `pointerup`.
 Never write to `documentStore` on every `pointermove`.
 
-## Data model (filled in Phase 0 — `domain/schema.ts`)
+## Data model — `src/domain/schema.ts` (canonical, implemented)
 
-Phase 0 implements these interfaces in `domain/schema.ts` and they become the
-authoritative contract other phases reference:
+`domain/schema.ts` defines the authoritative interfaces every phase
+references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
+`TimelineDoc`, `Track`, `Clip`, `Transform`, `Effect`, `Transition`,
+`TextProps`. Read that file for field-level docs. Key invariants:
 
-- `RationalTime`, `TimeRange`
-- `MediaAsset`, `TimelineDoc`, `Track`, `Clip`
-- `Transform`, `Effect`, `Transition`, `TextProps`
+- `TimeRange` is **half-open** `[startFrame, startFrame + durationFrames)`;
+  ranges that merely touch do not overlap. All ranges are integer frames at
+  the document rate.
+- MVP: clips play at speed 1.0 and assets are conformed to the doc rate, so
+  `sourceRange.durationFrames === timelineRange.durationFrames` always.
+- Clips on one track are sorted by `timelineRange.startFrame` and pairwise
+  non-overlapping; `operations.ts` rejects violations.
+- `TimelineDoc.tracks[0]` composites first (bottom layer).
+- Document duration is derived (selectors), never stored.
+- `TimelineDoc` must survive `JSON.stringify`/`parse` losslessly (undo
+  history depends on it); `MediaAsset.objectUrl` is session-scoped.
 
 ## Store action contracts (filled in Phase 1)
 
