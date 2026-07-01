@@ -73,6 +73,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   ops return the SAME doc reference, so they push no history entry.
   Actions take the frame as a parameter — documentStore never reads
   transportStore (UI wiring passes the playhead in).
+- `TransportState` — `src/state/transportStore.ts`: `playheadFrame` (int,
+  setter rounds + clamps >= 0), `isPlaying`, `isScrubbing`, `zoom`
+  (px/frame, > 0), `inOut`. No history, no side effects, never touches
+  documentStore.
+- `MediaState` — `src/state/mediaStore.ts`: `assets: Map<AssetId,
+  MediaAsset>`, `addAsset(file)` (placeholder until Phase 2 demux),
+  `removeAsset(id)` (revokes the object URL). Session-scoped, not
+  serialized with the project.
 - Worker message unions `ToWorker` / `FromWorker` (filled in Phase 2).
 
 ## Folder layout

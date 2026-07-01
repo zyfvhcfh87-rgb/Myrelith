@@ -1,0 +1,58 @@
+/**
+ * state/transportStore.test.ts — Phase 1.3.
+ */
+
+import { beforeEach, describe, expect, test } from 'vitest'
+import { useTransportStore } from './transportStore'
+
+const getState = () => useTransportStore.getState()
+
+beforeEach(() => {
+  useTransportStore.setState({
+    playheadFrame: 0,
+    isPlaying: false,
+    isScrubbing: false,
+    zoom: 1,
+    inOut: null,
+  })
+})
+
+describe('transportStore', () => {
+  test('setPlayheadFrame updates ONLY playheadFrame', () => {
+    const before = getState()
+    getState().setPlayheadFrame(42)
+    const after = getState()
+    expect(after.playheadFrame).toBe(42)
+    expect(after.isPlaying).toBe(before.isPlaying)
+    expect(after.isScrubbing).toBe(before.isScrubbing)
+    expect(after.zoom).toBe(before.zoom)
+    expect(after.inOut).toBe(before.inOut)
+  })
+
+  test('playhead is forced to a non-negative integer (rule 2)', () => {
+    getState().setPlayheadFrame(41.7)
+    expect(getState().playheadFrame).toBe(42)
+    getState().setPlayheadFrame(-10)
+    expect(getState().playheadFrame).toBe(0)
+  })
+
+  test('zoom rejects non-positive values', () => {
+    getState().setZoom(2.5)
+    expect(getState().zoom).toBe(2.5)
+    getState().setZoom(0)
+    expect(getState().zoom).toBe(2.5)
+    getState().setZoom(-1)
+    expect(getState().zoom).toBe(2.5)
+  })
+
+  test('flags and inOut set independently', () => {
+    getState().setIsPlaying(true)
+    getState().setIsScrubbing(true)
+    getState().setInOut({ startFrame: 10, durationFrames: 50 })
+    expect(getState().isPlaying).toBe(true)
+    expect(getState().isScrubbing).toBe(true)
+    expect(getState().inOut).toEqual({ startFrame: 10, durationFrames: 50 })
+    getState().setInOut(null)
+    expect(getState().inOut).toBeNull()
+  })
+})

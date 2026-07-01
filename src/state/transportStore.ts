@@ -1,2 +1,52 @@
-﻿// state/transportStore.ts — playhead/zoom/in-out transport state (Phase 1).
-export {};
+/**
+ * state/transportStore.ts — Playback/navigation state. Phase 1.3.
+ *
+ * Rules (from the plan and ARCHITECTURE.md):
+ * - NO history middleware: scrubbing must never pollute undo.
+ * - NO side effects and NO coupling: setters touch exactly their own field
+ *   and never read or write documentStore.
+ * - playheadFrame is an integer frame at the document rate (rule 2); the
+ *   setter rounds and clamps to >= 0 so a stray float can never leak in.
+ */
+
+import { create } from 'zustand'
+import type { TimeRange } from '../domain/schema'
+
+export interface TransportState {
+  /** Current playhead position, integer frames at the document rate. */
+  playheadFrame: number
+  /** True while the playback engine is running (Phase 2 drives this). */
+  isPlaying: boolean
+  /** True while the user is dragging the playhead/a scrub gesture is live. */
+  isScrubbing: boolean
+  /** Timeline zoom in pixels per frame (> 0). UI tunes the default later. */
+  zoom: number
+  /** In/out selection for preview/export, or null when unset. */
+  inOut: TimeRange | null
+
+  /** Move the playhead. Does NOTHING else — no side effects, no coupling. */
+  setPlayheadFrame: (frame: number) => void
+  /** Flip the playing flag (the playback engine owns when this happens). */
+  setIsPlaying: (isPlaying: boolean) => void
+  /** Flip the scrubbing flag (pointer handlers own when this happens). */
+  setIsScrubbing: (isScrubbing: boolean) => void
+  /** Set zoom in pixels per frame; values <= 0 are ignored. */
+  setZoom: (zoom: number) => void
+  /** Set or clear the in/out selection. */
+  setInOut: (inOut: TimeRange | null) => void
+}
+
+export const useTransportStore = create<TransportState>()((set) => ({
+  playheadFrame: 0,
+  isPlaying: false,
+  isScrubbing: false,
+  zoom: 1,
+  inOut: null,
+
+  setPlayheadFrame: (frame) =>
+    set({ playheadFrame: Math.max(0, Math.round(frame)) }),
+  setIsPlaying: (isPlaying) => set({ isPlaying }),
+  setIsScrubbing: (isScrubbing) => set({ isScrubbing }),
+  setZoom: (zoom) => set((state) => (zoom > 0 ? { zoom } : state)),
+  setInOut: (inOut) => set({ inOut }),
+}))
