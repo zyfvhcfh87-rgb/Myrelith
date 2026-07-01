@@ -63,10 +63,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `TimelineDoc` must survive `JSON.stringify`/`parse` losslessly (undo
   history depends on it); `MediaAsset.objectUrl` is session-scoped.
 
-## Store action contracts (filled in Phase 1)
+## Store action contracts
 
-- `DocumentActions`: `splitClipAtPlayhead`, `trimClip`, `moveClip`,
-  `addEffect`, `undo`, `redo`.
+- `DocumentState` — implemented in `src/state/documentStore.ts` (canonical):
+  `setDoc`, `splitClipAtPlayhead(frame)`, `trimClip(clipId, edge, delta)`,
+  `moveClip(clipId, toTrackId, toFrame)`, `rippleDelete(clipId)`,
+  `addEffect(clipId, effect)`, `undo`, `redo`.
+  History: `past`/`future` snapshot stacks capped at 100. Rejected domain
+  ops return the SAME doc reference, so they push no history entry.
+  Actions take the frame as a parameter — documentStore never reads
+  transportStore (UI wiring passes the playhead in).
 - Worker message unions `ToWorker` / `FromWorker` (filled in Phase 2).
 
 ## Folder layout
