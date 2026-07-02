@@ -47,11 +47,17 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes
 }
 
-/** Normalize BufferSource (ArrayBuffer or any view) to an exact Uint8Array. */
+/**
+ * Normalize BufferSource (ArrayBuffer or any view) to an exact Uint8Array.
+ * Deliberately never references the SharedArrayBuffer global: it does not
+ * exist on non-cross-origin-isolated pages, and touching the bare name
+ * throws ReferenceError there (found by the Phase 2.5 browser smoke test).
+ */
 function toUint8(source: AllowSharedBufferSource): Uint8Array {
-  if (source instanceof ArrayBuffer) return new Uint8Array(source)
-  if (source instanceof SharedArrayBuffer) return new Uint8Array(source)
-  return new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+  if (ArrayBuffer.isView(source)) {
+    return new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+  }
+  return new Uint8Array(source as ArrayBuffer)
 }
 
 /**

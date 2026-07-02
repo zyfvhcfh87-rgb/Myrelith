@@ -15,6 +15,7 @@ import type {
   ToDecodeWorker,
 } from './decode-protocol'
 import type {
+  BitmapLike,
   Canvas2DLike,
   DecodableFrame,
   DecodeWorkerEnv,
@@ -46,6 +47,11 @@ function makeFrame(timestampUs: number, registry: TrackedFrame[]): TrackedFrame 
   return frame
 }
 
+interface TrackedBitmap extends BitmapLike {
+  sourceTimestamp: number
+  closed: boolean
+}
+
 interface FakeOptions {
   supported?: boolean
   flushRejects?: boolean
@@ -56,14 +62,18 @@ interface FakeOptions {
 /**
  * Behaves like a real VideoDecoder where it matters: decode() GROWS the
  * queue (that is what makes backpressure kick in), frames only come out on
- * flush(), and reset() empties the queue and drops pending outputs.
+ * flush(), reset() empties the queue, drops pending outputs AND moves the
+ * codec to unconfigured — decoding then throws InvalidStateError exactly
+ * like Chrome (the bug the Phase 2.5 browser smoke test caught).
  */
 class FakeDecoder implements VideoDecoderLike {
   decodeQueueSize = 0
   ondequeue: (() => void) | null = null
   decoded: ChunkPayload[] = []
   resetCount = 0
+  configureCount = 0
   isClosed = false
+  private isConfigured = false
   private pending: ChunkPayload[] = []
 
   private readonly output: (frame: DecodableFrame) => void
@@ -80,9 +90,18 @@ class FakeDecoder implements VideoDecoderLike {
     this.frames = frames
   }
 
-  configure(): void {}
+  configure(): void {
+    this.configureCount++
+    this.isConfigured = true
+  }
 
   decode(chunk: unknown): void {
+    if (!this.isConfigured) {
+      throw new DOMException(
+        "Failed to execute 'decode' on 'VideoDecoder': Cannot call 'decode' on an unconfigured codec.",
+        'InvalidStateError',
+      )
+    }
     const payload = chunk as ChunkPayload
     this.decoded.push(payload)
     this.pending.push(payload)
@@ -112,6 +131,7 @@ class FakeDecoder implements VideoDecoderLike {
     this.resetCount++
     this.decodeQueueSize = 0
     this.pending = []
+    this.isConfigured = false // per spec: reset() unconfigures the codec
   }
 
   close(): void {
@@ -123,6 +143,7 @@ interface Harness {
   core: ReturnType<typeof createDecodeWorkerCore>
   posts: FromDecodeWorker[]
   frames: TrackedFrame[]
+  bitmaps: TrackedBitmap[]
   drawSpy: ReturnType<typeof vi.fn>
   canvas: { width: number; height: number }
   decoder: () => FakeDecoder
@@ -131,6 +152,7 @@ interface Harness {
 function makeHarness(opts: FakeOptions = {}, drawImpl?: () => void): Harness {
   const posts: FromDecodeWorker[] = []
   const frames: TrackedFrame[] = []
+  const bitmaps: TrackedBitmap[] = []
   let decoder: FakeDecoder | null = null
 
   const drawSpy = vi.fn(drawImpl ?? (() => {}))
@@ -145,6 +167,19 @@ function makeHarness(opts: FakeOptions = {}, drawImpl?: () => void): Harness {
     },
     isConfigSupported: async () => ({ supported: opts.supported ?? true }),
     createChunk: (payload) => payload,
+    createBitmap: async (frame) => {
+      const bitmap: TrackedBitmap = {
+        width: frame.displayWidth,
+        height: frame.displayHeight,
+        sourceTimestamp: frame.timestamp,
+        closed: false,
+        close() {
+          bitmap.closed = true
+        },
+      }
+      bitmaps.push(bitmap)
+      return bitmap
+    },
     now: () => 0,
   }
 
@@ -152,6 +187,7 @@ function makeHarness(opts: FakeOptions = {}, drawImpl?: () => void): Harness {
     core: createDecodeWorkerCore(env),
     posts,
     frames,
+    bitmaps,
     drawSpy,
     canvas,
     decoder: () => {
@@ -242,20 +278,24 @@ describe('init / configure', () => {
 /* ------------------------------------------------------------------ */
 
 describe('frame lifecycle', () => {
-  test('draws ONLY the target frame; frames live in the cache, close() releases them', async () => {
+  test('draws ONLY the target; every VideoFrame closes fast; bitmaps hold the cache', async () => {
     const h = makeHarness()
     await setup(h)
 
     await h.core.handleMessage(seekMsg(7, FRAME_US * 2, gop()))
+    await microtasks() // bitmap copies land
 
     expect(h.drawSpy).toHaveBeenCalledTimes(1)
     const drawn = h.drawSpy.mock.calls[0][0] as TrackedFrame
     expect(drawn.timestamp).toBe(FRAME_US * 2)
 
-    // All 5 frames are alive — owned by the ring buffer now, not leaked,
-    // not prematurely closed.
+    // ALL VideoFrames are closed promptly — they own decoder buffers and
+    // holding them stalls hardware decoders (the 2.5 gate crawl bug).
     expect(h.frames).toHaveLength(5)
-    expect(h.frames.every((f) => !f.closed)).toBe(true)
+    expect(h.frames.every((f) => f.closed)).toBe(true)
+    // Their pixels live on as cached bitmaps.
+    expect(h.bitmaps).toHaveLength(5)
+    expect(h.bitmaps.every((b) => !b.closed)).toBe(true)
 
     expect(h.posts).toContainEqual({
       type: 'frameReady',
@@ -268,34 +308,36 @@ describe('frame lifecycle', () => {
     expect(h.canvas.width).toBe(320)
     expect(h.canvas.height).toBe(180)
 
-    // Teardown proves ownership: close releases every cached frame.
+    // Teardown proves cache ownership: close releases every cached bitmap.
     await h.core.handleMessage({ type: 'close' })
-    expect(h.frames.every((f) => f.closed)).toBe(true)
+    expect(h.bitmaps.every((b) => b.closed)).toBe(true)
   })
 
-  test('cache stays bounded: a long batch evicts oldest frames (closed exactly once)', async () => {
+  test('cache stays bounded: a long batch evicts the oldest bitmaps', async () => {
     const h = makeHarness({ autoDrain: true })
     await setup(h)
 
-    // 20 frames through a 12-slot cache: the first 8 must be evicted+closed.
+    // 20 frames through a 12-slot cache: the first 8 bitmaps get evicted.
     await h.core.handleMessage(seekMsg(7, FRAME_US * 19, gopN(20)))
+    await microtasks()
 
     expect(h.frames).toHaveLength(20)
-    const closedCount = h.frames.filter((f) => f.closed).length
-    expect(closedCount).toBe(8)
-    // Specifically the OLDEST 8 (LRU eviction).
-    expect(h.frames.slice(0, 8).every((f) => f.closed)).toBe(true)
-    expect(h.frames.slice(8).every((f) => !f.closed)).toBe(true)
+    expect(h.frames.every((f) => f.closed)).toBe(true) // frames never held
+    expect(h.bitmaps).toHaveLength(20)
+    expect(h.bitmaps.slice(0, 8).every((b) => b.closed)).toBe(true) // LRU out
+    expect(h.bitmaps.slice(8).every((b) => !b.closed)).toBe(true) // 12 cached
   })
 
-  test('missing target: frameReady(drewFrame=false); frames still cached', async () => {
+  test('missing target: frameReady(drewFrame=false); frames closed, bitmaps cached', async () => {
     const h = makeHarness()
     await setup(h)
 
     await h.core.handleMessage(seekMsg(8, 999_999_999, gop()))
+    await microtasks()
 
     expect(h.drawSpy).not.toHaveBeenCalled()
-    expect(h.frames.every((f) => !f.closed)).toBe(true)
+    expect(h.frames.every((f) => f.closed)).toBe(true)
+    expect(h.bitmaps.every((b) => !b.closed)).toBe(true)
     expect(h.posts).toContainEqual({
       type: 'frameReady',
       requestId: 8,
@@ -305,21 +347,16 @@ describe('frame lifecycle', () => {
     })
   })
 
-  test('drawImage throwing closes THAT frame (not cached) and reports an error', async () => {
+  test('drawImage throwing still closes every frame and reports an error', async () => {
     const h = makeHarness({}, () => {
       throw new Error('GPU said no')
     })
     await setup(h)
 
     await h.core.handleMessage(seekMsg(9, FRAME_US, gop()))
+    await microtasks()
 
-    // The frame that crashed the draw was never handed to the cache — it
-    // must be closed by the finally. The others are cached (alive).
-    const crashed = h.frames.find((f) => f.timestamp === FRAME_US) as TrackedFrame
-    expect(crashed.closed).toBe(true)
-    expect(
-      h.frames.filter((f) => f !== crashed).every((f) => !f.closed),
-    ).toBe(true)
+    expect(h.frames.every((f) => f.closed)).toBe(true)
     expect(h.posts).toContainEqual({
       type: 'error',
       requestId: 9,
@@ -418,26 +455,32 @@ describe('seek supersession', () => {
     expect(readies[0]).toMatchObject({ requestId: 200, drewFrame: true })
 
     // A's dropped chunks never became frames (reset discards them, like a
-    // real decoder); B's two frames exist, alive in the cache.
+    // real decoder); B's two frames were bitmapped + closed.
+    await microtasks()
     expect(h.frames).toHaveLength(2)
-    expect(h.frames.every((f) => !f.closed)).toBe(true)
+    expect(h.frames.every((f) => f.closed)).toBe(true)
+    expect(h.bitmaps.filter((b) => !b.closed)).toHaveLength(2)
   })
 
-  test('backward step onto a cached frame skips the decoder entirely', async () => {
+  test('backward step onto a cached bitmap skips the decoder entirely', async () => {
     const h = makeHarness()
     await setup(h)
     const dec = h.decoder()
 
     // Decode a 5-frame GOP, land on frame 2.
     await h.core.handleMessage(seekMsg(50, FRAME_US * 2, gop()))
+    await microtasks() // bitmaps land in the cache
     expect(dec.decoded).toHaveLength(5)
     expect(h.drawSpy).toHaveBeenCalledTimes(1)
 
-    // Step BACK to frame 1: it is in the cache — no new decodes allowed.
+    // Step BACK to frame 1: cached — no new decodes allowed.
     await h.core.handleMessage(seekMsg(51, FRAME_US, gop()))
 
     expect(dec.decoded).toHaveLength(5) // unchanged: nothing re-decoded
     expect(h.drawSpy).toHaveBeenCalledTimes(2)
+    // The second draw used the cached BITMAP, not a fresh frame.
+    const drawnFromCache = h.drawSpy.mock.calls[1][0] as TrackedBitmap
+    expect(drawnFromCache.sourceTimestamp).toBe(FRAME_US)
     const ready = h.posts.filter(
       (p) => p.type === 'frameReady' && p.requestId === 51,
     )
@@ -446,19 +489,20 @@ describe('seek supersession', () => {
       drewFrame: true,
       frameTimestampUs: FRAME_US,
     })
-    // The cached frame survived the round-trip (take → draw → put back).
-    expect(h.frames.every((f) => !f.closed)).toBe(true)
+    // The cached bitmap survived the round-trip (take → draw → put back).
+    expect(h.bitmaps.filter((b) => !b.closed)).toHaveLength(5)
   })
 
-  test('re-configuring clears the cache (frames of the old stream close)', async () => {
+  test('re-configuring clears the cache (bitmaps of the old stream close)', async () => {
     const h = makeHarness()
     await setup(h)
     await h.core.handleMessage(seekMsg(60, FRAME_US, gop()))
-    expect(h.frames.every((f) => !f.closed)).toBe(true)
+    await microtasks()
+    expect(h.bitmaps.every((b) => !b.closed)).toBe(true)
 
     await h.core.handleMessage(configureMsg)
 
-    expect(h.frames.every((f) => f.closed)).toBe(true)
+    expect(h.bitmaps.every((b) => b.closed)).toBe(true)
   })
 
   test('close() tears down the decoder and later seeks error cleanly', async () => {

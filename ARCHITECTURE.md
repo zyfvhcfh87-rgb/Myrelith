@@ -109,4 +109,5 @@ src/
   ui/          Toolbar, MediaPool, Preview, Inspector
   ui/timeline/ Timeline, Track, ClipView, Ruler, Playhead
   app/         App, layout.css
+  dev/         temporary scratch harnesses — may import anything, never shipped
 ```

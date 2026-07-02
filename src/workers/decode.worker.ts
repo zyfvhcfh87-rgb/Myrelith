@@ -3,9 +3,12 @@
  * memory-critical module in the project (spec Bottlenecks #1 and #3).
  *
  * Non-negotiables implemented here:
- * - EVERY decoded frame has exactly one owner at all times. The output
- *   callback either hands the frame to the FrameRingBuffer (which closes it
- *   on eviction/clear) or closes it in `finally` itself. No third path.
+ * - EVERY decoded VideoFrame is closed as soon as its pixels are used —
+ *   drawn and/or copied to an ImageBitmap. Raw VideoFrames are NEVER
+ *   cached: they own the hardware decoder's output buffers, and holding
+ *   even ~12 of them starves the decoder into a one-frame-per-eviction
+ *   crawl (found live in the Phase 2.5 gate). The ring buffer holds
+ *   decoder-independent ImageBitmaps instead, closed on eviction/clear.
  * - Backpressure: never let decodeQueueSize exceed QUEUE_HIGH_WATER; wait
  *   for 'dequeue' before feeding more (keeps the worker responsive and
  *   memory bounded).
@@ -49,6 +52,13 @@ export interface DecodableFrame {
   close(): void
 }
 
+/** The slice of ImageBitmap the worker caches (real ImageBitmap satisfies it). */
+export interface BitmapLike {
+  width: number
+  height: number
+  close(): void
+}
+
 /** The slice of VideoDecoder the worker drives. */
 export interface VideoDecoderLike {
   decodeQueueSize: number
@@ -79,6 +89,8 @@ export interface DecodeWorkerEnv {
   }): VideoDecoderLike
   isConfigSupported(config: VideoDecoderConfig): Promise<{ supported?: boolean }>
   createChunk(payload: ChunkPayload): unknown
+  /** GPU-copy a frame into a decoder-independent bitmap (createImageBitmap). */
+  createBitmap(frame: DecodableFrame): Promise<BitmapLike>
   now(): number
 }
 
@@ -100,13 +112,16 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
   let canvas: CanvasLike | null = null
   let ctx: Canvas2DLike | null = null
   let decoder: VideoDecoderLike | null = null
+  /** Last applied config — reset() UNCONFIGURES a decoder (per spec), so
+   * every reset must reapply this before the next decode. */
+  let currentConfig: VideoDecoderConfig | null = null
   /** Bumped by every seek/configure/close; stale async loops check it and bail. */
   let generation = 0
   let target: SeekTarget | null = null
   /** Feed loops parked on backpressure; woken by dequeue events and resets. */
   const queueWaiters = new Set<() => void>()
-  /** Recently decoded frames, keyed by timestamp µs. Owns its frames. */
-  const cache = new FrameRingBuffer<DecodableFrame>(CACHE_CAPACITY)
+  /** Recently decoded frames as ImageBitmaps, keyed by timestamp µs. */
+  const cache = new FrameRingBuffer<BitmapLike>(CACHE_CAPACITY)
 
   function wakeAllWaiters(): void {
     const waiters = [...queueWaiters]
@@ -118,26 +133,23 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
     return new Promise((resolve) => queueWaiters.add(resolve))
   }
 
-  /** Fit the canvas to the frame and draw it full-surface. */
-  function drawToCanvas(frame: DecodableFrame): void {
+  /** Fit the canvas to the image and draw it full-surface. */
+  function drawToCanvas(image: unknown, width: number, height: number): void {
     if (canvas === null || ctx === null) throw new Error('canvas not initialized')
-    if (
-      canvas.width !== frame.displayWidth ||
-      canvas.height !== frame.displayHeight
-    ) {
-      canvas.width = frame.displayWidth
-      canvas.height = frame.displayHeight
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width
+      canvas.height = height
     }
-    ctx.drawImage(frame, 0, 0, canvas.width, canvas.height)
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
   }
 
   /**
-   * The output callback — where the single-owner rule lives. Every emitted
-   * frame ends up either owned by the cache (put) or closed in `finally`.
-   * There is no path on which a frame escapes both.
+   * The output callback. Draw the target synchronously if this is it, then
+   * ALWAYS: GPU-copy the frame to an ImageBitmap for the cache and close
+   * the VideoFrame at the first possible moment — the decoder needs its
+   * output buffer back or it stalls (see file header).
    */
   function onFrame(frame: DecodableFrame): void {
-    let ownedByCache = false
     try {
       const t = target
       if (
@@ -146,7 +158,7 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
         Math.abs(frame.timestamp - t.targetTimestampUs) <= t.toleranceUs
       ) {
         t.drew = true
-        drawToCanvas(frame)
+        drawToCanvas(frame, frame.displayWidth, frame.displayHeight)
         env.post({
           type: 'frameReady',
           requestId: t.requestId,
@@ -155,17 +167,27 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
           decodeMs: env.now() - t.startedAt,
         })
       }
-      cache.put(frame.timestamp, frame)
-      ownedByCache = true
     } catch (e) {
       env.post({
         type: 'error',
         requestId: target?.requestId,
         message: `draw failed: ${e instanceof Error ? e.message : String(e)}`,
       })
-    } finally {
-      if (!ownedByCache) frame.close()
     }
+    // Cache path: bitmap first, close the frame the moment the copy exists
+    // (or failed). The bitmap belongs to the ring buffer from then on.
+    const timestamp = frame.timestamp
+    void env
+      .createBitmap(frame)
+      .then((bitmap) => {
+        try {
+          cache.put(timestamp, bitmap)
+        } catch {
+          bitmap.close() // cache refused it (aliased key): do not leak
+        }
+      })
+      .catch(() => undefined) // bitmap creation failed: nothing to cache
+      .finally(() => frame.close())
   }
 
   /** Cached timestamp within tolerance of the target, or null. */
@@ -174,6 +196,16 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
       if (Math.abs(key - targetTimestampUs) <= toleranceUs) return key
     }
     return null
+  }
+
+  /**
+   * Drop all in-flight decoder work. reset() moves a VideoDecoder to
+   * "unconfigured" (spec behavior, found the hard way in the 2.5 gate), so
+   * the config is reapplied immediately — callers may decode right after.
+   */
+  function resetDecoder(dec: VideoDecoderLike): void {
+    dec.reset()
+    if (currentConfig) dec.configure(currentConfig)
   }
 
   async function handleConfigure(config: VideoDecoderConfig): Promise<void> {
@@ -195,6 +227,7 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
       error: (e) => env.post({ type: 'error', message: `decoder: ${e.message}` }),
     })
     decoder.ondequeue = wakeAllWaiters
+    currentConfig = config
     decoder.configure(config)
     env.post({ type: 'configured' })
   }
@@ -225,17 +258,17 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
     if (cachedKey !== null) {
       generation++ // any in-flight batch must not draw over this
       wakeAllWaiters()
-      decoder.reset()
+      resetDecoder(decoder)
       target = null
       const startedAt = env.now()
-      const cached = cache.take(cachedKey) as DecodableFrame
+      const cached = cache.take(cachedKey) as BitmapLike
       try {
-        drawToCanvas(cached)
+        drawToCanvas(cached, cached.width, cached.height)
         env.post({
           type: 'frameReady',
           requestId: msg.requestId,
           drewFrame: true,
-          frameTimestampUs: cached.timestamp,
+          frameTimestampUs: cachedKey,
           decodeMs: env.now() - startedAt,
         })
       } catch (e) {
@@ -253,7 +286,7 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
     const gen = ++generation
     // Free any older feed loop stuck on backpressure, then drop its queue.
     wakeAllWaiters()
-    decoder.reset()
+    resetDecoder(decoder)
     target = {
       requestId: msg.requestId,
       targetTimestampUs: msg.targetTimestampUs,
@@ -294,6 +327,20 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
   }
 
   async function handleMessage(msg: ToDecodeWorker): Promise<void> {
+    try {
+      await dispatch(msg)
+    } catch (e) {
+      // Uncaught async exceptions in a worker are silent to the page —
+      // never let one vanish: report it tied to the request if possible.
+      env.post({
+        type: 'error',
+        requestId: msg.type === 'seek' ? msg.requestId : undefined,
+        message: `worker ${msg.type} failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`,
+      })
+    }
+  }
+
+  async function dispatch(msg: ToDecodeWorker): Promise<void> {
     switch (msg.type) {
       case 'init': {
         canvas = msg.canvas
@@ -346,6 +393,8 @@ if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
         duration: p.durationUs,
         data: p.data,
       }),
+    createBitmap: (frame) =>
+      createImageBitmap(frame as unknown as ImageBitmapSource),
     now: () => performance.now(),
   })
 
