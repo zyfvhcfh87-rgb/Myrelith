@@ -3,15 +3,20 @@
  * memory-critical module in the project (spec Bottlenecks #1 and #3).
  *
  * Non-negotiables implemented here:
- * - EVERY decoded frame is close()'d in a `finally`, drawn or not, error or
- *   not. Frames never outlive their output callback. (Ring-buffer caching
- *   arrives in Phase 2.3 and will take over ownership explicitly.)
+ * - EVERY decoded frame has exactly one owner at all times. The output
+ *   callback either hands the frame to the FrameRingBuffer (which closes it
+ *   on eviction/clear) or closes it in `finally` itself. No third path.
  * - Backpressure: never let decodeQueueSize exceed QUEUE_HIGH_WATER; wait
  *   for 'dequeue' before feeding more (keeps the worker responsive and
  *   memory bounded).
  * - Latest-wins seeks: a newer seek resets the decoder, wakes any waiting
  *   feed loop, and the stale loop exits at its next generation check —
  *   scrubbing never queues up a backlog of dead work.
+ * - Seeks check the ring buffer first: stepping backward onto a recently
+ *   decoded frame draws from cache and never touches the decoder.
+ *
+ * Layering note: importing engine/frame-cache from workers/ is sanctioned
+ * by ARCHITECTURE.md — it is a pure, React-free class with no other deps.
  *
  * The logic lives in createDecodeWorkerCore() with injected browser deps so
  * Vitest can drive it with fakes (decode.worker.test.ts proves the close /
@@ -19,6 +24,7 @@
  * runs inside an actual worker scope.
  */
 
+import { FrameRingBuffer } from '../engine/frame-cache'
 import type {
   ChunkPayload,
   FromDecodeWorker,
@@ -27,6 +33,9 @@ import type {
 
 /** Plan-mandated high-water mark for decoder queue backpressure. */
 const QUEUE_HIGH_WATER = 8
+
+/** Plan-mandated ring buffer capacity (frame-cache default is also 12). */
+const CACHE_CAPACITY = 12
 
 /* ------------------------------------------------------------------ */
 /* Structural types for injectable browser deps                         */
@@ -96,6 +105,8 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
   let target: SeekTarget | null = null
   /** Feed loops parked on backpressure; woken by dequeue events and resets. */
   const queueWaiters = new Set<() => void>()
+  /** Recently decoded frames, keyed by timestamp µs. Owns its frames. */
+  const cache = new FrameRingBuffer<DecodableFrame>(CACHE_CAPACITY)
 
   function wakeAllWaiters(): void {
     const waiters = [...queueWaiters]
@@ -107,29 +118,35 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
     return new Promise((resolve) => queueWaiters.add(resolve))
   }
 
+  /** Fit the canvas to the frame and draw it full-surface. */
+  function drawToCanvas(frame: DecodableFrame): void {
+    if (canvas === null || ctx === null) throw new Error('canvas not initialized')
+    if (
+      canvas.width !== frame.displayWidth ||
+      canvas.height !== frame.displayHeight
+    ) {
+      canvas.width = frame.displayWidth
+      canvas.height = frame.displayHeight
+    }
+    ctx.drawImage(frame, 0, 0, canvas.width, canvas.height)
+  }
+
   /**
-   * The output callback — where the frame-closing rule lives. The frame is
-   * closed in `finally` on every path: drawn, ignored, or crashed.
+   * The output callback — where the single-owner rule lives. Every emitted
+   * frame ends up either owned by the cache (put) or closed in `finally`.
+   * There is no path on which a frame escapes both.
    */
   function onFrame(frame: DecodableFrame): void {
+    let ownedByCache = false
     try {
       const t = target
       if (
         t !== null &&
         !t.drew &&
-        canvas !== null &&
-        ctx !== null &&
         Math.abs(frame.timestamp - t.targetTimestampUs) <= t.toleranceUs
       ) {
         t.drew = true
-        if (
-          canvas.width !== frame.displayWidth ||
-          canvas.height !== frame.displayHeight
-        ) {
-          canvas.width = frame.displayWidth
-          canvas.height = frame.displayHeight
-        }
-        ctx.drawImage(frame, 0, 0, canvas.width, canvas.height)
+        drawToCanvas(frame)
         env.post({
           type: 'frameReady',
           requestId: t.requestId,
@@ -138,6 +155,8 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
           decodeMs: env.now() - t.startedAt,
         })
       }
+      cache.put(frame.timestamp, frame)
+      ownedByCache = true
     } catch (e) {
       env.post({
         type: 'error',
@@ -145,8 +164,16 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
         message: `draw failed: ${e instanceof Error ? e.message : String(e)}`,
       })
     } finally {
-      frame.close()
+      if (!ownedByCache) frame.close()
     }
+  }
+
+  /** Cached timestamp within tolerance of the target, or null. */
+  function findCachedKey(targetTimestampUs: number, toleranceUs: number): number | null {
+    for (const key of cache.keys()) {
+      if (Math.abs(key - targetTimestampUs) <= toleranceUs) return key
+    }
+    return null
   }
 
   async function handleConfigure(config: VideoDecoderConfig): Promise<void> {
@@ -161,6 +188,7 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
       return
     }
     if (decoder) decoder.close()
+    cache.clear() // cached frames belong to the OLD stream — never reuse
     target = null
     decoder = env.createDecoder({
       output: onFrame,
@@ -188,6 +216,37 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
         requestId: msg.requestId,
         message: 'seek batch must start with a keyframe chunk',
       })
+      return
+    }
+
+    // Cache first: a backward step onto a recent frame skips decoding
+    // entirely. Take → draw → put back (recency refreshed).
+    const cachedKey = findCachedKey(msg.targetTimestampUs, msg.toleranceUs)
+    if (cachedKey !== null) {
+      generation++ // any in-flight batch must not draw over this
+      wakeAllWaiters()
+      decoder.reset()
+      target = null
+      const startedAt = env.now()
+      const cached = cache.take(cachedKey) as DecodableFrame
+      try {
+        drawToCanvas(cached)
+        env.post({
+          type: 'frameReady',
+          requestId: msg.requestId,
+          drewFrame: true,
+          frameTimestampUs: cached.timestamp,
+          decodeMs: env.now() - startedAt,
+        })
+      } catch (e) {
+        env.post({
+          type: 'error',
+          requestId: msg.requestId,
+          message: `draw failed: ${e instanceof Error ? e.message : String(e)}`,
+        })
+      } finally {
+        cache.put(cachedKey, cached) // ownership back to the cache
+      }
       return
     }
 
@@ -252,6 +311,7 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
         generation++
         wakeAllWaiters()
         target = null
+        cache.clear()
         if (decoder) {
           decoder.close()
           decoder = null

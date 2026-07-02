@@ -49,6 +49,8 @@ function makeFrame(timestampUs: number, registry: TrackedFrame[]): TrackedFrame 
 interface FakeOptions {
   supported?: boolean
   flushRejects?: boolean
+  /** Drain one queue slot per microtask after each decode, like a live decoder. */
+  autoDrain?: boolean
 }
 
 /**
@@ -85,6 +87,7 @@ class FakeDecoder implements VideoDecoderLike {
     this.decoded.push(payload)
     this.pending.push(payload)
     this.decodeQueueSize++
+    if (this.opts.autoDrain) queueMicrotask(() => this.drain(1))
   }
 
   /** Simulate the decoder catching up: shrink the queue, fire dequeue. */
@@ -239,7 +242,7 @@ describe('init / configure', () => {
 /* ------------------------------------------------------------------ */
 
 describe('frame lifecycle', () => {
-  test('draws ONLY the target frame, closes ALL frames', async () => {
+  test('draws ONLY the target frame; frames live in the cache, close() releases them', async () => {
     const h = makeHarness()
     await setup(h)
 
@@ -249,8 +252,10 @@ describe('frame lifecycle', () => {
     const drawn = h.drawSpy.mock.calls[0][0] as TrackedFrame
     expect(drawn.timestamp).toBe(FRAME_US * 2)
 
+    // All 5 frames are alive — owned by the ring buffer now, not leaked,
+    // not prematurely closed.
     expect(h.frames).toHaveLength(5)
-    expect(h.frames.every((f) => f.closed)).toBe(true)
+    expect(h.frames.every((f) => !f.closed)).toBe(true)
 
     expect(h.posts).toContainEqual({
       type: 'frameReady',
@@ -262,16 +267,35 @@ describe('frame lifecycle', () => {
     // Canvas adopted the frame's dimensions.
     expect(h.canvas.width).toBe(320)
     expect(h.canvas.height).toBe(180)
+
+    // Teardown proves ownership: close releases every cached frame.
+    await h.core.handleMessage({ type: 'close' })
+    expect(h.frames.every((f) => f.closed)).toBe(true)
   })
 
-  test('missing target: frameReady(drewFrame=false), still all closed', async () => {
+  test('cache stays bounded: a long batch evicts oldest frames (closed exactly once)', async () => {
+    const h = makeHarness({ autoDrain: true })
+    await setup(h)
+
+    // 20 frames through a 12-slot cache: the first 8 must be evicted+closed.
+    await h.core.handleMessage(seekMsg(7, FRAME_US * 19, gopN(20)))
+
+    expect(h.frames).toHaveLength(20)
+    const closedCount = h.frames.filter((f) => f.closed).length
+    expect(closedCount).toBe(8)
+    // Specifically the OLDEST 8 (LRU eviction).
+    expect(h.frames.slice(0, 8).every((f) => f.closed)).toBe(true)
+    expect(h.frames.slice(8).every((f) => !f.closed)).toBe(true)
+  })
+
+  test('missing target: frameReady(drewFrame=false); frames still cached', async () => {
     const h = makeHarness()
     await setup(h)
 
     await h.core.handleMessage(seekMsg(8, 999_999_999, gop()))
 
     expect(h.drawSpy).not.toHaveBeenCalled()
-    expect(h.frames.every((f) => f.closed)).toBe(true)
+    expect(h.frames.every((f) => !f.closed)).toBe(true)
     expect(h.posts).toContainEqual({
       type: 'frameReady',
       requestId: 8,
@@ -281,7 +305,7 @@ describe('frame lifecycle', () => {
     })
   })
 
-  test('drawImage throwing still closes the frame and reports an error', async () => {
+  test('drawImage throwing closes THAT frame (not cached) and reports an error', async () => {
     const h = makeHarness({}, () => {
       throw new Error('GPU said no')
     })
@@ -289,7 +313,13 @@ describe('frame lifecycle', () => {
 
     await h.core.handleMessage(seekMsg(9, FRAME_US, gop()))
 
-    expect(h.frames.every((f) => f.closed)).toBe(true)
+    // The frame that crashed the draw was never handed to the cache — it
+    // must be closed by the finally. The others are cached (alive).
+    const crashed = h.frames.find((f) => f.timestamp === FRAME_US) as TrackedFrame
+    expect(crashed.closed).toBe(true)
+    expect(
+      h.frames.filter((f) => f !== crashed).every((f) => !f.closed),
+    ).toBe(true)
     expect(h.posts).toContainEqual({
       type: 'error',
       requestId: 9,
@@ -388,8 +418,46 @@ describe('seek supersession', () => {
     expect(readies[0]).toMatchObject({ requestId: 200, drewFrame: true })
 
     // A's dropped chunks never became frames (reset discards them, like a
-    // real decoder); B's two frames exist and are closed.
+    // real decoder); B's two frames exist, alive in the cache.
     expect(h.frames).toHaveLength(2)
+    expect(h.frames.every((f) => !f.closed)).toBe(true)
+  })
+
+  test('backward step onto a cached frame skips the decoder entirely', async () => {
+    const h = makeHarness()
+    await setup(h)
+    const dec = h.decoder()
+
+    // Decode a 5-frame GOP, land on frame 2.
+    await h.core.handleMessage(seekMsg(50, FRAME_US * 2, gop()))
+    expect(dec.decoded).toHaveLength(5)
+    expect(h.drawSpy).toHaveBeenCalledTimes(1)
+
+    // Step BACK to frame 1: it is in the cache — no new decodes allowed.
+    await h.core.handleMessage(seekMsg(51, FRAME_US, gop()))
+
+    expect(dec.decoded).toHaveLength(5) // unchanged: nothing re-decoded
+    expect(h.drawSpy).toHaveBeenCalledTimes(2)
+    const ready = h.posts.filter(
+      (p) => p.type === 'frameReady' && p.requestId === 51,
+    )
+    expect(ready).toHaveLength(1)
+    expect(ready[0]).toMatchObject({
+      drewFrame: true,
+      frameTimestampUs: FRAME_US,
+    })
+    // The cached frame survived the round-trip (take → draw → put back).
+    expect(h.frames.every((f) => !f.closed)).toBe(true)
+  })
+
+  test('re-configuring clears the cache (frames of the old stream close)', async () => {
+    const h = makeHarness()
+    await setup(h)
+    await h.core.handleMessage(seekMsg(60, FRAME_US, gop()))
+    expect(h.frames.every((f) => !f.closed)).toBe(true)
+
+    await h.core.handleMessage(configureMsg)
+
     expect(h.frames.every((f) => f.closed)).toBe(true)
   })
 

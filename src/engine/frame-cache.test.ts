@@ -48,6 +48,14 @@ describe('FrameRingBuffer basics', () => {
     expect(ring.size).toBe(12)
   })
 
+  test('keys() lists cached keys LRU-first', () => {
+    const ring = new FrameRingBuffer<MockFrame>(3)
+    ring.put(10, frame(0))
+    ring.put(20, frame(1))
+    ring.put(10, ring.take(10) as MockFrame) // touch 10 → now newest
+    expect(ring.keys()).toEqual([20, 10])
+  })
+
   test('invalid capacities are rejected', () => {
     expect(() => new FrameRingBuffer(0)).toThrow(TypeError)
     expect(() => new FrameRingBuffer(-1)).toThrow(TypeError)

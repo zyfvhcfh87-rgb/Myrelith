@@ -94,6 +94,15 @@ export class FrameRingBuffer<T extends CloseableFrame = CloseableFrame> {
     return this.entries.has(key)
   }
 
+  /**
+   * Snapshot of cached keys, least recently used first. For tolerance-window
+   * lookups ("any frame within half a frame of X?") that exact-key take()
+   * cannot answer.
+   */
+  keys(): number[] {
+    return [...this.entries.keys()]
+  }
+
   get size(): number {
     return this.entries.size
   }

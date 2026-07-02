@@ -19,6 +19,12 @@ non-negotiable rules. Re-read it at the start of every coding session.
   `pipeline/`, `workers/`, or `engine/` directly from a `.tsx` file.
 - `engine/`, `pipeline/`, `workers/` may import `domain/`. They must never
   import React or anything from `ui/` or `state/`.
+- Sanctioned exceptions between those three (and nothing more):
+  - anyone may import `workers/decode-protocol.ts` (types only, no runtime),
+  - `workers/` may import `engine/frame-cache.ts` (pure class, no deps),
+  - `engine/worker-bridge.ts` references the worker FILE via
+    `new Worker(new URL(...))` — a URL, not a module import; the pipeline
+    chunk source reaches the bridge by injection, never by import.
 
 ## Non-negotiable rules
 
