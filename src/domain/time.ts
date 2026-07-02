@@ -46,6 +46,63 @@ export function rateEquals(a: FrameRate, b: FrameRate): boolean {
 }
 
 /**
+ * Standard broadcast/web frame rates, used to turn a measured float fps
+ * (e.g. Mediabunny's averagePacketRate of 29.97002997) back into the exact
+ * rational it almost certainly is. Ordered list, nearest wins.
+ */
+const STANDARD_RATES: readonly FrameRate[] = [
+  { num: 24000, den: 1001 },
+  { num: 24, den: 1 },
+  { num: 25, den: 1 },
+  { num: 30000, den: 1001 },
+  { num: 30, den: 1 },
+  { num: 48, den: 1 },
+  { num: 50, den: 1 },
+  { num: 60000, den: 1001 },
+  { num: 60, den: 1 },
+  { num: 90, den: 1 },
+  { num: 100, den: 1 },
+  { num: 120000, den: 1001 },
+  { num: 120, den: 1 },
+]
+
+function gcd(a: number, b: number): number {
+  while (b !== 0) {
+    const t = b
+    b = a % b
+    a = t
+  }
+  return a
+}
+
+/**
+ * Snap a measured float fps to the nearest standard rational rate when it is
+ * within `toleranceFps`; otherwise build an exact rational from the float at
+ * millifps precision (17.3 → 173/10). This is how float fps readings from
+ * demuxed files re-enter the integer-frame world without smuggling drift in.
+ */
+export function snapToStandardRate(fps: number, toleranceFps = 0.05): FrameRate {
+  if (!Number.isFinite(fps) || fps <= 0) {
+    throw new TypeError(`snapToStandardRate: fps must be finite and > 0, got ${fps}`)
+  }
+  let best = STANDARD_RATES[0]
+  let bestDiff = Number.POSITIVE_INFINITY
+  for (const rate of STANDARD_RATES) {
+    const diff = Math.abs(fps - rate.num / rate.den)
+    if (diff < bestDiff) {
+      best = rate
+      bestDiff = diff
+    }
+  }
+  if (bestDiff <= toleranceFps) return best
+
+  // Unusual rate: preserve it exactly at millifps precision, reduced.
+  const num = Math.round(fps * 1000)
+  const g = gcd(num, 1000)
+  return { num: num / g, den: 1000 / g }
+}
+
+/**
  * Convert an integer frame count from one rate to another, rounding to the
  * nearest destination frame. All multiplication happens on integers first,
  * so results are exact whenever the conversion is exact (e.g. 30fps → 60fps).

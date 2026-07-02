@@ -16,6 +16,7 @@ import {
   rateEquals,
   rescaleFrames,
   secondsToFrames,
+  snapToStandardRate,
 } from './time'
 
 /** NTSC rates — the drift-prone ones this module exists to tame. */
@@ -127,6 +128,26 @@ describe('addFrames and duration safety', () => {
   test('rateEquals compares reduced value, not representation', () => {
     expect(rateEquals(F30, { num: 60, den: 2 })).toBe(true)
     expect(rateEquals(F30, F60)).toBe(false)
+  })
+
+  test('snapToStandardRate recovers exact rationals from measured fps', () => {
+    expect(snapToStandardRate(29.97002997)).toEqual(NTSC_2997)
+    expect(snapToStandardRate(23.976)).toEqual(NTSC_23976)
+    expect(snapToStandardRate(59.94)).toEqual(NTSC_5994)
+    expect(snapToStandardRate(25.0001)).toEqual({ num: 25, den: 1 })
+    expect(snapToStandardRate(30)).toEqual({ num: 30, den: 1 })
+  })
+
+  test('snapToStandardRate keeps unusual rates exact instead of forcing them', () => {
+    expect(snapToStandardRate(17.3)).toEqual({ num: 173, den: 10 })
+    expect(snapToStandardRate(15)).toEqual({ num: 15, den: 1 })
+    expect(snapToStandardRate(240)).toEqual({ num: 240, den: 1 })
+  })
+
+  test('snapToStandardRate rejects nonsense input', () => {
+    expect(() => snapToStandardRate(0)).toThrow(TypeError)
+    expect(() => snapToStandardRate(-24)).toThrow(TypeError)
+    expect(() => snapToStandardRate(Number.NaN)).toThrow(TypeError)
   })
 
   test('rescaleFrames: exact conversions stay exact, others round nearest', () => {
