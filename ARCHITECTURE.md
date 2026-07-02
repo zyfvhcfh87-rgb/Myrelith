@@ -81,7 +81,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   MediaAsset>`, `addAsset(file)` (placeholder until Phase 2 demux),
   `removeAsset(id)` (revokes the object URL). Session-scoped, not
   serialized with the project.
-- Worker message unions `ToWorker` / `FromWorker` (filled in Phase 2).
+- Worker messages — `src/workers/decode-protocol.ts` (canonical):
+  `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
+  (`configured`/`frameReady`/`error`). Types-only file; BOTH the worker and
+  `engine/worker-bridge.ts` import it (that is the one sanctioned
+  cross-import between those layers — it carries zero runtime code).
+  Timestamps are integer microseconds; frame-number conversion happens on
+  the bridge side. Seeks are latest-wins: only the newest seek is guaranteed
+  a `frameReady`; superseded seeks are resolved by the bridge, and a
+  worker `error` carrying a requestId also settles that request.
 
 ## Folder layout
 
