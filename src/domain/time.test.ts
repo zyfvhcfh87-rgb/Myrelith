@@ -8,6 +8,7 @@ import { describe, test, expect } from 'vitest'
 import type { FrameRate, TimeRange } from './schema'
 import {
   addFrames,
+  formatTimecode,
   framesToSeconds,
   growRange,
   rangeContains,
@@ -148,6 +149,22 @@ describe('addFrames and duration safety', () => {
     expect(() => snapToStandardRate(0)).toThrow(TypeError)
     expect(() => snapToStandardRate(-24)).toThrow(TypeError)
     expect(() => snapToStandardRate(Number.NaN)).toThrow(TypeError)
+  })
+
+  test('formatTimecode renders non-drop HH:MM:SS:FF', () => {
+    expect(formatTimecode(0, F30)).toBe('00:00:00:00')
+    expect(formatTimecode(29, F30)).toBe('00:00:00:29')
+    expect(formatTimecode(30, F30)).toBe('00:00:01:00')
+    expect(formatTimecode(1799, F30)).toBe('00:00:59:29')
+    expect(formatTimecode(30 * 3600 + 30 * 61 + 5, F30)).toBe('01:01:01:05')
+    expect(formatTimecode(60, F60)).toBe('00:00:01:00')
+    // NDF on NTSC: 29.97 counts a nominal 30 frames per second.
+    expect(formatTimecode(30, NTSC_2997)).toBe('00:00:01:00')
+  })
+
+  test('formatTimecode clamps negatives and rounds strays', () => {
+    expect(formatTimecode(-5, F30)).toBe('00:00:00:00')
+    expect(formatTimecode(29.6, F30)).toBe('00:00:01:00')
   })
 
   test('rescaleFrames: exact conversions stay exact, others round nearest', () => {

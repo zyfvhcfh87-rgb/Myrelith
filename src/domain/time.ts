@@ -204,3 +204,23 @@ export function growRange(range: TimeRange, deltaFrames: number): TimeRange {
     durationFrames: Math.max(0, range.durationFrames + deltaFrames),
   }
 }
+
+/**
+ * Frame count → non-drop-frame timecode "HH:MM:SS:FF" for ruler/readout
+ * display. NDF counts a nominal integer fps (29.97 counts 30 frames per
+ * "second"), so it stays frame-accurate but drifts ~0.1% from wall-clock on
+ * NTSC rates — the standard tradeoff; drop-frame display is a post-MVP
+ * concern. Negative inputs clamp to 0.
+ */
+export function formatTimecode(frame: number, rate: FrameRate): string {
+  assertValidRate(rate)
+  const f = Math.max(0, Math.round(frame))
+  const fps = Math.max(1, Math.round(rate.num / rate.den))
+  const ff = f % fps
+  const totalSeconds = Math.floor(f / fps)
+  const ss = totalSeconds % 60
+  const mm = Math.floor(totalSeconds / 60) % 60
+  const hh = Math.floor(totalSeconds / 3600)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(hh)}:${pad(mm)}:${pad(ss)}:${pad(ff)}`
+}

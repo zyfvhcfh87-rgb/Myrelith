@@ -16,7 +16,8 @@ describe('App shell', () => {
     expect(screen.getByText('Media Pool')).toBeInTheDocument()
     expect(screen.getByText('Preview')).toBeInTheDocument()
     expect(screen.getByText('Inspector')).toBeInTheDocument()
-    expect(screen.getByText('Timeline')).toBeInTheDocument()
+    // Timeline renders its real 3.2 contents, not a placeholder.
+    expect(screen.getByTestId('timeline-root')).toBeInTheDocument()
 
     const shell = container.querySelector('.app-shell')
     expect(shell).not.toBeNull()
