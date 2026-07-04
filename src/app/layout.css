@@ -1,0 +1,87 @@
+/*
+ * app/layout.css — The editor grid. Phase 3.1.
+ *
+ * Areas (plan/spec layout):
+ *   toolbar    toolbar   toolbar
+ *   media-pool preview   inspector
+ *   timeline   timeline  timeline
+ *
+ * minmax(0, 1fr) everywhere a panel can hold wide/tall content — plain 1fr
+ * lets grid items refuse to shrink and blow the layout open.
+ */
+
+.app-shell {
+  display: grid;
+  grid-template-areas:
+    'toolbar toolbar toolbar'
+    'media-pool preview inspector'
+    'timeline timeline timeline';
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  grid-template-rows: 48px minmax(0, 1fr) 320px;
+  height: 100dvh;
+  background: #141414;
+  color: #e8e8e8;
+}
+
+.area-toolbar {
+  grid-area: toolbar;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+
+.area-media-pool {
+  grid-area: media-pool;
+  border-right: 1px solid #2a2a2a;
+  overflow-y: auto;
+}
+
+.area-preview {
+  grid-area: preview;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #0d0d0d;
+}
+
+.area-inspector {
+  grid-area: inspector;
+  border-left: 1px solid #2a2a2a;
+  overflow-y: auto;
+}
+
+.area-timeline {
+  grid-area: timeline;
+  border-top: 1px solid #2a2a2a;
+  overflow: auto;
+}
+
+/* Phase 3.1 placeholder styling — dies as real panels replace it. */
+.panel-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  height: 100%;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.area-toolbar .panel-placeholder {
+  flex-direction: row;
+  gap: 12px;
+  padding: 0;
+}
+
+.placeholder-title {
+  font-weight: 600;
+  color: #bbb;
+}
+
+.placeholder-note {
+  font-size: 12px;
+  color: #666;
+}
