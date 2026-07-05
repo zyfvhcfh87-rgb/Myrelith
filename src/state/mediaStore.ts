@@ -30,6 +30,15 @@ export interface MediaState {
   addAsset: (file: File) => MediaAsset
   /** Remove an asset and revoke its object URL (frees the Blob reference). */
   removeAsset: (id: string) => void
+  /**
+   * Merge real metadata into a placeholder asset (the preview controller
+   * calls this after demuxing). Unknown ids are a safe no-op. The id and
+   * objectUrl are not patchable.
+   */
+  updateAsset: (
+    id: string,
+    patch: Partial<Omit<MediaAsset, 'id' | 'objectUrl'>>,
+  ) => void
 }
 
 export const useMediaStore = create<MediaState>()((set) => ({
@@ -65,6 +74,15 @@ export const useMediaStore = create<MediaState>()((set) => ({
       URL.revokeObjectURL(asset.objectUrl)
       const assets = new Map(state.assets)
       assets.delete(id)
+      return { assets }
+    }),
+
+  updateAsset: (id, patch) =>
+    set((state) => {
+      const existing = state.assets.get(id)
+      if (!existing) return state
+      const assets = new Map(state.assets)
+      assets.set(id, { ...existing, ...patch, id, objectUrl: existing.objectUrl })
       return { assets }
     }),
 }))

@@ -69,4 +69,31 @@ describe('mediaStore', () => {
     expect(revokeSpy).not.toHaveBeenCalled()
     expect(getState().assets).toBe(before)
   })
+
+  test('updateAsset merges demux results without touching id/objectUrl', () => {
+    const a = getState().addAsset(new File([], 'a.mp4', { type: 'video/mp4' }))
+    getState().updateAsset(a.id, {
+      durationFrames: 412,
+      frameRate: { num: 60, den: 1 },
+      width: 1920,
+      height: 1080,
+    })
+    const updated = getState().assets.get(a.id)
+    expect(updated).toMatchObject({
+      id: a.id,
+      objectUrl: a.objectUrl,
+      fileName: 'a.mp4',
+      durationFrames: 412,
+      frameRate: { num: 60, den: 1 },
+      width: 1920,
+    })
+    // New Map identity so subscribers fire.
+    expect(getState().assets).not.toBe(new Map())
+  })
+
+  test('updateAsset on an unknown id is a safe no-op', () => {
+    const before = getState().assets
+    getState().updateAsset('asset_nope', { durationFrames: 10 })
+    expect(getState().assets).toBe(before)
+  })
 })

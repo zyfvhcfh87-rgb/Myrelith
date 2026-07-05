@@ -56,10 +56,15 @@ export interface ChunkProvider {
   ): Promise<ChunkPayload[]>
 }
 
+/** What the bridge decodes from: a rate + a chunk provider, per asset. */
+interface BridgeSource {
+  rate: FrameRate
+  chunkProvider: ChunkProvider
+}
+
 export class DecodeWorkerBridge {
   private readonly worker: WorkerLike
-  private readonly rate: FrameRate
-  private readonly chunkProvider: ChunkProvider
+  private source: BridgeSource | null = null
   private nextRequestId = 1
   /** Id of the newest renderFrameAt CALL — stale calls detect supersession. */
   private latestCallId = 0
@@ -71,13 +76,24 @@ export class DecodeWorkerBridge {
   /** Errors not tied to a request (decoder faults mid-stream) land here. */
   onWorkerError: ((message: string) => void) | null = null
 
-  constructor(worker: WorkerLike, rate: FrameRate, chunkProvider: ChunkProvider) {
+  constructor(worker: WorkerLike) {
     this.worker = worker
-    this.rate = rate
-    this.chunkProvider = chunkProvider
     worker.addEventListener('message', (event: MessageEvent) => {
       this.route(event.data as FromDecodeWorker)
     })
+  }
+
+  /**
+   * Point the bridge at an asset's chunks/rate. Callable repeatedly (the
+   * preview switches assets); any in-flight requests resolve 'superseded'.
+   * Pair with configure() for the matching decoder config.
+   */
+  setSource(rate: FrameRate, chunkProvider: ChunkProvider): void {
+    this.source = { rate, chunkProvider }
+    for (const resolve of this.pending.values()) {
+      resolve({ status: 'superseded', frameTimestampUs: -1, decodeMs: 0 })
+    }
+    this.pending.clear()
   }
 
   /** Hand the drawing surface to the worker (transferred, call once). */
@@ -94,20 +110,29 @@ export class DecodeWorkerBridge {
   }
 
   /**
-   * Render the given integer frame (document rate) onto the worker's
-   * canvas. Latest-wins: issuing a new call settles older in-flight calls
-   * as 'superseded'. Never rejects — errors come back in the result.
+   * Render the given integer frame (at the CURRENT source's rate) onto the
+   * worker's canvas. Latest-wins: issuing a new call settles older in-flight
+   * calls as 'superseded'. Never rejects — errors come back in the result.
    */
   async renderFrameAt(frame: number): Promise<RenderResult> {
+    const source = this.source
+    if (!source) {
+      return {
+        status: 'error',
+        frameTimestampUs: -1,
+        decodeMs: 0,
+        message: 'no source configured (call setSource first)',
+      }
+    }
     const requestId = this.nextRequestId++
     this.latestCallId = requestId
 
-    const targetSec = framesToSeconds(frame, this.rate)
-    const toleranceSec = this.rate.den / this.rate.num / 2
+    const targetSec = framesToSeconds(frame, source.rate)
+    const toleranceSec = source.rate.den / source.rate.num / 2
 
     let chunks: ChunkPayload[]
     try {
-      chunks = await this.chunkProvider.chunksForTimestamp(targetSec, toleranceSec)
+      chunks = await source.chunkProvider.chunksForTimestamp(targetSec, toleranceSec)
     } catch (e) {
       return {
         status: 'error',
@@ -117,8 +142,9 @@ export class DecodeWorkerBridge {
       }
     }
 
-    // A newer call started while we were reading chunks: don't even post.
-    if (this.latestCallId !== requestId) {
+    // A newer call started — or the source was swapped — while we were
+    // reading chunks: don't even post.
+    if (this.latestCallId !== requestId || this.source !== source) {
       return { status: 'superseded', frameTimestampUs: -1, decodeMs: 0 }
     }
 

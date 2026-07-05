@@ -91,8 +91,8 @@ export default function DecodeSandbox() {
       canvasHostRef.current?.replaceChildren(canvas)
 
       setStatus(`configuring decoder (${config.codec})…`)
-      const bridge = new DecodeWorkerBridge(
-        createDecodeWorker(),
+      const bridge = new DecodeWorkerBridge(createDecodeWorker())
+      bridge.setSource(
         loaded.asset.frameRate,
         createChunkSource(loaded.videoTrack, loaded.asset.frameRate),
       )

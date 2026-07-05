@@ -13,10 +13,10 @@ describe('App shell', () => {
     const { container } = render(<App />)
 
     expect(screen.getByText('WebCut')).toBeInTheDocument()
-    expect(screen.getByText('Media Pool')).toBeInTheDocument()
-    expect(screen.getByText('Preview')).toBeInTheDocument()
-    expect(screen.getByText('Inspector')).toBeInTheDocument()
-    // Timeline renders its real 3.2 contents, not a placeholder.
+    // Real panels (3.2–3.4), not placeholders:
+    expect(container.querySelector('.media-pool')).not.toBeNull()
+    expect(screen.getByTestId('preview-canvas')).toBeInTheDocument()
+    expect(screen.getByText('Inspector')).toBeInTheDocument() // Phase 4
     expect(screen.getByTestId('timeline-root')).toBeInTheDocument()
 
     const shell = container.querySelector('.app-shell')

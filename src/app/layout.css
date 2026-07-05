@@ -58,6 +58,109 @@
   overflow: auto;
 }
 
+/* Preview panel (Phase 3.4) */
+
+.preview-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  background: #000;
+}
+
+.preview-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* Media pool (Phase 3.4) */
+
+.media-pool {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.media-import input {
+  width: 100%;
+  font-size: 12px;
+  color: #999;
+}
+
+.media-empty {
+  color: #666;
+  font-size: 12px;
+  text-align: center;
+  margin: 24px 0;
+}
+
+.media-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.media-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name remove'
+    'meta remove';
+  align-items: center;
+  gap: 0 8px;
+  padding: 6px 8px;
+  background: #1c1c1c;
+  border: 1px solid #2c2c2c;
+  border-radius: 4px;
+}
+
+.media-name {
+  grid-area: name;
+  font-size: 12px;
+  color: #ccc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-meta {
+  grid-area: meta;
+  font-size: 10px;
+  font-family: ui-monospace, Consolas, monospace;
+  color: #777;
+}
+
+.media-remove {
+  grid-area: remove;
+  background: none;
+  border: none;
+  color: #777;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.media-remove:hover {
+  color: #e66;
+}
+
 /* Phase 3.1 placeholder styling — dies as real panels replace it. */
 .panel-placeholder {
   display: flex;

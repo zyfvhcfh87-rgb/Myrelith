@@ -64,7 +64,8 @@ function makeProvider(auto = true) {
 function makeBridge(auto = true) {
   const worker = new FakeWorker()
   const { provider, calls } = makeProvider(auto)
-  const bridge = new DecodeWorkerBridge(worker, NTSC, provider)
+  const bridge = new DecodeWorkerBridge(worker)
+  bridge.setSource(NTSC, provider)
   return { bridge, worker, calls }
 }
 
@@ -169,10 +170,33 @@ describe('render result mapping', () => {
     const provider: ChunkProvider = {
       chunksForTimestamp: () => Promise.reject(new Error('no keyframe')),
     }
-    const bridge = new DecodeWorkerBridge(worker, NTSC, provider)
+    const bridge = new DecodeWorkerBridge(worker)
+    bridge.setSource(NTSC, provider)
     const result = await bridge.renderFrameAt(3)
     expect(result).toMatchObject({ status: 'error', message: 'no keyframe' })
     expect(worker.sent).toHaveLength(0)
+  })
+
+  test('renderFrameAt before setSource fails soft with an error result', async () => {
+    const bridge = new DecodeWorkerBridge(new FakeWorker())
+    const result = await bridge.renderFrameAt(3)
+    expect(result.status).toBe('error')
+    expect(result.message).toMatch(/no source/)
+  })
+
+  test('swapping the source mid-fetch supersedes the stale request', async () => {
+    const { bridge, worker, calls } = makeBridge(false) // manual provider
+    const stale = bridge.renderFrameAt(10)
+    await flush()
+
+    // Asset switch happens while the old fetch is still pending.
+    const { provider: newProvider } = makeProvider(true)
+    bridge.setSource(NTSC, newProvider)
+    calls[0].resolve(chunkBatch()) // stale fetch finally resolves
+    await flush()
+
+    expect((await stale).status).toBe('superseded')
+    expect(worker.sent.filter((s) => s.msg.type === 'seek')).toHaveLength(0)
   })
 
   test('late frameReady for an unknown request is ignored', () => {
