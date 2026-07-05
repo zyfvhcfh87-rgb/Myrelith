@@ -19,10 +19,11 @@
  */
 
 import { create } from 'zustand'
-import type { ClipId, Effect, TimelineDoc, TrackId } from '../domain/schema'
+import type { Clip, ClipId, Effect, TimelineDoc, TrackId } from '../domain/schema'
 import type { TrimEdge } from '../domain/operations'
 import {
   addEffect,
+  insertClip,
   moveClip,
   rippleDelete,
   splitClipAtFrame,
@@ -49,6 +50,12 @@ export interface DocumentState {
    * unlocked tracks. One history entry for the whole gesture.
    */
   splitClipAtPlayhead: (playheadFrame: number) => void
+  /**
+   * Insert a new clip onto a track (Phase 4.0 media → timeline flow).
+   * Callers build the clip (e.g. domain clipFromAsset); a rejected insert
+   * (overlap, locked, bad geometry) pushes no history entry.
+   */
+  insertClip: (trackId: TrackId, clip: Clip) => void
   /** Trim one clip edge by a signed frame delta. */
   trimClip: (clipId: ClipId, edge: TrimEdge, deltaFrames: number) => void
   /** Move a clip to a new frame, optionally onto another same-kind track. */
@@ -137,6 +144,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       }
       return commit(state, next)
     }),
+
+  insertClip: (trackId, clip) =>
+    set((state) => commit(state, insertClip(state.doc, trackId, clip))),
 
   trimClip: (clipId, edge, deltaFrames) =>
     set((state) => commit(state, trimClip(state.doc, clipId, edge, deltaFrames))),

@@ -131,6 +131,12 @@
   border-radius: 4px;
 }
 
+/* Rows become draggable onto the timeline once metadata is in (Phase 4.0). */
+.media-item[draggable='true'] {
+  cursor: grab;
+  user-select: none;
+}
+
 .media-name {
   grid-area: name;
   font-size: 12px;

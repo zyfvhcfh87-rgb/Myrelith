@@ -203,4 +203,21 @@ describe('actions delegate to domain operations', () => {
     const doc = getState().doc
     expect(JSON.parse(JSON.stringify(doc))).toEqual(doc)
   })
+
+  test('insertClip lands on the track, is one undo entry, and undo removes it', () => {
+    getState().insertClip('V2', makeClip('clipNew', 50, 120))
+    expect(getState().doc.tracks[1].clips.map((c) => c.id)).toEqual(['clipNew'])
+    expect(getState().past).toHaveLength(1)
+
+    getState().undo()
+    expect(getState().doc.tracks[1].clips).toHaveLength(0)
+  })
+
+  test('rejected insertClip (overlap) leaves doc and history untouched', () => {
+    const before = getState().doc
+    getState().insertClip('V1', makeClip('clipNew', 100, 50)) // inside clipA [0,300)
+    expect(getState().doc).toBe(before) // same reference — nothing happened
+    expect(getState().past).toHaveLength(0)
+    expect(warnSpy).toHaveBeenCalled()
+  })
 })

@@ -21,11 +21,12 @@ they differ. Companion context: [HANDOFF.md](HANDOFF.md).
 
 Goal: full editing surface + correct multi-track compositing.
 
-### 4.0 (added; not in original plan) Media → timeline flow
-Dragging/adding an asset from MediaPool onto a track (creates a Clip via a
-new domain op `insertClip(doc, trackId, clip)` + documentStore action).
-Without this nothing else in Phase 4 is user-reachable. Keep the op pure,
-reject overlaps like every other op.
+### 4.0 ✅ DONE (2026-07-06) Media → timeline flow
+Shipped: pure ops `insertClip(doc, trackId, clip)` + `clipFromAsset(asset,
+startFrame)`, documentStore.insertClip (one undo entry; rejects push none),
+HTML5 drag from MediaPool rows onto Track lanes (`ui/dnd.ts` carries the
+payload contract + asset-kind↔track-kind gating; drop = pointer frame via
+the ruler's px→frame mapping). Browser-verified drop/undo/redo.
 
 ### 4.1 Compositing — `pipeline/render.ts` + `workers/render.worker.ts`
 Implement `compositeFrame(doc, frame)`: draw each track's active clip at

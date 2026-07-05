@@ -23,6 +23,7 @@ import type {
   Clip,
   ClipId,
   Effect,
+  MediaAsset,
   TimeRange,
   TimelineDoc,
   Track,
@@ -111,6 +112,98 @@ function newId(prefix: string): string {
 /* ------------------------------------------------------------------ */
 /* Operations                                                           */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Build a default Clip that plays `asset` in full, starting at timeline
+ * frame `startFrame`. Pure factory — it does NOT validate against a doc
+ * (insertClip does that); it only fills in the schema defaults (identity
+ * transform, full opacity/volume, empty effect chain). Per the MVP
+ * conformance note in schema.ts, asset.durationFrames is already measured
+ * in document-rate frames.
+ */
+export function clipFromAsset(asset: MediaAsset, startFrame: number): Clip {
+  return {
+    id: newId('clip'),
+    assetId: asset.id,
+    name: asset.fileName,
+    sourceRange: { startFrame: 0, durationFrames: asset.durationFrames },
+    timelineRange: { startFrame, durationFrames: asset.durationFrames },
+    transform: {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    },
+    opacity: 1,
+    volume: 1,
+    effects: [],
+  }
+}
+
+/**
+ * Insert a new clip onto a track. The clip is defensively deep-copied so
+ * later mutation of the caller's object cannot reach into the doc. Rejected
+ * on unknown/locked track, duplicate clip id, non-integer or negative
+ * frames, duration < 1, a sourceRange/timelineRange duration mismatch
+ * (speed-1.0 invariant), or overlap with an existing clip.
+ *
+ * Asset-kind vs track-kind compatibility is NOT checked here: assets live in
+ * state/mediaStore and domain/ cannot see them (same boundary as the
+ * source-length note in the file header). The UI gates that before calling.
+ */
+export function insertClip(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  clip: Clip,
+): TimelineDoc {
+  const op = 'insertClip'
+  const tl = clip.timelineRange
+  const src = clip.sourceRange
+
+  if (!Number.isInteger(tl.startFrame) || tl.startFrame < 0) {
+    return reject(doc, op, `timeline start must be an integer >= 0, got ${tl.startFrame}`)
+  }
+  if (!Number.isInteger(tl.durationFrames) || tl.durationFrames < 1) {
+    return reject(doc, op, `duration must be an integer >= 1, got ${tl.durationFrames}`)
+  }
+  if (!Number.isInteger(src.startFrame) || src.startFrame < 0) {
+    return reject(doc, op, `source start must be an integer >= 0, got ${src.startFrame}`)
+  }
+  if (src.durationFrames !== tl.durationFrames) {
+    return reject(
+      doc,
+      op,
+      `sourceRange duration ${src.durationFrames} != timelineRange duration ${tl.durationFrames} (clips play at speed 1.0)`,
+    )
+  }
+
+  const trackIndex = doc.tracks.findIndex((t) => t.id === trackId)
+  if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
+  const track = doc.tracks[trackIndex]
+  if (track.locked) return reject(doc, op, `track ${track.id} is locked`)
+
+  if (locateClip(doc, clip.id)) {
+    return reject(doc, op, `clip id ${clip.id} already exists in the document`)
+  }
+  if (overlapsAny(track.clips, tl)) {
+    return reject(doc, op, 'insert would overlap a clip on the target track')
+  }
+
+  const copy: Clip = {
+    ...clip,
+    sourceRange: { ...src },
+    timelineRange: { ...tl },
+    transform: { ...clip.transform },
+    effects: clip.effects.map((e) => ({ ...e, params: { ...e.params } })),
+    ...(clip.text ? { text: { ...clip.text } } : {}),
+  }
+
+  const clips = [...track.clips, copy].sort(byStart)
+  return withTrack(doc, trackIndex, { ...track, clips })
+}
 
 /**
  * Split a clip in two at a timeline frame strictly inside it. The left half

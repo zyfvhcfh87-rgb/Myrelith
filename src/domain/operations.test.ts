@@ -7,9 +7,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { Clip, Effect, TimelineDoc, Track } from './schema'
+import type { Clip, Effect, MediaAsset, TimelineDoc, Track } from './schema'
 import {
   addEffect,
+  clipFromAsset,
+  insertClip,
   moveClip,
   rippleDelete,
   splitClipAtFrame,
@@ -376,5 +378,114 @@ describe('cross-cutting guarantees', () => {
         expect(starts).toEqual([...starts].sort((a, b) => a - b))
       }
     }
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* insertClip + clipFromAsset (Phase 4.0)                               */
+/* ------------------------------------------------------------------ */
+
+const asset = (over: Partial<MediaAsset> = {}): MediaAsset => ({
+  id: 'asset-9',
+  fileName: 'beach.mp4',
+  objectUrl: 'blob:fake',
+  kind: 'video',
+  durationFrames: 120,
+  frameRate: { num: 30, den: 1 },
+  width: 1920,
+  height: 1080,
+  hasAudio: true,
+  audioSampleRate: 48000,
+  audioChannels: 2,
+  decoderConfigB64: null,
+  ...over,
+})
+
+describe('clipFromAsset', () => {
+  test('plays the whole asset from its first frame with schema defaults', () => {
+    const c = clipFromAsset(asset(), 30)
+    expect(c.assetId).toBe('asset-9')
+    expect(c.name).toBe('beach.mp4')
+    expect(c.sourceRange).toEqual({ startFrame: 0, durationFrames: 120 })
+    expect(c.timelineRange).toEqual({ startFrame: 30, durationFrames: 120 })
+    expect(c.opacity).toBe(1)
+    expect(c.volume).toBe(1)
+    expect(c.effects).toEqual([])
+    expect(c.transform).toEqual({
+      x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5,
+    })
+  })
+
+  test('every call mints a fresh clip id', () => {
+    expect(clipFromAsset(asset(), 0).id).not.toBe(clipFromAsset(asset(), 0).id)
+  })
+})
+
+describe('insertClip', () => {
+  test('inserts onto an empty track (factory output passes validation)', () => {
+    const doc = makeDoc()
+    const clip = clipFromAsset(asset(), 40)
+    const out = insertClip(doc, 'V2', clip)
+    expect(out).not.toBe(doc)
+    expect(clipsOf(out, 'V2')).toHaveLength(1)
+    expect(clipsOf(out, 'V2')[0].timelineRange).toEqual({ startFrame: 40, durationFrames: 120 })
+    expect(clipsOf(doc, 'V2')).toHaveLength(0) // input untouched
+  })
+
+  test('lands sorted between neighbors; touching ranges do not overlap (half-open)', () => {
+    // V1 has clipB [100,150) and clipC [200,260); [150,200) touches both.
+    const doc = makeDoc()
+    const out = insertClip(doc, 'V1', makeClip('clipNew', 150, 50))
+    const ids = clipsOf(out, 'V1').map((c) => c.id)
+    expect(ids).toEqual(['clipA', 'clipB', 'clipNew', 'clipC'])
+  })
+
+  test('overlap, locked track, unknown track are rejected (same reference)', () => {
+    const doc = makeDoc()
+    expect(insertClip(doc, 'V1', makeClip('n1', 90, 20))).toBe(doc) // overlaps clipA
+    expect(insertClip(doc, 'VL', makeClip('n2', 0, 10))).toBe(doc) // locked
+    expect(insertClip(doc, 'V9', makeClip('n3', 0, 10))).toBe(doc) // no such track
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+
+  test('duplicate clip id anywhere in the doc is rejected', () => {
+    const doc = makeDoc()
+    expect(insertClip(doc, 'V2', makeClip('clipA', 500, 10))).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
+
+  test('bad geometry is rejected: dur < 1, floats, negatives, speed != 1.0', () => {
+    const doc = makeDoc()
+    expect(insertClip(doc, 'V2', makeClip('z1', 0, 0))).toBe(doc) // empty clip
+    expect(insertClip(doc, 'V2', makeClip('z2', 0.5, 10))).toBe(doc) // float start
+    expect(insertClip(doc, 'V2', makeClip('z3', -5, 10))).toBe(doc) // negative start
+    expect(insertClip(doc, 'V2', makeClip('z4', 0, 10, -1))).toBe(doc) // negative src start
+    const mismatched = {
+      ...makeClip('z5', 0, 10),
+      sourceRange: { startFrame: 0, durationFrames: 9 },
+    }
+    expect(insertClip(doc, 'V2', mismatched)).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(5)
+  })
+
+  test('the stored clip is a deep copy — mutating the argument later is harmless', () => {
+    const doc = makeDoc()
+    const clip = makeClip('clipNew', 300, 40)
+    clip.effects.push(fx('fx1'))
+    const out = insertClip(doc, 'V2', clip)
+
+    clip.timelineRange.startFrame = 999
+    clip.transform.x = 999
+    clip.effects[0].params.amount = 999
+
+    const stored = clipIn(out, 'V2', 'clipNew')
+    expect(stored.timelineRange.startFrame).toBe(300)
+    expect(stored.transform.x).toBe(0)
+    expect(stored.effects[0].params.amount).toBe(0.5)
+  })
+
+  test('result survives a JSON round-trip', () => {
+    const out = insertClip(makeDoc(), 'V2', clipFromAsset(asset(), 0))
+    expect(JSON.parse(JSON.stringify(out))).toEqual(out)
   })
 })

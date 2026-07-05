@@ -55,6 +55,17 @@
   background: #151a17;
 }
 
+/* Lane highlighted while a compatible MediaPool asset hovers over it. */
+.timeline-track.drop-target {
+  background: #1d2733;
+  box-shadow: inset 0 0 0 1px #3d6491;
+}
+
+.track-audio.drop-target {
+  background: #182420;
+  box-shadow: inset 0 0 0 1px #3d7f56;
+}
+
 .track-label {
   position: sticky;
   left: 4px;

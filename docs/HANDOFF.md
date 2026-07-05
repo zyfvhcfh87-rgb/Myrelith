@@ -4,7 +4,7 @@ Read this first in a new session. It is the deep context; [PLAN.md](PLAN.md)
 holds what to build next; [../ARCHITECTURE.md](../ARCHITECTURE.md) holds the
 binding rules.
 
-## Status (2026-07-02)
+## Status (2026-07-06)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -13,20 +13,23 @@ binding rules.
 | 2 — decode engine | ✅ done | user-verified: 1080p60 scrub, 0.1ms cache hits, zero leak warnings |
 | 3.1–3.4 — layout/ruler/clips/preview | ✅ done | browser E2E: import → preview → scrub, 30↔60fps rescale exact |
 | **3 gate** | ⏳ OPEN | see PLAN.md "Immediate next" |
-| 4 — edit ops + compositing | ⬜ | |
+| 4.0 — media → timeline drag | ✅ done | browser E2E: drag asset row → clip on lane, kind-gated, 1 undo entry |
+| 4.1+ — compositing, trim/split UI | ⬜ | |
 | 5 — export | ⬜ | |
 
-161 tests green · `npm run build` and `npm run lint` clean · every phase
+181 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`).
 
 ## What works today (user-visible)
 
 Run `npm run dev` → editor shell. Import a video in the Media Pool → row
 shows real metadata, Preview draws frame 0. Click/drag the timeline ruler →
-playhead moves, Preview follows (rAF-coalesced, latest-wins). Seed clips via
-`window.__stores` (dev only) → drag clips with snap-back on illegal drops,
-one undo entry per drag. `?sandbox` = Phase 2 decode harness (delete after
-the Phase 3 gate passes).
+playhead moves, Preview follows (rAF-coalesced, latest-wins). Drag a media
+row onto a lane (4.0): compatible lanes highlight, drop creates the clip at
+the pointer, one undo entry (kind-gated: video/image → V lanes, audio → A
+lanes; rows drag only after metadata arrives). Drag clips with snap-back on
+illegal drops, one undo entry per drag. `?sandbox` = Phase 2 decode harness
+(delete after the Phase 3 gate passes).
 
 ## Map (key files, one line each)
 
@@ -54,7 +57,9 @@ the Phase 3 gate passes).
   meet engine/pipeline; DI seams for tests; idempotent per canvas
   (StrictMode); Phase 4 swaps its single-asset source for the compositor.
 - `src/ui/` — components read state only; `timeline/useScrubScheduler.ts`
-  = rAF coalescing reused by ruler + clip drag.
+  = rAF coalescing reused by ruler + clip drag; `dnd.ts` = MediaPool→Track
+  drag payload contract + asset-kind↔track-kind gating (kind policy lives
+  here because domain/ can't see assets).
 
 ## Invariants that must survive refactors
 
@@ -98,19 +103,27 @@ the Phase 3 gate passes).
   frame numbers, `File` it, then `DataTransfer` into a file input.
 - Synthetic gestures: dispatch `PointerEvent`s with `bubbles: true`
   directly on elements (preview_click does NOT produce pointer events).
-- Preview server: `.claude/launch.json` → `webcut-dev` on :5173. HMR of
-  worker files fully reloads the page (in-page state like `__testFile`
-  dies); module-map caches stale plain-URL imports — cache-bust probes
-  with `?probe=N`.
+  DnD: real `new DataTransfer()` + `DragEvent` work in Chrome; jsdom has
+  NEITHER (only PointerEvent), so `test/setup.ts` polyfills DragEvent as a
+  MouseEvent subclass — without it drop clientX silently becomes undefined
+  and tests green-light broken frame math.
+- Preview server: `.claude/launch.json` → `webcut-dev`, :5173 preferred but
+  `autoPort: true` + vite reading `PORT` (vite.config) let parallel chat
+  sessions run their own server on an assigned port.
+- HMR of worker files fully reloads the page (in-page state like
+  `__testFile` dies); module-map caches stale plain-URL imports —
+  cache-bust probes with `?probe=N` (this double-instances mediabunny →
+  its "loaded twice" console warning; harness artifact, ignore).
 
 ## Open items (beyond PLAN.md phases)
 
 - Phase 3 gate (keyboard undo/redo, profiler pass, user manual check) —
-  then DELETE `src/dev/DecodeSandbox.tsx` + the `?sandbox` branch.
+  then DELETE `src/dev/DecodeSandbox.tsx` + the `?sandbox` branch. The 4.0
+  drag flow makes the manual pass easier: no more `__stores` clip seeding.
 - `engine/playback-engine.ts` still a stub — audio-clock playback loop
   (ARCHITECTURE rule 3) has not started; no audio path at all yet.
-- MediaPool → timeline flow (creating clips from assets) doesn't exist;
-  clips are seeded via `__stores` for now. Needed early in Phase 4.
+- Preview still single-asset (previewController shows the last-imported
+  asset; dropped clips render as blocks but only composite in 4.1).
 - Clip selection (`selectedClipId`) arrives with Inspector (4.3).
 - `Transition`s exist in schema only. Images not previewable (video only).
 - `mediaStore.addAsset` is still the placeholder path; previewController
