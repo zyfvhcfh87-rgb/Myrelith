@@ -33,7 +33,9 @@ export default function App() {
       <section className="area-transport">
         <TransportBar />
       </section>
-      <section className="area-timeline">
+      {/* data-timeline-scroll: the Ruler virtualizes its ticks against
+          this scroll container (see ui/timeline/Ruler.tsx). */}
+      <section className="area-timeline" data-timeline-scroll>
         <Timeline />
       </section>
     </div>

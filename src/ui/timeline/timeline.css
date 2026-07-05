@@ -39,6 +39,13 @@
   white-space: nowrap;
 }
 
+/* The runway's final label sits INSIDE the right edge, so scrolling all
+   the way right ends on a readable mark instead of a clipped one. */
+.ruler-label-end {
+  left: auto;
+  right: 4px;
+}
+
 .timeline-tracks {
   position: relative;
   flex: 1;

@@ -15,10 +15,11 @@ binding rules.
 | **3 gate** | ⏳ OPEN | see PLAN.md "Immediate next" |
 | 4.0 — media → timeline drag | ✅ done | browser E2E: drag asset row → clip on lane, kind-gated, 1 undo entry |
 | 4.0.5 — transport bar (user request) | ✅ done | browser: ~30fps vs wall clock, pause freezes, ±1 steps, restart at end |
+| 4.0.6 — 12h virtualized ruler (user request) | ✅ done | browser: 1.296M-px runway, 18–27 tick nodes at any scroll, end label flush right |
 | 4.1+ — compositing, trim/split UI | ⬜ | |
 | 5 — export | ⬜ | |
 
-206 tests green · `npm run build` and `npm run lint` clean · every phase
+210 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`).
 
 ## What works today (user-visible)
@@ -70,7 +71,10 @@ from 0 when played at the end, auto-pauses when a scrub starts. `?sandbox`
 - `src/ui/` — components read state only; `timeline/useScrubScheduler.ts`
   = rAF coalescing reused by ruler + clip drag; `dnd.ts` = MediaPool→Track
   drag payload contract + asset-kind↔track-kind gating (kind policy lives
-  here because domain/ can't see assets).
+  here because domain/ can't see assets). `timeline/Ruler.tsx`: 12h min
+  runway, ticks VIRTUALIZED against the `[data-timeline-scroll]` ancestor
+  (app shell marks it; bare tests get a fallback window); the final frame
+  always gets a right-anchored end label.
 
 ## Invariants that must survive refactors
 

@@ -10,11 +10,53 @@
 import { Profiler } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { TimelineDoc } from '../../domain/schema'
+import { useDocumentStore } from '../../state/documentStore'
 import { useTransportStore } from '../../state/transportStore'
 import Playhead from './Playhead'
 import Ruler from './Ruler'
 import Timeline from './Timeline'
 import { useScrubScheduler } from './useScrubScheduler'
+
+/** Empty 30fps doc, optionally with one clip to pin the doc duration. */
+function makeDoc(durationFrames = 0): TimelineDoc {
+  return {
+    schemaVersion: 1,
+    id: 'doc-ruler',
+    name: 'ruler fixture',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [
+      {
+        id: 'V1',
+        kind: 'video',
+        name: 'V1',
+        clips:
+          durationFrames > 0
+            ? [
+                {
+                  id: 'clipA',
+                  assetId: 'asset-1',
+                  name: 'clipA',
+                  sourceRange: { startFrame: 0, durationFrames },
+                  timelineRange: { startFrame: 0, durationFrames },
+                  transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
+                  opacity: 1,
+                  volume: 1,
+                  effects: [],
+                },
+              ]
+            : [],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        locked: false,
+      },
+    ],
+  }
+}
 
 beforeEach(() => {
   useTransportStore.setState({
@@ -25,7 +67,33 @@ beforeEach(() => {
     inOut: null,
     dragPreview: null,
   })
+  useDocumentStore.getState().setDoc(makeDoc())
 })
+
+/** 12h at 30fps — the minimum ruler runway in frames. */
+const RUNWAY_FRAMES = 12 * 3600 * 30
+
+/**
+ * Render a Ruler inside a marked scroll container and put its viewport at
+ * `scrollLeft`. jsdom has no layout, so clientWidth is stubbed.
+ */
+async function renderScrolled(scrollLeft: number, clientWidth = 1000) {
+  const { container } = render(
+    <div data-timeline-scroll>
+      <Ruler />
+    </div>,
+  )
+  const scroller = container.firstElementChild as HTMLElement
+  Object.defineProperty(scroller, 'clientWidth', {
+    value: clientWidth,
+    configurable: true,
+  })
+  scroller.scrollLeft = scrollLeft
+  fireEvent.scroll(scroller)
+  await nextFrame() // flush the rAF-coalesced window read
+  await nextFrame()
+  return scroller
+}
 
 const nextFrame = () =>
   act(
@@ -83,8 +151,41 @@ describe('Ruler', () => {
     render(<Ruler />)
     expect(screen.getByText('00:00:00:00')).toBeInTheDocument()
     expect(screen.getByText('00:00:01:00')).toBeInTheDocument()
-    expect(screen.getByText('00:01:00:00')).toBeInTheDocument() // 60s runway
+    expect(screen.getByText('00:01:00:00')).toBeInTheDocument() // still inside the fallback window
     expect(screen.queryByText('00:00:00:15')).not.toBeInTheDocument() // no sub-second labels at this zoom
+  })
+
+  test('runway spans 12 hours even for an empty project', () => {
+    render(<Ruler />)
+    expect(screen.getByTestId('ruler')).toHaveStyle({
+      width: `${RUNWAY_FRAMES}px`, // zoom 1
+    })
+  })
+
+  test('virtualization: only ticks near the scroll viewport exist', async () => {
+    await renderScrolled(600_000) // ~5h33m in, zoom 1
+    const ticks = document.querySelectorAll('.ruler-tick')
+    expect(ticks.length).toBeGreaterThan(0)
+    expect(ticks.length).toBeLessThan(60) // NOT all ~8,640 runway ticks
+    expect(screen.getByText('05:33:20:00')).toBeInTheDocument() // frame 600000
+    expect(screen.queryByText('00:00:00:00')).not.toBeInTheDocument() // start is far away
+  })
+
+  test('scrolled to the far right, the runway ends on an inside-anchored 12h label', async () => {
+    await renderScrolled(RUNWAY_FRAMES - 1000)
+    const endLabel = screen.getByText('12:00:00:00')
+    expect(endLabel).toHaveClass('ruler-label-end')
+  })
+
+  test('a doc slightly longer than the runway ends on ITS last frame, dropping a crowded neighbor', async () => {
+    // 1,296,050 frames: 50px past the aligned 12h tick at zoom 1 — too
+    // close for two labels, so the aligned tick yields to the end tick.
+    act(() => {
+      useDocumentStore.getState().setDoc(makeDoc(RUNWAY_FRAMES + 50))
+    })
+    await renderScrolled(RUNWAY_FRAMES - 1000)
+    expect(screen.getByText('12:00:01:20')).toHaveClass('ruler-label-end')
+    expect(screen.queryByText('12:00:00:00')).not.toBeInTheDocument()
   })
 
   test('click + drag seeks the playhead (rAF-coalesced, scrub flag toggles)', async () => {

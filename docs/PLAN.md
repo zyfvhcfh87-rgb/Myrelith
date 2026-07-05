@@ -37,6 +37,16 @@ parks+pauses, play-at-end restarts), ui/TransportBar (subscribes to
 isPlaying only — invariant 6 kept). Playback is silent + single-asset
 until 4.1/audio; keyboard arrows still belong to 4.2.
 
+### 4.0.6 ✅ DONE (2026-07-06; user-requested) 12-hour virtualized ruler
+The 60s minimum runway ended mid-screen on wide monitors. Now
+MIN_RULER_SECONDS = 12h with tick VIRTUALIZATION (only the viewport ±1
+screen of ticks exist in the DOM — a full 12h runway would be ~8.6k
+nodes); scroll window read from the `[data-timeline-scroll]` ancestor,
+rAF-coalesced. The runway's last frame always shows a right-anchored
+label so scrolling right ends on a clean 12:00:00:00 mark. Native
+scrollbar is twitchy at 1px/frame over 1.3M px — acceptable until zoom
+controls land (post-4.2 candidate).
+
 ### 4.1 Compositing — `pipeline/render.ts` + `workers/render.worker.ts`
 Implement `compositeFrame(doc, frame)`: draw each track's active clip at
 `frame` bottom-to-top (tracks[0] first), applying Transform
