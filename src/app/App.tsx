@@ -12,6 +12,7 @@ import Toolbar from '../ui/Toolbar'
 import MediaPool from '../ui/MediaPool'
 import Preview from '../ui/Preview'
 import Inspector from '../ui/Inspector'
+import TransportBar from '../ui/TransportBar'
 import Timeline from '../ui/timeline/Timeline'
 
 export default function App() {
@@ -29,6 +30,9 @@ export default function App() {
       <aside className="area-inspector">
         <Inspector />
       </aside>
+      <section className="area-transport">
+        <TransportBar />
+      </section>
       <section className="area-timeline">
         <Timeline />
       </section>

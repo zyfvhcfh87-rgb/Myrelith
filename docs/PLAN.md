@@ -28,6 +28,15 @@ HTML5 drag from MediaPool rows onto Track lanes (`ui/dnd.ts` carries the
 payload contract + asset-kind↔track-kind gating; drop = pointer frame via
 the ruler's px→frame mapping). Browser-verified drop/undo/redo.
 
+### 4.0.5 ✅ DONE (2026-07-06; user-requested, not in original plan) Transport bar
+Play/pause + one-frame steps between Preview and Timeline. Shipped:
+`engine/playback-engine.ts` (real now, no longer a stub — injected
+AudioContext clock per rule 3, floor+epsilon frame math), app/
+transportController (composition root; scrub preempts playback, end
+parks+pauses, play-at-end restarts), ui/TransportBar (subscribes to
+isPlaying only — invariant 6 kept). Playback is silent + single-asset
+until 4.1/audio; keyboard arrows still belong to 4.2.
+
 ### 4.1 Compositing — `pipeline/render.ts` + `workers/render.worker.ts`
 Implement `compositeFrame(doc, frame)`: draw each track's active clip at
 `frame` bottom-to-top (tracks[0] first), applying Transform

@@ -14,10 +14,11 @@ binding rules.
 | 3.1–3.4 — layout/ruler/clips/preview | ✅ done | browser E2E: import → preview → scrub, 30↔60fps rescale exact |
 | **3 gate** | ⏳ OPEN | see PLAN.md "Immediate next" |
 | 4.0 — media → timeline drag | ✅ done | browser E2E: drag asset row → clip on lane, kind-gated, 1 undo entry |
+| 4.0.5 — transport bar (user request) | ✅ done | browser: ~30fps vs wall clock, pause freezes, ±1 steps, restart at end |
 | 4.1+ — compositing, trim/split UI | ⬜ | |
 | 5 — export | ⬜ | |
 
-181 tests green · `npm run build` and `npm run lint` clean · every phase
+206 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`).
 
 ## What works today (user-visible)
@@ -28,8 +29,11 @@ playhead moves, Preview follows (rAF-coalesced, latest-wins). Drag a media
 row onto a lane (4.0): compatible lanes highlight, drop creates the clip at
 the pointer, one undo entry (kind-gated: video/image → V lanes, audio → A
 lanes; rows drag only after metadata arrives). Drag clips with snap-back on
-illegal drops, one undo entry per drag. `?sandbox` = Phase 2 decode harness
-(delete after the Phase 3 gate passes).
+illegal drops, one undo entry per drag. Transport bar between preview and
+timeline (4.0.5): play/pause + one-frame steps — playback derives frames
+from an AudioContext clock (rule 3), parks on the last frame, restarts
+from 0 when played at the end, auto-pauses when a scrub starts. `?sandbox`
+= Phase 2 decode harness (delete after the Phase 3 gate passes).
 
 ## Map (key files, one line each)
 
@@ -56,6 +60,13 @@ illegal drops, one undo entry per drag. `?sandbox` = Phase 2 decode harness
 - `src/app/previewController.ts` — THE COMPOSITION ROOT: only place stores
   meet engine/pipeline; DI seams for tests; idempotent per canvas
   (StrictMode); Phase 4 swaps its single-asset source for the compositor.
+- `src/app/transportController.ts` — second composition root (same
+  pattern): PlaybackEngine ↔ transportStore, lazy AudioContext on first
+  play (click = allowed gesture), clamps every frame vs CURRENT doc
+  duration, pauses on scrub-start. `src/engine/playback-engine.ts` = the
+  pure loop (injected clock/ticks; floor + 1e-6 frame epsilon so NTSC
+  boundaries don't flip late; emits newest frame only, latest-wins).
+  UI facade: `src/ui/TransportBar.tsx` (subscribes to isPlaying ONLY).
 - `src/ui/` — components read state only; `timeline/useScrubScheduler.ts`
   = rAF coalescing reused by ruler + clip drag; `dnd.ts` = MediaPool→Track
   drag payload contract + asset-kind↔track-kind gating (kind policy lives
@@ -120,8 +131,9 @@ illegal drops, one undo entry per drag. `?sandbox` = Phase 2 decode harness
 - Phase 3 gate (keyboard undo/redo, profiler pass, user manual check) —
   then DELETE `src/dev/DecodeSandbox.tsx` + the `?sandbox` branch. The 4.0
   drag flow makes the manual pass easier: no more `__stores` clip seeding.
-- `engine/playback-engine.ts` still a stub — audio-clock playback loop
-  (ARCHITECTURE rule 3) has not started; no audio path at all yet.
+- Playback exists but is SILENT: the AudioContext is clock-only (rule 3
+  honored); audio decode/mix/output does not exist yet. Playback also
+  still shows the single demuxed asset, not the timeline (4.1 compositor).
 - Preview still single-asset (previewController shows the last-imported
   asset; dropped clips render as blocks but only composite in 4.1).
 - Clip selection (`selectedClipId`) arrives with Inspector (4.3).

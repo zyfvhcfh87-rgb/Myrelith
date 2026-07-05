@@ -15,9 +15,10 @@
   grid-template-areas:
     'toolbar toolbar toolbar'
     'media-pool preview inspector'
+    'transport transport transport'
     'timeline timeline timeline';
   grid-template-columns: 280px minmax(0, 1fr) 300px;
-  grid-template-rows: 48px minmax(0, 1fr) 320px;
+  grid-template-rows: 48px minmax(0, 1fr) 40px 320px;
   height: 100dvh;
   background: #141414;
   color: #e8e8e8;
@@ -52,10 +53,54 @@
   overflow-y: auto;
 }
 
+.area-transport {
+  grid-area: transport;
+  border-top: 1px solid #2a2a2a;
+  background: #181818;
+}
+
 .area-timeline {
   grid-area: timeline;
   border-top: 1px solid #2a2a2a;
   overflow: auto;
+}
+
+/* Transport bar (Phase 4.0.5) */
+
+.transport-bar {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.transport-button {
+  min-width: 34px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 13px;
+  line-height: 1;
+  color: #ccc;
+  background: #232323;
+  border: 1px solid #333;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.transport-button:hover {
+  background: #2d2d2d;
+  border-color: #4a4a4a;
+}
+
+.transport-button:active {
+  background: #1b1b1b;
+}
+
+.transport-play {
+  min-width: 44px;
+  font-size: 14px;
+  color: #e8e8e8;
 }
 
 /* Preview panel (Phase 3.4) */
