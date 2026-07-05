@@ -9,15 +9,28 @@ frame math, audio-master-clock, UI-reads-state-only, one-module-per-prompt).
 Those rules are binding for every change and are not repeated here to avoid
 drift — treat ARCHITECTURE.md as canonical.
 
+## Continuing the build (start here in a new session)
+
+1. [docs/HANDOFF.md](docs/HANDOFF.md) — status, file map, invariants,
+   hard-won lessons (browser-only bugs!), dev toolbox, working agreements.
+2. [docs/PLAN.md](docs/PLAN.md) — exactly what to build next (Phase 3 gate
+   → Phase 4 → Phase 5) with gates; supersedes the original plan file.
+
+Phases 0–3.4 are done and committed; the Phase 3 gate is open. 161 tests.
+
 ## Build & test
 
-- `npm run dev` — dev server
-- `npm run build` — typecheck + production build (must stay green)
+- `npm run dev` — dev server (preview config: `.claude/launch.json`)
+- `npm run build` — typecheck + production build (must stay green;
+  vitest alone is NOT enough — run tsc via this)
 - `npm test` — Vitest
 - `npm run lint` — oxlint
 
-## Build sequence
+## Working style (user preference — binding)
 
-The project is built phase-by-phase per the implementation plan. Each phase
-has a gate that must pass before starting the next. Current status is tracked
-in the plan; do not skip a gate.
+- One module per turn: implement → test → build/lint → browser-verify if
+  observable → commit (message file + `git commit -F`, author Aryel,
+  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`).
+- Never skip a phase gate. Quality over speed, explicitly requested.
+- End-of-turn summaries: short, plain, low-jargon (see HANDOFF.md).
+- TypeScript `erasableSyntaxOnly`: no constructor parameter properties.
