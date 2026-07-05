@@ -19,8 +19,10 @@ binding rules.
 | 4.1+ — compositing, trim/split UI | ⬜ | |
 | 5 — export | ⬜ | |
 
-210 tests green · `npm run build` and `npm run lint` clean · every phase
-committed separately (see `git log --oneline`).
+216 tests green · `npm run build` and `npm run lint` clean · every phase
+committed separately (see `git log --oneline`). Keyboard undo/redo
+(Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y) is wired — gate item 1 done; the gate's
+remaining items are the user's manual pass.
 
 ## What works today (user-visible)
 

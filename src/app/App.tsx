@@ -5,6 +5,8 @@
  * Every panel is its own component from ui/; the shell holds NO state and
  * subscribes to NO stores — re-renders here would cascade everywhere, and
  * the Phase 3 gate requires scrubbing to re-render Playhead/Preview only.
+ * (useUndoRedoShortcuts only attaches a window listener — no subscription,
+ * no state, no re-renders.)
  */
 
 import './layout.css'
@@ -14,8 +16,10 @@ import Preview from '../ui/Preview'
 import Inspector from '../ui/Inspector'
 import TransportBar from '../ui/TransportBar'
 import Timeline from '../ui/timeline/Timeline'
+import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
 
 export default function App() {
+  useUndoRedoShortcuts()
   return (
     <div className="app-shell">
       <header className="area-toolbar">

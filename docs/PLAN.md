@@ -7,8 +7,9 @@ they differ. Companion context: [HANDOFF.md](HANDOFF.md).
 
 ## Immediate next: Phase 3 gate
 
-- [ ] Wire Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y) to documentStore undo/redo —
-  a small app-level keyboard hook (app/ or ui/, reads state only).
+- [x] Wire Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y) to documentStore undo/redo —
+  DONE 2026-07-06: `app/useUndoRedoShortcuts.ts` (window listener, no
+  subscriptions; guards editable targets, AltGr, IME).
 - [ ] Verify with React DevTools Profiler in the browser: 5s of scrubbing
   re-renders ONLY Playhead + Preview (automated Profiler tests exist;
   this is the manual confirmation pass).
