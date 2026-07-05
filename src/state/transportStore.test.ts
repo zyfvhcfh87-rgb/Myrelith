@@ -14,6 +14,7 @@ beforeEach(() => {
     isScrubbing: false,
     zoom: 1,
     inOut: null,
+    dragPreview: null,
   })
 })
 
@@ -43,6 +44,25 @@ describe('transportStore', () => {
     expect(getState().zoom).toBe(2.5)
     getState().setZoom(-1)
     expect(getState().zoom).toBe(2.5)
+  })
+
+  test('dragPreview sets, normalizes the frame, and clears', () => {
+    getState().setDragPreview({ clipId: 'clipA', startFrame: 41.6 })
+    expect(getState().dragPreview).toEqual({ clipId: 'clipA', startFrame: 42 })
+
+    getState().setDragPreview({ clipId: 'clipA', startFrame: -20 })
+    expect(getState().dragPreview).toEqual({ clipId: 'clipA', startFrame: 0 })
+
+    getState().setDragPreview(null)
+    expect(getState().dragPreview).toBeNull()
+  })
+
+  test('setDragPreview touches ONLY dragPreview', () => {
+    getState().setPlayheadFrame(77)
+    getState().setDragPreview({ clipId: 'clipA', startFrame: 10 })
+    expect(getState().playheadFrame).toBe(77)
+    expect(getState().zoom).toBe(1)
+    expect(getState().isScrubbing).toBe(false)
   })
 
   test('flags and inOut set independently', () => {

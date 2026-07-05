@@ -44,6 +44,68 @@
   flex: 1;
 }
 
+.timeline-track {
+  position: relative;
+  height: 56px;
+  border-bottom: 1px solid #232323;
+  background: #171717;
+}
+
+.track-audio {
+  background: #151a17;
+}
+
+.track-label {
+  position: sticky;
+  left: 4px;
+  top: 4px;
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  color: #999;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 3px;
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
+}
+
+.clip-view {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  background: linear-gradient(180deg, #2d4a6d, #253c58);
+  border: 1px solid #3d6491;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #cfe2f5;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.track-audio .clip-view {
+  background: linear-gradient(180deg, #2d5d40, #24492f);
+  border-color: #3d7f56;
+  color: #cfeedd;
+}
+
+.clip-view.dragging {
+  cursor: grabbing;
+  opacity: 0.85;
+  z-index: 5;
+  border-color: #7db4ec;
+}
+
+.clip-name {
+  pointer-events: none;
+}
+
 .playhead {
   position: absolute;
   top: 0;

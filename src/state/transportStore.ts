@@ -10,7 +10,19 @@
  */
 
 import { create } from 'zustand'
-import type { TimeRange } from '../domain/schema'
+import type { ClipId, TimeRange } from '../domain/schema'
+
+/**
+ * Live position of a clip mid-drag — the "scrubbing" half of the
+ * scrubbing-vs-committed pattern (ARCHITECTURE.md). While a drag gesture is
+ * active, ClipView renders from here; documentStore is untouched until
+ * pointerup commits ONE moveClip (one undo entry).
+ */
+export interface DragPreview {
+  clipId: ClipId
+  /** Where the dragged clip's timelineRange would start right now. */
+  startFrame: number
+}
 
 export interface TransportState {
   /** Current playhead position, integer frames at the document rate. */
@@ -23,6 +35,8 @@ export interface TransportState {
   zoom: number
   /** In/out selection for preview/export, or null when unset. */
   inOut: TimeRange | null
+  /** Clip-drag preview, or null when no drag is in flight. */
+  dragPreview: DragPreview | null
 
   /** Move the playhead. Does NOTHING else — no side effects, no coupling. */
   setPlayheadFrame: (frame: number) => void
@@ -34,6 +48,11 @@ export interface TransportState {
   setZoom: (zoom: number) => void
   /** Set or clear the in/out selection. */
   setInOut: (inOut: TimeRange | null) => void
+  /**
+   * Update or clear the clip-drag preview. Frame is forced to a
+   * non-negative integer like the playhead. No other field is touched.
+   */
+  setDragPreview: (preview: DragPreview | null) => void
 }
 
 export const useTransportStore = create<TransportState>()((set) => ({
@@ -42,6 +61,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
   isScrubbing: false,
   zoom: 1,
   inOut: null,
+  dragPreview: null,
 
   setPlayheadFrame: (frame) =>
     set({ playheadFrame: Math.max(0, Math.round(frame)) }),
@@ -49,4 +69,10 @@ export const useTransportStore = create<TransportState>()((set) => ({
   setIsScrubbing: (isScrubbing) => set({ isScrubbing }),
   setZoom: (zoom) => set((state) => (zoom > 0 ? { zoom } : state)),
   setInOut: (inOut) => set({ inOut }),
+  setDragPreview: (preview) =>
+    set({
+      dragPreview: preview
+        ? { ...preview, startFrame: Math.max(0, Math.round(preview.startFrame)) }
+        : null,
+    }),
 }))

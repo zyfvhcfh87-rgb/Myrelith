@@ -8,6 +8,7 @@
  * touches documentStore.
  */
 
+import { useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { docDurationFrames } from '../../domain/selectors'
 import { formatTimecode, secondsToFrames } from '../../domain/time'
@@ -41,6 +42,8 @@ export default function Ruler() {
   const durationFrames = useDocumentStore((s) => docDurationFrames(s.doc))
 
   const schedule = useScrubScheduler(setPlayheadFrame)
+  /** Our own gesture flag — capture status is NOT the source of truth. */
+  const scrubbingRef = useRef(false)
 
   const totalFrames = Math.max(
     durationFrames,
@@ -82,19 +85,28 @@ export default function Ruler() {
       data-testid="ruler"
       style={{ width: totalFrames * zoom }}
       onPointerDown={(e) => {
+        scrubbingRef.current = true
         setIsScrubbing(true)
         schedule(frameFromPointer(e))
         capturePointer(e)
       }}
       onPointerMove={(e) => {
-        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        if (scrubbingRef.current) {
           schedule(frameFromPointer(e))
         }
       }}
       onPointerUp={(e) => {
+        scrubbingRef.current = false
         releasePointer(e)
         schedule(frameFromPointer(e))
         setIsScrubbing(false)
+      }}
+      onPointerLeave={(e) => {
+        // Capture failed and the pointer left: end the scrub cleanly.
+        if (scrubbingRef.current && !e.currentTarget.hasPointerCapture(e.pointerId)) {
+          scrubbingRef.current = false
+          setIsScrubbing(false)
+        }
       }}
     >
       {ticks.map((frame) => (

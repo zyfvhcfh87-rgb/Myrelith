@@ -23,6 +23,7 @@ beforeEach(() => {
     isScrubbing: false,
     zoom: 1,
     inOut: null,
+    dragPreview: null,
   })
 })
 

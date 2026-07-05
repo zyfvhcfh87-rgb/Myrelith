@@ -81,8 +81,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   transportStore (UI wiring passes the playhead in).
 - `TransportState` — `src/state/transportStore.ts`: `playheadFrame` (int,
   setter rounds + clamps >= 0), `isPlaying`, `isScrubbing`, `zoom`
-  (px/frame, > 0), `inOut`. No history, no side effects, never touches
-  documentStore.
+  (px/frame, > 0), `inOut`, `dragPreview` ({clipId, startFrame} | null —
+  the live half of the scrubbing-vs-committed pattern; pointerup commits
+  ONE documentStore.moveClip and clears it). No history, no side effects,
+  never touches documentStore.
 - `MediaState` — `src/state/mediaStore.ts`: `assets: Map<AssetId,
   MediaAsset>`, `addAsset(file)` (placeholder until Phase 2 demux),
   `removeAsset(id)` (revokes the object URL). Session-scoped, not
