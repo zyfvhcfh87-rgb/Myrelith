@@ -251,6 +251,57 @@
   color: #fff;
 }
 
+/* Phase 4.3 Inspector: transform/opacity fields for the selected clip. */
+.inspector-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.inspector-title {
+  font-weight: 600;
+  color: #cfe2f5;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.inspector-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inspector-field-label {
+  font-size: 10px;
+  color: #9aa3ad;
+}
+
+.inspector-field input {
+  background: #1d1d21;
+  border: 1px solid #3a3a41;
+  border-radius: 4px;
+  color: #ddd;
+  font-size: 12px;
+  padding: 3px 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.inspector-field input:focus {
+  outline: none;
+  border-color: #6b93c4;
+}
+
 /* Phase 3.1 placeholder styling — dies as real panels replace it. */
 .panel-placeholder {
   display: flex;

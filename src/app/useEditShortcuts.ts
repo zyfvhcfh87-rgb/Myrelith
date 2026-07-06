@@ -8,6 +8,7 @@
  *   A/B/T/Y/U        → select / razor / trim / slip / slide tool
  *   S                → split every clip under the playhead
  *   Delete/Backspace → ripple-delete the selected clip
+ *   ←/→              → step the playhead one frame (Phase 4 gate item)
  *
  * Guards match the undo hook: editable targets keep their native typing,
  * modifier combos pass through (Ctrl+A must stay select-all), and IME
@@ -17,6 +18,7 @@
 import { useEffect } from 'react'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import { stepFrame } from './transportController'
 import { isEditableTarget } from './useUndoRedoShortcuts'
 
 export function useEditShortcuts(): void {
@@ -44,6 +46,12 @@ export function useEditShortcuts(): void {
           break
         case 's':
           useDocumentStore.getState().splitClipAtPlayhead(transport.playheadFrame)
+          break
+        case 'arrowleft':
+          stepFrame(-1)
+          break
+        case 'arrowright':
+          stepFrame(1)
           break
         case 'delete':
         case 'backspace': {

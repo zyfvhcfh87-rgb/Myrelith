@@ -128,6 +128,31 @@ describe('S — split at playhead', () => {
   })
 })
 
+describe('arrow keys — frame stepping (Phase 4 gate item)', () => {
+  test('ArrowRight/ArrowLeft step exactly one frame, clamped at 0', () => {
+    render(<Host />)
+    transport().setPlayheadFrame(100)
+    key({ key: 'ArrowRight' })
+    expect(transport().playheadFrame).toBe(101)
+    key({ key: 'ArrowLeft' })
+    key({ key: 'ArrowLeft' })
+    expect(transport().playheadFrame).toBe(99)
+
+    transport().setPlayheadFrame(0)
+    key({ key: 'ArrowLeft' })
+    expect(transport().playheadFrame).toBe(0) // floor clamp
+  })
+
+  test('arrows inside an editable field keep their native caret behavior', () => {
+    const { getByTestId } = render(<Host />)
+    transport().setPlayheadFrame(100)
+    getByTestId('field').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }),
+    )
+    expect(transport().playheadFrame).toBe(100) // untouched
+  })
+})
+
 describe('Delete — ripple delete the selection', () => {
   test('deletes the selected clip, closes the gap, clears the selection', () => {
     render(<Host />)
