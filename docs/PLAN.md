@@ -5,18 +5,15 @@ Adapted from the original implementation plan (source:
 how the codebase actually evolved — trust THIS file over the original where
 they differ. Companion context: [HANDOFF.md](HANDOFF.md).
 
-## Immediate next: Phase 3 gate
+## Phase 3 gate — ✅ CLOSED (2026-07-06)
 
 - [x] Wire Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y) to documentStore undo/redo —
-  DONE 2026-07-06: `app/useUndoRedoShortcuts.ts` (window listener, no
-  subscriptions; guards editable targets, AltGr, IME).
-- [ ] Verify with React DevTools Profiler in the browser: 5s of scrubbing
-  re-renders ONLY Playhead + Preview (automated Profiler tests exist;
-  this is the manual confirmation pass).
-- [ ] Dragging a clip updates the doc JSON (inspect via
-  `window.__stores.document.getState().doc`) and undo visibly reverts it.
-- [ ] User runs the manual pass; then DELETE `src/dev/DecodeSandbox.tsx`
-  and the `?sandbox` branch in `main.tsx`.
+  `app/useUndoRedoShortcuts.ts` (window listener, no subscriptions;
+  guards editable targets, AltGr, IME).
+- [x] User ran the manual pass (Profiler render isolation, drag → doc JSON
+  → undo reverts) — confirmed 2026-07-06.
+- [x] `src/dev/DecodeSandbox.tsx` and the `?sandbox` branch in `main.tsx`
+  DELETED.
 
 ## Phase 4 — Trim / Split / Multi-Track Edit Ops
 

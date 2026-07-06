@@ -12,7 +12,7 @@ binding rules.
 | 1 — ops + undo/redo stores | ✅ done | 20-random-ops fuzz gate, 5 seeds |
 | 2 — decode engine | ✅ done | user-verified: 1080p60 scrub, 0.1ms cache hits, zero leak warnings |
 | 3.1–3.4 — layout/ruler/clips/preview | ✅ done | browser E2E: import → preview → scrub, 30↔60fps rescale exact |
-| **3 gate** | ⏳ OPEN | see PLAN.md "Immediate next" |
+| **3 gate** | ✅ closed | user manual pass 2026-07-06; sandbox deleted |
 | 4.0 — media → timeline drag | ✅ done | browser E2E: drag asset row → clip on lane, kind-gated, 1 undo entry |
 | 4.0.5 — transport bar (user request) | ✅ done | browser: ~30fps vs wall clock, pause freezes, ±1 steps, restart at end |
 | 4.0.6 — 12h virtualized ruler (user request) | ✅ done | browser: 1.296M-px runway, 18–27 tick nodes at any scroll, end label flush right |
@@ -35,8 +35,7 @@ lanes; rows drag only after metadata arrives). Drag clips with snap-back on
 illegal drops, one undo entry per drag. Transport bar between preview and
 timeline (4.0.5): play/pause + one-frame steps — playback derives frames
 from an AudioContext clock (rule 3), parks on the last frame, restarts
-from 0 when played at the end, auto-pauses when a scrub starts. `?sandbox`
-= Phase 2 decode harness (delete after the Phase 3 gate passes).
+from 0 when played at the end, auto-pauses when a scrub starts.
 
 ## Map (key files, one line each)
 
@@ -134,9 +133,6 @@ from 0 when played at the end, auto-pauses when a scrub starts. `?sandbox`
 
 ## Open items (beyond PLAN.md phases)
 
-- Phase 3 gate (keyboard undo/redo, profiler pass, user manual check) —
-  then DELETE `src/dev/DecodeSandbox.tsx` + the `?sandbox` branch. The 4.0
-  drag flow makes the manual pass easier: no more `__stores` clip seeding.
 - Playback exists but is SILENT: the AudioContext is clock-only (rule 3
   honored); audio decode/mix/output does not exist yet. Playback also
   still shows the single demuxed asset, not the timeline (4.1 compositor).
