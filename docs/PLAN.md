@@ -46,15 +46,32 @@ scrollbar is twitchy at 1px/frame over 1.3M px — acceptable until zoom
 controls land (post-4.2 candidate).
 
 ### 4.1 Compositing — `pipeline/render.ts` + `workers/render.worker.ts`
-Implement `compositeFrame(doc, frame)`: draw each track's active clip at
-`frame` bottom-to-top (tracks[0] first), applying Transform
-(translate/scale/rotate around anchor) + opacity via ctx.globalAlpha before
-drawImage. Skip `hidden` tracks. Canvas2D only — no WebGL yet.
-Sources: per-asset decode (reuse VideoChunkSource / decode-worker pattern;
-design decision needed: one decoder per active asset inside render.worker,
-reusing createDecodeWorkerCore pieces where possible).
-Then swap `app/previewController.ts` from single-asset preview to the
-compositor (its DI seams were built for exactly this swap).
+Sliced into three module-turns:
+
+- [x] **4.1a compositor core** — DONE 2026-07-06. `pipeline/render.ts`:
+  `compositeFrame(doc, frame, ctx, source)` draws each visible video
+  track's active clip bottom-to-top (tracks[0] first) with Transform
+  (scale→rotate→translate around anchor) + clamped opacity; black
+  background; text clips + opacity≤0 skipped. Canvas2D only. The 2D ctx
+  (`Composite2D`) and pixels (`FrameSource.getFrame(assetId, sourceFrame)
+  → Promise<ImageBitmap|null>`) are injected; all fetches for one
+  composite issue CONCURRENTLY, drawing is synchronous afterwards
+  (bitmap-validity window), per-clip try/finally so a dead bitmap can't
+  poison the ctx stack; result reports `{drawn, missing}` clip ids so the
+  caller knows to re-composite after decoders warm up. New domain
+  selectors: `activeClipAt(track, frame)`, `clipSourceFrame(clip, frame)`.
+  12 unit tests (order, transform math, failure isolation, concurrency).
+- [ ] **4.1b render worker** — `workers/render.worker.ts`: one decode core
+  per active asset (reuse createDecodeWorkerCore pieces), owns the
+  transferred preview canvas sized to doc dims, implements FrameSource
+  over the per-asset caches, runs compositeFrame per seek (latest-wins at
+  the request layer, NEVER dropping requests within one composite — see
+  render.ts contract), auto re-composites when `missing` clips decode.
+  Needs a render-protocol (doc snapshot + frame + per-asset chunks).
+- [ ] **4.1c previewController swap** — single-asset preview → compositor
+  (DI seams were built for this); demux/config per asset used by the doc,
+  not just the newest import. Browser-verify: 2 stacked clips, opacity
+  blend, hidden-track toggle.
 
 ### 4.2 Split / Trim wiring
 - Keyboard 'S' → documentStore.splitClipAtPlayhead(transportStore

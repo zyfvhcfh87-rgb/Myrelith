@@ -16,13 +16,14 @@ binding rules.
 | 4.0 — media → timeline drag | ✅ done | browser E2E: drag asset row → clip on lane, kind-gated, 1 undo entry |
 | 4.0.5 — transport bar (user request) | ✅ done | browser: ~30fps vs wall clock, pause freezes, ±1 steps, restart at end |
 | 4.0.6 — 12h virtualized ruler (user request) | ✅ done | browser: 1.296M-px runway, 18–27 tick nodes at any scroll, end label flush right |
-| 4.1+ — compositing, trim/split UI | ⬜ | |
+| 4.1a — compositor core (`compositeFrame`) | ✅ done | 12 unit tests: stack order, transform math, failure isolation, concurrent fetch |
+| 4.1b/c — render worker + preview swap | ⬜ | |
+| 4.2+ — trim/split UI, Inspector | ⬜ | |
 | 5 — export | ⬜ | |
 
-216 tests green · `npm run build` and `npm run lint` clean · every phase
-committed separately (see `git log --oneline`). Keyboard undo/redo
-(Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y) is wired — gate item 1 done; the gate's
-remaining items are the user's manual pass.
+233 tests green · `npm run build` and `npm run lint` clean · every phase
+committed separately (see `git log --oneline`). Phase 3 gate CLOSED
+2026-07-06 (user manual pass; DecodeSandbox deleted).
 
 ## What works today (user-visible)
 
@@ -42,7 +43,12 @@ from 0 when played at the end, auto-pauses when a scrub starts.
 - `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates),
   `time.ts` (conversions incl. `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn),
-  `selectors.ts` (`docDurationFrames` — duration is derived, never stored).
+  `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame` —
+  all derived reads, never stored).
+- `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
+  THE compositing path (preview worker in 4.1b, export in 5 — same code).
+  Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
+  synchronous draw; `{drawn, missing}` result; per-clip try/finally.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
   100; rejected ops push no entry), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
