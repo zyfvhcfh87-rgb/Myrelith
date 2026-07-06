@@ -14,6 +14,9 @@ import {
   insertClip,
   moveClip,
   rippleDelete,
+  rippleTrim,
+  slideClip,
+  slipClip,
   splitClipAtFrame,
   trimClip,
 } from './operations'
@@ -487,5 +490,178 @@ describe('insertClip', () => {
   test('result survives a JSON round-trip', () => {
     const out = insertClip(makeDoc(), 'V2', clipFromAsset(asset(), 0))
     expect(JSON.parse(JSON.stringify(out))).toEqual(out)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* slipClip                                                             */
+/* ------------------------------------------------------------------ */
+
+describe('slipClip', () => {
+  test('shifts source material only; timeline placement is untouched', () => {
+    const doc = makeDoc()
+    const out = slipClip(doc, 'clipA', 25) // src [10,110) -> [35,135)
+    const slipped = clipIn(out, 'V1', 'clipA')
+    expect(slipped.sourceRange).toEqual({ startFrame: 35, durationFrames: 100 })
+    expect(slipped.timelineRange).toEqual({ startFrame: 0, durationFrames: 100 })
+    // Neighbors completely unaffected (same references — structural sharing).
+    expect(clipIn(out, 'V1', 'clipB')).toBe(clipIn(doc, 'V1', 'clipB'))
+    expect(out.tracks[2]).toBe(doc.tracks[2])
+  })
+
+  test('negative slip down to source frame 0 works; past it is rejected', () => {
+    const doc = makeDoc()
+    const out = slipClip(doc, 'clipA', -10) // src start 10 -> 0
+    expect(clipIn(out, 'V1', 'clipA').sourceRange.startFrame).toBe(0)
+
+    expect(slipClip(doc, 'clipA', -11)).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
+
+  test('rejects non-integer deltas, unknown clips, and locked tracks', () => {
+    const doc = makeDoc()
+    expect(slipClip(doc, 'clipA', 1.5)).toBe(doc)
+    expect(slipClip(doc, 'nope', 5)).toBe(doc)
+    expect(slipClip(doc, 'clipE', 5)).toBe(doc) // VL is locked
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* slideClip                                                            */
+/* ------------------------------------------------------------------ */
+
+describe('slideClip', () => {
+  // Fixture reminder: V1 = clipA [0,100) + clipB [100,150) touching,
+  // then a gap, then clipC [200,260).
+
+  test('sliding right extends the touching left neighbor; gap side just moves', () => {
+    const doc = makeDoc()
+    const out = slideClip(doc, 'clipB', 10)
+    const a = clipIn(out, 'V1', 'clipA')
+    const b = clipIn(out, 'V1', 'clipB')
+
+    expect(b.timelineRange).toEqual({ startFrame: 110, durationFrames: 50 })
+    expect(b.sourceRange).toBe(clipIn(doc, 'V1', 'clipB').sourceRange) // content untouched
+    // A's tail grew to stay glued (timeline AND source duration).
+    expect(a.timelineRange).toEqual({ startFrame: 0, durationFrames: 110 })
+    expect(a.sourceRange.durationFrames).toBe(110)
+    // C sits across the gap: same reference.
+    expect(clipIn(out, 'V1', 'clipC')).toBe(clipIn(doc, 'V1', 'clipC'))
+  })
+
+  test('sliding left shrinks the touching left neighbor', () => {
+    const doc = makeDoc()
+    const out = slideClip(doc, 'clipB', -20)
+    expect(clipIn(out, 'V1', 'clipA').timelineRange.durationFrames).toBe(80)
+    expect(clipIn(out, 'V1', 'clipB').timelineRange.startFrame).toBe(80)
+  })
+
+  test('a touching RIGHT neighbor is head-trimmed in both directions', () => {
+    const doc = makeDoc()
+    const out = slideClip(doc, 'clipA', 10) // B touches A's tail
+    const b = clipIn(out, 'V1', 'clipB')
+    expect(clipIn(out, 'V1', 'clipA').timelineRange).toEqual({
+      startFrame: 10,
+      durationFrames: 100,
+    })
+    expect(b.timelineRange).toEqual({ startFrame: 110, durationFrames: 40 })
+    expect(b.sourceRange).toEqual({ startFrame: 10, durationFrames: 40 })
+  })
+
+  test('rejects when a touching neighbor would vanish or lose source', () => {
+    const doc = makeDoc()
+    expect(slideClip(doc, 'clipB', -100)).toBe(doc) // A would hit 0 frames
+    expect(slideClip(doc, 'clipA', 50)).toBe(doc) // B would hit 0 frames
+    expect(slideClip(doc, 'clipA', -5)).toBe(doc) // B src would go below 0
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+
+  test('rejects sliding across a gap INTO another clip, and before frame 0', () => {
+    const doc = makeDoc()
+    expect(slideClip(doc, 'clipB', 60)).toBe(doc) // B [160,210) vs C [200,260)
+    expect(slideClip(doc, 'clipA', -1)).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+  })
+
+  test('rejects non-integer deltas, unknown clips, and locked tracks', () => {
+    const doc = makeDoc()
+    expect(slideClip(doc, 'clipB', 0.5)).toBe(doc)
+    expect(slideClip(doc, 'nope', 5)).toBe(doc)
+    expect(slideClip(doc, 'clipE', 5)).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* rippleTrim                                                           */
+/* ------------------------------------------------------------------ */
+
+describe('rippleTrim', () => {
+  test("'end' shortening pulls every downstream clip left; gaps are preserved", () => {
+    const doc = makeDoc()
+    const out = rippleTrim(doc, 'clipA', 'end', -20)
+    expect(clipIn(out, 'V1', 'clipA').timelineRange).toEqual({
+      startFrame: 0,
+      durationFrames: 80,
+    })
+    expect(clipIn(out, 'V1', 'clipA').sourceRange.durationFrames).toBe(80)
+    expect(clipIn(out, 'V1', 'clipB').timelineRange.startFrame).toBe(80)
+    // B->C gap was 50 frames (150..200) and still is (130..180).
+    expect(clipIn(out, 'V1', 'clipC').timelineRange.startFrame).toBe(180)
+  })
+
+  test("'end' lengthening pushes downstream right; earlier clips untouched", () => {
+    const doc = makeDoc()
+    const out = rippleTrim(doc, 'clipB', 'end', 30)
+    expect(clipIn(out, 'V1', 'clipA')).toBe(clipIn(doc, 'V1', 'clipA'))
+    expect(clipIn(out, 'V1', 'clipB').timelineRange.durationFrames).toBe(80)
+    expect(clipIn(out, 'V1', 'clipB').sourceRange.durationFrames).toBe(80)
+    expect(clipIn(out, 'V1', 'clipC').timelineRange.startFrame).toBe(230)
+  })
+
+  test("'start' trim keeps the clip head in place and closes downstream", () => {
+    const doc = makeDoc()
+    const out = rippleTrim(doc, 'clipB', 'start', 30) // cut 30 frames of material
+    const b = clipIn(out, 'V1', 'clipB')
+    expect(b.timelineRange).toEqual({ startFrame: 100, durationFrames: 20 })
+    expect(b.sourceRange).toEqual({ startFrame: 30, durationFrames: 20 })
+    expect(clipIn(out, 'V1', 'clipC').timelineRange.startFrame).toBe(170)
+    expect(clipIn(out, 'V1', 'clipA')).toBe(clipIn(doc, 'V1', 'clipA'))
+  })
+
+  test("'start' extension restores head material when the source allows it", () => {
+    const doc = makeDoc()
+    const out = rippleTrim(doc, 'clipA', 'start', -10) // src starts at 10
+    const a = clipIn(out, 'V1', 'clipA')
+    expect(a.timelineRange).toEqual({ startFrame: 0, durationFrames: 110 })
+    expect(a.sourceRange).toEqual({ startFrame: 0, durationFrames: 110 })
+    expect(clipIn(out, 'V1', 'clipB').timelineRange.startFrame).toBe(110)
+    expect(clipIn(out, 'V1', 'clipC').timelineRange.startFrame).toBe(210)
+
+    expect(rippleTrim(doc, 'clipB', 'start', -1)).toBe(doc) // B's src starts at 0
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
+
+  test('rejects shrinking to zero frames from either edge', () => {
+    const doc = makeDoc()
+    expect(rippleTrim(doc, 'clipA', 'end', -100)).toBe(doc)
+    expect(rippleTrim(doc, 'clipA', 'start', 100)).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+  })
+
+  test('rejects non-integer deltas, unknown clips, and locked tracks', () => {
+    const doc = makeDoc()
+    expect(rippleTrim(doc, 'clipA', 'end', 0.5)).toBe(doc)
+    expect(rippleTrim(doc, 'nope', 'end', 5)).toBe(doc)
+    expect(rippleTrim(doc, 'clipE', 'end', 5)).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+
+  test('other tracks keep their references (structural sharing)', () => {
+    const doc = makeDoc()
+    const out = rippleTrim(doc, 'clipA', 'end', -20)
+    expect(out.tracks[1]).toBe(doc.tracks[1])
+    expect(out.tracks[2]).toBe(doc.tracks[2])
   })
 })

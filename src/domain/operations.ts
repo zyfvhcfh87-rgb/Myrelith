@@ -417,6 +417,201 @@ export function rippleDelete(doc: TimelineDoc, clipId: ClipId): TimelineDoc {
 }
 
 /**
+ * Slip: shift WHICH source material a clip shows without moving the clip on
+ * the timeline. Positive delta shows later material (source in-point moves
+ * forward). timelineRange is untouched, so neighbors can never be affected.
+ * Rejected when the source in-point would go below 0; slipping past the END
+ * of the asset is validated at the store/UI layer, like trimClip (domain/
+ * cannot see assets — file-header note).
+ */
+export function slipClip(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  deltaFrames: number,
+): TimelineDoc {
+  const op = 'slipClip'
+  if (!Number.isInteger(deltaFrames)) {
+    return reject(doc, op, `deltaFrames must be an integer, got ${deltaFrames}`)
+  }
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+
+  const src = loc.clip.sourceRange
+  const newSrcStart = src.startFrame + deltaFrames
+  if (newSrcStart < 0) {
+    return reject(doc, op, 'no source material before the asset start')
+  }
+
+  const clips = loc.track.clips.slice()
+  clips[loc.clipIndex] = {
+    ...loc.clip,
+    sourceRange: { startFrame: newSrcStart, durationFrames: src.durationFrames },
+  }
+  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
+/**
+ * Slide: move a clip along its track while its TOUCHING neighbors absorb
+ * the change — the left neighbor's tail extends/shrinks and the right
+ * neighbor's head trims, so the three clips stay glued and everything
+ * beyond them keeps its position. The slid clip's duration and source are
+ * unchanged. A side with a gap instead of a touching neighbor just slides
+ * over the gap. Rejected when a touching neighbor would drop below 1
+ * frame, the right neighbor's source would go below 0, the clip would
+ * start before 0, or the result would overlap any other clip.
+ */
+export function slideClip(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  deltaFrames: number,
+): TimelineDoc {
+  const op = 'slideClip'
+  if (!Number.isInteger(deltaFrames)) {
+    return reject(doc, op, `deltaFrames must be an integer, got ${deltaFrames}`)
+  }
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+
+  const { clip, track, clipIndex } = loc
+  const tl = clip.timelineRange
+  const newStart = tl.startFrame + deltaFrames
+  if (newStart < 0) {
+    return reject(doc, op, 'clip cannot start before timeline frame 0')
+  }
+
+  const clips = track.clips.slice()
+  const left = clipIndex > 0 ? clips[clipIndex - 1] : null
+  const right = clipIndex < clips.length - 1 ? clips[clipIndex + 1] : null
+
+  if (left && rangeEnd(left.timelineRange) === tl.startFrame) {
+    // Touching left neighbor: its tail follows our head.
+    const newDur = left.timelineRange.durationFrames + deltaFrames
+    if (newDur < 1) {
+      return reject(doc, op, 'left neighbor cannot shrink below 1 frame')
+    }
+    clips[clipIndex - 1] = {
+      ...left,
+      timelineRange: { ...left.timelineRange, durationFrames: newDur },
+      sourceRange: { ...left.sourceRange, durationFrames: newDur },
+    }
+  }
+  if (right && right.timelineRange.startFrame === rangeEnd(tl)) {
+    // Touching right neighbor: its head follows our tail.
+    const newDur = right.timelineRange.durationFrames - deltaFrames
+    const newSrcStart = right.sourceRange.startFrame + deltaFrames
+    if (newDur < 1) {
+      return reject(doc, op, 'right neighbor cannot shrink below 1 frame')
+    }
+    if (newSrcStart < 0) {
+      return reject(doc, op, 'right neighbor has no source material before the asset start')
+    }
+    clips[clipIndex + 1] = {
+      ...right,
+      timelineRange: {
+        startFrame: right.timelineRange.startFrame + deltaFrames,
+        durationFrames: newDur,
+      },
+      sourceRange: { startFrame: newSrcStart, durationFrames: newDur },
+    }
+  }
+  clips[clipIndex] = {
+    ...clip,
+    timelineRange: { startFrame: newStart, durationFrames: tl.durationFrames },
+  }
+
+  // Gap sides can slide into other clips: re-verify the whole-track
+  // invariant. In a sorted-by-start list any overlap shows up between some
+  // sort-adjacent pair.
+  clips.sort(byStart)
+  for (let i = 1; i < clips.length; i++) {
+    if (rangeOverlap(clips[i - 1].timelineRange, clips[i].timelineRange)) {
+      return reject(doc, op, 'slide would overlap another clip')
+    }
+  }
+
+  return withTrack(doc, loc.trackIndex, { ...track, clips })
+}
+
+/**
+ * Ripple trim: change a clip's length at one edge and shift every clip on
+ * the SAME track that starts at/after the clip's OLD end by the same
+ * amount, so downstream spacing is preserved (the timeline "breathes"
+ * instead of leaving a gap). MVP scope: single-track ripple, matching
+ * rippleDelete. For edge 'start' the clip's timeline start stays fixed —
+ * material is cut from (delta > 0) or restored to (delta < 0) the head and
+ * downstream closes/opens accordingly; for edge 'end' positive delta
+ * lengthens the tail and pushes downstream right. Gap preservation means
+ * a ripple trim can never create an overlap.
+ */
+export function rippleTrim(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  edge: TrimEdge,
+  deltaFrames: number,
+): TimelineDoc {
+  const op = 'rippleTrim'
+  if (!Number.isInteger(deltaFrames)) {
+    return reject(doc, op, `deltaFrames must be an integer, got ${deltaFrames}`)
+  }
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+
+  const { clip } = loc
+  const tl = clip.timelineRange
+  const src = clip.sourceRange
+  const oldEnd = rangeEnd(tl)
+
+  let newClip: Clip
+  let shiftBy: number
+  if (edge === 'start') {
+    const newDur = tl.durationFrames - deltaFrames
+    const newSrcStart = src.startFrame + deltaFrames
+    if (newDur < 1) {
+      return reject(doc, op, 'clip duration cannot shrink below 1 frame')
+    }
+    if (newSrcStart < 0) {
+      return reject(doc, op, 'no source material before the asset start')
+    }
+    newClip = {
+      ...clip,
+      timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
+      sourceRange: { startFrame: newSrcStart, durationFrames: newDur },
+    }
+    shiftBy = -deltaFrames
+  } else {
+    const newDur = tl.durationFrames + deltaFrames
+    if (newDur < 1) {
+      return reject(doc, op, 'clip duration cannot shrink below 1 frame')
+    }
+    newClip = {
+      ...clip,
+      timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
+      sourceRange: { startFrame: src.startFrame, durationFrames: newDur },
+    }
+    shiftBy = deltaFrames
+  }
+
+  const clips = loc.track.clips.map((c) => {
+    if (c.id === clipId) return newClip
+    if (c.timelineRange.startFrame >= oldEnd) {
+      return {
+        ...c,
+        timelineRange: {
+          ...c.timelineRange,
+          startFrame: c.timelineRange.startFrame + shiftBy,
+        },
+      }
+    }
+    return c
+  })
+
+  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
+/**
  * Append an effect to a clip's chain. The effect is defensively copied so
  * later mutation of the caller's object cannot reach into the doc.
  */
