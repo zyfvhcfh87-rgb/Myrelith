@@ -61,13 +61,22 @@ Sliced into three module-turns:
   caller knows to re-composite after decoders warm up. New domain
   selectors: `activeClipAt(track, frame)`, `clipSourceFrame(clip, frame)`.
   12 unit tests (order, transform math, failure isolation, concurrency).
-- [ ] **4.1b render worker** — `workers/render.worker.ts`: one decode core
-  per active asset (reuse createDecodeWorkerCore pieces), owns the
-  transferred preview canvas sized to doc dims, implements FrameSource
-  over the per-asset caches, runs compositeFrame per seek (latest-wins at
-  the request layer, NEVER dropping requests within one composite — see
-  render.ts contract), auto re-composites when `missing` clips decode.
-  Needs a render-protocol (doc snapshot + frame + per-asset chunks).
+- [x] **4.1b render worker** — DONE 2026-07-06. `workers/render-protocol.ts`
+  (types only: init/setDoc/configureAsset/releaseAsset/composite ↔
+  assetConfigured/compositeDone/error; the MAIN side is the single
+  computer of µs targets — entries carry assetId+sourceFrame+targetUs+
+  tolUs+chunks) + `workers/render.worker.ts` (`createRenderWorkerCore`,
+  injected deps): one decoder + 12-slot bitmap cache PER ASSET (decode-
+  worker semantics kept: reset-reconfigures, ≥8 backpressure, close every
+  frame), FrameSource over the caches feeding compositeFrame, DOUBLE
+  BUFFERING (compose on scratch, blit→visible only if still newest —
+  superseded composites never touch the screen), per-asset batch chains
+  (same-asset PiP entries serialize; assets parallel), LOAN ledger
+  (in-use bitmaps leave the cache during a composite so a flooding batch
+  can't evict-and-close them mid-draw; epoch-checked return). 13 unit
+  tests incl. a loan mutation-test. DEVIATION from the sketch: the worker
+  does NOT self-recomposite on late decodes — `missing` goes back to the
+  bridge and the controller decides to reissue (retry policy = main side).
 - [ ] **4.1c previewController swap** — single-asset preview → compositor
   (DI seams were built for this); demux/config per asset used by the doc,
   not just the newest import. Browser-verify: 2 stacked clips, opacity

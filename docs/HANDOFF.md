@@ -17,11 +17,12 @@ binding rules.
 | 4.0.5 — transport bar (user request) | ✅ done | browser: ~30fps vs wall clock, pause freezes, ±1 steps, restart at end |
 | 4.0.6 — 12h virtualized ruler (user request) | ✅ done | browser: 1.296M-px runway, 18–27 tick nodes at any scroll, end label flush right |
 | 4.1a — compositor core (`compositeFrame`) | ✅ done | 12 unit tests: stack order, transform math, failure isolation, concurrent fetch |
-| 4.1b/c — render worker + preview swap | ⬜ | |
+| 4.1b — render worker (per-asset decoders) | ✅ done | 13 unit tests: double-buffer blit, latest-wins, PiP loan survival (mutation-tested), fault containment |
+| 4.1c — render bridge + preview swap | ⬜ | browser-verify: stacked clips, opacity, hidden toggle |
 | 4.2+ — trim/split UI, Inspector | ⬜ | |
 | 5 — export | ⬜ | |
 
-233 tests green · `npm run build` and `npm run lint` clean · every phase
+246 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06 (user manual pass; DecodeSandbox deleted).
 
@@ -54,6 +55,15 @@ from 0 when played at the end, auto-pauses when a scrub starts.
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
   assets; `addAsset` placeholder → controller fills via `updateAsset`).
 - `src/workers/decode-protocol.ts` — canonical worker message types.
+- `src/workers/render-protocol.ts` — render-worker message types (types
+  only). The MAIN side computes all µs targets; entries are keyed by exact
+  (assetId, sourceFrame); setDoc must precede composites built from it.
+- `src/workers/render.worker.ts` — compositing worker (4.1b): decoder +
+  bitmap cache PER ASSET, FrameSource → compositeFrame on a SCRATCH canvas,
+  blit→visible only if newest (double buffer), per-asset batch chains,
+  loaned bitmaps (evict-proof mid-composite, epoch-checked return). Imports
+  pipeline/render (sanctioned) + decode.worker types via `import type`
+  ONLY (a runtime import would register the decode listener here too!).
 - `src/workers/decode.worker.ts` — injectable core (`createDecodeWorkerCore`);
   closes every VideoFrame ASAP, caches ImageBitmap copies (12) instead
   (raw frames starve the hw decoder pool!), backpressure at queue≥8,

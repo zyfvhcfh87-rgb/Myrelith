@@ -24,8 +24,15 @@ non-negotiable rules. Re-read it at the start of every coding session.
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
 - Sanctioned exceptions between those three (and nothing more):
-  - anyone may import `workers/decode-protocol.ts` (types only, no runtime),
+  - anyone may import `workers/decode-protocol.ts` and
+    `workers/render-protocol.ts` (types only, no runtime),
   - `workers/` may import `engine/frame-cache.ts` (pure class, no deps),
+  - `workers/render.worker.ts` may import `pipeline/render.ts` (the pure
+    compositing core: imports domain/ only, no browser I/O — the worker is
+    its runtime host, exactly like export.ts will be in Phase 5) and the
+    STRUCTURAL TYPES exported by `workers/decode.worker.ts` via
+    `import type` (erased at build time — a runtime import would register
+    the decode worker's message listener inside the render worker),
   - `engine/worker-bridge.ts` references the worker FILE via
     `new Worker(new URL(...))` — a URL, not a module import; the pipeline
     chunk source reaches the bridge by injection, never by import.
