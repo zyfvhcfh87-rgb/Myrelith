@@ -134,3 +134,65 @@
   pointer-events: none;
   z-index: 10;
 }
+
+/* ---------------- Phase 4.2 editing tools ---------------- */
+
+.clip-view.selected {
+  outline: 2px solid #8ec2ff;
+  outline-offset: -2px;
+}
+
+/* Edge handles for trim (select tool) / ripple trim (trim tool). */
+.clip-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 3;
+}
+
+.clip-edge-start {
+  left: 0;
+}
+
+.clip-edge-end {
+  right: 0;
+}
+
+.clip-edge:hover {
+  background: rgba(142, 194, 255, 0.35);
+}
+
+/* Live gesture readout (slip/slide/trim deltas), inside the block —
+   .clip-view clips overflowing children. */
+.clip-edit-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  background: rgba(20, 24, 32, 0.85);
+  color: #aecdf2;
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* Tool-specific cursors (class set on .timeline-root by Timeline.tsx). */
+.tool-select .clip-view {
+  cursor: grab;
+}
+
+.tool-razor .clip-view {
+  cursor: crosshair;
+}
+
+.tool-trim .clip-view {
+  cursor: default;
+}
+
+.tool-slip .clip-view,
+.tool-slide .clip-view {
+  cursor: ew-resize;
+}

@@ -16,7 +16,8 @@
 import { useEffect } from 'react'
 import { useDocumentStore } from '../state/documentStore'
 
-function isEditableTarget(target: EventTarget | null): boolean {
+/** Shared by all app/ keyboard hooks: native text editing wins in fields. */
+export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   return (
     target.isContentEditable ||

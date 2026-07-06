@@ -38,6 +38,13 @@ function Track({ track }: TrackProps) {
     <div
       className={`timeline-track track-${track.kind}${dropReady ? ' drop-target' : ''}`}
       data-testid={`track-${track.id}`}
+      onPointerDown={(e) => {
+        // Empty-lane click deselects; clip pointerdowns have the CLIP as
+        // target, so they never land here (Phase 4.2 selection).
+        if (e.target === e.currentTarget) {
+          useTransportStore.getState().setSelectedClip(null)
+        }
+      }}
       onDragOver={(e) => {
         if (!acceptsDrag(e)) return
         e.preventDefault() // required by DnD: marks the lane as droppable

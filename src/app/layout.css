@@ -213,6 +213,44 @@
   color: #e66;
 }
 
+/* Phase 4.2 toolbar: brand + timeline tool buttons. */
+.toolbar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  height: 100%;
+  padding: 0 12px;
+}
+
+.toolbar-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.tool-button {
+  background: #26262b;
+  color: #bbb;
+  border: 1px solid #3a3a41;
+  border-radius: 4px;
+  min-width: 30px;
+  padding: 2px 6px;
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.tool-button:hover {
+  background: #303038;
+  color: #ddd;
+}
+
+.tool-button.active {
+  background: #3d5a80;
+  border-color: #6b93c4;
+  color: #fff;
+}
+
 /* Phase 3.1 placeholder styling — dies as real panels replace it. */
 .panel-placeholder {
   display: flex;

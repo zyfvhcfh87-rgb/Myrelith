@@ -17,9 +17,11 @@ import Inspector from '../ui/Inspector'
 import TransportBar from '../ui/TransportBar'
 import Timeline from '../ui/timeline/Timeline'
 import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
+import { useEditShortcuts } from './useEditShortcuts'
 
 export default function App() {
   useUndoRedoShortcuts()
+  useEditShortcuts()
   return (
     <div className="app-shell">
       <header className="area-toolbar">
