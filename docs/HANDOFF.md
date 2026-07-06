@@ -19,13 +19,15 @@ binding rules.
 | 4.1a — compositor core (`compositeFrame`) | ✅ done | 12 unit tests: stack order, transform math, failure isolation, concurrent fetch |
 | 4.1b — render worker (per-asset decoders) | ✅ done | 13 unit tests: double-buffer blit, latest-wins, PiP loan survival (mutation-tested), fault containment |
 | 4.1c — render bridge + preview swap | ✅ done | browser E2E: 2-track PiP numerically exact, opacity/rotation blend, hidden toggle, 30fps playback, clean console |
-| 4.2+ — trim/split UI, Inspector | ⬜ | |
+| 4.2 — editing toolset (select/razor/trim/ripple/slip/slide) | ✅ done | browser E2E: 7 tool edits then 7 undos → byte-exact original layout |
+| 4.3 — Inspector | ⬜ | |
 | 5 — export | ⬜ | |
 
-262 tests green · `npm run build` and `npm run lint` clean · every phase
+303 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
-2026-07-06 (user manual pass; DecodeSandbox deleted). Phase 4.1 COMPLETE:
-the preview IS the multi-track compositor now.
+2026-07-06 (user manual pass; DecodeSandbox deleted). Phase 4.1 COMPLETE
+(the preview IS the multi-track compositor) and 4.2 COMPLETE (the full
+editing toolset: select/razor/trim/ripple/slip/slide + S/Delete keys).
 
 ## What works today (user-visible)
 
@@ -39,8 +41,14 @@ Click/drag the timeline ruler → playhead moves, Preview follows
 (rAF-coalesced, latest-wins, double-buffered — no torn frames). Drag a
 media row onto a lane (4.0): compatible lanes highlight, drop creates the
 clip at the pointer, one undo entry (kind-gated: video/image → V lanes,
-audio → A lanes; rows drag only after metadata arrives). Drag clips with
-snap-back on illegal drops, one undo entry per drag. Transport bar
+audio → A lanes; rows drag only after metadata arrives). The full editing
+toolset (4.2): toolbar buttons or A/B/T/Y/U — select (click selects, body
+drag moves with snap-back on illegal drops, edge drag trims), razor
+(click cuts at the pointer frame), ripple trim (edges; downstream
+follows), slip (source shifts under a fixed clip, live-clamped to the
+asset, delta badge), slide (touching neighbors absorb). S splits under
+the playhead, Delete/Backspace ripple-deletes the selection, empty-lane
+click deselects. Every gesture = one undo entry. Transport bar
 (4.0.5): play/pause + one-frame steps — playback derives frames from an
 AudioContext clock (rule 3), composites every tick at wall-clock 30fps,
 parks on the last frame, restarts from 0 when played at the end,
@@ -109,6 +117,12 @@ auto-pauses when a scrub starts.
   runway, ticks VIRTUALIZED against the `[data-timeline-scroll]` ancestor
   (app shell marks it; bare tests get a fallback window); the final frame
   always gets a right-anchored end label.
+- `src/ui/timeline/ClipView.tsx` — the 4.2 gesture heart: one session ref
+  routes body/edge pointerdowns by the CURRENT tool (getState(), not the
+  render closure!); previews via transportStore.editPreview, one commit
+  per gesture; slip clamps live against mediaStore asset bounds.
+  `ui/Toolbar.tsx` = tool buttons; `app/useEditShortcuts.ts` = A/B/T/Y/U,
+  S split-at-playhead, Delete ripple-delete (selection kept on reject).
 
 ## Invariants that must survive refactors
 
@@ -134,6 +148,10 @@ auto-pauses when a scrub starts.
   verify pipeline changes (preview tools + `window.__stores`).
 - **Pointer capture is not gesture truth.** Gate pointermove on your own
   session ref; capture is best-effort enhancement (it silently fails).
+- **Route event handlers by getState(), not render closures.** A keypress
+  can switch the tool in the same tick as a pointerdown — the 4.2 browser
+  pass caught the razor routing as 'select' because the handler read the
+  subscribed (stale) tool value.
 - **erasableSyntaxOnly** bans constructor parameter properties
   (`constructor(private x…)`) — declare fields explicitly. Bit us twice.
 - **Windows/PowerShell:** multiline commit messages via file +

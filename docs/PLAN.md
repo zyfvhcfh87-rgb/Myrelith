@@ -96,14 +96,29 @@ Sliced into three module-turns:
 
 **4.1 COMPLETE** — preview is the real timeline compositor.
 
-### 4.2 Split / Trim wiring
-- Keyboard 'S' → documentStore.splitClipAtPlayhead(transportStore
-  .getState().playheadFrame) — the store action already takes the frame as
-  a param (it never reads transportStore itself).
-- Clip edge-dragging in ClipView → documentStore.trimClip with the SAME
-  scrub-preview-then-commit pattern (extend transportStore dragPreview or
-  add a trimPreview variant; one undo entry per gesture).
-- rippleDelete already exists as an op + store action; add Delete key.
+### 4.2 ✅ DONE (2026-07-06) — the full editing toolset
+EXPANDED at user request from the original "S + edge trim + Delete" to
+the Resolve-style fundamental tools, shipped in three commits
+(domain → state → ui) + browser verification:
+- **domain**: `slipClip` (source shift, position fixed), `slideClip`
+  (touching neighbors absorb; gap sides just move; whole-track overlap
+  recheck), `rippleTrim` (edge trim + same-track downstream shift,
+  gap-preserving; 'start' keeps the head pinned). All with the standard
+  reject-same-reference contract.
+- **state**: transportStore `tool` (select/razor/trim/slip/slide),
+  `selectedClipId`, `editPreview` {clipId, kind, deltaFrames};
+  documentStore `splitClipAt`, `rippleTrim`, `slipClip`, `slideClip`.
+- **ui**: Toolbar tool buttons; keys A/B/T/Y/U (tools), S (split all
+  under playhead), Delete/Backspace (ripple-delete selection, kept when
+  a locked track rejects); ClipView gesture routing — edge handles trim
+  (select) or ripple (trim tool), razor click-splits at the pointer
+  frame, slip/slide body drags with live delta badges; slip clamps live
+  against the asset's source bounds; empty-lane click deselects.
+  Every gesture = preview-then-commit, one undo entry.
+- Browser-verified: trim→razor→ripple→slip→slide→S→Delete on real
+  clips, then SEVEN Ctrl+Z restored the byte-exact original layout.
+  Verification caught one real fix: pointer handlers now route by
+  getState() tool, not the render-time closure.
 
 ### 4.3 Inspector
 Add `selectedClipId` to transportStore; click-to-select in ClipView.

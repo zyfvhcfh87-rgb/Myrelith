@@ -209,8 +209,11 @@ function ClipView({ clip, trackId }: ClipViewProps) {
   /* ---------------- handlers ----------------------------------------- */
 
   const onBodyPointerDown = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    // Route by the CURRENT tool, not the render-time closure — handlers
+    // read stores with getState() (a keypress may switch the tool in the
+    // same tick as the pointerdown, before React re-renders).
     const transport = useTransportStore.getState()
-    switch (tool) {
+    switch (transport.tool) {
       case 'razor': {
         // Split at the pointer frame — a click edit, no drag phase.
         const rect = e.currentTarget.getBoundingClientRect()
@@ -243,8 +246,9 @@ function ClipView({ clip, trackId }: ClipViewProps) {
     edge: 'start' | 'end',
   ): void => {
     e.stopPropagation() // the body handler must not also start a gesture
-    useTransportStore.getState().setSelectedClip(clip.id)
-    startGesture(e, tool === 'trim' ? `ripple-${edge}` : `trim-${edge}`)
+    const transport = useTransportStore.getState() // current tool, as above
+    transport.setSelectedClip(clip.id)
+    startGesture(e, transport.tool === 'trim' ? `ripple-${edge}` : `trim-${edge}`)
   }
 
   const showEdges = tool === 'select' || tool === 'trim'
