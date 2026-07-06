@@ -1,11 +1,16 @@
 /**
- * app/previewController.test.ts — Phase 3.4. Drives the composition root
- * with injected fakes (no Worker, no OffscreenCanvas, no fetch).
+ * app/previewController.test.ts — Phase 3.4, reworked for the 4.1c
+ * compositor swap. Drives the composition root with injected fakes (no
+ * Worker, no OffscreenCanvas, no fetch) and asserts the wiring: every
+ * video asset reaches the bridge, docs are forwarded, playhead moves
+ * render doc frames rAF-coalesced, removals release worker decoders.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { FrameRate, MediaAsset } from '../domain/schema'
-import type { ChunkProvider, RenderResult } from '../engine/worker-bridge'
+import type { FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
+import type { ChunkProvider } from '../engine/worker-bridge'
+import type { RenderFrameResult } from '../engine/render-bridge'
+import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 import type { BridgeLike, PreviewDeps } from './previewController'
@@ -15,20 +20,30 @@ const F60: FrameRate = { num: 60, den: 1 }
 
 class FakeBridge implements BridgeLike {
   onWorkerError: ((message: string) => void) | null = null
-  configured: VideoDecoderConfig[] = []
-  sources: Array<{ rate: FrameRate }> = []
+  onAssetReady: ((assetId: string) => void) | null = null
+  docs: TimelineDoc[] = []
+  configured: Array<{ assetId: string; codec: string; rate: FrameRate }> = []
+  released: string[] = []
   rendered: number[] = []
   disposed = false
 
-  setSource(rate: FrameRate): void {
-    this.sources.push({ rate })
+  setDoc(doc: TimelineDoc): void {
+    this.docs.push(doc)
   }
-  async configure(config: VideoDecoderConfig): Promise<void> {
-    this.configured.push(config)
+  async configureAsset(
+    assetId: string,
+    config: VideoDecoderConfig,
+    rate: FrameRate,
+  ): Promise<void> {
+    this.configured.push({ assetId, codec: config.codec, rate })
+    this.onAssetReady?.(assetId) // like the real bridge's assetConfigured ack
   }
-  async renderFrameAt(frame: number): Promise<RenderResult> {
+  releaseAsset(assetId: string): void {
+    this.released.push(assetId)
+  }
+  async renderFrame(frame: number): Promise<RenderFrameResult> {
     this.rendered.push(frame)
-    return { status: 'drawn', frameTimestampUs: 0, decodeMs: 1 }
+    return { status: 'drawn', drawnClipIds: [], missingClipIds: [], renderMs: 1 }
   }
   dispose(): void {
     this.disposed = true
@@ -57,11 +72,7 @@ function makeDeps() {
     transferCanvas: () => ({}) as OffscreenCanvas,
     init: vi.fn(),
     fetchBlob: async () => new Blob(['x'], { type: 'video/mp4' }),
-    demux: async () => ({
-      asset: demuxedAsset,
-      videoTrack: {},
-      chunkProvider: provider,
-    }),
+    demux: async () => ({ asset: demuxedAsset, chunkProvider: provider }),
   }
   return { deps, bridge }
 }
@@ -73,7 +84,10 @@ const flush = async (): Promise<void> => {
 const nextFrame = () =>
   new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
+const initialDoc = useDocumentStore.getState().doc
+
 beforeEach(() => {
+  useDocumentStore.getState().setDoc(initialDoc)
   useTransportStore.setState({
     playheadFrame: 0,
     isPlaying: false,
@@ -92,17 +106,21 @@ afterEach(() => {
 })
 
 describe('previewController', () => {
-  test('importing a video demuxes it, configures the bridge, updates the store', async () => {
+  test('importing a video demuxes it, configures its decoder, updates the store', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
+    // The doc reached the worker before any composite could reference it.
+    expect(bridge.docs).toEqual([initialDoc])
 
     const placeholder = useMediaStore
       .getState()
       .addAsset(new File(['x'], 'clip.mp4', { type: 'video/mp4' }))
     await flush()
 
-    expect(bridge.configured).toHaveLength(1)
-    expect(bridge.sources).toEqual([{ rate: F60 }])
+    // Configured under the STORE's asset id (clips reference that id).
+    expect(bridge.configured).toEqual([
+      { assetId: placeholder.id, codec: 'avc1.64042a', rate: F60 },
+    ])
     // Real metadata merged onto the placeholder row.
     const updated = useMediaStore.getState().assets.get(placeholder.id)
     expect(updated).toMatchObject({
@@ -110,12 +128,25 @@ describe('previewController', () => {
       frameRate: F60,
       width: 1920,
     })
-    // First frame rendered after load.
+    // First frame rendered after init+load (coalesced into one rAF).
     await nextFrame()
     expect(bridge.rendered).toEqual([0])
   })
 
-  test('scrubbing renders rAF-coalesced frames RESCALED to the asset rate', async () => {
+  test('EVERY video asset gets its own decoder, not just the newest', async () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+
+    const one = useMediaStore.getState().addAsset(new File(['x'], 'one.mp4', { type: 'video/mp4' }))
+    const two = useMediaStore.getState().addAsset(new File(['x'], 'two.mp4', { type: 'video/mp4' }))
+    await flush()
+
+    expect(bridge.configured.map((c) => c.assetId).sort()).toEqual(
+      [one.id, two.id].sort(),
+    )
+  })
+
+  test('scrubbing renders rAF-coalesced DOC frames (bridge owns rescaling)', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
     useMediaStore.getState().addAsset(new File(['x'], 'clip.mp4', { type: 'video/mp4' }))
@@ -123,8 +154,8 @@ describe('previewController', () => {
     await nextFrame()
     bridge.rendered.length = 0
 
-    // Doc is 30fps, asset is 60fps: playhead 30 → asset frame 60.
-    // Three rapid moves inside one frame collapse to the last one.
+    // Three rapid moves inside one frame collapse to the last one — and
+    // the frame stays in DOCUMENT frames (no asset rescale up here).
     const t = useTransportStore.getState()
     t.setPlayheadFrame(10)
     t.setPlayheadFrame(20)
@@ -132,7 +163,34 @@ describe('previewController', () => {
     await nextFrame()
     await flush()
 
-    expect(bridge.rendered).toEqual([60])
+    expect(bridge.rendered).toEqual([30])
+  })
+
+  test('a document change reaches the worker and repaints the playhead frame', async () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+    await nextFrame()
+    bridge.rendered.length = 0
+
+    const changed = { ...initialDoc, name: 'edited' }
+    useDocumentStore.getState().setDoc(changed)
+
+    expect(bridge.docs).toEqual([initialDoc, changed])
+    await nextFrame()
+    expect(bridge.rendered).toEqual([0])
+  })
+
+  test('removing an asset releases its worker decoder', async () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+    const placeholder = useMediaStore
+      .getState()
+      .addAsset(new File(['x'], 'clip.mp4', { type: 'video/mp4' }))
+    await flush()
+    expect(bridge.configured).toHaveLength(1)
+
+    useMediaStore.getState().removeAsset(placeholder.id)
+    expect(bridge.released).toEqual([placeholder.id])
   })
 
   test('initPreview is idempotent per canvas (StrictMode double-mount)', () => {
@@ -166,9 +224,11 @@ describe('previewController', () => {
     expect(bridge.configured).toHaveLength(0)
   })
 
-  test('a demux failure logs and leaves the preview usable', async () => {
+  test('a demux failure logs, stays retriable, and leaves the preview usable', async () => {
     const { deps, bridge } = makeDeps()
+    let attempts = 0
     deps.demux = async () => {
+      attempts++
       throw new Error('corrupt container')
     }
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -177,6 +237,11 @@ describe('previewController', () => {
     await flush()
     expect(bridge.configured).toHaveLength(0)
     expect(warn).toHaveBeenCalled()
+
+    // The failed asset is retried on the next media-pool change.
+    useMediaStore.getState().addAsset(new File(['x'], 'poke.mp3', { type: 'audio/mpeg' }))
+    await flush()
+    expect(attempts).toBe(2)
     warn.mockRestore()
   })
 

@@ -77,10 +77,24 @@ Sliced into three module-turns:
   tests incl. a loan mutation-test. DEVIATION from the sketch: the worker
   does NOT self-recomposite on late decodes — `missing` goes back to the
   bridge and the controller decides to reissue (retry policy = main side).
-- [ ] **4.1c previewController swap** — single-asset preview → compositor
-  (DI seams were built for this); demux/config per asset used by the doc,
-  not just the newest import. Browser-verify: 2 stacked clips, opacity
-  blend, hidden-track toggle.
+- [x] **4.1c render bridge + previewController swap** — DONE 2026-07-06.
+  `engine/render-bridge.ts` (`RenderWorkerBridge`): owns the doc snapshot
+  it last posted (protocol ordering), mirrors compositeFrame's skip rules
+  via the domain selectors, dedupes (asset, sourceFrame) wants, does ALL
+  µs math per asset, fetches chunk batches concurrently (a failing
+  provider degrades to an empty batch), latest-wins request ids.
+  `app/previewController.ts` rewired: demuxes EVERY video asset into a
+  per-asset worker decoder (not just the newest), releases removed
+  assets, forwards each doc snapshot, renders DOC frames rAF-coalesced;
+  re-render on doc change + assetConfigured = the missing-clip retry
+  policy. 23 unit tests. Browser-verified end-to-end: 2 generated clips,
+  PiP placement numerically exact, scrub sync across decoders, hidden
+  toggle, 50% opacity + scale + 15° rotation blend, 30fps playback
+  through the compositor, clean console. NOTE: decode.worker +
+  DecodeWorkerBridge are now runtime-dead (types/tests still use them) —
+  remove or repurpose during Phase 5.
+
+**4.1 COMPLETE** — preview is the real timeline compositor.
 
 ### 4.2 Split / Trim wiring
 - Keyboard 'S' → documentStore.splitClipAtPlayhead(transportStore

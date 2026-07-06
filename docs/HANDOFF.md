@@ -18,26 +18,33 @@ binding rules.
 | 4.0.6 — 12h virtualized ruler (user request) | ✅ done | browser: 1.296M-px runway, 18–27 tick nodes at any scroll, end label flush right |
 | 4.1a — compositor core (`compositeFrame`) | ✅ done | 12 unit tests: stack order, transform math, failure isolation, concurrent fetch |
 | 4.1b — render worker (per-asset decoders) | ✅ done | 13 unit tests: double-buffer blit, latest-wins, PiP loan survival (mutation-tested), fault containment |
-| 4.1c — render bridge + preview swap | ⬜ | browser-verify: stacked clips, opacity, hidden toggle |
+| 4.1c — render bridge + preview swap | ✅ done | browser E2E: 2-track PiP numerically exact, opacity/rotation blend, hidden toggle, 30fps playback, clean console |
 | 4.2+ — trim/split UI, Inspector | ⬜ | |
 | 5 — export | ⬜ | |
 
-246 tests green · `npm run build` and `npm run lint` clean · every phase
+262 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
-2026-07-06 (user manual pass; DecodeSandbox deleted).
+2026-07-06 (user manual pass; DecodeSandbox deleted). Phase 4.1 COMPLETE:
+the preview IS the multi-track compositor now.
 
 ## What works today (user-visible)
 
-Run `npm run dev` → editor shell. Import a video in the Media Pool → row
-shows real metadata, Preview draws frame 0. Click/drag the timeline ruler →
-playhead moves, Preview follows (rAF-coalesced, latest-wins). Drag a media
-row onto a lane (4.0): compatible lanes highlight, drop creates the clip at
-the pointer, one undo entry (kind-gated: video/image → V lanes, audio → A
-lanes; rows drag only after metadata arrives). Drag clips with snap-back on
-illegal drops, one undo entry per drag. Transport bar between preview and
-timeline (4.0.5): play/pause + one-frame steps — playback derives frames
-from an AudioContext clock (rule 3), parks on the last frame, restarts
-from 0 when played at the end, auto-pauses when a scrub starts.
+Run `npm run dev` → editor shell. Import videos in the Media Pool → rows
+show real metadata; EVERY video asset gets its own decoder in the render
+worker. The Preview is the real timeline compositor (4.1): all visible
+video tracks draw bottom-to-top at the playhead with per-clip Transform
+(scale/rotate/translate around anchor) + opacity alpha-blended onto a
+black 1920×1080 composition; hidden tracks skip; gaps show background.
+Click/drag the timeline ruler → playhead moves, Preview follows
+(rAF-coalesced, latest-wins, double-buffered — no torn frames). Drag a
+media row onto a lane (4.0): compatible lanes highlight, drop creates the
+clip at the pointer, one undo entry (kind-gated: video/image → V lanes,
+audio → A lanes; rows drag only after metadata arrives). Drag clips with
+snap-back on illegal drops, one undo entry per drag. Transport bar
+(4.0.5): play/pause + one-frame steps — playback derives frames from an
+AudioContext clock (rule 3), composites every tick at wall-clock 30fps,
+parks on the last frame, restarts from 0 when played at the end,
+auto-pauses when a scrub starts.
 
 ## Map (key files, one line each)
 
@@ -75,9 +82,19 @@ from 0 when played at the end, auto-pauses when a scrub starts.
 - `src/pipeline/demux.ts` — Mediabunny loadAsset + decoderConfig (de)serialize.
 - `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,
   `verifyKeyPackets`, bounded overshoot, bytes copied for transfer).
+- `src/engine/render-bridge.ts` — main-thread half of the render worker
+  (4.1c): keeps the doc snapshot it last posted, picks wanted
+  (asset, sourceFrame) pairs with the domain selectors (mirroring
+  compositeFrame's skips), does all per-asset µs math, fetches chunk
+  batches concurrently, latest-wins requestIds; onAssetReady/onWorkerError
+  hooks for the controller.
 - `src/app/previewController.ts` — THE COMPOSITION ROOT: only place stores
   meet engine/pipeline; DI seams for tests; idempotent per canvas
-  (StrictMode); Phase 4 swaps its single-asset source for the compositor.
+  (StrictMode). Since 4.1c it drives RenderWorkerBridge: demuxes EVERY
+  video asset into a per-asset worker decoder, releases removed ones,
+  forwards doc snapshots, renders DOC frames rAF-coalesced (bridge owns
+  per-asset rescaling); re-renders on doc change + assetConfigured (=the
+  whole missing-clip retry policy).
 - `src/app/transportController.ts` — second composition root (same
   pattern): PlaybackEngine ↔ transportStore, lazy AudioContext on first
   play (click = allowed gesture), clamps every frame vs CURRENT doc
@@ -121,7 +138,9 @@ from 0 when played at the end, auto-pauses when a scrub starts.
   (`constructor(private x…)`) — declare fields explicitly. Bit us twice.
 - **Windows/PowerShell:** multiline commit messages via file +
   `git commit -F <file>` (heredocs get mangled); tests may pass while
-  `tsc -b` fails — always run both.
+  `tsc -b` fails — always run both. NEVER edit source files via
+  Get-Content/Set-Content pipelines: PS 5.1 reads BOM-less UTF-8 as ANSI
+  and mangles every non-ASCII char (µ, —, →). Use real editor tools.
 - Fake decoders/browsers in tests must model REAL semantics (queue growth,
   reset-unconfigures, flush-emits) or they green-light bugs.
 
@@ -150,10 +169,15 @@ from 0 when played at the end, auto-pauses when a scrub starts.
 ## Open items (beyond PLAN.md phases)
 
 - Playback exists but is SILENT: the AudioContext is clock-only (rule 3
-  honored); audio decode/mix/output does not exist yet. Playback also
-  still shows the single demuxed asset, not the timeline (4.1 compositor).
-- Preview still single-asset (previewController shows the last-imported
-  asset; dropped clips render as blocks but only composite in 4.1).
+  honored); audio decode/mix/output does not exist yet. Video playback
+  composites the full timeline since 4.1c.
+- Playback re-walks each GOP per frame (chunksForTimestamp per tick — the
+  proven scrub path, works at 1080p30). True streaming decode is a
+  post-MVP optimization if profiling ever demands it.
+- `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
+  (the render worker replaced the single-asset path). Kept because their
+  tests document the decoder semantics and render.worker imports their
+  structural types. Remove or repurpose during Phase 5.
 - Clip selection (`selectedClipId`) arrives with Inspector (4.3).
 - `Transition`s exist in schema only. Images not previewable (video only).
 - `mediaStore.addAsset` is still the placeholder path; previewController
