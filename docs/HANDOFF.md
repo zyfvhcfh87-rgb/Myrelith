@@ -20,14 +20,16 @@ binding rules.
 | 4.1b — render worker (per-asset decoders) | ✅ done | 13 unit tests: double-buffer blit, latest-wins, PiP loan survival (mutation-tested), fault containment |
 | 4.1c — render bridge + preview swap | ✅ done | browser E2E: 2-track PiP numerically exact, opacity/rotation blend, hidden toggle, 30fps playback, clean console |
 | 4.2 — editing toolset (select/razor/trim/ripple/slip/slide) | ✅ done | browser E2E: 7 tool edits then 7 undos → byte-exact original layout |
-| 4.3 — Inspector | ⬜ | |
+| 4.3 — Inspector + arrow-key stepping | ✅ done | browser E2E: 5 field edits = 5 entries, live compositor render, exact undo restore, arrow clamps |
+| **4 gate** | ⏳ user pass | most items machine-verified; see PLAN gate section |
 | 5 — export | ⬜ | |
 
-303 tests green · `npm run build` and `npm run lint` clean · every phase
+318 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
-2026-07-06 (user manual pass; DecodeSandbox deleted). Phase 4.1 COMPLETE
-(the preview IS the multi-track compositor) and 4.2 COMPLETE (the full
-editing toolset: select/razor/trim/ripple/slip/slide + S/Delete keys).
+2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
+4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
+4.3 Inspector + arrow stepping. The Phase 4 gate awaits the user's
+manual confirmation pass (see PLAN.md).
 
 ## What works today (user-visible)
 
@@ -47,8 +49,12 @@ drag moves with snap-back on illegal drops, edge drag trims), razor
 (click cuts at the pointer frame), ripple trim (edges; downstream
 follows), slip (source shifts under a fixed clip, live-clamped to the
 asset, delta badge), slide (touching neighbors absorb). S splits under
-the playhead, Delete/Backspace ripple-deletes the selection, empty-lane
-click deselects. Every gesture = one undo entry. Transport bar
+the playhead, Delete/Backspace ripple-deletes the selection, ←/→ steps
+the playhead one frame, empty-lane click deselects. The Inspector (4.3)
+edits the selected clip's position/scale/rotation/opacity — drafts while
+typing, commits on blur/Enter, Escape reverts — and the compositor
+preview reflects each commit immediately. Every gesture and every field
+commit = one undo entry. Transport bar
 (4.0.5): play/pause + one-frame steps — playback derives frames from an
 AudioContext clock (rule 3), composites every tick at wall-clock 30fps,
 parks on the last frame, restarts from 0 when played at the end,
@@ -196,7 +202,9 @@ auto-pauses when a scrub starts.
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their
   structural types. Remove or repurpose during Phase 5.
-- Clip selection (`selectedClipId`) arrives with Inspector (4.3).
+- Inspector number inputs render locale decimal separators (e.g. "1,5")
+  — display-only browser behavior; committed doc values are plain floats.
+  Revisit only if locale typing ever reports badInput problems.
 - `Transition`s exist in schema only. Images not previewable (video only).
 - `mediaStore.addAsset` is still the placeholder path; previewController
   re-fetches the blob URL for demuxing (works; slightly wasteful).

@@ -120,20 +120,33 @@ the Resolve-style fundamental tools, shipped in three commits
   Verification caught one real fix: pointer handlers now route by
   getState() tool, not the render-time closure.
 
-### 4.3 Inspector
-Add `selectedClipId` to transportStore; click-to-select in ClipView.
-Inspector edits transform (x/y/scale/rotation) + opacity, committing on
-blur/Enter (NOT per keystroke), via a new documentStore action
-`updateClipTransform` (needs a matching pure op in domain/operations.ts —
-op does not exist yet).
+### 4.3 ✅ DONE (2026-07-06) Inspector
+(`selectedClipId` + click-to-select had already landed with 4.2.)
+- domain `updateClipTransform(doc, clipId, {transform?, opacity?})`:
+  merges partial Transform + opacity; rejects non-finite numbers and
+  empty patches; clamps opacity to [0,1]. Plus selectors.findClip.
+- documentStore.updateClipTransform — one entry per commit.
+- ui/Inspector.tsx: Position X/Y, Scale X/Y, Rotation, Opacity; drafts
+  while typing, commit on blur/Enter only, Escape reverts, junk/empty
+  reverts, unchanged blur commits nothing; resyncs on undo/gestures;
+  remounts per clip. Never reads playheadFrame (invariant 6).
+- BONUS (gate prerequisite): ←/→ arrow keys step ±1 frame via
+  transportController.stepFrame, clamped to [0, last content frame].
+- Browser-verified: five field edits through the real inputs = five
+  undo entries, transform/opacity rendered live by the compositor,
+  5×Ctrl+Z exact restore, arrow clamps at both ends. (Live inputs show
+  locale decimal commas — display-only; the doc holds proper floats.)
 
-### Phase 4 gate
+### Phase 4 gate — build complete; USER'S MANUAL PASS PENDING
+Machine-verified already (browser E2E, see 4.1c/4.2d/4.3 notes):
+- every edit op = exactly one undo entry (7-op and 5-op undo chains
+  restored byte-exact layouts);
+- arrow keys step exactly one frame, clamped both ends;
+- 2 video tracks with the top clip at 50% opacity blend correctly.
+User's confirmation pass:
 - [ ] Split a clip, trim both halves, drag one to another track —
   compositing order stays correct (cross-track moveClip already works).
-- [ ] Every edit op = exactly one undo entry (no partial entries from
-  drag-in-progress states).
-- [ ] Frame-step (arrow keys) advances exactly one frame vs ruler timecode.
-- [ ] 2 video tracks, top clip at 50% opacity — alpha blend visually correct.
+- [ ] General feel: tools/inspector/undo behave as expected end to end.
 
 ## Phase 5 — Export Pipeline
 
