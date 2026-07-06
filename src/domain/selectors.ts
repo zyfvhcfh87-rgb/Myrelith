@@ -3,7 +3,7 @@
  * No browser APIs, no stores — plain functions over plain data.
  */
 
-import type { Clip, Track, TimelineDoc } from './schema'
+import type { Clip, ClipId, Track, TimelineDoc } from './schema'
 import { rangeContains, rangeEnd } from './time'
 
 /**
@@ -33,6 +33,16 @@ export function activeClipAt(track: Track, frame: number): Clip | null {
   for (const clip of track.clips) {
     if (clip.timelineRange.startFrame > frame) break // sorted: no later clip can contain it
     if (rangeContains(clip.timelineRange, frame)) return clip
+  }
+  return null
+}
+
+/** Find a clip anywhere in the document, or null (Inspector lookups). */
+export function findClip(doc: TimelineDoc, clipId: ClipId): Clip | null {
+  for (const track of doc.tracks) {
+    for (const clip of track.clips) {
+      if (clip.id === clipId) return clip
+    }
   }
   return null
 }

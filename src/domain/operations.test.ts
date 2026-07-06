@@ -19,6 +19,7 @@ import {
   slipClip,
   splitClipAtFrame,
   trimClip,
+  updateClipTransform,
 } from './operations'
 import { rangeEnd } from './time'
 
@@ -663,5 +664,56 @@ describe('rippleTrim', () => {
     const out = rippleTrim(doc, 'clipA', 'end', -20)
     expect(out.tracks[1]).toBe(doc.tracks[1])
     expect(out.tracks[2]).toBe(doc.tracks[2])
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* updateClipTransform                                                  */
+/* ------------------------------------------------------------------ */
+
+describe('updateClipTransform', () => {
+  test('merges a partial transform; untouched fields and ranges survive', () => {
+    const doc = makeDoc()
+    const out = updateClipTransform(doc, 'clipA', {
+      transform: { x: 40, rotation: 15 },
+    })
+    const clip = clipIn(out, 'V1', 'clipA')
+    expect(clip.transform).toEqual({
+      x: 40,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 15,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    })
+    expect(clip.opacity).toBe(1) // untouched
+    expect(clip.timelineRange).toBe(clipIn(doc, 'V1', 'clipA').timelineRange)
+    expect(out.tracks[2]).toBe(doc.tracks[2]) // structural sharing
+  })
+
+  test('opacity is clamped into [0,1], alone or alongside a transform', () => {
+    const doc = makeDoc()
+    expect(clipIn(updateClipTransform(doc, 'clipA', { opacity: 1.7 }), 'V1', 'clipA').opacity).toBe(1)
+    expect(clipIn(updateClipTransform(doc, 'clipA', { opacity: -0.3 }), 'V1', 'clipA').opacity).toBe(0)
+    const both = updateClipTransform(doc, 'clipA', { transform: { scaleX: 2 }, opacity: 0.5 })
+    expect(clipIn(both, 'V1', 'clipA').opacity).toBe(0.5)
+    expect(clipIn(both, 'V1', 'clipA').transform.scaleX).toBe(2)
+  })
+
+  test('rejects non-finite numbers — NaN/Infinity never enter the doc', () => {
+    const doc = makeDoc()
+    expect(updateClipTransform(doc, 'clipA', { transform: { x: Number.NaN } })).toBe(doc)
+    expect(updateClipTransform(doc, 'clipA', { transform: { scaleY: 1 / 0 } })).toBe(doc)
+    expect(updateClipTransform(doc, 'clipA', { opacity: Number.NaN })).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+
+  test('rejects empty patches, unknown clips, and locked tracks', () => {
+    const doc = makeDoc()
+    expect(updateClipTransform(doc, 'clipA', {})).toBe(doc)
+    expect(updateClipTransform(doc, 'nope', { opacity: 1 })).toBe(doc)
+    expect(updateClipTransform(doc, 'clipE', { opacity: 1 })).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(3)
   })
 })

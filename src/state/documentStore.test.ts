@@ -265,6 +265,20 @@ describe('Phase 4.2 editing actions', () => {
     expect(warnSpy).toHaveBeenCalled()
   })
 
+  test('updateClipTransform commits one entry; rejects push none', () => {
+    getState().updateClipTransform('clipA', { transform: { x: 25 }, opacity: 0.4 })
+    const clip = getState().doc.tracks[0].clips[0]
+    expect(clip.transform.x).toBe(25)
+    expect(clip.opacity).toBe(0.4)
+    expect(getState().past).toHaveLength(1)
+
+    const before = getState().doc
+    getState().updateClipTransform('clipA', {}) // empty patch → rejected
+    expect(getState().doc).toBe(before)
+    expect(getState().past).toHaveLength(1)
+    expect(warnSpy).toHaveBeenCalled()
+  })
+
   test('slideClip moves over gaps and rejects collisions without history', () => {
     getState().slideClip('clipB', -50) // gap [300,400) absorbs it
     expect(getState().doc.tracks[0].clips[1].timelineRange.startFrame).toBe(350)

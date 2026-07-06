@@ -20,7 +20,7 @@
 
 import { create } from 'zustand'
 import type { Clip, ClipId, Effect, TimelineDoc, TrackId } from '../domain/schema'
-import type { TrimEdge } from '../domain/operations'
+import type { ClipTransformPatch, TrimEdge } from '../domain/operations'
 import {
   addEffect,
   insertClip,
@@ -31,6 +31,7 @@ import {
   slipClip,
   splitClipAtFrame,
   trimClip,
+  updateClipTransform,
 } from '../domain/operations'
 import { rangeEnd } from '../domain/time'
 
@@ -79,6 +80,8 @@ export interface DocumentState {
   moveClip: (clipId: ClipId, toTrackId: TrackId, toFrame: number) => void
   /** Delete a clip and shift later clips on its track left to close the gap. */
   rippleDelete: (clipId: ClipId) => void
+  /** Merge transform fields / opacity into a clip (Inspector, 4.3). */
+  updateClipTransform: (clipId: ClipId, patch: ClipTransformPatch) => void
   /** Append an effect to a clip's chain. */
   addEffect: (clipId: ClipId, effect: Effect) => void
   /** Step back one snapshot. No-op when history is empty. */
@@ -185,6 +188,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   rippleDelete: (clipId) =>
     set((state) => commit(state, rippleDelete(state.doc, clipId))),
+
+  updateClipTransform: (clipId, patch) =>
+    set((state) => commit(state, updateClipTransform(state.doc, clipId, patch))),
 
   addEffect: (clipId, effect) =>
     set((state) => commit(state, addEffect(state.doc, clipId, effect))),

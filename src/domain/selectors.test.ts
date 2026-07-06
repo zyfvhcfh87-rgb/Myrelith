@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from './schema'
-import { activeClipAt, clipSourceFrame, docDurationFrames } from './selectors'
+import { activeClipAt, clipSourceFrame, docDurationFrames, findClip } from './selectors'
 
 function makeClip(id: string, tlStart: number, duration: number, sourceStart = 0): Clip {
   return {
@@ -81,6 +81,18 @@ describe('activeClipAt', () => {
 
   test('empty track yields null', () => {
     expect(activeClipAt(makeTrack('V2', 'video', []), 5)).toBeNull()
+  })
+})
+
+describe('findClip', () => {
+  test('finds clips on any track; unknown ids yield null', () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [makeClip('a', 0, 10)]),
+      makeTrack('A1', 'audio', [makeClip('b', 5, 10)]),
+    ])
+    expect(findClip(doc, 'b')?.id).toBe('b')
+    expect(findClip(doc, 'a')?.id).toBe('a')
+    expect(findClip(doc, 'nope')).toBeNull()
   })
 })
 

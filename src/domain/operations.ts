@@ -28,6 +28,7 @@ import type {
   TimelineDoc,
   Track,
   TrackId,
+  Transform,
 } from './schema'
 import { rangeEnd, rangeOverlap } from './time'
 
@@ -608,6 +609,56 @@ export function rippleTrim(
     return c
   })
 
+  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
+/** What updateClipTransform can change (the Inspector's surface, 4.3). */
+export interface ClipTransformPatch {
+  /** Transform fields to merge; omitted fields keep their current values. */
+  transform?: Partial<Transform>
+  /** New opacity. Clamped into [0, 1] (schema range). */
+  opacity?: number
+}
+
+/**
+ * Merge new visual properties into a clip: any subset of Transform fields
+ * plus opacity. Purely presentational — ranges, neighbors and durations
+ * cannot be affected. Rejected on an empty patch or any non-finite number
+ * (NaN/Infinity from a parsed input must never enter the doc); opacity is
+ * clamped rather than rejected, since 0..1 is a UI convention.
+ */
+export function updateClipTransform(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  patch: ClipTransformPatch,
+): TimelineDoc {
+  const op = 'updateClipTransform'
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+
+  const transformPatch = patch.transform ?? {}
+  for (const [key, value] of Object.entries(transformPatch)) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return reject(doc, op, `transform.${key} must be a finite number, got ${value}`)
+    }
+  }
+  const hasOpacity = patch.opacity !== undefined
+  if (hasOpacity && !Number.isFinite(patch.opacity)) {
+    return reject(doc, op, `opacity must be a finite number, got ${patch.opacity}`)
+  }
+  if (Object.keys(transformPatch).length === 0 && !hasOpacity) {
+    return reject(doc, op, 'empty patch — nothing to change')
+  }
+
+  const clips = loc.track.clips.slice()
+  clips[loc.clipIndex] = {
+    ...loc.clip,
+    transform: { ...loc.clip.transform, ...transformPatch },
+    opacity: hasOpacity
+      ? Math.min(1, Math.max(0, patch.opacity as number))
+      : loc.clip.opacity,
+  }
   return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
 }
 
