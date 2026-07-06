@@ -221,3 +221,59 @@ describe('actions delegate to domain operations', () => {
     expect(warnSpy).toHaveBeenCalled()
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* Phase 4.2 editing actions                                            */
+/* ------------------------------------------------------------------ */
+
+describe('Phase 4.2 editing actions', () => {
+  // Fixture: V1 = clipA [0,300) + clipB [400,500); A1 = clipD [0,300).
+
+  test('splitClipAt razors ONE clip (unlike splitClipAtPlayhead)', () => {
+    getState().splitClipAt('clipA', 100)
+    const v1 = getState().doc.tracks[0]
+    const a1 = getState().doc.tracks[2]
+    expect(v1.clips).toHaveLength(3) // A left, A right, B
+    expect(v1.clips[0].timelineRange).toEqual({ startFrame: 0, durationFrames: 100 })
+    expect(v1.clips[1].timelineRange).toEqual({ startFrame: 100, durationFrames: 200 })
+    expect(a1.clips).toHaveLength(1) // clipD crosses frame 100 but is untouched
+    expect(getState().past).toHaveLength(1) // one undo entry
+  })
+
+  test('rippleTrim commits one entry and shifts downstream', () => {
+    getState().rippleTrim('clipA', 'end', -50)
+    const v1 = getState().doc.tracks[0]
+    expect(v1.clips[0].timelineRange.durationFrames).toBe(250)
+    expect(v1.clips[1].timelineRange.startFrame).toBe(350) // followed left
+    expect(getState().past).toHaveLength(1)
+
+    getState().undo()
+    expect(JSON.stringify(getState().doc)).toBe(JSON.stringify(makeDoc()))
+  })
+
+  test('slipClip shifts source only; a rejected slip pushes no history', () => {
+    getState().slipClip('clipA', 10)
+    const clip = getState().doc.tracks[0].clips[0]
+    expect(clip.sourceRange.startFrame).toBe(10)
+    expect(clip.timelineRange).toEqual({ startFrame: 0, durationFrames: 300 })
+    expect(getState().past).toHaveLength(1)
+
+    const before = getState().doc
+    getState().slipClip('clipA', -100) // source would go below 0
+    expect(getState().doc).toBe(before)
+    expect(getState().past).toHaveLength(1) // unchanged
+    expect(warnSpy).toHaveBeenCalled()
+  })
+
+  test('slideClip moves over gaps and rejects collisions without history', () => {
+    getState().slideClip('clipB', -50) // gap [300,400) absorbs it
+    expect(getState().doc.tracks[0].clips[1].timelineRange.startFrame).toBe(350)
+    expect(getState().past).toHaveLength(1)
+
+    const before = getState().doc
+    getState().slideClip('clipA', 150) // [150,450) would overlap clipB [350,450)
+    expect(getState().doc).toBe(before)
+    expect(getState().past).toHaveLength(1)
+    expect(warnSpy).toHaveBeenCalled()
+  })
+})

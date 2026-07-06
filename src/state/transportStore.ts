@@ -24,6 +24,31 @@ export interface DragPreview {
   startFrame: number
 }
 
+/** The Phase 4.2 timeline tools (Toolbar buttons + A/B/T/Y/U keys). */
+export type TimelineTool = 'select' | 'razor' | 'trim' | 'slip' | 'slide'
+
+/** What kind of edit an in-flight edge/body gesture previews. */
+export type EditPreviewKind =
+  | 'trim-start'
+  | 'trim-end'
+  | 'ripple-start'
+  | 'ripple-end'
+  | 'slip'
+  | 'slide'
+
+/**
+ * Live state of a trim/ripple/slip/slide gesture — same
+ * scrubbing-vs-committed contract as DragPreview (which stays dedicated to
+ * select-tool moves): pointermove writes ONLY this; pointerup commits ONE
+ * documentStore action and clears it.
+ */
+export interface EditPreview {
+  clipId: ClipId
+  kind: EditPreviewKind
+  /** Signed frame delta of the gesture so far (integer, may be negative). */
+  deltaFrames: number
+}
+
 export interface TransportState {
   /** Current playhead position, integer frames at the document rate. */
   playheadFrame: number
@@ -37,6 +62,12 @@ export interface TransportState {
   inOut: TimeRange | null
   /** Clip-drag preview, or null when no drag is in flight. */
   dragPreview: DragPreview | null
+  /** Active timeline tool (Phase 4.2). */
+  tool: TimelineTool
+  /** The selected clip, or null. Ephemeral UI state — never in undo. */
+  selectedClipId: ClipId | null
+  /** Trim/ripple/slip/slide gesture preview, or null when none is live. */
+  editPreview: EditPreview | null
 
   /** Move the playhead. Does NOTHING else — no side effects, no coupling. */
   setPlayheadFrame: (frame: number) => void
@@ -53,6 +84,15 @@ export interface TransportState {
    * non-negative integer like the playhead. No other field is touched.
    */
   setDragPreview: (preview: DragPreview | null) => void
+  /** Switch the active timeline tool. */
+  setTool: (tool: TimelineTool) => void
+  /** Select a clip (or clear with null). */
+  setSelectedClip: (clipId: ClipId | null) => void
+  /**
+   * Update or clear the edit-gesture preview. deltaFrames is rounded to an
+   * integer (negative allowed — deltas are signed).
+   */
+  setEditPreview: (preview: EditPreview | null) => void
 }
 
 export const useTransportStore = create<TransportState>()((set) => ({
@@ -62,6 +102,9 @@ export const useTransportStore = create<TransportState>()((set) => ({
   zoom: 1,
   inOut: null,
   dragPreview: null,
+  tool: 'select',
+  selectedClipId: null,
+  editPreview: null,
 
   setPlayheadFrame: (frame) =>
     set({ playheadFrame: Math.max(0, Math.round(frame)) }),
@@ -73,6 +116,14 @@ export const useTransportStore = create<TransportState>()((set) => ({
     set({
       dragPreview: preview
         ? { ...preview, startFrame: Math.max(0, Math.round(preview.startFrame)) }
+        : null,
+    }),
+  setTool: (tool) => set({ tool }),
+  setSelectedClip: (clipId) => set({ selectedClipId: clipId }),
+  setEditPreview: (preview) =>
+    set({
+      editPreview: preview
+        ? { ...preview, deltaFrames: Math.round(preview.deltaFrames) }
         : null,
     }),
 }))

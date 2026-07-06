@@ -83,9 +83,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 ## Store action contracts
 
 - `DocumentState` — implemented in `src/state/documentStore.ts` (canonical):
-  `setDoc`, `splitClipAtPlayhead(frame)`, `trimClip(clipId, edge, delta)`,
-  `moveClip(clipId, toTrackId, toFrame)`, `rippleDelete(clipId)`,
-  `addEffect(clipId, effect)`, `undo`, `redo`.
+  `setDoc`, `splitClipAtPlayhead(frame)`, `splitClipAt(clipId, frame)`,
+  `insertClip(trackId, clip)`, `trimClip(clipId, edge, delta)`,
+  `rippleTrim(clipId, edge, delta)`, `slipClip(clipId, delta)`,
+  `slideClip(clipId, delta)`, `moveClip(clipId, toTrackId, toFrame)`,
+  `rippleDelete(clipId)`, `addEffect(clipId, effect)`, `undo`, `redo`.
   History: `past`/`future` snapshot stacks capped at 100. Rejected domain
   ops return the SAME doc reference, so they push no history entry.
   Actions take the frame as a parameter — documentStore never reads
@@ -93,9 +95,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `TransportState` — `src/state/transportStore.ts`: `playheadFrame` (int,
   setter rounds + clamps >= 0), `isPlaying`, `isScrubbing`, `zoom`
   (px/frame, > 0), `inOut`, `dragPreview` ({clipId, startFrame} | null —
-  the live half of the scrubbing-vs-committed pattern; pointerup commits
-  ONE documentStore.moveClip and clears it). No history, no side effects,
-  never touches documentStore.
+  the live half of the scrubbing-vs-committed pattern for select-tool
+  moves; pointerup commits ONE documentStore.moveClip and clears it),
+  `tool` ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipId`
+  (ephemeral, never in undo), `editPreview` ({clipId, kind, deltaFrames}
+  | null — same live-preview contract for trim/ripple/slip/slide
+  gestures). No history, no side effects, never touches documentStore.
 - `MediaState` — `src/state/mediaStore.ts`: `assets: Map<AssetId,
   MediaAsset>`, `addAsset(file)` (placeholder until Phase 2 demux),
   `removeAsset(id)` (revokes the object URL). Session-scoped, not

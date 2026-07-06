@@ -15,6 +15,9 @@ beforeEach(() => {
     zoom: 1,
     inOut: null,
     dragPreview: null,
+    tool: 'select',
+    selectedClipId: null,
+    editPreview: null,
   })
 })
 
@@ -74,5 +77,35 @@ describe('transportStore', () => {
     expect(getState().inOut).toEqual({ startFrame: 10, durationFrames: 50 })
     getState().setInOut(null)
     expect(getState().inOut).toBeNull()
+  })
+})
+
+describe('Phase 4.2 tool / selection / edit-preview state', () => {
+  test('tool defaults to select and switches without touching other fields', () => {
+    expect(getState().tool).toBe('select')
+    getState().setSelectedClip('clipA')
+    getState().setTool('razor')
+    expect(getState().tool).toBe('razor')
+    expect(getState().selectedClipId).toBe('clipA') // untouched
+  })
+
+  test('selection sets and clears', () => {
+    getState().setSelectedClip('clipA')
+    expect(getState().selectedClipId).toBe('clipA')
+    getState().setSelectedClip(null)
+    expect(getState().selectedClipId).toBeNull()
+  })
+
+  test('editPreview rounds deltas, keeps them signed, and clears', () => {
+    getState().setEditPreview({ clipId: 'clipA', kind: 'trim-start', deltaFrames: 4.6 })
+    expect(getState().editPreview).toEqual({
+      clipId: 'clipA',
+      kind: 'trim-start',
+      deltaFrames: 5,
+    })
+    getState().setEditPreview({ clipId: 'clipA', kind: 'slip', deltaFrames: -7.4 })
+    expect(getState().editPreview?.deltaFrames).toBe(-7) // negative allowed
+    getState().setEditPreview(null)
+    expect(getState().editPreview).toBeNull()
   })
 })

@@ -26,6 +26,9 @@ import {
   insertClip,
   moveClip,
   rippleDelete,
+  rippleTrim,
+  slideClip,
+  slipClip,
   splitClipAtFrame,
   trimClip,
 } from '../domain/operations'
@@ -56,8 +59,22 @@ export interface DocumentState {
    * (overlap, locked, bad geometry) pushes no history entry.
    */
   insertClip: (trackId: TrackId, clip: Clip) => void
+  /**
+   * Split ONE clip at a timeline frame strictly inside it (the razor tool;
+   * splitClipAtPlayhead is the split-everything keyboard variant).
+   */
+  splitClipAt: (clipId: ClipId, frame: number) => void
   /** Trim one clip edge by a signed frame delta. */
   trimClip: (clipId: ClipId, edge: TrimEdge, deltaFrames: number) => void
+  /**
+   * Ripple-trim one clip edge: downstream clips on the same track shift to
+   * keep their spacing (Phase 4.2 trim tool).
+   */
+  rippleTrim: (clipId: ClipId, edge: TrimEdge, deltaFrames: number) => void
+  /** Shift a clip's source material without moving it (Phase 4.2 slip tool). */
+  slipClip: (clipId: ClipId, deltaFrames: number) => void
+  /** Move a clip while touching neighbors absorb the change (slide tool). */
+  slideClip: (clipId: ClipId, deltaFrames: number) => void
   /** Move a clip to a new frame, optionally onto another same-kind track. */
   moveClip: (clipId: ClipId, toTrackId: TrackId, toFrame: number) => void
   /** Delete a clip and shift later clips on its track left to close the gap. */
@@ -148,8 +165,20 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   insertClip: (trackId, clip) =>
     set((state) => commit(state, insertClip(state.doc, trackId, clip))),
 
+  splitClipAt: (clipId, frame) =>
+    set((state) => commit(state, splitClipAtFrame(state.doc, clipId, frame))),
+
   trimClip: (clipId, edge, deltaFrames) =>
     set((state) => commit(state, trimClip(state.doc, clipId, edge, deltaFrames))),
+
+  rippleTrim: (clipId, edge, deltaFrames) =>
+    set((state) => commit(state, rippleTrim(state.doc, clipId, edge, deltaFrames))),
+
+  slipClip: (clipId, deltaFrames) =>
+    set((state) => commit(state, slipClip(state.doc, clipId, deltaFrames))),
+
+  slideClip: (clipId, deltaFrames) =>
+    set((state) => commit(state, slideClip(state.doc, clipId, deltaFrames))),
 
   moveClip: (clipId, toTrackId, toFrame) =>
     set((state) => commit(state, moveClip(state.doc, clipId, toTrackId, toFrame))),
