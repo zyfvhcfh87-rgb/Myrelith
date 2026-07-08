@@ -137,6 +137,26 @@ the Resolve-style fundamental tools, shipped in three commits
   5×Ctrl+Z exact restore, arrow clamps at both ends. (Live inputs show
   locale decimal commas — display-only; the doc holds proper floats.)
 
+### 4.3.5 ✅ DONE (2026-07-08; user-requested) Timeline track headers
+The lone in-lane V1/A1 chips were not enough to understand the timeline.
+Shipped in three commits (domain → state → ui):
+- **domain**: `addTrack(doc, kind)` (next free V#/A# counting ids AND
+  names; video inserts after the last video = composites on top, audio
+  appends), `setTrackFlags(doc, trackId, {hidden?, muted?, locked?})`
+  (works on locked tracks — that's how unlocking works; idempotent
+  patches return the same reference), selector `tracksInDisplayOrder`
+  (videos reversed — top composite layer first — then audios).
+- **state**: documentStore.addTrack / setTrackFlags via commit();
+  one undo entry per real change, none for idempotent toggles.
+- **ui**: sticky header gutter [headers | lanes] — TrackHeader rows
+  (badge, kind, clip count, hide/mute/lock toggles) pixel-aligned with
+  their lanes, "+ Video"/"+ Audio" buttons, lanes restyled by flags
+  (dim hidden/muted, stripe locked). Lanes column keeps the frame-0
+  x-origin, so ruler/drop/drag/playhead math is untouched.
+- Browser-verified: add → order + undo exact, toggles → flags + one
+  entry each, sticky gutter at 5000px scroll, rows aligned, clean
+  console. 351 tests total.
+
 ### Phase 4 gate — build complete; USER'S MANUAL PASS PENDING
 Machine-verified already (browser E2E, see 4.1c/4.2d/4.3 notes):
 - every edit op = exactly one undo entry (7-op and 5-op undo chains
