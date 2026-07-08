@@ -22,10 +22,11 @@ binding rules.
 | 4.2 — editing toolset (select/razor/trim/ripple/slip/slide) | ✅ done | browser E2E: 7 tool edits then 7 undos → byte-exact original layout |
 | 4.3 — Inspector + arrow-key stepping | ✅ done | browser E2E: 5 field edits = 5 entries, live compositor render, exact undo restore, arrow clamps |
 | 4.3.5 — timeline track headers (user request) | ✅ done | browser E2E: sticky gutter, add/hide/mute/lock wired, rows pixel-aligned, undo exact |
+| 4.3.6 — track rename/delete/solo (user request) | ✅ done | browser E2E: dblclick-rename, × delete + undo-restores-clips, solo dims the rest |
 | **4 gate** | ⏳ user pass | most items machine-verified; see PLAN gate section |
 | 5 — export | ⬜ | |
 
-351 tests green · `npm run build` and `npm run lint` clean · every phase
+376 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -72,7 +73,14 @@ and live clip count with hide (video) / mute (audio) / lock toggles —
 each real toggle is one undo entry; "+ Video"/"+ Audio" buttons add
 tracks (V2 composites above V1 and displays above it; audio stacks
 below). Lanes mirror the flags: hidden/muted clips dim, locked lanes
-get stripes + a not-allowed cursor.
+get stripes + a not-allowed cursor. Track management (4.3.6):
+double-click a header to RENAME inline (Enter/blur commits, Escape
+cancels; the badge shows the name, the id never changes), the ×
+DELETES a track with its clips (one undo restores both; disabled
+while locked), and audio rows have SOLO next to mute — while any
+track is solo the other audio lanes dim. Solo/mute semantics live in
+ONE place, domain `audibleTracks` (mute wins over solo); Phase 5
+audio must consume that selector, not re-derive flags.
 
 ## Map (key files, one line each)
 
@@ -80,7 +88,8 @@ get stripes + a not-allowed cursor.
   `time.ts` (conversions incl. `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
-  `tracksInDisplayOrder` — all derived reads, never stored).
+  `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
+  derived reads, never stored).
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then

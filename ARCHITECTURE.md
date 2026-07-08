@@ -89,7 +89,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   delta)`,
   `rippleTrim(clipId, edge, delta)`, `slipClip(clipId, delta)`,
   `slideClip(clipId, delta)`, `moveClip(clipId, toTrackId, toFrame)`,
-  `rippleDelete(clipId)`, `addEffect(clipId, effect)`, `undo`, `redo`.
+  `rippleDelete(clipId)`, `addEffect(clipId, effect)`,
+  `addTrack(kind)`, `setTrackFlags(trackId, {hidden?, muted?, solo?,
+  locked?})` (idempotent patches push no history entry; flags and
+  renames WORK on locked tracks — metadata, not content),
+  `renameTrack(trackId, name)`, `removeTrack(trackId)` (locked tracks
+  reject), `undo`, `redo`.
   History: `past`/`future` snapshot stacks capped at 100. Rejected domain
   ops return the SAME doc reference, so they push no history entry.
   Actions take the frame as a parameter — documentStore never reads

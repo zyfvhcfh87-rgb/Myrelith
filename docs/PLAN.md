@@ -157,6 +157,26 @@ Shipped in three commits (domain → state → ui):
   entry each, sticky gutter at 5000px scroll, rows aligned, clean
   console. 351 tests total.
 
+### 4.3.6 ✅ DONE (2026-07-09; user-requested) Track rename / delete / solo
+Follow-up to 4.3.5, same domain → state → ui slicing:
+- **domain**: `Track.solo` (new REQUIRED schema field; every fixture
+  updated, tsc-verified), `renameTrack` (display name only, id stable;
+  allowed on locked tracks — metadata, not content), `removeTrack`
+  (takes its clips with it, ONE op; locked rejects; deleting the last
+  track of a kind is allowed), selector `audibleTracks` = THE solo/mute
+  mix rule (any solo → only solo tracks; mute wins) for Phase 5 audio.
+- **state**: documentStore.renameTrack / removeTrack; solo rides the
+  existing setTrackFlags. Idempotent renames/toggles push no entry;
+  one undo restores a deleted track with all its clips.
+- **ui**: double-click header → inline rename input (Enter/blur
+  commits, Escape cancels, empty cancels; shortcut keys already guard
+  editable targets); × delete button (disabled while locked); S solo
+  button on audio rows — Timeline derives anyAudioSolo and dims the
+  non-solo audio lanes. Gutter 168→200px for the fourth button.
+- Browser-verified: real dblclick+keydown rename → badge + 1 entry,
+  solo dims exactly the other audio lanes, delete → undo restores the
+  clip, locked × disabled, clean console. 376 tests total.
+
 ### Phase 4 gate — build complete; USER'S MANUAL PASS PENDING
 Machine-verified already (browser E2E, see 4.1c/4.2d/4.3 notes):
 - every edit op = exactly one undo entry (7-op and 5-op undo chains
