@@ -408,6 +408,19 @@ describe('track actions', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1)
   })
 
+  test('setClipVolume commits one entry; idempotent sets push none', () => {
+    getState().setClipVolume('clipD', 0.4) // clipD is on A1
+    expect(getState().doc.tracks[2].clips[0].volume).toBe(0.4)
+    expect(getState().past).toHaveLength(1)
+
+    getState().setClipVolume('clipD', 0.4) // unchanged
+    expect(getState().past).toHaveLength(1)
+
+    getState().setClipVolume('clipD', 99) // domain clamps to 2
+    expect(getState().doc.tracks[2].clips[0].volume).toBe(2)
+    expect(getState().past).toHaveLength(2)
+  })
+
   test('solo flows through setTrackFlags with the same history contract', () => {
     getState().setTrackFlags('A1', { solo: true })
     expect(getState().doc.tracks[2].solo).toBe(true)

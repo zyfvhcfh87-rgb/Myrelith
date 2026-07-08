@@ -20,7 +20,7 @@ beforeEach(() => {
   revokeSpy = vi.fn()
   URL.createObjectURL = createSpy as typeof URL.createObjectURL
   URL.revokeObjectURL = revokeSpy as typeof URL.revokeObjectURL
-  useMediaStore.setState({ assets: new Map() })
+  useMediaStore.setState({ assets: new Map(), visuals: new Map() })
 })
 
 describe('mediaStore', () => {
@@ -95,5 +95,50 @@ describe('mediaStore', () => {
     const before = getState().assets
     getState().updateAsset('asset_nope', { durationFrames: 10 })
     expect(getState().assets).toBe(before)
+  })
+})
+
+describe('asset visuals (filmstrip/waveform images)', () => {
+  const visualsFor = (n: number) => ({
+    filmstrip: { url: `blob:strip-${n}`, tiles: 8, tileWidth: 78, tileHeight: 44 },
+    waveform: { url: `blob:wave-${n}`, width: 800, height: 44 },
+  })
+
+  test('setAssetVisuals stores; removeAsset revokes BOTH image URLs', () => {
+    const a = getState().addAsset(new File([], 'a.mp4', { type: 'video/mp4' }))
+    getState().setAssetVisuals(a.id, visualsFor(1))
+    expect(getState().visuals.get(a.id)?.filmstrip?.url).toBe('blob:strip-1')
+
+    getState().removeAsset(a.id)
+    expect(revokeSpy).toHaveBeenCalledWith('blob:strip-1')
+    expect(revokeSpy).toHaveBeenCalledWith('blob:wave-1')
+    expect(getState().visuals.has(a.id)).toBe(false)
+  })
+
+  test('a late result for a removed asset is revoked, never stored', () => {
+    getState().setAssetVisuals('asset_gone', visualsFor(2))
+    expect(revokeSpy).toHaveBeenCalledWith('blob:strip-2')
+    expect(revokeSpy).toHaveBeenCalledWith('blob:wave-2')
+    expect(getState().visuals.size).toBe(0)
+  })
+
+  test('replacing visuals revokes the previous images', () => {
+    const a = getState().addAsset(new File([], 'a.mp4', { type: 'video/mp4' }))
+    getState().setAssetVisuals(a.id, visualsFor(3))
+    getState().setAssetVisuals(a.id, visualsFor(4))
+    expect(revokeSpy).toHaveBeenCalledWith('blob:strip-3')
+    expect(revokeSpy).toHaveBeenCalledWith('blob:wave-3')
+    expect(getState().visuals.get(a.id)?.waveform?.url).toBe('blob:wave-4')
+  })
+
+  test('null halves (audio-only / silent video) revoke nothing extra', () => {
+    const a = getState().addAsset(new File([], 'a.mp3', { type: 'audio/mpeg' }))
+    getState().setAssetVisuals(a.id, {
+      filmstrip: null,
+      waveform: { url: 'blob:wave-9', width: 400, height: 44 },
+    })
+    getState().removeAsset(a.id)
+    expect(revokeSpy).toHaveBeenCalledWith('blob:wave-9')
+    expect(revokeSpy).toHaveBeenCalledTimes(2) // objectUrl + waveform only
   })
 })

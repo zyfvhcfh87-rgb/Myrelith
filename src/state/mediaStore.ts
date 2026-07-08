@@ -18,9 +18,41 @@ function kindFromMime(mime: string): AssetKind {
   return 'video'
 }
 
+/**
+ * Precomputed timeline eye-candy for one asset (filmstrip on video clips,
+ * waveform on audio clips), generated once per asset by
+ * app/mediaVisualsController. Both images span the asset's FULL source
+ * duration, so ClipView maps them onto a clip with pure CSS background
+ * math (size = assetDuration×zoom, position = −sourceStart×zoom) — trim,
+ * slip and zoom all stay correct with zero redraws. The URLs are object
+ * URLs OWNED by this store: revoked when the asset is removed (or when a
+ * result arrives for an already-removed asset).
+ */
+export interface AssetVisuals {
+  /** Horizontal strip of evenly spaced video frames, or null (no video). */
+  filmstrip: {
+    url: string
+    tiles: number
+    tileWidth: number
+    tileHeight: number
+  } | null
+  /** Rendered waveform image, or null (no audio). */
+  waveform: { url: string; width: number; height: number } | null
+}
+
+/** Every object URL inside a visuals record (for revocation). */
+function visualUrls(visuals: AssetVisuals): string[] {
+  const urls: string[] = []
+  if (visuals.filmstrip) urls.push(visuals.filmstrip.url)
+  if (visuals.waveform) urls.push(visuals.waveform.url)
+  return urls
+}
+
 export interface MediaState {
   /** All imported assets, keyed by asset id. Treated as immutable. */
   assets: Map<string, MediaAsset>
+  /** Generated clip visuals, keyed by asset id. Session-scoped like assets. */
+  visuals: Map<string, AssetVisuals>
 
   /**
    * Register a file as a placeholder MediaAsset (id + object URL only —
@@ -39,10 +71,18 @@ export interface MediaState {
     id: string,
     patch: Partial<Omit<MediaAsset, 'id' | 'objectUrl'>>,
   ) => void
+  /**
+   * Attach generated visuals to an asset. If the asset vanished while its
+   * visuals were being generated, the images' URLs are revoked on the spot
+   * and nothing is stored — the store owns the URLs either way, so callers
+   * never leak them.
+   */
+  setAssetVisuals: (id: string, visuals: AssetVisuals) => void
 }
 
 export const useMediaStore = create<MediaState>()((set) => ({
   assets: new Map(),
+  visuals: new Map(),
 
   addAsset: (file) => {
     const asset: MediaAsset = {
@@ -74,7 +114,12 @@ export const useMediaStore = create<MediaState>()((set) => ({
       URL.revokeObjectURL(asset.objectUrl)
       const assets = new Map(state.assets)
       assets.delete(id)
-      return { assets }
+      const existingVisuals = state.visuals.get(id)
+      if (!existingVisuals) return { assets }
+      for (const url of visualUrls(existingVisuals)) URL.revokeObjectURL(url)
+      const visuals = new Map(state.visuals)
+      visuals.delete(id)
+      return { assets, visuals }
     }),
 
   updateAsset: (id, patch) =>
@@ -84,5 +129,22 @@ export const useMediaStore = create<MediaState>()((set) => ({
       const assets = new Map(state.assets)
       assets.set(id, { ...existing, ...patch, id, objectUrl: existing.objectUrl })
       return { assets }
+    }),
+
+  setAssetVisuals: (id, next) =>
+    set((state) => {
+      if (!state.assets.has(id)) {
+        // Asset removed mid-generation: dispose the late result, store nothing.
+        for (const url of visualUrls(next)) URL.revokeObjectURL(url)
+        return state
+      }
+      // Replacing earlier visuals (regeneration) frees the old images.
+      const previous = state.visuals.get(id)
+      if (previous) {
+        for (const url of visualUrls(previous)) URL.revokeObjectURL(url)
+      }
+      const visuals = new Map(state.visuals)
+      visuals.set(id, next)
+      return { visuals }
     }),
 }))

@@ -30,6 +30,7 @@ import {
   renameTrack,
   rippleDelete,
   rippleTrim,
+  setClipVolume,
   setTrackFlags,
   slideClip,
   slipClip,
@@ -94,6 +95,11 @@ export interface DocumentState {
   rippleDelete: (clipId: ClipId) => void
   /** Merge transform fields / opacity into a clip (Inspector, 4.3). */
   updateClipTransform: (clipId: ClipId, patch: ClipTransformPatch) => void
+  /**
+   * Set a clip's audio volume (Inspector for audio clips). Domain-clamped
+   * to [0, MAX_CLIP_VOLUME]; an unchanged value pushes no history entry.
+   */
+  setClipVolume: (clipId: ClipId, volume: number) => void
   /**
    * Add a new empty V#/A# track (timeline header "+ track" buttons). One
    * history entry — an added track is undoable like any other edit.
@@ -239,6 +245,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   updateClipTransform: (clipId, patch) =>
     set((state) => commit(state, updateClipTransform(state.doc, clipId, patch))),
+
+  setClipVolume: (clipId, volume) =>
+    set((state) => commit(state, setClipVolume(state.doc, clipId, volume))),
 
   addTrack: (kind) => set((state) => commit(state, addTrack(state.doc, kind))),
 
