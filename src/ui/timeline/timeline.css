@@ -20,8 +20,8 @@
   position: sticky;
   left: 0;
   z-index: 20;
-  flex: 0 0 168px;
-  width: 168px;
+  flex: 0 0 200px;
+  width: 200px;
   display: flex;
   flex-direction: column;
   background: #1c1c1c;
@@ -54,6 +54,10 @@
 
 .track-badge {
   min-width: 26px;
+  max-width: 64px; /* renamed tracks ellipsize; full name in the tooltip */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: center;
   padding: 2px 4px;
   font-size: 11px;
@@ -93,6 +97,34 @@
 .track-header-toggles {
   display: flex;
   gap: 3px;
+}
+
+/* Inline rename editor — swaps in for the info block on double-click. */
+.track-rename-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 5px;
+  font-size: 11px;
+  color: #ddd;
+  background: #1d1d21;
+  border: 1px solid #6b93c4;
+  border-radius: 3px;
+}
+
+.track-rename-input:focus {
+  outline: none;
+}
+
+.track-delete:hover:not(:disabled) {
+  background: #4a2626;
+  border-color: #8a4444;
+  color: #f0b6b6;
+}
+
+.track-delete:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .track-toggle {
@@ -220,9 +252,12 @@
   box-shadow: inset 0 0 0 1px #3d7f56;
 }
 
-/* Flag-state restyles (behavior lives in the compositor / domain ops). */
+/* Flag-state restyles (behavior lives in the compositor / domain ops).
+   track-solo-dimmed = ANOTHER audio track is solo, this one is out of
+   the mix (Timeline derives it; the rule lives in audibleTracks). */
 .timeline-track.track-hidden .clip-view,
-.timeline-track.track-muted .clip-view {
+.timeline-track.track-muted .clip-view,
+.timeline-track.track-solo-dimmed .clip-view {
   opacity: 0.35;
 }
 

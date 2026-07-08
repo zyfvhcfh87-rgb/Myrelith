@@ -31,9 +31,11 @@ import ClipView from './ClipView'
 
 interface TrackProps {
   track: TrackData
+  /** True while ANOTHER audio track is solo — this lane is out of the mix. */
+  soloDimmed?: boolean
 }
 
-function Track({ track }: TrackProps) {
+function Track({ track, soloDimmed = false }: TrackProps) {
   const [dropReady, setDropReady] = useState(false)
 
   const acceptsDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
@@ -42,7 +44,8 @@ function Track({ track }: TrackProps) {
   const flagClasses =
     (track.hidden ? ' track-hidden' : '') +
     (track.muted ? ' track-muted' : '') +
-    (track.locked ? ' track-locked' : '')
+    (track.locked ? ' track-locked' : '') +
+    (soloDimmed ? ' track-solo-dimmed' : '')
 
   return (
     <div

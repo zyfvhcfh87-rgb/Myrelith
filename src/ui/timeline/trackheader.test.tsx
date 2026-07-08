@@ -9,7 +9,7 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { Clip, TimelineDoc, Track as TrackData } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import Timeline from './Timeline'
@@ -169,5 +169,93 @@ describe('add-track buttons', () => {
     render(<Timeline />)
     fireEvent.click(screen.getByLabelText('add video track'))
     expect(screen.getByTestId('track-V3')).toBeInTheDocument()
+  })
+})
+
+describe('rename (double-click the header)', () => {
+  test('Enter commits the trimmed name as ONE entry; badge shows it', () => {
+    render(<Timeline />)
+    fireEvent.doubleClick(screen.getByTestId('track-header-V1'))
+    const input = screen.getByTestId('track-rename-V1') as HTMLInputElement
+    expect(input.value).toBe('V1') // prefilled with the current name
+
+    fireEvent.change(input, { target: { value: '  Main cam ' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(trackById('V1').name).toBe('Main cam')
+    expect(trackById('V1').id).toBe('V1') // id is stable
+    expect(getState().past).toHaveLength(1)
+    expect(screen.queryByTestId('track-rename-V1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('track-header-V1')).toHaveTextContent('Main cam')
+  })
+
+  test('Escape cancels, and an emptied name cancels too — no history', () => {
+    render(<Timeline />)
+    fireEvent.doubleClick(screen.getByTestId('track-header-V1'))
+    fireEvent.keyDown(screen.getByTestId('track-rename-V1'), { key: 'Escape' })
+    expect(screen.queryByTestId('track-rename-V1')).not.toBeInTheDocument()
+
+    fireEvent.doubleClick(screen.getByTestId('track-header-V1'))
+    const input = screen.getByTestId('track-rename-V1')
+    fireEvent.change(input, { target: { value: '   ' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(trackById('V1').name).toBe('V1')
+    expect(getState().past).toHaveLength(0)
+  })
+
+  test('blur commits like Enter', () => {
+    render(<Timeline />)
+    fireEvent.doubleClick(screen.getByTestId('track-header-A1'))
+    const input = screen.getByTestId('track-rename-A1')
+    fireEvent.change(input, { target: { value: 'Music' } })
+    fireEvent.blur(input)
+    expect(trackById('A1').name).toBe('Music')
+    expect(getState().past).toHaveLength(1)
+  })
+})
+
+describe('delete button', () => {
+  test('removes header + lane as ONE entry; one undo restores the clips too', () => {
+    render(<Timeline />)
+    fireEvent.click(screen.getByLabelText('delete track V1')) // carries 2 clips
+
+    expect(getState().doc.tracks.map((t) => t.id)).toEqual(['V2', 'A1'])
+    expect(screen.queryByTestId('track-header-V1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('track-V1')).not.toBeInTheDocument()
+    expect(getState().past).toHaveLength(1)
+
+    act(() => getState().undo())
+    expect(trackById('V1').clips).toHaveLength(2)
+    expect(screen.getByTestId('track-header-V1')).toBeInTheDocument()
+  })
+
+  test('disabled while the track is locked', () => {
+    getState().setTrackFlags('V1', { locked: true })
+    render(<Timeline />)
+    expect(screen.getByLabelText('delete track V1')).toBeDisabled()
+    expect(screen.getByLabelText('delete track V2')).toBeEnabled()
+  })
+})
+
+describe('solo button', () => {
+  test('audio headers offer solo; video headers do not', () => {
+    render(<Timeline />)
+    expect(screen.getByLabelText('solo track A1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('solo track V1')).not.toBeInTheDocument()
+  })
+
+  test('solo dims every OTHER audio lane, and clears when unsolo’d', () => {
+    getState().addTrack('audio') // A2 joins A1
+    render(<Timeline />)
+
+    fireEvent.click(screen.getByLabelText('solo track A1'))
+    expect(trackById('A1').solo).toBe(true)
+    expect(screen.getByTestId('track-A2')).toHaveClass('track-solo-dimmed')
+    expect(screen.getByTestId('track-A1')).not.toHaveClass('track-solo-dimmed')
+    expect(screen.getByTestId('track-V1')).not.toHaveClass('track-solo-dimmed')
+
+    fireEvent.click(screen.getByLabelText('solo track A1'))
+    expect(screen.getByTestId('track-A2')).not.toHaveClass('track-solo-dimmed')
   })
 })

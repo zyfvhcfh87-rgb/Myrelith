@@ -38,6 +38,10 @@ export default function Timeline() {
 
   // Derived per render (cheap): stable Track references keep memo rows idle.
   const ordered = tracksInDisplayOrder(doc)
+  // Solo is cross-track state (one solo dims every OTHER audio lane), so
+  // the container derives it and hands each lane a boolean; the actual
+  // mix rule lives in domain selectors.audibleTracks.
+  const anyAudioSolo = doc.tracks.some((t) => t.kind === 'audio' && t.solo)
   const addTrack = (kind: 'video' | 'audio') =>
     useDocumentStore.getState().addTrack(kind)
 
@@ -74,7 +78,11 @@ export default function Timeline() {
         <Ruler />
         <div className="timeline-tracks">
           {ordered.map((track) => (
-            <Track key={track.id} track={track} />
+            <Track
+              key={track.id}
+              track={track}
+              soloDimmed={anyAudioSolo && track.kind === 'audio' && !track.solo}
+            />
           ))}
         </div>
         <Playhead />
