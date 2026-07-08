@@ -3,7 +3,8 @@
  *
  * MediaPool rows advertise {asset id, kind} per the ui/dnd.ts contract;
  * Track lanes accept kind-matched drops and commit exactly ONE
- * documentStore.insertClip (one undo entry). jsdom has no real drag-and-
+ * documentStore action (one undo entry) — a video asset with audio lands
+ * as a video+audio clip pair via insertClips. jsdom has no real drag-and-
  * drop, so tests drive the handlers with a stub dataTransfer (see
  * test/setup.ts for the DragEvent polyfill that keeps clientX alive).
  */
@@ -166,8 +167,8 @@ describe('MediaPool drag source', () => {
 /* ------------------------------------------------------------------ */
 
 describe('Track drop target', () => {
-  test('video drop inserts one clip at the pointer frame — one undo entry', () => {
-    seedAsset(makeAsset())
+  test('A/V video drop lands a video+audio clip pair — one undo entry', () => {
+    seedAsset(makeAsset()) // hasAudio: true
     render(<Track track={trackById('V1')} />)
     const lane = screen.getByTestId('track-V1')
     const dataTransfer = assetDragData(makeAsset())
@@ -179,16 +180,76 @@ describe('Track drop target', () => {
     fireEvent.drop(lane, { dataTransfer, clientX: 240 })
     expect(lane.className).not.toContain('drop-target')
 
-    const clips = trackById('V1').clips
-    expect(clips).toHaveLength(1)
-    expect(clips[0].assetId).toBe('asset-9')
-    expect(clips[0].name).toBe('beach.mp4')
-    expect(clips[0].timelineRange).toEqual({ startFrame: 240, durationFrames: 120 })
-    expect(clips[0].sourceRange).toEqual({ startFrame: 0, durationFrames: 120 })
-    expect(doc().past).toHaveLength(1) // exactly ONE undo entry
+    const video = trackById('V1').clips
+    expect(video).toHaveLength(1)
+    expect(video[0].assetId).toBe('asset-9')
+    expect(video[0].name).toBe('beach.mp4')
+    expect(video[0].timelineRange).toEqual({ startFrame: 240, durationFrames: 120 })
+    expect(video[0].sourceRange).toEqual({ startFrame: 0, durationFrames: 120 })
 
-    doc().undo()
+    // The file's audio landed with it: same asset, same range, own id.
+    const audio = trackById('A1').clips
+    expect(audio).toHaveLength(1)
+    expect(audio[0].assetId).toBe('asset-9')
+    expect(audio[0].timelineRange).toEqual({ startFrame: 240, durationFrames: 120 })
+    expect(audio[0].id).not.toBe(video[0].id)
+
+    expect(doc().past).toHaveLength(1) // exactly ONE undo entry for the pair
+
+    doc().undo() // one undo removes BOTH halves
     expect(trackById('V1').clips).toHaveLength(0)
+    expect(trackById('A1').clips).toHaveLength(0)
+  })
+
+  test('silent video (hasAudio false) drops as a lone video clip', () => {
+    seedAsset(makeAsset({ hasAudio: false, audioSampleRate: null, audioChannels: null }))
+    render(<Track track={trackById('V1')} />)
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: assetDragData(makeAsset()),
+      clientX: 240,
+    })
+    expect(trackById('V1').clips).toHaveLength(1)
+    expect(trackById('A1').clips).toHaveLength(0)
+    expect(doc().past).toHaveLength(1)
+  })
+
+  test('no unlocked audio lane: the video half still lands alone', () => {
+    seedAsset(makeAsset()) // hasAudio: true
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [makeTrack('V1', 'video'), makeTrack('A1', 'audio', [], true)],
+    })
+    render(<Track track={trackById('V1')} />)
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: assetDragData(makeAsset()),
+      clientX: 240,
+    })
+    expect(trackById('V1').clips).toHaveLength(1)
+    expect(trackById('A1').clips).toHaveLength(0)
+    expect(doc().past).toHaveLength(1)
+  })
+
+  test('occupied audio spot rejects the WHOLE drop (never half a pair)', () => {
+    seedAsset(makeAsset()) // hasAudio: true
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video'),
+        makeTrack('A1', 'audio', [makeClip('existingA', 200, 100)]),
+      ],
+    })
+    render(<Track track={trackById('V1')} />)
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: assetDragData(makeAsset()),
+      clientX: 240, // audio half would land inside existingA [200, 300)
+    })
+    expect(trackById('V1').clips).toHaveLength(0) // video half rolled back too
+    expect(trackById('A1').clips).toHaveLength(1) // only the original
+    expect(doc().past).toHaveLength(0)
+    expect(warnSpy).toHaveBeenCalled()
   })
 
   test('drop honors zoom when mapping pixels to frames', () => {

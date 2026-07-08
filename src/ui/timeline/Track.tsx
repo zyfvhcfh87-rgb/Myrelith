@@ -7,9 +7,12 @@
  * label chip lives INSIDE the lane so clips keep the same x-origin as the
  * ruler and playhead — a label gutter would break their alignment.
  *
- * Dropping an asset (ui/dnd.ts contract) builds a clip via domain
- * clipFromAsset and commits ONE documentStore.insertClip — a plain
- * click-release edit, so unlike clip drags there is no scrub-preview phase.
+ * Dropping an asset (ui/dnd.ts contract) builds clips via domain
+ * clipFromAsset and commits ONE documentStore action — insertClip, or
+ * insertClips when a video asset brings its audio along as a second clip
+ * on the first unlocked audio lane. Either way it is a plain click-release
+ * edit (one undo entry), so unlike clip drags there is no scrub-preview
+ * phase.
  * Handlers read stores with getState() only; the lone subscription-free
  * local state is the drop highlight, so render isolation is unchanged.
  */
@@ -64,7 +67,24 @@ function Track({ track }: TrackProps) {
         const rect = e.currentTarget.getBoundingClientRect()
         const zoom = useTransportStore.getState().zoom
         const frame = Math.max(0, Math.round((e.clientX - rect.left) / zoom))
-        useDocumentStore.getState().insertClip(track.id, clipFromAsset(asset, frame))
+        const documentStore = useDocumentStore.getState()
+        // A video asset that carries audio lands as a PAIR (NLE convention):
+        // its video clip on this lane plus an audio clip on the first
+        // unlocked audio lane — one atomic insertClips, one undo entry. If
+        // the audio spot is taken the whole drop is rejected (never half a
+        // pair); with no usable audio lane the video half lands alone.
+        const audioLane =
+          asset.kind === 'video' && asset.hasAudio
+            ? documentStore.doc.tracks.find((t) => t.kind === 'audio' && !t.locked)
+            : undefined
+        if (audioLane) {
+          documentStore.insertClips([
+            { trackId: track.id, clip: clipFromAsset(asset, frame) },
+            { trackId: audioLane.id, clip: clipFromAsset(asset, frame) },
+          ])
+        } else {
+          documentStore.insertClip(track.id, clipFromAsset(asset, frame))
+        }
       }}
     >
       <span className="track-label">{track.name}</span>
