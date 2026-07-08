@@ -24,12 +24,14 @@ binding rules.
 | **4 gate** | ⏳ user pass | most items machine-verified; see PLAN gate section |
 | 5 — export | ⬜ | |
 
-318 tests green · `npm run build` and `npm run lint` clean · every phase
+324 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
 4.3 Inspector + arrow stepping. The Phase 4 gate awaits the user's
-manual confirmation pass (see PLAN.md).
+manual confirmation pass (see PLAN.md). 2026-07-08 bug fix: dropping a
+video asset that contains audio now lands a video+audio clip PAIR
+(one undo entry) instead of silently dropping the audio.
 
 ## What works today (user-visible)
 
@@ -43,7 +45,12 @@ Click/drag the timeline ruler → playhead moves, Preview follows
 (rAF-coalesced, latest-wins, double-buffered — no torn frames). Drag a
 media row onto a lane (4.0): compatible lanes highlight, drop creates the
 clip at the pointer, one undo entry (kind-gated: video/image → V lanes,
-audio → A lanes; rows drag only after metadata arrives). The full editing
+audio → A lanes; rows drag only after metadata arrives). A video asset
+whose file contains audio lands as a PAIR — video clip on the drop lane
++ audio clip on the first unlocked A lane, one atomic
+documentStore.insertClips, ONE undo entry; if the audio spot is
+occupied the whole drop rejects (never half a pair). The clips are not
+linked afterwards (moving one does not move the other — post-MVP). The full editing
 toolset (4.2): toolbar buttons or A/B/T/Y/U — select (click selects, body
 drag moves with snap-back on illegal drops, edge drag trims), razor
 (click cuts at the pointer frame), ripple trim (edges; downstream
@@ -194,7 +201,11 @@ auto-pauses when a scrub starts.
 
 - Playback exists but is SILENT: the AudioContext is clock-only (rule 3
   honored); audio decode/mix/output does not exist yet. Video playback
-  composites the full timeline since 4.1c.
+  composites the full timeline since 4.1c. Audio clips DO land on A
+  lanes since the 2026-07-08 A/V drop fix (visible + editable), but
+  they produce no sound until the audio pipeline exists.
+- A/V pairs from one drop are NOT linked clips: schema has no linking,
+  so moving/trimming one half does not follow the other. Post-MVP.
 - Playback re-walks each GOP per frame (chunksForTimestamp per tick — the
   proven scrub path, works at 1080p30). True streaming decode is a
   post-MVP optimization if profiling ever demands it.
