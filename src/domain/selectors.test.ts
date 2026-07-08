@@ -4,7 +4,13 @@
 
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from './schema'
-import { activeClipAt, clipSourceFrame, docDurationFrames, findClip } from './selectors'
+import {
+  activeClipAt,
+  clipSourceFrame,
+  docDurationFrames,
+  findClip,
+  tracksInDisplayOrder,
+} from './selectors'
 
 function makeClip(id: string, tlStart: number, duration: number, sourceStart = 0): Clip {
   return {
@@ -93,6 +99,32 @@ describe('findClip', () => {
     expect(findClip(doc, 'b')?.id).toBe('b')
     expect(findClip(doc, 'a')?.id).toBe('a')
     expect(findClip(doc, 'nope')).toBeNull()
+  })
+})
+
+describe('tracksInDisplayOrder', () => {
+  test('videos reversed (top composite layer first), then audios in order', () => {
+    const v1 = makeTrack('V1', 'video', [])
+    const v2 = makeTrack('V2', 'video', [])
+    const a1 = makeTrack('A1', 'audio', [])
+    const a2 = makeTrack('A2', 'audio', [])
+    const doc = makeDoc([v1, v2, a1, a2])
+    // V2 composites ABOVE V1 (later in the array), so it displays on top.
+    expect(tracksInDisplayOrder(doc)).toEqual([v2, v1, a1, a2])
+    // Same references, pure reordering; the doc array is untouched.
+    expect(tracksInDisplayOrder(doc)[0]).toBe(v2)
+    expect(doc.tracks).toEqual([v1, v2, a1, a2])
+  })
+
+  test('interleaved kinds are grouped: all videos first, then all audios', () => {
+    const v1 = makeTrack('V1', 'video', [])
+    const a1 = makeTrack('A1', 'audio', [])
+    const v2 = makeTrack('V2', 'video', [])
+    expect(tracksInDisplayOrder(makeDoc([v1, a1, v2]))).toEqual([v2, v1, a1])
+  })
+
+  test('empty doc yields an empty array', () => {
+    expect(tracksInDisplayOrder(makeDoc([]))).toEqual([])
   })
 })
 

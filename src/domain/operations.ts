@@ -28,6 +28,7 @@ import type {
   TimelineDoc,
   Track,
   TrackId,
+  TrackKind,
   Transform,
 } from './schema'
 import { rangeEnd, rangeOverlap } from './time'
@@ -660,6 +661,87 @@ export function updateClipTransform(
       : loc.clip.opacity,
   }
   return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
+/** Per-track toggle flags (timeline header buttons). */
+export interface TrackFlagsPatch {
+  hidden?: boolean
+  muted?: boolean
+  locked?: boolean
+}
+
+/**
+ * Add a new empty track of `kind`, named with the NLE convention V2/V3…
+ * (video) or A2/A3… (audio) — the next free number for that kind, counting
+ * both existing ids and names so a rename can never cause an id collision.
+ *
+ * Placement keeps the doc's [videos…, audios…] shape AND the compositing
+ * convention (tracks[0] = bottom layer): a video track goes AFTER the last
+ * video track, so it composites above the existing video stack; an audio
+ * track goes after the last audio track (the end). Never rejects.
+ */
+export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
+  const prefix = kind === 'video' ? 'V' : 'A'
+  const pattern = new RegExp(`^${prefix}(\\d+)$`)
+  let max = 0
+  for (const track of doc.tracks) {
+    for (const label of [track.id, track.name]) {
+      const m = pattern.exec(label)
+      if (m) max = Math.max(max, Number(m[1]))
+    }
+  }
+  const label = `${prefix}${max + 1}`
+  const track: Track = {
+    id: label,
+    kind,
+    name: label,
+    clips: [],
+    transitions: [],
+    hidden: false,
+    muted: false,
+    locked: false,
+  }
+
+  let lastOfKind = -1
+  for (let t = 0; t < doc.tracks.length; t++) {
+    if (doc.tracks[t].kind === kind) lastOfKind = t
+  }
+  // No video track yet → index 0 (below any audio in the array); no audio
+  // track yet → the end. Both keep videos grouped before audios.
+  const insertAt =
+    lastOfKind !== -1 ? lastOfKind + 1 : kind === 'video' ? 0 : doc.tracks.length
+  const tracks = doc.tracks.slice()
+  tracks.splice(insertAt, 0, track)
+  return { ...doc, tracks }
+}
+
+/**
+ * Set a track's toggle flags: hidden (video → skipped by the compositor),
+ * muted (audio → excluded from the mix), locked (rejects clip edits).
+ * DELIBERATE exception to the locked rule: flags may be changed on a locked
+ * track — otherwise a track could never be unlocked. A patch that changes
+ * nothing returns the same reference WITHOUT a warning (an idempotent
+ * toggle is not an error, it just pushes no history entry).
+ */
+export function setTrackFlags(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  patch: TrackFlagsPatch,
+): TimelineDoc {
+  const op = 'setTrackFlags'
+  const trackIndex = doc.tracks.findIndex((t) => t.id === trackId)
+  if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
+  const track = doc.tracks[trackIndex]
+
+  const keys = (['hidden', 'muted', 'locked'] as const).filter(
+    (k) => patch[k] !== undefined,
+  )
+  if (keys.length === 0) return reject(doc, op, 'empty patch — nothing to change')
+  if (keys.every((k) => patch[k] === track[k])) return doc
+
+  const next = { ...track }
+  for (const k of keys) next[k] = patch[k] as boolean
+  return withTrack(doc, trackIndex, next)
 }
 
 /**

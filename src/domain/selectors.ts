@@ -48,6 +48,24 @@ export function findClip(doc: TimelineDoc, clipId: ClipId): Clip | null {
 }
 
 /**
+ * Tracks in TIMELINE DISPLAY order (NLE convention, top row first): video
+ * tracks with the topmost composite layer first — i.e. array order
+ * REVERSED, since tracks[0] composites at the bottom — then audio tracks
+ * in array order, so A1 sits directly under the video stack. Pure
+ * reordering: the returned array holds the same Track references, and the
+ * doc's own tracks array (the compositing order) is untouched.
+ */
+export function tracksInDisplayOrder(doc: TimelineDoc): Track[] {
+  const videos: Track[] = []
+  const audios: Track[] = []
+  for (const track of doc.tracks) {
+    if (track.kind === 'video') videos.unshift(track)
+    else audios.push(track)
+  }
+  return [...videos, ...audios]
+}
+
+/**
  * Map a timeline frame to the source-asset frame the clip shows there:
  * sourceRange start plus the offset into the clip. Pure integer math (MVP
  * speed 1.0 — source and timeline ranges have equal durations). Only

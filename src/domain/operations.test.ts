@@ -10,9 +10,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, Effect, MediaAsset, TimelineDoc, Track } from './schema'
 import {
   addEffect,
+  addTrack,
   clipFromAsset,
   insertClip,
   moveClip,
+  setTrackFlags,
   rippleDelete,
   rippleTrim,
   slideClip,
@@ -715,5 +717,110 @@ describe('updateClipTransform', () => {
     expect(updateClipTransform(doc, 'nope', { opacity: 1 })).toBe(doc)
     expect(updateClipTransform(doc, 'clipE', { opacity: 1 })).toBe(doc)
     expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* addTrack (timeline header upgrade)                                   */
+/* ------------------------------------------------------------------ */
+
+describe('addTrack', () => {
+  // Fixture reminder: tracks = [V1, V2, A1, VL] — VL is a video track, so
+  // videos are NOT contiguous; "after the LAST video" means after VL.
+
+  test('adds an empty video track with the next free V number, after the last video', () => {
+    const doc = makeDoc()
+    const out = addTrack(doc, 'video')
+    expect(out.tracks.map((t) => t.id)).toEqual(['V1', 'V2', 'A1', 'VL', 'V3'])
+    const added = out.tracks[4]
+    expect(added).toEqual({
+      id: 'V3',
+      kind: 'video',
+      name: 'V3',
+      clips: [],
+      transitions: [],
+      hidden: false,
+      muted: false,
+      locked: false,
+    })
+    // Compositing convention: last video in the array = topmost layer.
+  })
+
+  test('adds an audio track directly after the last audio track', () => {
+    const doc = makeDoc()
+    const out = addTrack(doc, 'audio')
+    expect(out.tracks.map((t) => t.id)).toEqual(['V1', 'V2', 'A1', 'A2', 'VL'])
+    expect(out.tracks[3].kind).toBe('audio')
+  })
+
+  test('numbering counts names as well as ids, so renames cannot collide', () => {
+    const doc = deepFreeze({
+      ...makeDoc(),
+      tracks: [{ ...makeTrack('track-7', 'video', []), name: 'V7' }],
+    })
+    expect(addTrack(doc, 'video').tracks.map((t) => t.id)).toEqual(['track-7', 'V8'])
+  })
+
+  test('first track of a kind: video lands at index 0, audio at the end', () => {
+    const audioOnly = deepFreeze({ ...makeDoc(), tracks: [makeTrack('A1', 'audio', [])] })
+    expect(addTrack(audioOnly, 'video').tracks.map((t) => t.id)).toEqual(['V1', 'A1'])
+
+    const videoOnly = deepFreeze({ ...makeDoc(), tracks: [makeTrack('V1', 'video', [])] })
+    expect(addTrack(videoOnly, 'audio').tracks.map((t) => t.id)).toEqual(['V1', 'A1'])
+  })
+
+  test('existing tracks keep their references; result survives JSON round-trip', () => {
+    const doc = makeDoc()
+    const out = addTrack(doc, 'video')
+    expect(out).not.toBe(doc)
+    for (let t = 0; t < doc.tracks.length; t++) {
+      expect(out.tracks[t]).toBe(doc.tracks[t])
+    }
+    expect(JSON.parse(JSON.stringify(out))).toEqual(out)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* setTrackFlags                                                        */
+/* ------------------------------------------------------------------ */
+
+describe('setTrackFlags', () => {
+  test('sets one flag; everything else on the track is untouched', () => {
+    const doc = makeDoc()
+    const out = setTrackFlags(doc, 'V1', { hidden: true })
+    const track = out.tracks[0]
+    expect(track.hidden).toBe(true)
+    expect(track.muted).toBe(false)
+    expect(track.locked).toBe(false)
+    expect(track.clips).toBe(doc.tracks[0].clips) // same reference
+    expect(out.tracks[1]).toBe(doc.tracks[1]) // structural sharing
+    expect(out.tracks[2]).toBe(doc.tracks[2])
+  })
+
+  test('sets several flags in one call', () => {
+    const doc = makeDoc()
+    const out = setTrackFlags(doc, 'A1', { muted: true, locked: true })
+    expect(out.tracks[2].muted).toBe(true)
+    expect(out.tracks[2].locked).toBe(true)
+  })
+
+  test('a locked track CAN be unlocked (the deliberate locked-rule exception)', () => {
+    const doc = makeDoc()
+    const out = setTrackFlags(doc, 'VL', { locked: false })
+    expect(out).not.toBe(doc)
+    expect(out.tracks[3].locked).toBe(false)
+  })
+
+  test('no-change patch returns the same reference WITHOUT warning', () => {
+    const doc = makeDoc()
+    expect(setTrackFlags(doc, 'V1', { hidden: false })).toBe(doc)
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('unknown track and empty patch are rejected with a warning', () => {
+    const doc = makeDoc()
+    expect(setTrackFlags(doc, 'V9', { hidden: true })).toBe(doc)
+    expect(setTrackFlags(doc, 'V1', {})).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(2)
   })
 })
