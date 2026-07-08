@@ -25,7 +25,7 @@
 
 import { memo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { Clip, TrackId } from '../../domain/schema'
+import type { Clip, TrackId, TrackKind } from '../../domain/schema'
 import { rangeEnd } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
@@ -36,6 +36,8 @@ import { useScrubScheduler } from './useScrubScheduler'
 interface ClipViewProps {
   clip: Clip
   trackId: TrackId
+  /** Lane kind: picks the visual (filmstrip vs waveform). Default video. */
+  trackKind?: TrackKind
 }
 
 type GestureMode = 'move' | EditPreviewKind
@@ -50,7 +52,7 @@ interface GestureSession {
   maxDelta: number
 }
 
-function ClipView({ clip, trackId }: ClipViewProps) {
+function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   const zoom = useTransportStore((s) => s.zoom)
   const tool = useTransportStore((s) => s.tool)
   const isSelected = useTransportStore((s) => s.selectedClipId === clip.id)
@@ -66,6 +68,16 @@ function ClipView({ clip, trackId }: ClipViewProps) {
   )
   const setDragPreview = useTransportStore((s) => s.setDragPreview)
   const setEditPreview = useTransportStore((s) => s.setEditPreview)
+
+  // Clip visuals (filmstrip / waveform): both images span the asset's FULL
+  // source duration, so mapping them onto this clip is two CSS background
+  // values — size (asset length at the current zoom) and position (the
+  // in-point shift). Stable narrow slices: they change only when THIS
+  // asset's visuals/metadata land.
+  const visuals = useMediaStore((s) => s.visuals.get(clip.assetId))
+  const assetDurationFrames = useMediaStore(
+    (s) => s.assets.get(clip.assetId)?.durationFrames ?? 0,
+  )
 
   const session = useRef<GestureSession | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -109,6 +121,20 @@ function ClipView({ clip, trackId }: ClipViewProps) {
     }
   }
   const dragging = previewStart !== null || editPreview !== null
+
+  // Source in-point as currently DISPLAYED: slip and start-side trims
+  // shift the material under the clip, so the visual tracks the gesture
+  // live (the background is anchored to the clip's moving left edge).
+  let sourceStartFrame = clip.sourceRange.startFrame
+  if (
+    editPreview &&
+    (editPreview.kind === 'slip' ||
+      editPreview.kind === 'trim-start' ||
+      editPreview.kind === 'ripple-start')
+  ) {
+    sourceStartFrame += editPreview.deltaFrames
+  }
+  const visual = trackKind === 'audio' ? visuals?.waveform : visuals?.filmstrip
 
   /* ---------------- gesture plumbing -------------------------------- */
 
@@ -296,6 +322,17 @@ function ClipView({ clip, trackId }: ClipViewProps) {
         }
       }}
     >
+      {visual && assetDurationFrames > 0 && (
+        <div
+          className="clip-visual"
+          data-testid={`clip-${clip.id}-visual`}
+          style={{
+            backgroundImage: `url(${visual.url})`,
+            backgroundSize: `${assetDurationFrames * zoom}px 100%`,
+            backgroundPosition: `${-sourceStartFrame * zoom}px 0`,
+          }}
+        />
+      )}
       {showEdges && (
         <>
           <div

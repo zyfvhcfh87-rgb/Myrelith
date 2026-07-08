@@ -307,8 +307,21 @@
   border-color: #7db4ec;
 }
 
-.clip-name {
+/* Filmstrip/waveform layer — spans the whole block, beneath name/edges.
+   The background maps the ASSET-length image onto this clip: size =
+   assetDuration×zoom, position = −sourceStart×zoom (set inline). */
+.clip-visual {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
   pointer-events: none;
+}
+
+.clip-name {
+  /* positioned → paints above the (positioned) visual layer */
+  position: relative;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
 
 .playhead {

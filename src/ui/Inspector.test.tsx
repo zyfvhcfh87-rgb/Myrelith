@@ -28,8 +28,8 @@ function makeClip(id: string, tlStart: number, duration: number): Clip {
   }
 }
 
-function makeTrack(id: string, clips: Clip[]): Track {
-  return { id, kind: 'video', name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked: false }
+function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Track {
+  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked: false }
 }
 
 function makeDoc(): TimelineDoc {
@@ -41,7 +41,10 @@ function makeDoc(): TimelineDoc {
     width: 1920,
     height: 1080,
     audioSampleRate: 48000,
-    tracks: [makeTrack('V1', [makeClip('clipA', 0, 100), makeClip('clipB', 100, 50)])],
+    tracks: [
+      makeTrack('V1', [makeClip('clipA', 0, 100), makeClip('clipB', 100, 50)]),
+      makeTrack('A1', [makeClip('clipD', 0, 80)], 'audio'),
+    ],
   }
 }
 
@@ -169,5 +172,55 @@ describe('Inspector', () => {
     transport().setSelectedClip('gone')
     rerender(<Inspector />)
     expect(screen.getByText('select a clip to edit it')).toBeInTheDocument()
+  })
+})
+
+describe('audio clips (clip audio upgrade)', () => {
+  const clipD = () =>
+    doc().doc.tracks[1].clips.find((c) => c.id === 'clipD') as Clip
+
+  test('an audio-lane clip shows Volume and NOT the transform fields', () => {
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+    expect(screen.getByTestId('inspector-volume')).toHaveValue(1)
+    expect(screen.queryByTestId('inspector-x')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('inspector-opacity')).not.toBeInTheDocument()
+  })
+
+  test('a video-lane clip shows no Volume field', () => {
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+    expect(screen.queryByTestId('inspector-volume')).not.toBeInTheDocument()
+  })
+
+  test('volume commits ONE setClipVolume; the domain clamps to [0,2]', () => {
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+    const volume = screen.getByTestId('inspector-volume')
+
+    fireEvent.change(volume, { target: { value: '0.5' } })
+    expect(clipD().volume).toBe(1) // drafting: doc untouched
+    fireEvent.keyDown(volume, { key: 'Enter' })
+    expect(clipD().volume).toBe(0.5)
+    expect(doc().past).toHaveLength(1)
+
+    fireEvent.change(volume, { target: { value: '9' } })
+    fireEvent.blur(volume)
+    expect(clipD().volume).toBe(2) // clamped by the domain op
+    expect(doc().past).toHaveLength(2)
+  })
+
+  test('undo restores the volume and the field resyncs', () => {
+    transport().setSelectedClip('clipD')
+    const { rerender } = render(<Inspector />)
+    const volume = screen.getByTestId('inspector-volume')
+
+    fireEvent.change(volume, { target: { value: '0.2' } })
+    fireEvent.keyDown(volume, { key: 'Enter' })
+    expect(clipD().volume).toBe(0.2)
+
+    doc().undo()
+    rerender(<Inspector />)
+    expect(screen.getByTestId('inspector-volume')).toHaveValue(1)
   })
 })

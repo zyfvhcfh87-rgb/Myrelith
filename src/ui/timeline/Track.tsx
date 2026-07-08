@@ -98,7 +98,7 @@ function Track({ track, soloDimmed = false }: TrackProps) {
       }}
     >
       {track.clips.map((clip) => (
-        <ClipView key={clip.id} clip={clip} trackId={track.id} />
+        <ClipView key={clip.id} clip={clip} trackId={track.id} trackKind={track.kind} />
       ))}
     </div>
   )

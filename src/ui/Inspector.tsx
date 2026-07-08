@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react'
 import type { ClipTransformPatch } from '../domain/operations'
-import { findClip } from '../domain/selectors'
+import { findClip, trackOfClip } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 
@@ -78,12 +78,37 @@ export default function Inspector() {
   const clip = useDocumentStore((s) =>
     selectedClipId ? findClip(s.doc, selectedClipId) : null,
   )
+  // Lane kind decides the field set: audio clips edit VOLUME, video clips
+  // the visual transform. A primitive slice, so unrelated edits skip us.
+  const laneKind = useDocumentStore((s) =>
+    selectedClipId ? (trackOfClip(s.doc, selectedClipId)?.kind ?? null) : null,
+  )
 
   if (!clip) {
     return (
       <div className="panel-placeholder">
         <span className="placeholder-title">Inspector</span>
         <span className="placeholder-note">select a clip to edit it</span>
+      </div>
+    )
+  }
+
+  if (laneKind === 'audio') {
+    return (
+      <div className="inspector-panel" key={clip.id} data-testid="inspector-panel">
+        <div className="inspector-title">{clip.name}</div>
+        <div className="inspector-grid">
+          <NumberField
+            label="Volume"
+            value={clip.volume}
+            step={0.05}
+            testId="inspector-volume"
+            onCommit={(volume) =>
+              useDocumentStore.getState().setClipVolume(clip.id, volume)
+            }
+          />
+        </div>
+        <span className="inspector-note">0 = silent · 1 = original · 2 = max</span>
       </div>
     )
   }

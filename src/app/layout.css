@@ -309,6 +309,11 @@
   border-color: #6b93c4;
 }
 
+.inspector-note {
+  font-size: 10px;
+  color: #8a94a0;
+}
+
 /* Phase 3.1 placeholder styling — dies as real panels replace it. */
 .panel-placeholder {
   display: flex;
