@@ -84,7 +84,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 
 - `DocumentState` — implemented in `src/state/documentStore.ts` (canonical):
   `setDoc`, `splitClipAtPlayhead(frame)`, `splitClipAt(clipId, frame)`,
-  `insertClip(trackId, clip)`, `trimClip(clipId, edge, delta)`,
+  `insertClip(trackId, clip)`, `insertClips([{trackId, clip}...])` (atomic
+  batch, one history entry — the A/V drop path), `trimClip(clipId, edge,
+  delta)`,
   `rippleTrim(clipId, edge, delta)`, `slipClip(clipId, delta)`,
   `slideClip(clipId, delta)`, `moveClip(clipId, toTrackId, toFrame)`,
   `rippleDelete(clipId)`, `addEffect(clipId, effect)`, `undo`, `redo`.

@@ -220,6 +220,39 @@ describe('actions delegate to domain operations', () => {
     expect(getState().past).toHaveLength(0)
     expect(warnSpy).toHaveBeenCalled()
   })
+
+  test('insertClips places the whole batch as ONE undo entry', () => {
+    // The A/V drop shape: same range on a video and an audio lane.
+    getState().insertClips([
+      { trackId: 'V2', clip: makeClip('vHalf', 500, 120) },
+      { trackId: 'A1', clip: makeClip('aHalf', 500, 120) },
+    ])
+    expect(getState().doc.tracks[1].clips.map((c) => c.id)).toEqual(['vHalf'])
+    expect(getState().doc.tracks[2].clips.map((c) => c.id)).toEqual(['clipD', 'aHalf'])
+    expect(getState().past).toHaveLength(1)
+
+    getState().undo() // one undo removes BOTH halves
+    expect(getState().doc.tracks[1].clips).toHaveLength(0)
+    expect(getState().doc.tracks[2].clips.map((c) => c.id)).toEqual(['clipD'])
+  })
+
+  test('insertClips is atomic: one rejected insert drops the whole batch', () => {
+    const before = getState().doc
+    getState().insertClips([
+      { trackId: 'V2', clip: makeClip('vHalf', 100, 120) }, // V2 is free — would succeed
+      { trackId: 'A1', clip: makeClip('aHalf', 100, 120) }, // inside clipD [0,300) — rejected
+    ])
+    expect(getState().doc).toBe(before) // nothing landed, not even the video half
+    expect(getState().past).toHaveLength(0)
+    expect(warnSpy).toHaveBeenCalled()
+  })
+
+  test('insertClips with an empty batch is a no-op with no history entry', () => {
+    const before = getState().doc
+    getState().insertClips([])
+    expect(getState().doc).toBe(before)
+    expect(getState().past).toHaveLength(0)
+  })
 })
 
 /* ------------------------------------------------------------------ */

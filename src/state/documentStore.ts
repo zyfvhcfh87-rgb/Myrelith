@@ -61,6 +61,14 @@ export interface DocumentState {
    */
   insertClip: (trackId: TrackId, clip: Clip) => void
   /**
+   * Insert several clips as ONE gesture — the A/V drop path, where a video
+   * asset with audio lands as a video clip plus its audio clip. Atomic:
+   * if ANY insert is rejected the doc is left untouched (a drop can never
+   * place half of a linked pair), and a successful batch is ONE history
+   * entry, so a single undo removes the whole pair.
+   */
+  insertClips: (inserts: ReadonlyArray<{ trackId: TrackId; clip: Clip }>) => void
+  /**
    * Split ONE clip at a timeline frame strictly inside it (the razor tool;
    * splitClipAtPlayhead is the split-everything keyboard variant).
    */
@@ -167,6 +175,19 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   insertClip: (trackId, clip) =>
     set((state) => commit(state, insertClip(state.doc, trackId, clip))),
+
+  insertClips: (inserts) =>
+    set((state) => {
+      let next = state.doc
+      for (const { trackId, clip } of inserts) {
+        const after = insertClip(next, trackId, clip)
+        // Any rejection (insertClip already warned why) aborts the WHOLE
+        // batch: return the untouched state so no history entry appears.
+        if (after === next) return state
+        next = after
+      }
+      return commit(state, next)
+    }),
 
   splitClipAt: (clipId, frame) =>
     set((state) => commit(state, splitClipAtFrame(state.doc, clipId, frame))),
