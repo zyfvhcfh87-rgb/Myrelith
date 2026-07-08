@@ -13,11 +13,13 @@ import {
   addTrack,
   clipFromAsset,
   insertClip,
+  MAX_CLIP_VOLUME,
   moveClip,
   removeTrack,
   renameTrack,
   rippleDelete,
   rippleTrim,
+  setClipVolume,
   setTrackFlags,
   slideClip,
   slipClip,
@@ -835,6 +837,43 @@ describe('setTrackFlags', () => {
     const both = setTrackFlags(doc, 'A1', { solo: true, muted: true })
     expect(both.tracks[2].solo).toBe(true)
     expect(both.tracks[2].muted).toBe(true)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* setClipVolume                                                        */
+/* ------------------------------------------------------------------ */
+
+describe('setClipVolume', () => {
+  test('sets the volume; ranges, transform and neighbors are untouched', () => {
+    const doc = makeDoc()
+    const out = setClipVolume(doc, 'clipD', 0.5) // clipD lives on A1
+    const clip = clipIn(out, 'A1', 'clipD')
+    expect(clip.volume).toBe(0.5)
+    expect(clip.timelineRange).toBe(clipIn(doc, 'A1', 'clipD').timelineRange)
+    expect(out.tracks[0]).toBe(doc.tracks[0]) // structural sharing
+  })
+
+  test('clamps into [0, MAX_CLIP_VOLUME] instead of rejecting', () => {
+    const doc = makeDoc()
+    expect(clipIn(setClipVolume(doc, 'clipD', 9), 'A1', 'clipD').volume).toBe(
+      MAX_CLIP_VOLUME,
+    )
+    expect(clipIn(setClipVolume(doc, 'clipD', -1), 'A1', 'clipD').volume).toBe(0)
+  })
+
+  test('setting the current volume returns the same reference, no warning', () => {
+    const doc = makeDoc()
+    expect(setClipVolume(doc, 'clipD', 1)).toBe(doc) // default volume is 1
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('rejects non-finite values, unknown clips and locked tracks', () => {
+    const doc = makeDoc()
+    expect(setClipVolume(doc, 'clipD', Number.NaN)).toBe(doc)
+    expect(setClipVolume(doc, 'nope', 0.5)).toBe(doc)
+    expect(setClipVolume(doc, 'clipE', 0.5)).toBe(doc) // VL is locked
+    expect(warnSpy).toHaveBeenCalledTimes(3)
   })
 })
 

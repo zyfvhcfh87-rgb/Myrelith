@@ -48,6 +48,18 @@ export function findClip(doc: TimelineDoc, clipId: ClipId): Clip | null {
 }
 
 /**
+ * The track a clip lives on, or null. Lets the UI branch on lane kind —
+ * e.g. the Inspector shows Volume for clips on audio tracks and the
+ * transform fields for clips on video tracks.
+ */
+export function trackOfClip(doc: TimelineDoc, clipId: ClipId): Track | null {
+  for (const track of doc.tracks) {
+    if (track.clips.some((clip) => clip.id === clipId)) return track
+  }
+  return null
+}
+
+/**
  * Tracks in TIMELINE DISPLAY order (NLE convention, top row first): video
  * tracks with the topmost composite layer first — i.e. array order
  * REVERSED, since tracks[0] composites at the bottom — then audio tracks

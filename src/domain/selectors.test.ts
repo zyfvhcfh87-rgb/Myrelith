@@ -10,6 +10,7 @@ import {
   clipSourceFrame,
   docDurationFrames,
   findClip,
+  trackOfClip,
   tracksInDisplayOrder,
 } from './selectors'
 
@@ -126,6 +127,18 @@ describe('tracksInDisplayOrder', () => {
 
   test('empty doc yields an empty array', () => {
     expect(tracksInDisplayOrder(makeDoc([]))).toEqual([])
+  })
+})
+
+describe('trackOfClip', () => {
+  test('finds the owning track on any lane; unknown clips yield null', () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [makeClip('a', 0, 10)]),
+      makeTrack('A1', 'audio', [makeClip('b', 5, 10)]),
+    ])
+    expect(trackOfClip(doc, 'a')?.id).toBe('V1')
+    expect(trackOfClip(doc, 'b')?.kind).toBe('audio')
+    expect(trackOfClip(doc, 'nope')).toBeNull()
   })
 })
 

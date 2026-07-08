@@ -789,6 +789,37 @@ export function removeTrack(doc: TimelineDoc, trackId: TrackId): TimelineDoc {
   return { ...doc, tracks }
 }
 
+/** Upper clip-volume bound: 200% gain, the usual NLE headroom. */
+export const MAX_CLIP_VOLUME = 2
+
+/**
+ * Set a clip's audio volume (linear gain, clamped to [0, MAX_CLIP_VOLUME]
+ * like opacity's [0,1] — a UI convention, not an error). Meaningful for
+ * clips on audio tracks; the mix (Phase 5 export, future playback) reads
+ * it via clip.volume. Rejects non-finite values, unknown clips and locked
+ * tracks; setting the current value returns the same reference silently.
+ */
+export function setClipVolume(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  volume: number,
+): TimelineDoc {
+  const op = 'setClipVolume'
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+  if (!Number.isFinite(volume)) {
+    return reject(doc, op, `volume must be a finite number, got ${volume}`)
+  }
+
+  const clamped = Math.min(MAX_CLIP_VOLUME, Math.max(0, volume))
+  if (clamped === loc.clip.volume) return doc
+
+  const clips = loc.track.clips.slice()
+  clips[loc.clipIndex] = { ...loc.clip, volume: clamped }
+  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
 /**
  * Append an effect to a clip's chain. The effect is defensively copied so
  * later mutation of the caller's object cannot reach into the doc.
