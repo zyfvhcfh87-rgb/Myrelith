@@ -83,10 +83,9 @@ describe('ClipView rendering', () => {
     expect(el).toHaveStyle({ transform: 'translateX(200px)', width: '100px' })
   })
 
-  test('Track renders a lane with its clips and label', () => {
+  test('Track renders a lane with its clips (identity lives in TrackHeader)', () => {
     render(<Track track={doc().doc.tracks[0]} />)
     expect(screen.getByTestId('track-V1')).toBeInTheDocument()
-    expect(screen.getByText('V1')).toBeInTheDocument()
     expect(screen.getByTestId('clip-clipA')).toBeInTheDocument()
     expect(screen.getByTestId('clip-clipB')).toBeInTheDocument()
   })

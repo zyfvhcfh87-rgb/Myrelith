@@ -1,0 +1,173 @@
+/**
+ * ui/timeline/trackheader.test.tsx — timeline tracks upgrade.
+ *
+ * The header gutter: one TrackHeader per track in DISPLAY order (video
+ * stack top-down — the topmost composite layer first — then audio), with
+ * working hide/mute/lock toggles and add-track buttons. Toggle behavior
+ * itself (compositor skips, edit rejection) is enforced elsewhere; here we
+ * verify the wiring: click → documentStore change → one undo entry.
+ */
+
+import { beforeEach, describe, expect, test } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import type { Clip, TimelineDoc, Track as TrackData } from '../../domain/schema'
+import { useDocumentStore } from '../../state/documentStore'
+import Timeline from './Timeline'
+
+function makeClip(id: string, tlStart: number, duration: number): Clip {
+  return {
+    id,
+    assetId: 'asset-1',
+    name: id,
+    sourceRange: { startFrame: 0, durationFrames: duration },
+    timelineRange: { startFrame: tlStart, durationFrames: duration },
+    transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
+    opacity: 1,
+    volume: 1,
+    effects: [],
+  }
+}
+
+function makeTrack(id: string, kind: TrackData['kind'], clips: Clip[] = []): TrackData {
+  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, locked: false }
+}
+
+/** V1 (2 clips), V2 (empty), A1 (1 clip) — doc order = compositing order. */
+function makeDoc(): TimelineDoc {
+  return {
+    schemaVersion: 1,
+    id: 'doc-headers',
+    name: 'header fixture',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [
+      makeTrack('V1', 'video', [makeClip('c1', 0, 50), makeClip('c2', 100, 50)]),
+      makeTrack('V2', 'video'),
+      makeTrack('A1', 'audio', [makeClip('c3', 0, 80)]),
+    ],
+  }
+}
+
+const getState = () => useDocumentStore.getState()
+const trackById = (id: string) =>
+  getState().doc.tracks.find((t) => t.id === id) as TrackData
+
+beforeEach(() => {
+  getState().setDoc(makeDoc())
+})
+
+describe('header gutter', () => {
+  test('headers AND lanes render in display order: V2 over V1, audio below', () => {
+    render(<Timeline />)
+    const headerIds = screen
+      .getAllByTestId(/^track-header-/)
+      .map((el) => el.dataset.testid)
+    expect(headerIds).toEqual(['track-header-V2', 'track-header-V1', 'track-header-A1'])
+
+    const laneIds = screen.getAllByTestId(/^track-(V|A)\d/).map((el) => el.dataset.testid)
+    expect(laneIds).toEqual(['track-V2', 'track-V1', 'track-A1'])
+  })
+
+  test('a header shows the track badge, kind and clip count', () => {
+    render(<Timeline />)
+    const v1 = screen.getByTestId('track-header-V1')
+    expect(v1).toHaveTextContent('V1')
+    expect(v1).toHaveTextContent('Video')
+    expect(v1).toHaveTextContent('2 clips')
+    expect(screen.getByTestId('track-header-A1')).toHaveTextContent('1 clip')
+    expect(screen.getByTestId('track-header-V2')).toHaveTextContent('0 clips')
+  })
+
+  test('video headers offer hide, audio headers offer mute, both offer lock', () => {
+    render(<Timeline />)
+    expect(screen.getByLabelText('hide track V1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('mute track V1')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('mute track A1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('hide track A1')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('lock track V1')).toBeInTheDocument()
+    expect(screen.getByLabelText('lock track A1')).toBeInTheDocument()
+  })
+})
+
+describe('toggle wiring', () => {
+  test('hide toggles doc.hidden; each real change is ONE undo entry', () => {
+    render(<Timeline />)
+    const hide = screen.getByLabelText('hide track V1')
+    expect(hide).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(hide)
+    expect(trackById('V1').hidden).toBe(true)
+    expect(getState().past).toHaveLength(1)
+    expect(screen.getByLabelText('hide track V1')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByLabelText('hide track V1'))
+    expect(trackById('V1').hidden).toBe(false)
+    expect(getState().past).toHaveLength(2)
+  })
+
+  test('mute and lock write their flags', () => {
+    render(<Timeline />)
+    fireEvent.click(screen.getByLabelText('mute track A1'))
+    expect(trackById('A1').muted).toBe(true)
+
+    fireEvent.click(screen.getByLabelText('lock track V1'))
+    expect(trackById('V1').locked).toBe(true)
+  })
+
+  test('the lock button UNLOCKS a locked track (flags bypass the locked rule)', () => {
+    getState().setTrackFlags('V1', { locked: true })
+    render(<Timeline />)
+    fireEvent.click(screen.getByLabelText('lock track V1'))
+    expect(trackById('V1').locked).toBe(false)
+  })
+
+  test('lanes mirror the flags as classes (visual state only)', () => {
+    getState().setTrackFlags('V1', { hidden: true })
+    getState().setTrackFlags('A1', { muted: true, locked: true })
+    render(<Timeline />)
+    expect(screen.getByTestId('track-V1')).toHaveClass('track-hidden')
+    expect(screen.getByTestId('track-A1')).toHaveClass('track-muted', 'track-locked')
+  })
+})
+
+describe('add-track buttons', () => {
+  test('+ Video inserts above the video stack (display top) as one undo entry', () => {
+    render(<Timeline />)
+    fireEvent.click(screen.getByLabelText('add video track'))
+
+    // Doc order: after the last video → composites above V2.
+    expect(getState().doc.tracks.map((t) => t.id)).toEqual(['V1', 'V2', 'V3', 'A1'])
+    // Display order: the new top layer is the top row.
+    const headerIds = screen
+      .getAllByTestId(/^track-header-/)
+      .map((el) => el.dataset.testid)
+    expect(headerIds).toEqual([
+      'track-header-V3',
+      'track-header-V2',
+      'track-header-V1',
+      'track-header-A1',
+    ])
+
+    expect(getState().past).toHaveLength(1)
+    getState().undo()
+    expect(getState().doc.tracks.map((t) => t.id)).toEqual(['V1', 'V2', 'A1'])
+  })
+
+  test('+ Audio appends below the audio stack', () => {
+    render(<Timeline />)
+    fireEvent.click(screen.getByLabelText('add audio track'))
+    expect(getState().doc.tracks.map((t) => t.id)).toEqual(['V1', 'V2', 'A1', 'A2'])
+    const headerIds = screen
+      .getAllByTestId(/^track-header-/)
+      .map((el) => el.dataset.testid)
+    expect(headerIds[headerIds.length - 1]).toBe('track-header-A2')
+  })
+
+  test('a drop lane exists for the new track immediately', () => {
+    render(<Timeline />)
+    fireEvent.click(screen.getByLabelText('add video track'))
+    expect(screen.getByTestId('track-V3')).toBeInTheDocument()
+  })
+})

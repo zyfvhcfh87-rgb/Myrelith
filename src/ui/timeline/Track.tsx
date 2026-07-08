@@ -3,9 +3,11 @@
  * target for MediaPool assets since 4.0.
  *
  * Presentation + drop wiring: receives its Track as a prop (Timeline
- * subscribes to the tracks array), renders a ClipView per clip. The sticky
- * label chip lives INSIDE the lane so clips keep the same x-origin as the
- * ruler and playhead — a label gutter would break their alignment.
+ * subscribes to the doc), renders a ClipView per clip. Identity and
+ * toggles live in the header gutter (TrackHeader) — a separate sticky
+ * column, so the lane keeps the same x-origin as the ruler and playhead.
+ * Flag classes (track-hidden/-muted/-locked) only restyle the lane; the
+ * flags' behavior is enforced in the compositor and domain ops.
  *
  * Dropping an asset (ui/dnd.ts contract) builds clips via domain
  * clipFromAsset and commits ONE documentStore action — insertClip, or
@@ -37,9 +39,14 @@ function Track({ track }: TrackProps) {
   const acceptsDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
     !track.locked && trackAcceptsAssetDrag(track.kind, e.dataTransfer.types)
 
+  const flagClasses =
+    (track.hidden ? ' track-hidden' : '') +
+    (track.muted ? ' track-muted' : '') +
+    (track.locked ? ' track-locked' : '')
+
   return (
     <div
-      className={`timeline-track track-${track.kind}${dropReady ? ' drop-target' : ''}`}
+      className={`timeline-track track-${track.kind}${flagClasses}${dropReady ? ' drop-target' : ''}`}
       data-testid={`track-${track.id}`}
       onPointerDown={(e) => {
         // Empty-lane click deselects; clip pointerdowns have the CLIP as
@@ -87,7 +94,6 @@ function Track({ track }: TrackProps) {
         }
       }}
     >
-      <span className="track-label">{track.name}</span>
       {track.clips.map((clip) => (
         <ClipView key={clip.id} clip={clip} trackId={track.id} />
       ))}
