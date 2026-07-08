@@ -11,6 +11,7 @@
 
 import './layout.css'
 import Toolbar from '../ui/Toolbar'
+import ToolButtons from '../ui/ToolButtons'
 import MediaPool from '../ui/MediaPool'
 import Preview from '../ui/Preview'
 import Inspector from '../ui/Inspector'
@@ -37,6 +38,7 @@ export default function App() {
         <Inspector />
       </aside>
       <section className="area-transport">
+        <ToolButtons />
         <TransportBar />
       </section>
       {/* data-timeline-scroll: the Ruler virtualizes its ticks against
