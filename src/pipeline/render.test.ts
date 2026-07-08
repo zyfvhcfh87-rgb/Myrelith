@@ -50,6 +50,7 @@ function makeTrack(
     transitions: [],
     hidden: false,
     muted: false,
+    solo: false,
     locked: false,
     ...overrides,
   }

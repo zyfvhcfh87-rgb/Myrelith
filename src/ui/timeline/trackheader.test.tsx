@@ -29,7 +29,7 @@ function makeClip(id: string, tlStart: number, duration: number): Clip {
 }
 
 function makeTrack(id: string, kind: TrackData['kind'], clips: Clip[] = []): TrackData {
-  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, locked: false }
+  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked: false }
 }
 
 /** V1 (2 clips), V2 (empty), A1 (1 clip) — doc order = compositing order. */

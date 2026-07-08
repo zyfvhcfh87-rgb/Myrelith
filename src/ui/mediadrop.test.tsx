@@ -66,7 +66,7 @@ function makeTrack(
   clips: Clip[] = [],
   locked = false,
 ): TrackData {
-  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, locked }
+  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked }
 }
 
 /** V1 (video, empty), A1 (audio, empty), VL (video, locked). */

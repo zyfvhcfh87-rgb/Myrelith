@@ -257,6 +257,13 @@ export interface Track {
   hidden: boolean
   /** Audio: excluded from the mix when true. */
   muted: boolean
+  /**
+   * Audio: exclusive listen. While ANY audio track is solo, every non-solo
+   * audio track is excluded from the mix; mute still wins on a solo track.
+   * The mix-set rule lives in selectors.audibleTracks — consumers (Phase 5
+   * export, future playback audio) must go through it, not re-derive it.
+   */
+  solo: boolean
   /** When true, edit operations targeting this track are rejected. */
   locked: boolean
 }

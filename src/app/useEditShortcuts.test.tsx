@@ -31,7 +31,7 @@ function makeClip(id: string, tlStart: number, duration: number): Clip {
 }
 
 function makeTrack(id: string, clips: Clip[], locked = false): Track {
-  return { id, kind: 'video', name: id, clips, transitions: [], hidden: false, muted: false, locked }
+  return { id, kind: 'video', name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked }
 }
 
 /** V1: clipA [100,50), clipB [200,40). VL (locked): clipE [0,30). */

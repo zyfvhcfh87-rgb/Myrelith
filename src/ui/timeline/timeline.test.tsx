@@ -52,6 +52,7 @@ function makeDoc(durationFrames = 0): TimelineDoc {
         transitions: [],
         hidden: false,
         muted: false,
+        solo: false,
         locked: false,
       },
     ],

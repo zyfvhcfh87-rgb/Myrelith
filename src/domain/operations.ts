@@ -667,6 +667,7 @@ export function updateClipTransform(
 export interface TrackFlagsPatch {
   hidden?: boolean
   muted?: boolean
+  solo?: boolean
   locked?: boolean
 }
 
@@ -699,6 +700,7 @@ export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
     transitions: [],
     hidden: false,
     muted: false,
+    solo: false,
     locked: false,
   }
 
@@ -733,7 +735,7 @@ export function setTrackFlags(
   if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
   const track = doc.tracks[trackIndex]
 
-  const keys = (['hidden', 'muted', 'locked'] as const).filter(
+  const keys = (['hidden', 'muted', 'solo', 'locked'] as const).filter(
     (k) => patch[k] !== undefined,
   )
   if (keys.length === 0) return reject(doc, op, 'empty patch — nothing to change')
@@ -742,6 +744,49 @@ export function setTrackFlags(
   const next = { ...track }
   for (const k of keys) next[k] = patch[k] as boolean
   return withTrack(doc, trackIndex, next)
+}
+
+/**
+ * Rename a track (display name only — the id never changes, so clips,
+ * undo snapshots and UI keys keep working). The name is trimmed; an empty
+ * result is rejected. Renaming to the CURRENT name returns the same
+ * reference silently (idempotent, no history entry), matching
+ * setTrackFlags. Renaming a locked track is allowed — like its flags, a
+ * track's label is metadata about the track, not an edit of its content.
+ */
+export function renameTrack(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  name: string,
+): TimelineDoc {
+  const op = 'renameTrack'
+  const trackIndex = doc.tracks.findIndex((t) => t.id === trackId)
+  if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
+  const trimmed = name.trim()
+  if (trimmed === '') return reject(doc, op, 'name must not be empty')
+  const track = doc.tracks[trackIndex]
+  if (trimmed === track.name) return doc
+  return withTrack(doc, trackIndex, { ...track, name: trimmed })
+}
+
+/**
+ * Delete a track AND everything on it (clips, transitions) — one op, so
+ * one undo entry restores the lot. A locked track rejects (the lock is
+ * exactly the "don't touch this content" guard); unknown ids reject.
+ * Deleting the last track of a kind is allowed — the add-track buttons
+ * and undo are both one click away, and nothing in the engine requires a
+ * lane of each kind to exist.
+ */
+export function removeTrack(doc: TimelineDoc, trackId: TrackId): TimelineDoc {
+  const op = 'removeTrack'
+  const trackIndex = doc.tracks.findIndex((t) => t.id === trackId)
+  if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
+  if (doc.tracks[trackIndex].locked) {
+    return reject(doc, op, `track ${trackId} is locked`)
+  }
+  const tracks = doc.tracks.slice()
+  tracks.splice(trackIndex, 1)
+  return { ...doc, tracks }
 }
 
 /**

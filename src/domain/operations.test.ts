@@ -14,9 +14,11 @@ import {
   clipFromAsset,
   insertClip,
   moveClip,
-  setTrackFlags,
+  removeTrack,
+  renameTrack,
   rippleDelete,
   rippleTrim,
+  setTrackFlags,
   slideClip,
   slipClip,
   splitClipAtFrame,
@@ -59,7 +61,7 @@ function makeClip(
 }
 
 function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = false): Track {
-  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, locked }
+  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked }
 }
 
 /**
@@ -741,6 +743,7 @@ describe('addTrack', () => {
       transitions: [],
       hidden: false,
       muted: false,
+      solo: false,
       locked: false,
     })
     // Compositing convention: last video in the array = topmost layer.
@@ -821,6 +824,88 @@ describe('setTrackFlags', () => {
     const doc = makeDoc()
     expect(setTrackFlags(doc, 'V9', { hidden: true })).toBe(doc)
     expect(setTrackFlags(doc, 'V1', {})).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+  })
+
+  test('solo is a flag like the others: set, idempotent no-op, combined', () => {
+    const doc = makeDoc()
+    const out = setTrackFlags(doc, 'A1', { solo: true })
+    expect(out.tracks[2].solo).toBe(true)
+    expect(setTrackFlags(out, 'A1', { solo: true })).toBe(out) // idempotent
+    const both = setTrackFlags(doc, 'A1', { solo: true, muted: true })
+    expect(both.tracks[2].solo).toBe(true)
+    expect(both.tracks[2].muted).toBe(true)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* renameTrack                                                          */
+/* ------------------------------------------------------------------ */
+
+describe('renameTrack', () => {
+  test('renames the display name only; the id and content are untouched', () => {
+    const doc = makeDoc()
+    const out = renameTrack(doc, 'V1', '  Main cam  ') // trimmed
+    const track = out.tracks[0]
+    expect(track.name).toBe('Main cam')
+    expect(track.id).toBe('V1')
+    expect(track.clips).toBe(doc.tracks[0].clips) // same reference
+    expect(out.tracks[1]).toBe(doc.tracks[1]) // structural sharing
+  })
+
+  test('renaming to the current name returns the same reference, no warning', () => {
+    const doc = makeDoc()
+    expect(renameTrack(doc, 'V1', 'V1')).toBe(doc)
+    expect(renameTrack(doc, 'V1', '  V1  ')).toBe(doc) // trims first
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('empty/whitespace names and unknown tracks are rejected', () => {
+    const doc = makeDoc()
+    expect(renameTrack(doc, 'V1', '')).toBe(doc)
+    expect(renameTrack(doc, 'V1', '   ')).toBe(doc)
+    expect(renameTrack(doc, 'V9', 'ghost')).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+
+  test('a locked track CAN be renamed (metadata, not content — like flags)', () => {
+    const doc = makeDoc()
+    const out = renameTrack(doc, 'VL', 'Locked lane')
+    expect(out).not.toBe(doc)
+    expect(out.tracks[3].name).toBe('Locked lane')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* removeTrack                                                          */
+/* ------------------------------------------------------------------ */
+
+describe('removeTrack', () => {
+  test('removes the track; the others keep their references', () => {
+    const doc = makeDoc()
+    const out = removeTrack(doc, 'V2')
+    expect(out.tracks.map((t) => t.id)).toEqual(['V1', 'A1', 'VL'])
+    expect(out.tracks[0]).toBe(doc.tracks[0])
+    expect(out.tracks[1]).toBe(doc.tracks[2])
+  })
+
+  test('a track with clips goes down WITH its clips in one op', () => {
+    const doc = makeDoc()
+    const out = removeTrack(doc, 'V1') // 3 clips on it
+    expect(out.tracks.map((t) => t.id)).toEqual(['V2', 'A1', 'VL'])
+    expect(JSON.parse(JSON.stringify(out))).toEqual(out) // round-trips
+  })
+
+  test('the LAST track of a kind may be removed', () => {
+    const doc = makeDoc()
+    const out = removeTrack(doc, 'A1') // the only audio track
+    expect(out.tracks.some((t) => t.kind === 'audio')).toBe(false)
+  })
+
+  test('locked and unknown tracks are rejected', () => {
+    const doc = makeDoc()
+    expect(removeTrack(doc, 'VL')).toBe(doc)
+    expect(removeTrack(doc, 'V9')).toBe(doc)
     expect(warnSpy).toHaveBeenCalledTimes(2)
   })
 })

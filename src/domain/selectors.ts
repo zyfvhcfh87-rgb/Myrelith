@@ -66,6 +66,19 @@ export function tracksInDisplayOrder(doc: TimelineDoc): Track[] {
 }
 
 /**
+ * The audio tracks that belong in the mix — THE single home of the
+ * solo/mute rule (schema.ts points here): while any audio track is solo,
+ * only solo tracks play; mute always wins, even on a solo track. Phase 5
+ * export and future playback audio must use this instead of re-deriving
+ * flag logic.
+ */
+export function audibleTracks(doc: TimelineDoc): Track[] {
+  const audio = doc.tracks.filter((t) => t.kind === 'audio')
+  const anySolo = audio.some((t) => t.solo)
+  return audio.filter((t) => !t.muted && (!anySolo || t.solo))
+}
+
+/**
  * Map a timeline frame to the source-asset frame the clip shows there:
  * sourceRange start plus the offset into the clip. Pure integer math (MVP
  * speed 1.0 — source and timeline ranges have equal durations). Only

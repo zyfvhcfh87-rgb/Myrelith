@@ -42,6 +42,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
     transitions: [],
     hidden: false,
     muted: false,
+    solo: false,
     locked: false,
   }
 }

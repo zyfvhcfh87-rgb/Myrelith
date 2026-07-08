@@ -6,6 +6,7 @@ import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from './schema'
 import {
   activeClipAt,
+  audibleTracks,
   clipSourceFrame,
   docDurationFrames,
   findClip,
@@ -27,7 +28,7 @@ function makeClip(id: string, tlStart: number, duration: number, sourceStart = 0
 }
 
 function makeTrack(id: string, kind: Track['kind'], clips: Clip[]): Track {
-  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, locked: false }
+  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked: false }
 }
 
 function makeDoc(tracks: Track[]): TimelineDoc {
@@ -125,6 +126,51 @@ describe('tracksInDisplayOrder', () => {
 
   test('empty doc yields an empty array', () => {
     expect(tracksInDisplayOrder(makeDoc([]))).toEqual([])
+  })
+})
+
+describe('audibleTracks', () => {
+  const flagged = (id: string, flags: Partial<Track> = {}): Track => ({
+    ...makeTrack(id, 'audio', []),
+    ...flags,
+  })
+
+  test('with no solo anywhere, every unmuted audio track is audible', () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', []),
+      flagged('A1'),
+      flagged('A2', { muted: true }),
+      flagged('A3'),
+    ])
+    expect(audibleTracks(doc).map((t) => t.id)).toEqual(['A1', 'A3'])
+  })
+
+  test('one solo track silences every non-solo audio track', () => {
+    const doc = makeDoc([flagged('A1'), flagged('A2', { solo: true }), flagged('A3')])
+    expect(audibleTracks(doc).map((t) => t.id)).toEqual(['A2'])
+  })
+
+  test('several solo tracks are audible together', () => {
+    const doc = makeDoc([
+      flagged('A1', { solo: true }),
+      flagged('A2'),
+      flagged('A3', { solo: true }),
+    ])
+    expect(audibleTracks(doc).map((t) => t.id)).toEqual(['A1', 'A3'])
+  })
+
+  test('mute wins over solo on the same track', () => {
+    const doc = makeDoc([flagged('A1', { solo: true, muted: true }), flagged('A2')])
+    // A1 is solo (so A2 is silenced) but also muted — nothing plays.
+    expect(audibleTracks(doc)).toEqual([])
+  })
+
+  test('video tracks are never in the mix set, whatever their flags', () => {
+    const doc = makeDoc([
+      { ...makeTrack('V1', 'video', []), solo: true },
+      flagged('A1'),
+    ])
+    expect(audibleTracks(doc).map((t) => t.id)).toEqual(['A1'])
   })
 })
 

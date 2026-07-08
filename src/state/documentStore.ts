@@ -129,6 +129,7 @@ function emptyDoc(): TimelineDoc {
         transitions: [],
         hidden: false,
         muted: false,
+        solo: false,
         locked: false,
       },
       {
@@ -139,6 +140,7 @@ function emptyDoc(): TimelineDoc {
         transitions: [],
         hidden: false,
         muted: false,
+        solo: false,
         locked: false,
       },
     ],

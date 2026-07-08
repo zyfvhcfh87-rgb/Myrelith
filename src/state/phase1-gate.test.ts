@@ -56,7 +56,7 @@ function makeClip(id: string, tlStart: number, duration: number, srcStart = 20):
 }
 
 function makeTrack(id: string, kind: Track['kind'], clips: Clip[]): Track {
-  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, locked: false }
+  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked: false }
 }
 
 function makeDoc(): TimelineDoc {

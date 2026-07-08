@@ -303,7 +303,7 @@ function makeClip(
 }
 
 function makeTrack(id: string, clips: Clip[]): Track {
-  return { id, kind: 'video', name: id, clips, transitions: [], hidden: false, muted: false, locked: false }
+  return { id, kind: 'video', name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked: false }
 }
 
 function makeDoc(tracks: Track[]): TimelineDoc {

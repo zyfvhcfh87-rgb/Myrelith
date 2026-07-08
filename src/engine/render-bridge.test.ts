@@ -86,7 +86,7 @@ function makeClip(id: string, assetId: string, tlStart: number, duration: number
 }
 
 function makeTrack(id: string, kind: Track['kind'], clips: Clip[], overrides: Partial<Track> = {}): Track {
-  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, locked: false, ...overrides }
+  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked: false, ...overrides }
 }
 
 function makeDoc(tracks: Track[]): TimelineDoc {
