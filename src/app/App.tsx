@@ -9,6 +9,7 @@
  * no state, no re-renders.)
  */
 
+import { useEffect } from 'react'
 import './layout.css'
 import Toolbar from '../ui/Toolbar'
 import ToolButtons from '../ui/ToolButtons'
@@ -19,10 +20,16 @@ import TransportBar from '../ui/TransportBar'
 import Timeline from '../ui/timeline/Timeline'
 import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
 import { useEditShortcuts } from './useEditShortcuts'
+import { initMediaVisuals } from './mediaVisualsController'
 
 export default function App() {
   useUndoRedoShortcuts()
   useEditShortcuts()
+  // Filmstrip/waveform generation for imported assets — idempotent init,
+  // no subscriptions in App itself (render-inertness preserved).
+  useEffect(() => {
+    initMediaVisuals()
+  }, [])
   return (
     <div className="app-shell">
       <header className="area-toolbar">
