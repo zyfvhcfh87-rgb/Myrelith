@@ -94,7 +94,7 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   locked?})` (idempotent patches push no history entry; flags and
   renames WORK on locked tracks — metadata, not content),
   `renameTrack(trackId, name)`, `removeTrack(trackId)` (locked tracks
-  reject), `undo`, `redo`.
+  reject), `setClipVolume(clipId, volume)` (clamped [0,2]), `undo`, `redo`.
   History: `past`/`future` snapshot stacks capped at 100. Rejected domain
   ops return the SAME doc reference, so they push no history entry.
   Actions take the frame as a parameter — documentStore never reads
@@ -110,8 +110,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   gestures). No history, no side effects, never touches documentStore.
 - `MediaState` — `src/state/mediaStore.ts`: `assets: Map<AssetId,
   MediaAsset>`, `addAsset(file)` (placeholder until Phase 2 demux),
-  `removeAsset(id)` (revokes the object URL). Session-scoped, not
-  serialized with the project.
+  `removeAsset(id)` (revokes the object URL), `visuals: Map<AssetId,
+  AssetVisuals>` + `setAssetVisuals(id, v)` (filmstrip/waveform images;
+  the store OWNS those object URLs — revokes on removal/replacement and
+  for late results after removal). Session-scoped, not serialized with
+  the project.
 - Worker messages — `src/workers/decode-protocol.ts` (canonical):
   `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
   (`configured`/`frameReady`/`error`). Types-only file; BOTH the worker and

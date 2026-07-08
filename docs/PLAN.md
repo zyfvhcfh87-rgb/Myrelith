@@ -177,6 +177,33 @@ Follow-up to 4.3.5, same domain → state → ui slicing:
   solo dims exactly the other audio lanes, delete → undo restores the
   clip, locked × disabled, clean console. 376 tests total.
 
+### 4.3.7 ✅ DONE (2026-07-09; user-requested) Clip visuals + clip volume
+Waveforms on audio clips, filmstrip thumbnails on video clips, and a
+per-clip volume editor. Sliced domain → state → pipeline → app → ui:
+- **domain**: `setClipVolume` (clamp [0, MAX_CLIP_VOLUME=2], silent
+  idempotent no-op), selector `trackOfClip` (lane-kind branching).
+- **state**: documentStore.setClipVolume; mediaStore.visuals map — the
+  generated images as object URLs OWNED by the store (revoked on asset
+  removal, on replacement, and for late results after removal).
+- **pipeline** `visuals.ts`: generateFilmstrip (CanvasSink, 1 tile/~2s,
+  cap 48, JPEG) + generateWaveform (AudioBufferSink chunk streaming —
+  full PCM never in memory; 100px/s cap 16k, true amplitude, PNG).
+  KEY DESIGN: both images span the asset's FULL duration, so the UI
+  maps them onto any clip with two CSS background values
+  (size = assetDuration×zoom, position = −sourceStart×zoom) — trim,
+  razor, slip and zoom all correct with zero redraws.
+- **app** `mediaVisualsController.ts` (3rd composition root): one
+  background generation per asset, failures logged not retried,
+  images skipped, idempotent init from App.
+- **ui**: ClipView `.clip-visual` layer (waveform on A lanes, strip on
+  V lanes; slip/start-trim previews shift the material live);
+  Inspector edits Volume for audio-lane clips (transform fields are
+  video-only now). Actual audio MIXING with clip.volume lands with
+  Phase 5 export/audio playback.
+- Browser-verified with an in-page generated 8s A/V MP4 (beat audio):
+  strips + waveform render, continuous across razor splits, volume
+  commit = one entry, clean console. 414 tests total.
+
 ### Phase 4 gate — build complete; USER'S MANUAL PASS PENDING
 Machine-verified already (browser E2E, see 4.1c/4.2d/4.3 notes):
 - every edit op = exactly one undo entry (7-op and 5-op undo chains

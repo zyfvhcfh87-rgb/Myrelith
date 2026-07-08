@@ -23,10 +23,11 @@ binding rules.
 | 4.3 — Inspector + arrow-key stepping | ✅ done | browser E2E: 5 field edits = 5 entries, live compositor render, exact undo restore, arrow clamps |
 | 4.3.5 — timeline track headers (user request) | ✅ done | browser E2E: sticky gutter, add/hide/mute/lock wired, rows pixel-aligned, undo exact |
 | 4.3.6 — track rename/delete/solo (user request) | ✅ done | browser E2E: dblclick-rename, × delete + undo-restores-clips, solo dims the rest |
+| 4.3.7 — waveforms/filmstrips + clip volume (user request) | ✅ done | browser E2E: generated A/V file → strips + beat waveform, continuous across razor splits, volume commit |
 | **4 gate** | ⏳ user pass | most items machine-verified; see PLAN gate section |
 | 5 — export | ⬜ | |
 
-376 tests green · `npm run build` and `npm run lint` clean · every phase
+414 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -80,7 +81,16 @@ DELETES a track with its clips (one undo restores both; disabled
 while locked), and audio rows have SOLO next to mute — while any
 track is solo the other audio lanes dim. Solo/mute semantics live in
 ONE place, domain `audibleTracks` (mute wins over solo); Phase 5
-audio must consume that selector, not re-derive flags.
+audio must consume that selector, not re-derive flags. Clip visuals
+(4.3.7): every imported asset gets a FILMSTRIP (video frames, one
+tile per ~2s, cap 48) and a WAVEFORM image generated once in the
+background (app/mediaVisualsController → pipeline/visuals via
+mediabunny sinks); both images span the asset's FULL duration, so
+ClipView maps them with two CSS background values — trim/razor/zoom
+need zero redraws and slip/start-trim previews shift the material
+live. The Inspector edits VOLUME for audio-lane clips (domain-clamped
+[0,2], one entry per commit; mix consumption is Phase 5) and shows
+the transform fields only for video-lane clips.
 
 ## Map (key files, one line each)
 
@@ -117,6 +127,12 @@ audio must consume that selector, not re-derive flags.
   `setSource(rate, provider)` + `renderFrameAt(frame) → RenderResult`
   ('drawn'|'missed'|'superseded'|'error'; never rejects).
 - `src/pipeline/demux.ts` — Mediabunny loadAsset + decoderConfig (de)serialize.
+- `src/pipeline/visuals.ts` — filmstrip/waveform image generators (4.3.7):
+  mediabunny CanvasSink / AudioBufferSink (streamed chunks, peaks fold on
+  the fly — full PCM never held); images span the asset's FULL duration
+  (the CSS-mapping contract). Pure math unit-tested; shells browser-only.
+  Wired by `src/app/mediaVisualsController.ts` (3rd composition root):
+  one generation per asset, no retries, mediaStore owns the result URLs.
 - `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,
   `verifyKeyPackets`, bounded overshoot, bytes copied for transfer).
 - `src/engine/render-bridge.ts` — main-thread half of the render worker
