@@ -26,6 +26,8 @@ import {
   addTrack,
   insertClip,
   moveClip,
+  removeTrack,
+  renameTrack,
   rippleDelete,
   rippleTrim,
   setTrackFlags,
@@ -98,10 +100,21 @@ export interface DocumentState {
    */
   addTrack: (kind: TrackKind) => void
   /**
-   * Toggle a track's hidden/muted/locked flags (timeline header buttons).
-   * An idempotent patch changes nothing and pushes no history entry.
+   * Toggle a track's hidden/muted/solo/locked flags (timeline header
+   * buttons). An idempotent patch changes nothing and pushes no history
+   * entry.
    */
   setTrackFlags: (trackId: TrackId, patch: TrackFlagsPatch) => void
+  /**
+   * Rename a track's display name (header double-click). Trimmed by the
+   * domain op; renaming to the current name pushes no history entry.
+   */
+  renameTrack: (trackId: TrackId, name: string) => void
+  /**
+   * Delete a track with everything on it — ONE history entry, so one undo
+   * brings the track and all its clips back. Locked tracks reject.
+   */
+  removeTrack: (trackId: TrackId) => void
   /** Append an effect to a clip's chain. */
   addEffect: (clipId: ClipId, effect: Effect) => void
   /** Step back one snapshot. No-op when history is empty. */
@@ -231,6 +244,12 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   setTrackFlags: (trackId, patch) =>
     set((state) => commit(state, setTrackFlags(state.doc, trackId, patch))),
+
+  renameTrack: (trackId, name) =>
+    set((state) => commit(state, renameTrack(state.doc, trackId, name))),
+
+  removeTrack: (trackId) =>
+    set((state) => commit(state, removeTrack(state.doc, trackId))),
 
   addEffect: (clipId, effect) =>
     set((state) => commit(state, addEffect(state.doc, clipId, effect))),

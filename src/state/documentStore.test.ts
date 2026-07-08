@@ -374,4 +374,45 @@ describe('track actions', () => {
     expect(getState().doc.tracks[0].clips[0].timelineRange.durationFrames).toBe(300)
     expect(getState().past).toHaveLength(1) // only the lock itself
   })
+
+  test('renameTrack commits one entry; same-name renames push none', () => {
+    getState().renameTrack('V1', 'Main cam')
+    expect(getState().doc.tracks[0].name).toBe('Main cam')
+    expect(getState().doc.tracks[0].id).toBe('V1') // id untouched
+    expect(getState().past).toHaveLength(1)
+
+    getState().renameTrack('V1', ' Main cam ') // trims to the current name
+    expect(getState().past).toHaveLength(1) // no new entry
+
+    getState().undo()
+    expect(getState().doc.tracks[0].name).toBe('V1')
+  })
+
+  test('removeTrack is ONE entry; one undo restores the track AND its clips', () => {
+    const initialJson = JSON.stringify(getState().doc)
+
+    getState().removeTrack('V1') // carries clipA + clipB
+    expect(getState().doc.tracks.map((t) => t.id)).toEqual(['V2', 'A1'])
+    expect(getState().past).toHaveLength(1)
+
+    getState().undo()
+    expect(JSON.stringify(getState().doc)).toBe(initialJson)
+  })
+
+  test('removeTrack on a locked track warns and pushes no history', () => {
+    getState().setTrackFlags('A1', { locked: true })
+    const before = getState().doc
+    getState().removeTrack('A1')
+    expect(getState().doc).toBe(before)
+    expect(getState().past).toHaveLength(1) // only the lock
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
+
+  test('solo flows through setTrackFlags with the same history contract', () => {
+    getState().setTrackFlags('A1', { solo: true })
+    expect(getState().doc.tracks[2].solo).toBe(true)
+    expect(getState().past).toHaveLength(1)
+    getState().setTrackFlags('A1', { solo: true }) // idempotent
+    expect(getState().past).toHaveLength(1)
+  })
 })
