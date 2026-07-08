@@ -19,14 +19,16 @@
  */
 
 import { create } from 'zustand'
-import type { Clip, ClipId, Effect, TimelineDoc, TrackId } from '../domain/schema'
-import type { ClipTransformPatch, TrimEdge } from '../domain/operations'
+import type { Clip, ClipId, Effect, TimelineDoc, TrackId, TrackKind } from '../domain/schema'
+import type { ClipTransformPatch, TrackFlagsPatch, TrimEdge } from '../domain/operations'
 import {
   addEffect,
+  addTrack,
   insertClip,
   moveClip,
   rippleDelete,
   rippleTrim,
+  setTrackFlags,
   slideClip,
   slipClip,
   splitClipAtFrame,
@@ -90,6 +92,16 @@ export interface DocumentState {
   rippleDelete: (clipId: ClipId) => void
   /** Merge transform fields / opacity into a clip (Inspector, 4.3). */
   updateClipTransform: (clipId: ClipId, patch: ClipTransformPatch) => void
+  /**
+   * Add a new empty V#/A# track (timeline header "+ track" buttons). One
+   * history entry — an added track is undoable like any other edit.
+   */
+  addTrack: (kind: TrackKind) => void
+  /**
+   * Toggle a track's hidden/muted/locked flags (timeline header buttons).
+   * An idempotent patch changes nothing and pushes no history entry.
+   */
+  setTrackFlags: (trackId: TrackId, patch: TrackFlagsPatch) => void
   /** Append an effect to a clip's chain. */
   addEffect: (clipId: ClipId, effect: Effect) => void
   /** Step back one snapshot. No-op when history is empty. */
@@ -212,6 +224,11 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   updateClipTransform: (clipId, patch) =>
     set((state) => commit(state, updateClipTransform(state.doc, clipId, patch))),
+
+  addTrack: (kind) => set((state) => commit(state, addTrack(state.doc, kind))),
+
+  setTrackFlags: (trackId, patch) =>
+    set((state) => commit(state, setTrackFlags(state.doc, trackId, patch))),
 
   addEffect: (clipId, effect) =>
     set((state) => commit(state, addEffect(state.doc, clipId, effect))),

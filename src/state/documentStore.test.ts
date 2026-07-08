@@ -324,3 +324,54 @@ describe('Phase 4.2 editing actions', () => {
     expect(warnSpy).toHaveBeenCalled()
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* Track actions (timeline header upgrade)                              */
+/* ------------------------------------------------------------------ */
+
+describe('track actions', () => {
+  // Fixture: tracks = [V1, V2, A1].
+
+  test('addTrack commits one undo entry; undo removes the track exactly', () => {
+    const initialJson = JSON.stringify(getState().doc)
+
+    getState().addTrack('video')
+    expect(getState().doc.tracks.map((t) => t.id)).toEqual(['V1', 'V2', 'V3', 'A1'])
+    expect(getState().past).toHaveLength(1)
+
+    getState().addTrack('audio')
+    expect(getState().doc.tracks.map((t) => t.id)).toEqual(['V1', 'V2', 'V3', 'A1', 'A2'])
+    expect(getState().past).toHaveLength(2)
+
+    getState().undo()
+    getState().undo()
+    expect(JSON.stringify(getState().doc)).toBe(initialJson)
+  })
+
+  test('setTrackFlags commits one entry; the idempotent toggle pushes none', () => {
+    getState().setTrackFlags('V1', { hidden: true })
+    expect(getState().doc.tracks[0].hidden).toBe(true)
+    expect(getState().past).toHaveLength(1)
+
+    const before = getState().doc
+    getState().setTrackFlags('V1', { hidden: true }) // already hidden
+    expect(getState().doc).toBe(before)
+    expect(getState().past).toHaveLength(1) // no new entry, no warning
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('setTrackFlags on an unknown track warns and pushes no history', () => {
+    const before = getState().doc
+    getState().setTrackFlags('V9', { locked: true })
+    expect(getState().doc).toBe(before)
+    expect(getState().past).toHaveLength(0)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
+
+  test('a clip edit on a track locked via setTrackFlags is rejected', () => {
+    getState().setTrackFlags('V1', { locked: true })
+    getState().trimClip('clipA', 'end', -10)
+    expect(getState().doc.tracks[0].clips[0].timelineRange.durationFrames).toBe(300)
+    expect(getState().past).toHaveLength(1) // only the lock itself
+  })
+})
