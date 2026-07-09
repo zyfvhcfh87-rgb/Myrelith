@@ -25,19 +25,22 @@ import {
   addEffect,
   addTrack,
   insertClip,
-  moveClip,
   removeTrack,
   renameTrack,
-  rippleDelete,
-  rippleTrim,
   setClipVolume,
   setTrackFlags,
-  slideClip,
-  slipClip,
-  splitClipAtFrame,
-  trimClip,
   updateClipTransform,
 } from '../domain/operations'
+import {
+  linkedMoveClip,
+  linkedRippleDelete,
+  linkedRippleTrim,
+  linkedSlideClip,
+  linkedSlipClip,
+  linkedSplitClipAtFrame,
+  linkedTrimClip,
+  unlinkClip,
+} from '../domain/linking'
 import { rangeEnd } from '../domain/time'
 
 /** Max undo levels; snapshots beyond this fall off the old end. */
@@ -56,7 +59,9 @@ export interface DocumentState {
   setDoc: (doc: TimelineDoc) => void
   /**
    * Split every clip that the playhead falls strictly inside, across all
-   * unlocked tracks. One history entry for the whole gesture.
+   * unlocked tracks. One history entry for the whole gesture. Each link
+   * group is split at most once — a partner's split follows automatically
+   * (domain/linking) even though its own range would also match the test.
    */
   splitClipAtPlayhead: (playheadFrame: number) => void
   /**
@@ -75,29 +80,59 @@ export interface DocumentState {
   insertClips: (inserts: ReadonlyArray<{ trackId: TrackId; clip: Clip }>) => void
   /**
    * Split ONE clip at a timeline frame strictly inside it (the razor tool;
-   * splitClipAtPlayhead is the split-everything keyboard variant).
+   * splitClipAtPlayhead is the split-everything keyboard variant). Linked
+   * partners follow (one entry); see domain/linking.
    */
   splitClipAt: (clipId: ClipId, frame: number) => void
-  /** Trim one clip edge by a signed frame delta. */
+  /**
+   * Trim one clip edge by a signed frame delta. Linked partners follow
+   * (one entry); see domain/linking.
+   */
   trimClip: (clipId: ClipId, edge: TrimEdge, deltaFrames: number) => void
   /**
    * Ripple-trim one clip edge: downstream clips on the same track shift to
-   * keep their spacing (Phase 4.2 trim tool).
+   * keep their spacing (Phase 4.2 trim tool). Linked partners follow (one
+   * entry); see domain/linking.
    */
   rippleTrim: (clipId: ClipId, edge: TrimEdge, deltaFrames: number) => void
-  /** Shift a clip's source material without moving it (Phase 4.2 slip tool). */
+  /**
+   * Shift a clip's source material without moving it (Phase 4.2 slip tool).
+   * Linked partners follow (one entry); see domain/linking.
+   */
   slipClip: (clipId: ClipId, deltaFrames: number) => void
-  /** Move a clip while touching neighbors absorb the change (slide tool). */
+  /**
+   * Move a clip while touching neighbors absorb the change (slide tool).
+   * Linked partners follow (one entry); see domain/linking.
+   */
   slideClip: (clipId: ClipId, deltaFrames: number) => void
-  /** Move a clip to a new frame, optionally onto another same-kind track. */
+  /**
+   * Move a clip to a new frame, optionally onto another same-kind track.
+   * Linked partners follow (one entry); see domain/linking.
+   */
   moveClip: (clipId: ClipId, toTrackId: TrackId, toFrame: number) => void
-  /** Delete a clip and shift later clips on its track left to close the gap. */
+  /**
+   * Delete a clip and shift later clips on its track left to close the gap.
+   * Linked partners follow (one entry); see domain/linking.
+   */
   rippleDelete: (clipId: ClipId) => void
-  /** Merge transform fields / opacity into a clip (Inspector, 4.3). */
+  /**
+   * Dissolve clipId's whole link group in one entry — every member loses
+   * its linkGroupId (the Inspector's manual "unlink" button). A clip with
+   * no linkGroupId, or any group member on a locked track, is rejected: no
+   * history entry, a console.warn explains why.
+   */
+  unlinkClip: (clipId: ClipId) => void
+  /**
+   * Merge transform fields / opacity into a clip (Inspector, 4.3). Does NOT
+   * follow links — transform lives on the video half and stays
+   * independently editable even when linked to an audio half.
+   */
   updateClipTransform: (clipId: ClipId, patch: ClipTransformPatch) => void
   /**
    * Set a clip's audio volume (Inspector for audio clips). Domain-clamped
    * to [0, MAX_CLIP_VOLUME]; an unchanged value pushes no history entry.
+   * Does NOT follow links — volume lives on the audio half and stays
+   * independently editable even when linked to a video half.
    */
   setClipVolume: (clipId: ClipId, volume: number) => void
   /**
@@ -194,12 +229,22 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       let next = state.doc
       // Collect targets from the CURRENT doc; left halves keep their ids, so
       // each original clip is split at most once even as `next` evolves.
+      // A linked group is split via whichever member is visited first; mark
+      // it in `splitGroups` BEFORE calling (win or lose) so a partner from
+      // the same group is skipped outright instead of re-attempting a split
+      // linkedSplitClipAtFrame already resolved — the op is atomic per
+      // group, so a second call would just reject again and double the warn.
+      const splitGroups = new Set<string>()
       for (const track of state.doc.tracks) {
         if (track.locked) continue
         for (const clip of track.clips) {
           const tl = clip.timelineRange
           if (playheadFrame > tl.startFrame && playheadFrame < rangeEnd(tl)) {
-            next = splitClipAtFrame(next, clip.id, playheadFrame)
+            if (clip.linkGroupId) {
+              if (splitGroups.has(clip.linkGroupId)) continue
+              splitGroups.add(clip.linkGroupId)
+            }
+            next = linkedSplitClipAtFrame(next, clip.id, playheadFrame)
           }
         }
       }
@@ -223,25 +268,28 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     }),
 
   splitClipAt: (clipId, frame) =>
-    set((state) => commit(state, splitClipAtFrame(state.doc, clipId, frame))),
+    set((state) => commit(state, linkedSplitClipAtFrame(state.doc, clipId, frame))),
 
   trimClip: (clipId, edge, deltaFrames) =>
-    set((state) => commit(state, trimClip(state.doc, clipId, edge, deltaFrames))),
+    set((state) => commit(state, linkedTrimClip(state.doc, clipId, edge, deltaFrames))),
 
   rippleTrim: (clipId, edge, deltaFrames) =>
-    set((state) => commit(state, rippleTrim(state.doc, clipId, edge, deltaFrames))),
+    set((state) => commit(state, linkedRippleTrim(state.doc, clipId, edge, deltaFrames))),
 
   slipClip: (clipId, deltaFrames) =>
-    set((state) => commit(state, slipClip(state.doc, clipId, deltaFrames))),
+    set((state) => commit(state, linkedSlipClip(state.doc, clipId, deltaFrames))),
 
   slideClip: (clipId, deltaFrames) =>
-    set((state) => commit(state, slideClip(state.doc, clipId, deltaFrames))),
+    set((state) => commit(state, linkedSlideClip(state.doc, clipId, deltaFrames))),
 
   moveClip: (clipId, toTrackId, toFrame) =>
-    set((state) => commit(state, moveClip(state.doc, clipId, toTrackId, toFrame))),
+    set((state) => commit(state, linkedMoveClip(state.doc, clipId, toTrackId, toFrame))),
 
   rippleDelete: (clipId) =>
-    set((state) => commit(state, rippleDelete(state.doc, clipId))),
+    set((state) => commit(state, linkedRippleDelete(state.doc, clipId))),
+
+  unlinkClip: (clipId) =>
+    set((state) => commit(state, unlinkClip(state.doc, clipId))),
 
   updateClipTransform: (clipId, patch) =>
     set((state) => commit(state, updateClipTransform(state.doc, clipId, patch))),

@@ -109,3 +109,38 @@ describe('Phase 4.2 tool / selection / edit-preview state', () => {
     expect(getState().editPreview).toBeNull()
   })
 })
+
+describe('Phase 4.3.8 linked clip previews', () => {
+  test('setDragPreview preserves linkGroupId when given, omits it when not, and clears with null', () => {
+    getState().setDragPreview({ clipId: 'clipA', startFrame: 10, linkGroupId: 'link_1' })
+    expect(getState().dragPreview).toEqual({
+      clipId: 'clipA',
+      startFrame: 10,
+      linkGroupId: 'link_1',
+    })
+
+    getState().setDragPreview({ clipId: 'clipB', startFrame: 20 })
+    expect(getState().dragPreview).toEqual({ clipId: 'clipB', startFrame: 20 })
+    expect(getState().dragPreview?.linkGroupId).toBeUndefined()
+
+    getState().setDragPreview(null)
+    expect(getState().dragPreview).toBeNull()
+  })
+
+  test('setEditPreview preserves linkGroupId when given, omits it when not, and clears with null', () => {
+    getState().setEditPreview({ clipId: 'clipA', kind: 'trim-start', deltaFrames: 5, linkGroupId: 'link_2' })
+    expect(getState().editPreview).toEqual({
+      clipId: 'clipA',
+      kind: 'trim-start',
+      deltaFrames: 5,
+      linkGroupId: 'link_2',
+    })
+
+    getState().setEditPreview({ clipId: 'clipB', kind: 'slip', deltaFrames: -3 })
+    expect(getState().editPreview).toEqual({ clipId: 'clipB', kind: 'slip', deltaFrames: -3 })
+    expect(getState().editPreview?.linkGroupId).toBeUndefined()
+
+    getState().setEditPreview(null)
+    expect(getState().editPreview).toBeNull()
+  })
+})

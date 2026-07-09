@@ -22,6 +22,11 @@ export interface DragPreview {
   clipId: ClipId
   /** Where the dragged clip's timelineRange would start right now. */
   startFrame: number
+  /**
+   * When the dragged clip is linked, the UI stamps its group id here so
+   * partner ClipViews can ghost the same move; absent for unlinked clips.
+   */
+  linkGroupId?: string
 }
 
 /** The Phase 4.2 timeline tools (Toolbar buttons + A/B/T/Y/U keys). */
@@ -47,6 +52,11 @@ export interface EditPreview {
   kind: EditPreviewKind
   /** Signed frame delta of the gesture so far (integer, may be negative). */
   deltaFrames: number
+  /**
+   * When the dragged clip is linked, the UI stamps its group id here so
+   * partner ClipViews can ghost the same edit; absent for unlinked clips.
+   */
+  linkGroupId?: string
 }
 
 export interface TransportState {

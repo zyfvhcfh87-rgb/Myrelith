@@ -94,20 +94,29 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   locked?})` (idempotent patches push no history entry; flags and
   renames WORK on locked tracks — metadata, not content),
   `renameTrack(trackId, name)`, `removeTrack(trackId)` (locked tracks
-  reject), `setClipVolume(clipId, volume)` (clamped [0,2]), `undo`, `redo`.
-  History: `past`/`future` snapshot stacks capped at 100. Rejected domain
-  ops return the SAME doc reference, so they push no history entry.
-  Actions take the frame as a parameter — documentStore never reads
-  transportStore (UI wiring passes the playhead in).
+  reject), `setClipVolume(clipId, volume)` (clamped [0,2]),
+  `unlinkClip(clipId)` (dissolves the clip's whole link group), `undo`,
+  `redo`. The geometry actions (move/trim/rippleTrim/slip/slide/
+  rippleDelete/splitClipAt/splitClipAtPlayhead) are LINK-AWARE: they
+  delegate to domain/linking wrappers, so edits apply to every member of
+  a `Clip.linkGroupId` group atomically (any member rejecting rolls the
+  whole edit back); transform/volume edits deliberately do NOT follow
+  links. History: `past`/`future` snapshot stacks capped at 100.
+  Rejected domain ops return the SAME doc reference, so they push no
+  history entry. Actions take the frame as a parameter — documentStore
+  never reads transportStore (UI wiring passes the playhead in).
 - `TransportState` — `src/state/transportStore.ts`: `playheadFrame` (int,
   setter rounds + clamps >= 0), `isPlaying`, `isScrubbing`, `zoom`
-  (px/frame, > 0), `inOut`, `dragPreview` ({clipId, startFrame} | null —
-  the live half of the scrubbing-vs-committed pattern for select-tool
-  moves; pointerup commits ONE documentStore.moveClip and clears it),
-  `tool` ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipId`
-  (ephemeral, never in undo), `editPreview` ({clipId, kind, deltaFrames}
-  | null — same live-preview contract for trim/ripple/slip/slide
-  gestures). No history, no side effects, never touches documentStore.
+  (px/frame, > 0), `inOut`, `dragPreview` ({clipId, startFrame,
+  linkGroupId?} | null — the live half of the scrubbing-vs-committed
+  pattern for select-tool moves; pointerup commits ONE
+  documentStore.moveClip and clears it), `tool`
+  ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipId`
+  (ephemeral, never in undo), `editPreview` ({clipId, kind, deltaFrames,
+  linkGroupId?} | null — same live-preview contract for trim/ripple/
+  slip/slide gestures). The optional linkGroupId lets partner ClipViews
+  ghost a linked gesture live. No history, no side effects, never
+  touches documentStore.
 - `MediaState` — `src/state/mediaStore.ts`: `assets: Map<AssetId,
   MediaAsset>`, `addAsset(file)` (placeholder until Phase 2 demux),
   `removeAsset(id)` (revokes the object URL), `visuals: Map<AssetId,
