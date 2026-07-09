@@ -207,3 +207,102 @@ describe('drag isolation', () => {
     expect(rendersB.mock.calls.length).toBe(before) // B untouched
   })
 })
+
+describe('linked clip gestures (A/V pairs)', () => {
+  /** V1 has the video half 'vid' [100,50); A1 has the audio half 'aud' at
+   * the SAME range, both sharing 'link_1' — a linked pair by construction. */
+  function makeLinkedDoc(): TimelineDoc {
+    return {
+      schemaVersion: 1,
+      id: 'doc-linked-drag',
+      name: 'linked drag fixture',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [
+        {
+          id: 'V1',
+          kind: 'video',
+          name: 'V1',
+          clips: [{ ...makeClip('vid', 100, 50), linkGroupId: 'link_1' }],
+          transitions: [],
+          hidden: false,
+          muted: false,
+          solo: false,
+          locked: false,
+        },
+        {
+          id: 'A1',
+          kind: 'audio',
+          name: 'A1',
+          clips: [{ ...makeClip('aud', 100, 50), linkGroupId: 'link_1' }],
+          transitions: [],
+          hidden: false,
+          muted: false,
+          solo: false,
+          locked: false,
+        },
+      ],
+    }
+  }
+
+  const v1 = () => doc().doc.tracks[0]
+  const a1 = () => doc().doc.tracks[1]
+  const vidClip = () => v1().clips.find((c) => c.id === 'vid') as Clip
+  const audClip = () => a1().clips.find((c) => c.id === 'aud') as Clip
+
+  test('dragging the video half live-previews the linked audio half; pointerup moves BOTH with ONE history entry', async () => {
+    doc().setDoc(makeLinkedDoc())
+    render(
+      <>
+        <Track track={v1()} />
+        <Track track={a1()} />
+      </>,
+    )
+    const videoEl = screen.getByTestId('clip-vid')
+    const audioEl = screen.getByTestId('clip-aud')
+
+    fireEvent.pointerDown(videoEl, { pointerId: 1, clientX: 500 })
+    fireEvent.pointerMove(videoEl, { pointerId: 1, clientX: 560 }) // +60px @ zoom 1
+    await waitFor(() => expect(transport().dragPreview?.startFrame).toBe(160))
+
+    // Both halves visually follow the SAME preview — partner ghosts the gesture.
+    expect(videoEl).toHaveStyle({ transform: 'translateX(160px)' })
+    expect(audioEl).toHaveStyle({ transform: 'translateX(160px)' })
+    // Still mid-drag: the document itself is untouched.
+    expect(vidClip().timelineRange.startFrame).toBe(100)
+    expect(audClip().timelineRange.startFrame).toBe(100)
+    expect(doc().past).toHaveLength(0)
+
+    fireEvent.pointerUp(videoEl, { pointerId: 1, clientX: 560 })
+
+    expect(vidClip().timelineRange.startFrame).toBe(160)
+    expect(audClip().timelineRange.startFrame).toBe(160)
+    expect(doc().past).toHaveLength(1) // ONE entry for the whole linked move
+  })
+
+  test('dragging an UNLINKED clip does not move a linked pair elsewhere (isolation)', async () => {
+    const withExtra = makeLinkedDoc()
+    withExtra.tracks[0].clips.push(makeClip('lone', 300, 40))
+    doc().setDoc(withExtra)
+    render(
+      <>
+        <Track track={v1()} />
+        <Track track={a1()} />
+      </>,
+    )
+    const loneEl = screen.getByTestId('clip-lone')
+
+    fireEvent.pointerDown(loneEl, { pointerId: 1, clientX: 500 })
+    fireEvent.pointerMove(loneEl, { pointerId: 1, clientX: 560 }) // +60px @ zoom 1
+    await waitFor(() => expect(transport().dragPreview?.startFrame).toBe(360))
+    fireEvent.pointerUp(loneEl, { pointerId: 1, clientX: 560 })
+
+    const lone = v1().clips.find((c) => c.id === 'lone') as Clip
+    expect(lone.timelineRange.startFrame).toBe(360) // its own move went through
+    expect(doc().past).toHaveLength(1) // one entry, for the lone clip only
+    expect(vidClip().timelineRange.startFrame).toBe(100) // linked pair untouched
+    expect(audClip().timelineRange.startFrame).toBe(100)
+  })
+})

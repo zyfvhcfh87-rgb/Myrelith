@@ -224,3 +224,52 @@ describe('audio clips (clip audio upgrade)', () => {
     expect(screen.getByTestId('inspector-volume')).toHaveValue(1)
   })
 })
+
+describe('linked clips (unlink control)', () => {
+  /** V1's 'clipV' and A1's 'clipLinkedA' share a group — a linked pair. */
+  function makeLinkedDoc(): TimelineDoc {
+    return {
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', [{ ...makeClip('clipV', 0, 50), linkGroupId: 'link_1' }]),
+        makeTrack('A1', [{ ...makeClip('clipLinkedA', 0, 50), linkGroupId: 'link_1' }], 'audio'),
+      ],
+    }
+  }
+
+  test('a linked video clip shows the unlink button', () => {
+    doc().setDoc(makeLinkedDoc())
+    transport().setSelectedClip('clipV')
+    render(<Inspector />)
+    expect(screen.getByTestId('inspector-unlink')).toBeInTheDocument()
+  })
+
+  test('a linked audio clip shows the unlink button too', () => {
+    doc().setDoc(makeLinkedDoc())
+    transport().setSelectedClip('clipLinkedA')
+    render(<Inspector />)
+    expect(screen.getByTestId('inspector-unlink')).toBeInTheDocument()
+  })
+
+  test('clicking unlink dissolves the WHOLE pair in ONE history entry; the button then disappears', () => {
+    doc().setDoc(makeLinkedDoc())
+    transport().setSelectedClip('clipV')
+    const { rerender } = render(<Inspector />)
+
+    fireEvent.click(screen.getByTestId('inspector-unlink'))
+    rerender(<Inspector />)
+
+    const v = doc().doc.tracks[0].clips.find((c) => c.id === 'clipV') as Clip
+    const a = doc().doc.tracks[1].clips.find((c) => c.id === 'clipLinkedA') as Clip
+    expect(v.linkGroupId).toBeUndefined()
+    expect(a.linkGroupId).toBeUndefined()
+    expect(doc().past).toHaveLength(1)
+    expect(screen.queryByTestId('inspector-unlink')).not.toBeInTheDocument()
+  })
+
+  test('an unlinked clip shows no unlink button', () => {
+    transport().setSelectedClip('clipA') // default fixture: no linkGroupId
+    render(<Inspector />)
+    expect(screen.queryByTestId('inspector-unlink')).not.toBeInTheDocument()
+  })
+})

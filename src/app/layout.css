@@ -314,6 +314,23 @@
   color: #8a94a0;
 }
 
+/* Manual A/V unlink (Phase 4.3.8) — mirrors the .track-toggle chip look. */
+.inspector-unlink {
+  align-self: flex-start;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #9aa3ad;
+  background: #232323;
+  border: 1px solid #333;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.inspector-unlink:hover {
+  background: #2d2d2d;
+  color: #ddd;
+}
+
 /* Phase 3.1 placeholder styling — dies as real panels replace it. */
 .panel-placeholder {
   display: flex;

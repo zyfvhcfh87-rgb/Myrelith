@@ -12,7 +12,8 @@
  * Dropping an asset (ui/dnd.ts contract) builds clips via domain
  * clipFromAsset and commits ONE documentStore action — insertClip, or
  * insertClips when a video asset brings its audio along as a second clip
- * on the first unlocked audio lane. Either way it is a plain click-release
+ * on the first unlocked audio lane, the pair lands LINKED (edits follow
+ * the link; Inspector unlinks). Either way it is a plain click-release
  * edit (one undo entry), so unlike clip drags there is no scrub-preview
  * phase.
  * Handlers read stores with getState() only; the lone subscription-free
@@ -22,6 +23,7 @@
 import { memo, useState } from 'react'
 import type { DragEvent as ReactDragEvent } from 'react'
 import type { Track as TrackData } from '../../domain/schema'
+import { createLinkGroupId } from '../../domain/linking'
 import { clipFromAsset } from '../../domain/operations'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
@@ -80,17 +82,20 @@ function Track({ track, soloDimmed = false }: TrackProps) {
         const documentStore = useDocumentStore.getState()
         // A video asset that carries audio lands as a PAIR (NLE convention):
         // its video clip on this lane plus an audio clip on the first
-        // unlocked audio lane — one atomic insertClips, one undo entry. If
-        // the audio spot is taken the whole drop is rejected (never half a
-        // pair); with no usable audio lane the video half lands alone.
+        // unlocked audio lane, both stamped with ONE fresh linkGroupId so
+        // the pair lands LINKED — one atomic insertClips, one undo entry.
+        // If the audio spot is taken the whole drop is rejected (never half
+        // a pair); with no usable audio lane the video half lands alone,
+        // unlinked.
         const audioLane =
           asset.kind === 'video' && asset.hasAudio
             ? documentStore.doc.tracks.find((t) => t.kind === 'audio' && !t.locked)
             : undefined
         if (audioLane) {
+          const linkGroupId = createLinkGroupId()
           documentStore.insertClips([
-            { trackId: track.id, clip: clipFromAsset(asset, frame) },
-            { trackId: audioLane.id, clip: clipFromAsset(asset, frame) },
+            { trackId: track.id, clip: clipFromAsset(asset, frame, linkGroupId) },
+            { trackId: audioLane.id, clip: clipFromAsset(asset, frame, linkGroupId) },
           ])
         } else {
           documentStore.insertClip(track.id, clipFromAsset(asset, frame))

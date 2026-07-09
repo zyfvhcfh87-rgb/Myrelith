@@ -224,6 +224,71 @@ describe('razor tool', () => {
     expect(clips[1].sourceRange).toEqual({ startFrame: 50, durationFrames: 20 })
     expect(doc().past).toHaveLength(1)
   })
+
+  test('razor-splitting a linked pair: left halves keep the original group, right halves share ONE new group', () => {
+    // V1 'vid' and A1 'aud', same range [100,50), both in 'link_orig'.
+    doc().setDoc({
+      schemaVersion: 1,
+      id: 'doc-tools-linked',
+      name: 'tools linked fixture',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [
+        {
+          id: 'V1',
+          kind: 'video',
+          name: 'V1',
+          clips: [{ ...makeClip('vid', 100, 50), linkGroupId: 'link_orig' }],
+          transitions: [],
+          hidden: false,
+          muted: false,
+          solo: false,
+          locked: false,
+        },
+        {
+          id: 'A1',
+          kind: 'audio',
+          name: 'A1',
+          clips: [{ ...makeClip('aud', 100, 50), linkGroupId: 'link_orig' }],
+          transitions: [],
+          hidden: false,
+          muted: false,
+          solo: false,
+          locked: false,
+        },
+      ],
+    })
+    act(() => transport().setTool('razor'))
+    render(
+      <>
+        <Track track={doc().doc.tracks[0]} />
+        <Track track={doc().doc.tracks[1]} />
+      </>,
+    )
+    // frame = clip start (100) + 30 = 130, strictly inside [100,150).
+    fireEvent.pointerDown(screen.getByTestId('clip-vid'), { pointerId: 1, clientX: 30 })
+
+    const videoClips = doc().doc.tracks[0].clips
+    const audioClips = doc().doc.tracks[1].clips
+    expect(videoClips).toHaveLength(2) // left + right
+    expect(audioClips).toHaveLength(2) // partner followed
+
+    const [vLeft, vRight] = videoClips
+    const [aLeft, aRight] = audioClips
+
+    // Left halves keep the ORIGINAL group id.
+    expect(vLeft.linkGroupId).toBe('link_orig')
+    expect(aLeft.linkGroupId).toBe('link_orig')
+
+    // Right halves share ONE NEW group id, distinct from the original.
+    expect(vRight.linkGroupId).toBeDefined()
+    expect(vRight.linkGroupId).not.toBe('link_orig')
+    expect(aRight.linkGroupId).toBe(vRight.linkGroupId)
+
+    expect(doc().past).toHaveLength(1) // ONE history entry for the whole split
+  })
 })
 
 describe('slip tool', () => {

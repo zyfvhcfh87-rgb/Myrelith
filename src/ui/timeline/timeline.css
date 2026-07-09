@@ -379,6 +379,21 @@
   z-index: 4;
 }
 
+/* Link indicator for A/V-linked clips (Phase 4.3.8). Opposite corner from
+   .clip-edit-badge so the two never overlap when both are visible at once
+   (e.g. slip-dragging a linked clip shows the delta badge AND this one).
+   pointer-events: none like the other overlays, so it never steals the
+   edge handles' hit area. */
+.clip-link-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 9px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 4;
+}
+
 /* Tool-specific cursors (class set on .timeline-root by Timeline.tsx). */
 .tool-select .clip-view {
   cursor: grab;

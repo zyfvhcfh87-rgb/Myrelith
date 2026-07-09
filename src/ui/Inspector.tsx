@@ -19,6 +19,7 @@
 
 import { useEffect, useState } from 'react'
 import type { ClipTransformPatch } from '../domain/operations'
+import type { ClipId } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
@@ -73,6 +74,26 @@ function NumberField({ label, value, step, testId, onCommit }: NumberFieldProps)
   )
 }
 
+/**
+ * Manual "unlink" control (Phase 4.3.8): shown in BOTH lane-kind branches
+ * below when the selected clip has a linkGroupId. Dissolves the whole
+ * link group in one documentStore.unlinkClip call (one undo entry); the
+ * clip then loses linkGroupId and the caller's own findClip subscription
+ * makes the button disappear on its own — no local state to reset here.
+ */
+function UnlinkButton({ clipId }: { clipId: ClipId }) {
+  return (
+    <button
+      type="button"
+      className="inspector-unlink"
+      data-testid="inspector-unlink"
+      onClick={() => useDocumentStore.getState().unlinkClip(clipId)}
+    >
+      🔗 Unlink audio/video
+    </button>
+  )
+}
+
 export default function Inspector() {
   const selectedClipId = useTransportStore((s) => s.selectedClipId)
   const clip = useDocumentStore((s) =>
@@ -97,6 +118,7 @@ export default function Inspector() {
     return (
       <div className="inspector-panel" key={clip.id} data-testid="inspector-panel">
         <div className="inspector-title">{clip.name}</div>
+        {clip.linkGroupId !== undefined && <UnlinkButton clipId={clip.id} />}
         <div className="inspector-grid">
           <NumberField
             label="Volume"
@@ -121,6 +143,7 @@ export default function Inspector() {
     /* key: switching clips remounts the fields, dropping stale drafts. */
     <div className="inspector-panel" key={clip.id} data-testid="inspector-panel">
       <div className="inspector-title">{clip.name}</div>
+      {clip.linkGroupId !== undefined && <UnlinkButton clipId={clip.id} />}
       <div className="inspector-grid">
         <NumberField
           label="Position X"

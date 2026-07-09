@@ -194,11 +194,33 @@ describe('Track drop target', () => {
     expect(audio[0].timelineRange).toEqual({ startFrame: 240, durationFrames: 120 })
     expect(audio[0].id).not.toBe(video[0].id)
 
+    // The pair lands LINKED: one shared, defined group id.
+    expect(video[0].linkGroupId).toBeDefined()
+    expect(audio[0].linkGroupId).toBe(video[0].linkGroupId)
+
     expect(doc().past).toHaveLength(1) // exactly ONE undo entry for the pair
 
     doc().undo() // one undo removes BOTH halves
     expect(trackById('V1').clips).toHaveLength(0)
     expect(trackById('A1').clips).toHaveLength(0)
+  })
+
+  test('a second A/V drop gets a DIFFERENT linkGroupId from the first', () => {
+    seedAsset(makeAsset()) // hasAudio: true
+    render(<Track track={trackById('V1')} />)
+    const lane = screen.getByTestId('track-V1')
+
+    fireEvent.drop(lane, { dataTransfer: assetDragData(makeAsset()), clientX: 0 })
+    // Second drop, far enough right to avoid overlapping either half of the first.
+    fireEvent.drop(lane, { dataTransfer: assetDragData(makeAsset()), clientX: 240 })
+
+    const [firstVideo, secondVideo] = trackById('V1').clips
+    const [firstAudio, secondAudio] = trackById('A1').clips
+    expect(firstVideo.linkGroupId).toBeDefined()
+    expect(secondVideo.linkGroupId).toBeDefined()
+    expect(secondVideo.linkGroupId).not.toBe(firstVideo.linkGroupId)
+    expect(firstAudio.linkGroupId).toBe(firstVideo.linkGroupId)
+    expect(secondAudio.linkGroupId).toBe(secondVideo.linkGroupId)
   })
 
   test('silent video (hasAudio false) drops as a lone video clip', () => {
@@ -212,6 +234,7 @@ describe('Track drop target', () => {
     expect(trackById('V1').clips).toHaveLength(1)
     expect(trackById('A1').clips).toHaveLength(0)
     expect(doc().past).toHaveLength(1)
+    expect(trackById('V1').clips[0].linkGroupId).toBeUndefined() // solo fallback: unlinked
   })
 
   test('no unlocked audio lane: the video half still lands alone', () => {
@@ -229,6 +252,7 @@ describe('Track drop target', () => {
     expect(trackById('V1').clips).toHaveLength(1)
     expect(trackById('A1').clips).toHaveLength(0)
     expect(doc().past).toHaveLength(1)
+    expect(trackById('V1').clips[0].linkGroupId).toBeUndefined() // solo fallback: unlinked
   })
 
   test('occupied audio spot rejects the WHOLE drop (never half a pair)', () => {

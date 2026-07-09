@@ -56,15 +56,23 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   const zoom = useTransportStore((s) => s.zoom)
   const tool = useTransportStore((s) => s.tool)
   const isSelected = useTransportStore((s) => s.selectedClipId === clip.id)
-  // Narrow slices: null unless THIS clip owns the live gesture — other
-  // clips' subscriptions never fire during someone else's drag.
+  // Narrow slices: null unless THIS clip owns the live gesture OR is linked
+  // to the clip that does (partners ghost the same preview) — every other,
+  // unrelated clip's subscription still never fires, so render isolation
+  // for UNLINKED clips is unchanged.
   const previewStart = useTransportStore((s) =>
-    s.dragPreview && s.dragPreview.clipId === clip.id
+    s.dragPreview &&
+    (s.dragPreview.clipId === clip.id ||
+      (clip.linkGroupId !== undefined && s.dragPreview.linkGroupId === clip.linkGroupId))
       ? s.dragPreview.startFrame
       : null,
   )
   const editPreview = useTransportStore((s) =>
-    s.editPreview && s.editPreview.clipId === clip.id ? s.editPreview : null,
+    s.editPreview &&
+    (s.editPreview.clipId === clip.id ||
+      (clip.linkGroupId !== undefined && s.editPreview.linkGroupId === clip.linkGroupId))
+      ? s.editPreview
+      : null,
   )
   const setDragPreview = useTransportStore((s) => s.setDragPreview)
   const setEditPreview = useTransportStore((s) => s.setEditPreview)
@@ -83,18 +91,25 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
 
   const scheduleMovePreview = useScrubScheduler((startFrame: number) =>
-    setDragPreview({ clipId: clip.id, startFrame }),
+    setDragPreview({ clipId: clip.id, startFrame, linkGroupId: clip.linkGroupId }),
   )
   const scheduleEditPreview = useScrubScheduler((deltaFrames: number) => {
     const mode = session.current?.mode
     if (mode && mode !== 'move') {
-      setEditPreview({ clipId: clip.id, kind: mode, deltaFrames })
+      setEditPreview({ clipId: clip.id, kind: mode, deltaFrames, linkGroupId: clip.linkGroupId })
     }
   })
 
   /* ---------------- geometry (committed + live preview) ------------- */
 
   const tl = clip.timelineRange
+  // previewStart may belong to a LINKED PARTNER's gesture (widened slice
+  // above). Linked halves share identical timelineRanges by construction
+  // (created together at A/V drop, and every linked geometry edit applies
+  // the same delta to both), so rendering the gesture owner's ABSOLUTE
+  // startFrame here is correct for the partner too — no per-clip delta math
+  // needed. editPreview below carries a RELATIVE deltaFrames instead, so the
+  // switch already renders correctly on the partner with no special-casing.
   let startFrame = previewStart ?? tl.startFrame
   let durationFrames = tl.durationFrames
   let badge: string | null = null
@@ -182,9 +197,9 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
       ...boundsFor(mode),
     }
     if (mode === 'move') {
-      setDragPreview({ clipId: clip.id, startFrame: tl.startFrame })
+      setDragPreview({ clipId: clip.id, startFrame: tl.startFrame, linkGroupId: clip.linkGroupId })
     } else {
-      setEditPreview({ clipId: clip.id, kind: mode, deltaFrames: 0 })
+      setEditPreview({ clipId: clip.id, kind: mode, deltaFrames: 0, linkGroupId: clip.linkGroupId })
     }
     try {
       rootRef.current?.setPointerCapture(e.pointerId)
@@ -349,6 +364,11 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
       )}
       {badge !== null && <span className="clip-edit-badge">{badge}</span>}
       <span className="clip-name">{clip.name}</span>
+      {clip.linkGroupId !== undefined && (
+        <span className="clip-link-badge" data-testid={`clip-${clip.id}-link`}>
+          🔗
+        </span>
+      )}
     </div>
   )
 }
