@@ -121,9 +121,15 @@ function newId(prefix: string): string {
  * (insertClip does that); it only fills in the schema defaults (identity
  * transform, full opacity/volume, empty effect chain). Per the MVP
  * conformance note in schema.ts, asset.durationFrames is already measured
- * in document-rate frames.
+ * in document-rate frames. When `linkGroupId` is given (the A/V drop path,
+ * pairing a video clip with its audio clip), it is stamped onto the clip;
+ * omitted, the key is left absent, matching an ordinary unlinked clip.
  */
-export function clipFromAsset(asset: MediaAsset, startFrame: number): Clip {
+export function clipFromAsset(
+  asset: MediaAsset,
+  startFrame: number,
+  linkGroupId?: string,
+): Clip {
   return {
     id: newId('clip'),
     assetId: asset.id,
@@ -142,6 +148,7 @@ export function clipFromAsset(asset: MediaAsset, startFrame: number): Clip {
     opacity: 1,
     volume: 1,
     effects: [],
+    ...(linkGroupId ? { linkGroupId } : {}),
   }
 }
 

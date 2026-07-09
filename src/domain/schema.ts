@@ -230,6 +230,18 @@ export interface Clip {
   effects: Effect[]
   /** Present only on text clips; such clips render text instead of media. */
   text?: TextProps
+  /**
+   * Clips sharing this id are LINKED: edits follow the link at the store
+   * layer (moving/trimming/splitting/deleting one member applies the same
+   * edit to the rest). Created at A/V drop, when one dropped asset yields a
+   * video clip + audio clip pair. Absent means unlinked (the common case).
+   * By construction a present linkGroupId implies at least one partner
+   * clip exists somewhere in the doc — operations that would orphan a
+   * member (leaving it alone in its group) strip or reassign the id
+   * instead. Optional so old serialized docs without this field stay
+   * valid (schemaVersion is NOT bumped for it).
+   */
+  linkGroupId?: string
 }
 
 /** What a track holds; a track only accepts clips compatible with its kind. */
