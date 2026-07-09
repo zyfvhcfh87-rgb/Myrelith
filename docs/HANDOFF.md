@@ -24,17 +24,20 @@ binding rules.
 | 4.3.5 — timeline track headers (user request) | ✅ done | browser E2E: sticky gutter, add/hide/mute/lock wired, rows pixel-aligned, undo exact |
 | 4.3.6 — track rename/delete/solo (user request) | ✅ done | browser E2E: dblclick-rename, × delete + undo-restores-clips, solo dims the rest |
 | 4.3.7 — waveforms/filmstrips + clip volume (user request) | ✅ done | browser E2E: generated A/V file → strips + beat waveform, continuous across razor splits, volume commit |
+| 4.3.8 — linked A/V clips + manual unlink (user request) | ✅ done | browser E2E: partner ghosts the drag live, one commit moves both, razor re-groups halves, unlink isolates |
 | **4 gate** | ⏳ user pass | most items machine-verified; see PLAN gate section |
 | 5 — export | ⬜ | |
 
-414 tests green · `npm run build` and `npm run lint` clean · every phase
+463 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
 4.3 Inspector + arrow stepping. The Phase 4 gate awaits the user's
 manual confirmation pass (see PLAN.md). 2026-07-08 bug fix: dropping a
 video asset that contains audio now lands a video+audio clip PAIR
-(one undo entry) instead of silently dropping the audio.
+(one undo entry) instead of silently dropping the audio; since 4.3.8
+(2026-07-10) that pair lands LINKED — edits follow the link, Inspector
+unlinks (see PLAN 4.3.8).
 
 ## What works today (user-visible)
 
@@ -49,11 +52,15 @@ Click/drag the timeline ruler → playhead moves, Preview follows
 media row onto a lane (4.0): compatible lanes highlight, drop creates the
 clip at the pointer, one undo entry (kind-gated: video/image → V lanes,
 audio → A lanes; rows drag only after metadata arrives). A video asset
-whose file contains audio lands as a PAIR — video clip on the drop lane
-+ audio clip on the first unlocked A lane, one atomic
-documentStore.insertClips, ONE undo entry; if the audio spot is
-occupied the whole drop rejects (never half a pair). The clips are not
-linked afterwards (moving one does not move the other — post-MVP). The full editing
+whose file contains audio lands as a LINKED PAIR (4.3.8) — video clip
+on the drop lane + audio clip on the first unlocked A lane sharing one
+`linkGroupId`, one atomic documentStore.insertClips, ONE undo entry;
+if the audio spot is occupied the whole drop rejects (never half a
+pair). Linked clips show a tiny 🔗 badge; every geometry edit
+(move/trim/ripple/slip/slide/razor/S/Delete) applies to BOTH halves
+atomically — the partner even ghosts the gesture live — and the
+Inspector's "🔗 Unlink audio/video" button dissolves the group (one
+entry; undo re-links). Transform and volume stay per-half on purpose. The full editing
 toolset (4.2): toolbar buttons or A/B/T/Y/U — select (click selects, body
 drag moves with snap-back on illegal drops, edge drag trims), razor
 (click cuts at the pointer frame), ripple trim (edges; downstream
@@ -99,7 +106,10 @@ the transform fields only for video-lane clips.
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
-  derived reads, never stored).
+  derived reads, never stored), `linking.ts` (4.3.8: linked-pair
+  wrappers around the base ops — same delta to every linkGroupId
+  member, atomic rollback; unlinkClip dissolves a group; the store's
+  geometry actions call THESE, not the base ops).
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
@@ -244,8 +254,10 @@ the transform fields only for video-lane clips.
   composites the full timeline since 4.1c. Audio clips DO land on A
   lanes since the 2026-07-08 A/V drop fix (visible + editable), but
   they produce no sound until the audio pipeline exists.
-- A/V pairs from one drop are NOT linked clips: schema has no linking,
-  so moving/trimming one half does not follow the other. Post-MVP.
+- A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
+  domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
+  (unlink is one-way today, undo aside) and linked-pair awareness in a
+  future multi-select. Post-MVP.
 - Playback re-walks each GOP per frame (chunksForTimestamp per tick — the
   proven scrub path, works at 1080p30). True streaming decode is a
   post-MVP optimization if profiling ever demands it.

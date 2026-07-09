@@ -90,9 +90,16 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   const session = useRef<GestureSession | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
 
-  const scheduleMovePreview = useScrubScheduler((startFrame: number) =>
-    setDragPreview({ clipId: clip.id, startFrame, linkGroupId: clip.linkGroupId }),
-  )
+  const scheduleMovePreview = useScrubScheduler((startFrame: number) => {
+    // Same session guard as scheduleEditPreview below: a rAF flush can land
+    // AFTER pointerup already committed and cleared the preview — without
+    // this check the stale flush re-posts a dragPreview that nothing ever
+    // clears, wedging the clip at the preview position until the next
+    // gesture (caught in the 4.3.8 browser pass under a throttled-rAF pane).
+    if (session.current?.mode === 'move') {
+      setDragPreview({ clipId: clip.id, startFrame, linkGroupId: clip.linkGroupId })
+    }
+  })
   const scheduleEditPreview = useScrubScheduler((deltaFrames: number) => {
     const mode = session.current?.mode
     if (mode && mode !== 'move') {

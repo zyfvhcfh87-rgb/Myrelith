@@ -204,6 +204,45 @@ per-clip volume editor. Sliced domain → state → pipeline → app → ui:
   strips + waveform render, continuous across razor splits, volume
   commit = one entry, clean console. 414 tests total.
 
+### 4.3.8 ✅ DONE (2026-07-10; user-requested) Linked A/V clips + unlink
+A/V drops land LINKED by default; edits follow the link; the Inspector
+unlinks manually. Built by Sonnet subagents (one per module) under
+orchestrator review, sliced domain → state → ui:
+- **domain**: `Clip.linkGroupId?` (shared id = linked; optional, no
+  schemaVersion bump) + `linking.ts` — `createLinkGroupId`,
+  `linkedPartners`, `unlinkClip` (dissolves the whole group; rejects
+  if any member's track is locked) and linked wrappers around the
+  proven ops (move/trim/rippleTrim/slip/slide/rippleDelete/split).
+  Same delta to every member, sequentially, ATOMIC (any member
+  rejecting rolls the whole edit back — a pair can never half-edit).
+  Split re-groups the right halves under ONE fresh id via exact
+  id-diffing; a lone right half is unlinked; left halves keep the
+  original group.
+- **state**: documentStore's geometry actions delegate to the linked
+  variants (signatures unchanged — UI gesture code untouched); new
+  `unlinkClip` action; splitClipAtPlayhead is group-aware (each group
+  split once per gesture); transportStore Drag/EditPreview carry an
+  optional linkGroupId. Transform/volume edits stay deliberately
+  link-blind (video-half / audio-half properties).
+- **ui**: the A/V drop stamps ONE fresh group id on both halves;
+  ClipView's narrow preview slices also match the gesture owner's
+  linkGroupId so the PARTNER ghosts moves/trims/slips live (absolute
+  startFrame valid for both — identical ranges by construction); tiny
+  🔗 badge on linked clips; Inspector "🔗 Unlink audio/video" button
+  on both lane kinds.
+- Bonus fix caught in the browser pass: scheduleMovePreview now has
+  the same session guard as scheduleEditPreview — a rAF flush landing
+  after pointerup could re-post a stale dragPreview that nothing
+  clears (pre-existing race, window ~1 frame; huge under a
+  throttled-rAF pane, which is how it surfaced).
+- Browser-verified end-to-end with an in-page generated A/V MP4:
+  linked drop (one entry, badges), partner ghosts the drag live
+  (both translateX(150px) mid-gesture), one commit moves both halves,
+  razor → 4 clips / left pair keeps group / right pair shares a new
+  one, unlink dissolves exactly its own group and the button removes
+  itself, post-unlink halves move independently, 5-undo chain back to
+  empty + redo exact, clean console. 463 tests total.
+
 ### Phase 4 gate — build complete; USER'S MANUAL PASS PENDING
 Machine-verified already (browser E2E, see 4.1c/4.2d/4.3 notes):
 - every edit op = exactly one undo entry (7-op and 5-op undo chains
