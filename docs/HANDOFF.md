@@ -28,9 +28,10 @@ binding rules.
 | **4 gate** | ✅ closed | user manual pass 2026-07-11 |
 | 5.1a — CFR export foundation | ✅ done | 21 focused tests: timing, backpressure, progress, ownership, cancellation |
 | 5.1b — real video adapters | ✅ done | locked Mediabunny 1.50.3 browser pass: 10-frame MP4 reopened by native video |
-| 5 — export | 🚧 in progress | audio mix, crossfade parity, controller/UI remain |
+| 5.1c — bounded audio export | ✅ done | NTSC browser pass: exact 48,048-sample stereo AAC mix, A/V both 1.001s, clean console |
+| 5 — export | 🚧 in progress | crossfade parity, controller/UI, then MVP gate remain |
 
-501 tests green · `npm run build` and `npm run lint` clean · every phase
+521 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -40,15 +41,21 @@ video asset that contains audio now lands a video+audio clip PAIR
 (one undo entry) instead of silently dropping the audio; since 4.3.8
 (2026-07-10) that pair lands LINKED — edits follow the link, Inspector
 unlinks (see PLAN 4.3.8). Phase 5.1a landed 2026-07-11:
-`pipeline/export.ts` owns the tested video-only CFR scheduling contract
+`pipeline/export.ts` owns the tested CFR scheduling contract
 (injected frame leases/sink, exact rational timestamps, awaited backpressure,
 progress/result protocol, and exact-once cleanup). Phase 5.1b landed the same
 day: `pipeline/export-mediabunny.ts` provides real lazy Blob decoding and
 AVC/MP4 encoding. One long-lived timestamp iterator per asset keeps decoder
 count bounded; frame leases own and close stable ImageBitmap copies. The real
 browser gate re-exported 10 red→green frames and native `<video>` reported
-64×48, 1.000s, with correct pixels at 0.2s and 0.7s. Audio and user-visible
-export still do not exist; 5.1c is next.
+64×48, 1.000s, with correct pixels at 0.2s and 0.7s. Phase 5.1c landed the
+same day: `pipeline/export-audio.ts` owns the exact integer sample grid and
+bounded mix; `pipeline/export-mediabunny.ts` adds lazy active-clip audio
+decoders plus stereo AAC encoding. The real 30000/1001 browser gate exported
+exactly 48,048 scheduled samples: AVC + AAC, 48 kHz stereo, audio and video
+both 1.001s, correct trimmed/half-gain tone followed by silence, clean
+console. Export has no user-facing controller/UI yet; crossfade parity is
+the next module.
 
 ## What works today (user-visible)
 
@@ -107,7 +114,7 @@ mediabunny sinks); both images span the asset's FULL duration, so
 ClipView maps them with two CSS background values — trim/razor/zoom
 need zero redraws and slip/start-trim previews shift the material
 live. The Inspector edits VOLUME for audio-lane clips (domain-clamped
-[0,2], one entry per commit; mix consumption is Phase 5) and shows
+[0,2], one entry per commit; Phase 5.1c export consumes it) and shows
 the transform fields only for video-lane clips.
 
 ## Map (key files, one line each)
@@ -125,18 +132,25 @@ the transform fields only for video-lane clips.
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
   synchronous draw; `{drawn, missing}` result; per-clip try/finally.
-- `src/pipeline/export.ts` — Phase 5.1a video-only CFR orchestrator:
+- `src/pipeline/export.ts` — Phase 5.1a CFR orchestrator:
   `exportTimeline` derives length with `docDurationFrames`, composites every
   integer frame through an injected `compositeFrame`, awaits sink
   backpressure, and owns per-frame/export cleanup. Natural completion returns
   `ExportResult`; controller cancellation after iteration starts uses
   `return(undefined)`.
-- `src/pipeline/export-mediabunny.ts` — Phase 5.1b production browser
+- `src/pipeline/export-audio.ts` — Phase 5.1c exact audio scheduler/mixer:
+  BigInt frame→sample boundaries; `audibleTracks` selection; clip source
+  offsets + volume; 1024-sample bounded stereo blocks; post-sum clipping;
+  one active sequential reader per audible clip; exact-once reader/source
+  cleanup. Browser codecs stay behind injected ports for Node tests.
+- `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c production browser
   adapters: asset Blob resolver → one Input/CanvasSink/timestamp iterator per
-  asset → lease-owned ImageBitmap copies; OffscreenCanvas/CanvasSource →
-  AVC-in-MP4 BufferTarget with support probe, awaited backpressure, and
-  exact-once terminal cleanup. Its precomputed request order mirrors
-  `compositeFrame` and fails closed if the two ever drift.
+  video asset → lease-owned ImageBitmap copies; active audio clips → lazy
+  AudioSampleSink cursors with streaming resampling + channel downmix;
+  OffscreenCanvas/CanvasSource + AudioSampleSource → AVC/AAC-in-MP4
+  BufferTarget. Both encoders are support-probed, writes honor backpressure,
+  every media sample closes, and terminal cleanup is exact-once. The video
+  request order mirrors `compositeFrame` and fails closed if the two drift.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
   100; rejected ops push no entry), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
@@ -213,8 +227,9 @@ the transform fields only for video-lane clips.
 ## Invariants that must survive refactors
 
 1. Integer frames everywhere; seconds only at codec/clock boundaries.
-2. Every VideoFrame closed the moment its pixels are used; ImageBitmaps in
-   the ring buffer, closed on evict/clear. One owner at all times.
+2. Every VideoFrame/AudioSample closed the moment its pixels/samples are
+   copied; ImageBitmaps in the ring buffer, closed on evict/clear. One owner
+   at all times.
 3. Rejected domain ops return the SAME doc reference (callers detect via
    `===`; store pushes no history).
 4. Scrubbing/dragging writes transportStore only; pointerup commits ONE
@@ -251,6 +266,13 @@ the transform fields only for video-lane clips.
   every call creates a new timestamp iterator and decoder. Sequential export
   must keep one `canvasesAtTimestamps` iterator alive per asset; a focused fake
   that only records `getCanvas` calls will miss catastrophic decoder churn.
+- **AAC payload length is not timeline duration.** Chrome encodes whole
+  1024-sample AAC packets: 48,048 submitted NTSC samples decode to a 48,128-
+  sample payload. In locked Mediabunny 1.50.3, `onEncodedPacket` runs
+  synchronously immediately before the same packet object reaches the MP4
+  muxer; 5.1c clamps only the final packet's container duration so the audio
+  track ends at the exact rational sample boundary (1.001s in the browser
+  gate). Re-verify this version-coupled callback ordering before any upgrade.
 
 ## Dev/test toolbox
 
@@ -277,10 +299,11 @@ the transform fields only for video-lane clips.
 ## Open items (beyond PLAN.md phases)
 
 - Playback exists but is SILENT: the AudioContext is clock-only (rule 3
-  honored); audio decode/mix/output does not exist yet. Video playback
-  composites the full timeline since 4.1c. Audio clips DO land on A
-  lanes since the 2026-07-08 A/V drop fix (visible + editable), but
-  they produce no sound until the audio pipeline exists.
+  honored). Phase 5.1c's bounded audio decode/mix is export-only; live audio
+  scheduling/output still needs its own post-MVP design. Video playback
+  composites the full timeline since 4.1c. Audio clips DO land on A lanes,
+  remain linked to their video halves, and now export with volume/mute/solo,
+  but they still produce no sound inside the editor.
 - A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
   domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
   (unlink is one-way today, undo aside) and linked-pair awareness in a
