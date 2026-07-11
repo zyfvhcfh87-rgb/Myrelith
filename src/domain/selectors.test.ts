@@ -12,6 +12,7 @@ import {
   findClip,
   trackOfClip,
   tracksInDisplayOrder,
+  visibleVideoLayersAtFrame,
 } from './selectors'
 
 function makeClip(id: string, tlStart: number, duration: number, sourceStart = 0): Clip {
@@ -28,8 +29,24 @@ function makeClip(id: string, tlStart: number, duration: number, sourceStart = 0
   }
 }
 
-function makeTrack(id: string, kind: Track['kind'], clips: Clip[]): Track {
-  return { id, kind, name: id, clips, transitions: [], hidden: false, muted: false, solo: false, locked: false }
+function makeTrack(
+  id: string,
+  kind: Track['kind'],
+  clips: Clip[],
+  overrides: Partial<Track> = {},
+): Track {
+  return {
+    id,
+    kind,
+    name: id,
+    clips,
+    transitions: [],
+    hidden: false,
+    muted: false,
+    solo: false,
+    locked: false,
+    ...overrides,
+  }
 }
 
 function makeDoc(tracks: Track[]): TimelineDoc {
@@ -200,5 +217,169 @@ describe('clipSourceFrame', () => {
     expect(clipSourceFrame(clip, 100)).toBe(30)
     expect(clipSourceFrame(clip, 110)).toBe(40)
     expect(clipSourceFrame(clip, 149)).toBe(79)
+  })
+})
+
+describe('visibleVideoLayersAtFrame', () => {
+  const from = makeClip('from', 10, 10, 100)
+  const to = makeClip('to', 20, 10, 200)
+  const transition = {
+    id: 'transition',
+    type: 'crossfade' as const,
+    fromClipId: from.id,
+    toClipId: to.id,
+    durationFrames: 3,
+  }
+  const transitionTrack = makeTrack('V1', 'video', [from, to], {
+    transitions: [transition],
+  })
+
+  const summary = (doc: TimelineDoc, frame: number) =>
+    visibleVideoLayersAtFrame(doc, frame).map((layer) => ({
+      id: layer.clip.id,
+      sourceFrame: layer.sourceFrame,
+      opacity: layer.opacity,
+    }))
+
+  test('uses one centered frozen-endpoint render plan across the full boundary', () => {
+    const doc = makeDoc([transitionTrack])
+
+    expect(summary(doc, 18)).toEqual([
+      { id: 'from', sourceFrame: 108, opacity: 1 },
+    ])
+    expect(summary(doc, 19)).toEqual([
+      { id: 'from', sourceFrame: 109, opacity: 1 },
+      { id: 'to', sourceFrame: 200, opacity: 0.25 },
+    ])
+    expect(summary(doc, 20)).toEqual([
+      { id: 'from', sourceFrame: 109, opacity: 1 },
+      { id: 'to', sourceFrame: 200, opacity: 0.5 },
+    ])
+    expect(summary(doc, 21)).toEqual([
+      { id: 'from', sourceFrame: 109, opacity: 1 },
+      { id: 'to', sourceFrame: 201, opacity: 0.75 },
+    ])
+    expect(summary(doc, 22)).toEqual([
+      { id: 'to', sourceFrame: 202, opacity: 1 },
+    ])
+  })
+
+  test('a one-frame transition produces one exact midpoint blend', () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [from, to], {
+        transitions: [{ ...transition, durationFrames: 1 }],
+      }),
+    ])
+
+    expect(summary(doc, 20)).toEqual([
+      { id: 'from', sourceFrame: 109, opacity: 1 },
+      { id: 'to', sourceFrame: 200, opacity: 0.5 },
+    ])
+  })
+
+  test('adjusts intrinsic opacities without a source-over dark dip', () => {
+    const fadedFrom = { ...from, opacity: 0.5 }
+    const fadedTo = { ...to, opacity: 0.25 }
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [fadedFrom, fadedTo], {
+        transitions: [{ ...transition, durationFrames: 1 }],
+      }),
+    ])
+    const layers = visibleVideoLayersAtFrame(doc, 20)
+
+    expect(layers.map((layer) => layer.clip.id)).toEqual(['from', 'to'])
+    expect(layers[0].opacity).toBeCloseTo(2 / 7, 12)
+    expect(layers[1].opacity).toBe(0.125)
+  })
+
+  test('skips hidden, audio, text, and zero-opacity media in the canonical plan', () => {
+    const text = {
+      content: 'title',
+      fontFamily: 'sans-serif',
+      fontSizePx: 40,
+      color: '#fff',
+      align: 'center' as const,
+      bold: false,
+      italic: false,
+    }
+    const doc = makeDoc([
+      makeTrack('hidden', 'video', [from], { hidden: true }),
+      makeTrack('audio', 'audio', [from]),
+      makeTrack('text', 'video', [{ ...from, text }]),
+      makeTrack('zero', 'video', [{ ...from, opacity: 0 }]),
+    ])
+
+    expect(visibleVideoLayersAtFrame(doc, 15)).toEqual([])
+  })
+
+  test('malformed or ambiguous transitions deterministically fall back to the hard cut', () => {
+    const middle = makeClip('middle', 20, 5, 300)
+    const later = makeClip('later', 25, 10, 400)
+    const cases: Array<{ track: Track; frame: number }> = [
+      {
+        track: makeTrack('V1', 'video', [from, to], {
+          transitions: [{ ...transition, durationFrames: 0 }],
+        }),
+        frame: 20,
+      },
+      {
+        track: makeTrack('V1', 'video', [from, to], {
+          transitions: [{ ...transition, toClipId: 'missing' }],
+        }),
+        frame: 20,
+      },
+      {
+        track: makeTrack('V1', 'video', [from, middle, later], {
+          transitions: [{ ...transition, toClipId: later.id }],
+        }),
+        frame: 25,
+      },
+      {
+        track: makeTrack('V1', 'video', [from, { ...to, timelineRange: {
+          ...to.timelineRange,
+          startFrame: 21,
+        } }], { transitions: [transition] }),
+        frame: 21,
+      },
+      {
+        track: makeTrack('V1', 'video', [from, to], {
+          transitions: [{ ...transition, durationFrames: 30 }],
+        }),
+        frame: 20,
+      },
+      {
+        track: makeTrack('V1', 'video', [from, to], {
+          transitions: [transition, { ...transition, id: 'duplicate' }],
+        }),
+        frame: 20,
+      },
+    ]
+
+    for (const { track, frame } of cases) {
+      const withTransition = summary(makeDoc([track]), frame)
+      const hardCut = summary(
+        makeDoc([{ ...track, transitions: [] }]),
+        frame,
+      )
+      expect(withTransition).toEqual(hardCut)
+    }
+  })
+
+  test('invalidates partially overlapping transition windows for their full duration', () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [from, to], {
+        transitions: [
+          transition,
+          { ...transition, id: 'wider', durationFrames: 5 },
+        ],
+      }),
+    ])
+    const hardCutDoc = makeDoc([
+      { ...transitionTrack, transitions: [] },
+    ])
+
+    for (const frame of [18, 19, 20, 21, 22]) {
+      expect(summary(doc, frame)).toEqual(summary(hardCutDoc, frame))
+    }
   })
 })

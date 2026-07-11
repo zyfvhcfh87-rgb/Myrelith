@@ -132,6 +132,67 @@ const flushMicrotasks = async (): Promise<void> => {
 /* ------------------------------------------------------------------ */
 
 describe('renderFrame entry building', () => {
+  test('requests both centered crossfade legs from the canonical render plan', async () => {
+    const from = makeClip('from', 'A', 0, 10, 30)
+    const to = makeClip('to', 'B', 10, 10, 50)
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [from, to], {
+        transitions: [{
+          id: 'dissolve',
+          type: 'crossfade',
+          fromClipId: from.id,
+          toClipId: to.id,
+          durationFrames: 1,
+        }],
+      }),
+    ])
+    const { worker, bridge } = makeBridge(doc)
+    const a = makeProvider([chunk(11)])
+    const b = makeProvider([chunk(22)])
+    await configureAcked({ worker, bridge }, 'A', R30, a.provider)
+    await configureAcked({ worker, bridge }, 'B', R60, b.provider)
+
+    void bridge.renderFrame(10)
+    await flushMicrotasks()
+
+    expect(b.calls[0].targetSec).toBeCloseTo((50 * 2) / 60, 9)
+    expect(b.calls[0].toleranceSec).toBeCloseTo(1 / 120, 9)
+    expect(a.calls[0].targetSec).toBeCloseTo(39 / 30, 9)
+    expect(a.calls[0].toleranceSec).toBeCloseTo(1 / 60, 9)
+    expect(worker.composites()[0].sources.map((entry) => ({
+      assetId: entry.assetId,
+      sourceFrame: entry.sourceFrame,
+    }))).toEqual([
+      { assetId: 'A', sourceFrame: 39 },
+      { assetId: 'B', sourceFrame: 50 },
+    ])
+  })
+
+  test('dedupes identical transition source keys without suppressing either render layer', async () => {
+    const from = makeClip('from', 'A', 0, 1)
+    const to = makeClip('to', 'A', 1, 1)
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [from, to], {
+        transitions: [{
+          id: 'dissolve',
+          type: 'crossfade',
+          fromClipId: from.id,
+          toClipId: to.id,
+          durationFrames: 1,
+        }],
+      }),
+    ])
+    const { worker, bridge } = makeBridge(doc)
+    const a = makeProvider()
+    await configureAcked({ worker, bridge }, 'A', R30, a.provider)
+
+    void bridge.renderFrame(1)
+    await flushMicrotasks()
+
+    expect(a.calls).toHaveLength(1)
+    expect(worker.composites()[0].sources).toHaveLength(1)
+    expect(worker.composites()[0].sources[0].sourceFrame).toBe(0)
+  })
   test('per-asset µs math: doc frames rescale to each asset rate; buffers transfer', async () => {
     const doc = makeDoc([
       makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)]), // 30fps asset

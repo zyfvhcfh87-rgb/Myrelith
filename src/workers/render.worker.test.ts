@@ -561,6 +561,32 @@ describe('same-asset entries in one composite', () => {
 /* ------------------------------------------------------------------ */
 
 describe('failure containment', () => {
+  test('one missing shared transition key reports both render layers', async () => {
+    const from = makeClip('from', 'A', 0, 1)
+    const to = makeClip('to', 'A', 1, 1)
+    const track = {
+      ...makeTrack('V1', [from, to]),
+      transitions: [{
+        id: 'dissolve',
+        type: 'crossfade' as const,
+        fromClipId: from.id,
+        toClipId: to.id,
+        durationFrames: 1,
+      }],
+    }
+    const h = makeHarness()
+    await setup(h, makeDoc([track]), [])
+
+    await h.core.handleMessage(compMsg(1, 1, []))
+
+    expect(doneFor(h, 1)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: ['from', 'to'],
+    })
+    expect(h.decoders).toHaveLength(0)
+  })
+
   test('an unconfigured asset turns into missingClipIds, not an error', async () => {
     const h = makeHarness()
     await setup(h, twoTrackDoc(), ['A']) // B never configured

@@ -6,8 +6,8 @@
  * ToRenderWorker/FromRenderWorker protocol on the other. Owns everything
  * the render-protocol says the MAIN side owns:
  * - deciding which (asset, sourceFrame) pairs a composite needs, via the
- *   same domain selectors the compositor uses (activeClipAt /
- *   clipSourceFrame) over the SAME doc snapshot it last posted (setDoc
+ *   canonical domain visibleVideoLayersAtFrame plan over the SAME document
+ *   snapshot it last posted (setDoc
  *   stores it, satisfying the protocol's ordering contract);
  * - all µs math: doc frame → asset frame (rescaleFrames) → target/
  *   tolerance microseconds (frame↔seconds only at this boundary, rule 2);
@@ -24,7 +24,7 @@
  */
 
 import type { AssetId, ClipId, FrameRate, TimelineDoc } from '../domain/schema'
-import { activeClipAt, clipSourceFrame } from '../domain/selectors'
+import { visibleVideoLayersAtFrame } from '../domain/selectors'
 import { framesToSeconds, rescaleFrames } from '../domain/time'
 import type { ChunkPayload } from '../workers/decode-protocol'
 import type {
@@ -147,16 +147,14 @@ export class RenderWorkerBridge {
     const requestId = this.nextRequestId++
     this.latestCallId = requestId
 
-    // Which (asset, sourceFrame) pairs does this composite need? Mirrors
-    // compositeFrame's own skip rules so no chunks are fetched for clips
-    // that will not draw; deduped exactly like the worker's source table.
+    // Which (asset, sourceFrame) pairs does this composite need? The domain
+    // render plan is the same ordered truth compositeFrame consumes;
+    // dedupe only the decode work, exactly like the worker's source table.
     const wants = new Map<string, { assetId: AssetId; sourceFrame: number }>()
-    for (const track of doc.tracks) {
-      if (track.kind !== 'video' || track.hidden) continue
-      const clip = activeClipAt(track, frame)
-      if (!clip || clip.text !== undefined || clip.opacity <= 0) continue
+    for (const layer of visibleVideoLayersAtFrame(doc, frame)) {
+      const clip = layer.clip
       if (!this.sources.has(clip.assetId)) continue
-      const sourceFrame = clipSourceFrame(clip, frame)
+      const sourceFrame = layer.sourceFrame
       wants.set(`${clip.assetId}@${sourceFrame}`, {
         assetId: clip.assetId,
         sourceFrame,

@@ -310,8 +310,30 @@ is the video-only CFR orchestration and ownership foundation described in
   tests + 20 combined adapter tests; 524 total tests, build, and lint green.
 
 ### 5.1d Transition parity
-- [ ] Implement crossfade selection/rendering in `compositeFrame` and update
-  preview/export frame requests together so both paths keep one visual truth.
+- [x] **Crossfade selection/rendering + preview/export request parity** — DONE
+  2026-07-11. `visibleVideoLayersAtFrame` is now the one domain-owned,
+  paint-ordered visual plan consumed by `compositeFrame`, the preview render
+  bridge, and the export scheduler. Crossfades use a centered half-open
+  window around a touching edit, freeze endpoint frames where source handles
+  do not exist, and fail closed to a hard cut for stale, invalid, duplicate,
+  or overlapping transition definitions. The Canvas2D opacity compensation
+  removes the dark midpoint for ordinary opaque full-frame footage. Export
+  validates every frame-local request against that same plan while retaining
+  one long-lived timestamp iterator per asset.
+  Browser-verified against locked Mediabunny 1.50.3 with one source asset
+  whose transition schedule forces a real decoder seek forward → backward →
+  forward: 12/12 frames reopened, 1.200s exact duration, preview/export probe
+  pixels within 2 channel values, bright midpoint, clean console. 16 new
+  regression tests; 540 total tests, build, and lint green.
+
+### 5.1e Transition authoring (required before the MVP gate)
+- [ ] **5.1e-1 domain lifecycle** — add/remove crossfade operations for
+  touching adjacent video clips and define how trim/move/split/delete keep or
+  discard affected transitions; reject durations/windows that cannot fit.
+- [ ] **5.1e-2 state wiring** — document-store actions with one undo entry per
+  transition edit and exact undo/redo restoration.
+- [ ] **5.1e-3 timeline UI** — minimal create/remove/duration affordance at an
+  eligible clip seam, followed by real-browser preview verification.
 
 ### 5.2 Export flow
 - [ ] **5.2a app export controller** — composition-root wiring for the media
@@ -322,8 +344,8 @@ is the video-only CFR orchestration and ownership foundation described in
 
 ### Phase 5 / MVP gate
 - [ ] Export a 30s, 3-clip, 2-track timeline w/ one crossfade + one trim.
-  (Crossfade requires implementing Transition rendering in compositeFrame —
-  schema exists, renderer does not yet.)
+  (Rendering is complete; 5.1e authoring must land so the editor can create
+  the transition without a seeded document.)
 - [ ] VLC + QuickTime playback, no perceptible A/V desync.
 - [ ] Spot-check exported frame at t=10s vs preview.
 - [ ] `ffprobe -show_streams`: avg_frame_rate == r_frame_rate (CFR). No

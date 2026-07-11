@@ -29,9 +29,10 @@ binding rules.
 | 5.1a — CFR export foundation | ✅ done | 21 focused tests: timing, backpressure, progress, ownership, cancellation |
 | 5.1b — real video adapters | ✅ done | locked Mediabunny 1.50.3 browser pass: 10-frame MP4 reopened by native video |
 | 5.1c — bounded audio export | ✅ done | NTSC browser pass: exact 48,048-sample stereo AAC mix, A/V both 1.001s, clean console |
-| 5 — export | 🚧 in progress | crossfade parity, controller/UI, then MVP gate remain |
+| 5.1d — transition parity | ✅ done | same-asset seek/backtrack browser pass: 12-frame MP4, preview/export pixels within 2, clean console |
+| 5 — export | 🚧 in progress | transition authoring, controller/UI, then MVP gate remain |
 
-524 tests green · `npm run build` and `npm run lint` clean · every phase
+540 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -54,8 +55,15 @@ bounded mix; `pipeline/export-mediabunny.ts` adds lazy active-clip audio
 decoders plus stereo AAC encoding. The real 30000/1001 browser gate exported
 exactly 48,048 scheduled samples: AVC + AAC, 48 kHz stereo, audio and video
 both 1.001s, correct trimmed/half-gain tone followed by silence, clean
-console. Export has no user-facing controller/UI yet; crossfade parity is
-the next module.
+console. Phase 5.1d now routes compositor, preview requests, and export
+requests through `visibleVideoLayersAtFrame`, including centered crossfades
+with frozen source endpoints and hard-cut fallback for malformed/ambiguous
+definitions. Its same-asset browser gate forced the real decoder forward →
+backward → forward, reopened all 12 output frames at exactly 1.200s, and kept
+preview/export probe pixels within 2 channel values with no dark midpoint or
+console errors. Export has no user-facing controller/UI yet; transition
+authoring (5.1e) is the next module because the schema/render path exists but
+the editor still cannot create a transition.
 
 ## What works today (user-visible)
 
@@ -123,6 +131,7 @@ the transform fields only for video-lane clips.
   `time.ts` (conversions incl. `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
+  `visibleVideoLayersAtFrame` (THE preview/export visual plan),
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
   derived reads, never stored), `linking.ts` (4.3.8: linked-pair
   wrappers around the base ops — same delta to every linkGroupId
@@ -131,7 +140,9 @@ the transform fields only for video-lane clips.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
-  synchronous draw; `{drawn, missing}` result; per-clip try/finally.
+  synchronous draw; `{drawn, missing}` result; per-clip try/finally. Since
+  5.1d it paints the selector's ordered ordinary/crossfade layers rather than
+  re-deriving active clips.
 - `src/pipeline/export.ts` — Phase 5.1a CFR orchestrator:
   `exportTimeline` derives length with `docDurationFrames`, composites every
   integer frame through an injected `compositeFrame`, awaits sink
@@ -144,14 +155,17 @@ the transform fields only for video-lane clips.
   blocks; post-sum clipping;
   one active sequential reader per audible clip; exact-once reader/source
   cleanup. Browser codecs stay behind injected ports for Node tests.
-- `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c production browser
+- `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c/d production browser
   adapters: asset Blob resolver → one Input/CanvasSink/timestamp iterator per
   video asset → lease-owned ImageBitmap copies; active audio clips → lazy
   AudioSampleSink cursors with streaming resampling + channel downmix;
   OffscreenCanvas/CanvasSource + AudioSampleSource → AVC/AAC-in-MP4
   BufferTarget. Both encoders are support-probed, writes honor backpressure,
   every media sample closes, and terminal cleanup is exact-once. The video
-  request order mirrors `compositeFrame` and fails closed if the two drift.
+  iterator schedule and each frame-local request derive from the canonical
+  visual plan; frame leases fail closed on omitted, extra, or reordered
+  requests. Locked Mediabunny 1.50.3 handles the same-asset non-monotonic
+  sequence created by a frozen-endpoint crossfade (browser-proven in 5.1d).
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
   100; rejected ops push no entry), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
@@ -267,6 +281,17 @@ the transform fields only for video-lane clips.
   every call creates a new timestamp iterator and decoder. Sequential export
   must keep one `canvasesAtTimestamps` iterator alive per asset; a focused fake
   that only records `getCanvas` calls will miss catastrophic decoder churn.
+- **Naive complementary Canvas2D alpha makes a crossfade dip dark.** With
+  source-over, drawing outgoing at `1-p` and incoming at `p` attenuates the
+  outgoing pixels twice. 5.1d paints outgoing first with compensated alpha,
+  then incoming, which gives an exact linear dissolve for ordinary opaque
+  full-frame footage. General transformed/transparent cross-dissolves need
+  offscreen isolation; do not silently generalize this formula.
+- **Frozen transition endpoints make one asset seek backward.** With no
+  source-handle metadata, 5.1d repeats the outgoing last frame and incoming
+  first frame around the cut. A single asset can therefore produce a
+  non-monotonic `canvasesAtTimestamps` sequence. Mediabunny 1.50.3 supports
+  that path, but keep the real-browser seek/backtrack gate when upgrading it.
 - **AAC payload length is not timeline duration.** Chrome encodes whole
   1024-sample AAC packets: 48,048 submitted NTSC samples decode to a 48,128-
   sample payload. In locked Mediabunny 1.50.3, `onEncodedPacket` runs
@@ -324,7 +349,12 @@ the transform fields only for video-lane clips.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
-- `Transition`s exist in schema only. Images not previewable (video only).
+- `Transition` rendering exists, but authoring does not: no domain operation,
+  store action, or timeline control creates/removes one yet (PLAN 5.1e).
+  Current crossfades are visual-only (audio still hard-cuts), and the
+  source-over compensation is exact only for ordinary opaque full-frame
+  footage; transformed/transparent dissolves need isolated compositing.
+  Images remain not previewable (video only).
 - `mediaStore.addAsset` is still the placeholder path; previewController
   re-fetches the blob URL for demuxing (works; slightly wasteful).
 

@@ -7,6 +7,18 @@ import type { Clip, ClipId, Track, TimelineDoc } from './schema'
 import { rangeContains, rangeEnd } from './time'
 
 /**
+ * One paint-ordered media layer needed to composite a document frame.
+ * This is the canonical visual selection contract shared by preview and
+ * export: consumers must not independently re-derive clip visibility,
+ * transition source frames, or effective opacity.
+ */
+export interface VisibleVideoLayer {
+  clip: Clip
+  sourceFrame: number
+  opacity: number
+}
+
+/**
  * Total document length in frames: the end of the last clip across all
  * tracks (0 for an empty project). Derived on demand — never stored on the
  * doc, so it can never go stale (see schema.ts).
@@ -101,4 +113,173 @@ export function clipSourceFrame(clip: Clip, timelineFrame: number): number {
   return (
     clip.sourceRange.startFrame + (timelineFrame - clip.timelineRange.startFrame)
   )
+}
+
+interface ActiveCrossfade {
+  from: Clip
+  to: Clip
+  startFrame: number
+  endFrame: number
+  durationFrames: number
+}
+
+function clipOpacity(clip: Clip): number {
+  if (!Number.isFinite(clip.opacity) || clip.opacity <= 0) return 0
+  return Math.min(1, clip.opacity)
+}
+
+function validSourceRange(clip: Clip): boolean {
+  const { startFrame, durationFrames } = clip.sourceRange
+  return (
+    Number.isSafeInteger(startFrame) &&
+    startFrame >= 0 &&
+    Number.isSafeInteger(durationFrames) &&
+    durationFrames >= 1 &&
+    Number.isSafeInteger(startFrame + durationFrames - 1)
+  )
+}
+
+function crossfadeAt(track: Track, frame: number): ActiveCrossfade | null {
+  const candidates: ActiveCrossfade[] = []
+
+  for (const transition of track.transitions) {
+    const durationFrames = transition.durationFrames
+    if (
+      transition.type !== 'crossfade' ||
+      !Number.isSafeInteger(durationFrames) ||
+      durationFrames < 1
+    ) {
+      continue
+    }
+
+    const fromIndex = track.clips.findIndex(
+      (clip) => clip.id === transition.fromClipId,
+    )
+    if (fromIndex < 0 || fromIndex + 1 >= track.clips.length) continue
+    const from = track.clips[fromIndex]
+    const to = track.clips[fromIndex + 1]
+    if (to.id !== transition.toClipId || from.id === to.id) continue
+    if (from.text !== undefined || to.text !== undefined) continue
+    if (!validSourceRange(from) || !validSourceRange(to)) continue
+
+    const fromStart = from.timelineRange.startFrame
+    const cutFrame = rangeEnd(from.timelineRange)
+    const toEnd = rangeEnd(to.timelineRange)
+    if (
+      !Number.isSafeInteger(fromStart) ||
+      !Number.isSafeInteger(cutFrame) ||
+      !Number.isSafeInteger(toEnd) ||
+      cutFrame !== to.timelineRange.startFrame
+    ) {
+      continue
+    }
+
+    const startFrame = cutFrame - Math.floor(durationFrames / 2)
+    const endFrame = startFrame + durationFrames
+    if (
+      !Number.isSafeInteger(startFrame) ||
+      !Number.isSafeInteger(endFrame) ||
+      startFrame < fromStart ||
+      endFrame > toEnd
+    ) {
+      continue
+    }
+
+    candidates.push({ from, to, startFrame, endFrame, durationFrames })
+  }
+
+  const active = candidates.filter(
+    (candidate) =>
+      frame >= candidate.startFrame && frame < candidate.endFrame,
+  )
+  if (active.length !== 1) return null
+
+  // Invalidate an overlapping/duplicate transition for its WHOLE window.
+  // Looking only for another transition active at this frame would let a
+  // malformed dissolve start, hard-cut in the overlap, then resume. Checking
+  // only the one active candidate against the full valid set also keeps this
+  // selector linear in transition count for every rendered frame.
+  const selected = active[0]
+  const ambiguous = candidates.some(
+    (candidate) =>
+      candidate !== selected &&
+      selected.startFrame < candidate.endFrame &&
+      candidate.startFrame < selected.endFrame,
+  )
+  return ambiguous ? null : selected
+}
+
+function clampedTransitionSourceFrame(clip: Clip, frame: number): number {
+  const first = clip.sourceRange.startFrame
+  const last = first + clip.sourceRange.durationFrames - 1
+  return Math.max(first, Math.min(last, clipSourceFrame(clip, frame)))
+}
+
+function ordinaryVideoLayer(track: Track, frame: number): VisibleVideoLayer[] {
+  const clip = activeClipAt(track, frame)
+  if (!clip || clip.text !== undefined) return []
+  const opacity = clipOpacity(clip)
+  if (opacity <= 0) return []
+  return [{ clip, sourceFrame: clipSourceFrame(clip, frame), opacity }]
+}
+
+/**
+ * Return every visual media layer needed for `frame`, in exact paint order.
+ * Hidden/audio tracks, text clips, and non-positive opacity are omitted.
+ *
+ * Crossfades are centered on the touching edit point. Because TimelineDoc
+ * has no source-handle metadata, the incoming first frame freezes before the
+ * cut and the outgoing last frame freezes after it; every request therefore
+ * remains inside its clip's declared source range. The outgoing clip paints
+ * first and the incoming clip fades over it. The opacity adjustment avoids
+ * the dark midpoint produced by naively source-over drawing two
+ * complementary globalAlpha values for ordinary opaque video.
+ *
+ * Invalid, stale, overlapping, or ambiguous transitions fall back to the
+ * normal hard-cut selection.
+ */
+export function visibleVideoLayersAtFrame(
+  doc: TimelineDoc,
+  frame: number,
+): VisibleVideoLayer[] {
+  const layers: VisibleVideoLayer[] = []
+
+  for (const track of doc.tracks) {
+    if (track.kind !== 'video' || track.hidden) continue
+    const transition = crossfadeAt(track, frame)
+    if (!transition) {
+      layers.push(...ordinaryVideoLayer(track, frame))
+      continue
+    }
+
+    const index = frame - transition.startFrame
+    const progress = (index + 1) / (transition.durationFrames + 1)
+    const fromBaseOpacity = clipOpacity(transition.from)
+    const toBaseOpacity = clipOpacity(transition.to)
+    const toOpacity = progress * toBaseOpacity
+    const uncovered = 1 - toOpacity
+    const fromOpacity =
+      uncovered > 0
+        ? ((1 - progress) * fromBaseOpacity) / uncovered
+        : 0
+
+    // Outgoing then incoming: source-over now produces a linear dissolve for
+    // full-frame opaque media while still honoring intrinsic opacity.
+    if (fromOpacity > 0) {
+      layers.push({
+        clip: transition.from,
+        sourceFrame: clampedTransitionSourceFrame(transition.from, frame),
+        opacity: Math.min(1, fromOpacity),
+      })
+    }
+    if (toOpacity > 0) {
+      layers.push({
+        clip: transition.to,
+        sourceFrame: clampedTransitionSourceFrame(transition.to, frame),
+        opacity: Math.min(1, toOpacity),
+      })
+    }
+  }
+
+  return layers
 }
