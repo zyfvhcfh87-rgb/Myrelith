@@ -296,7 +296,8 @@ is the video-only CFR orchestration and ownership foundation described in
   adapter tests; 501 total tests, build, and lint green.
 - [x] **5.1c bounded audio decode/mix/encode with exact integer sample count**
   — DONE 2026-07-11. `pipeline/export-audio.ts` derives every absolute
-  frame→sample boundary with BigInt rational math, mixes only
+  frame→sample boundary with BigInt rational math, preserves a signed
+  source-minus-timeline phase across razor/start-trim edits, mixes only
   `audibleTracks`, honors trims/source offsets + clip volume, performs
   streaming resampling and mono/stereo/surround→stereo conversion, and emits
   awaited blocks capped at 1024 samples. `pipeline/export-mediabunny.ts`
@@ -305,8 +306,8 @@ is the video-only CFR orchestration and ownership foundation described in
   the final AAC packet's container duration to the exact scheduled sample
   count. Browser-verified against locked Mediabunny 1.50.3 at 30000/1001:
   48,048 scheduled samples, stereo 48 kHz AAC, audio+video both 1.001s,
-  trimmed 0.5-gain tone + silent tail correct, clean console. 13 audio-core
-  tests + 20 combined adapter tests; 521 total tests, build, and lint green.
+  trimmed 0.5-gain tone + silent tail correct, clean console. 16 audio-core
+  tests + 20 combined adapter tests; 524 total tests, build, and lint green.
 
 ### 5.1d Transition parity
 - [ ] Implement crossfade selection/rendering in `compositeFrame` and update

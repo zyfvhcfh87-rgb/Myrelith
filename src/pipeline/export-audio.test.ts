@@ -13,6 +13,8 @@ import type {
   TimelineDoc,
   Track,
 } from '../domain/schema'
+import { splitClipAtFrame, trimClip } from '../domain/operations'
+import { docDurationFrames } from '../domain/selectors'
 import {
   audioSampleBoundary,
   EXPORT_AUDIO_BLOCK_SAMPLES,
@@ -162,6 +164,34 @@ function captureBlock(block: MixedAudioBlock): CapturedBlock {
     sampleCount: block.sampleCount,
     channels: block.channels.map((channel) => Array.from(channel)),
   }
+}
+
+async function renderSourceSamplePattern(doc: TimelineDoc): Promise<{
+  samples: number[]
+  requests: ExportAudioClipRequest[]
+}> {
+  const h = makeSource((request, sampleCount, offset) => {
+    const channel = Float32Array.from(
+      { length: sampleCount },
+      (_, index) =>
+        ((request.startSample + offset + index) % 8_192) / 8_192,
+    )
+    return [channel, channel.slice()]
+  })
+  const mixer = new TimelineAudioMixer(doc, h.source)
+  const samples: number[] = []
+
+  try {
+    for (let frame = 0; frame < docDurationFrames(doc); frame++) {
+      await mixer.writeFrame(frame, async (block) => {
+        samples.push(...block.channels[0])
+      })
+    }
+  } finally {
+    await mixer.close()
+  }
+
+  return { samples, requests: h.requests }
 }
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -314,6 +344,81 @@ describe('TimelineAudioMixer selection and mapping', () => {
       endSample: 3_204,
     })
     expect(h.readers[0].readCounts).toEqual([1_024, 578])
+    await mixer.close()
+  })
+
+  test('keeps the complete NTSC source sample stream unchanged across a razor split', async () => {
+    const clip = makeClip('continuous', 0, 2, {
+      sourceStart: 1,
+      assetId: 'asset-a',
+    })
+    const originalDoc = makeDoc(
+      [makeTrack('A1', 'audio', [clip])],
+      NTSC_2997,
+      48_000,
+    )
+    const splitDoc = splitClipAtFrame(originalDoc, clip.id, 1)
+
+    const original = await renderSourceSamplePattern(originalDoc)
+    const split = await renderSourceSamplePattern(splitDoc)
+
+    expect(split.samples).toEqual(original.samples)
+    expect(original.requests.map(({ startSample, endSample }) => ({
+      startSample,
+      endSample,
+    }))).toEqual([{ startSample: 1_602, endSample: 4_805 }])
+    expect(split.requests.map(({ startSample, endSample }) => ({
+      startSample,
+      endSample,
+    }))).toEqual([
+      { startSample: 1_602, endSample: 3_204 },
+      { startSample: 3_204, endSample: 4_805 },
+    ])
+  })
+
+  test('keeps an NTSC start-trim equal to the original source suffix', async () => {
+    const clip = makeClip('continuous', 0, 2, {
+      sourceStart: 1,
+      assetId: 'asset-a',
+    })
+    const originalDoc = makeDoc(
+      [makeTrack('A1', 'audio', [clip])],
+      NTSC_2997,
+      48_000,
+    )
+    const trimmedDoc = trimClip(originalDoc, clip.id, 'start', 1)
+
+    const original = await renderSourceSamplePattern(originalDoc)
+    const trimmed = await renderSourceSamplePattern(trimmedDoc)
+    const suffixStart = audioSampleBoundary(1, originalDoc)
+
+    expect(trimmed.samples.slice(0, suffixStart).every((sample) => sample === 0))
+      .toBe(true)
+    expect(trimmed.samples.slice(suffixStart)).toEqual(
+      original.samples.slice(suffixStart),
+    )
+    expect(trimmed.requests.map(({ startSample, endSample }) => ({
+      startSample,
+      endSample,
+    }))).toEqual([{ startSample: 3_204, endSample: 4_805 }])
+  })
+
+  test('rounds a negative half-sample phase away from zero', async () => {
+    const clip = makeClip('negative-phase', 1, 1, { sourceStart: 0 })
+    const doc = makeDoc(
+      [makeTrack('A1', 'audio', [clip])],
+      { num: 2, den: 1 },
+      3,
+    )
+    const h = makeSource()
+    const mixer = new TimelineAudioMixer(doc, h.source)
+
+    await mixer.writeFrame(0, async () => undefined)
+    await mixer.writeFrame(1, async () => undefined)
+
+    // B(1) = 2 and the signed phase is roundAway(-1.5) = -2. A
+    // Math.round-style negative tie would incorrectly start at sample 1.
+    expect(h.requests[0]).toMatchObject({ startSample: 0, endSample: 1 })
     await mixer.close()
   })
 

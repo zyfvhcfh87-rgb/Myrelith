@@ -31,7 +31,7 @@ binding rules.
 | 5.1c — bounded audio export | ✅ done | NTSC browser pass: exact 48,048-sample stereo AAC mix, A/V both 1.001s, clean console |
 | 5 — export | 🚧 in progress | crossfade parity, controller/UI, then MVP gate remain |
 
-521 tests green · `npm run build` and `npm run lint` clean · every phase
+524 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -139,8 +139,9 @@ the transform fields only for video-lane clips.
   `ExportResult`; controller cancellation after iteration starts uses
   `return(undefined)`.
 - `src/pipeline/export-audio.ts` — Phase 5.1c exact audio scheduler/mixer:
-  BigInt frame→sample boundaries; `audibleTracks` selection; clip source
-  offsets + volume; 1024-sample bounded stereo blocks; post-sum clipping;
+  BigInt frame→sample boundaries; split/trim-stable signed source↔timeline
+  phase; `audibleTracks` selection; clip volume; 1024-sample bounded stereo
+  blocks; post-sum clipping;
   one active sequential reader per audible clip; exact-once reader/source
   cleanup. Browser codecs stay behind injected ports for Node tests.
 - `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c production browser
@@ -273,6 +274,11 @@ the transform fields only for video-lane clips.
   muxer; 5.1c clamps only the final packet's container duration so the audio
   track ends at the exact rational sample boundary (1.001s in the browser
   gate). Re-verify this version-coupled callback ordering before any upgrade.
+- **Fractional samples/frame need one stable clip phase.** Independently
+  rounding `sourceRange.startFrame` for every clip makes NTSC razor halves
+  overlap or gap by one sample. Derive a signed source-minus-timeline phase
+  once per clip; because split/start-trim advance both starts equally, the
+  phase survives the edit and the source stream remains sample-identical.
 
 ## Dev/test toolbox
 

@@ -80,6 +80,45 @@ export function audioSampleBoundary(
   return Number(rounded)
 }
 
+/**
+ * Quantize the signed source-minus-timeline phase once per clip. The
+ * antisymmetric tie rule is deliberate: a negative phase must exactly cancel
+ * the matching positive timeline boundary. Because a razor split or start
+ * trim advances both frame starts equally, this phase remains unchanged and
+ * the resulting source sample stream stays continuous across the edit.
+ */
+function audioSamplePhaseOffset(
+  sourceFrame: number,
+  timelineFrame: number,
+  doc: TimelineDoc,
+): number {
+  if (!Number.isSafeInteger(sourceFrame) || sourceFrame < 0) {
+    throw new RangeError(
+      'Audio source frame must be a non-negative safe integer',
+    )
+  }
+  if (!Number.isSafeInteger(timelineFrame) || timelineFrame < 0) {
+    throw new RangeError(
+      'Audio timeline frame must be a non-negative safe integer',
+    )
+  }
+  assertPositiveSafeInteger(doc.frameRate.num, 'Frame-rate numerator')
+  assertPositiveSafeInteger(doc.frameRate.den, 'Frame-rate denominator')
+  assertPositiveSafeInteger(doc.audioSampleRate, 'Audio sample rate')
+
+  const divisor = BigInt(doc.frameRate.num)
+  const numerator =
+    (BigInt(sourceFrame) - BigInt(timelineFrame)) *
+    BigInt(doc.frameRate.den) *
+    BigInt(doc.audioSampleRate)
+  const magnitude = numerator < 0n ? -numerator : numerator
+  const roundedMagnitude = (magnitude + divisor / 2n) / divisor
+  if (roundedMagnitude > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError('Audio sample phase exceeds the safe integer range')
+  }
+  return Number(numerator < 0n ? -roundedMagnitude : roundedMagnitude)
+}
+
 interface ActiveReader {
   clip: Clip
   reader: ExportAudioClipReader
@@ -185,10 +224,6 @@ export class TimelineAudioMixer {
 
     for (const clip of clips) {
       if (this.readers.has(clip.id)) continue
-      const sourceStartSample = audioSampleBoundary(
-        clip.sourceRange.startFrame,
-        this.doc,
-      )
       const timelineStartSample = audioSampleBoundary(
         clip.timelineRange.startFrame,
         this.doc,
@@ -197,6 +232,16 @@ export class TimelineAudioMixer {
         timelineEndFrame(clip),
         this.doc,
       )
+      const sourceStartSample =
+        timelineStartSample +
+        audioSamplePhaseOffset(
+          clip.sourceRange.startFrame,
+          clip.timelineRange.startFrame,
+          this.doc,
+        )
+      if (!Number.isSafeInteger(sourceStartSample) || sourceStartSample < 0) {
+        throw new RangeError(`Clip "${clip.id}" has an invalid audio in-point`)
+      }
       const sourceEndSample =
         sourceStartSample + (timelineEndSample - timelineStartSample)
       if (!Number.isSafeInteger(sourceEndSample)) {
