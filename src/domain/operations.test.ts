@@ -7,8 +7,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { Clip, Effect, MediaAsset, TimelineDoc, Track } from './schema'
+import type { Clip, Effect, MediaAsset, TimelineDoc, Track, Transition } from './schema'
 import {
+  addCrossfade,
   addEffect,
   addTrack,
   clipFromAsset,
@@ -16,10 +17,12 @@ import {
   MAX_CLIP_VOLUME,
   moveClip,
   removeTrack,
+  removeTransition,
   renameTrack,
   rippleDelete,
   rippleTrim,
   setClipVolume,
+  setCrossfadeDuration,
   setTrackFlags,
   slideClip,
   slipClip,
@@ -670,6 +673,483 @@ describe('rippleTrim', () => {
     const out = rippleTrim(doc, 'clipA', 'end', -20)
     expect(out.tracks[1]).toBe(doc.tracks[1])
     expect(out.tracks[2]).toBe(doc.tracks[2])
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Crossfade authoring + lifecycle (Phase 5.1e-1)                      */
+/* ------------------------------------------------------------------ */
+
+function crossfade(
+  id: string,
+  fromClipId: string,
+  toClipId: string,
+  durationFrames: number,
+): Transition {
+  return { id, type: 'crossfade', fromClipId, toClipId, durationFrames }
+}
+
+function makeCrossfadeDoc(
+  clips: Clip[],
+  transitions: Transition[] = [],
+  extraTracks: Track[] = [makeTrack('V2', 'video', [])],
+  locked = false,
+): TimelineDoc {
+  return deepFreeze({
+    schemaVersion: 1,
+    id: 'crossfade-doc',
+    name: 'Crossfade lifecycle',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [
+      {
+        ...makeTrack('V1', 'video', clips, locked),
+        transitions,
+      },
+      ...extraTracks,
+    ],
+  })
+}
+
+function transitionsOf(doc: TimelineDoc, trackId = 'V1'): Transition[] {
+  const track = doc.tracks.find((candidate) => candidate.id === trackId)
+  if (!track) throw new Error(`no track ${trackId}`)
+  return track.transitions
+}
+
+function authoredPair(durationFrames = 5): TimelineDoc {
+  const doc = makeCrossfadeDoc([
+    makeClip('A', 0, 10),
+    makeClip('B', 10, 10),
+  ])
+  return deepFreeze(addCrossfade(doc, 'A', 'B', durationFrames))
+}
+
+function authoredTriple(durationFrames = 5): TimelineDoc {
+  const doc = makeCrossfadeDoc([
+    makeClip('A', 0, 10),
+    makeClip('B', 10, 10),
+    makeClip('C', 20, 10),
+  ])
+  const withLeft = addCrossfade(doc, 'A', 'B', durationFrames)
+  return deepFreeze(addCrossfade(withLeft, 'B', 'C', durationFrames))
+}
+
+describe('crossfade authoring', () => {
+  test('adds ordered seam metadata with a fresh id and preserves structural sharing', () => {
+    const doc = makeCrossfadeDoc([
+      makeClip('A', 0, 10),
+      makeClip('B', 10, 10),
+      makeClip('C', 20, 10),
+    ])
+
+    const withLeft = deepFreeze(addCrossfade(doc, 'A', 'B', 5))
+    const left = transitionsOf(withLeft)[0]
+    expect(left).toEqual({
+      id: expect.stringMatching(/^transition_/),
+      type: 'crossfade',
+      fromClipId: 'A',
+      toClipId: 'B',
+      durationFrames: 5,
+    })
+
+    const withBoth = addCrossfade(withLeft, 'B', 'C', 5)
+    expect(transitionsOf(withBoth)).toHaveLength(2)
+    expect(transitionsOf(withBoth)[1].id).not.toBe(left.id)
+    expect(transitionsOf(doc)).toEqual([])
+    expect(withBoth.tracks[1]).toBe(doc.tracks[1])
+  })
+
+  test('requires an ordered touching video seam with editable media endpoints', () => {
+    const textClip: Clip = {
+      ...makeClip('text', 40, 10),
+      text: {
+        content: 'Title',
+        fontFamily: 'sans-serif',
+        fontSizePx: 48,
+        color: '#ffffff',
+        align: 'center',
+        bold: false,
+        italic: false,
+      },
+    }
+    const doc = makeCrossfadeDoc(
+      [
+        makeClip('A', 0, 10),
+        makeClip('B', 10, 10),
+        makeClip('gap', 30, 10),
+        textClip,
+      ],
+      [],
+      [
+        makeTrack('V2', 'video', [makeClip('other', 0, 10)]),
+        makeTrack('A1', 'audio', [
+          makeClip('audioA', 0, 10),
+          makeClip('audioB', 10, 10),
+        ]),
+        makeTrack('VL', 'video', [
+          makeClip('lockedA', 0, 10),
+          makeClip('lockedB', 10, 10),
+        ], true),
+      ],
+    )
+
+    const rejected = [
+      addCrossfade(doc, 'A', 'missing', 5),
+      addCrossfade(doc, 'A', 'A', 5),
+      addCrossfade(doc, 'B', 'A', 5),
+      addCrossfade(doc, 'A', 'other', 5),
+      addCrossfade(doc, 'audioA', 'audioB', 5),
+      addCrossfade(doc, 'B', 'gap', 5),
+      addCrossfade(doc, 'gap', 'text', 5),
+      addCrossfade(doc, 'lockedA', 'lockedB', 5),
+    ]
+
+    for (const result of rejected) expect(result).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(rejected.length)
+  })
+
+  test('uses the centered odd/even fit rule and rejects unsafe durations', () => {
+    // D=5 needs floor(5/2)=2 outgoing frames and ceil(5/2)=3 incoming.
+    const exact = makeCrossfadeDoc([
+      makeClip('A', 0, 2),
+      makeClip('B', 2, 3),
+    ])
+    expect(transitionsOf(addCrossfade(exact, 'A', 'B', 5))).toHaveLength(1)
+    expect(addCrossfade(exact, 'A', 'B', 6)).toBe(exact)
+
+    const minimal = makeCrossfadeDoc([
+      makeClip('oneA', 0, 1),
+      makeClip('oneB', 1, 1),
+    ])
+    expect(transitionsOf(addCrossfade(minimal, 'oneA', 'oneB', 1))).toHaveLength(1)
+
+    for (const duration of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(addCrossfade(exact, 'A', 'B', duration)).toBe(exact)
+    }
+  })
+
+  test('allows half-open transition windows to touch but rejects duplicates and overlap', () => {
+    // A->B is [8,13); B->C is [13,18): exact half-open contact is valid.
+    const touching = makeCrossfadeDoc([
+      makeClip('A', 0, 10),
+      makeClip('B', 10, 5),
+      makeClip('C', 15, 10),
+    ])
+    const touchingLeft = deepFreeze(addCrossfade(touching, 'A', 'B', 5))
+    const touchingBoth = addCrossfade(touchingLeft, 'B', 'C', 5)
+    expect(transitionsOf(touchingBoth)).toHaveLength(2)
+    expect(addCrossfade(touchingLeft, 'A', 'B', 5)).toBe(touchingLeft)
+
+    // With a 4-frame B, the individually fitting windows overlap at frame 12.
+    const overlapping = makeCrossfadeDoc([
+      makeClip('A', 0, 10),
+      makeClip('B', 10, 4),
+      makeClip('C', 14, 10),
+    ])
+    const overlappingLeft = deepFreeze(addCrossfade(overlapping, 'A', 'B', 5))
+    expect(addCrossfade(overlappingLeft, 'B', 'C', 5)).toBe(overlappingLeft)
+  })
+
+  test('updates duration in place, preserves identity, and is idempotent', () => {
+    const added = authoredPair(3)
+    const original = transitionsOf(added)[0]
+    const updated = deepFreeze(setCrossfadeDuration(added, 'V1', original.id, 5))
+
+    expect(transitionsOf(updated)).toEqual([
+      { ...original, durationFrames: 5 },
+    ])
+    expect(transitionsOf(updated)[0].id).toBe(original.id)
+    expect(setCrossfadeDuration(updated, 'V1', original.id, 5)).toBe(updated)
+    expect(setCrossfadeDuration(updated, 'V1', 'missing', 5)).toBe(updated)
+    expect(setCrossfadeDuration(updated, 'V1', original.id, 21)).toBe(updated)
+    expect(setCrossfadeDuration(updated, 'V1', original.id, 2.5)).toBe(updated)
+
+    // An explicit transition edit may repair a stale duration; geometry edits may not.
+    const stale = makeCrossfadeDoc(
+      [makeClip('staleA', 0, 10), makeClip('staleB', 10, 10)],
+      [crossfade('stale', 'staleA', 'staleB', 21)],
+    )
+    expect(transitionsOf(setCrossfadeDuration(stale, 'V1', 'stale', 5))).toEqual([
+      crossfade('stale', 'staleA', 'staleB', 5),
+    ])
+  })
+
+  test('duration updates reject overlap but accept exact half-open contact', () => {
+    const doc = makeCrossfadeDoc([
+      makeClip('A', 0, 10),
+      makeClip('B', 10, 5),
+      makeClip('C', 15, 10),
+    ])
+    const left = addCrossfade(doc, 'A', 'B', 3)
+    const both = deepFreeze(addCrossfade(left, 'B', 'C', 3))
+    const leftId = transitionsOf(both)[0].id
+
+    // D=8 ends at 14, before B->C's [14,17); D=9 overlaps frame 14.
+    const touching = deepFreeze(setCrossfadeDuration(both, 'V1', leftId, 8))
+    expect(transitionsOf(touching)[0].durationFrames).toBe(8)
+    expect(setCrossfadeDuration(both, 'V1', leftId, 9)).toBe(both)
+  })
+
+  test('removes exactly one transition and honors track locking', () => {
+    const doc = authoredTriple()
+    const [left, right] = transitionsOf(doc)
+    const removed = removeTransition(doc, 'V1', left.id)
+
+    expect(transitionsOf(removed)).toHaveLength(1)
+    expect(transitionsOf(removed)[0]).toBe(right)
+    expect(removed.tracks[1]).toBe(doc.tracks[1])
+    expect(removeTransition(doc, 'V1', 'missing')).toBe(doc)
+
+    const locked = deepFreeze(setTrackFlags(doc, 'V1', { locked: true }))
+    expect(removeTransition(locked, 'V1', left.id)).toBe(locked)
+    expect(setCrossfadeDuration(locked, 'V1', left.id, 3)).toBe(locked)
+
+    const stale = makeCrossfadeDoc(
+      [makeClip('staleA', 0, 10), makeClip('staleB', 20, 10)],
+      [crossfade('stale', 'staleA', 'staleB', 5)],
+    )
+    expect(transitionsOf(removeTransition(stale, 'V1', 'stale'))).toEqual([])
+  })
+
+  test('scopes transition ids to their owning track', () => {
+    const sharedId = 'shared-transition-id'
+    const secondTrack: Track = {
+      ...makeTrack('V2', 'video', [
+        makeClip('X', 0, 10),
+        makeClip('Y', 10, 10),
+      ]),
+      transitions: [crossfade(sharedId, 'X', 'Y', 3)],
+    }
+    const doc = makeCrossfadeDoc(
+      [makeClip('A', 0, 10), makeClip('B', 10, 10)],
+      [crossfade(sharedId, 'A', 'B', 3)],
+      [secondTrack],
+    )
+
+    const updated = setCrossfadeDuration(doc, 'V2', sharedId, 5)
+    expect(transitionsOf(updated, 'V1')[0].durationFrames).toBe(3)
+    expect(transitionsOf(updated, 'V2')[0].durationFrames).toBe(5)
+
+    const removed = removeTransition(updated, 'V1', sharedId)
+    expect(transitionsOf(removed, 'V1')).toEqual([])
+    expect(transitionsOf(removed, 'V2')).toEqual([
+      crossfade(sharedId, 'X', 'Y', 5),
+    ])
+  })
+
+  test('drops corrupt same-track duplicate ids and rejects ambiguous id edits', () => {
+    const duplicateId = 'duplicate-on-v1'
+    const doc = makeCrossfadeDoc(
+      [
+        makeClip('A', 0, 10),
+        makeClip('B', 10, 10),
+        makeClip('C', 20, 10),
+        makeClip('D', 30, 10),
+      ],
+      [
+        crossfade(duplicateId, 'A', 'B', 3),
+        crossfade(duplicateId, 'C', 'D', 3),
+      ],
+    )
+
+    expect(removeTransition(doc, 'V1', duplicateId)).toBe(doc)
+    expect(setCrossfadeDuration(doc, 'V1', duplicateId, 5)).toBe(doc)
+    expect(transitionsOf(trimClip(doc, 'B', 'end', -1))).toEqual([])
+  })
+})
+
+describe('crossfade geometry lifecycle', () => {
+  test('trim keeps exact-fit outer edges and drops too-short or disconnected seams', () => {
+    const doc = authoredPair()
+    const transition = transitionsOf(doc)[0]
+
+    expect(transitionsOf(trimClip(doc, 'A', 'start', 8))[0]).toBe(transition)
+    expect(transitionsOf(trimClip(doc, 'A', 'start', 9))).toEqual([])
+    expect(transitionsOf(trimClip(doc, 'B', 'end', -7))[0]).toBe(transition)
+    expect(transitionsOf(trimClip(doc, 'B', 'end', -8))).toEqual([])
+    expect(transitionsOf(trimClip(doc, 'A', 'end', -1))).toEqual([])
+    expect(transitionsOf(trimClip(doc, 'B', 'start', 1))).toEqual([])
+
+    // Geometry rejection is still atomic, including transition metadata.
+    expect(trimClip(doc, 'A', 'end', 1)).toBe(doc)
+  })
+
+  test('move drops transitions on moved endpoints and retains unrelated valid seams', () => {
+    const base = makeCrossfadeDoc([
+      makeClip('A', 0, 10),
+      makeClip('B', 10, 10),
+      makeClip('unrelated', 40, 5),
+    ])
+    const doc = deepFreeze(addCrossfade(base, 'A', 'B', 5))
+    const transition = transitionsOf(doc)[0]
+
+    expect(transitionsOf(moveClip(doc, 'A', 'V1', 30))).toEqual([])
+    expect(transitionsOf(moveClip(doc, 'B', 'V1', 20))).toEqual([])
+    expect(transitionsOf(moveClip(doc, 'A', 'V2', 0))).toEqual([])
+    expect(transitionsOf(moveClip(doc, 'unrelated', 'V1', 50))[0]).toBe(transition)
+    expect(transitionsOf(moveClip(doc, 'A', 'V1', 0))[0]).toBe(transition)
+  })
+
+  test('split rebinds an outgoing seam to its new right half at the exact fit boundary', () => {
+    const doc = authoredPair()
+    const transition = transitionsOf(doc)[0]
+    const retained = splitClipAtFrame(doc, 'A', 8)
+    const right = clipsOf(retained, 'V1').find(
+      (clip) => clip.id !== 'A' && clip.timelineRange.startFrame === 8,
+    )
+    expect(right).toBeDefined()
+    expect(transitionsOf(retained)).toEqual([
+      { ...transition, fromClipId: right?.id },
+    ])
+    expect(transitionsOf(retained)[0].id).toBe(transition.id)
+    expect(transitionsOf(splitClipAtFrame(doc, 'A', 9))).toEqual([])
+  })
+
+  test('split keeps an incoming left half only while its transition window fits', () => {
+    const doc = authoredPair()
+    const transition = transitionsOf(doc)[0]
+    const retained = splitClipAtFrame(doc, 'B', 13)
+    expect(transitionsOf(retained)[0]).toBe(transition)
+    expect(transitionsOf(retained)[0].toClipId).toBe('B')
+    expect(transitionsOf(splitClipAtFrame(doc, 'B', 12))).toEqual([])
+  })
+
+  test('splitting a middle clip preserves both outer seams with asymmetric id inheritance', () => {
+    const doc = authoredTriple()
+    const [leftTransition, rightTransition] = transitionsOf(doc)
+    const out = splitClipAtFrame(doc, 'B', 15)
+    const newRight = clipsOf(out, 'V1').find(
+      (clip) => clip.id !== 'B' && clip.timelineRange.startFrame === 15,
+    )
+
+    expect(newRight).toBeDefined()
+    expect(transitionsOf(out)).toEqual([
+      leftTransition,
+      { ...rightTransition, fromClipId: newRight?.id },
+    ])
+    expect(transitionsOf(out)).toHaveLength(2) // no invented transition at the split
+  })
+
+  test('ripple delete drops only removed-endpoint transitions and never invents a new seam', () => {
+    const doc = authoredTriple()
+    const [, right] = transitionsOf(doc)
+
+    const middleDeleted = rippleDelete(doc, 'B')
+    expect(clipsOf(middleDeleted, 'V1').map((clip) => clip.id)).toEqual(['A', 'C'])
+    expect(rangeEnd(clipsOf(middleDeleted, 'V1')[0].timelineRange)).toBe(
+      clipsOf(middleDeleted, 'V1')[1].timelineRange.startFrame,
+    )
+    expect(transitionsOf(middleDeleted)).toEqual([])
+
+    const firstDeleted = rippleDelete(doc, 'A')
+    expect(transitionsOf(firstDeleted)).toEqual([right])
+  })
+
+  test('ripple trim retains exact-fit seams and drops a transition one frame past fit', () => {
+    const doc = authoredPair()
+    const transition = transitionsOf(doc)[0]
+
+    expect(transitionsOf(rippleTrim(doc, 'A', 'end', -8))[0]).toBe(transition)
+    expect(transitionsOf(rippleTrim(doc, 'A', 'end', -9))).toEqual([])
+    expect(transitionsOf(rippleTrim(doc, 'B', 'start', 7))[0]).toBe(transition)
+    expect(transitionsOf(rippleTrim(doc, 'B', 'start', 8))).toEqual([])
+  })
+
+  test('ripple trim keeps touching windows and drops every member of an overlap', () => {
+    const doc = authoredTriple()
+
+    // B becomes 5 frames: [8,13) and [13,18) merely touch.
+    expect(transitionsOf(rippleTrim(doc, 'B', 'start', 5))).toHaveLength(2)
+    // B becomes 4 frames: [8,13) and [12,17) overlap, so both fail closed.
+    expect(transitionsOf(rippleTrim(doc, 'B', 'start', 6))).toEqual([])
+  })
+
+  test('slide follows the same exact-contact versus overlap rule', () => {
+    const base = makeCrossfadeDoc([
+      makeClip('P', 0, 10),
+      makeClip('A', 10, 10),
+      makeClip('B', 20, 10),
+    ])
+    const withLeft = addCrossfade(base, 'P', 'A', 5)
+    const doc = deepFreeze(addCrossfade(withLeft, 'A', 'B', 5))
+
+    // Sliding B left by 5 leaves A 5 frames long: windows touch at 13.
+    expect(transitionsOf(slideClip(doc, 'B', -5))).toHaveLength(2)
+    // One frame further leaves two individually fitting, overlapping windows.
+    expect(transitionsOf(slideClip(doc, 'B', -6))).toEqual([])
+  })
+
+  test('slip preserves transitions, while track removal owns their lifetime', () => {
+    const doc = authoredTriple()
+    const slipped = slipClip(doc, 'B', 3)
+    expect(transitionsOf(slipped)).toBe(transitionsOf(doc))
+    expect(slipClip(doc, 'B', Number.MAX_SAFE_INTEGER)).toBe(doc)
+
+    const unrelatedRemoved = removeTrack(doc, 'V2')
+    expect(unrelatedRemoved.tracks[0]).toBe(doc.tracks[0])
+    expect(transitionsOf(unrelatedRemoved)).toBe(transitionsOf(doc))
+
+    expect(removeTrack(doc, 'V1').tracks.some((track) => track.id === 'V1')).toBe(false)
+    const locked = deepFreeze(setTrackFlags(doc, 'V1', { locked: true }))
+    expect(removeTrack(locked, 'V1')).toBe(locked)
+  })
+
+  test('never resurrects a stale transition when geometry happens to repair it', () => {
+    const gap = makeCrossfadeDoc(
+      [makeClip('A', 0, 10), makeClip('B', 20, 10)],
+      [crossfade('stale-gap', 'A', 'B', 5)],
+    )
+    expect(transitionsOf(moveClip(gap, 'B', 'V1', 10))).toEqual([])
+
+    const tooLong = makeCrossfadeDoc(
+      [makeClip('A', 0, 2), makeClip('B', 2, 1)],
+      [crossfade('stale-duration', 'A', 'B', 5)],
+    )
+    expect(transitionsOf(rippleTrim(tooLong, 'B', 'end', 2))).toEqual([])
+
+    const ambiguous = makeCrossfadeDoc(
+      [makeClip('P', 0, 10), makeClip('A', 10, 4), makeClip('B', 14, 10)],
+      [
+        crossfade('stale-left', 'P', 'A', 5),
+        crossfade('stale-right', 'A', 'B', 5),
+      ],
+    )
+    // Sliding B right separates the windows, but explicit authoring is still required.
+    expect(transitionsOf(slideClip(ambiguous, 'B', 1))).toEqual([])
+
+    const unsafeSource = {
+      ...makeClip('unsafeA', 0, 10),
+      sourceRange: {
+        startFrame: Number.MAX_SAFE_INTEGER,
+        durationFrames: 10,
+      },
+    }
+    const staleSource = makeCrossfadeDoc(
+      [unsafeSource, makeClip('unsafeB', 10, 10)],
+      [crossfade('stale-source', 'unsafeA', 'unsafeB', 5)],
+    )
+    const repairedSource = slipClip(
+      staleSource,
+      'unsafeA',
+      -Number.MAX_SAFE_INTEGER,
+    )
+    expect(clipIn(repairedSource, 'V1', 'unsafeA').sourceRange.startFrame).toBe(0)
+    expect(transitionsOf(repairedSource)).toEqual([])
+  })
+
+  test('authored and edited transitions remain serializable without mutating frozen inputs', () => {
+    const doc = makeCrossfadeDoc([makeClip('A', 0, 10), makeClip('B', 10, 10)])
+    const added = deepFreeze(addCrossfade(doc, 'A', 'B', 3))
+    const id = transitionsOf(added)[0].id
+    const updated = deepFreeze(setCrossfadeDuration(added, 'V1', id, 5))
+    const removed = removeTransition(updated, 'V1', id)
+
+    expect(JSON.parse(JSON.stringify(updated))).toEqual(updated)
+    expect(JSON.parse(JSON.stringify(removed))).toEqual(removed)
+    expect(transitionsOf(doc)).toEqual([])
   })
 })
 

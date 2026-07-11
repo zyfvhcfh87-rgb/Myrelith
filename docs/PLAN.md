@@ -327,9 +327,18 @@ is the video-only CFR orchestration and ownership foundation described in
   regression tests; 540 total tests, build, and lint green.
 
 ### 5.1e Transition authoring (required before the MVP gate)
-- [ ] **5.1e-1 domain lifecycle** — add/remove crossfade operations for
-  touching adjacent video clips and define how trim/move/split/delete keep or
-  discard affected transitions; reject durations/windows that cannot fit.
+- [x] **5.1e-1 domain lifecycle** — DONE 2026-07-11.
+  `addCrossfade`, `setCrossfadeDuration`, and `removeTransition` now author
+  track-scoped, stable transition metadata for touching adjacent video clips.
+  Authoring and rendering share `resolveCrossfade` for the exact centered
+  window/fit rule; duplicate seams, unsafe durations, and overlapping windows
+  reject with the original document reference. Successful geometry edits
+  retain only transitions valid both before and after, so stale definitions
+  never spring alive. Split preserves outer-edge intent by rebinding an
+  outgoing transition to the new right half; move/trim/ripple/slide/delete
+  keep or discard seams deterministically; slip stays safe-integer bounded.
+  Linked A/V rollback restores transition metadata atomically. 24 new domain
+  regressions; 564 total tests, build, and lint green.
 - [ ] **5.1e-2 state wiring** — document-store actions with one undo entry per
   transition edit and exact undo/redo restoration.
 - [ ] **5.1e-3 timeline UI** — minimal create/remove/duration affordance at an

@@ -125,6 +125,37 @@ function makeDoc(): TimelineDoc {
   })
 }
 
+function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
+  const linkGroupId = 'link_transition'
+  const video = makeClip('vTransition', 0, 100, 10, linkGroupId)
+  const audio = makeClip('aTransition', 0, 100, 0, linkGroupId)
+  const next = makeClip('vAfter', 100, 50)
+  const videoTrack: Track = {
+    ...makeTrack('VT', 'video', [video, next]),
+    transitions: [{
+      id: 'transition-linked',
+      type: 'crossfade',
+      fromClipId: video.id,
+      toClipId: next.id,
+      durationFrames: 10,
+    }],
+  }
+
+  return deepFreeze({
+    schemaVersion: 1,
+    id: 'doc-transition-linked',
+    name: 'Linked transition test doc',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [
+      videoTrack,
+      makeTrack('AT', 'audio', [audio], audioLocked),
+    ],
+  })
+}
+
 function clipsOf(doc: TimelineDoc, trackId: string): Clip[] {
   const track = doc.tracks.find((t) => t.id === trackId)
   if (!track) throw new Error(`no track ${trackId}`)
@@ -340,6 +371,21 @@ describe('linkedTrimClip', () => {
     expect(warnSpy).toHaveBeenCalledTimes(2)
   })
 
+  test('atomic rollback restores the exact transition when a later locked partner rejects', () => {
+    const doc = makeLinkedTransitionDoc(true)
+    const transition = doc.tracks[0].transitions[0]
+    const videoRange = clipIn(doc, 'VT', 'vTransition').timelineRange
+    const audioRange = clipIn(doc, 'AT', 'aTransition').timelineRange
+
+    const out = linkedTrimClip(doc, 'vTransition', 'end', -10)
+
+    expect(out).toBe(doc)
+    expect(out.tracks[0].transitions[0]).toBe(transition)
+    expect(clipIn(out, 'VT', 'vTransition').timelineRange).toBe(videoRange)
+    expect(clipIn(out, 'AT', 'aTransition').timelineRange).toBe(audioRange)
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+  })
+
   test('unlinked clip: byte-identical to the plain op', () => {
     const doc = makeDoc()
     expect(linkedTrimClip(doc, 'vDown', 'end', -10)).toEqual(trimClip(doc, 'vDown', 'end', -10))
@@ -479,6 +525,23 @@ describe('linkedSplitClipAtFrame', () => {
     expect(vRight.linkGroupId).toBeDefined()
     expect(vRight.linkGroupId).toBe(aRight.linkGroupId)
     expect(vRight.linkGroupId).not.toBe(PAIR1)
+  })
+
+  test('split via the audio member rebinds the video outgoing transition to the video right half', () => {
+    const doc = makeLinkedTransitionDoc()
+    const out = linkedSplitClipAtFrame(doc, 'aTransition', 40)
+    const videoRight = clipsOf(out, 'VT').find(
+      (clip) => clip.timelineRange.startFrame === 40,
+    )
+    if (!videoRight) throw new Error('video right half not found')
+
+    expect(out.tracks[0].transitions).toEqual([{
+      id: 'transition-linked',
+      type: 'crossfade',
+      fromClipId: videoRight.id,
+      toClipId: 'vAfter',
+      durationFrames: 10,
+    }])
   })
 
   test('split where only the target contains frame: target splits, right half unlinked, partner untouched', () => {

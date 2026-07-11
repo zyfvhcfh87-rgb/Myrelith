@@ -3,7 +3,7 @@
  * No browser APIs, no stores — plain functions over plain data.
  */
 
-import type { Clip, ClipId, Track, TimelineDoc } from './schema'
+import type { Clip, ClipId, Track, TimelineDoc, Transition } from './schema'
 import { rangeContains, rangeEnd } from './time'
 
 /**
@@ -115,7 +115,13 @@ export function clipSourceFrame(clip: Clip, timelineFrame: number): number {
   )
 }
 
-interface ActiveCrossfade {
+/**
+ * One structurally valid crossfade resolved against its owning track.
+ * Operations use the same geometry as rendering so an authored transition
+ * cannot be accepted only to fall back to a hard cut in the compositor.
+ */
+export interface ResolvedCrossfade {
+  transition: Transition
   from: Clip
   to: Clip
   startFrame: number
@@ -139,54 +145,76 @@ function validSourceRange(clip: Clip): boolean {
   )
 }
 
-function crossfadeAt(track: Track, frame: number): ActiveCrossfade | null {
-  const candidates: ActiveCrossfade[] = []
-
-  for (const transition of track.transitions) {
-    const durationFrames = transition.durationFrames
-    if (
-      transition.type !== 'crossfade' ||
-      !Number.isSafeInteger(durationFrames) ||
-      durationFrames < 1
-    ) {
-      continue
-    }
-
-    const fromIndex = track.clips.findIndex(
-      (clip) => clip.id === transition.fromClipId,
-    )
-    if (fromIndex < 0 || fromIndex + 1 >= track.clips.length) continue
-    const from = track.clips[fromIndex]
-    const to = track.clips[fromIndex + 1]
-    if (to.id !== transition.toClipId || from.id === to.id) continue
-    if (from.text !== undefined || to.text !== undefined) continue
-    if (!validSourceRange(from) || !validSourceRange(to)) continue
-
-    const fromStart = from.timelineRange.startFrame
-    const cutFrame = rangeEnd(from.timelineRange)
-    const toEnd = rangeEnd(to.timelineRange)
-    if (
-      !Number.isSafeInteger(fromStart) ||
-      !Number.isSafeInteger(cutFrame) ||
-      !Number.isSafeInteger(toEnd) ||
-      cutFrame !== to.timelineRange.startFrame
-    ) {
-      continue
-    }
-
-    const startFrame = cutFrame - Math.floor(durationFrames / 2)
-    const endFrame = startFrame + durationFrames
-    if (
-      !Number.isSafeInteger(startFrame) ||
-      !Number.isSafeInteger(endFrame) ||
-      startFrame < fromStart ||
-      endFrame > toEnd
-    ) {
-      continue
-    }
-
-    candidates.push({ from, to, startFrame, endFrame, durationFrames })
+/** Resolve one transition using the canonical centered crossfade geometry. */
+export function resolveCrossfade(
+  track: Track,
+  transition: Transition,
+): ResolvedCrossfade | null {
+  const durationFrames = transition.durationFrames
+  if (
+    track.kind !== 'video' ||
+    transition.type !== 'crossfade' ||
+    !Number.isSafeInteger(durationFrames) ||
+    durationFrames < 1
+  ) {
+    return null
   }
+
+  const fromIndex = track.clips.findIndex(
+    (clip) => clip.id === transition.fromClipId,
+  )
+  if (fromIndex < 0 || fromIndex + 1 >= track.clips.length) return null
+  const from = track.clips[fromIndex]
+  const to = track.clips[fromIndex + 1]
+  if (to.id !== transition.toClipId || from.id === to.id) return null
+  if (from.text !== undefined || to.text !== undefined) return null
+  if (!validSourceRange(from) || !validSourceRange(to)) return null
+
+  const fromStart = from.timelineRange.startFrame
+  const cutFrame = rangeEnd(from.timelineRange)
+  const toEnd = rangeEnd(to.timelineRange)
+  if (
+    !Number.isSafeInteger(fromStart) ||
+    !Number.isSafeInteger(cutFrame) ||
+    !Number.isSafeInteger(toEnd) ||
+    cutFrame !== to.timelineRange.startFrame
+  ) {
+    return null
+  }
+
+  const startFrame = cutFrame - Math.floor(durationFrames / 2)
+  const endFrame = startFrame + durationFrames
+  if (
+    !Number.isSafeInteger(startFrame) ||
+    !Number.isSafeInteger(endFrame) ||
+    startFrame < fromStart ||
+    endFrame > toEnd
+  ) {
+    return null
+  }
+
+  return { transition, from, to, startFrame, endFrame, durationFrames }
+}
+
+/** Half-open overlap for two resolved crossfade windows. */
+export function crossfadeWindowsOverlap(
+  left: Pick<ResolvedCrossfade, 'startFrame' | 'endFrame'>,
+  right: Pick<ResolvedCrossfade, 'startFrame' | 'endFrame'>,
+): boolean {
+  return left.startFrame < right.endFrame && right.startFrame < left.endFrame
+}
+
+function crossfadeAt(track: Track, frame: number): ResolvedCrossfade | null {
+  const idCounts = new Map<string, number>()
+  for (const transition of track.transitions) {
+    idCounts.set(transition.id, (idCounts.get(transition.id) ?? 0) + 1)
+  }
+  const candidates = track.transitions
+    .map((transition) => resolveCrossfade(track, transition))
+    .filter(
+      (candidate): candidate is ResolvedCrossfade =>
+        candidate !== null && idCounts.get(candidate.transition.id) === 1,
+    )
 
   const active = candidates.filter(
     (candidate) =>
@@ -203,8 +231,7 @@ function crossfadeAt(track: Track, frame: number): ActiveCrossfade | null {
   const ambiguous = candidates.some(
     (candidate) =>
       candidate !== selected &&
-      selected.startFrame < candidate.endFrame &&
-      candidate.startFrame < selected.endFrame,
+      crossfadeWindowsOverlap(selected, candidate),
   )
   return ambiguous ? null : selected
 }

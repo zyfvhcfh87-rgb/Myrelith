@@ -382,4 +382,36 @@ describe('visibleVideoLayersAtFrame', () => {
       expect(summary(doc, frame)).toEqual(summary(hardCutDoc, frame))
     }
   })
+
+  test('fails closed for duplicate transition ids on the same track', () => {
+    const clips = [
+      makeClip('A', 0, 10),
+      makeClip('B', 10, 10),
+      makeClip('C', 20, 10),
+      makeClip('D', 30, 10),
+    ]
+    const track = makeTrack('V1', 'video', clips, {
+      transitions: [
+        {
+          id: 'duplicate-id',
+          type: 'crossfade',
+          fromClipId: 'A',
+          toClipId: 'B',
+          durationFrames: 3,
+        },
+        {
+          id: 'duplicate-id',
+          type: 'crossfade',
+          fromClipId: 'C',
+          toClipId: 'D',
+          durationFrames: 3,
+        },
+      ],
+    })
+    const withDuplicates = makeDoc([track])
+    const hardCuts = makeDoc([{ ...track, transitions: [] }])
+
+    expect(summary(withDuplicates, 10)).toEqual(summary(hardCuts, 10))
+    expect(summary(withDuplicates, 30)).toEqual(summary(hardCuts, 30))
+  })
 })

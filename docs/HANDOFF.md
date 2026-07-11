@@ -30,9 +30,10 @@ binding rules.
 | 5.1b — real video adapters | ✅ done | locked Mediabunny 1.50.3 browser pass: 10-frame MP4 reopened by native video |
 | 5.1c — bounded audio export | ✅ done | NTSC browser pass: exact 48,048-sample stereo AAC mix, A/V both 1.001s, clean console |
 | 5.1d — transition parity | ✅ done | same-asset seek/backtrack browser pass: 12-frame MP4, preview/export pixels within 2, clean console |
-| 5 — export | 🚧 in progress | transition authoring, controller/UI, then MVP gate remain |
+| 5.1e-1 — transition domain lifecycle | ✅ done | track-scoped add/update/remove + deterministic edit cleanup; linked rollback proven |
+| 5 — export | 🚧 in progress | transition state/UI authoring, controller/UI, then MVP gate remain |
 
-540 tests green · `npm run build` and `npm run lint` clean · every phase
+564 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -62,8 +63,12 @@ definitions. Its same-asset browser gate forced the real decoder forward →
 backward → forward, reopened all 12 output frames at exactly 1.200s, and kept
 preview/export probe pixels within 2 channel values with no dark midpoint or
 console errors. Export has no user-facing controller/UI yet; transition
-authoring (5.1e) is the next module because the schema/render path exists but
-the editor still cannot create a transition.
+authoring now has its 5.1e-1 domain lifecycle: track-scoped add/duration/remove
+operations share the renderer's exact centered-window resolver, and every
+geometry edit keeps only seams valid before and after (split carries an
+outgoing seam to the new right half; linked rollback restores everything).
+The editor still cannot create a transition until state wiring (5.1e-2) and
+the timeline control (5.1e-3) land.
 
 ## What works today (user-visible)
 
@@ -129,8 +134,11 @@ the transform fields only for video-lane clips.
 
 - `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates),
   `time.ts` (conversions incl. `snapToStandardRate`, `formatTimecode`),
-  `operations.ts` (pure edits; REJECT = same doc reference + console.warn),
+  `operations.ts` (pure edits; REJECT = same doc reference + console.warn;
+  5.1e-1 track-scoped `addCrossfade`/`setCrossfadeDuration`/
+  `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
+  `resolveCrossfade` (canonical centered-window geometry),
   `visibleVideoLayersAtFrame` (THE preview/export visual plan),
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
   derived reads, never stored), `linking.ts` (4.3.8: linked-pair
@@ -292,6 +300,12 @@ the transform fields only for video-lane clips.
   first frame around the cut. A single asset can therefore produce a
   non-monotonic `canvasesAtTimestamps` sequence. Mediabunny 1.50.3 supports
   that path, but keep the real-browser seek/backtrack gate when upgrading it.
+- **Transitions belong to seams, not clip bodies.** Geometry edits retain a
+  transition only when its same track-scoped definition was valid before and
+  remains valid after; otherwise they discard it without rejecting the edit.
+  This prevents stale project data from waking up when a later ripple happens
+  to repair its geometry. Split is the deliberate exception: the original id
+  stays on the left half, so an outgoing seam must rebind to the new right id.
 - **AAC payload length is not timeline duration.** Chrome encodes whole
   1024-sample AAC packets: 48,048 submitted NTSC samples decode to a 48,128-
   sample payload. In locked Mediabunny 1.50.3, `onEncodedPacket` runs
@@ -349,8 +363,8 @@ the transform fields only for video-lane clips.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
-- `Transition` rendering exists, but authoring does not: no domain operation,
-  store action, or timeline control creates/removes one yet (PLAN 5.1e).
+- `Transition` rendering and domain authoring exist, but no store action or
+  timeline control invokes them yet (PLAN 5.1e-2/5.1e-3).
   Current crossfades are visual-only (audio still hard-cuts), and the
   source-over compensation is exact only for ordinary opaque full-frame
   footage; transformed/transparent dissolves need isolated compositing.
