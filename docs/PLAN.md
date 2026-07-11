@@ -294,11 +294,31 @@ is the video-only CFR orchestration and ownership foundation described in
   source was decoded, composited, re-exported, reopened by native `<video>`
   at 64×48 / 1.000s, and sampled correctly at 0.2s and 0.7s. 13 focused
   adapter tests; 501 total tests, build, and lint green.
-- [ ] **5.1c bounded audio decode/mix/encode with exact integer sample count.**
+- [x] **5.1c bounded audio decode/mix/encode with exact integer sample count**
+  — DONE 2026-07-11. `pipeline/export-audio.ts` derives every absolute
+  frame→sample boundary with BigInt rational math, preserves a signed
+  source-minus-timeline phase across razor/start-trim edits, mixes only
+  `audibleTracks`, honors trims/source offsets + clip volume, performs
+  streaming resampling and mono/stereo/surround→stereo conversion, and emits
+  awaited blocks capped at 1024 samples. `pipeline/export-mediabunny.ts`
+  keeps one sequential AudioSampleSink cursor per active clip, closes every
+  decoded/encoded AudioSample, muxes fixed 192 kbps AAC beside AVC, and trims
+  the final AAC packet's container duration to the exact scheduled sample
+  count. Browser-verified against locked Mediabunny 1.50.3 at 30000/1001:
+  48,048 scheduled samples, stereo 48 kHz AAC, audio+video both 1.001s,
+  trimmed 0.5-gain tone + silent tail correct, clean console. 16 audio-core
+  tests + 20 combined adapter tests; 524 total tests, build, and lint green.
 
-### 5.2 Export UI
-Toolbar Export button → modal (resolution/format) → progress bar from the
-generator → download via `URL.createObjectURL(new Blob([buffer]))`.
+### 5.1d Transition parity
+- [ ] Implement crossfade selection/rendering in `compositeFrame` and update
+  preview/export frame requests together so both paths keep one visual truth.
+
+### 5.2 Export flow
+- [ ] **5.2a app export controller** — composition-root wiring for the media
+  Blob resolver, generator lifecycle, cancellation, progress, and result.
+- [ ] **5.2b Export UI** — Toolbar Export button → modal
+  (resolution/format) → progress bar from the generator → download via
+  `URL.createObjectURL(new Blob([buffer]))`.
 
 ### Phase 5 / MVP gate
 - [ ] Export a 30s, 3-clip, 2-track timeline w/ one crossfade + one trim.

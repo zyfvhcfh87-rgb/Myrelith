@@ -1,7 +1,7 @@
 /**
- * pipeline/export.ts — video-only CFR export orchestration.
+ * pipeline/export.ts — CFR timeline export orchestration.
  *
- * Browser decoding and muxing are injected. This module owns validation,
+ * Browser decoding and A/V muxing are injected. This module owns validation,
  * integer-frame scheduling, compositeFrame reuse, encoder backpressure,
  * progress, and exact-once cleanup for per-frame and whole-export resources.
  */
@@ -37,6 +37,7 @@ export interface ExportMediaSource {
 
 export interface ExportVideoSink {
   ctx: Composite2D
+  /** Adds all encoded media belonging to this document frame. */
   addFrame(timestampSec: number, durationSec: number): Promise<void>
   finalize(): Promise<ExportResult>
   cancel(): Promise<void>
