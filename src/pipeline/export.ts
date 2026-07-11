@@ -160,7 +160,7 @@ export async function* exportTimeline(
   settings: ExportSettings,
   media: ExportMediaSource,
   deps: ExportDeps,
-): AsyncGenerator<number, ExportResult, void> {
+): AsyncGenerator<number, ExportResult | undefined, void> {
   let sink: ExportVideoSink | null = null
   let sinkFinalized = false
   let mediaClosed = false

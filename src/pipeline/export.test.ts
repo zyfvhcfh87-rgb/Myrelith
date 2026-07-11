@@ -223,12 +223,17 @@ function makeHarness(options: HarnessOptions = {}) {
 }
 
 async function drain(
-  generator: AsyncGenerator<number, ExportResult, void>,
+  generator: AsyncGenerator<number, ExportResult | undefined, void>,
 ): Promise<{ progress: number[]; result: ExportResult }> {
   const progress: number[] = []
   for (;;) {
     const step = await generator.next()
-    if (step.done) return { progress, result: step.value }
+    if (step.done) {
+      if (step.value === undefined) {
+        throw new Error('Export completed without a result')
+      }
+      return { progress, result: step.value }
+    }
     progress.push(step.value)
   }
 }
@@ -319,7 +324,7 @@ describe('exportTimeline CFR scheduling', () => {
     })
     expect(h.openFrame.mock.calls.map(([frame]) => frame)).toEqual([0, 1])
 
-    await generator.return(RESULT)
+    await generator.return(undefined)
   })
 })
 
@@ -509,8 +514,8 @@ describe('exportTimeline ownership and failures', () => {
       value: 1 / 3,
       done: false,
     })
-    await expect(generator.return(RESULT)).resolves.toEqual({
-      value: RESULT,
+    await expect(generator.return(undefined)).resolves.toEqual({
+      value: undefined,
       done: true,
     })
 
@@ -524,7 +529,7 @@ describe('exportTimeline ownership and failures', () => {
     const generator = exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)
 
     await expect(generator.next()).resolves.toEqual({ value: 0, done: false })
-    await generator.return(RESULT)
+    await generator.return(undefined)
 
     expect(h.createVideoSink).not.toHaveBeenCalled()
     expect(h.cancel).not.toHaveBeenCalled()
@@ -545,7 +550,7 @@ describe('exportTimeline ownership and failures', () => {
 
     await generator.next()
     await generator.next()
-    await expect(generator.return(RESULT)).rejects.toBe(cancelError)
+    await expect(generator.return(undefined)).rejects.toBe(cancelError)
 
     expect(h.cancel).toHaveBeenCalledOnce()
     expect(h.closeMedia).toHaveBeenCalledOnce()
@@ -566,6 +571,26 @@ describe('exportTimeline ownership and failures', () => {
       done: false,
     })
     await expect(generator.next()).rejects.toBe(mediaError)
+
+    expect(h.finalize).toHaveBeenCalledOnce()
+    expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('return after progress one remains cancellation, not completion', async () => {
+    const h = makeHarness()
+    const generator = exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)
+
+    await expect(generator.next()).resolves.toEqual({ value: 0, done: false })
+    await expect(generator.next()).resolves.toEqual({
+      value: 1 / 2,
+      done: false,
+    })
+    await expect(generator.next()).resolves.toEqual({ value: 1, done: false })
+    await expect(generator.return(undefined)).resolves.toEqual({
+      value: undefined,
+      done: true,
+    })
 
     expect(h.finalize).toHaveBeenCalledOnce()
     expect(h.cancel).not.toHaveBeenCalled()
