@@ -1,8 +1,9 @@
 /* ui/timeline/timeline.css — timeline visuals (headers, ruler, playhead,
    lanes). Layout: [ sticky header gutter | lanes column ]; header row i and
    lane row i share height+border so the columns stay aligned (global
-   border-box, see index.css). z-order: clips (5) < playhead (10) < gutter
-   (20) — scrolling right slides clips and playhead UNDER the headers. */
+   border-box, see index.css). z-order: clips (5) < seam marker (6) < playhead
+   (10) < an open seam editor (11) < gutter (20) — scrolling right slides all
+   lane content UNDER the headers. */
 
 .timeline-root {
   position: relative;
@@ -305,6 +306,160 @@
   opacity: 0.85;
   z-index: 5;
   border-color: #7db4ec;
+}
+
+/* ---------------- Phase 5.1e transition authoring ---------------- */
+
+/* Anchored at the exact cut frame. Only the tiny marker is persistent; its
+   temporary editor opens to the right so short clips near frame 0 do not tuck
+   form controls under the sticky track-header gutter. */
+.transition-seam {
+  position: absolute;
+  top: 0;
+  z-index: 6;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 24px;
+}
+
+.transition-seam.is-open {
+  z-index: 11;
+}
+
+.transition-trigger {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
+  color: #f3d9a0;
+  background: #352b19;
+  border: 1px solid #8a6d31;
+  border-radius: 50%;
+}
+
+.transition-trigger.is-active {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  background: #493a1c;
+}
+
+.transition-trigger:hover:not(:disabled) {
+  color: #fff1ca;
+  background: #564521;
+  border-color: #c49a47;
+}
+
+.transition-trigger:focus-visible {
+  outline: 2px solid #e1b557;
+  outline-offset: 1px;
+}
+
+.transition-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.transition-editor {
+  position: absolute;
+  top: 26px;
+  left: 12px;
+  width: 178px;
+  padding: 8px;
+  color: #e8dec6;
+  background: rgba(30, 27, 22, 0.98);
+  border: 1px solid #7b6331;
+  border-radius: 5px;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.6);
+}
+
+.transition-editor-field {
+  display: grid;
+  grid-template-columns: 1fr 48px;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: #c9ba98;
+}
+
+.transition-duration {
+  width: 48px;
+  height: 21px;
+  padding: 0 3px;
+  color: #f5e5bc;
+  background: #17140f;
+  border: 1px solid #65512a;
+  border-radius: 2px;
+  font: 10px/1 ui-monospace, Consolas, monospace;
+  text-align: right;
+}
+
+.transition-duration:focus {
+  outline: 1px solid #e1b557;
+  outline-offset: 0;
+}
+
+.transition-duration[aria-invalid='true'] {
+  color: #ffc0b8;
+  border-color: #b65b50;
+}
+
+.transition-error {
+  display: block;
+  margin-top: 5px;
+  color: #efaaa2;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.transition-editor-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.transition-editor-actions button {
+  min-width: 0;
+  height: 21px;
+  padding: 0 7px;
+  color: #cdbd99;
+  background: #29251e;
+  border: 1px solid #4d4435;
+  border-radius: 3px;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.transition-editor-actions button:hover:not(:disabled) {
+  color: #f4e8c9;
+  background: #3a3328;
+  border-color: #756344;
+}
+
+.transition-editor-actions .transition-apply {
+  color: #ffe7ad;
+  background: #4b3d20;
+  border-color: #8a6d31;
+}
+
+.transition-editor-actions .transition-remove:hover:not(:disabled) {
+  color: #ffc0b8;
+  background: #4a2522;
+  border-color: #8d4740;
+}
+
+.transition-cancel {
+  margin-left: auto;
+}
+
+.transition-editor-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.track-locked .transition-seam {
+  filter: saturate(0.45);
 }
 
 /* Filmstrip/waveform layer — spans the whole block, beneath name/edges.

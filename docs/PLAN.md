@@ -347,8 +347,20 @@ is the video-only CFR orchestration and ownership foundation described in
   snapshot and generated transition id; cross-track id reuse remains scoped
   to its requested owner. 5 new store regressions; 569 total tests, build,
   and lint green.
-- [ ] **5.1e-3 timeline UI** — minimal create/remove/duration affordance at an
-  eligible clip seam, followed by real-browser preview verification.
+- [x] **5.1e-3 timeline UI** — DONE 2026-07-11. Touching adjacent non-text
+  video clips now expose a compact cut marker; its accessible popover authors,
+  resizes, or removes a centered crossfade through the undoable store actions.
+  Duration is explicit before creation, neighboring-window rejection stays in
+  the editor with a useful retry message, locked tracks are inert, and the
+  popover does not steal clip gestures or global edit shortcuts. 5 focused RTL
+  regressions cover eligibility, locking, shorter-duration retry, one-entry
+  add/update/remove, dirty-draft removal, and exact-id undo/redo.
+  Browser-verified with a generated 60-frame red→green AVC source: UI-authored
+  D15 changed frame 27 from hard red `(255,1,0)` to blend `(175,81,0)`;
+  applying D2 restored hard red there while frame 30 blended `(85,170,1)`;
+  removal restored hard green `(0,255,1)`. Three keyboard undos/redos restored
+  none→D15→D2→none with the exact generated id; console stayed at 0 errors and
+  0 warnings. 574 total tests, build, and lint green.
 
 ### 5.2 Export flow
 - [ ] **5.2a app export controller** — composition-root wiring for the media

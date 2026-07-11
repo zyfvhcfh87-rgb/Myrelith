@@ -32,9 +32,10 @@ binding rules.
 | 5.1d — transition parity | ✅ done | same-asset seek/backtrack browser pass: 12-frame MP4, preview/export pixels within 2, clean console |
 | 5.1e-1 — transition domain lifecycle | ✅ done | track-scoped add/update/remove + deterministic edit cleanup; linked rollback proven |
 | 5.1e-2 — transition store wiring | ✅ done | one entry per edit; exact undo/redo id restore; rejected edits preserve redo |
-| 5 — export | 🚧 in progress | transition timeline UI, export controller/UI, then MVP gate remain |
+| 5.1e-3 — transition timeline UI | ✅ done | seam marker + accessible duration popover; real preview pixels and exact keyboard undo/redo verified |
+| 5 — export | 🚧 in progress | export controller/UI, then MVP gate remain |
 
-569 tests green · `npm run build` and `npm run lint` clean · every phase
+574 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -68,11 +69,16 @@ authoring now has its 5.1e-1 domain lifecycle: track-scoped add/duration/remove
 operations share the renderer's exact centered-window resolver, and every
 geometry edit keeps only seams valid before and after (split carries an
 outgoing seam to the new right half; linked rollback restores everything).
-5.1e-2 now supplies the undoable store surface: add, duration change, and
-removal are one snapshot each; rejected or idempotent calls leave both undo
-and redo stacks untouched; redo restores the original generated transition
-id rather than minting another one. Only the
-timeline control (5.1e-3) remains before this becomes user-visible.
+5.1e-2 supplies the undoable store surface: add, duration change, and removal
+are one snapshot each; rejected or idempotent calls leave both undo and redo
+stacks untouched; redo restores the original generated transition id rather
+than minting another one. 5.1e-3 makes that lifecycle user-visible: every
+eligible touching video seam has a small marker whose popover chooses a
+duration before Add, then explicitly Applies or Removes it. The real-browser
+gate authored D15, changed it to D2, removed it, and walked all three states
+backward/forward with the exact id. Red→green preview probe pixels changed at
+the expected frames and the console stayed clean. Export still has no
+user-facing controller/UI.
 
 ## What works today (user-visible)
 
@@ -102,7 +108,13 @@ drag moves with snap-back on illegal drops, edge drag trims), razor
 follows), slip (source shifts under a fixed clip, live-clamped to the
 asset, delta badge), slide (touching neighbors absorb). S splits under
 the playhead, Delete/Backspace ripple-deletes the selection, ←/→ steps
-the playhead one frame, empty-lane click deselects. The Inspector (4.3)
+the playhead one frame, empty-lane click deselects. Transition authoring
+(5.1e-3): each touching adjacent non-text video seam shows a tiny `+` marker;
+its popover chooses an integer frame duration before Add. An authored seam
+shows `CF`; the same popover explicitly Applies a new duration or Removes the
+crossfade. Domain rejection stays visible in the popover so a shorter duration
+can be tried, locked tracks disable the marker, and each successful button is
+exactly one undo entry. The Inspector (4.3)
 edits the selected clip's position/scale/rotation/opacity — drafts while
 typing, commits on blur/Enter, Escape reverts — and the compositor
 preview reflects each commit immediately. Every gesture and every field
@@ -251,6 +263,11 @@ the transform fields only for video-lane clips.
   "+ Video"/"+ Audio" (addTrack). Tracks render in domain
   tracksInDisplayOrder (videos reversed = top composite layer first,
   then audios) — doc order stays compositing order.
+- `src/ui/timeline/Track.tsx` + `TransitionSeam.tsx` (5.1e-3) — Track derives
+  eligible touching video cuts from its committed snapshot; each seam marker
+  subscribes only to zoom and opens a temporary Add/Apply/Remove duration
+  form. Pointer/key events stop before clip gestures/global shortcuts, while
+  all writes stay on the documentStore transition actions.
 
 ## Invariants that must survive refactors
 
@@ -311,6 +328,12 @@ the transform fields only for video-lane clips.
   This prevents stale project data from waking up when a later ripple happens
   to repair its geometry. Split is the deliberate exception: the original id
   stays on the left half, so an outgoing seam must rebind to the new right id.
+- **Transition duration needs an explicit submit, not blur commit.** Clicking
+  Remove moves focus away from a dirty number input before its click handler
+  runs; a blur-based duration commit would create one unintended history entry
+  and then a second removal entry. 5.1e-3 uses explicit Add/Apply buttons and a
+  temporary popover, which also lets a seam retry a shorter duration when its
+  default would overlap a neighboring crossfade.
 - **AAC payload length is not timeline duration.** Chrome encodes whole
   1024-sample AAC packets: 48,048 submitted NTSC samples decode to a 48,128-
   sample payload. In locked Mediabunny 1.50.3, `onEncodedPacket` runs
@@ -332,6 +355,10 @@ the transform fields only for video-lane clips.
   import mediabunny via `/@fs/E:/ClaudeSpace/WebCut/node_modules/mediabunny/dist/modules/src/index.js`,
   `Output` + `Mp4OutputFormat` + `BufferTarget` + `CanvasSource`, draw
   frame numbers, `File` it, then `DataTransfer` into a file input.
+  For a clean-console gate, generate it first in a same-origin non-app page
+  (for example `/src/index.css`) and navigate to `/` before creating the File;
+  importing that raw module after the bundled app is already loaded triggers
+  Mediabunny's duplicate-instance warning even without a cache-bust query.
 - Synthetic gestures: dispatch `PointerEvent`s with `bubbles: true`
   directly on elements (preview_click does NOT produce pointer events).
   DnD: real `new DataTransfer()` + `DragEvent` work in Chrome; jsdom has
@@ -368,12 +395,15 @@ the transform fields only for video-lane clips.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
-- `Transition` rendering, domain authoring, and undoable store actions exist,
-  but no timeline control invokes them yet (PLAN 5.1e-3).
-  Current crossfades are visual-only (audio still hard-cuts), and the
+- Transition rendering, domain authoring, undoable store actions, and the
+  5.1e-3 seam popover are complete. Current crossfades are visual-only (audio
+  still hard-cuts), and the
   source-over compensation is exact only for ordinary opaque full-frame
   footage; transformed/transparent dissolves need isolated compositing.
-  Images remain not previewable (video only).
+  Images remain not previewable (video only). The minimal UI intentionally
+  surfaces currently eligible seams; a malformed serialized transition whose
+  endpoints are missing/gapped/text has no cleanup marker yet, although the
+  store's remove action can still delete it.
 - `mediaStore.addAsset` is still the placeholder path; previewController
   re-fetches the blob URL for demuxing (works; slightly wasteful).
 
