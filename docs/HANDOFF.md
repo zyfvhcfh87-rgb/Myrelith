@@ -34,9 +34,10 @@ binding rules.
 | 5.1e-2 — transition store wiring | ✅ done | one entry per edit; exact undo/redo id restore; rejected edits preserve redo |
 | 5.1e-3 — transition timeline UI | ✅ done | seam marker + accessible duration popover; real preview pixels and exact keyboard undo/redo verified |
 | 5.2a — export controller | ✅ done | 11 focused tests: snapshots, shared Blob resolver, result drain, cancellation races, cleanup |
-| 5 — export | 🚧 in progress | export UI, then MVP gate remain |
+| 5.2b — export UI | ✅ done | real browser A/V export + download, active cancellation, retry, focus, clean console |
+| 5 — export | 🚧 in progress | MVP gate remains |
 
-585 tests green · `npm run build` and `npm run lint` clean · every phase
+594 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -65,8 +66,8 @@ with frozen source endpoints and hard-cut fallback for malformed/ambiguous
 definitions. Its same-asset browser gate forced the real decoder forward →
 backward → forward, reopened all 12 output frames at exactly 1.200s, and kept
 preview/export probe pixels within 2 channel values with no dark midpoint or
-console errors. Export has no user-facing UI yet; transition
-authoring now has its 5.1e-1 domain lifecycle: track-scoped add/duration/remove
+console errors. Transition authoring has its 5.1e-1 domain lifecycle:
+track-scoped add/duration/remove
 operations share the renderer's exact centered-window resolver, and every
 geometry edit keeps only seams valid before and after (split carries an
 outgoing seam to the new right half; linked rollback restores everything).
@@ -83,7 +84,17 @@ app export controller: it captures one document/settings/media snapshot,
 retains referenced Blobs before their object URLs can be revoked, shares one
 cached resolver across video and audio, explicitly drains progress through the
 final result, and serializes cancellation after any in-flight frame boundary.
-The Export button/modal/download flow is still not user-visible.
+Phase 5.2b exposes that controller through the Toolbar: one honest fixed-profile
+modal shows the current timeline resolution, MP4/H.264, and 8 Mbps; progress is
+rAF-coalesced; cancellation waits for controller cleanup; success owns a Blob
+URL through download-link use and revokes it on close/reset/unmount. Empty timelines, setup/runtime
+errors, double starts, pre-controller cancellation, keyboard isolation, focus,
+and Windows-safe filenames are covered. The real browser gate imported a
+generated 320×180 A/V source, exported a two-video-clip crossfade plus one
+audio clip, downloaded `Browser - Export.mp4`, and probed 4.000s of 30 fps H.264
+plus 48 kHz stereo AAC. Active cancellation happened at nonzero progress,
+showed the cancelling state, produced no download, and a retry succeeded; the
+console stayed at 0 errors and 0 warnings.
 
 ## What works today (user-visible)
 
@@ -119,7 +130,11 @@ its popover chooses an integer frame duration before Add. An authored seam
 shows `CF`; the same popover explicitly Applies a new duration or Removes the
 crossfade. Domain rejection stays visible in the popover so a shorter duration
 can be tried, locked tracks disable the marker, and each successful button is
-exactly one undo entry. The Inspector (4.3)
+exactly one undo entry. The Toolbar's Export button (5.2b) opens a native modal
+with the timeline's fixed resolution and the MVP MP4/H.264 profile. Start shows
+real progress; Cancel drains cleanup before reporting cancellation; success
+offers an explicit `.mp4` download and keeps its object URL alive until the
+flow closes or resets. The Inspector (4.3)
 edits the selected clip's position/scale/rotation/opacity — drafts while
 typing, commits on blur/Enter, Escape reverts — and the compositor
 preview reflects each commit immediately. Every gesture and every field
@@ -184,6 +199,11 @@ the transform fields only for video-lane clips.
   sole explicit generator pump, preserving the final `ExportResult` while
   making repeated/coincident cancellation one serialized `return(undefined)`.
   Only one run (including setup/cancel cleanup) may own the controller slot.
+- `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
+  code loads only on Start; progress is frame-coalesced; cancellation and retry
+  are explicit states; Blob URL/download ownership, filename safety, modal
+  focus, and shortcut isolation stay local to the UI. `Toolbar.tsx` only owns
+  the trigger/open state and restores focus when the dialog closes.
 - `src/pipeline/export-audio.ts` — Phase 5.1c exact audio scheduler/mixer:
   BigInt frame→sample boundaries; split/trim-stable signed source↔timeline
   phase; `audibleTracks` selection; clip volume; 1024-sample bounded stereo
@@ -362,7 +382,10 @@ the transform fields only for video-lane clips.
 
 - `window.__stores.{document,transport,media}` — dev-only zustand handles
   (seed docs, read JSON, drive undo from the console or preview_eval).
-- Generate a labeled test MP4 IN THE BROWSER (no ffmpeg on this machine):
+- `ffmpeg`/`ffprobe` are installed as of 2026-07-12. They generated and probed
+  the 5.2b A/V fixture/result; keep the in-browser generator below when a test
+  needs a same-origin `File` without touching disk.
+- Generate a labeled test MP4 IN THE BROWSER:
   import mediabunny via `/@fs/E:/ClaudeSpace/WebCut/node_modules/mediabunny/dist/modules/src/index.js`,
   `Output` + `Mp4OutputFormat` + `BufferTarget` + `CanvasSource`, draw
   frame numbers, `File` it, then `DataTransfer` into a file input.

@@ -375,9 +375,22 @@ is the video-only CFR orchestration and ownership foundation described in
   cancellation returns `undefined`. 11 focused lifecycle/ownership tests;
   585 total tests, build, and lint green. No browser pass: this controller has
   no rendered surface until 5.2b.
-- [ ] **5.2b Export UI** — Toolbar Export button → modal
-  (resolution/format) → progress bar from the generator → download via
-  `URL.createObjectURL(new Blob([buffer]))`.
+- [x] **5.2b Export UI** — DONE 2026-07-12. The Toolbar now opens a native,
+  focus-managed modal with one honest MVP profile: current timeline resolution
+  (fixed), MP4/H.264 AVC (fixed), and 8 Mbps. The heavy export controller stays
+  behind a Start-time dynamic import. Progress callbacks are rAF-coalesced;
+  synchronous double starts are rejected; active and pre-controller
+  cancellation are race-safe; cleanup finishes before the cancelled state.
+  Success creates one owned Blob URL and an explicit download link, revoking it
+  only on reset/close/unmount. Empty timelines, exact runtime errors/retry,
+  Windows-safe filenames, terminal focus, backdrop/keyboard behavior, and URL
+  lifetime have 9 focused RTL regressions. Browser-verified with a generated
+  320×180 A/V source and a two-video-clip crossfade plus one audio clip: the
+  downloaded `Browser - Export.mp4` probed as 4.000s, H.264 High/yuv420p at
+  exact 30/1 CFR, plus 48 kHz stereo AAC-LC. Progress was monotonic; active
+  cancellation at nonzero progress showed Cancelling, created no download,
+  and retry succeeded; console stayed at 0 errors and 0 warnings. 594 total
+  tests, build, and lint green.
 
 ### Phase 5 / MVP gate
 - [ ] Export a 30s, 3-clip, 2-track timeline w/ one crossfade + one trim.
@@ -385,8 +398,8 @@ is the video-only CFR orchestration and ownership foundation described in
   the transition without a seeded document.)
 - [ ] VLC + QuickTime playback, no perceptible A/V desync.
 - [ ] Spot-check exported frame at t=10s vs preview.
-- [ ] `ffprobe -show_streams`: avg_frame_rate == r_frame_rate (CFR). No
-  ffmpeg on this machine — user installs it or checks with another tool.
+- [x] `ffprobe -show_streams`: `avg_frame_rate == r_frame_rate == 30/1` on the
+  5.2b browser-exported A/V MP4 (2026-07-12).
 - [ ] No memory growth exporting a 2-min timeline (Chrome Task Manager).
 
 ## Test strategy per layer (unchanged from original)

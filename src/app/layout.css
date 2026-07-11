@@ -355,8 +355,386 @@
   flex-direction: row;
   align-items: center;
   gap: 16px;
+  width: 100%;
   height: 100%;
   padding: 0 12px;
+  box-sizing: border-box;
+}
+
+/* Phase 5.2b export flow. */
+.toolbar-export {
+  margin-left: auto;
+  min-height: 30px;
+  padding: 0 14px;
+  color: #f4f8ff;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  background: #315b96;
+  border: 1px solid #4c7dbc;
+  border-radius: 5px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+.toolbar-export:hover {
+  background: #3a68a7;
+  border-color: #68a0df;
+}
+
+.toolbar-export:active {
+  transform: translateY(1px);
+}
+
+.toolbar-export:focus-visible,
+.export-dialog button:focus-visible,
+.export-download:focus-visible {
+  outline: 2px solid #76a8ea;
+  outline-offset: 2px;
+}
+
+.export-dialog {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+  color: #e8edf5;
+  background: #181a1f;
+  border: 1px solid #3b414b;
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 58%);
+  transform: translate(-50%, -50%);
+  z-index: 100;
+}
+
+.export-dialog::backdrop {
+  background: rgb(3 5 8 / 72%);
+  backdrop-filter: blur(3px);
+}
+
+.export-dialog-card {
+  min-width: 0;
+}
+
+.export-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid #2c3139;
+}
+
+.export-dialog-header h2 {
+  margin: 3px 0 0;
+  color: #f3f6fb;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.export-eyebrow {
+  color: #78a9e8;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.export-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  color: #8f98a6;
+  font-size: 20px;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.export-close:hover:not(:disabled) {
+  color: #eef2f7;
+  background: #262a31;
+  border-color: #393f49;
+}
+
+.export-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.export-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 22px 20px;
+}
+
+.export-description {
+  margin: 0;
+  color: #9ca6b4;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.export-profile {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  background: #30353e;
+  border: 1px solid #30353e;
+  border-radius: 8px;
+}
+
+.export-profile-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 0 14px;
+  background: #1d2026;
+}
+
+.export-profile-row dt {
+  color: #8d97a5;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.export-profile-row dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.export-profile-row strong,
+.export-profile-row span {
+  display: block;
+}
+
+.export-profile-row strong {
+  color: #e4e9f0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.export-profile-row span {
+  margin-top: 3px;
+  color: #747f8e;
+  font-size: 9px;
+}
+
+.export-empty,
+.export-error,
+.export-cancelled,
+.export-result {
+  margin: 0;
+  padding: 11px 12px;
+  font-size: 11px;
+  line-height: 1.45;
+  border-radius: 7px;
+}
+
+.export-empty {
+  color: #d7b97a;
+  background: rgb(173 119 35 / 12%);
+  border: 1px solid rgb(205 153 73 / 28%);
+}
+
+.export-error {
+  color: #ffb4b4;
+  background: rgb(170 48 48 / 14%);
+  border: 1px solid rgb(230 88 88 / 30%);
+}
+
+.export-progress-panel {
+  padding: 13px 14px;
+  background: #1d2026;
+  border: 1px solid #30353e;
+  border-radius: 8px;
+}
+
+.export-progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #cdd5e0;
+  font-size: 11px;
+}
+
+.export-progress-heading strong {
+  color: #89b7ef;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+}
+
+.export-progress-panel progress {
+  width: 100%;
+  height: 8px;
+  display: block;
+  margin: 10px 0 8px;
+  overflow: hidden;
+  accent-color: #548bd0;
+  background: #111318;
+  border: 0;
+  border-radius: 999px;
+}
+
+.export-progress-panel p {
+  margin: 0;
+  color: #737e8d;
+  font-size: 9px;
+}
+
+.export-result,
+.export-cancelled {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.export-result {
+  color: #cdebd8;
+  background: rgb(48 145 86 / 13%);
+  border: 1px solid rgb(75 179 114 / 28%);
+}
+
+.export-cancelled {
+  color: #c2c9d2;
+  background: #20242a;
+  border: 1px solid #343a44;
+}
+
+.export-result-mark {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #dcf8e6;
+  background: #2c7548;
+  border-radius: 50%;
+}
+
+.export-result div,
+.export-cancelled {
+  min-width: 0;
+}
+
+.export-result strong,
+.export-result span,
+.export-cancelled strong,
+.export-cancelled span {
+  display: block;
+}
+
+.export-result span,
+.export-cancelled span {
+  margin-top: 2px;
+  color: #87919f;
+  font-size: 9px;
+}
+
+.export-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px 18px;
+  background: #15171b;
+  border-top: 1px solid #2c3139;
+}
+
+.export-dialog-actions button,
+.export-download {
+  min-height: 31px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 13px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.export-primary {
+  color: #f5f8fc;
+  background: #315b96;
+  border: 1px solid #4c7dbc;
+}
+
+.export-primary:hover:not(:disabled) {
+  background: #3a68a7;
+  border-color: #68a0df;
+}
+
+.export-secondary {
+  color: #c4cbd5;
+  background: #24282f;
+  border: 1px solid #3a404a;
+}
+
+.export-secondary:hover:not(:disabled) {
+  color: #edf1f6;
+  background: #2c3139;
+  border-color: #4a525f;
+}
+
+.export-danger {
+  color: #ffd4d4;
+  background: #4a2429;
+  border: 1px solid #74363e;
+}
+
+.export-danger:hover:not(:disabled) {
+  background: #5a2b32;
+  border-color: #96505a;
+}
+
+.export-dialog-actions button:disabled,
+.export-dialog-actions a[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 540px) {
+  .export-dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
+  .export-dialog-header,
+  .export-dialog-body {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .export-dialog-actions {
+    flex-wrap: wrap;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .export-profile-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
 }
 
 .tool-button {
