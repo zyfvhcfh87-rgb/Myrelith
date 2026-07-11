@@ -4,7 +4,7 @@ Read this first in a new session. It is the deep context; [PLAN.md](PLAN.md)
 holds what to build next; [../ARCHITECTURE.md](../ARCHITECTURE.md) holds the
 binding rules.
 
-## Status (2026-07-06)
+## Status (2026-07-11)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -25,15 +25,15 @@ binding rules.
 | 4.3.6 — track rename/delete/solo (user request) | ✅ done | browser E2E: dblclick-rename, × delete + undo-restores-clips, solo dims the rest |
 | 4.3.7 — waveforms/filmstrips + clip volume (user request) | ✅ done | browser E2E: generated A/V file → strips + beat waveform, continuous across razor splits, volume commit |
 | 4.3.8 — linked A/V clips + manual unlink (user request) | ✅ done | browser E2E: partner ghosts the drag live, one commit moves both, razor re-groups halves, unlink isolates |
-| **4 gate** | ⏳ user pass | most items machine-verified; see PLAN gate section |
+| **4 gate** | ✅ closed | user manual pass 2026-07-11 |
 | 5 — export | ⬜ | |
 
 463 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
-4.3 Inspector + arrow stepping. The Phase 4 gate awaits the user's
-manual confirmation pass (see PLAN.md). 2026-07-08 bug fix: dropping a
+4.3 Inspector + arrow stepping. The user completed the Phase 4 manual gate
+on 2026-07-11 (see PLAN.md). 2026-07-08 bug fix: dropping a
 video asset that contains audio now lands a video+audio clip PAIR
 (one undo entry) instead of silently dropping the audio; since 4.3.8
 (2026-07-10) that pair lands LINKED — edits follow the link, Inspector
