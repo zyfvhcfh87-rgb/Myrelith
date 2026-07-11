@@ -339,8 +339,14 @@ is the video-only CFR orchestration and ownership foundation described in
   keep or discard seams deterministically; slip stays safe-integer bounded.
   Linked A/V rollback restores transition metadata atomically. 24 new domain
   regressions; 564 total tests, build, and lint green.
-- [ ] **5.1e-2 state wiring** — document-store actions with one undo entry per
-  transition edit and exact undo/redo restoration.
+- [x] **5.1e-2 state wiring** — DONE 2026-07-11. `documentStore` now exposes
+  track-scoped add/duration/remove transition actions as thin domain-op →
+  `commit` adapters. Every successful edit creates exactly one snapshot;
+  rejected and idempotent edits preserve the document and both history stacks
+  (including an existing redo branch). Undo/redo restore the exact authored
+  snapshot and generated transition id; cross-track id reuse remains scoped
+  to its requested owner. 5 new store regressions; 569 total tests, build,
+  and lint green.
 - [ ] **5.1e-3 timeline UI** — minimal create/remove/duration affordance at an
   eligible clip seam, followed by real-browser preview verification.
 

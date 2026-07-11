@@ -31,9 +31,10 @@ binding rules.
 | 5.1c — bounded audio export | ✅ done | NTSC browser pass: exact 48,048-sample stereo AAC mix, A/V both 1.001s, clean console |
 | 5.1d — transition parity | ✅ done | same-asset seek/backtrack browser pass: 12-frame MP4, preview/export pixels within 2, clean console |
 | 5.1e-1 — transition domain lifecycle | ✅ done | track-scoped add/update/remove + deterministic edit cleanup; linked rollback proven |
-| 5 — export | 🚧 in progress | transition state/UI authoring, controller/UI, then MVP gate remain |
+| 5.1e-2 — transition store wiring | ✅ done | one entry per edit; exact undo/redo id restore; rejected edits preserve redo |
+| 5 — export | 🚧 in progress | transition timeline UI, export controller/UI, then MVP gate remain |
 
-564 tests green · `npm run build` and `npm run lint` clean · every phase
+569 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -67,8 +68,11 @@ authoring now has its 5.1e-1 domain lifecycle: track-scoped add/duration/remove
 operations share the renderer's exact centered-window resolver, and every
 geometry edit keeps only seams valid before and after (split carries an
 outgoing seam to the new right half; linked rollback restores everything).
-The editor still cannot create a transition until state wiring (5.1e-2) and
-the timeline control (5.1e-3) land.
+5.1e-2 now supplies the undoable store surface: add, duration change, and
+removal are one snapshot each; rejected or idempotent calls leave both undo
+and redo stacks untouched; redo restores the original generated transition
+id rather than minting another one. Only the
+timeline control (5.1e-3) remains before this becomes user-visible.
 
 ## What works today (user-visible)
 
@@ -175,7 +179,8 @@ the transform fields only for video-lane clips.
   requests. Locked Mediabunny 1.50.3 handles the same-asset non-monotonic
   sequence created by a frozen-endpoint crossfade (browser-proven in 5.1d).
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
-  100; rejected ops push no entry), `transportStore` (playhead/zoom/
+  100; rejected ops push no entry; 5.1e-2 transition add/duration/remove
+  actions preserve exact snapshot ids), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
   assets; `addAsset` placeholder → controller fills via `updateAsset`).
 - `src/workers/decode-protocol.ts` — canonical worker message types.
@@ -363,8 +368,8 @@ the transform fields only for video-lane clips.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
-- `Transition` rendering and domain authoring exist, but no store action or
-  timeline control invokes them yet (PLAN 5.1e-2/5.1e-3).
+- `Transition` rendering, domain authoring, and undoable store actions exist,
+  but no timeline control invokes them yet (PLAN 5.1e-3).
   Current crossfades are visual-only (audio still hard-cuts), and the
   source-over compensation is exact only for ordinary opaque full-frame
   footage; transformed/transparent dissolves need isolated compositing.

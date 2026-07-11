@@ -94,7 +94,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   locked?})` (idempotent patches push no history entry; flags and
   renames WORK on locked tracks — metadata, not content),
   `renameTrack(trackId, name)`, `removeTrack(trackId)` (locked tracks
-  reject), `setClipVolume(clipId, volume)` (clamped [0,2]),
+  reject), `addCrossfade(fromClipId, toClipId, durationFrames)`,
+  `setCrossfadeDuration(trackId, transitionId, durationFrames)`,
+  `removeTransition(trackId, transitionId)`,
+  `setClipVolume(clipId, volume)` (clamped [0,2]),
   `unlinkClip(clipId)` (dissolves the clip's whole link group), `undo`,
   `redo`. The geometry actions (move/trim/rippleTrim/slip/slide/
   rippleDelete/splitClipAt/splitClipAtPlayhead) are LINK-AWARE: they
