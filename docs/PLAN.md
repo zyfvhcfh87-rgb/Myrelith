@@ -243,16 +243,16 @@ orchestrator review, sliced domain → state → ui:
   itself, post-unlink halves move independently, 5-undo chain back to
   empty + redo exact, clean console. 463 tests total.
 
-### Phase 4 gate — build complete; USER'S MANUAL PASS PENDING
+### Phase 4 gate — ✅ CLOSED (2026-07-11)
 Machine-verified already (browser E2E, see 4.1c/4.2d/4.3 notes):
 - every edit op = exactly one undo entry (7-op and 5-op undo chains
   restored byte-exact layouts);
 - arrow keys step exactly one frame, clamped both ends;
 - 2 video tracks with the top clip at 50% opacity blend correctly.
-User's confirmation pass:
-- [ ] Split a clip, trim both halves, drag one to another track —
+User's confirmation pass (completed manually 2026-07-11):
+- [x] Split a clip, trim both halves, drag one to another track —
   compositing order stays correct (cross-track moveClip already works).
-- [ ] General feel: tools/inspector/undo behave as expected end to end.
+- [x] General feel: tools/inspector/undo behave as expected end to end.
 
 ## Phase 5 — Export Pipeline
 
@@ -269,6 +269,21 @@ deliberate deviation from the original plan). Pad/trim tail by a sample or
 two rather than letting rounding accumulate.
 The in-browser encode pattern is already proven — see HANDOFF.md toolbox
 (we generated test MP4s with Output/CanvasSource in Phase 2.5/3.4).
+
+Implementation is staged under the one-module rule. The approved first slice
+is the video-only CFR orchestration and ownership foundation described in
+[`docs/superpowers/specs/2026-07-11-phase-5-1-cfr-video-export-foundation-design.md`](superpowers/specs/2026-07-11-phase-5-1-cfr-video-export-foundation-design.md).
+
+- [x] **5.1a CFR orchestration foundation** — DONE 2026-07-11.
+  `pipeline/export.ts` now defines the injected media-lease/video-sink
+  contracts and schedules every derived document frame with independent
+  rational timestamps, awaited backpressure, fatal missing-media handling,
+  monotonic progress, returned buffer contract, and exact-once cleanup.
+  Cancellation returns `undefined` rather than fabricating an
+  `ExportResult` (caught by independent code review). 21 focused tests;
+  488 total tests, build, and lint green.
+- [ ] **5.1b real Mediabunny video adapters + browser export verification.**
+- [ ] **5.1c bounded audio decode/mix/encode with exact integer sample count.**
 
 ### 5.2 Export UI
 Toolbar Export button → modal (resolution/format) → progress bar from the

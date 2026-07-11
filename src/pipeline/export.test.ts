@@ -1,0 +1,599 @@
+/**
+ * pipeline/export.test.ts — video-only CFR export orchestration.
+ *
+ * Browser codecs and canvas are injected behind recording fakes. These tests
+ * prove integer-frame scheduling, backpressure, progress, and ownership; the
+ * real Mediabunny adapter receives its own browser gate in the next slice.
+ */
+
+import { describe, expect, test, vi } from 'vitest'
+import type {
+  Clip,
+  FrameRate,
+  TimelineDoc,
+  Track,
+} from '../domain/schema'
+import type {
+  Composite2D,
+  CompositeResult,
+  FrameSource,
+} from './render'
+import type {
+  ExportDeps,
+  ExportFrameLease,
+  ExportMediaSource,
+  ExportResult,
+  ExportSettings,
+  ExportVideoSink,
+} from './export'
+import { exportTimeline } from './export'
+
+const SETTINGS: ExportSettings = {
+  format: 'mp4',
+  videoCodec: 'avc',
+  videoBitrate: 8_000_000,
+}
+
+const RESULT: ExportResult = {
+  buffer: Uint8Array.from([1, 2, 3]).buffer,
+  mimeType: 'video/mp4',
+}
+
+function makeClip(durationFrames: number): Clip {
+  return {
+    id: 'clip-a',
+    assetId: 'asset-a',
+    name: 'clip-a',
+    sourceRange: { startFrame: 0, durationFrames },
+    timelineRange: { startFrame: 0, durationFrames },
+    transform: {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    },
+    opacity: 1,
+    volume: 1,
+    effects: [],
+  }
+}
+
+function makeDoc(
+  durationFrames = 3,
+  frameRate: FrameRate = { num: 30, den: 1 },
+): TimelineDoc {
+  const tracks: Track[] =
+    durationFrames === 0
+      ? []
+      : [
+          {
+            id: 'V1',
+            kind: 'video',
+            name: 'V1',
+            clips: [makeClip(durationFrames)],
+            transitions: [],
+            hidden: false,
+            muted: false,
+            solo: false,
+            locked: false,
+          },
+        ]
+
+  return {
+    schemaVersion: 1,
+    id: 'doc',
+    name: 'doc',
+    frameRate,
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48_000,
+    tracks,
+  }
+}
+
+function deferredVoid(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => {
+    resolve = () => done()
+  })
+  return { promise, resolve }
+}
+
+interface HarnessOptions {
+  composite?: (frame: number) => Promise<CompositeResult>
+  addFrame?: (
+    timestampSec: number,
+    durationSec: number,
+    index: number,
+  ) => Promise<void>
+  finalize?: () => Promise<ExportResult>
+  cancel?: () => Promise<void>
+  closeMedia?: () => Promise<void>
+  closeLease?: (frame: number) => Promise<void>
+  createSinkError?: Error
+}
+
+function makeHarness(options: HarnessOptions = {}) {
+  const events: string[] = []
+  const ctx = {} as Composite2D
+  let addIndex = 0
+
+  const leaseClose = vi.fn(async (frame: number): Promise<void> => {
+    events.push('lease:close:' + frame)
+    await options.closeLease?.(frame)
+  })
+
+  const openFrame = vi.fn(
+    async (docFrame: number): Promise<ExportFrameLease> => {
+      events.push('open:' + docFrame)
+      return {
+        getFrame: async (
+          _assetId: string,
+          _sourceFrame: number,
+        ): Promise<ImageBitmap | null> => null,
+        close: () => leaseClose(docFrame),
+      }
+    },
+  )
+
+  const closeMedia = vi.fn(async (): Promise<void> => {
+    events.push('media:close')
+    await options.closeMedia?.()
+  })
+
+  const media: ExportMediaSource = {
+    openFrame,
+    close: closeMedia,
+  }
+
+  const composite = vi.fn(
+    async (
+      _doc: TimelineDoc,
+      frame: number,
+      _ctx: Composite2D,
+      _source: FrameSource,
+    ): Promise<CompositeResult> => {
+      events.push('composite:' + frame)
+      return (
+        (await options.composite?.(frame)) ?? {
+          drawn: ['clip-a'],
+          missing: [],
+        }
+      )
+    },
+  )
+
+  const addFrame = vi.fn(
+    async (timestampSec: number, durationSec: number): Promise<void> => {
+      const index = addIndex++
+      events.push('add:' + index)
+      await options.addFrame?.(timestampSec, durationSec, index)
+    },
+  )
+
+  const finalize = vi.fn(async (): Promise<ExportResult> => {
+    events.push('sink:finalize')
+    return (await options.finalize?.()) ?? RESULT
+  })
+
+  const cancel = vi.fn(async (): Promise<void> => {
+    events.push('sink:cancel')
+    await options.cancel?.()
+  })
+
+  const sink: ExportVideoSink = {
+    ctx,
+    addFrame,
+    finalize,
+    cancel,
+  }
+
+  const createVideoSink = vi.fn(
+    async (
+      _doc: TimelineDoc,
+      _settings: ExportSettings,
+    ): Promise<ExportVideoSink> => {
+      events.push('sink:create')
+      if (options.createSinkError) throw options.createSinkError
+      return sink
+    },
+  )
+
+  const deps: ExportDeps = {
+    composite,
+    createVideoSink,
+  }
+
+  return {
+    events,
+    media,
+    deps,
+    openFrame,
+    closeMedia,
+    leaseClose,
+    composite,
+    createVideoSink,
+    addFrame,
+    finalize,
+    cancel,
+  }
+}
+
+async function drain(
+  generator: AsyncGenerator<number, ExportResult | undefined, void>,
+): Promise<{ progress: number[]; result: ExportResult }> {
+  const progress: number[] = []
+  for (;;) {
+    const step = await generator.next()
+    if (step.done) {
+      if (step.value === undefined) {
+        throw new Error('Export completed without a result')
+      }
+      return { progress, result: step.value }
+    }
+    progress.push(step.value)
+  }
+}
+
+describe('exportTimeline CFR scheduling', () => {
+  test('renders every document frame in order and returns the finalized result', async () => {
+    const doc = makeDoc(3)
+    const h = makeHarness()
+
+    const completed = await drain(exportTimeline(doc, SETTINGS, h.media, h.deps))
+
+    expect(h.createVideoSink).toHaveBeenCalledOnce()
+    expect(h.createVideoSink).toHaveBeenCalledWith(doc, SETTINGS)
+    expect(h.openFrame.mock.calls.map(([frame]) => frame)).toEqual([0, 1, 2])
+    expect(h.composite.mock.calls.map((call) => call[1])).toEqual([0, 1, 2])
+    expect(h.addFrame.mock.calls).toEqual([
+      [0, 1 / 30],
+      [1 / 30, 1 / 30],
+      [2 / 30, 1 / 30],
+    ])
+    expect(h.leaseClose).toHaveBeenCalledTimes(3)
+    expect(h.finalize).toHaveBeenCalledOnce()
+    expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+    expect(completed.progress).toEqual([0, 1 / 4, 2 / 4, 3 / 4, 1])
+    expect(completed.result).toBe(RESULT)
+    expect(h.events).toEqual([
+      'sink:create',
+      'open:0',
+      'composite:0',
+      'lease:close:0',
+      'add:0',
+      'open:1',
+      'composite:1',
+      'lease:close:1',
+      'add:1',
+      'open:2',
+      'composite:2',
+      'lease:close:2',
+      'add:2',
+      'sink:finalize',
+      'media:close',
+    ])
+  })
+
+  test('derives NTSC timestamps from each integer frame without accumulation', async () => {
+    const h = makeHarness()
+
+    await drain(
+      exportTimeline(
+        makeDoc(3, { num: 30_000, den: 1_001 }),
+        SETTINGS,
+        h.media,
+        h.deps,
+      ),
+    )
+
+    const frameDuration = 1_001 / 30_000
+    expect(h.addFrame.mock.calls).toEqual([
+      [0, frameDuration],
+      [1_001 / 30_000, frameDuration],
+      [2_002 / 30_000, frameDuration],
+    ])
+  })
+
+  test('does not open the next frame until encoder backpressure settles', async () => {
+    const firstAdd = deferredVoid()
+    const h = makeHarness({
+      addFrame: async (_timestampSec, _durationSec, index) => {
+        if (index === 0) await firstAdd.promise
+      },
+    })
+    const generator = exportTimeline(makeDoc(2), SETTINGS, h.media, h.deps)
+
+    await expect(generator.next()).resolves.toEqual({ value: 0, done: false })
+    const firstProgress = generator.next()
+    await vi.waitFor(() => expect(h.addFrame).toHaveBeenCalledOnce())
+
+    expect(h.openFrame).toHaveBeenCalledOnce()
+    expect(h.openFrame).toHaveBeenCalledWith(0)
+
+    firstAdd.resolve()
+    await expect(firstProgress).resolves.toEqual({ value: 1 / 3, done: false })
+
+    await expect(generator.next()).resolves.toEqual({
+      value: 2 / 3,
+      done: false,
+    })
+    expect(h.openFrame.mock.calls.map(([frame]) => frame)).toEqual([0, 1])
+
+    await generator.return(undefined)
+  })
+})
+
+describe('exportTimeline validation', () => {
+  test.each([0, -1, 1.5, Number.NaN])(
+    'rejects invalid video bitrate %s before creating a sink',
+    async (videoBitrate) => {
+      const h = makeHarness()
+      const settings: ExportSettings = { ...SETTINGS, videoBitrate }
+      const generator = exportTimeline(makeDoc(1), settings, h.media, h.deps)
+
+      await expect(generator.next()).rejects.toThrow(
+        'videoBitrate must be a positive safe integer',
+      )
+      expect(h.createVideoSink).not.toHaveBeenCalled()
+      expect(h.openFrame).not.toHaveBeenCalled()
+      expect(h.closeMedia).toHaveBeenCalledOnce()
+    },
+  )
+
+  test('rejects unsupported runtime format and codec values', async () => {
+    const invalidSettings = [
+      { ...SETTINGS, format: 'webm' } as unknown as ExportSettings,
+      { ...SETTINGS, videoCodec: 'vp9' } as unknown as ExportSettings,
+    ]
+
+    for (const settings of invalidSettings) {
+      const h = makeHarness()
+      const generator = exportTimeline(makeDoc(1), settings, h.media, h.deps)
+
+      await expect(generator.next()).rejects.toThrow('Unsupported export')
+      expect(h.createVideoSink).not.toHaveBeenCalled()
+      expect(h.closeMedia).toHaveBeenCalledOnce()
+    }
+  })
+
+  test('rejects an empty timeline before yielding or creating resources', async () => {
+    const h = makeHarness()
+    const generator = exportTimeline(makeDoc(0), SETTINGS, h.media, h.deps)
+
+    await expect(generator.next()).rejects.toThrow(
+      'Cannot export an empty or invalid timeline',
+    )
+    expect(h.createVideoSink).not.toHaveBeenCalled()
+    expect(h.openFrame).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('rejects invalid frame timing before creating a sink', async () => {
+    const h = makeHarness()
+    const generator = exportTimeline(
+      makeDoc(1, { num: 0, den: 1 }),
+      SETTINGS,
+      h.media,
+      h.deps,
+    )
+
+    await expect(generator.next()).rejects.toThrow('Invalid FrameRate 0/1')
+    expect(h.createVideoSink).not.toHaveBeenCalled()
+    expect(h.openFrame).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+})
+
+describe('exportTimeline ownership and failures', () => {
+  test('missing source media is fatal and cancels the sink', async () => {
+    const h = makeHarness({
+      composite: async () => ({
+        drawn: [],
+        missing: ['clip-a', 'clip-b'],
+      }),
+    })
+
+    await expect(
+      drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)),
+    ).rejects.toThrow('Missing source media for clips: clip-a, clip-b')
+
+    expect(h.leaseClose).toHaveBeenCalledOnce()
+    expect(h.addFrame).not.toHaveBeenCalled()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('preserves a composite failure over lease and export cleanup failures', async () => {
+    const primary = new Error('composite failed')
+    const h = makeHarness({
+      composite: async () => {
+        throw primary
+      },
+      closeLease: async () => {
+        throw new Error('lease close failed')
+      },
+      cancel: async () => {
+        throw new Error('cancel failed')
+      },
+      closeMedia: async () => {
+        throw new Error('media close failed')
+      },
+    })
+
+    await expect(
+      drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)),
+    ).rejects.toBe(primary)
+
+    expect(h.leaseClose).toHaveBeenCalledOnce()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('surfaces a lease-close failure when compositing succeeded', async () => {
+    const leaseError = new Error('lease close failed')
+    const h = makeHarness({
+      closeLease: async () => {
+        throw leaseError
+      },
+    })
+
+    await expect(
+      drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)),
+    ).rejects.toBe(leaseError)
+
+    expect(h.addFrame).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('cancels after an encoder failure without reopening or leaking the lease', async () => {
+    const addError = new Error('encoder failed')
+    const h = makeHarness({
+      addFrame: async () => {
+        throw addError
+      },
+    })
+
+    await expect(
+      drain(exportTimeline(makeDoc(2), SETTINGS, h.media, h.deps)),
+    ).rejects.toBe(addError)
+
+    expect(h.openFrame).toHaveBeenCalledOnce()
+    expect(h.leaseClose).toHaveBeenCalledOnce()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('cancels after finalization fails', async () => {
+    const finalizeError = new Error('finalize failed')
+    const h = makeHarness({
+      finalize: async () => {
+        throw finalizeError
+      },
+    })
+
+    await expect(
+      drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)),
+    ).rejects.toBe(finalizeError)
+
+    expect(h.finalize).toHaveBeenCalledOnce()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('preserves sink-creation failure over media cleanup failure', async () => {
+    const createError = new Error('sink creation failed')
+    const h = makeHarness({
+      createSinkError: createError,
+      closeMedia: async () => {
+        throw new Error('media close failed')
+      },
+    })
+
+    await expect(
+      drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)),
+    ).rejects.toBe(createError)
+
+    expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('early return cancels a created sink and closes media', async () => {
+    const h = makeHarness()
+    const generator = exportTimeline(makeDoc(2), SETTINGS, h.media, h.deps)
+
+    await expect(generator.next()).resolves.toEqual({ value: 0, done: false })
+    await expect(generator.next()).resolves.toEqual({
+      value: 1 / 3,
+      done: false,
+    })
+    await expect(generator.return(undefined)).resolves.toEqual({
+      value: undefined,
+      done: true,
+    })
+
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('early return at initial progress closes media without creating a sink', async () => {
+    const h = makeHarness()
+    const generator = exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)
+
+    await expect(generator.next()).resolves.toEqual({ value: 0, done: false })
+    await generator.return(undefined)
+
+    expect(h.createVideoSink).not.toHaveBeenCalled()
+    expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('early-return cleanup surfaces the first cleanup error', async () => {
+    const cancelError = new Error('cancel failed')
+    const h = makeHarness({
+      cancel: async () => {
+        throw cancelError
+      },
+      closeMedia: async () => {
+        throw new Error('media close failed')
+      },
+    })
+    const generator = exportTimeline(makeDoc(2), SETTINGS, h.media, h.deps)
+
+    await generator.next()
+    await generator.next()
+    await expect(generator.return(undefined)).rejects.toBe(cancelError)
+
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('media cleanup completes before progress reaches one', async () => {
+    const mediaError = new Error('media close failed')
+    const h = makeHarness({
+      closeMedia: async () => {
+        throw mediaError
+      },
+    })
+    const generator = exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)
+
+    await expect(generator.next()).resolves.toEqual({ value: 0, done: false })
+    await expect(generator.next()).resolves.toEqual({
+      value: 1 / 2,
+      done: false,
+    })
+    await expect(generator.next()).rejects.toBe(mediaError)
+
+    expect(h.finalize).toHaveBeenCalledOnce()
+    expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('return after progress one remains cancellation, not completion', async () => {
+    const h = makeHarness()
+    const generator = exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)
+
+    await expect(generator.next()).resolves.toEqual({ value: 0, done: false })
+    await expect(generator.next()).resolves.toEqual({
+      value: 1 / 2,
+      done: false,
+    })
+    await expect(generator.next()).resolves.toEqual({ value: 1, done: false })
+    await expect(generator.return(undefined)).resolves.toEqual({
+      value: undefined,
+      done: true,
+    })
+
+    expect(h.finalize).toHaveBeenCalledOnce()
+    expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+})
