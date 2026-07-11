@@ -274,6 +274,17 @@ Implementation is staged under the one-module rule. The approved first slice
 is the video-only CFR orchestration and ownership foundation described in
 [`docs/superpowers/specs/2026-07-11-phase-5-1-cfr-video-export-foundation-design.md`](superpowers/specs/2026-07-11-phase-5-1-cfr-video-export-foundation-design.md).
 
+- [x] **5.1a CFR orchestration foundation** — DONE 2026-07-11.
+  `pipeline/export.ts` now defines the injected media-lease/video-sink
+  contracts and schedules every derived document frame with independent
+  rational timestamps, awaited backpressure, fatal missing-media handling,
+  monotonic progress, returned buffer contract, and exact-once cleanup.
+  Cancellation returns `undefined` rather than fabricating an
+  `ExportResult` (caught by independent code review). 21 focused tests;
+  488 total tests, build, and lint green.
+- [ ] **5.1b real Mediabunny video adapters + browser export verification.**
+- [ ] **5.1c bounded audio decode/mix/encode with exact integer sample count.**
+
 ### 5.2 Export UI
 Toolbar Export button → modal (resolution/format) → progress bar from the
 generator → download via `URL.createObjectURL(new Blob([buffer]))`.

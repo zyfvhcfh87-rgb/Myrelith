@@ -26,9 +26,10 @@ binding rules.
 | 4.3.7 — waveforms/filmstrips + clip volume (user request) | ✅ done | browser E2E: generated A/V file → strips + beat waveform, continuous across razor splits, volume commit |
 | 4.3.8 — linked A/V clips + manual unlink (user request) | ✅ done | browser E2E: partner ghosts the drag live, one commit moves both, razor re-groups halves, unlink isolates |
 | **4 gate** | ✅ closed | user manual pass 2026-07-11 |
-| 5 — export | ⬜ | |
+| 5.1a — CFR export foundation | ✅ done | 21 focused tests: timing, backpressure, progress, ownership, cancellation |
+| 5 — export | 🚧 in progress | Mediabunny adapters, audio mix, crossfade parity, controller/UI remain |
 
-463 tests green · `npm run build` and `npm run lint` clean · every phase
+488 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -37,7 +38,11 @@ on 2026-07-11 (see PLAN.md). 2026-07-08 bug fix: dropping a
 video asset that contains audio now lands a video+audio clip PAIR
 (one undo entry) instead of silently dropping the audio; since 4.3.8
 (2026-07-10) that pair lands LINKED — edits follow the link, Inspector
-unlinks (see PLAN 4.3.8).
+unlinks (see PLAN 4.3.8). Phase 5.1a landed 2026-07-11:
+`pipeline/export.ts` now owns the tested video-only CFR scheduling contract
+(injected frame leases/sink, exact rational timestamps, awaited backpressure,
+progress/result protocol, and exact-once cleanup). Real Mediabunny adapters are
+the next slice; no user-visible export exists yet.
 
 ## What works today (user-visible)
 
@@ -114,6 +119,12 @@ the transform fields only for video-lane clips.
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
   synchronous draw; `{drawn, missing}` result; per-clip try/finally.
+- `src/pipeline/export.ts` — Phase 5.1a video-only CFR orchestrator:
+  `exportTimeline` derives length with `docDurationFrames`, composites every
+  integer frame through an injected `compositeFrame`, awaits sink
+  backpressure, and owns per-frame/export cleanup. Natural completion returns
+  `ExportResult`; controller cancellation after iteration starts uses
+  `return(undefined)`.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
   100; rejected ops push no entry), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
