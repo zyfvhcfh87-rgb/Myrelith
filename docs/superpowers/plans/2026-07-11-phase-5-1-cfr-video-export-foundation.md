@@ -21,7 +21,7 @@
 - Every successfully opened ExportFrameLease closes exactly once, including all failure paths.
 - Once iteration starts, ExportMediaSource closes exactly once. A created, unfinalized sink cancels exactly once on failure or early generator.return().
 - Preserve the first operational error over later cleanup errors; surface the first cleanup error only when no operational error exists.
-- Yield finite monotonic progress: 0 first, (frame + 1) / (frameCount + 1) after each encoded frame, then 1 after finalization and media cleanup. Return ExportResult on the following next().
+- Yield finite monotonic progress: 0 first, (frame + 1) / (frameCount + 1) after each encoded frame, then 1 after finalization and media cleanup. Return ExportResult on natural completion; after iteration starts, cancellation uses return(undefined) and completes with undefined.
 - Follow TDD: observe each newly introduced behavior fail before expanding production code.
 - Run focused tests after every red/green cycle, then run the full suite, production build, and lint.
 - This foundation has no observable browser behavior; browser verification belongs to the real Mediabunny adapter slice.
@@ -45,7 +45,7 @@
 
 **Interfaces:**
 - Consumes: docDurationFrames(doc: TimelineDoc): number; framesToSeconds(frames: number, rate: FrameRate): number; compositeFrame(doc, frame, ctx, source): Promise<CompositeResult>; FrameSource; Composite2D.
-- Produces: ExportSettings, ExportResult, ExportFrameLease, ExportMediaSource, ExportVideoSink, ExportDeps, and exportTimeline(doc, settings, media, deps): AsyncGenerator<number, ExportResult, void>.
+- Produces: ExportSettings, ExportResult, ExportFrameLease, ExportMediaSource, ExportVideoSink, ExportDeps, and exportTimeline(doc, settings, media, deps): AsyncGenerator<number, ExportResult | undefined, void>.
 
 - [ ] **Step 1: Re-read the architecture and confirm the exact working-tree scope**
 
@@ -1246,3 +1246,142 @@ git status --short --branch
 ~~~
 
 Expected: the commit succeeds with Aryel as author/committer and the required Codex Opus 4.8 co-author trailer. No tracked changes remain; the pre-existing untracked AGENTS.md remains untouched.
+
+### Post-implementation review correction: distinguish cancellation from completion
+
+The independent quality review found that the original
+AsyncGenerator<number, ExportResult, void> contract forced callers to pass a
+fabricated ExportResult to return() merely to cancel. Complete this correction
+before treating Task 1 as reviewed: natural completion returns ExportResult,
+while cancellation after iteration starts returns undefined.
+
+- [ ] **Step 17: Write the cancellation-result tests and confirm the type-level red state**
+
+In src/pipeline/export.test.ts, change drain to this exact implementation:
+
+~~~ts
+async function drain(
+  generator: AsyncGenerator<number, ExportResult | undefined, void>,
+): Promise<{ progress: number[]; result: ExportResult }> {
+  const progress: number[] = []
+  for (;;) {
+    const step = await generator.next()
+    if (step.done) {
+      if (step.value === undefined) {
+        throw new Error('Export completed without a result')
+      }
+      return { progress, result: step.value }
+    }
+    progress.push(step.value)
+  }
+}
+~~~
+
+Change every cancellation call from return(RESULT) to return(undefined). The
+created-sink cancellation assertion must be:
+
+~~~ts
+await expect(generator.return(undefined)).resolves.toEqual({
+  value: undefined,
+  done: true,
+})
+~~~
+
+Append this exact test to the ownership-and-failures describe block:
+
+~~~ts
+test('return after progress one remains cancellation, not completion', async () => {
+  const h = makeHarness()
+  const generator = exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)
+
+  await expect(generator.next()).resolves.toEqual({ value: 0, done: false })
+  await expect(generator.next()).resolves.toEqual({
+    value: 1 / 2,
+    done: false,
+  })
+  await expect(generator.next()).resolves.toEqual({ value: 1, done: false })
+  await expect(generator.return(undefined)).resolves.toEqual({
+    value: undefined,
+    done: true,
+  })
+
+  expect(h.finalize).toHaveBeenCalledOnce()
+  expect(h.cancel).not.toHaveBeenCalled()
+  expect(h.closeMedia).toHaveBeenCalledOnce()
+})
+~~~
+
+Run:
+
+~~~powershell
+npm run build
+~~~
+
+Expected: FAIL with five TS2345 errors because the production generator still
+requires ExportResult as its return() value. This is the review correction's
+red state.
+
+- [ ] **Step 18: Make cancellation an explicit undefined completion**
+
+Change only the exportTimeline return annotation in src/pipeline/export.ts:
+
+~~~ts
+export async function* exportTimeline(
+  doc: TimelineDoc,
+  settings: ExportSettings,
+  media: ExportMediaSource,
+  deps: ExportDeps,
+): AsyncGenerator<number, ExportResult | undefined, void> {
+~~~
+
+Do not add an AbortSignal or session wrapper in this slice. The future app
+controller must call next() at least once before exposing cancel, then use
+return(undefined) and treat done plus undefined as cancellation.
+
+- [ ] **Step 19: Rerun all gates after the review correction**
+
+Run each command separately:
+
+~~~powershell
+npm test -- src/pipeline/export.test.ts
+npm test
+npm run build
+npm run lint
+git diff --check
+~~~
+
+Expected:
+
+- Focused export tests pass 21/21.
+- Full suite passes 34 files and 488 tests.
+- Build exits 0.
+- Lint exits 0 with no warning.
+- Diff check exits 0.
+
+- [ ] **Step 20: Commit the reviewed cancellation protocol**
+
+Create .git/CODEX_PHASE_5_1_EXPORT_CANCEL_COMMIT_MSG with:
+
+~~~text
+Export: distinguish cancellation from completion
+
+Allow controller cancellation to close the async generator with undefined
+instead of fabricating an ExportResult, while completed drains still require a
+real finalized result.
+
+Cover cancellation after final progress without canceling an already finalized
+sink or closing media more than once.
+
+Co-Authored-By: Codex Opus 4.8 <noreply@anthropic.com>
+~~~
+
+Then run:
+
+~~~powershell
+git add -- src/pipeline/export.ts src/pipeline/export.test.ts
+git diff --cached --check
+git -c user.name="Aryel" -c user.email="286477813+zyfvhcfh87-rgb@users.noreply.github.com" commit --author="Aryel <286477813+zyfvhcfh87-rgb@users.noreply.github.com>" -F .git/CODEX_PHASE_5_1_EXPORT_CANCEL_COMMIT_MSG
+~~~
+
+Expected: follow-up commit succeeds, and cancellation can no longer masquerade
+as a successful ExportResult.

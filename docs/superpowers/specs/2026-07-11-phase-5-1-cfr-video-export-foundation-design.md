@@ -108,7 +108,7 @@ export function exportTimeline(
   settings: ExportSettings,
   media: ExportMediaSource,
   deps: ExportDeps,
-): AsyncGenerator<number, ExportResult, void>
+): AsyncGenerator<number, ExportResult | undefined, void>
 ```
 
 Progress values are finite, monotonic, and clamped to `[0, 1]`:
@@ -116,11 +116,20 @@ Progress values are finite, monotonic, and clamped to `[0, 1]`:
 1. A non-empty export first yields `0`.
 2. After frame `i` is encoded, it yields `(i + 1) / (frameCount + 1)`.
 3. After finalization succeeds, it yields `1`.
-4. The following `next()` completes the generator with `ExportResult`.
+4. The following `next()` completes a successful export with
+   `ExportResult`.
 
 The future app controller must consume the generator with explicit `next()`
 calls. A plain `for await` loop is not sufficient because JavaScript discards
 an async generator's return value in that form.
+
+Cancellation is distinct from successful completion. After starting iteration
+and receiving at least the initial `0` progress value, the controller cancels
+with `generator.return(undefined)`. Cancellation completes with
+`{ done: true, value: undefined }`; only natural completion may produce an
+`ExportResult`. The controller must start the generator before exposing
+cancel, because calling `return(undefined)` before the first `next()` does
+not enter the generator body and therefore cannot run its cleanup.
 
 ## Frame and Timing Flow
 
@@ -157,7 +166,8 @@ the generator completes or closes.
   including an empty-document rejection.
 - A created sink finalizes exactly once on success.
 - A created sink cancels exactly once on any failure or early
-  `generator.return()`; it is not canceled after successful finalization.
+  `generator.return(undefined)`; it is not canceled after successful
+  finalization.
 - Missing clip errors identify the affected clip ids.
 - Invalid settings, non-finite timing inputs, sink creation failure,
   compositing failure, `addFrame` failure, and finalization failure reject the
@@ -183,7 +193,10 @@ Focused Vitest tests will prove:
   and closes all owned resources.
 - Composite, encoder, and finalization failures cancel and clean up exactly
   once while preserving the original error.
-- Early `generator.return()` triggers the same cleanup.
+- `generator.return(undefined)` after initial or frame progress triggers the
+  same cleanup and never returns a fabricated `ExportResult`.
+- Cancellation after progress `1` returns `undefined` without canceling the
+  already-finalized sink or closing media twice.
 - An empty timeline rejects before sink/frame creation and still closes the
   supplied media source.
 - Invalid settings reject without producing output.
