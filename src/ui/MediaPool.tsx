@@ -1,73 +1,118 @@
 /**
- * ui/MediaPool.tsx — Import + asset list. Phase 3.4; drag source since 4.0.
+ * ui/MediaPool.tsx — Import + thumbnail asset cards.
  *
- * Importing only calls mediaStore.addAsset(file); the preview controller
- * watches the store and does the demux/preview side effects. Real metadata
- * (dimensions, duration) appears on each row once demuxing fills it in —
- * only then does the row become draggable (a clip needs a real duration),
- * carrying the asset id + kind per the ui/dnd.ts contract.
+ * Importing only calls mediaStore.addAsset(file); the existing controllers
+ * fill metadata and generate the full-source filmstrip in the background.
+ * This UI crops the filmstrip's first tile as a representative thumbnail.
+ * Rows become draggable only after demuxing supplies a real duration.
  */
 
-import { useMediaStore } from '../state/mediaStore'
 import { formatTimecode } from '../domain/time'
+import { useMediaStore } from '../state/mediaStore'
 import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
 
 export default function MediaPool() {
-  const assets = useMediaStore((s) => s.assets)
-  const addAsset = useMediaStore((s) => s.addAsset)
-  const removeAsset = useMediaStore((s) => s.removeAsset)
+  const assets = useMediaStore((state) => state.assets)
+  const visuals = useMediaStore((state) => state.visuals)
+  const addAsset = useMediaStore((state) => state.addAsset)
+  const removeAsset = useMediaStore((state) => state.removeAsset)
 
   return (
     <div className="media-pool">
-      <label className="media-import">
-        <input
-          type="file"
-          accept="video/*,.mp4,.mov,.mkv,.webm"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) addAsset(file)
-            e.target.value = '' // allow re-importing the same file
-          }}
-        />
-      </label>
+      <div className="media-pool-header">
+        <h2 className="media-pool-title">Media</h2>
+        <label className="media-import">
+          <span aria-hidden="true">+</span>
+          <span>Import</span>
+          <input
+            className="media-import-input"
+            aria-label="Import media"
+            type="file"
+            accept="video/*,.mp4,.mov,.mkv,.webm"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) addAsset(file)
+              event.target.value = ''
+            }}
+          />
+        </label>
+      </div>
 
       {assets.size === 0 ? (
         <p className="media-empty">no media yet — import a video file</p>
       ) : (
         <ul className="media-list">
-          {[...assets.values()].map((asset) => (
-            <li
-              key={asset.id}
-              className="media-item"
-              title={asset.fileName}
-              // Draggable only once demux filled in a real duration — a
-              // 0-frame clip is invalid and domain would reject it anyway.
-              draggable={asset.durationFrames > 0}
-              onDragStart={(e) => {
-                if (asset.durationFrames <= 0) return
-                e.dataTransfer.setData(ASSET_DRAG_TYPE, asset.id)
-                e.dataTransfer.setData(assetKindDragType(asset.kind), asset.kind)
-                e.dataTransfer.effectAllowed = 'copy'
-              }}
-            >
-              <span className="media-name">{asset.fileName}</span>
-              <span className="media-meta">
-                {asset.frameRate
-                  ? `${asset.width}×${asset.height} · ${formatTimecode(
-                      asset.durationFrames,
-                      asset.frameRate,
-                    )}`
-                  : 'analyzing…'}
-              </span>
-              <button
-                className="media-remove"
-                aria-label={`remove ${asset.fileName}`}
-                onClick={() => removeAsset(asset.id)}
+          {[...assets.values()].map((asset) => {
+            const filmstrip = visuals.get(asset.id)?.filmstrip ?? null
+            const thumbnailStyle = filmstrip
+              ? {
+                  backgroundImage: `url("${filmstrip.url}")`,
+                  // The strip is N tiles wide. Scaling its total width to
+                  // N × the thumbnail width makes exactly tile 1 fill the box.
+                  backgroundSize: `${filmstrip.tiles * 100}% auto`,
+                }
+              : undefined
+
+            return (
+              <li
+                key={asset.id}
+                className="media-item"
+                title={asset.fileName}
+                draggable={asset.durationFrames > 0}
+                onDragStart={(event) => {
+                  if (asset.durationFrames <= 0) return
+                  event.dataTransfer.setData(ASSET_DRAG_TYPE, asset.id)
+                  event.dataTransfer.setData(
+                    assetKindDragType(asset.kind),
+                    asset.kind,
+                  )
+                  event.dataTransfer.effectAllowed = 'copy'
+                }}
               >
-                ×
-              </button>
-            </li>
-          ))}
+                <div
+                  className="media-thumbnail"
+                  data-testid={`media-thumbnail-${asset.id}`}
+                  data-state={filmstrip ? 'ready' : 'placeholder'}
+                  style={thumbnailStyle}
+                  aria-hidden="true"
+                >
+                  {!filmstrip && (
+                    <svg
+                      className="media-thumbnail-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <rect x="3" y="5" width="13" height="14" rx="2" />
+                      <path d="m16 10 5-3v10l-5-3" />
+                    </svg>
+                  )}
+                </div>
+
+                <div className="media-details">
+                  <span className="media-name">{asset.fileName}</span>
+                  <span className="media-meta">
+                    {asset.frameRate
+                      ? `${asset.width}×${asset.height} · ${formatTimecode(
+                          asset.durationFrames,
+                          asset.frameRate,
+                        )}`
+                      : 'analyzing…'}
+                  </span>
+                </div>
+
+                <button
+                  className="media-remove"
+                  type="button"
+                  draggable={false}
+                  aria-label={`remove ${asset.fileName}`}
+                  onDragStart={(event) => event.stopPropagation()}
+                  onClick={() => removeAsset(asset.id)}
+                >
+                  ×
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>
