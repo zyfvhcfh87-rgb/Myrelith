@@ -282,7 +282,18 @@ is the video-only CFR orchestration and ownership foundation described in
   Cancellation returns `undefined` rather than fabricating an
   `ExportResult` (caught by independent code review). 21 focused tests;
   488 total tests, build, and lint green.
-- [ ] **5.1b real Mediabunny video adapters + browser export verification.**
+- [x] **5.1b real Mediabunny video adapters + browser export verification**
+  — DONE 2026-07-11. `pipeline/export-mediabunny.ts` supplies the production
+  Blob→CanvasSink media source and OffscreenCanvas→CanvasSource MP4 sink.
+  Each asset uses ONE long-lived `canvasesAtTimestamps` iterator (not
+  per-frame `getCanvas`, which would create a decoder per frame); pooled
+  canvases are copied into lease-owned ImageBitmaps and closed after each
+  composite. AVC support is probed before allocation; writes await
+  backpressure; setup/add/finalize/cancel paths terminate exactly once.
+  Browser-verified against locked Mediabunny 1.50.3: a 10-frame red→green
+  source was decoded, composited, re-exported, reopened by native `<video>`
+  at 64×48 / 1.000s, and sampled correctly at 0.2s and 0.7s. 13 focused
+  adapter tests; 501 total tests, build, and lint green.
 - [ ] **5.1c bounded audio decode/mix/encode with exact integer sample count.**
 
 ### 5.2 Export UI

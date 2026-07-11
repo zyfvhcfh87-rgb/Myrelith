@@ -27,9 +27,10 @@ binding rules.
 | 4.3.8 — linked A/V clips + manual unlink (user request) | ✅ done | browser E2E: partner ghosts the drag live, one commit moves both, razor re-groups halves, unlink isolates |
 | **4 gate** | ✅ closed | user manual pass 2026-07-11 |
 | 5.1a — CFR export foundation | ✅ done | 21 focused tests: timing, backpressure, progress, ownership, cancellation |
-| 5 — export | 🚧 in progress | Mediabunny adapters, audio mix, crossfade parity, controller/UI remain |
+| 5.1b — real video adapters | ✅ done | locked Mediabunny 1.50.3 browser pass: 10-frame MP4 reopened by native video |
+| 5 — export | 🚧 in progress | audio mix, crossfade parity, controller/UI remain |
 
-488 tests green · `npm run build` and `npm run lint` clean · every phase
+501 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -39,10 +40,15 @@ video asset that contains audio now lands a video+audio clip PAIR
 (one undo entry) instead of silently dropping the audio; since 4.3.8
 (2026-07-10) that pair lands LINKED — edits follow the link, Inspector
 unlinks (see PLAN 4.3.8). Phase 5.1a landed 2026-07-11:
-`pipeline/export.ts` now owns the tested video-only CFR scheduling contract
+`pipeline/export.ts` owns the tested video-only CFR scheduling contract
 (injected frame leases/sink, exact rational timestamps, awaited backpressure,
-progress/result protocol, and exact-once cleanup). Real Mediabunny adapters are
-the next slice; no user-visible export exists yet.
+progress/result protocol, and exact-once cleanup). Phase 5.1b landed the same
+day: `pipeline/export-mediabunny.ts` provides real lazy Blob decoding and
+AVC/MP4 encoding. One long-lived timestamp iterator per asset keeps decoder
+count bounded; frame leases own and close stable ImageBitmap copies. The real
+browser gate re-exported 10 red→green frames and native `<video>` reported
+64×48, 1.000s, with correct pixels at 0.2s and 0.7s. Audio and user-visible
+export still do not exist; 5.1c is next.
 
 ## What works today (user-visible)
 
@@ -125,6 +131,12 @@ the transform fields only for video-lane clips.
   backpressure, and owns per-frame/export cleanup. Natural completion returns
   `ExportResult`; controller cancellation after iteration starts uses
   `return(undefined)`.
+- `src/pipeline/export-mediabunny.ts` — Phase 5.1b production browser
+  adapters: asset Blob resolver → one Input/CanvasSink/timestamp iterator per
+  asset → lease-owned ImageBitmap copies; OffscreenCanvas/CanvasSource →
+  AVC-in-MP4 BufferTarget with support probe, awaited backpressure, and
+  exact-once terminal cleanup. Its precomputed request order mirrors
+  `compositeFrame` and fails closed if the two ever drift.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
   100; rejected ops push no entry), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
@@ -235,6 +247,10 @@ the transform fields only for video-lane clips.
   and mangles every non-ASCII char (µ, —, →). Use real editor tools.
 - Fake decoders/browsers in tests must model REAL semantics (queue growth,
   reset-unconfigures, flush-emits) or they green-light bugs.
+- **CanvasSink.getCanvas is not a persistent decoder.** In Mediabunny 1.50.3
+  every call creates a new timestamp iterator and decoder. Sequential export
+  must keep one `canvasesAtTimestamps` iterator alive per asset; a focused fake
+  that only records `getCanvas` calls will miss catastrophic decoder churn.
 
 ## Dev/test toolbox
 
