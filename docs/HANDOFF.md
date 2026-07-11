@@ -4,7 +4,7 @@ Read this first in a new session. It is the deep context; [PLAN.md](PLAN.md)
 holds what to build next; [../ARCHITECTURE.md](../ARCHITECTURE.md) holds the
 binding rules.
 
-## Status (2026-07-11)
+## Status (2026-07-12)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -33,9 +33,10 @@ binding rules.
 | 5.1e-1 — transition domain lifecycle | ✅ done | track-scoped add/update/remove + deterministic edit cleanup; linked rollback proven |
 | 5.1e-2 — transition store wiring | ✅ done | one entry per edit; exact undo/redo id restore; rejected edits preserve redo |
 | 5.1e-3 — transition timeline UI | ✅ done | seam marker + accessible duration popover; real preview pixels and exact keyboard undo/redo verified |
-| 5 — export | 🚧 in progress | export controller/UI, then MVP gate remain |
+| 5.2a — export controller | ✅ done | 11 focused tests: snapshots, shared Blob resolver, result drain, cancellation races, cleanup |
+| 5 — export | 🚧 in progress | export UI, then MVP gate remain |
 
-574 tests green · `npm run build` and `npm run lint` clean · every phase
+585 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -64,7 +65,7 @@ with frozen source endpoints and hard-cut fallback for malformed/ambiguous
 definitions. Its same-asset browser gate forced the real decoder forward →
 backward → forward, reopened all 12 output frames at exactly 1.200s, and kept
 preview/export probe pixels within 2 channel values with no dark midpoint or
-console errors. Export has no user-facing controller/UI yet; transition
+console errors. Export has no user-facing UI yet; transition
 authoring now has its 5.1e-1 domain lifecycle: track-scoped add/duration/remove
 operations share the renderer's exact centered-window resolver, and every
 geometry edit keeps only seams valid before and after (split carries an
@@ -77,8 +78,12 @@ eligible touching video seam has a small marker whose popover chooses a
 duration before Add, then explicitly Applies or Removes it. The real-browser
 gate authored D15, changed it to D2, removed it, and walked all three states
 backward/forward with the exact id. Red→green preview probe pixels changed at
-the expected frames and the console stayed clean. Export still has no
-user-facing controller/UI.
+the expected frames and the console stayed clean. Phase 5.2a now provides the
+app export controller: it captures one document/settings/media snapshot,
+retains referenced Blobs before their object URLs can be revoked, shares one
+cached resolver across video and audio, explicitly drains progress through the
+final result, and serializes cancellation after any in-flight frame boundary.
+The Export button/modal/download flow is still not user-visible.
 
 ## What works today (user-visible)
 
@@ -173,6 +178,12 @@ the transform fields only for video-lane clips.
   backpressure, and owns per-frame/export cleanup. Natural completion returns
   `ExportResult`; controller cancellation after iteration starts uses
   `return(undefined)`.
+- `src/app/exportController.ts` — Phase 5.2a composition root: snapshots the
+  current document/settings/media, eagerly retains every referenced Blob, and
+  passes one cached asset resolver to both Mediabunny adapter trees. It is the
+  sole explicit generator pump, preserving the final `ExportResult` while
+  making repeated/coincident cancellation one serialized `return(undefined)`.
+  Only one run (including setup/cancel cleanup) may own the controller slot.
 - `src/pipeline/export-audio.ts` — Phase 5.1c exact audio scheduler/mixer:
   BigInt frame→sample boundaries; split/trim-stable signed source↔timeline
   phase; `audibleTracks` selection; clip volume; 1024-sample bounded stereo

@@ -363,8 +363,18 @@ is the video-only CFR orchestration and ownership foundation described in
   0 warnings. 574 total tests, build, and lint green.
 
 ### 5.2 Export flow
-- [ ] **5.2a app export controller** — composition-root wiring for the media
-  Blob resolver, generator lifecycle, cancellation, progress, and result.
+- [x] **5.2a app export controller** — DONE 2026-07-12.
+  `app/exportController.ts` captures one immutable document/settings/media
+  snapshot per run, starts retaining every referenced Blob before its object
+  URL can be revoked, and shares one cached asset resolver between the video
+  decoder and A/V sink factories. It manually pumps `exportTimeline` through
+  the result-bearing final `next()` (never `for await`), forwards exact
+  progress, and makes cancellation a single serialized `return(undefined)`
+  after any in-flight frame boundary. A run owns the singleton slot through
+  setup/cancel cleanup; errors remain primary; success returns the buffer and
+  cancellation returns `undefined`. 11 focused lifecycle/ownership tests;
+  585 total tests, build, and lint green. No browser pass: this controller has
+  no rendered surface until 5.2b.
 - [ ] **5.2b Export UI** — Toolbar Export button → modal
   (resolution/format) → progress bar from the generator → download via
   `URL.createObjectURL(new Blob([buffer]))`.
