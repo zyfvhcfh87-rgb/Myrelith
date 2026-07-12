@@ -392,15 +392,19 @@ is the video-only CFR orchestration and ownership foundation described in
   and retry succeeded; console stayed at 0 errors and 0 warnings. 594 total
   tests, build, and lint green.
 
-### Phase 5 / MVP gate
-- [ ] Export a 30s, 3-clip, 2-track timeline w/ one crossfade + one trim.
-  (Rendering is complete; 5.1e authoring must land so the editor can create
-  the transition without a seeded document.)
-- [ ] VLC + QuickTime playback, no perceptible A/V desync.
-- [ ] Spot-check exported frame at t=10s vs preview.
+### Phase 5 / MVP gate — CLOSED 2026-07-12
+
+User's confirmation pass (completed manually 2026-07-12):
+
+- [x] Export a 30s, 3-clip, 2-track timeline w/ one crossfade + one trim.
+- [x] VLC + QuickTime playback, no perceptible A/V desync.
+- [x] Spot-check exported frame at t=10s vs preview.
 - [x] `ffprobe -show_streams`: `avg_frame_rate == r_frame_rate == 30/1` on the
   5.2b browser-exported A/V MP4 (2026-07-12).
-- [ ] No memory growth exporting a 2-min timeline (Chrome Task Manager).
+- [x] No memory growth exporting a 2-min timeline (Chrome Task Manager).
+
+Phase 5 and the MVP are complete. Further work is post-MVP and needs a new
+user-approved plan or an explicitly selected item from HANDOFF.md's open list.
 
 ## Test strategy per layer (unchanged from original)
 

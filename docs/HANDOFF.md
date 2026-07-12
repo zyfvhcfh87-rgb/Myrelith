@@ -35,10 +35,13 @@ binding rules.
 | 5.1e-3 — transition timeline UI | ✅ done | seam marker + accessible duration popover; real preview pixels and exact keyboard undo/redo verified |
 | 5.2a — export controller | ✅ done | 11 focused tests: snapshots, shared Blob resolver, result drain, cancellation races, cleanup |
 | 5.2b — export UI | ✅ done | real browser A/V export + download, active cancellation, retry, focus, clean console |
-| 5 — export | 🚧 in progress | MVP gate remains |
+| 5 — export | ✅ done | complete export pipeline + browser-verified delivery flow |
+| **5 / MVP gate** | ✅ closed | user manual pass 2026-07-12 |
 
 594 tests green · `npm run build` and `npm run lint` clean · every phase
-committed separately (see `git log --oneline`). Phase 3 gate CLOSED
+committed separately (see `git log --oneline`). The user completed the
+Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; no Phase 6
+has been selected. Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
 4.3 Inspector + arrow stepping. The user completed the Phase 4 manual gate
