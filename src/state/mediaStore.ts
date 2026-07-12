@@ -22,9 +22,9 @@ function kindFromMime(mime: string): AssetKind {
  * Precomputed timeline eye-candy for one asset (filmstrip on video clips,
  * waveform on audio clips), generated once per asset by
  * app/mediaVisualsController. Both images span the asset's FULL source
- * duration, so ClipView maps them onto a clip with pure CSS background
- * math (size = assetDuration×zoom, position = −sourceStart×zoom) — trim,
- * slip and zoom all stay correct with zero redraws. The URLs are object
+ * duration. ClipView maps waveform time with CSS and repeats fixed-aspect
+ * sprite frames inside integer-frame SVG buckets, so trim, slip and zoom stay
+ * aligned without stretching thumbnails. The URLs are object
  * URLs OWNED by this store: revoked when the asset is removed (or when a
  * result arrives for an already-removed asset).
  */

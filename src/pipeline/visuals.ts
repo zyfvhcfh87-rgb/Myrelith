@@ -4,20 +4,19 @@
  * video, and a WAVEFORM image for audio. Layering: pipeline/ → domain/
  * only (mediabunny + canvas are runtime hosts, same as demux.ts).
  *
- * Both images span the asset's FULL source duration by construction, so
- * the UI maps them onto any clip with two CSS background values
- * (size = assetDuration×zoom, position = −sourceStart×zoom) — trim, slip
- * and zoom stay correct without ever redrawing.
+ * Both images span the asset's FULL source duration by construction. The UI
+ * maps waveform time with CSS and filmstrip time with integer-frame sprite
+ * buckets, so trim, slip and zoom stay aligned without another decode.
  *
  * Decoding goes through mediabunny sinks (WebCodecs under the hood):
  * CanvasSink hands us pre-scaled frames, AudioBufferSink streams decoded
  * audio CHUNKS — peaks fold into a fixed-size array on the fly, so a long
  * file never holds its whole PCM in memory. Frame-closing rule: sink
  * canvases are drawn immediately (poolSize 1 reuses them), AudioBuffers
- * die with each loop turn, and the only outputs are two small blobs.
+ * die with each loop turn, and the only outputs are two small image blobs.
  *
  * The `filmstripTimestamps` / `waveformWidth` / `accumulatePeaks` /
- * `drawWaveform` helpers are pure and unit-tested; the two generators are
+ * `waveformPath` helpers are pure and unit-tested; the two generators are
  * thin async shells over them, verified in the browser (jsdom has neither
  * WebCodecs nor canvas).
  */
@@ -96,30 +95,25 @@ export function accumulatePeaks(
   }
 }
 
-/** The 2D-context surface drawWaveform needs (structural, for tests). */
-export interface Waveform2D {
-  fillStyle: string | CanvasGradient | CanvasPattern
-  fillRect(x: number, y: number, w: number, h: number): void
-}
-
-/**
- * Draw symmetric peak columns around the vertical center — the classic
- * NLE waveform. True amplitude (no normalization: quiet audio LOOKS
- * quiet), clamped to 1.0; silent columns keep a 1px center hairline so
- * the clip still reads as "audio lives here".
- */
-export function drawWaveform(
-  ctx: Waveform2D,
-  peaks: Float32Array,
-  height: number,
-  color: string,
-): void {
-  ctx.fillStyle = color
+/** A stepped, closed waveform silhouette that stays sharp at any zoom. */
+export function waveformPath(peaks: Float32Array, height: number): string {
+  if (peaks.length === 0 || !Number.isFinite(height) || height <= 0) return ''
   const mid = height / 2
-  for (let x = 0; x < peaks.length; x++) {
-    const half = Math.max(0.5, Math.min(1, peaks[x]) * mid)
-    ctx.fillRect(x, mid - half, 1, half * 2)
+  const halves = Array.from(peaks, (peak) =>
+    Math.max(0.5, Math.min(1, Number.isFinite(peak) ? peak : 0) * mid),
+  )
+
+  let path = `M0 ${mid - halves[0]}`
+  for (let x = 0; x < halves.length; x++) {
+    path += `H${x + 1}`
+    if (x + 1 < halves.length) path += `V${mid - halves[x + 1]}`
   }
+  path += `V${mid + halves[halves.length - 1]}`
+  for (let x = halves.length - 1; x >= 0; x--) {
+    path += `H${x}`
+    if (x > 0) path += `V${mid + halves[x - 1]}`
+  }
+  return `${path}Z`
 }
 
 /* ------------------------------------------------------------------ */
@@ -187,8 +181,8 @@ export async function generateFilmstrip(file: Blob): Promise<FilmstripResult | n
 
 /**
  * Decode the audio track chunk by chunk, fold peaks on the fly, and draw
- * one waveform image (PNG object URL — transparency lets the clip color
- * show through). Returns null when the file has no audio track. The
+ * one waveform image (SVG object URL — vector edges stay sharp at timeline
+ * zoom). Returns null when the file has no audio track. The
  * caller owns the returned URL (mediaStore takes it over).
  */
 export async function generateWaveform(file: Blob): Promise<WaveformResult | null> {
@@ -207,11 +201,8 @@ export async function generateWaveform(file: Blob): Promise<WaveformResult | nul
     }
   }
 
-  const canvas = new OffscreenCanvas(width, WAVEFORM_HEIGHT)
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return null
-  drawWaveform(ctx, peaks, WAVEFORM_HEIGHT, WAVEFORM_COLOR)
-
-  const blob = await canvas.convertToBlob({ type: 'image/png' })
+  const path = waveformPath(peaks, WAVEFORM_HEIGHT)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${WAVEFORM_HEIGHT}" preserveAspectRatio="none"><path d="${path}" fill="${WAVEFORM_COLOR}" shape-rendering="crispEdges"/></svg>`
+  const blob = new Blob([svg], { type: 'image/svg+xml' })
   return { url: URL.createObjectURL(blob), width, height: WAVEFORM_HEIGHT }
 }

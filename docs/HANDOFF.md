@@ -39,9 +39,10 @@ and the open list below.
 | 5 — export | ✅ done | complete export pipeline + browser-verified delivery flow |
 | **5 / MVP gate** | ✅ closed | user manual pass 2026-07-12 |
 | Post-MVP #2 — smooth preview playback | ✅ done | Blob-backed streaming lanes; user verified multiple videos without stutter |
+| Post-MVP #3 — undistorted timeline visuals | ✅ done | fixed-aspect SVG thumbnail patterns + vector waveform; Chrome razor continuity, clean console |
 | Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
 
-682 tests green · `npm run build` and `npm run lint` clean · every phase
+686 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; no Phase 6
 has been selected. Phase 3 gate CLOSED
@@ -103,7 +104,12 @@ showed the cancelling state, produced no download, and a retry succeeded; the
 console stayed at 0 errors and 0 warnings. Post-MVP issue #2 replaced per-frame
 encoded-chunk rebuilding with worker-owned Blob sources and clip-keyed
 sequential playback lanes; the user verified smooth playback across multiple
-videos. Issue #5 adds bounded live audio: Mediabunny decodes rolling PCM
+videos. Issue #3 now renders each full-source filmstrip as integer-frame SVG
+buckets with fixed-aspect repeating thumbnail patterns, so even hour-long clips
+add previews instead of stretching them; waveforms are scalable SVG paths
+instead of interpolated PNGs. Chrome verified a linked A/V import and exact
+filmstrip continuity across a razor cut with no console warnings or errors.
+Issue #5 adds bounded live audio: Mediabunny decodes rolling PCM
 windows, Web Audio schedules them against one future AudioContext anchor, and
 PlaybackEngine uses that same anchor. The Chrome gate measured non-zero audio
 while playing, zero audio/nodes after mute and pause, successful audio re-prime
@@ -173,10 +179,11 @@ playback consume that selector rather than re-deriving flags. Clip visuals
 (4.3.7): every imported asset gets a FILMSTRIP (video frames, one
 tile per ~2s, cap 48) and a WAVEFORM image generated once in the
 background (app/mediaVisualsController → pipeline/visuals via
-mediabunny sinks); both images span the asset's FULL duration, so
-ClipView maps them with two CSS background values — trim/razor/zoom
-need zero redraws and slip/start-trim previews shift the material
-live. The Inspector edits VOLUME for audio-lane clips (domain-clamped
+mediabunny sinks); both images span the asset's FULL duration. ClipView
+maps filmstrip time through fixed-aspect SVG patterns in integer-frame buckets
+and waveform time through a scalable SVG background, so trim/razor/zoom need
+zero decode work and slip/start-trim previews shift the material live without
+stretching or bitmap blur. The Inspector edits VOLUME for audio-lane clips (domain-clamped
 [0,2], one entry per commit; export and live playback consume it) and shows
 the transform fields only for video-lane clips.
 
@@ -270,7 +277,8 @@ the transform fields only for video-lane clips.
 - `src/pipeline/visuals.ts` — filmstrip/waveform image generators (4.3.7):
   mediabunny CanvasSink / AudioBufferSink (streamed chunks, peaks fold on
   the fly — full PCM never held); images span the asset's FULL duration
-  (the CSS-mapping contract). Pure math unit-tested; shells browser-only.
+  (integer-frame filmstrip buckets + vector waveform mapping). Pure math
+  unit-tested; shells browser-only.
   Wired by `src/app/mediaVisualsController.ts` (3rd composition root):
   one generation per asset, no retries, mediaStore owns the result URLs.
 - `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,

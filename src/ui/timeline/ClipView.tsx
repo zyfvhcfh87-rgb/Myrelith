@@ -31,6 +31,7 @@ import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import type { EditPreviewKind } from '../../state/transportStore'
 import { useTransportStore } from '../../state/transportStore'
+import { visibleFilmstripBuckets } from './clipVisualPlan'
 import { useScrubScheduler } from './useScrubScheduler'
 
 interface ClipViewProps {
@@ -77,11 +78,11 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   const setDragPreview = useTransportStore((s) => s.setDragPreview)
   const setEditPreview = useTransportStore((s) => s.setEditPreview)
 
-  // Clip visuals (filmstrip / waveform): both images span the asset's FULL
-  // source duration, so mapping them onto this clip is two CSS background
-  // values — size (asset length at the current zoom) and position (the
-  // in-point shift). Stable narrow slices: they change only when THIS
-  // asset's visuals/metadata land.
+  // Both visuals span the asset's FULL source duration. The waveform uses
+  // full-source CSS size/position; the filmstrip is cut into integer-frame
+  // SVG buckets that repeat each fixed-aspect sprite frame rather than
+  // stretching one sample across a potentially huge time span.
+  // Stable narrow slices change only when THIS asset's visuals/metadata land.
   const visuals = useMediaStore((s) => s.visuals.get(clip.assetId))
   const assetDurationFrames = useMediaStore(
     (s) => s.assets.get(clip.assetId)?.durationFrames ?? 0,
@@ -156,7 +157,18 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   ) {
     sourceStartFrame += editPreview.deltaFrames
   }
-  const visual = trackKind === 'audio' ? visuals?.waveform : visuals?.filmstrip
+  const filmstrip = trackKind === 'video' ? visuals?.filmstrip : null
+  const waveform = trackKind === 'audio' ? visuals?.waveform : null
+  const filmstripBuckets = filmstrip
+    ? visibleFilmstripBuckets(
+        assetDurationFrames,
+        filmstrip.tiles,
+        filmstrip.tileWidth,
+        zoom,
+        sourceStartFrame,
+        durationFrames,
+      )
+    : []
 
   /* ---------------- gesture plumbing -------------------------------- */
 
@@ -344,12 +356,53 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
         }
       }}
     >
-      {visual && assetDurationFrames > 0 && (
+      {filmstrip && assetDurationFrames > 0 && filmstripBuckets.length > 0 && (
         <div
-          className="clip-visual"
+          className="clip-visual clip-filmstrip"
+          data-testid={`clip-${clip.id}-visual`}
+        >
+          {filmstripBuckets.map((bucket) => (
+            <svg
+              key={bucket.index}
+              className="clip-filmstrip-tile"
+              data-testid={`clip-${clip.id}-filmstrip-tile-${bucket.index}`}
+              aria-hidden="true"
+              focusable="false"
+              style={{
+                left: (bucket.startFrame - sourceStartFrame) * zoom,
+                width: (bucket.endFrame - bucket.startFrame) * zoom,
+              }}
+            >
+              <defs>
+                <pattern
+                  id={`${clip.id}-filmstrip-pattern-${bucket.index}`}
+                  patternUnits="userSpaceOnUse"
+                  width={filmstrip.tileWidth}
+                  height={filmstrip.tileHeight}
+                >
+                  <image
+                    href={filmstrip.url}
+                    x={-bucket.spriteIndex * filmstrip.tileWidth}
+                    width={filmstrip.tiles * filmstrip.tileWidth}
+                    height={filmstrip.tileHeight}
+                  />
+                </pattern>
+              </defs>
+              <rect
+                width="100%"
+                height="100%"
+                fill={`url(#${clip.id}-filmstrip-pattern-${bucket.index})`}
+              />
+            </svg>
+          ))}
+        </div>
+      )}
+      {waveform && assetDurationFrames > 0 && (
+        <div
+          className="clip-visual clip-waveform"
           data-testid={`clip-${clip.id}-visual`}
           style={{
-            backgroundImage: `url(${visual.url})`,
+            backgroundImage: `url(${waveform.url})`,
             backgroundSize: `${assetDurationFrames * zoom}px 100%`,
             backgroundPosition: `${-sourceStartFrame * zoom}px 0`,
           }}
