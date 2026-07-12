@@ -13,10 +13,12 @@ drift — treat ARCHITECTURE.md as canonical.
 
 1. [docs/HANDOFF.md](docs/HANDOFF.md) — status, file map, invariants,
    hard-won lessons (browser-only bugs!), dev toolbox, working agreements.
-2. [docs/PLAN.md](docs/PLAN.md) — exactly what to build next (Phase 3 gate
-   → Phase 4 → Phase 5) with gates; supersedes the original plan file.
+2. [docs/PLAN.md](docs/PLAN.md) — completed MVP build record and gate
+   evidence; supersedes the original plan file.
 
-Phases 0–3.4 are done and committed; the Phase 3 gate is open. 161 tests.
+Phases 0–5 are done and committed; the MVP gate is closed. 594 tests.
+Select a post-MVP item from HANDOFF.md or write a new user-approved plan
+before starting another phase.
 
 ## Build & test
 
@@ -29,8 +31,8 @@ Phases 0–3.4 are done and committed; the Phase 3 gate is open. 161 tests.
 ## Working style (user preference — binding)
 
 - One module per turn: implement → test → build/lint → browser-verify if
-  observable → commit (message file + `git commit -F`, author Aryel,
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`).
+  observable → commit (message file + `git commit -F`, author Aryel only;
+  never add AI co-author or attribution trailers).
 - Never skip a phase gate. Quality over speed, explicitly requested.
 - End-of-turn summaries: short, plain, low-jargon (see HANDOFF.md).
 - TypeScript `erasableSyntaxOnly`: no constructor parameter properties.

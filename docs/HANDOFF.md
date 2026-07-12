@@ -1,8 +1,8 @@
 # WebCut — Session Handoff
 
 Read this first in a new session. It is the deep context; [PLAN.md](PLAN.md)
-holds what to build next; [../ARCHITECTURE.md](../ARCHITECTURE.md) holds the
-binding rules.
+records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTURE.md)
+holds the binding rules.
 
 ## Status (2026-07-12)
 
@@ -35,10 +35,13 @@ binding rules.
 | 5.1e-3 — transition timeline UI | ✅ done | seam marker + accessible duration popover; real preview pixels and exact keyboard undo/redo verified |
 | 5.2a — export controller | ✅ done | 11 focused tests: snapshots, shared Blob resolver, result drain, cancellation races, cleanup |
 | 5.2b — export UI | ✅ done | real browser A/V export + download, active cancellation, retry, focus, clean console |
-| 5 — export | 🚧 in progress | MVP gate remains |
+| 5 — export | ✅ done | complete export pipeline + browser-verified delivery flow |
+| **5 / MVP gate** | ✅ closed | user manual pass 2026-07-12 |
 
 594 tests green · `npm run build` and `npm run lint` clean · every phase
-committed separately (see `git log --oneline`). Phase 3 gate CLOSED
+committed separately (see `git log --oneline`). The user completed the
+Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; no Phase 6
+has been selected. Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
 4.3 Inspector + arrow stepping. The user completed the Phase 4 manual gate
@@ -425,7 +428,7 @@ the transform fields only for video-lane clips.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their
-  structural types. Remove or repurpose during Phase 5.
+  structural types. Remove or repurpose only as explicit post-MVP cleanup.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
@@ -445,8 +448,8 @@ the transform fields only for video-lane clips.
 
 - ONE module per turn, micro-steps (domain → state → ui) verified
   separately; never skip a phase gate; commit after each module with the
-  message file + `-F` pattern, `Co-Authored-By: Claude Opus 4.8
-  <noreply@anthropic.com>`.
+  message file + `-F` pattern, authored as Aryel only; never add AI
+  co-author or attribution trailers.
 - End-of-turn summaries: SHORT, plain words, low jargon (user has AuADHD —
   dense dumps fog them; they like emoji and warmth). Deep detail belongs in
   commits/docs, not the summary.
