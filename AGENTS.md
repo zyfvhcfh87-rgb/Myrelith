@@ -29,8 +29,8 @@ Phases 0–3.4 are done and committed; the Phase 3 gate is open. 161 tests.
 ## Working style (user preference — binding)
 
 - One module per turn: implement → test → build/lint → browser-verify if
-  observable → commit (message file + `git commit -F`, author Aryel,
-  `Co-Authored-By: Codex Opus 4.8 <noreply@anthropic.com>`).
+  observable → commit (message file + `git commit -F`, author Aryel only;
+  never add AI co-author or attribution trailers).
 - Never skip a phase gate. Quality over speed, explicitly requested.
 - End-of-turn summaries: short, plain, low-jargon (see HANDOFF.md).
 - TypeScript `erasableSyntaxOnly`: no constructor parameter properties.

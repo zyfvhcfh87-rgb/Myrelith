@@ -27,7 +27,7 @@
 - This foundation has no observable browser behavior; browser verification belongs to the real Mediabunny adapter slice.
 - Do not reinstall or change dependencies in this slice. The lockfile's Mediabunny 1.50.3 versus installed 1.50.8 drift is handled before the real adapter slice.
 - Preserve the user's untracked AGENTS.md; never edit or stage it.
-- Commit with author Aryel <286477813+zyfvhcfh87-rgb@users.noreply.github.com> and trailer Co-Authored-By: Codex Opus 4.8 <noreply@anthropic.com>, using a message file and git commit -F.
+- Commit with author Aryel <286477813+zyfvhcfh87-rgb@users.noreply.github.com>, using a message file and git commit -F; do not add AI attribution trailers.
 
 ---
 
@@ -1231,8 +1231,6 @@ explicit returned buffer contract.
 
 Close per-frame media leases exactly once and cancel unfinished exports without
 letting cleanup errors hide the first operational failure.
-
-Co-Authored-By: Codex Opus 4.8 <noreply@anthropic.com>
 ~~~
 
 Then run each command separately:
@@ -1371,8 +1369,6 @@ real finalized result.
 
 Cover cancellation after final progress without canceling an already finalized
 sink or closing media more than once.
-
-Co-Authored-By: Codex Opus 4.8 <noreply@anthropic.com>
 ~~~
 
 Then run:

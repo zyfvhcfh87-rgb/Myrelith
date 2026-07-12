@@ -445,8 +445,8 @@ the transform fields only for video-lane clips.
 
 - ONE module per turn, micro-steps (domain → state → ui) verified
   separately; never skip a phase gate; commit after each module with the
-  message file + `-F` pattern, `Co-Authored-By: Claude Opus 4.8
-  <noreply@anthropic.com>`.
+  message file + `-F` pattern, authored as Aryel only; never add AI
+  co-author or attribution trailers.
 - End-of-turn summaries: SHORT, plain words, low jargon (user has AuADHD —
   dense dumps fog them; they like emoji and warmth). Deep detail belongs in
   commits/docs, not the summary.

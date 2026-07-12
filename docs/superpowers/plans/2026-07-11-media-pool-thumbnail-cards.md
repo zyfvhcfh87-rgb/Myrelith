@@ -21,7 +21,7 @@
 - Treat thumbnail imagery as decorative; filename text remains the accessible asset identity.
 - Follow TDD: observe the new tests fail before writing component or CSS implementation.
 - After implementation run focused tests, the full test suite, production build, lint, and a real-browser verification.
-- Commit with author `Aryel <zyfvhcfh87@privaterelay.appleid.com>` and trailer `Co-Authored-By: Codex Opus 4.8 <noreply@anthropic.com>` using a message file and `git commit -F`.
+- Commit with author `Aryel <zyfvhcfh87@privaterelay.appleid.com>` using a message file and `git commit -F`; do not add AI attribution trailers.
 
 ---
 
@@ -609,8 +609,6 @@ Media Pool: add thumbnail cards
 Polish the media panel with a compact header and horizontal asset cards that
 reuse the existing filmstrip's early frame as a representative thumbnail.
 Keep import, metadata, removal, and timeline drag behavior intact.
-
-Co-Authored-By: Codex Opus 4.8 <noreply@anthropic.com>
 ```
 
 Then run:
