@@ -7,8 +7,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import type { Clip, MediaAsset, TimelineDoc, Track } from '../domain/schema'
+import type { TimelineAudioPlaybackSession } from '../pipeline/playback-audio'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 import {
   configureTransport,
@@ -18,6 +20,7 @@ import {
   stepFrame,
   togglePlayback,
 } from './transportController'
+import type { TransportDeps } from './transportController'
 
 function makeClip(id: string, tlStart: number, duration: number): Clip {
   return {
@@ -33,10 +36,14 @@ function makeClip(id: string, tlStart: number, duration: number): Clip {
   }
 }
 
-function makeTrack(id: string, clips: Clip[]): Track {
+function makeTrack(
+  id: string,
+  clips: Clip[],
+  kind: Track['kind'] = 'video',
+): Track {
   return {
     id,
-    kind: 'video',
+    kind,
     name: id,
     clips,
     transitions: [],
@@ -45,6 +52,61 @@ function makeTrack(id: string, clips: Clip[]): Track {
     solo: false,
     locked: false,
   }
+}
+
+function makeAudibleDoc(durationFrames = 120): TimelineDoc {
+  return {
+    ...makeDoc(durationFrames),
+    tracks: [
+      makeTrack('V1', [makeClip('clipV', 0, durationFrames)]),
+      makeTrack('A1', [makeClip('clipA', 0, durationFrames)], 'audio'),
+    ],
+  }
+}
+
+function makeAsset(id = 'asset-1'): MediaAsset {
+  return {
+    id,
+    fileName: 'fixture.mp4',
+    objectUrl: `blob:${id}`,
+    kind: 'video',
+    durationFrames: 120,
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    hasAudio: true,
+    audioSampleRate: 48_000,
+    audioChannels: 2,
+    decoderConfigB64: null,
+  }
+}
+
+function makeAudioSession(anchorTime: number): TimelineAudioPlaybackSession & {
+  stop: ReturnType<typeof vi.fn>
+} {
+  return {
+    anchorTime,
+    stop: vi.fn(async () => undefined),
+    diagnostics: () => ({
+      anchorTime,
+      fromFrame: 0,
+      contextTime: anchorTime,
+      activeNodeCount: 1,
+      rms: 0.25,
+      scheduledThroughTimelineTime: 1,
+      scheduledThroughContextTime: anchorTime + 1,
+    }),
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (cause?: unknown) => void
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve
+    reject = onReject
+  })
+  return { promise, resolve, reject }
 }
 
 /** One 120-frame clip at 30fps → duration 120, last frame 119. */
@@ -65,7 +127,15 @@ function makeDoc(durationFrames = 120): TimelineDoc {
 
 /** Fake AudioContext clock + manual rAF pump. */
 function makeFakeDeps() {
-  const clock = { currentTime: 0, resume: vi.fn(async () => {}) }
+  const clock = {
+    currentTime: 0,
+    resume: vi.fn(async () => undefined),
+    close: vi.fn(async () => undefined),
+  }
+  const fetchBlob = vi.fn(async () => new Blob(['audio']))
+  const startAudio = vi.fn<TransportDeps['startAudio']>(
+    async () => makeAudioSession(clock.currentTime),
+  )
   let nextId = 1
   const pending = new Map<number, () => void>()
   const deps = {
@@ -76,13 +146,22 @@ function makeFakeDeps() {
       return id
     },
     cancelTick: (id: number) => void pending.delete(id),
+    fetchBlob,
+    startAudio,
   }
   const pump = () => {
     const cbs = [...pending.values()]
     pending.clear()
     for (const cb of cbs) cb()
   }
-  return { clock, deps, pump, pendingCount: () => pending.size }
+  return {
+    clock,
+    deps,
+    fetchBlob,
+    startAudio,
+    pump,
+    pendingCount: () => pending.size,
+  }
 }
 
 const transport = () => useTransportStore.getState()
@@ -99,6 +178,10 @@ beforeEach(() => {
     dragPreview: null,
   })
   useDocumentStore.getState().setDoc(makeDoc())
+  useMediaStore.setState({
+    assets: new Map([['asset-1', makeAsset()]]),
+    visuals: new Map(),
+  })
   fake = makeFakeDeps()
   configureTransport(fake.deps)
 })
@@ -180,6 +263,309 @@ describe('play / pause', () => {
     fake.clock.currentTime = 2
     fake.pump()
     expect(transport().playheadFrame).toBe(60)
+  })
+})
+
+describe('live audio integration', () => {
+  test('audible playback waits for priming and shares the session anchor exactly', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const prime = deferred<TimelineAudioPlaybackSession>()
+    const session = makeAudioSession(100.25)
+    fake.startAudio.mockImplementationOnce(() => prime.promise)
+    fake.clock.currentTime = 2
+
+    play()
+
+    expect(transport().isPlaying).toBe(true)
+    expect(fake.pendingCount()).toBe(0)
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+    expect(fake.startAudio.mock.calls[0][2]).toBe(0)
+
+    // Time can move considerably while decoding. Video must still use the
+    // AUDIO session's future anchor, not the context time at click/resolve.
+    fake.clock.currentTime = 50
+    prime.resolve(session)
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+    fake.clock.currentTime = 100.75
+    fake.pump()
+    expect(transport().playheadFrame).toBe(15)
+  })
+
+  test('pause during pending prime aborts startup and stops its late session', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const prime = deferred<TimelineAudioPlaybackSession>()
+    const lateSession = makeAudioSession(80)
+    fake.startAudio.mockImplementationOnce(() => prime.promise)
+
+    play()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+    const options = fake.startAudio.mock.calls[0][4]
+
+    pause()
+    expect(options.signal?.aborted).toBe(true)
+    expect(transport().isPlaying).toBe(false)
+    expect(fake.pendingCount()).toBe(0)
+
+    prime.resolve(lateSession)
+    await vi.waitFor(() => expect(lateSession.stop).toHaveBeenCalledOnce())
+    expect(fake.pendingCount()).toBe(0)
+
+    fake.clock.currentTime = 1_000
+    fake.pump()
+    expect(transport().playheadFrame).toBe(0)
+  })
+
+  test('keeps audio alive through the final frame and stops at the exclusive end', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const session = makeAudioSession(0)
+    fake.startAudio.mockResolvedValueOnce(session)
+
+    play()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+    fake.clock.currentTime = 119 / 30
+    fake.pump()
+    expect(transport().playheadFrame).toBe(119)
+    expect(transport().isPlaying).toBe(true)
+    expect(session.stop).not.toHaveBeenCalled()
+
+    fake.clock.currentTime = 4
+    fake.pump()
+    expect(transport().playheadFrame).toBe(119)
+    expect(transport().isPlaying).toBe(false)
+    expect(session.stop).toHaveBeenCalledOnce()
+  })
+
+  test.each(['pause', 'scrub', 'step'] as const)(
+    '%s stops an active audio session',
+    async (action) => {
+      useDocumentStore.getState().setDoc(makeAudibleDoc())
+      const session = makeAudioSession(0)
+      fake.startAudio.mockResolvedValueOnce(session)
+
+      play()
+      await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+      if (action === 'pause') pause()
+      else if (action === 'scrub') transport().setIsScrubbing(true)
+      else stepFrame(1)
+
+      expect(session.stop).toHaveBeenCalledOnce()
+      expect(fake.pendingCount()).toBe(0)
+      expect(transport().isPlaying).toBe(false)
+      expect(transport().playheadFrame).toBe(action === 'step' ? 1 : 0)
+    },
+  )
+
+  test('audio-plan changes re-prime from the current frame; video transforms do not', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const first = makeAudioSession(0)
+    const second = makeAudioSession(1.05)
+    fake.startAudio
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second)
+
+    play()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+    fake.clock.currentTime = 1
+    fake.pump()
+    expect(transport().playheadFrame).toBe(30)
+
+    const original = useDocumentStore.getState().doc
+    const audioChanged: TimelineDoc = {
+      ...original,
+      tracks: original.tracks.map((track) =>
+        track.id === 'A1'
+          ? {
+              ...track,
+              clips: track.clips.map((clip) => ({ ...clip, volume: 0.5 })),
+            }
+          : track,
+      ),
+    }
+    useDocumentStore.getState().setDoc(audioChanged)
+
+    expect(first.stop).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledTimes(2))
+    expect(fake.startAudio.mock.calls[1][2]).toBe(30)
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+    const videoOnlyChange: TimelineDoc = {
+      ...audioChanged,
+      tracks: audioChanged.tracks.map((track) =>
+        track.id === 'V1'
+          ? {
+              ...track,
+              clips: track.clips.map((clip) => ({
+                ...clip,
+                transform: { ...clip.transform, x: clip.transform.x + 25 },
+              })),
+            }
+          : track,
+      ),
+    }
+    useDocumentStore.getState().setDoc(videoOnlyChange)
+    await Promise.resolve()
+
+    expect(fake.startAudio).toHaveBeenCalledTimes(2)
+    expect(second.stop).not.toHaveBeenCalled()
+  })
+
+  test('audible asset replacement re-primes; unrelated media changes do not', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const first = makeAudioSession(0)
+    const second = makeAudioSession(1.05)
+    fake.startAudio
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second)
+
+    play()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+    fake.clock.currentTime = 1
+    fake.pump()
+    expect(transport().playheadFrame).toBe(30)
+
+    const replacement = {
+      ...makeAsset(),
+      objectUrl: 'blob:replacement',
+    }
+    const replacementAssets = new Map([['asset-1', replacement]])
+    useMediaStore.setState({ assets: replacementAssets })
+
+    expect(first.stop).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledTimes(2))
+    expect(fake.startAudio.mock.calls[1][2]).toBe(30)
+    await fake.startAudio.mock.calls[1][3]('asset-1')
+    expect(fake.fetchBlob).toHaveBeenLastCalledWith('blob:replacement')
+
+    const unrelatedAssets = new Map(replacementAssets)
+    unrelatedAssets.set('asset-2', makeAsset('asset-2'))
+    useMediaStore.setState({ assets: unrelatedAssets })
+    await Promise.resolve()
+
+    expect(fake.startAudio).toHaveBeenCalledTimes(2)
+    expect(second.stop).not.toHaveBeenCalled()
+  })
+
+  test('audio startup failure logs once and falls back to clock-driven video', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fake.startAudio.mockRejectedValueOnce(new Error('decoder unavailable'))
+    fake.clock.currentTime = 2
+
+    play()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+    expect(transport().isPlaying).toBe(true)
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining('audio playback disabled; continuing with video'),
+      'decoder unavailable',
+    )
+    fake.clock.currentTime = 3
+    fake.pump()
+    expect(transport().playheadFrame).toBe(30)
+    warning.mockRestore()
+  })
+
+  test('a rejected AudioContext resume stops silent playback cleanly', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fake.clock.resume.mockRejectedValueOnce(new Error('autoplay blocked'))
+
+    play()
+    await vi.waitFor(() => expect(transport().isPlaying).toBe(false))
+
+    expect(fake.pendingCount()).toBe(0)
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining('AudioContext resume failed'),
+      'autoplay blocked',
+    )
+    warning.mockRestore()
+  })
+
+  test('resume rejection aborts a pending prime and stops its late session', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const resume = deferred<undefined>()
+    const prime = deferred<TimelineAudioPlaybackSession>()
+    const lateSession = makeAudioSession(10)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fake.clock.resume.mockReturnValueOnce(resume.promise)
+    fake.startAudio.mockImplementationOnce(() => prime.promise)
+
+    play()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+    const signal = fake.startAudio.mock.calls[0][4].signal
+    resume.reject(new Error('resume rejected'))
+
+    await vi.waitFor(() => expect(transport().isPlaying).toBe(false))
+    expect(signal?.aborted).toBe(true)
+    expect(fake.pendingCount()).toBe(0)
+
+    prime.resolve(lateSession)
+    await vi.waitFor(() => expect(lateSession.stop).toHaveBeenCalledOnce())
+    expect(fake.pendingCount()).toBe(0)
+    warning.mockRestore()
+  })
+
+  test('resume rejection stops an already-primed audio session', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const resume = deferred<undefined>()
+    const session = makeAudioSession(3)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fake.clock.resume.mockReturnValueOnce(resume.promise)
+    fake.startAudio.mockResolvedValueOnce(session)
+
+    play()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+    resume.reject(new Error('resume rejected after prime'))
+
+    await vi.waitFor(() => expect(session.stop).toHaveBeenCalledOnce())
+    expect(transport().isPlaying).toBe(false)
+    expect(fake.pendingCount()).toBe(0)
+    warning.mockRestore()
+  })
+
+  test('a stale resume rejection cannot cancel a newer play generation', async () => {
+    const firstResume = deferred<undefined>()
+    fake.clock.resume
+      .mockReturnValueOnce(firstResume.promise)
+      .mockResolvedValueOnce(undefined)
+
+    play()
+    pause()
+    play()
+    firstResume.reject(new Error('old rejection'))
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(transport().isPlaying).toBe(true)
+    expect(fake.pendingCount()).toBe(1)
+  })
+
+  test('AudioContext construction failure restores the stopped state', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    configureTransport({
+      createContext: () => {
+        throw new Error('context unavailable')
+      },
+    })
+
+    expect(() => play()).not.toThrow()
+    expect(transport().isPlaying).toBe(false)
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining('playback clock initialization failed'),
+      'context unavailable',
+    )
+    warning.mockRestore()
+  })
+
+  test('disposing the transport closes its AudioContext', () => {
+    play()
+    expect(fake.clock.close).not.toHaveBeenCalled()
+
+    disposeTransport()
+
+    expect(fake.clock.close).toHaveBeenCalledOnce()
   })
 })
 

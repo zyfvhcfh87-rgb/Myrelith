@@ -5,7 +5,7 @@ Stack: React + Vite + TypeScript + Zustand + Immer + WebCodecs + Mediabunny + Ca
 
 **Before editing, read [ARCHITECTURE.md](ARCHITECTURE.md).** It holds the
 dependency hierarchy and the non-negotiable rules (frame-closing, integer
-frame math, audio-master-clock, UI-reads-state-only, one-module-per-prompt).
+frame math, audio-master-clock, and UI-reads-state-only).
 Those rules are binding for every change and are not repeated here to avoid
 drift — treat ARCHITECTURE.md as canonical.
 
@@ -16,9 +16,8 @@ drift — treat ARCHITECTURE.md as canonical.
 2. [docs/PLAN.md](docs/PLAN.md) — completed MVP build record and gate
    evidence; supersedes the original plan file.
 
-Phases 0–5 are done and committed; the MVP gate is closed. 594 tests.
-Select a post-MVP item from HANDOFF.md or write a new user-approved plan
-before starting another phase.
+Phases 0–5 and the MVP gate are complete. Post-MVP work is tracked through
+explicitly selected issues and HANDOFF.md's open list.
 
 ## Build & test
 
@@ -30,7 +29,8 @@ before starting another phase.
 
 ## Working style (user preference — binding)
 
-- One module per turn: implement → test → build/lint → browser-verify if
+- Follow a change end-to-end across every module it genuinely needs. Keep
+  dependency boundaries clear, then test → build/lint → browser-verify if
   observable → commit (message file + `git commit -F`, author Aryel only;
   never add AI co-author or attribution trailers).
 - Never skip a phase gate. Quality over speed, explicitly requested.

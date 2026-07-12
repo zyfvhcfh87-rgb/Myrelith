@@ -50,9 +50,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
    show" from that clock — it never free-runs on its own timer.
 4. **UI reads state only.** UI components import from `state/` only. A `.tsx`
    file never imports `pipeline/`, `workers/`, or `engine/` directly.
-5. **One module per prompt.** If a change requires touching more than one
-   layer (ui + state + domain in the same prompt), stop and split it into
-   separate prompts.
+
+Changes may span multiple modules or layers when that is the smallest complete
+solution. The dependency direction above and all ownership/timing rules remain
+binding across the whole change.
 
 ## Scrubbing-vs-committed pattern
 

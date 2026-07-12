@@ -13,9 +13,10 @@
  *
  * Emission contract: only the NEWEST frame is emitted per tick (if the
  * clock jumped several frames, intermediates are skipped — latest-wins,
- * matching every other async layer). Reaching `endFrame` emits exactly
- * `endFrame`, then `onEnded`, exactly once. Callbacks may reentrantly call
- * stop()/start(); the loop never schedules past a stop.
+ * matching every other async layer). Playback ends at the exclusive document
+ * boundary, after the final frame has received its full display duration.
+ * Callbacks may reentrantly call stop()/start(); the loop never schedules
+ * past a stop.
  *
  * No React, no stores, no browser globals — deps are injected
  * (app/transportController.ts wires the real ones).
@@ -45,7 +46,7 @@ export interface PlaybackEngineDeps {
   cancelTick(id: number): void
   /** A new integer frame is due (strictly increasing between emits). */
   onFrame(frame: number): void
-  /** endFrame was reached; the engine has already stopped itself. */
+  /** The exclusive end boundary was reached; the engine already stopped. */
   onEnded(): void
 }
 
@@ -56,9 +57,10 @@ export class PlaybackEngine {
   private tickId: number | null = null
   private anchorTime = 0
   private anchorFrame = 0
-  private endFrame = 0
+  private endFrameExclusive = 0
   private lastEmitted = 0
   private rate: FrameRate = { num: 30, den: 1 }
+  private runGeneration = 0
 
   constructor(deps: PlaybackEngineDeps) {
     this.deps = deps
@@ -69,23 +71,31 @@ export class PlaybackEngine {
   }
 
   /**
-   * Begin playing from `fromFrame` (integer, at `rate`) until `endFrame`
-   * (inclusive — the final resting frame). Re-anchors on the current clock
-   * reading; calling while running restarts cleanly.
+   * Begin playing from `fromFrame` (integer, at `rate`) until the exclusive
+   * `endFrameExclusive` boundary. `anchorTime` can be supplied by a scheduled
+   * audio session so video and audio share one exact AudioContext origin.
+   * Calling while running restarts cleanly.
    */
-  start(fromFrame: number, endFrame: number, rate: FrameRate): void {
+  start(
+    fromFrame: number,
+    endFrameExclusive: number,
+    rate: FrameRate,
+    anchorTime = this.deps.clock.currentTime,
+  ): void {
     this.stop()
-    this.anchorTime = this.deps.clock.currentTime
+    this.anchorTime = anchorTime
     this.anchorFrame = fromFrame
-    this.endFrame = endFrame
+    this.endFrameExclusive = endFrameExclusive
     this.rate = rate
     this.lastEmitted = fromFrame // already on screen; emit only what's new
     this.running = true
+    this.runGeneration++
     this.tickId = this.deps.scheduleTick(this.tick)
   }
 
   /** Halt without emitting anything further. Safe to call at any time. */
   stop(): void {
+    this.runGeneration++
     this.running = false
     if (this.tickId !== null) {
       this.deps.cancelTick(this.tickId)
@@ -97,6 +107,7 @@ export class PlaybackEngine {
   private tick = (): void => {
     this.tickId = null
     if (!this.running) return
+    const generation = this.runGeneration
 
     // Float seconds are legal exactly here (clock boundary); multiply by
     // num before dividing by den so standard rates stay exact.
@@ -105,9 +116,13 @@ export class PlaybackEngine {
       this.anchorFrame +
       Math.floor((elapsed * this.rate.num) / this.rate.den + FRAME_EPSILON)
 
-    if (frame >= this.endFrame) {
+    if (frame >= this.endFrameExclusive) {
       this.running = false
-      if (this.endFrame !== this.lastEmitted) this.deps.onFrame(this.endFrame)
+      const lastFrame = Math.max(this.anchorFrame, this.endFrameExclusive - 1)
+      if (lastFrame > this.lastEmitted) this.deps.onFrame(lastFrame)
+      // The final-frame callback may have started or stopped a different run.
+      // Its lifecycle must not receive this superseded run's ended callback.
+      if (generation !== this.runGeneration) return
       this.deps.onEnded()
       return
     }
