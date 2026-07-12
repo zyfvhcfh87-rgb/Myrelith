@@ -1,0 +1,857 @@
+/**
+ * pipeline/playback-audio.test.ts — bounded live timeline-audio scheduling.
+ *
+ * Media decoding, Web Audio, and timers stay behind structural fakes. These
+ * tests pin the shared clock anchor, bounded lookahead, failure isolation,
+ * and exact cleanup behavior without requiring browser media globals.
+ */
+
+import { describe, expect, test, vi } from 'vitest'
+import type {
+  Clip,
+  FrameRate,
+  TimelineDoc,
+  Track,
+} from '../domain/schema'
+import {
+  createWebAudioPlaybackOutput,
+  startTimelineAudioPlayback,
+  type PlaybackAssetResolver,
+  type PlaybackAudioBuffer,
+  type PlaybackAudioClipRequest,
+  type PlaybackAudioCursor,
+  type PlaybackAudioDeps,
+  type PlaybackAudioMediaSource,
+  type PlaybackAudioOutput,
+  type ScheduledPlaybackAudio,
+} from './playback-audio'
+
+const F10: FrameRate = { num: 10, den: 1 }
+
+function makeClip(
+  id: string,
+  timelineStart: number,
+  duration: number,
+  options: {
+    assetId?: string
+    sourceStart?: number
+    volume?: number
+  } = {},
+): Clip {
+  return {
+    id,
+    assetId: options.assetId ?? `asset-${id}`,
+    name: id,
+    sourceRange: {
+      startFrame: options.sourceStart ?? 0,
+      durationFrames: duration,
+    },
+    timelineRange: { startFrame: timelineStart, durationFrames: duration },
+    transform: {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    },
+    opacity: 1,
+    volume: options.volume ?? 1,
+    effects: [],
+  }
+}
+
+function makeTrack(
+  id: string,
+  kind: Track['kind'],
+  clips: Clip[],
+  flags: Partial<Pick<Track, 'muted' | 'solo'>> = {},
+): Track {
+  return {
+    id,
+    kind,
+    name: id,
+    clips,
+    transitions: [],
+    hidden: false,
+    muted: flags.muted ?? false,
+    solo: flags.solo ?? false,
+    locked: false,
+  }
+}
+
+function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
+  return {
+    schemaVersion: 1,
+    id: 'doc',
+    name: 'Playback audio test',
+    frameRate: F10,
+    width: 64,
+    height: 48,
+    audioSampleRate: 48_000,
+    tracks: [
+      makeTrack(
+        'V1',
+        'video',
+        [makeClip('video-runway', 0, durationFrames)],
+      ),
+      ...audioTracks,
+    ],
+  }
+}
+
+function decodedBuffer(
+  label: string,
+  timestamp: number,
+  duration: number,
+  bufferDuration = duration,
+): PlaybackAudioBuffer {
+  const buffer = { duration: bufferDuration, label } as unknown as AudioBuffer
+  return { buffer, timestamp, duration }
+}
+
+function deferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+} {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+type CursorStep =
+  | PlaybackAudioBuffer
+  | Error
+  | Promise<IteratorResult<PlaybackAudioBuffer, void>>
+
+interface CursorHarness {
+  cursor: PlaybackAudioCursor
+}
+
+function makeCursor(initialSteps: CursorStep[]): CursorHarness {
+  const steps = [...initialSteps]
+  let closed = false
+  const next = vi.fn(
+    async (): Promise<IteratorResult<PlaybackAudioBuffer, void>> => {
+      if (closed) return { done: true, value: undefined }
+      const step = steps.shift()
+      if (step === undefined) return { done: true, value: undefined }
+      if (step instanceof Error) throw step
+      if (step instanceof Promise) return step
+      return { done: false, value: step }
+    },
+  )
+  const close = vi.fn(async () => {
+    closed = true
+  })
+  return { cursor: { next, close } }
+}
+
+interface MediaHarness {
+  source: PlaybackAudioMediaSource
+  requests: PlaybackAudioClipRequest[]
+  enqueue(assetId: string, response: PlaybackAudioCursor | Error): void
+}
+
+function makeMediaHarness(): MediaHarness {
+  const requests: PlaybackAudioClipRequest[] = []
+  const responses = new Map<string, Array<PlaybackAudioCursor | Error>>()
+  const enqueue = (
+    assetId: string,
+    response: PlaybackAudioCursor | Error,
+  ): void => {
+    const queue = responses.get(assetId) ?? []
+    queue.push(response)
+    responses.set(assetId, queue)
+  }
+  const openClip = vi.fn(async (request: PlaybackAudioClipRequest) => {
+    requests.push({ ...request })
+    const response = responses.get(request.assetId)?.shift()
+    if (!response) {
+      throw new Error(`No fake audio cursor for ${request.assetId}`)
+    }
+    if (response instanceof Error) throw response
+    return response
+  })
+  const close = vi.fn(async () => undefined)
+  return { source: { openClip, close }, requests, enqueue }
+}
+
+interface OutputHarness {
+  output: PlaybackAudioOutput
+  scheduled: ScheduledPlaybackAudio[]
+  setTime(value: number): void
+  queueTimes(...values: number[]): void
+}
+
+function makeOutputHarness(initialTime: number): OutputHarness {
+  let now = initialTime
+  const queuedTimes: number[] = []
+  const scheduled: ScheduledPlaybackAudio[] = []
+  const currentTime = vi.fn(() => {
+    const queued = queuedTimes.shift()
+    if (queued !== undefined) now = queued
+    return now
+  })
+  const schedule = vi.fn((request: ScheduledPlaybackAudio) => {
+    scheduled.push(request)
+  })
+  const stop = vi.fn()
+  const output: PlaybackAudioOutput = {
+    currentTime,
+    schedule,
+    stop,
+    diagnostics: () => ({
+      contextTime: now,
+      activeNodeCount: scheduled.length,
+      rms: 0,
+    }),
+  }
+  return {
+    output,
+    scheduled,
+    setTime: (value) => {
+      now = value
+    },
+    queueTimes: (...values) => {
+      queuedTimes.push(...values)
+    },
+  }
+}
+
+interface PumpEntry {
+  callback: () => void
+  delayMs: number
+}
+
+interface TimerHarness {
+  schedulePump: PlaybackAudioDeps['schedulePump']
+  cancelPump: PlaybackAudioDeps['cancelPump']
+  pendingCount(): number
+  runNext(): PumpEntry
+}
+
+function makeTimerHarness(): TimerHarness {
+  let nextId = 1
+  const pending = new Map<number, PumpEntry>()
+  const schedulePump = vi.fn((callback: () => void, delayMs: number) => {
+    const id = nextId++
+    pending.set(id, { callback, delayMs })
+    return id
+  })
+  const cancelPump = vi.fn((id: number) => {
+    pending.delete(id)
+  })
+  return {
+    schedulePump,
+    cancelPump,
+    pendingCount: () => pending.size,
+    runNext: () => {
+      const entry = [...pending.entries()][0]
+      if (!entry) throw new Error('No fake audio pump is queued')
+      pending.delete(entry[0])
+      entry[1].callback()
+      return entry[1]
+    },
+  }
+}
+
+interface PlaybackHarnessOptions {
+  currentTime?: number
+  lookaheadSeconds?: number
+  startLeadSeconds?: number
+  pumpIntervalMs?: number
+}
+
+function makePlaybackHarness(options: PlaybackHarnessOptions = {}): {
+  context: AudioContext
+  resolveAsset: PlaybackAssetResolver
+  media: MediaHarness
+  output: OutputHarness
+  timers: TimerHarness
+  deps: PlaybackAudioDeps
+} {
+  const context = {} as AudioContext
+  const resolveAsset: PlaybackAssetResolver = async () => new Blob()
+  const media = makeMediaHarness()
+  const output = makeOutputHarness(options.currentTime ?? 5)
+  const timers = makeTimerHarness()
+  const deps: PlaybackAudioDeps = {
+    createMediaSource: vi.fn(() => media.source),
+    createOutput: vi.fn(() => output.output),
+    schedulePump: timers.schedulePump,
+    cancelPump: timers.cancelPump,
+    lookaheadSeconds: options.lookaheadSeconds ?? 0.5,
+    startLeadSeconds: options.startLeadSeconds ?? 0.05,
+    pumpIntervalMs: options.pumpIntervalMs ?? 25,
+  }
+  return { context, resolveAsset, media, output, timers, deps }
+}
+
+interface FakeAudioParam {
+  value: number
+  cancelScheduledValues: ReturnType<typeof vi.fn>
+  setValueAtTime: ReturnType<typeof vi.fn>
+  linearRampToValueAtTime: ReturnType<typeof vi.fn>
+}
+
+interface FakeGainNode {
+  gain: FakeAudioParam
+  connect: ReturnType<typeof vi.fn>
+  disconnect: ReturnType<typeof vi.fn>
+}
+
+interface FakeSourceNode {
+  buffer: AudioBuffer | null
+  onended: (() => void) | null
+  connect: ReturnType<typeof vi.fn>
+  disconnect: ReturnType<typeof vi.fn>
+  start: ReturnType<typeof vi.fn>
+  stop: ReturnType<typeof vi.fn>
+}
+
+function makeWebAudioHarness(state: AudioContextState): {
+  context: AudioContext
+  gains: FakeGainNode[]
+  sources: FakeSourceNode[]
+  analyser: {
+    disconnect: ReturnType<typeof vi.fn>
+  }
+} {
+  const gains: FakeGainNode[] = []
+  const sources: FakeSourceNode[] = []
+  const makeGain = (): FakeGainNode => ({
+    gain: {
+      value: 1,
+      cancelScheduledValues: vi.fn(),
+      setValueAtTime: vi.fn(),
+      linearRampToValueAtTime: vi.fn(),
+    },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  })
+  const analyser = {
+    fftSize: 0,
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    getFloatTimeDomainData: vi.fn((samples: Float32Array) => samples.fill(0)),
+  }
+  const context = {
+    currentTime: 5,
+    state,
+    destination: {},
+    createGain: vi.fn(() => {
+      const gain = makeGain()
+      gains.push(gain)
+      return gain
+    }),
+    createAnalyser: vi.fn(() => analyser),
+    createBufferSource: vi.fn(() => {
+      const source: FakeSourceNode = {
+        buffer: null,
+        onended: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      }
+      sources.push(source)
+      return source
+    }),
+  } as unknown as AudioContext
+  return { context, gains, sources, analyser }
+}
+
+describe('startTimelineAudioPlayback scheduling', () => {
+  test('shares one future anchor and maps a mid-buffer seek exactly', async () => {
+    const doc = makeDoc([
+      makeTrack('A-mid', 'audio', [
+        makeClip('mid', 0, 20, {
+          assetId: 'asset-mid',
+          sourceStart: 10,
+          volume: 0.25,
+        }),
+      ]),
+      makeTrack('A-peer', 'audio', [
+        makeClip('peer', 0, 20, { assetId: 'asset-peer' }),
+      ]),
+    ])
+    const h = makePlaybackHarness({ currentTime: 5 })
+    const mid = decodedBuffer('mid-buffer', 1, 1)
+    const peer = decodedBuffer('peer-buffer', 0.5, 0.5)
+    h.media.enqueue('asset-mid', makeCursor([mid]).cursor)
+    h.media.enqueue('asset-peer', makeCursor([peer]).cursor)
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      5,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.media.requests).toEqual([
+      { assetId: 'asset-mid', startTime: 1.5, endTime: 3 },
+      { assetId: 'asset-peer', startTime: 0.5, endTime: 2 },
+    ])
+    expect(session.anchorTime).toBeCloseTo(5.05)
+    expect(session.anchorTime).toBeGreaterThan(5)
+    expect(h.output.scheduled).toHaveLength(2)
+    expect(h.output.scheduled.map(({ when }) => when)).toEqual([
+      session.anchorTime,
+      session.anchorTime,
+    ])
+
+    const scheduledMid = h.output.scheduled.find(
+      ({ clipId }) => clipId === 'mid',
+    )
+    if (!scheduledMid) throw new Error('Expected the mid-buffer event')
+    expect(scheduledMid.buffer).toBe(mid.buffer)
+    expect(scheduledMid.when).toBeCloseTo(session.anchorTime)
+    expect(scheduledMid.offset).toBeCloseTo(0.5)
+    expect(scheduledMid.duration).toBeCloseTo(0.5)
+    expect(scheduledMid.volume).toBe(0.25)
+
+    await session.stop()
+  })
+
+  test('uses canonical solo and mute selection and skips zero volume', async () => {
+    const doc = makeDoc([
+      makeTrack('A-normal', 'audio', [
+        makeClip('normal', 0, 10, { assetId: 'asset-normal' }),
+      ]),
+      makeTrack(
+        'A-muted-solo',
+        'audio',
+        [makeClip('muted', 0, 10, { assetId: 'asset-muted' })],
+        { muted: true, solo: true },
+      ),
+      makeTrack(
+        'A-zero-solo',
+        'audio',
+        [
+          makeClip('zero', 0, 10, {
+            assetId: 'asset-zero',
+            volume: 0,
+          }),
+        ],
+        { solo: true },
+      ),
+      makeTrack(
+        'A-live-solo',
+        'audio',
+        [
+          makeClip('live', 0, 10, {
+            assetId: 'asset-live',
+            volume: 0.4,
+          }),
+        ],
+        { solo: true },
+      ),
+    ])
+    const h = makePlaybackHarness()
+    h.media.enqueue(
+      'asset-live',
+      makeCursor([decodedBuffer('live', 0, 0.5)]).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.media.requests).toEqual([
+      { assetId: 'asset-live', startTime: 0, endTime: 1 },
+    ])
+    expect(h.output.scheduled.map(({ clipId, volume }) => ({
+      clipId,
+      volume,
+    }))).toEqual([{ clipId: 'live', volume: 0.4 }])
+
+    await session.stop()
+  })
+
+  test('bounds initial decoding to lookahead and refills only elapsed time', async () => {
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('long', 0, 20)]),
+    ], 20)
+    const h = makePlaybackHarness({ currentTime: 2 })
+    const first = decodedBuffer('first', 0, 0.5)
+    const second = decodedBuffer('second', 0.5, 0.5)
+    const third = decodedBuffer('third', 1, 0.5)
+    const cursor = makeCursor([first, second, third])
+    h.media.enqueue('asset-long', cursor.cursor)
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.output.scheduled).toHaveLength(1)
+    expect(h.output.scheduled[0].buffer).toBe(first.buffer)
+    expect(cursor.cursor.next).toHaveBeenCalledTimes(2)
+    expect(session.diagnostics().scheduledThroughTimelineTime).toBeCloseTo(0.5)
+    expect(h.timers.pendingCount()).toBe(1)
+    expect(h.timers.schedulePump).toHaveBeenLastCalledWith(
+      expect.any(Function),
+      25,
+    )
+
+    h.output.setTime(session.anchorTime + 0.25)
+    const pump = h.timers.runNext()
+    expect(pump.delayMs).toBe(25)
+    await vi.waitFor(() => expect(h.output.scheduled).toHaveLength(2))
+
+    const refill = h.output.scheduled[1]
+    expect(refill.buffer).toBe(second.buffer)
+    expect(refill.when).toBeCloseTo(session.anchorTime + 0.5)
+    expect(refill.offset).toBeCloseTo(0)
+    expect(refill.duration).toBeCloseTo(0.25)
+    expect(cursor.cursor.next).toHaveBeenCalledTimes(2)
+    expect(session.diagnostics().scheduledThroughTimelineTime).toBeCloseTo(0.75)
+    expect(h.timers.pendingCount()).toBe(1)
+
+    await session.stop()
+  })
+
+  test('opens a future clip only when it enters the rolling lookahead', async () => {
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('future', 10, 10)]),
+    ], 20)
+    const h = makePlaybackHarness()
+    h.media.enqueue(
+      'asset-future',
+      makeCursor([decodedBuffer('future', 0, 0.5)]).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+    expect(h.media.requests).toHaveLength(0)
+
+    h.output.setTime(session.anchorTime + 0.4)
+    h.timers.runNext()
+    await vi.waitFor(() => expect(h.timers.pendingCount()).toBe(1))
+    expect(h.media.requests).toHaveLength(0)
+
+    h.output.setTime(session.anchorTime + 0.6)
+    h.timers.runNext()
+    await vi.waitFor(() => expect(h.media.requests).toHaveLength(1))
+    expect(h.media.requests[0]).toEqual({
+      assetId: 'asset-future',
+      startTime: 0,
+      endTime: 1,
+    })
+
+    await session.stop()
+  })
+
+  test('trims a decoded buffer that becomes late before scheduling', async () => {
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('late', 0, 10)]),
+    ])
+    const h = makePlaybackHarness({ currentTime: 10 })
+    h.output.queueTimes(10, 10, 10.2)
+    const wrapped = decodedBuffer('late', 0, 0.5)
+    h.media.enqueue('asset-late', makeCursor([wrapped]).cursor)
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(session.anchorTime).toBeCloseTo(10.05)
+    expect(h.output.scheduled).toHaveLength(1)
+    expect(h.output.scheduled[0].when).toBeCloseTo(10.2)
+    expect(h.output.scheduled[0].offset).toBeCloseTo(0.15)
+    expect(h.output.scheduled[0].duration).toBeCloseTo(0.35)
+
+    await session.stop()
+  })
+
+  test('isolates one clip read failure while scheduling healthy clips', async () => {
+    const failure = new Error('clip decode failed')
+    const doc = makeDoc([
+      makeTrack('A-bad', 'audio', [makeClip('bad', 0, 10)]),
+      makeTrack('A-good', 'audio', [makeClip('good', 0, 10)]),
+    ])
+    const h = makePlaybackHarness()
+    const bad = makeCursor([failure])
+    const good = makeCursor([decodedBuffer('good', 0, 0.5)])
+    h.media.enqueue('asset-bad', bad.cursor)
+    h.media.enqueue('asset-good', good.cursor)
+    const onWarning = vi.fn()
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      { onWarning },
+      h.deps,
+    )
+
+    expect(onWarning).toHaveBeenCalledWith('bad', failure)
+    expect(h.output.scheduled.map(({ clipId }) => clipId)).toEqual(['good'])
+
+    await session.stop()
+    expect(bad.cursor.close).toHaveBeenCalledOnce()
+    expect(good.cursor.close).toHaveBeenCalledOnce()
+  })
+
+  test('does not reopen a clip after its decoder reaches natural EOF', async () => {
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('short-media', 0, 20)]),
+    ], 20)
+    const h = makePlaybackHarness()
+    const cursor = makeCursor([decodedBuffer('only-buffer', 0, 0.25)])
+    h.media.enqueue('asset-short-media', cursor.cursor)
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.media.requests).toHaveLength(1)
+    for (const elapsed of [0.25, 0.5, 0.75]) {
+      h.output.setTime(session.anchorTime + elapsed)
+      h.timers.runNext()
+      await vi.waitFor(() => expect(h.timers.pendingCount()).toBe(1))
+    }
+
+    expect(h.media.requests).toHaveLength(1)
+    expect(cursor.cursor.close).toHaveBeenCalledOnce()
+    await session.stop()
+  })
+})
+
+describe('startTimelineAudioPlayback ownership', () => {
+  test('stop cancels refill and closes output, cursors, and media once', async () => {
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('long', 0, 20)]),
+    ], 20)
+    const h = makePlaybackHarness()
+    const cursor = makeCursor([
+      decodedBuffer('first', 0, 0.5),
+      decodedBuffer('pending', 0.5, 0.5),
+    ])
+    h.media.enqueue('asset-long', cursor.cursor)
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.timers.pendingCount()).toBe(1)
+    const firstStop = session.stop()
+    const secondStop = session.stop()
+    expect(secondStop).toBe(firstStop)
+    await firstStop
+    expect(session.stop()).toBe(firstStop)
+
+    expect(h.timers.cancelPump).toHaveBeenCalledOnce()
+    expect(h.timers.pendingCount()).toBe(0)
+    expect(h.output.output.stop).toHaveBeenCalledOnce()
+    expect(cursor.cursor.close).toHaveBeenCalledOnce()
+    expect(h.media.source.close).toHaveBeenCalledOnce()
+  })
+
+  test('abort during a deferred initial read schedules nothing and cleans up', async () => {
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('deferred', 0, 20)]),
+    ], 20)
+    const h = makePlaybackHarness()
+    const read = deferred<IteratorResult<PlaybackAudioBuffer, void>>()
+    const cursor: PlaybackAudioCursor = {
+      next: vi.fn(() => read.promise),
+      close: vi.fn(async () => {
+        read.resolve({ done: true, value: undefined })
+      }),
+    }
+    h.media.enqueue('asset-deferred', cursor)
+    const controller = new AbortController()
+    const onWarning = vi.fn()
+
+    const pending = startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      { signal: controller.signal, onWarning },
+      h.deps,
+    )
+    const rejection = expect(pending).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+    await vi.waitFor(() => expect(cursor.next).toHaveBeenCalledOnce())
+
+    controller.abort()
+    await rejection
+
+    expect(h.output.output.schedule).not.toHaveBeenCalled()
+    expect(h.timers.schedulePump).not.toHaveBeenCalled()
+    expect(h.output.output.stop).toHaveBeenCalledOnce()
+    expect(cursor.close).toHaveBeenCalledOnce()
+    expect(h.media.source.close).toHaveBeenCalledOnce()
+    expect(onWarning).not.toHaveBeenCalled()
+  })
+
+  test('stop closes media immediately while a refill read is pending', async () => {
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('pending-refill', 0, 20)]),
+    ], 20)
+    const h = makePlaybackHarness()
+    const read = deferred<IteratorResult<PlaybackAudioBuffer, void>>()
+    const next = vi.fn<PlaybackAudioCursor['next']>()
+      .mockResolvedValueOnce({
+        done: false,
+        value: decodedBuffer('first-second', 0, 1),
+      })
+      .mockImplementation(() => read.promise)
+    const cursor: PlaybackAudioCursor = {
+      next,
+      close: vi.fn(async () => {
+        read.resolve({ done: true, value: undefined })
+      }),
+    }
+    h.media.enqueue('asset-pending-refill', cursor)
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    h.output.setTime(session.anchorTime + 0.75)
+    h.timers.runNext()
+    await vi.waitFor(() => expect(next).toHaveBeenCalledTimes(2))
+
+    const stopped = session.stop()
+    expect(cursor.close).toHaveBeenCalledOnce()
+    expect(h.media.source.close).toHaveBeenCalledOnce()
+    await stopped
+    expect(h.output.output.stop).toHaveBeenCalledOnce()
+  })
+
+  test('abort after startup stops the active session exactly once', async () => {
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('active', 0, 20)]),
+    ], 20)
+    const h = makePlaybackHarness()
+    const cursor = makeCursor([decodedBuffer('active', 0, 1)])
+    h.media.enqueue('asset-active', cursor.cursor)
+    const controller = new AbortController()
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      { signal: controller.signal },
+      h.deps,
+    )
+
+    controller.abort()
+    await vi.waitFor(() => expect(cursor.cursor.close).toHaveBeenCalledOnce())
+    await session.stop()
+
+    expect(h.output.output.stop).toHaveBeenCalledOnce()
+    expect(h.media.source.close).toHaveBeenCalledOnce()
+  })
+})
+
+describe('createWebAudioPlaybackOutput ownership', () => {
+  test('ramps in once and synchronously cleans a suspended context', () => {
+    const h = makeWebAudioHarness('suspended')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const buffer = { duration: 1 } as AudioBuffer
+
+    output.schedule({
+      clipId: 'clip-1',
+      buffer,
+      when: 10,
+      offset: 0,
+      duration: 0.5,
+      volume: 0.75,
+    })
+    output.schedule({
+      clipId: 'clip-2',
+      buffer,
+      when: 10.5,
+      offset: 0,
+      duration: 0.5,
+      volume: 0.5,
+    })
+
+    const master = h.gains[0]
+    expect(master.gain.setValueAtTime).toHaveBeenCalledOnce()
+    expect(master.gain.setValueAtTime).toHaveBeenCalledWith(0, 10)
+    expect(master.gain.linearRampToValueAtTime).toHaveBeenCalledOnce()
+    expect(master.gain.linearRampToValueAtTime).toHaveBeenCalledWith(1, 10.005)
+
+    output.stop()
+
+    expect(output.diagnostics().activeNodeCount).toBe(0)
+    expect(h.sources.every(({ stop }) => stop.mock.calls.length === 1)).toBe(true)
+    expect(h.sources.every(({ disconnect }) =>
+      disconnect.mock.calls.length === 1)).toBe(true)
+    expect(h.gains.every(({ disconnect }) =>
+      disconnect.mock.calls.length === 1)).toBe(true)
+    expect(h.analyser.disconnect).toHaveBeenCalledOnce()
+  })
+
+  test('uses a wall-clock cleanup fallback when running nodes never end', () => {
+    vi.useFakeTimers()
+    try {
+      const h = makeWebAudioHarness('running')
+      const output = createWebAudioPlaybackOutput(h.context)
+      output.schedule({
+        clipId: 'clip',
+        buffer: { duration: 1 } as AudioBuffer,
+        when: 10,
+        offset: 0,
+        duration: 1,
+        volume: 1,
+      })
+
+      output.stop()
+      expect(output.diagnostics().activeNodeCount).toBe(1)
+
+      vi.advanceTimersByTime(50)
+      expect(output.diagnostics().activeNodeCount).toBe(0)
+      expect(h.sources[0].disconnect).toHaveBeenCalledOnce()
+      expect(h.gains[0].disconnect).toHaveBeenCalledOnce()
+      expect(h.analyser.disconnect).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

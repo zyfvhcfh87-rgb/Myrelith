@@ -33,8 +33,9 @@ Play/pause + one-frame steps between Preview and Timeline. Shipped:
 AudioContext clock per rule 3, floor+epsilon frame math), app/
 transportController (composition root; scrub preempts playback, end
 parks+pauses, play-at-end restarts), ui/TransportBar (subscribes to
-isPlaying only — invariant 6 kept). Playback is silent + single-asset
-until 4.1/audio; keyboard arrows still belong to 4.2.
+isPlaying only — invariant 6 kept). At this point playback was silent and
+single-asset; Phase 4.1 and post-MVP issues #2/#5 later superseded both
+limitations. Keyboard arrows still belonged to 4.2.
 
 ### 4.0.6 ✅ DONE (2026-07-06; user-requested) 12-hour virtualized ruler
 The 60s minimum runway ended mid-screen on wide monitors. Now
@@ -199,8 +200,8 @@ per-clip volume editor. Sliced domain → state → pipeline → app → ui:
 - **ui**: ClipView `.clip-visual` layer (waveform on A lanes, strip on
   V lanes; slip/start-trim previews shift the material live);
   Inspector edits Volume for audio-lane clips (transform fields are
-  video-only now). Actual audio MIXING with clip.volume lands with
-  Phase 5 export/audio playback.
+  video-only now). Audio mixing with `clip.volume` is now complete in both
+  Phase 5 export and post-MVP issue #5 live playback.
 - Browser-verified with an in-page generated 8s A/V MP4 (beat audio):
   strips + waveform render, continuous across razor splits, volume
   commit = one entry, clean console. 414 tests total.
@@ -271,8 +272,8 @@ two rather than letting rounding accumulate.
 The in-browser encode pattern is already proven — see HANDOFF.md toolbox
 (we generated test MP4s with Output/CanvasSource in Phase 2.5/3.4).
 
-Implementation is staged under the one-module rule. The approved first slice
-is the video-only CFR orchestration and ownership foundation described in
+The completed export work began with the video-only CFR orchestration and
+ownership foundation described in
 [`docs/superpowers/specs/2026-07-11-phase-5-1-cfr-video-export-foundation-design.md`](superpowers/specs/2026-07-11-phase-5-1-cfr-video-export-foundation-design.md).
 
 - [x] **5.1a CFR orchestration foundation** — DONE 2026-07-11.
@@ -417,7 +418,5 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
 
 - Follow ARCHITECTURE.md dependency arrows; new store↔engine wiring goes
   through app/ composition-root controllers (previewController pattern).
-- Micro-step order inside a module turn: domain → state → app/ui, tests at
-  each step; browser-verify anything touching pipeline/workers/gestures.
-- Original plan's per-module prompt template still applies (one file, list
-  constraints, paste acceptance tests).
+- Keep dependency boundaries explicit, test logical steps as they land, and
+  browser-verify anything touching pipeline/workers/gestures.

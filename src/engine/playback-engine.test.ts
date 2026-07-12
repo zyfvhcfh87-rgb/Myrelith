@@ -107,20 +107,37 @@ describe('PlaybackEngine', () => {
     expect(h.frames).toEqual([30])
   })
 
-  test('reaching endFrame emits endFrame then onEnded, once, and halts', () => {
+  test('reaching the exclusive end parks on the last frame, ends once, and halts', () => {
     const h = makeHarness()
     h.engine.start(0, 60, FPS30)
     h.clock.currentTime = 10 // way past the end
     h.pump()
-    expect(h.frames).toEqual([60])
+    expect(h.frames).toEqual([59])
     expect(h.ended()).toBe(1)
     expect(h.engine.isRunning).toBe(false)
     expect(h.pendingCount()).toBe(0) // nothing rescheduled
 
     h.clock.currentTime = 20
     h.pump() // no pending ticks anyway; nothing may happen
-    expect(h.frames).toEqual([60])
+    expect(h.frames).toEqual([59])
     expect(h.ended()).toBe(1)
+  })
+
+  test('the final frame receives its full duration before playback ends', () => {
+    const h = makeHarness()
+    h.engine.start(0, 120, FPS30)
+
+    h.clock.currentTime = 119 / 30
+    h.pump()
+    expect(h.frames).toEqual([119])
+    expect(h.ended()).toBe(0)
+    expect(h.engine.isRunning).toBe(true)
+
+    h.clock.currentTime = 4
+    h.pump()
+    expect(h.frames).toEqual([119])
+    expect(h.ended()).toBe(1)
+    expect(h.engine.isRunning).toBe(false)
   })
 
   test('stop() cancels the pending tick and emits nothing further', () => {
@@ -149,6 +166,28 @@ describe('PlaybackEngine', () => {
     expect(h.pendingCount()).toBe(0)
   })
 
+  test('reentrant start from the final frame is not ended by the old run', () => {
+    let restarted = false
+    const h = makeHarness((frame, engine) => {
+      if (frame === 59 && !restarted) {
+        restarted = true
+        engine.start(100, 200, FPS30)
+      }
+    })
+    h.engine.start(0, 60, FPS30)
+    h.clock.currentTime = 2
+    h.pump()
+
+    expect(h.frames).toEqual([59])
+    expect(h.ended()).toBe(0)
+    expect(h.engine.isRunning).toBe(true)
+    expect(h.pendingCount()).toBe(1)
+
+    h.clock.currentTime = 2.5
+    h.pump()
+    expect(h.frames).toEqual([59, 115])
+  })
+
   test('restart re-anchors on the current clock reading', () => {
     const h = makeHarness()
     h.engine.start(0, 300, FPS30)
@@ -163,7 +202,21 @@ describe('PlaybackEngine', () => {
     expect(h.frames).toEqual([30, 115]) // 100 + 0.5s * 30fps
   })
 
-  test('starting at/past endFrame settles on endFrame and ends immediately', () => {
+  test('an explicit future audio anchor is shared without advancing early', () => {
+    const h = makeHarness()
+    h.clock.currentTime = 5
+    h.engine.start(10, 300, FPS30, 5.25)
+
+    h.clock.currentTime = 5.24
+    h.pump()
+    expect(h.frames).toEqual([])
+
+    h.clock.currentTime = 5.75
+    h.pump()
+    expect(h.frames).toEqual([25])
+  })
+
+  test('starting at the exclusive end settles and ends immediately', () => {
     const h = makeHarness()
     h.engine.start(120, 120, FPS30)
     h.pump()

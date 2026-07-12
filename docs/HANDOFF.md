@@ -2,7 +2,8 @@
 
 Read this first in a new session. It is the deep context; [PLAN.md](PLAN.md)
 records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTURE.md)
-holds the binding rules.
+holds the binding rules. Post-MVP work comes from explicitly selected issues
+and the open list below.
 
 ## Status (2026-07-12)
 
@@ -37,8 +38,10 @@ holds the binding rules.
 | 5.2b — export UI | ✅ done | real browser A/V export + download, active cancellation, retry, focus, clean console |
 | 5 — export | ✅ done | complete export pipeline + browser-verified delivery flow |
 | **5 / MVP gate** | ✅ closed | user manual pass 2026-07-12 |
+| Post-MVP #2 — smooth preview playback | ✅ done | Blob-backed streaming lanes; user verified multiple videos without stutter |
+| Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
 
-594 tests green · `npm run build` and `npm run lint` clean · every phase
+682 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; no Phase 6
 has been selected. Phase 3 gate CLOSED
@@ -97,7 +100,14 @@ generated 320×180 A/V source, exported a two-video-clip crossfade plus one
 audio clip, downloaded `Browser - Export.mp4`, and probed 4.000s of 30 fps H.264
 plus 48 kHz stereo AAC. Active cancellation happened at nonzero progress,
 showed the cancelling state, produced no download, and a retry succeeded; the
-console stayed at 0 errors and 0 warnings.
+console stayed at 0 errors and 0 warnings. Post-MVP issue #2 replaced per-frame
+encoded-chunk rebuilding with worker-owned Blob sources and clip-keyed
+sequential playback lanes; the user verified smooth playback across multiple
+videos. Issue #5 adds bounded live audio: Mediabunny decodes rolling PCM
+windows, Web Audio schedules them against one future AudioContext anchor, and
+PlaybackEngine uses that same anchor. The Chrome gate measured non-zero audio
+while playing, zero audio/nodes after mute and pause, successful audio re-prime
+after a one-frame seek, exact exclusive-end parking, and no warnings or errors.
 
 ## What works today (user-visible)
 
@@ -141,11 +151,12 @@ flow closes or resets. The Inspector (4.3)
 edits the selected clip's position/scale/rotation/opacity — drafts while
 typing, commits on blur/Enter, Escape reverts — and the compositor
 preview reflects each commit immediately. Every gesture and every field
-commit = one undo entry. Transport bar
-(4.0.5): play/pause + one-frame steps — playback derives frames from an
-AudioContext clock (rule 3), composites every tick at wall-clock 30fps,
-parks on the last frame, restarts from 0 when played at the end,
-auto-pauses when a scrub starts. Timeline track headers (4.3.5): a
+commit = one undo entry. Transport bar (4.0.5 + issue #5): play/pause +
+one-frame steps. Live audio uses bounded Mediabunny decode windows and Web Audio
+scheduling; audio and video share one future AudioContext anchor (rule 3).
+Pause, scrub, step, audio-plan edits, and media replacement cancel/re-prime the
+session exactly; the final frame receives its full duration before the exclusive
+end. Play at the end restarts from 0. Timeline track headers (4.3.5): a
 sticky gutter on the timeline's left shows every track's badge, kind
 and live clip count with hide (video) / mute (audio) / lock toggles —
 each real toggle is one undo entry; "+ Video"/"+ Audio" buttons add
@@ -157,8 +168,8 @@ cancels; the badge shows the name, the id never changes), the ×
 DELETES a track with its clips (one undo restores both; disabled
 while locked), and audio rows have SOLO next to mute — while any
 track is solo the other audio lanes dim. Solo/mute semantics live in
-ONE place, domain `audibleTracks` (mute wins over solo); Phase 5
-audio must consume that selector, not re-derive flags. Clip visuals
+ONE place, domain `audibleTracks` (mute wins over solo); both export and live
+playback consume that selector rather than re-deriving flags. Clip visuals
 (4.3.7): every imported asset gets a FILMSTRIP (video frames, one
 tile per ~2s, cap 48) and a WAVEFORM image generated once in the
 background (app/mediaVisualsController → pipeline/visuals via
@@ -166,7 +177,7 @@ mediabunny sinks); both images span the asset's FULL duration, so
 ClipView maps them with two CSS background values — trim/razor/zoom
 need zero redraws and slip/start-trim previews shift the material
 live. The Inspector edits VOLUME for audio-lane clips (domain-clamped
-[0,2], one entry per commit; Phase 5.1c export consumes it) and shows
+[0,2], one entry per commit; export and live playback consume it) and shows
 the transform fields only for video-lane clips.
 
 ## Map (key files, one line each)
@@ -213,6 +224,12 @@ the transform fields only for video-lane clips.
   blocks; post-sum clipping;
   one active sequential reader per audible clip; exact-once reader/source
   cleanup. Browser codecs stay behind injected ports for Node tests.
+- `src/pipeline/playback-audio.ts` — issue #5 bounded live-audio scheduler:
+  derives clip plans from `audibleTracks`, lazily opens Mediabunny
+  `AudioBufferSink` cursors, and keeps only a rolling 0.75s lookahead. Web
+  Audio owns per-clip gain, resampling, mixing, analyser diagnostics, and the
+  shared future anchor. The last cursor releases its Input; EOF, abort, pause,
+  seek, muted-plan changes, and terminal cleanup cannot reopen or retain it.
 - `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c/d production browser
   adapters: asset Blob resolver → one Input/CanvasSink/timestamp iterator per
   video asset → lease-owned ImageBitmap copies; active audio clips → lazy
@@ -230,15 +247,17 @@ the transform fields only for video-lane clips.
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
   assets; `addAsset` placeholder → controller fills via `updateAsset`).
 - `src/workers/decode-protocol.ts` — canonical worker message types.
-- `src/workers/render-protocol.ts` — render-worker message types (types
-  only). The MAIN side computes all µs targets; entries are keyed by exact
-  (assetId, sourceFrame); setDoc must precede composites built from it.
-- `src/workers/render.worker.ts` — compositing worker (4.1b): decoder +
-  bitmap cache PER ASSET, FrameSource → compositeFrame on a SCRATCH canvas,
-  blit→visible only if newest (double buffer), per-asset batch chains,
-  loaned bitmaps (evict-proof mid-composite, epoch-checked return). Imports
-  pipeline/render (sanctioned) + decode.worker types via `import type`
-  ONLY (a runtime import would register the decode listener here too!).
+- `src/workers/render-protocol.ts` — render-worker message types (types only).
+  The primary path sends each asset Blob once, then lightweight entries with
+  clip lane, asset, integer source frame, exact µs timestamp, and playback/seek
+  mode. The deprecated chunk-batch messages remain only for migration tests.
+  `setDoc` must precede renders built from it.
+- `src/workers/render.worker.ts` — Blob-backed compositing worker: one source
+  per asset; sequential, clip-keyed lanes for playback; request-scoped cursors
+  for seeks; tiny timestamp cache; FrameSource → compositeFrame on a scratch
+  canvas; newest-only blit via double buffering. Superseded presentation never
+  cancels a healthy playback lane, while discontinuities and every terminal
+  path close frames/cursors/sources exactly.
 - `src/workers/decode.worker.ts` — injectable core (`createDecodeWorkerCore`);
   closes every VideoFrame ASAP, caches ImageBitmap copies (12) instead
   (raw frames starve the hw decoder pool!), backpressure at queue≥8,
@@ -256,26 +275,27 @@ the transform fields only for video-lane clips.
   one generation per asset, no retries, mediaStore owns the result URLs.
 - `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,
   `verifyKeyPackets`, bounded overshoot, bytes copied for transfer).
-- `src/engine/render-bridge.ts` — main-thread half of the render worker
-  (4.1c): keeps the doc snapshot it last posted, picks wanted
-  (asset, sourceFrame) pairs with the domain selectors (mirroring
-  compositeFrame's skips), does all per-asset µs math, fetches chunk
-  batches concurrently, latest-wins requestIds; onAssetReady/onWorkerError
-  hooks for the controller.
+- `src/engine/render-bridge.ts` — main-thread half of the render worker: keeps
+  the posted doc and per-asset rates, hands each Blob to the worker once, then
+  maps canonical visual layers to clip-keyed source-frame/µs requests with an
+  explicit playback/seek mode. Request ids remain latest-wins for presentation;
+  `onAssetReady`/`onWorkerError` are the controller hooks. The old encoded-batch
+  overload is deprecated and not used by preview.
 - `src/app/previewController.ts` — THE COMPOSITION ROOT: only place stores
   meet engine/pipeline; DI seams for tests; idempotent per canvas
-  (StrictMode). Since 4.1c it drives RenderWorkerBridge: demuxes EVERY
-  video asset into a per-asset worker decoder, releases removed ones,
-  forwards doc snapshots, renders DOC frames rAF-coalesced (bridge owns
-  per-asset rescaling); re-renders on doc change + assetConfigured (=the
-  whole missing-clip retry policy).
+  (StrictMode). It demuxes metadata for every video asset, hands its Blob to
+  the worker once, releases removed assets, forwards doc snapshots, and sends
+  rAF-coalesced document frames with playback/seek mode; re-renders on doc
+  change + assetConfigured (=the whole missing-clip retry policy).
 - `src/app/transportController.ts` — second composition root (same
-  pattern): PlaybackEngine ↔ transportStore, lazy AudioContext on first
-  play (click = allowed gesture), clamps every frame vs CURRENT doc
-  duration, pauses on scrub-start. `src/engine/playback-engine.ts` = the
-  pure loop (injected clock/ticks; floor + 1e-6 frame epsilon so NTSC
-  boundaries don't flip late; emits newest frame only, latest-wins).
-  UI facade: `src/ui/TransportBar.tsx` (subscribes to isPlaying ONLY).
+  pattern): primes issue #5 live audio from immutable document/media snapshots,
+  resumes AudioContext inside the click gesture, gives PlaybackEngine the exact
+  audio anchor, and restarts only when the audible plan/assets change. Pause,
+  scrub, step, failure, and disposal share generation-safe cleanup.
+  `src/engine/playback-engine.ts` is the pure loop: injected audio clock/ticks,
+  floor + 1e-6 NTSC epsilon, newest-frame-only emission, and an exclusive end
+  boundary that preserves the final frame's duration. UI facade:
+  `src/ui/TransportBar.tsx` (subscribes to isPlaying only).
 - `src/ui/` — components read state only; `timeline/useScrubScheduler.ts`
   = rAF coalescing reused by ruler + clip drag; `dnd.ts` = MediaPool→Track
   drag payload contract + asset-kind↔track-kind gating (kind policy lives
@@ -402,9 +422,8 @@ the transform fields only for video-lane clips.
   NEITHER (only PointerEvent), so `test/setup.ts` polyfills DragEvent as a
   MouseEvent subclass — without it drop clientX silently becomes undefined
   and tests green-light broken frame math.
-- Preview server: `.claude/launch.json` → `webcut-dev`, :5173 preferred but
-  `autoPort: true` + vite reading `PORT` (vite.config) let parallel chat
-  sessions run their own server on an assigned port.
+- Preview server: `npm run dev` uses :5173 by default; Vite also reads `PORT`
+  (vite.config) so external launch profiles can assign an isolated port.
 - HMR of worker files fully reloads the page (in-page state like
   `__testFile` dies); module-map caches stale plain-URL imports —
   cache-bust probes with `?probe=N` (this double-instances mediabunny →
@@ -412,23 +431,14 @@ the transform fields only for video-lane clips.
 
 ## Open items (beyond PLAN.md phases)
 
-- Playback exists but is SILENT: the AudioContext is clock-only (rule 3
-  honored). Phase 5.1c's bounded audio decode/mix is export-only; live audio
-  scheduling/output still needs its own post-MVP design. Video playback
-  composites the full timeline since 4.1c. Audio clips DO land on A lanes,
-  remain linked to their video halves, and now export with volume/mute/solo,
-  but they still produce no sound inside the editor.
 - A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
   domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
   (unlink is one-way today, undo aside) and linked-pair awareness in a
   future multi-select. Post-MVP.
-- Playback re-walks each GOP per frame (chunksForTimestamp per tick — the
-  proven scrub path, works at 1080p30). True streaming decode is a
-  post-MVP optimization if profiling ever demands it.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their
-  structural types. Remove or repurpose only as explicit post-MVP cleanup.
+  structural types. Remove or repurpose only as an explicit post-MVP cleanup.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
@@ -446,10 +456,10 @@ the transform fields only for video-lane clips.
 
 ## Working agreements (the user's explicit preferences)
 
-- ONE module per turn, micro-steps (domain → state → ui) verified
-  separately; never skip a phase gate; commit after each module with the
-  message file + `-F` pattern, authored as Aryel only; never add AI
-  co-author or attribution trailers.
+- Changes may span every module needed for one complete fix. Keep dependency
+  boundaries clear and verify logical steps separately; never skip a phase
+  gate; commit with the message file + `-F` pattern, authored as Aryel only;
+  never add AI co-author or attribution trailers.
 - End-of-turn summaries: SHORT, plain words, low jargon (user has AuADHD —
   dense dumps fog them; they like emoji and warmth). Deep detail belongs in
   commits/docs, not the summary.

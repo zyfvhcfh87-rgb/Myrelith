@@ -25,6 +25,7 @@ import type { ChunkProvider, WorkerLike } from './worker-bridge'
 
 const R30: FrameRate = { num: 30, den: 1 }
 const R60: FrameRate = { num: 60, den: 1 }
+const R_NTSC: FrameRate = { num: 30_000, den: 1_001 }
 
 class FakeWorker implements WorkerLike {
   posted: Array<{ msg: ToRenderWorker; transfer: Transferable[] }> = []
@@ -47,6 +48,16 @@ class FakeWorker implements WorkerLike {
     return this.posted
       .map((p) => p.msg)
       .filter((m): m is Extract<ToRenderWorker, { type: 'composite' }> => m.type === 'composite')
+  }
+  renderFrames(): Array<Extract<ToRenderWorker, { type: 'renderFrame' }>> {
+    return this.posted
+      .map((p) => p.msg)
+      .filter((m): m is Extract<ToRenderWorker, { type: 'renderFrame' }> => m.type === 'renderFrame')
+  }
+  openAssets(): Array<Extract<ToRenderWorker, { type: 'openAsset' }>> {
+    return this.posted
+      .map((p) => p.msg)
+      .filter((m): m is Extract<ToRenderWorker, { type: 'openAsset' }> => m.type === 'openAsset')
   }
 }
 
@@ -118,6 +129,18 @@ function configureAcked(
   provider: ChunkProvider,
 ): Promise<void> {
   const done = ctx.bridge.configureAsset(assetId, { codec: 'avc1.640028' }, rate, provider)
+  ctx.worker.emit({ type: 'assetConfigured', assetId })
+  return done
+}
+
+/** openAsset + immediately ack it from the fake worker. */
+function openAcked(
+  ctx: { worker: FakeWorker; bridge: RenderWorkerBridge },
+  assetId: string,
+  blob: Blob,
+  rate: FrameRate,
+): Promise<void> {
+  const done = ctx.bridge.openAsset(assetId, blob, rate)
   ctx.worker.emit({ type: 'assetConfigured', assetId })
   return done
 }
@@ -335,6 +358,257 @@ describe('renderFrame entry building', () => {
 })
 
 /* ------------------------------------------------------------------ */
+/* Blob-backed streaming path                                          */
+/* ------------------------------------------------------------------ */
+
+describe('Blob-backed streaming path', () => {
+  test('openAsset structured-clones the Blob with no transferables and resolves on ready', async () => {
+    const { worker, bridge } = makeBridge(makeDoc([]))
+    const blob = new Blob(['video'], { type: 'video/mp4' })
+    const ready: string[] = []
+    bridge.onAssetReady = (assetId) => ready.push(assetId)
+
+    const done = bridge.openAsset('A', blob, R_NTSC)
+
+    expect(worker.openAssets()).toHaveLength(1)
+    expect(worker.openAssets()[0]).toEqual({ type: 'openAsset', assetId: 'A', blob })
+    expect(worker.posted.find((post) => post.msg.type === 'openAsset')?.transfer).toEqual([])
+
+    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    await expect(done).resolves.toBeUndefined()
+    expect(ready).toEqual(['A'])
+  })
+
+  test('serializes same-asset setup until the pending acknowledgement arrives', async () => {
+    const { worker, bridge } = makeBridge(makeDoc([]))
+    const firstBlob = new Blob(['first'])
+    const secondBlob = new Blob(['second'])
+
+    const first = bridge.openAsset('A', firstBlob, R30)
+    await expect(bridge.openAsset('A', secondBlob, R60)).rejects.toThrow(
+      'asset A registration already pending',
+    )
+    expect(worker.openAssets().map((message) => message.blob)).toEqual([firstBlob])
+
+    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    await expect(first).resolves.toBeUndefined()
+
+    const replacement = bridge.openAsset('A', secondBlob, R60)
+    expect(worker.openAssets().map((message) => message.blob)).toEqual([
+      firstBlob,
+      secondBlob,
+    ])
+    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    await expect(replacement).resolves.toBeUndefined()
+  })
+
+  test('keeps same-frame clips as ordered lanes and forwards exact native timestamps and mode', async () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [makeClip('one', 'A', 0, 200)]),
+      makeTrack('V2', 'video', [makeClip('two', 'A', 0, 200)]),
+    ])
+    const { worker, bridge } = makeBridge(doc)
+    await openAcked({ worker, bridge }, 'A', new Blob(['video']), R_NTSC)
+
+    const playback = bridge.renderFrame(100, 'playback')
+    const first = worker.renderFrames()[0]
+
+    expect(first.mode).toBe('playback')
+    expect(first.sources).toEqual([
+      {
+        clipId: 'one',
+        assetId: 'A',
+        sourceFrame: 100,
+        targetTimestampUs: 3_336_667,
+      },
+      {
+        clipId: 'two',
+        assetId: 'A',
+        sourceFrame: 100,
+        targetTimestampUs: 3_336_667,
+      },
+    ])
+    expect(worker.posted.find((post) => post.msg === first)?.transfer).toEqual([])
+
+    worker.emit({
+      type: 'compositeDone',
+      requestId: first.requestId,
+      status: 'drawn',
+      drawnClipIds: ['one', 'two'],
+      missingClipIds: [],
+      renderMs: 2,
+    })
+    await expect(playback).resolves.toMatchObject({ status: 'drawn' })
+
+    const seek = bridge.renderFrame(101, 'seek')
+    const second = worker.renderFrames()[1]
+    expect(second.mode).toBe('seek')
+    expect(worker.posted.find((post) => post.msg === second)?.transfer).toEqual([])
+    worker.emit({
+      type: 'compositeDone',
+      requestId: second.requestId,
+      status: 'drawn',
+      drawnClipIds: ['one', 'two'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(seek).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('rejects protocol mismatches instead of drawing a partial frame', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+
+    const legacy = makeBridge(doc)
+    await configureAcked(legacy, 'A', R30, makeProvider().provider)
+    await expect(legacy.bridge.renderFrame(1, 'playback')).resolves.toMatchObject({
+      status: 'error',
+      message: expect.stringContaining('legacy render protocol'),
+    })
+    expect(legacy.worker.renderFrames()).toHaveLength(0)
+    expect(legacy.worker.composites()).toHaveLength(0)
+
+    const streaming = makeBridge(doc)
+    await openAcked(streaming, 'A', new Blob(['video']), R30)
+    await expect(streaming.bridge.renderFrame(1)).resolves.toMatchObject({
+      status: 'error',
+      message: expect.stringContaining('streaming render protocol'),
+    })
+    expect(streaming.worker.renderFrames()).toHaveLength(0)
+    expect(streaming.worker.composites()).toHaveLength(0)
+  })
+
+  test('a protocol mismatch does not supersede the last valid render', async () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [
+        makeClip('streaming', 'A', 0, 10),
+        makeClip('legacy', 'B', 10, 10),
+      ]),
+    ])
+    const { worker, bridge } = makeBridge(doc)
+    await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
+    await configureAcked({ worker, bridge }, 'B', R30, makeProvider().provider)
+
+    const valid = bridge.renderFrame(1, 'playback')
+    await expect(bridge.renderFrame(10, 'playback')).resolves.toMatchObject({
+      status: 'error',
+      message: expect.stringContaining('legacy render protocol'),
+    })
+    expect(worker.renderFrames()).toHaveLength(1)
+
+    worker.emit({
+      type: 'compositeDone',
+      requestId: worker.renderFrames()[0].requestId,
+      status: 'drawn',
+      drawnClipIds: ['streaming'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(valid).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('omits truly unregistered assets while keeping registered streaming entries', async () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [makeClip('ready', 'A', 0, 100)]),
+      makeTrack('V2', 'video', [makeClip('missing', 'NOPE', 0, 100)]),
+    ])
+    const { worker, bridge } = makeBridge(doc)
+    await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
+
+    const result = bridge.renderFrame(3, 'seek')
+    const render = worker.renderFrames()[0]
+    expect(render.sources.map((source) => source.clipId)).toEqual(['ready'])
+
+    worker.emit({
+      type: 'compositeDone',
+      requestId: render.requestId,
+      status: 'drawn',
+      drawnClipIds: ['ready'],
+      missingClipIds: ['missing'],
+      renderMs: 1,
+    })
+    await expect(result).resolves.toMatchObject({
+      status: 'drawn',
+      missingClipIds: ['missing'],
+    })
+  })
+
+  test('a newer streaming request supersedes the posted request immediately', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
+
+    const first = bridge.renderFrame(1, 'playback')
+    const second = bridge.renderFrame(2, 'seek')
+    await expect(first).resolves.toMatchObject({ status: 'superseded' })
+
+    const renders = worker.renderFrames()
+    expect(renders.map((render) => render.mode)).toEqual(['playback', 'seek'])
+    worker.emit({
+      type: 'compositeDone',
+      requestId: renders[0].requestId,
+      status: 'superseded',
+      drawnClipIds: [],
+      missingClipIds: [],
+      renderMs: 0,
+    })
+    worker.emit({
+      type: 'compositeDone',
+      requestId: renders[1].requestId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(second).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('an open error removes the failed registration', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    const opening = bridge.openAsset('A', new Blob(['bad']), R30)
+
+    worker.emit({ type: 'error', assetId: 'A', message: 'container unsupported' })
+    await expect(opening).rejects.toThrow('container unsupported')
+
+    const result = bridge.renderFrame(1, 'seek')
+    const render = worker.renderFrames()[0]
+    expect(render.sources).toEqual([])
+    worker.emit({
+      type: 'compositeDone',
+      requestId: render.requestId,
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: ['a'],
+      renderMs: 0,
+    })
+    await expect(result).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('releaseAsset rejects a pending open and omits its source afterward', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    const opening = bridge.openAsset('A', new Blob(['video']), R30)
+
+    bridge.releaseAsset('A')
+    await expect(opening).rejects.toThrow('asset released')
+    expect(worker.posted.find((post) => post.msg.type === 'releaseAsset')?.transfer).toEqual([])
+
+    const result = bridge.renderFrame(1, 'seek')
+    const render = worker.renderFrames()[0]
+    expect(render.sources).toEqual([])
+    worker.emit({
+      type: 'compositeDone',
+      requestId: render.requestId,
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: ['a'],
+      renderMs: 0,
+    })
+    await expect(result).resolves.toMatchObject({ status: 'drawn' })
+  })
+})
+
+/* ------------------------------------------------------------------ */
 /* Latest-wins                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -376,6 +650,64 @@ describe('latest-wins', () => {
       renderMs: 1,
     })
     await expect(second).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('opening a streaming replacement invalidates an in-progress legacy chunk read', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    const pendingFetches: Array<(chunks: ChunkPayload[]) => void> = []
+    const provider: ChunkProvider = {
+      chunksForTimestamp: () => new Promise((resolve) => pendingFetches.push(resolve)),
+    }
+    await configureAcked({ worker, bridge }, 'A', R30, provider)
+
+    const render = bridge.renderFrame(1)
+    await flushMicrotasks()
+    expect(pendingFetches).toHaveLength(1)
+
+    await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
+    pendingFetches[0]([chunk(1)])
+
+    await expect(render).resolves.toMatchObject({ status: 'superseded' })
+    expect(worker.composites()).toHaveLength(0)
+  })
+
+  test('releasing an asset invalidates an in-progress legacy chunk read', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    const pendingFetches: Array<(chunks: ChunkPayload[]) => void> = []
+    const provider: ChunkProvider = {
+      chunksForTimestamp: () => new Promise((resolve) => pendingFetches.push(resolve)),
+    }
+    await configureAcked({ worker, bridge }, 'A', R30, provider)
+
+    const render = bridge.renderFrame(1)
+    await flushMicrotasks()
+    bridge.releaseAsset('A')
+    pendingFetches[0]([chunk(1)])
+
+    await expect(render).resolves.toMatchObject({ status: 'superseded' })
+    expect(worker.composites()).toHaveLength(0)
+  })
+
+  test('disposing during a legacy chunk read never posts after termination', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    const pendingFetches: Array<(chunks: ChunkPayload[]) => void> = []
+    const provider: ChunkProvider = {
+      chunksForTimestamp: () => new Promise((resolve) => pendingFetches.push(resolve)),
+    }
+    await configureAcked({ worker, bridge }, 'A', R30, provider)
+
+    const render = bridge.renderFrame(1)
+    await flushMicrotasks()
+    bridge.dispose()
+    pendingFetches[0]([chunk(1)])
+
+    await expect(render).resolves.toMatchObject({ status: 'superseded' })
+    expect(worker.composites()).toHaveLength(0)
+    expect(worker.posted.at(-1)).toEqual({ msg: { type: 'close' }, transfer: [] })
+    expect(worker.terminated).toBe(true)
   })
 
   test('posting a newer composite settles older posted ones as superseded', async () => {
@@ -479,6 +811,39 @@ describe('reply routing', () => {
 
     await expect(result).resolves.toMatchObject({ status: 'drawn', missingClipIds: ['a'] })
     expect(warnings).toEqual(['decode failed: boom'])
+  })
+
+  test('an old render diagnostic cannot reject a pending asset replacement', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    await openAcked({ worker, bridge }, 'A', new Blob(['first']), R30)
+    const warnings: string[] = []
+    bridge.onWorkerError = (message) => warnings.push(message)
+
+    const replacement = bridge.openAsset('A', new Blob(['second']), R60)
+    worker.emit({
+      type: 'error',
+      requestId: 99,
+      assetId: 'A',
+      message: 'late decode diagnostic',
+    })
+    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+
+    await expect(replacement).resolves.toBeUndefined()
+    expect(warnings).toEqual(['late decode diagnostic'])
+
+    const result = bridge.renderFrame(1, 'seek')
+    const render = worker.renderFrames()[0]
+    expect(render.sources.map((source) => source.assetId)).toEqual(['A'])
+    worker.emit({
+      type: 'compositeDone',
+      requestId: render.requestId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(result).resolves.toMatchObject({ status: 'drawn' })
   })
 
   test('releaseAsset drops the source: later frames skip the asset', async () => {

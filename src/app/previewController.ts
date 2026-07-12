@@ -11,12 +11,13 @@
  * - this file is where stores and machinery are ALLOWED to meet.
  *
  * What it does: owns one render worker + bridge for the lifetime of the
- * canvas. Watches mediaStore and demuxes EVERY video asset into the bridge
- * (one worker-side decoder per asset), releasing assets that disappear;
+ * canvas. Watches mediaStore, inspects EVERY video asset for metadata, and
+ * gives its Blob to the bridge once (one worker-owned source per asset),
+ * releasing assets that disappear;
  * watches documentStore and posts each new doc snapshot; watches
- * transportStore.playheadFrame and renders it, coalesced to one
- * renderFrame per animation frame (the bridge further dedupes
- * latest-wins). Re-renders when a doc changes or an asset's decoder
+ * transportStore and renders its latest frame + playback/seek mode,
+ * coalesced to one renderFrame per animation frame (the bridge further
+ * dedupes latest-wins). Re-renders when a doc changes or an asset source
  * becomes ready — that is the whole retry policy for clips the worker
  * reported missing (the worker never self-recomposites; see PLAN 4.1b).
  *
@@ -27,26 +28,20 @@
  */
 
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
-import type { ChunkProvider } from '../engine/worker-bridge'
 import type { RenderFrameResult } from '../engine/render-bridge'
 import { createRenderWorker, RenderWorkerBridge } from '../engine/render-bridge'
-import { createChunkSource } from '../pipeline/decode'
-import { deserializeDecoderConfig, loadAsset } from '../pipeline/demux'
+import { loadAsset } from '../pipeline/demux'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
+import type { RenderMode } from '../workers/render-protocol'
 
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
   setDoc(doc: TimelineDoc): void
-  configureAsset(
-    assetId: AssetId,
-    config: VideoDecoderConfig,
-    rate: FrameRate,
-    chunkProvider: ChunkProvider,
-  ): Promise<void>
+  openAsset(assetId: AssetId, blob: Blob, rate: FrameRate): Promise<void>
   releaseAsset(assetId: AssetId): void
-  renderFrame(frame: number): Promise<RenderFrameResult>
+  renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult>
   dispose(): void
   onWorkerError: ((message: string) => void) | null
   onAssetReady: ((assetId: AssetId) => void) | null
@@ -60,7 +55,6 @@ export interface PreviewDeps {
   fetchBlob(url: string): Promise<Blob>
   demux(file: File): Promise<{
     asset: MediaAsset
-    chunkProvider: ChunkProvider
   }>
 }
 
@@ -71,12 +65,19 @@ const realDeps: PreviewDeps = {
   fetchBlob: (url) => fetch(url).then((r) => r.blob()),
   demux: async (file) => {
     const loaded = await loadAsset(file)
-    if (!loaded.videoTrack || !loaded.asset.frameRate) {
-      throw new Error(`"${file.name}" has no decodable video track`)
-    }
-    return {
-      asset: loaded.asset,
-      chunkProvider: createChunkSource(loaded.videoTrack, loaded.asset.frameRate),
+    try {
+      if (!loaded.videoTrack || !loaded.asset.frameRate) {
+        throw new Error(`"${file.name}" has no decodable video track`)
+      }
+      return { asset: loaded.asset }
+    } finally {
+      // loadAsset creates a metadata-only URL and Input. The mediaStore owns
+      // the original URL; neither temporary resource survives inspection.
+      try {
+        loaded.input.dispose()
+      } finally {
+        URL.revokeObjectURL(loaded.asset.objectUrl)
+      }
     }
   },
 }
@@ -85,11 +86,12 @@ interface ControllerState {
   canvas: HTMLCanvasElement | null
   bridge: BridgeLike | null
   /** Per-asset pipeline status. Absent = not started (or failed: retried
-   * on the next mediaStore change). Removal releases the worker decoder. */
+   * on the next mediaStore change). Removal releases the worker source. */
   assetStates: Map<AssetId, 'loading' | 'ready'>
   unsubscribes: Array<() => void>
   rafPending: boolean
-  latestFrame: number
+  /** Invalidates callbacks queued for a disposed/replaced bridge. */
+  renderGeneration: number
 }
 
 const state: ControllerState = {
@@ -98,30 +100,39 @@ const state: ControllerState = {
   assetStates: new Map(),
   unsubscribes: [],
   rafPending: false,
-  latestFrame: 0,
+  renderGeneration: 0,
 }
 
-function scheduleRender(frame: number): void {
-  state.latestFrame = frame
-  if (state.rafPending || !state.bridge) return
+function modeForTransport(transport: {
+  isPlaying: boolean
+  isScrubbing: boolean
+}): RenderMode {
+  return transport.isPlaying && !transport.isScrubbing ? 'playback' : 'seek'
+}
+
+function scheduleRender(): void {
+  const bridge = state.bridge
+  if (state.rafPending || !bridge) return
+  const generation = state.renderGeneration
   state.rafPending = true
   requestAnimationFrame(() => {
+    if (state.renderGeneration !== generation || state.bridge !== bridge) return
     state.rafPending = false
-    const bridge = state.bridge
-    if (!bridge) return
     // Document frames go straight through — per-asset rescaling happens
-    // inside the bridge, per configured asset.
-    void bridge.renderFrame(state.latestFrame)
+    // inside the bridge; source cursor policy belongs to the worker.
+    const transport = useTransportStore.getState()
+    void bridge.renderFrame(transport.playheadFrame, modeForTransport(transport))
   })
 }
 
-/** Demux one placeholder asset and hand its decoder+chunks to the worker. */
+/** Inspect one placeholder asset and hand its Blob to the render worker. */
 async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void> {
   const bridge = state.bridge
   if (!bridge) return
   state.assetStates.set(asset.id, 'loading')
   try {
     const blob = await deps.fetchBlob(asset.objectUrl)
+    if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
     const file = new File([blob], asset.fileName, { type: blob.type })
     const demuxed = await deps.demux(file)
     // Disposed, re-inited, or the asset was removed while we demuxed?
@@ -138,20 +149,19 @@ async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void>
       audioChannels: demuxed.asset.audioChannels,
       decoderConfigB64: demuxed.asset.decoderConfigB64,
     })
+    // Store subscribers run synchronously; one may remove the asset or tear
+    // down this controller in reaction to the metadata update.
+    if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
 
-    if (!demuxed.asset.decoderConfigB64 || !demuxed.asset.frameRate) {
-      throw new Error(`"${asset.fileName}": missing decoder config or frame rate`)
+    if (!demuxed.asset.frameRate) {
+      throw new Error(`"${asset.fileName}": missing frame rate`)
     }
-    await bridge.configureAsset(
-      asset.id,
-      deserializeDecoderConfig(demuxed.asset.decoderConfigB64),
-      demuxed.asset.frameRate,
-      demuxed.chunkProvider,
-    )
+    await bridge.openAsset(asset.id, blob, demuxed.asset.frameRate)
     if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
     state.assetStates.set(asset.id, 'ready')
   } catch (e) {
-    if (state.bridge === bridge) state.assetStates.delete(asset.id) // retriable
+    if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
+    state.assetStates.delete(asset.id) // retriable on the next media change
     console.warn(
       `[previewController] loading "${asset.fileName}" failed:`,
       e instanceof Error ? e.message : e,
@@ -159,7 +169,7 @@ async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void>
   }
 }
 
-/** Reconcile the worker's decoders with the media pool (adds + removals). */
+/** Reconcile worker-owned sources with the media pool (adds + removals). */
 function syncAssets(deps: PreviewDeps): void {
   const bridge = state.bridge
   if (!bridge) return
@@ -205,9 +215,9 @@ export function initPreview(
   }
   bridge.onWorkerError = (message) =>
     console.warn('[previewController] worker error:', message)
-  // A decoder came online: repaint so its clips fill in (retry policy).
+  // A source came online: repaint so its clips fill in (retry policy).
   bridge.onAssetReady = () =>
-    scheduleRender(useTransportStore.getState().playheadFrame)
+    scheduleRender()
   state.canvas = canvas
   state.bridge = bridge
 
@@ -217,11 +227,14 @@ export function initPreview(
     useDocumentStore.subscribe((s, prev) => {
       if (s.doc !== prev.doc) {
         bridge.setDoc(s.doc)
-        scheduleRender(useTransportStore.getState().playheadFrame)
+        scheduleRender()
       }
     }),
     useTransportStore.subscribe((s, prev) => {
-      if (s.playheadFrame !== prev.playheadFrame) scheduleRender(s.playheadFrame)
+      if (
+        s.playheadFrame !== prev.playheadFrame
+        || modeForTransport(s) !== modeForTransport(prev)
+      ) scheduleRender()
     }),
     useMediaStore.subscribe(() => {
       syncAssets(deps)
@@ -230,11 +243,12 @@ export function initPreview(
   // Assets may already be waiting (import before mount, HMR, tests) and an
   // empty timeline still paints its background.
   syncAssets(deps)
-  scheduleRender(useTransportStore.getState().playheadFrame)
+  scheduleRender()
 }
 
 /** Tear everything down (tests / real app teardown, not StrictMode churn). */
 export function disposePreview(): void {
+  state.renderGeneration++
   for (const unsubscribe of state.unsubscribes) unsubscribe()
   state.unsubscribes = []
   state.bridge?.dispose()
