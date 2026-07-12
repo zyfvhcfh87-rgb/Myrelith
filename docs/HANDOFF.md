@@ -39,9 +39,9 @@ and the open list below.
 | 5 — export | ✅ done | complete export pipeline + browser-verified delivery flow |
 | **5 / MVP gate** | ✅ closed | user manual pass 2026-07-12 |
 | Post-MVP #2 — smooth preview playback | ✅ done | Blob-backed streaming lanes; user verified multiple videos without stutter |
-| Post-MVP #5 — live audio playback | ✅ implemented | Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
+| Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
 
-679 tests green · `npm run build` and `npm run lint` clean · every phase
+682 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; no Phase 6
 has been selected. Phase 3 gate CLOSED

@@ -21,7 +21,7 @@ explicitly selected issues and HANDOFF.md's open list.
 
 ## Build & test
 
-- `npm run dev` — dev server (preview config: `.Codex/launch.json`)
+- `npm run dev` — dev server (defaults to `http://localhost:5173`)
 - `npm run build` — typecheck + production build (must stay green;
   vitest alone is NOT enough — run tsc via this)
 - `npm test` — Vitest

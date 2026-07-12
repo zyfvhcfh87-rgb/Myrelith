@@ -5,9 +5,8 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // The preview harness assigns a free port via PORT (autoPort in
-  // .claude/launch.json) so parallel sessions don't fight over 5173;
-  // plain `npm run dev` keeps vite's default behavior.
+  // External preview harnesses may assign an isolated port through PORT;
+  // plain `npm run dev` keeps Vite's 5173 default.
   server: {
     port: Number(process.env.PORT) || 5173,
   },

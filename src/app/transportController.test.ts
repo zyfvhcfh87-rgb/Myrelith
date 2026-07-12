@@ -316,6 +316,45 @@ describe('live audio integration', () => {
     expect(transport().playheadFrame).toBe(0)
   })
 
+  test('an audio-plan change replaces a pending prime without reviving it', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    transport().setPlayheadFrame(24)
+    const firstPrime = deferred<TimelineAudioPlaybackSession>()
+    const staleSession = makeAudioSession(5)
+    const currentSession = makeAudioSession(6)
+    fake.startAudio
+      .mockImplementationOnce(() => firstPrime.promise)
+      .mockResolvedValueOnce(currentSession)
+
+    play()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+    const firstSignal = fake.startAudio.mock.calls[0][4].signal
+
+    const original = useDocumentStore.getState().doc
+    useDocumentStore.getState().setDoc({
+      ...original,
+      tracks: original.tracks.map((track) =>
+        track.id === 'A1'
+          ? {
+              ...track,
+              clips: track.clips.map((clip) => ({ ...clip, volume: 0.5 })),
+            }
+          : track,
+      ),
+    })
+
+    expect(firstSignal?.aborted).toBe(true)
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledTimes(2))
+    expect(fake.startAudio.mock.calls[1][2]).toBe(24)
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+    firstPrime.resolve(staleSession)
+    await vi.waitFor(() => expect(staleSession.stop).toHaveBeenCalledOnce())
+    expect(currentSession.stop).not.toHaveBeenCalled()
+    expect(transport().isPlaying).toBe(true)
+    expect(fake.pendingCount()).toBe(1)
+  })
+
   test('keeps audio alive through the final frame and stops at the exclusive end', async () => {
     useDocumentStore.getState().setDoc(makeAudibleDoc())
     const session = makeAudioSession(0)

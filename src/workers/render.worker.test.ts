@@ -1307,6 +1307,42 @@ describe('streaming seek lanes', () => {
     ])
     expect(doneFor(h, 3)).toMatchObject({ status: 'drawn', drawnClipIds: ['a'] })
   })
+
+  test('revision bookkeeping retires with completed assets and playback lanes', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    source.queuePlayback(new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ]))
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])])
+    await setupStreaming(h, doc, [['A', source]])
+
+    expect(h.core.revisionEntryCounts()).toEqual({
+      assets: 0,
+      playbackLanes: 0,
+    })
+
+    await h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('a', 'A', 0)]),
+    )
+    expect(h.core.revisionEntryCounts()).toEqual({
+      assets: 0,
+      playbackLanes: 1,
+    })
+
+    await h.core.handleMessage(renderMsg(2, 0, 'seek', []))
+    expect(h.core.revisionEntryCounts()).toEqual({
+      assets: 0,
+      playbackLanes: 0,
+    })
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    expect(h.core.revisionEntryCounts()).toEqual({
+      assets: 0,
+      playbackLanes: 0,
+    })
+  })
 })
 
 describe('streaming response contract', () => {

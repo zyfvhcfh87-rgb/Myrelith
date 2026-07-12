@@ -9,6 +9,7 @@ const media = vi.hoisted(() => ({
   inputs: [] as Array<{ disposeCalls: number }>,
   iterators: [] as Array<{ returnCalls: number }>,
   failTrackCount: 0,
+  bufferOpensOnDisposedInput: 0,
 }))
 
 vi.mock('mediabunny', () => {
@@ -32,7 +33,7 @@ vi.mock('mediabunny', () => {
         media.failTrackCount--
         return null
       }
-      return { canDecode: async () => true }
+      return { canDecode: async () => true, input: this }
     }
 
     dispose() {
@@ -41,7 +42,17 @@ vi.mock('mediabunny', () => {
   }
 
   class AudioBufferSink {
+    private input: { disposeCalls: number }
+
+    constructor(track: { input: { disposeCalls: number } }) {
+      this.input = track.input
+    }
+
     buffers() {
+      if (this.input.disposeCalls > 0) {
+        media.bufferOpensOnDisposedInput++
+        throw new Error('cannot open buffers on a disposed Input')
+      }
       return {
         [Symbol.asyncIterator]() {
           const iterator = {
@@ -75,6 +86,7 @@ beforeEach(() => {
   media.inputs.length = 0
   media.iterators.length = 0
   media.failTrackCount = 0
+  media.bufferOpensOnDisposedInput = 0
 })
 
 describe('createMediabunnyPlaybackAudioSource ownership', () => {
@@ -127,6 +139,34 @@ describe('createMediabunnyPlaybackAudioSource ownership', () => {
 
     await second.close()
     await source.close()
+    expect(media.inputs[1].disposeCalls).toBe(1)
+  })
+
+  test('reopens an asset when the last close overlaps the next clip open', async () => {
+    const resolveAsset = vi.fn(async () => new Blob(['media']))
+    const source = createMediabunnyPlaybackAudioSource(resolveAsset)
+    const first = await source.openClip({
+      assetId: 'asset-1',
+      startTime: 0,
+      endTime: 1,
+    })
+
+    const closing = first.close()
+    const second = await source.openClip({
+      assetId: 'asset-1',
+      startTime: 1,
+      endTime: 2,
+    })
+    await closing
+
+    expect(resolveAsset).toHaveBeenCalledTimes(2)
+    expect(media.inputs).toHaveLength(2)
+    expect(media.inputs[0].disposeCalls).toBe(1)
+    expect(media.inputs[1].disposeCalls).toBe(0)
+    expect(media.bufferOpensOnDisposedInput).toBe(0)
+
+    await second.close()
+    await expect(source.close()).resolves.toBeUndefined()
     expect(media.inputs[1].disposeCalls).toBe(1)
   })
 

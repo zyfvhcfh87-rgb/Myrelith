@@ -335,8 +335,20 @@ export function createMediabunnyPlaybackAudioSource(
       throw new RangeError('Playback audio clip range must be non-empty')
     }
 
-    const asset = await openAsset(request.assetId)
-    if (closed) throw new Error('Playback audio source is closed')
+    let asset: DecodedAudioAsset
+    while (true) {
+      const candidate = await openAsset(request.assetId)
+      if (closed) throw new Error('Playback audio source is closed')
+      if (candidate.disposed) continue
+
+      // Reserve the shared Input before creating the iterator. An adjacent
+      // clip may be closing the asset's previous last cursor in another
+      // microtask; once this count is incremented, that close cannot dispose
+      // the Input underneath the new cursor.
+      candidate.activeCursors++
+      asset = candidate
+      break
+    }
     let iterator: AsyncIterator<PlaybackAudioBuffer, void>
     try {
       iterator = asset.sink.buffers(
@@ -344,10 +356,13 @@ export function createMediabunnyPlaybackAudioSource(
         request.endTime,
       )[Symbol.asyncIterator]()
     } catch (cause) {
-      if (asset.activeCursors === 0) disposeAsset(request.assetId, asset)
+      try {
+        releaseAsset(request.assetId, asset)
+      } catch {
+        // Preserve the iterator-creation failure as the primary error.
+      }
       throw cause
     }
-    asset.activeCursors++
     let cursorClosed = false
     let cursorClosePromise: Promise<void> | null = null
     let cursor!: PlaybackAudioCursor

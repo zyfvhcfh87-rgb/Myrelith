@@ -172,6 +172,7 @@ interface ClipDecodeIdentity {
 
 export function createRenderWorkerCore(env: RenderWorkerEnv): {
   handleMessage(msg: ToRenderWorker): Promise<void>
+  revisionEntryCounts(): { assets: number; playbackLanes: number }
 } {
   let visible: RenderCanvasLike | null = null
   let visibleCtx: Composite2D | null = null
@@ -185,6 +186,8 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   let compositeChain: Promise<void> = Promise.resolve()
   /** Invalidates asset opens/configures that outlive a worker-wide close. */
   let workerLifecycle = 0
+  /** Worker-global tokens prevent ABA when per-key revision entries retire. */
+  let revisionToken = 0
   /** Deprecated chunk-backed asset states. */
   const assets = new Map<AssetId, AssetState>()
   /** Blob-backed streaming asset states. */
@@ -206,10 +209,24 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     return new Promise((resolve) => state.waiters.add(resolve))
   }
 
+  function nextRevisionToken(): number {
+    revisionToken++
+    if (!Number.isSafeInteger(revisionToken)) {
+      throw new RangeError('Render worker revision token overflow')
+    }
+    return revisionToken
+  }
+
   function nextAssetRevision(assetId: AssetId): number {
-    const revision = (assetRevisions.get(assetId) ?? 0) + 1
+    const revision = nextRevisionToken()
     assetRevisions.set(assetId, revision)
     return revision
+  }
+
+  function clearAssetRevision(assetId: AssetId, revision: number): void {
+    if (assetRevisions.get(assetId) === revision) {
+      assetRevisions.delete(assetId)
+    }
   }
 
   function assetRevisionIsCurrent(
@@ -380,8 +397,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         desiredPlaybackLaneKeys.has(key)
         && (frameRateChanged || !sameClipDecodeIdentity(identity, next.get(clipId)))
       ) {
-        bumpPlaybackLaneRevision(key)
+        const revision = bumpPlaybackLaneRevision(key)
         desiredPlaybackLaneKeys.delete(key)
+        clearPlaybackLaneRevision(key, revision)
       }
     }
   }
@@ -450,8 +468,16 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     return `${assetId}\u0000${clipId}`
   }
 
-  function bumpPlaybackLaneRevision(key: string): void {
-    playbackLaneRevisions.set(key, (playbackLaneRevisions.get(key) ?? 0) + 1)
+  function bumpPlaybackLaneRevision(key: string): number {
+    const revision = nextRevisionToken()
+    playbackLaneRevisions.set(key, revision)
+    return revision
+  }
+
+  function clearPlaybackLaneRevision(key: string, revision: number): void {
+    if (playbackLaneRevisions.get(key) === revision) {
+      playbackLaneRevisions.delete(key)
+    }
   }
 
   function sameLaneKeySet(left: Set<string>, right: Set<string>): boolean {
@@ -479,15 +505,20 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     const nextKeys = msg.mode === 'playback'
       ? new Set(msg.sources.map((entry) => playbackLaneKey(entry.assetId, entry.clipId)))
       : new Set<string>()
+    const retiredRevisions = new Map<string, number>()
     if (!sameLaneKeySet(desiredPlaybackLaneKeys, nextKeys)) {
       const changedKeys = new Set([...desiredPlaybackLaneKeys, ...nextKeys])
       for (const key of changedKeys) {
         if (desiredPlaybackLaneKeys.has(key) !== nextKeys.has(key)) {
-          bumpPlaybackLaneRevision(key)
+          const revision = bumpPlaybackLaneRevision(key)
+          if (!nextKeys.has(key)) retiredRevisions.set(key, revision)
         }
       }
     }
     desiredPlaybackLaneKeys = nextKeys
+    for (const [key, revision] of retiredRevisions) {
+      clearPlaybackLaneRevision(key, revision)
+    }
 
     const closes: Promise<void>[] = []
     for (const [assetId, state] of streamingAssets) {
@@ -869,11 +900,11 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     return bitmap
   }
 
-  async function handleConfigureAsset(
+  async function configureAssetAtRevision(
     msg: Extract<ToRenderWorker, { type: 'configureAsset' }>,
+    revision: number,
+    lifecycle: number,
   ): Promise<void> {
-    const revision = nextAssetRevision(msg.assetId)
-    const lifecycle = workerLifecycle
     supersede() // in-flight composites may reference the machinery we replace
     const existing = assets.get(msg.assetId)
     if (existing) {
@@ -960,11 +991,23 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     env.post({ type: 'assetConfigured', assetId: msg.assetId })
   }
 
-  async function handleOpenAsset(
-    msg: Extract<ToRenderWorker, { type: 'openAsset' }>,
+  async function handleConfigureAsset(
+    msg: Extract<ToRenderWorker, { type: 'configureAsset' }>,
   ): Promise<void> {
     const revision = nextAssetRevision(msg.assetId)
     const lifecycle = workerLifecycle
+    try {
+      await configureAssetAtRevision(msg, revision, lifecycle)
+    } finally {
+      clearAssetRevision(msg.assetId, revision)
+    }
+  }
+
+  async function openAssetAtRevision(
+    msg: Extract<ToRenderWorker, { type: 'openAsset' }>,
+    revision: number,
+    lifecycle: number,
+  ): Promise<void> {
     supersede()
 
     const legacy = assets.get(msg.assetId)
@@ -1003,6 +1046,33 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       epoch: 0,
     })
     env.post({ type: 'assetConfigured', assetId: msg.assetId })
+  }
+
+  async function handleOpenAsset(
+    msg: Extract<ToRenderWorker, { type: 'openAsset' }>,
+  ): Promise<void> {
+    const revision = nextAssetRevision(msg.assetId)
+    const lifecycle = workerLifecycle
+    try {
+      await openAssetAtRevision(msg, revision, lifecycle)
+    } finally {
+      clearAssetRevision(msg.assetId, revision)
+    }
+  }
+
+  async function handleReleaseAsset(assetId: AssetId): Promise<void> {
+    const revision = nextAssetRevision(assetId)
+    try {
+      supersede()
+      const state = assets.get(assetId)
+      if (state) {
+        teardownAsset(state)
+        assets.delete(assetId)
+      }
+      await removeStreamingAsset(assetId)
+    } finally {
+      clearAssetRevision(assetId, revision)
+    }
   }
 
   function handleComposite(
@@ -1249,17 +1319,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       case 'configureAsset':
         await handleConfigureAsset(msg)
         break
-      case 'releaseAsset': {
-        nextAssetRevision(msg.assetId)
-        supersede()
-        const state = assets.get(msg.assetId)
-        if (state) {
-          teardownAsset(state)
-          assets.delete(msg.assetId)
-        }
-        await removeStreamingAsset(msg.assetId)
+      case 'releaseAsset':
+        await handleReleaseAsset(msg.assetId)
         break
-      }
       case 'renderFrame':
         await handleRenderFrame(msg)
         break
@@ -1269,6 +1331,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       case 'close': {
         workerLifecycle++
         supersede()
+        assetRevisions.clear()
+        desiredPlaybackLaneKeys.clear()
+        playbackLaneRevisions.clear()
         for (const state of assets.values()) teardownAsset(state)
         assets.clear()
         const streaming = [...streamingAssets.values()]
@@ -1310,7 +1375,13 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
   }
 
-  return { handleMessage }
+  return {
+    handleMessage,
+    revisionEntryCounts: () => ({
+      assets: assetRevisions.size,
+      playbackLanes: playbackLaneRevisions.size,
+    }),
+  }
 }
 
 /* ------------------------------------------------------------------ */
