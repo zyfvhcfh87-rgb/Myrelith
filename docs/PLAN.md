@@ -310,24 +310,96 @@ is the video-only CFR orchestration and ownership foundation described in
   tests + 20 combined adapter tests; 524 total tests, build, and lint green.
 
 ### 5.1d Transition parity
-- [ ] Implement crossfade selection/rendering in `compositeFrame` and update
-  preview/export frame requests together so both paths keep one visual truth.
+- [x] **Crossfade selection/rendering + preview/export request parity** — DONE
+  2026-07-11. `visibleVideoLayersAtFrame` is now the one domain-owned,
+  paint-ordered visual plan consumed by `compositeFrame`, the preview render
+  bridge, and the export scheduler. Crossfades use a centered half-open
+  window around a touching edit, freeze endpoint frames where source handles
+  do not exist, and fail closed to a hard cut for stale, invalid, duplicate,
+  or overlapping transition definitions. The Canvas2D opacity compensation
+  removes the dark midpoint for ordinary opaque full-frame footage. Export
+  validates every frame-local request against that same plan while retaining
+  one long-lived timestamp iterator per asset.
+  Browser-verified against locked Mediabunny 1.50.3 with one source asset
+  whose transition schedule forces a real decoder seek forward → backward →
+  forward: 12/12 frames reopened, 1.200s exact duration, preview/export probe
+  pixels within 2 channel values, bright midpoint, clean console. 16 new
+  regression tests; 540 total tests, build, and lint green.
+
+### 5.1e Transition authoring (required before the MVP gate)
+- [x] **5.1e-1 domain lifecycle** — DONE 2026-07-11.
+  `addCrossfade`, `setCrossfadeDuration`, and `removeTransition` now author
+  track-scoped, stable transition metadata for touching adjacent video clips.
+  Authoring and rendering share `resolveCrossfade` for the exact centered
+  window/fit rule; duplicate seams, unsafe durations, and overlapping windows
+  reject with the original document reference. Successful geometry edits
+  retain only transitions valid both before and after, so stale definitions
+  never spring alive. Split preserves outer-edge intent by rebinding an
+  outgoing transition to the new right half; move/trim/ripple/slide/delete
+  keep or discard seams deterministically; slip stays safe-integer bounded.
+  Linked A/V rollback restores transition metadata atomically. 24 new domain
+  regressions; 564 total tests, build, and lint green.
+- [x] **5.1e-2 state wiring** — DONE 2026-07-11. `documentStore` now exposes
+  track-scoped add/duration/remove transition actions as thin domain-op →
+  `commit` adapters. Every successful edit creates exactly one snapshot;
+  rejected and idempotent edits preserve the document and both history stacks
+  (including an existing redo branch). Undo/redo restore the exact authored
+  snapshot and generated transition id; cross-track id reuse remains scoped
+  to its requested owner. 5 new store regressions; 569 total tests, build,
+  and lint green.
+- [x] **5.1e-3 timeline UI** — DONE 2026-07-11. Touching adjacent non-text
+  video clips now expose a compact cut marker; its accessible popover authors,
+  resizes, or removes a centered crossfade through the undoable store actions.
+  Duration is explicit before creation, neighboring-window rejection stays in
+  the editor with a useful retry message, locked tracks are inert, and the
+  popover does not steal clip gestures or global edit shortcuts. 5 focused RTL
+  regressions cover eligibility, locking, shorter-duration retry, one-entry
+  add/update/remove, dirty-draft removal, and exact-id undo/redo.
+  Browser-verified with a generated 60-frame red→green AVC source: UI-authored
+  D15 changed frame 27 from hard red `(255,1,0)` to blend `(175,81,0)`;
+  applying D2 restored hard red there while frame 30 blended `(85,170,1)`;
+  removal restored hard green `(0,255,1)`. Three keyboard undos/redos restored
+  none→D15→D2→none with the exact generated id; console stayed at 0 errors and
+  0 warnings. 574 total tests, build, and lint green.
 
 ### 5.2 Export flow
-- [ ] **5.2a app export controller** — composition-root wiring for the media
-  Blob resolver, generator lifecycle, cancellation, progress, and result.
-- [ ] **5.2b Export UI** — Toolbar Export button → modal
-  (resolution/format) → progress bar from the generator → download via
-  `URL.createObjectURL(new Blob([buffer]))`.
+- [x] **5.2a app export controller** — DONE 2026-07-12.
+  `app/exportController.ts` captures one immutable document/settings/media
+  snapshot per run, starts retaining every referenced Blob before its object
+  URL can be revoked, and shares one cached asset resolver between the video
+  decoder and A/V sink factories. It manually pumps `exportTimeline` through
+  the result-bearing final `next()` (never `for await`), forwards exact
+  progress, and makes cancellation a single serialized `return(undefined)`
+  after any in-flight frame boundary. A run owns the singleton slot through
+  setup/cancel cleanup; errors remain primary; success returns the buffer and
+  cancellation returns `undefined`. 11 focused lifecycle/ownership tests;
+  585 total tests, build, and lint green. No browser pass: this controller has
+  no rendered surface until 5.2b.
+- [x] **5.2b Export UI** — DONE 2026-07-12. The Toolbar now opens a native,
+  focus-managed modal with one honest MVP profile: current timeline resolution
+  (fixed), MP4/H.264 AVC (fixed), and 8 Mbps. The heavy export controller stays
+  behind a Start-time dynamic import. Progress callbacks are rAF-coalesced;
+  synchronous double starts are rejected; active and pre-controller
+  cancellation are race-safe; cleanup finishes before the cancelled state.
+  Success creates one owned Blob URL and an explicit download link, revoking it
+  only on reset/close/unmount. Empty timelines, exact runtime errors/retry,
+  Windows-safe filenames, terminal focus, backdrop/keyboard behavior, and URL
+  lifetime have 9 focused RTL regressions. Browser-verified with a generated
+  320×180 A/V source and a two-video-clip crossfade plus one audio clip: the
+  downloaded `Browser - Export.mp4` probed as 4.000s, H.264 High/yuv420p at
+  exact 30/1 CFR, plus 48 kHz stereo AAC-LC. Progress was monotonic; active
+  cancellation at nonzero progress showed Cancelling, created no download,
+  and retry succeeded; console stayed at 0 errors and 0 warnings. 594 total
+  tests, build, and lint green.
 
 ### Phase 5 / MVP gate
 - [ ] Export a 30s, 3-clip, 2-track timeline w/ one crossfade + one trim.
-  (Crossfade requires implementing Transition rendering in compositeFrame —
-  schema exists, renderer does not yet.)
+  (Rendering is complete; 5.1e authoring must land so the editor can create
+  the transition without a seeded document.)
 - [ ] VLC + QuickTime playback, no perceptible A/V desync.
 - [ ] Spot-check exported frame at t=10s vs preview.
-- [ ] `ffprobe -show_streams`: avg_frame_rate == r_frame_rate (CFR). No
-  ffmpeg on this machine — user installs it or checks with another tool.
+- [x] `ffprobe -show_streams`: `avg_frame_rate == r_frame_rate == 30/1` on the
+  5.2b browser-exported A/V MP4 (2026-07-12).
 - [ ] No memory growth exporting a 2-min timeline (Chrome Task Manager).
 
 ## Test strategy per layer (unchanged from original)

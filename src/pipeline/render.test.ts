@@ -253,6 +253,69 @@ describe('compositeFrame — stacking order & concurrency', () => {
     expect(draws.map((op) => op.args[0])).toEqual([bottomImage, topImage])
     expect(result).toEqual({ drawn: ['bottom', 'top'], missing: [] })
   })
+
+  test('fetches a crossfade concurrently and fades incoming over outgoing', async () => {
+    const outgoingImage = fakeBitmap(100, 100)
+    const incomingImage = fakeBitmap(100, 100)
+    const outgoing = deferred<ImageBitmap | null>()
+    const incoming = deferred<ImageBitmap | null>()
+    const from = makeClip('from', 0, 10, { assetId: 'A' })
+    const to = makeClip('to', 10, 10, { assetId: 'B' })
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [from, to], {
+        transitions: [{
+          id: 'dissolve',
+          type: 'crossfade',
+          fromClipId: from.id,
+          toClipId: to.id,
+          durationFrames: 1,
+        }],
+      }),
+    ])
+    const { ctx, ops } = makeCtx()
+    const { source, requests } = makeSource({
+      'A@9': outgoing.promise,
+      'B@0': incoming.promise,
+    })
+
+    const composite = compositeFrame(doc, 10, ctx, source)
+    expect(requests).toEqual(['A@9', 'B@0'])
+
+    outgoing.resolve(outgoingImage)
+    incoming.resolve(incomingImage)
+    const result = await composite
+
+    expect(ops('drawImage').map((op) => op.args[0])).toEqual([
+      outgoingImage,
+      incomingImage,
+    ])
+    expect(ops('alpha').map((op) => op.args[0])).toEqual([1, 1, 0.5])
+    expect(result).toEqual({ drawn: ['from', 'to'], missing: [] })
+  })
+
+  test('keeps one missing crossfade leg isolated from the other', async () => {
+    const from = makeClip('from', 0, 10, { assetId: 'A' })
+    const to = makeClip('to', 10, 10, { assetId: 'B' })
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [from, to], {
+        transitions: [{
+          id: 'dissolve',
+          type: 'crossfade',
+          fromClipId: from.id,
+          toClipId: to.id,
+          durationFrames: 1,
+        }],
+      }),
+    ])
+    const incomingImage = fakeBitmap(100, 100)
+    const { ctx, ops } = makeCtx()
+    const { source } = makeSource({ 'B@0': incomingImage })
+
+    const result = await compositeFrame(doc, 10, ctx, source)
+
+    expect(ops('drawImage').map((op) => op.args[0])).toEqual([incomingImage])
+    expect(result).toEqual({ drawn: ['to'], missing: ['from'] })
+  })
 })
 
 describe('compositeFrame — transform & opacity', () => {

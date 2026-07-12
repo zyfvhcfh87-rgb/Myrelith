@@ -26,9 +26,8 @@ import {
 } from 'mediabunny'
 import type { AssetId, TimelineDoc } from '../domain/schema'
 import {
-  activeClipAt,
-  clipSourceFrame,
   docDurationFrames,
+  visibleVideoLayersAtFrame,
 } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
 import type {
@@ -89,26 +88,31 @@ function closeBitmaps(bitmaps: Set<ImageBitmap>): void {
  * that full stream to one canvasesAtTimestamps iterator keeps one decoder
  * alive per asset instead of creating a decoder for every exported frame.
  */
-function videoRequestSchedule(doc: TimelineDoc): Map<AssetId, number[]> {
+interface VideoFrameRequest {
+  assetId: AssetId
+  sourceFrame: number
+}
+
+interface VideoRequestSchedule {
+  frameCount: number
+  byAsset: Map<AssetId, number[]>
+}
+
+function videoRequestSchedule(doc: TimelineDoc): VideoRequestSchedule {
   const frameCount = docDurationFrames(doc)
   if (!Number.isSafeInteger(frameCount) || frameCount < 0) {
     throw new RangeError('Cannot schedule an invalid export timeline')
   }
 
-  const requests = new Map<AssetId, number[]>()
+  const byAsset = new Map<AssetId, number[]>()
   for (let frame = 0; frame < frameCount; frame++) {
-    // Keep this filtering and track order aligned with compositeFrame.
-    for (const track of doc.tracks) {
-      if (track.kind !== 'video' || track.hidden) continue
-      const clip = activeClipAt(track, frame)
-      if (!clip || clip.text !== undefined || clip.opacity <= 0) continue
-      const sourceFrame = clipSourceFrame(clip, frame)
-      const assetRequests = requests.get(clip.assetId)
+    for (const { clip, sourceFrame } of visibleVideoLayersAtFrame(doc, frame)) {
+      const assetRequests = byAsset.get(clip.assetId)
       if (assetRequests) assetRequests.push(sourceFrame)
-      else requests.set(clip.assetId, [sourceFrame])
+      else byAsset.set(clip.assetId, [sourceFrame])
     }
   }
-  return requests
+  return { frameCount, byAsset }
 }
 
 /**
@@ -140,7 +144,7 @@ export function createMediabunnyExportMediaSource(
 
     const pending = (async (): Promise<DecodedAsset> => {
       if (closed) throw new Error('Export media source is closed')
-      const sourceFrames = requests.get(assetId)
+      const sourceFrames = requests.byAsset.get(assetId)
       if (!sourceFrames || sourceFrames.length === 0) {
         throw new Error(`Export asset "${assetId}" was not scheduled`)
       }
@@ -191,9 +195,20 @@ export function createMediabunnyExportMediaSource(
   const openFrame = async (docFrame: number): Promise<ExportFrameLease> => {
     assertFrame(docFrame, 'Document frame')
     if (closed) throw new Error('Export media source is closed')
+    if (docFrame >= requests.frameCount) {
+      throw new Error(`Export received an extra document frame ${docFrame}`)
+    }
+    const frameRequests: VideoFrameRequest[] = visibleVideoLayersAtFrame(
+      doc,
+      docFrame,
+    ).map(({ clip, sourceFrame }) => ({
+      assetId: clip.assetId,
+      sourceFrame,
+    }))
 
     const bitmaps = new Set<ImageBitmap>()
     let leaseClosed = false
+    let nextFrameRequestIndex = 0
 
     return {
       getFrame: async (
@@ -204,6 +219,24 @@ export function createMediabunnyExportMediaSource(
         if (closed || leaseClosed) {
           throw new Error('Export frame lease is closed')
         }
+
+        const frameRequest = frameRequests[nextFrameRequestIndex]
+        if (!frameRequest) {
+          throw new Error(
+            `Export document frame ${docFrame} received an extra media request`,
+          )
+        }
+        if (
+          frameRequest.assetId !== assetId ||
+          frameRequest.sourceFrame !== sourceFrame
+        ) {
+          throw new Error(
+            `Export document frame ${docFrame} expected ` +
+              `${frameRequest.assetId}@${frameRequest.sourceFrame}, got ` +
+              `${assetId}@${sourceFrame}`,
+          )
+        }
+        nextFrameRequestIndex++
 
         const asset = await openAsset(assetId)
         const expectedFrame = asset.sourceFrames[asset.nextRequestIndex]
@@ -250,7 +283,23 @@ export function createMediabunnyExportMediaSource(
       close: (): void => {
         if (leaseClosed) return
         leaseClosed = true
-        closeBitmaps(bitmaps)
+        let failure: unknown
+        try {
+          closeBitmaps(bitmaps)
+        } catch (cause) {
+          failure = cause
+        }
+        if (
+          nextFrameRequestIndex !== frameRequests.length &&
+          failure === undefined
+        ) {
+          failure = new Error(
+            `Export document frame ${docFrame} received ` +
+              `${nextFrameRequestIndex} of ${frameRequests.length} ` +
+              'scheduled media requests',
+          )
+        }
+        if (failure !== undefined) throw failure
       },
     }
   }

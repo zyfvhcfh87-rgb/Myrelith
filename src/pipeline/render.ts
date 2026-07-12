@@ -27,12 +27,16 @@
  *   A FrameSource must therefore resolve every request — per-asset
  *   latest-wins supersession across composites is fine, but dropping
  *   requests WITHIN one composite is not.
- * - Text clips are skipped (post-MVP); Transition rendering (crossfade)
- *   lands with the Phase 5 gate.
+ * - Visual selection, including crossfade source frames and opacity, comes
+ *   only from domain.visibleVideoLayersAtFrame. Preview and export consume
+ *   that same ordered plan and must never duplicate its rules.
  */
 
 import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
-import { activeClipAt, clipSourceFrame } from '../domain/selectors'
+import {
+  visibleVideoLayersAtFrame,
+  type VisibleVideoLayer,
+} from '../domain/selectors'
 
 /**
  * Supplies decoded pixels for an asset's source frame; null when the frame
@@ -86,22 +90,14 @@ export async function compositeFrame(
   source: FrameSource,
 ): Promise<CompositeResult> {
   // Phase 1 — collect what needs pixels, bottom-to-top.
-  const jobs: Clip[] = []
-  for (const track of doc.tracks) {
-    if (track.kind !== 'video' || track.hidden) continue
-    const clip = activeClipAt(track, frame)
-    if (!clip) continue
-    if (clip.text !== undefined) continue // text clips render post-MVP
-    if (clip.opacity <= 0) continue // invisible: skip the decode entirely
-    jobs.push(clip)
-  }
+  const jobs = visibleVideoLayersAtFrame(doc, frame)
 
   // Phase 2 — fetch every needed frame concurrently.
   const images = await Promise.all(
-    jobs.map((clip) =>
-      source.getFrame(clip.assetId, clipSourceFrame(clip, frame)).catch((e) => {
+    jobs.map((job) =>
+      source.getFrame(job.clip.assetId, job.sourceFrame).catch((e) => {
         console.warn(
-          `[render] getFrame failed for clip "${clip.id}":`,
+          `[render] getFrame failed for clip "${job.clip.id}":`,
           e instanceof Error ? e.message : e,
         )
         return null
@@ -120,14 +116,15 @@ export async function compositeFrame(
     ctx.fillRect(0, 0, doc.width, doc.height)
 
     for (let i = 0; i < jobs.length; i++) {
-      const clip = jobs[i]
+      const job = jobs[i]
+      const clip = job.clip
       const image = images[i]
       if (image === null) {
         missing.push(clip.id)
         continue
       }
       try {
-        drawClip(ctx, doc, clip, image)
+        drawClip(ctx, doc, job, image)
         drawn.push(clip.id)
       } catch (e) {
         // e.g. the bitmap was closed under us — record and keep compositing.
@@ -155,9 +152,10 @@ export async function compositeFrame(
 function drawClip(
   ctx: Composite2D,
   doc: TimelineDoc,
-  clip: Clip,
+  layer: VisibleVideoLayer,
   image: ImageBitmap,
 ): void {
+  const clip: Clip = layer.clip
   const t = clip.transform
   // Anchor point in image pixels.
   const anchorX = t.anchorX * image.width
@@ -168,7 +166,7 @@ function drawClip(
 
   ctx.save()
   try {
-    ctx.globalAlpha = Math.min(1, clip.opacity)
+    ctx.globalAlpha = layer.opacity
     ctx.translate(canvasX, canvasY)
     ctx.rotate((t.rotation * Math.PI) / 180)
     ctx.scale(t.scaleX, t.scaleY)

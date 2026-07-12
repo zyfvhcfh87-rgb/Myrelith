@@ -5,8 +5,8 @@
  * import (same rule as decode-protocol.ts).
  *
  * Division of labor: the MAIN side is the single computer of timestamps.
- * It runs the domain selectors (activeClipAt/clipSourceFrame) over the doc,
- * rescales to each asset's native rate, fetches the chunk batch per asset,
+ * It runs domain.visibleVideoLayersAtFrame over the doc, rescales each
+ * selected source frame to the asset's native rate, fetches the chunk batch,
  * and ships everything in one `composite` message. The worker never
  * re-derives µs targets — it matches `sourceFrame` keys exactly and trusts
  * `targetTimestampUs`/`toleranceUs`, so the two sides can never disagree
@@ -32,7 +32,7 @@ import type { ChunkPayload } from './decode-protocol'
  */
 export interface CompositeSourceEntry {
   assetId: AssetId
-  /** Document-rate source frame, as produced by domain clipSourceFrame(). */
+  /** Document-rate source frame from domain.visibleVideoLayersAtFrame(). */
   sourceFrame: number
   /** Target presentation timestamp in the ASSET's stream, integer µs. */
   targetTimestampUs: number

@@ -462,6 +462,34 @@ function makeAudioDoc(tracks: Track[]): TimelineDoc {
   return { ...makeDoc(), tracks }
 }
 
+function makeTransitionVideoDoc(): TimelineDoc {
+  const from = makeAudioClip('from', 'asset-a', 3, { sourceStart: 10 })
+  const to = makeAudioClip('to', 'asset-a', 3, {
+    timelineStart: 3,
+    sourceStart: 20,
+  })
+  return {
+    ...makeDoc(),
+    tracks: [{
+      id: 'V1',
+      kind: 'video',
+      name: 'V1',
+      clips: [from, to],
+      transitions: [{
+        id: 'dissolve',
+        type: 'crossfade',
+        fromClipId: from.id,
+        toClipId: to.id,
+        durationFrames: 3,
+      }],
+      hidden: false,
+      muted: false,
+      solo: false,
+      locked: false,
+    }],
+  }
+}
+
 interface FakeBitmap extends ImageBitmap {
   close: Mock<() => void>
 }
@@ -638,6 +666,125 @@ beforeEach(() => {
 })
 
 describe('createMediabunnyExportMediaSource', () => {
+  test('uses the canonical crossfade plan for exact ordered decode timestamps', async () => {
+    const doc = makeTransitionVideoDoc()
+    mb.inputTracks.push(videoTrack())
+    mb.canvasSinkHandlers.push(async () => wrappedCanvas())
+    const media = createMediabunnyExportMediaSource(
+      doc,
+      async () => new Blob(['asset-a']),
+    )
+    const ctx = new FakeOffscreenCanvas(doc.width, doc.height).context
+    const drawn: string[][] = []
+
+    for (let frame = 0; frame < 6; frame++) {
+      const lease = await media.openFrame(frame)
+      const result = await compositeFrame(doc, frame, ctx, lease)
+      drawn.push(result.drawn)
+      await lease.close()
+    }
+    await media.close()
+
+    expect(drawn).toEqual([
+      ['from'],
+      ['from'],
+      ['from', 'to'],
+      ['from', 'to'],
+      ['from', 'to'],
+      ['to'],
+    ])
+    expect(mb.inputs).toHaveLength(1)
+    expect(canvasSinkAt().canvasesAtTimestamps).toHaveBeenCalledWith(
+      [10, 11, 12, 20, 12, 20, 12, 21, 22].map(
+        (frame) => (frame * 1_001) / 30_000,
+      ),
+    )
+    expect(createBitmap).toHaveBeenCalledTimes(9)
+    for (const bitmap of fakeBitmaps) {
+      expect(bitmap.close).toHaveBeenCalledOnce()
+    }
+    expect(canvasIteratorAt().return).toHaveBeenCalledOnce()
+    expect(inputAt().dispose).toHaveBeenCalledOnce()
+  })
+
+  test('fails lease close when a scheduled render request was omitted', async () => {
+    const media = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
+      async () => new Blob(['asset-a']),
+    )
+    const lease = await media.openFrame(0)
+
+    expect(() => lease.close()).toThrow(
+      'Export document frame 0 received 0 of 1 scheduled media requests',
+    )
+    await media.close()
+  })
+
+  test('closes acquired bitmaps before reporting a partially omitted schedule', async () => {
+    mb.inputTracks.push(videoTrack())
+    mb.canvasSinkHandlers.push(async () => wrappedCanvas())
+    const media = createMediabunnyExportMediaSource(
+      makeVideoDoc(
+        [
+          { assetId: 'asset-a', sourceStart: 0 },
+          { assetId: 'asset-b', sourceStart: 0 },
+        ],
+        1,
+      ),
+      async (assetId) => new Blob([assetId]),
+    )
+    const lease = await media.openFrame(0)
+
+    const bitmap = await lease.getFrame('asset-a', 0)
+    expect(bitmap).toBe(fakeBitmaps[0])
+    expect(() => lease.close()).toThrow(
+      'Export document frame 0 received 1 of 2 scheduled media requests',
+    )
+    expect(fakeBitmaps[0].close).toHaveBeenCalledOnce()
+
+    await media.close()
+    expect(inputAt().dispose).toHaveBeenCalledOnce()
+  })
+
+  test('rejects an out-of-order request against the frame-local render plan', async () => {
+    const media = createMediabunnyExportMediaSource(
+      makeVideoDoc(
+        [
+          { assetId: 'asset-a', sourceStart: 0 },
+          { assetId: 'asset-b', sourceStart: 0 },
+        ],
+        1,
+      ),
+      async (assetId) => new Blob([assetId]),
+    )
+    const lease = await media.openFrame(0)
+
+    await expect(lease.getFrame('asset-b', 0)).rejects.toThrow(
+      'Export document frame 0 expected asset-a@0, got asset-b@0',
+    )
+    expect(() => lease.close()).toThrow(
+      'Export document frame 0 received 0 of 2 scheduled media requests',
+    )
+    await media.close()
+  })
+
+  test('rejects an extra request after the frame-local render plan is consumed', async () => {
+    mb.inputTracks.push(videoTrack())
+    mb.canvasSinkHandlers.push(async () => wrappedCanvas())
+    const media = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
+      async () => new Blob(['asset-a']),
+    )
+    const lease = await media.openFrame(0)
+
+    await lease.getFrame('asset-a', 0)
+    await expect(lease.getFrame('asset-a', 0)).rejects.toThrow(
+      'Export document frame 0 received an extra media request',
+    )
+    await lease.close()
+    await media.close()
+  })
+
   test('opens one decoder per asset and leases stable bitmap copies', async () => {
     const doc = makeVideoDoc(
       [{ assetId: 'asset-a', sourceStart: 3 }],

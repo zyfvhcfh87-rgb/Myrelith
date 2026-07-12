@@ -19,15 +19,26 @@
  */
 
 import { create } from 'zustand'
-import type { Clip, ClipId, Effect, TimelineDoc, TrackId, TrackKind } from '../domain/schema'
+import type {
+  Clip,
+  ClipId,
+  Effect,
+  TimelineDoc,
+  TrackId,
+  TrackKind,
+  TransitionId,
+} from '../domain/schema'
 import type { ClipTransformPatch, TrackFlagsPatch, TrimEdge } from '../domain/operations'
 import {
+  addCrossfade,
   addEffect,
   addTrack,
   insertClip,
+  removeTransition,
   removeTrack,
   renameTrack,
   setClipVolume,
+  setCrossfadeDuration,
   setTrackFlags,
   updateClipTransform,
 } from '../domain/operations'
@@ -115,6 +126,29 @@ export interface DocumentState {
    * Linked partners follow (one entry); see domain/linking.
    */
   rippleDelete: (clipId: ClipId) => void
+  /**
+   * Add a centered crossfade between ordered touching video clips. A valid
+   * add is one undo entry; rejected geometry or a locked track adds none.
+   */
+  addCrossfade: (
+    fromClipId: ClipId,
+    toClipId: ClipId,
+    durationFrames: number,
+  ) => void
+  /**
+   * Change one crossfade duration while preserving its id. `trackId` scopes
+   * stale UI calls; unchanged or rejected edits add no history entry.
+   */
+  setCrossfadeDuration: (
+    trackId: TrackId,
+    transitionId: TransitionId,
+    durationFrames: number,
+  ) => void
+  /**
+   * Remove one transition from its owning track. Stale endpoint definitions
+   * remain removable; unknown/mismatched ids and locked tracks are no-ops.
+   */
+  removeTransition: (trackId: TrackId, transitionId: TransitionId) => void
   /**
    * Dissolve clipId's whole link group in one entry — every member loses
    * its linkGroupId (the Inspector's manual "unlink" button). A clip with
@@ -287,6 +321,35 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   rippleDelete: (clipId) =>
     set((state) => commit(state, linkedRippleDelete(state.doc, clipId))),
+
+  addCrossfade: (fromClipId, toClipId, durationFrames) =>
+    set((state) =>
+      commit(
+        state,
+        addCrossfade(state.doc, fromClipId, toClipId, durationFrames),
+      ),
+    ),
+
+  setCrossfadeDuration: (trackId, transitionId, durationFrames) =>
+    set((state) =>
+      commit(
+        state,
+        setCrossfadeDuration(
+          state.doc,
+          trackId,
+          transitionId,
+          durationFrames,
+        ),
+      ),
+    ),
+
+  removeTransition: (trackId, transitionId) =>
+    set((state) =>
+      commit(
+        state,
+        removeTransition(state.doc, trackId, transitionId),
+      ),
+    ),
 
   unlinkClip: (clipId) =>
     set((state) => commit(state, unlinkClip(state.doc, clipId))),

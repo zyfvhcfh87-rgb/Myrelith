@@ -29,8 +29,14 @@ import type {
   Track,
   TrackId,
   TrackKind,
+  Transition,
+  TransitionId,
   Transform,
 } from './schema'
+import {
+  crossfadeWindowsOverlap,
+  resolveCrossfade,
+} from './selectors'
 import { rangeEnd, rangeOverlap } from './time'
 
 /** Which clip edge a trim moves. */
@@ -48,6 +54,13 @@ interface ClipLocation {
   clip: Clip
 }
 
+interface TransitionLocation {
+  trackIndex: number
+  track: Track
+  transitionIndex: number
+  transition: Transition
+}
+
 function locateClip(doc: TimelineDoc, clipId: ClipId): ClipLocation | null {
   for (let t = 0; t < doc.tracks.length; t++) {
     const track = doc.tracks[t]
@@ -57,6 +70,25 @@ function locateClip(doc: TimelineDoc, clipId: ClipId): ClipLocation | null {
     }
   }
   return null
+}
+
+/** Every occurrence on one owning track, so corrupt duplicate ids stay ambiguous. */
+function locateTrackTransitions(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  transitionId: TransitionId,
+): TransitionLocation[] {
+  const locations: TransitionLocation[] = []
+  const trackIndex = doc.tracks.findIndex((track) => track.id === trackId)
+  if (trackIndex < 0) return locations
+  const track = doc.tracks[trackIndex]
+  for (let i = 0; i < track.transitions.length; i++) {
+    const transition = track.transitions[i]
+    if (transition.id === transitionId) {
+      locations.push({ trackIndex, track, transitionIndex: i, transition })
+    }
+  }
+  return locations
 }
 
 /** Rejection path: warn and hand back the SAME doc reference. */
@@ -91,15 +123,76 @@ function withTrack(
   return { ...doc, tracks }
 }
 
-/** Drop transitions whose endpoints no longer both exist on the track. */
-function pruneTransitions(track: Track): Track {
-  const ids = new Set(track.clips.map((c) => c.id))
-  const transitions = track.transitions.filter(
-    (tr) => ids.has(tr.fromClipId) && ids.has(tr.toClipId),
+/** Transition array positions whose definitions resolve without overlap. */
+function validTransitionIndexes(track: Track): Set<number> {
+  const resolved = track.transitions.map((transition) =>
+    resolveCrossfade(track, transition),
   )
-  return transitions.length === track.transitions.length
-    ? track
-    : { ...track, transitions }
+  const invalid = new Set<number>()
+  const indexesById = new Map<TransitionId, number[]>()
+
+  for (let i = 0; i < track.transitions.length; i++) {
+    if (!resolved[i]) invalid.add(i)
+    const transition = track.transitions[i]
+    const indexes = indexesById.get(transition.id)
+    if (indexes) indexes.push(i)
+    else indexesById.set(transition.id, [i])
+  }
+
+  for (const indexes of indexesById.values()) {
+    if (indexes.length > 1) {
+      for (const index of indexes) invalid.add(index)
+    }
+  }
+
+  for (let left = 0; left < resolved.length; left++) {
+    const leftWindow = resolved[left]
+    if (!leftWindow) continue
+    for (let right = left + 1; right < resolved.length; right++) {
+      const rightWindow = resolved[right]
+      if (
+        rightWindow &&
+        crossfadeWindowsOverlap(leftWindow, rightWindow)
+      ) {
+        invalid.add(left)
+        invalid.add(right)
+      }
+    }
+  }
+
+  const indexes = new Set<number>()
+  for (let i = 0; i < track.transitions.length; i++) {
+    if (!invalid.has(i)) indexes.add(i)
+  }
+  return indexes
+}
+
+/**
+ * Carry only transitions that were valid before a geometry edit and remain
+ * valid afterwards. This prevents a stale serialized definition from
+ * springing alive merely because an unrelated ripple makes its endpoints
+ * touch. Call only after the geometry operation itself has succeeded.
+ */
+function reconcileTransitions(before: Track, after: Track): Track {
+  if (after.transitions.length === 0) return after
+  const beforeValid = validTransitionIndexes(before)
+  const candidates = after.transitions.filter((_transition, index) =>
+    beforeValid.has(index),
+  )
+  // Stale-before definitions are excluded BEFORE after-state ambiguity is
+  // measured; otherwise one that merely became geometrically plausible could
+  // suppress a legitimate survivor by overlapping it.
+  const candidateTrack =
+    candidates.length === after.transitions.length
+      ? after
+      : { ...after, transitions: candidates }
+  const afterValid = validTransitionIndexes(candidateTrack)
+  const transitions = candidates.filter((_transition, index) =>
+    afterValid.has(index),
+  )
+  return transitions.length === after.transitions.length
+    ? after
+    : { ...after, transitions }
 }
 
 /**
@@ -111,9 +204,170 @@ function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`
 }
 
+/** Mint an id unique on the owning track (schema.ts's TransitionId scope). */
+function newTransitionId(track: Track): TransitionId {
+  const existing = new Set(
+    track.transitions.map((transition) => transition.id),
+  )
+  let id = newId('transition')
+  while (existing.has(id)) id = newId('transition')
+  return id
+}
+
 /* ------------------------------------------------------------------ */
 /* Operations                                                           */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Add one centered visual crossfade at an existing touching video seam.
+ * The transition id is minted internally; callers identify the seam by its
+ * ordered outgoing/incoming clip ids. A crossfade is rejected unless the
+ * canonical render geometry resolves and its half-open window is disjoint
+ * from every other valid transition window on the track.
+ */
+export function addCrossfade(
+  doc: TimelineDoc,
+  fromClipId: ClipId,
+  toClipId: ClipId,
+  durationFrames: number,
+): TimelineDoc {
+  const op = 'addCrossfade'
+  if (!Number.isSafeInteger(durationFrames) || durationFrames < 1) {
+    return reject(
+      doc,
+      op,
+      `durationFrames must be a safe integer >= 1, got ${durationFrames}`,
+    )
+  }
+  if (fromClipId === toClipId) {
+    return reject(doc, op, 'crossfade endpoints must be distinct clips')
+  }
+
+  const fromLoc = locateClip(doc, fromClipId)
+  if (!fromLoc) return reject(doc, op, `clip ${fromClipId} not found`)
+  const toLoc = locateClip(doc, toClipId)
+  if (!toLoc) return reject(doc, op, `clip ${toClipId} not found`)
+  if (fromLoc.trackIndex !== toLoc.trackIndex) {
+    return reject(doc, op, 'crossfade endpoints must be on the same track')
+  }
+
+  const track = fromLoc.track
+  if (track.locked) return reject(doc, op, `track ${track.id} is locked`)
+  if (track.kind !== 'video') {
+    return reject(doc, op, `track ${track.id} is not a video track`)
+  }
+  if (toLoc.clipIndex !== fromLoc.clipIndex + 1) {
+    return reject(doc, op, 'crossfade endpoints must be ordered adjacent clips')
+  }
+  if (rangeEnd(fromLoc.clip.timelineRange) !== toLoc.clip.timelineRange.startFrame) {
+    return reject(doc, op, 'crossfade endpoints must touch on the timeline')
+  }
+  if (
+    track.transitions.some(
+      (transition) =>
+        transition.fromClipId === fromClipId &&
+        transition.toClipId === toClipId,
+    )
+  ) {
+    return reject(doc, op, 'the clip seam already has a transition')
+  }
+
+  const transition: Transition = {
+    id: newTransitionId(track),
+    type: 'crossfade',
+    fromClipId,
+    toClipId,
+    durationFrames,
+  }
+  const nextTrack: Track = {
+    ...track,
+    transitions: [...track.transitions, transition],
+  }
+  if (!validTransitionIndexes(nextTrack).has(nextTrack.transitions.length - 1)) {
+    return reject(
+      doc,
+      op,
+      'crossfade window does not fit its clips or overlaps another transition',
+    )
+  }
+  return withTrack(doc, fromLoc.trackIndex, nextTrack)
+}
+
+/**
+ * Change one track-owned crossfade's duration without replacing its stable
+ * id. A no-op duration is silent; malformed endpoints may be repaired only
+ * when the new duration makes the complete canonical definition valid and
+ * unambiguous.
+ */
+export function setCrossfadeDuration(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  transitionId: TransitionId,
+  durationFrames: number,
+): TimelineDoc {
+  const op = 'setCrossfadeDuration'
+  if (!Number.isSafeInteger(durationFrames) || durationFrames < 1) {
+    return reject(
+      doc,
+      op,
+      `durationFrames must be a safe integer >= 1, got ${durationFrames}`,
+    )
+  }
+
+  const locations = locateTrackTransitions(doc, trackId, transitionId)
+  if (locations.length === 0) {
+    return reject(doc, op, `transition ${transitionId} not found`)
+  }
+  if (locations.length > 1) {
+    return reject(doc, op, `transition id ${transitionId} is ambiguous`)
+  }
+  const loc = locations[0]
+  if (loc.track.locked) {
+    return reject(doc, op, `track ${loc.track.id} is locked`)
+  }
+  if (loc.transition.durationFrames === durationFrames) return doc
+
+  const transition: Transition = { ...loc.transition, durationFrames }
+  const transitions = loc.track.transitions.slice()
+  transitions[loc.transitionIndex] = transition
+  const nextTrack: Track = { ...loc.track, transitions }
+  if (!validTransitionIndexes(nextTrack).has(loc.transitionIndex)) {
+    return reject(
+      doc,
+      op,
+      'crossfade window does not fit its clips or overlaps another transition',
+    )
+  }
+  return withTrack(doc, loc.trackIndex, nextTrack)
+}
+
+/**
+ * Remove exactly one transition by owning track + id. Endpoint validity is
+ * deliberately not required, so malformed/stale serialized transitions
+ * remain removable.
+ */
+export function removeTransition(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  transitionId: TransitionId,
+): TimelineDoc {
+  const op = 'removeTransition'
+  const locations = locateTrackTransitions(doc, trackId, transitionId)
+  if (locations.length === 0) {
+    return reject(doc, op, `transition ${transitionId} not found`)
+  }
+  if (locations.length > 1) {
+    return reject(doc, op, `transition id ${transitionId} is ambiguous`)
+  }
+  const loc = locations[0]
+  if (loc.track.locked) {
+    return reject(doc, op, `track ${loc.track.id} is locked`)
+  }
+
+  const transitions = loc.track.transitions.slice()
+  transitions.splice(loc.transitionIndex, 1)
+  return withTrack(doc, loc.trackIndex, { ...loc.track, transitions })
+}
 
 /**
  * Build a default Clip that plays `asset` in full, starting at timeline
@@ -211,7 +465,8 @@ export function insertClip(
   }
 
   const clips = [...track.clips, copy].sort(byStart)
-  return withTrack(doc, trackIndex, { ...track, clips })
+  const nextTrack = reconcileTransitions(track, { ...track, clips })
+  return withTrack(doc, trackIndex, nextTrack)
 }
 
 /**
@@ -270,7 +525,20 @@ export function splitClipAtFrame(
 
   const clips = loc.track.clips.slice()
   clips.splice(loc.clipIndex, 1, left, right)
-  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+  // The original id stays on the left half, so an incoming transition keeps
+  // pointing at it. An outgoing transition belongs at the original outer
+  // edge and therefore follows the newly minted right half.
+  const transitions = loc.track.transitions.map((transition) =>
+    transition.fromClipId === clip.id
+      ? { ...transition, fromClipId: right.id }
+      : transition,
+  )
+  const nextTrack = reconcileTransitions(loc.track, {
+    ...loc.track,
+    clips,
+    transitions,
+  })
+  return withTrack(doc, loc.trackIndex, nextTrack)
 }
 
 /**
@@ -330,7 +598,8 @@ export function trimClip(
   const clips = loc.track.clips.slice()
   clips[loc.clipIndex] = { ...clip, timelineRange: newTl, sourceRange: newSrc }
   clips.sort(byStart)
-  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+  const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
+  return withTrack(doc, loc.trackIndex, nextTrack)
 }
 
 /**
@@ -378,15 +647,22 @@ export function moveClip(
     const clips = loc.track.clips.slice()
     clips[loc.clipIndex] = movedClip
     clips.sort(byStart)
-    return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+    const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
+    return withTrack(doc, loc.trackIndex, nextTrack)
   }
 
   // Cross-track: remove from source, insert into target, fix transitions.
   const sourceClips = loc.track.clips.filter((c) => c.id !== clipId)
   const targetClips = [...target.clips, movedClip].sort(byStart)
   const tracks = doc.tracks.slice()
-  tracks[loc.trackIndex] = pruneTransitions({ ...loc.track, clips: sourceClips })
-  tracks[targetIndex] = { ...target, clips: targetClips }
+  tracks[loc.trackIndex] = reconcileTransitions(loc.track, {
+    ...loc.track,
+    clips: sourceClips,
+  })
+  tracks[targetIndex] = reconcileTransitions(target, {
+    ...target,
+    clips: targetClips,
+  })
   return { ...doc, tracks }
 }
 
@@ -418,20 +694,18 @@ export function rippleDelete(doc: TimelineDoc, clipId: ClipId): TimelineDoc {
         : c,
     )
 
-  return withTrack(
-    doc,
-    loc.trackIndex,
-    pruneTransitions({ ...loc.track, clips }),
-  )
+  const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
+  return withTrack(doc, loc.trackIndex, nextTrack)
 }
 
 /**
  * Slip: shift WHICH source material a clip shows without moving the clip on
  * the timeline. Positive delta shows later material (source in-point moves
  * forward). timelineRange is untouched, so neighbors can never be affected.
- * Rejected when the source in-point would go below 0; slipping past the END
- * of the asset is validated at the store/UI layer, like trimClip (domain/
- * cannot see assets — file-header note).
+ * Rejected when the source in-point would go below 0 or the resulting source
+ * range would leave JavaScript's safe-integer frame domain. Slipping past the
+ * END of the asset is validated at the store/UI layer, like trimClip
+ * (domain/ cannot see assets — file-header note).
  */
 export function slipClip(
   doc: TimelineDoc,
@@ -451,13 +725,21 @@ export function slipClip(
   if (newSrcStart < 0) {
     return reject(doc, op, 'no source material before the asset start')
   }
+  const newSrcEnd = newSrcStart + src.durationFrames - 1
+  if (
+    !Number.isSafeInteger(newSrcStart) ||
+    !Number.isSafeInteger(newSrcEnd)
+  ) {
+    return reject(doc, op, 'source range must stay within safe integer frames')
+  }
 
   const clips = loc.track.clips.slice()
   clips[loc.clipIndex] = {
     ...loc.clip,
     sourceRange: { startFrame: newSrcStart, durationFrames: src.durationFrames },
   }
-  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+  const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
+  return withTrack(doc, loc.trackIndex, nextTrack)
 }
 
 /**
@@ -540,7 +822,8 @@ export function slideClip(
     }
   }
 
-  return withTrack(doc, loc.trackIndex, { ...track, clips })
+  const nextTrack = reconcileTransitions(track, { ...track, clips })
+  return withTrack(doc, loc.trackIndex, nextTrack)
 }
 
 /**
@@ -617,7 +900,8 @@ export function rippleTrim(
     return c
   })
 
-  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+  const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
+  return withTrack(doc, loc.trackIndex, nextTrack)
 }
 
 /** What updateClipTransform can change (the Inspector's surface, 4.3). */

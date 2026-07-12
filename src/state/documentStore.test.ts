@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import type { Clip, TimelineDoc, Track, Transition } from '../domain/schema'
 import { useDocumentStore } from './documentStore'
 
 /* ------------------------------------------------------------------ */
@@ -54,6 +54,49 @@ function makeDoc(): TimelineDoc {
       makeTrack('V1', 'video', [makeClip('clipA', 0, 300), makeClip('clipB', 400, 100)]),
       makeTrack('V2', 'video', []),
       makeTrack('A1', 'audio', [makeClip('clipD', 0, 300)]),
+    ],
+  })
+}
+
+function crossfade(
+  id: string,
+  fromClipId: string,
+  toClipId: string,
+  durationFrames = 3,
+): Transition {
+  return { id, type: 'crossfade', fromClipId, toClipId, durationFrames }
+}
+
+function makeTransitionDoc(
+  v1Transitions: Transition[] = [],
+  v2Transitions: Transition[] = [],
+  v1Locked = false,
+): TimelineDoc {
+  return deepFreeze({
+    schemaVersion: 1,
+    id: 'doc-transitions',
+    name: 'Transition store test',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [
+      {
+        ...makeTrack('V1', 'video', [
+          makeClip('A', 0, 10),
+          makeClip('B', 10, 10),
+          makeClip('gap', 30, 10),
+        ], v1Locked),
+        transitions: v1Transitions,
+      },
+      {
+        ...makeTrack('V2', 'video', [
+          makeClip('X', 0, 10),
+          makeClip('Y', 10, 10),
+        ]),
+        transitions: v2Transitions,
+      },
+      makeTrack('A1', 'audio', []),
     ],
   })
 }
@@ -160,6 +203,157 @@ describe('history behavior', () => {
     getState().setDoc(makeDoc())
     expect(getState().past).toHaveLength(0)
     expect(getState().future).toHaveLength(0)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Transition actions (Phase 5.1e-2)                                  */
+/* ------------------------------------------------------------------ */
+
+describe('transition action history', () => {
+  function expectRejectedWithoutStateChange(action: () => void): void {
+    const before = getState()
+    action()
+    expect(getState().doc).toBe(before.doc)
+    expect(getState().past).toBe(before.past)
+    expect(getState().future).toBe(before.future)
+  }
+
+  test('add is one entry; undo/redo restore the exact generated transition snapshot', () => {
+    getState().setDoc(makeTransitionDoc())
+    const initial = getState().doc
+    const initialJson = JSON.stringify(initial)
+
+    getState().addCrossfade('A', 'B', 5)
+    const authored = getState().doc
+    const authoredJson = JSON.stringify(authored)
+    const generatedId = authored.tracks[0].transitions[0].id
+
+    expect(generatedId).toMatch(/^transition_/)
+    expect(getState().past).toEqual([initial])
+    expect(getState().future).toEqual([])
+
+    getState().undo()
+    expect(getState().doc).toBe(initial)
+    expect(JSON.stringify(getState().doc)).toBe(initialJson)
+
+    getState().redo()
+    expect(getState().doc).toBe(authored)
+    expect(JSON.stringify(getState().doc)).toBe(authoredJson)
+    expect(getState().doc.tracks[0].transitions[0].id).toBe(generatedId)
+  })
+
+  test('duration update is one entry; same-value and invalid updates add none', () => {
+    getState().setDoc(makeTransitionDoc([crossfade('t1', 'A', 'B')]))
+    const initial = getState().doc
+
+    getState().setCrossfadeDuration('V1', 't1', 5)
+    expect(getState().doc.tracks[0].transitions[0]).toEqual(
+      crossfade('t1', 'A', 'B', 5),
+    )
+    expect(getState().past).toEqual([initial])
+    const updated = getState().doc
+
+    getState().undo()
+    expect(getState().doc).toBe(initial)
+    getState().redo()
+    expect(getState().doc).toBe(updated)
+
+    expectRejectedWithoutStateChange(() => {
+      getState().setCrossfadeDuration('V1', 't1', 5)
+    })
+    expectRejectedWithoutStateChange(() => {
+      getState().setCrossfadeDuration('V1', 't1', 21)
+    })
+    expect(getState().past).toHaveLength(1)
+  })
+
+  test('remove is one entry and undo/redo restore it byte-exactly', () => {
+    getState().setDoc(makeTransitionDoc([crossfade('t1', 'A', 'B', 5)]))
+    const initial = getState().doc
+    const initialJson = JSON.stringify(initial)
+
+    getState().removeTransition('V1', 't1')
+    const removed = getState().doc
+    const removedJson = JSON.stringify(removed)
+    expect(removed.tracks[0].transitions).toEqual([])
+    expect(getState().past).toEqual([initial])
+
+    getState().undo()
+    expect(getState().doc).toBe(initial)
+    expect(JSON.stringify(getState().doc)).toBe(initialJson)
+    getState().redo()
+    expect(getState().doc).toBe(removed)
+    expect(JSON.stringify(getState().doc)).toBe(removedJson)
+  })
+
+  test('invalid seam, locked track, and unknown targets preserve doc and both stacks', () => {
+    // A real edit followed by undo gives rejections a non-empty future stack
+    // to preserve, not merely the easy all-empty state.
+    getState().setDoc(makeTransitionDoc())
+    const initial = getState().doc
+    getState().addCrossfade('A', 'B', 3)
+    const redoTarget = getState().doc
+    getState().undo()
+    expect(getState().future).toHaveLength(1)
+
+    expectRejectedWithoutStateChange(() => {
+      getState().addCrossfade('B', 'gap', 3)
+    })
+    expectRejectedWithoutStateChange(() => {
+      getState().addCrossfade('A', 'missing', 3)
+    })
+    expectRejectedWithoutStateChange(() => {
+      getState().setCrossfadeDuration('V1', 'missing', 5)
+    })
+    expectRejectedWithoutStateChange(() => {
+      getState().removeTransition('V9', 'missing')
+    })
+    getState().redo()
+    expect(getState().doc).toBe(redoTarget)
+    getState().undo()
+    expect(getState().doc).toBe(initial)
+    getState().addCrossfade('A', 'B', 5)
+    expect(getState().future).toEqual([])
+
+    const locked = makeTransitionDoc(
+      [crossfade('locked-transition', 'A', 'B')],
+      [],
+      true,
+    )
+    getState().setDoc(locked)
+    getState().renameTrack('V1', 'Locked video')
+    getState().undo()
+    expect(getState().future).toHaveLength(1)
+    expectRejectedWithoutStateChange(() => {
+      getState().addCrossfade('A', 'B', 3)
+    })
+    expectRejectedWithoutStateChange(() => {
+      getState().setCrossfadeDuration('V1', 'locked-transition', 3)
+    })
+    expectRejectedWithoutStateChange(() => {
+      getState().removeTransition('V1', 'locked-transition')
+    })
+  })
+
+  test('same transition id on two tracks updates/removes only the requested track', () => {
+    const sharedId = 'shared-transition'
+    getState().setDoc(makeTransitionDoc(
+      [crossfade(sharedId, 'A', 'B')],
+      [crossfade(sharedId, 'X', 'Y')],
+    ))
+
+    getState().setCrossfadeDuration('V2', sharedId, 5)
+    expect(getState().doc.tracks[0].transitions[0].durationFrames).toBe(3)
+    expect(getState().doc.tracks[1].transitions[0].durationFrames).toBe(5)
+    expect(getState().past).toHaveLength(1)
+
+    getState().removeTransition('V1', sharedId)
+    expect(getState().doc.tracks[0].transitions).toEqual([])
+    expect(getState().doc.tracks[1].transitions).toEqual([
+      crossfade(sharedId, 'X', 'Y', 5),
+    ])
+    expect(getState().past).toHaveLength(2)
   })
 })
 

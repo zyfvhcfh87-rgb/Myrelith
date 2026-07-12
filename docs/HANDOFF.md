@@ -4,7 +4,7 @@ Read this first in a new session. It is the deep context; [PLAN.md](PLAN.md)
 holds what to build next; [../ARCHITECTURE.md](../ARCHITECTURE.md) holds the
 binding rules.
 
-## Status (2026-07-11)
+## Status (2026-07-12)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -29,9 +29,15 @@ binding rules.
 | 5.1a — CFR export foundation | ✅ done | 21 focused tests: timing, backpressure, progress, ownership, cancellation |
 | 5.1b — real video adapters | ✅ done | locked Mediabunny 1.50.3 browser pass: 10-frame MP4 reopened by native video |
 | 5.1c — bounded audio export | ✅ done | NTSC browser pass: exact 48,048-sample stereo AAC mix, A/V both 1.001s, clean console |
-| 5 — export | 🚧 in progress | crossfade parity, controller/UI, then MVP gate remain |
+| 5.1d — transition parity | ✅ done | same-asset seek/backtrack browser pass: 12-frame MP4, preview/export pixels within 2, clean console |
+| 5.1e-1 — transition domain lifecycle | ✅ done | track-scoped add/update/remove + deterministic edit cleanup; linked rollback proven |
+| 5.1e-2 — transition store wiring | ✅ done | one entry per edit; exact undo/redo id restore; rejected edits preserve redo |
+| 5.1e-3 — transition timeline UI | ✅ done | seam marker + accessible duration popover; real preview pixels and exact keyboard undo/redo verified |
+| 5.2a — export controller | ✅ done | 11 focused tests: snapshots, shared Blob resolver, result drain, cancellation races, cleanup |
+| 5.2b — export UI | ✅ done | real browser A/V export + download, active cancellation, retry, focus, clean console |
+| 5 — export | 🚧 in progress | MVP gate remains |
 
-524 tests green · `npm run build` and `npm run lint` clean · every phase
+594 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -54,8 +60,41 @@ bounded mix; `pipeline/export-mediabunny.ts` adds lazy active-clip audio
 decoders plus stereo AAC encoding. The real 30000/1001 browser gate exported
 exactly 48,048 scheduled samples: AVC + AAC, 48 kHz stereo, audio and video
 both 1.001s, correct trimmed/half-gain tone followed by silence, clean
-console. Export has no user-facing controller/UI yet; crossfade parity is
-the next module.
+console. Phase 5.1d now routes compositor, preview requests, and export
+requests through `visibleVideoLayersAtFrame`, including centered crossfades
+with frozen source endpoints and hard-cut fallback for malformed/ambiguous
+definitions. Its same-asset browser gate forced the real decoder forward →
+backward → forward, reopened all 12 output frames at exactly 1.200s, and kept
+preview/export probe pixels within 2 channel values with no dark midpoint or
+console errors. Transition authoring has its 5.1e-1 domain lifecycle:
+track-scoped add/duration/remove
+operations share the renderer's exact centered-window resolver, and every
+geometry edit keeps only seams valid before and after (split carries an
+outgoing seam to the new right half; linked rollback restores everything).
+5.1e-2 supplies the undoable store surface: add, duration change, and removal
+are one snapshot each; rejected or idempotent calls leave both undo and redo
+stacks untouched; redo restores the original generated transition id rather
+than minting another one. 5.1e-3 makes that lifecycle user-visible: every
+eligible touching video seam has a small marker whose popover chooses a
+duration before Add, then explicitly Applies or Removes it. The real-browser
+gate authored D15, changed it to D2, removed it, and walked all three states
+backward/forward with the exact id. Red→green preview probe pixels changed at
+the expected frames and the console stayed clean. Phase 5.2a now provides the
+app export controller: it captures one document/settings/media snapshot,
+retains referenced Blobs before their object URLs can be revoked, shares one
+cached resolver across video and audio, explicitly drains progress through the
+final result, and serializes cancellation after any in-flight frame boundary.
+Phase 5.2b exposes that controller through the Toolbar: one honest fixed-profile
+modal shows the current timeline resolution, MP4/H.264, and 8 Mbps; progress is
+rAF-coalesced; cancellation waits for controller cleanup; success owns a Blob
+URL through download-link use and revokes it on close/reset/unmount. Empty timelines, setup/runtime
+errors, double starts, pre-controller cancellation, keyboard isolation, focus,
+and Windows-safe filenames are covered. The real browser gate imported a
+generated 320×180 A/V source, exported a two-video-clip crossfade plus one
+audio clip, downloaded `Browser - Export.mp4`, and probed 4.000s of 30 fps H.264
+plus 48 kHz stereo AAC. Active cancellation happened at nonzero progress,
+showed the cancelling state, produced no download, and a retry succeeded; the
+console stayed at 0 errors and 0 warnings.
 
 ## What works today (user-visible)
 
@@ -85,7 +124,17 @@ drag moves with snap-back on illegal drops, edge drag trims), razor
 follows), slip (source shifts under a fixed clip, live-clamped to the
 asset, delta badge), slide (touching neighbors absorb). S splits under
 the playhead, Delete/Backspace ripple-deletes the selection, ←/→ steps
-the playhead one frame, empty-lane click deselects. The Inspector (4.3)
+the playhead one frame, empty-lane click deselects. Transition authoring
+(5.1e-3): each touching adjacent non-text video seam shows a tiny `+` marker;
+its popover chooses an integer frame duration before Add. An authored seam
+shows `CF`; the same popover explicitly Applies a new duration or Removes the
+crossfade. Domain rejection stays visible in the popover so a shorter duration
+can be tried, locked tracks disable the marker, and each successful button is
+exactly one undo entry. The Toolbar's Export button (5.2b) opens a native modal
+with the timeline's fixed resolution and the MVP MP4/H.264 profile. Start shows
+real progress; Cancel drains cleanup before reporting cancellation; success
+offers an explicit `.mp4` download and keeps its object URL alive until the
+flow closes or resets. The Inspector (4.3)
 edits the selected clip's position/scale/rotation/opacity — drafts while
 typing, commits on blur/Enter, Escape reverts — and the compositor
 preview reflects each commit immediately. Every gesture and every field
@@ -121,8 +170,12 @@ the transform fields only for video-lane clips.
 
 - `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates),
   `time.ts` (conversions incl. `snapToStandardRate`, `formatTimecode`),
-  `operations.ts` (pure edits; REJECT = same doc reference + console.warn),
+  `operations.ts` (pure edits; REJECT = same doc reference + console.warn;
+  5.1e-1 track-scoped `addCrossfade`/`setCrossfadeDuration`/
+  `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
+  `resolveCrossfade` (canonical centered-window geometry),
+  `visibleVideoLayersAtFrame` (THE preview/export visual plan),
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
   derived reads, never stored), `linking.ts` (4.3.8: linked-pair
   wrappers around the base ops — same delta to every linkGroupId
@@ -131,29 +184,46 @@ the transform fields only for video-lane clips.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
-  synchronous draw; `{drawn, missing}` result; per-clip try/finally.
+  synchronous draw; `{drawn, missing}` result; per-clip try/finally. Since
+  5.1d it paints the selector's ordered ordinary/crossfade layers rather than
+  re-deriving active clips.
 - `src/pipeline/export.ts` — Phase 5.1a CFR orchestrator:
   `exportTimeline` derives length with `docDurationFrames`, composites every
   integer frame through an injected `compositeFrame`, awaits sink
   backpressure, and owns per-frame/export cleanup. Natural completion returns
   `ExportResult`; controller cancellation after iteration starts uses
   `return(undefined)`.
+- `src/app/exportController.ts` — Phase 5.2a composition root: snapshots the
+  current document/settings/media, eagerly retains every referenced Blob, and
+  passes one cached asset resolver to both Mediabunny adapter trees. It is the
+  sole explicit generator pump, preserving the final `ExportResult` while
+  making repeated/coincident cancellation one serialized `return(undefined)`.
+  Only one run (including setup/cancel cleanup) may own the controller slot.
+- `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
+  code loads only on Start; progress is frame-coalesced; cancellation and retry
+  are explicit states; Blob URL/download ownership, filename safety, modal
+  focus, and shortcut isolation stay local to the UI. `Toolbar.tsx` only owns
+  the trigger/open state and restores focus when the dialog closes.
 - `src/pipeline/export-audio.ts` — Phase 5.1c exact audio scheduler/mixer:
   BigInt frame→sample boundaries; split/trim-stable signed source↔timeline
   phase; `audibleTracks` selection; clip volume; 1024-sample bounded stereo
   blocks; post-sum clipping;
   one active sequential reader per audible clip; exact-once reader/source
   cleanup. Browser codecs stay behind injected ports for Node tests.
-- `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c production browser
+- `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c/d production browser
   adapters: asset Blob resolver → one Input/CanvasSink/timestamp iterator per
   video asset → lease-owned ImageBitmap copies; active audio clips → lazy
   AudioSampleSink cursors with streaming resampling + channel downmix;
   OffscreenCanvas/CanvasSource + AudioSampleSource → AVC/AAC-in-MP4
   BufferTarget. Both encoders are support-probed, writes honor backpressure,
   every media sample closes, and terminal cleanup is exact-once. The video
-  request order mirrors `compositeFrame` and fails closed if the two drift.
+  iterator schedule and each frame-local request derive from the canonical
+  visual plan; frame leases fail closed on omitted, extra, or reordered
+  requests. Locked Mediabunny 1.50.3 handles the same-asset non-monotonic
+  sequence created by a frozen-endpoint crossfade (browser-proven in 5.1d).
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
-  100; rejected ops push no entry), `transportStore` (playhead/zoom/
+  100; rejected ops push no entry; 5.1e-2 transition add/duration/remove
+  actions preserve exact snapshot ids), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
   assets; `addAsset` placeholder → controller fills via `updateAsset`).
 - `src/workers/decode-protocol.ts` — canonical worker message types.
@@ -224,6 +294,11 @@ the transform fields only for video-lane clips.
   "+ Video"/"+ Audio" (addTrack). Tracks render in domain
   tracksInDisplayOrder (videos reversed = top composite layer first,
   then audios) — doc order stays compositing order.
+- `src/ui/timeline/Track.tsx` + `TransitionSeam.tsx` (5.1e-3) — Track derives
+  eligible touching video cuts from its committed snapshot; each seam marker
+  subscribes only to zoom and opens a temporary Add/Apply/Remove duration
+  form. Pointer/key events stop before clip gestures/global shortcuts, while
+  all writes stay on the documentStore transition actions.
 
 ## Invariants that must survive refactors
 
@@ -267,6 +342,29 @@ the transform fields only for video-lane clips.
   every call creates a new timestamp iterator and decoder. Sequential export
   must keep one `canvasesAtTimestamps` iterator alive per asset; a focused fake
   that only records `getCanvas` calls will miss catastrophic decoder churn.
+- **Naive complementary Canvas2D alpha makes a crossfade dip dark.** With
+  source-over, drawing outgoing at `1-p` and incoming at `p` attenuates the
+  outgoing pixels twice. 5.1d paints outgoing first with compensated alpha,
+  then incoming, which gives an exact linear dissolve for ordinary opaque
+  full-frame footage. General transformed/transparent cross-dissolves need
+  offscreen isolation; do not silently generalize this formula.
+- **Frozen transition endpoints make one asset seek backward.** With no
+  source-handle metadata, 5.1d repeats the outgoing last frame and incoming
+  first frame around the cut. A single asset can therefore produce a
+  non-monotonic `canvasesAtTimestamps` sequence. Mediabunny 1.50.3 supports
+  that path, but keep the real-browser seek/backtrack gate when upgrading it.
+- **Transitions belong to seams, not clip bodies.** Geometry edits retain a
+  transition only when its same track-scoped definition was valid before and
+  remains valid after; otherwise they discard it without rejecting the edit.
+  This prevents stale project data from waking up when a later ripple happens
+  to repair its geometry. Split is the deliberate exception: the original id
+  stays on the left half, so an outgoing seam must rebind to the new right id.
+- **Transition duration needs an explicit submit, not blur commit.** Clicking
+  Remove moves focus away from a dirty number input before its click handler
+  runs; a blur-based duration commit would create one unintended history entry
+  and then a second removal entry. 5.1e-3 uses explicit Add/Apply buttons and a
+  temporary popover, which also lets a seam retry a shorter duration when its
+  default would overlap a neighboring crossfade.
 - **AAC payload length is not timeline duration.** Chrome encodes whole
   1024-sample AAC packets: 48,048 submitted NTSC samples decode to a 48,128-
   sample payload. In locked Mediabunny 1.50.3, `onEncodedPacket` runs
@@ -284,10 +382,17 @@ the transform fields only for video-lane clips.
 
 - `window.__stores.{document,transport,media}` — dev-only zustand handles
   (seed docs, read JSON, drive undo from the console or preview_eval).
-- Generate a labeled test MP4 IN THE BROWSER (no ffmpeg on this machine):
+- `ffmpeg`/`ffprobe` are installed as of 2026-07-12. They generated and probed
+  the 5.2b A/V fixture/result; keep the in-browser generator below when a test
+  needs a same-origin `File` without touching disk.
+- Generate a labeled test MP4 IN THE BROWSER:
   import mediabunny via `/@fs/E:/ClaudeSpace/WebCut/node_modules/mediabunny/dist/modules/src/index.js`,
   `Output` + `Mp4OutputFormat` + `BufferTarget` + `CanvasSource`, draw
   frame numbers, `File` it, then `DataTransfer` into a file input.
+  For a clean-console gate, generate it first in a same-origin non-app page
+  (for example `/src/index.css`) and navigate to `/` before creating the File;
+  importing that raw module after the bundled app is already loaded triggers
+  Mediabunny's duplicate-instance warning even without a cache-bust query.
 - Synthetic gestures: dispatch `PointerEvent`s with `bubbles: true`
   directly on elements (preview_click does NOT produce pointer events).
   DnD: real `new DataTransfer()` + `DragEvent` work in Chrome; jsdom has
@@ -324,7 +429,15 @@ the transform fields only for video-lane clips.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
-- `Transition`s exist in schema only. Images not previewable (video only).
+- Transition rendering, domain authoring, undoable store actions, and the
+  5.1e-3 seam popover are complete. Current crossfades are visual-only (audio
+  still hard-cuts), and the
+  source-over compensation is exact only for ordinary opaque full-frame
+  footage; transformed/transparent dissolves need isolated compositing.
+  Images remain not previewable (video only). The minimal UI intentionally
+  surfaces currently eligible seams; a malformed serialized transition whose
+  endpoints are missing/gapped/text has no cleanup marker yet, although the
+  store's remove action can still delete it.
 - `mediaStore.addAsset` is still the placeholder path; previewController
   re-fetches the blob URL for demuxing (works; slightly wasteful).
 

@@ -1,6 +1,6 @@
 /**
  * ui/timeline/Track.tsx — One horizontal lane of clips. Phase 3.3; drop
- * target for MediaPool assets since 4.0.
+ * target for MediaPool assets since 4.0; transition seam host since 5.1e-3.
  *
  * Presentation + drop wiring: receives its Track as a prop (Timeline
  * subscribes to the doc), renders a ClipView per clip. Identity and
@@ -25,11 +25,13 @@ import type { DragEvent as ReactDragEvent } from 'react'
 import type { Track as TrackData } from '../../domain/schema'
 import { createLinkGroupId } from '../../domain/linking'
 import { clipFromAsset } from '../../domain/operations'
+import { rangeEnd } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
 import { ASSET_DRAG_TYPE, trackAcceptsAssetDrag } from '../dnd'
 import ClipView from './ClipView'
+import TransitionSeam from './TransitionSeam'
 
 interface TrackProps {
   track: TrackData
@@ -105,6 +107,31 @@ function Track({ track, soloDimmed = false }: TrackProps) {
       {track.clips.map((clip) => (
         <ClipView key={clip.id} clip={clip} trackId={track.id} trackKind={track.kind} />
       ))}
+      {track.kind === 'video' &&
+        track.clips.slice(0, -1).map((from, index) => {
+          const to = track.clips[index + 1]
+          if (
+            from.text !== undefined ||
+            to.text !== undefined ||
+            rangeEnd(from.timelineRange) !== to.timelineRange.startFrame
+          ) {
+            return null
+          }
+          const transition = track.transitions.find(
+            (candidate) =>
+              candidate.fromClipId === from.id && candidate.toClipId === to.id,
+          )
+          return (
+            <TransitionSeam
+              key={`${from.id}:${to.id}`}
+              trackId={track.id}
+              locked={track.locked}
+              from={from}
+              to={to}
+              transition={transition}
+            />
+          )
+        })}
     </div>
   )
 }
