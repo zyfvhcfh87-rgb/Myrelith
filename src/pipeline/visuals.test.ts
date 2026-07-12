@@ -100,18 +100,18 @@ describe('accumulatePeaks', () => {
 })
 
 describe('waveformPath', () => {
-  test('builds a closed stepped silhouette with true amplitude', () => {
-    expect(waveformPath(new Float32Array([1, 0.5]), WAVEFORM_HEIGHT)).toBe(
-      'M0 0H1V11H2V33H1V44H0Z',
+  test('builds a closed, linearly connected silhouette with true amplitude', () => {
+    expect(waveformPath(new Float32Array([1, 0.5, 0.25]), WAVEFORM_HEIGHT)).toBe(
+      'M0 0L1 11L2 16.5L3 16.5L3 27.5L2 27.5L1 33L0 44Z',
     )
   })
 
   test('keeps silence visible and rejects invalid geometry', () => {
     expect(waveformPath(new Float32Array([0]), WAVEFORM_HEIGHT)).toBe(
-      'M0 21.5H1V22.5H0Z',
+      'M0 21.5L1 21.5L1 22.5L0 22.5Z',
     )
     expect(waveformPath(new Float32Array([1.7]), WAVEFORM_HEIGHT)).toBe(
-      'M0 0H1V44H0Z',
+      'M0 0L1 0L1 44L0 44Z',
     )
     expect(waveformPath(new Float32Array(), WAVEFORM_HEIGHT)).toBe('')
     expect(waveformPath(new Float32Array([1]), 0)).toBe('')

@@ -39,7 +39,7 @@ and the open list below.
 | 5 — export | ✅ done | complete export pipeline + browser-verified delivery flow |
 | **5 / MVP gate** | ✅ closed | user manual pass 2026-07-12 |
 | Post-MVP #2 — smooth preview playback | ✅ done | Blob-backed streaming lanes; user verified multiple videos without stutter |
-| Post-MVP #3 — undistorted timeline visuals | ✅ done | fixed-aspect SVG thumbnail patterns + vector waveform; Chrome razor continuity, clean console |
+| Post-MVP #3 — undistorted timeline visuals | ✅ done | fixed-aspect SVG thumbnail patterns + antialiased vector waveform; Chrome razor continuity, clean console |
 | Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
 
 686 tests green · `npm run build` and `npm run lint` clean · every phase
@@ -106,7 +106,7 @@ encoded-chunk rebuilding with worker-owned Blob sources and clip-keyed
 sequential playback lanes; the user verified smooth playback across multiple
 videos. Issue #3 now renders each full-source filmstrip as integer-frame SVG
 buckets with fixed-aspect repeating thumbnail patterns, so even hour-long clips
-add previews instead of stretching them; waveforms are scalable SVG paths
+add previews instead of stretching them; waveforms are smoothly connected SVG paths
 instead of interpolated PNGs. Chrome verified a linked A/V import and exact
 filmstrip continuity across a razor cut with no console warnings or errors.
 Issue #5 adds bounded live audio: Mediabunny decodes rolling PCM

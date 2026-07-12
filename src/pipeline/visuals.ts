@@ -95,7 +95,7 @@ export function accumulatePeaks(
   }
 }
 
-/** A stepped, closed waveform silhouette that stays sharp at any zoom. */
+/** A linearly connected waveform silhouette that stays natural at any zoom. */
 export function waveformPath(peaks: Float32Array, height: number): string {
   if (peaks.length === 0 || !Number.isFinite(height) || height <= 0) return ''
   const mid = height / 2
@@ -104,14 +104,14 @@ export function waveformPath(peaks: Float32Array, height: number): string {
   )
 
   let path = `M0 ${mid - halves[0]}`
-  for (let x = 0; x < halves.length; x++) {
-    path += `H${x + 1}`
-    if (x + 1 < halves.length) path += `V${mid - halves[x + 1]}`
+  for (let x = 1; x < halves.length; x++) {
+    path += `L${x} ${mid - halves[x]}`
   }
-  path += `V${mid + halves[halves.length - 1]}`
-  for (let x = halves.length - 1; x >= 0; x--) {
-    path += `H${x}`
-    if (x > 0) path += `V${mid + halves[x - 1]}`
+  const end = halves.length
+  const lastHalf = halves[end - 1]
+  path += `L${end} ${mid - lastHalf}L${end} ${mid + lastHalf}`
+  for (let x = end - 1; x >= 0; x--) {
+    path += `L${x} ${mid + halves[x]}`
   }
   return `${path}Z`
 }
@@ -202,7 +202,7 @@ export async function generateWaveform(file: Blob): Promise<WaveformResult | nul
   }
 
   const path = waveformPath(peaks, WAVEFORM_HEIGHT)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${WAVEFORM_HEIGHT}" preserveAspectRatio="none"><path d="${path}" fill="${WAVEFORM_COLOR}" shape-rendering="crispEdges"/></svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${WAVEFORM_HEIGHT}" preserveAspectRatio="none"><path d="${path}" fill="${WAVEFORM_COLOR}"/></svg>`
   const blob = new Blob([svg], { type: 'image/svg+xml' })
   return { url: URL.createObjectURL(blob), width, height: WAVEFORM_HEIGHT }
 }
