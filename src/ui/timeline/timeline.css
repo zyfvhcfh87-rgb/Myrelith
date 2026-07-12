@@ -462,14 +462,28 @@
   filter: saturate(0.45);
 }
 
-/* Filmstrip/waveform layer — spans the whole block, beneath name/edges.
-   The background maps the ASSET-length image onto this clip: size =
-   assetDuration×zoom, position = −sourceStart×zoom (set inline). */
+/* Filmstrip/waveform layer — spans the whole block, beneath name/edges. */
 .clip-visual {
   position: absolute;
   inset: 0;
-  background-repeat: no-repeat;
+  overflow: hidden;
   pointer-events: none;
+}
+
+/* Each SVG is one source-time bucket. Its pattern repeats the matching
+   fixed-size sprite frame, so a long or highly zoomed bucket adds more
+   thumbnails instead of stretching or deeply cropping one thumbnail. */
+.clip-filmstrip-tile {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* The generated waveform is an SVG, so this full-source time mapping stays
+   sharp when zoomed instead of interpolating a fixed-resolution PNG. */
+.clip-waveform {
+  background-repeat: no-repeat;
 }
 
 .clip-name {

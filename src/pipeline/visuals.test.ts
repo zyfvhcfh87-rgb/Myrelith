@@ -10,12 +10,11 @@
 import { describe, expect, test } from 'vitest'
 import {
   accumulatePeaks,
-  drawWaveform,
   filmstripTimestamps,
+  waveformPath,
   waveformWidth,
   WAVEFORM_HEIGHT,
 } from './visuals'
-import type { Waveform2D } from './visuals'
 
 describe('filmstripTimestamps', () => {
   test('one tile per ~2s, sampled at bucket midpoints', () => {
@@ -100,31 +99,21 @@ describe('accumulatePeaks', () => {
   })
 })
 
-describe('drawWaveform', () => {
-  /** Records fillRect calls; height 44 → mid 22. */
-  function recordingCtx(): Waveform2D & { rects: number[][] } {
-    const rects: number[][] = []
-    return {
-      rects,
-      fillStyle: '',
-      fillRect: (x, y, w, h) => rects.push([x, y, w, h]),
-    }
-  }
-
-  test('one symmetric column per peak, centered on the midline', () => {
-    const ctx = recordingCtx()
-    drawWaveform(ctx, new Float32Array([1, 0.5]), WAVEFORM_HEIGHT, '#fff')
-    expect(ctx.rects).toEqual([
-      [0, 0, 1, 44], // full-scale peak spans the whole height
-      [1, 11, 1, 22], // half-scale spans the middle half
-    ])
-    expect(ctx.fillStyle).toBe('#fff')
+describe('waveformPath', () => {
+  test('builds a closed, linearly connected silhouette with true amplitude', () => {
+    expect(waveformPath(new Float32Array([1, 0.5, 0.25]), WAVEFORM_HEIGHT)).toBe(
+      'M0 0L1 11L2 16.5L3 16.5L3 27.5L2 27.5L1 33L0 44Z',
+    )
   })
 
-  test('silence keeps a hairline; overs clamp to full scale', () => {
-    const ctx = recordingCtx()
-    drawWaveform(ctx, new Float32Array([0, 1.7]), WAVEFORM_HEIGHT, '#fff')
-    expect(ctx.rects[0]).toEqual([0, 21.5, 1, 1]) // 1px center line
-    expect(ctx.rects[1]).toEqual([1, 0, 1, 44]) // clamped, not overflowing
+  test('keeps silence visible and rejects invalid geometry', () => {
+    expect(waveformPath(new Float32Array([0]), WAVEFORM_HEIGHT)).toBe(
+      'M0 21.5L1 21.5L1 22.5L0 22.5Z',
+    )
+    expect(waveformPath(new Float32Array([1.7]), WAVEFORM_HEIGHT)).toBe(
+      'M0 0L1 0L1 44L0 44Z',
+    )
+    expect(waveformPath(new Float32Array(), WAVEFORM_HEIGHT)).toBe('')
+    expect(waveformPath(new Float32Array([1]), 0)).toBe('')
   })
 })
