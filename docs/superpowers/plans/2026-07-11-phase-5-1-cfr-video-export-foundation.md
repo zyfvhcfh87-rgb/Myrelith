@@ -1243,7 +1243,9 @@ git -c user.name="Aryel" -c user.email="286477813+zyfvhcfh87-rgb@users.noreply.g
 git status --short --branch
 ~~~
 
-Expected: the commit succeeds with Aryel as author/committer and the required Codex Opus 4.8 co-author trailer. No tracked changes remain; the pre-existing untracked AGENTS.md remains untouched.
+Expected: the commit succeeds with Aryel as sole author/committer and no AI
+attribution trailer. No tracked changes remain; the pre-existing untracked
+AGENTS.md remains untouched.
 
 ### Post-implementation review correction: distinguish cancellation from completion
 

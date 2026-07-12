@@ -619,4 +619,6 @@ git -c user.name="Aryel" -c user.email="zyfvhcfh87@privaterelay.appleid.com" com
 git status --short --branch
 ```
 
-Expected: commit succeeds under Aryel's authorship with the required co-author trailer. The working tree has no tracked changes; the pre-existing untracked `AGENTS.md` remains untouched.
+Expected: the commit succeeds with Aryel as sole author/committer and no AI
+attribution trailer. The working tree has no tracked changes; the pre-existing
+untracked `AGENTS.md` remains untouched.

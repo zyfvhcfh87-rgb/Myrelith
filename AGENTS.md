@@ -13,10 +13,12 @@ drift — treat ARCHITECTURE.md as canonical.
 
 1. [docs/HANDOFF.md](docs/HANDOFF.md) — status, file map, invariants,
    hard-won lessons (browser-only bugs!), dev toolbox, working agreements.
-2. [docs/PLAN.md](docs/PLAN.md) — exactly what to build next (Phase 3 gate
-   → Phase 4 → Phase 5) with gates; supersedes the original plan file.
+2. [docs/PLAN.md](docs/PLAN.md) — completed MVP build record and gate
+   evidence; supersedes the original plan file.
 
-Phases 0–3.4 are done and committed; the Phase 3 gate is open. 161 tests.
+Phases 0–5 are done and committed; the MVP gate is closed. 594 tests.
+Select a post-MVP item from HANDOFF.md or write a new user-approved plan
+before starting another phase.
 
 ## Build & test
 

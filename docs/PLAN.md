@@ -1,9 +1,10 @@
-# WebCut — Remaining Plan (Phases 3-gate, 4, 5)
+# WebCut — MVP Build Record (Phases 3-gate, 4, 5)
 
 Adapted from the original implementation plan (source:
 `C:\Users\Aryel\Pictures\nle-implementation-plan.md`) with corrections for
-how the codebase actually evolved — trust THIS file over the original where
-they differ. Companion context: [HANDOFF.md](HANDOFF.md).
+how the codebase actually evolved. This completed roadmap remains the MVP gate
+record; new post-MVP work needs a new user-approved plan. Companion context:
+[HANDOFF.md](HANDOFF.md).
 
 ## Phase 3 gate — ✅ CLOSED (2026-07-06)
 
@@ -92,7 +93,7 @@ Sliced into three module-turns:
   toggle, 50% opacity + scale + 15° rotation blend, 30fps playback
   through the compositor, clean console. NOTE: decode.worker +
   DecodeWorkerBridge are now runtime-dead (types/tests still use them) —
-  remove or repurpose during Phase 5.
+  remove or repurpose only as explicit post-MVP cleanup.
 
 **4.1 COMPLETE** — preview is the real timeline compositor.
 

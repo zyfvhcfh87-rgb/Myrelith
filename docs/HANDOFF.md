@@ -1,8 +1,8 @@
 # WebCut — Session Handoff
 
 Read this first in a new session. It is the deep context; [PLAN.md](PLAN.md)
-holds what to build next; [../ARCHITECTURE.md](../ARCHITECTURE.md) holds the
-binding rules.
+records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTURE.md)
+holds the binding rules.
 
 ## Status (2026-07-12)
 
@@ -428,7 +428,7 @@ the transform fields only for video-lane clips.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their
-  structural types. Remove or repurpose during Phase 5.
+  structural types. Remove or repurpose only as explicit post-MVP cleanup.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
