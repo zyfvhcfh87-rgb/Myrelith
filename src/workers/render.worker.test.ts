@@ -17,7 +17,7 @@
  * flush-emits, closed-bitmap draws throw) — see HANDOFF.md lessons.
  */
 
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import type { Composite2D } from '../pipeline/render'
 import type { ChunkPayload } from './decode-protocol'
@@ -29,10 +29,22 @@ import type {
 import type {
   CompositeSourceEntry,
   FromRenderWorker,
+  RenderFrameMessage,
+  RenderMode,
+  StreamingCompositeSourceEntry,
   ToRenderWorker,
 } from './render-protocol'
 import type { RenderCanvasLike, RenderWorkerEnv } from './render.worker'
-import { createRenderWorkerCore } from './render.worker'
+import {
+  createOrientedStreamingBitmap,
+  createRenderWorkerCore,
+} from './render.worker'
+import type {
+  DecodedVideoFrame,
+  PlaybackLaneOptions,
+  VideoFrameCursor,
+  WorkerVideoSource,
+} from './video-source'
 
 /* ------------------------------------------------------------------ */
 /* Timebase: 10 fps doc + assets → one frame = 100_000 µs exactly       */
@@ -52,6 +64,12 @@ interface TrackedFrame extends DecodableFrame {
 interface TrackedBitmap extends BitmapLike {
   sourceTimestamp: number
   closed: boolean
+  closeCount: number
+}
+
+interface TrackedStreamingFrame {
+  closeCount: number
+  close(): void
 }
 
 interface FakeOptions {
@@ -60,6 +78,12 @@ interface FakeOptions {
   autoDrain?: boolean
   /** decode() of the chunk at this timestamp fires the error callback. */
   errorOnUs?: number
+  /** Streaming bitmap normalization rejects at this source timestamp. */
+  streamBitmapErrorOnUs?: number
+  /** Holds streaming bitmap normalization for teardown-race tests. */
+  streamBitmapGate?: Promise<void>
+  /** Holds Blob-source opening for revision-race tests. */
+  openSourceGate?: Promise<void>
 }
 
 /** Same real-semantics fake as decode.worker.test.ts, plus an error hook. */
@@ -148,6 +172,104 @@ class FakeDecoder implements VideoDecoderLike {
   }
 }
 
+class FakeStreamCursor implements VideoFrameCursor {
+  nextCount = 0
+  closeCount = 0
+  private readonly parkWhenEmpty: boolean
+  private queue: DecodedVideoFrame[]
+  private pendingResolve: ((frame: DecodedVideoFrame | null) => void) | null = null
+  private closed = false
+
+  constructor(frames: DecodedVideoFrame[] = [], parkWhenEmpty = false) {
+    this.queue = [...frames]
+    this.parkWhenEmpty = parkWhenEmpty
+  }
+
+  next(): Promise<DecodedVideoFrame | null> {
+    this.nextCount++
+    if (this.closed) return Promise.resolve(null)
+    const frame = this.queue.shift()
+    if (frame) return Promise.resolve(frame)
+    if (!this.parkWhenEmpty) return Promise.resolve(null)
+    if (this.pendingResolve) {
+      return Promise.reject(new Error('fake cursor already has a pending next'))
+    }
+    return new Promise((resolve) => {
+      this.pendingResolve = resolve
+    })
+  }
+
+  push(frame: DecodedVideoFrame): void {
+    if (this.closed) {
+      frame.frame.close()
+      return
+    }
+    const resolve = this.pendingResolve
+    if (resolve) {
+      this.pendingResolve = null
+      resolve(frame)
+    } else {
+      this.queue.push(frame)
+    }
+  }
+
+  close(): Promise<void> {
+    if (this.closed) return Promise.resolve()
+    this.closed = true
+    this.closeCount++
+    for (const frame of this.queue.splice(0)) frame.frame.close()
+    const resolve = this.pendingResolve
+    this.pendingResolve = null
+    resolve?.(null)
+    return Promise.resolve()
+  }
+}
+
+class FakeVideoSource implements WorkerVideoSource {
+  playbackOptions: PlaybackLaneOptions[] = []
+  seekTargets: number[] = []
+  playbackCursors: FakeStreamCursor[] = []
+  seekCursors: FakeStreamCursor[] = []
+  closeCount = 0
+  private playbackQueue: FakeStreamCursor[] = []
+  private seekQueue: FakeStreamCursor[] = []
+  private closed = false
+
+  queuePlayback(cursor: FakeStreamCursor): void {
+    this.playbackQueue.push(cursor)
+  }
+
+  queueSeek(cursor: FakeStreamCursor): void {
+    this.seekQueue.push(cursor)
+  }
+
+  openPlaybackLane(options: PlaybackLaneOptions): VideoFrameCursor {
+    if (this.closed) throw new Error('fake source is closed')
+    const cursor = this.playbackQueue.shift() ?? new FakeStreamCursor()
+    this.playbackOptions.push(options)
+    this.playbackCursors.push(cursor)
+    return cursor
+  }
+
+  openSeekLane(targetTimestampUs: number): VideoFrameCursor {
+    if (this.closed) throw new Error('fake source is closed')
+    const cursor = this.seekQueue.shift() ?? new FakeStreamCursor()
+    this.seekTargets.push(targetTimestampUs)
+    this.seekCursors.push(cursor)
+    return cursor
+  }
+
+  async close(): Promise<void> {
+    if (this.closed) return
+    this.closed = true
+    this.closeCount++
+    await Promise.all([
+      ...this.playbackCursors.map((cursor) => cursor.close()),
+      ...this.seekCursors.map((cursor) => cursor.close()),
+    ])
+  }
+}
+
 interface CtxOp {
   surface: 'visible' | 'scratch'
   name: string
@@ -214,7 +336,12 @@ interface Harness {
   core: ReturnType<typeof createRenderWorkerCore>
   posts: FromRenderWorker[]
   frames: TrackedFrame[]
+  streamingFrames: TrackedStreamingFrame[]
   bitmaps: TrackedBitmap[]
+  streamingBitmaps: TrackedBitmap[]
+  normalizations: Array<Omit<DecodedVideoFrame, 'frame'>>
+  sourcesToOpen: FakeVideoSource[]
+  openedBlobs: Blob[]
   decoders: FakeDecoder[]
   ops: CtxOp[]
   visible: FakeSurface
@@ -226,7 +353,12 @@ interface Harness {
 function makeHarness(opts: FakeOptions = {}): Harness {
   const posts: FromRenderWorker[] = []
   const frames: TrackedFrame[] = []
+  const streamingFrames: TrackedStreamingFrame[] = []
   const bitmaps: TrackedBitmap[] = []
+  const streamingBitmaps: TrackedBitmap[] = []
+  const normalizations: Array<Omit<DecodedVideoFrame, 'frame'>> = []
+  const sourcesToOpen: FakeVideoSource[] = []
+  const openedBlobs: Blob[] = []
   const decoders: FakeDecoder[] = []
   const ops: CtxOp[] = []
   const visible = makeSurface('visible', ops)
@@ -247,11 +379,47 @@ function makeHarness(opts: FakeOptions = {}): Harness {
         height: frame.displayHeight,
         sourceTimestamp: frame.timestamp,
         closed: false,
+        closeCount: 0,
         close() {
+          bitmap.closeCount++
           bitmap.closed = true
         },
       }
       bitmaps.push(bitmap)
+      return bitmap
+    },
+    openVideoSource: async (blob) => {
+      openedBlobs.push(blob)
+      await opts.openSourceGate
+      const source = sourcesToOpen.shift()
+      if (!source) throw new Error('test did not queue a streaming source')
+      return source
+    },
+    createStreamingBitmap: async (decoded) => {
+      await opts.streamBitmapGate
+      normalizations.push({
+        timestampUs: decoded.timestampUs,
+        durationUs: decoded.durationUs,
+        rotation: decoded.rotation,
+        displayWidth: decoded.displayWidth,
+        displayHeight: decoded.displayHeight,
+      })
+      if (opts.streamBitmapErrorOnUs === decoded.timestampUs) {
+        throw new Error('streaming bitmap copy failed')
+      }
+      const bitmap: TrackedBitmap = {
+        width: decoded.displayWidth,
+        height: decoded.displayHeight,
+        sourceTimestamp: decoded.timestampUs,
+        closed: false,
+        closeCount: 0,
+        close() {
+          bitmap.closeCount++
+          bitmap.closed = true
+        },
+      }
+      bitmaps.push(bitmap)
+      streamingBitmaps.push(bitmap)
       return bitmap
     },
     createCanvas: (width, height) => {
@@ -267,7 +435,12 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     core: createRenderWorkerCore(env),
     posts,
     frames,
+    streamingFrames,
     bitmaps,
+    streamingBitmaps,
+    normalizations,
+    sourcesToOpen,
+    openedBlobs,
     decoders,
     ops,
     visible,
@@ -345,6 +518,39 @@ function entry(
   }
 }
 
+function streamDecoded(
+  harness: Harness,
+  timestampUs: number,
+  rotation: DecodedVideoFrame['rotation'] = 0,
+  displayWidth = 320,
+  displayHeight = 180,
+): DecodedVideoFrame {
+  const frame: TrackedStreamingFrame = {
+    closeCount: 0,
+    close() {
+      frame.closeCount++
+    },
+  }
+  harness.streamingFrames.push(frame)
+  return {
+    timestampUs,
+    durationUs: FRAME_US,
+    rotation,
+    displayWidth,
+    displayHeight,
+    frame,
+  }
+}
+
+function streamEntry(
+  clipId: string,
+  assetId: string,
+  sourceFrame: number,
+  targetTimestampUs = sourceFrame * FRAME_US,
+): StreamingCompositeSourceEntry {
+  return { clipId, assetId, sourceFrame, targetTimestampUs }
+}
+
 const initMsg = (h: Harness): ToRenderWorker => ({
   type: 'init',
   canvas: h.visible.canvas as unknown as OffscreenCanvas,
@@ -358,6 +564,12 @@ const cfgMsg = (assetId: string): ToRenderWorker => ({
   config: { codec: 'avc1.640028' },
 })
 
+const openMsg = (assetId: string, blob = new Blob(['video'])): ToRenderWorker => ({
+  type: 'openAsset',
+  assetId,
+  blob,
+})
+
 function compMsg(
   requestId: number,
   frame: number,
@@ -366,14 +578,44 @@ function compMsg(
   return { type: 'composite', requestId, frame, sources }
 }
 
+function renderMsg(
+  requestId: number,
+  frame: number,
+  mode: RenderMode,
+  sources: StreamingCompositeSourceEntry[],
+): RenderFrameMessage {
+  return { type: 'renderFrame', requestId, frame, mode, sources }
+}
+
 async function setup(h: Harness, doc: TimelineDoc, assetIds: string[]): Promise<void> {
   await h.core.handleMessage(initMsg(h))
   await h.core.handleMessage(docMsg(doc))
   for (const assetId of assetIds) await h.core.handleMessage(cfgMsg(assetId))
 }
 
+async function setupStreaming(
+  h: Harness,
+  doc: TimelineDoc,
+  assetsToOpen: Array<[string, FakeVideoSource]>,
+): Promise<void> {
+  await h.core.handleMessage(initMsg(h))
+  await h.core.handleMessage(docMsg(doc))
+  for (const [assetId, source] of assetsToOpen) {
+    h.sourcesToOpen.push(source)
+    await h.core.handleMessage(openMsg(assetId))
+  }
+}
+
 const microtasks = async (n = 20): Promise<void> => {
   for (let i = 0; i < n; i++) await Promise.resolve()
+}
+
+function deferredVoid(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
 }
 
 function doneFor(h: Harness, requestId: number) {
@@ -706,5 +948,592 @@ describe('asset lifecycle', () => {
 
     await h.core.handleMessage(compMsg(2, 2, [entry('A', 2, gop(0, 5))]))
     expect(doneFor(h, 2).missingClipIds).toEqual(['a'])
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Blob-backed streaming render path                                   */
+/* ------------------------------------------------------------------ */
+
+describe('streaming playback lanes', () => {
+  test('a newer presentation reuses the clip cursor and keeps one-frame lookahead', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    const cursor = new FakeStreamCursor([streamDecoded(h, 0)], true)
+    source.queuePlayback(cursor)
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 20)])])
+    await setupStreaming(h, doc, [['A', source]])
+
+    const first = h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('a', 'A', 0)]),
+    )
+    await microtasks()
+    expect(cursor.nextCount).toBe(2) // current decoded; lookahead is parked
+
+    const second = h.core.handleMessage(
+      renderMsg(2, 1, 'playback', [streamEntry('a', 'A', 1, 250_000)]),
+    )
+    await microtasks()
+    expect(cursor.closeCount).toBe(0) // presentation supersession kept the lane
+
+    cursor.push(streamDecoded(h, FRAME_US))
+    cursor.push(streamDecoded(h, 150_000))
+    cursor.push(streamDecoded(h, 2 * FRAME_US))
+    cursor.push(streamDecoded(h, 3 * FRAME_US))
+    await Promise.all([first, second])
+
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(doneFor(h, 2)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+    })
+    expect(source.playbackOptions).toEqual([{ startTimestampUs: 0 }])
+    expect(h.blits()).toHaveLength(1)
+    expect(h.streamingFrames.map((frame) => frame.closeCount)).toEqual([1, 1, 1, 1, 1])
+    expect(h.normalizations.map((frame) => frame.timestampUs)).toEqual([
+      0,
+      FRAME_US,
+      2 * FRAME_US,
+      3 * FRAME_US,
+    ])
+
+    const byTimestamp = new Map(
+      h.streamingBitmaps.map((bitmap) => [bitmap.sourceTimestamp, bitmap]),
+    )
+    expect(byTimestamp.get(0)).toMatchObject({ closed: true, closeCount: 1 })
+    expect(byTimestamp.get(FRAME_US)).toMatchObject({ closed: true, closeCount: 1 })
+    expect(byTimestamp.has(150_000)).toBe(false)
+    expect(byTimestamp.get(2 * FRAME_US)).toMatchObject({ closed: false, closeCount: 0 })
+    expect(byTimestamp.get(3 * FRAME_US)).toMatchObject({ closed: false, closeCount: 0 })
+
+    await h.core.handleMessage({ type: 'close' })
+    expect(cursor.closeCount).toBe(1)
+    expect(source.closeCount).toBe(1)
+    expect(h.streamingBitmaps.every((bitmap) => bitmap.closeCount === 1)).toBe(true)
+  })
+
+  test('two clips showing one asset keep independent playback lanes', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    source.queuePlayback(new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ]))
+    source.queuePlayback(new FakeStreamCursor([
+      streamDecoded(h, 20 * FRAME_US),
+      streamDecoded(h, 21 * FRAME_US),
+    ]))
+    const doc = makeDoc([
+      makeTrack('V1', [makeClip('x', 'A', 0, 10, 0)]),
+      makeTrack('V2', [makeClip('y', 'A', 0, 10, 20)]),
+    ])
+    await setupStreaming(h, doc, [['A', source]])
+
+    await h.core.handleMessage(renderMsg(1, 0, 'playback', [
+      streamEntry('x', 'A', 0),
+      streamEntry('y', 'A', 20),
+    ]))
+
+    expect(doneFor(h, 1)).toMatchObject({
+      drawnClipIds: ['x', 'y'],
+      missingClipIds: [],
+    })
+    expect(source.playbackOptions).toEqual([
+      { startTimestampUs: 0 },
+      { startTimestampUs: 20 * FRAME_US },
+    ])
+    expect(h.scratchDraws().map(
+      (op) => (op.args[0] as TrackedBitmap).sourceTimestamp,
+    )).toEqual([0, 20 * FRAME_US])
+
+    await h.core.handleMessage({ type: 'close' })
+    expect(source.playbackCursors.map((cursor) => cursor.closeCount)).toEqual([1, 1])
+    expect(h.streamingFrames.every((frame) => frame.closeCount === 1)).toBe(true)
+    expect(h.streamingBitmaps.every((bitmap) => bitmap.closeCount === 1)).toBe(true)
+  })
+
+  test('a missing same-frame clip entry cannot consume another clip\'s lane', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    source.queuePlayback(new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ]))
+    const doc = makeDoc([
+      makeTrack('V1', [makeClip('x', 'A', 0, 10, 0)]),
+      makeTrack('V2', [makeClip('y', 'A', 0, 10, 0)]),
+    ])
+    await setupStreaming(h, doc, [['A', source]])
+
+    await h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('y', 'A', 0)]),
+    )
+
+    expect(doneFor(h, 1)).toMatchObject({
+      drawnClipIds: ['y'],
+      missingClipIds: ['x'],
+    })
+    expect(source.playbackOptions).toEqual([{ startTimestampUs: 0 }])
+  })
+
+  test('two valid same-frame entries still open two clip-keyed cursors', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    source.queuePlayback(new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ]))
+    source.queuePlayback(new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ]))
+    const doc = makeDoc([
+      makeTrack('V1', [makeClip('x', 'A', 0, 10, 0)]),
+      makeTrack('V2', [makeClip('y', 'A', 0, 10, 0)]),
+    ])
+    await setupStreaming(h, doc, [['A', source]])
+
+    await h.core.handleMessage(renderMsg(1, 0, 'playback', [
+      streamEntry('x', 'A', 0),
+      streamEntry('y', 'A', 0),
+    ]))
+
+    expect(doneFor(h, 1)).toMatchObject({
+      drawnClipIds: ['x', 'y'],
+      missingClipIds: [],
+    })
+    expect(source.playbackOptions).toEqual([
+      { startTimestampUs: 0 },
+      { startTimestampUs: 0 },
+    ])
+    expect(h.scratchDraws()).toHaveLength(2)
+  })
+
+  test('a cut closes the parked old clip lane before the new clip renders', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    const oldCursor = new FakeStreamCursor([streamDecoded(h, 0)], true)
+    const newCursor = new FakeStreamCursor([
+      streamDecoded(h, 10 * FRAME_US),
+      streamDecoded(h, 11 * FRAME_US),
+    ])
+    source.queuePlayback(oldCursor)
+    source.queuePlayback(newCursor)
+    const doc = makeDoc([makeTrack('V1', [
+      makeClip('old', 'A', 0, 1, 0),
+      makeClip('new', 'A', 1, 10, 10),
+    ])])
+    await setupStreaming(h, doc, [['A', source]])
+
+    const oldRender = h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('old', 'A', 0)]),
+    )
+    await microtasks()
+    expect(oldCursor.nextCount).toBe(2)
+
+    const newRender = h.core.handleMessage(
+      renderMsg(2, 1, 'playback', [streamEntry('new', 'A', 10)]),
+    )
+    expect(oldCursor.closeCount).toBe(1)
+    await Promise.all([oldRender, newRender])
+
+    expect(oldCursor.closeCount).toBe(1)
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(doneFor(h, 2)).toMatchObject({ status: 'drawn', drawnClipIds: ['new'] })
+    expect(source.playbackOptions).toEqual([
+      { startTimestampUs: 0 },
+      { startTimestampUs: 10 * FRAME_US },
+    ])
+  })
+
+  test('removing one active layer does not invalidate another layer\'s lane', async () => {
+    const h = makeHarness()
+    const sourceA = new FakeVideoSource()
+    const sourceB = new FakeVideoSource()
+    const cursorA = new FakeStreamCursor([streamDecoded(h, 0)], true)
+    const cursorB = new FakeStreamCursor([streamDecoded(h, 0)], true)
+    sourceA.queuePlayback(cursorA)
+    sourceB.queuePlayback(cursorB)
+    await setupStreaming(h, twoTrackDoc(), [['A', sourceA], ['B', sourceB]])
+
+    const first = h.core.handleMessage(renderMsg(1, 0, 'playback', [
+      streamEntry('a', 'A', 0),
+      streamEntry('b', 'B', 0),
+    ]))
+    await microtasks()
+
+    const second = h.core.handleMessage(
+      renderMsg(2, 1, 'playback', [streamEntry('a', 'A', 1)]),
+    )
+    expect(cursorA.closeCount).toBe(0)
+    expect(cursorB.closeCount).toBe(1)
+    cursorA.push(streamDecoded(h, FRAME_US))
+    cursorA.push(streamDecoded(h, 2 * FRAME_US))
+    await Promise.all([first, second])
+
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(doneFor(h, 2)).toMatchObject({
+      drawnClipIds: ['a'],
+      missingClipIds: ['b'],
+    })
+    expect(sourceA.playbackOptions).toHaveLength(1)
+  })
+
+  test('document updates preserve compatible lanes and prune removed clips', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    const cursor = new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+      streamDecoded(h, 2 * FRAME_US),
+    ])
+    source.queuePlayback(cursor)
+    const firstDoc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 20)])])
+    await setupStreaming(h, firstDoc, [['A', source]])
+    await h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('a', 'A', 0)]),
+    )
+
+    const transformed = makeClip('a', 'A', 0, 20)
+    transformed.transform.x = 42
+    await h.core.handleMessage(docMsg(makeDoc([makeTrack('V1', [transformed])])))
+    expect(cursor.closeCount).toBe(0)
+    await h.core.handleMessage(
+      renderMsg(2, 1, 'playback', [streamEntry('a', 'A', 1)]),
+    )
+    expect(source.playbackOptions).toHaveLength(1)
+
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    expect(cursor.closeCount).toBe(1)
+    expect(h.streamingBitmaps.every((bitmap) => bitmap.closeCount === 1)).toBe(true)
+    expect(source.closeCount).toBe(0) // setDoc prunes lanes, not the shared source
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    expect(source.closeCount).toBe(1)
+  })
+})
+
+describe('streaming seek lanes', () => {
+  test('seek arrival cancels a parked playback lane before entering the render queue', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    const playbackCursor = new FakeStreamCursor([streamDecoded(h, 0)], true)
+    source.queuePlayback(playbackCursor)
+    source.queueSeek(new FakeStreamCursor([streamDecoded(h, FRAME_US)]))
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 20)])])
+    await setupStreaming(h, doc, [['A', source]])
+
+    const playback = h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('a', 'A', 0)]),
+    )
+    await microtasks()
+    expect(playbackCursor.nextCount).toBe(2)
+
+    const seek = h.core.handleMessage(
+      renderMsg(2, 1, 'seek', [streamEntry('a', 'A', 1)]),
+    )
+    expect(playbackCursor.closeCount).toBe(1)
+    await Promise.all([playback, seek])
+
+    expect(playbackCursor.closeCount).toBe(1)
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(doneFor(h, 2)).toMatchObject({ status: 'drawn', drawnClipIds: ['a'] })
+    expect(source.seekTargets).toEqual([FRAME_US])
+  })
+
+  test('a newer seek cancels the parked one-shot cursor and is the only frame presented', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    const firstCursor = new FakeStreamCursor([], true)
+    const secondCursor = new FakeStreamCursor([streamDecoded(h, FRAME_US)])
+    source.queueSeek(firstCursor)
+    source.queueSeek(secondCursor)
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 20)])])
+    await setupStreaming(h, doc, [['A', source]])
+
+    const first = h.core.handleMessage(
+      renderMsg(1, 0, 'seek', [streamEntry('a', 'A', 0)]),
+    )
+    await microtasks()
+    expect(firstCursor.nextCount).toBe(1)
+
+    const second = h.core.handleMessage(
+      renderMsg(2, 1, 'seek', [streamEntry('a', 'A', 1)]),
+    )
+    await Promise.all([first, second])
+
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(doneFor(h, 2)).toMatchObject({ status: 'drawn', drawnClipIds: ['a'] })
+    expect(firstCursor.closeCount).toBe(1)
+    expect(secondCursor.closeCount).toBe(1)
+    expect(source.seekTargets).toEqual([0, FRAME_US])
+    expect(h.blits()).toHaveLength(1)
+    expect(h.streamingFrames[0].closeCount).toBe(1)
+    expect(h.streamingBitmaps[0]).toMatchObject({ closed: true, closeCount: 1 })
+  })
+
+  test('seek invalidates playback; the next play opens a fresh cursor', async () => {
+    const h = makeHarness()
+    const source = new FakeVideoSource()
+    const firstPlayback = new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ])
+    const secondPlayback = new FakeStreamCursor([
+      streamDecoded(h, 2 * FRAME_US),
+      streamDecoded(h, 3 * FRAME_US),
+    ])
+    source.queuePlayback(firstPlayback)
+    source.queuePlayback(secondPlayback)
+    source.queueSeek(new FakeStreamCursor([streamDecoded(h, FRAME_US)]))
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 20)])])
+    await setupStreaming(h, doc, [['A', source]])
+
+    await h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('a', 'A', 0)]),
+    )
+    await h.core.handleMessage(
+      renderMsg(2, 1, 'seek', [streamEntry('a', 'A', 1)]),
+    )
+    expect(firstPlayback.closeCount).toBe(1)
+
+    await h.core.handleMessage(
+      renderMsg(3, 2, 'playback', [streamEntry('a', 'A', 2)]),
+    )
+    expect(source.playbackOptions).toEqual([
+      { startTimestampUs: 0 },
+      { startTimestampUs: 2 * FRAME_US },
+    ])
+    expect(doneFor(h, 3)).toMatchObject({ status: 'drawn', drawnClipIds: ['a'] })
+  })
+})
+
+describe('streaming response contract', () => {
+  test('renderFrame before init/setDoc posts one request-fatal error and no done', async () => {
+    const h = makeHarness()
+    await h.core.handleMessage(renderMsg(9, 0, 'seek', []))
+
+    expect(h.posts).toEqual([{
+      type: 'error',
+      requestId: 9,
+      message: 'renderFrame before init/setDoc',
+    }])
+  })
+
+  test('an unopened streaming asset is an ordinary missing clip', async () => {
+    const h = makeHarness()
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])])
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(doc))
+
+    await h.core.handleMessage(
+      renderMsg(1, 0, 'seek', [streamEntry('a', 'A', 0)]),
+    )
+
+    expect(doneFor(h, 1)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: ['a'],
+    })
+    expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
+  })
+})
+
+describe('streaming frame ownership', () => {
+  test('only the newest deferred open installs; the stale source closes silently', async () => {
+    const gate = deferredVoid()
+    const h = makeHarness({ openSourceGate: gate.promise })
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    const staleSource = new FakeVideoSource()
+    const winningSource = new FakeVideoSource()
+    h.sourcesToOpen.push(staleSource, winningSource)
+
+    const staleOpen = h.core.handleMessage(openMsg('A', new Blob(['stale'])))
+    await microtasks()
+    const winningOpen = h.core.handleMessage(openMsg('A', new Blob(['winning'])))
+    await microtasks()
+    gate.resolve()
+    await Promise.all([staleOpen, winningOpen])
+
+    expect(staleSource.closeCount).toBe(1)
+    expect(winningSource.closeCount).toBe(0)
+    expect(h.posts.filter((post) => post.type === 'assetConfigured')).toEqual([
+      { type: 'assetConfigured', assetId: 'A' },
+    ])
+    expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    expect(winningSource.closeCount).toBe(1)
+  })
+
+  test('release waits for an in-progress bitmap copy and closes its late result', async () => {
+    const gate = deferredVoid()
+    const h = makeHarness({ streamBitmapGate: gate.promise })
+    const source = new FakeVideoSource()
+    const cursor = new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ])
+    source.queuePlayback(cursor)
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])])
+    await setupStreaming(h, doc, [['A', source]])
+
+    const render = h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('a', 'A', 0)]),
+    )
+    await microtasks()
+    let released = false
+    const release = h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+      .then(() => {
+        released = true
+      })
+    await microtasks()
+    expect(released).toBe(false)
+
+    gate.resolve()
+    await Promise.all([render, release])
+
+    expect(released).toBe(true)
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(source.closeCount).toBe(1)
+    expect(cursor.closeCount).toBe(1)
+    expect(h.streamingFrames.map((frame) => frame.closeCount)).toEqual([1, 1])
+    expect(h.streamingBitmaps).toHaveLength(1)
+    expect(h.streamingBitmaps[0].closeCount).toBe(1)
+  })
+
+  test('asset replacement closes the old source, cursor, and owned bitmaps exactly once', async () => {
+    const h = makeHarness()
+    const firstSource = new FakeVideoSource()
+    const firstCursor = new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ])
+    firstSource.queuePlayback(firstCursor)
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])])
+    await setupStreaming(h, doc, [['A', firstSource]])
+    await h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('a', 'A', 0)]),
+    )
+
+    const replacement = new FakeVideoSource()
+    h.sourcesToOpen.push(replacement)
+    await h.core.handleMessage(openMsg('A', new Blob(['replacement'])))
+
+    expect(firstSource.closeCount).toBe(1)
+    expect(firstCursor.closeCount).toBe(1)
+    expect(h.streamingBitmaps.every((bitmap) => bitmap.closeCount === 1)).toBe(true)
+    expect(h.posts.filter((post) => post.type === 'assetConfigured')).toHaveLength(2)
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    expect(replacement.closeCount).toBe(1)
+    expect(firstSource.closeCount).toBe(1)
+  })
+
+  test('the real normalizer bakes clockwise 90 and 270 degree rotation', async () => {
+    const canvases: Array<{
+      width: number
+      height: number
+      ops: Array<{ name: string; args: unknown[] }>
+    }> = []
+    vi.stubGlobal('OffscreenCanvas', class {
+      width: number
+      height: number
+      private readonly ops: Array<{ name: string; args: unknown[] }> = []
+
+      constructor(width: number, height: number) {
+        this.width = width
+        this.height = height
+        canvases.push({ width, height, ops: this.ops })
+      }
+
+      getContext() {
+        return {
+          save: () => this.ops.push({ name: 'save', args: [] }),
+          restore: () => this.ops.push({ name: 'restore', args: [] }),
+          translate: (...args: unknown[]) => this.ops.push({ name: 'translate', args }),
+          rotate: (...args: unknown[]) => this.ops.push({ name: 'rotate', args }),
+          drawImage: (...args: unknown[]) => this.ops.push({ name: 'drawImage', args }),
+        }
+      }
+
+      transferToImageBitmap() {
+        return { width: this.width, height: this.height, close: () => undefined }
+      }
+    })
+
+    try {
+      const rawFrames: TrackedStreamingFrame[] = []
+      for (const rotation of [90, 270] as const) {
+        const raw: TrackedStreamingFrame = {
+          closeCount: 0,
+          close() {
+            raw.closeCount++
+          },
+        }
+        rawFrames.push(raw)
+        const bitmap = await createOrientedStreamingBitmap({
+          timestampUs: 0,
+          durationUs: FRAME_US,
+          rotation,
+          displayWidth: 180,
+          displayHeight: 320,
+          frame: raw,
+        })
+        expect(bitmap).toMatchObject({ width: 180, height: 320 })
+      }
+
+      expect(canvases[0].ops).toEqual([
+        { name: 'save', args: [] },
+        { name: 'translate', args: [180, 0] },
+        { name: 'rotate', args: [Math.PI / 2] },
+        { name: 'drawImage', args: [rawFrames[0], 0, 0, 320, 180] },
+        { name: 'restore', args: [] },
+      ])
+      expect(canvases[1].ops).toEqual([
+        { name: 'save', args: [] },
+        { name: 'translate', args: [0, 320] },
+        { name: 'rotate', args: [-Math.PI / 2] },
+        { name: 'drawImage', args: [rawFrames[1], 0, 0, 320, 180] },
+        { name: 'restore', args: [] },
+      ])
+      expect(rawFrames.map((frame) => frame.closeCount)).toEqual([0, 0])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('rotation metadata reaches normalization and raw frames close when copying fails', async () => {
+    const h = makeHarness({ streamBitmapErrorOnUs: 0 })
+    const source = new FakeVideoSource()
+    source.queuePlayback(new FakeStreamCursor([
+      streamDecoded(h, 0, 90, 180, 320),
+      streamDecoded(h, FRAME_US),
+    ]))
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])])
+    await setupStreaming(h, doc, [['A', source]])
+
+    await h.core.handleMessage(
+      renderMsg(1, 0, 'playback', [streamEntry('a', 'A', 0)]),
+    )
+
+    expect(h.normalizations).toEqual([{
+      timestampUs: 0,
+      durationUs: FRAME_US,
+      rotation: 90,
+      displayWidth: 180,
+      displayHeight: 320,
+    }])
+    expect(h.streamingFrames.map((frame) => frame.closeCount)).toEqual([1, 1])
+    expect(h.streamingBitmaps).toHaveLength(0)
+    expect(h.posts).toContainEqual({
+      type: 'error',
+      requestId: 1,
+      assetId: 'A',
+      message: 'streaming playback failed: streaming bitmap copy failed',
+    })
+    expect(doneFor(h, 1).missingClipIds).toEqual(['a'])
   })
 })
