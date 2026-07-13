@@ -21,6 +21,7 @@ import {
 } from '../state/projectSessionStore'
 import {
   LIVE_SAVE_DELAY_MS,
+  RECOVERY_SAVE_DELAY_MS,
   ProjectPersistenceController,
   projectFileName,
   type ProjectPersistenceDeps,
@@ -100,6 +101,11 @@ function makeDeps(
     clearTimer: (timer) => window.clearTimeout(timer),
     addBeforeUnload: vi.fn(),
     removeBeforeUnload: vi.fn(),
+    createRecoveryJournalId: vi.fn(() => 'recovery-journal-test'),
+    createRecoverySnapshotId: vi.fn(() => 'recovery-snapshot-test'),
+    appendRecoverySnapshot: vi.fn(async () => undefined),
+    deleteRecoveryJournal: vi.fn(async () => undefined),
+    rememberRecentProject: vi.fn(async () => undefined),
     ...overrides,
   }
 }
@@ -153,6 +159,216 @@ describe('project persistence', () => {
       liveSaveEnabled: false,
     })
     expect(deps.removeBeforeUnload).toHaveBeenCalledOnce()
+  })
+
+  test('keeps an unsaved project recoverable without claiming it was saved', async () => {
+    const deps = makeDeps(makeHandle())
+    controller = new ProjectPersistenceController(deps)
+
+    controller.startSession({ fileName: null, persisted: false })
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    expect(deps.appendRecoverySnapshot).toHaveBeenCalledOnce()
+    const recovery = vi.mocked(deps.appendRecoverySnapshot).mock.calls[0][0]
+    expect(recovery).toMatchObject({
+      journalId: 'recovery-journal-test',
+      documentId: 'doc-save-test',
+      projectName: 'My edit',
+      projectFileName: null,
+    })
+    expect(parseProjectFile(recovery.serializedProject).document.id)
+      .toBe('doc-save-test')
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      hasUnsavedChanges: true,
+      savePhase: 'idle',
+      lastSavedAt: null,
+      recoveryPhase: 'idle',
+      lastRecoveryAt: 1_234,
+      recoveryError: null,
+    })
+  })
+
+  test('a recovery failure stays separate from successful project-file saving', async () => {
+    const deps = makeDeps(makeHandle(), {
+      appendRecoverySnapshot: vi.fn(async () => {
+        throw new Error('IndexedDB quota exceeded')
+      }),
+    })
+    controller = new ProjectPersistenceController(deps)
+    controller.startSession({ fileName: null, persisted: false })
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      hasUnsavedChanges: true,
+      savePhase: 'idle',
+      lastSavedAt: null,
+      recoveryPhase: 'error',
+      recoveryError: 'Could not update the recovery copy: IndexedDB quota exceeded',
+    })
+
+    await expect(controller.saveAs()).resolves.toMatchObject({ status: 'saved' })
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      hasUnsavedChanges: false,
+      savePhase: 'idle',
+      saveError: null,
+      recoveryPhase: 'idle',
+      recoveryError: null,
+      lastSavedAt: 1_234,
+    })
+  })
+
+  test('an invalid portable snapshot reports recovery failure and can retry', async () => {
+    const deps = makeDeps(makeHandle())
+    controller = new ProjectPersistenceController(deps)
+    controller.startSession({ fileName: null, persisted: false })
+    for (let index = 0; index < 255; index++) {
+      useDocumentStore.getState().addTrack('video')
+    }
+
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    expect(deps.appendRecoverySnapshot).not.toHaveBeenCalled()
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      hasUnsavedChanges: true,
+      recoveryPhase: 'error',
+    })
+    expect(useProjectSessionStore.getState().recoveryError)
+      .toMatch(/^Could not update the recovery copy:/)
+
+    useDocumentStore.getState().setDoc(createTimelineDoc(
+      'My edit',
+      DEFAULT_PROJECT_SETTINGS,
+      'doc-save-test',
+    ))
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    expect(deps.appendRecoverySnapshot).toHaveBeenCalledOnce()
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      recoveryPhase: 'idle',
+      recoveryError: null,
+    })
+  })
+
+  test('a clean opened project waits for its first edit before recovery', async () => {
+    const deps = makeDeps(makeHandle())
+    controller = new ProjectPersistenceController(deps)
+    controller.startSession({ fileName: 'Opened.webcut', persisted: true })
+
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    expect(deps.appendRecoverySnapshot).not.toHaveBeenCalled()
+
+    useDocumentStore.getState().addTrack('video')
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    expect(deps.appendRecoverySnapshot).toHaveBeenCalledOnce()
+  })
+
+  test('an edit during a recovery write schedules one newest follow-up', async () => {
+    const firstWrite = deferred<void>()
+    const appendRecoverySnapshot = vi.fn<ProjectPersistenceDeps['appendRecoverySnapshot']>()
+      .mockImplementationOnce(() => firstWrite.promise)
+      .mockResolvedValue(undefined)
+    const deps = makeDeps(makeHandle(), { appendRecoverySnapshot })
+    controller = new ProjectPersistenceController(deps)
+    controller.startSession({ fileName: null, persisted: false })
+
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    expect(appendRecoverySnapshot).toHaveBeenCalledOnce()
+    useDocumentStore.getState().addTrack('video')
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    expect(appendRecoverySnapshot).toHaveBeenCalledOnce()
+
+    firstWrite.resolve()
+    await firstWrite.promise
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    expect(appendRecoverySnapshot).toHaveBeenCalledTimes(2)
+    const newest = appendRecoverySnapshot.mock.calls[1][0]
+    expect(parseProjectFile(newest.serializedProject).document.tracks)
+      .toHaveLength(3)
+  })
+
+  test('a late recovery completion cannot update a replacement session', async () => {
+    const oldWrite = deferred<void>()
+    const deps = makeDeps(makeHandle(), {
+      appendRecoverySnapshot: vi.fn(() => oldWrite.promise),
+    })
+    controller = new ProjectPersistenceController(deps)
+    controller.startSession({ fileName: null, persisted: false })
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    controller.startSession({ fileName: 'Replacement.webcut', persisted: true })
+    oldWrite.resolve()
+    await oldWrite.promise
+    await Promise.resolve()
+
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      activeProjectFileName: 'Replacement.webcut',
+      hasUnsavedChanges: false,
+      recoveryPhase: 'idle',
+      lastRecoveryAt: null,
+      recoveryError: null,
+    })
+  })
+
+  test('a successful Save clears recovery and remembers the writable project', async () => {
+    const handle = makeHandle()
+    const deps = makeDeps(handle)
+    controller = new ProjectPersistenceController(deps)
+    controller.startSession({ fileName: null, persisted: false })
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    await expect(controller.saveAs()).resolves.toMatchObject({ status: 'saved' })
+
+    expect(deps.deleteRecoveryJournal)
+      .toHaveBeenCalledWith('recovery-journal-test')
+    expect(deps.rememberRecentProject).toHaveBeenCalledWith(expect.objectContaining({
+      documentId: 'doc-save-test',
+      projectName: 'My edit',
+      fileName: 'Edit.webcut',
+      handle,
+    }))
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      hasUnsavedChanges: false,
+      lastRecoveryAt: null,
+      recoveryPhase: 'idle',
+    })
+  })
+
+  test('Save before the recovery debounce cannot recreate a cleared journal', async () => {
+    const deps = makeDeps(makeHandle())
+    controller = new ProjectPersistenceController(deps)
+    controller.startSession({ fileName: null, persisted: false })
+
+    await expect(controller.saveAs()).resolves.toMatchObject({ status: 'saved' })
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    expect(deps.deleteRecoveryJournal)
+      .toHaveBeenCalledWith('recovery-journal-test')
+    expect(deps.appendRecoverySnapshot).not.toHaveBeenCalled()
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      hasUnsavedChanges: false,
+      lastRecoveryAt: null,
+      recoveryPhase: 'idle',
+    })
+  })
+
+  test('a failed exit can rebuild the intentionally discarded recovery', async () => {
+    const deps = makeDeps(makeHandle())
+    controller = new ProjectPersistenceController(deps)
+    controller.startSession({ fileName: null, persisted: false })
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    await controller.pauseSession()
+    await controller.discardRecovery()
+    controller.resumeSession()
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    expect(deps.deleteRecoveryJournal)
+      .toHaveBeenCalledWith('recovery-journal-test')
+    expect(deps.appendRecoverySnapshot).toHaveBeenCalledTimes(2)
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      hasUnsavedChanges: true,
+      recoveryPhase: 'idle',
+      lastRecoveryAt: 1_234,
+    })
   })
 
   test('Save As writes one valid snapshot, adopts the handle, and enables live save', async () => {

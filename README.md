@@ -12,6 +12,9 @@ complete MVP editing and MP4 export flow.
 - Remember local source media in Chrome and reconnect it automatically on
   Resume; permission, missing-file, and portable-project fallbacks remain
   explicit, and incomplete candidates never replace the session.
+- Reopen validated `.webcut` files from Recent and recover bounded local safety
+  copies after a reload or crash; recovery is always offered explicitly and is
+  never presented as a user-owned save.
 - Import local video files and generate metadata, filmstrips, and waveforms.
 - Edit on a multi-track timeline with select, razor, trim, ripple trim, slip,
   and slide tools.
@@ -40,7 +43,8 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173). WebCut opens on the project
-home, where you can create a project or choose a portable `.webcut` file.
+home, where you can create a project, choose a portable `.webcut` file, reopen
+a recent file, or review an available recovery copy.
 
 Inside the editor, the first **Save** asks where to store the portable
 `.webcut`; **Save As** chooses a different project file. After that one
@@ -57,6 +61,11 @@ media & open** restores it with one click. Moving the project to another
 browser/computer, clearing site data, or moving/changing a source uses the
 manual metadata-checked relink fallback.
 
+While work is dirty, WebCut also maintains a bounded local recovery journal in
+browser storage. Home offers that journal after a reload or crash, but never
+opens it automatically. Recovery copies are not `.webcut` saves and do not
+cache source videos; use **Save** or **Save As** for a user-owned project file.
+
 ## Browser support
 
 Desktop Chrome is the verified development target. Playback and export require
@@ -71,8 +80,12 @@ unverified.
   available, including browser-local automatic source reconnection. Existing
   projects imported before this support need one final manual relink to seed
   their handles. A resumed `.webcut` still needs one **Save** or **Save As**
-  grant before live save can update that project file in place. Recent
-  projects and crash-recovery snapshots are not implemented yet.
+  grant before live save can update that project file in place. Recent-file
+  shortcuts and recovery journals are origin-local browser conveniences: they
+  disappear when site data is cleared, are not portable, and do not cache
+  source media. Recovery ownership is not coordinated across multiple open
+  WebCut tabs, so the same recovery copy should not be edited or discarded from
+  two tabs at once.
 - Crossfades are visual-only, so audio still hard-cuts. Dissolves involving
   transformed or transparent footage are not yet mathematically exact.
 - The import UI accepts video and audio files. Images are not previewable.
@@ -117,5 +130,6 @@ For deeper project context, see:
 ## Project status
 
 The MVP gate is complete. Smooth preview, live audio, configurable project
-creation, and safe portable-project resume are implemented. WebCut remains an
-experimental development project rather than a production-ready editor.
+creation, portable save/resume, recent files, and explicit crash recovery are
+implemented. WebCut remains an experimental development project rather than a
+production-ready editor.

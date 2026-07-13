@@ -14,8 +14,14 @@ import {
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
+import {
+  LOCAL_PROJECT_RECORD_VERSION,
+  localProjectStorage,
+  type LocalProjectFileHandle,
+} from './localProjectStorage'
 
 export const LIVE_SAVE_DELAY_MS = 800
+export const RECOVERY_SAVE_DELAY_MS = 500
 
 export interface ProjectWritableFileStream {
   write(data: string): Promise<void>
@@ -25,7 +31,27 @@ export interface ProjectWritableFileStream {
 
 export interface ProjectWritableFileHandle {
   readonly name: string
+  readonly kind?: 'file'
+  getFile?(): Promise<File>
   createWritable(): Promise<ProjectWritableFileStream>
+}
+
+export interface ProjectRecoverySnapshot {
+  journalId: string
+  snapshotId: string
+  documentId: string
+  projectName: string
+  projectFileName: string | null
+  capturedAt: number
+  serializedProject: string
+}
+
+export interface RecentProjectBookmark {
+  documentId: string
+  projectName: string
+  fileName: string
+  lastOpenedAt: number
+  handle: ProjectWritableFileHandle
 }
 
 export interface ProjectPersistenceDeps {
@@ -37,11 +63,18 @@ export interface ProjectPersistenceDeps {
   clearTimer(timer: number): void
   addBeforeUnload(handler: (event: BeforeUnloadEvent) => void): void
   removeBeforeUnload(handler: (event: BeforeUnloadEvent) => void): void
+  createRecoveryJournalId(): string
+  createRecoverySnapshotId(): string
+  appendRecoverySnapshot(snapshot: ProjectRecoverySnapshot): Promise<void>
+  deleteRecoveryJournal(journalId: string): Promise<void>
+  rememberRecentProject(bookmark: RecentProjectBookmark): Promise<void>
 }
 
 export interface ProjectPersistenceSession {
   fileName: string | null
   persisted: boolean
+  recoveryJournalId?: string
+  recoveryCapturedAt?: number | null
 }
 
 export type ProjectSaveResult =
@@ -107,6 +140,31 @@ const realDeps: ProjectPersistenceDeps = {
   clearTimer: (timer) => window.clearTimeout(timer),
   addBeforeUnload: (handler) => window.addEventListener('beforeunload', handler),
   removeBeforeUnload: (handler) => window.removeEventListener('beforeunload', handler),
+  createRecoveryJournalId: () => `recovery_${crypto.randomUUID()}`,
+  createRecoverySnapshotId: () => `snapshot_${crypto.randomUUID()}`,
+  appendRecoverySnapshot: async (snapshot) => {
+    await localProjectStorage.appendRecoverySnapshot(snapshot)
+  },
+  deleteRecoveryJournal: (journalId) => (
+    localProjectStorage.deleteRecoveryJournal(journalId)
+  ),
+  rememberRecentProject: async (bookmark) => {
+    const { handle } = bookmark
+    if (
+      handle.kind !== 'file'
+      || typeof handle.getFile !== 'function'
+    ) {
+      return
+    }
+    await localProjectStorage.rememberRecentProject({
+      version: LOCAL_PROJECT_RECORD_VERSION,
+      documentId: bookmark.documentId,
+      projectName: bookmark.projectName,
+      fileName: bookmark.fileName,
+      lastOpenedAt: bookmark.lastOpenedAt,
+      handle: handle as LocalProjectFileHandle,
+    })
+  },
 }
 
 function messageFrom(cause: unknown): string {
@@ -142,6 +200,13 @@ interface SaveOperation {
   kind: 'current' | 'save-as' | 'live'
 }
 
+interface CapturedProjectSnapshot {
+  serialized: string
+  revision: number
+  documentId: string
+  projectName: string
+}
+
 export class ProjectPersistenceController {
   private readonly deps: ProjectPersistenceDeps
   private active = false
@@ -150,8 +215,13 @@ export class ProjectPersistenceController {
   private persistedRevision = 0
   private handle: ProjectWritableFileHandle | null = null
   private timer: number | null = null
+  private recoveryTimer: number | null = null
   private operation: SaveOperation | null = null
   private activeWrite: Promise<ProjectSaveResult> | null = null
+  private activeRecoveryWrite: Promise<void> | null = null
+  private recoveryFollowUp = false
+  private recoveryRevision = 0
+  private recoveryJournalId: string | null = null
   private paused = false
   private unsubscribeDocument: (() => void) | null = null
   private unsubscribeMedia: (() => void) | null = null
@@ -171,6 +241,12 @@ export class ProjectPersistenceController {
     this.active = true
     this.revision = 0
     this.persistedRevision = session.persisted ? 0 : -1
+    this.recoveryRevision = session.persisted || session.recoveryCapturedAt
+      ? 0
+      : -1
+    this.recoveryJournalId = session.recoveryJournalId
+      ?? this.deps.createRecoveryJournalId()
+    this.recoveryFollowUp = false
     this.unsubscribeDocument = useDocumentStore.subscribe((state, previous) => {
       if (state.doc !== previous.doc) this.markDirty()
     })
@@ -185,8 +261,12 @@ export class ProjectPersistenceController {
       liveSaveEnabled: false,
       lastSavedAt: null,
       saveError: null,
+      recoveryPhase: 'idle',
+      lastRecoveryAt: session.recoveryCapturedAt ?? null,
+      recoveryError: null,
     })
     this.syncBeforeUnload(hasUnsavedChanges)
+    if (this.recoveryRevision < this.revision) this.scheduleRecovery()
   }
 
   suspendSession(): void {
@@ -194,12 +274,16 @@ export class ProjectPersistenceController {
     this.active = false
     if (this.timer !== null) this.deps.clearTimer(this.timer)
     this.timer = null
+    if (this.recoveryTimer !== null) this.deps.clearTimer(this.recoveryTimer)
+    this.recoveryTimer = null
     this.unsubscribeDocument?.()
     this.unsubscribeDocument = null
     this.unsubscribeMedia?.()
     this.unsubscribeMedia = null
     this.handle = null
     this.operation = null
+    this.recoveryJournalId = null
+    this.recoveryFollowUp = false
     this.paused = false
     this.syncBeforeUnload(false)
   }
@@ -208,19 +292,28 @@ export class ProjectPersistenceController {
   async pauseSession(): Promise<void> {
     if (!this.active) return
     if (this.paused) {
-      if (this.activeWrite) await this.activeWrite
+      await Promise.all([
+        this.activeWrite ?? Promise.resolve(),
+        this.activeRecoveryWrite?.catch(() => undefined) ?? Promise.resolve(),
+      ])
       return
     }
     this.paused = true
     if (this.timer !== null) this.deps.clearTimer(this.timer)
     this.timer = null
+    if (this.recoveryTimer !== null) this.deps.clearTimer(this.recoveryTimer)
+    this.recoveryTimer = null
     const activeWrite = this.activeWrite
+    const activeRecoveryWrite = this.activeRecoveryWrite
     if (this.operation && !activeWrite) {
       // A picker may still be open, but it no longer owns this session.
       this.operation = null
       useProjectSessionStore.setState({ savePhase: 'idle', saveError: null })
     }
-    if (activeWrite) await activeWrite
+    await Promise.all([
+      activeWrite ?? Promise.resolve(),
+      activeRecoveryWrite?.catch(() => undefined) ?? Promise.resolve(),
+    ])
   }
 
   /** Restore the retained handle after an editor-exit attempt fails. */
@@ -235,6 +328,34 @@ export class ProjectPersistenceController {
     ) {
       this.scheduleLiveSave()
     }
+    if (this.revision !== this.recoveryRevision) this.scheduleRecovery()
+  }
+
+  /** Remove this editing lineage only after any in-flight recovery write ends. */
+  async discardRecovery(): Promise<void> {
+    const journalId = this.recoveryJournalId
+    if (!journalId) return
+    const pending = this.activeRecoveryWrite
+    if (pending) {
+      try {
+        await pending
+      } catch {
+        // Deleting the journal is still the useful intentional-discard action.
+      }
+    }
+    if (journalId !== this.recoveryJournalId) return
+    await this.deps.deleteRecoveryJournal(journalId)
+    if (journalId !== this.recoveryJournalId) return
+    // A later teardown step can still fail after this intentional delete. Keep
+    // dirty work eligible for a fresh recovery write if the editor is resumed.
+    this.recoveryRevision = useProjectSessionStore.getState().hasUnsavedChanges
+      ? this.revision - 1
+      : this.revision
+    useProjectSessionStore.setState({
+      recoveryPhase: 'idle',
+      lastRecoveryAt: null,
+      recoveryError: null,
+    })
   }
 
   async save(): Promise<ProjectSaveResult> {
@@ -276,13 +397,18 @@ export class ProjectPersistenceController {
       ?? projectFileName(session.activeProjectName ?? 'Untitled project')
   }
 
-  private capture(): { serialized: string; revision: number } {
+  private capture(): CapturedProjectSnapshot {
     const revision = this.revision
     const project = createProjectFileSnapshot(
       useDocumentStore.getState().doc,
       useMediaStore.getState().assets.values(),
     )
-    return { serialized: serializeProjectFile(project), revision }
+    return {
+      serialized: serializeProjectFile(project),
+      revision,
+      documentId: project.document.id,
+      projectName: project.document.name,
+    }
   }
 
   private beginOperation(kind: SaveOperation['kind']): SaveOperation | null {
@@ -326,6 +452,11 @@ export class ProjectPersistenceController {
       writable = null
       if (!this.operationIsCurrent(operation)) return { status: 'cancelled' }
       if (adoptTarget) this.handle = target
+      await Promise.all([
+        this.rememberRecentBestEffort(snapshot, target),
+        this.clearRecoveryAfterSuccessfulSave(snapshot, operation),
+      ])
+      if (!this.operationIsCurrent(operation)) return { status: 'cancelled' }
       this.completeSave(operation, snapshot.revision, target.name)
       return {
         status: 'saved',
@@ -400,6 +531,80 @@ export class ProjectPersistenceController {
     if (hasUnsavedChanges && this.handle) this.scheduleLiveSave()
   }
 
+  private async rememberRecentBestEffort(
+    snapshot: CapturedProjectSnapshot,
+    handle: ProjectWritableFileHandle,
+  ): Promise<void> {
+    try {
+      await this.deps.rememberRecentProject({
+        documentId: snapshot.documentId,
+        projectName: snapshot.projectName,
+        fileName: handle.name,
+        lastOpenedAt: this.deps.now(),
+        handle,
+      })
+    } catch (cause) {
+      console.warn('Could not add the saved project to Recent projects', cause)
+    }
+  }
+
+  private async clearRecoveryAfterSuccessfulSave(
+    snapshot: CapturedProjectSnapshot,
+    operation: SaveOperation,
+  ): Promise<void> {
+    const journalId = this.recoveryJournalId
+    if (!journalId) return
+    const pendingRecovery = this.activeRecoveryWrite
+    if (pendingRecovery) {
+      try {
+        await pendingRecovery
+      } catch {
+        // The user-file write already succeeded. Recovery errors remain a
+        // separate status and must never turn that durable save into failure.
+      }
+    }
+    if (
+      !this.operationIsCurrent(operation)
+      || this.recoveryJournalId !== journalId
+      || this.revision !== snapshot.revision
+    ) {
+      return
+    }
+    // A manual Save can finish before the pending recovery debounce. Cancel
+    // that older timer before deleting the now-redundant journal so it cannot
+    // recreate a recovery copy for already-saved work.
+    if (this.recoveryTimer !== null) {
+      this.deps.clearTimer(this.recoveryTimer)
+      this.recoveryTimer = null
+    }
+    try {
+      await this.deps.deleteRecoveryJournal(journalId)
+      if (!this.operationIsCurrent(operation)) return
+      this.recoveryRevision = snapshot.revision
+      useProjectSessionStore.setState({
+        recoveryPhase: 'idle',
+        lastRecoveryAt: null,
+        recoveryError: null,
+      })
+    } catch (cause) {
+      const message = `Could not clear the recovery copy: ${messageFrom(cause)}`
+      if (this.operationIsCurrent(operation)) {
+        useProjectSessionStore.setState({
+          recoveryPhase: 'error',
+          recoveryError: message,
+        })
+      }
+      console.warn(message, cause)
+    } finally {
+      if (
+        this.operationIsCurrent(operation)
+        && this.revision !== snapshot.revision
+      ) {
+        this.scheduleRecovery()
+      }
+    }
+  }
+
   private finishCancelledOperation(operation: SaveOperation): void {
     if (!this.operationIsCurrent(operation)) return
     this.operation = null
@@ -443,6 +648,7 @@ export class ProjectPersistenceController {
     this.revision++
     useProjectSessionStore.setState({ hasUnsavedChanges: true })
     this.syncBeforeUnload(true)
+    this.scheduleRecovery()
     if (!this.handle) return
     if (this.operation) return
     this.scheduleLiveSave()
@@ -455,6 +661,104 @@ export class ProjectPersistenceController {
       this.timer = null
       void this.runLiveSave()
     }, LIVE_SAVE_DELAY_MS)
+  }
+
+  private scheduleRecovery(): void {
+    if (!this.active || !this.recoveryJournalId || this.paused) return
+    if (this.recoveryTimer !== null) {
+      this.deps.clearTimer(this.recoveryTimer)
+    }
+    this.recoveryTimer = this.deps.setTimer(() => {
+      this.recoveryTimer = null
+      void this.runRecoverySave()
+    }, RECOVERY_SAVE_DELAY_MS)
+  }
+
+  private async runRecoverySave(): Promise<void> {
+    const journalId = this.recoveryJournalId
+    if (!this.active || !journalId || this.paused) return
+    if (this.activeRecoveryWrite) {
+      this.recoveryFollowUp = true
+      return
+    }
+
+    const generation = this.generation
+    this.recoveryFollowUp = false
+    let snapshot: CapturedProjectSnapshot
+    try {
+      snapshot = this.capture()
+    } catch (cause) {
+      if (
+        this.active
+        && generation === this.generation
+        && journalId === this.recoveryJournalId
+      ) {
+        useProjectSessionStore.setState({
+          recoveryPhase: 'error',
+          recoveryError: `Could not update the recovery copy: ${messageFrom(cause)}`,
+        })
+      }
+      return
+    }
+    useProjectSessionStore.setState({
+      recoveryPhase: 'saving',
+      recoveryError: null,
+    })
+    const write = Promise.resolve().then(() => (
+      this.deps.appendRecoverySnapshot({
+        journalId,
+        snapshotId: this.deps.createRecoverySnapshotId(),
+        documentId: snapshot.documentId,
+        projectName: snapshot.projectName,
+        projectFileName: useProjectSessionStore.getState().activeProjectFileName,
+        capturedAt: this.deps.now(),
+        serializedProject: snapshot.serialized,
+      })
+    ))
+    this.activeRecoveryWrite = write
+    let succeeded = false
+
+    try {
+      await write
+      succeeded = true
+      if (
+        this.active
+        && generation === this.generation
+        && journalId === this.recoveryJournalId
+      ) {
+        this.recoveryRevision = snapshot.revision
+        useProjectSessionStore.setState({
+          recoveryPhase: 'idle',
+          lastRecoveryAt: this.deps.now(),
+          recoveryError: null,
+        })
+      }
+    } catch (cause) {
+      if (
+        this.active
+        && generation === this.generation
+        && journalId === this.recoveryJournalId
+      ) {
+        useProjectSessionStore.setState({
+          recoveryPhase: 'error',
+          recoveryError: `Could not update the recovery copy: ${messageFrom(cause)}`,
+        })
+      }
+    } finally {
+      if (this.activeRecoveryWrite === write) this.activeRecoveryWrite = null
+      if (
+        this.active
+        && generation === this.generation
+        && journalId === this.recoveryJournalId
+        && !this.paused
+        && (
+          this.recoveryFollowUp
+          || (succeeded && this.revision !== this.recoveryRevision)
+        )
+      ) {
+        this.scheduleRecovery()
+      }
+    }
   }
 
   private async runLiveSave(): Promise<void> {
@@ -508,6 +812,10 @@ export function pauseProjectPersistenceSession(): Promise<void> {
 
 export function resumeProjectPersistenceSession(): void {
   controller.resumeSession()
+}
+
+export function discardProjectRecoverySession(): Promise<void> {
+  return controller.discardRecovery()
 }
 
 export function saveActiveProject(): Promise<ProjectSaveResult> {

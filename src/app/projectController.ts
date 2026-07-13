@@ -30,6 +30,7 @@ import { inspectMediaFile } from './mediaInspection'
 import { resetMediaImportController } from './mediaImportController'
 import { disposeMediaVisuals } from './mediaVisualsController'
 import {
+  discardProjectRecoverySession,
   pauseProjectPersistenceSession,
   resumeProjectPersistenceSession,
   startProjectPersistenceSession,
@@ -49,9 +50,26 @@ import {
   type LocalMediaPermission,
   type LocalMediaSelection,
 } from './localMediaHandles'
+import {
+  isLocalProjectPickerCancellation,
+  pickLocalProjectFile,
+  requestLocalProjectPermission,
+  supportsLocalProjectFiles,
+  type LocalProjectFileHandle,
+  type LocalProjectPermission,
+  type LocalProjectSelection,
+  type RecentProjectRecord,
+  type RecoveryJournalRecord,
+} from './localProjectStorage'
+import {
+  getRecentProjectRecord,
+  getRecoveryJournalRecord,
+  rememberRecentProjectRecord,
+} from './projectLibraryController'
 
 export interface ProjectControllerDeps {
   createDocumentId(): string
+  now(): number
   readText(file: File): Promise<string>
   inspectMedia(file: File, documentRate: FrameRate): Promise<MediaAsset>
   disposeExport(): Promise<void>
@@ -60,6 +78,7 @@ export interface ProjectControllerDeps {
   disposeMediaVisuals(): void
   resetMediaImport(): void
   pauseProjectPersistence(): Promise<void>
+  discardProjectRecovery(): Promise<void>
   resumeProjectPersistence(): void
   startProjectPersistence(session: ProjectPersistenceSession): void
   suspendProjectPersistence(): void
@@ -76,6 +95,15 @@ export interface ProjectControllerDeps {
   queryMediaPermission(handle: LocalMediaFileHandle): Promise<LocalMediaPermission>
   requestMediaPermission(handle: LocalMediaFileHandle): Promise<LocalMediaPermission>
   pickMediaFiles(multiple: boolean): Promise<LocalMediaSelection[]>
+  pickProjectFile(): Promise<LocalProjectSelection>
+  requestProjectPermission(
+    handle: LocalProjectFileHandle,
+  ): Promise<LocalProjectPermission>
+  getRecentProject(documentId: string): RecentProjectRecord | null
+  getRecoveryJournal(journalId: string): RecoveryJournalRecord | null
+  rememberRecentProject(
+    project: Omit<RecentProjectRecord, 'version'>,
+  ): Promise<void>
   revokeObjectURL(url: string): void
 }
 
@@ -87,6 +115,7 @@ export type ProjectActionResult =
 
 const realDeps: ProjectControllerDeps = {
   createDocumentId: () => `doc_${crypto.randomUUID()}`,
+  now: () => Date.now(),
   readText: (file) => file.text(),
   inspectMedia: inspectMediaFile,
   disposeExport: async () => {
@@ -98,6 +127,7 @@ const realDeps: ProjectControllerDeps = {
   disposeMediaVisuals,
   resetMediaImport: resetMediaImportController,
   pauseProjectPersistence: pauseProjectPersistenceSession,
+  discardProjectRecovery: discardProjectRecoverySession,
   resumeProjectPersistence: resumeProjectPersistenceSession,
   startProjectPersistence: startProjectPersistenceSession,
   suspendProjectPersistence: suspendProjectPersistenceSession,
@@ -113,12 +143,22 @@ const realDeps: ProjectControllerDeps = {
   queryMediaPermission: queryLocalMediaPermission,
   requestMediaPermission: requestLocalMediaPermission,
   pickMediaFiles: pickLocalMediaFiles,
+  pickProjectFile: pickLocalProjectFile,
+  requestProjectPermission: requestLocalProjectPermission,
+  getRecentProject: getRecentProjectRecord,
+  getRecoveryJournal: getRecoveryJournalRecord,
+  rememberRecentProject: rememberRecentProjectRecord,
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
 }
 
 interface PendingResume {
   project: ProjectFile
-  projectFileName: string
+  projectFileName: string | null
+  displayFileName: string
+  origin: ResumeProjectSummary['origin']
+  persisted: boolean
+  recoveryJournalId?: string
+  recoveryCapturedAt?: number
   assets: Map<string, MediaAsset>
   rememberedHandles: Map<string, LocalMediaFileHandle>
 }
@@ -150,7 +190,8 @@ function invalidatePending(
 function resumeSummary(pending: PendingResume): ResumeProjectSummary {
   const { document, assets } = pending.project
   return {
-    projectFileName: pending.projectFileName,
+    origin: pending.origin,
+    projectFileName: pending.displayFileName,
     projectName: document.name,
     width: document.width,
     height: document.height,
@@ -220,6 +261,10 @@ export async function leaveActiveProject(
     // cross the slower export/audio teardown below.
     await deps.pauseProjectPersistence()
     if (generation !== operationGeneration) return { status: 'cancelled' }
+    // A confirmed return to Projects is an intentional discard, not a crash.
+    // Remove its recovery lineage before revoking any media resources.
+    await deps.discardProjectRecovery()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
     await deps.disposeExport()
     await deps.disposeTransport()
     if (generation !== operationGeneration) return { status: 'cancelled' }
@@ -246,7 +291,7 @@ export async function leaveActiveProject(
 async function activateProject(
   document: TimelineDoc,
   assets: readonly MediaAsset[],
-  projectFileName: string | null,
+  persistence: ProjectPersistenceSession,
   generation: number,
   deps: ProjectControllerDeps,
 ): Promise<ProjectActionResult> {
@@ -281,14 +326,11 @@ async function activateProject(
       screen: 'editor',
       phase: 'idle',
       activeProjectName: document.name,
-      activeProjectFileName: projectFileName,
+      activeProjectFileName: persistence.fileName,
       candidate: null,
       error: null,
     })
-    deps.startProjectPersistence({
-      fileName: projectFileName,
-      persisted: projectFileName !== null,
-    })
+    deps.startProjectPersistence(persistence)
     return { status: 'activated' }
   } catch (cause) {
     if (generation !== operationGeneration) return { status: 'cancelled' }
@@ -319,14 +361,27 @@ export async function createNewProject(
     })
     return { status: 'failed', message }
   }
-  return activateProject(document, [], null, generation, deps)
+  return activateProject(
+    document,
+    [],
+    { fileName: null, persisted: false },
+    generation,
+    deps,
+  )
 }
 
-/** Parse and validate a portable project without changing the active editor. */
-export async function openProjectFile(
-  file: File,
-  deps: ProjectControllerDeps = realDeps,
-): Promise<ProjectActionResult> {
+interface ProjectCandidateSource {
+  origin: PendingResume['origin']
+  displayFileName: string
+  projectFileName: string | null
+  persisted: boolean
+  expectedDocumentId?: string
+  handle?: LocalProjectFileHandle
+  recoveryJournalId?: string
+  recoveryCapturedAt?: number
+}
+
+function beginProjectRead(deps: ProjectControllerDeps): number {
   invalidatePending(deps)
   const generation = operationGeneration
   useProjectSessionStore.setState({
@@ -334,7 +389,73 @@ export async function openProjectFile(
     screen: 'resume',
     phase: 'reading-project',
   })
+  return generation
+}
 
+async function prepareProjectCandidate(
+  serialized: string,
+  source: ProjectCandidateSource,
+  generation: number,
+  deps: ProjectControllerDeps,
+): Promise<ProjectActionResult> {
+  const project = parseProjectFile(serialized)
+  if (source.expectedDocumentId && project.document.id !== source.expectedDocumentId) {
+    throw new Error('The local project entry now points to a different project')
+  }
+  if (project.assets.some((asset) => asset.kind === 'image')) {
+    throw new Error(
+      'This project contains image sources, which this WebCut build cannot reconnect yet',
+    )
+  }
+  if (generation !== operationGeneration) return { status: 'cancelled' }
+
+  const pending: PendingResume = {
+    project,
+    projectFileName: source.projectFileName,
+    displayFileName: source.displayFileName,
+    origin: source.origin,
+    persisted: source.persisted,
+    recoveryJournalId: source.recoveryJournalId,
+    recoveryCapturedAt: source.recoveryCapturedAt,
+    assets: new Map(),
+    rememberedHandles: new Map(),
+  }
+  pendingResume = pending
+
+  if (source.handle) {
+    void deps.rememberRecentProject({
+      documentId: project.document.id,
+      projectName: project.document.name,
+      fileName: source.handle.name,
+      lastOpenedAt: deps.now(),
+      handle: source.handle,
+    }).catch((cause) => {
+      console.warn('Could not update the recent-project entry', cause)
+    })
+  }
+  if (project.assets.length > 0) {
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      phase: 'relinking',
+      candidate: resumeSummary(pending),
+      error: null,
+    })
+  }
+  const restored = await restoreRememberedMedia(pending, generation, deps)
+  if (restored.status === 'cancelled') return restored
+  publishResumeCandidate(
+    pending,
+    restored.errors.length > 0 ? restored.errors.join(' ') : null,
+  )
+  return { status: 'ready' }
+}
+
+async function readProjectCandidateFile(
+  file: File,
+  source: ProjectCandidateSource,
+  generation: number,
+  deps: ProjectControllerDeps,
+): Promise<ProjectActionResult> {
   try {
     if (!file.name.toLowerCase().endsWith('.webcut')) {
       throw new Error('Choose a file ending in .webcut')
@@ -344,34 +465,7 @@ export async function openProjectFile(
     }
     const serialized = await deps.readText(file)
     if (generation !== operationGeneration) return { status: 'cancelled' }
-    const project = parseProjectFile(serialized)
-    if (project.assets.some((asset) => asset.kind === 'image')) {
-      throw new Error(
-        'This project contains image sources, which this WebCut build cannot reconnect yet',
-      )
-    }
-    const pending: PendingResume = {
-      project,
-      projectFileName: file.name,
-      assets: new Map(),
-      rememberedHandles: new Map(),
-    }
-    pendingResume = pending
-    if (project.assets.length > 0) {
-      useProjectSessionStore.setState({
-        screen: 'resume',
-        phase: 'relinking',
-        candidate: resumeSummary(pending),
-        error: null,
-      })
-    }
-    const restored = await restoreRememberedMedia(pending, generation, deps)
-    if (restored.status === 'cancelled') return restored
-    publishResumeCandidate(
-      pending,
-      restored.errors.length > 0 ? restored.errors.join(' ') : null,
-    )
-    return { status: 'ready' }
+    return await prepareProjectCandidate(serialized, source, generation, deps)
   } catch (cause) {
     if (generation !== operationGeneration) return { status: 'cancelled' }
     const message = `Could not read "${file.name}": ${messageFrom(cause)}`
@@ -383,6 +477,148 @@ export async function openProjectFile(
     })
     return { status: 'failed', message }
   }
+}
+
+/** Parse and validate a portable project from the compatibility file input. */
+export function openProjectFile(
+  file: File,
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  const generation = beginProjectRead(deps)
+  return readProjectCandidateFile(file, {
+    origin: 'file',
+    displayFileName: file.name,
+    projectFileName: file.name,
+    persisted: true,
+  }, generation, deps)
+}
+
+export function canRememberProjectFiles(): boolean {
+  return supportsLocalProjectFiles()
+}
+
+/** Choose a reusable `.webcut` handle directly from the Resume click. */
+export async function chooseProjectFile(
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  const generation = beginProjectRead(deps)
+  try {
+    const selection = await deps.pickProjectFile()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+    return readProjectCandidateFile(selection.file, {
+      origin: 'file',
+      displayFileName: selection.file.name,
+      projectFileName: selection.file.name,
+      persisted: true,
+      handle: selection.handle,
+    }, generation, deps)
+  } catch (cause) {
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+    if (isLocalProjectPickerCancellation(cause)) {
+      useProjectSessionStore.setState({ phase: 'idle', error: null })
+      return { status: 'cancelled' }
+    }
+    const message = `Could not choose a project: ${messageFrom(cause)}`
+    useProjectSessionStore.setState({ phase: 'error', error: message })
+    return { status: 'failed', message }
+  }
+}
+
+async function finishRecentProjectOpen(
+  record: RecentProjectRecord,
+  permission: Promise<LocalProjectPermission>,
+  generation: number,
+  deps: ProjectControllerDeps,
+): Promise<ProjectActionResult> {
+  try {
+    if (await permission !== 'granted') {
+      throw new Error('Access to this recent project was not granted')
+    }
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+    const file = await record.handle.getFile()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+    return readProjectCandidateFile(file, {
+      origin: 'recent',
+      displayFileName: file.name,
+      projectFileName: file.name,
+      persisted: true,
+      expectedDocumentId: record.documentId,
+      handle: record.handle,
+    }, generation, deps)
+  } catch (cause) {
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+    const message = `Could not open "${record.fileName}": ${messageFrom(cause)}`
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      phase: 'error',
+      candidate: null,
+      error: message,
+    })
+    return { status: 'failed', message }
+  }
+}
+
+/** Open a cached recent handle; permission starts synchronously in this click. */
+export function openRecentProject(
+  documentId: string,
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  const record = deps.getRecentProject(documentId)
+  if (!record) {
+    const message = 'This recent project is no longer available locally'
+    useProjectSessionStore.setState({ phase: 'error', error: message })
+    return Promise.resolve({ status: 'failed', message })
+  }
+  const generation = beginProjectRead(deps)
+  let permission: Promise<LocalProjectPermission>
+  try {
+    // Keep the permission request before the first await so Chrome retains the
+    // user activation from this Recent project's Open button.
+    permission = deps.requestProjectPermission(record.handle)
+  } catch (cause) {
+    permission = Promise.reject(cause)
+  }
+  return finishRecentProjectOpen(record, permission, generation, deps)
+}
+
+/** Offer, but never silently activate, the newest valid local recovery copy. */
+export async function openRecoveryProject(
+  journalId: string,
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  const record = deps.getRecoveryJournal(journalId)
+  if (!record) {
+    const message = 'This recovery copy is no longer available locally'
+    useProjectSessionStore.setState({ phase: 'error', error: message })
+    return { status: 'failed', message }
+  }
+  const generation = beginProjectRead(deps)
+  const generations = [...record.generations].reverse()
+  let lastError: unknown = new Error('No complete recovery snapshot is available')
+  for (const recovery of generations) {
+    try {
+      return await prepareProjectCandidate(recovery.serializedProject, {
+        origin: 'recovery',
+        displayFileName: record.projectFileName ?? 'Local recovery copy',
+        projectFileName: record.projectFileName,
+        persisted: false,
+        expectedDocumentId: record.documentId,
+        recoveryJournalId: record.journalId,
+        recoveryCapturedAt: recovery.capturedAt,
+      }, generation, deps)
+    } catch (cause) {
+      lastError = cause
+    }
+  }
+  if (generation !== operationGeneration) return { status: 'cancelled' }
+  const message = `Could not open the recovery copy: ${messageFrom(lastError)}`
+  useProjectSessionStore.setState({
+    screen: 'resume',
+    phase: 'error',
+    candidate: null,
+    error: message,
+  })
+  return { status: 'failed', message }
 }
 
 function ratesMatch(
@@ -474,6 +710,22 @@ function pendingIsCurrent(
   generation: number,
 ): boolean {
   return generation === operationGeneration && pending === pendingResume
+}
+
+function pendingPersistenceSession(
+  pending: PendingResume,
+): ProjectPersistenceSession {
+  const session: ProjectPersistenceSession = {
+    fileName: pending.projectFileName,
+    persisted: pending.persisted,
+  }
+  if (pending.recoveryJournalId) {
+    session.recoveryJournalId = pending.recoveryJournalId
+  }
+  if (pending.recoveryCapturedAt !== undefined) {
+    session.recoveryCapturedAt = pending.recoveryCapturedAt
+  }
+  return session
 }
 
 function forgetStaleHandle(
@@ -776,7 +1028,7 @@ async function restoreRequestedMediaAndActivate(
   return activateProject(
     pending.project.document,
     [...pending.assets.values()],
-    pending.projectFileName,
+    pendingPersistenceSession(pending),
     generation,
     deps,
   )
@@ -813,7 +1065,7 @@ export function activateResumedProject(
     return activateProject(
       pending.project.document,
       [...pending.assets.values()],
-      pending.projectFileName,
+      pendingPersistenceSession(pending),
       generation,
       deps,
     )

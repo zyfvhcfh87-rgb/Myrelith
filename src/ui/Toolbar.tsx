@@ -33,6 +33,15 @@ function saveStatus(
   return fileName ? 'Opened · Save to enable live save' : 'Not saved yet'
 }
 
+function recoveryStatus(
+  phase: 'idle' | 'saving' | 'error',
+  lastRecoveryAt: number | null,
+): string | null {
+  if (phase === 'saving') return 'Updating recovery copy…'
+  if (phase === 'error') return 'Recovery copy failed'
+  return lastRecoveryAt === null ? null : 'Recovery copy updated'
+}
+
 export default function Toolbar() {
   const [exportOpen, setExportOpen] = useState(false)
   const [leaving, setLeaving] = useState(false)
@@ -50,10 +59,14 @@ export default function Toolbar() {
   )
   const lastSavedAt = useProjectSessionStore((state) => state.lastSavedAt)
   const saveError = useProjectSessionStore((state) => state.saveError)
+  const recoveryPhase = useProjectSessionStore((state) => state.recoveryPhase)
+  const lastRecoveryAt = useProjectSessionStore((state) => state.lastRecoveryAt)
+  const recoveryError = useProjectSessionStore((state) => state.recoveryError)
   const saving = phase === 'saving'
   const closing = leaving || projectPhase === 'closing'
   const busy = saving || closing
   const statusError = closing ? null : leaveError ?? saveError
+  const recoveryCopyStatus = recoveryStatus(recoveryPhase, lastRecoveryAt)
 
   const closeExport = (): void => {
     setExportOpen(false)
@@ -95,6 +108,18 @@ export default function Toolbar() {
               ? 'Could not return to Projects'
               : saveStatus(phase, dirty, liveSaveEnabled, lastSavedAt, projectFile)}
         </span>
+        {!closing && recoveryCopyStatus && (
+          <span
+            className="toolbar-recovery-status"
+            data-state={recoveryPhase}
+            role={recoveryPhase === 'error' ? 'alert' : undefined}
+            aria-live="polite"
+            aria-atomic="true"
+            title={recoveryError ?? undefined}
+          >
+            {recoveryCopyStatus}
+          </span>
+        )}
       </div>
       <span className="placeholder-note">S splits at playhead · Del ripple-deletes</span>
       <div className="toolbar-actions">

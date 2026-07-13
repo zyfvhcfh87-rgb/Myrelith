@@ -1,15 +1,24 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   activateResumedProject,
+  canRememberProjectFiles,
   canRememberProjectMedia,
+  chooseProjectFile,
   chooseProjectMedia,
   connectProjectMedia,
   createNewProject,
   openProjectFile,
+  openRecentProject,
+  openRecoveryProject,
   returnToProjectHome,
   showNewProject,
   showResumeProject,
 } from '../app/projectController'
+import {
+  discardRecoveryJournal,
+  forgetRecentProject,
+  refreshProjectLibrary,
+} from '../app/projectLibraryController'
 import {
   DEFAULT_PROJECT_SETTINGS,
   PROJECT_AUDIO_SAMPLE_RATE_PRESETS,
@@ -20,6 +29,7 @@ import {
 import { MAX_PROJECT_NAME_CHARACTERS } from '../domain/projectLimits'
 import type { FrameRate } from '../domain/schema'
 import { useProjectSessionStore } from '../state/projectSessionStore'
+import { useProjectLibraryStore } from '../state/projectLibraryStore'
 
 function rateKey(rate: FrameRate): string {
   return `${rate.num}/${rate.den}`
@@ -37,10 +47,23 @@ function formatRate(rate: FrameRate): string {
     : `${decimal} fps (${rate.num}/${rate.den})`
 }
 
+function formatLocalTime(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(timestamp))
+}
+
 function isBusy(phase: string): boolean {
   return phase === 'reading-project'
     || phase === 'relinking'
     || phase === 'activating'
+}
+
+function confirmRecoveryDiscard(projectName: string): boolean {
+  return window.confirm(
+    `Discard the recovery copy for "${projectName}"? This permanently removes its local unsaved safety copies.`,
+  )
 }
 
 function LaunchFrame({
@@ -62,6 +85,25 @@ function LaunchFrame({
 }
 
 function HomeScreen() {
+  const libraryPhase = useProjectLibraryStore((state) => state.phase)
+  const recentSupported = useProjectLibraryStore(
+    (state) => state.recentProjectsSupported,
+  )
+  const recentProjects = useProjectLibraryStore((state) => state.recentProjects)
+  const recoveries = useProjectLibraryStore((state) => state.recoveries)
+  const libraryError = useProjectLibraryStore((state) => state.error)
+  const homeError = useProjectSessionStore((state) => state.error)
+
+  useEffect(() => {
+    void refreshProjectLibrary().catch((cause) => {
+      console.warn('Could not refresh the local project library', cause)
+    })
+  }, [])
+
+  const libraryEmpty = libraryPhase !== 'loading'
+    && recentProjects.length === 0
+    && recoveries.length === 0
+
   return (
     <LaunchFrame home>
       <div className="project-launch-heading project-launch-heading-home">
@@ -87,6 +129,118 @@ function HomeScreen() {
           <span>Open a .webcut file and restore its source media.</span>
         </button>
       </div>
+      <section className="project-library" aria-labelledby="project-library-title">
+        <header className="project-library-header">
+          <div>
+            <span className="project-launch-eyebrow">Stored in this browser</span>
+            <h2 id="project-library-title">Your projects</h2>
+          </div>
+          <button
+            className="project-library-refresh"
+            type="button"
+            disabled={libraryPhase === 'loading'}
+            onClick={() => void refreshProjectLibrary()}
+          >
+            Refresh
+          </button>
+        </header>
+
+        {libraryPhase === 'loading' && (
+          <p className="project-library-status" role="status">
+            Checking recent projects and recovery copies…
+          </p>
+        )}
+        {(libraryError || homeError) && (
+          <p className="project-launch-error" role="alert">
+            {homeError ?? libraryError}
+          </p>
+        )}
+
+        {recoveries.length > 0 && (
+          <div className="project-library-group">
+            <div className="project-library-group-heading">
+              <h3>Recovery copies</h3>
+              <span>Unsaved safety copies — never opened automatically</span>
+            </div>
+            <ul className="project-library-list">
+              {recoveries.map((recovery) => (
+                <li key={recovery.journalId} data-kind="recovery">
+                  <button
+                    className="project-library-open"
+                    type="button"
+                    aria-label={`Recover ${recovery.projectName}`}
+                    onClick={() => void openRecoveryProject(recovery.journalId)}
+                  >
+                    <strong>{recovery.projectName}</strong>
+                    <span>
+                      {recovery.projectFileName ?? 'Not saved to a .webcut yet'}
+                    </span>
+                    <time dateTime={new Date(recovery.updatedAt).toISOString()}>
+                      Updated {formatLocalTime(recovery.updatedAt)} · {recovery.generationCount} safety {recovery.generationCount === 1 ? 'copy' : 'copies'}
+                    </time>
+                  </button>
+                  <button
+                    className="project-library-remove"
+                    type="button"
+                    aria-label={`Discard recovery for ${recovery.projectName}`}
+                    onClick={() => {
+                      if (confirmRecoveryDiscard(recovery.projectName)) {
+                        void discardRecoveryJournal(recovery.journalId)
+                      }
+                    }}
+                  >
+                    Discard
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {recentProjects.length > 0 && (
+          <div className="project-library-group">
+            <div className="project-library-group-heading">
+              <h3>Recent projects</h3>
+              <span>Shortcuts to files you already chose</span>
+            </div>
+            <ul className="project-library-list">
+              {recentProjects.map((project) => (
+                <li key={project.documentId} data-kind="recent">
+                  <button
+                    className="project-library-open"
+                    type="button"
+                    aria-label={`Open ${project.projectName}`}
+                    onClick={() => void openRecentProject(project.documentId)}
+                  >
+                    <strong>{project.projectName}</strong>
+                    <span>{project.fileName}</span>
+                    <time dateTime={new Date(project.lastOpenedAt).toISOString()}>
+                      Last used {formatLocalTime(project.lastOpenedAt)} · {project.permission === 'granted' ? 'Ready' : project.permission === 'denied' ? 'Access blocked' : 'Permission may be needed'}
+                    </time>
+                  </button>
+                  <button
+                    className="project-library-remove"
+                    type="button"
+                    aria-label={`Remove ${project.projectName} from Recent`}
+                    title="Remove this shortcut only — the .webcut file stays on disk"
+                    onClick={() => void forgetRecentProject(project.documentId)}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {libraryEmpty && (
+          <p className="project-library-empty">
+            {recentSupported
+              ? 'No recent projects or recovery copies yet.'
+              : 'No recovery copies yet. Recent-file shortcuts need Chrome file access.'}
+          </p>
+        )}
+      </section>
     </LaunchFrame>
   )
 }
@@ -221,7 +375,9 @@ function ResumeProjectScreen() {
   const candidate = useProjectSessionStore((state) => state.candidate)
   const error = useProjectSessionStore((state) => state.error)
   const busy = isBusy(phase)
-  const handlePickerAvailable = canRememberProjectMedia()
+  const mediaHandlePickerAvailable = canRememberProjectMedia()
+  const projectHandlePickerAvailable = canRememberProjectFiles()
+  const recovering = candidate?.origin === 'recovery'
   const needsPermission = candidate?.assets.some(
     (asset) => asset.status === 'remembered',
   ) ?? false
@@ -233,28 +389,47 @@ function ResumeProjectScreen() {
   return (
     <LaunchFrame>
       <div className="project-launch-heading">
-        <span className="project-launch-eyebrow">Resume project</span>
-        <h1>Reconnect your work</h1>
-        <p>The project is checked before it can replace the current session.</p>
+        <span className="project-launch-eyebrow">
+          {recovering ? 'Recovery copy' : 'Resume project'}
+        </span>
+        <h1>{recovering ? 'Review recovered work' : 'Reconnect your work'}</h1>
+        <p>
+          {recovering
+            ? 'This local safety copy is checked before you choose to restore it.'
+            : 'The project is checked before it can replace the current session.'}
+        </p>
       </div>
 
       <div className="project-resume-body">
-        <label className={`project-file-choice${busy ? ' is-disabled' : ''}`}>
-          <strong>{candidate ? 'Choose another project file' : 'Choose a .webcut file'}</strong>
-          <span>Only a validated portable WebCut project will continue.</span>
-          <input
-            className="project-file-input"
+        {projectHandlePickerAvailable ? (
+          <button
+            className={`project-file-choice${busy ? ' is-disabled' : ''}`}
             aria-label="Choose a WebCut project file"
-            type="file"
-            accept=".webcut"
+            type="button"
             disabled={busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              event.target.value = ''
-              if (file) void openProjectFile(file)
-            }}
-          />
-        </label>
+            onClick={() => void chooseProjectFile()}
+          >
+            <strong>{candidate ? 'Choose another project file' : 'Choose a .webcut file'}</strong>
+            <span>Only a validated portable WebCut project will continue.</span>
+          </button>
+        ) : (
+          <label className={`project-file-choice${busy ? ' is-disabled' : ''}`}>
+            <strong>{candidate ? 'Choose another project file' : 'Choose a .webcut file'}</strong>
+            <span>Only a validated portable WebCut project will continue.</span>
+            <input
+              className="project-file-input"
+              aria-label="Choose a WebCut project file"
+              type="file"
+              accept=".webcut"
+              disabled={busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                event.target.value = ''
+                if (file) void openProjectFile(file)
+              }}
+            />
+          </label>
+        )}
 
         {candidate && (
           <section className="project-candidate" aria-label="Project summary">
@@ -263,7 +438,13 @@ function ResumeProjectScreen() {
                 <span>{candidate.projectFileName}</span>
                 <h2>{candidate.projectName}</h2>
               </div>
-              <strong>Validated</strong>
+              <strong>
+                {candidate.origin === 'recovery'
+                  ? 'Recovery ready'
+                  : candidate.origin === 'recent'
+                    ? 'Recent'
+                    : 'Validated'}
+              </strong>
             </div>
             <dl className="project-profile">
               <div>
@@ -292,7 +473,7 @@ function ResumeProjectScreen() {
                 </p>
               </div>
               {candidate.assets.length > 0 && (
-                handlePickerAvailable ? (
+                mediaHandlePickerAvailable ? (
                   <button
                     className="project-button project-button-secondary project-relink-button"
                     type="button"
@@ -368,7 +549,9 @@ function ResumeProjectScreen() {
             disabled={busy || !candidate || !allRestorable}
             onClick={() => void activateResumedProject()}
           >
-            {needsPermission ? 'Allow media & open' : 'Open project'}
+            {needsPermission
+              ? recovering ? 'Allow media & recover' : 'Allow media & open'
+              : recovering ? 'Recover project' : 'Open project'}
           </button>
         </div>
       </div>

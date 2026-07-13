@@ -146,4 +146,37 @@ describe('Toolbar project persistence', () => {
       'Could not save the project: disk full',
     )
   })
+
+  test('reports recovery separately without claiming the project was saved', () => {
+    render(<Toolbar />)
+
+    act(() => {
+      useProjectSessionStore.setState({ recoveryPhase: 'saving' })
+    })
+    expect(screen.getByText('Updating recovery copy…')).toBeInTheDocument()
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+
+    act(() => {
+      useProjectSessionStore.setState({
+        recoveryPhase: 'idle',
+        lastRecoveryAt: 123,
+      })
+    })
+    expect(screen.getByText('Recovery copy updated')).toBeInTheDocument()
+    expect(screen.queryByText(/^Saved/)).not.toBeInTheDocument()
+  })
+
+  test('surfaces a recovery failure without turning it into a save failure', () => {
+    useProjectSessionStore.setState({
+      recoveryPhase: 'error',
+      recoveryError: 'IndexedDB is unavailable',
+    })
+    render(<Toolbar />)
+
+    const alerts = screen.getAllByRole('alert')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toHaveTextContent('Recovery copy failed')
+    expect(alerts[0]).toHaveAttribute('title', 'IndexedDB is unavailable')
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+  })
 })

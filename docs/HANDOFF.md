@@ -46,8 +46,9 @@ and the open list below.
 | Post-MVP project system — Slice 3 sessions/UI | ✅ done | atomic Create/Resume/relink; 764 tests; real 4K60 create + 1440p60 media-resume Chrome gate |
 | Post-MVP project system — Slice 4 persistence | ✅ done | portable Save/Save As, revision-safe live save, quiesced exit; 794 tests + Chrome toolbar/Resume/layout gate |
 | Post-MVP project system — remembered media follow-up | ✅ done | origin-local file handles + permission-aware automatic relink; 806 tests + Chrome picker-entry smoke |
+| Post-MVP project system — Slice 5 local library | ✅ done | Recent handles + explicit three-generation recovery; 840 tests + Chrome reload/recover/discard/picker-entry gate |
 
-806 tests green · `npm run build` and `npm run lint` clean · every phase
+840 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -180,14 +181,34 @@ await. Denied, missing, moved, changed, unsupported-browser, and cleared-site-
 data cases stay on the existing manual relink fallback. Old projects seed the
 sidecar after their next successful handle-aware relink.
 
-**Next: Slice 5 — recent projects and crash recovery.** Add a local recent-file
-surface where browser capabilities allow it, plus recovery snapshots that are
-separate from the user-owned `.webcut` live-save path.
+Project-system Slice 5 adds an origin-local project library without changing
+the portable `.webcut` format. Validated handles become removable Recent
+shortcuts in supporting Chrome builds. Dirty work writes a separate bounded
+recovery journal: at most three complete generations per editing lineage,
+twelve Recent entries, eight journals, and a fixed serialized-character budget.
+Recovery never clears dirty state or claims the project was Saved; Home offers
+it explicitly after reload/crash and requires confirmation before permanent
+discard. Successful revision-current Save and intentional Projects exit clear
+the journal. Recovery failures remain separate from file-save truth, and a
+failed exit rebuilds its deleted safety copy before editing continues. No media
+bytes, paths, object URLs, or handles enter `.webcut` or Zustand.
+
+The real-Chrome gate passed 2026-07-14: four recovery writes retained exactly
+three generations; reload offered, but did not silently activate, the local
+copy; Review + Recover restored the latest four-track document and kept it
+honestly unsaved; confirmed Discard removed the journal; the reusable project
+picker entry rendered; the Home layout stayed intact; and the final console was
+clean.
+
+**Next: ask the user to select the next issue #4 follow-up.** Remaining
+issue-level work includes folder/batch matching and any future opt-in media
+caching/quota controls; do not imply those are part of recovery today.
 
 ## What works today (user-visible)
 
 Run `npm run dev` → project Home. Create a project with an explicit canvas,
-frame rate, and audio rate, or choose a `.webcut`. Remembered sources with a
+frame rate, and audio rate, choose a `.webcut`, reopen a Recent file, or review
+an explicitly offered recovery copy. Remembered sources with a
 retained grant reconnect automatically; a returned permission prompt needs one
 Allow-and-open click, and only genuinely missing sources need manual relink.
 Review the profile and open it only when complete. In the editor,
@@ -288,16 +309,20 @@ the transform fields only for video-lane clips.
   migration entry point, strict untrusted-input validation, and bounded durable
   asset metadata; excludes every session-owned field.
 - `src/state/projectSessionStore.ts` — serializable launch/editor screen,
-  active-project labels, operation phase, and relink status only; no Files,
-  Blobs, URLs, parsed candidates, or browser handles.
+  active-project labels, operation phase, relink status, and separate
+  save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
+  handles, or recovery payloads. `src/state/projectLibraryStore.ts` holds only
+  serializable Recent/recovery summaries for Home.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
   candidates off-store, restores granted local handles, requests remembered
   permission only from the Open click, matches relinked media exactly,
   generation-cancels late work, and performs the awaited outgoing-session
   teardown before committing a complete new document/media session.
-  `src/app/localMediaHandles.ts` owns picker types plus the origin-local
-  IndexedDB handle registry. `src/ui/ProjectLaunch.tsx` is the Home, New
-  Project, and Resume UI facade.
+  `src/app/localMediaHandles.ts` owns picker types plus the origin-local media
+  handle registry. `src/app/localProjectStorage.ts` owns bounded Recent and
+  recovery IndexedDB records; `src/app/projectLibraryController.ts` keeps their
+  handles/snapshots outside state. `src/ui/ProjectLaunch.tsx` is the Home, New
+  Project, Resume, Recent, and explicit-Recovery UI facade.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
@@ -549,13 +574,15 @@ the transform fields only for video-lane clips.
 
 ## Open items (beyond PLAN.md phases)
 
-- Slice 4 plus its remembered-media follow-up complete portable Save/Save As,
-  permission-aware automatic source reconnection, manual fallback, and live
-  save after a writable grant. The media sidecar is origin-local convenience,
-  not portable bundled media. A resumed project file is read-only until one
-  Save or Save As grant. Recent-project discovery and crash-recovery snapshots
-  remain for the next issue #4 slice; do not describe live save or remembered
-  media as crash recovery.
+- Slice 4, remembered media, and Slice 5 now cover portable Save/Save As,
+  permission-aware automatic source reconnection, removable Recent shortcuts,
+  manual fallback, live save after a writable grant, and explicit bounded
+  recovery journals. These origin-local sidecars are convenience, not portable
+  bundled media; recovery stores no source bytes. A resumed project remains
+  read-only until one Save or Save As grant. Multi-tab recovery ownership is
+  not coordinated yet, so do not edit/discard the same journal from two tabs.
+  Issue #4 remains open for folder/batch matching and any future opt-in media
+  caching/quota UI.
 - A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
   domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
   (unlink is one-way today, undo aside) and linked-pair awareness in a

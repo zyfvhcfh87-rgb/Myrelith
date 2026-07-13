@@ -21,16 +21,25 @@ import {
 import { useTransportStore } from '../state/transportStore'
 import {
   activateResumedProject,
+  chooseProjectFile,
   chooseProjectMedia,
   connectProjectMedia,
   createNewProject,
   leaveActiveProject,
   openProjectFile,
+  openRecentProject,
+  openRecoveryProject,
   resetProjectController,
   returnToProjectHome,
   type ProjectControllerDeps,
 } from './projectController'
 import type { LocalMediaFileHandle } from './localMediaHandles'
+import {
+  LOCAL_PROJECT_RECORD_VERSION,
+  type LocalProjectFileHandle,
+  type RecentProjectRecord,
+  type RecoveryJournalRecord,
+} from './localProjectStorage'
 
 function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
   return {
@@ -97,6 +106,7 @@ function makeDeps(
 ): ProjectControllerDeps {
   return {
     createDocumentId: vi.fn(() => 'doc-new'),
+    now: vi.fn(() => 1_234),
     readText: vi.fn(async () => ''),
     inspectMedia: vi.fn(async () => makeAsset()),
     disposeExport: vi.fn(async () => undefined),
@@ -105,6 +115,7 @@ function makeDeps(
     disposeMediaVisuals: vi.fn(),
     resetMediaImport: vi.fn(),
     pauseProjectPersistence: vi.fn(async () => undefined),
+    discardProjectRecovery: vi.fn(async () => undefined),
     resumeProjectPersistence: vi.fn(),
     startProjectPersistence: vi.fn(),
     suspendProjectPersistence: vi.fn(),
@@ -114,6 +125,13 @@ function makeDeps(
     queryMediaPermission: vi.fn(async () => 'granted' as const),
     requestMediaPermission: vi.fn(async () => 'granted' as const),
     pickMediaFiles: vi.fn(async () => []),
+    pickProjectFile: vi.fn(async () => {
+      throw new DOMException('cancelled', 'AbortError')
+    }),
+    requestProjectPermission: vi.fn(async () => 'granted' as const),
+    getRecentProject: vi.fn(() => null),
+    getRecoveryJournal: vi.fn(() => null),
+    rememberRecentProject: vi.fn(async () => undefined),
     revokeObjectURL: vi.fn((url) => URL.revokeObjectURL(url)),
     ...overrides,
   }
@@ -126,6 +144,15 @@ function makeHandle(file: File): LocalMediaFileHandle {
     getFile: vi.fn(async () => file),
     isSameEntry: vi.fn(async () => false),
   } as unknown as LocalMediaFileHandle
+}
+
+function makeProjectHandle(file: File): LocalProjectFileHandle {
+  return {
+    kind: 'file',
+    name: file.name,
+    getFile: vi.fn(async () => file),
+    isSameEntry: vi.fn(async () => false),
+  }
 }
 
 function deferred<T>() {
@@ -286,6 +313,7 @@ describe('active-project cleanup', () => {
 
     persistenceGate.resolve()
     await flush()
+    expect(deps.discardProjectRecovery).toHaveBeenCalledOnce()
     expect(deps.disposeExport).toHaveBeenCalledOnce()
     expect(deps.disposeTransport).toHaveBeenCalledOnce()
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
@@ -385,6 +413,36 @@ describe('active-project cleanup', () => {
       error: 'Could not return to Projects: audio drain failed',
     })
   })
+
+  test('a failed recovery discard keeps the editor intact before Blob cleanup', async () => {
+    const asset = makeAsset({
+      id: 'asset-recovery-retained',
+      objectUrl: 'blob:recovery-retained',
+    })
+    useMediaStore.getState().addAsset(asset)
+    useProjectSessionStore.setState({
+      screen: 'editor',
+      activeProjectName: 'Still recoverable',
+    })
+    const deps = makeDeps({
+      discardProjectRecovery: vi.fn(async () => {
+        throw new Error('local storage unavailable')
+      }),
+    })
+
+    await expect(leaveActiveProject(deps)).resolves.toEqual({
+      status: 'failed',
+      message: 'Could not return to Projects: local storage unavailable',
+    })
+
+    expect(deps.disposeExport).not.toHaveBeenCalled()
+    expect(deps.disposeTransport).not.toHaveBeenCalled()
+    expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(
+      'blob:recovery-retained',
+    )
+  })
 })
 
 describe('portable project resume', () => {
@@ -433,6 +491,115 @@ describe('portable project resume', () => {
     expect(deps.startProjectPersistence).toHaveBeenCalledWith({
       fileName: 'empty.webcut',
       persisted: true,
+    })
+  })
+
+  test('the Chrome project picker remembers a validated reusable handle', async () => {
+    const serialized = serializeProjectFile(makeProject([], 'Picker project'))
+    const file = new File([serialized], 'picker.webcut')
+    const handle = makeProjectHandle(file)
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      pickProjectFile: vi.fn(async () => ({ file, handle })),
+    })
+
+    await expect(chooseProjectFile(deps)).resolves.toEqual({ status: 'ready' })
+    await flush()
+
+    expect(useProjectSessionStore.getState().candidate).toMatchObject({
+      origin: 'file',
+      projectName: 'Picker project',
+    })
+    expect(deps.rememberRecentProject).toHaveBeenCalledWith({
+      documentId: 'doc-saved',
+      projectName: 'Picker project',
+      fileName: 'picker.webcut',
+      lastOpenedAt: 1_234,
+      handle,
+    })
+  })
+
+  test('a Recent click starts permission synchronously and verifies document identity', async () => {
+    const serialized = serializeProjectFile(makeProject([], 'Recent project'))
+    const file = new File([serialized], 'recent.webcut')
+    const handle = makeProjectHandle(file)
+    const permission = deferred<'granted'>()
+    const record: RecentProjectRecord = {
+      version: LOCAL_PROJECT_RECORD_VERSION,
+      documentId: 'doc-saved',
+      projectName: 'Recent project',
+      fileName: 'recent.webcut',
+      lastOpenedAt: 10,
+      handle,
+    }
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      getRecentProject: vi.fn(() => record),
+      requestProjectPermission: vi.fn(() => permission.promise),
+    })
+
+    const opening = openRecentProject('doc-saved', deps)
+    expect(deps.requestProjectPermission).toHaveBeenCalledWith(handle)
+    expect(handle.getFile).not.toHaveBeenCalled()
+    permission.resolve('granted')
+
+    await expect(opening).resolves.toEqual({ status: 'ready' })
+    expect(useProjectSessionStore.getState().candidate).toMatchObject({
+      origin: 'recent',
+      projectName: 'Recent project',
+    })
+
+    const staleDeps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      getRecentProject: vi.fn(() => ({
+        ...record,
+        documentId: 'different-document',
+      })),
+    })
+    await expect(openRecentProject('different-document', staleDeps))
+      .resolves.toMatchObject({ status: 'failed' })
+    expect(useProjectSessionStore.getState().error)
+      .toContain('points to a different project')
+  })
+
+  test('recovery falls back to a valid generation and activates as unsaved', async () => {
+    const serialized = serializeProjectFile(makeProject([], 'Recovered project'))
+    const record: RecoveryJournalRecord = {
+      version: LOCAL_PROJECT_RECORD_VERSION,
+      journalId: 'journal-recovery',
+      documentId: 'doc-saved',
+      projectName: 'Recovered project',
+      projectFileName: 'Recovered.webcut',
+      updatedAt: 200,
+      generations: [{
+        snapshotId: 'snapshot-good',
+        capturedAt: 100,
+        serializedProject: serialized,
+      }, {
+        snapshotId: 'snapshot-corrupt',
+        capturedAt: 200,
+        serializedProject: '{broken',
+      }],
+    }
+    const deps = makeDeps({
+      getRecoveryJournal: vi.fn(() => record),
+    })
+
+    await expect(openRecoveryProject('journal-recovery', deps))
+      .resolves.toEqual({ status: 'ready' })
+    expect(useProjectSessionStore.getState().candidate).toMatchObject({
+      origin: 'recovery',
+      projectName: 'Recovered project',
+    })
+
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+    expect(deps.startProjectPersistence).toHaveBeenCalledWith({
+      fileName: 'Recovered.webcut',
+      persisted: false,
+      recoveryJournalId: 'journal-recovery',
+      recoveryCapturedAt: 100,
     })
   })
 

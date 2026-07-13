@@ -133,10 +133,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   not serialized with the project.
 - `ProjectSessionState` — `src/state/projectSessionStore.ts`: serializable
   launch/editor screen, operation phase, active-project labels, a small relink
-  summary, and the serializable dirty/save-status projection. Parsed projects,
-  selected Files, MediaAssets, readable/writable file handles, timers, and all
-  object URLs stay in app-layer controllers/adapters; they never enter this
-  store.
+  summary, and the serializable dirty/save/recovery-status projection. Parsed
+  projects, selected Files, MediaAssets, readable/writable file handles,
+  recovery payloads, timers, and all object URLs stay in app-layer
+  controllers/adapters; they never enter this store.
+- `ProjectLibraryState` — `src/state/projectLibraryStore.ts`: serializable Home
+  summaries for recent project files and recovery journals. Opaque handles and
+  serialized recovery snapshots remain controller-local; this store may only
+  expose labels, timestamps, permission state, and stable local record ids.
 - Project persistence — `src/app/projectPersistenceController.ts`: builds a
   validated portable snapshot from `documentStore` + `mediaStore`, owns the
   current writable handle, debounces live saves, serializes overlapping edits
@@ -144,9 +148,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   and `Save As` request an explicit user-gesture grant when no writable handle
   exists; that grant enables later in-place live saves. A browser without the
   writable-file picker may download a copy, but that unobservable fallback
-  never marks dirty work as safely persisted. Project replacement first pauses
-  this controller, cancels its timer, and drains any open write before media or
-  session state can be released.
+  never marks dirty work as safely persisted. A separate recovery sink writes
+  bounded, versioned local snapshots while work is dirty; recovery success
+  never clears dirty state or updates saved-at truth. Project replacement first
+  pauses this controller, cancels both timers, and drains any open file or
+  recovery write before media or session state can be released.
+- Local project library — `src/app/localProjectStorage.ts` stores recent
+  `FileSystemFileHandle` capabilities and bounded recovery journals in
+  origin-local IndexedDB. `src/app/projectLibraryController.ts` retains those
+  opaque values outside Zustand and publishes Home summaries. Recovery keeps
+  several complete generations, is offered explicitly, and never stores media
+  bytes. Intentional project exit or a revision-current successful `.webcut`
+  save removes the active journal before session resources are released.
 - Local media reconnection — `src/app/localMediaHandles.ts` stores opaque
   `FileSystemFileHandle` capabilities in an origin-local IndexedDB sidecar,
   keyed by stable document + asset ids. Paths and handles never enter domain
@@ -168,7 +181,7 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 ```
 src/
   domain/      time, schema, operations, selectors      (pure TS)
-  state/       document, transport, media, project-session stores (Zustand)
+  state/       document, transport, media, project-session/library stores
   engine/      playback-engine, worker-bridge, frame-cache
   workers/     decode.worker, render.worker
   pipeline/    demux, decode, render, export
