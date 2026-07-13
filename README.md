@@ -9,8 +9,9 @@ complete MVP editing and MP4 export flow.
 
 - Start from a project home, choose 720p through 4K, exact common frame rates,
   and 44.1/48/96 kHz audio, or validate and resume a portable `.webcut` file.
-- Reconnect saved source media by metadata before a resumed project can enter
-  the editor; invalid or incomplete candidates never replace the session.
+- Remember local source media in Chrome and reconnect it automatically on
+  Resume; permission, missing-file, and portable-project fallbacks remain
+  explicit, and incomplete candidates never replace the session.
 - Import local video files and generate metadata, filmstrips, and waveforms.
 - Edit on a multi-track timeline with select, razor, trim, ripple trim, slip,
   and slide tools.
@@ -49,6 +50,13 @@ download a copy, but WebCut keeps the work marked unsaved because a download
 cannot be verified. Unsaved work is protected before reload or a return to the
 project Home.
 
+Chrome imports store an opaque local file handle in browser storage—not a
+Windows path and not inside `.webcut`. When that read grant persists, Resume
+reconnects the original media automatically. If Chrome asks again, **Allow
+media & open** restores it with one click. Moving the project to another
+browser/computer, clearing site data, or moving/changing a source uses the
+manual metadata-checked relink fallback.
+
 ## Browser support
 
 Desktop Chrome is the verified development target. Playback and export require
@@ -60,9 +68,11 @@ unverified.
 
 - Export uses one fixed profile: MP4 with 8 Mbps H.264/AVC video and stereo AAC.
 - Portable Save, Save As, Resume, validation, and media relinking are
-  available. A project resumed through the browser file input needs one
-  **Save** or **Save As** grant before live save can update a file in place.
-  Recent projects and crash-recovery snapshots are not implemented yet.
+  available, including browser-local automatic source reconnection. Existing
+  projects imported before this support need one final manual relink to seed
+  their handles. A resumed `.webcut` still needs one **Save** or **Save As**
+  grant before live save can update that project file in place. Recent
+  projects and crash-recovery snapshots are not implemented yet.
 - Crossfades are visual-only, so audio still hard-cuts. Dissolves involving
   transformed or transparent footage are not yet mathematically exact.
 - The import UI accepts video and audio files. Images are not previewable.

@@ -8,6 +8,8 @@ import ProjectLaunch from './ProjectLaunch'
 
 const controller = vi.hoisted(() => ({
   activateResumedProject: vi.fn(async () => ({ status: 'activated' })),
+  canRememberProjectMedia: vi.fn(() => false),
+  chooseProjectMedia: vi.fn(async () => ({ status: 'ready' })),
   connectProjectMedia: vi.fn(async () => ({ status: 'ready' })),
   createNewProject: vi.fn(async () => ({ status: 'activated' })),
   openProjectFile: vi.fn(async () => ({ status: 'ready' })),
@@ -21,6 +23,7 @@ vi.mock('../app/projectController', () => controller)
 beforeEach(() => {
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
   for (const mock of Object.values(controller)) mock.mockClear()
+  controller.canRememberProjectMedia.mockReturnValue(false)
 })
 
 describe('ProjectLaunch', () => {
@@ -113,5 +116,59 @@ describe('ProjectLaunch', () => {
     expect(open).toBeEnabled()
     fireEvent.click(open)
     expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+  })
+
+  test('remembered media needs only the Open click to grant access', () => {
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      candidate: {
+        projectFileName: 'remembered.webcut',
+        projectName: 'Remembered work',
+        width: 1920,
+        height: 1080,
+        frameRate: { num: 30, den: 1 },
+        audioSampleRate: 48_000,
+        assets: [{
+          id: 'asset-1',
+          fileName: 'source.mp4',
+          kind: 'video',
+          status: 'remembered',
+        }],
+      },
+    })
+    render(<ProjectLaunch />)
+
+    expect(screen.getByText('Remembered')).toBeInTheDocument()
+    const open = screen.getByRole('button', { name: 'Allow media & open' })
+    expect(open).toBeEnabled()
+    fireEvent.click(open)
+    expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+  })
+
+  test('supporting browsers reconnect through the reusable-handle picker', () => {
+    controller.canRememberProjectMedia.mockReturnValue(true)
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      candidate: {
+        projectFileName: 'edit.webcut',
+        projectName: 'Saved edit',
+        width: 1920,
+        height: 1080,
+        frameRate: { num: 30, den: 1 },
+        audioSampleRate: 48_000,
+        assets: [{
+          id: 'asset-1',
+          fileName: 'source.mp4',
+          kind: 'video',
+          status: 'missing',
+        }],
+      },
+    })
+    render(<ProjectLaunch />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect files' }))
+    expect(controller.chooseProjectMedia).toHaveBeenCalledOnce()
+    expect(screen.queryByLabelText('Reconnect project source media'))
+      .not.toBeInTheDocument()
   })
 })

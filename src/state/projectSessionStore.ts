@@ -21,7 +21,8 @@ export interface RelinkAssetSummary {
   id: string
   fileName: string
   kind: AssetKind
-  status: 'missing' | 'ready'
+  /** Remembered means Chrome has the handle but needs one click for access. */
+  status: 'missing' | 'remembered' | 'ready'
 }
 
 export interface ResumeProjectSummary {

@@ -21,6 +21,7 @@ import {
 import { useTransportStore } from '../state/transportStore'
 import {
   activateResumedProject,
+  chooseProjectMedia,
   connectProjectMedia,
   createNewProject,
   leaveActiveProject,
@@ -29,6 +30,7 @@ import {
   returnToProjectHome,
   type ProjectControllerDeps,
 } from './projectController'
+import type { LocalMediaFileHandle } from './localMediaHandles'
 
 function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
   return {
@@ -106,9 +108,24 @@ function makeDeps(
     resumeProjectPersistence: vi.fn(),
     startProjectPersistence: vi.fn(),
     suspendProjectPersistence: vi.fn(),
+    loadMediaHandle: vi.fn(async () => null),
+    rememberMediaHandle: vi.fn(async () => undefined),
+    forgetMediaHandle: vi.fn(async () => undefined),
+    queryMediaPermission: vi.fn(async () => 'granted' as const),
+    requestMediaPermission: vi.fn(async () => 'granted' as const),
+    pickMediaFiles: vi.fn(async () => []),
     revokeObjectURL: vi.fn((url) => URL.revokeObjectURL(url)),
     ...overrides,
   }
+}
+
+function makeHandle(file: File): LocalMediaFileHandle {
+  return {
+    kind: 'file',
+    name: file.name,
+    getFile: vi.fn(async () => file),
+    isSameEntry: vi.fn(async () => false),
+  } as unknown as LocalMediaFileHandle
 }
 
 function deferred<T>() {
@@ -445,6 +462,126 @@ describe('portable project resume', () => {
     expect(deps.inspectMedia).not.toHaveBeenCalled()
   })
 
+  test('automatically reconnects a remembered source whose read grant persists', async () => {
+    const analyzed = makeAsset({
+      id: 'session-id',
+      objectUrl: 'blob:auto-restored',
+    })
+    const descriptor = descriptorFrom(analyzed)
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const source = new File(['12345678'], 'source.mp4', {
+      type: 'video/mp4',
+      lastModified: analyzed.lastModified,
+    })
+    const handle = makeHandle(source)
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(async () => handle),
+      queryMediaPermission: vi.fn(async () => 'granted' as const),
+      inspectMedia: vi.fn(async () => analyzed),
+    })
+
+    await expect(
+      openProjectFile(new File([serialized], 'remembered.webcut'), deps),
+    ).resolves.toEqual({ status: 'ready' })
+
+    expect(deps.loadMediaHandle).toHaveBeenCalledWith(
+      'doc-saved',
+      'asset-stable',
+    )
+    expect(deps.queryMediaPermission).toHaveBeenCalledWith(handle)
+    expect(deps.inspectMedia).toHaveBeenCalledOnce()
+    expect(useProjectSessionStore.getState().candidate?.assets).toEqual([{
+      id: 'asset-stable',
+      fileName: 'source.mp4',
+      kind: 'video',
+      status: 'ready',
+    }])
+
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+    expect(useMediaStore.getState().assets.get('asset-stable')).toMatchObject({
+      id: 'asset-stable',
+      objectUrl: 'blob:auto-restored',
+    })
+    expect(deps.requestMediaPermission).not.toHaveBeenCalled()
+  })
+
+  test('uses the Open click to grant a remembered source, then activates', async () => {
+    const analyzed = makeAsset({ objectUrl: 'blob:permission-restored' })
+    const descriptor = descriptorFrom(analyzed)
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const source = new File(['12345678'], 'source.mp4', {
+      type: 'video/mp4',
+      lastModified: analyzed.lastModified,
+    })
+    const handle = makeHandle(source)
+    const requestMediaPermission = vi.fn(async () => 'granted' as const)
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(async () => handle),
+      queryMediaPermission: vi.fn(async () => 'prompt' as const),
+      requestMediaPermission,
+      inspectMedia: vi.fn(async () => analyzed),
+    })
+    await openProjectFile(new File([serialized], 'permission.webcut'), deps)
+
+    expect(useProjectSessionStore.getState().candidate?.assets[0].status)
+      .toBe('remembered')
+    expect(deps.inspectMedia).not.toHaveBeenCalled()
+
+    const opening = activateResumedProject(deps)
+    expect(requestMediaPermission).toHaveBeenCalledOnce()
+    await expect(opening).resolves.toEqual({ status: 'activated' })
+    expect(deps.inspectMedia).toHaveBeenCalledOnce()
+    expect(useMediaStore.getState().assets.has('asset-stable')).toBe(true)
+  })
+
+  test('denied or changed remembered media falls back to manual relink', async () => {
+    const expected = makeAsset()
+    const descriptor = descriptorFrom(expected)
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const source = new File(['12345678'], 'source.mp4', {
+      type: 'video/mp4',
+      lastModified: expected.lastModified,
+    })
+    const handle = makeHandle(source)
+    const deniedDeps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(async () => handle),
+      queryMediaPermission: vi.fn(async () => 'denied' as const),
+    })
+
+    await openProjectFile(new File([serialized], 'denied.webcut'), deniedDeps)
+    expect(useProjectSessionStore.getState().candidate?.assets[0].status)
+      .toBe('missing')
+    expect(deniedDeps.inspectMedia).not.toHaveBeenCalled()
+
+    const changed = makeAsset({
+      lastModified: expected.lastModified + 1,
+      objectUrl: 'blob:changed',
+    })
+    const changedDeps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(async () => handle),
+      queryMediaPermission: vi.fn(async () => 'granted' as const),
+      inspectMedia: vi.fn(async () => changed),
+    })
+    await openProjectFile(new File([serialized], 'changed.webcut'), changedDeps)
+
+    expect(changedDeps.revokeObjectURL).toHaveBeenCalledWith('blob:changed')
+    expect(changedDeps.forgetMediaHandle).toHaveBeenCalledWith(
+      'doc-saved',
+      'asset-stable',
+    )
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      phase: 'error',
+      candidate: { assets: [expect.objectContaining({ status: 'missing' })] },
+      error: expect.stringContaining('remembered file changed'),
+    })
+  })
+
   test('relinks a source after one analysis and restores its stable id', async () => {
     const analyzed = makeAsset({
       id: 'asset-random-session-id',
@@ -494,6 +631,33 @@ describe('portable project resume', () => {
       durationFrames: 60,
     })
     expect(deps.revokeObjectURL).not.toHaveBeenCalled()
+  })
+
+  test('a handle-aware manual relink seeds automatic resume for next time', async () => {
+    const analyzed = makeAsset({ objectUrl: 'blob:handle-relinked' })
+    const descriptor = descriptorFrom(analyzed)
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const source = new File(['12345678'], 'source.mp4', {
+      type: 'video/mp4',
+      lastModified: analyzed.lastModified,
+    })
+    const handle = makeHandle(source)
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      pickMediaFiles: vi.fn(async () => [{ file: source, handle }]),
+      inspectMedia: vi.fn(async () => analyzed),
+    })
+    await openProjectFile(new File([serialized], 'legacy.webcut'), deps)
+
+    await expect(chooseProjectMedia(deps)).resolves.toEqual({ status: 'ready' })
+
+    expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
+      'doc-saved',
+      'asset-stable',
+      handle,
+    )
+    expect(useProjectSessionStore.getState().candidate?.assets[0].status)
+      .toBe('ready')
   })
 
   test('a metadata mismatch is revoked and leaves the active session untouched', async () => {

@@ -13,10 +13,12 @@ import {
   cancelMediaImport,
   dismissMediaImportError,
   importMedia,
+  importMediaFromHandle,
   resetMediaImportController,
   resolveMediaImportDecision,
   type MediaImportDeps,
 } from './mediaImportController'
+import type { LocalMediaFileHandle } from './localMediaHandles'
 
 const F24: FrameRate = { num: 24, den: 1 }
 const F30: FrameRate = { num: 30, den: 1 }
@@ -84,6 +86,9 @@ interface Fixture {
   inspect: ReturnType<typeof vi.fn<MediaImportDeps['inspect']>>
   replaceDocument: ReturnType<typeof vi.fn<MediaImportDeps['replaceDocument']>>
   reconformAssets: ReturnType<typeof vi.fn<MediaImportDeps['reconformAssets']>>
+  rememberMediaHandle: ReturnType<
+    typeof vi.fn<MediaImportDeps['rememberMediaHandle']>
+  >
   revokeObjectURL: ReturnType<typeof vi.fn<MediaImportDeps['revokeObjectURL']>>
 }
 
@@ -109,6 +114,7 @@ function makeFixture(
       })
     }
   })
+  const rememberMediaHandle = vi.fn(async () => undefined)
   const revokeObjectURL = vi.fn()
   const deps: MediaImportDeps = {
     inspect,
@@ -121,6 +127,7 @@ function makeFixture(
       return true
     },
     reconformAssets,
+    rememberMediaHandle,
     revokeObjectURL,
   }
   return {
@@ -133,6 +140,7 @@ function makeFixture(
     inspect,
     replaceDocument,
     reconformAssets,
+    rememberMediaHandle,
     revokeObjectURL,
   }
 }
@@ -165,6 +173,27 @@ describe('mediaImportController', () => {
     expect(fixture.replaceDocument).not.toHaveBeenCalled()
     expect(fixture.revokeObjectURL).not.toHaveBeenCalled()
     expect(useMediaImportStore.getState().phase).toBe('idle')
+  })
+
+  test('a handle-aware import remembers the capability only after commit', async () => {
+    const fixture = makeFixture(makeAsset({ frameRate: F30 }))
+    const selected = file()
+    const handle = {
+      kind: 'file',
+      name: selected.name,
+      getFile: vi.fn(async () => selected),
+    } as unknown as LocalMediaFileHandle
+
+    await expect(
+      importMediaFromHandle(selected, handle, fixture.deps),
+    ).resolves.toMatchObject({ status: 'imported' })
+
+    expect(fixture.rememberMediaHandle).toHaveBeenCalledOnce()
+    expect(fixture.rememberMediaHandle).toHaveBeenCalledWith(
+      'doc-import',
+      'asset-new',
+      handle,
+    )
   })
 
   test('Keep preserves project FPS and conforms duration from microseconds', async () => {
@@ -227,6 +256,7 @@ describe('mediaImportController', () => {
     expect(fixture.revokeObjectURL).toHaveBeenCalledOnce()
     expect(fixture.revokeObjectURL).toHaveBeenCalledWith('blob:source')
     expect(useMediaImportStore.getState().phase).toBe('idle')
+    expect(fixture.rememberMediaHandle).not.toHaveBeenCalled()
   })
 
   test('Match remains visible but disabled after timeline editing begins', async () => {

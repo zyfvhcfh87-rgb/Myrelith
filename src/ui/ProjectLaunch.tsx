@@ -1,6 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import {
   activateResumedProject,
+  canRememberProjectMedia,
+  chooseProjectMedia,
   connectProjectMedia,
   createNewProject,
   openProjectFile,
@@ -82,7 +84,7 @@ function HomeScreen() {
           onClick={showResumeProject}
         >
           <strong>Resume previous work</strong>
-          <span>Open a .webcut file and reconnect its source media.</span>
+          <span>Open a .webcut file and restore its source media.</span>
         </button>
       </div>
     </LaunchFrame>
@@ -219,7 +221,13 @@ function ResumeProjectScreen() {
   const candidate = useProjectSessionStore((state) => state.candidate)
   const error = useProjectSessionStore((state) => state.error)
   const busy = isBusy(phase)
-  const allReady = candidate?.assets.every((asset) => asset.status === 'ready')
+  const handlePickerAvailable = canRememberProjectMedia()
+  const needsPermission = candidate?.assets.some(
+    (asset) => asset.status === 'remembered',
+  ) ?? false
+  const allRestorable = candidate?.assets.every(
+    (asset) => asset.status !== 'missing',
+  )
     ?? false
 
   return (
@@ -278,26 +286,39 @@ function ResumeProjectScreen() {
                 <p>
                   {candidate.assets.length === 0
                     ? 'This project does not need any source files.'
-                    : 'Select the original video and audio files. You can choose several at once.'}
+                    : needsPermission
+                      ? 'WebCut remembers these files. Open the project once to allow access again.'
+                      : 'Remembered files reconnect automatically. Select only the sources still marked Missing.'}
                 </p>
               </div>
               {candidate.assets.length > 0 && (
-                <label className={`project-button project-button-secondary project-relink-button${busy ? ' is-disabled' : ''}`}>
-                  Reconnect files
-                  <input
-                    className="project-file-input"
-                    aria-label="Reconnect project source media"
-                    type="file"
-                    accept="video/*,audio/*,.mp4,.mov,.mkv,.webm"
-                    multiple
+                handlePickerAvailable ? (
+                  <button
+                    className="project-button project-button-secondary project-relink-button"
+                    type="button"
                     disabled={busy}
-                    onChange={(event) => {
-                      const files = [...(event.target.files ?? [])]
-                      event.target.value = ''
-                      if (files.length > 0) void connectProjectMedia(files)
-                    }}
-                  />
-                </label>
+                    onClick={() => void chooseProjectMedia()}
+                  >
+                    Reconnect files
+                  </button>
+                ) : (
+                  <label className={`project-button project-button-secondary project-relink-button${busy ? ' is-disabled' : ''}`}>
+                    Reconnect files
+                    <input
+                      className="project-file-input"
+                      aria-label="Reconnect project source media"
+                      type="file"
+                      accept="video/*,audio/*,.mp4,.mov,.mkv,.webm"
+                      multiple
+                      disabled={busy}
+                      onChange={(event) => {
+                        const files = [...(event.target.files ?? [])]
+                        event.target.value = ''
+                        if (files.length > 0) void connectProjectMedia(files)
+                      }}
+                    />
+                  </label>
+                )
               )}
             </div>
 
@@ -309,7 +330,13 @@ function ResumeProjectScreen() {
                       <strong>{asset.fileName}</strong>
                       <span>{asset.kind}</span>
                     </div>
-                    <span>{asset.status === 'ready' ? 'Ready' : 'Missing'}</span>
+                    <span>
+                      {asset.status === 'ready'
+                        ? 'Ready'
+                        : asset.status === 'remembered'
+                          ? 'Remembered'
+                          : 'Missing'}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -338,10 +365,10 @@ function ResumeProjectScreen() {
           <button
             className="project-button project-button-primary"
             type="button"
-            disabled={busy || !candidate || !allReady}
+            disabled={busy || !candidate || !allRestorable}
             onClick={() => void activateResumedProject()}
           >
-            Open project
+            {needsPermission ? 'Allow media & open' : 'Open project'}
           </button>
         </div>
       </div>

@@ -38,6 +38,17 @@ import {
 } from './projectPersistenceController'
 import { disposePreview } from './previewController'
 import { disposeTransport } from './transportController'
+import {
+  isLocalMediaPickerCancellation,
+  localMediaHandleRegistry,
+  pickLocalMediaFiles,
+  queryLocalMediaPermission,
+  requestLocalMediaPermission,
+  supportsLocalMediaHandles,
+  type LocalMediaFileHandle,
+  type LocalMediaPermission,
+  type LocalMediaSelection,
+} from './localMediaHandles'
 
 export interface ProjectControllerDeps {
   createDocumentId(): string
@@ -52,6 +63,19 @@ export interface ProjectControllerDeps {
   resumeProjectPersistence(): void
   startProjectPersistence(session: ProjectPersistenceSession): void
   suspendProjectPersistence(): void
+  loadMediaHandle(
+    documentId: string,
+    assetId: string,
+  ): Promise<LocalMediaFileHandle | null>
+  rememberMediaHandle(
+    documentId: string,
+    assetId: string,
+    handle: LocalMediaFileHandle,
+  ): Promise<void>
+  forgetMediaHandle(documentId: string, assetId: string): Promise<void>
+  queryMediaPermission(handle: LocalMediaFileHandle): Promise<LocalMediaPermission>
+  requestMediaPermission(handle: LocalMediaFileHandle): Promise<LocalMediaPermission>
+  pickMediaFiles(multiple: boolean): Promise<LocalMediaSelection[]>
   revokeObjectURL(url: string): void
 }
 
@@ -77,6 +101,18 @@ const realDeps: ProjectControllerDeps = {
   resumeProjectPersistence: resumeProjectPersistenceSession,
   startProjectPersistence: startProjectPersistenceSession,
   suspendProjectPersistence: suspendProjectPersistenceSession,
+  loadMediaHandle: (documentId, assetId) => (
+    localMediaHandleRegistry.load(documentId, assetId)
+  ),
+  rememberMediaHandle: (documentId, assetId, handle) => (
+    localMediaHandleRegistry.remember(documentId, assetId, handle)
+  ),
+  forgetMediaHandle: (documentId, assetId) => (
+    localMediaHandleRegistry.forget(documentId, assetId)
+  ),
+  queryMediaPermission: queryLocalMediaPermission,
+  requestMediaPermission: requestLocalMediaPermission,
+  pickMediaFiles: pickLocalMediaFiles,
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
 }
 
@@ -84,6 +120,7 @@ interface PendingResume {
   project: ProjectFile
   projectFileName: string
   assets: Map<string, MediaAsset>
+  rememberedHandles: Map<string, LocalMediaFileHandle>
 }
 
 let pendingResume: PendingResume | null = null
@@ -123,7 +160,11 @@ function resumeSummary(pending: PendingResume): ResumeProjectSummary {
       id: asset.id,
       fileName: asset.fileName,
       kind: asset.kind,
-      status: pending.assets.has(asset.id) ? 'ready' : 'missing',
+      status: pending.assets.has(asset.id)
+        ? 'ready'
+        : pending.rememberedHandles.has(asset.id)
+          ? 'remembered'
+          : 'missing',
     })),
   }
 }
@@ -313,9 +354,23 @@ export async function openProjectFile(
       project,
       projectFileName: file.name,
       assets: new Map(),
+      rememberedHandles: new Map(),
     }
     pendingResume = pending
-    publishResumeCandidate(pending)
+    if (project.assets.length > 0) {
+      useProjectSessionStore.setState({
+        screen: 'resume',
+        phase: 'relinking',
+        candidate: resumeSummary(pending),
+        error: null,
+      })
+    }
+    const restored = await restoreRememberedMedia(pending, generation, deps)
+    if (restored.status === 'cancelled') return restored
+    publishResumeCandidate(
+      pending,
+      restored.errors.length > 0 ? restored.errors.join(' ') : null,
+    )
     return { status: 'ready' }
   } catch (cause) {
     if (generation !== operationGeneration) return { status: 'cancelled' }
@@ -409,10 +464,153 @@ function relinkedAsset(
   }
 }
 
+type RememberedRestoreResult =
+  | { status: 'ready' }
+  | { status: 'cancelled' }
+  | { status: 'failed'; message: string }
+
+function pendingIsCurrent(
+  pending: PendingResume,
+  generation: number,
+): boolean {
+  return generation === operationGeneration && pending === pendingResume
+}
+
+function forgetStaleHandle(
+  pending: PendingResume,
+  descriptor: PortableAssetDescriptor,
+  deps: ProjectControllerDeps,
+): void {
+  void deps.forgetMediaHandle(
+    pending.project.document.id,
+    descriptor.id,
+  ).catch((cause) => {
+    console.warn('Could not forget a stale remembered media file', cause)
+  })
+}
+
+async function restoreRememberedDescriptor(
+  pending: PendingResume,
+  descriptor: PortableAssetDescriptor,
+  handle: LocalMediaFileHandle,
+  generation: number,
+  deps: ProjectControllerDeps,
+): Promise<RememberedRestoreResult> {
+  let analyzed: MediaAsset | null = null
+  try {
+    const file = await handle.getFile()
+    if (!pendingIsCurrent(pending, generation)) {
+      return { status: 'cancelled' }
+    }
+    analyzed = await deps.inspectMedia(
+      file,
+      pending.project.document.frameRate,
+    )
+    if (!pendingIsCurrent(pending, generation)) {
+      deps.revokeObjectURL(analyzed.objectUrl)
+      return { status: 'cancelled' }
+    }
+    if (
+      !descriptorMatches(descriptor, analyzed)
+      || descriptor.lastModified !== analyzed.lastModified
+    ) {
+      throw new Error('the remembered file changed since this project was saved')
+    }
+    const connected = relinkedAsset(
+      descriptor,
+      analyzed,
+      pending.project.document.frameRate,
+    )
+    pending.assets.set(descriptor.id, connected)
+    pending.rememberedHandles.delete(descriptor.id)
+    analyzed = null // ownership moved to the pending candidate
+    useProjectSessionStore.setState({ candidate: resumeSummary(pending) })
+    return { status: 'ready' }
+  } catch (cause) {
+    if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
+    if (!pendingIsCurrent(pending, generation)) {
+      return { status: 'cancelled' }
+    }
+    pending.rememberedHandles.delete(descriptor.id)
+    forgetStaleHandle(pending, descriptor, deps)
+    return {
+      status: 'failed',
+      message: `Could not reopen "${descriptor.fileName}": ${messageFrom(cause)}. Reconnect it manually.`,
+    }
+  }
+}
+
+async function restoreRememberedMedia(
+  pending: PendingResume,
+  generation: number,
+  deps: ProjectControllerDeps,
+): Promise<
+  | { status: 'ready'; errors: string[] }
+  | { status: 'cancelled' }
+> {
+  const documentId = pending.project.document.id
+  const loaded = await Promise.all(pending.project.assets.map(
+    async (descriptor) => {
+      try {
+        return {
+          descriptor,
+          handle: await deps.loadMediaHandle(documentId, descriptor.id),
+          error: null,
+        }
+      } catch (cause) {
+        return { descriptor, handle: null, error: cause }
+      }
+    },
+  ))
+  if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
+
+  const errors: string[] = []
+  for (const entry of loaded) {
+    if (entry.error) {
+      console.warn('Could not load remembered media', entry.error)
+      continue
+    }
+    if (!entry.handle) continue
+
+    let permission: LocalMediaPermission
+    try {
+      permission = await deps.queryMediaPermission(entry.handle)
+    } catch (cause) {
+      errors.push(
+        `Could not check access to "${entry.descriptor.fileName}": ${messageFrom(cause)}.`,
+      )
+      continue
+    }
+    if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
+    if (permission === 'prompt') {
+      pending.rememberedHandles.set(entry.descriptor.id, entry.handle)
+      useProjectSessionStore.setState({ candidate: resumeSummary(pending) })
+      continue
+    }
+    if (permission !== 'granted') continue
+
+    const restored = await restoreRememberedDescriptor(
+      pending,
+      entry.descriptor,
+      entry.handle,
+      generation,
+      deps,
+    )
+    if (restored.status === 'cancelled') return restored
+    if (restored.status === 'failed') errors.push(restored.message)
+  }
+  return { status: 'ready', errors }
+}
+
+interface ProjectMediaSelection {
+  file: File
+  handle: LocalMediaFileHandle | null
+}
+
 /** Analyze selected source files once and attach only exact relink matches. */
-export async function connectProjectMedia(
-  files: readonly File[],
-  deps: ProjectControllerDeps = realDeps,
+async function connectProjectMediaSelections(
+  selections: readonly ProjectMediaSelection[],
+  deps: ProjectControllerDeps,
 ): Promise<ProjectActionResult> {
   const pending = pendingResume
   if (!pending) {
@@ -420,13 +618,13 @@ export async function connectProjectMedia(
     useProjectSessionStore.setState({ phase: 'error', error: message })
     return { status: 'failed', message }
   }
-  if (files.length === 0) return { status: 'ready' }
+  if (selections.length === 0) return { status: 'ready' }
 
   const generation = operationGeneration
   useProjectSessionStore.setState({ phase: 'relinking', error: null })
   const errors: string[] = []
 
-  for (const file of files) {
+  for (const { file, handle } of selections) {
     let analyzed: MediaAsset | null = null
     try {
       analyzed = await deps.inspectMedia(file, pending.project.document.frameRate)
@@ -441,8 +639,23 @@ export async function connectProjectMedia(
         pending.project.document.frameRate,
       )
       pending.assets.set(descriptor.id, connected)
+      pending.rememberedHandles.delete(descriptor.id)
       analyzed = null // ownership moved to the pending candidate
       useProjectSessionStore.setState({ candidate: resumeSummary(pending) })
+      if (handle) {
+        try {
+          await deps.rememberMediaHandle(
+            pending.project.document.id,
+            descriptor.id,
+            handle,
+          )
+        } catch (cause) {
+          console.warn('Could not remember the reconnected media file', cause)
+        }
+        if (!pendingIsCurrent(pending, generation)) {
+          return { status: 'cancelled' }
+        }
+      }
     } catch (cause) {
       if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
       if (generation !== operationGeneration || pending !== pendingResume) {
@@ -464,7 +677,112 @@ export async function connectProjectMedia(
   return { status: 'ready' }
 }
 
-/** Activate only after every portable asset descriptor has a live source. */
+/** Compatibility fallback for ordinary file inputs without reusable handles. */
+export function connectProjectMedia(
+  files: readonly File[],
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  return connectProjectMediaSelections(
+    files.map((file) => ({ file, handle: null })),
+    deps,
+  )
+}
+
+export function canRememberProjectMedia(): boolean {
+  return supportsLocalMediaHandles()
+}
+
+/** Pick reusable handles and seed future automatic resumes after validation. */
+export async function chooseProjectMedia(
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  const pending = pendingResume
+  if (!pending) {
+    const message = 'Choose a valid .webcut project before reconnecting media'
+    useProjectSessionStore.setState({ phase: 'error', error: message })
+    return { status: 'failed', message }
+  }
+  try {
+    const selections = await deps.pickMediaFiles(true)
+    return connectProjectMediaSelections(
+      selections.map(({ file, handle }) => ({ file, handle })),
+      deps,
+    )
+  } catch (cause) {
+    if (isLocalMediaPickerCancellation(cause)) return { status: 'ready' }
+    const message = `Could not choose source media: ${messageFrom(cause)}`
+    publishResumeCandidate(pending, message)
+    return { status: 'failed', message }
+  }
+}
+
+interface PermissionRequest {
+  descriptor: PortableAssetDescriptor
+  handle: LocalMediaFileHandle
+  permission: Promise<LocalMediaPermission>
+}
+
+async function restoreRequestedMediaAndActivate(
+  pending: PendingResume,
+  generation: number,
+  requests: readonly PermissionRequest[],
+  deps: ProjectControllerDeps,
+): Promise<ProjectActionResult> {
+  const permissions = await Promise.allSettled(
+    requests.map((request) => request.permission),
+  )
+  if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
+
+  const errors: string[] = []
+  for (let index = 0; index < requests.length; index++) {
+    const request = requests[index]
+    const permission = permissions[index]
+    if (permission.status === 'rejected') {
+      pending.rememberedHandles.delete(request.descriptor.id)
+      errors.push(
+        `Could not request access to "${request.descriptor.fileName}": ${messageFrom(permission.reason)}.`,
+      )
+      continue
+    }
+    if (permission.value !== 'granted') {
+      pending.rememberedHandles.delete(request.descriptor.id)
+      errors.push(`Access to "${request.descriptor.fileName}" was not granted.`)
+      continue
+    }
+    const restored = await restoreRememberedDescriptor(
+      pending,
+      request.descriptor,
+      request.handle,
+      generation,
+      deps,
+    )
+    if (restored.status === 'cancelled') return restored
+    if (restored.status === 'failed') errors.push(restored.message)
+  }
+
+  if (errors.length > 0) {
+    const message = errors.join(' ')
+    publishResumeCandidate(pending, message)
+    return { status: 'failed', message }
+  }
+  const missing = pending.project.assets.filter(
+    (descriptor) => !pending.assets.has(descriptor.id),
+  )
+  if (missing.length > 0) {
+    const message = `Reconnect ${missing.length} missing source${missing.length === 1 ? '' : 's'} before opening`
+    publishResumeCandidate(pending, message)
+    return { status: 'failed', message }
+  }
+  return activateProject(
+    pending.project.document,
+    [...pending.assets.values()],
+    pending.projectFileName,
+    generation,
+    deps,
+  )
+}
+
+/** Activate after ready sources, requesting remembered permission from this click. */
 export function activateResumedProject(
   deps: ProjectControllerDeps = realDeps,
 ): Promise<ProjectActionResult> {
@@ -475,18 +793,48 @@ export function activateResumedProject(
     return Promise.resolve({ status: 'failed', message })
   }
   const missing = pending.project.assets.filter(
-    (descriptor) => !pending.assets.has(descriptor.id),
+    (descriptor) => (
+      !pending.assets.has(descriptor.id)
+      && !pending.rememberedHandles.has(descriptor.id)
+    ),
   )
   if (missing.length > 0) {
     const message = `Reconnect ${missing.length} missing source${missing.length === 1 ? '' : 's'} before opening`
     publishResumeCandidate(pending, message)
     return Promise.resolve({ status: 'failed', message })
   }
-  return activateProject(
-    pending.project.document,
-    [...pending.assets.values()],
-    pending.projectFileName,
-    operationGeneration,
+
+  const generation = operationGeneration
+  const remembered = pending.project.assets.flatMap((descriptor) => {
+    const handle = pending.rememberedHandles.get(descriptor.id)
+    return handle ? [{ descriptor, handle }] : []
+  })
+  if (remembered.length === 0) {
+    return activateProject(
+      pending.project.document,
+      [...pending.assets.values()],
+      pending.projectFileName,
+      generation,
+      deps,
+    )
+  }
+
+  useProjectSessionStore.setState({ phase: 'relinking', error: null })
+  // Start every permission request synchronously inside the Open click. Awaiting
+  // first would lose the browser's transient user activation.
+  const requests: PermissionRequest[] = remembered.map(({ descriptor, handle }) => {
+    let permission: Promise<LocalMediaPermission>
+    try {
+      permission = deps.requestMediaPermission(handle)
+    } catch (cause) {
+      permission = Promise.reject(cause)
+    }
+    return { descriptor, handle, permission }
+  })
+  return restoreRequestedMediaAndActivate(
+    pending,
+    generation,
+    requests,
     deps,
   )
 }

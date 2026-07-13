@@ -21,6 +21,13 @@ import {
   useMediaImportStore,
 } from '../state/mediaImportStore'
 import { useMediaStore } from '../state/mediaStore'
+import {
+  isLocalMediaPickerCancellation,
+  localMediaHandleRegistry,
+  pickLocalMediaFiles,
+  supportsLocalMediaHandles,
+  type LocalMediaFileHandle,
+} from './localMediaHandles'
 import { inspectMediaFile } from './mediaInspection'
 
 export type MediaImportDecision =
@@ -41,6 +48,11 @@ export interface MediaImportDeps {
   hasAsset(assetId: string): boolean
   addAsset(asset: MediaAsset): boolean
   reconformAssets(rate: FrameRate): void
+  rememberMediaHandle(
+    documentId: string,
+    assetId: string,
+    handle: LocalMediaFileHandle,
+  ): Promise<void>
   revokeObjectURL(url: string): void
 }
 
@@ -51,6 +63,9 @@ const realDeps: MediaImportDeps = {
   hasAsset: (assetId) => useMediaStore.getState().assets.has(assetId),
   addAsset: (asset) => useMediaStore.getState().addAsset(asset),
   reconformAssets: (rate) => useMediaStore.getState().reconformAssets(rate),
+  rememberMediaHandle: (documentId, assetId, handle) => (
+    localMediaHandleRegistry.remember(documentId, assetId, handle)
+  ),
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
 }
 
@@ -105,9 +120,10 @@ function documentStillMatches(
 }
 
 /** Analyze and, after any required decision, commit one selected file. */
-export async function importMedia(
+async function importSelectedMedia(
   file: File,
-  deps: MediaImportDeps = realDeps,
+  handle: LocalMediaFileHandle | null,
+  deps: MediaImportDeps,
 ): Promise<MediaImportResult> {
   if (activeImport) return { status: 'busy' }
 
@@ -219,6 +235,20 @@ export async function importMedia(
       deps.reconformAssets(finalRate)
     }
 
+    if (handle) {
+      try {
+        await deps.rememberMediaHandle(
+          commitDocument.id,
+          committedAsset.id,
+          handle,
+        )
+      } catch (cause) {
+        // The import already committed successfully. Remembering its browser
+        // capability is a local convenience and must never roll media back.
+        console.warn('Could not remember the imported media file', cause)
+      }
+    }
+
     setUi({ ...INITIAL_MEDIA_IMPORT_STATE })
     return { status: 'imported', assetId: committedAsset.id }
   } catch (cause) {
@@ -242,6 +272,58 @@ export async function importMedia(
       activeImport = null
     }
   }
+}
+
+/** Compatibility path for browsers whose file inputs cannot return handles. */
+export function importMedia(
+  file: File,
+  deps: MediaImportDeps = realDeps,
+): Promise<MediaImportResult> {
+  return importSelectedMedia(file, null, deps)
+}
+
+/** Handle-aware path used by Chromium so later project resumes can reconnect. */
+export function importMediaFromHandle(
+  file: File,
+  handle: LocalMediaFileHandle,
+  deps: MediaImportDeps = realDeps,
+): Promise<MediaImportResult> {
+  return importSelectedMedia(file, handle, deps)
+}
+
+export function canRememberImportedMedia(): boolean {
+  return supportsLocalMediaHandles()
+}
+
+/** Open the picker directly from the Import click, then run the one-analysis path. */
+export async function chooseMediaForImport(
+  deps: MediaImportDeps = realDeps,
+): Promise<MediaImportResult> {
+  if (activeImport) return { status: 'busy' }
+  try {
+    const [selection] = await pickLocalMediaFiles(false)
+    if (!selection) return { status: 'cancelled' }
+    return importMediaFromHandle(selection.file, selection.handle, deps)
+  } catch (cause) {
+    if (isLocalMediaPickerCancellation(cause)) return { status: 'cancelled' }
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    const message = `Could not choose media: ${detail}`
+    useMediaImportStore.setState({
+      phase: 'error',
+      fileName: null,
+      prompt: null,
+      error: message,
+    })
+    return { status: 'failed', message }
+  }
+}
+
+/** Forget a removed asset's local capability without affecting store removal. */
+export function forgetImportedMediaHandle(assetId: string): void {
+  const documentId = useDocumentStore.getState().doc.id
+  void localMediaHandleRegistry.forget(documentId, assetId).catch((cause) => {
+    console.warn('Could not forget the removed media file', cause)
+  })
 }
 
 /** Resolve the visible FPS prompt. Invalid/disabled actions are ignored. */

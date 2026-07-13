@@ -45,8 +45,9 @@ and the open list below.
 | Post-MVP project system — Slice 2 media import | ✅ done | one analysis per file; explicit Keep/Match/Cancel; complete-asset commits; 745 tests + Chrome gate |
 | Post-MVP project system — Slice 3 sessions/UI | ✅ done | atomic Create/Resume/relink; 764 tests; real 4K60 create + 1440p60 media-resume Chrome gate |
 | Post-MVP project system — Slice 4 persistence | ✅ done | portable Save/Save As, revision-safe live save, quiesced exit; 794 tests + Chrome toolbar/Resume/layout gate |
+| Post-MVP project system — remembered media follow-up | ✅ done | origin-local file handles + permission-aware automatic relink; 806 tests + Chrome picker-entry smoke |
 
-794 tests green · `npm run build` and `npm run lint` clean · every phase
+806 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -168,6 +169,17 @@ work, and revokes outgoing media before showing Home. A failed exit re-enables
 the retained live-save path. Media sources still used by clips can no longer
 be removed into an unsavable document.
 
+The remembered-media follow-up removes the repeated source picker on the same
+browser/origin. Chrome imports and exact manual relinks now persist opaque
+`FileSystemFileHandle`s in an IndexedDB sidecar keyed by document + asset id;
+raw paths and handles never enter `.webcut`, Zustand, or domain data. Resume
+queries each remembered handle: a retained read grant analyzes and reconnects
+the exact descriptor automatically, while a `prompt` state becomes one
+**Allow media & open** click whose permission requests start before the first
+await. Denied, missing, moved, changed, unsupported-browser, and cleared-site-
+data cases stay on the existing manual relink fallback. Old projects seed the
+sidecar after their next successful handle-aware relink.
+
 **Next: Slice 5 — recent projects and crash recovery.** Add a local recent-file
 surface where browser capabilities allow it, plus recovery snapshots that are
 separate from the user-owned `.webcut` live-save path.
@@ -175,8 +187,10 @@ separate from the user-owned `.webcut` live-save path.
 ## What works today (user-visible)
 
 Run `npm run dev` → project Home. Create a project with an explicit canvas,
-frame rate, and audio rate, or choose a `.webcut`, reconnect every required
-source, review its profile, and open it only when complete. In the editor,
+frame rate, and audio rate, or choose a `.webcut`. Remembered sources with a
+retained grant reconnect automatically; a returned permission prompt needs one
+Allow-and-open click, and only genuinely missing sources need manual relink.
+Review the profile and open it only when complete. In the editor,
 the first Save chooses a writable file; Save As chooses another; both turn on
 live save. The toolbar shows dirty/saving/saved/error state, reload is guarded
 only while dirty, and returning to Projects confirms before safely closing the
@@ -277,10 +291,13 @@ the transform fields only for video-lane clips.
   active-project labels, operation phase, and relink status only; no Files,
   Blobs, URLs, parsed candidates, or browser handles.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
-  candidates off-store, matches relinked media exactly, generation-cancels late
-  work, and performs the awaited outgoing-session teardown before committing a
-  complete new document/media session. `src/ui/ProjectLaunch.tsx` is the Home,
-  New Project, and Resume UI facade.
+  candidates off-store, restores granted local handles, requests remembered
+  permission only from the Open click, matches relinked media exactly,
+  generation-cancels late work, and performs the awaited outgoing-session
+  teardown before committing a complete new document/media session.
+  `src/app/localMediaHandles.ts` owns picker types plus the origin-local
+  IndexedDB handle registry. `src/ui/ProjectLaunch.tsx` is the Home, New
+  Project, and Resume UI facade.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
@@ -532,11 +549,13 @@ the transform fields only for video-lane clips.
 
 ## Open items (beyond PLAN.md phases)
 
-- Slice 4 completes portable Save/Save As/Resume and live save for a writable
-  handle during the current browser session. A project resumed through the
-  ordinary file input is read-only until one Save or Save As grant.
-  Recent-project discovery and crash-recovery snapshots remain for the next
-  issue #4 slice; do not describe live save as crash recovery.
+- Slice 4 plus its remembered-media follow-up complete portable Save/Save As,
+  permission-aware automatic source reconnection, manual fallback, and live
+  save after a writable grant. The media sidecar is origin-local convenience,
+  not portable bundled media. A resumed project file is read-only until one
+  Save or Save As grant. Recent-project discovery and crash-recovery snapshots
+  remain for the next issue #4 slice; do not describe live save or remembered
+  media as crash recovery.
 - A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
   domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
   (unlink is one-way today, undo aside) and linked-pair awareness in a

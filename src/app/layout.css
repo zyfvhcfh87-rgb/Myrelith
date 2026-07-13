@@ -468,6 +468,10 @@
   color: #78c690;
 }
 
+.project-source-list li[data-status='remembered'] > span {
+  color: #78a9e8;
+}
+
 .project-launch-error,
 .project-launch-status {
   margin: 0;
@@ -727,6 +731,7 @@
   min-height: 28px;
   padding: 0 10px;
   color: #eaf2ff;
+  font-family: inherit;
   font-size: 11px;
   font-weight: 600;
   background: #315b96;
@@ -739,12 +744,17 @@
     border-color 120ms ease;
 }
 
-.media-import:hover {
+.media-import:hover:not(:disabled) {
   background: #3a68a7;
   border-color: #5a8bc9;
 }
 
 .media-import:focus-within {
+  outline: 2px solid #76a8ea;
+  outline-offset: 2px;
+}
+
+.media-import:focus-visible {
   outline: 2px solid #76a8ea;
   outline-offset: 2px;
 }
@@ -762,6 +772,11 @@
 }
 
 .media-import:has(.media-import-input:disabled) {
+  cursor: progress;
+  opacity: 0.55;
+}
+
+.media-import:disabled {
   cursor: progress;
   opacity: 0.55;
 }

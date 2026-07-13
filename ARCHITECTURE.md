@@ -134,8 +134,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `ProjectSessionState` — `src/state/projectSessionStore.ts`: serializable
   launch/editor screen, operation phase, active-project labels, a small relink
   summary, and the serializable dirty/save-status projection. Parsed projects,
-  selected Files, MediaAssets, writable file handles, timers, and all object
-  URLs stay controller-local; they never enter this store.
+  selected Files, MediaAssets, readable/writable file handles, timers, and all
+  object URLs stay in app-layer controllers/adapters; they never enter this
+  store.
 - Project persistence — `src/app/projectPersistenceController.ts`: builds a
   validated portable snapshot from `documentStore` + `mediaStore`, owns the
   current writable handle, debounces live saves, serializes overlapping edits
@@ -146,6 +147,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   never marks dirty work as safely persisted. Project replacement first pauses
   this controller, cancels its timer, and drains any open write before media or
   session state can be released.
+- Local media reconnection — `src/app/localMediaHandles.ts` stores opaque
+  `FileSystemFileHandle` capabilities in an origin-local IndexedDB sidecar,
+  keyed by stable document + asset ids. Paths and handles never enter domain
+  data or `.webcut` JSON. Resume may query permission silently; prompting must
+  originate in a user click. Missing, denied, moved, changed, or unsupported
+  sources fall back to the exact-metadata manual relink path.
 - Worker messages — `src/workers/decode-protocol.ts` (canonical):
   `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
   (`configured`/`frameReady`/`error`). Types-only file; BOTH the worker and

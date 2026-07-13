@@ -9,7 +9,12 @@
  * draggable onto the timeline.
  */
 
-import { importMedia } from '../app/mediaImportController'
+import {
+  canRememberImportedMedia,
+  chooseMediaForImport,
+  forgetImportedMediaHandle,
+  importMedia,
+} from '../app/mediaImportController'
 import type { FrameRate, MediaAsset } from '../domain/schema'
 import { formatTimecode } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
@@ -50,27 +55,40 @@ export default function MediaPool() {
   const visuals = useMediaStore((state) => state.visuals)
   const removeAsset = useMediaStore((state) => state.removeAsset)
   const importBusy = useMediaImportStore((state) => state.phase !== 'idle')
+  const handlePickerAvailable = canRememberImportedMedia()
 
   return (
     <div className="media-pool">
       <div className="media-pool-header">
         <h2 className="media-pool-title">Media</h2>
-        <label className="media-import">
-          <span aria-hidden="true">+</span>
-          <span>Import</span>
-          <input
-            className="media-import-input"
-            aria-label="Import media"
-            type="file"
-            accept="video/*,audio/*,.mp4,.mov,.mkv,.webm"
+        {handlePickerAvailable ? (
+          <button
+            className="media-import"
+            type="button"
             disabled={importBusy}
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              event.target.value = ''
-              if (file) void importMedia(file)
-            }}
-          />
-        </label>
+            onClick={() => void chooseMediaForImport()}
+          >
+            <span aria-hidden="true">+</span>
+            <span>Import</span>
+          </button>
+        ) : (
+          <label className="media-import">
+            <span aria-hidden="true">+</span>
+            <span>Import</span>
+            <input
+              className="media-import-input"
+              aria-label="Import media"
+              type="file"
+              accept="video/*,audio/*,.mp4,.mov,.mkv,.webm"
+              disabled={importBusy}
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                event.target.value = ''
+                if (file) void importMedia(file)
+              }}
+            />
+          </label>
+        )}
       </div>
 
       {assets.size === 0 ? (
@@ -143,6 +161,7 @@ export default function MediaPool() {
                       )
                       return
                     }
+                    forgetImportedMediaHandle(asset.id)
                     removeAsset(asset.id)
                   }}
                 >

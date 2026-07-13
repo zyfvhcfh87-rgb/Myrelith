@@ -8,7 +8,12 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { importMedia } from '../app/mediaImportController'
+import {
+  canRememberImportedMedia,
+  chooseMediaForImport,
+  forgetImportedMediaHandle,
+  importMedia,
+} from '../app/mediaImportController'
 import type { MediaAsset } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { INITIAL_MEDIA_IMPORT_STATE, useMediaImportStore } from '../state/mediaImportStore'
@@ -17,6 +22,12 @@ import { useMediaStore } from '../state/mediaStore'
 import MediaPool from './MediaPool'
 
 vi.mock('../app/mediaImportController', () => ({
+  canRememberImportedMedia: vi.fn(() => false),
+  chooseMediaForImport: vi.fn(async () => ({
+    status: 'imported',
+    assetId: 'mock',
+  })),
+  forgetImportedMediaHandle: vi.fn(),
   importMedia: vi.fn(async () => ({ status: 'imported', assetId: 'mock' })),
   cancelMediaImport: vi.fn(),
   dismissMediaImportError: vi.fn(),
@@ -64,6 +75,9 @@ beforeEach(() => {
   useMediaStore.setState({ assets: new Map(), visuals: new Map() })
   useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
   vi.mocked(importMedia).mockClear()
+  vi.mocked(chooseMediaForImport).mockClear()
+  vi.mocked(forgetImportedMediaHandle).mockClear()
+  vi.mocked(canRememberImportedMedia).mockReturnValue(false)
   useDocumentStore.getState().setDoc({
     ...useDocumentStore.getState().doc,
     frameRate: { num: 30, den: 1 },
@@ -82,6 +96,16 @@ describe('MediaPool presentation', () => {
     expect(importMedia).toHaveBeenCalledOnce()
     expect(importMedia).toHaveBeenCalledWith(file)
     expect(useMediaStore.getState().assets.size).toBe(0)
+  })
+
+  test('supporting browsers import through the reusable-handle picker', () => {
+    vi.mocked(canRememberImportedMedia).mockReturnValue(true)
+    render(<MediaPool />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }))
+
+    expect(chooseMediaForImport).toHaveBeenCalledOnce()
+    expect(screen.queryByLabelText('Import media')).not.toBeInTheDocument()
   })
 
   test('shows a placeholder while preserving ready metadata and drag state', () => {
@@ -149,6 +173,7 @@ describe('MediaPool presentation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'remove beach.mp4' }))
 
+    expect(forgetImportedMediaHandle).toHaveBeenCalledWith('asset-9')
     expect(screen.queryByTitle('beach.mp4')).not.toBeInTheDocument()
     expect(useMediaStore.getState().assets.size).toBe(0)
   })
