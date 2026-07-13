@@ -49,4 +49,22 @@ describe('App shell', () => {
       expect(shell?.querySelector(`.${area}`)).not.toBeNull()
     }
   })
+
+  test('makes every editing surface inert while the project is closing', () => {
+    useProjectSessionStore.setState({ screen: 'editor', phase: 'closing' })
+    const { container } = render(<App />)
+
+    const shell = container.querySelector('.app-shell')
+    expect(shell).toHaveAttribute('aria-busy', 'true')
+    for (const area of [
+      'area-media-pool',
+      'area-preview',
+      'area-inspector',
+      'area-transport',
+      'area-timeline',
+    ]) {
+      expect(shell?.querySelector(`.${area}`)).toHaveAttribute('inert')
+    }
+    expect(shell?.querySelector('.area-toolbar')).not.toHaveAttribute('inert')
+  })
 })

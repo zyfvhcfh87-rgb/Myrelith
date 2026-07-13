@@ -41,6 +41,14 @@ npm run dev
 Open [http://localhost:5173](http://localhost:5173). WebCut opens on the project
 home, where you can create a project or choose a portable `.webcut` file.
 
+Inside the editor, the first **Save** asks where to store the portable
+`.webcut`; **Save As** chooses a different project file. After that one
+explicit browser permission, WebCut live-saves later timeline and media-pool
+changes to the writable file. Browsers without the writable-file picker can
+download a copy, but WebCut keeps the work marked unsaved because a download
+cannot be verified. Unsaved work is protected before reload or a return to the
+project Home.
+
 ## Browser support
 
 Desktop Chrome is the verified development target. Playback and export require
@@ -51,9 +59,10 @@ unverified.
 ## Current limitations
 
 - Export uses one fixed profile: MP4 with 8 Mbps H.264/AVC video and stereo AAC.
-- Portable project validation, loading, and media relinking are available, but
-  Save, Save As, recent projects, and crash-recovery/autosave are not yet in
-  the UI. Work created in the editor still lives in memory for this slice.
+- Portable Save, Save As, Resume, validation, and media relinking are
+  available. A project resumed through the browser file input needs one
+  **Save** or **Save As** grant before live save can update a file in place.
+  Recent projects and crash-recovery snapshots are not implemented yet.
 - Crossfades are visual-only, so audio still hard-cuts. Dissolves involving
   transformed or transparent footage are not yet mathematically exact.
 - The import UI accepts video and audio files. Images are not previewable.

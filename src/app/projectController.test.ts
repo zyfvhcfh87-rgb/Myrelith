@@ -14,12 +14,16 @@ import {
 import type { MediaAsset } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
-import { useProjectSessionStore } from '../state/projectSessionStore'
+import {
+  INITIAL_PROJECT_SESSION_STATE,
+  useProjectSessionStore,
+} from '../state/projectSessionStore'
 import { useTransportStore } from '../state/transportStore'
 import {
   activateResumedProject,
   connectProjectMedia,
   createNewProject,
+  leaveActiveProject,
   openProjectFile,
   resetProjectController,
   returnToProjectHome,
@@ -98,6 +102,10 @@ function makeDeps(
     disposePreview: vi.fn(),
     disposeMediaVisuals: vi.fn(),
     resetMediaImport: vi.fn(),
+    pauseProjectPersistence: vi.fn(async () => undefined),
+    resumeProjectPersistence: vi.fn(),
+    startProjectPersistence: vi.fn(),
+    suspendProjectPersistence: vi.fn(),
     revokeObjectURL: vi.fn((url) => URL.revokeObjectURL(url)),
     ...overrides,
   }
@@ -195,6 +203,13 @@ describe('new-project activation', () => {
       activeProjectName: 'Cinema',
       activeProjectFileName: null,
     })
+    expect(deps.suspendProjectPersistence).toHaveBeenCalledOnce()
+    expect(deps.pauseProjectPersistence).toHaveBeenCalledOnce()
+    expect(deps.resumeProjectPersistence).not.toHaveBeenCalled()
+    expect(deps.startProjectPersistence).toHaveBeenCalledWith({
+      fileName: null,
+      persisted: false,
+    })
   })
 
   test('invalid settings preserve the current document and never start cleanup', async () => {
@@ -211,6 +226,146 @@ describe('new-project activation', () => {
     expect(useProjectSessionStore.getState()).toMatchObject({
       screen: 'new-project',
       phase: 'error',
+    })
+  })
+})
+
+describe('active-project cleanup', () => {
+  test('waits for Blob consumers before revoking media and returning Home', async () => {
+    const asset = makeAsset({
+      id: 'asset-active',
+      objectUrl: 'blob:active-source',
+    })
+    useMediaStore.getState().addAsset(asset)
+    useMediaStore.getState().setAssetVisuals(asset.id, {
+      filmstrip: {
+        url: 'blob:active-strip',
+        tiles: 2,
+        tileWidth: 80,
+        tileHeight: 45,
+      },
+      waveform: null,
+    })
+    useTransportStore.setState({ isPlaying: true, playheadFrame: 42 })
+    useProjectSessionStore.setState({
+      screen: 'editor',
+      activeProjectName: 'Leaving safely',
+      hasUnsavedChanges: true,
+    })
+
+    const persistenceGate = deferred<void>()
+    const transportGate = deferred<void>()
+    const deps = makeDeps({
+      pauseProjectPersistence: vi.fn(() => persistenceGate.promise),
+      disposeTransport: vi.fn(() => transportGate.promise),
+    })
+
+    const leaving = leaveActiveProject(deps)
+    await flush()
+    expect(deps.pauseProjectPersistence).toHaveBeenCalledOnce()
+    expect(useProjectSessionStore.getState().phase).toBe('closing')
+    expect(deps.disposeExport).not.toHaveBeenCalled()
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+
+    persistenceGate.resolve()
+    await flush()
+    expect(deps.disposeExport).toHaveBeenCalledOnce()
+    expect(deps.disposeTransport).toHaveBeenCalledOnce()
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+    expect(deps.suspendProjectPersistence).not.toHaveBeenCalled()
+
+    transportGate.resolve()
+    await expect(leaving).resolves.toEqual({ status: 'ready' })
+
+    expect(deps.disposePreview).toHaveBeenCalledOnce()
+    expect(deps.disposeMediaVisuals).toHaveBeenCalledOnce()
+    expect(deps.resetMediaImport).toHaveBeenCalledOnce()
+    expect(deps.suspendProjectPersistence).toHaveBeenCalledOnce()
+    expect(deps.resumeProjectPersistence).not.toHaveBeenCalled()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:active-source')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:active-strip')
+    expect(useMediaStore.getState().assets.size).toBe(0)
+    expect(useTransportStore.getState()).toMatchObject({
+      isPlaying: false,
+      playheadFrame: 0,
+    })
+    expect(useProjectSessionStore.getState()).toEqual(
+      INITIAL_PROJECT_SESSION_STATE,
+    )
+  })
+
+  test('a late leave cannot clear a newer editor session', async () => {
+    const oldAsset = makeAsset({
+      id: 'asset-old-session',
+      objectUrl: 'blob:old-session',
+    })
+    useMediaStore.getState().addAsset(oldAsset)
+    useProjectSessionStore.setState({ screen: 'editor' })
+
+    const leaveGate = deferred<void>()
+    const leaveDeps = makeDeps({
+      disposeTransport: vi.fn(() => leaveGate.promise),
+    })
+    const leaving = leaveActiveProject(leaveDeps)
+    await flush()
+
+    const createDeps = makeDeps({ createDocumentId: vi.fn(() => 'doc-newer') })
+    await expect(createNewProject(
+      'Newer project',
+      DEFAULT_PROJECT_SETTINGS,
+      createDeps,
+    )).resolves.toEqual({ status: 'activated' })
+    const newerAsset = makeAsset({
+      id: 'asset-new-session',
+      objectUrl: 'blob:new-session',
+    })
+    useMediaStore.getState().addAsset(newerAsset)
+
+    leaveGate.resolve()
+    await expect(leaving).resolves.toEqual({ status: 'cancelled' })
+
+    expect(leaveDeps.disposePreview).not.toHaveBeenCalled()
+    expect(leaveDeps.suspendProjectPersistence).not.toHaveBeenCalled()
+    expect(useDocumentStore.getState().doc).toMatchObject({
+      id: 'doc-newer',
+      name: 'Newer project',
+    })
+    expect(useMediaStore.getState().assets.get(newerAsset.id)).toBe(newerAsset)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:new-session')
+    expect(useProjectSessionStore.getState().screen).toBe('editor')
+  })
+
+  test('a failed consumer drain keeps the active editor and its media intact', async () => {
+    const asset = makeAsset({
+      id: 'asset-still-active',
+      objectUrl: 'blob:still-active',
+    })
+    useMediaStore.getState().addAsset(asset)
+    useProjectSessionStore.setState({
+      screen: 'editor',
+      activeProjectName: 'Still active',
+    })
+    const deps = makeDeps({
+      disposeTransport: vi.fn(async () => {
+        throw new Error('audio drain failed')
+      }),
+    })
+
+    await expect(leaveActiveProject(deps)).resolves.toEqual({
+      status: 'failed',
+      message: 'Could not return to Projects: audio drain failed',
+    })
+
+    expect(deps.disposePreview).not.toHaveBeenCalled()
+    expect(deps.suspendProjectPersistence).not.toHaveBeenCalled()
+    expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:still-active')
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      screen: 'editor',
+      phase: 'error',
+      activeProjectName: 'Still active',
+      error: 'Could not return to Projects: audio drain failed',
     })
   })
 })
@@ -257,6 +412,10 @@ describe('portable project resume', () => {
     expect(useProjectSessionStore.getState()).toMatchObject({
       screen: 'editor',
       activeProjectFileName: 'empty.webcut',
+    })
+    expect(deps.startProjectPersistence).toHaveBeenCalledWith({
+      fileName: 'empty.webcut',
+      persisted: true,
     })
   })
 

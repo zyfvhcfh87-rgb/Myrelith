@@ -152,4 +152,50 @@ describe('MediaPool presentation', () => {
     expect(screen.queryByTitle('beach.mp4')).not.toBeInTheDocument()
     expect(useMediaStore.getState().assets.size).toBe(0)
   })
+
+  test('refuses to remove a source that is still used by a timeline clip', () => {
+    const asset = makeAsset()
+    seedAsset(asset)
+    const document = useDocumentStore.getState().doc
+    const videoTrack = document.tracks.find((track) => track.kind === 'video')
+    if (!videoTrack) throw new Error('video track fixture missing')
+    useDocumentStore.getState().setDoc({
+      ...document,
+      tracks: document.tracks.map((track) => (
+        track.id === videoTrack.id
+          ? {
+              ...track,
+              clips: [{
+                id: 'clip-used-source',
+                assetId: asset.id,
+                name: asset.fileName,
+                sourceRange: { startFrame: 0, durationFrames: 30 },
+                timelineRange: { startFrame: 0, durationFrames: 30 },
+                transform: {
+                  x: 0,
+                  y: 0,
+                  scaleX: 1,
+                  scaleY: 1,
+                  rotation: 0,
+                  anchorX: 0.5,
+                  anchorY: 0.5,
+                },
+                opacity: 1,
+                volume: 1,
+                effects: [],
+              }],
+            }
+          : track
+      )),
+    })
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined)
+    render(<MediaPool />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'remove beach.mp4' }))
+
+    expect(alert).toHaveBeenCalledWith(
+      'Remove this media\'s clips from the timeline before removing its source.',
+    )
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+  })
 })

@@ -12,6 +12,7 @@ import type {
   Clip,
   Effect,
   FrameRate,
+  MediaAsset,
   TextProps,
   TimelineDoc,
   Track,
@@ -770,6 +771,39 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
       }))
       .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)),
   }
+}
+
+/**
+ * Build one isolated portable snapshot from the active editor session.
+ * Session-only URLs, decoder configuration, conformed frame counts, visuals,
+ * and undo history are intentionally absent from the descriptor allowlist.
+ */
+export function createProjectFileSnapshot(
+  document: TimelineDoc,
+  assets: Iterable<MediaAsset>,
+): ProjectFile {
+  const project: ProjectFile = {
+    format: PROJECT_FILE_FORMAT,
+    formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
+    document,
+    assets: Array.from(assets, (asset) => ({
+      id: asset.id,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+      size: asset.size,
+      lastModified: asset.lastModified,
+      kind: asset.kind,
+      durationMicroseconds: asset.durationMicroseconds,
+      nativeFrameRate: asset.frameRate === null ? null : { ...asset.frameRate },
+      width: asset.width,
+      height: asset.height,
+      hasAudio: asset.hasAudio,
+      audioSampleRate: asset.audioSampleRate,
+      audioChannels: asset.audioChannels,
+    })),
+  }
+  validateProjectFile(project)
+  return portableProjectSnapshot(project)
 }
 
 interface SerializationBudget {

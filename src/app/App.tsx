@@ -2,9 +2,9 @@
  * app/App.tsx — The editor shell. Phase 3.1.
  *
  * Pure layout: a CSS grid (layout.css) with one named area per panel.
- * Every panel is its own component from ui/; the shell holds NO state and
- * subscribes to NO stores — re-renders here would cascade everywhere, and
- * the Phase 3 gate requires scrubbing to re-render Playhead/Preview only.
+ * Every panel is its own component from ui/; the shell holds no editing or
+ * playhead subscriptions. It receives only the project-closing barrier, so
+ * ordinary scrubbing still re-renders Playhead/Preview only.
  * (useUndoRedoShortcuts only attaches a window listener — no subscription,
  * no state, no re-renders.)
  */
@@ -24,35 +24,47 @@ import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
 import { useEditShortcuts } from './useEditShortcuts'
 import { initMediaVisuals } from './mediaVisualsController'
 
-function EditorShell() {
+interface EditorShellProps {
+  closing: boolean
+}
+
+function EditorShell({ closing }: EditorShellProps) {
   useUndoRedoShortcuts()
   useEditShortcuts()
   // Filmstrip/waveform generation for imported assets — idempotent init,
-  // no subscriptions in App itself (render-inertness preserved).
+  // no media-store subscriptions in the shell (render-inertness preserved).
   useEffect(() => {
     initMediaVisuals()
   }, [])
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      data-closing={closing ? 'true' : undefined}
+      aria-busy={closing}
+    >
       <header className="area-toolbar">
         <Toolbar />
       </header>
-      <aside className="area-media-pool">
+      <aside className="area-media-pool" inert={closing}>
         <MediaPool />
       </aside>
-      <main className="area-preview">
+      <main className="area-preview" inert={closing}>
         <Preview />
       </main>
-      <aside className="area-inspector">
+      <aside className="area-inspector" inert={closing}>
         <Inspector />
       </aside>
-      <section className="area-transport">
+      <section className="area-transport" inert={closing}>
         <ToolButtons />
         <TransportBar />
       </section>
       {/* data-timeline-scroll: the Ruler virtualizes its ticks against
           this scroll container (see ui/timeline/Ruler.tsx). */}
-      <section className="area-timeline" data-timeline-scroll>
+      <section
+        className="area-timeline"
+        data-timeline-scroll
+        inert={closing}
+      >
         <Timeline />
       </section>
     </div>
@@ -63,5 +75,6 @@ export default function App() {
   const editorActive = useProjectSessionStore(
     (state) => state.screen === 'editor',
   )
-  return editorActive ? <EditorShell /> : <ProjectLaunch />
+  const closing = useProjectSessionStore((state) => state.phase === 'closing')
+  return editorActive ? <EditorShell closing={closing} /> : <ProjectLaunch />
 }

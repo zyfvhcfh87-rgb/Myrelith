@@ -44,8 +44,9 @@ and the open list below.
 | Post-MVP project system — Slice 1 foundations | ✅ done | presets + portable `.webcut`; Chrome: 2.000s 60fps source stays 2.000s at 30fps, clean console |
 | Post-MVP project system — Slice 2 media import | ✅ done | one analysis per file; explicit Keep/Match/Cancel; complete-asset commits; 745 tests + Chrome gate |
 | Post-MVP project system — Slice 3 sessions/UI | ✅ done | atomic Create/Resume/relink; 764 tests; real 4K60 create + 1440p60 media-resume Chrome gate |
+| Post-MVP project system — Slice 4 persistence | ✅ done | portable Save/Save As, revision-safe live save, quiesced exit; 794 tests + Chrome toolbar/Resume/layout gate |
 
-764 tests green · `npm run build` and `npm run lint` clean · every phase
+794 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -151,16 +152,36 @@ URLs, clears history and transient transport state, and commits the new
 document/media as one complete session. Late relink and visual results are
 generation-guarded and clean themselves up instead of crossing projects.
 
-**Next: Slice 4 — portable Save / Save As plus dirty-state protection.**
-Create `.webcut` files from the active session, track unsaved changes, and
-guard project replacement/reload before adding recent-project and recovery UI.
+Project-system Slice 4 closes the portable save/resume loop. The pure project
+file layer now snapshots the active document plus durable media descriptors
+without Blob URLs, decoder data, visuals, conformed frame counts, or history.
+The first `Save`, or any `Save As`, obtains one writable browser handle and
+enables 800 ms debounced live save for later document/media changes. A
+download-only browser receives a portable copy but remains honestly dirty
+because download completion cannot be observed. Writes carry a session
+generation and revision, so a late old-project write cannot update a
+replacement and an edit made during a write stays dirty until one follow-up
+saves the newest snapshot. Dirty work alone owns the `beforeunload` listener;
+Projects confirms before discarding it, immediately stops new edits and queued
+saves, waits for an open write, then drains export/audio, stops preview/import
+work, and revokes outgoing media before showing Home. A failed exit re-enables
+the retained live-save path. Media sources still used by clips can no longer
+be removed into an unsavable document.
+
+**Next: Slice 5 — recent projects and crash recovery.** Add a local recent-file
+surface where browser capabilities allow it, plus recovery snapshots that are
+separate from the user-owned `.webcut` live-save path.
 
 ## What works today (user-visible)
 
 Run `npm run dev` → project Home. Create a project with an explicit canvas,
 frame rate, and audio rate, or choose a `.webcut`, reconnect every required
 source, review its profile, and open it only when complete. In the editor,
-import video or audio in the Media Pool; files are analyzed before they appear.
+the first Save chooses a writable file; Save As chooses another; both turn on
+live save. The toolbar shows dirty/saving/saved/error state, reload is guarded
+only while dirty, and returning to Projects confirms before safely closing the
+active media session. Import video or audio in the Media Pool; files are
+analyzed before they appear.
 An FPS mismatch opens an explicit
 Keep/Match/Cancel dialog, and every video asset gets its own decoder in the
 render worker. The Preview is the real timeline compositor (4.1): all visible
@@ -511,10 +532,11 @@ the transform fields only for video-lane clips.
 
 ## Open items (beyond PLAN.md phases)
 
-- Slice 3 can validate/resume an existing portable project, but the editor
-  cannot create or update that `.webcut` file yet. Save, Save As, dirty-state
-  replacement guards, recent projects, and crash recovery belong to the next
-  issue #4 slices; do not call Resume a complete persistence workflow yet.
+- Slice 4 completes portable Save/Save As/Resume and live save for a writable
+  handle during the current browser session. A project resumed through the
+  ordinary file input is read-only until one Save or Save As grant.
+  Recent-project discovery and crash-recovery snapshots remain for the next
+  issue #4 slice; do not describe live save as crash recovery.
 - A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
   domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
   (unlink is one-way today, undo aside) and linked-pair awareness in a

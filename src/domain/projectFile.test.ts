@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { Clip, TimelineDoc, Track } from './schema'
+import type { Clip, MediaAsset, TimelineDoc, Track } from './schema'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
@@ -7,6 +7,7 @@ import {
 import {
   CURRENT_PROJECT_FORMAT_VERSION,
   CURRENT_TIMELINE_SCHEMA_VERSION,
+  createProjectFileSnapshot,
   parseProjectFile,
   PROJECT_FILE_FORMAT,
   PROJECT_FILE_LIMITS,
@@ -187,6 +188,44 @@ describe('portable project file', () => {
     expect(parsed.document.tracks[0].transitions).toEqual(
       original.document.tracks[0].transitions,
     )
+  })
+
+  test('builds an isolated active-session snapshot without session-only media fields', () => {
+    const document = makeDocument()
+    const assets: MediaAsset[] = makeAssets().map((asset) => ({
+      id: asset.id,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+      size: asset.size,
+      lastModified: asset.lastModified,
+      objectUrl: `blob:${asset.id}`,
+      kind: asset.kind,
+      durationFrames: 240,
+      durationMicroseconds: asset.durationMicroseconds,
+      frameRate: asset.nativeFrameRate,
+      width: asset.width,
+      height: asset.height,
+      hasAudio: asset.hasAudio,
+      audioSampleRate: asset.audioSampleRate,
+      audioChannels: asset.audioChannels,
+      decoderConfigB64: asset.kind === 'video' ? '{"codec":"avc1"}' : null,
+    }))
+
+    const snapshot = createProjectFileSnapshot(document, assets)
+    document.name = 'Mutated after capture'
+    assets[0].fileName = 'mutated.mov'
+
+    expect(snapshot.document.name).toBe('Portable edit')
+    expect(snapshot.assets.map((asset) => asset.id)).toEqual(['image-a', 'video-z'])
+    expect(snapshot.assets.find((asset) => asset.id === 'video-z')).toMatchObject({
+      fileName: 'camera.mov',
+      nativeFrameRate: { num: 60_000, den: 1_001 },
+    })
+    const serialized = serializeProjectFile(snapshot)
+    expect(serialized).not.toContain('objectUrl')
+    expect(serialized).not.toContain('durationFrames":240')
+    expect(serialized).not.toContain('decoderConfigB64')
+    expect(serialized).not.toContain('blob:')
   })
 
   test('serialization is deterministic across asset and effect-param insertion order', () => {

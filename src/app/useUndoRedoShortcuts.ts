@@ -15,6 +15,7 @@
 
 import { useEffect } from 'react'
 import { useDocumentStore } from '../state/documentStore'
+import { useProjectSessionStore } from '../state/projectSessionStore'
 
 /** Shared by all app/ keyboard hooks: native text editing wins in fields. */
 export function isEditableTarget(target: EventTarget | null): boolean {
@@ -30,6 +31,7 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 export function useUndoRedoShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (useProjectSessionStore.getState().phase === 'closing') return
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.isComposing) return
       if (isEditableTarget(e.target)) return
 

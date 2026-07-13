@@ -132,10 +132,20 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   and generated URL exactly once during project replacement). Session-scoped,
   not serialized with the project.
 - `ProjectSessionState` — `src/state/projectSessionStore.ts`: serializable
-  launch/editor screen, operation phase, active-project labels, and a small
-  relink summary. Parsed projects, selected Files, MediaAssets, and all object
-  URLs stay controller-local until atomic activation; they never enter this
-  store.
+  launch/editor screen, operation phase, active-project labels, a small relink
+  summary, and the serializable dirty/save-status projection. Parsed projects,
+  selected Files, MediaAssets, writable file handles, timers, and all object
+  URLs stay controller-local; they never enter this store.
+- Project persistence — `src/app/projectPersistenceController.ts`: builds a
+  validated portable snapshot from `documentStore` + `mediaStore`, owns the
+  current writable handle, debounces live saves, serializes overlapping edits
+  by revision, and attaches `beforeunload` only while work is dirty. `Save`
+  and `Save As` request an explicit user-gesture grant when no writable handle
+  exists; that grant enables later in-place live saves. A browser without the
+  writable-file picker may download a copy, but that unobservable fallback
+  never marks dirty work as safely persisted. Project replacement first pauses
+  this controller, cancels its timer, and drains any open write before media or
+  session state can be released.
 - Worker messages — `src/workers/decode-protocol.ts` (canonical):
   `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
   (`configured`/`frameReady`/`error`). Types-only file; BOTH the worker and
@@ -157,6 +167,6 @@ src/
   pipeline/    demux, decode, render, export
   ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector
   ui/timeline/ Timeline, Track, ClipView, Ruler, Playhead
-  app/         App, project/controllers, layout.css
+  app/         App, project/persistence/controllers, layout.css
   dev/         temporary scratch harnesses — may import anything, never shipped
 ```

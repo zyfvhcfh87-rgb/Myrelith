@@ -38,6 +38,12 @@ function formatAssetMetadata(
   return `Image · ${duration}`
 }
 
+function assetIsUsedOnTimeline(assetId: string): boolean {
+  return useDocumentStore.getState().doc.tracks.some((track) => (
+    track.clips.some((clip) => clip.assetId === assetId)
+  ))
+}
+
 export default function MediaPool() {
   const documentFrameRate = useDocumentStore((state) => state.doc.frameRate)
   const assets = useMediaStore((state) => state.assets)
@@ -130,7 +136,15 @@ export default function MediaPool() {
                   draggable={false}
                   aria-label={`remove ${asset.fileName}`}
                   onDragStart={(event) => event.stopPropagation()}
-                  onClick={() => removeAsset(asset.id)}
+                  onClick={() => {
+                    if (assetIsUsedOnTimeline(asset.id)) {
+                      window.alert(
+                        'Remove this media\'s clips from the timeline before removing its source.',
+                      )
+                      return
+                    }
+                    removeAsset(asset.id)
+                  }}
                 >
                   ×
                 </button>

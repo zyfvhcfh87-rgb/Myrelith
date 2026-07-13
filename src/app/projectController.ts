@@ -29,6 +29,13 @@ import { useTransportStore } from '../state/transportStore'
 import { inspectMediaFile } from './mediaInspection'
 import { resetMediaImportController } from './mediaImportController'
 import { disposeMediaVisuals } from './mediaVisualsController'
+import {
+  pauseProjectPersistenceSession,
+  resumeProjectPersistenceSession,
+  startProjectPersistenceSession,
+  suspendProjectPersistenceSession,
+  type ProjectPersistenceSession,
+} from './projectPersistenceController'
 import { disposePreview } from './previewController'
 import { disposeTransport } from './transportController'
 
@@ -41,6 +48,10 @@ export interface ProjectControllerDeps {
   disposePreview(): void
   disposeMediaVisuals(): void
   resetMediaImport(): void
+  pauseProjectPersistence(): Promise<void>
+  resumeProjectPersistence(): void
+  startProjectPersistence(session: ProjectPersistenceSession): void
+  suspendProjectPersistence(): void
   revokeObjectURL(url: string): void
 }
 
@@ -62,6 +73,10 @@ const realDeps: ProjectControllerDeps = {
   disposePreview,
   disposeMediaVisuals,
   resetMediaImport: resetMediaImportController,
+  pauseProjectPersistence: pauseProjectPersistenceSession,
+  resumeProjectPersistence: resumeProjectPersistenceSession,
+  startProjectPersistence: startProjectPersistenceSession,
+  suspendProjectPersistence: suspendProjectPersistenceSession,
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
 }
 
@@ -144,7 +159,47 @@ export function showResumeProject(): void {
 /** Cancel an uncommitted candidate and return to the launch screen. */
 export function returnToProjectHome(): void {
   invalidatePending()
+  suspendProjectPersistenceSession()
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
+}
+
+/**
+ * Leave an active editor only after every Blob consumer has released it.
+ * Launch-screen Back buttons use returnToProjectHome because no editor-owned
+ * transport, workers, or media exist on those screens.
+ */
+export async function leaveActiveProject(
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  invalidatePending(deps)
+  const generation = operationGeneration
+  useProjectSessionStore.setState({ phase: 'closing', error: null })
+  try {
+    // Pause synchronously before the first await: no queued live save may
+    // cross the slower export/audio teardown below.
+    await deps.pauseProjectPersistence()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+    await deps.disposeExport()
+    await deps.disposeTransport()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+
+    deps.disposePreview()
+    deps.disposeMediaVisuals()
+    deps.resetMediaImport()
+    deps.suspendProjectPersistence()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+
+    useMediaStore.getState().clearAssets()
+    useTransportStore.getState().resetTransport()
+    useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
+    return { status: 'ready' }
+  } catch (cause) {
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+    const message = `Could not return to Projects: ${messageFrom(cause)}`
+    deps.resumeProjectPersistence()
+    useProjectSessionStore.setState({ phase: 'error', error: message })
+    return { status: 'failed', message }
+  }
 }
 
 async function activateProject(
@@ -156,6 +211,8 @@ async function activateProject(
 ): Promise<ProjectActionResult> {
   useProjectSessionStore.setState({ phase: 'activating', error: null })
   try {
+    await deps.pauseProjectPersistence()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
     // Export and audio are the asynchronous consumers. They must release the
     // old Blobs before mediaStore revokes their URLs.
     await deps.disposeExport()
@@ -165,6 +222,7 @@ async function activateProject(
     deps.disposePreview()
     deps.disposeMediaVisuals()
     deps.resetMediaImport()
+    deps.suspendProjectPersistence()
     if (generation !== operationGeneration) return { status: 'cancelled' }
 
     useMediaStore.getState().clearAssets()
@@ -186,9 +244,15 @@ async function activateProject(
       candidate: null,
       error: null,
     })
+    deps.startProjectPersistence({
+      fileName: projectFileName,
+      persisted: projectFileName !== null,
+    })
     return { status: 'activated' }
   } catch (cause) {
+    if (generation !== operationGeneration) return { status: 'cancelled' }
     const message = `Could not open the project: ${messageFrom(cause)}`
+    deps.resumeProjectPersistence()
     useProjectSessionStore.setState({ phase: 'error', error: message })
     return { status: 'failed', message }
   }
@@ -432,5 +496,6 @@ export function resetProjectController(
   deps: Pick<ProjectControllerDeps, 'revokeObjectURL'> = realDeps,
 ): void {
   invalidatePending(deps)
+  suspendProjectPersistenceSession()
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
 }

@@ -17,6 +17,7 @@
 
 import { useEffect } from 'react'
 import { useDocumentStore } from '../state/documentStore'
+import { useProjectSessionStore } from '../state/projectSessionStore'
 import { useTransportStore } from '../state/transportStore'
 import { stepFrame } from './transportController'
 import { isEditableTarget } from './useUndoRedoShortcuts'
@@ -24,6 +25,7 @@ import { isEditableTarget } from './useUndoRedoShortcuts'
 export function useEditShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (useProjectSessionStore.getState().phase === 'closing') return
       if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return
       if (isEditableTarget(e.target)) return
 

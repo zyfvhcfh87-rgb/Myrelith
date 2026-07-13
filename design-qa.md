@@ -33,3 +33,27 @@
   and zero errors.
 
 final result: passed
+
+## Slice 4 persistence QA
+
+- Desktop Chrome at the normal 2560 x 1271 viewport: a new project entered the
+  editor as **Unsaved changes** with the project identity and
+  Projects/Save/Save As/Export controls visible.
+- The saved-project Resume surface validated a 1920 x 1080, 30 fps, 48 kHz
+  `.webcut`, activated its two video tracks plus one audio track, and showed
+  the expected read-only resumed-project state.
+- At 1280 x 720, the project name/status and Projects/Save/Save As/Export
+  controls stayed inside the toolbar with no document or toolbar overflow.
+- Dirty Projects navigation raised Chrome's native confirmation. Clean
+  navigation returned directly to Home.
+- The OS-owned Save picker cannot be completed through the Chrome extension
+  test surface. Handle adoption, write/close/abort behavior, debouncing, edits
+  during a write, cancellation, honest download fallback, unload ownership,
+  stale session completion, save quiescence, blocked closing-time edits, and
+  ordered editor teardown are covered by focused Vitest regressions. The final
+  picker-first Save and quiesced Projects teardown corrections were made after
+  the Chrome session was finalized, so those two paths are not claimed as
+  manual browser verification.
+- Final Chrome console: zero warnings and zero errors.
+
+Slice 4 result: passed

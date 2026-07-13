@@ -13,7 +13,9 @@ export type ProjectSessionPhase =
   | 'reading-project'
   | 'relinking'
   | 'activating'
+  | 'closing'
   | 'error'
+export type ProjectSavePhase = 'idle' | 'saving' | 'error'
 
 export interface RelinkAssetSummary {
   id: string
@@ -37,6 +39,11 @@ export interface ProjectSessionState {
   phase: ProjectSessionPhase
   activeProjectName: string | null
   activeProjectFileName: string | null
+  hasUnsavedChanges: boolean
+  savePhase: ProjectSavePhase
+  liveSaveEnabled: boolean
+  lastSavedAt: number | null
+  saveError: string | null
   candidate: ResumeProjectSummary | null
   error: string | null
 }
@@ -47,6 +54,11 @@ export const INITIAL_PROJECT_SESSION_STATE: Readonly<ProjectSessionState> =
     phase: 'idle',
     activeProjectName: null,
     activeProjectFileName: null,
+    hasUnsavedChanges: false,
+    savePhase: 'idle',
+    liveSaveEnabled: false,
+    lastSavedAt: null,
+    saveError: null,
     candidate: null,
     error: null,
   })
