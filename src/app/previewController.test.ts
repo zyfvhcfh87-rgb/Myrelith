@@ -1,9 +1,7 @@
 /**
- * app/previewController.test.ts — Phase 3.4, reworked for the 4.1c
- * compositor swap. Drives the composition root with injected fakes (no
- * Worker, no OffscreenCanvas, no fetch) and asserts the wiring: every
- * video asset reaches the bridge, docs are forwarded, playhead moves
- * render doc frames/modes rAF-coalesced, removals release worker sources.
+ * Composition-root tests for the preview pipeline. Imported media is already
+ * analyzed before it reaches mediaStore, so this controller fetches each
+ * video Blob once and forwards it directly to the worker bridge.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -32,18 +30,22 @@ class FakeBridge implements BridgeLike {
   setDoc(doc: TimelineDoc): void {
     this.docs.push(doc)
   }
+
   async openAsset(assetId: string, blob: Blob, rate: FrameRate): Promise<void> {
     this.opened.push({ assetId, blob, rate })
     await this.openImpl(assetId, blob, rate)
-    this.onAssetReady?.(assetId) // like the real bridge's assetConfigured ack
+    this.onAssetReady?.(assetId)
   }
+
   releaseAsset(assetId: string): void {
     this.released.push(assetId)
   }
+
   async renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult> {
     this.rendered.push({ frame, mode })
     return { status: 'drawn', drawnClipIds: [], missingClipIds: [], renderMs: 1 }
   }
+
   dispose(): void {
     this.disposed = true
   }
@@ -52,32 +54,44 @@ class FakeBridge implements BridgeLike {
 function makeDeps() {
   const bridge = new FakeBridge()
   const blob = new Blob(['x'], { type: 'video/mp4' })
-  const demuxedAsset: MediaAsset = {
-    id: 'ignored',
-    fileName: 'clip.mp4',
-    mimeType: 'video/demux-temporary',
-    size: 999,
-    lastModified: 999,
-    objectUrl: 'blob:demuxed',
-    kind: 'video',
-    durationFrames: 206,
-    durationMicroseconds: 6_866_667,
-    frameRate: F60,
-    width: 1920,
-    height: 1080,
-    hasAudio: true,
-    audioSampleRate: 48000,
-    audioChannels: 2,
-    decoderConfigB64: '{"codec":"avc1.64042a"}',
-  }
   const deps: PreviewDeps = {
     createBridge: () => bridge,
     transferCanvas: () => ({}) as OffscreenCanvas,
     init: vi.fn(),
-    fetchBlob: async () => blob,
-    demux: async () => ({ asset: demuxedAsset }),
+    fetchBlob: vi.fn(async () => blob),
   }
-  return { deps, bridge, blob, demuxedAsset }
+  return { deps, bridge, blob }
+}
+
+let assetCounter = 0
+
+function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
+  const id = overrides.id ?? `asset-${++assetCounter}`
+  return {
+    id,
+    fileName: `${id}.mp4`,
+    mimeType: 'video/mp4',
+    size: 1,
+    lastModified: 1,
+    objectUrl: `blob:${id}`,
+    kind: 'video',
+    durationFrames: 120,
+    durationMicroseconds: 2_000_000,
+    frameRate: F60,
+    width: 1920,
+    height: 1080,
+    hasAudio: true,
+    audioSampleRate: 48_000,
+    audioChannels: 2,
+    decoderConfigB64: '{"codec":"avc1.64042a"}',
+    ...overrides,
+  }
+}
+
+function seedAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
+  const asset = makeAsset(overrides)
+  expect(useMediaStore.getState().addAsset(asset)).toBe(true)
+  return asset
 }
 
 const canvasEl = () => document.createElement('canvas')
@@ -100,6 +114,7 @@ function deferred<T>() {
 const initialDoc = useDocumentStore.getState().doc
 
 beforeEach(() => {
+  assetCounter = 0
   useDocumentStore.getState().setDoc(initialDoc)
   useTransportStore.setState({
     playheadFrame: 0,
@@ -109,9 +124,7 @@ beforeEach(() => {
     inOut: null,
     dragPreview: null,
   })
-  useMediaStore.setState({ assets: new Map() })
-  URL.createObjectURL = vi.fn(() => 'blob:mock') as typeof URL.createObjectURL
-  URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
+  useMediaStore.setState({ assets: new Map(), visuals: new Map() })
 })
 
 afterEach(() => {
@@ -119,72 +132,32 @@ afterEach(() => {
 })
 
 describe('previewController', () => {
-  test('importing a video inspects metadata and opens its original Blob once', async () => {
+  test('opens an analyzed video\'s original Blob without re-demuxing', async () => {
     const { deps, bridge, blob } = makeDeps()
-    const demux = vi.fn(deps.demux)
-    initPreview(canvasEl(), { ...deps, demux })
-    // The doc reached the worker before any composite could reference it.
+    initPreview(canvasEl(), deps)
     expect(bridge.docs).toEqual([initialDoc])
 
-    const placeholder = useMediaStore
-      .getState()
-      .addAsset(new File(['x'], 'clip.mp4', {
-        type: 'video/mp4',
-        lastModified: 1_725_000_000_002,
-      }))
+    const asset = seedAsset({
+      id: 'clip',
+      fileName: 'clip.mp4',
+      objectUrl: 'blob:clip-source',
+    })
     await flush()
 
-    expect(demux).toHaveBeenCalledWith(expect.any(File), initialDoc.frameRate)
+    expect(deps.fetchBlob).toHaveBeenCalledOnce()
+    expect(deps.fetchBlob).toHaveBeenCalledWith(asset.objectUrl)
+    expect(bridge.opened).toEqual([{ assetId: asset.id, blob, rate: F60 }])
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
 
-    // Opened under the STORE's asset id with the fetched Blob itself. The
-    // bridge structured-clones this once; no encoded chunk batches exist.
-    expect(bridge.opened).toEqual([{ assetId: placeholder.id, blob, rate: F60 }])
-    // Real metadata merged onto the placeholder row.
-    const updated = useMediaStore.getState().assets.get(placeholder.id)
-    expect(updated).toMatchObject({
-      mimeType: 'video/mp4',
-      size: 1,
-      lastModified: 1_725_000_000_002,
-      durationFrames: 206,
-      durationMicroseconds: 6_866_667,
-      frameRate: F60,
-      width: 1920,
-    })
-    // First frame rendered after init+load (coalesced into one rAF).
     await nextFrame()
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
   })
 
-  test('reconforms duration if the project rate changes while demux is pending', async () => {
-    const { deps, demuxedAsset } = makeDeps()
-    const pending = deferred<{ asset: MediaAsset }>()
-    initPreview(canvasEl(), { ...deps, demux: () => pending.promise })
-
-    const placeholder = useMediaStore
-      .getState()
-      .addAsset(new File(['x'], 'clip.mp4', { type: 'video/mp4' }))
-    await flush()
-
-    useDocumentStore.getState().setDoc({
-      ...initialDoc,
-      id: 'retimed-project',
-      frameRate: F60,
-    })
-    pending.resolve({ asset: demuxedAsset })
-    await flush()
-
-    expect(useMediaStore.getState().assets.get(placeholder.id)).toMatchObject({
-      durationFrames: 412,
-      durationMicroseconds: 6_866_667,
-    })
-  })
-
-  test('EVERY video asset gets its own worker source, not just the newest', async () => {
+  test('every video asset gets its own worker source', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
-
-    const one = useMediaStore.getState().addAsset(new File(['x'], 'one.mp4', { type: 'video/mp4' }))
-    const two = useMediaStore.getState().addAsset(new File(['x'], 'two.mp4', { type: 'video/mp4' }))
+    const one = seedAsset({ id: 'one' })
+    const two = seedAsset({ id: 'two' })
     await flush()
 
     expect(bridge.opened.map((entry) => entry.assetId).sort()).toEqual(
@@ -192,28 +165,26 @@ describe('previewController', () => {
     )
   })
 
-  test('scrubbing renders rAF-coalesced DOC frames (bridge owns rescaling)', async () => {
+  test('scrubbing renders rAF-coalesced document frames', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
-    useMediaStore.getState().addAsset(new File(['x'], 'clip.mp4', { type: 'video/mp4' }))
+    seedAsset()
     await flush()
     await nextFrame()
     bridge.rendered.length = 0
 
-    // Three rapid moves inside one frame collapse to the last one — and
-    // the frame stays in DOCUMENT frames (no asset rescale up here).
-    const t = useTransportStore.getState()
-    t.setIsScrubbing(true)
-    t.setPlayheadFrame(10)
-    t.setPlayheadFrame(20)
-    t.setPlayheadFrame(30)
+    const transport = useTransportStore.getState()
+    transport.setIsScrubbing(true)
+    transport.setPlayheadFrame(10)
+    transport.setPlayheadFrame(20)
+    transport.setPlayheadFrame(30)
     await nextFrame()
     await flush()
 
     expect(bridge.rendered).toEqual([{ frame: 30, mode: 'seek' }])
   })
 
-  test('Play primes playback mode and rapid playback ticks keep only the latest frame', async () => {
+  test('Play primes playback mode and rapid ticks keep only the latest frame', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
     await nextFrame()
@@ -232,7 +203,7 @@ describe('previewController', () => {
     expect(bridge.rendered).toEqual([{ frame: 3, mode: 'playback' }])
   })
 
-  test('playback yields to seek during scrub and resumes when the scrub ends', async () => {
+  test('playback yields to seek during scrub and resumes afterward', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
     await nextFrame()
@@ -254,15 +225,9 @@ describe('previewController', () => {
       { frame: 0, mode: 'playback' },
       { frame: 0, mode: 'seek' },
     ])
-
-    bridge.rendered.length = 0
-    transport.setIsScrubbing(true)
-    transport.setIsScrubbing(false)
-    await nextFrame()
-    expect(bridge.rendered).toEqual([])
   })
 
-  test('mode is chosen at dispatch so pause wins over a queued Play render', async () => {
+  test('mode is chosen at dispatch so pause wins over queued Play', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
     await nextFrame()
@@ -276,7 +241,7 @@ describe('previewController', () => {
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
   })
 
-  test('a document change reaches the worker and repaints the playhead frame', async () => {
+  test('a document change reaches the worker and repaints', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
     await nextFrame()
@@ -290,7 +255,7 @@ describe('previewController', () => {
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
   })
 
-  test('a source becoming ready repaints after the initial frame already ran', async () => {
+  test('a source becoming ready repaints after the initial frame', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
     await nextFrame()
@@ -305,26 +270,23 @@ describe('previewController', () => {
   test('removing an asset releases its worker source', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
-    const placeholder = useMediaStore
-      .getState()
-      .addAsset(new File(['x'], 'clip.mp4', { type: 'video/mp4' }))
+    const asset = seedAsset()
     await flush()
-    expect(bridge.opened).toHaveLength(1)
 
-    useMediaStore.getState().removeAsset(placeholder.id)
-    expect(bridge.released).toEqual([placeholder.id])
+    useMediaStore.getState().removeAsset(asset.id)
+    expect(bridge.released).toEqual([asset.id])
   })
 
-  test('initPreview is idempotent per canvas (StrictMode double-mount)', () => {
+  test('initPreview is idempotent per canvas', () => {
     const { deps, bridge } = makeDeps()
     const canvas = canvasEl()
     initPreview(canvas, deps)
-    initPreview(canvas, deps) // second mount of the same canvas: no-op
+    initPreview(canvas, deps)
     expect(bridge.disposed).toBe(false)
     expect(vi.mocked(deps.init)).toHaveBeenCalledTimes(1)
   })
 
-  test('a failing transfer disables the preview without crashing', () => {
+  test('a failing transfer disables preview without crashing', () => {
     const { deps } = makeDeps()
     deps.transferCanvas = () => {
       throw new Error('OffscreenCanvas unsupported')
@@ -335,35 +297,48 @@ describe('previewController', () => {
     warn.mockRestore()
   })
 
-  test('audio imports never reach the preview pipeline (filtered upstream)', async () => {
+  test('audio imports never reach the preview pipeline', async () => {
     const { deps, bridge } = makeDeps()
-    const demuxSpy = vi.fn(deps.demux)
-    deps.demux = demuxSpy
     initPreview(canvasEl(), deps)
-    useMediaStore.getState().addAsset(new File(['x'], 'song.mp3', { type: 'audio/mpeg' }))
+    seedAsset({
+      id: 'song',
+      fileName: 'song.mp3',
+      mimeType: 'audio/mpeg',
+      kind: 'audio',
+      frameRate: null,
+      width: null,
+      height: null,
+      decoderConfigB64: null,
+    })
     await flush()
-    expect(demuxSpy).not.toHaveBeenCalled()
+
+    expect(deps.fetchBlob).not.toHaveBeenCalled()
     expect(bridge.opened).toHaveLength(0)
   })
 
-  test('a demux failure logs, stays retriable, and leaves the preview usable', async () => {
-    const { deps, bridge } = makeDeps()
+  test('a Blob fetch failure logs and retries on the next media change', async () => {
+    const { deps, bridge, blob } = makeDeps()
     let attempts = 0
-    deps.demux = async () => {
+    deps.fetchBlob = vi.fn(async () => {
       attempts++
-      throw new Error('corrupt container')
-    }
+      if (attempts === 1) throw new Error('source URL unavailable')
+      return blob
+    })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     initPreview(canvasEl(), deps)
-    useMediaStore.getState().addAsset(new File(['x'], 'bad.mp4', { type: 'video/mp4' }))
+    seedAsset({ id: 'bad', fileName: 'bad.mp4' })
     await flush()
-    expect(bridge.opened).toHaveLength(0)
-    expect(warn).toHaveBeenCalled()
 
-    // The failed asset is retried on the next media-pool change.
-    useMediaStore.getState().addAsset(new File(['x'], 'poke.mp3', { type: 'audio/mpeg' }))
+    expect(bridge.opened).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('loading "bad.mp4" failed'),
+      'source URL unavailable',
+    )
+
+    seedAsset({ id: 'poke', kind: 'audio', frameRate: null })
     await flush()
     expect(attempts).toBe(2)
+    expect(bridge.opened).toHaveLength(1)
     warn.mockRestore()
   })
 
@@ -376,7 +351,7 @@ describe('previewController', () => {
     }
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     initPreview(canvasEl(), deps)
-    useMediaStore.getState().addAsset(new File(['x'], 'bad.mp4', { type: 'video/mp4' }))
+    seedAsset({ id: 'bad', fileName: 'bad.mp4' })
     await flush()
 
     expect(attempts).toBe(1)
@@ -385,89 +360,38 @@ describe('previewController', () => {
       'worker could not open source',
     )
 
-    useMediaStore.getState().addAsset(new File(['x'], 'poke.mp3', { type: 'audio/mpeg' }))
+    seedAsset({ id: 'poke', kind: 'audio', frameRate: null })
     await flush()
     expect(attempts).toBe(2)
     expect(bridge.opened).toHaveLength(2)
     warn.mockRestore()
   })
 
-  test('removal during Blob fetch cancels silently before metadata inspection', async () => {
+  test('removal during Blob fetch cancels before worker open', async () => {
     const { deps, bridge, blob } = makeDeps()
     const fetched = deferred<Blob>()
-    const demux = vi.fn(deps.demux)
     deps.fetchBlob = () => fetched.promise
-    deps.demux = demux
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     initPreview(canvasEl(), deps)
-    const asset = useMediaStore
-      .getState()
-      .addAsset(new File(['x'], 'gone.mp4', { type: 'video/mp4' }))
+    const asset = seedAsset({ id: 'gone' })
 
     useMediaStore.getState().removeAsset(asset.id)
     fetched.resolve(blob)
     await flush()
 
     expect(bridge.released).toEqual([asset.id])
-    expect(demux).not.toHaveBeenCalled()
     expect(bridge.opened).toHaveLength(0)
     expect(warn).not.toHaveBeenCalled()
     warn.mockRestore()
   })
 
-  test('removal during metadata inspection cancels before opening the worker source', async () => {
-    const { deps, bridge, demuxedAsset } = makeDeps()
-    const inspected = deferred<{ asset: MediaAsset }>()
-    deps.demux = () => inspected.promise
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    initPreview(canvasEl(), deps)
-    const asset = useMediaStore
-      .getState()
-      .addAsset(new File(['x'], 'gone.mp4', { type: 'video/mp4' }))
-    await flush()
-
-    useMediaStore.getState().removeAsset(asset.id)
-    inspected.resolve({ asset: demuxedAsset })
-    await flush()
-
-    expect(bridge.released).toEqual([asset.id])
-    expect(bridge.opened).toHaveLength(0)
-    expect(warn).not.toHaveBeenCalled()
-    warn.mockRestore()
-  })
-
-  test('synchronous removal during metadata update cannot reopen the asset', async () => {
-    const { deps, bridge } = makeDeps()
-    const unsubscribe = useMediaStore.subscribe((current, previous) => {
-      for (const [id, asset] of current.assets) {
-        if (asset.frameRate && !previous.assets.get(id)?.frameRate) {
-          useMediaStore.getState().removeAsset(id)
-        }
-      }
-    })
-    try {
-      initPreview(canvasEl(), deps)
-      const asset = useMediaStore
-        .getState()
-        .addAsset(new File(['x'], 'gone.mp4', { type: 'video/mp4' }))
-      await flush()
-
-      expect(bridge.released).toEqual([asset.id])
-      expect(bridge.opened).toHaveLength(0)
-    } finally {
-      unsubscribe()
-    }
-  })
-
-  test('removal during worker open treats the late cancellation as expected', async () => {
+  test('removal during worker open treats late rejection as cancellation', async () => {
     const { deps, bridge } = makeDeps()
     const opening = deferred<void>()
     bridge.openImpl = () => opening.promise
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     initPreview(canvasEl(), deps)
-    const asset = useMediaStore
-      .getState()
-      .addAsset(new File(['x'], 'gone.mp4', { type: 'video/mp4' }))
+    const asset = seedAsset({ id: 'gone' })
     await flush()
     expect(bridge.opened).toHaveLength(1)
 
@@ -480,28 +404,25 @@ describe('previewController', () => {
     warn.mockRestore()
   })
 
-  test('dispose during Blob fetch prevents late metadata and worker work', async () => {
+  test('dispose during Blob fetch prevents late worker work', async () => {
     const { deps, bridge, blob } = makeDeps()
     const fetched = deferred<Blob>()
-    const demux = vi.fn(deps.demux)
     deps.fetchBlob = () => fetched.promise
-    deps.demux = demux
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     initPreview(canvasEl(), deps)
-    useMediaStore.getState().addAsset(new File(['x'], 'late.mp4', { type: 'video/mp4' }))
+    seedAsset({ id: 'late' })
 
     disposePreview()
     fetched.resolve(blob)
     await flush()
 
     expect(bridge.disposed).toBe(true)
-    expect(demux).not.toHaveBeenCalled()
     expect(bridge.opened).toHaveLength(0)
     expect(warn).not.toHaveBeenCalled()
     warn.mockRestore()
   })
 
-  test('a queued render from an old canvas cannot draw through a new bridge', async () => {
+  test('a queued render from an old canvas cannot use a new bridge', async () => {
     const first = makeDeps()
     const second = makeDeps()
 
@@ -533,8 +454,7 @@ describe('previewController', () => {
     disposePreview()
     expect(bridge.disposed).toBe(true)
 
-    // Store changes after dispose reach nothing.
-    useMediaStore.getState().addAsset(new File(['x'], 'c.mp4', { type: 'video/mp4' }))
+    seedAsset({ id: 'after-dispose' })
     await flush()
     expect(bridge.opened).toHaveLength(0)
   })

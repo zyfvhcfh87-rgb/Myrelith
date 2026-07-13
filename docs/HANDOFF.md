@@ -42,8 +42,9 @@ and the open list below.
 | Post-MVP #3 — undistorted timeline visuals | ✅ done | fixed-aspect SVG thumbnail patterns + antialiased vector waveform; Chrome razor continuity, clean console |
 | Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
 | Post-MVP project system — Slice 1 foundations | ✅ done | presets + portable `.webcut`; Chrome: 2.000s 60fps source stays 2.000s at 30fps, clean console |
+| Post-MVP project system — Slice 2 media import | ✅ done | one analysis per file; explicit Keep/Match/Cancel; complete-asset commits; 745 tests + Chrome gate |
 
-731 tests green · `npm run build` and `npm run lint` clean · every phase
+745 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -125,18 +126,29 @@ decoder state, visuals, or undo history. Media assets now retain canonical
 integer microseconds and conform that duration to the active document rate. A
 10-second 60 fps source in a 30 fps project is therefore 300 frames, not 600.
 
-**Next: Slice 2 — centralized media import and the FPS-mismatch decision
-flow.** Move file analysis and metadata commitment behind an app controller,
-demux each file once against the active project rate, compare exact native and
-project rates, and expose Keep project rate / Match source rate / Cancel without
-silently changing the project. The launch/home and New Project UI follows once
-this import path is trustworthy.
+Project-system Slice 2 centralizes media import behind one app controller. A
+selected File is analyzed exactly once, stays outside Zustand while a decision
+is open, and enters mediaStore only as one complete asset. Exact rational native
+and project rates drive an explicit Keep project rate / Match source rate /
+Cancel dialog; WebCut never changes project FPS silently. Match is safe only
+for an empty timeline and a supported project preset. It updates the document
+and re-conforms every unused asset from canonical microseconds; once clips
+exist, Match remains visible but disabled because edited-timeline retiming is a
+separate operation. Every rejected/cancelled path closes Mediabunny Input and
+revokes the uncommitted source URL. Preview now forwards the committed asset's
+Blob and native rate directly to the worker instead of re-demuxing it.
+
+**Next: Slice 3 — active-project sessions plus the Home / New Project UI.**
+Connect the Slice 1 project factory and portable file contract to explicit
+Create and Resume entry points, then make project activation reset all
+session-owned controller/store state safely.
 
 ## What works today (user-visible)
 
-Run `npm run dev` → editor shell. Import videos in the Media Pool → rows
-show real metadata; EVERY video asset gets its own decoder in the render
-worker. The Preview is the real timeline compositor (4.1): all visible
+Run `npm run dev` → editor shell. Import video or audio in the Media Pool;
+files are analyzed before they appear. An FPS mismatch opens an explicit
+Keep/Match/Cancel dialog, and every video asset gets its own decoder in the
+render worker. The Preview is the real timeline compositor (4.1): all visible
 video tracks draw bottom-to-top at the playhead with per-clip Transform
 (scale/rotate/translate around anchor) + opacity alpha-blended onto a
 black 1920×1080 composition; hidden tracks skip; gaps show background.
@@ -243,6 +255,12 @@ the transform fields only for video-lane clips.
   sole explicit generator pump, preserving the final `ExportResult` while
   making repeated/coincident cancellation one serialized `return(undefined)`.
   Only one run (including setup/cancel cleanup) may own the controller slot.
+- `src/app/mediaImportController.ts` — Slice 2 import composition root: owns
+  the selected File and analyzed resource until Keep/Match/Cancel resolves,
+  commits complete assets exactly once, guards project-change races, and owns
+  every uncommitted object URL.
+- `src/ui/MediaImportDialog.tsx` — accessible analysis/error/FPS-decision UI;
+  exact rates, explicit choices, disabled-Match explanation, Escape handling.
 - `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
   code loads only on Start; progress is frame-coalesced; cancellation and retry
   are explicit states; Blob URL/download ownership, filename safety, modal
@@ -274,8 +292,9 @@ the transform fields only for video-lane clips.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
   100; rejected ops push no entry; 5.1e-2 transition add/duration/remove
   actions preserve exact snapshot ids), `transportStore` (playhead/zoom/
-  `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
-  assets; `addAsset` placeholder → controller fills via `updateAsset`).
+  `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (complete analyzed
+  assets + visual URL ownership + exact duration reconformance), and
+  `mediaImportStore` (serializable dialog status only; no File/Blob handles).
 - `src/workers/decode-protocol.ts` — canonical worker message types.
 - `src/workers/render-protocol.ts` — render-worker message types (types only).
   The primary path sends each asset Blob once, then lightweight entries with
@@ -484,8 +503,10 @@ the transform fields only for video-lane clips.
   surfaces currently eligible seams; a malformed serialized transition whose
   endpoints are missing/gapped/text has no cleanup marker yet, although the
   store's remove action can still delete it.
-- `mediaStore.addAsset` is still the placeholder path; previewController
-  re-fetches the blob URL for demuxing (works; slightly wasteful).
+- Matching a source FPS intentionally stops being available once any clip is
+  on the timeline. Supporting that later requires an explicit retime operation
+  for clip ranges, source ranges, transitions, playhead, and undo history; it
+  must not be smuggled into import-time rounding.
 
 ## Working agreements (the user's explicit preferences)
 

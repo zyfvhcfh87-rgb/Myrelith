@@ -1,159 +1,138 @@
-/**
- * state/mediaStore.test.ts — Phase 1.3.
- *
- * jsdom does not implement blob URLs, so URL.createObjectURL/revokeObjectURL
- * are stubbed here — which also lets us assert revocation on removal.
- */
-
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { MediaAsset } from '../domain/schema'
 import { useMediaStore } from './mediaStore'
+
+function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
+  return {
+    id: 'asset-1',
+    fileName: 'holiday.mp4',
+    mimeType: 'video/mp4',
+    size: 1_024,
+    lastModified: 1_725_000_000_000,
+    objectUrl: 'blob:asset-1',
+    kind: 'video',
+    durationFrames: 300,
+    durationMicroseconds: 10_000_000,
+    frameRate: { num: 60, den: 1 },
+    width: 1920,
+    height: 1080,
+    hasAudio: true,
+    audioSampleRate: 48_000,
+    audioChannels: 2,
+    decoderConfigB64: null,
+    ...overrides,
+  }
+}
 
 const getState = () => useMediaStore.getState()
 
-let createSpy: ReturnType<typeof vi.fn>
-let revokeSpy: ReturnType<typeof vi.fn>
-let urlCounter = 0
-
 beforeEach(() => {
-  urlCounter = 0
-  createSpy = vi.fn(() => `blob:mock-${++urlCounter}`)
-  revokeSpy = vi.fn()
-  URL.createObjectURL = createSpy as typeof URL.createObjectURL
-  URL.revokeObjectURL = revokeSpy as typeof URL.revokeObjectURL
   useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+  URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
 })
 
 describe('mediaStore', () => {
-  test('addAsset registers a placeholder with id, name, url and kind', () => {
-    const file = new File(['x'], 'holiday.mp4', {
-      type: 'video/mp4',
-      lastModified: 1_725_000_000_000,
-    })
-    const asset = getState().addAsset(file)
+  test('commits only complete analyzed assets and rejects duplicate ids', () => {
+    const asset = makeAsset()
 
-    expect(asset.id).toMatch(/^asset_/)
-    expect(asset.fileName).toBe('holiday.mp4')
-    expect(asset.mimeType).toBe('video/mp4')
-    expect(asset.size).toBe(1)
-    expect(asset.lastModified).toBe(1_725_000_000_000)
-    expect(asset.objectUrl).toBe('blob:mock-1')
-    expect(asset.kind).toBe('video')
-    expect(asset.durationFrames).toBe(0) // placeholder until Phase 2
-    expect(asset.durationMicroseconds).toBe(0)
-    expect(asset.decoderConfigB64).toBeNull()
+    expect(getState().addAsset(asset)).toBe(true)
+    expect(getState().assets.get(asset.id)).toBe(asset)
+    const before = getState().assets
+
+    expect(getState().addAsset({ ...asset, objectUrl: 'blob:duplicate' })).toBe(false)
+    expect(getState().assets).toBe(before)
     expect(getState().assets.get(asset.id)).toBe(asset)
   })
 
-  test('kind is derived from MIME type', () => {
-    expect(
-      getState().addAsset(new File([], 'a.mp3', { type: 'audio/mpeg' })).kind,
-    ).toBe('audio')
-    expect(
-      getState().addAsset(new File([], 'b.png', { type: 'image/png' })).kind,
-    ).toBe('image')
-    expect(getState().addAsset(new File([], 'c.bin')).kind).toBe('video')
-  })
-
-  test('updates are immutable: a new Map instance per change', () => {
+  test('committing an asset replaces the Map immutably', () => {
     const before = getState().assets
-    getState().addAsset(new File([], 'a.mp4', { type: 'video/mp4' }))
+    getState().addAsset(makeAsset())
     expect(getState().assets).not.toBe(before)
   })
 
-  test('removeAsset revokes the object URL and drops the entry', () => {
-    const a = getState().addAsset(new File([], 'a.mp4', { type: 'video/mp4' }))
-    const b = getState().addAsset(new File([], 'b.mp4', { type: 'video/mp4' }))
+  test('reconforms every asset from canonical duration and preserves no-op identity', () => {
+    getState().addAsset(makeAsset())
+    getState().addAsset(makeAsset({
+      id: 'asset-2',
+      objectUrl: 'blob:asset-2',
+      durationFrames: 150,
+      durationMicroseconds: 5_000_000,
+    }))
 
-    getState().removeAsset(a.id)
-    expect(revokeSpy).toHaveBeenCalledWith(a.objectUrl)
-    expect(getState().assets.has(a.id)).toBe(false)
-    expect(getState().assets.has(b.id)).toBe(true)
+    getState().reconformAssets({ num: 60, den: 1 })
+    expect(getState().assets.get('asset-1')?.durationFrames).toBe(600)
+    expect(getState().assets.get('asset-2')?.durationFrames).toBe(300)
+
+    const conformed = getState().assets
+    getState().reconformAssets({ num: 60, den: 1 })
+    expect(getState().assets).toBe(conformed)
+  })
+
+  test('removeAsset revokes the source URL and drops the entry', () => {
+    const asset = makeAsset()
+    getState().addAsset(asset)
+    getState().removeAsset(asset.id)
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(asset.objectUrl)
+    expect(getState().assets.has(asset.id)).toBe(false)
   })
 
   test('removing an unknown id is a safe no-op', () => {
     const before = getState().assets
-    getState().removeAsset('asset_nope')
-    expect(revokeSpy).not.toHaveBeenCalled()
+    getState().removeAsset('missing')
     expect(getState().assets).toBe(before)
   })
 
-  test('updateAsset merges demux results without touching source identity', () => {
-    const a = getState().addAsset(new File([], 'a.mp4', {
-      type: 'video/mp4',
-      lastModified: 1_725_000_000_001,
-    }))
-    getState().updateAsset(a.id, {
-      durationFrames: 412,
-      durationMicroseconds: 6_866_667,
-      frameRate: { num: 60, den: 1 },
-      width: 1920,
-      height: 1080,
+  test('setAssetVisuals stores; removeAsset revokes both generated URLs', () => {
+    const asset = makeAsset()
+    getState().addAsset(asset)
+    getState().setAssetVisuals(asset.id, {
+      filmstrip: { url: 'blob:film', tiles: 3, tileWidth: 80, tileHeight: 45 },
+      waveform: { url: 'blob:wave', width: 1000, height: 64 },
     })
-    const updated = getState().assets.get(a.id)
-    expect(updated).toMatchObject({
-      id: a.id,
-      objectUrl: a.objectUrl,
-      fileName: 'a.mp4',
-      mimeType: 'video/mp4',
-      size: 0,
-      lastModified: 1_725_000_000_001,
-      durationFrames: 412,
-      durationMicroseconds: 6_866_667,
-      frameRate: { num: 60, den: 1 },
-      width: 1920,
+
+    expect(getState().visuals.has(asset.id)).toBe(true)
+    getState().removeAsset(asset.id)
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:film')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:wave')
+    expect(getState().visuals.has(asset.id)).toBe(false)
+  })
+
+  test('a late visual result for a removed asset is revoked, never stored', () => {
+    getState().setAssetVisuals('gone', {
+      filmstrip: { url: 'blob:late-film', tiles: 1, tileWidth: 80, tileHeight: 45 },
+      waveform: { url: 'blob:late-wave', width: 100, height: 40 },
     })
-    // New Map identity so subscribers fire.
-    expect(getState().assets).not.toBe(new Map())
-  })
 
-  test('updateAsset on an unknown id is a safe no-op', () => {
-    const before = getState().assets
-    getState().updateAsset('asset_nope', { durationFrames: 10 })
-    expect(getState().assets).toBe(before)
-  })
-})
-
-describe('asset visuals (filmstrip/waveform images)', () => {
-  const visualsFor = (n: number) => ({
-    filmstrip: { url: `blob:strip-${n}`, tiles: 8, tileWidth: 78, tileHeight: 44 },
-    waveform: { url: `blob:wave-${n}`, width: 800, height: 44 },
-  })
-
-  test('setAssetVisuals stores; removeAsset revokes BOTH image URLs', () => {
-    const a = getState().addAsset(new File([], 'a.mp4', { type: 'video/mp4' }))
-    getState().setAssetVisuals(a.id, visualsFor(1))
-    expect(getState().visuals.get(a.id)?.filmstrip?.url).toBe('blob:strip-1')
-
-    getState().removeAsset(a.id)
-    expect(revokeSpy).toHaveBeenCalledWith('blob:strip-1')
-    expect(revokeSpy).toHaveBeenCalledWith('blob:wave-1')
-    expect(getState().visuals.has(a.id)).toBe(false)
-  })
-
-  test('a late result for a removed asset is revoked, never stored', () => {
-    getState().setAssetVisuals('asset_gone', visualsFor(2))
-    expect(revokeSpy).toHaveBeenCalledWith('blob:strip-2')
-    expect(revokeSpy).toHaveBeenCalledWith('blob:wave-2')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:late-film')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:late-wave')
     expect(getState().visuals.size).toBe(0)
   })
 
   test('replacing visuals revokes the previous images', () => {
-    const a = getState().addAsset(new File([], 'a.mp4', { type: 'video/mp4' }))
-    getState().setAssetVisuals(a.id, visualsFor(3))
-    getState().setAssetVisuals(a.id, visualsFor(4))
-    expect(revokeSpy).toHaveBeenCalledWith('blob:strip-3')
-    expect(revokeSpy).toHaveBeenCalledWith('blob:wave-3')
-    expect(getState().visuals.get(a.id)?.waveform?.url).toBe('blob:wave-4')
+    const asset = makeAsset()
+    getState().addAsset(asset)
+    getState().setAssetVisuals(asset.id, {
+      filmstrip: { url: 'blob:old-film', tiles: 1, tileWidth: 80, tileHeight: 45 },
+      waveform: null,
+    })
+    getState().setAssetVisuals(asset.id, {
+      filmstrip: { url: 'blob:new-film', tiles: 1, tileWidth: 80, tileHeight: 45 },
+      waveform: null,
+    })
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:old-film')
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:new-film')
   })
 
-  test('null halves (audio-only / silent video) revoke nothing extra', () => {
-    const a = getState().addAsset(new File([], 'a.mp3', { type: 'audio/mpeg' }))
-    getState().setAssetVisuals(a.id, {
-      filmstrip: null,
-      waveform: { url: 'blob:wave-9', width: 400, height: 44 },
-    })
-    getState().removeAsset(a.id)
-    expect(revokeSpy).toHaveBeenCalledWith('blob:wave-9')
-    expect(revokeSpy).toHaveBeenCalledTimes(2) // objectUrl + waveform only
+  test('null visual halves revoke nothing extra', () => {
+    const asset = makeAsset({ kind: 'audio', frameRate: null, width: null, height: null })
+    getState().addAsset(asset)
+    getState().setAssetVisuals(asset.id, { filmstrip: null, waveform: null })
+    getState().removeAsset(asset.id)
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(asset.objectUrl)
   })
 })

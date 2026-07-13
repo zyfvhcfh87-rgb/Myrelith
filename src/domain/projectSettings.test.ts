@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   createTimelineDoc,
   DEFAULT_PROJECT_SETTINGS,
+  isProjectFrameRatePreset,
   PROJECT_AUDIO_SAMPLE_RATE_PRESETS,
   PROJECT_FRAME_RATE_PRESETS,
   PROJECT_RESOLUTION_PRESETS,
@@ -47,6 +48,13 @@ describe('project setting presets', () => {
     expect(Object.isFrozen(PROJECT_AUDIO_SAMPLE_RATE_PRESETS)).toBe(true)
     expect(Object.isFrozen(DEFAULT_PROJECT_SETTINGS)).toBe(true)
     expect(Object.isFrozen(DEFAULT_PROJECT_SETTINGS.frameRate)).toBe(true)
+  })
+
+  test('recognizes only exact canonical frame-rate presets', () => {
+    expect(isProjectFrameRatePreset({ num: 60, den: 1 })).toBe(true)
+    expect(isProjectFrameRatePreset({ num: 60_000, den: 1_001 })).toBe(true)
+    expect(isProjectFrameRatePreset({ num: 120, den: 1 })).toBe(false)
+    expect(isProjectFrameRatePreset({ num: 120, den: 2 })).toBe(false)
   })
 })
 

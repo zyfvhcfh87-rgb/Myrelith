@@ -51,7 +51,7 @@ unverified.
 - There is no project save/load UI; document and media state live in memory.
 - Crossfades are visual-only, so audio still hard-cuts. Dissolves involving
   transformed or transparent footage are not yet mathematically exact.
-- The import UI accepts video files. Images are not previewable.
+- The import UI accepts video and audio files. Images are not previewable.
 - Linked audio/video pairs can be unlinked, but arbitrary clips cannot be
   manually re-linked yet.
 - Media compatibility ultimately depends on the codecs exposed by the browser

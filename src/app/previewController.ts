@@ -11,8 +11,8 @@
  * - this file is where stores and machinery are ALLOWED to meet.
  *
  * What it does: owns one render worker + bridge for the lifetime of the
- * canvas. Watches mediaStore, inspects EVERY video asset for metadata, and
- * gives its Blob to the bridge once (one worker-owned source per asset),
+ * canvas. Watches mediaStore and gives every analyzed video Blob to the
+ * bridge once (one worker-owned source per asset),
  * releasing assets that disappear;
  * watches documentStore and posts each new doc snapshot; watches
  * transportStore and renders its latest frame + playback/seek mode,
@@ -28,10 +28,8 @@
  */
 
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
-import { microsecondsToFrames } from '../domain/time'
 import type { RenderFrameResult } from '../engine/render-bridge'
 import { createRenderWorker, RenderWorkerBridge } from '../engine/render-bridge'
-import { loadAsset } from '../pipeline/demux'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
@@ -54,9 +52,6 @@ export interface PreviewDeps {
   transferCanvas(canvas: HTMLCanvasElement): OffscreenCanvas
   init(bridge: BridgeLike, canvas: OffscreenCanvas): void
   fetchBlob(url: string): Promise<Blob>
-  demux(file: File, documentRate: FrameRate): Promise<{
-    asset: MediaAsset
-  }>
 }
 
 const realDeps: PreviewDeps = {
@@ -64,23 +59,6 @@ const realDeps: PreviewDeps = {
   transferCanvas: (canvas) => canvas.transferControlToOffscreen(),
   init: (bridge, offscreen) => (bridge as RenderWorkerBridge).init(offscreen),
   fetchBlob: (url) => fetch(url).then((r) => r.blob()),
-  demux: async (file, documentRate) => {
-    const loaded = await loadAsset(file, documentRate)
-    try {
-      if (!loaded.videoTrack || !loaded.asset.frameRate) {
-        throw new Error(`"${file.name}" has no decodable video track`)
-      }
-      return { asset: loaded.asset }
-    } finally {
-      // loadAsset creates a metadata-only URL and Input. The mediaStore owns
-      // the original URL; neither temporary resource survives inspection.
-      try {
-        loaded.input.dispose()
-      } finally {
-        URL.revokeObjectURL(loaded.asset.objectUrl)
-      }
-    }
-  },
 }
 
 interface ControllerState {
@@ -126,7 +104,7 @@ function scheduleRender(): void {
   })
 }
 
-/** Inspect one placeholder asset and hand its Blob to the render worker. */
+/** Hand one already-analyzed asset's Blob to the render worker. */
 async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void> {
   const bridge = state.bridge
   if (!bridge) return
@@ -134,40 +112,10 @@ async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void>
   try {
     const blob = await deps.fetchBlob(asset.objectUrl)
     if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
-    const file = new File([blob], asset.fileName, { type: blob.type })
-    const demuxed = await deps.demux(
-      file,
-      useDocumentStore.getState().doc.frameRate,
-    )
-    // Disposed, re-inited, or the asset was removed while we demuxed?
-    if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
-
-    useMediaStore.getState().updateAsset(asset.id, {
-      kind: demuxed.asset.kind,
-      // A project-rate change may have landed while demux was awaiting the
-      // browser. Commit duration against the current document, never the
-      // stale rate sampled when this import began.
-      durationFrames: microsecondsToFrames(
-        demuxed.asset.durationMicroseconds,
-        useDocumentStore.getState().doc.frameRate,
-      ),
-      durationMicroseconds: demuxed.asset.durationMicroseconds,
-      frameRate: demuxed.asset.frameRate,
-      width: demuxed.asset.width,
-      height: demuxed.asset.height,
-      hasAudio: demuxed.asset.hasAudio,
-      audioSampleRate: demuxed.asset.audioSampleRate,
-      audioChannels: demuxed.asset.audioChannels,
-      decoderConfigB64: demuxed.asset.decoderConfigB64,
-    })
-    // Store subscribers run synchronously; one may remove the asset or tear
-    // down this controller in reaction to the metadata update.
-    if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
-
-    if (!demuxed.asset.frameRate) {
+    if (!asset.frameRate) {
       throw new Error(`"${asset.fileName}": missing frame rate`)
     }
-    await bridge.openAsset(asset.id, blob, demuxed.asset.frameRate)
+    await bridge.openAsset(asset.id, blob, asset.frameRate)
     if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
     state.assetStates.set(asset.id, 'ready')
   } catch (e) {

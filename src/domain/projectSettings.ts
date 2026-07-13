@@ -89,9 +89,10 @@ function matchesResolution(width: number, height: number): boolean {
   )
 }
 
-function matchesFrameRate(num: number, den: number): boolean {
+/** True only for one of the exact canonical project-rate presets. */
+export function isProjectFrameRatePreset(rate: FrameRate): boolean {
   return PROJECT_FRAME_RATE_PRESETS.some(
-    (preset) => preset.num === num && preset.den === den,
+    (preset) => preset.num === rate.num && preset.den === rate.den,
   )
 }
 
@@ -124,7 +125,7 @@ export function validateProjectSettings(value: unknown): Readonly<ProjectSetting
   if (!Number.isSafeInteger(num) || !Number.isSafeInteger(den)) {
     throw new TypeError('Project frame-rate numerator and denominator must be safe integers')
   }
-  if (!matchesFrameRate(num as number, den as number)) {
+  if (!isProjectFrameRatePreset({ num: num as number, den: den as number })) {
     throw new RangeError(`Unsupported project frame rate: ${String(num)}/${String(den)}`)
   }
 

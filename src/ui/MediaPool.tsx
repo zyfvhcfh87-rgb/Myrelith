@@ -1,23 +1,49 @@
 /**
  * ui/MediaPool.tsx — Import + thumbnail asset cards.
  *
- * Importing only calls mediaStore.addAsset(file); the existing controllers
- * fill metadata and generate the full-source filmstrip in the background.
+ * Importing delegates to app/mediaImportController, which analyzes the File,
+ * handles any FPS decision, and commits one complete asset. Existing
+ * controllers then open its preview source and generate visuals.
  * This UI crops the filmstrip's first tile as a representative thumbnail.
- * Rows become draggable only after demuxing supplies a real duration.
+ * Every visible row is already analyzed; a positive duration makes it
+ * draggable onto the timeline.
  */
 
+import { importMedia } from '../app/mediaImportController'
+import type { FrameRate, MediaAsset } from '../domain/schema'
 import { formatTimecode } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaImportStore } from '../state/mediaImportStore'
 import { useMediaStore } from '../state/mediaStore'
 import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
+import MediaImportDialog from './MediaImportDialog'
+
+function formatAssetMetadata(
+  asset: MediaAsset,
+  projectRate: FrameRate,
+): string {
+  const duration = formatTimecode(asset.durationFrames, projectRate)
+  if (asset.kind === 'video') {
+    const dimensions = asset.width && asset.height
+      ? `${asset.width}×${asset.height}`
+      : 'Video'
+    return `${dimensions} · ${duration}`
+  }
+  if (asset.kind === 'audio') {
+    const quality = asset.audioSampleRate
+      ? `${asset.audioSampleRate / 1_000} kHz`
+      : 'Audio'
+    return `${quality} · ${duration}`
+  }
+  return `Image · ${duration}`
+}
 
 export default function MediaPool() {
   const documentFrameRate = useDocumentStore((state) => state.doc.frameRate)
   const assets = useMediaStore((state) => state.assets)
   const visuals = useMediaStore((state) => state.visuals)
-  const addAsset = useMediaStore((state) => state.addAsset)
   const removeAsset = useMediaStore((state) => state.removeAsset)
+  const importBusy = useMediaImportStore((state) => state.phase !== 'idle')
 
   return (
     <div className="media-pool">
@@ -30,18 +56,19 @@ export default function MediaPool() {
             className="media-import-input"
             aria-label="Import media"
             type="file"
-            accept="video/*,.mp4,.mov,.mkv,.webm"
+            accept="video/*,audio/*,.mp4,.mov,.mkv,.webm"
+            disabled={importBusy}
             onChange={(event) => {
               const file = event.target.files?.[0]
-              if (file) addAsset(file)
               event.target.value = ''
+              if (file) void importMedia(file)
             }}
           />
         </label>
       </div>
 
       {assets.size === 0 ? (
-        <p className="media-empty">no media yet — import a video file</p>
+        <p className="media-empty">no media yet — import a video or audio file</p>
       ) : (
         <ul className="media-list">
           {[...assets.values()].map((asset) => {
@@ -93,12 +120,7 @@ export default function MediaPool() {
                 <div className="media-details">
                   <span className="media-name">{asset.fileName}</span>
                   <span className="media-meta">
-                    {asset.frameRate
-                      ? `${asset.width}×${asset.height} · ${formatTimecode(
-                          asset.durationFrames,
-                          documentFrameRate,
-                        )}`
-                      : 'analyzing…'}
+                    {formatAssetMetadata(asset, documentFrameRate)}
                   </span>
                 </div>
 
@@ -117,6 +139,7 @@ export default function MediaPool() {
           })}
         </ul>
       )}
+      <MediaImportDialog />
     </div>
   )
 }

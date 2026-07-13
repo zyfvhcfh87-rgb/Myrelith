@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { MediaAsset } from '../domain/schema'
 import { useMediaStore } from '../state/mediaStore'
 import type { VisualsDeps } from './mediaVisualsController'
 import { disposeMediaVisuals, initMediaVisuals } from './mediaVisualsController'
@@ -14,6 +15,7 @@ let warnSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   urlCounter = 0
+  assetCounter = 0
   URL.createObjectURL = vi.fn(
     () => `blob:mock-${++urlCounter}`,
   ) as typeof URL.createObjectURL
@@ -39,8 +41,35 @@ function fakeDeps(over: Partial<VisualsDeps> = {}): VisualsDeps {
   }
 }
 
-const addAsset = (name: string, type: string) =>
-  useMediaStore.getState().addAsset(new File(['x'], name, { type }))
+let assetCounter = 0
+
+const addAsset = (name: string, type: string): MediaAsset => {
+  const kind = type.startsWith('video/')
+    ? 'video'
+    : type.startsWith('audio/')
+      ? 'audio'
+      : 'image'
+  const asset: MediaAsset = {
+    id: `asset-${++assetCounter}`,
+    fileName: name,
+    mimeType: type,
+    size: 1,
+    lastModified: 1,
+    objectUrl: `blob:${name}`,
+    kind,
+    durationFrames: 60,
+    durationMicroseconds: 2_000_000,
+    frameRate: kind === 'video' ? { num: 30, den: 1 } : null,
+    width: kind === 'audio' ? null : 1920,
+    height: kind === 'audio' ? null : 1080,
+    hasAudio: kind !== 'image',
+    audioSampleRate: kind !== 'image' ? 48_000 : null,
+    audioChannels: kind !== 'image' ? 2 : null,
+    decoderConfigB64: kind === 'video' ? '{"codec":"avc1.64042a"}' : null,
+  }
+  expect(useMediaStore.getState().addAsset(asset)).toBe(true)
+  return asset
+}
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 

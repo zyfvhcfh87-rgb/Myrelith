@@ -28,6 +28,7 @@ const media = vi.hoisted(() => ({
   durationSec: 0,
   videoTrack: null as FakeVideoTrack | null,
   audioTrack: null as FakeAudioTrack | null,
+  disposeCount: 0,
 }))
 
 vi.mock('mediabunny', () => {
@@ -50,6 +51,10 @@ vi.mock('mediabunny', () => {
 
     async computeDuration(): Promise<number> {
       return media.durationSec
+    }
+
+    dispose(): void {
+      media.disposeCount++
     }
   }
 
@@ -137,6 +142,7 @@ describe('loadAsset duration conformance', () => {
   const F30: FrameRate = { num: 30, den: 1 }
 
   beforeEach(() => {
+    media.disposeCount = 0
     media.durationSec = 10
     media.audioTrack = { sampleRate: 48_000, numberOfChannels: 2 }
     media.videoTrack = {
@@ -192,5 +198,17 @@ describe('loadAsset duration conformance', () => {
 
     expect(loaded.asset.frameRate).toEqual({ num: 30000, den: 1001 })
     expect(loaded.asset.durationFrames).toBe(300)
+  })
+
+  test('disposes its Input when analysis fails before ownership can transfer', async () => {
+    media.videoTrack = null
+    media.audioTrack = null
+
+    await expect(loadAsset(
+      new File(['fixture'], 'not-media.bin'),
+      F30,
+    )).rejects.toThrow('contains no video or audio track')
+
+    expect(media.disposeCount).toBe(1)
   })
 })

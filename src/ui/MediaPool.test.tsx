@@ -8,11 +8,20 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { importMedia } from '../app/mediaImportController'
 import type { MediaAsset } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
+import { INITIAL_MEDIA_IMPORT_STATE, useMediaImportStore } from '../state/mediaImportStore'
 import type { AssetVisuals } from '../state/mediaStore'
 import { useMediaStore } from '../state/mediaStore'
 import MediaPool from './MediaPool'
+
+vi.mock('../app/mediaImportController', () => ({
+  importMedia: vi.fn(async () => ({ status: 'imported', assetId: 'mock' })),
+  cancelMediaImport: vi.fn(),
+  dismissMediaImportError: vi.fn(),
+  resolveMediaImportDecision: vi.fn(),
+}))
 
 function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
   return {
@@ -53,6 +62,8 @@ beforeEach(() => {
   ) as typeof URL.createObjectURL
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+  useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
+  vi.mocked(importMedia).mockClear()
   useDocumentStore.getState().setDoc({
     ...useDocumentStore.getState().doc,
     frameRate: { num: 30, den: 1 },
@@ -60,7 +71,7 @@ beforeEach(() => {
 })
 
 describe('MediaPool presentation', () => {
-  test('renders the Media header and imports through the labeled control', () => {
+  test('renders the Media header and delegates the selected File to the import controller', () => {
     render(<MediaPool />)
 
     expect(screen.getByRole('heading', { name: 'Media' })).toBeInTheDocument()
@@ -68,8 +79,9 @@ describe('MediaPool presentation', () => {
     const file = new File(['video'], 'fresh.mp4', { type: 'video/mp4' })
     fireEvent.change(input, { target: { files: [file] } })
 
-    expect(screen.getByTitle('fresh.mp4')).toBeInTheDocument()
-    expect(useMediaStore.getState().assets.size).toBe(1)
+    expect(importMedia).toHaveBeenCalledOnce()
+    expect(importMedia).toHaveBeenCalledWith(file)
+    expect(useMediaStore.getState().assets.size).toBe(0)
   })
 
   test('shows a placeholder while preserving ready metadata and drag state', () => {
@@ -112,6 +124,23 @@ describe('MediaPool presentation', () => {
     expect(thumbnail).toHaveAttribute('data-state', 'ready')
     expect(thumbnail.getAttribute('style')).toContain('blob:filmstrip')
     expect(thumbnail).toHaveStyle({ backgroundSize: '400% auto' })
+  })
+
+  test('shows completed audio metadata instead of an analysis placeholder', () => {
+    seedAsset(makeAsset({
+      id: 'audio-1',
+      fileName: 'dialogue.wav',
+      mimeType: 'audio/wav',
+      kind: 'audio',
+      frameRate: null,
+      width: null,
+      height: null,
+      decoderConfigB64: null,
+    }))
+    render(<MediaPool />)
+
+    expect(screen.getByText('48 kHz · 00:00:04:00')).toBeInTheDocument()
+    expect(screen.queryByText('analyzing…')).not.toBeInTheDocument()
   })
 
   test('removes an asset from its card control', () => {
