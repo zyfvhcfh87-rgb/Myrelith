@@ -68,9 +68,13 @@ function makeAsset(id = 'asset-1'): MediaAsset {
   return {
     id,
     fileName: 'fixture.mp4',
+    mimeType: 'video/mp4',
+    size: 1_024,
+    lastModified: 1_725_000_000_000,
     objectUrl: `blob:${id}`,
     kind: 'video',
     durationFrames: 120,
+    durationMicroseconds: 4_000_000,
     frameRate: { num: 30, den: 1 },
     width: 1920,
     height: 1080,

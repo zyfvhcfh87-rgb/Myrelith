@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-12)
+## Status (2026-07-13)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -41,11 +41,12 @@ and the open list below.
 | Post-MVP #2 — smooth preview playback | ✅ done | Blob-backed streaming lanes; user verified multiple videos without stutter |
 | Post-MVP #3 — undistorted timeline visuals | ✅ done | fixed-aspect SVG thumbnail patterns + antialiased vector waveform; Chrome razor continuity, clean console |
 | Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
+| Post-MVP project system — Slice 1 foundations | ✅ done | presets + portable `.webcut`; Chrome: 2.000s 60fps source stays 2.000s at 30fps, clean console |
 
-686 tests green · `npm run build` and `npm run lint` clean · every phase
+731 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
-Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; no Phase 6
-has been selected. Phase 3 gate CLOSED
+Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
+post-MVP project-system milestone is now active. Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
 4.3 Inspector + arrow stepping. The user completed the Phase 4 manual gate
@@ -114,6 +115,22 @@ windows, Web Audio schedules them against one future AudioContext anchor, and
 PlaybackEngine uses that same anchor. The Chrome gate measured non-zero audio
 while playing, zero audio/nodes after mute and pause, successful audio re-prime
 after a one-frame seek, exact exclusive-end parking, and no warnings or errors.
+
+Project-system Slice 1 establishes the non-UI foundations: one authoritative
+catalog for 720p/1080p/1440p/4K, exact common frame rates, and 44.1/48/96 kHz
+audio; a pure new-document factory; and a versioned portable `.webcut` contract
+with deterministic serialization, strict validation, migration entry points,
+resource bounds, stable asset descriptors, and no session-only URLs, handles,
+decoder state, visuals, or undo history. Media assets now retain canonical
+integer microseconds and conform that duration to the active document rate. A
+10-second 60 fps source in a 30 fps project is therefore 300 frames, not 600.
+
+**Next: Slice 2 — centralized media import and the FPS-mismatch decision
+flow.** Move file analysis and metadata commitment behind an app controller,
+demux each file once against the active project rate, compare exact native and
+project rates, and expose Keep project rate / Match source rate / Cancel without
+silently changing the project. The launch/home and New Project UI follows once
+this import path is trustworthy.
 
 ## What works today (user-visible)
 
@@ -190,7 +207,8 @@ the transform fields only for video-lane clips.
 ## Map (key files, one line each)
 
 - `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates),
-  `time.ts` (conversions incl. `snapToStandardRate`, `formatTimecode`),
+  `time.ts` (conversions incl. exact integer microseconds,
+  `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn;
   5.1e-1 track-scoped `addCrossfade`/`setCrossfadeDuration`/
   `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
@@ -202,6 +220,11 @@ the transform fields only for video-lane clips.
   wrappers around the base ops — same delta to every linkGroupId
   member, atomic rollback; unlinkClip dissolves a group; the store's
   geometry actions call THESE, not the base ops).
+- `src/domain/projectSettings.ts` — authoritative project presets, strict
+  settings validation, and the pure empty-document factory.
+- `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
+  migration entry point, strict untrusted-input validation, and bounded durable
+  asset metadata; excludes every session-owned field.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
@@ -273,7 +296,9 @@ the transform fields only for video-lane clips.
 - `src/engine/worker-bridge.ts` — `DecodeWorkerBridge(worker)` +
   `setSource(rate, provider)` + `renderFrameAt(frame) → RenderResult`
   ('drawn'|'missed'|'superseded'|'error'; never rejects).
-- `src/pipeline/demux.ts` — Mediabunny loadAsset + decoderConfig (de)serialize.
+- `src/pipeline/demux.ts` — Mediabunny loadAsset + decoderConfig (de)serialize;
+  records canonical integer-microsecond duration and conforms playable frames
+  to the active document rate.
 - `src/pipeline/visuals.ts` — filmstrip/waveform image generators (4.3.7):
   mediabunny CanvasSink / AudioBufferSink (streamed chunks, peaks fold on
   the fly — full PCM never held); images span the asset's FULL duration

@@ -9,6 +9,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { MediaAsset } from '../domain/schema'
+import { useDocumentStore } from '../state/documentStore'
 import type { AssetVisuals } from '../state/mediaStore'
 import { useMediaStore } from '../state/mediaStore'
 import MediaPool from './MediaPool'
@@ -17,9 +18,13 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
   return {
     id: 'asset-9',
     fileName: 'beach.mp4',
+    mimeType: 'video/mp4',
+    size: 1_024,
+    lastModified: 1_725_000_000_000,
     objectUrl: 'blob:video',
     kind: 'video',
     durationFrames: 120,
+    durationMicroseconds: 4_000_000,
     frameRate: { num: 30, den: 1 },
     width: 1920,
     height: 1080,
@@ -48,6 +53,10 @@ beforeEach(() => {
   ) as typeof URL.createObjectURL
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+  useDocumentStore.getState().setDoc({
+    ...useDocumentStore.getState().doc,
+    frameRate: { num: 30, den: 1 },
+  })
 })
 
 describe('MediaPool presentation', () => {
@@ -74,6 +83,17 @@ describe('MediaPool presentation', () => {
       'data-state',
       'placeholder',
     )
+  })
+
+  test('formats conformed duration on the document timebase', () => {
+    seedAsset(makeAsset({
+      durationFrames: 300,
+      durationMicroseconds: 10_000_000,
+      frameRate: { num: 60, den: 1 },
+    }))
+    render(<MediaPool />)
+
+    expect(screen.getByText('1920\u00d71080 \u00b7 00:00:10:00')).toBeInTheDocument()
   })
 
   test('crops the first tile from the existing filmstrip', () => {

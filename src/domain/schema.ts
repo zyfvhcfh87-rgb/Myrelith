@@ -82,6 +82,12 @@ export interface MediaAsset {
   id: AssetId
   /** Original file name, for display in the media pool. */
   fileName: string
+  /** Original browser-reported MIME type, retained for save/relink matching. */
+  mimeType: string
+  /** Original file size in bytes, retained for save/relink matching. */
+  size: number
+  /** Original File.lastModified timestamp, retained for save/relink matching. */
+  lastModified: number
   /**
    * Object URL for the underlying File/Blob. Session-scoped: NOT valid across
    * page reloads, so it is excluded from project serialization and must be
@@ -95,6 +101,13 @@ export interface MediaAsset {
    * header). Images use a nominal default chosen at import.
    */
   durationFrames: number
+  /**
+   * Canonical playable duration in integer microseconds, independent of the
+   * document frame rate. Re-conforming an asset to another project rate must
+   * derive durationFrames from this value rather than from its native frame
+   * count, otherwise a 60fps source becomes twice as long in a 30fps project.
+   */
+  durationMicroseconds: number
   /** Native frame rate of the video stream; null for audio-only and images. */
   frameRate: FrameRate | null
   /** Pixel width of the video/image stream; null for audio-only. */

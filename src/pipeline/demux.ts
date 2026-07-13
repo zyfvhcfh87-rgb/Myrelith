@@ -12,7 +12,11 @@
 import { ALL_FORMATS, BlobSource, Input } from 'mediabunny'
 import type { InputAudioTrack, InputVideoTrack } from 'mediabunny'
 import type { FrameRate, MediaAsset } from '../domain/schema'
-import { secondsToFrames, snapToStandardRate } from '../domain/time'
+import {
+  microsecondsToFrames,
+  secondsToMicroseconds,
+  snapToStandardRate,
+} from '../domain/time'
 
 /**
  * A freshly demuxed file: the serializable asset description plus the live
@@ -129,14 +133,19 @@ export async function loadAsset(
   }
 
   const durationSec = await input.computeDuration()
+  const durationMicroseconds = secondsToMicroseconds(durationSec)
   const effectiveRate = docRate ?? frameRate ?? { num: 30, den: 1 }
 
   const asset: MediaAsset = {
     id: `asset_${crypto.randomUUID()}`,
     fileName: file.name,
+    mimeType: file.type,
+    size: file.size,
+    lastModified: file.lastModified,
     objectUrl: URL.createObjectURL(file),
     kind: videoTrack ? 'video' : 'audio',
-    durationFrames: secondsToFrames(durationSec, effectiveRate),
+    durationFrames: microsecondsToFrames(durationMicroseconds, effectiveRate),
+    durationMicroseconds,
     frameRate,
     width: videoTrack ? videoTrack.displayWidth : null,
     height: videoTrack ? videoTrack.displayHeight : null,

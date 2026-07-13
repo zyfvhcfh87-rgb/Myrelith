@@ -28,6 +28,7 @@
  */
 
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
+import { microsecondsToFrames } from '../domain/time'
 import type { RenderFrameResult } from '../engine/render-bridge'
 import { createRenderWorker, RenderWorkerBridge } from '../engine/render-bridge'
 import { loadAsset } from '../pipeline/demux'
@@ -53,7 +54,7 @@ export interface PreviewDeps {
   transferCanvas(canvas: HTMLCanvasElement): OffscreenCanvas
   init(bridge: BridgeLike, canvas: OffscreenCanvas): void
   fetchBlob(url: string): Promise<Blob>
-  demux(file: File): Promise<{
+  demux(file: File, documentRate: FrameRate): Promise<{
     asset: MediaAsset
   }>
 }
@@ -63,8 +64,8 @@ const realDeps: PreviewDeps = {
   transferCanvas: (canvas) => canvas.transferControlToOffscreen(),
   init: (bridge, offscreen) => (bridge as RenderWorkerBridge).init(offscreen),
   fetchBlob: (url) => fetch(url).then((r) => r.blob()),
-  demux: async (file) => {
-    const loaded = await loadAsset(file)
+  demux: async (file, documentRate) => {
+    const loaded = await loadAsset(file, documentRate)
     try {
       if (!loaded.videoTrack || !loaded.asset.frameRate) {
         throw new Error(`"${file.name}" has no decodable video track`)
@@ -134,13 +135,23 @@ async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void>
     const blob = await deps.fetchBlob(asset.objectUrl)
     if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
     const file = new File([blob], asset.fileName, { type: blob.type })
-    const demuxed = await deps.demux(file)
+    const demuxed = await deps.demux(
+      file,
+      useDocumentStore.getState().doc.frameRate,
+    )
     // Disposed, re-inited, or the asset was removed while we demuxed?
     if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
 
     useMediaStore.getState().updateAsset(asset.id, {
       kind: demuxed.asset.kind,
-      durationFrames: demuxed.asset.durationFrames,
+      // A project-rate change may have landed while demux was awaiting the
+      // browser. Commit duration against the current document, never the
+      // stale rate sampled when this import began.
+      durationFrames: microsecondsToFrames(
+        demuxed.asset.durationMicroseconds,
+        useDocumentStore.getState().doc.frameRate,
+      ),
+      durationMicroseconds: demuxed.asset.durationMicroseconds,
       frameRate: demuxed.asset.frameRate,
       width: demuxed.asset.width,
       height: demuxed.asset.height,

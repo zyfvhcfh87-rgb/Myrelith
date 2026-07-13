@@ -8,10 +8,12 @@
  */
 
 import { formatTimecode } from '../domain/time'
+import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
 
 export default function MediaPool() {
+  const documentFrameRate = useDocumentStore((state) => state.doc.frameRate)
   const assets = useMediaStore((state) => state.assets)
   const visuals = useMediaStore((state) => state.visuals)
   const addAsset = useMediaStore((state) => state.addAsset)
@@ -94,7 +96,7 @@ export default function MediaPool() {
                     {asset.frameRate
                       ? `${asset.width}×${asset.height} · ${formatTimecode(
                           asset.durationFrames,
-                          asset.frameRate,
+                          documentFrameRate,
                         )}`
                       : 'analyzing…'}
                   </span>

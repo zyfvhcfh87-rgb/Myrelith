@@ -33,9 +33,13 @@ function makeClip(id: string, tlStart: number, duration: number, srcStart = 0): 
 const asset: MediaAsset = {
   id: 'asset-1',
   fileName: 'a.mp4',
+  mimeType: 'video/mp4',
+  size: 1_024,
+  lastModified: 1_725_000_000_000,
   objectUrl: 'blob:asset',
   kind: 'video',
   durationFrames: 300,
+  durationMicroseconds: 10_000_000,
   frameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,

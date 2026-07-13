@@ -8,15 +8,18 @@ import { describe, test, expect } from 'vitest'
 import type { FrameRate, TimeRange } from './schema'
 import {
   addFrames,
+  framesToMicroseconds,
   formatTimecode,
   framesToSeconds,
   growRange,
+  microsecondsToFrames,
   rangeContains,
   rangeEnd,
   rangeOverlap,
   rateEquals,
   rescaleFrames,
   secondsToFrames,
+  secondsToMicroseconds,
   snapToStandardRate,
 } from './time'
 
@@ -84,6 +87,42 @@ describe('frames <-> seconds round-trips (no drift)', () => {
     expect(() => secondsToFrames(1, { num: 0, den: 1 })).toThrow(TypeError)
     expect(() => framesToSeconds(1, { num: 30, den: -1 })).toThrow(TypeError)
     expect(() => framesToSeconds(Number.NaN, F30)).toThrow(TypeError)
+  })
+})
+
+describe('frames <-> canonical microseconds', () => {
+  test('a 10-second 60fps source stays 10 seconds in a 30fps document', () => {
+    const sourceDuration = framesToMicroseconds(600, F60)
+
+    expect(sourceDuration).toBe(10_000_000)
+    expect(microsecondsToFrames(sourceDuration, F30)).toBe(300)
+    expect(microsecondsToFrames(sourceDuration, F60)).toBe(600)
+  })
+
+  test('preserves exact long-duration NTSC conversions', () => {
+    expect(framesToMicroseconds(30_000, NTSC_2997)).toBe(1_001_000_000)
+    expect(microsecondsToFrames(1_001_000_000, NTSC_2997)).toBe(30_000)
+
+    const tenSeconds = 10_000_000
+    expect(microsecondsToFrames(tenSeconds, NTSC_2997)).toBe(300)
+    expect(microsecondsToFrames(tenSeconds, NTSC_5994)).toBe(599)
+  })
+
+  test('rounds fractional frames and microseconds to the nearest integer', () => {
+    expect(microsecondsToFrames(16_666, F30)).toBe(0)
+    expect(microsecondsToFrames(16_667, F30)).toBe(1)
+    expect(framesToMicroseconds(1, F60)).toBe(16_667)
+    expect(secondsToMicroseconds(1.2345675)).toBe(1_234_568)
+  })
+
+  test('rejects values that cannot be represented safely', () => {
+    expect(() => microsecondsToFrames(-1, F30)).toThrow(TypeError)
+    expect(() => microsecondsToFrames(1.5, F30)).toThrow(TypeError)
+    expect(() => framesToMicroseconds(-1, F30)).toThrow(TypeError)
+    expect(() => framesToMicroseconds(Number.MAX_SAFE_INTEGER, { num: 1, den: 1 }))
+      .toThrow(RangeError)
+    expect(() => secondsToMicroseconds(Number.POSITIVE_INFINITY)).toThrow(TypeError)
+    expect(() => secondsToMicroseconds(Number.MAX_SAFE_INTEGER)).toThrow(TypeError)
   })
 })
 

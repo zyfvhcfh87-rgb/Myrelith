@@ -1,11 +1,60 @@
 /**
  * pipeline/demux.test.ts — Phase 2.1 unit tests for the pure parts.
- * (loadAsset itself needs a real media file: validated via the Phase 2.5
- * sandbox, then a fixture-MP4 integration test per the plan's test strategy.)
+ * The container adapter is mocked here; real media stays covered by the
+ * browser decode/export gates.
  */
 
-import { describe, expect, test } from 'vitest'
-import { deserializeDecoderConfig, serializeDecoderConfig } from './demux'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { FrameRate } from '../domain/schema'
+import {
+  deserializeDecoderConfig,
+  loadAsset,
+  serializeDecoderConfig,
+} from './demux'
+
+interface FakeVideoTrack {
+  displayWidth: number
+  displayHeight: number
+  computePacketStats: ReturnType<typeof vi.fn>
+  getDecoderConfig: ReturnType<typeof vi.fn>
+}
+
+interface FakeAudioTrack {
+  sampleRate: number
+  numberOfChannels: number
+}
+
+const media = vi.hoisted(() => ({
+  durationSec: 0,
+  videoTrack: null as FakeVideoTrack | null,
+  audioTrack: null as FakeAudioTrack | null,
+}))
+
+vi.mock('mediabunny', () => {
+  class BlobSource {
+    blob: Blob
+
+    constructor(blob: Blob) {
+      this.blob = blob
+    }
+  }
+
+  class Input {
+    async getPrimaryVideoTrack(): Promise<FakeVideoTrack | null> {
+      return media.videoTrack
+    }
+
+    async getPrimaryAudioTrack(): Promise<FakeAudioTrack | null> {
+      return media.audioTrack
+    }
+
+    async computeDuration(): Promise<number> {
+      return media.durationSec
+    }
+  }
+
+  return { ALL_FORMATS: {}, BlobSource, Input }
+})
 
 /** Deterministic pseudo-random bytes covering the full 0..255 range. */
 function testBytes(length: number, seed = 7): Uint8Array {
@@ -81,5 +130,67 @@ describe('decoder config serialization', () => {
       serializeDecoderConfig({ codec: 'hev1.1.6.L93.B0', description: big }),
     )
     expect(new Uint8Array(revived.description as Uint8Array)).toEqual(big)
+  })
+})
+
+describe('loadAsset duration conformance', () => {
+  const F30: FrameRate = { num: 30, den: 1 }
+
+  beforeEach(() => {
+    media.durationSec = 10
+    media.audioTrack = { sampleRate: 48_000, numberOfChannels: 2 }
+    media.videoTrack = {
+      displayWidth: 1920,
+      displayHeight: 1080,
+      computePacketStats: vi.fn(async () => ({ averagePacketRate: 60 })),
+      getDecoderConfig: vi.fn(async () => ({ codec: 'avc1.640028' })),
+    }
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:demux-test'),
+    })
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(
+      '00000000-0000-4000-8000-000000000001',
+    )
+  })
+
+  test('stores canonical duration and conforms a 60fps source to 30fps', async () => {
+    const loaded = await loadAsset(
+      new File(['fixture'], 'ten-seconds.mp4', {
+        type: 'video/mp4',
+        lastModified: 1_725_000_000_003,
+      }),
+      F30,
+    )
+
+    expect(loaded.asset.mimeType).toBe('video/mp4')
+    expect(loaded.asset.size).toBe(7)
+    expect(loaded.asset.lastModified).toBe(1_725_000_000_003)
+    expect(loaded.asset.frameRate).toEqual({ num: 60, den: 1 })
+    expect(loaded.asset.durationMicroseconds).toBe(10_000_000)
+    expect(loaded.asset.durationFrames).toBe(300)
+  })
+
+  test('keeps the existing native-rate default when docRate is omitted', async () => {
+    const loaded = await loadAsset(
+      new File(['fixture'], 'ten-seconds.mp4', { type: 'video/mp4' }),
+    )
+
+    expect(loaded.asset.durationMicroseconds).toBe(10_000_000)
+    expect(loaded.asset.durationFrames).toBe(600)
+  })
+
+  test('conforms canonical duration at an exact rational document rate', async () => {
+    media.videoTrack!.computePacketStats = vi.fn(async () => ({
+      averagePacketRate: 29.97002997,
+    }))
+
+    const loaded = await loadAsset(
+      new File(['fixture'], 'ntsc.mp4', { type: 'video/mp4' }),
+      { num: 30000, den: 1001 },
+    )
+
+    expect(loaded.asset.frameRate).toEqual({ num: 30000, den: 1001 })
+    expect(loaded.asset.durationFrames).toBe(300)
   })
 })

@@ -25,14 +25,21 @@ beforeEach(() => {
 
 describe('mediaStore', () => {
   test('addAsset registers a placeholder with id, name, url and kind', () => {
-    const file = new File(['x'], 'holiday.mp4', { type: 'video/mp4' })
+    const file = new File(['x'], 'holiday.mp4', {
+      type: 'video/mp4',
+      lastModified: 1_725_000_000_000,
+    })
     const asset = getState().addAsset(file)
 
     expect(asset.id).toMatch(/^asset_/)
     expect(asset.fileName).toBe('holiday.mp4')
+    expect(asset.mimeType).toBe('video/mp4')
+    expect(asset.size).toBe(1)
+    expect(asset.lastModified).toBe(1_725_000_000_000)
     expect(asset.objectUrl).toBe('blob:mock-1')
     expect(asset.kind).toBe('video')
     expect(asset.durationFrames).toBe(0) // placeholder until Phase 2
+    expect(asset.durationMicroseconds).toBe(0)
     expect(asset.decoderConfigB64).toBeNull()
     expect(getState().assets.get(asset.id)).toBe(asset)
   })
@@ -70,10 +77,14 @@ describe('mediaStore', () => {
     expect(getState().assets).toBe(before)
   })
 
-  test('updateAsset merges demux results without touching id/objectUrl', () => {
-    const a = getState().addAsset(new File([], 'a.mp4', { type: 'video/mp4' }))
+  test('updateAsset merges demux results without touching source identity', () => {
+    const a = getState().addAsset(new File([], 'a.mp4', {
+      type: 'video/mp4',
+      lastModified: 1_725_000_000_001,
+    }))
     getState().updateAsset(a.id, {
       durationFrames: 412,
+      durationMicroseconds: 6_866_667,
       frameRate: { num: 60, den: 1 },
       width: 1920,
       height: 1080,
@@ -83,7 +94,11 @@ describe('mediaStore', () => {
       id: a.id,
       objectUrl: a.objectUrl,
       fileName: 'a.mp4',
+      mimeType: 'video/mp4',
+      size: 0,
+      lastModified: 1_725_000_000_001,
       durationFrames: 412,
+      durationMicroseconds: 6_866_667,
       frameRate: { num: 60, den: 1 },
       width: 1920,
     })

@@ -1,0 +1,844 @@
+/**
+ * Portable, versioned WebCut project-file contract.
+ *
+ * This module is deliberately pure TypeScript. A project file contains the
+ * durable timeline and enough source-file metadata to relink media, but none
+ * of the session-owned Blob URLs, decoder state, generated visuals, browser
+ * handles, local paths, or undo history.
+ */
+
+import type {
+  AssetKind,
+  Clip,
+  Effect,
+  FrameRate,
+  TextProps,
+  TimelineDoc,
+  Track,
+  Transform,
+} from './schema'
+import { microsecondsToFrames } from './time'
+import {
+  MAX_DOCUMENT_ID_CHARACTERS,
+  MAX_PROJECT_NAME_CHARACTERS,
+} from './projectLimits'
+
+export const PROJECT_FILE_FORMAT = 'webcut-project' as const
+export const CURRENT_PROJECT_FORMAT_VERSION = 1 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 1 as const
+
+/** Public bounds applied before or while walking untrusted project data. */
+export const PROJECT_FILE_LIMITS = {
+  maxSerializedCharacters: 10_000_000,
+  maxAssets: 50_000,
+  maxTracks: 256,
+  maxClips: 100_000,
+  maxEffectsPerClip: 256,
+  maxEffectParams: 256,
+  maxTotalEffects: 10_000,
+  maxTotalEffectParams: 50_000,
+  maxTotalEffectStringCharacters: 10_000_000,
+  maxTransitions: 100_000,
+  maxTotalTextCharacters: 10_000_000,
+  maxIdCharacters: MAX_DOCUMENT_ID_CHARACTERS,
+  maxNameCharacters: MAX_PROJECT_NAME_CHARACTERS,
+  maxFileNameCharacters: 4_096,
+  maxMimeTypeCharacters: 256,
+  maxTextCharacters: 1_000_000,
+  maxEffectStringCharacters: 65_536,
+  maxDimension: 65_535,
+  maxAudioSampleRate: 768_000,
+  maxAudioChannels: 64,
+  maxRatePart: 1_000_000,
+  maxFramesPerSecond: 1_000,
+  maxFiniteMagnitude: 1_000_000_000,
+} as const
+
+/** Durable source-file metadata used for display, matching, and relinking. */
+export interface PortableAssetDescriptor {
+  id: string
+  fileName: string
+  mimeType: string
+  size: number
+  lastModified: number
+  kind: AssetKind
+  durationMicroseconds: number
+  nativeFrameRate: FrameRate | null
+  width: number | null
+  height: number | null
+  hasAudio: boolean
+  audioSampleRate: number | null
+  audioChannels: number | null
+}
+
+export interface ProjectFileV1 {
+  format: typeof PROJECT_FILE_FORMAT
+  formatVersion: typeof CURRENT_PROJECT_FORMAT_VERSION
+  document: TimelineDoc
+  assets: PortableAssetDescriptor[]
+}
+
+export type ProjectFile = ProjectFileV1
+
+export class ProjectFileError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ProjectFileError'
+  }
+}
+
+type JsonRecord = Record<string, unknown>
+
+function fail(path: string, problem: string): never {
+  throw new ProjectFileError(`${path}: ${problem}`)
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+function record(value: unknown, path: string): JsonRecord {
+  if (!isRecord(value)) fail(path, 'expected an object')
+  return value
+}
+
+function exactKeys(
+  value: JsonRecord,
+  required: readonly string[],
+  optional: readonly string[],
+  path: string,
+): void {
+  const allowed = new Set([...required, ...optional])
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) fail(`${path}.${key}`, 'unknown field')
+  }
+  for (const key of required) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) {
+      fail(path, `missing field ${key}`)
+    }
+  }
+}
+
+function stringValue(
+  value: unknown,
+  path: string,
+  maxLength: number,
+  allowEmpty = false,
+): asserts value is string {
+  if (typeof value !== 'string') fail(path, 'expected a string')
+  if (value.length > maxLength) fail(path, `exceeds ${maxLength} characters`)
+  if (!allowEmpty && value.trim().length === 0) fail(path, 'must not be empty')
+}
+
+function booleanValue(value: unknown, path: string): asserts value is boolean {
+  if (typeof value !== 'boolean') fail(path, 'expected a boolean')
+}
+
+function safeInteger(
+  value: unknown,
+  path: string,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+): asserts value is number {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+    fail(path, `expected a safe integer from ${minimum} to ${maximum}`)
+  }
+}
+
+function finiteNumber(
+  value: unknown,
+  path: string,
+  minimum: number,
+  maximum: number,
+): asserts value is number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum || value > maximum) {
+    fail(path, `expected a finite number from ${minimum} to ${maximum}`)
+  }
+}
+
+function boundedArray(
+  value: unknown,
+  path: string,
+  maximum: number,
+): asserts value is unknown[] {
+  if (!Array.isArray(value)) fail(path, 'expected an array')
+  if (value.length > maximum) fail(path, `exceeds ${maximum} entries`)
+}
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = left
+  let b = right
+  while (b !== 0) {
+    const remainder = a % b
+    a = b
+    b = remainder
+  }
+  return a
+}
+
+function validateFrameRate(value: unknown, path: string): asserts value is FrameRate {
+  const candidate = record(value, path)
+  exactKeys(candidate, ['num', 'den'], [], path)
+  safeInteger(candidate.num, `${path}.num`, 1, PROJECT_FILE_LIMITS.maxRatePart)
+  safeInteger(candidate.den, `${path}.den`, 1, PROJECT_FILE_LIMITS.maxRatePart)
+  if (greatestCommonDivisor(candidate.num, candidate.den) !== 1) {
+    fail(path, 'frame rate must be reduced to an exact rational')
+  }
+  if (candidate.num / candidate.den > PROJECT_FILE_LIMITS.maxFramesPerSecond) {
+    fail(path, `frame rate exceeds ${PROJECT_FILE_LIMITS.maxFramesPerSecond} fps`)
+  }
+}
+
+function validateNullableFrameRate(
+  value: unknown,
+  path: string,
+): asserts value is FrameRate | null {
+  if (value !== null) validateFrameRate(value, path)
+}
+
+function validateNullableSafeInteger(
+  value: unknown,
+  path: string,
+  minimum: number,
+  maximum: number,
+): asserts value is number | null {
+  if (value !== null) safeInteger(value, path, minimum, maximum)
+}
+
+function validateAsset(value: unknown, path: string): asserts value is PortableAssetDescriptor {
+  const asset = record(value, path)
+  exactKeys(
+    asset,
+    [
+      'id',
+      'fileName',
+      'mimeType',
+      'size',
+      'lastModified',
+      'kind',
+      'durationMicroseconds',
+      'nativeFrameRate',
+      'width',
+      'height',
+      'hasAudio',
+      'audioSampleRate',
+      'audioChannels',
+    ],
+    [],
+    path,
+  )
+  stringValue(asset.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  stringValue(asset.fileName, `${path}.fileName`, PROJECT_FILE_LIMITS.maxFileNameCharacters)
+  stringValue(asset.mimeType, `${path}.mimeType`, PROJECT_FILE_LIMITS.maxMimeTypeCharacters, true)
+  safeInteger(asset.size, `${path}.size`, 0)
+  safeInteger(asset.lastModified, `${path}.lastModified`, 0)
+  if (asset.kind !== 'video' && asset.kind !== 'audio' && asset.kind !== 'image') {
+    fail(`${path}.kind`, 'expected video, audio, or image')
+  }
+  safeInteger(asset.durationMicroseconds, `${path}.durationMicroseconds`, 0)
+  validateNullableFrameRate(asset.nativeFrameRate, `${path}.nativeFrameRate`)
+  validateNullableSafeInteger(asset.width, `${path}.width`, 1, PROJECT_FILE_LIMITS.maxDimension)
+  validateNullableSafeInteger(asset.height, `${path}.height`, 1, PROJECT_FILE_LIMITS.maxDimension)
+  booleanValue(asset.hasAudio, `${path}.hasAudio`)
+  validateNullableSafeInteger(
+    asset.audioSampleRate,
+    `${path}.audioSampleRate`,
+    1,
+    PROJECT_FILE_LIMITS.maxAudioSampleRate,
+  )
+  validateNullableSafeInteger(
+    asset.audioChannels,
+    `${path}.audioChannels`,
+    1,
+    PROJECT_FILE_LIMITS.maxAudioChannels,
+  )
+
+  const dimensionsBothNull = asset.width === null && asset.height === null
+  const dimensionsBothPresent = asset.width !== null && asset.height !== null
+  if (!dimensionsBothNull && !dimensionsBothPresent) {
+    fail(path, 'width and height must both be present or both be null')
+  }
+  if (asset.kind === 'audio' && !dimensionsBothNull) {
+    fail(path, 'audio-only assets cannot have visual dimensions')
+  }
+  if (asset.kind === 'image' && !dimensionsBothPresent) {
+    fail(path, 'image assets require dimensions')
+  }
+  if (asset.kind !== 'video' && asset.nativeFrameRate !== null) {
+    fail(path, 'only video assets may have a native frame rate')
+  }
+  if (asset.kind === 'audio' && !asset.hasAudio) {
+    fail(path, 'audio assets must contain audio')
+  }
+  const audioMetadataPresent = asset.audioSampleRate !== null && asset.audioChannels !== null
+  if (asset.hasAudio !== audioMetadataPresent) {
+    fail(path, 'audio metadata must match hasAudio')
+  }
+}
+
+function validateRange(value: unknown, path: string, minimumDuration: number): void {
+  const range = record(value, path)
+  exactKeys(range, ['startFrame', 'durationFrames'], [], path)
+  safeInteger(range.startFrame, `${path}.startFrame`, 0)
+  safeInteger(range.durationFrames, `${path}.durationFrames`, minimumDuration)
+  if (!Number.isSafeInteger(range.startFrame + range.durationFrames)) {
+    fail(path, 'range end exceeds safe integer precision')
+  }
+}
+
+function validateTransform(value: unknown, path: string): asserts value is Transform {
+  const transform = record(value, path)
+  exactKeys(
+    transform,
+    ['x', 'y', 'scaleX', 'scaleY', 'rotation', 'anchorX', 'anchorY'],
+    [],
+    path,
+  )
+  const magnitude = PROJECT_FILE_LIMITS.maxFiniteMagnitude
+  finiteNumber(transform.x, `${path}.x`, -magnitude, magnitude)
+  finiteNumber(transform.y, `${path}.y`, -magnitude, magnitude)
+  finiteNumber(transform.scaleX, `${path}.scaleX`, -magnitude, magnitude)
+  finiteNumber(transform.scaleY, `${path}.scaleY`, -magnitude, magnitude)
+  finiteNumber(transform.rotation, `${path}.rotation`, -magnitude, magnitude)
+  finiteNumber(transform.anchorX, `${path}.anchorX`, 0, 1)
+  finiteNumber(transform.anchorY, `${path}.anchorY`, 0, 1)
+}
+
+function validateEffect(
+  value: unknown,
+  path: string,
+  context: ValidationContext,
+): asserts value is Effect {
+  const effect = record(value, path)
+  exactKeys(effect, ['id', 'type', 'enabled', 'params'], [], path)
+  stringValue(effect.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (context.effectIds.has(effect.id)) fail(`${path}.id`, 'duplicate effect id')
+  context.effectIds.add(effect.id)
+  stringValue(effect.type, `${path}.type`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  booleanValue(effect.enabled, `${path}.enabled`)
+  const params = record(effect.params, `${path}.params`)
+  const keys = Object.keys(params)
+  if (keys.length > PROJECT_FILE_LIMITS.maxEffectParams) {
+    fail(`${path}.params`, `exceeds ${PROJECT_FILE_LIMITS.maxEffectParams} entries`)
+  }
+  context.effectParamCount += keys.length
+  if (context.effectParamCount > PROJECT_FILE_LIMITS.maxTotalEffectParams) {
+    fail(
+      '$.document.tracks',
+      `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectParams} effect parameters in total`,
+    )
+  }
+  for (const key of keys) {
+    stringValue(key, `${path}.params key`, PROJECT_FILE_LIMITS.maxNameCharacters)
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+      fail(`${path}.params.${key}`, 'unsafe parameter key')
+    }
+    const parameter = params[key]
+    if (typeof parameter === 'number') {
+      finiteNumber(
+        parameter,
+        `${path}.params.${key}`,
+        -PROJECT_FILE_LIMITS.maxFiniteMagnitude,
+        PROJECT_FILE_LIMITS.maxFiniteMagnitude,
+      )
+    } else if (typeof parameter === 'string') {
+      stringValue(
+        parameter,
+        `${path}.params.${key}`,
+        PROJECT_FILE_LIMITS.maxEffectStringCharacters,
+        true,
+      )
+      context.effectStringCharacterCount += parameter.length
+      if (
+        context.effectStringCharacterCount >
+        PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters
+      ) {
+        fail(
+          '$.document.tracks',
+          `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters} effect-string characters in total`,
+        )
+      }
+    } else if (typeof parameter !== 'boolean') {
+      fail(`${path}.params.${key}`, 'expected a finite number, string, or boolean')
+    }
+  }
+}
+
+function validateText(value: unknown, path: string): asserts value is TextProps {
+  const text = record(value, path)
+  exactKeys(
+    text,
+    ['content', 'fontFamily', 'fontSizePx', 'color', 'align', 'bold', 'italic'],
+    [],
+    path,
+  )
+  stringValue(text.content, `${path}.content`, PROJECT_FILE_LIMITS.maxTextCharacters, true)
+  stringValue(text.fontFamily, `${path}.fontFamily`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  finiteNumber(text.fontSizePx, `${path}.fontSizePx`, 0.01, PROJECT_FILE_LIMITS.maxFiniteMagnitude)
+  stringValue(text.color, `${path}.color`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  if (text.align !== 'left' && text.align !== 'center' && text.align !== 'right') {
+    fail(`${path}.align`, 'expected left, center, or right')
+  }
+  booleanValue(text.bold, `${path}.bold`)
+  booleanValue(text.italic, `${path}.italic`)
+}
+
+interface ValidationContext {
+  assetIds: Set<string>
+  assetsById: Map<string, PortableAssetDescriptor>
+  documentFrameRate: FrameRate | null
+  clipIds: Set<string>
+  effectIds: Set<string>
+  transitionIds: Set<string>
+  linkGroupCounts: Map<string, number>
+  clipCount: number
+  effectCount: number
+  effectParamCount: number
+  effectStringCharacterCount: number
+  textCharacterCount: number
+  transitionCount: number
+}
+
+function validateClip(value: unknown, path: string, trackKind: Track['kind'], context: ValidationContext): asserts value is Clip {
+  const clip = record(value, path)
+  exactKeys(
+    clip,
+    ['id', 'assetId', 'name', 'sourceRange', 'timelineRange', 'transform', 'opacity', 'volume', 'effects'],
+    ['text', 'linkGroupId'],
+    path,
+  )
+  stringValue(clip.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (context.clipIds.has(clip.id)) fail(`${path}.id`, 'duplicate clip id')
+  context.clipIds.add(clip.id)
+  stringValue(clip.assetId, `${path}.assetId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  const asset = context.assetsById.get(clip.assetId)
+  if (!asset) fail(`${path}.assetId`, 'references an unknown asset')
+  stringValue(clip.name, `${path}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  validateRange(clip.sourceRange, `${path}.sourceRange`, 1)
+  validateRange(clip.timelineRange, `${path}.timelineRange`, 1)
+  const sourceRange = clip.sourceRange as { durationFrames: number }
+  const timelineRange = clip.timelineRange as { durationFrames: number }
+  if (sourceRange.durationFrames !== timelineRange.durationFrames) {
+    fail(path, 'source and timeline durations must match')
+  }
+  if (context.documentFrameRate === null) {
+    fail('$.document.frameRate', 'must be validated before clips')
+  }
+  const source = clip.sourceRange as {
+    startFrame: number
+    durationFrames: number
+  }
+  const assetDurationFrames = microsecondsToFrames(
+    asset.durationMicroseconds,
+    context.documentFrameRate,
+  )
+  if (source.startFrame + source.durationFrames > assetDurationFrames) {
+    fail(`${path}.sourceRange`, 'extends beyond the referenced asset duration')
+  }
+  validateTransform(clip.transform, `${path}.transform`)
+  finiteNumber(clip.opacity, `${path}.opacity`, 0, 1)
+  finiteNumber(clip.volume, `${path}.volume`, 0, 2)
+  boundedArray(clip.effects, `${path}.effects`, PROJECT_FILE_LIMITS.maxEffectsPerClip)
+  context.effectCount += clip.effects.length
+  if (context.effectCount > PROJECT_FILE_LIMITS.maxTotalEffects) {
+    fail(
+      '$.document.tracks',
+      `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffects} effects in total`,
+    )
+  }
+  for (let index = 0; index < clip.effects.length; index++) {
+    validateEffect(clip.effects[index], `${path}.effects[${index}]`, context)
+  }
+  if (clip.text !== undefined) {
+    validateText(clip.text, `${path}.text`)
+    context.textCharacterCount += clip.text.content.length
+    if (context.textCharacterCount > PROJECT_FILE_LIMITS.maxTotalTextCharacters) {
+      fail(
+        '$.document.tracks',
+        `exceeds ${PROJECT_FILE_LIMITS.maxTotalTextCharacters} text characters in total`,
+      )
+    }
+  }
+  if (clip.linkGroupId !== undefined) {
+    stringValue(clip.linkGroupId, `${path}.linkGroupId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+    context.linkGroupCounts.set(
+      clip.linkGroupId,
+      (context.linkGroupCounts.get(clip.linkGroupId) ?? 0) + 1,
+    )
+  }
+  if (trackKind === 'audio') {
+    if (clip.text !== undefined) fail(path, 'text clips cannot be placed on audio tracks')
+    if (!asset.hasAudio) fail(`${path}.assetId`, 'audio-track clip references an asset without audio')
+  } else if (clip.text === undefined && asset.kind === 'audio') {
+    fail(`${path}.assetId`, 'video-track clip references an audio-only asset')
+  }
+}
+
+interface ResolvedTransitionWindow {
+  startFrame: number
+  endFrame: number
+}
+
+function validateTransition(
+  value: unknown,
+  path: string,
+  track: Track,
+  clipIndexById: ReadonlyMap<string, number>,
+  context: ValidationContext,
+): ResolvedTransitionWindow {
+  const transition = record(value, path)
+  exactKeys(
+    transition,
+    ['id', 'type', 'fromClipId', 'toClipId', 'durationFrames'],
+    [],
+    path,
+  )
+  stringValue(transition.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (context.transitionIds.has(transition.id)) fail(`${path}.id`, 'duplicate transition id')
+  context.transitionIds.add(transition.id)
+  if (transition.type !== 'crossfade') fail(`${path}.type`, 'expected crossfade')
+  stringValue(transition.fromClipId, `${path}.fromClipId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  stringValue(transition.toClipId, `${path}.toClipId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  safeInteger(transition.durationFrames, `${path}.durationFrames`, 1)
+  if (track.kind !== 'video') fail(path, 'transitions require a video track')
+
+  const fromIndex = clipIndexById.get(transition.fromClipId)
+  if (fromIndex === undefined || fromIndex + 1 >= track.clips.length) {
+    fail(path, 'transition endpoints must be adjacent clips on the owning track')
+  }
+  const from = track.clips[fromIndex]
+  const to = track.clips[fromIndex + 1]
+  if (to.id !== transition.toClipId || from.id === to.id) {
+    fail(path, 'transition endpoints must be ordered adjacent clips')
+  }
+  if (from.text !== undefined || to.text !== undefined) {
+    fail(path, 'text clips cannot be transition endpoints')
+  }
+  const cutFrame = from.timelineRange.startFrame + from.timelineRange.durationFrames
+  if (cutFrame !== to.timelineRange.startFrame) {
+    fail(path, 'transition endpoints must touch')
+  }
+  const startFrame = cutFrame - Math.floor(transition.durationFrames / 2)
+  const endFrame = startFrame + transition.durationFrames
+  const toEnd = to.timelineRange.startFrame + to.timelineRange.durationFrames
+  if (
+    !Number.isSafeInteger(startFrame) ||
+    !Number.isSafeInteger(endFrame) ||
+    startFrame < from.timelineRange.startFrame ||
+    endFrame > toEnd
+  ) {
+    fail(path, 'transition window does not fit its clips')
+  }
+  return { startFrame, endFrame }
+}
+
+function validateTrack(value: unknown, path: string, trackIds: Set<string>, context: ValidationContext): asserts value is Track {
+  const track = record(value, path)
+  exactKeys(
+    track,
+    ['id', 'kind', 'name', 'clips', 'transitions', 'hidden', 'muted', 'solo', 'locked'],
+    [],
+    path,
+  )
+  stringValue(track.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (trackIds.has(track.id)) fail(`${path}.id`, 'duplicate track id')
+  trackIds.add(track.id)
+  if (track.kind !== 'video' && track.kind !== 'audio') {
+    fail(`${path}.kind`, 'expected video or audio')
+  }
+  stringValue(track.name, `${path}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  boundedArray(track.clips, `${path}.clips`, PROJECT_FILE_LIMITS.maxClips)
+  context.clipCount += track.clips.length
+  if (context.clipCount > PROJECT_FILE_LIMITS.maxClips) {
+    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxClips} clips in total`)
+  }
+  let previousEnd = -1
+  const clipIndexById = new Map<string, number>()
+  for (let index = 0; index < track.clips.length; index++) {
+    const clipPath = `${path}.clips[${index}]`
+    const clip = track.clips[index]
+    validateClip(clip, clipPath, track.kind, context)
+    if (clip.timelineRange.startFrame < previousEnd) {
+      fail(clipPath, 'clips must be sorted and non-overlapping')
+    }
+    previousEnd = clip.timelineRange.startFrame + clip.timelineRange.durationFrames
+    clipIndexById.set(clip.id, index)
+  }
+  boundedArray(track.transitions, `${path}.transitions`, PROJECT_FILE_LIMITS.maxTransitions)
+  context.transitionCount += track.transitions.length
+  if (context.transitionCount > PROJECT_FILE_LIMITS.maxTransitions) {
+    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxTransitions} transitions in total`)
+  }
+  const windows: ResolvedTransitionWindow[] = []
+  for (let index = 0; index < track.transitions.length; index++) {
+    const window = validateTransition(
+      track.transitions[index],
+      `${path}.transitions[${index}]`,
+      track as unknown as Track,
+      clipIndexById,
+      context,
+    )
+    windows.push(window)
+  }
+  windows.sort((left, right) => left.startFrame - right.startFrame)
+  for (let index = 1; index < windows.length; index++) {
+    if (windows[index].startFrame < windows[index - 1].endFrame) {
+      fail(path, 'transition windows overlap')
+    }
+  }
+  booleanValue(track.hidden, `${path}.hidden`)
+  booleanValue(track.muted, `${path}.muted`)
+  booleanValue(track.solo, `${path}.solo`)
+  booleanValue(track.locked, `${path}.locked`)
+}
+
+function validateDocument(value: unknown, context: ValidationContext): asserts value is TimelineDoc {
+  const document = record(value, '$.document')
+  exactKeys(
+    document,
+    ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks'],
+    [],
+    '$.document',
+  )
+  safeInteger(document.schemaVersion, '$.document.schemaVersion', 1)
+  if (document.schemaVersion > CURRENT_TIMELINE_SCHEMA_VERSION) {
+    fail('$.document.schemaVersion', `unsupported future timeline schema ${document.schemaVersion}`)
+  }
+  if (document.schemaVersion !== CURRENT_TIMELINE_SCHEMA_VERSION) {
+    fail('$.document.schemaVersion', `unsupported timeline schema ${document.schemaVersion}`)
+  }
+  stringValue(document.id, '$.document.id', PROJECT_FILE_LIMITS.maxIdCharacters)
+  stringValue(document.name, '$.document.name', PROJECT_FILE_LIMITS.maxNameCharacters)
+  validateFrameRate(document.frameRate, '$.document.frameRate')
+  context.documentFrameRate = document.frameRate
+  safeInteger(document.width, '$.document.width', 1, PROJECT_FILE_LIMITS.maxDimension)
+  safeInteger(document.height, '$.document.height', 1, PROJECT_FILE_LIMITS.maxDimension)
+  safeInteger(
+    document.audioSampleRate,
+    '$.document.audioSampleRate',
+    1,
+    PROJECT_FILE_LIMITS.maxAudioSampleRate,
+  )
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const trackIds = new Set<string>()
+  for (let index = 0; index < document.tracks.length; index++) {
+    validateTrack(document.tracks[index], `$.document.tracks[${index}]`, trackIds, context)
+  }
+}
+
+/**
+ * Validate an already-current project value. The returned object is the same
+ * reference; callers that need an isolated snapshot can parse serialized JSON.
+ */
+export function validateProjectFile(value: unknown): ProjectFile {
+  const project = record(value, '$')
+  exactKeys(project, ['format', 'formatVersion', 'document', 'assets'], [], '$')
+  if (project.format !== PROJECT_FILE_FORMAT) {
+    fail('$.format', `expected ${PROJECT_FILE_FORMAT}`)
+  }
+  safeInteger(project.formatVersion, '$.formatVersion', 1)
+  if (project.formatVersion > CURRENT_PROJECT_FORMAT_VERSION) {
+    fail('$.formatVersion', `unsupported future project format ${project.formatVersion}`)
+  }
+  if (project.formatVersion !== CURRENT_PROJECT_FORMAT_VERSION) {
+    fail('$.formatVersion', `unsupported project format ${project.formatVersion}`)
+  }
+  boundedArray(project.assets, '$.assets', PROJECT_FILE_LIMITS.maxAssets)
+
+  const assetIds = new Set<string>()
+  const assetsById = new Map<string, PortableAssetDescriptor>()
+  for (let index = 0; index < project.assets.length; index++) {
+    const path = `$.assets[${index}]`
+    const asset = project.assets[index]
+    validateAsset(asset, path)
+    if (assetIds.has(asset.id)) fail(`${path}.id`, 'duplicate asset id')
+    assetIds.add(asset.id)
+    assetsById.set(asset.id, asset)
+  }
+
+  const context: ValidationContext = {
+    assetIds,
+    assetsById,
+    documentFrameRate: null,
+    clipIds: new Set(),
+    effectIds: new Set(),
+    transitionIds: new Set(),
+    linkGroupCounts: new Map(),
+    clipCount: 0,
+    effectCount: 0,
+    effectParamCount: 0,
+    effectStringCharacterCount: 0,
+    textCharacterCount: 0,
+    transitionCount: 0,
+  }
+  validateDocument(project.document, context)
+  for (const [linkGroupId, count] of context.linkGroupCounts) {
+    if (count < 2) fail('$.document', `link group ${linkGroupId} has no partner clip`)
+  }
+  return project as unknown as ProjectFile
+}
+
+/**
+ * Upgrade a parsed historical value into the current format. Version 1 has no
+ * predecessor yet; the explicit switch is the insertion point for migrations.
+ */
+export function migrateProjectFile(value: unknown): unknown {
+  const project = record(value, '$')
+  if (project.format !== PROJECT_FILE_FORMAT) {
+    fail('$.format', `expected ${PROJECT_FILE_FORMAT}`)
+  }
+  safeInteger(project.formatVersion, '$.formatVersion', 1)
+  if (project.formatVersion > CURRENT_PROJECT_FORMAT_VERSION) {
+    fail('$.formatVersion', `unsupported future project format ${project.formatVersion}`)
+  }
+  switch (project.formatVersion) {
+    case 1:
+      return project
+    default:
+      return fail('$.formatVersion', `unsupported project format ${project.formatVersion}`)
+  }
+}
+
+function cloneEffectParams(params: Effect['params']): Effect['params'] {
+  const copy: Effect['params'] = {}
+  for (const key of Object.keys(params)) copy[key] = params[key]
+  return copy
+}
+
+function portableProjectSnapshot(project: ProjectFile): ProjectFile {
+  const document = project.document
+  return {
+    format: PROJECT_FILE_FORMAT,
+    formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
+    document: {
+      schemaVersion: document.schemaVersion,
+      id: document.id,
+      name: document.name,
+      frameRate: { num: document.frameRate.num, den: document.frameRate.den },
+      width: document.width,
+      height: document.height,
+      audioSampleRate: document.audioSampleRate,
+      tracks: document.tracks.map((track) => ({
+        id: track.id,
+        kind: track.kind,
+        name: track.name,
+        clips: track.clips.map((clip) => ({
+          id: clip.id,
+          assetId: clip.assetId,
+          name: clip.name,
+          sourceRange: { ...clip.sourceRange },
+          timelineRange: { ...clip.timelineRange },
+          transform: { ...clip.transform },
+          opacity: clip.opacity,
+          volume: clip.volume,
+          effects: clip.effects.map((effect) => ({
+            id: effect.id,
+            type: effect.type,
+            enabled: effect.enabled,
+            params: cloneEffectParams(effect.params),
+          })),
+          ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
+          ...(clip.linkGroupId === undefined ? {} : { linkGroupId: clip.linkGroupId }),
+        })),
+        transitions: track.transitions.map((transition) => ({ ...transition })),
+        hidden: track.hidden,
+        muted: track.muted,
+        solo: track.solo,
+        locked: track.locked,
+      })),
+    },
+    assets: project.assets
+      .map((asset) => ({
+        id: asset.id,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        size: asset.size,
+        lastModified: asset.lastModified,
+        kind: asset.kind,
+        durationMicroseconds: asset.durationMicroseconds,
+        nativeFrameRate:
+          asset.nativeFrameRate === null ? null : { ...asset.nativeFrameRate },
+        width: asset.width,
+        height: asset.height,
+        hasAudio: asset.hasAudio,
+        audioSampleRate: asset.audioSampleRate,
+        audioChannels: asset.audioChannels,
+      }))
+      .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)),
+  }
+}
+
+interface SerializationBudget {
+  remaining: number
+}
+
+function consumeSerializationBudget(
+  budget: SerializationBudget,
+  characters: number,
+): void {
+  if (characters > budget.remaining) {
+    fail(
+      '$',
+      `serialized project exceeds ${PROJECT_FILE_LIMITS.maxSerializedCharacters} characters`,
+    )
+  }
+  budget.remaining -= characters
+}
+
+function stableJson(value: unknown, budget: SerializationBudget): string {
+  if (value === null || typeof value !== 'object') {
+    const serialized = JSON.stringify(value)
+    consumeSerializationBudget(budget, serialized.length)
+    return serialized
+  }
+  if (Array.isArray(value)) {
+    consumeSerializationBudget(budget, 2)
+    const items: string[] = []
+    for (let index = 0; index < value.length; index++) {
+      if (index > 0) consumeSerializationBudget(budget, 1)
+      items.push(stableJson(value[index], budget))
+    }
+    return `[${items.join(',')}]`
+  }
+  const object = value as JsonRecord
+  const keys = Object.keys(object).sort()
+  consumeSerializationBudget(budget, 2)
+  const entries: string[] = []
+  for (let index = 0; index < keys.length; index++) {
+    const key = keys[index]
+    const serializedKey = JSON.stringify(key)
+    if (index > 0) consumeSerializationBudget(budget, 1)
+    consumeSerializationBudget(budget, serializedKey.length + 1)
+    entries.push(`${serializedKey}:${stableJson(object[key], budget)}`)
+  }
+  return `{${entries.join(',')}}`
+}
+
+/** Serialize an allowlisted, validated, deterministic portable snapshot. */
+export function serializeProjectFile(project: ProjectFile): string {
+  validateProjectFile(project)
+  const snapshot = portableProjectSnapshot(project)
+  validateProjectFile(snapshot)
+  return stableJson(snapshot, {
+    remaining: PROJECT_FILE_LIMITS.maxSerializedCharacters,
+  })
+}
+
+/** Parse, migrate, and fully validate untrusted project-file JSON. */
+export function parseProjectFile(serialized: string): ProjectFile {
+  if (typeof serialized !== 'string') fail('$', 'project file must be text')
+  if (serialized.length > PROJECT_FILE_LIMITS.maxSerializedCharacters) {
+    fail('$', `project file exceeds ${PROJECT_FILE_LIMITS.maxSerializedCharacters} characters`)
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(serialized) as unknown
+  } catch {
+    fail('$', 'invalid JSON')
+  }
+  return validateProjectFile(migrateProjectFile(parsed))
+}

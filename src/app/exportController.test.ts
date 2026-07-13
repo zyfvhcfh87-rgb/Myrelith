@@ -81,9 +81,13 @@ const DOC: TimelineDoc = {
 const ASSET: MediaAsset = {
   id: 'asset-1',
   fileName: 'source.mp4',
+  mimeType: 'video/mp4',
+  size: 1_024,
+  lastModified: 1_725_000_000_000,
   objectUrl: 'blob:captured-source',
   kind: 'video',
   durationFrames: 60,
+  durationMicroseconds: 2_000_000,
   frameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,

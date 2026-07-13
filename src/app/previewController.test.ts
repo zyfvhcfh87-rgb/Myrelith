@@ -55,9 +55,13 @@ function makeDeps() {
   const demuxedAsset: MediaAsset = {
     id: 'ignored',
     fileName: 'clip.mp4',
+    mimeType: 'video/demux-temporary',
+    size: 999,
+    lastModified: 999,
     objectUrl: 'blob:demuxed',
     kind: 'video',
-    durationFrames: 412,
+    durationFrames: 206,
+    durationMicroseconds: 6_866_667,
     frameRate: F60,
     width: 1920,
     height: 1080,
@@ -117,14 +121,20 @@ afterEach(() => {
 describe('previewController', () => {
   test('importing a video inspects metadata and opens its original Blob once', async () => {
     const { deps, bridge, blob } = makeDeps()
-    initPreview(canvasEl(), deps)
+    const demux = vi.fn(deps.demux)
+    initPreview(canvasEl(), { ...deps, demux })
     // The doc reached the worker before any composite could reference it.
     expect(bridge.docs).toEqual([initialDoc])
 
     const placeholder = useMediaStore
       .getState()
-      .addAsset(new File(['x'], 'clip.mp4', { type: 'video/mp4' }))
+      .addAsset(new File(['x'], 'clip.mp4', {
+        type: 'video/mp4',
+        lastModified: 1_725_000_000_002,
+      }))
     await flush()
+
+    expect(demux).toHaveBeenCalledWith(expect.any(File), initialDoc.frameRate)
 
     // Opened under the STORE's asset id with the fetched Blob itself. The
     // bridge structured-clones this once; no encoded chunk batches exist.
@@ -132,13 +142,41 @@ describe('previewController', () => {
     // Real metadata merged onto the placeholder row.
     const updated = useMediaStore.getState().assets.get(placeholder.id)
     expect(updated).toMatchObject({
-      durationFrames: 412,
+      mimeType: 'video/mp4',
+      size: 1,
+      lastModified: 1_725_000_000_002,
+      durationFrames: 206,
+      durationMicroseconds: 6_866_667,
       frameRate: F60,
       width: 1920,
     })
     // First frame rendered after init+load (coalesced into one rAF).
     await nextFrame()
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
+  })
+
+  test('reconforms duration if the project rate changes while demux is pending', async () => {
+    const { deps, demuxedAsset } = makeDeps()
+    const pending = deferred<{ asset: MediaAsset }>()
+    initPreview(canvasEl(), { ...deps, demux: () => pending.promise })
+
+    const placeholder = useMediaStore
+      .getState()
+      .addAsset(new File(['x'], 'clip.mp4', { type: 'video/mp4' }))
+    await flush()
+
+    useDocumentStore.getState().setDoc({
+      ...initialDoc,
+      id: 'retimed-project',
+      frameRate: F60,
+    })
+    pending.resolve({ asset: demuxedAsset })
+    await flush()
+
+    expect(useMediaStore.getState().assets.get(placeholder.id)).toMatchObject({
+      durationFrames: 412,
+      durationMicroseconds: 6_866_667,
+    })
   })
 
   test('EVERY video asset gets its own worker source, not just the newest', async () => {

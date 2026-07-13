@@ -65,11 +65,16 @@ export interface MediaState {
   /**
    * Merge real metadata into a placeholder asset (the preview controller
    * calls this after demuxing). Unknown ids are a safe no-op. The id and
-   * objectUrl are not patchable.
+   * original source-file identity fields are not patchable.
    */
   updateAsset: (
     id: string,
-    patch: Partial<Omit<MediaAsset, 'id' | 'objectUrl'>>,
+    patch: Partial<
+      Omit<
+        MediaAsset,
+        'id' | 'fileName' | 'mimeType' | 'size' | 'lastModified' | 'objectUrl'
+      >
+    >,
   ) => void
   /**
    * Attach generated visuals to an asset. If the asset vanished while its
@@ -88,9 +93,13 @@ export const useMediaStore = create<MediaState>()((set) => ({
     const asset: MediaAsset = {
       id: `asset_${crypto.randomUUID()}`,
       fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      lastModified: file.lastModified,
       objectUrl: URL.createObjectURL(file),
       kind: kindFromMime(file.type),
       durationFrames: 0, // placeholder until Phase 2 demux
+      durationMicroseconds: 0,
       frameRate: null,
       width: null,
       height: null,
@@ -127,7 +136,16 @@ export const useMediaStore = create<MediaState>()((set) => ({
       const existing = state.assets.get(id)
       if (!existing) return state
       const assets = new Map(state.assets)
-      assets.set(id, { ...existing, ...patch, id, objectUrl: existing.objectUrl })
+      assets.set(id, {
+        ...existing,
+        ...patch,
+        id,
+        fileName: existing.fileName,
+        mimeType: existing.mimeType,
+        size: existing.size,
+        lastModified: existing.lastModified,
+        objectUrl: existing.objectUrl,
+      })
       return { assets }
     }),
 
