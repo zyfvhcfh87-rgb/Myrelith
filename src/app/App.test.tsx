@@ -4,12 +4,30 @@
  * do real layout); this guards wiring, not pixels.
  */
 
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import App from './App'
+import {
+  INITIAL_PROJECT_SESSION_STATE,
+  useProjectSessionStore,
+} from '../state/projectSessionStore'
+
+beforeEach(() => {
+  useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
+})
 
 describe('App shell', () => {
+  test('opens on the project home instead of mounting editor controllers', () => {
+    const { container } = render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'WebCut' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /create a new project/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /resume previous work/i })).toBeInTheDocument()
+    expect(container.querySelector('.app-shell')).toBeNull()
+  })
+
   test('renders all five panel areas', () => {
+    useProjectSessionStore.setState({ screen: 'editor' })
     const { container } = render(<App />)
 
     expect(screen.getByText('WebCut')).toBeInTheDocument()

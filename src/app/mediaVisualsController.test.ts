@@ -150,6 +150,27 @@ describe('mediaVisualsController', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:wave')
   })
 
+  test('dispose invalidates an old result even when the next project reuses its id', async () => {
+    let releaseBlob: (blob: Blob) => void = () => {}
+    const gate = new Promise<Blob>((resolve) => (releaseBlob = resolve))
+    const deps = fakeDeps({ fetchBlob: vi.fn(() => gate) })
+    initMediaVisuals(deps)
+    addAsset('old.mp4', 'video/mp4')
+
+    disposeMediaVisuals()
+    useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+    assetCounter = 0
+    const replacement = addAsset('replacement.mp4', 'video/mp4')
+    expect(replacement.id).toBe('asset-1')
+
+    releaseBlob(new Blob(['x']))
+    await flush()
+
+    expect(useMediaStore.getState().visuals.size).toBe(0)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:strip')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:wave')
+  })
+
   test('init is idempotent (StrictMode): one subscription, one pass', async () => {
     const deps = fakeDeps()
     initMediaVisuals(deps)

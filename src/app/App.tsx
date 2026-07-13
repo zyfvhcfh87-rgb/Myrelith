@@ -18,11 +18,13 @@ import Preview from '../ui/Preview'
 import Inspector from '../ui/Inspector'
 import TransportBar from '../ui/TransportBar'
 import Timeline from '../ui/timeline/Timeline'
+import ProjectLaunch from '../ui/ProjectLaunch'
+import { useProjectSessionStore } from '../state/projectSessionStore'
 import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
 import { useEditShortcuts } from './useEditShortcuts'
 import { initMediaVisuals } from './mediaVisualsController'
 
-export default function App() {
+function EditorShell() {
   useUndoRedoShortcuts()
   useEditShortcuts()
   // Filmstrip/waveform generation for imported assets — idempotent init,
@@ -55,4 +57,11 @@ export default function App() {
       </section>
     </div>
   )
+}
+
+export default function App() {
+  const editorActive = useProjectSessionStore(
+    (state) => state.screen === 'editor',
+  )
+  return editorActive ? <EditorShell /> : <ProjectLaunch />
 }

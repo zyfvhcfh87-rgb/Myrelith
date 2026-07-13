@@ -120,14 +120,22 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   linkGroupId?} | null — same live-preview contract for trim/ripple/
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
   ghost a linked gesture live. No history, no side effects, never
-  touches documentStore.
+  touches documentStore. `resetTransport()` restores every field to its
+  initial value when a different project is activated.
 - `MediaState` — `src/state/mediaStore.ts`: `assets: Map<AssetId,
-  MediaAsset>`, `addAsset(file)` (placeholder until Phase 2 demux),
+  MediaAsset>`, `addAsset(asset)` (accepts one fully analyzed asset and takes
+  ownership of its source URL),
   `removeAsset(id)` (revokes the object URL), `visuals: Map<AssetId,
   AssetVisuals>` + `setAssetVisuals(id, v)` (filmstrip/waveform images;
   the store OWNS those object URLs — revokes on removal/replacement and
-  for late results after removal). Session-scoped, not serialized with
-  the project.
+  for late results after removal), and `clearAssets()` (revokes every source
+  and generated URL exactly once during project replacement). Session-scoped,
+  not serialized with the project.
+- `ProjectSessionState` — `src/state/projectSessionStore.ts`: serializable
+  launch/editor screen, operation phase, active-project labels, and a small
+  relink summary. Parsed projects, selected Files, MediaAssets, and all object
+  URLs stay controller-local until atomic activation; they never enter this
+  store.
 - Worker messages — `src/workers/decode-protocol.ts` (canonical):
   `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
   (`configured`/`frameReady`/`error`). Types-only file; BOTH the worker and
@@ -143,12 +151,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 ```
 src/
   domain/      time, schema, operations, selectors      (pure TS)
-  state/       documentStore, transportStore, mediaStore (Zustand)
+  state/       document, transport, media, project-session stores (Zustand)
   engine/      playback-engine, worker-bridge, frame-cache
   workers/     decode.worker, render.worker
   pipeline/    demux, decode, render, export
-  ui/          Toolbar, MediaPool, Preview, Inspector
+  ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector
   ui/timeline/ Timeline, Track, ClipView, Ruler, Playhead
-  app/         App, layout.css
+  app/         App, project/controllers, layout.css
   dev/         temporary scratch harnesses — may import anything, never shipped
 ```

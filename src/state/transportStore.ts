@@ -103,18 +103,24 @@ export interface TransportState {
    * integer (negative allowed — deltas are signed).
    */
   setEditPreview: (preview: EditPreview | null) => void
+  /** Clear every session-owned playback/navigation value for a new project. */
+  resetTransport: () => void
 }
 
-export const useTransportStore = create<TransportState>()((set) => ({
+export const INITIAL_TRANSPORT_STATE = Object.freeze({
   playheadFrame: 0,
   isPlaying: false,
   isScrubbing: false,
   zoom: 1,
   inOut: null,
   dragPreview: null,
-  tool: 'select',
+  tool: 'select' as TimelineTool,
   selectedClipId: null,
   editPreview: null,
+})
+
+export const useTransportStore = create<TransportState>()((set) => ({
+  ...INITIAL_TRANSPORT_STATE,
 
   setPlayheadFrame: (frame) =>
     set({ playheadFrame: Math.max(0, Math.round(frame)) }),
@@ -136,4 +142,5 @@ export const useTransportStore = create<TransportState>()((set) => ({
         ? { ...preview, deltaFrames: Math.round(preview.deltaFrames) }
         : null,
     }),
+  resetTransport: () => set({ ...INITIAL_TRANSPORT_STATE }),
 }))

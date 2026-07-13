@@ -77,6 +77,39 @@ describe('mediaStore', () => {
     expect(getState().assets.has(asset.id)).toBe(false)
   })
 
+  test('clearAssets revokes every source and visual exactly once', () => {
+    const first = makeAsset()
+    const second = makeAsset({
+      id: 'asset-2',
+      objectUrl: 'blob:asset-2',
+    })
+    getState().addAsset(first)
+    getState().addAsset(second)
+    getState().setAssetVisuals(first.id, {
+      filmstrip: { url: 'blob:film', tiles: 3, tileWidth: 80, tileHeight: 45 },
+      waveform: { url: 'blob:wave', width: 1000, height: 64 },
+    })
+
+    getState().clearAssets()
+
+    expect(getState().assets.size).toBe(0)
+    expect(getState().visuals.size).toBe(0)
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(4)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:asset-1')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:asset-2')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:film')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:wave')
+  })
+
+  test('clearAssets preserves empty-state identity', () => {
+    const assets = getState().assets
+    const visuals = getState().visuals
+    getState().clearAssets()
+    expect(getState().assets).toBe(assets)
+    expect(getState().visuals).toBe(visuals)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+  })
+
   test('removing an unknown id is a safe no-op', () => {
     const before = getState().assets
     getState().removeAsset('missing')

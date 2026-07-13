@@ -92,6 +92,9 @@ interface ControllerState {
   audioPlanKey: string
   audioAssetsKey: string
   unsubscribes: Array<() => void>
+  /** Async playback startups and stop work that project switching must drain. */
+  playbackTasks: Set<Promise<void>>
+  cleanupTasks: Set<Promise<void>>
 }
 
 const state: ControllerState = {
@@ -104,6 +107,8 @@ const state: ControllerState = {
   audioPlanKey: '',
   audioAssetsKey: '',
   unsubscribes: [],
+  playbackTasks: new Set(),
+  cleanupTasks: new Set(),
 }
 
 /** Last frame the playhead may rest on; 0 for an empty doc. */
@@ -148,15 +153,32 @@ function createAssetResolver(
   }
 }
 
+function trackCleanup(
+  operation: Promise<unknown>,
+  failureMessage: string,
+): Promise<void> {
+  const cleanup = operation.then(
+    () => undefined,
+    (cause) => warnAudio(failureMessage, cause),
+  )
+  state.cleanupTasks.add(cleanup)
+  void cleanup.then(() => state.cleanupTasks.delete(cleanup))
+  return cleanup
+}
+
 function stopAudioSession(): void {
   state.startupAbort?.abort()
   state.startupAbort = null
   const session = state.audioSession
   state.audioSession = null
   if (session) {
-    void session.stop().catch((cause) =>
-      warnAudio('audio cleanup failed', cause),
-    )
+    let pending: Promise<unknown>
+    try {
+      pending = Promise.resolve(session.stop())
+    } catch (cause) {
+      pending = Promise.reject(cause)
+    }
+    void trackCleanup(pending, 'audio cleanup failed')
   }
 }
 
@@ -290,7 +312,7 @@ function startPlayback(fromFrame: number): void {
   }
 
   const resolveAsset = createAssetResolver(assets, state.deps.fetchBlob)
-  void (async () => {
+  const playbackTask = (async () => {
     const session = await state.deps.startAudio(
       context,
       doc,
@@ -333,6 +355,8 @@ function startPlayback(fromFrame: number): void {
     warnAudio('audio playback disabled; continuing with video', cause)
     engine.start(from, durationFrames, doc.frameRate, context.currentTime)
   })
+  state.playbackTasks.add(playbackTask)
+  void playbackTask.then(() => state.playbackTasks.delete(playbackTask))
 }
 
 function restartPlayback(): void {
@@ -389,8 +413,11 @@ export function stepFrame(delta: number): void {
   transport.setPlayheadFrame(next)
 }
 
-/** Tear down engine + subscriptions (tests / real teardown). */
-export function disposeTransport(): void {
+/**
+ * Tear down engine + subscriptions and wait for every old audio consumer.
+ * Project activation awaits this before revoking the outgoing media URLs.
+ */
+export async function disposeTransport(): Promise<void> {
   cancelPlaybackWork()
   const context = state.clockCtx
   state.engine = null
@@ -399,12 +426,19 @@ export function disposeTransport(): void {
   state.unsubscribes = []
   state.audioPlanKey = ''
   state.audioAssetsKey = ''
-  if (context?.close) {
-    void context.close().catch((cause) =>
-      warnAudio('AudioContext close failed', cause),
-    )
-  }
   state.deps = realDeps
+
+  await Promise.all([
+    ...state.playbackTasks,
+    ...state.cleanupTasks,
+  ])
+  if (context?.close) {
+    try {
+      await context.close()
+    } catch (cause) {
+      warnAudio('AudioContext close failed', cause)
+    }
+  }
 }
 
 /** Dev/browser verification hook; null while silent or still priming. */

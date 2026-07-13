@@ -43,6 +43,8 @@ export interface MediaState {
    * Duplicate ids are rejected; the caller retains URL ownership when false.
    */
   addAsset: (asset: MediaAsset) => boolean
+  /** Revoke and remove every session-owned source and generated visual. */
+  clearAssets: () => void
   /** Remove an asset and revoke every object URL owned for it. */
   removeAsset: (id: string) => void
   /**
@@ -72,6 +74,18 @@ export const useMediaStore = create<MediaState>()((set) => ({
     })
     return added
   },
+
+  clearAssets: () =>
+    set((state) => {
+      if (state.assets.size === 0 && state.visuals.size === 0) return state
+      const urls = new Set<string>()
+      for (const asset of state.assets.values()) urls.add(asset.objectUrl)
+      for (const visuals of state.visuals.values()) {
+        for (const url of visualUrls(visuals)) urls.add(url)
+      }
+      for (const url of urls) URL.revokeObjectURL(url)
+      return { assets: new Map(), visuals: new Map() }
+    }),
 
   removeAsset: (id) =>
     set((state) => {

@@ -78,6 +78,36 @@ describe('transportStore', () => {
     getState().setInOut(null)
     expect(getState().inOut).toBeNull()
   })
+
+  test('resetTransport clears every session-owned field', () => {
+    getState().setPlayheadFrame(90)
+    getState().setIsPlaying(true)
+    getState().setIsScrubbing(true)
+    getState().setZoom(3)
+    getState().setInOut({ startFrame: 10, durationFrames: 20 })
+    getState().setDragPreview({ clipId: 'clipA', startFrame: 10 })
+    getState().setTool('slide')
+    getState().setSelectedClip('clipA')
+    getState().setEditPreview({
+      clipId: 'clipA',
+      kind: 'slide',
+      deltaFrames: 4,
+    })
+
+    getState().resetTransport()
+
+    expect(getState()).toMatchObject({
+      playheadFrame: 0,
+      isPlaying: false,
+      isScrubbing: false,
+      zoom: 1,
+      inOut: null,
+      dragPreview: null,
+      tool: 'select',
+      selectedClipId: null,
+      editPreview: null,
+    })
+  })
 })
 
 describe('Phase 4.2 tool / selection / edit-preview state', () => {

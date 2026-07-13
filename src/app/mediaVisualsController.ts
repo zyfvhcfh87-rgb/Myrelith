@@ -38,11 +38,28 @@ interface ControllerState {
   /** Assets already picked up (in flight, done, or failed — no retries). */
   started: Set<AssetId>
   unsubscribe: (() => void) | null
+  generation: number
 }
 
-const state: ControllerState = { started: new Set(), unsubscribe: null }
+const state: ControllerState = {
+  started: new Set(),
+  unsubscribe: null,
+  generation: 0,
+}
 
-async function process(asset: MediaAsset, deps: VisualsDeps): Promise<void> {
+function revokeGenerated(
+  filmstrip: FilmstripResult | null,
+  waveform: WaveformResult | null,
+): void {
+  if (filmstrip) URL.revokeObjectURL(filmstrip.url)
+  if (waveform) URL.revokeObjectURL(waveform.url)
+}
+
+async function process(
+  asset: MediaAsset,
+  deps: VisualsDeps,
+  generation: number,
+): Promise<void> {
   if (asset.kind === 'image') return // images get neither strip nor waveform
   try {
     const blob = await deps.fetchBlob(asset.objectUrl)
@@ -53,10 +70,19 @@ async function process(asset: MediaAsset, deps: VisualsDeps): Promise<void> {
       deps.generateWaveform(blob),
     ])
     if (!filmstrip && !waveform) return
+    const current = useMediaStore.getState().assets.get(asset.id)
+    if (
+      generation !== state.generation
+      || current?.objectUrl !== asset.objectUrl
+    ) {
+      revokeGenerated(filmstrip, waveform)
+      return
+    }
     // The store takes URL ownership — it also handles the case where the
     // asset was removed while we were decoding (revokes, stores nothing).
     useMediaStore.getState().setAssetVisuals(asset.id, { filmstrip, waveform })
   } catch (err) {
+    if (generation !== state.generation) return
     console.warn(`[mediaVisuals] generation failed for "${asset.fileName}"`, err)
   }
 }
@@ -70,7 +96,7 @@ function scan(deps: VisualsDeps): void {
   for (const [id, asset] of assets) {
     if (state.started.has(id)) continue
     state.started.add(id)
-    void process(asset, deps)
+    void process(asset, deps, state.generation)
   }
 }
 
@@ -85,6 +111,7 @@ export function initMediaVisuals(deps: VisualsDeps = realDeps): void {
 
 /** Tear down (tests). In-flight generations resolve into the store guard. */
 export function disposeMediaVisuals(): void {
+  state.generation++
   state.unsubscribe?.()
   state.unsubscribe = null
   state.started.clear()

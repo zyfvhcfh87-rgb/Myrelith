@@ -13,7 +13,6 @@ import {
   microsecondsToFrames,
   rateEquals,
 } from '../domain/time'
-import { loadAsset, type LoadedAsset } from '../pipeline/demux'
 import { useDocumentStore } from '../state/documentStore'
 import {
   INITIAL_MEDIA_IMPORT_STATE,
@@ -22,6 +21,7 @@ import {
   useMediaImportStore,
 } from '../state/mediaImportStore'
 import { useMediaStore } from '../state/mediaStore'
+import { inspectMediaFile } from './mediaInspection'
 
 export type MediaImportDecision =
   | 'keep-project-rate'
@@ -44,30 +44,8 @@ export interface MediaImportDeps {
   revokeObjectURL(url: string): void
 }
 
-function discardLoadedAsset(loaded: LoadedAsset): void {
-  try {
-    loaded.input.dispose()
-  } catch {
-    // Rejection cleanup must preserve the useful import error.
-  }
-  URL.revokeObjectURL(loaded.asset.objectUrl)
-}
-
 const realDeps: MediaImportDeps = {
-  inspect: async (file, documentRate) => {
-    const loaded = await loadAsset(file, documentRate)
-    if (loaded.asset.kind === 'video' && !loaded.asset.frameRate) {
-      discardLoadedAsset(loaded)
-      throw new Error(`"${file.name}" has no detectable video frame rate`)
-    }
-    try {
-      loaded.input.dispose()
-    } catch (cause) {
-      URL.revokeObjectURL(loaded.asset.objectUrl)
-      throw cause
-    }
-    return loaded.asset
-  },
+  inspect: inspectMediaFile,
   getDocument: () => useDocumentStore.getState().doc,
   replaceDocument: (document) => useDocumentStore.getState().setDoc(document),
   hasAsset: (assetId) => useMediaStore.getState().assets.has(assetId),

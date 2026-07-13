@@ -43,8 +43,9 @@ and the open list below.
 | Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
 | Post-MVP project system — Slice 1 foundations | ✅ done | presets + portable `.webcut`; Chrome: 2.000s 60fps source stays 2.000s at 30fps, clean console |
 | Post-MVP project system — Slice 2 media import | ✅ done | one analysis per file; explicit Keep/Match/Cancel; complete-asset commits; 745 tests + Chrome gate |
+| Post-MVP project system — Slice 3 sessions/UI | ✅ done | atomic Create/Resume/relink; 764 tests; real 4K60 create + 1440p60 media-resume Chrome gate |
 
-745 tests green · `npm run build` and `npm run lint` clean · every phase
+764 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -138,15 +139,29 @@ separate operation. Every rejected/cancelled path closes Mediabunny Input and
 revokes the uncommitted source URL. Preview now forwards the committed asset's
 Blob and native rate directly to the worker instead of re-demuxing it.
 
-**Next: Slice 3 — active-project sessions plus the Home / New Project UI.**
-Connect the Slice 1 project factory and portable file contract to explicit
-Create and Resume entry points, then make project activation reset all
-session-owned controller/store state safely.
+Project-system Slice 3 makes those foundations user-visible. WebCut now opens
+on a responsive Home screen with explicit Create and Resume paths. Create uses
+the authoritative resolution/frame-rate/audio catalogs. Resume validates a
+`.webcut` candidate before touching the editor, then analyzes selected source
+files exactly once and restores their durable asset ids only on exact metadata
+matches. Files, parsed candidates, and object URLs remain controller-local
+until all required sources are ready. Activation awaits export and live-audio
+cleanup, invalidates preview/import/visual work, revokes the outgoing session's
+URLs, clears history and transient transport state, and commits the new
+document/media as one complete session. Late relink and visual results are
+generation-guarded and clean themselves up instead of crossing projects.
+
+**Next: Slice 4 — portable Save / Save As plus dirty-state protection.**
+Create `.webcut` files from the active session, track unsaved changes, and
+guard project replacement/reload before adding recent-project and recovery UI.
 
 ## What works today (user-visible)
 
-Run `npm run dev` → editor shell. Import video or audio in the Media Pool;
-files are analyzed before they appear. An FPS mismatch opens an explicit
+Run `npm run dev` → project Home. Create a project with an explicit canvas,
+frame rate, and audio rate, or choose a `.webcut`, reconnect every required
+source, review its profile, and open it only when complete. In the editor,
+import video or audio in the Media Pool; files are analyzed before they appear.
+An FPS mismatch opens an explicit
 Keep/Match/Cancel dialog, and every video asset gets its own decoder in the
 render worker. The Preview is the real timeline compositor (4.1): all visible
 video tracks draw bottom-to-top at the playhead with per-clip Transform
@@ -237,6 +252,14 @@ the transform fields only for video-lane clips.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
   migration entry point, strict untrusted-input validation, and bounded durable
   asset metadata; excludes every session-owned field.
+- `src/state/projectSessionStore.ts` — serializable launch/editor screen,
+  active-project labels, operation phase, and relink status only; no Files,
+  Blobs, URLs, parsed candidates, or browser handles.
+- `src/app/projectController.ts` — Slice 3 session composition root: validates
+  candidates off-store, matches relinked media exactly, generation-cancels late
+  work, and performs the awaited outgoing-session teardown before committing a
+  complete new document/media session. `src/ui/ProjectLaunch.tsx` is the Home,
+  New Project, and Resume UI facade.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
@@ -258,7 +281,8 @@ the transform fields only for video-lane clips.
 - `src/app/mediaImportController.ts` — Slice 2 import composition root: owns
   the selected File and analyzed resource until Keep/Match/Cancel resolves,
   commits complete assets exactly once, guards project-change races, and owns
-  every uncommitted object URL.
+  every uncommitted object URL. Import and project relink share the one real
+  File-analysis seam in `src/app/mediaInspection.ts`.
 - `src/ui/MediaImportDialog.tsx` — accessible analysis/error/FPS-decision UI;
   exact rates, explicit choices, disabled-Match explanation, Escape handling.
 - `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
@@ -324,7 +348,9 @@ the transform fields only for video-lane clips.
   (integer-frame filmstrip buckets + vector waveform mapping). Pure math
   unit-tested; shells browser-only.
   Wired by `src/app/mediaVisualsController.ts` (3rd composition root):
-  one generation per asset, no retries, mediaStore owns the result URLs.
+  one generation per asset, no retries, mediaStore owns the result URLs;
+  project-generation guards revoke stale results even when a new project
+  reuses the same durable asset id.
 - `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,
   `verifyKeyPackets`, bounded overshoot, bytes copied for transfer).
 - `src/engine/render-bridge.ts` — main-thread half of the render worker: keeps
@@ -335,15 +361,17 @@ the transform fields only for video-lane clips.
   overload is deprecated and not used by preview.
 - `src/app/previewController.ts` — THE COMPOSITION ROOT: only place stores
   meet engine/pipeline; DI seams for tests; idempotent per canvas
-  (StrictMode). It demuxes metadata for every video asset, hands its Blob to
-  the worker once, releases removed assets, forwards doc snapshots, and sends
+  (StrictMode). It fetches each already-analyzed asset Blob, hands it to the
+  worker once, releases removed assets, forwards doc snapshots, and sends
   rAF-coalesced document frames with playback/seek mode; re-renders on doc
   change + assetConfigured (=the whole missing-clip retry policy).
 - `src/app/transportController.ts` — second composition root (same
   pattern): primes issue #5 live audio from immutable document/media snapshots,
   resumes AudioContext inside the click gesture, gives PlaybackEngine the exact
   audio anchor, and restarts only when the audible plan/assets change. Pause,
-  scrub, step, failure, and disposal share generation-safe cleanup.
+  scrub, step, failure, and disposal share generation-safe cleanup;
+  `disposeTransport()` now awaits pending startups, session stops, and context
+  close so project replacement cannot revoke a Blob still used by old audio.
   `src/engine/playback-engine.ts` is the pure loop: injected audio clock/ticks,
   floor + 1e-6 NTSC epsilon, newest-frame-only emission, and an exclusive end
   boundary that preserves the final frame's duration. UI facade:
@@ -455,7 +483,7 @@ the transform fields only for video-lane clips.
 
 ## Dev/test toolbox
 
-- `window.__stores.{document,transport,media}` — dev-only zustand handles
+- `window.__stores.{document,transport,media,mediaImport,projectSession}` — dev-only Zustand handles
   (seed docs, read JSON, drive undo from the console or preview_eval).
 - `ffmpeg`/`ffprobe` are installed as of 2026-07-12. They generated and probed
   the 5.2b A/V fixture/result; keep the in-browser generator below when a test
@@ -483,6 +511,10 @@ the transform fields only for video-lane clips.
 
 ## Open items (beyond PLAN.md phases)
 
+- Slice 3 can validate/resume an existing portable project, but the editor
+  cannot create or update that `.webcut` file yet. Save, Save As, dirty-state
+  replacement guards, recent projects, and crash recovery belong to the next
+  issue #4 slices; do not call Resume a complete persistence workflow yet.
 - A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
   domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
   (unlink is one-way today, undo aside) and linked-pair awareness in a
