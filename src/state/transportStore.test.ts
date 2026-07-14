@@ -68,6 +68,21 @@ describe('transportStore', () => {
     expect(getState().isScrubbing).toBe(false)
   })
 
+  test('setDragPreview preserves cross-track target metadata while normalizing only the frame', () => {
+    getState().setDragPreview({
+      clipId: 'clipA',
+      startFrame: 41.6,
+      targetTrackId: 'V2',
+      trackOffsetY: -55.5,
+    })
+    expect(getState().dragPreview).toEqual({
+      clipId: 'clipA',
+      startFrame: 42,
+      targetTrackId: 'V2',
+      trackOffsetY: -55.5,
+    })
+  })
+
   test('flags and inOut set independently', () => {
     getState().setIsPlaying(true)
     getState().setIsScrubbing(true)

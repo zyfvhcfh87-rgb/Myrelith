@@ -112,8 +112,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `TransportState` — `src/state/transportStore.ts`: `playheadFrame` (int,
   setter rounds + clamps >= 0), `isPlaying`, `isScrubbing`, `zoom`
   (px/frame, > 0), `inOut`, `dragPreview` ({clipId, startFrame,
-  linkGroupId?} | null — the live half of the scrubbing-vs-committed
-  pattern for select-tool moves; pointerup commits ONE
+  targetTrackId?, trackOffsetY?, linkGroupId?} | null — the live half of
+  the scrubbing-vs-committed pattern for select-tool moves; the optional
+  target fields ghost only the gesture owner over a same-kind lane while a
+  linked partner stays on its own lane; pointerup commits ONE
   documentStore.moveClip and clears it), `tool`
   ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipId`
   (ephemeral, never in undo), `editPreview` ({clipId, kind, deltaFrames,

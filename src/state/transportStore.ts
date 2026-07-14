@@ -10,7 +10,7 @@
  */
 
 import { create } from 'zustand'
-import type { ClipId, TimeRange } from '../domain/schema'
+import type { ClipId, TimeRange, TrackId } from '../domain/schema'
 
 /**
  * Live position of a clip mid-drag — the "scrubbing" half of the
@@ -22,6 +22,10 @@ export interface DragPreview {
   clipId: ClipId
   /** Where the dragged clip's timelineRange would start right now. */
   startFrame: number
+  /** Same-kind lane currently under the gesture owner, when cross-track. */
+  targetTrackId?: TrackId
+  /** Pixel offset from the source lane used to ghost the owner vertically. */
+  trackOffsetY?: number
   /**
    * When the dragged clip is linked, the UI stamps its group id here so
    * partner ClipViews can ghost the same move; absent for unlinked clips.
