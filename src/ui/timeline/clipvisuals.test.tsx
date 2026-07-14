@@ -9,6 +9,7 @@
 
 import { act, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test } from 'vitest'
+import type { PortableAssetDescriptor } from '../../domain/projectFile'
 import type { Clip, MediaAsset } from '../../domain/schema'
 import type { AssetVisuals } from '../../state/mediaStore'
 import { useMediaStore } from '../../state/mediaStore'
@@ -33,9 +34,13 @@ function makeClip(id: string, tlStart: number, duration: number, srcStart = 0): 
 const asset: MediaAsset = {
   id: 'asset-1',
   fileName: 'a.mp4',
+  mimeType: 'video/mp4',
+  size: 1_024,
+  lastModified: 1_725_000_000_000,
   objectUrl: 'blob:asset',
   kind: 'video',
   durationFrames: 300,
+  durationMicroseconds: 10_000_000,
   frameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,
@@ -43,6 +48,22 @@ const asset: MediaAsset = {
   audioSampleRate: 48000,
   audioChannels: 2,
   decoderConfigB64: null,
+}
+
+const descriptor: PortableAssetDescriptor = {
+  id: asset.id,
+  fileName: asset.fileName,
+  mimeType: asset.mimeType,
+  size: asset.size,
+  lastModified: asset.lastModified,
+  kind: asset.kind,
+  durationMicroseconds: asset.durationMicroseconds,
+  nativeFrameRate: asset.frameRate,
+  width: asset.width,
+  height: asset.height,
+  hasAudio: asset.hasAudio,
+  audioSampleRate: asset.audioSampleRate,
+  audioChannels: asset.audioChannels,
 }
 
 const visuals: AssetVisuals = {
@@ -63,12 +84,37 @@ beforeEach(() => {
     editPreview: null,
   })
   useMediaStore.setState({
+    descriptors: new Map([[descriptor.id, descriptor]]),
     assets: new Map([[asset.id, asset]]),
     visuals: new Map([[asset.id, visuals]]),
   })
 })
 
 describe('clip visuals', () => {
+  test('an offline descriptor-backed clip stays visible and marked Offline', () => {
+    useMediaStore.setState({
+      descriptors: new Map([[descriptor.id, descriptor]]),
+      assets: new Map(),
+      visuals: new Map(),
+    })
+
+    render(
+      <ClipView
+        clip={makeClip('offline', 25, 100, 60)}
+        trackId="V1"
+        trackKind="video"
+      />,
+    )
+
+    const clip = screen.getByTestId('clip-offline')
+    expect(clip).toBeVisible()
+    expect(clip).toHaveClass('offline')
+    expect(clip).toHaveAttribute('data-offline', 'true')
+    expect(clip).toHaveStyle({ transform: 'translateX(50px)', width: '200px' })
+    expect(screen.getByLabelText('Source offline')).toHaveTextContent('Offline')
+    expect(screen.queryByTestId('clip-offline-visual')).not.toBeInTheDocument()
+  })
+
   test('video lanes show time-aligned fixed-size sprite patterns', () => {
     // Clip shows source [60, 160) of a 300-frame asset, zoom 2.
     render(<ClipView clip={makeClip('c1', 0, 100, 60)} trackId="V1" trackKind="video" />)

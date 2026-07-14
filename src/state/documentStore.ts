@@ -53,6 +53,10 @@ import {
   unlinkClip,
 } from '../domain/linking'
 import { rangeEnd } from '../domain/time'
+import {
+  createTimelineDoc,
+  DEFAULT_PROJECT_SETTINGS,
+} from '../domain/projectSettings'
 
 /** Max undo levels; snapshots beyond this fall off the old end. */
 const HISTORY_LIMIT = 100
@@ -198,43 +202,6 @@ export interface DocumentState {
   redo: () => void
 }
 
-/** Fresh default project: 1080p, 30fps, one video + one audio track. */
-function emptyDoc(): TimelineDoc {
-  return {
-    schemaVersion: 1,
-    id: 'doc_default',
-    name: 'Untitled',
-    frameRate: { num: 30, den: 1 },
-    width: 1920,
-    height: 1080,
-    audioSampleRate: 48000,
-    tracks: [
-      {
-        id: 'V1',
-        kind: 'video',
-        name: 'V1',
-        clips: [],
-        transitions: [],
-        hidden: false,
-        muted: false,
-        solo: false,
-        locked: false,
-      },
-      {
-        id: 'A1',
-        kind: 'audio',
-        name: 'A1',
-        clips: [],
-        transitions: [],
-        hidden: false,
-        muted: false,
-        solo: false,
-        locked: false,
-      },
-    ],
-  }
-}
-
 /**
  * Fold a successful edit into the state: push the outgoing doc onto `past`,
  * clear `future`. A rejected edit (same reference) changes nothing at all.
@@ -252,7 +219,7 @@ function commit(
 }
 
 export const useDocumentStore = create<DocumentState>()((set) => ({
-  doc: emptyDoc(),
+  doc: createTimelineDoc('Untitled', DEFAULT_PROJECT_SETTINGS, 'doc_default'),
   past: [],
   future: [],
 

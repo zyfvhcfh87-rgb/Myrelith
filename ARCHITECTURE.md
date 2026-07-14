@@ -120,14 +120,61 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   linkGroupId?} | null — same live-preview contract for trim/ripple/
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
   ghost a linked gesture live. No history, no side effects, never
-  touches documentStore.
-- `MediaState` — `src/state/mediaStore.ts`: `assets: Map<AssetId,
-  MediaAsset>`, `addAsset(file)` (placeholder until Phase 2 demux),
-  `removeAsset(id)` (revokes the object URL), `visuals: Map<AssetId,
-  AssetVisuals>` + `setAssetVisuals(id, v)` (filmstrip/waveform images;
-  the store OWNS those object URLs — revokes on removal/replacement and
-  for late results after removal). Session-scoped, not serialized with
-  the project.
+  touches documentStore. `resetTransport()` restores every field to its
+  initial value when a different project is activated.
+- `MediaState` — `src/state/mediaStore.ts`: `descriptors: Map<AssetId,
+  PortableAssetDescriptor>` is the durable project catalog, while
+  `assets: Map<AssetId, MediaAsset>` is only the currently connected subset.
+  `addAsset`/`connectAsset` install a fully analyzed source and take ownership
+  of its URL; `disconnectAsset` keeps the descriptor but releases the source;
+  `replaceAssets` atomically installs a project catalog plus its connected
+  subset; and `removeAsset` deletes both. `visuals: Map<AssetId, AssetVisuals>`
+  + `setAssetVisuals(id, v)` owns filmstrip/waveform URLs. Replacement,
+  disconnection, removal, late visual results, and `clearAssets()` revoke each
+  owned source/generated URL exactly once. Project persistence serializes the
+  descriptors, never the session-only connected resources or URLs.
+- `ProjectSessionState` — `src/state/projectSessionStore.ts`: serializable
+  launch/editor screen, operation phase, active-project labels, resume and
+  active-editor relink summaries (including ambiguity choices), and the
+  serializable dirty/save/recovery-status projection. Parsed projects,
+  selected Files, folder entries, MediaAssets, readable/writable file handles,
+  recovery payloads, timers, and all object URLs stay in app-layer
+  controllers/adapters; they never enter this store.
+- `ProjectLibraryState` — `src/state/projectLibraryStore.ts`: serializable Home
+  summaries for recent project files and recovery journals. Opaque handles and
+  serialized recovery snapshots remain controller-local; this store may only
+  expose labels, timestamps, permission state, and stable local record ids.
+- Project persistence — `src/app/projectPersistenceController.ts`: builds a
+  validated portable snapshot from `documentStore` + `mediaStore`, owns the
+  current writable handle, debounces live saves, serializes overlapping edits
+  by revision, and attaches `beforeunload` only while work is dirty. `Save`
+  and `Save As` request an explicit user-gesture grant when no writable handle
+  exists; that grant enables later in-place live saves. A browser without the
+  writable-file picker may download a copy, but that unobservable fallback
+  never marks dirty work as safely persisted. A separate recovery sink writes
+  bounded, versioned local snapshots while work is dirty; recovery success
+  never clears dirty state or updates saved-at truth. Project replacement first
+  pauses this controller, cancels both timers, and drains any open file or
+  recovery write before media or session state can be released.
+- Local project library — `src/app/localProjectStorage.ts` stores recent
+  `FileSystemFileHandle` capabilities and bounded recovery journals in
+  origin-local IndexedDB. `src/app/projectLibraryController.ts` retains those
+  opaque values outside Zustand and publishes Home summaries. Recovery keeps
+  several complete generations, is offered explicitly, and never stores media
+  bytes. Intentional project exit or a revision-current successful `.webcut`
+  save removes the active journal before session resources are released.
+- Local media reconnection — `src/app/localMediaHandles.ts` stores opaque
+  `FileSystemFileHandle` capabilities in an origin-local IndexedDB sidecar,
+  keyed by stable document + asset ids. Paths and handles never enter domain
+  data or `.webcut` JSON. Resume may query permission silently; prompting must
+  originate in a user click. Missing, denied, moved, changed, or unsupported
+  sources remain offline and may be reconnected individually or through one
+  recursively enumerated folder. Folder scans are deterministically bounded;
+  conservative filename/size/modified-time/media-metadata matching accepts
+  unique sources, while ambiguous candidates require an explicit user choice.
+  Accepted sources keep the original asset id and are re-analyzed before
+  transfer into `MediaState`; relative folder paths are display-only, and
+  Files, handles, and object URLs remain controller-local.
 - Worker messages — `src/workers/decode-protocol.ts` (canonical):
   `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
   (`configured`/`frameReady`/`error`). Types-only file; BOTH the worker and
@@ -143,12 +190,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 ```
 src/
   domain/      time, schema, operations, selectors      (pure TS)
-  state/       documentStore, transportStore, mediaStore (Zustand)
+  state/       document, transport, media, project-session/library stores
   engine/      playback-engine, worker-bridge, frame-cache
   workers/     decode.worker, render.worker
   pipeline/    demux, decode, render, export
-  ui/          Toolbar, MediaPool, Preview, Inspector
+  ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector
   ui/timeline/ Timeline, Track, ClipView, Ruler, Playhead
-  app/         App, layout.css
+  app/         App, project/persistence/controllers, layout.css
   dev/         temporary scratch harnesses — may import anything, never shipped
 ```

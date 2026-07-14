@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-12)
+## Status (2026-07-14)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -41,11 +41,18 @@ and the open list below.
 | Post-MVP #2 — smooth preview playback | ✅ done | Blob-backed streaming lanes; user verified multiple videos without stutter |
 | Post-MVP #3 — undistorted timeline visuals | ✅ done | fixed-aspect SVG thumbnail patterns + antialiased vector waveform; Chrome razor continuity, clean console |
 | Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
+| Post-MVP project system — Slice 1 foundations | ✅ done | presets + portable `.webcut`; Chrome: 2.000s 60fps source stays 2.000s at 30fps, clean console |
+| Post-MVP project system — Slice 2 media import | ✅ done | one analysis per file; explicit Keep/Match/Cancel; complete-asset commits; 745 tests + Chrome gate |
+| Post-MVP project system — Slice 3 sessions/UI | ✅ done | atomic Create/Resume/relink; 764 tests; real 4K60 create + 1440p60 media-resume Chrome gate |
+| Post-MVP project system — Slice 4 persistence | ✅ done | portable Save/Save As, revision-safe live save, quiesced exit; 794 tests + Chrome toolbar/Resume/layout gate |
+| Post-MVP project system — remembered media follow-up | ✅ done | origin-local file handles + permission-aware automatic relink; 806 tests + Chrome picker-entry smoke |
+| Post-MVP project system — Slice 5 local library | ✅ done | Recent handles + explicit three-generation recovery; 840 tests + Chrome reload/recover/discard/picker-entry gate |
+| Post-MVP project system — Slice 6 offline media | ✅ done | open-offline + one-file/folder relink + ambiguity UI + export preflight; 881 tests + Chrome offline→folder-relink gate |
 
-686 tests green · `npm run build` and `npm run lint` clean · every phase
+881 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
-Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; no Phase 6
-has been selected. Phase 3 gate CLOSED
+Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
+post-MVP project-system milestone is now active. Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
 4.3 Inspector + arrow stepping. The user completed the Phase 4 manual gate
@@ -115,11 +122,129 @@ PlaybackEngine uses that same anchor. The Chrome gate measured non-zero audio
 while playing, zero audio/nodes after mute and pause, successful audio re-prime
 after a one-frame seek, exact exclusive-end parking, and no warnings or errors.
 
+Project-system Slice 1 establishes the non-UI foundations: one authoritative
+catalog for 720p/1080p/1440p/4K, exact common frame rates, and 44.1/48/96 kHz
+audio; a pure new-document factory; and a versioned portable `.webcut` contract
+with deterministic serialization, strict validation, migration entry points,
+resource bounds, stable asset descriptors, and no session-only URLs, handles,
+decoder state, visuals, or undo history. Media assets now retain canonical
+integer microseconds and conform that duration to the active document rate. A
+10-second 60 fps source in a 30 fps project is therefore 300 frames, not 600.
+
+Project-system Slice 2 centralizes media import behind one app controller. A
+selected File is analyzed exactly once, stays outside Zustand while a decision
+is open, and enters mediaStore only as one complete asset. Exact rational native
+and project rates drive an explicit Keep project rate / Match source rate /
+Cancel dialog; WebCut never changes project FPS silently. Match is safe only
+for an empty timeline and a supported project preset. It updates the document
+and re-conforms every unused asset from canonical microseconds; once clips
+exist, Match remains visible but disabled because edited-timeline retiming is a
+separate operation. Every rejected/cancelled path closes Mediabunny Input and
+revokes the uncommitted source URL. Preview now forwards the committed asset's
+Blob and native rate directly to the worker instead of re-demuxing it.
+
+Project-system Slice 3 makes those foundations user-visible. WebCut now opens
+on a responsive Home screen with explicit Create and Resume paths. Create uses
+the authoritative resolution/frame-rate/audio catalogs. Resume validates a
+`.webcut` candidate before touching the editor, then analyzes selected source
+files exactly once and restores their durable asset ids only on exact metadata
+matches. Files, parsed candidates, and object URLs remain controller-local
+until all required sources are ready. Activation awaits export and live-audio
+cleanup, invalidates preview/import/visual work, revokes the outgoing session's
+URLs, clears history and transient transport state, and commits the new
+document/media as one complete session. Late relink and visual results are
+generation-guarded and clean themselves up instead of crossing projects.
+
+Project-system Slice 4 closes the portable save/resume loop. The pure project
+file layer now snapshots the active document plus durable media descriptors
+without Blob URLs, decoder data, visuals, conformed frame counts, or history.
+The first `Save`, or any `Save As`, obtains one writable browser handle and
+enables 800 ms debounced live save for later document/media changes. A
+download-only browser receives a portable copy but remains honestly dirty
+because download completion cannot be observed. Writes carry a session
+generation and revision, so a late old-project write cannot update a
+replacement and an edit made during a write stays dirty until one follow-up
+saves the newest snapshot. Dirty work alone owns the `beforeunload` listener;
+Projects confirms before discarding it, immediately stops new edits and queued
+saves, waits for an open write, then drains export/audio, stops preview/import
+work, and revokes outgoing media before showing Home. A failed exit re-enables
+the retained live-save path. Media sources still used by clips can no longer
+be removed into an unsavable document.
+
+The remembered-media follow-up removes the repeated source picker on the same
+browser/origin. Chrome imports and exact manual relinks now persist opaque
+`FileSystemFileHandle`s in an IndexedDB sidecar keyed by document + asset id;
+raw paths and handles never enter `.webcut`, Zustand, or domain data. Resume
+queries each remembered handle: a retained read grant analyzes and reconnects
+the exact descriptor automatically, while a `prompt` state becomes one
+**Allow media & open** click whose permission requests start before the first
+await. Denied, missing, moved, changed, unsupported-browser, and cleared-site-
+data cases stay on the existing manual relink fallback. Old projects seed the
+sidecar after their next successful handle-aware relink.
+
+Project-system Slice 5 adds an origin-local project library without changing
+the portable `.webcut` format. Validated handles become removable Recent
+shortcuts in supporting Chrome builds. Dirty work writes a separate bounded
+recovery journal: at most three complete generations per editing lineage,
+twelve Recent entries, eight journals, and a fixed serialized-character budget.
+Recovery never clears dirty state or claims the project was Saved; Home offers
+it explicitly after reload/crash and requires confirmation before permanent
+discard. Successful revision-current Save and intentional Projects exit clear
+the journal. Recovery failures remain separate from file-save truth, and a
+failed exit rebuilds its deleted safety copy before editing continues. No media
+bytes, paths, object URLs, or handles enter `.webcut` or Zustand.
+
+The real-Chrome gate passed 2026-07-14: four recovery writes retained exactly
+three generations; reload offered, but did not silently activate, the local
+copy; Review + Recover restored the latest four-track document and kept it
+honestly unsaved; confirmed Discard removed the journal; the reusable project
+picker entry rendered; the Home layout stayed intact; and the final console was
+clean.
+
+Project-system Slice 6 separates the durable media catalog from its connected
+session resources. A validated `.webcut` now activates even when some or all
+sources are unavailable: affected clips stay visible, retain finite descriptor
+bounds, and are labeled Offline in the Media panel, timeline, and Preview.
+Individual Relink restores one source. Scan folder performs a bounded recursive
+enumeration and conservative matching by filename, size, modified time, and
+analyzed media metadata; unique matches connect automatically, ambiguous
+matches require explicit confirmation, and accepted files preserve the saved
+asset ids. Files, handles, candidate paths, and staging URLs remain outside
+Zustand, and every cancellation/supersession path releases its URLs. Preview
+and live audio fail soft while media is missing; output-contributing offline
+sources block export before any Blob or encoder is created.
+
+The real-Chrome gate passed 2026-07-14 with a disk-backed `.webcut` and MP4:
+the project opened with one offline source, the clip remained visible, Preview
+named the missing file, and export named it while disabling Start. One folder
+selection auto-matched and re-analyzed the MP4, restored thumbnail/Preview and
+the same timeline clip, reported `1 connected · 0 skipped`, and enabled Start
+export. The final warning/error console was empty.
+
+**Next: ask the user to select the next post-MVP issue.** Folder/batch relinking
+is complete. Future project-storage work is separate opt-in media caching with
+quota/eviction UX and multi-tab recovery ownership; do not imply recovery or a
+portable `.webcut` contains source bytes today.
+
 ## What works today (user-visible)
 
-Run `npm run dev` → editor shell. Import videos in the Media Pool → rows
-show real metadata; EVERY video asset gets its own decoder in the render
-worker. The Preview is the real timeline compositor (4.1): all visible
+Run `npm run dev` → project Home. Create a project with an explicit canvas,
+frame rate, and audio rate, choose a `.webcut`, reopen a Recent file, or review
+an explicitly offered recovery copy. Remembered sources with a
+retained grant reconnect automatically; a returned permission prompt needs one
+Allow-and-open click. Genuinely missing sources can open Offline without hiding
+their clips; reconnect one from its Media row or choose Scan folder once for
+bounded batch matching. Preview/audio resume when the source reconnects, and
+export stays disabled only while an output-contributing source is offline.
+Review the profile, then open it with ready or offline sources. In the editor,
+the first Save chooses a writable file; Save As chooses another; both turn on
+live save. The toolbar shows dirty/saving/saved/error state, reload is guarded
+only while dirty, and returning to Projects confirms before safely closing the
+active media session. Import video or audio in the Media Pool; files are
+analyzed before they appear.
+An FPS mismatch opens an explicit
+Keep/Match/Cancel dialog, and every video asset gets its own decoder in the
+render worker. The Preview is the real timeline compositor (4.1): all visible
 video tracks draw bottom-to-top at the playhead with per-clip Transform
 (scale/rotate/translate around anchor) + opacity alpha-blended onto a
 black 1920×1080 composition; hidden tracks skip; gaps show background.
@@ -190,7 +315,8 @@ the transform fields only for video-lane clips.
 ## Map (key files, one line each)
 
 - `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates),
-  `time.ts` (conversions incl. `snapToStandardRate`, `formatTimecode`),
+  `time.ts` (conversions incl. exact integer microseconds,
+  `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn;
   5.1e-1 track-scoped `addCrossfade`/`setCrossfadeDuration`/
   `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
@@ -202,6 +328,26 @@ the transform fields only for video-lane clips.
   wrappers around the base ops — same delta to every linkGroupId
   member, atomic rollback; unlinkClip dissolves a group; the store's
   geometry actions call THESE, not the base ops).
+- `src/domain/projectSettings.ts` — authoritative project presets, strict
+  settings validation, and the pure empty-document factory.
+- `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
+  migration entry point, strict untrusted-input validation, and bounded durable
+  asset metadata; excludes every session-owned field.
+- `src/state/projectSessionStore.ts` — serializable launch/editor screen,
+  active-project labels, operation phase, relink status, and separate
+  save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
+  handles, or recovery payloads. `src/state/projectLibraryStore.ts` holds only
+  serializable Recent/recovery summaries for Home.
+- `src/app/projectController.ts` — Slice 3 session composition root: validates
+  candidates off-store, restores granted local handles, requests remembered
+  permission only from the Open click, matches relinked media exactly,
+  generation-cancels late work, and performs the awaited outgoing-session
+  teardown before committing a complete new document/media session.
+  `src/app/localMediaHandles.ts` owns picker types plus the origin-local media
+  handle registry. `src/app/localProjectStorage.ts` owns bounded Recent and
+  recovery IndexedDB records; `src/app/projectLibraryController.ts` keeps their
+  handles/snapshots outside state. `src/ui/ProjectLaunch.tsx` is the Home, New
+  Project, Resume, Recent, and explicit-Recovery UI facade.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
@@ -220,6 +366,23 @@ the transform fields only for video-lane clips.
   sole explicit generator pump, preserving the final `ExportResult` while
   making repeated/coincident cancellation one serialized `return(undefined)`.
   Only one run (including setup/cancel cleanup) may own the controller slot.
+  Slice 6 preflights the pure `outputMediaAssetIds` selection first, so a
+  missing output source fails with exact filenames before Blob retention,
+  adapter creation, or generator startup.
+- `src/app/projectController.ts` + `localMediaHandles.ts` — project activation
+  installs the full descriptor catalog plus whatever connected subset is
+  available. Active Relink and Scan folder are project-generation guarded,
+  retain Files/handles/candidates outside Zustand, enforce bounded recursive
+  enumeration, stage no long-lived scan URLs, re-inspect accepted candidates,
+  preserve saved asset ids, and publish only serializable progress/ambiguity
+  summaries. Confirmed handles are remembered for later automatic Resume.
+- `src/app/mediaImportController.ts` — Slice 2 import composition root: owns
+  the selected File and analyzed resource until Keep/Match/Cancel resolves,
+  commits complete assets exactly once, guards project-change races, and owns
+  every uncommitted object URL. Import and project relink share the one real
+  File-analysis seam in `src/app/mediaInspection.ts`.
+- `src/ui/MediaImportDialog.tsx` — accessible analysis/error/FPS-decision UI;
+  exact rates, explicit choices, disabled-Match explanation, Escape handling.
 - `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
   code loads only on Start; progress is frame-coalesced; cancellation and retry
   are explicit states; Blob URL/download ownership, filename safety, modal
@@ -251,8 +414,11 @@ the transform fields only for video-lane clips.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
   100; rejected ops push no entry; 5.1e-2 transition add/duration/remove
   actions preserve exact snapshot ids), `transportStore` (playhead/zoom/
-  `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (Map of
-  assets; `addAsset` placeholder → controller fills via `updateAsset`).
+  `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (durable descriptor
+  catalog + connected analyzed subset + visual URL ownership + exact duration
+  reconformance), `previewStatusStore` (idempotent visible-offline projection),
+  and
+  `mediaImportStore` (serializable dialog status only; no File/Blob handles).
 - `src/workers/decode-protocol.ts` — canonical worker message types.
 - `src/workers/render-protocol.ts` — render-worker message types (types only).
   The primary path sends each asset Blob once, then lightweight entries with
@@ -273,14 +439,18 @@ the transform fields only for video-lane clips.
 - `src/engine/worker-bridge.ts` — `DecodeWorkerBridge(worker)` +
   `setSource(rate, provider)` + `renderFrameAt(frame) → RenderResult`
   ('drawn'|'missed'|'superseded'|'error'; never rejects).
-- `src/pipeline/demux.ts` — Mediabunny loadAsset + decoderConfig (de)serialize.
+- `src/pipeline/demux.ts` — Mediabunny loadAsset + decoderConfig (de)serialize;
+  records canonical integer-microsecond duration and conforms playable frames
+  to the active document rate.
 - `src/pipeline/visuals.ts` — filmstrip/waveform image generators (4.3.7):
   mediabunny CanvasSink / AudioBufferSink (streamed chunks, peaks fold on
   the fly — full PCM never held); images span the asset's FULL duration
   (integer-frame filmstrip buckets + vector waveform mapping). Pure math
   unit-tested; shells browser-only.
   Wired by `src/app/mediaVisualsController.ts` (3rd composition root):
-  one generation per asset, no retries, mediaStore owns the result URLs.
+  one generation per asset, no retries, mediaStore owns the result URLs;
+  project-generation guards revoke stale results even when a new project
+  reuses the same durable asset id.
 - `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,
   `verifyKeyPackets`, bounded overshoot, bytes copied for transfer).
 - `src/engine/render-bridge.ts` — main-thread half of the render worker: keeps
@@ -291,15 +461,17 @@ the transform fields only for video-lane clips.
   overload is deprecated and not used by preview.
 - `src/app/previewController.ts` — THE COMPOSITION ROOT: only place stores
   meet engine/pipeline; DI seams for tests; idempotent per canvas
-  (StrictMode). It demuxes metadata for every video asset, hands its Blob to
-  the worker once, releases removed assets, forwards doc snapshots, and sends
+  (StrictMode). It fetches each already-analyzed asset Blob, hands it to the
+  worker once, releases removed assets, forwards doc snapshots, and sends
   rAF-coalesced document frames with playback/seek mode; re-renders on doc
   change + assetConfigured (=the whole missing-clip retry policy).
 - `src/app/transportController.ts` — second composition root (same
   pattern): primes issue #5 live audio from immutable document/media snapshots,
   resumes AudioContext inside the click gesture, gives PlaybackEngine the exact
   audio anchor, and restarts only when the audible plan/assets change. Pause,
-  scrub, step, failure, and disposal share generation-safe cleanup.
+  scrub, step, failure, and disposal share generation-safe cleanup;
+  `disposeTransport()` now awaits pending startups, session stops, and context
+  close so project replacement cannot revoke a Blob still used by old audio.
   `src/engine/playback-engine.ts` is the pure loop: injected audio clock/ticks,
   floor + 1e-6 NTSC epsilon, newest-frame-only emission, and an exclusive end
   boundary that preserves the final frame's duration. UI facade:
@@ -325,6 +497,11 @@ the transform fields only for video-lane clips.
   "+ Video"/"+ Audio" (addTrack). Tracks render in domain
   tracksInDisplayOrder (videos reversed = top composite layer first,
   then audios) — doc order stays compositing order.
+- `src/ui/MediaPool.tsx` + `MediaRelinkDialog.tsx` + `Preview.tsx` +
+  `timeline/ClipView.tsx` — Slice 6 offline UI: descriptor-driven media rows,
+  per-source Relink, one folder scan, focus-trapped ambiguity confirmation,
+  current-frame Preview guidance, and finite labeled offline clips. Offline
+  rows cannot be dragged; text clips remain intentionally extendable.
 - `src/ui/timeline/Track.tsx` + `TransitionSeam.tsx` (5.1e-3) — Track derives
   eligible touching video cuts from its committed snapshot; each seam marker
   subscribes only to zoom and opens a temporary Add/Apply/Remove duration
@@ -411,7 +588,7 @@ the transform fields only for video-lane clips.
 
 ## Dev/test toolbox
 
-- `window.__stores.{document,transport,media}` — dev-only zustand handles
+- `window.__stores.{document,transport,media,mediaImport,projectSession}` — dev-only Zustand handles
   (seed docs, read JSON, drive undo from the console or preview_eval).
 - `ffmpeg`/`ffprobe` are installed as of 2026-07-12. They generated and probed
   the 5.2b A/V fixture/result; keep the in-browser generator below when a test
@@ -439,6 +616,15 @@ the transform fields only for video-lane clips.
 
 ## Open items (beyond PLAN.md phases)
 
+- Slices 4–6 now cover portable Save/Save As,
+  permission-aware automatic source reconnection, removable Recent shortcuts,
+  open-offline sessions, individual/folder relinking, live save after a writable
+  grant, and explicit bounded recovery journals. These origin-local sidecars
+  are convenience, not portable bundled media; recovery stores no source
+  bytes. A resumed project remains read-only until one Save or Save As grant.
+  Multi-tab recovery ownership is not coordinated yet, so do not edit/discard
+  the same journal from two tabs. Any future media caching needs explicit
+  opt-in, quota/eviction UX, and a separate security/storage review.
 - A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
   domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
   (unlink is one-way today, undo aside) and linked-pair awareness in a
@@ -459,8 +645,10 @@ the transform fields only for video-lane clips.
   surfaces currently eligible seams; a malformed serialized transition whose
   endpoints are missing/gapped/text has no cleanup marker yet, although the
   store's remove action can still delete it.
-- `mediaStore.addAsset` is still the placeholder path; previewController
-  re-fetches the blob URL for demuxing (works; slightly wasteful).
+- Matching a source FPS intentionally stops being available once any clip is
+  on the timeline. Supporting that later requires an explicit retime operation
+  for clip ranges, source ranges, transitions, playhead, and undo history; it
+  must not be smuggled into import-time rounding.
 
 ## Working agreements (the user's explicit preferences)
 

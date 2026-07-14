@@ -68,9 +68,13 @@ function makeAsset(id = 'asset-1'): MediaAsset {
   return {
     id,
     fileName: 'fixture.mp4',
+    mimeType: 'video/mp4',
+    size: 1_024,
+    lastModified: 1_725_000_000_000,
     objectUrl: `blob:${id}`,
     kind: 'video',
     durationFrames: 120,
+    durationMicroseconds: 4_000_000,
     frameRate: { num: 30, den: 1 },
     width: 1920,
     height: 1080,
@@ -179,6 +183,7 @@ beforeEach(() => {
   })
   useDocumentStore.getState().setDoc(makeDoc())
   useMediaStore.setState({
+    descriptors: new Map(),
     assets: new Map([['asset-1', makeAsset()]]),
     visuals: new Map(),
   })
@@ -186,8 +191,8 @@ beforeEach(() => {
   configureTransport(fake.deps)
 })
 
-afterEach(() => {
-  disposeTransport()
+afterEach(async () => {
+  await disposeTransport()
 })
 
 describe('play / pause', () => {
@@ -598,12 +603,32 @@ describe('live audio integration', () => {
     warning.mockRestore()
   })
 
-  test('disposing the transport closes its AudioContext', () => {
+  test('disposing the transport closes its AudioContext', async () => {
     play()
     expect(fake.clock.close).not.toHaveBeenCalled()
 
-    disposeTransport()
+    await disposeTransport()
 
+    expect(fake.clock.close).toHaveBeenCalledOnce()
+  })
+
+  test('disposing waits for active audio cleanup before closing the context', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const stopGate = deferred<void>()
+    const session = makeAudioSession(0)
+    session.stop.mockImplementationOnce(() => stopGate.promise)
+    fake.startAudio.mockResolvedValueOnce(session)
+
+    play()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+    const disposing = disposeTransport()
+    await Promise.resolve()
+
+    expect(session.stop).toHaveBeenCalledOnce()
+    expect(fake.clock.close).not.toHaveBeenCalled()
+
+    stopGate.resolve()
+    await disposing
     expect(fake.clock.close).toHaveBeenCalledOnce()
   })
 })

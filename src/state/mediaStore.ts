@@ -1,46 +1,31 @@
 /**
- * state/mediaStore.ts — The media pool: every imported asset, by id.
- * Phase 1.3.
+ * state/mediaStore.ts — The durable media catalog plus session connections.
  *
- * Session-scoped state: a Map does not JSON-serialize and objectUrl dies
- * with the page, so this store is rebuilt on project load (asset re-linking
- * is a post-MVP concern). Real demuxing replaces the placeholder fields in
- * Phase 2 (pipeline/demux.ts).
+ * Production imports arrive fully analyzed from app/mediaImportController;
+ * this store never demuxes files or exposes half-committed placeholders.
  */
 
 import { create } from 'zustand'
-import type { AssetKind, MediaAsset } from '../domain/schema'
-
-/** Best-effort kind from the file's MIME type; video when unrecognizable. */
-function kindFromMime(mime: string): AssetKind {
-  if (mime.startsWith('audio/')) return 'audio'
-  if (mime.startsWith('image/')) return 'image'
-  return 'video'
-}
+import type { PortableAssetDescriptor } from '../domain/projectFile'
+import type { FrameRate, MediaAsset } from '../domain/schema'
+import { microsecondsToFrames } from '../domain/time'
 
 /**
- * Precomputed timeline eye-candy for one asset (filmstrip on video clips,
- * waveform on audio clips), generated once per asset by
- * app/mediaVisualsController. Both images span the asset's FULL source
- * duration. ClipView maps waveform time with CSS and repeats fixed-aspect
- * sprite frames inside integer-frame SVG buckets, so trim, slip and zoom stay
- * aligned without stretching thumbnails. The URLs are object
- * URLs OWNED by this store: revoked when the asset is removed (or when a
- * result arrives for an already-removed asset).
+ * Precomputed timeline eye-candy for one connected asset (filmstrip on video
+ * clips, waveform on audio clips), generated once per connection by
+ * app/mediaVisualsController. Both images span the asset's full duration.
+ * Every URL here is owned by this store.
  */
 export interface AssetVisuals {
-  /** Horizontal strip of evenly spaced video frames, or null (no video). */
   filmstrip: {
     url: string
     tiles: number
     tileWidth: number
     tileHeight: number
   } | null
-  /** Rendered waveform image, or null (no audio). */
   waveform: { url: string; width: number; height: number } | null
 }
 
-/** Every object URL inside a visuals record (for revocation). */
 function visualUrls(visuals: AssetVisuals): string[] {
   const urls: string[] = []
   if (visuals.filmstrip) urls.push(visuals.filmstrip.url)
@@ -48,100 +33,283 @@ function visualUrls(visuals: AssetVisuals): string[] {
   return urls
 }
 
+function revokeUrls(
+  urls: Iterable<string>,
+  protectedUrls: ReadonlySet<string> = new Set(),
+): void {
+  const unique = new Set(urls)
+  for (const url of unique) {
+    if (!protectedUrls.has(url)) URL.revokeObjectURL(url)
+  }
+}
+
+function descriptorFromAsset(asset: MediaAsset): PortableAssetDescriptor {
+  return {
+    id: asset.id,
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    size: asset.size,
+    lastModified: asset.lastModified,
+    kind: asset.kind,
+    durationMicroseconds: asset.durationMicroseconds,
+    nativeFrameRate: asset.frameRate === null ? null : { ...asset.frameRate },
+    width: asset.width,
+    height: asset.height,
+    hasAudio: asset.hasAudio,
+    audioSampleRate: asset.audioSampleRate,
+    audioChannels: asset.audioChannels,
+  }
+}
+
+function ratesMatch(
+  descriptor: FrameRate | null,
+  connected: FrameRate | null,
+): boolean {
+  if (descriptor === null || connected === null) return descriptor === connected
+  return descriptor.num === connected.num && descriptor.den === connected.den
+}
+
+function connectionMatchesDescriptor(
+  descriptor: PortableAssetDescriptor,
+  asset: MediaAsset,
+): boolean {
+  return descriptor.id === asset.id
+    && descriptor.fileName === asset.fileName
+    && descriptor.mimeType === asset.mimeType
+    && descriptor.size === asset.size
+    && descriptor.lastModified === asset.lastModified
+    && descriptor.kind === asset.kind
+    && descriptor.durationMicroseconds === asset.durationMicroseconds
+    && ratesMatch(descriptor.nativeFrameRate, asset.frameRate)
+    && descriptor.width === asset.width
+    && descriptor.height === asset.height
+    && descriptor.hasAudio === asset.hasAudio
+    && descriptor.audioSampleRate === asset.audioSampleRate
+    && descriptor.audioChannels === asset.audioChannels
+}
+
+function descriptorMapFrom(
+  descriptors: Iterable<PortableAssetDescriptor>,
+): Map<string, PortableAssetDescriptor> | null {
+  const catalog = new Map<string, PortableAssetDescriptor>()
+  for (const descriptor of descriptors) {
+    if (catalog.has(descriptor.id)) return null
+    catalog.set(descriptor.id, descriptor)
+  }
+  return catalog
+}
+
+function connectionMapFrom(
+  catalog: ReadonlyMap<string, PortableAssetDescriptor>,
+  assets: Iterable<MediaAsset>,
+): Map<string, MediaAsset> | null {
+  const connected = new Map<string, MediaAsset>()
+  for (const asset of assets) {
+    const descriptor = catalog.get(asset.id)
+    if (
+      connected.has(asset.id)
+      || !descriptor
+      || !connectionMatchesDescriptor(descriptor, asset)
+    ) {
+      return null
+    }
+    connected.set(asset.id, asset)
+  }
+  return connected
+}
+
 export interface MediaState {
-  /** All imported assets, keyed by asset id. Treated as immutable. */
+  /** Durable portable descriptors for every project source, online or offline. */
+  descriptors: Map<string, PortableAssetDescriptor>
+  /** Session-connected analyzed assets, always a subset of descriptors. */
   assets: Map<string, MediaAsset>
-  /** Generated clip visuals, keyed by asset id. Session-scoped like assets. */
+  /** Generated clip visuals for connected assets, keyed by asset id. */
   visuals: Map<string, AssetVisuals>
 
   /**
-   * Register a file as a placeholder MediaAsset (id + object URL only —
-   * duration/dimensions/decoder config arrive with Phase 2 demuxing).
-   * Returns the created asset so callers can reference its id.
+   * Import one fully analyzed asset atomically: add its durable descriptor and
+   * connected session object together, then take ownership of its object URL.
+   * Duplicate ids are rejected; the caller retains URL ownership when false.
    */
-  addAsset: (file: File) => MediaAsset
-  /** Remove an asset and revoke its object URL (frees the Blob reference). */
+  addAsset: (asset: MediaAsset) => boolean
+  /**
+   * Connect an analyzed source to an existing descriptor without replacing the
+   * descriptor Map or descriptor object. The caller retains ownership on false.
+   */
+  connectAsset: (asset: MediaAsset) => boolean
+  /**
+   * Drop only the session connection and visuals. The durable descriptor stays
+   * in the project catalog so the source can be reconnected later.
+   */
+  disconnectAsset: (id: string) => void
+  /**
+   * Atomically install a complete project descriptor catalog plus any connected
+   * subset. On success the store takes incoming source-URL ownership and revokes
+   * every outgoing source/visual URL no longer present. Invalid input is a no-op.
+   */
+  replaceAssets: (
+    descriptors: Iterable<PortableAssetDescriptor>,
+    assets: Iterable<MediaAsset>,
+  ) => boolean
+  /** Revoke and remove every descriptor, connection, and generated visual. */
+  clearAssets: () => void
+  /** Remove a durable descriptor and any connected source/visual URLs it owns. */
   removeAsset: (id: string) => void
   /**
-   * Merge real metadata into a placeholder asset (the preview controller
-   * calls this after demuxing). Unknown ids are a safe no-op. The id and
-   * objectUrl are not patchable.
+   * Re-express every connected duration at a new project rate. Canonical
+   * microseconds and durable descriptors remain unchanged, and an already-
+   * conformed connected pool emits no update.
    */
-  updateAsset: (
-    id: string,
-    patch: Partial<Omit<MediaAsset, 'id' | 'objectUrl'>>,
-  ) => void
+  reconformAssets: (rate: FrameRate) => void
   /**
-   * Attach generated visuals to an asset. If the asset vanished while its
-   * visuals were being generated, the images' URLs are revoked on the spot
-   * and nothing is stored — the store owns the URLs either way, so callers
-   * never leak them.
+   * Attach generated visuals. Late results for disconnected assets are revoked
+   * immediately, so URL ownership remains exact on every path.
    */
   setAssetVisuals: (id: string, visuals: AssetVisuals) => void
 }
 
 export const useMediaStore = create<MediaState>()((set) => ({
+  descriptors: new Map(),
   assets: new Map(),
   visuals: new Map(),
 
-  addAsset: (file) => {
-    const asset: MediaAsset = {
-      id: `asset_${crypto.randomUUID()}`,
-      fileName: file.name,
-      objectUrl: URL.createObjectURL(file),
-      kind: kindFromMime(file.type),
-      durationFrames: 0, // placeholder until Phase 2 demux
-      frameRate: null,
-      width: null,
-      height: null,
-      hasAudio: false,
-      audioSampleRate: null,
-      audioChannels: null,
-      decoderConfigB64: null,
-    }
+  addAsset: (asset) => {
+    let added = false
     set((state) => {
+      if (state.descriptors.has(asset.id) || state.assets.has(asset.id)) {
+        return state
+      }
+      const descriptors = new Map(state.descriptors)
+      descriptors.set(asset.id, descriptorFromAsset(asset))
       const assets = new Map(state.assets)
       assets.set(asset.id, asset)
-      return { assets }
+      added = true
+      return { descriptors, assets }
     })
-    return asset
+    return added
   },
 
-  removeAsset: (id) =>
+  connectAsset: (asset) => {
+    let connected = false
+    set((state) => {
+      const descriptor = state.descriptors.get(asset.id)
+      if (
+        state.assets.has(asset.id)
+        || !descriptor
+        || !connectionMatchesDescriptor(descriptor, asset)
+      ) {
+        return state
+      }
+      const assets = new Map(state.assets)
+      assets.set(asset.id, asset)
+      connected = true
+      return { assets }
+    })
+    return connected
+  },
+
+  disconnectAsset: (id) =>
     set((state) => {
       const asset = state.assets.get(id)
-      if (!asset) return state
-      URL.revokeObjectURL(asset.objectUrl)
+      const existingVisuals = state.visuals.get(id)
+      if (!asset && !existingVisuals) return state
+      revokeUrls([
+        ...(asset ? [asset.objectUrl] : []),
+        ...(existingVisuals ? visualUrls(existingVisuals) : []),
+      ])
       const assets = new Map(state.assets)
       assets.delete(id)
-      const existingVisuals = state.visuals.get(id)
-      if (!existingVisuals) return { assets }
-      for (const url of visualUrls(existingVisuals)) URL.revokeObjectURL(url)
       const visuals = new Map(state.visuals)
       visuals.delete(id)
       return { assets, visuals }
     }),
 
-  updateAsset: (id, patch) =>
+  replaceAssets: (nextDescriptors, nextAssets) => {
+    const descriptors = descriptorMapFrom(nextDescriptors)
+    if (!descriptors) return false
+    const assets = connectionMapFrom(descriptors, nextAssets)
+    if (!assets) return false
+
+    const protectedUrls = new Set(
+      Array.from(assets.values(), (asset) => asset.objectUrl),
+    )
     set((state) => {
-      const existing = state.assets.get(id)
-      if (!existing) return state
+      const outgoingUrls: string[] = []
+      for (const asset of state.assets.values()) outgoingUrls.push(asset.objectUrl)
+      for (const visuals of state.visuals.values()) {
+        outgoingUrls.push(...visualUrls(visuals))
+      }
+      revokeUrls(outgoingUrls, protectedUrls)
+      return { descriptors, assets, visuals: new Map() }
+    })
+    return true
+  },
+
+  clearAssets: () =>
+    set((state) => {
+      if (
+        state.descriptors.size === 0
+        && state.assets.size === 0
+        && state.visuals.size === 0
+      ) {
+        return state
+      }
+      const urls: string[] = []
+      for (const asset of state.assets.values()) urls.push(asset.objectUrl)
+      for (const visuals of state.visuals.values()) {
+        urls.push(...visualUrls(visuals))
+      }
+      revokeUrls(urls)
+      return {
+        descriptors: new Map(),
+        assets: new Map(),
+        visuals: new Map(),
+      }
+    }),
+
+  removeAsset: (id) =>
+    set((state) => {
+      const descriptor = state.descriptors.get(id)
+      const asset = state.assets.get(id)
+      const existingVisuals = state.visuals.get(id)
+      if (!descriptor && !asset && !existingVisuals) return state
+      revokeUrls([
+        ...(asset ? [asset.objectUrl] : []),
+        ...(existingVisuals ? visualUrls(existingVisuals) : []),
+      ])
+      const descriptors = new Map(state.descriptors)
+      descriptors.delete(id)
       const assets = new Map(state.assets)
-      assets.set(id, { ...existing, ...patch, id, objectUrl: existing.objectUrl })
-      return { assets }
+      assets.delete(id)
+      const visuals = new Map(state.visuals)
+      visuals.delete(id)
+      return { descriptors, assets, visuals }
+    }),
+
+  reconformAssets: (rate) =>
+    set((state) => {
+      let assets: Map<string, MediaAsset> | null = null
+      for (const asset of state.assets.values()) {
+        const durationFrames = microsecondsToFrames(
+          asset.durationMicroseconds,
+          rate,
+        )
+        if (durationFrames === asset.durationFrames) continue
+        assets ??= new Map(state.assets)
+        assets.set(asset.id, { ...asset, durationFrames })
+      }
+      return assets ? { assets } : state
     }),
 
   setAssetVisuals: (id, next) =>
     set((state) => {
       if (!state.assets.has(id)) {
-        // Asset removed mid-generation: dispose the late result, store nothing.
-        for (const url of visualUrls(next)) URL.revokeObjectURL(url)
+        revokeUrls(visualUrls(next))
         return state
       }
-      // Replacing earlier visuals (regeneration) frees the old images.
       const previous = state.visuals.get(id)
       if (previous) {
-        for (const url of visualUrls(previous)) URL.revokeObjectURL(url)
+        revokeUrls(visualUrls(previous), new Set(visualUrls(next)))
       }
       const visuals = new Map(state.visuals)
       visuals.set(id, next)

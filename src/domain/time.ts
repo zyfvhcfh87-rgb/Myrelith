@@ -12,6 +12,9 @@
 
 import type { FrameRate, RationalTime, TimeRange } from './schema'
 
+/** Integer timebase used by WebCodecs and canonical media durations. */
+export const MICROSECONDS_PER_SECOND = 1_000_000
+
 /* ------------------------------------------------------------------ */
 /* Validation                                                           */
 /* ------------------------------------------------------------------ */
@@ -19,8 +22,8 @@ import type { FrameRate, RationalTime, TimeRange } from './schema'
 /** Throws unless the rate is made of positive integers (e.g. 30000/1001). */
 function assertValidRate(rate: FrameRate): void {
   if (
-    !Number.isInteger(rate.num) ||
-    !Number.isInteger(rate.den) ||
+    !Number.isSafeInteger(rate.num) ||
+    !Number.isSafeInteger(rate.den) ||
     rate.num <= 0 ||
     rate.den <= 0
   ) {
@@ -28,6 +31,31 @@ function assertValidRate(rate: FrameRate): void {
       `Invalid FrameRate ${rate.num}/${rate.den}: num and den must be positive integers`,
     )
   }
+}
+
+function assertNonNegativeSafeInteger(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError(
+      `${name}: value must be a non-negative safe integer, got ${value}`,
+    )
+  }
+}
+
+/**
+ * Divide two non-negative integers and round to the nearest integer. BigInt
+ * keeps the intermediate product exact even when it exceeds Number's safe
+ * range; the final value is checked before crossing back to number.
+ */
+function divideRoundNearest(
+  numerator: bigint,
+  denominator: bigint,
+  name: string,
+): number {
+  const rounded = (numerator + denominator / 2n) / denominator
+  if (rounded > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError(`${name}: result exceeds Number.MAX_SAFE_INTEGER`)
+  }
+  return Number(rounded)
 }
 
 /* ------------------------------------------------------------------ */
@@ -42,7 +70,7 @@ function assertValidRate(rate: FrameRate): void {
 export function rateEquals(a: FrameRate, b: FrameRate): boolean {
   assertValidRate(a)
   assertValidRate(b)
-  return a.num * b.den === b.num * a.den
+  return BigInt(a.num) * BigInt(b.den) === BigInt(b.num) * BigInt(a.den)
 }
 
 /**
@@ -118,6 +146,57 @@ export function rescaleFrames(
     throw new TypeError(`rescaleFrames: frames must be finite, got ${frames}`)
   }
   return Math.round((frames * from.den * to.num) / (from.num * to.den))
+}
+
+/* ------------------------------------------------------------------ */
+/* Integer-microsecond boundary                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Canonical integer microseconds -> nearest document frame.
+ *
+ * This is duration math, so negative and non-integer inputs are rejected.
+ * BigInt intermediates avoid precision loss for long media and rational
+ * rates such as 30000/1001.
+ */
+export function microsecondsToFrames(
+  microseconds: number,
+  rate: FrameRate,
+): number {
+  assertValidRate(rate)
+  assertNonNegativeSafeInteger(microseconds, 'microsecondsToFrames')
+  return divideRoundNearest(
+    BigInt(microseconds) * BigInt(rate.num),
+    BigInt(MICROSECONDS_PER_SECOND) * BigInt(rate.den),
+    'microsecondsToFrames',
+  )
+}
+
+/**
+ * Non-negative document frames -> nearest canonical integer microsecond.
+ * This is the exact integer-safe inverse boundary used when a source duration
+ * starts from frame metadata rather than a container duration.
+ */
+export function framesToMicroseconds(frames: number, rate: FrameRate): number {
+  assertValidRate(rate)
+  assertNonNegativeSafeInteger(frames, 'framesToMicroseconds')
+  return divideRoundNearest(
+    BigInt(frames) * BigInt(rate.den) * BigInt(MICROSECONDS_PER_SECOND),
+    BigInt(rate.num),
+    'framesToMicroseconds',
+  )
+}
+
+/** Convert a finite, non-negative seconds boundary value to integer Âµs. */
+export function secondsToMicroseconds(seconds: number): number {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    throw new TypeError(
+      `secondsToMicroseconds: seconds must be finite and non-negative, got ${seconds}`,
+    )
+  }
+  const microseconds = Math.round(seconds * MICROSECONDS_PER_SECOND)
+  assertNonNegativeSafeInteger(microseconds, 'secondsToMicroseconds')
+  return microseconds
 }
 
 /* ------------------------------------------------------------------ */

@@ -10,6 +10,7 @@
  */
 
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
+import { outputMediaAssetIds } from '../domain/selectors'
 import {
   exportTimeline,
   type ExportDeps as PipelineExportDeps,
@@ -254,7 +255,19 @@ export function startExport(
 
   const doc = useDocumentStore.getState().doc
   const runSettings = { ...settings }
-  const assets = new Map(useMediaStore.getState().assets)
+  const mediaState = useMediaStore.getState()
+  const assets = new Map(mediaState.assets)
+  const offline = [...outputMediaAssetIds(doc)].filter(
+    (assetId) => !assets.has(assetId),
+  )
+  if (offline.length > 0) {
+    const names = offline.map(
+      (assetId) => mediaState.descriptors.get(assetId)?.fileName ?? assetId,
+    )
+    return Promise.reject(new Error(
+      `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`,
+    ))
+  }
   const resolveAsset = createAssetResolver(assets, deps.fetchBlob)
   retainReferencedBlobs(doc, resolveAsset)
 

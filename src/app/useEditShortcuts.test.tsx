@@ -8,6 +8,10 @@ import { render } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
+import {
+  INITIAL_PROJECT_SESSION_STATE,
+  useProjectSessionStore,
+} from '../state/projectSessionStore'
 import { useTransportStore } from '../state/transportStore'
 import { useEditShortcuts } from './useEditShortcuts'
 
@@ -73,6 +77,10 @@ beforeEach(() => {
     editPreview: null,
   })
   doc().setDoc(makeDoc())
+  useProjectSessionStore.setState({
+    ...INITIAL_PROJECT_SESSION_STATE,
+    screen: 'editor',
+  })
 })
 
 describe('tool keys', () => {
@@ -103,6 +111,24 @@ describe('tool keys', () => {
       new KeyboardEvent('keydown', { key: 'b', bubbles: true }),
     )
     expect(transport().tool).toBe('select')
+  })
+
+  test('closing the editor blocks every global edit shortcut', () => {
+    render(<Host />)
+    transport().setPlayheadFrame(120)
+    transport().setSelectedClip('clipA')
+    useProjectSessionStore.setState({ phase: 'closing' })
+
+    key({ key: 'b' })
+    key({ key: 's' })
+    key({ key: 'ArrowRight' })
+    key({ key: 'Delete' })
+
+    expect(transport().tool).toBe('select')
+    expect(transport().playheadFrame).toBe(120)
+    expect(transport().selectedClipId).toBe('clipA')
+    expect(doc().doc.tracks[0].clips).toHaveLength(2)
+    expect(doc().past).toHaveLength(0)
   })
 })
 

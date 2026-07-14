@@ -11,12 +11,16 @@ if (import.meta.env.DEV) {
     import('./state/documentStore'),
     import('./state/transportStore'),
     import('./state/mediaStore'),
-  ]).then(([doc, transport, media]) => {
+    import('./state/mediaImportStore'),
+    import('./state/projectSessionStore'),
+  ]).then(([doc, transport, media, mediaImport, projectSession]) => {
     Object.assign(window, {
       __stores: {
         document: doc.useDocumentStore,
         transport: transport.useTransportStore,
         media: media.useMediaStore,
+        mediaImport: mediaImport.useMediaImportStore,
+        projectSession: projectSession.useProjectSessionStore,
       },
     })
   })

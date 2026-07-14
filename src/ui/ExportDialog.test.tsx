@@ -21,8 +21,9 @@ import {
   type ExportCallbacks,
   type ExportResult,
 } from '../app/exportController'
-import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import type { Clip, MediaAsset, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
 import Toolbar from './Toolbar'
 
 vi.mock('../app/exportController', () => ({
@@ -84,6 +85,27 @@ function doc(withContent = true): TimelineDoc {
   }
 }
 
+function asset(): MediaAsset {
+  return {
+    id: 'asset-1',
+    fileName: 'source.mp4',
+    mimeType: 'video/mp4',
+    size: 1_024,
+    lastModified: 1_725_000_000_000,
+    objectUrl: 'blob:source',
+    kind: 'video',
+    durationFrames: 90,
+    durationMicroseconds: 3_000_000,
+    frameRate: { num: 30, den: 1 },
+    width: 1280,
+    height: 720,
+    hasAudio: true,
+    audioSampleRate: 48_000,
+    audioChannels: 2,
+    decoderConfigB64: null,
+  }
+}
+
 function deferred<T>(): {
   promise: Promise<T>
   resolve: (value: T) => void
@@ -135,6 +157,12 @@ beforeEach(() => {
   cancelMock.mockReset()
   cancelMock.mockResolvedValue(undefined)
   useDocumentStore.setState({ doc: doc(), past: [], future: [] })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+  })
+  useMediaStore.getState().addAsset(asset())
 })
 
 afterEach(() => {
@@ -186,6 +214,20 @@ describe('Export dialog configuration', () => {
     expect(screen.getByText(/add a clip to the timeline/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start export' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
+    expect(startMock).not.toHaveBeenCalled()
+  })
+
+  test('lists referenced offline media and disables export until relinked', async () => {
+    useMediaStore.getState().disconnectAsset('asset-1')
+    render(<Toolbar />)
+    await openDialog()
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Reconnect 1 offline source before exporting: source.mp4.',
+    )
+    expect(
+      screen.getByRole('button', { name: 'Reconnect media to export' }),
+    ).toBeDisabled()
     expect(startMock).not.toHaveBeenCalled()
   })
 })
@@ -260,6 +302,7 @@ describe('Export dialog lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
 
     const download = await screen.findByRole('link', { name: 'Download MP4' })
+    await waitFor(() => expect(rafCallbacks.size).toBeGreaterThan(0))
     flushAnimationFrame()
     expect(download).toHaveFocus()
     expect(URL.createObjectURL).toHaveBeenCalledOnce()

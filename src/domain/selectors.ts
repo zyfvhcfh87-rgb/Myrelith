@@ -3,7 +3,14 @@
  * No browser APIs, no stores — plain functions over plain data.
  */
 
-import type { Clip, ClipId, Track, TimelineDoc, Transition } from './schema'
+import type {
+  AssetId,
+  Clip,
+  ClipId,
+  Track,
+  TimelineDoc,
+  Transition,
+} from './schema'
 import { rangeContains, rangeEnd } from './time'
 
 /**
@@ -100,6 +107,23 @@ export function audibleTracks(doc: TimelineDoc): Track[] {
   const audio = doc.tracks.filter((t) => t.kind === 'audio')
   const anySolo = audio.some((t) => t.solo)
   return audio.filter((t) => !t.muted && (!anySolo || t.solo))
+}
+
+/** Media sources that can contribute pixels or samples to a full export. */
+export function outputMediaAssetIds(doc: TimelineDoc): Set<AssetId> {
+  const ids = new Set<AssetId>()
+  for (const track of doc.tracks) {
+    if (track.kind !== 'video' || track.hidden) continue
+    for (const clip of track.clips) {
+      if (!clip.text && clip.opacity > 0) ids.add(clip.assetId)
+    }
+  }
+  for (const track of audibleTracks(doc)) {
+    for (const clip of track.clips) {
+      if (!clip.text && clip.volume > 0) ids.add(clip.assetId)
+    }
+  }
+  return ids
 }
 
 /**

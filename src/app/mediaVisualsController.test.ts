@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { MediaAsset } from '../domain/schema'
 import { useMediaStore } from '../state/mediaStore'
 import type { VisualsDeps } from './mediaVisualsController'
 import { disposeMediaVisuals, initMediaVisuals } from './mediaVisualsController'
@@ -14,12 +15,17 @@ let warnSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   urlCounter = 0
+  assetCounter = 0
   URL.createObjectURL = vi.fn(
     () => `blob:mock-${++urlCounter}`,
   ) as typeof URL.createObjectURL
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+  })
 })
 
 afterEach(() => {
@@ -39,8 +45,35 @@ function fakeDeps(over: Partial<VisualsDeps> = {}): VisualsDeps {
   }
 }
 
-const addAsset = (name: string, type: string) =>
-  useMediaStore.getState().addAsset(new File(['x'], name, { type }))
+let assetCounter = 0
+
+const addAsset = (name: string, type: string): MediaAsset => {
+  const kind = type.startsWith('video/')
+    ? 'video'
+    : type.startsWith('audio/')
+      ? 'audio'
+      : 'image'
+  const asset: MediaAsset = {
+    id: `asset-${++assetCounter}`,
+    fileName: name,
+    mimeType: type,
+    size: 1,
+    lastModified: 1,
+    objectUrl: `blob:${name}`,
+    kind,
+    durationFrames: 60,
+    durationMicroseconds: 2_000_000,
+    frameRate: kind === 'video' ? { num: 30, den: 1 } : null,
+    width: kind === 'audio' ? null : 1920,
+    height: kind === 'audio' ? null : 1080,
+    hasAudio: kind !== 'image',
+    audioSampleRate: kind !== 'image' ? 48_000 : null,
+    audioChannels: kind !== 'image' ? 2 : null,
+    decoderConfigB64: kind === 'video' ? '{"codec":"avc1.64042a"}' : null,
+  }
+  expect(useMediaStore.getState().addAsset(asset)).toBe(true)
+  return asset
+}
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
@@ -117,6 +150,31 @@ describe('mediaVisualsController', () => {
 
     expect(useMediaStore.getState().visuals.size).toBe(0)
     // The late result's URLs were revoked by the store guard.
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:strip')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:wave')
+  })
+
+  test('dispose invalidates an old result even when the next project reuses its id', async () => {
+    let releaseBlob: (blob: Blob) => void = () => {}
+    const gate = new Promise<Blob>((resolve) => (releaseBlob = resolve))
+    const deps = fakeDeps({ fetchBlob: vi.fn(() => gate) })
+    initMediaVisuals(deps)
+    addAsset('old.mp4', 'video/mp4')
+
+    disposeMediaVisuals()
+    useMediaStore.setState({
+      descriptors: new Map(),
+      assets: new Map(),
+      visuals: new Map(),
+    })
+    assetCounter = 0
+    const replacement = addAsset('replacement.mp4', 'video/mp4')
+    expect(replacement.id).toBe('asset-1')
+
+    releaseBlob(new Blob(['x']))
+    await flush()
+
+    expect(useMediaStore.getState().visuals.size).toBe(0)
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:strip')
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:wave')
   })

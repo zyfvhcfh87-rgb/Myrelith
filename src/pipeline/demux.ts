@@ -12,7 +12,11 @@
 import { ALL_FORMATS, BlobSource, Input } from 'mediabunny'
 import type { InputAudioTrack, InputVideoTrack } from 'mediabunny'
 import type { FrameRate, MediaAsset } from '../domain/schema'
-import { secondsToFrames, snapToStandardRate } from '../domain/time'
+import {
+  microsecondsToFrames,
+  secondsToMicroseconds,
+  snapToStandardRate,
+} from '../domain/time'
 
 /**
  * A freshly demuxed file: the serializable asset description plus the live
@@ -100,51 +104,66 @@ const FPS_SAMPLE_PACKETS = 120
  * the sandbox, or when the asset defines the project — the asset's own
  * detected rate is used, falling back to 30fps for audio-only files.
  *
- * Throws on files with no video AND no audio track (images and non-media
- * files stay placeholder assets at the mediaStore level).
+ * Throws on files with no video AND no audio track. Failed analysis is never
+ * committed to mediaStore; the import controller presents the error instead.
  */
 export async function loadAsset(
   file: File,
   docRate?: FrameRate,
 ): Promise<LoadedAsset> {
   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
-
-  const [videoTrack, audioTrack] = await Promise.all([
-    input.getPrimaryVideoTrack(),
-    input.getPrimaryAudioTrack(),
-  ])
-  if (!videoTrack && !audioTrack) {
-    throw new Error(`"${file.name}" contains no video or audio track`)
-  }
-
-  let frameRate: FrameRate | null = null
-  let decoderConfigB64: string | null = null
-  if (videoTrack) {
-    const stats = await videoTrack.computePacketStats(FPS_SAMPLE_PACKETS)
-    if (stats.averagePacketRate > 0) {
-      frameRate = snapToStandardRate(stats.averagePacketRate)
+  try {
+    const [videoTrack, audioTrack] = await Promise.all([
+      input.getPrimaryVideoTrack(),
+      input.getPrimaryAudioTrack(),
+    ])
+    if (!videoTrack && !audioTrack) {
+      throw new Error(`"${file.name}" contains no video or audio track`)
     }
-    const config = await videoTrack.getDecoderConfig()
-    if (config) decoderConfigB64 = serializeDecoderConfig(config)
+
+    let frameRate: FrameRate | null = null
+    let decoderConfigB64: string | null = null
+    if (videoTrack) {
+      const stats = await videoTrack.computePacketStats(FPS_SAMPLE_PACKETS)
+      if (stats.averagePacketRate > 0) {
+        frameRate = snapToStandardRate(stats.averagePacketRate)
+      }
+      const config = await videoTrack.getDecoderConfig()
+      if (config) decoderConfigB64 = serializeDecoderConfig(config)
+    }
+
+    const durationSec = await input.computeDuration()
+    const durationMicroseconds = secondsToMicroseconds(durationSec)
+    const effectiveRate = docRate ?? frameRate ?? { num: 30, den: 1 }
+
+    const asset: MediaAsset = {
+      id: `asset_${crypto.randomUUID()}`,
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      lastModified: file.lastModified,
+      objectUrl: URL.createObjectURL(file),
+      kind: videoTrack ? 'video' : 'audio',
+      durationFrames: microsecondsToFrames(durationMicroseconds, effectiveRate),
+      durationMicroseconds,
+      frameRate,
+      width: videoTrack ? videoTrack.displayWidth : null,
+      height: videoTrack ? videoTrack.displayHeight : null,
+      hasAudio: audioTrack !== null,
+      audioSampleRate: audioTrack ? audioTrack.sampleRate : null,
+      audioChannels: audioTrack ? audioTrack.numberOfChannels : null,
+      decoderConfigB64,
+    }
+
+    return { asset, input, videoTrack, audioTrack }
+  } catch (cause) {
+    // loadAsset cannot hand the Input to a caller on failure, so it must close
+    // the resource here. Cleanup errors never replace the primary demux error.
+    try {
+      input.dispose()
+    } catch {
+      // Preserve the original failure.
+    }
+    throw cause
   }
-
-  const durationSec = await input.computeDuration()
-  const effectiveRate = docRate ?? frameRate ?? { num: 30, den: 1 }
-
-  const asset: MediaAsset = {
-    id: `asset_${crypto.randomUUID()}`,
-    fileName: file.name,
-    objectUrl: URL.createObjectURL(file),
-    kind: videoTrack ? 'video' : 'audio',
-    durationFrames: secondsToFrames(durationSec, effectiveRate),
-    frameRate,
-    width: videoTrack ? videoTrack.displayWidth : null,
-    height: videoTrack ? videoTrack.displayHeight : null,
-    hasAudio: audioTrack !== null,
-    audioSampleRate: audioTrack ? audioTrack.sampleRate : null,
-    audioChannels: audioTrack ? audioTrack.numberOfChannels : null,
-    decoderConfigB64,
-  }
-
-  return { asset, input, videoTrack, audioTrack }
 }

@@ -11,6 +11,10 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
+import {
+  INITIAL_PROJECT_SESSION_STATE,
+  useProjectSessionStore,
+} from '../state/projectSessionStore'
 import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
 
 function makeClip(id: string, tlStart: number, duration: number): Clip {
@@ -66,6 +70,10 @@ const clipStart = () =>
 
 beforeEach(() => {
   doc().setDoc(makeDoc())
+  useProjectSessionStore.setState({
+    ...INITIAL_PROJECT_SESSION_STATE,
+    screen: 'editor',
+  })
 })
 
 /** One committed edit to have something on the undo stack. */
@@ -123,6 +131,15 @@ describe('useUndoRedoShortcuts', () => {
       ctrlKey: true,
     })
     expect(clipStart()).toBe(300) // text fields keep their own undo
+  })
+
+  test('closing the editor blocks undo and redo mutations', () => {
+    render(<Harness />)
+    commitMove()
+    useProjectSessionStore.setState({ phase: 'closing' })
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true })
+    expect(clipStart()).toBe(300)
   })
 
   test('unmount detaches the listener', () => {

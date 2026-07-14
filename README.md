@@ -7,6 +7,15 @@ complete MVP editing and MP4 export flow.
 
 ## Features
 
+- Start from a project home, choose 720p through 4K, exact common frame rates,
+  and 44.1/48/96 kHz audio, or validate and resume a portable `.webcut` file.
+- Remember local source media in Chrome and reconnect it automatically on
+  Resume. Projects can also open safely with missing sources kept **Offline**,
+  then reconnect one file or scan a folder to restore preview, audio, and
+  export without changing clip or asset identities.
+- Reopen validated `.webcut` files from Recent and recover bounded local safety
+  copies after a reload or crash; recovery is always offered explicitly and is
+  never presented as a user-owned save.
 - Import local video files and generate metadata, filmstrips, and waveforms.
 - Edit on a multi-track timeline with select, razor, trim, ripple trim, slip,
   and slide tools.
@@ -34,8 +43,33 @@ npm ci
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Imported media and project
-state are session-scoped, so reloading the page starts a fresh project.
+Open [http://localhost:5173](http://localhost:5173). WebCut opens on the project
+home, where you can create a project, choose a portable `.webcut` file, reopen
+a recent file, or review an available recovery copy.
+
+Inside the editor, the first **Save** asks where to store the portable
+`.webcut`; **Save As** chooses a different project file. After that one
+explicit browser permission, WebCut live-saves later timeline and media-pool
+changes to the writable file. Browsers without the writable-file picker can
+download a copy, but WebCut keeps the work marked unsaved because a download
+cannot be verified. Unsaved work is protected before reload or a return to the
+project Home.
+
+Chrome imports store an opaque local file handle in browser storage—not a
+Windows path and not inside `.webcut`. When that read grant persists, Resume
+reconnects the original media automatically. If Chrome asks again, **Allow
+media & open** restores it with one click. Moving the project to another
+browser/computer, clearing site data, or moving/changing a source uses the
+metadata-checked relink fallback. A project with missing media can still open:
+its clips remain visible and bounded on the timeline, preview labels the
+missing source, and export explains what must be reconnected. Use **Relink**
+for one source or **Scan folder** once to search a moved media folder; WebCut
+auto-connects unique matches and asks before using an ambiguous match.
+
+While work is dirty, WebCut also maintains a bounded local recovery journal in
+browser storage. Home offers that journal after a reload or crash, but never
+opens it automatically. Recovery copies are not `.webcut` saves and do not
+cache source videos; use **Save** or **Save As** for a user-owned project file.
 
 ## Browser support
 
@@ -46,12 +80,21 @@ unverified.
 
 ## Current limitations
 
-- The project profile is fixed at 1920×1080, 30 fps, and 48 kHz audio.
 - Export uses one fixed profile: MP4 with 8 Mbps H.264/AVC video and stereo AAC.
-- There is no project save/load UI; document and media state live in memory.
+- Portable Save, Save As, Resume, validation, and media relinking are
+  available, including browser-local automatic source reconnection, offline
+  editing, individual relink, and bounded folder matching. Existing projects
+  imported before handle storage need one successful relink or folder match to
+  seed their handles. A resumed `.webcut` still needs one **Save** or **Save
+  As** grant before live save can update that project file in place. Recent-file
+  shortcuts, remembered media, and recovery journals are origin-local browser
+  conveniences: they disappear when site data is cleared, are not portable,
+  and do not cache source media. Recovery ownership is not coordinated across
+  multiple open WebCut tabs, so the same recovery copy should not be edited or
+  discarded from two tabs at once.
 - Crossfades are visual-only, so audio still hard-cuts. Dissolves involving
   transformed or transparent footage are not yet mathematically exact.
-- The import UI accepts video files. Images are not previewable.
+- The import UI accepts video and audio files. Images are not previewable.
 - Linked audio/video pairs can be unlinked, but arbitrary clips cannot be
   manually re-linked yet.
 - Media compatibility ultimately depends on the codecs exposed by the browser
@@ -92,6 +135,7 @@ For deeper project context, see:
 
 ## Project status
 
-The MVP gate is complete. The post-MVP smooth-preview and live-audio playback
-fixes are also implemented and browser-verified. WebCut remains an experimental
-development project rather than a production-ready editor.
+The MVP gate is complete. Smooth preview, live audio, configurable project
+creation, portable save/resume, recent files, and explicit crash recovery are
+implemented. WebCut remains an experimental development project rather than a
+production-ready editor.
