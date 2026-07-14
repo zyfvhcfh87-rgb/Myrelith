@@ -18,7 +18,7 @@ complete MVP editing and MP4 export flow.
   never presented as a user-owned save.
 - Import local video files and generate metadata, filmstrips, and waveforms.
 - Edit on a multi-track timeline with select, razor, trim, ripple trim, slip,
-  and slide tools.
+  and slide tools, including dragging clips between same-kind tracks.
 - Keep imported audio/video pairs linked through edits, with manual unlinking
   and exact undo/redo history.
 - Hide, mute, solo, lock, rename, add, and remove tracks.

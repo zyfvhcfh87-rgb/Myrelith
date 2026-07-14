@@ -48,8 +48,9 @@ and the open list below.
 | Post-MVP project system — remembered media follow-up | ✅ done | origin-local file handles + permission-aware automatic relink; 806 tests + Chrome picker-entry smoke |
 | Post-MVP project system — Slice 5 local library | ✅ done | Recent handles + explicit three-generation recovery; 840 tests + Chrome reload/recover/discard/picker-entry gate |
 | Post-MVP project system — Slice 6 offline media | ✅ done | open-offline + one-file/folder relink + ambiguity UI + export preflight; 881 tests + Chrome offline→folder-relink gate |
+| Post-MVP #11 — cross-track clip dragging | ✅ done | same-kind video/audio lane targeting + vertical ghost; 885 tests + user manual drag gate |
 
-881 tests green · `npm run build` and `npm run lint` clean · every phase
+885 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -121,6 +122,14 @@ windows, Web Audio schedules them against one future AudioContext anchor, and
 PlaybackEngine uses that same anchor. The Chrome gate measured non-zero audio
 while playing, zero audio/nodes after mute and pause, successful audio re-prime
 after a one-frame seek, exact exclusive-end parking, and no warnings or errors.
+
+Issue #11 completes the existing cross-track `moveClip` domain capability in
+the timeline UI. A select-tool move now resolves the same-kind lane physically
+under the pointer despite pointer capture, ghosts only the gesture owner over
+that lane, highlights the target, and commits one undoable move on pointerup.
+Linked partners keep the same frame delta on their own current lanes. Video and
+audio moves work in both directions; the user completed the manual gate on
+2026-07-14.
 
 Project-system Slice 1 establishes the non-UI foundations: one authoritative
 catalog for 720p/1080p/1440p/4K, exact common frame rates, and 44.1/48/96 kHz
@@ -263,7 +272,8 @@ atomically — the partner even ghosts the gesture live — and the
 Inspector's "🔗 Unlink audio/video" button dissolves the group (one
 entry; undo re-links). Transform and volume stay per-half on purpose. The full editing
 toolset (4.2): toolbar buttons or A/B/T/Y/U — select (click selects, body
-drag moves with snap-back on illegal drops, edge drag trims), razor
+drag moves horizontally or between same-kind lanes with snap-back on illegal
+drops, edge drag trims), razor
 (click cuts at the pointer frame), ripple trim (edges; downstream
 follows), slip (source shifts under a fixed clip, live-clamped to the
 asset, delta badge), slide (touching neighbors absorb). S splits under

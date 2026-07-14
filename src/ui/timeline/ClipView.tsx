@@ -48,6 +48,10 @@ interface GestureSession {
   mode: GestureMode
   pointerStartX: number
   originFrame: number
+  /** Current same-kind lane under the pointer during a move gesture. */
+  targetTrackId: TrackId
+  /** Target-lane top minus source-lane top, for the vertical ghost. */
+  trackOffsetY: number
   /** Live clamp for the signed frame delta (source/timeline floors). */
   minDelta: number
   maxDelta: number
@@ -67,6 +71,11 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
       (clip.linkGroupId !== undefined && s.dragPreview.linkGroupId === clip.linkGroupId))
       ? s.dragPreview.startFrame
       : null,
+  )
+  // Only the gesture owner changes lanes. A linked partner follows the
+  // horizontal frame delta on its own current track (domain/linking.ts).
+  const previewTrackOffsetY = useTransportStore((s) =>
+    s.dragPreview?.clipId === clip.id ? (s.dragPreview.trackOffsetY ?? 0) : 0,
   )
   const editPreview = useTransportStore((s) =>
     s.editPreview &&
@@ -106,8 +115,20 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
     // this check the stale flush re-posts a dragPreview that nothing ever
     // clears, wedging the clip at the preview position until the next
     // gesture (caught in the 4.3.8 browser pass under a throttled-rAF pane).
-    if (session.current?.mode === 'move') {
-      setDragPreview({ clipId: clip.id, startFrame, linkGroupId: clip.linkGroupId })
+    const active = session.current
+    if (active?.mode === 'move') {
+      const crossTrack = active.targetTrackId !== trackId
+      setDragPreview({
+        clipId: clip.id,
+        startFrame,
+        linkGroupId: clip.linkGroupId,
+        ...(crossTrack
+          ? {
+              targetTrackId: active.targetTrackId,
+              trackOffsetY: active.trackOffsetY,
+            }
+          : {}),
+      })
     }
   })
   const scheduleEditPreview = useScrubScheduler((deltaFrames: number) => {
@@ -215,6 +236,41 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
     return Math.min(s.maxDelta, Math.max(s.minDelta, raw))
   }
 
+  /** Resolve the same-kind lane physically under the pointer. Pointer
+   * capture keeps events on this ClipView, so event.target cannot identify
+   * the hovered lane; sibling lane rectangles can. */
+  const trackTargetAt = (clientX: number, clientY: number): {
+    trackId: TrackId
+    offsetY: number
+  } => {
+    const sourceLane = rootRef.current?.closest<HTMLElement>('[data-track-id]')
+    const laneContainer = sourceLane?.parentElement
+    if (!sourceLane || !laneContainer) return { trackId, offsetY: 0 }
+
+    const sourceRect = sourceLane.getBoundingClientRect()
+    const lanes = laneContainer.querySelectorAll<HTMLElement>('[data-track-id]')
+    for (const lane of lanes) {
+      if (lane.dataset.trackKind !== trackKind) continue
+      const rect = lane.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) continue
+      if (
+        clientX >= rect.left &&
+        clientX < rect.right &&
+        clientY >= rect.top &&
+        clientY < rect.bottom
+      ) {
+        const targetTrackId = lane.dataset.trackId
+        if (targetTrackId) {
+          return {
+            trackId: targetTrackId,
+            offsetY: rect.top - sourceRect.top,
+          }
+        }
+      }
+    }
+    return { trackId, offsetY: 0 }
+  }
+
   const startGesture = (
     e: ReactPointerEvent<HTMLDivElement>,
     mode: GestureMode,
@@ -223,6 +279,8 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
       mode,
       pointerStartX: e.clientX,
       originFrame: tl.startFrame,
+      targetTrackId: trackId,
+      trackOffsetY: 0,
       ...boundsFor(mode),
     }
     if (mode === 'move') {
@@ -247,11 +305,17 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
     const s = session.current as GestureSession
     const delta = deltaFromEvent(e)
     const store = useDocumentStore.getState()
+    const moveTarget =
+      s.mode === 'move' ? trackTargetAt(e.clientX, e.clientY) : null
     // Commit exactly once, and only when something actually changed.
-    if (delta !== 0) {
+    if (delta !== 0 || moveTarget?.trackId !== trackId) {
       switch (s.mode) {
         case 'move':
-          store.moveClip(clip.id, trackId, s.originFrame + delta)
+          store.moveClip(
+            clip.id,
+            moveTarget?.trackId ?? trackId,
+            s.originFrame + delta,
+          )
           break
         case 'trim-start':
           store.trimClip(clip.id, 'start', delta)
@@ -330,7 +394,10 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
       data-testid={`clip-${clip.id}`}
       data-offline={isOffline ? 'true' : 'false'}
       style={{
-        transform: `translateX(${startFrame * zoom}px)`,
+        transform:
+          previewTrackOffsetY === 0
+            ? `translateX(${startFrame * zoom}px)`
+            : `translate(${startFrame * zoom}px, ${previewTrackOffsetY}px)`,
         width: durationFrames * zoom,
       }}
       onPointerDown={onBodyPointerDown}
@@ -341,6 +408,9 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
         const s = session.current
         if (!s) return
         if (s.mode === 'move') {
+          const target = trackTargetAt(e.clientX, e.clientY)
+          s.targetTrackId = target.trackId
+          s.trackOffsetY = target.offsetY
           scheduleMovePreview(s.originFrame + deltaFromEvent(e))
         } else {
           scheduleEditPreview(deltaFromEvent(e))

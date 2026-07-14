@@ -31,10 +31,14 @@ function makeClip(id: string, tlStart: number, duration: number): Clip {
   }
 }
 
-function makeTrack(id: string, clips: Clip[]): TrackData {
+function makeTrack(
+  id: string,
+  clips: Clip[],
+  kind: TrackData['kind'] = 'video',
+): TrackData {
   return {
     id,
-    kind: 'video',
+    kind,
     name: id,
     clips,
     transitions: [],
@@ -75,6 +79,31 @@ beforeEach(() => {
 })
 
 const clipA = () => doc().doc.tracks[0].clips.find((c) => c.id === 'clipA') as Clip
+
+const trackById = (trackId: string): TrackData => {
+  const track = doc().doc.tracks.find((candidate) => candidate.id === trackId)
+  if (!track) throw new Error(`missing track ${trackId}`)
+  return track
+}
+
+function laneRect(top: number): DOMRect {
+  return {
+    x: 200,
+    y: top,
+    left: 200,
+    right: 1200,
+    top,
+    bottom: top + 56,
+    width: 1000,
+    height: 56,
+    toJSON: () => ({}),
+  } as DOMRect
+}
+
+function mockLaneRect(trackId: string, top: number): void {
+  vi.spyOn(screen.getByTestId(`track-${trackId}`), 'getBoundingClientRect')
+    .mockReturnValue(laneRect(top))
+}
 
 describe('ClipView rendering', () => {
   test('positions by timelineRange at current zoom', () => {
@@ -172,6 +201,118 @@ describe('drag: scrub-preview then commit', () => {
     expect(transport().dragPreview).toBeNull()
     expect(doc().past).toHaveLength(0)
     expect(clipA().timelineRange.startFrame).toBe(100)
+  })
+})
+
+describe('drag: same-kind track targeting', () => {
+  test('video clip ghosts to a new lane, moves there and back, and undo restores each source lane', async () => {
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', [makeClip('clipA', 100, 50), makeClip('clipB', 300, 80)]),
+        makeTrack('V2', []),
+      ],
+    })
+    const view = render(
+      <>
+        <Track track={trackById('V2')} />
+        <Track track={trackById('V1')} />
+      </>,
+    )
+    mockLaneRect('V2', 0)
+    mockLaneRect('V1', 56)
+
+    const firstClip = screen.getByTestId('clip-clipA')
+    fireEvent.pointerDown(firstClip, { pointerId: 1, clientX: 500, clientY: 84 })
+    fireEvent.pointerMove(firstClip, { pointerId: 1, clientX: 560, clientY: 28 })
+
+    await waitFor(() =>
+      expect(transport().dragPreview).toMatchObject({
+        clipId: 'clipA',
+        startFrame: 160,
+        targetTrackId: 'V2',
+        trackOffsetY: -56,
+      }),
+    )
+    expect(firstClip).toHaveStyle({ transform: 'translate(160px, -56px)' })
+    expect(screen.getByTestId('track-V2')).toHaveClass('clip-drop-target')
+    expect(trackById('V1').clips.some((clip) => clip.id === 'clipA')).toBe(true)
+    expect(trackById('V2').clips).toHaveLength(0)
+
+    fireEvent.pointerUp(firstClip, { pointerId: 1, clientX: 560, clientY: 28 })
+
+    expect(trackById('V1').clips.some((clip) => clip.id === 'clipA')).toBe(false)
+    expect(trackById('V2').clips.find((clip) => clip.id === 'clipA')?.timelineRange.startFrame).toBe(160)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().dragPreview).toBeNull()
+
+    doc().undo()
+    expect(trackById('V1').clips.some((clip) => clip.id === 'clipA')).toBe(true)
+    doc().redo()
+    expect(trackById('V2').clips.some((clip) => clip.id === 'clipA')).toBe(true)
+
+    view.rerender(
+      <>
+        <Track track={trackById('V2')} />
+        <Track track={trackById('V1')} />
+      </>,
+    )
+    mockLaneRect('V2', 0)
+    mockLaneRect('V1', 56)
+
+    const returningClip = screen.getByTestId('clip-clipA')
+    fireEvent.pointerDown(returningClip, { pointerId: 2, clientX: 560, clientY: 28 })
+    fireEvent.pointerMove(returningClip, { pointerId: 2, clientX: 560, clientY: 84 })
+    await waitFor(() =>
+      expect(transport().dragPreview).toMatchObject({
+        clipId: 'clipA',
+        startFrame: 160,
+        targetTrackId: 'V1',
+        trackOffsetY: 56,
+      }),
+    )
+    fireEvent.pointerUp(returningClip, { pointerId: 2, clientX: 560, clientY: 84 })
+
+    expect(trackById('V1').clips.some((clip) => clip.id === 'clipA')).toBe(true)
+    expect(trackById('V2').clips.some((clip) => clip.id === 'clipA')).toBe(false)
+    expect(doc().past).toHaveLength(2)
+    doc().undo()
+    expect(trackById('V2').clips.some((clip) => clip.id === 'clipA')).toBe(true)
+  })
+
+  test('audio clips use the same vertical targeting contract', async () => {
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('A1', [makeClip('audioA', 40, 40)], 'audio'),
+        makeTrack('A2', [], 'audio'),
+      ],
+    })
+    render(
+      <>
+        <Track track={trackById('A1')} />
+        <Track track={trackById('A2')} />
+      </>,
+    )
+    mockLaneRect('A1', 0)
+    mockLaneRect('A2', 56)
+
+    const audioClip = screen.getByTestId('clip-audioA')
+    fireEvent.pointerDown(audioClip, { pointerId: 3, clientX: 500, clientY: 28 })
+    fireEvent.pointerMove(audioClip, { pointerId: 3, clientX: 530, clientY: 84 })
+    await waitFor(() =>
+      expect(transport().dragPreview).toMatchObject({
+        clipId: 'audioA',
+        startFrame: 70,
+        targetTrackId: 'A2',
+        trackOffsetY: 56,
+      }),
+    )
+    fireEvent.pointerUp(audioClip, { pointerId: 3, clientX: 530, clientY: 84 })
+
+    expect(trackById('A1').clips).toHaveLength(0)
+    expect(trackById('A2').clips.find((clip) => clip.id === 'audioA')?.timelineRange.startFrame).toBe(70)
+    expect(doc().past).toHaveLength(1)
   })
 })
 
@@ -280,6 +421,45 @@ describe('linked clip gestures (A/V pairs)', () => {
     expect(vidClip().timelineRange.startFrame).toBe(160)
     expect(audClip().timelineRange.startFrame).toBe(160)
     expect(doc().past).toHaveLength(1) // ONE entry for the whole linked move
+  })
+
+  test('cross-track video drag ghosts only the owner vertically while its linked audio partner stays on its lane', async () => {
+    const linked = makeLinkedDoc()
+    linked.tracks.splice(1, 0, makeTrack('V2', []))
+    doc().setDoc(linked)
+    render(
+      <>
+        <Track track={trackById('V2')} />
+        <Track track={trackById('V1')} />
+        <Track track={trackById('A1')} />
+      </>,
+    )
+    mockLaneRect('V2', 0)
+    mockLaneRect('V1', 56)
+    mockLaneRect('A1', 112)
+
+    const videoEl = screen.getByTestId('clip-vid')
+    const audioEl = screen.getByTestId('clip-aud')
+    fireEvent.pointerDown(videoEl, { pointerId: 4, clientX: 500, clientY: 84 })
+    fireEvent.pointerMove(videoEl, { pointerId: 4, clientX: 560, clientY: 28 })
+    await waitFor(() =>
+      expect(transport().dragPreview).toMatchObject({
+        clipId: 'vid',
+        startFrame: 160,
+        targetTrackId: 'V2',
+        trackOffsetY: -56,
+        linkGroupId: 'link_1',
+      }),
+    )
+
+    expect(videoEl).toHaveStyle({ transform: 'translate(160px, -56px)' })
+    expect(audioEl).toHaveStyle({ transform: 'translateX(160px)' })
+    fireEvent.pointerUp(videoEl, { pointerId: 4, clientX: 560, clientY: 28 })
+
+    expect(trackById('V1').clips).toHaveLength(0)
+    expect(trackById('V2').clips.find((clip) => clip.id === 'vid')?.timelineRange.startFrame).toBe(160)
+    expect(trackById('A1').clips.find((clip) => clip.id === 'aud')?.timelineRange.startFrame).toBe(160)
+    expect(doc().past).toHaveLength(1)
   })
 
   test('dragging an UNLINKED clip does not move a linked pair elsewhere (isolation)', async () => {

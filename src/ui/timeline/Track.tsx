@@ -41,6 +41,9 @@ interface TrackProps {
 
 function Track({ track, soloDimmed = false }: TrackProps) {
   const [dropReady, setDropReady] = useState(false)
+  const clipDropTarget = useTransportStore(
+    (state) => state.dragPreview?.targetTrackId === track.id,
+  )
 
   const acceptsDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
     !track.locked && trackAcceptsAssetDrag(track.kind, e.dataTransfer.types)
@@ -53,8 +56,10 @@ function Track({ track, soloDimmed = false }: TrackProps) {
 
   return (
     <div
-      className={`timeline-track track-${track.kind}${flagClasses}${dropReady ? ' drop-target' : ''}`}
+      className={`timeline-track track-${track.kind}${flagClasses}${dropReady ? ' drop-target' : ''}${clipDropTarget ? ' clip-drop-target' : ''}`}
       data-testid={`track-${track.id}`}
+      data-track-id={track.id}
+      data-track-kind={track.kind}
       onPointerDown={(e) => {
         // Empty-lane click deselects; clip pointerdowns have the CLIP as
         // target, so they never land here (Phase 4.2 selection).

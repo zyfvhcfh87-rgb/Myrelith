@@ -253,6 +253,16 @@
   box-shadow: inset 0 0 0 1px #3d7f56;
 }
 
+/* Same-kind lane under an in-flight clip move. The clip itself remains in
+   its source lane until pointerup, but ghosts vertically over this target. */
+.timeline-track.clip-drop-target {
+  box-shadow: inset 0 0 0 1px #6f9fd0;
+}
+
+.track-audio.clip-drop-target {
+  box-shadow: inset 0 0 0 1px #63a979;
+}
+
 /* Flag-state restyles (behavior lives in the compositor / domain ops).
    track-solo-dimmed = ANOTHER audio track is solo, this one is out of
    the mix (Timeline derives it; the rule lives in audibleTracks). */
