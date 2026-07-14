@@ -11,6 +11,7 @@
 import { useEffect, useRef } from 'react'
 import { initPreview } from '../app/previewController'
 import { useMediaStore } from '../state/mediaStore'
+import { usePreviewStatusStore } from '../state/previewStatusStore'
 
 export default function Preview() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -20,6 +21,21 @@ export default function Preview() {
     }
     return false
   })
+  const hasVideoDescriptor = useMediaStore((s) => {
+    for (const descriptor of s.descriptors.values()) {
+      if (descriptor.kind === 'video') return true
+    }
+    return false
+  })
+  const offlineVideoAssetIds = usePreviewStatusStore(
+    (state) => state.offlineVideoAssetIds,
+  )
+  const offlineFileNames = useMediaStore((state) => (
+    offlineVideoAssetIds
+      .map((id) => state.descriptors.get(id)?.fileName)
+      .filter((name): name is string => name !== undefined)
+      .join(', ')
+  ))
 
   // initPreview is idempotent per canvas — StrictMode double-mount safe.
   useEffect(() => {
@@ -33,11 +49,22 @@ export default function Preview() {
         className="preview-canvas"
         data-testid="preview-canvas"
       />
-      {!hasLoadedVideo && (
+      {offlineVideoAssetIds.length > 0 ? (
+        <div className="preview-hint preview-hint-offline" role="status">
+          <strong>Source offline</strong>
+          <span>
+            Reconnect {offlineFileNames || 'this video'} in the Media panel.
+          </span>
+        </div>
+      ) : !hasVideoDescriptor ? (
         <div className="preview-hint">
           import a video in the Media Pool to preview it here
         </div>
-      )}
+      ) : !hasLoadedVideo ? (
+        <div className="preview-hint preview-hint-offline" role="status">
+          Video sources are offline. Reconnect them in the Media panel.
+        </div>
+      ) : null}
     </div>
   )
 }

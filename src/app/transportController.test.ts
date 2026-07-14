@@ -183,6 +183,7 @@ beforeEach(() => {
   })
   useDocumentStore.getState().setDoc(makeDoc())
   useMediaStore.setState({
+    descriptors: new Map(),
     assets: new Map([['asset-1', makeAsset()]]),
     visuals: new Map(),
   })

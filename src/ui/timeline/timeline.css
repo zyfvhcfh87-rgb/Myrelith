@@ -301,6 +301,21 @@
   color: #cfeedd;
 }
 
+.clip-view.offline,
+.track-audio .clip-view.offline {
+  color: #dfcda8;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      #302a21 0,
+      #302a21 8px,
+      #28231c 8px,
+      #28231c 16px
+    );
+  border-color: #8b7147;
+  border-style: dashed;
+}
+
 .clip-view.dragging {
   cursor: grabbing;
   opacity: 0.85;
@@ -546,6 +561,23 @@
   border-radius: 3px;
   pointer-events: none;
   z-index: 4;
+}
+
+.clip-offline-badge {
+  position: absolute;
+  bottom: 2px;
+  left: 6px;
+  z-index: 4;
+  padding: 1px 4px;
+  color: #f0ce8c;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgb(28 23 16 / 88%);
+  border-radius: 3px;
+  pointer-events: none;
 }
 
 /* Link indicator for A/V-linked clips (Phase 4.3.8). Opposite corner from

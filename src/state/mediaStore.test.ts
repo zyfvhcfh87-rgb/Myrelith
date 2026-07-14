@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { MediaAsset } from '../domain/schema'
 import { useMediaStore } from './mediaStore'
 
@@ -24,10 +25,32 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
   }
 }
 
+function descriptorFor(asset: MediaAsset): PortableAssetDescriptor {
+  return {
+    id: asset.id,
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    size: asset.size,
+    lastModified: asset.lastModified,
+    kind: asset.kind,
+    durationMicroseconds: asset.durationMicroseconds,
+    nativeFrameRate: asset.frameRate,
+    width: asset.width,
+    height: asset.height,
+    hasAudio: asset.hasAudio,
+    audioSampleRate: asset.audioSampleRate,
+    audioChannels: asset.audioChannels,
+  }
+}
+
 const getState = () => useMediaStore.getState()
 
 beforeEach(() => {
-  useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+  })
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
 })
 
@@ -48,6 +71,78 @@ describe('mediaStore', () => {
     const before = getState().assets
     getState().addAsset(makeAsset())
     expect(getState().assets).not.toBe(before)
+  })
+
+  test('disconnect keeps the durable descriptor and reconnect takes new ownership', () => {
+    const first = makeAsset()
+    expect(getState().addAsset(first)).toBe(true)
+
+    getState().disconnectAsset(first.id)
+
+    expect(getState().descriptors.get(first.id)).toEqual(descriptorFor(first))
+    expect(getState().assets.has(first.id)).toBe(false)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(first.objectUrl)
+
+    const reconnected = { ...first, objectUrl: 'blob:reconnected' }
+    expect(getState().connectAsset(reconnected)).toBe(true)
+    expect(getState().assets.get(first.id)).toBe(reconnected)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(reconnected.objectUrl)
+  })
+
+  test('rejects a mismatched connection without taking its URL', () => {
+    const first = makeAsset()
+    getState().addAsset(first)
+    getState().disconnectAsset(first.id)
+    vi.mocked(URL.revokeObjectURL).mockClear()
+
+    const mismatch = {
+      ...first,
+      objectUrl: 'blob:mismatch',
+      size: first.size + 1,
+    }
+    expect(getState().connectAsset(mismatch)).toBe(false)
+    expect(getState().assets.has(first.id)).toBe(false)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+  })
+
+  test('atomically replaces the catalog and connected subset', () => {
+    const outgoing = makeAsset()
+    getState().addAsset(outgoing)
+    getState().setAssetVisuals(outgoing.id, {
+      filmstrip: { url: 'blob:old-film', tiles: 1, tileWidth: 80, tileHeight: 45 },
+      waveform: null,
+    })
+    const incoming = makeAsset({
+      id: 'asset-2',
+      fileName: 'camera.mp4',
+      objectUrl: 'blob:incoming',
+    })
+
+    expect(getState().replaceAssets(
+      [descriptorFor(incoming), descriptorFor(makeAsset({ id: 'offline' }))],
+      [incoming],
+    )).toBe(true)
+
+    expect([...getState().descriptors.keys()]).toEqual(['asset-2', 'offline'])
+    expect([...getState().assets.keys()]).toEqual(['asset-2'])
+    expect(getState().visuals.size).toBe(0)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(outgoing.objectUrl)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:old-film')
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(incoming.objectUrl)
+  })
+
+  test('invalid replacement is a no-op and leaves incoming ownership with caller', () => {
+    const outgoing = makeAsset()
+    getState().addAsset(outgoing)
+    const beforeDescriptors = getState().descriptors
+    const beforeAssets = getState().assets
+    const incoming = makeAsset({ id: 'incoming', objectUrl: 'blob:incoming' })
+
+    expect(getState().replaceAssets([], [incoming])).toBe(false)
+
+    expect(getState().descriptors).toBe(beforeDescriptors)
+    expect(getState().assets).toBe(beforeAssets)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(incoming.objectUrl)
   })
 
   test('reconforms every asset from canonical duration and preserves no-op identity', () => {

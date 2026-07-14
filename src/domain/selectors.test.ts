@@ -10,6 +10,7 @@ import {
   clipSourceFrame,
   docDurationFrames,
   findClip,
+  outputMediaAssetIds,
   trackOfClip,
   tracksInDisplayOrder,
   visibleVideoLayersAtFrame,
@@ -201,6 +202,54 @@ describe('audibleTracks', () => {
       flagged('A1'),
     ])
     expect(audibleTracks(doc).map((t) => t.id)).toEqual(['A1'])
+  })
+})
+
+describe('outputMediaAssetIds', () => {
+  test('includes only sources that can contribute to the exported output', () => {
+    const visible = { ...makeClip('visible', 0, 10), assetId: 'video-visible' }
+    const transparent = {
+      ...makeClip('transparent', 10, 10),
+      assetId: 'video-transparent',
+      opacity: 0,
+    }
+    const text = {
+      ...makeClip('title', 20, 10),
+      assetId: 'text-asset',
+      text: {
+        content: 'Title',
+        fontFamily: 'sans-serif',
+        fontSizePx: 48,
+        color: '#fff',
+        align: 'center' as const,
+        bold: false,
+        italic: false,
+      },
+    }
+    const soloAudio = {
+      ...makeClip('solo-audio', 0, 10),
+      assetId: 'audio-solo',
+    }
+    const zeroVolume = {
+      ...makeClip('silent', 10, 10),
+      assetId: 'audio-silent',
+      volume: 0,
+    }
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [visible, transparent, text]),
+      makeTrack('V2', 'video', [
+        { ...makeClip('hidden', 0, 10), assetId: 'video-hidden' },
+      ], { hidden: true }),
+      makeTrack('A1', 'audio', [
+        { ...makeClip('not-solo', 0, 10), assetId: 'audio-not-solo' },
+      ]),
+      makeTrack('A2', 'audio', [soloAudio, zeroVolume], { solo: true }),
+    ])
+
+    expect([...outputMediaAssetIds(doc)]).toEqual([
+      'video-visible',
+      'audio-solo',
+    ])
   })
 })
 

@@ -381,10 +381,9 @@ function ResumeProjectScreen() {
   const needsPermission = candidate?.assets.some(
     (asset) => asset.status === 'remembered',
   ) ?? false
-  const allRestorable = candidate?.assets.every(
-    (asset) => asset.status !== 'missing',
-  )
-    ?? false
+  const missingCount = candidate?.assets.filter(
+    (asset) => asset.status === 'missing',
+  ).length ?? 0
 
   return (
     <LaunchFrame>
@@ -396,7 +395,7 @@ function ResumeProjectScreen() {
         <p>
           {recovering
             ? 'This local safety copy is checked before you choose to restore it.'
-            : 'The project is checked before it can replace the current session.'}
+            : 'The project is checked before it opens. Missing sources can stay offline and be reconnected later.'}
         </p>
       </div>
 
@@ -469,7 +468,9 @@ function ResumeProjectScreen() {
                     ? 'This project does not need any source files.'
                     : needsPermission
                       ? 'WebCut remembers these files. Open the project once to allow access again.'
-                      : 'Remembered files reconnect automatically. Select only the sources still marked Missing.'}
+                      : missingCount > 0
+                        ? `${missingCount} source${missingCount === 1 ? '' : 's'} will open offline. You can reconnect them now or from the editor.`
+                        : 'Every source is ready. Remembered files reconnect automatically.'}
                 </p>
               </div>
               {candidate.assets.length > 0 && (
@@ -516,7 +517,7 @@ function ResumeProjectScreen() {
                         ? 'Ready'
                         : asset.status === 'remembered'
                           ? 'Remembered'
-                          : 'Missing'}
+                          : 'Opens offline'}
                     </span>
                   </li>
                 ))}
@@ -546,12 +547,16 @@ function ResumeProjectScreen() {
           <button
             className="project-button project-button-primary"
             type="button"
-            disabled={busy || !candidate || !allRestorable}
+            disabled={busy || !candidate}
             onClick={() => void activateResumedProject()}
           >
             {needsPermission
               ? recovering ? 'Allow media & recover' : 'Allow media & open'
-              : recovering ? 'Recover project' : 'Open project'}
+              : missingCount > 0
+                ? recovering
+                  ? `Recover with ${missingCount} offline`
+                  : `Open with ${missingCount} offline`
+                : recovering ? 'Recover project' : 'Open project'}
           </button>
         </div>
       </div>

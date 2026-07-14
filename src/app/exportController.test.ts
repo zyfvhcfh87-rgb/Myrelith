@@ -195,9 +195,11 @@ beforeEach(() => {
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   useDocumentStore.setState({ doc: DOC, past: [], future: [] })
   useMediaStore.setState({
-    assets: new Map([[ASSET.id, ASSET]]),
+    descriptors: new Map(),
+    assets: new Map(),
     visuals: new Map(),
   })
+  useMediaStore.getState().addAsset(ASSET)
 })
 
 afterEach(async () => {
@@ -205,6 +207,35 @@ afterEach(async () => {
 })
 
 describe('exportController wiring and completion', () => {
+  test('rejects referenced offline media before creating export resources', async () => {
+    const descriptor = useMediaStore.getState().descriptors.get(ASSET.id)
+    expect(descriptor).toBeDefined()
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      'Reconnect 1 offline source before exporting: source.mp4.',
+    )
+
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('does not block export for an output-suppressed offline source', async () => {
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    useDocumentStore.setState({
+      doc: {
+        ...DOC,
+        tracks: DOC.tracks.map((track) => ({ ...track, hidden: true })),
+      },
+    })
+    const h = makeHarness(() => completedRun())
+
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+  })
+
   test('snapshots the run, shares one cached resolver, forwards progress, and returns the buffer', async () => {
     const observed = observeRun(completedRun())
     const h = makeHarness(() => observed.run)

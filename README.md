@@ -10,8 +10,9 @@ complete MVP editing and MP4 export flow.
 - Start from a project home, choose 720p through 4K, exact common frame rates,
   and 44.1/48/96 kHz audio, or validate and resume a portable `.webcut` file.
 - Remember local source media in Chrome and reconnect it automatically on
-  Resume; permission, missing-file, and portable-project fallbacks remain
-  explicit, and incomplete candidates never replace the session.
+  Resume. Projects can also open safely with missing sources kept **Offline**,
+  then reconnect one file or scan a folder to restore preview, audio, and
+  export without changing clip or asset identities.
 - Reopen validated `.webcut` files from Recent and recover bounded local safety
   copies after a reload or crash; recovery is always offered explicitly and is
   never presented as a user-owned save.
@@ -59,7 +60,11 @@ Windows path and not inside `.webcut`. When that read grant persists, Resume
 reconnects the original media automatically. If Chrome asks again, **Allow
 media & open** restores it with one click. Moving the project to another
 browser/computer, clearing site data, or moving/changing a source uses the
-manual metadata-checked relink fallback.
+metadata-checked relink fallback. A project with missing media can still open:
+its clips remain visible and bounded on the timeline, preview labels the
+missing source, and export explains what must be reconnected. Use **Relink**
+for one source or **Scan folder** once to search a moved media folder; WebCut
+auto-connects unique matches and asks before using an ambiguous match.
 
 While work is dirty, WebCut also maintains a bounded local recovery journal in
 browser storage. Home offers that journal after a reload or crash, but never
@@ -77,15 +82,16 @@ unverified.
 
 - Export uses one fixed profile: MP4 with 8 Mbps H.264/AVC video and stereo AAC.
 - Portable Save, Save As, Resume, validation, and media relinking are
-  available, including browser-local automatic source reconnection. Existing
-  projects imported before this support need one final manual relink to seed
-  their handles. A resumed `.webcut` still needs one **Save** or **Save As**
-  grant before live save can update that project file in place. Recent-file
-  shortcuts and recovery journals are origin-local browser conveniences: they
-  disappear when site data is cleared, are not portable, and do not cache
-  source media. Recovery ownership is not coordinated across multiple open
-  WebCut tabs, so the same recovery copy should not be edited or discarded from
-  two tabs at once.
+  available, including browser-local automatic source reconnection, offline
+  editing, individual relink, and bounded folder matching. Existing projects
+  imported before handle storage need one successful relink or folder match to
+  seed their handles. A resumed `.webcut` still needs one **Save** or **Save
+  As** grant before live save can update that project file in place. Recent-file
+  shortcuts, remembered media, and recovery journals are origin-local browser
+  conveniences: they disappear when site data is cleared, are not portable,
+  and do not cache source media. Recovery ownership is not coordinated across
+  multiple open WebCut tabs, so the same recovery copy should not be edited or
+  discarded from two tabs at once.
 - Crossfades are visual-only, so audio still hard-cuts. Dissolves involving
   transformed or transparent footage are not yet mathematically exact.
 - The import UI accepts video and audio files. Images are not previewable.

@@ -60,7 +60,7 @@ const realDeps: MediaImportDeps = {
   inspect: inspectMediaFile,
   getDocument: () => useDocumentStore.getState().doc,
   replaceDocument: (document) => useDocumentStore.getState().setDoc(document),
-  hasAsset: (assetId) => useMediaStore.getState().assets.has(assetId),
+  hasAsset: (assetId) => useMediaStore.getState().descriptors.has(assetId),
   addAsset: (asset) => useMediaStore.getState().addAsset(asset),
   reconformAssets: (rate) => useMediaStore.getState().reconformAssets(rate),
   rememberMediaHandle: (documentId, assetId, handle) => (

@@ -182,7 +182,13 @@ describe('ProjectLaunch', () => {
 
     expect(controller.openProjectFile).toHaveBeenCalledWith(project)
     expect(controller.connectProjectMedia).toHaveBeenCalledWith([source])
-    expect(screen.getByRole('button', { name: 'Open project' })).toBeDisabled()
+    const openOffline = screen.getByRole('button', {
+      name: 'Open with 1 offline',
+    })
+    expect(openOffline).toBeEnabled()
+    expect(screen.getByText(/will open offline/i)).toBeInTheDocument()
+    fireEvent.click(openOffline)
+    expect(controller.activateResumedProject).toHaveBeenCalledOnce()
   })
 
   test('validated zero-media projects can be opened immediately', () => {

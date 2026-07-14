@@ -26,7 +26,7 @@
 import { memo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Clip, TrackId, TrackKind } from '../../domain/schema'
-import { rangeEnd } from '../../domain/time'
+import { microsecondsToFrames, rangeEnd } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import type { EditPreviewKind } from '../../state/transportStore'
@@ -77,6 +77,7 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   )
   const setDragPreview = useTransportStore((s) => s.setDragPreview)
   const setEditPreview = useTransportStore((s) => s.setEditPreview)
+  const documentRate = useDocumentStore((s) => s.doc.frameRate)
 
   // Both visuals span the asset's FULL source duration. The waveform uses
   // full-source CSS size/position; the filmstrip is cut into integer-frame
@@ -84,8 +85,16 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   // stretching one sample across a potentially huge time span.
   // Stable narrow slices change only when THIS asset's visuals/metadata land.
   const visuals = useMediaStore((s) => s.visuals.get(clip.assetId))
-  const assetDurationFrames = useMediaStore(
-    (s) => s.assets.get(clip.assetId)?.durationFrames ?? 0,
+  const assetDurationFrames = useMediaStore((s) => {
+    const connected = s.assets.get(clip.assetId)
+    if (connected) return connected.durationFrames
+    const descriptor = s.descriptors.get(clip.assetId)
+    return descriptor
+      ? microsecondsToFrames(descriptor.durationMicroseconds, documentRate)
+      : 0
+  })
+  const isOffline = useMediaStore(
+    (s) => s.descriptors.has(clip.assetId) && !s.assets.has(clip.assetId),
   )
 
   const session = useRef<GestureSession | null>(null)
@@ -176,10 +185,11 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
    * the asset is known) the source ceiling — live-accurate previews. */
   const boundsFor = (mode: GestureMode): { minDelta: number; maxDelta: number } => {
     const src = clip.sourceRange
-    const asset = useMediaStore.getState().assets.get(clip.assetId)
-    const headroom = asset
-      ? Math.max(0, asset.durationFrames - rangeEnd(src))
-      : Number.POSITIVE_INFINITY
+    // Text clips have no media descriptor and intentionally remain extendable.
+    // Unknown non-text sources stay clamped defensively at their current end.
+    const headroom = clip.text
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, assetDurationFrames - rangeEnd(src))
     switch (mode) {
       case 'move':
       case 'slide':
@@ -316,8 +326,9 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   return (
     <div
       ref={rootRef}
-      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}`}
+      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isOffline ? ' offline' : ''}`}
       data-testid={`clip-${clip.id}`}
+      data-offline={isOffline ? 'true' : 'false'}
       style={{
         transform: `translateX(${startFrame * zoom}px)`,
         width: durationFrames * zoom,
@@ -423,6 +434,11 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
         </>
       )}
       {badge !== null && <span className="clip-edit-badge">{badge}</span>}
+      {isOffline && (
+        <span className="clip-offline-badge" aria-label="Source offline">
+          Offline
+        </span>
+      )}
       <span className="clip-name">{clip.name}</span>
       {clip.linkGroupId !== undefined && (
         <span className="clip-link-badge" data-testid={`clip-${clip.id}-link`}>

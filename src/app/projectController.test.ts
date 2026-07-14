@@ -21,8 +21,12 @@ import {
 import { useTransportStore } from '../state/transportStore'
 import {
   activateResumedProject,
+  cancelActiveMediaRelink,
+  chooseActiveAssetMedia,
+  chooseActiveMediaFolder,
   chooseProjectFile,
   chooseProjectMedia,
+  connectActiveMediaFolder,
   connectProjectMedia,
   createNewProject,
   leaveActiveProject,
@@ -30,10 +34,15 @@ import {
   openRecentProject,
   openRecoveryProject,
   resetProjectController,
+  resolveActiveMediaAmbiguity,
   returnToProjectHome,
+  skipActiveMediaAmbiguity,
   type ProjectControllerDeps,
 } from './projectController'
-import type { LocalMediaFileHandle } from './localMediaHandles'
+import type {
+  LocalMediaFileHandle,
+  LocalMediaFolderSelection,
+} from './localMediaHandles'
 import {
   LOCAL_PROJECT_RECORD_VERSION,
   type LocalProjectFileHandle,
@@ -125,6 +134,7 @@ function makeDeps(
     queryMediaPermission: vi.fn(async () => 'granted' as const),
     requestMediaPermission: vi.fn(async () => 'granted' as const),
     pickMediaFiles: vi.fn(async () => []),
+    pickMediaFolder: vi.fn(async () => []),
     pickProjectFile: vi.fn(async () => {
       throw new DOMException('cancelled', 'AbortError')
     }),
@@ -169,6 +179,37 @@ async function flush(): Promise<void> {
   for (let index = 0; index < 6; index++) await Promise.resolve()
 }
 
+function makeFolderSelection(
+  fileName: string,
+  relativePath = `media/${fileName}`,
+  lastModified = 999,
+): LocalMediaFolderSelection {
+  const file = new File(['12345678'], fileName, {
+    type: 'video/mp4',
+    lastModified,
+  })
+  return { file, handle: makeHandle(file), relativePath }
+}
+
+async function activateSavedProject(
+  descriptors: readonly PortableAssetDescriptor[],
+  overrides: Partial<ProjectControllerDeps> = {},
+): Promise<ProjectControllerDeps> {
+  const serialized = serializeProjectFile(makeProject([...descriptors]))
+  const deps = makeDeps({
+    readText: vi.fn(async () => serialized),
+    ...overrides,
+  })
+  await expect(openProjectFile(
+    new File([serialized], 'offline.webcut'),
+    deps,
+  )).resolves.toEqual({ status: 'ready' })
+  await expect(activateResumedProject(deps)).resolves.toEqual({
+    status: 'activated',
+  })
+  return deps
+}
+
 beforeEach(() => {
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   resetProjectController({ revokeObjectURL: URL.revokeObjectURL })
@@ -177,7 +218,11 @@ beforeEach(() => {
     DEFAULT_PROJECT_SETTINGS,
     'doc-current',
   ))
-  useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+  })
   useTransportStore.getState().resetTransport()
 })
 
@@ -922,5 +967,475 @@ describe('portable project resume', () => {
     await expect(connecting).resolves.toEqual({ status: 'cancelled' })
     expect(deps.revokeObjectURL).toHaveBeenCalledWith('blob:late')
     expect(useProjectSessionStore.getState().screen).toBe('home')
+  })
+})
+
+describe('active-project media relink', () => {
+  test('activates with missing sources and preserves every descriptor', async () => {
+    const first = descriptorFrom(makeAsset(), { id: 'offline-first' })
+    const second = descriptorFrom(makeAsset({
+      fileName: 'second.mp4',
+      size: 9,
+      durationFrames: 90,
+      durationMicroseconds: 3_000_000,
+    }), { id: 'offline-second' })
+
+    await activateSavedProject([first, second])
+
+    const media = useMediaStore.getState()
+    expect([...media.descriptors.entries()]).toEqual([
+      ['offline-first', first],
+      ['offline-second', second],
+    ])
+    expect(media.assets.size).toBe(0)
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      screen: 'editor',
+      candidate: null,
+    })
+  })
+
+  test('a denied remembered permission activates with the source offline', async () => {
+    const descriptor = descriptorFrom(makeAsset())
+    const source = new File(['12345678'], 'source.mp4', {
+      type: 'video/mp4',
+      lastModified: descriptor.lastModified,
+    })
+    const handle = makeHandle(source)
+    const deps = await activateSavedProject([descriptor], {
+      loadMediaHandle: vi.fn(async () => handle),
+      queryMediaPermission: vi.fn(async () => 'prompt' as const),
+      requestMediaPermission: vi.fn(async () => 'denied' as const),
+    })
+
+    expect(deps.requestMediaPermission).toHaveBeenCalledWith(handle)
+    expect(deps.inspectMedia).not.toHaveBeenCalled()
+    expect(useMediaStore.getState().descriptors.get(descriptor.id))
+      .toEqual(descriptor)
+    expect(useMediaStore.getState().assets.has(descriptor.id)).toBe(false)
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      screen: 'editor',
+      activeMediaRelink: {
+        phase: 'complete',
+        errors: [expect.stringContaining('was not granted')],
+      },
+    })
+  })
+
+  test('an individual picker reconnects the existing descriptor and remembers its handle', async () => {
+    const descriptor = descriptorFrom(makeAsset())
+    const selection = makeFolderSelection('renamed-copy.mp4')
+    const analyzed = makeAsset({
+      id: 'temporary-analysis-id',
+      fileName: selection.file.name,
+      lastModified: selection.file.lastModified,
+      objectUrl: 'blob:individual-relink',
+    })
+    const deps = await activateSavedProject([descriptor], {
+      inspectMedia: vi.fn(async () => analyzed),
+      pickMediaFiles: vi.fn(async () => [{
+        file: selection.file,
+        handle: selection.handle,
+      }]),
+    })
+    const descriptorBefore = useMediaStore.getState().descriptors.get(
+      descriptor.id,
+    )
+
+    await expect(chooseActiveAssetMedia(descriptor.id, deps)).resolves.toEqual({
+      status: 'ready',
+    })
+
+    const media = useMediaStore.getState()
+    expect(deps.pickMediaFiles).toHaveBeenCalledWith(false)
+    expect(media.descriptors.get(descriptor.id)).toBe(descriptorBefore)
+    expect(media.assets.get(descriptor.id)).toMatchObject({
+      id: descriptor.id,
+      fileName: descriptor.fileName,
+      objectUrl: 'blob:individual-relink',
+    })
+    expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
+      'doc-saved',
+      descriptor.id,
+      selection.handle,
+    )
+    expect(deps.revokeObjectURL).not.toHaveBeenCalledWith(
+      'blob:individual-relink',
+    )
+    expect(useProjectSessionStore.getState().activeMediaRelink)
+      .toMatchObject({ phase: 'complete', connectedCount: 1 })
+  })
+
+  test('a folder scan connects unique matches while leaving other sources offline', async () => {
+    const first = descriptorFrom(makeAsset(), {
+      id: 'folder-first',
+      fileName: 'first-original.mp4',
+    })
+    const second = descriptorFrom(makeAsset({
+      fileName: 'second.mp4',
+      size: 9,
+      durationFrames: 90,
+      durationMicroseconds: 3_000_000,
+    }), { id: 'folder-second' })
+    const matching = makeFolderSelection(
+      'first-original.mp4',
+      'chosen/first-original.mp4',
+      first.lastModified,
+    )
+    const ignoredFile = new File(['nope'], 'notes.txt', {
+      type: 'text/plain',
+      lastModified: 555,
+    })
+    const ignored: LocalMediaFolderSelection = {
+      file: ignoredFile,
+      handle: makeHandle(ignoredFile),
+      relativePath: 'chosen/notes.txt',
+    }
+    const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
+      .mockResolvedValueOnce(makeAsset({
+        id: 'folder-scan',
+        fileName: matching.file.name,
+        objectUrl: 'blob:folder-scan',
+      }))
+      .mockResolvedValueOnce(makeAsset({
+        id: 'folder-analysis',
+        fileName: matching.file.name,
+        objectUrl: 'blob:folder-unique',
+      }))
+    const deps = await activateSavedProject([first, second], {
+      inspectMedia,
+    })
+
+    await expect(connectActiveMediaFolder(
+      [matching, ignored],
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+
+    const media = useMediaStore.getState()
+    expect(deps.inspectMedia).toHaveBeenCalledTimes(2)
+    expect(deps.revokeObjectURL).toHaveBeenCalledWith('blob:folder-scan')
+    expect(media.assets.get(first.id)).toMatchObject({
+      id: first.id,
+      objectUrl: 'blob:folder-unique',
+    })
+    expect(media.assets.has(second.id)).toBe(false)
+    expect(media.descriptors.size).toBe(2)
+    expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
+      'doc-saved',
+      first.id,
+      matching.handle,
+    )
+    expect(useProjectSessionStore.getState().activeMediaRelink).toEqual({
+      phase: 'complete',
+      scannedFileCount: 2,
+      connectedCount: 1,
+      skippedCount: 1,
+      errors: [],
+      ambiguity: null,
+    })
+  })
+
+  test('duplicate folder matches publish only a serializable ambiguity summary', async () => {
+    const analyzed = makeAsset({ objectUrl: 'blob:ambiguous-summary' })
+    const first = descriptorFrom(analyzed, { id: 'duplicate-first' })
+    const second = descriptorFrom(analyzed, { id: 'duplicate-second' })
+    const selection = makeFolderSelection(
+      analyzed.fileName,
+      `duplicates/${analyzed.fileName}`,
+      analyzed.lastModified,
+    )
+    const deps = await activateSavedProject([first, second], {
+      inspectMedia: vi.fn(async () => analyzed),
+    })
+
+    await expect(connectActiveMediaFolder([selection], deps)).resolves.toEqual({
+      status: 'ready',
+    })
+
+    const summary = useProjectSessionStore.getState().activeMediaRelink
+    expect(summary).toEqual({
+      phase: 'awaiting-choice',
+      scannedFileCount: 1,
+      connectedCount: 0,
+      skippedCount: 0,
+      errors: [],
+      ambiguity: {
+        token: expect.any(String),
+        assetId: first.id,
+        assetFileName: first.fileName,
+        candidates: [{
+          token: expect.any(String),
+          fileName: analyzed.fileName,
+          relativePath: `duplicates/${analyzed.fileName}`,
+        }],
+      },
+    })
+    const serializedSummary = JSON.stringify(summary)
+    expect(JSON.parse(serializedSummary)).toEqual(summary)
+    expect(serializedSummary).not.toContain('blob:ambiguous-summary')
+    expect(serializedSummary).not.toContain('getFile')
+
+    cancelActiveMediaRelink(deps)
+  })
+
+  test('confirming an ambiguity transfers the staged URL and handle to the chosen asset', async () => {
+    const analyzed = makeAsset({ objectUrl: 'blob:confirmed-folder-scan' })
+    const first = descriptorFrom(analyzed, { id: 'confirm-first' })
+    const second = descriptorFrom(analyzed, { id: 'confirm-second' })
+    const selection = makeFolderSelection(
+      analyzed.fileName,
+      `duplicates/${analyzed.fileName}`,
+      analyzed.lastModified,
+    )
+    const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
+      .mockResolvedValueOnce(analyzed)
+      .mockResolvedValueOnce(makeAsset({
+        objectUrl: 'blob:confirmed-folder-source',
+      }))
+    const deps = await activateSavedProject([first, second], {
+      inspectMedia,
+    })
+    await connectActiveMediaFolder([selection], deps)
+    const ambiguity = useProjectSessionStore.getState()
+      .activeMediaRelink.ambiguity
+    expect(ambiguity).not.toBeNull()
+
+    await expect(resolveActiveMediaAmbiguity(
+      ambiguity!.token,
+      ambiguity!.candidates[0].token,
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+
+    const media = useMediaStore.getState()
+    expect(media.assets.get(first.id)).toMatchObject({
+      id: first.id,
+      objectUrl: 'blob:confirmed-folder-source',
+    })
+    expect(media.assets.has(second.id)).toBe(false)
+    expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
+      'doc-saved',
+      first.id,
+      selection.handle,
+    )
+    expect(deps.revokeObjectURL).not.toHaveBeenCalledWith(
+      'blob:confirmed-folder-source',
+    )
+    expect(deps.revokeObjectURL).toHaveBeenCalledWith(
+      'blob:confirmed-folder-scan',
+    )
+    expect(useProjectSessionStore.getState().activeMediaRelink)
+      .toMatchObject({ phase: 'complete', connectedCount: 1 })
+  })
+
+  test('skipping an ambiguity revokes every discarded staged URL once', async () => {
+    const descriptor = descriptorFrom(makeAsset(), { id: 'skip-target' })
+    const first = makeFolderSelection('skip-copy-a.mp4')
+    const second = makeFolderSelection('skip-copy-b.mp4')
+    const firstUrl = 'blob:skip-copy-a'
+    const secondUrl = 'blob:skip-copy-b'
+    const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
+      .mockResolvedValueOnce(makeAsset({
+        fileName: first.file.name,
+        objectUrl: firstUrl,
+      }))
+      .mockResolvedValueOnce(makeAsset({
+        fileName: second.file.name,
+        objectUrl: secondUrl,
+      }))
+    const deps = await activateSavedProject([descriptor], { inspectMedia })
+    await connectActiveMediaFolder([first, second], deps)
+    const ambiguity = useProjectSessionStore.getState()
+      .activeMediaRelink.ambiguity
+    expect(ambiguity?.candidates).toHaveLength(2)
+
+    await expect(skipActiveMediaAmbiguity(
+      ambiguity!.token,
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+    await expect(skipActiveMediaAmbiguity(
+      ambiguity!.token,
+      deps,
+    )).resolves.toEqual({ status: 'cancelled' })
+
+    const revocations = vi.mocked(deps.revokeObjectURL).mock.calls
+      .map(([url]) => url)
+    expect(revocations.filter((url) => url === firstUrl)).toHaveLength(1)
+    expect(revocations.filter((url) => url === secondUrl)).toHaveLength(1)
+    expect(useMediaStore.getState().assets.size).toBe(0)
+    expect(useProjectSessionStore.getState().activeMediaRelink)
+      .toMatchObject({
+        phase: 'complete',
+        connectedCount: 0,
+        skippedCount: 2,
+      })
+  })
+
+  test('cancelling an ambiguity revokes every staged URL once', async () => {
+    const descriptor = descriptorFrom(makeAsset(), { id: 'cancel-target' })
+    const first = makeFolderSelection('cancel-copy-a.mp4')
+    const second = makeFolderSelection('cancel-copy-b.mp4')
+    const firstUrl = 'blob:cancel-copy-a'
+    const secondUrl = 'blob:cancel-copy-b'
+    const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
+      .mockResolvedValueOnce(makeAsset({
+        fileName: first.file.name,
+        objectUrl: firstUrl,
+      }))
+      .mockResolvedValueOnce(makeAsset({
+        fileName: second.file.name,
+        objectUrl: secondUrl,
+      }))
+    const deps = await activateSavedProject([descriptor], { inspectMedia })
+    await connectActiveMediaFolder([first, second], deps)
+    expect(useProjectSessionStore.getState().activeMediaRelink.phase)
+      .toBe('awaiting-choice')
+
+    cancelActiveMediaRelink(deps)
+    cancelActiveMediaRelink(deps)
+
+    const revocations = vi.mocked(deps.revokeObjectURL).mock.calls
+      .map(([url]) => url)
+    expect(revocations.filter((url) => url === firstUrl)).toHaveLength(1)
+    expect(revocations.filter((url) => url === secondUrl)).toHaveLength(1)
+    expect(useMediaStore.getState().assets.size).toBe(0)
+    expect(useProjectSessionStore.getState().activeMediaRelink)
+      .toMatchObject({ phase: 'complete', skippedCount: 2 })
+  })
+
+  test('superseding an ambiguity revokes the previous staged URLs once', async () => {
+    const descriptor = descriptorFrom(makeAsset(), {
+      id: 'superseded-target',
+    })
+    const first = makeFolderSelection('superseded-copy-a.mp4')
+    const second = makeFolderSelection('superseded-copy-b.mp4')
+    const firstUrl = 'blob:superseded-copy-a'
+    const secondUrl = 'blob:superseded-copy-b'
+    const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
+      .mockResolvedValueOnce(makeAsset({
+        fileName: first.file.name,
+        objectUrl: firstUrl,
+      }))
+      .mockResolvedValueOnce(makeAsset({
+        fileName: second.file.name,
+        objectUrl: secondUrl,
+      }))
+    const deps = await activateSavedProject([descriptor], { inspectMedia })
+    await connectActiveMediaFolder([first, second], deps)
+    expect(useProjectSessionStore.getState().activeMediaRelink.phase)
+      .toBe('awaiting-choice')
+
+    await expect(connectActiveMediaFolder([], deps)).resolves.toEqual({
+      status: 'ready',
+    })
+    await expect(connectActiveMediaFolder([], deps)).resolves.toEqual({
+      status: 'ready',
+    })
+
+    const revocations = vi.mocked(deps.revokeObjectURL).mock.calls
+      .map(([url]) => url)
+    expect(revocations.filter((url) => url === firstUrl)).toHaveLength(1)
+    expect(revocations.filter((url) => url === secondUrl)).toHaveLength(1)
+    expect(useMediaStore.getState().assets.size).toBe(0)
+  })
+
+  test('a large folder keeps every unique match beyond the former staging cap', async () => {
+    const descriptors: PortableAssetDescriptor[] = []
+    const selections: LocalMediaFolderSelection[] = []
+    for (let index = 0; index < 257; index++) {
+      const fileName = `unique-${index}.mp4`
+      const size = 8 + index
+      const lastModified = 10_000 + index
+      const durationMicroseconds = 2_000_000 + index
+      const file = new File([new Uint8Array(size)], fileName, {
+        type: 'video/mp4',
+        lastModified,
+      })
+      descriptors.push(descriptorFrom(makeAsset({
+        fileName,
+        size,
+        lastModified,
+        durationMicroseconds,
+      }), { id: `large-folder-${index}` }))
+      selections.push({
+        file,
+        handle: makeHandle(file),
+        relativePath: `large/${fileName}`,
+      })
+    }
+    let inspectionId = 0
+    const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>(
+      async (file) => {
+        const index = Number(file.name.slice('unique-'.length, -'.mp4'.length))
+        return makeAsset({
+          id: `temporary-${inspectionId}`,
+          fileName: file.name,
+          size: file.size,
+          lastModified: file.lastModified,
+          durationMicroseconds: 2_000_000 + index,
+          objectUrl: `blob:large-folder-${inspectionId++}`,
+        })
+      },
+    )
+    const deps = await activateSavedProject(descriptors, { inspectMedia })
+
+    await expect(connectActiveMediaFolder(selections, deps)).resolves.toEqual({
+      status: 'ready',
+    })
+
+    expect(useMediaStore.getState().assets.size).toBe(257)
+    expect(inspectMedia).toHaveBeenCalledTimes(514)
+    expect(useProjectSessionStore.getState().activeMediaRelink).toMatchObject({
+      phase: 'complete',
+      connectedCount: 257,
+      skippedCount: 0,
+      errors: [],
+    })
+  })
+
+  test('a folder picker result cannot relink a project that was left meanwhile', async () => {
+    const descriptor = descriptorFrom(makeAsset(), { id: 'picker-race' })
+    const selection = makeFolderSelection(descriptor.fileName)
+    const picker = deferred<LocalMediaFolderSelection[]>()
+    const deps = await activateSavedProject([descriptor], {
+      pickMediaFolder: vi.fn(() => picker.promise),
+    })
+
+    const choosing = chooseActiveMediaFolder(deps)
+    await flush()
+    expect(useProjectSessionStore.getState().activeMediaRelink.phase)
+      .toBe('scanning')
+
+    returnToProjectHome()
+    picker.resolve([selection])
+
+    await expect(choosing).resolves.toEqual({ status: 'cancelled' })
+    expect(deps.inspectMedia).not.toHaveBeenCalled()
+    expect(useMediaStore.getState().assets.size).toBe(0)
+  })
+
+  test('cancelling while a connected handle is being remembered reports cancellation without revoking the transferred URL', async () => {
+    const descriptor = descriptorFrom(makeAsset(), { id: 'remember-race' })
+    const selection = makeFolderSelection(descriptor.fileName)
+    const remember = deferred<void>()
+    const scanUrl = 'blob:remember-race-scan'
+    const sourceUrl = 'blob:remember-race'
+    const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
+      .mockResolvedValueOnce(makeAsset({ objectUrl: scanUrl }))
+      .mockResolvedValueOnce(makeAsset({ objectUrl: sourceUrl }))
+    const deps = await activateSavedProject([descriptor], {
+      inspectMedia,
+      rememberMediaHandle: vi.fn(() => remember.promise),
+    })
+
+    const connecting = connectActiveMediaFolder([selection], deps)
+    await flush()
+    expect(useMediaStore.getState().assets.has(descriptor.id)).toBe(true)
+
+    cancelActiveMediaRelink(deps)
+    remember.resolve(undefined)
+
+    await expect(connecting).resolves.toEqual({ status: 'cancelled' })
+    expect(deps.revokeObjectURL).toHaveBeenCalledWith(scanUrl)
+    expect(deps.revokeObjectURL).not.toHaveBeenCalledWith(sourceUrl)
+    expect(useMediaStore.getState().assets.has(descriptor.id)).toBe(true)
   })
 })

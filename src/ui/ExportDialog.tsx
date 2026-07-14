@@ -14,8 +14,9 @@ import {
   useRef,
   useState,
 } from 'react'
-import { docDurationFrames } from '../domain/selectors'
+import { docDurationFrames, outputMediaAssetIds } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
 
 type ExportControllerModule = typeof import('../app/exportController')
 type ExportSettings = Parameters<ExportControllerModule['startExport']>[0]
@@ -79,6 +80,16 @@ function exportFileName(projectName: string): string {
 export default function ExportDialog({ onClose }: ExportDialogProps) {
   const doc = useDocumentStore((state) => state.doc)
   const hasContent = docDurationFrames(doc) > 0
+  const offlineExportMessage = useMediaStore((state) => {
+    const offline = [...outputMediaAssetIds(doc)].filter(
+      (assetId) => !state.assets.has(assetId),
+    )
+    if (offline.length === 0) return null
+    const names = offline.map(
+      (assetId) => state.descriptors.get(assetId)?.fileName ?? assetId,
+    )
+    return `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`
+  })
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   const startButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -187,7 +198,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   }
 
   const beginExport = async (): Promise<void> => {
-    if (runningRef.current || !hasContent) return
+    if (runningRef.current || !hasContent || offlineExportMessage) return
     runningRef.current = true
     cancelRequestedRef.current = false
     const token = ++runTokenRef.current
@@ -381,6 +392,12 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             <p className="export-empty">Add a clip to the timeline before exporting.</p>
           )}
 
+          {offlineExportMessage && phase === 'configure' && (
+            <p className="export-error" role="alert">
+              {offlineExportMessage}
+            </p>
+          )}
+
           {error && (
             <p className="export-error" role="alert">
               {error}
@@ -434,10 +451,12 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
                 ref={startButtonRef}
                 type="button"
                 className="export-primary"
-                disabled={!hasContent}
+                disabled={!hasContent || offlineExportMessage !== null}
                 onClick={() => void beginExport()}
               >
-                {error ? 'Retry export' : 'Start export'}
+                {offlineExportMessage
+                  ? 'Reconnect media to export'
+                  : error ? 'Retry export' : 'Start export'}
               </button>
             </>
           )}

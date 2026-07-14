@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { Clip, MediaAsset, TimelineDoc, Track } from './schema'
+import type { Clip, TimelineDoc, Track } from './schema'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
@@ -192,24 +192,7 @@ describe('portable project file', () => {
 
   test('builds an isolated active-session snapshot without session-only media fields', () => {
     const document = makeDocument()
-    const assets: MediaAsset[] = makeAssets().map((asset) => ({
-      id: asset.id,
-      fileName: asset.fileName,
-      mimeType: asset.mimeType,
-      size: asset.size,
-      lastModified: asset.lastModified,
-      objectUrl: `blob:${asset.id}`,
-      kind: asset.kind,
-      durationFrames: 240,
-      durationMicroseconds: asset.durationMicroseconds,
-      frameRate: asset.nativeFrameRate,
-      width: asset.width,
-      height: asset.height,
-      hasAudio: asset.hasAudio,
-      audioSampleRate: asset.audioSampleRate,
-      audioChannels: asset.audioChannels,
-      decoderConfigB64: asset.kind === 'video' ? '{"codec":"avc1"}' : null,
-    }))
+    const assets = makeAssets()
 
     const snapshot = createProjectFileSnapshot(document, assets)
     document.name = 'Mutated after capture'
@@ -223,7 +206,6 @@ describe('portable project file', () => {
     })
     const serialized = serializeProjectFile(snapshot)
     expect(serialized).not.toContain('objectUrl')
-    expect(serialized).not.toContain('durationFrames":240')
     expect(serialized).not.toContain('decoderConfigB64')
     expect(serialized).not.toContain('blob:')
   })

@@ -28,10 +28,12 @@
  */
 
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
+import { visibleVideoLayersAtFrame } from '../domain/selectors'
 import type { RenderFrameResult } from '../engine/render-bridge'
 import { createRenderWorker, RenderWorkerBridge } from '../engine/render-bridge'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { useTransportStore } from '../state/transportStore'
 import type { RenderMode } from '../workers/render-protocol'
 
@@ -100,6 +102,25 @@ function scheduleRender(): void {
     // Document frames go straight through — per-asset rescaling happens
     // inside the bridge; source cursor policy belongs to the worker.
     const transport = useTransportStore.getState()
+    const document = useDocumentStore.getState().doc
+    const media = useMediaStore.getState()
+    const offlineIds: AssetId[] = []
+    const seen = new Set<AssetId>()
+    for (const layer of visibleVideoLayersAtFrame(
+      document,
+      transport.playheadFrame,
+    )) {
+      const id = layer.clip.assetId
+      if (
+        !seen.has(id)
+        && media.descriptors.has(id)
+        && !media.assets.has(id)
+      ) {
+        seen.add(id)
+        offlineIds.push(id)
+      }
+    }
+    usePreviewStatusStore.getState().setOfflineVideoAssetIds(offlineIds)
     void bridge.renderFrame(transport.playheadFrame, modeForTransport(transport))
   })
 }
@@ -197,6 +218,7 @@ export function initPreview(
     }),
     useMediaStore.subscribe(() => {
       syncAssets(deps)
+      scheduleRender()
     }),
   )
   // Assets may already be waiting (import before mount, HMR, tests) and an
@@ -215,4 +237,5 @@ export function disposePreview(): void {
   state.canvas = null
   state.assetStates = new Map()
   state.rafPending = false
+  usePreviewStatusStore.getState().resetPreviewStatus()
 }

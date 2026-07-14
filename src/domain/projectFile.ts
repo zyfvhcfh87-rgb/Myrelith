@@ -12,7 +12,6 @@ import type {
   Clip,
   Effect,
   FrameRate,
-  MediaAsset,
   TextProps,
   TimelineDoc,
   Track,
@@ -774,33 +773,19 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
 }
 
 /**
- * Build one isolated portable snapshot from the active editor session.
- * Session-only URLs, decoder configuration, conformed frame counts, visuals,
- * and undo history are intentionally absent from the descriptor allowlist.
+ * Build one isolated portable snapshot from the active editor session's durable
+ * descriptor catalog. Connected MediaAssets, session-only URLs, decoder state,
+ * conformed frame counts, visuals, and undo history are intentionally absent.
  */
 export function createProjectFileSnapshot(
   document: TimelineDoc,
-  assets: Iterable<MediaAsset>,
+  descriptors: Iterable<PortableAssetDescriptor>,
 ): ProjectFile {
   const project: ProjectFile = {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
     document,
-    assets: Array.from(assets, (asset) => ({
-      id: asset.id,
-      fileName: asset.fileName,
-      mimeType: asset.mimeType,
-      size: asset.size,
-      lastModified: asset.lastModified,
-      kind: asset.kind,
-      durationMicroseconds: asset.durationMicroseconds,
-      nativeFrameRate: asset.frameRate === null ? null : { ...asset.frameRate },
-      width: asset.width,
-      height: asset.height,
-      hasAudio: asset.hasAudio,
-      audioSampleRate: asset.audioSampleRate,
-      audioChannels: asset.audioChannels,
-    })),
+    assets: Array.from(descriptors),
   }
   validateProjectFile(project)
   return portableProjectSnapshot(project)

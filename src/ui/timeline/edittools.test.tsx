@@ -11,8 +11,19 @@
 import { Profiler } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { Clip, TimelineDoc, Track as TrackData } from '../../domain/schema'
+import {
+  createProjectFileSnapshot,
+  serializeProjectFile,
+  type PortableAssetDescriptor,
+} from '../../domain/projectFile'
+import type {
+  Clip,
+  MediaAsset,
+  TimelineDoc,
+  Track as TrackData,
+} from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
+import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
 import ClipView from './ClipView'
 import Track from './Track'
@@ -65,10 +76,71 @@ function makeDoc(): TimelineDoc {
   }
 }
 
+const connectedAsset: MediaAsset = {
+  id: 'asset-1',
+  fileName: 'source.mp4',
+  mimeType: 'video/mp4',
+  size: 1_024,
+  lastModified: 1_725_000_000_000,
+  objectUrl: 'blob:source',
+  kind: 'video',
+  durationFrames: 300,
+  durationMicroseconds: 10_000_000,
+  frameRate: { num: 30, den: 1 },
+  width: 1920,
+  height: 1080,
+  hasAudio: true,
+  audioSampleRate: 48_000,
+  audioChannels: 2,
+  decoderConfigB64: null,
+}
+
+const connectedDescriptor: PortableAssetDescriptor = {
+  id: connectedAsset.id,
+  fileName: connectedAsset.fileName,
+  mimeType: connectedAsset.mimeType,
+  size: connectedAsset.size,
+  lastModified: connectedAsset.lastModified,
+  kind: connectedAsset.kind,
+  durationMicroseconds: connectedAsset.durationMicroseconds,
+  nativeFrameRate: connectedAsset.frameRate,
+  width: connectedAsset.width,
+  height: connectedAsset.height,
+  hasAudio: connectedAsset.hasAudio,
+  audioSampleRate: connectedAsset.audioSampleRate,
+  audioChannels: connectedAsset.audioChannels,
+}
+
+const offlineDescriptor: PortableAssetDescriptor = {
+  ...connectedDescriptor,
+  durationMicroseconds: 3_000_000,
+}
+
 const doc = () => useDocumentStore.getState()
 const transport = () => useTransportStore.getState()
 const v1 = () => doc().doc.tracks[0]
 const clipById = (id: string) => v1().clips.find((c) => c.id === id) as Clip
+
+function installOfflineBoundsFixture(): void {
+  doc().setDoc({
+    ...makeDoc(),
+    id: 'doc-offline-bounds',
+    name: 'offline bounds fixture',
+    tracks: [makeTrack('V1', [makeClip('offline', 100, 50, 20)])],
+  })
+  useMediaStore.setState({
+    descriptors: new Map([[offlineDescriptor.id, offlineDescriptor]]),
+    assets: new Map(),
+    visuals: new Map(),
+  })
+}
+
+function expectCurrentDocumentToRemainPortable(): void {
+  const descriptors = useMediaStore.getState().descriptors.values()
+  expect(() => serializeProjectFile(
+    createProjectFileSnapshot(doc().doc, descriptors),
+  )).not.toThrow()
+}
 
 let warnSpy: ReturnType<typeof vi.spyOn>
 
@@ -86,6 +158,11 @@ beforeEach(() => {
     editPreview: null,
   })
   doc().setDoc(makeDoc())
+  useMediaStore.setState({
+    descriptors: new Map([[connectedDescriptor.id, connectedDescriptor]]),
+    assets: new Map([[connectedAsset.id, connectedAsset]]),
+    visuals: new Map(),
+  })
 })
 
 const renderTrack = () => render(<Track track={v1()} />)
@@ -322,6 +399,77 @@ describe('slip tool', () => {
     fireEvent.pointerUp(clip, { pointerId: 1, clientX: 60 })
     expect(clipById('clipA').sourceRange.startFrame).toBe(0)
     expect(doc().past).toHaveLength(1)
+  })
+})
+
+describe('offline descriptor source bounds', () => {
+  test('plain trim-end stops at the descriptor duration', async () => {
+    installOfflineBoundsFixture()
+    renderTrack()
+    const clip = screen.getByTestId('clip-offline')
+
+    fireEvent.pointerDown(screen.getByTestId('clip-offline-edge-end'), {
+      pointerId: 1,
+      clientX: 150,
+    })
+    fireEvent.pointerMove(clip, { pointerId: 1, clientX: 350 })
+    await waitFor(() => expect(transport().editPreview?.deltaFrames).toBe(20))
+    fireEvent.pointerUp(clip, { pointerId: 1, clientX: 350 })
+
+    expect(clipById('offline').sourceRange).toEqual({
+      startFrame: 20,
+      durationFrames: 70,
+    })
+    expect(clipById('offline').timelineRange.durationFrames).toBe(70)
+    expect(doc().past).toHaveLength(1)
+    expectCurrentDocumentToRemainPortable()
+  })
+
+  test('ripple trim-end stops at the descriptor duration', async () => {
+    installOfflineBoundsFixture()
+    act(() => transport().setTool('trim'))
+    renderTrack()
+    const clip = screen.getByTestId('clip-offline')
+
+    fireEvent.pointerDown(screen.getByTestId('clip-offline-edge-end'), {
+      pointerId: 1,
+      clientX: 150,
+    })
+    expect(transport().editPreview?.kind).toBe('ripple-end')
+    fireEvent.pointerMove(clip, { pointerId: 1, clientX: 350 })
+    await waitFor(() => expect(transport().editPreview?.deltaFrames).toBe(20))
+    fireEvent.pointerUp(clip, { pointerId: 1, clientX: 350 })
+
+    expect(clipById('offline').sourceRange).toEqual({
+      startFrame: 20,
+      durationFrames: 70,
+    })
+    expect(clipById('offline').timelineRange.durationFrames).toBe(70)
+    expect(doc().past).toHaveLength(1)
+    expectCurrentDocumentToRemainPortable()
+  })
+
+  test('slip stops before the source window exceeds descriptor duration', async () => {
+    installOfflineBoundsFixture()
+    act(() => transport().setTool('slip'))
+    renderTrack()
+    const clip = screen.getByTestId('clip-offline')
+
+    fireEvent.pointerDown(clip, { pointerId: 1, clientX: 120 })
+    fireEvent.pointerMove(clip, { pointerId: 1, clientX: 500 })
+    await waitFor(() => expect(transport().editPreview?.deltaFrames).toBe(20))
+    fireEvent.pointerUp(clip, { pointerId: 1, clientX: 500 })
+
+    expect(clipById('offline').sourceRange).toEqual({
+      startFrame: 40,
+      durationFrames: 50,
+    })
+    expect(clipById('offline').timelineRange).toEqual({
+      startFrame: 100,
+      durationFrames: 50,
+    })
+    expect(doc().past).toHaveLength(1)
+    expectCurrentDocumentToRemainPortable()
   })
 })
 

@@ -251,7 +251,7 @@ export class ProjectPersistenceController {
       if (state.doc !== previous.doc) this.markDirty()
     })
     this.unsubscribeMedia = useMediaStore.subscribe((state, previous) => {
-      if (state.assets !== previous.assets) this.markDirty()
+      if (state.descriptors !== previous.descriptors) this.markDirty()
     })
     const hasUnsavedChanges = !session.persisted
     useProjectSessionStore.setState({
@@ -401,7 +401,7 @@ export class ProjectPersistenceController {
     const revision = this.revision
     const project = createProjectFileSnapshot(
       useDocumentStore.getState().doc,
-      useMediaStore.getState().assets.values(),
+      useMediaStore.getState().descriptors.values(),
     )
     return {
       serialized: serializeProjectFile(project),

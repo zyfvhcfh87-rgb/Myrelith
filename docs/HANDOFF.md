@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-13)
+## Status (2026-07-14)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -47,8 +47,9 @@ and the open list below.
 | Post-MVP project system — Slice 4 persistence | ✅ done | portable Save/Save As, revision-safe live save, quiesced exit; 794 tests + Chrome toolbar/Resume/layout gate |
 | Post-MVP project system — remembered media follow-up | ✅ done | origin-local file handles + permission-aware automatic relink; 806 tests + Chrome picker-entry smoke |
 | Post-MVP project system — Slice 5 local library | ✅ done | Recent handles + explicit three-generation recovery; 840 tests + Chrome reload/recover/discard/picker-entry gate |
+| Post-MVP project system — Slice 6 offline media | ✅ done | open-offline + one-file/folder relink + ambiguity UI + export preflight; 881 tests + Chrome offline→folder-relink gate |
 
-840 tests green · `npm run build` and `npm run lint` clean · every phase
+881 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -200,9 +201,30 @@ honestly unsaved; confirmed Discard removed the journal; the reusable project
 picker entry rendered; the Home layout stayed intact; and the final console was
 clean.
 
-**Next: ask the user to select the next issue #4 follow-up.** Remaining
-issue-level work includes folder/batch matching and any future opt-in media
-caching/quota controls; do not imply those are part of recovery today.
+Project-system Slice 6 separates the durable media catalog from its connected
+session resources. A validated `.webcut` now activates even when some or all
+sources are unavailable: affected clips stay visible, retain finite descriptor
+bounds, and are labeled Offline in the Media panel, timeline, and Preview.
+Individual Relink restores one source. Scan folder performs a bounded recursive
+enumeration and conservative matching by filename, size, modified time, and
+analyzed media metadata; unique matches connect automatically, ambiguous
+matches require explicit confirmation, and accepted files preserve the saved
+asset ids. Files, handles, candidate paths, and staging URLs remain outside
+Zustand, and every cancellation/supersession path releases its URLs. Preview
+and live audio fail soft while media is missing; output-contributing offline
+sources block export before any Blob or encoder is created.
+
+The real-Chrome gate passed 2026-07-14 with a disk-backed `.webcut` and MP4:
+the project opened with one offline source, the clip remained visible, Preview
+named the missing file, and export named it while disabling Start. One folder
+selection auto-matched and re-analyzed the MP4, restored thumbnail/Preview and
+the same timeline clip, reported `1 connected · 0 skipped`, and enabled Start
+export. The final warning/error console was empty.
+
+**Next: ask the user to select the next post-MVP issue.** Folder/batch relinking
+is complete. Future project-storage work is separate opt-in media caching with
+quota/eviction UX and multi-tab recovery ownership; do not imply recovery or a
+portable `.webcut` contains source bytes today.
 
 ## What works today (user-visible)
 
@@ -210,8 +232,11 @@ Run `npm run dev` → project Home. Create a project with an explicit canvas,
 frame rate, and audio rate, choose a `.webcut`, reopen a Recent file, or review
 an explicitly offered recovery copy. Remembered sources with a
 retained grant reconnect automatically; a returned permission prompt needs one
-Allow-and-open click, and only genuinely missing sources need manual relink.
-Review the profile and open it only when complete. In the editor,
+Allow-and-open click. Genuinely missing sources can open Offline without hiding
+their clips; reconnect one from its Media row or choose Scan folder once for
+bounded batch matching. Preview/audio resume when the source reconnects, and
+export stays disabled only while an output-contributing source is offline.
+Review the profile, then open it with ready or offline sources. In the editor,
 the first Save chooses a writable file; Save As chooses another; both turn on
 live save. The toolbar shows dirty/saving/saved/error state, reload is guarded
 only while dirty, and returning to Projects confirms before safely closing the
@@ -341,6 +366,16 @@ the transform fields only for video-lane clips.
   sole explicit generator pump, preserving the final `ExportResult` while
   making repeated/coincident cancellation one serialized `return(undefined)`.
   Only one run (including setup/cancel cleanup) may own the controller slot.
+  Slice 6 preflights the pure `outputMediaAssetIds` selection first, so a
+  missing output source fails with exact filenames before Blob retention,
+  adapter creation, or generator startup.
+- `src/app/projectController.ts` + `localMediaHandles.ts` — project activation
+  installs the full descriptor catalog plus whatever connected subset is
+  available. Active Relink and Scan folder are project-generation guarded,
+  retain Files/handles/candidates outside Zustand, enforce bounded recursive
+  enumeration, stage no long-lived scan URLs, re-inspect accepted candidates,
+  preserve saved asset ids, and publish only serializable progress/ambiguity
+  summaries. Confirmed handles are remembered for later automatic Resume.
 - `src/app/mediaImportController.ts` — Slice 2 import composition root: owns
   the selected File and analyzed resource until Keep/Match/Cancel resolves,
   commits complete assets exactly once, guards project-change races, and owns
@@ -379,8 +414,10 @@ the transform fields only for video-lane clips.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
   100; rejected ops push no entry; 5.1e-2 transition add/duration/remove
   actions preserve exact snapshot ids), `transportStore` (playhead/zoom/
-  `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (complete analyzed
-  assets + visual URL ownership + exact duration reconformance), and
+  `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (durable descriptor
+  catalog + connected analyzed subset + visual URL ownership + exact duration
+  reconformance), `previewStatusStore` (idempotent visible-offline projection),
+  and
   `mediaImportStore` (serializable dialog status only; no File/Blob handles).
 - `src/workers/decode-protocol.ts` — canonical worker message types.
 - `src/workers/render-protocol.ts` — render-worker message types (types only).
@@ -460,6 +497,11 @@ the transform fields only for video-lane clips.
   "+ Video"/"+ Audio" (addTrack). Tracks render in domain
   tracksInDisplayOrder (videos reversed = top composite layer first,
   then audios) — doc order stays compositing order.
+- `src/ui/MediaPool.tsx` + `MediaRelinkDialog.tsx` + `Preview.tsx` +
+  `timeline/ClipView.tsx` — Slice 6 offline UI: descriptor-driven media rows,
+  per-source Relink, one folder scan, focus-trapped ambiguity confirmation,
+  current-frame Preview guidance, and finite labeled offline clips. Offline
+  rows cannot be dragged; text clips remain intentionally extendable.
 - `src/ui/timeline/Track.tsx` + `TransitionSeam.tsx` (5.1e-3) — Track derives
   eligible touching video cuts from its committed snapshot; each seam marker
   subscribes only to zoom and opens a temporary Add/Apply/Remove duration
@@ -574,15 +616,15 @@ the transform fields only for video-lane clips.
 
 ## Open items (beyond PLAN.md phases)
 
-- Slice 4, remembered media, and Slice 5 now cover portable Save/Save As,
+- Slices 4–6 now cover portable Save/Save As,
   permission-aware automatic source reconnection, removable Recent shortcuts,
-  manual fallback, live save after a writable grant, and explicit bounded
-  recovery journals. These origin-local sidecars are convenience, not portable
-  bundled media; recovery stores no source bytes. A resumed project remains
-  read-only until one Save or Save As grant. Multi-tab recovery ownership is
-  not coordinated yet, so do not edit/discard the same journal from two tabs.
-  Issue #4 remains open for folder/batch matching and any future opt-in media
-  caching/quota UI.
+  open-offline sessions, individual/folder relinking, live save after a writable
+  grant, and explicit bounded recovery journals. These origin-local sidecars
+  are convenience, not portable bundled media; recovery stores no source
+  bytes. A resumed project remains read-only until one Save or Save As grant.
+  Multi-tab recovery ownership is not coordinated yet, so do not edit/discard
+  the same journal from two tabs. Any future media caching needs explicit
+  opt-in, quota/eviction UX, and a separate security/storage review.
 - A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
   domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
   (unlink is one-way today, undo aside) and linked-pair awareness in a

@@ -37,6 +37,45 @@ export interface ResumeProjectSummary {
   assets: RelinkAssetSummary[]
 }
 
+export type ActiveMediaRelinkPhase =
+  | 'idle'
+  | 'scanning'
+  | 'awaiting-choice'
+  | 'complete'
+
+export interface MediaRelinkFileCandidateSummary {
+  token: string
+  fileName: string
+  relativePath: string
+}
+
+export interface MediaRelinkAmbiguitySummary {
+  token: string
+  assetId: string
+  assetFileName: string
+  candidates: readonly MediaRelinkFileCandidateSummary[]
+}
+
+/** Serializable projection only; Files, handles, URLs, and assets stay in app/. */
+export interface ActiveMediaRelinkSummary {
+  phase: ActiveMediaRelinkPhase
+  scannedFileCount: number
+  connectedCount: number
+  skippedCount: number
+  errors: readonly string[]
+  ambiguity: MediaRelinkAmbiguitySummary | null
+}
+
+export const INITIAL_ACTIVE_MEDIA_RELINK: Readonly<ActiveMediaRelinkSummary> =
+  Object.freeze({
+    phase: 'idle',
+    scannedFileCount: 0,
+    connectedCount: 0,
+    skippedCount: 0,
+    errors: Object.freeze([]) as readonly string[],
+    ambiguity: null,
+  })
+
 export interface ProjectSessionState {
   screen: ProjectScreen
   phase: ProjectSessionPhase
@@ -50,6 +89,7 @@ export interface ProjectSessionState {
   recoveryPhase: ProjectRecoveryPhase
   lastRecoveryAt: number | null
   recoveryError: string | null
+  activeMediaRelink: ActiveMediaRelinkSummary
   candidate: ResumeProjectSummary | null
   error: string | null
 }
@@ -68,6 +108,7 @@ export const INITIAL_PROJECT_SESSION_STATE: Readonly<ProjectSessionState> =
     recoveryPhase: 'idle',
     lastRecoveryAt: null,
     recoveryError: null,
+    activeMediaRelink: INITIAL_ACTIVE_MEDIA_RELINK,
     candidate: null,
     error: null,
   })

@@ -122,19 +122,22 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   ghost a linked gesture live. No history, no side effects, never
   touches documentStore. `resetTransport()` restores every field to its
   initial value when a different project is activated.
-- `MediaState` — `src/state/mediaStore.ts`: `assets: Map<AssetId,
-  MediaAsset>`, `addAsset(asset)` (accepts one fully analyzed asset and takes
-  ownership of its source URL),
-  `removeAsset(id)` (revokes the object URL), `visuals: Map<AssetId,
-  AssetVisuals>` + `setAssetVisuals(id, v)` (filmstrip/waveform images;
-  the store OWNS those object URLs — revokes on removal/replacement and
-  for late results after removal), and `clearAssets()` (revokes every source
-  and generated URL exactly once during project replacement). Session-scoped,
-  not serialized with the project.
+- `MediaState` — `src/state/mediaStore.ts`: `descriptors: Map<AssetId,
+  PortableAssetDescriptor>` is the durable project catalog, while
+  `assets: Map<AssetId, MediaAsset>` is only the currently connected subset.
+  `addAsset`/`connectAsset` install a fully analyzed source and take ownership
+  of its URL; `disconnectAsset` keeps the descriptor but releases the source;
+  `replaceAssets` atomically installs a project catalog plus its connected
+  subset; and `removeAsset` deletes both. `visuals: Map<AssetId, AssetVisuals>`
+  + `setAssetVisuals(id, v)` owns filmstrip/waveform URLs. Replacement,
+  disconnection, removal, late visual results, and `clearAssets()` revoke each
+  owned source/generated URL exactly once. Project persistence serializes the
+  descriptors, never the session-only connected resources or URLs.
 - `ProjectSessionState` — `src/state/projectSessionStore.ts`: serializable
-  launch/editor screen, operation phase, active-project labels, a small relink
-  summary, and the serializable dirty/save/recovery-status projection. Parsed
-  projects, selected Files, MediaAssets, readable/writable file handles,
+  launch/editor screen, operation phase, active-project labels, resume and
+  active-editor relink summaries (including ambiguity choices), and the
+  serializable dirty/save/recovery-status projection. Parsed projects,
+  selected Files, folder entries, MediaAssets, readable/writable file handles,
   recovery payloads, timers, and all object URLs stay in app-layer
   controllers/adapters; they never enter this store.
 - `ProjectLibraryState` — `src/state/projectLibraryStore.ts`: serializable Home
@@ -165,7 +168,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   keyed by stable document + asset ids. Paths and handles never enter domain
   data or `.webcut` JSON. Resume may query permission silently; prompting must
   originate in a user click. Missing, denied, moved, changed, or unsupported
-  sources fall back to the exact-metadata manual relink path.
+  sources remain offline and may be reconnected individually or through one
+  recursively enumerated folder. Folder scans are deterministically bounded;
+  conservative filename/size/modified-time/media-metadata matching accepts
+  unique sources, while ambiguous candidates require an explicit user choice.
+  Accepted sources keep the original asset id and are re-analyzed before
+  transfer into `MediaState`; relative folder paths are display-only, and
+  Files, handles, and object URLs remain controller-local.
 - Worker messages — `src/workers/decode-protocol.ts` (canonical):
   `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
   (`configured`/`frameReady`/`error`). Types-only file; BOTH the worker and

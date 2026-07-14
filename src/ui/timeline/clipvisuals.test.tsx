@@ -9,6 +9,7 @@
 
 import { act, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test } from 'vitest'
+import type { PortableAssetDescriptor } from '../../domain/projectFile'
 import type { Clip, MediaAsset } from '../../domain/schema'
 import type { AssetVisuals } from '../../state/mediaStore'
 import { useMediaStore } from '../../state/mediaStore'
@@ -49,6 +50,22 @@ const asset: MediaAsset = {
   decoderConfigB64: null,
 }
 
+const descriptor: PortableAssetDescriptor = {
+  id: asset.id,
+  fileName: asset.fileName,
+  mimeType: asset.mimeType,
+  size: asset.size,
+  lastModified: asset.lastModified,
+  kind: asset.kind,
+  durationMicroseconds: asset.durationMicroseconds,
+  nativeFrameRate: asset.frameRate,
+  width: asset.width,
+  height: asset.height,
+  hasAudio: asset.hasAudio,
+  audioSampleRate: asset.audioSampleRate,
+  audioChannels: asset.audioChannels,
+}
+
 const visuals: AssetVisuals = {
   filmstrip: { url: 'blob:strip', tiles: 5, tileWidth: 78, tileHeight: 44 },
   waveform: { url: 'blob:wave', width: 1000, height: 44 },
@@ -67,12 +84,37 @@ beforeEach(() => {
     editPreview: null,
   })
   useMediaStore.setState({
+    descriptors: new Map([[descriptor.id, descriptor]]),
     assets: new Map([[asset.id, asset]]),
     visuals: new Map([[asset.id, visuals]]),
   })
 })
 
 describe('clip visuals', () => {
+  test('an offline descriptor-backed clip stays visible and marked Offline', () => {
+    useMediaStore.setState({
+      descriptors: new Map([[descriptor.id, descriptor]]),
+      assets: new Map(),
+      visuals: new Map(),
+    })
+
+    render(
+      <ClipView
+        clip={makeClip('offline', 25, 100, 60)}
+        trackId="V1"
+        trackKind="video"
+      />,
+    )
+
+    const clip = screen.getByTestId('clip-offline')
+    expect(clip).toBeVisible()
+    expect(clip).toHaveClass('offline')
+    expect(clip).toHaveAttribute('data-offline', 'true')
+    expect(clip).toHaveStyle({ transform: 'translateX(50px)', width: '200px' })
+    expect(screen.getByLabelText('Source offline')).toHaveTextContent('Offline')
+    expect(screen.queryByTestId('clip-offline-visual')).not.toBeInTheDocument()
+  })
+
   test('video lanes show time-aligned fixed-size sprite patterns', () => {
     // Clip shows source [60, 160) of a 300-frame asset, zoom 2.
     render(<ClipView clip={makeClip('c1', 0, 100, 60)} trackId="V1" trackKind="video" />)

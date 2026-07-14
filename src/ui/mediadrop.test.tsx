@@ -121,16 +121,12 @@ beforeEach(() => {
     inOut: null,
     dragPreview: null,
   })
-  useMediaStore.setState({ assets: new Map() })
+  useMediaStore.setState({ descriptors: new Map(), assets: new Map() })
   doc().setDoc(makeDoc())
 })
 
 function seedAsset(asset: MediaAsset): void {
-  useMediaStore.setState((s) => {
-    const assets = new Map(s.assets)
-    assets.set(asset.id, asset)
-    return { assets }
-  })
+  expect(useMediaStore.getState().addAsset(asset)).toBe(true)
 }
 
 /* ------------------------------------------------------------------ */

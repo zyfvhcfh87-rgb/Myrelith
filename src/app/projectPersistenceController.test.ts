@@ -124,7 +124,11 @@ beforeEach(() => {
     DEFAULT_PROJECT_SETTINGS,
     'doc-save-test',
   ))
-  useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+  })
 })
 
 afterEach(() => {

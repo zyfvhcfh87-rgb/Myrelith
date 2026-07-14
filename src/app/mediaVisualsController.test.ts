@@ -21,7 +21,11 @@ beforeEach(() => {
   ) as typeof URL.createObjectURL
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+  })
 })
 
 afterEach(() => {
@@ -158,7 +162,11 @@ describe('mediaVisualsController', () => {
     addAsset('old.mp4', 'video/mp4')
 
     disposeMediaVisuals()
-    useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+    useMediaStore.setState({
+      descriptors: new Map(),
+      assets: new Map(),
+      visuals: new Map(),
+    })
     assetCounter = 0
     const replacement = addAsset('replacement.mp4', 'video/mp4')
     expect(replacement.id).toBe('asset-1')

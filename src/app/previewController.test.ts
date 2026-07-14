@@ -5,10 +5,18 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
+import type { PortableAssetDescriptor } from '../domain/projectFile'
+import type {
+  Clip,
+  FrameRate,
+  MediaAsset,
+  TimelineDoc,
+  Track,
+} from '../domain/schema'
 import type { RenderFrameResult } from '../engine/render-bridge'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { useTransportStore } from '../state/transportStore'
 import type { RenderMode } from '../workers/render-protocol'
 import type { BridgeLike, PreviewDeps } from './previewController'
@@ -94,6 +102,61 @@ function seedAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
   return asset
 }
 
+function descriptorFrom(asset: MediaAsset): PortableAssetDescriptor {
+  return {
+    id: asset.id,
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    size: asset.size,
+    lastModified: asset.lastModified,
+    kind: asset.kind,
+    durationMicroseconds: asset.durationMicroseconds,
+    nativeFrameRate: asset.frameRate,
+    width: asset.width,
+    height: asset.height,
+    hasAudio: asset.hasAudio,
+    audioSampleRate: asset.audioSampleRate,
+    audioChannels: asset.audioChannels,
+  }
+}
+
+function makeClip(id: string, assetId: string): Clip {
+  return {
+    id,
+    assetId,
+    name: id,
+    sourceRange: { startFrame: 0, durationFrames: 30 },
+    timelineRange: { startFrame: 0, durationFrames: 30 },
+    transform: {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    },
+    opacity: 1,
+    volume: 1,
+    effects: [],
+  }
+}
+
+function makeVideoDoc(assetIds: readonly string[]): TimelineDoc {
+  const tracks: Track[] = assetIds.map((assetId, index) => ({
+    id: `track-${index}`,
+    kind: 'video',
+    name: `V${index + 1}`,
+    clips: [makeClip(`clip-${index}`, assetId)],
+    transitions: [],
+    hidden: false,
+    muted: false,
+    solo: false,
+    locked: false,
+  }))
+  return { ...initialDoc, tracks }
+}
+
 const canvasEl = () => document.createElement('canvas')
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 20; i++) await Promise.resolve()
@@ -124,7 +187,12 @@ beforeEach(() => {
     inOut: null,
     dragPreview: null,
   })
-  useMediaStore.setState({ assets: new Map(), visuals: new Map() })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+  })
+  usePreviewStatusStore.getState().resetPreviewStatus()
 })
 
 afterEach(() => {
@@ -163,6 +231,103 @@ describe('previewController', () => {
     expect(bridge.opened.map((entry) => entry.assetId).sort()).toEqual(
       [one.id, two.id].sort(),
     )
+  })
+
+  test('descriptor-only media is never fetched or opened', async () => {
+    const offline = makeAsset({ id: 'offline-only' })
+    expect(useMediaStore.getState().replaceAssets(
+      [descriptorFrom(offline)],
+      [],
+    )).toBe(true)
+    const { deps, bridge } = makeDeps()
+
+    initPreview(canvasEl(), deps)
+    await flush()
+    await nextFrame()
+
+    expect(deps.fetchBlob).not.toHaveBeenCalled()
+    expect(bridge.opened).toHaveLength(0)
+  })
+
+  test('publishes only offline video sources visible at the current frame', async () => {
+    const offline = makeAsset({ id: 'offline-current-frame' })
+    expect(useMediaStore.getState().replaceAssets(
+      [descriptorFrom(offline)],
+      [],
+    )).toBe(true)
+    useDocumentStore.getState().setDoc(makeVideoDoc([offline.id]))
+    const { deps } = makeDeps()
+
+    initPreview(canvasEl(), deps)
+    await nextFrame()
+
+    expect(usePreviewStatusStore.getState().offlineVideoAssetIds)
+      .toEqual([offline.id])
+
+    useTransportStore.getState().setPlayheadFrame(30)
+    await nextFrame()
+    expect(usePreviewStatusStore.getState().offlineVideoAssetIds).toEqual([])
+  })
+
+  test('reconnecting the current source clears offline status and repaints', async () => {
+    const reconnected = makeAsset({
+      id: 'reconnected-current-frame',
+      objectUrl: 'blob:reconnected-current-frame',
+    })
+    expect(useMediaStore.getState().replaceAssets(
+      [descriptorFrom(reconnected)],
+      [],
+    )).toBe(true)
+    useDocumentStore.getState().setDoc(makeVideoDoc([reconnected.id]))
+    const { deps, bridge, blob } = makeDeps()
+    initPreview(canvasEl(), deps)
+    await nextFrame()
+    expect(usePreviewStatusStore.getState().offlineVideoAssetIds)
+      .toEqual([reconnected.id])
+    bridge.rendered.length = 0
+
+    expect(useMediaStore.getState().connectAsset(reconnected)).toBe(true)
+    await flush()
+    await nextFrame()
+
+    expect(deps.fetchBlob).toHaveBeenCalledWith(reconnected.objectUrl)
+    expect(bridge.opened).toEqual([{
+      assetId: reconnected.id,
+      blob,
+      rate: F60,
+    }])
+    expect(usePreviewStatusStore.getState().offlineVideoAssetIds).toEqual([])
+    expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
+  })
+
+  test('mixed online and offline layers still render the connected composition', async () => {
+    const online = makeAsset({
+      id: 'mixed-online',
+      objectUrl: 'blob:mixed-online',
+    })
+    const offline = makeAsset({
+      id: 'mixed-offline',
+      objectUrl: 'blob:mixed-offline-unused',
+    })
+    expect(useMediaStore.getState().replaceAssets(
+      [descriptorFrom(online), descriptorFrom(offline)],
+      [online],
+    )).toBe(true)
+    const document = makeVideoDoc([online.id, offline.id])
+    useDocumentStore.getState().setDoc(document)
+    const { deps, bridge, blob } = makeDeps()
+
+    initPreview(canvasEl(), deps)
+    await flush()
+    await nextFrame()
+
+    expect(bridge.docs).toEqual([document])
+    expect(deps.fetchBlob).toHaveBeenCalledOnce()
+    expect(deps.fetchBlob).toHaveBeenCalledWith(online.objectUrl)
+    expect(bridge.opened).toEqual([{ assetId: online.id, blob, rate: F60 }])
+    expect(usePreviewStatusStore.getState().offlineVideoAssetIds)
+      .toEqual([offline.id])
+    expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
   })
 
   test('scrubbing renders rAF-coalesced document frames', async () => {
