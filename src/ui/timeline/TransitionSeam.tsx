@@ -11,6 +11,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { Clip, TrackId, Transition } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import { useTransportStore } from '../../state/transportStore'
+import { frameToTimelineLocalPx } from './timelineViewport'
 
 const DEFAULT_CROSSFADE_FRAMES = 15
 
@@ -20,6 +21,7 @@ interface TransitionSeamProps {
   from: Clip
   to: Clip
   transition?: Transition
+  timelineOriginFrame?: number
 }
 
 /** Largest centered duration that fits the two endpoint clips individually.
@@ -53,6 +55,7 @@ export default function TransitionSeam({
   from,
   to,
   transition,
+  timelineOriginFrame = 0,
 }: TransitionSeamProps) {
   const zoom = useTransportStore((state) => state.zoom)
   const maximum = centeredFitMaximum(from, to)
@@ -160,7 +163,9 @@ export default function TransitionSeam({
       ref={rootRef}
       className={`transition-seam${open ? ' is-open' : ''}`}
       data-testid={`transition-seam-${from.id}-${to.id}`}
-      style={{ left: seamFrame * zoom }}
+      style={{
+        left: frameToTimelineLocalPx(seamFrame, timelineOriginFrame, zoom),
+      }}
       onPointerDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
         event.stopPropagation()

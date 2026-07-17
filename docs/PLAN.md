@@ -44,8 +44,11 @@ screen of ticks exist in the DOM — a full 12h runway would be ~8.6k
 nodes); scroll window read from the `[data-timeline-scroll]` ancestor,
 rAF-coalesced. The runway's last frame always shows a right-anchored
 label so scrolling right ends on a clean 12:00:00:00 mark. Native
-scrollbar is twitchy at 1px/frame over 1.3M px — acceptable until zoom
-controls land (post-4.2 candidate).
+scrollbar is twitchy at 1px/frame over 1.3M px. Post-MVP issue #9 now
+supersedes that fixed-scale limitation with Full/Detail/Custom zoom while
+retaining the virtualized ruler and the exact logical 12-hour runway. Its
+bounded physical viewport removes the browser-width limitation without
+shortening the runway.
 
 ### 4.1 Compositing — `pipeline/render.ts` + `workers/render.worker.ts`
 Sliced into three module-turns:
@@ -407,6 +410,38 @@ User's confirmation pass (completed manually 2026-07-12):
 
 Phase 5 and the MVP are complete. Further work is post-MVP and needs a new
 user-approved plan or an explicitly selected item from HANDOFF.md's open list.
+
+## Post-MVP issue #9 — ✅ DONE (2026-07-17) Timeline zoom
+
+- [x] Keep transport `zoom` as the sole rendered pixels-per-frame value; add
+  ephemeral `zoomMode` and remembered `customZoom` without document writes or
+  undo/redo entries.
+- [x] Add right-docked Full Extent, 11-second Detail, remembered Custom,
+  multiplicative −/+, and an exponential range slider while playback remains
+  centered and timeline tools remain left-docked.
+- [x] Measure the live lane width from the scroller minus the actual sticky
+  header; anchor Detail/Custom around the playhead after layout commit, clamp
+  at frame zero, and force Full Extent to scroll zero with 3%/32px trailing
+  room.
+- [x] Recompute Full/Detail from ResizeObserver and document-duration changes;
+  preserve Custom pixels-per-frame and keep all ruler/clip/seam/visual geometry
+  on the existing zoom path.
+- [x] Preserve the exact logical runway through
+  `max(docDurationFrames(doc), 12 hours at the document rate)` at every zoom;
+  do not shorten it or derive maximum zoom from a browser layout ceiling.
+- [x] Project that runway through a whole-frame DOM surface capped at
+  16,000,000px. Keep `timelineOriginFrame` as ephemeral translation-only state,
+  rebase it near native-scroll edges with the opposite scroll displacement,
+  and make the true logical endpoint reachable in the last window.
+- [x] Slice long clips to the active physical window while preserving source
+  offsets for filmstrip buckets and mapping waveforms through a normalized SVG
+  viewBox, so no individual visual recreates an oversized browser surface.
+- [x] Verification: 127 focused timeline/transport tests, 930 total tests,
+  production build, lint, and diff checks green. Real Chrome passed all three
+  modes, exact recall, geometric mapping, 1.25x steps, endpoint disabling,
+  centering/frame-zero clamping, 720px responsive layout, ruler virtualization,
+  filmstrip/waveform rendering, and linked A/V alignment with a clean
+  secure-origin warning/error console.
 
 ## Test strategy per layer (unchanged from original)
 

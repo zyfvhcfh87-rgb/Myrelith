@@ -15,26 +15,108 @@
  * order, tracks[0] = bottom), then audio tracks below. Both columns map
  * the same ordered array, so header row i always faces lane row i.
  *
- * Subscribes ONLY to the doc and the active tool (4.2 cursor class):
- * re-renders on edits and tool switches (rare), never on playhead movement
- * (Phase 3 gate), and never mid-drag — drags live in transportStore
- * previews until commit. memo'd TrackHeader/Track rows plus structural
- * sharing mean an edit re-renders just the affected row pair.
+ * Subscribes to the doc, active tool, authoritative zoom, and the rare
+ * bounded-surface origin. It never subscribes to playhead movement (Phase 3
+ * gate) or drag previews; those stay inside their narrow consumers until
+ * commit. memo'd TrackHeader/Track rows plus structural sharing mean an edit
+ * re-renders just the affected row pair.
  */
 
+import { useLayoutEffect, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import './timeline.css'
 import { useDocumentStore } from '../../state/documentStore'
-import { useTransportStore } from '../../state/transportStore'
-import { tracksInDisplayOrder } from '../../domain/selectors'
+import {
+  getTransportResetRevision,
+  useTransportStore,
+} from '../../state/transportStore'
+import { docDurationFrames, tracksInDisplayOrder } from '../../domain/selectors'
 import Ruler from './Ruler'
 import Track from './Track'
 import TrackHeader from './TrackHeader'
 import Playhead from './Playhead'
+import { timelineRunwayFrames } from './timelineZoom'
+import {
+  calculateTimelineViewport,
+  measureTimelineLaneWidth,
+  planTimelineEdgeRebase,
+} from './timelineViewport'
 
 export default function Timeline() {
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const doc = useDocumentStore((s) => s.doc)
   // Tool-specific cursors via a root class; changes only on tool switch.
   const tool = useTransportStore((s) => s.tool)
+  const zoom = useTransportStore((s) => s.zoom)
+  const requestedOriginFrame = useTransportStore(
+    (s) => s.timelineOriginFrame,
+  )
+  const setTimelineOriginFrame = useTransportStore(
+    (s) => s.setTimelineOriginFrame,
+  )
+
+  const totalFrames = timelineRunwayFrames(
+    docDurationFrames(doc),
+    doc.frameRate,
+  )
+  const viewport = calculateTimelineViewport(
+    totalFrames,
+    zoom,
+    requestedOriginFrame,
+  )
+
+  // Duration/zoom changes can reduce the legal origin range. Publish the
+  // clamped integer origin before paint; the physical surface stays bounded.
+  useLayoutEffect(() => {
+    if (requestedOriginFrame !== viewport.originFrame) {
+      setTimelineOriginFrame(viewport.originFrame)
+    }
+  }, [requestedOriginFrame, setTimelineOriginFrame, viewport.originFrame])
+
+  // Native scrolling remains 1:1. Only when an edge of the bounded surface
+  // approaches do we move the global frame origin and apply the exact
+  // opposite scroll delta in one pre-paint commit.
+  useLayoutEffect(() => {
+    const scroller = rootRef.current?.closest('[data-timeline-scroll]')
+    if (!(scroller instanceof HTMLElement)) return
+
+    let resetRevision = getTransportResetRevision()
+    const onScroll = () => {
+      const transport = useTransportStore.getState()
+      const liveDoc = useDocumentStore.getState().doc
+      const liveTotalFrames = timelineRunwayFrames(
+        docDurationFrames(liveDoc),
+        liveDoc.frameRate,
+      )
+      const liveViewport = calculateTimelineViewport(
+        liveTotalFrames,
+        transport.zoom,
+        transport.timelineOriginFrame,
+      )
+      const plan = planTimelineEdgeRebase(
+        liveViewport,
+        transport.zoom,
+        measureTimelineLaneWidth(scroller),
+        scroller.scrollLeft,
+      )
+      if (!plan) return
+
+      scroller.scrollLeft = plan.scrollLeft
+      flushSync(() => transport.setTimelineOriginFrame(plan.originFrame))
+    }
+
+    const unsubscribe = useTransportStore.subscribe(() => {
+      const nextRevision = getTransportResetRevision()
+      if (nextRevision === resetRevision) return
+      resetRevision = nextRevision
+      scroller.scrollLeft = 0
+    })
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      unsubscribe()
+      scroller.removeEventListener('scroll', onScroll)
+    }
+  }, [])
 
   // Derived per render (cheap): stable Track references keep memo rows idle.
   const ordered = tracksInDisplayOrder(doc)
@@ -46,8 +128,19 @@ export default function Timeline() {
     useDocumentStore.getState().addTrack(kind)
 
   return (
-    <div className={`timeline-root tool-${tool}`} data-testid="timeline-root">
-      <div className="timeline-headers" data-testid="timeline-headers">
+    <div
+      ref={rootRef}
+      className={`timeline-root tool-${tool}`}
+      data-testid="timeline-root"
+      data-timeline-origin-frame={viewport.originFrame}
+      data-timeline-window-end-frame={viewport.endFrame}
+      data-timeline-total-frames={viewport.totalFrames}
+    >
+      <div
+        className="timeline-headers"
+        data-timeline-headers
+        data-testid="timeline-headers"
+      >
         {/* Corner spacer: same height as the ruler so header/lane rows align. */}
         <div className="timeline-headers-corner" />
         {ordered.map((track) => (
@@ -82,10 +175,15 @@ export default function Timeline() {
               key={track.id}
               track={track}
               soloDimmed={anyAudioSolo && track.kind === 'audio' && !track.solo}
+              timelineOriginFrame={viewport.originFrame}
+              timelineWindowEndFrame={viewport.endFrame}
             />
           ))}
         </div>
-        <Playhead />
+        <Playhead
+          timelineOriginFrame={viewport.originFrame}
+          timelineWindowEndFrame={viewport.endFrame}
+        />
       </div>
     </div>
   )

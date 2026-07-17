@@ -37,9 +37,18 @@ interface TrackProps {
   track: TrackData
   /** True while ANOTHER audio track is solo — this lane is out of the mix. */
   soloDimmed?: boolean
+  /** Global frame represented by this bounded lane's local x=0. */
+  timelineOriginFrame?: number
+  /** Exclusive global frame at the bounded lane's right edge. */
+  timelineWindowEndFrame?: number
 }
 
-function Track({ track, soloDimmed = false }: TrackProps) {
+function Track({
+  track,
+  soloDimmed = false,
+  timelineOriginFrame = 0,
+  timelineWindowEndFrame = Number.MAX_SAFE_INTEGER,
+}: TrackProps) {
   const [dropReady, setDropReady] = useState(false)
   const clipDropTarget = useTransportStore(
     (state) => state.dragPreview?.targetTrackId === track.id,
@@ -53,6 +62,12 @@ function Track({ track, soloDimmed = false }: TrackProps) {
     (track.muted ? ' track-muted' : '') +
     (track.locked ? ' track-locked' : '') +
     (soloDimmed ? ' track-solo-dimmed' : '')
+  const liveTransport = useTransportStore.getState()
+  const liveGesture = liveTransport.dragPreview ?? liveTransport.editPreview
+  const participatesInLiveGesture = (clipId: string, linkGroupId?: string) =>
+    liveGesture !== null &&
+    (liveGesture.clipId === clipId ||
+      (linkGroupId !== undefined && liveGesture.linkGroupId === linkGroupId))
 
   return (
     <div
@@ -81,11 +96,14 @@ function Track({ track, soloDimmed = false }: TrackProps) {
         const assetId = e.dataTransfer.getData(ASSET_DRAG_TYPE)
         const asset = useMediaStore.getState().assets.get(assetId)
         if (!asset) return
-        // Same px→frame mapping as the ruler: the lane's left edge is
-        // frame 0, so this stays correct under horizontal scroll.
+        // Same px→frame mapping as the ruler: the lane's left edge is the
+        // current global origin, while pointer deltas remain local pixels.
         const rect = e.currentTarget.getBoundingClientRect()
         const zoom = useTransportStore.getState().zoom
-        const frame = Math.max(0, Math.round((e.clientX - rect.left) / zoom))
+        const frame = Math.max(
+          0,
+          timelineOriginFrame + Math.round((e.clientX - rect.left) / zoom),
+        )
         const documentStore = useDocumentStore.getState()
         // A video asset that carries audio lands as a PAIR (NLE convention):
         // its video clip on this lane plus an audio clip on the first
@@ -109,9 +127,23 @@ function Track({ track, soloDimmed = false }: TrackProps) {
         }
       }}
     >
-      {track.clips.map((clip) => (
-        <ClipView key={clip.id} clip={clip} trackId={track.id} trackKind={track.kind} />
-      ))}
+      {track.clips
+        .filter(
+          (clip) =>
+            participatesInLiveGesture(clip.id, clip.linkGroupId) ||
+            (rangeEnd(clip.timelineRange) > timelineOriginFrame &&
+              clip.timelineRange.startFrame < timelineWindowEndFrame),
+        )
+        .map((clip) => (
+          <ClipView
+            key={clip.id}
+            clip={clip}
+            trackId={track.id}
+            trackKind={track.kind}
+            timelineOriginFrame={timelineOriginFrame}
+            timelineWindowEndFrame={timelineWindowEndFrame}
+          />
+        ))}
       {track.kind === 'video' &&
         track.clips.slice(0, -1).map((from, index) => {
           const to = track.clips[index + 1]
@@ -126,6 +158,13 @@ function Track({ track, soloDimmed = false }: TrackProps) {
             (candidate) =>
               candidate.fromClipId === from.id && candidate.toClipId === to.id,
           )
+          const seamFrame = rangeEnd(from.timelineRange)
+          if (
+            seamFrame < timelineOriginFrame ||
+            seamFrame > timelineWindowEndFrame
+          ) {
+            return null
+          }
           return (
             <TransitionSeam
               key={`${from.id}:${to.id}`}
@@ -134,6 +173,7 @@ function Track({ track, soloDimmed = false }: TrackProps) {
               from={from}
               to={to}
               transition={transition}
+              timelineOriginFrame={timelineOriginFrame}
             />
           )
         })}

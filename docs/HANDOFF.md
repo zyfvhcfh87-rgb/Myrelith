@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-14)
+## Status (2026-07-17)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -41,6 +41,7 @@ and the open list below.
 | Post-MVP #2 — smooth preview playback | ✅ done | Blob-backed streaming lanes; user verified multiple videos without stutter |
 | Post-MVP #3 — undistorted timeline visuals | ✅ done | fixed-aspect SVG thumbnail patterns + antialiased vector waveform; Chrome razor continuity, clean console |
 | Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
+| Post-MVP #9 — three-mode timeline zoom | ✅ done | authoritative px/frame plus exact-endpoint 12h runway over a bounded 16Mpx surface; 127 focused + 930 total tests; real Chrome long-project/rebase/fit/center/resize/visual gate |
 | Post-MVP project system — Slice 1 foundations | ✅ done | presets + portable `.webcut`; Chrome: 2.000s 60fps source stays 2.000s at 30fps, clean console |
 | Post-MVP project system — Slice 2 media import | ✅ done | one analysis per file; explicit Keep/Match/Cancel; complete-asset commits; 745 tests + Chrome gate |
 | Post-MVP project system — Slice 3 sessions/UI | ✅ done | atomic Create/Resume/relink; 764 tests; real 4K60 create + 1440p60 media-resume Chrome gate |
@@ -50,7 +51,7 @@ and the open list below.
 | Post-MVP project system — Slice 6 offline media | ✅ done | open-offline + one-file/folder relink + ambiguity UI + export preflight; 881 tests + Chrome offline→folder-relink gate |
 | Post-MVP #11 — cross-track clip dragging | ✅ done | same-kind video/audio lane targeting + vertical ghost; 885 tests + user manual drag gate |
 
-885 tests green · `npm run build` and `npm run lint` clean · every phase
+909 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -130,6 +131,27 @@ that lane, highlights the target, and commits one undoable move on pointerup.
 Linked partners keep the same frame delta on their own current lanes. Video and
 audio moves work in both directions; the user completed the manual gate on
 2026-07-14.
+
+Issue #9 adds Resolve-style Full Extent, Detail, and remembered Custom zoom
+without creating a second transform or touching document history. `zoom`
+remains the rendered pixels-per-frame value; `zoomMode` and `customZoom` are
+ephemeral transport state. Geometry measures the live scroller and sticky
+header, maps the slider exponentially, centers Detail/Custom around the
+playhead after layout commit, and reflows Full/Detail through ResizeObserver.
+Full keeps roughly 3% trailing room (at least 32px), fits changing document
+duration, and always returns to frame zero. Follow-up viewport hardening keeps
+the logical runway exactly `max(document duration, 12 hours)` instead of
+shortening it near a browser layout ceiling. The DOM renders one whole-frame
+window no wider than 16,000,000px; ephemeral `timelineOriginFrame` translates
+global frames into that surface without changing the authoritative zoom.
+Near either native-scroll edge, `Timeline` shifts the origin and applies the
+opposite scroll delta before paint, preserving the visible logical position;
+the final window ends on the true runway endpoint. The 2026-07-17 Chrome gate
+measured 11.0001s Detail, 3.0005%
+Full padding on a short project, exact Custom recall, geometric slider output,
+1.25x buttons, endpoint disabling, frame-zero clamping, responsive centering
+through 720px, virtualized ruler ticks, linked A/V alignment, filmstrips, and
+waveform with a clean secure-origin warning/error console.
 
 Project-system Slice 1 establishes the non-UI foundations: one authoritative
 catalog for 720p/1080p/1440p/4K, exact common frame rates, and 44.1/48/96 kHz
@@ -230,8 +252,9 @@ selection auto-matched and re-analyzed the MP4, restored thumbnail/Preview and
 the same timeline clip, reported `1 connected · 0 skipped`, and enabled Start
 export. The final warning/error console was empty.
 
-**Next: ask the user to select the next post-MVP issue.** Folder/batch relinking
-is complete. Future project-storage work is separate opt-in media caching with
+**Next: ask the user to select the next post-MVP issue.** Issue #9 and
+folder/batch relinking are complete. Future project-storage work is separate
+opt-in media caching with
 quota/eviction UX and multi-tab recovery ownership; do not imply recovery or a
 portable `.webcut` contains source bytes today.
 
@@ -316,11 +339,19 @@ tile per ~2s, cap 48) and a WAVEFORM image generated once in the
 background (app/mediaVisualsController → pipeline/visuals via
 mediabunny sinks); both images span the asset's FULL duration. ClipView
 maps filmstrip time through fixed-aspect SVG patterns in integer-frame buckets
-and waveform time through a scalable SVG background, so trim/razor/zoom need
-zero decode work and slip/start-trim previews shift the material live without
-stretching or bitmap blur. The Inspector edits VOLUME for audio-lane clips (domain-clamped
+and waveform time through a normalized source-time SVG viewBox. A long clip is
+sliced to the current bounded timeline window while both visual types retain
+their exact source offset, so trim/razor/zoom/rebasing need zero decode work and
+slip/start-trim previews shift the material live without stretching, bitmap
+blur, or oversized DOM backgrounds. The Inspector edits VOLUME for audio-lane
+clips (domain-clamped
 [0,2], one entry per commit; export and live playback consume it) and shows
 the transform fields only for video-lane clips.
+The transport's right dock provides Full Extent, 11-second Detail, and
+remembered Custom timeline zoom plus multiplicative −/+ steps; every timeline
+renderer still consumes the same authoritative pixels-per-frame value.
+`timelineOriginFrame` is translation-only session state for the bounded native
+surface; it is not a second zoom and never enters document history.
 
 ## Map (key files, one line each)
 
@@ -348,6 +379,10 @@ the transform fields only for video-lane clips.
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
   handles, or recovery payloads. `src/state/projectLibraryStore.ts` holds only
   serializable Recent/recovery summaries for Home.
+- `src/state/transportStore.ts` — ephemeral playback/tool/selection state plus
+  authoritative timeline `zoom`, `zoomMode`, remembered `customZoom`, and the
+  translation-only `timelineOriginFrame`; preset/custom zoom and origin setters
+  never enter document undo/redo history.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
   candidates off-store, restores granted local handles, requests remembered
   permission only from the Open click, matches relinked media exactly,
@@ -398,6 +433,14 @@ the transform fields only for video-lane clips.
   are explicit states; Blob URL/download ownership, filename safety, modal
   focus, and shortcut isolation stay local to the UI. `Toolbar.tsx` only owns
   the trigger/open state and restores focus when the dialog closes.
+- `src/ui/timeline/TimelineZoomControls.tsx` + `timelineZoom.ts` — measured
+  Full/Detail/Custom geometry, exponential slider mapping, rAF-coalesced input,
+  post-layout playhead anchoring, ResizeObserver updates, and the exact logical
+  12-hour-or-project runway. `timelineViewport.ts` + `Timeline.tsx` project that
+  runway through a whole-frame surface capped at 16,000,000px, rebase near its
+  native-scroll edges without moving the logical viewport, and keep the final
+  endpoint reachable. `Ruler.tsx`, clips, visuals, seams, and playhead all read
+  the single transport `zoom` plus the shared translation origin.
 - `src/pipeline/export-audio.ts` — Phase 5.1c exact audio scheduler/mixer:
   BigInt frame→sample boundaries; split/trim-stable signed source↔timeline
   phase; `audibleTracks` selection; clip volume; 1024-sample bounded stereo
@@ -490,13 +533,16 @@ the transform fields only for video-lane clips.
   = rAF coalescing reused by ruler + clip drag; `dnd.ts` = MediaPool→Track
   drag payload contract + asset-kind↔track-kind gating (kind policy lives
   here because domain/ can't see assets). `timeline/Ruler.tsx`: 12h min
-  runway, ticks VIRTUALIZED against the `[data-timeline-scroll]` ancestor
-  (app shell marks it; bare tests get a fallback window); the final frame
-  always gets a right-anchored end label.
+  logical runway, ticks VIRTUALIZED against the `[data-timeline-scroll]`
+  ancestor (app shell marks it; bare tests get a fallback window), and local
+  positions relative to the bounded timeline origin; the logical endpoint
+  always gets a right-anchored end label in the last physical window.
 - `src/ui/timeline/ClipView.tsx` — the 4.2 gesture heart: one session ref
   routes body/edge pointerdowns by the CURRENT tool (getState(), not the
   render closure!); previews via transportStore.editPreview, one commit
-  per gesture; slip clamps live against mediaStore asset bounds.
+  per gesture; slip clamps live against mediaStore asset bounds. Long clips
+  render only their intersection with the bounded window; filmstrip buckets
+  and the normalized waveform viewBox remain aligned to the original source.
   `ui/Toolbar.tsx` = tool buttons; `app/useEditShortcuts.ts` = A/B/T/Y/U,
   S split-at-playhead, Delete ripple-delete (selection kept on reject).
 - `src/ui/timeline/Timeline.tsx` + `TrackHeader.tsx` (4.3.5) — two

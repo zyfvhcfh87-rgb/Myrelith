@@ -11,11 +11,13 @@ import { Profiler } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { TimelineDoc } from '../../domain/schema'
+import { formatTimecode } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useTransportStore } from '../../state/transportStore'
 import Playhead from './Playhead'
 import Ruler from './Ruler'
 import Timeline from './Timeline'
+import { MAX_TIMELINE_SURFACE_PX } from './timelineViewport'
 import { useScrubScheduler } from './useScrubScheduler'
 
 /** Empty 30fps doc, optionally with one clip to pin the doc duration. */
@@ -65,6 +67,9 @@ beforeEach(() => {
     isPlaying: false,
     isScrubbing: false,
     zoom: 1,
+    zoomMode: 'custom',
+    customZoom: 1,
+    timelineOriginFrame: 0,
     inOut: null,
     dragPreview: null,
   })
@@ -104,6 +109,11 @@ const nextFrame = () =>
       }),
   )
 
+function translatedX(element: HTMLElement): number {
+  const match = element.style.transform.match(/translateX\(([-\d.]+)px\)/)
+  return Number(match?.[1] ?? 0)
+}
+
 describe('Playhead', () => {
   test('positions itself at playheadFrame × zoom', () => {
     act(() => {
@@ -142,6 +152,18 @@ describe('Playhead', () => {
     expect(playheadRenders.mock.calls.length).toBe(playheadBefore + 2)
     expect(rulerRenders.mock.calls.length).toBe(rulerBefore) // untouched!
   })
+
+  test('positions a far playhead from the bounded timeline origin', () => {
+    act(() => {
+      useTransportStore.getState().setZoom(2)
+      useTransportStore.getState().setTimelineOriginFrame(1_000_000)
+      useTransportStore.getState().setPlayheadFrame(1_000_050)
+    })
+    render(<Playhead timelineWindowEndFrame={1_100_000} />)
+    expect(screen.getByTestId('playhead')).toHaveStyle({
+      transform: 'translateX(100px)',
+    })
+  })
 })
 
 describe('Ruler', () => {
@@ -170,6 +192,24 @@ describe('Ruler', () => {
     expect(ticks.length).toBeLessThan(60) // NOT all ~8,640 runway ticks
     expect(screen.getByText('05:33:20:00')).toBeInTheDocument() // frame 600000
     expect(screen.queryByText('00:00:00:00')).not.toBeInTheDocument() // start is far away
+  })
+
+  test('very wide visible ranges keep ruler labels sparse and virtualized', async () => {
+    act(() => {
+      useTransportStore.getState().setZoom(1000 / (33_000 * 30))
+    })
+    await renderScrolled(0, 1000)
+    const ticks = [...document.querySelectorAll<HTMLElement>('.ruler-tick')]
+    expect(ticks.length).toBeGreaterThan(0)
+    expect(ticks.length).toBeLessThan(40)
+
+    const positions = ticks.map((tick) => {
+      const match = tick.style.transform.match(/translateX\(([-\d.]+)px\)/)
+      return Number(match?.[1] ?? 0)
+    })
+    for (let index = 1; index < positions.length; index += 1) {
+      expect(positions[index] - positions[index - 1]).toBeGreaterThanOrEqual(90)
+    }
   })
 
   test('scrolled to the far right, the runway ends on an inside-anchored 12h label', async () => {
@@ -223,6 +263,22 @@ describe('Ruler', () => {
     await nextFrame()
     expect(useTransportStore.getState().playheadFrame).toBe(0)
   })
+
+  test('seek mapping adds a nonzero virtual timeline origin', async () => {
+    act(() => {
+      useDocumentStore.getState().setDoc(makeDoc(10_000_000))
+      useTransportStore.getState().setZoom(2)
+      useTransportStore.getState().setTimelineOriginFrame(1_000_000)
+    })
+    render(<Ruler />)
+    fireEvent.pointerDown(screen.getByTestId('ruler'), {
+      pointerId: 7,
+      clientX: 100,
+    })
+    await waitFor(() =>
+      expect(useTransportStore.getState().playheadFrame).toBe(1_000_050),
+    )
+  })
 })
 
 describe('Timeline container', () => {
@@ -232,6 +288,135 @@ describe('Timeline container', () => {
     expect(root.querySelector('.timeline-ruler')).not.toBeNull()
     expect(root.querySelector('.timeline-tracks')).not.toBeNull()
     expect(root.querySelector('.playhead')).not.toBeNull()
+  })
+
+  test('keeps a far max-zoom project inside the bounded physical surface', () => {
+    act(() => {
+      useDocumentStore.getState().setDoc(makeDoc(2_000_000))
+      useTransportStore.getState().setZoom(50)
+      useTransportStore.getState().setTimelineOriginFrame(1_000_000)
+    })
+    render(<Timeline />)
+
+    const root = screen.getByTestId('timeline-root')
+    const ruler = screen.getByTestId('ruler')
+    expect(root).toHaveAttribute('data-timeline-origin-frame', '1000000')
+    expect(Number.parseFloat(ruler.style.width)).toBeLessThanOrEqual(
+      MAX_TIMELINE_SURFACE_PX,
+    )
+    expect(screen.getByTestId('clip-clipA')).toHaveStyle({
+      transform: 'translateX(0px)',
+      width: `${MAX_TIMELINE_SURFACE_PX}px`,
+    })
+  })
+
+  test('mounted edge rebases preserve screen geometry in both directions and reset cleanly', async () => {
+    const base = makeDoc(10)
+    const template = base.tracks[0].clips[0]
+    const nearA = {
+      ...template,
+      id: 'nearA',
+      name: 'nearA',
+      sourceRange: { startFrame: 0, durationFrames: 10 },
+      timelineRange: { startFrame: 319_980, durationFrames: 10 },
+    }
+    const nearB = {
+      ...template,
+      id: 'nearB',
+      name: 'nearB',
+      sourceRange: { startFrame: 0, durationFrames: 1_680_010 },
+      timelineRange: { startFrame: 319_990, durationFrames: 1_680_010 },
+    }
+    act(() => {
+      useDocumentStore.getState().setDoc({
+        ...base,
+        tracks: [{ ...base.tracks[0], clips: [nearA, nearB] }],
+      })
+      useTransportStore.getState().setZoom(50)
+      useTransportStore.getState().setPlayheadFrame(319_990)
+    })
+
+    const { container } = render(
+      <div data-timeline-scroll>
+        <Timeline />
+      </div>,
+    )
+    const scroller = container.firstElementChild as HTMLElement
+    const header = screen.getByTestId('timeline-headers')
+    vi.spyOn(header, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      right: 200,
+      top: 0,
+      bottom: 100,
+      width: 200,
+      height: 100,
+      toJSON: () => ({}),
+    } as DOMRect)
+    Object.defineProperty(scroller, 'clientWidth', {
+      value: 1200,
+      configurable: true,
+    })
+    Object.defineProperty(scroller, 'scrollWidth', {
+      configurable: true,
+      get: () =>
+        200 + Number.parseFloat(screen.getByTestId('ruler').style.width),
+    })
+
+    const rightEdgeScroll = MAX_TIMELINE_SURFACE_PX - 1000 - 100
+    scroller.scrollLeft = rightEdgeScroll
+    const clipScreenBefore =
+      translatedX(screen.getByTestId('clip-nearA')) - rightEdgeScroll
+    const playheadScreenBefore =
+      translatedX(screen.getByTestId('playhead')) - rightEdgeScroll
+    const seamScreenBefore =
+      Number.parseFloat(
+        screen.getByTestId('transition-seam-nearA-nearB').style.left,
+      ) - rightEdgeScroll
+    const visibleStartBefore = rightEdgeScroll / 50
+
+    fireEvent.scroll(scroller)
+    await nextFrame()
+    await nextFrame()
+
+    const rebasedOrigin = useTransportStore.getState().timelineOriginFrame
+    expect(rebasedOrigin).toBeGreaterThan(0)
+    expect(rebasedOrigin + scroller.scrollLeft / 50).toBeCloseTo(
+      visibleStartBefore,
+      8,
+    )
+    expect(
+      translatedX(screen.getByTestId('clip-nearA')) - scroller.scrollLeft,
+    ).toBeCloseTo(clipScreenBefore, 8)
+    expect(
+      translatedX(screen.getByTestId('playhead')) - scroller.scrollLeft,
+    ).toBeCloseTo(playheadScreenBefore, 8)
+    expect(
+      Number.parseFloat(
+        screen.getByTestId('transition-seam-nearA-nearB').style.left,
+      ) - scroller.scrollLeft,
+    ).toBeCloseTo(seamScreenBefore, 8)
+    expect(
+      screen.getByText(formatTimecode(319_990, base.frameRate)),
+    ).toBeInTheDocument()
+
+    scroller.scrollLeft = 100
+    const leftVisibleStart = rebasedOrigin + scroller.scrollLeft / 50
+    fireEvent.scroll(scroller)
+    await nextFrame()
+
+    expect(useTransportStore.getState().timelineOriginFrame).toBeLessThan(
+      rebasedOrigin,
+    )
+    expect(
+      useTransportStore.getState().timelineOriginFrame +
+        scroller.scrollLeft / 50,
+    ).toBeCloseTo(leftVisibleStart, 8)
+
+    act(() => useTransportStore.getState().resetTransport())
+    expect(useTransportStore.getState().timelineOriginFrame).toBe(0)
+    expect(scroller.scrollLeft).toBe(0)
   })
 })
 

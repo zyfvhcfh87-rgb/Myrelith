@@ -807,6 +807,115 @@
   z-index: 1;
 }
 
+/* DaVinci-style timeline zoom controls, right-docked so playback remains
+   mathematically centered regardless of the dock widths on either side. */
+.timeline-zoom-controls {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transform: translateY(-50%);
+}
+
+.timeline-zoom-button {
+  width: 26px;
+  height: 24px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  color: #aeb4bd;
+  background: #26262b;
+  border: 1px solid #3a3a41;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.timeline-zoom-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.timeline-zoom-button:hover:not(:disabled) {
+  color: #e1e5eb;
+  background: #303038;
+  border-color: #4f5059;
+}
+
+.timeline-zoom-button.active {
+  color: #fff;
+  background: #3d5a80;
+  border-color: #6b93c4;
+}
+
+.timeline-zoom-button:focus-visible,
+.timeline-zoom-slider:focus-visible {
+  outline: 2px solid #76a8ea;
+  outline-offset: 1px;
+}
+
+.timeline-zoom-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.34;
+}
+
+.timeline-zoom-step {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.timeline-zoom-slider {
+  width: clamp(58px, 7vw, 96px);
+  height: 18px;
+  padding: 0;
+  margin: 0 1px;
+  color: #6b93c4;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+.timeline-zoom-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  background: #3a3d44;
+  border-radius: 999px;
+}
+
+.timeline-zoom-slider::-webkit-slider-thumb {
+  width: 10px;
+  height: 14px;
+  margin-top: -5.5px;
+  background: #9eb7d6;
+  border: 1px solid #c5d3e4;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
+  appearance: none;
+}
+
+.timeline-zoom-slider::-moz-range-track {
+  height: 3px;
+  background: #3a3d44;
+  border: 0;
+  border-radius: 999px;
+}
+
+.timeline-zoom-slider::-moz-range-thumb {
+  width: 10px;
+  height: 14px;
+  background: #9eb7d6;
+  border: 1px solid #c5d3e4;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
+}
+
 .area-timeline {
   grid-area: timeline;
   border-top: 1px solid #2a2a2a;
@@ -1986,6 +2095,138 @@
   background: #3d5a80;
   border-color: #6b93c4;
   color: #fff;
+}
+
+/* Keep the independently docked tool, playback, and zoom groups disjoint as
+   the editor narrows. These rules intentionally follow every base button
+   declaration so the compact sizes win the cascade. */
+@media (max-width: 1250px) {
+  .app-shell {
+    grid-template-columns: 240px minmax(0, 1fr) 260px;
+  }
+
+  .transport-tools {
+    left: 4px;
+    gap: 2px;
+  }
+
+  .transport-tools .tool-button {
+    min-width: 24px;
+    padding-right: 4px;
+    padding-left: 4px;
+    font-size: 13px;
+  }
+
+  .timeline-zoom-controls {
+    right: 4px;
+    gap: 2px;
+  }
+
+  .timeline-zoom-button {
+    width: 22px;
+  }
+
+  .timeline-zoom-slider {
+    width: 44px;
+    margin: 0;
+  }
+
+  .transport-bar {
+    gap: 6px;
+  }
+
+  .transport-button {
+    min-width: 30px;
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .transport-play {
+    min-width: 40px;
+  }
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    grid-template-columns: 210px minmax(0, 1fr) 220px;
+  }
+
+  .transport-tools .tool-button {
+    min-width: 22px;
+    padding-right: 3px;
+    padding-left: 3px;
+    font-size: 12px;
+  }
+
+  .timeline-zoom-button {
+    width: 20px;
+  }
+
+  .timeline-zoom-slider {
+    width: 32px;
+  }
+
+  .transport-bar {
+    gap: 4px;
+  }
+
+  .transport-button {
+    min-width: 26px;
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+
+  .transport-play {
+    min-width: 36px;
+  }
+}
+
+/* WebCut is a desktop editor. Keep every transport group usable down to the
+   720px supported shell width; narrower windows scroll the shell instead of
+   letting the centered playback controls collide with either dock. */
+@media (max-width: 820px) {
+  .app-shell {
+    min-width: 720px;
+    grid-template-columns: 180px minmax(0, 1fr) 180px;
+  }
+
+  .transport-tools .tool-button {
+    min-width: 20px;
+    padding-right: 2px;
+    padding-left: 2px;
+    font-size: 11px;
+  }
+
+  .timeline-zoom-controls {
+    gap: 1px;
+  }
+
+  .timeline-zoom-button {
+    width: 18px;
+  }
+
+  .timeline-zoom-button svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .timeline-zoom-slider {
+    width: 28px;
+  }
+
+  .transport-bar {
+    gap: 3px;
+  }
+
+  .transport-button {
+    min-width: 24px;
+    padding-right: 3px;
+    padding-left: 3px;
+  }
+
+  .transport-play {
+    min-width: 32px;
+  }
 }
 
 /* Phase 4.3 Inspector: transform/opacity fields for the selected clip. */

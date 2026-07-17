@@ -23,7 +23,7 @@
  * switches (rare, user-initiated).
  */
 
-import { memo, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Clip, TrackId, TrackKind } from '../../domain/schema'
 import { microsecondsToFrames, rangeEnd } from '../../domain/time'
@@ -33,12 +33,17 @@ import type { EditPreviewKind } from '../../state/transportStore'
 import { useTransportStore } from '../../state/transportStore'
 import { visibleFilmstripBuckets } from './clipVisualPlan'
 import { useScrubScheduler } from './useScrubScheduler'
+import { frameToTimelineLocalPx } from './timelineViewport'
 
 interface ClipViewProps {
   clip: Clip
   trackId: TrackId
   /** Lane kind: picks the visual (filmstrip vs waveform). Default video. */
   trackKind?: TrackKind
+  /** Global frame represented by the bounded lane's local x=0. */
+  timelineOriginFrame?: number
+  /** Exclusive global frame at the bounded lane's right edge. */
+  timelineWindowEndFrame?: number
 }
 
 type GestureMode = 'move' | EditPreviewKind
@@ -57,7 +62,13 @@ interface GestureSession {
   maxDelta: number
 }
 
-function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
+function ClipView({
+  clip,
+  trackId,
+  trackKind = 'video',
+  timelineOriginFrame = 0,
+  timelineWindowEndFrame = Number.MAX_SAFE_INTEGER,
+}: ClipViewProps) {
   const zoom = useTransportStore((s) => s.zoom)
   const tool = useTransportStore((s) => s.tool)
   const isSelected = useTransportStore((s) => s.selectedClipId === clip.id)
@@ -84,13 +95,17 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
       ? s.editPreview
       : null,
   )
+  const ownsLiveGesture = useTransportStore(
+    (s) =>
+      s.dragPreview?.clipId === clip.id || s.editPreview?.clipId === clip.id,
+  )
   const setDragPreview = useTransportStore((s) => s.setDragPreview)
   const setEditPreview = useTransportStore((s) => s.setEditPreview)
   const documentRate = useDocumentStore((s) => s.doc.frameRate)
 
-  // Both visuals span the asset's FULL source duration. The waveform uses
-  // full-source CSS size/position; the filmstrip is cut into integer-frame
-  // SVG buckets that repeat each fixed-aspect sprite frame rather than
+  // Both visuals map the asset's FULL source duration. The waveform crops a
+  // normalized SVG source-time viewBox; the filmstrip is cut into integer-
+  // frame SVG buckets that repeat each fixed-aspect sprite frame rather than
   // stretching one sample across a potentially huge time span.
   // Stable narrow slices change only when THIS asset's visuals/metadata land.
   const visuals = useMediaStore((s) => s.visuals.get(clip.assetId))
@@ -108,6 +123,22 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
 
   const session = useRef<GestureSession | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
+
+  // A gesture owner normally remains mounted through pointerup. If a parent
+  // disappears for an unrelated reason, clear its session state so a lost DOM
+  // capture can never leave the transport store wedged in a live preview.
+  useEffect(
+    () => () => {
+      const transport = useTransportStore.getState()
+      if (transport.dragPreview?.clipId === clip.id) {
+        transport.setDragPreview(null)
+      }
+      if (transport.editPreview?.clipId === clip.id) {
+        transport.setEditPreview(null)
+      }
+    },
+    [clip.id],
+  )
 
   const scheduleMovePreview = useScrubScheduler((startFrame: number) => {
     // Same session guard as scheduleEditPreview below: a rAF flush can land
@@ -187,6 +218,47 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
   ) {
     sourceStartFrame += editPreview.deltaFrames
   }
+
+  // Intersect the live clip geometry with the bounded physical surface. A
+  // single multi-hour clip must never emit an 80Mpx DOM width by itself.
+  const clippedStartFrame = Math.max(startFrame, timelineOriginFrame)
+  const clippedEndFrame = Math.min(
+    startFrame + durationFrames,
+    timelineWindowEndFrame,
+  )
+  const hasVisibleSlice = clippedEndFrame > clippedStartFrame
+  if (!hasVisibleSlice && !ownsLiveGesture) return null
+
+  // Keep the same root DOM node alive at the nearest surface edge while its
+  // pointer capture is active. The invisible 1px host cannot enlarge the
+  // bounded surface, but it can still receive pointerup/cancel and commit or
+  // clear the gesture normally.
+  const displayedStartFrame = hasVisibleSlice
+    ? clippedStartFrame
+    : Math.min(
+        timelineWindowEndFrame,
+        Math.max(timelineOriginFrame, startFrame),
+      )
+  const displayedEndFrame = hasVisibleSlice
+    ? clippedEndFrame
+    : displayedStartFrame
+  const displayedDurationFrames = displayedEndFrame - displayedStartFrame
+  const surfaceWidthPx = Math.max(
+    1,
+    (timelineWindowEndFrame - timelineOriginFrame) * zoom,
+  )
+  const localStartPx = hasVisibleSlice
+    ? frameToTimelineLocalPx(
+        displayedStartFrame,
+        timelineOriginFrame,
+        zoom,
+      )
+    : startFrame + durationFrames <= timelineOriginFrame
+      ? 0
+      : Math.max(0, surfaceWidthPx - 1)
+
+  const displayedSourceStartFrame =
+    sourceStartFrame + (displayedStartFrame - startFrame)
   const filmstrip = trackKind === 'video' ? visuals?.filmstrip : null
   const waveform = trackKind === 'audio' ? visuals?.waveform : null
   const filmstripBuckets = filmstrip
@@ -195,8 +267,8 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
         filmstrip.tiles,
         filmstrip.tileWidth,
         zoom,
-        sourceStartFrame,
-        durationFrames,
+        displayedSourceStartFrame,
+        displayedDurationFrames,
       )
     : []
 
@@ -352,7 +424,7 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
         // Split at the pointer frame — a click edit, no drag phase.
         const rect = e.currentTarget.getBoundingClientRect()
         const frame =
-          tl.startFrame + Math.round((e.clientX - rect.left) / zoom)
+          displayedStartFrame + Math.round((e.clientX - rect.left) / zoom)
         useDocumentStore.getState().splitClipAt(clip.id, frame)
         transport.setSelectedClip(clip.id)
         return
@@ -385,20 +457,24 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
     startGesture(e, transport.tool === 'trim' ? `ripple-${edge}` : `trim-${edge}`)
   }
 
-  const showEdges = tool === 'select' || tool === 'trim'
+  const showEdges = hasVisibleSlice && (tool === 'select' || tool === 'trim')
+  const showStartEdge = showEdges && displayedStartFrame === startFrame
+  const showEndEdge =
+    showEdges && displayedEndFrame === startFrame + durationFrames
 
   return (
     <div
       ref={rootRef}
-      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isOffline ? ' offline' : ''}`}
+      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isOffline ? ' offline' : ''}${hasVisibleSlice ? '' : ' virtual-gesture-host'}`}
       data-testid={`clip-${clip.id}`}
       data-offline={isOffline ? 'true' : 'false'}
+      data-virtual-gesture-host={hasVisibleSlice ? 'false' : 'true'}
       style={{
         transform:
           previewTrackOffsetY === 0
-            ? `translateX(${startFrame * zoom}px)`
-            : `translate(${startFrame * zoom}px, ${previewTrackOffsetY}px)`,
-        width: durationFrames * zoom,
+            ? `translateX(${localStartPx}px)`
+            : `translate(${localStartPx}px, ${previewTrackOffsetY}px)`,
+        width: hasVisibleSlice ? displayedDurationFrames * zoom : 1,
       }}
       onPointerDown={onBodyPointerDown}
       onPointerMove={(e) => {
@@ -418,12 +494,12 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
       }}
       onPointerUp={(e) => {
         if (!session.current) return
+        commitGesture(e)
         try {
           rootRef.current?.releasePointerCapture(e.pointerId)
         } catch {
           /* nothing captured */
         }
-        commitGesture(e)
       }}
       onPointerCancel={() => {
         // Gesture aborted (e.g. touch stolen by the OS): revert, commit nothing.
@@ -436,84 +512,123 @@ function ClipView({ clip, trackId, trackKind = 'video' }: ClipViewProps) {
           endGesture()
         }
       }}
+      onLostPointerCapture={() => {
+        if (session.current) endGesture()
+      }}
     >
-      {filmstrip && assetDurationFrames > 0 && filmstripBuckets.length > 0 && (
-        <div
-          className="clip-visual clip-filmstrip"
-          data-testid={`clip-${clip.id}-visual`}
-        >
-          {filmstripBuckets.map((bucket) => (
-            <svg
-              key={bucket.index}
-              className="clip-filmstrip-tile"
-              data-testid={`clip-${clip.id}-filmstrip-tile-${bucket.index}`}
-              aria-hidden="true"
-              focusable="false"
-              style={{
-                left: (bucket.startFrame - sourceStartFrame) * zoom,
-                width: (bucket.endFrame - bucket.startFrame) * zoom,
-              }}
-            >
-              <defs>
-                <pattern
-                  id={`${clip.id}-filmstrip-pattern-${bucket.index}`}
-                  patternUnits="userSpaceOnUse"
-                  width={filmstrip.tileWidth}
-                  height={filmstrip.tileHeight}
-                >
-                  <image
-                    href={filmstrip.url}
-                    x={-bucket.spriteIndex * filmstrip.tileWidth}
-                    width={filmstrip.tiles * filmstrip.tileWidth}
+      {hasVisibleSlice &&
+        filmstrip &&
+        assetDurationFrames > 0 &&
+        filmstripBuckets.length > 0 && (
+          <div
+            className="clip-visual clip-filmstrip"
+            data-testid={`clip-${clip.id}-visual`}
+          >
+          {filmstripBuckets.map((bucket) => {
+            const visibleBucketStart = Math.max(
+              bucket.startFrame,
+              displayedSourceStartFrame,
+            )
+            const visibleBucketEnd = Math.min(
+              bucket.endFrame,
+              displayedSourceStartFrame + displayedDurationFrames,
+            )
+            const croppedHeadPx =
+              (visibleBucketStart - bucket.startFrame) * zoom
+            return (
+              <svg
+                key={bucket.index}
+                className="clip-filmstrip-tile"
+                data-testid={`clip-${clip.id}-filmstrip-tile-${bucket.index}`}
+                aria-hidden="true"
+                focusable="false"
+                style={{
+                  left:
+                    (visibleBucketStart - displayedSourceStartFrame) * zoom,
+                  width: (visibleBucketEnd - visibleBucketStart) * zoom,
+                }}
+              >
+                <defs>
+                  <pattern
+                    id={`${clip.id}-filmstrip-pattern-${bucket.index}`}
+                    patternUnits="userSpaceOnUse"
+                    x={-(croppedHeadPx % filmstrip.tileWidth)}
+                    width={filmstrip.tileWidth}
                     height={filmstrip.tileHeight}
-                  />
-                </pattern>
-              </defs>
-              <rect
-                width="100%"
-                height="100%"
-                fill={`url(#${clip.id}-filmstrip-pattern-${bucket.index})`}
-              />
-            </svg>
-          ))}
-        </div>
-      )}
-      {waveform && assetDurationFrames > 0 && (
-        <div
+                  >
+                    <image
+                      href={filmstrip.url}
+                      x={-bucket.spriteIndex * filmstrip.tileWidth}
+                      width={filmstrip.tiles * filmstrip.tileWidth}
+                      height={filmstrip.tileHeight}
+                    />
+                  </pattern>
+                </defs>
+                <rect
+                  width="100%"
+                  height="100%"
+                  fill={`url(#${clip.id}-filmstrip-pattern-${bucket.index})`}
+                />
+              </svg>
+            )
+            })}
+          </div>
+        )}
+      {hasVisibleSlice && waveform && assetDurationFrames > 0 && (
+        <svg
           className="clip-visual clip-waveform"
           data-testid={`clip-${clip.id}-visual`}
-          style={{
-            backgroundImage: `url(${waveform.url})`,
-            backgroundSize: `${assetDurationFrames * zoom}px 100%`,
-            backgroundPosition: `${-sourceStartFrame * zoom}px 0`,
-          }}
-        />
+          aria-hidden="true"
+          focusable="false"
+          preserveAspectRatio="none"
+          viewBox={`${displayedSourceStartFrame / assetDurationFrames} 0 ${displayedDurationFrames / assetDurationFrames} 1`}
+        >
+          <image
+            href={waveform.url}
+            x="0"
+            y="0"
+            width="1"
+            height="1"
+            preserveAspectRatio="none"
+          />
+        </svg>
       )}
-      {showEdges && (
+      {(showStartEdge || showEndEdge) && (
         <>
-          <div
-            className="clip-edge clip-edge-start"
-            data-testid={`clip-${clip.id}-edge-start`}
-            onPointerDown={(e) => onEdgePointerDown(e, 'start')}
-          />
-          <div
-            className="clip-edge clip-edge-end"
-            data-testid={`clip-${clip.id}-edge-end`}
-            onPointerDown={(e) => onEdgePointerDown(e, 'end')}
-          />
+          {showStartEdge && (
+            <div
+              className="clip-edge clip-edge-start"
+              data-testid={`clip-${clip.id}-edge-start`}
+              onPointerDown={(e) => onEdgePointerDown(e, 'start')}
+            />
+          )}
+          {showEndEdge && (
+            <div
+              className="clip-edge clip-edge-end"
+              data-testid={`clip-${clip.id}-edge-end`}
+              onPointerDown={(e) => onEdgePointerDown(e, 'end')}
+            />
+          )}
         </>
       )}
-      {badge !== null && <span className="clip-edit-badge">{badge}</span>}
-      {isOffline && (
-        <span className="clip-offline-badge" aria-label="Source offline">
-          Offline
-        </span>
-      )}
-      <span className="clip-name">{clip.name}</span>
-      {clip.linkGroupId !== undefined && (
-        <span className="clip-link-badge" data-testid={`clip-${clip.id}-link`}>
-          🔗
-        </span>
+      {hasVisibleSlice && (
+        <>
+          {badge !== null && <span className="clip-edit-badge">{badge}</span>}
+          {isOffline && (
+            <span className="clip-offline-badge" aria-label="Source offline">
+              Offline
+            </span>
+          )}
+          <span className="clip-name">{clip.name}</span>
+          {clip.linkGroupId !== undefined && (
+            <span
+              className="clip-link-badge"
+              data-testid={`clip-${clip.id}-link`}
+            >
+              🔗
+            </span>
+          )}
+        </>
       )}
     </div>
   )

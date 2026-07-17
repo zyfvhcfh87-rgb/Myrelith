@@ -3,8 +3,8 @@
  *
  * Filmstrip buckets stay in full-source integer-frame space, but each sprite
  * tile repeats at a fixed SVG-pattern size instead of horizontally stretching.
- * Waveforms retain the full-source size/position mapping because their
- * generated asset is now vector SVG.
+ * Waveforms use a normalized source-time SVG viewBox, so a virtual slice
+ * never needs an asset-sized CSS background.
  */
 
 import { act, render, screen } from '@testing-library/react'
@@ -16,6 +16,7 @@ import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
 import ClipView from './ClipView'
 import { visibleFilmstripBuckets } from './clipVisualPlan'
+import { MAX_TIMELINE_SURFACE_PX } from './timelineViewport'
 
 function makeClip(id: string, tlStart: number, duration: number, srcStart = 0): Clip {
   return {
@@ -77,6 +78,9 @@ beforeEach(() => {
     isPlaying: false,
     isScrubbing: false,
     zoom: 2,
+    zoomMode: 'custom',
+    customZoom: 2,
+    timelineOriginFrame: 0,
     inOut: null,
     dragPreview: null,
     tool: 'select',
@@ -127,18 +131,76 @@ describe('clip visuals', () => {
     expect(first.querySelector('pattern')).toHaveAttribute('width', '78')
     expect(first.querySelector('pattern')).toHaveAttribute('height', '44')
     expect(first.querySelector('image')).toHaveAttribute('x', '-78')
-    expect(second).toHaveStyle({ left: '120px', width: '120px' })
+    expect(second).toHaveStyle({ left: '120px', width: '80px' })
     expect(second.querySelector('image')).toHaveAttribute('x', '-156')
     expect(visual.querySelectorAll('.clip-filmstrip-tile')).toHaveLength(2)
   })
 
   test('audio lanes map the full-source vector waveform by time', () => {
     render(<ClipView clip={makeClip('c2', 0, 100)} trackId="A1" trackKind="audio" />)
-    expect(screen.getByTestId('clip-c2-visual')).toHaveStyle({
-      backgroundImage: 'url(blob:wave)',
-      backgroundSize: '600px 100%',
-      backgroundPosition: '0px 0',
+    const waveform = screen.getByTestId('clip-c2-visual')
+    expect(waveform).toHaveAttribute(
+      'viewBox',
+      '0 0 0.3333333333333333 1',
+    )
+    expect(waveform.querySelector('image')).toHaveAttribute('href', 'blob:wave')
+  })
+
+  test('a huge clip renders one bounded, source-aligned virtual slice', () => {
+    useMediaStore.setState({
+      assets: new Map([[asset.id, { ...asset, durationFrames: 2_000_000 }]]),
     })
+
+    render(
+      <ClipView
+        clip={makeClip('long', 0, 2_000_000)}
+        trackId="A1"
+        trackKind="audio"
+        timelineOriginFrame={1_000_000}
+        timelineWindowEndFrame={1_100_000}
+      />,
+    )
+
+    expect(screen.getByTestId('clip-long')).toHaveStyle({
+      transform: 'translateX(0px)',
+      width: '200000px',
+    })
+    expect(screen.getByTestId('clip-long-visual')).toHaveAttribute(
+      'viewBox',
+      '0.5 0 0.05 1',
+    )
+    expect(screen.queryByTestId('clip-long-edge-start')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('clip-long-edge-end')).not.toBeInTheDocument()
+  })
+
+  test('a huge filmstrip clips every source bucket to the bounded slice', () => {
+    useMediaStore.setState({
+      assets: new Map([[asset.id, { ...asset, durationFrames: 2_000_000 }]]),
+    })
+    act(() => useTransportStore.getState().setZoom(44))
+
+    render(
+      <ClipView
+        clip={makeClip('long-video', 0, 2_000_000)}
+        trackId="V1"
+        trackKind="video"
+        timelineOriginFrame={1_000_000}
+        timelineWindowEndFrame={1_363_636}
+      />,
+    )
+
+    const clip = screen.getByTestId('clip-long-video')
+    const tiles = [
+      ...screen
+        .getByTestId('clip-long-video-visual')
+        .querySelectorAll<HTMLElement>('.clip-filmstrip-tile'),
+    ]
+    const widths = tiles.map((tile) => Number.parseFloat(tile.style.width))
+    expect(clip).toHaveStyle({ width: '15999984px' })
+    expect(tiles).toHaveLength(2)
+    expect(Math.max(...widths)).toBeLessThan(MAX_TIMELINE_SURFACE_PX)
+    expect(widths.reduce((sum, width) => sum + width, 0)).toBe(15_999_984)
+    expect(tiles[0].querySelector('pattern')).toHaveAttribute('x')
   })
 
   test('nothing renders while visuals or asset metadata are missing', () => {
@@ -172,9 +234,14 @@ describe('clip visuals', () => {
         .setEditPreview({ clipId: 'c5', kind: 'slip', deltaFrames: 10 })
     })
     expect(screen.getByTestId('clip-c5-filmstrip-tile-1')).toHaveStyle({
-      left: '-20px',
-      width: '120px',
+      left: '0px',
+      width: '100px',
     })
+    expect(
+      screen
+        .getByTestId('clip-c5-filmstrip-tile-1')
+        .querySelector('pattern'),
+    ).toHaveAttribute('x', '-20')
   })
 
   test('zoom changes bucket geometry but keeps the same fixed-size source tile', () => {

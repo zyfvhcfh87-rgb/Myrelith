@@ -18,6 +18,7 @@ import Preview from '../ui/Preview'
 import Inspector from '../ui/Inspector'
 import TransportBar from '../ui/TransportBar'
 import Timeline from '../ui/timeline/Timeline'
+import TimelineZoomControls from '../ui/timeline/TimelineZoomControls'
 import ProjectLaunch from '../ui/ProjectLaunch'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
@@ -57,6 +58,7 @@ function EditorShell({ closing }: EditorShellProps) {
       <section className="area-transport" inert={closing}>
         <ToolButtons />
         <TransportBar />
+        <TimelineZoomControls />
       </section>
       {/* data-timeline-scroll: the Ruler virtualizes its ticks against
           this scroll container (see ui/timeline/Ruler.tsx). */}
