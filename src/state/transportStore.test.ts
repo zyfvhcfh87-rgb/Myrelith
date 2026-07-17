@@ -3,22 +3,12 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest'
-import { useTransportStore } from './transportStore'
+import { INITIAL_TRANSPORT_STATE, useTransportStore } from './transportStore'
 
 const getState = () => useTransportStore.getState()
 
 beforeEach(() => {
-  useTransportStore.setState({
-    playheadFrame: 0,
-    isPlaying: false,
-    isScrubbing: false,
-    zoom: 1,
-    inOut: null,
-    dragPreview: null,
-    tool: 'select',
-    selectedClipId: null,
-    editPreview: null,
-  })
+  useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
 })
 
 describe('transportStore', () => {
@@ -40,13 +30,35 @@ describe('transportStore', () => {
     expect(getState().playheadFrame).toBe(0)
   })
 
-  test('zoom rejects non-positive values', () => {
+  test('custom zoom updates rendered + remembered values atomically', () => {
     getState().setZoom(2.5)
-    expect(getState().zoom).toBe(2.5)
+    expect(getState()).toMatchObject({
+      zoom: 2.5,
+      customZoom: 2.5,
+      zoomMode: 'custom',
+    })
     getState().setZoom(0)
     expect(getState().zoom).toBe(2.5)
     getState().setZoom(-1)
     expect(getState().zoom).toBe(2.5)
+    getState().setZoom(Number.POSITIVE_INFINITY)
+    expect(getState().zoom).toBe(2.5)
+  })
+
+  test('Full and Detail presets never overwrite remembered Custom zoom', () => {
+    getState().setZoom(4.25)
+    getState().setPresetZoom('full', 0.01)
+    expect(getState()).toMatchObject({
+      zoom: 0.01,
+      zoomMode: 'full',
+      customZoom: 4.25,
+    })
+    getState().setPresetZoom('detail', 3)
+    expect(getState()).toMatchObject({
+      zoom: 3,
+      zoomMode: 'detail',
+      customZoom: 4.25,
+    })
   })
 
   test('dragPreview sets, normalizes the frame, and clears', () => {
@@ -99,6 +111,7 @@ describe('transportStore', () => {
     getState().setIsPlaying(true)
     getState().setIsScrubbing(true)
     getState().setZoom(3)
+    getState().setPresetZoom('detail', 0.5)
     getState().setInOut({ startFrame: 10, durationFrames: 20 })
     getState().setDragPreview({ clipId: 'clipA', startFrame: 10 })
     getState().setTool('slide')
@@ -116,6 +129,8 @@ describe('transportStore', () => {
       isPlaying: false,
       isScrubbing: false,
       zoom: 1,
+      zoomMode: 'custom',
+      customZoom: 1,
       inOut: null,
       dragPreview: null,
       tool: 'select',

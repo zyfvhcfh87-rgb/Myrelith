@@ -110,8 +110,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   history entry. Actions take the frame as a parameter — documentStore
   never reads transportStore (UI wiring passes the playhead in).
 - `TransportState` — `src/state/transportStore.ts`: `playheadFrame` (int,
-  setter rounds + clamps >= 0), `isPlaying`, `isScrubbing`, `zoom`
-  (px/frame, > 0), `inOut`, `dragPreview` ({clipId, startFrame,
+  setter rounds + clamps >= 0), `isPlaying`, `isScrubbing`, authoritative
+  `zoom` (px/frame, > 0), `zoomMode` ('full'|'detail'|'custom'), and
+  `customZoom` (remembered custom px/frame). `setZoom` atomically updates
+  rendered + remembered zoom and activates Custom; `setPresetZoom` updates
+  rendered zoom + Full/Detail mode without overwriting `customZoom`. All zoom
+  state is ephemeral/non-history and reset deterministically. Also `inOut`,
+  `dragPreview` ({clipId, startFrame,
   targetTrackId?, trackOffsetY?, linkGroupId?} | null — the live half of
   the scrubbing-vs-committed pattern for select-tool moves; the optional
   target fields ghost only the gesture owner over a same-kind lane while a

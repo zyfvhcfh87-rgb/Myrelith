@@ -172,6 +172,24 @@ describe('Ruler', () => {
     expect(screen.queryByText('00:00:00:00')).not.toBeInTheDocument() // start is far away
   })
 
+  test('very wide visible ranges keep ruler labels sparse and virtualized', async () => {
+    act(() => {
+      useTransportStore.getState().setZoom(1000 / (33_000 * 30))
+    })
+    await renderScrolled(0, 1000)
+    const ticks = [...document.querySelectorAll<HTMLElement>('.ruler-tick')]
+    expect(ticks.length).toBeGreaterThan(0)
+    expect(ticks.length).toBeLessThan(40)
+
+    const positions = ticks.map((tick) => {
+      const match = tick.style.transform.match(/translateX\(([-\d.]+)px\)/)
+      return Number(match?.[1] ?? 0)
+    })
+    for (let index = 1; index < positions.length; index += 1) {
+      expect(positions[index] - positions[index - 1]).toBeGreaterThanOrEqual(90)
+    }
+  })
+
   test('scrolled to the far right, the runway ends on an inside-anchored 12h label', async () => {
     await renderScrolled(RUNWAY_FRAMES - 1000)
     const endLabel = screen.getByText('12:00:00:00')

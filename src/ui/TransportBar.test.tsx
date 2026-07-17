@@ -62,4 +62,17 @@ describe('TransportBar', () => {
     act(() => useTransportStore.getState().setPlayheadFrame(52))
     expect(renders.mock.calls.length).toBe(before)
   })
+
+  test('GATE: timeline zoom changes do not re-render the playback controls', () => {
+    const renders = vi.fn()
+    render(
+      <Profiler id="bar" onRender={renders}>
+        <TransportBar />
+      </Profiler>,
+    )
+    const before = renders.mock.calls.length
+    act(() => useTransportStore.getState().setZoom(2))
+    act(() => useTransportStore.getState().setPresetZoom('detail', 3))
+    expect(renders.mock.calls.length).toBe(before)
+  })
 })

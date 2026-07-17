@@ -11,9 +11,14 @@ import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
+import {
+  INITIAL_TRANSPORT_STATE,
+  useTransportStore,
+} from '../state/transportStore'
 
 beforeEach(() => {
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
+  useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
 })
 
 describe('App shell', () => {
@@ -36,6 +41,9 @@ describe('App shell', () => {
     expect(screen.getByTestId('preview-canvas')).toBeInTheDocument()
     expect(screen.getByText('Inspector')).toBeInTheDocument() // Phase 4
     expect(screen.getByTestId('timeline-root')).toBeInTheDocument()
+    expect(
+      screen.getByRole('group', { name: 'Timeline zoom controls' }),
+    ).toBeInTheDocument()
 
     const shell = container.querySelector('.app-shell')
     expect(shell).not.toBeNull()
@@ -48,6 +56,9 @@ describe('App shell', () => {
     ]) {
       expect(shell?.querySelector(`.${area}`)).not.toBeNull()
     }
+    expect(
+      shell?.querySelector('.area-transport > .timeline-zoom-controls'),
+    ).not.toBeNull()
   })
 
   test('makes every editing surface inert while the project is closing', () => {

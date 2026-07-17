@@ -30,9 +30,8 @@ import type { FrameRate } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import { useTransportStore } from '../../state/transportStore'
 import { useScrubScheduler } from './useScrubScheduler'
+import { timelineRunwayFrames } from './timelineZoom'
 
-/** Minimum runway even for short/empty projects: a full editing day. */
-const MIN_RULER_SECONDS = 12 * 3600
 /** Ticks want at least this much horizontal room per label. */
 const MIN_LABEL_PX = 90
 /** Window width assumed when no scrollable ancestor exists (bare tests). */
@@ -40,14 +39,41 @@ const FALLBACK_VIEWPORT_PX = 4000
 
 /** Smallest "nice" frame interval that keeps labels at least MIN_LABEL_PX apart. */
 function pickTickIntervalFrames(zoom: number, rate: FrameRate): number {
-  const fps = Math.max(1, Math.round(rate.num / rate.den))
+  const seconds = [
+    1,
+    2,
+    5,
+    10,
+    30,
+    60,
+    300,
+    600,
+    1800,
+    3600,
+    7200,
+    21600,
+    43200,
+  ]
   const candidates = [
-    ...new Set([1, 2, 5, 10, fps, fps * 2, fps * 5, fps * 10, fps * 30, fps * 60, fps * 300, fps * 600]),
+    ...new Set([
+      1,
+      2,
+      5,
+      10,
+      ...seconds.map((value) => secondsToFrames(value, rate)),
+    ]),
   ].sort((a, b) => a - b)
   for (const candidate of candidates) {
     if (candidate * zoom >= MIN_LABEL_PX) return candidate
   }
-  return candidates[candidates.length - 1]
+  let interval = candidates[candidates.length - 1]
+  while (
+    interval * zoom < MIN_LABEL_PX &&
+    interval <= Number.MAX_SAFE_INTEGER / 2
+  ) {
+    interval *= 2
+  }
+  return interval
 }
 
 /** The horizontal slice of the scroll viewport the ruler must cover. */
@@ -106,10 +132,7 @@ export default function Ruler() {
     }
   }, [])
 
-  const totalFrames = Math.max(
-    durationFrames,
-    secondsToFrames(MIN_RULER_SECONDS, frameRate),
-  )
+  const totalFrames = timelineRunwayFrames(durationFrames, frameRate, zoom)
   const interval = pickTickIntervalFrames(zoom, frameRate)
 
   // Ticks for the viewport plus one viewport of overscan on each side.

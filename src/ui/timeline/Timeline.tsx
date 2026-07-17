@@ -47,7 +47,11 @@ export default function Timeline() {
 
   return (
     <div className={`timeline-root tool-${tool}`} data-testid="timeline-root">
-      <div className="timeline-headers" data-testid="timeline-headers">
+      <div
+        className="timeline-headers"
+        data-timeline-headers
+        data-testid="timeline-headers"
+      >
         {/* Corner spacer: same height as the ruler so header/lane rows align. */}
         <div className="timeline-headers-corner" />
         {ordered.map((track) => (

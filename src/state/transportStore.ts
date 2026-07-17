@@ -3,8 +3,9 @@
  *
  * Rules (from the plan and ARCHITECTURE.md):
  * - NO history middleware: scrubbing must never pollute undo.
- * - NO side effects and NO coupling: setters touch exactly their own field
- *   and never read or write documentStore.
+ * - NO external side effects and NO document coupling. Setters update one
+ *   conceptual transport slice (zoom + its mode/remembered value are one
+ *   slice) and never read or write documentStore.
  * - playheadFrame is an integer frame at the document rate (rule 2); the
  *   setter rounds and clamps to >= 0 so a stray float can never leak in.
  */
@@ -35,6 +36,10 @@ export interface DragPreview {
 
 /** The Phase 4.2 timeline tools (Toolbar buttons + A/B/T/Y/U keys). */
 export type TimelineTool = 'select' | 'razor' | 'trim' | 'slip' | 'slide'
+
+/** Ephemeral timeline zoom preset. Zoom never belongs to document history. */
+export type ZoomMode = 'full' | 'detail' | 'custom'
+export type PresetZoomMode = Exclude<ZoomMode, 'custom'>
 
 /** What kind of edit an in-flight edge/body gesture previews. */
 export type EditPreviewKind =
@@ -72,6 +77,10 @@ export interface TransportState {
   isScrubbing: boolean
   /** Timeline zoom in pixels per frame (> 0). UI tunes the default later. */
   zoom: number
+  /** Active timeline zoom preset; session-only and never undoable. */
+  zoomMode: ZoomMode
+  /** Remembered Custom-mode pixels-per-frame value. */
+  customZoom: number
   /** In/out selection for preview/export, or null when unset. */
   inOut: TimeRange | null
   /** Clip-drag preview, or null when no drag is in flight. */
@@ -89,8 +98,13 @@ export interface TransportState {
   setIsPlaying: (isPlaying: boolean) => void
   /** Flip the scrubbing flag (pointer handlers own when this happens). */
   setIsScrubbing: (isScrubbing: boolean) => void
-  /** Set zoom in pixels per frame; values <= 0 are ignored. */
+  /**
+   * Set a user-authored zoom in pixels per frame. Activates Custom mode and
+   * remembers the value; invalid/non-positive values are ignored.
+   */
   setZoom: (zoom: number) => void
+  /** Apply Full/Detail without overwriting the remembered Custom value. */
+  setPresetZoom: (mode: PresetZoomMode, zoom: number) => void
   /** Set or clear the in/out selection. */
   setInOut: (inOut: TimeRange | null) => void
   /**
@@ -116,12 +130,23 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   isPlaying: false,
   isScrubbing: false,
   zoom: 1,
+  zoomMode: 'custom' as ZoomMode,
+  customZoom: 1,
   inOut: null,
   dragPreview: null,
   tool: 'select' as TimelineTool,
   selectedClipId: null,
   editPreview: null,
 })
+
+// A queued range-input frame must not resurrect pre-reset zoom state. Keep
+// this sequence outside Zustand so resetTransport can still restore the
+// complete public transport state to the exact deterministic initial values.
+let transportResetRevision = 0
+
+export function getTransportResetRevision(): number {
+  return transportResetRevision
+}
 
 export const useTransportStore = create<TransportState>()((set) => ({
   ...INITIAL_TRANSPORT_STATE,
@@ -130,7 +155,24 @@ export const useTransportStore = create<TransportState>()((set) => ({
     set({ playheadFrame: Math.max(0, Math.round(frame)) }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setIsScrubbing: (isScrubbing) => set({ isScrubbing }),
-  setZoom: (zoom) => set((state) => (zoom > 0 ? { zoom } : state)),
+  setZoom: (zoom) =>
+    set((state) =>
+      Number.isFinite(zoom) && zoom > 0
+        ? state.zoom === zoom &&
+          state.customZoom === zoom &&
+          state.zoomMode === 'custom'
+          ? state
+          : { zoom, customZoom: zoom, zoomMode: 'custom' }
+        : state,
+    ),
+  setPresetZoom: (zoomMode, zoom) =>
+    set((state) =>
+      Number.isFinite(zoom) && zoom > 0
+        ? state.zoom === zoom && state.zoomMode === zoomMode
+          ? state
+          : { zoom, zoomMode }
+        : state,
+    ),
   setInOut: (inOut) => set({ inOut }),
   setDragPreview: (preview) =>
     set({
@@ -146,5 +188,8 @@ export const useTransportStore = create<TransportState>()((set) => ({
         ? { ...preview, deltaFrames: Math.round(preview.deltaFrames) }
         : null,
     }),
-  resetTransport: () => set({ ...INITIAL_TRANSPORT_STATE }),
+  resetTransport: () => {
+    transportResetRevision += 1
+    set({ ...INITIAL_TRANSPORT_STATE })
+  },
 }))
