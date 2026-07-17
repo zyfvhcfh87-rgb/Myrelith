@@ -81,6 +81,8 @@ export interface TransportState {
   zoomMode: ZoomMode
   /** Remembered Custom-mode pixels-per-frame value. */
   customZoom: number
+  /** Integer global frame represented by local x=0 in the bounded DOM lane. */
+  timelineOriginFrame: number
   /** In/out selection for preview/export, or null when unset. */
   inOut: TimeRange | null
   /** Clip-drag preview, or null when no drag is in flight. */
@@ -105,6 +107,8 @@ export interface TransportState {
   setZoom: (zoom: number) => void
   /** Apply Full/Detail without overwriting the remembered Custom value. */
   setPresetZoom: (mode: PresetZoomMode, zoom: number) => void
+  /** Rebase the browser-safe timeline surface; never changes zoom/history. */
+  setTimelineOriginFrame: (frame: number) => void
   /** Set or clear the in/out selection. */
   setInOut: (inOut: TimeRange | null) => void
   /**
@@ -132,6 +136,7 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   zoom: 1,
   zoomMode: 'custom' as ZoomMode,
   customZoom: 1,
+  timelineOriginFrame: 0,
   inOut: null,
   dragPreview: null,
   tool: 'select' as TimelineTool,
@@ -173,6 +178,17 @@ export const useTransportStore = create<TransportState>()((set) => ({
           : { zoom, zoomMode }
         : state,
     ),
+  setTimelineOriginFrame: (frame) =>
+    set((state) => {
+      if (!Number.isFinite(frame)) return state
+      const timelineOriginFrame = Math.max(
+        0,
+        Math.min(Number.MAX_SAFE_INTEGER, Math.round(frame)),
+      )
+      return state.timelineOriginFrame === timelineOriginFrame
+        ? state
+        : { timelineOriginFrame }
+    }),
   setInOut: (inOut) => set({ inOut }),
   setDragPreview: (preview) =>
     set({

@@ -20,6 +20,7 @@ describe('transportStore', () => {
     expect(after.isPlaying).toBe(before.isPlaying)
     expect(after.isScrubbing).toBe(before.isScrubbing)
     expect(after.zoom).toBe(before.zoom)
+    expect(after.timelineOriginFrame).toBe(before.timelineOriginFrame)
     expect(after.inOut).toBe(before.inOut)
   })
 
@@ -59,6 +60,25 @@ describe('transportStore', () => {
       zoomMode: 'detail',
       customZoom: 4.25,
     })
+  })
+
+  test('timeline origin is normalized independently of zoom and playhead', () => {
+    getState().setPlayheadFrame(77)
+    getState().setZoom(2.5)
+
+    getState().setTimelineOriginFrame(1234.6)
+    expect(getState()).toMatchObject({
+      timelineOriginFrame: 1235,
+      playheadFrame: 77,
+      zoom: 2.5,
+      customZoom: 2.5,
+      zoomMode: 'custom',
+    })
+
+    getState().setTimelineOriginFrame(-10)
+    expect(getState().timelineOriginFrame).toBe(0)
+    getState().setTimelineOriginFrame(Number.POSITIVE_INFINITY)
+    expect(getState().timelineOriginFrame).toBe(0)
   })
 
   test('dragPreview sets, normalizes the frame, and clears', () => {
@@ -112,6 +132,7 @@ describe('transportStore', () => {
     getState().setIsScrubbing(true)
     getState().setZoom(3)
     getState().setPresetZoom('detail', 0.5)
+    getState().setTimelineOriginFrame(50_000)
     getState().setInOut({ startFrame: 10, durationFrames: 20 })
     getState().setDragPreview({ clipId: 'clipA', startFrame: 10 })
     getState().setTool('slide')
@@ -131,6 +152,7 @@ describe('transportStore', () => {
       zoom: 1,
       zoomMode: 'custom',
       customZoom: 1,
+      timelineOriginFrame: 0,
       inOut: null,
       dragPreview: null,
       tool: 'select',

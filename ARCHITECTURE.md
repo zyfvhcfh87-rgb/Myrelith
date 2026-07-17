@@ -62,6 +62,31 @@ gesture (coalesced to one update per animation frame). The `documentStore`
 mutation — which creates an undo-history entry — happens once, on `pointerup`.
 Never write to `documentStore` on every `pointermove`.
 
+## Browser-safe timeline geometry
+
+- `zoom` is the one and only pixels-per-frame scale. The logical timeline
+  runway is `max(docDurationFrames(doc), 12 hours at the document rate)` and
+  keeps its exact logical endpoint at every zoom level; browser layout limits
+  must never shorten it or impose a duration-dependent maximum zoom.
+- The DOM exposes at most one 16,000,000px physical timeline surface at a
+  time. `timelineOriginFrame` is an ephemeral non-negative integer translation:
+  local x for a global frame is `(frame - timelineOriginFrame) * zoom`. It is
+  NOT another scale, never changes `playheadFrame` or document geometry, and
+  never enters persistence or undo/redo history.
+- `ui/timeline/timelineViewport.ts` owns the pure bounded-window math. Its
+  final legal origin is `totalFrames - surfaceFrames`, so the exact logical
+  endpoint remains reachable. Near a native-scroll edge, `Timeline`
+  rebases the origin and applies the opposite scroll displacement before
+  paint; the logical viewport and every on-screen frame stay fixed while
+  ordinary scrolling remains one logical pixel per CSS pixel.
+- Ruler ticks, pointer-to-frame conversion, clips, transition seams, and the
+  playhead all use the same `zoom` plus the shared origin translation. A clip
+  is intersected with the current physical window before it emits DOM width.
+  Filmstrip buckets retain their source-frame offset within that slice, and
+  waveforms use a normalized source-time SVG viewBox rather than a gigantic
+  duration-scaled background. Long clips therefore stay aligned without
+  recreating the browser-width problem inside one visual element.
+
 ## Data model — `src/domain/schema.ts` (canonical, implemented)
 
 `domain/schema.ts` defines the authoritative interfaces every phase
@@ -112,10 +137,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `TransportState` — `src/state/transportStore.ts`: `playheadFrame` (int,
   setter rounds + clamps >= 0), `isPlaying`, `isScrubbing`, authoritative
   `zoom` (px/frame, > 0), `zoomMode` ('full'|'detail'|'custom'), and
-  `customZoom` (remembered custom px/frame). `setZoom` atomically updates
-  rendered + remembered zoom and activates Custom; `setPresetZoom` updates
-  rendered zoom + Full/Detail mode without overwriting `customZoom`. All zoom
-  state is ephemeral/non-history and reset deterministically. Also `inOut`,
+  `customZoom` (remembered custom px/frame), plus `timelineOriginFrame` (the
+  integer global frame represented by local x=0 in the bounded DOM surface).
+  `setZoom` atomically updates rendered + remembered zoom and activates Custom;
+  `setPresetZoom` updates rendered zoom + Full/Detail mode without overwriting
+  `customZoom`; `setTimelineOriginFrame` changes translation only. All four
+  fields are ephemeral/non-history and reset deterministically. Also `inOut`,
   `dragPreview` ({clipId, startFrame,
   targetTrackId?, trackOffsetY?, linkGroupId?} | null — the live half of
   the scrubbing-vs-committed pattern for select-tool moves; the optional

@@ -72,6 +72,9 @@ beforeEach(() => {
     isPlaying: false,
     isScrubbing: false,
     zoom: 1,
+    zoomMode: 'custom',
+    customZoom: 1,
+    timelineOriginFrame: 0,
     inOut: null,
     dragPreview: null,
   })
@@ -201,6 +204,46 @@ describe('drag: scrub-preview then commit', () => {
     expect(transport().dragPreview).toBeNull()
     expect(doc().past).toHaveLength(0)
     expect(clipA().timelineRange.startFrame).toBe(100)
+  })
+
+  test('a drag crossing the virtual window keeps its capture host through commit', async () => {
+    const view = render(
+      <Track
+        track={doc().doc.tracks[0]}
+        timelineOriginFrame={0}
+        timelineWindowEndFrame={200}
+      />,
+    )
+    const el = screen.getByTestId('clip-clipA')
+
+    fireEvent.pointerDown(el, { pointerId: 8, clientX: 500 })
+    fireEvent.pointerMove(el, { pointerId: 8, clientX: 650 })
+    await waitFor(() =>
+      expect(transport().dragPreview?.startFrame).toBe(250),
+    )
+
+    expect(document.body.contains(el)).toBe(true)
+    expect(el).toHaveAttribute('data-virtual-gesture-host', 'true')
+    expect(el).toHaveStyle({ transform: 'translateX(199px)', width: '1px' })
+
+    // Simulate an origin rebase that culls the committed range but brings the
+    // live preview back inside the new physical window. Track must retain the
+    // same captured ClipView because it participates in the active gesture.
+    view.rerender(
+      <Track
+        track={doc().doc.tracks[0]}
+        timelineOriginFrame={200}
+        timelineWindowEndFrame={400}
+      />,
+    )
+    expect(screen.getByTestId('clip-clipA')).toBe(el)
+    expect(el).toHaveAttribute('data-virtual-gesture-host', 'false')
+    expect(el).toHaveStyle({ transform: 'translateX(50px)', width: '50px' })
+
+    fireEvent.pointerUp(el, { pointerId: 8, clientX: 650 })
+    expect(clipA().timelineRange.startFrame).toBe(250)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().dragPreview).toBeNull()
   })
 })
 

@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest'
 import {
-  MAX_TIMELINE_LAYOUT_PX,
   calculateTimelineZoomGeometry,
   sliderPositionForZoom,
   timelineRunwayFrames,
@@ -27,28 +26,22 @@ describe('timeline zoom math', () => {
     expect(geometry.minZoom).toBeCloseTo(expectedFull, 12)
   })
 
-  test('high zoom keeps the real Chromium runway within its layout ceiling', () => {
-    const geometry = calculateTimelineZoomGeometry(2360, 0, RATE)
-    const runwayFrames = timelineRunwayFrames(0, RATE, geometry.maxZoom)
+  test('Detail and Max stay exact at every project duration', () => {
+    for (const durationFrames of [0, 6000, 12 * 3600 * 30, 2_000_000]) {
+      const geometry = calculateTimelineZoomGeometry(
+        2360,
+        durationFrames,
+        RATE,
+      )
 
-    expect(geometry.maxZoom).toBeCloseTo(2360 / (1.8 * 30), 12)
-    expect(runwayFrames * geometry.maxZoom).toBeLessThanOrEqual(
-      MAX_TIMELINE_LAYOUT_PX,
-    )
-    expect(runwayFrames).toBeLessThan(12 * 3600 * 30)
+      expect(geometry.detailZoom).toBeCloseTo(2360 / (11 * 30), 12)
+      expect(geometry.maxZoom).toBeCloseTo(2360 / (1.8 * 30), 12)
+    }
   })
 
-  test('long projects cap only an impossible endpoint and remain reachable', () => {
-    const durationFrames = 2_000_000
-    const geometry = calculateTimelineZoomGeometry(2360, durationFrames, RATE)
-
-    expect(geometry.maxZoom).toBeCloseTo(
-      MAX_TIMELINE_LAYOUT_PX / durationFrames,
-      12,
-    )
-    expect(
-      timelineRunwayFrames(durationFrames, RATE, geometry.maxZoom),
-    ).toBe(durationFrames)
+  test('the logical runway remains twelve hours and expands for longer docs', () => {
+    expect(timelineRunwayFrames(0, RATE)).toBe(12 * 3600 * 30)
+    expect(timelineRunwayFrames(2_000_000, RATE)).toBe(2_000_000)
   })
 
   test('the exponential midpoint is geometric, not arithmetic', () => {

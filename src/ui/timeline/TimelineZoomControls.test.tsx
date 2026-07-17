@@ -10,11 +10,17 @@ import {
 import TimelineZoomControls from './TimelineZoomControls'
 import {
   calculateTimelineZoomGeometry,
+  timelineRunwayFrames,
   zoomAtSliderPosition,
 } from './timelineZoom'
+import {
+  MAX_TIMELINE_SURFACE_PX,
+  calculateTimelineViewport,
+} from './timelineViewport'
 
 const RATE = { num: 30, den: 1 }
-const RUNWAY_FRAMES = 12 * 3600 * 30
+const LONG_PROJECT_FRAMES = 100 * 3600 * 30
+const FAR_PLAYHEAD_FRAME = 8_000_000
 
 function makeDoc(durationFrames = 6000): TimelineDoc {
   return {
@@ -92,10 +98,14 @@ class MockResizeObserver {
 }
 
 function flushFrame(): void {
-  const callbacks = [...rafCallbacks.values()]
-  rafCallbacks = new Map()
+  const callbackIds = [...rafCallbacks.keys()]
   act(() => {
-    for (const callback of callbacks) callback(performance.now())
+    for (const id of callbackIds) {
+      const callback = rafCallbacks.get(id)
+      if (!callback) continue
+      rafCallbacks.delete(id)
+      callback(performance.now())
+    }
   })
 }
 
@@ -139,11 +149,17 @@ function renderHarness(initial: HarnessGeometry = {
   Object.defineProperty(scroller, 'scrollWidth', {
     configurable: true,
     get: () => {
-      const duration = Math.max(
-        RUNWAY_FRAMES,
-        docDurationFrames(useDocumentStore.getState().doc),
+      const doc = useDocumentStore.getState().doc
+      const transport = useTransportStore.getState()
+      const viewport = calculateTimelineViewport(
+        timelineRunwayFrames(docDurationFrames(doc), doc.frameRate),
+        transport.zoom,
+        transport.timelineOriginFrame,
       )
-      return measured.headerWidth + duration * useTransportStore.getState().zoom
+      return Math.max(
+        measured.scrollerWidth,
+        measured.headerWidth + viewport.surfaceWidth,
+      )
     },
   })
   Object.defineProperty(header, 'offsetWidth', {
@@ -156,6 +172,24 @@ function renderHarness(initial: HarnessGeometry = {
   triggerResize(scroller)
 
   return { scroller, measured }
+}
+
+function readLiveViewport() {
+  const doc = useDocumentStore.getState().doc
+  const transport = useTransportStore.getState()
+  return calculateTimelineViewport(
+    timelineRunwayFrames(docDurationFrames(doc), doc.frameRate),
+    transport.zoom,
+    transport.timelineOriginFrame,
+  )
+}
+
+function expectPlayheadCentered(scroller: HTMLElement, laneWidth: number): void {
+  const state = useTransportStore.getState()
+  const playheadScreenX =
+    (state.playheadFrame - state.timelineOriginFrame) * state.zoom -
+    scroller.scrollLeft
+  expect(playheadScreenX).toBeCloseTo(laneWidth / 2, 6)
 }
 
 beforeEach(() => {
@@ -204,14 +238,46 @@ describe('TimelineZoomControls', () => {
 
   test('Full Extent fits duration with trailing padding and scrolls to zero', () => {
     const { scroller } = renderHarness()
+    act(() => useTransportStore.getState().setTimelineOriginFrame(50_000))
     scroller.scrollLeft = 900
 
     fireEvent.click(screen.getByRole('button', { name: 'Full Extent Zoom' }))
     const state = useTransportStore.getState()
     expect(state.zoomMode).toBe('full')
+    expect(state.timelineOriginFrame).toBe(0)
     expect(state.zoom).toBeCloseTo((1200 - 36) / 6000, 12)
     expect(state.zoom * 6000).toBeCloseTo(1200 - 36, 8)
     expect(scroller.scrollLeft).toBe(900)
+
+    flushFrame()
+    expect(scroller.scrollLeft).toBe(0)
+  })
+
+  test('Full resets a long-project virtual origin and scroll without overwriting Custom', () => {
+    useDocumentStore.setState({
+      doc: makeDoc(LONG_PROJECT_FRAMES),
+      past: [],
+      future: [],
+    })
+    const { scroller } = renderHarness()
+    act(() => {
+      useTransportStore.getState().setZoom(7.25)
+      useTransportStore.getState().setTimelineOriginFrame(6_000_000)
+    })
+    scroller.scrollLeft = 7_000_000
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full Extent Zoom' }))
+
+    expect(useTransportStore.getState()).toMatchObject({
+      zoomMode: 'full',
+      customZoom: 7.25,
+      timelineOriginFrame: 0,
+    })
+    expect(useTransportStore.getState().zoom).toBeCloseTo(
+      (1200 - 36) / LONG_PROJECT_FRAMES,
+      12,
+    )
+    expect(scroller.scrollLeft).toBe(7_000_000)
 
     flushFrame()
     expect(scroller.scrollLeft).toBe(0)
@@ -231,6 +297,41 @@ describe('TimelineZoomControls', () => {
 
     flushFrame()
     expect(scroller.scrollLeft).toBeCloseTo(1000 * expectedZoom - 600, 8)
+  })
+
+  test('Detail keeps the exact eleven-second scale and centers a far playhead on a bounded surface', () => {
+    useDocumentStore.setState({
+      doc: makeDoc(LONG_PROJECT_FRAMES),
+      past: [],
+      future: [],
+    })
+    const { scroller, measured } = renderHarness()
+    act(() =>
+      useTransportStore.getState().setPlayheadFrame(FAR_PLAYHEAD_FRAME),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Detail Zoom' }))
+
+    const expectedZoom = 1200 / (11 * 30)
+    const state = useTransportStore.getState()
+    const viewport = readLiveViewport()
+    expect(state.zoom).toBeCloseTo(expectedZoom, 12)
+    expect(state.zoomMode).toBe('detail')
+    expect(state.timelineOriginFrame).toBeGreaterThan(0)
+    expect(viewport.virtualized).toBe(true)
+    expect(viewport.surfaceWidth).toBeLessThanOrEqual(
+      MAX_TIMELINE_SURFACE_PX,
+    )
+    expect(scroller.scrollWidth - measured.headerWidth).toBeCloseTo(
+      viewport.surfaceWidth,
+      6,
+    )
+
+    flushFrame()
+    expectPlayheadCentered(scroller, 1200)
+    expect(scroller.scrollLeft).toBeLessThanOrEqual(
+      scroller.scrollWidth - scroller.clientWidth,
+    )
   })
 
   test('playhead anchoring clamps at frame zero', () => {
@@ -267,6 +368,35 @@ describe('TimelineZoomControls', () => {
     })
   })
 
+  test('Custom restores its exact value and recenters a far playhead after presets', () => {
+    useDocumentStore.setState({
+      doc: makeDoc(LONG_PROJECT_FRAMES),
+      past: [],
+      future: [],
+    })
+    const { scroller } = renderHarness()
+    act(() => {
+      useTransportStore.getState().setPlayheadFrame(FAR_PLAYHEAD_FRAME)
+      useTransportStore.getState().setZoom(7.25)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full Extent Zoom' }))
+    flushFrame()
+    fireEvent.click(screen.getByRole('button', { name: 'Detail Zoom' }))
+    flushFrame()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Custom Zoom' }))
+    expect(useTransportStore.getState()).toMatchObject({
+      zoom: 7.25,
+      customZoom: 7.25,
+      zoomMode: 'custom',
+    })
+    expect(useTransportStore.getState().timelineOriginFrame).toBeGreaterThan(0)
+
+    flushFrame()
+    expectPlayheadCentered(scroller, 1200)
+  })
+
   test('slider is rAF-coalesced, exponential, and latest-wins', () => {
     const { scroller } = renderHarness()
     act(() => useTransportStore.getState().setPlayheadFrame(1000))
@@ -301,6 +431,43 @@ describe('TimelineZoomControls', () => {
     unsubscribe()
   })
 
+  test('the exact 1.8-second maximum centers a far playhead while the physical surface stays bounded', () => {
+    useDocumentStore.setState({
+      doc: makeDoc(LONG_PROJECT_FRAMES),
+      past: [],
+      future: [],
+    })
+    const { scroller, measured } = renderHarness()
+    act(() =>
+      useTransportStore.getState().setPlayheadFrame(FAR_PLAYHEAD_FRAME),
+    )
+
+    fireEvent.input(
+      screen.getByRole('slider', { name: 'Custom timeline zoom' }),
+      { target: { value: '1' } },
+    )
+    flushFrame()
+
+    const state = useTransportStore.getState()
+    const expectedMaxZoom = 1200 / (1.8 * 30)
+    const viewport = readLiveViewport()
+    expect(state.zoom).toBeCloseTo(expectedMaxZoom, 12)
+    expect(state.customZoom).toBeCloseTo(expectedMaxZoom, 12)
+    expect(state.zoomMode).toBe('custom')
+    expect(state.timelineOriginFrame).toBeGreaterThan(0)
+    expect(viewport.virtualized).toBe(true)
+    expect(viewport.surfaceWidth).toBeLessThanOrEqual(
+      MAX_TIMELINE_SURFACE_PX,
+    )
+    expect(scroller.scrollWidth - measured.headerWidth).toBeCloseTo(
+      viewport.surfaceWidth,
+      6,
+    )
+
+    flushFrame()
+    expectPlayheadCentered(scroller, 1200)
+  })
+
   test('a queued slider input uses resized endpoints at commit time', () => {
     const { scroller, measured } = renderHarness()
     const slider = screen.getByRole('slider', {
@@ -317,6 +484,25 @@ describe('TimelineZoomControls', () => {
       zoomAtSliderPosition(0.5, resized.minZoom, resized.maxZoom),
       12,
     )
+  })
+
+  test('deferred Custom anchoring remeasures a resize after zoom commit', () => {
+    const { scroller, measured } = renderHarness()
+    act(() => useTransportStore.getState().setPlayheadFrame(1000))
+
+    fireEvent.input(
+      screen.getByRole('slider', { name: 'Custom timeline zoom' }),
+      { target: { value: '0.7' } },
+    )
+    flushFrame() // commits zoom and queues the post-layout anchor
+    const committedZoom = useTransportStore.getState().zoom
+
+    measured.scrollerWidth = 1050 // lane changes from 1200px to 800px
+    triggerResize(scroller) // Custom intentionally preserves its exact value
+    flushFrame()
+
+    expect(useTransportStore.getState().zoom).toBe(committedZoom)
+    expectPlayheadCentered(scroller, 800)
   })
 
   test('minus and plus use 1.25x steps, activate Custom, and clamp', () => {

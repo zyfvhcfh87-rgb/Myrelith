@@ -10,14 +10,8 @@ export const MIN_VISIBLE_SECONDS = 9 * 3600 + 10 * 60
 export const DETAIL_VISIBLE_SECONDS = 11
 export const MAX_VISIBLE_SECONDS = 1.8
 export const ZOOM_STEP = 1.25
-/** Existing empty-project runway retained whenever Chromium can lay it out. */
+/** Existing empty-project runway retained logically by the virtual viewport. */
 export const TIMELINE_RUNWAY_SECONDS = 12 * 3600
-/**
- * Blink clamps a single horizontal layout surface near 2^25 CSS pixels.
- * Leave room for the sticky gutter and rounding instead of letting the final
- * ruler hours become silently unreachable at the 1.8-second endpoint.
- */
-export const MAX_TIMELINE_LAYOUT_PX = 33_000_000
 
 export interface TimelineZoomGeometry {
   laneWidth: number
@@ -68,14 +62,7 @@ export function calculateTimelineZoomGeometry(
     MAX_VISIBLE_SECONDS,
     frameRate,
   )
-  // A project itself must always remain addressable. Short projects keep the
-  // exact 1.8-second endpoint; Ruler shortens only the otherwise-empty runway
-  // when that is necessary to stay below Chromium's layout ceiling.
-  const projectSafeMaxZoom = MAX_TIMELINE_LAYOUT_PX / durationFrames
-  const maxZoom = Math.max(
-    minZoom,
-    Math.min(requestedMaxZoom, projectSafeMaxZoom),
-  )
+  const maxZoom = Math.max(minZoom, requestedMaxZoom)
 
   return {
     laneWidth,
@@ -90,29 +77,17 @@ export function calculateTimelineZoomGeometry(
   }
 }
 
-/**
- * Keep the familiar 12-hour runway when it fits. At very high zoom on a wide
- * viewport, shorten only unused post-project runway so the real scrollWidth
- * remains reachable in Chromium. The document duration always wins.
- */
+/** Keep the familiar logical 12-hour runway; DOM width is virtualized. */
 export function timelineRunwayFrames(
   projectDurationFrames: number,
   frameRate: FrameRate,
-  zoom: number,
 ): number {
   const durationFrames = Math.max(0, projectDurationFrames)
   const nominalRunwayFrames = secondsToFrames(
     TIMELINE_RUNWAY_SECONDS,
     frameRate,
   )
-  const safeRunwayFrames = Math.max(
-    1,
-    Math.floor(MAX_TIMELINE_LAYOUT_PX / Math.max(Number.EPSILON, zoom)),
-  )
-  return Math.max(
-    durationFrames,
-    Math.min(nominalRunwayFrames, safeRunwayFrames),
-  )
+  return Math.max(durationFrames, nominalRunwayFrames)
 }
 
 /** Exponential range mapping: the midpoint is the geometric mean. */

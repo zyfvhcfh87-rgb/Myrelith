@@ -118,6 +118,9 @@ beforeEach(() => {
     isPlaying: false,
     isScrubbing: false,
     zoom: 1,
+    zoomMode: 'custom',
+    customZoom: 1,
+    timelineOriginFrame: 0,
     inOut: null,
     dragPreview: null,
   })
@@ -284,6 +287,25 @@ describe('Track drop target', () => {
 
     fireEvent.drop(screen.getByTestId('track-V1'), { dataTransfer, clientX: 240 })
     expect(trackById('V1').clips[0].timelineRange.startFrame).toBe(120)
+  })
+
+  test('drop mapping adds the bounded timeline origin', () => {
+    seedAsset(makeAsset())
+    act(() => useTransportStore.getState().setZoom(2))
+    render(
+      <Track
+        track={trackById('V1')}
+        timelineOriginFrame={1_000_000}
+        timelineWindowEndFrame={1_100_000}
+      />,
+    )
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: assetDragData(makeAsset()),
+      clientX: 240,
+    })
+    expect(trackById('V1').clips[0].timelineRange.startFrame).toBe(1_000_120)
+    expect(trackById('A1').clips[0].timelineRange.startFrame).toBe(1_000_120)
   })
 
   test('kind mismatch is refused both ways (no highlight, no doc change)', () => {

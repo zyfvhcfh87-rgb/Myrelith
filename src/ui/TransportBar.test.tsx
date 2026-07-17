@@ -25,6 +25,9 @@ beforeEach(() => {
     isPlaying: false,
     isScrubbing: false,
     zoom: 1,
+    zoomMode: 'custom',
+    customZoom: 1,
+    timelineOriginFrame: 0,
     inOut: null,
     dragPreview: null,
   })
@@ -73,6 +76,7 @@ describe('TransportBar', () => {
     const before = renders.mock.calls.length
     act(() => useTransportStore.getState().setZoom(2))
     act(() => useTransportStore.getState().setPresetZoom('detail', 3))
+    act(() => useTransportStore.getState().setTimelineOriginFrame(1_000_000))
     expect(renders.mock.calls.length).toBe(before)
   })
 })

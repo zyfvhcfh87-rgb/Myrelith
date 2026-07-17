@@ -8,10 +8,11 @@
  * rAF-coalescing scheduler write transportStore.playheadFrame; nothing here
  * touches documentStore.
  *
- * Virtualization: the ruler ELEMENT spans the whole runway (that width is
- * what makes the timeline scrollable), but tick DIVs exist only for the
- * stretch near the viewport — a 12h runway at 1px/frame would otherwise be
- * ~8,600 nodes. The scrollable ancestor is found via the
+ * Virtualization: one browser-safe ruler surface spans a bounded frame window
+ * of the logical runway, while tick DIVs exist only for the stretch near the
+ * viewport. A 12h runway at 1px/frame would otherwise be ~8,600 nodes, and at
+ * maximum zoom its DOM width would exceed browser layout limits. The
+ * scrollable ancestor is found via the
  * [data-timeline-scroll] attribute (app shell marks it); scroll updates are
  * rAF-coalesced local state, so scrolling re-renders the ruler alone and
  * store-driven isolation is untouched. Without a marked ancestor (bare
@@ -22,7 +23,7 @@
  * scrolling all the way right ends on a clean labeled mark.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { docDurationFrames } from '../../domain/selectors'
 import { formatTimecode, secondsToFrames } from '../../domain/time'
@@ -31,6 +32,11 @@ import { useDocumentStore } from '../../state/documentStore'
 import { useTransportStore } from '../../state/transportStore'
 import { useScrubScheduler } from './useScrubScheduler'
 import { timelineRunwayFrames } from './timelineZoom'
+import {
+  calculateTimelineViewport,
+  frameAtTimelineLocalPx,
+  frameToTimelineLocalPx,
+} from './timelineViewport'
 
 /** Ticks want at least this much horizontal room per label. */
 const MIN_LABEL_PX = 90
@@ -84,6 +90,7 @@ interface ViewWindow {
 
 export default function Ruler() {
   const zoom = useTransportStore((s) => s.zoom)
+  const timelineOriginFrame = useTransportStore((s) => s.timelineOriginFrame)
   const setIsScrubbing = useTransportStore((s) => s.setIsScrubbing)
   const setPlayheadFrame = useTransportStore((s) => s.setPlayheadFrame)
   const frameRate = useDocumentStore((s) => s.doc.frameRate)
@@ -101,7 +108,7 @@ export default function Ruler() {
 
   // Track the scrollable ancestor's window; rAF-coalesced so a scroll
   // gesture costs at most one ruler re-render per animation frame.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scroller = rootRef.current?.closest('[data-timeline-scroll]')
     if (!(scroller instanceof HTMLElement)) return
 
@@ -130,17 +137,26 @@ export default function Ruler() {
       window.removeEventListener('resize', onScroll)
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [])
+  }, [timelineOriginFrame, zoom])
 
-  const totalFrames = timelineRunwayFrames(durationFrames, frameRate, zoom)
+  const totalFrames = timelineRunwayFrames(durationFrames, frameRate)
+  const viewport = calculateTimelineViewport(
+    totalFrames,
+    zoom,
+    timelineOriginFrame,
+  )
   const interval = pickTickIntervalFrames(zoom, frameRate)
 
   // Ticks for the viewport plus one viewport of overscan on each side.
   const windowStartPx = Math.max(0, view.leftPx - view.widthPx)
   const windowEndPx = view.leftPx + view.widthPx * 2
+  const firstWindowFrame = viewport.originFrame + windowStartPx / zoom
   const firstTick =
-    Math.max(0, Math.floor(windowStartPx / zoom / interval)) * interval
-  const lastWindowFrame = Math.min(totalFrames, Math.ceil(windowEndPx / zoom))
+    Math.max(0, Math.floor(firstWindowFrame / interval)) * interval
+  const lastWindowFrame = Math.min(
+    viewport.endFrame,
+    viewport.originFrame + Math.ceil(windowEndPx / zoom),
+  )
 
   const ticks: number[] = []
   for (let frame = firstTick; frame <= lastWindowFrame; frame += interval) {
@@ -151,7 +167,11 @@ export default function Ruler() {
   if (lastWindowFrame === totalFrames) {
     while (ticks.length > 0) {
       const last = ticks[ticks.length - 1]
-      if (last === totalFrames || (totalFrames - last) * zoom >= MIN_LABEL_PX) break
+      if (
+        last === totalFrames ||
+        (totalFrames - last) * zoom >= MIN_LABEL_PX
+      )
+        break
       ticks.pop()
     }
     if (ticks[ticks.length - 1] !== totalFrames) ticks.push(totalFrames)
@@ -159,7 +179,11 @@ export default function Ruler() {
 
   const frameFromPointer = (e: ReactPointerEvent<HTMLDivElement>): number => {
     const rect = e.currentTarget.getBoundingClientRect()
-    return Math.max(0, Math.round((e.clientX - rect.left) / zoom))
+    return frameAtTimelineLocalPx(
+      e.clientX - rect.left,
+      viewport.originFrame,
+      zoom,
+    )
   }
 
   // Capture can throw (inactive/synthetic pointer, detached node) — the
@@ -185,7 +209,7 @@ export default function Ruler() {
       ref={rootRef}
       className="timeline-ruler"
       data-testid="ruler"
-      style={{ width: totalFrames * zoom }}
+      style={{ width: viewport.surfaceWidth }}
       onPointerDown={(e) => {
         scrubbingRef.current = true
         setIsScrubbing(true)
@@ -215,7 +239,9 @@ export default function Ruler() {
         <div
           key={frame}
           className="ruler-tick"
-          style={{ transform: `translateX(${frame * zoom}px)` }}
+          style={{
+            transform: `translateX(${frameToTimelineLocalPx(frame, viewport.originFrame, zoom)}px)`,
+          }}
         >
           <span
             className={

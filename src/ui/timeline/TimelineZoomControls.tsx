@@ -16,6 +16,7 @@ import {
   useState,
 } from 'react'
 import type { FormEvent } from 'react'
+import { flushSync } from 'react-dom'
 import { docDurationFrames } from '../../domain/selectors'
 import { useDocumentStore } from '../../state/documentStore'
 import {
@@ -27,9 +28,16 @@ import {
   calculateTimelineZoomGeometry,
   clampTimelineZoom,
   sliderPositionForZoom,
+  timelineRunwayFrames,
   zoomAtSliderPosition,
 } from './timelineZoom'
 import type { TimelineZoomGeometry } from './timelineZoom'
+import {
+  findTimelineScroller,
+  measureTimelineLaneWidth,
+  planTimelineAnchor,
+  planTimelineStart,
+} from './timelineViewport'
 
 type ScrollAnchor = 'start' | 'playhead'
 
@@ -59,20 +67,6 @@ function CustomZoomIcon() {
       <circle cx="9" cy="15" r="1.5" />
     </svg>
   )
-}
-
-function findTimelineScroller(root: HTMLElement | null): HTMLElement | null {
-  const scope = root?.closest('.app-shell') ?? root?.ownerDocument
-  const scroller = scope?.querySelector('[data-timeline-scroll]')
-  return scroller instanceof HTMLElement ? scroller : null
-}
-
-/** Measure the real sticky gutter instead of coupling behavior to its CSS width. */
-function measureLaneWidth(scroller: HTMLElement): number {
-  const header = scroller.querySelector<HTMLElement>('[data-timeline-headers]')
-  const rectWidth = header?.getBoundingClientRect().width ?? 0
-  const headerWidth = rectWidth > 0 ? rectWidth : (header?.offsetWidth ?? 0)
-  return Math.max(1, scroller.clientWidth - headerWidth)
 }
 
 function sameGeometry(
@@ -116,25 +110,61 @@ export default function TimelineZoomControls() {
   const scheduleScroll = useCallback(
     (newZoom: number, anchor: ScrollAnchor): void => {
       if (anchorRafRef.current) cancelAnimationFrame(anchorRafRef.current)
+      const scroller = findTimelineScroller(rootRef.current)
+      if (!scroller) return
+
+      const laneWidth = measureTimelineLaneWidth(scroller)
+      const doc = useDocumentStore.getState().doc
+      const totalFrames = timelineRunwayFrames(
+        docDurationFrames(doc),
+        doc.frameRate,
+      )
+      const transport = useTransportStore.getState()
+      const initialPlan =
+        anchor === 'start'
+          ? planTimelineStart()
+          : planTimelineAnchor(
+              totalFrames,
+              newZoom,
+              laneWidth,
+              transport.playheadFrame,
+            )
+      transport.setTimelineOriginFrame(initialPlan.originFrame)
+      const resetRevision = getTransportResetRevision()
+
+      // The origin + zoom render commits before this frame. Only then read the
+      // new native width and apply the bounded physical scroll position.
       anchorRafRef.current = requestAnimationFrame(() => {
         anchorRafRef.current = 0
-        const scroller = findTimelineScroller(rootRef.current)
-        if (!scroller) return
-        if (anchor === 'start') {
-          scroller.scrollLeft = 0
-          return
+        if (resetRevision !== getTransportResetRevision()) return
+        const liveScroller = findTimelineScroller(rootRef.current)
+        if (!liveScroller) return
+        const liveDoc = useDocumentStore.getState().doc
+        const liveTransport = useTransportStore.getState()
+        const livePlan =
+          anchor === 'start'
+            ? planTimelineStart()
+            : planTimelineAnchor(
+                timelineRunwayFrames(
+                  docDurationFrames(liveDoc),
+                  liveDoc.frameRate,
+                ),
+                newZoom,
+                measureTimelineLaneWidth(liveScroller),
+                liveTransport.playheadFrame,
+              )
+        if (liveTransport.timelineOriginFrame !== livePlan.originFrame) {
+          flushSync(() =>
+            liveTransport.setTimelineOriginFrame(livePlan.originFrame),
+          )
         }
-
-        const laneWidth = measureLaneWidth(scroller)
-        const playheadFrame = useTransportStore.getState().playheadFrame
-        const desiredScrollLeft = playheadFrame * newZoom - laneWidth / 2
         const maximumScrollLeft = Math.max(
           0,
-          scroller.scrollWidth - scroller.clientWidth,
+          liveScroller.scrollWidth - liveScroller.clientWidth,
         )
-        scroller.scrollLeft = Math.min(
+        liveScroller.scrollLeft = Math.min(
           maximumScrollLeft,
-          Math.max(0, desiredScrollLeft),
+          Math.max(0, livePlan.scrollLeft),
         )
       })
     },
@@ -146,7 +176,7 @@ export default function TimelineZoomControls() {
     if (!scroller) return geometryRef.current
     const doc = useDocumentStore.getState().doc
     const next = calculateTimelineZoomGeometry(
-      measureLaneWidth(scroller),
+      measureTimelineLaneWidth(scroller),
       docDurationFrames(doc),
       doc.frameRate,
     )
