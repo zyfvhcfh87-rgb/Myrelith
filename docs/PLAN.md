@@ -472,10 +472,44 @@ boundary before any fallback or partial-track policy is selected.
   Chrome for Testing passed H.264/AAC MP4 Ready → linked A/V drop, ProRes MOV
   Unsupported/non-draggable → fresh explicit Retry → keyboard Remove, 720px
   wrapped diagnostics, and a 0-warning/0-error console.
-- [ ] Later slices: explicit decode fallback and its resource policy;
-  user-consented partial-track import; guarded report state and actionable
-  diagnostics for Resume/Relink plus downstream preview/audio/export failures;
-  broader browser/codec matrix. Resume/Relink already enforce the native probe.
+- [ ] Later slices after Slice 2: explicit local decode fallback and its
+  resource policy; user-consented partial-track import; capability caching;
+  optional proxy/fallback spike; broader browser/codec fixture matrix.
+
+## Post-MVP issue #19 — Slice 2 ✅ DONE (2026-07-18) Lifecycle + runtime feedback
+
+Issue #19 remains open; this slice makes the native compatibility result one
+guarded session truth across project reconnection and downstream consumers.
+
+- [x] Thread the typed native probe through remembered Resume, manual Resume,
+  individual Relink, accepted folder matches, and active-project recovery.
+  Activation installs connected assets and their Ready reports atomically;
+  settled non-Ready reports stay attached to durable Offline descriptors.
+- [x] Preserve a prior settled descriptor report while a new check owns the
+  row, then restore it on cancellation, wrong-file selection, or failed commit.
+  Descriptor-backed store transitions enforce exact identity, report/status
+  consistency, and Ready/connected parity; provisional imports remain exempt.
+- [x] Feed confirmed preview, filmstrip, waveform, live-audio, and export
+  source failures into compatibility state through typed asset errors. Resource
+  setup failures are file-level; track open/decode failures mark only the
+  implicated primary track. Global output/pump/cleanup failures stay global.
+- [x] Capture the exact object URL plus compatibility generation before async
+  work. Stale preview requests, render replies, release cleanup, visuals,
+  audio, and export failures cannot disconnect a relinked replacement. A
+  failure disconnects once and does not create a hidden decode retry loop.
+- [x] Keep runtime diagnostics accessible and non-duplicated. Descriptor-backed
+  failures expose Relink rather than the direct-import Retry action; successful
+  Relink publishes a fresh Ready report and restores the source.
+- [x] Verification: 303 focused tests across 14 lifecycle/runtime files and
+  1,021 total tests green; production build, lint, and diff checks green.
+  In-app Chromium at 1280×720 passed Offline H.264/AAC → Ready, ProRes →
+  Unsupported, wrong-file rollback to the prior report, and a real corrupted
+  AAC Ready-at-probe → one Waveform Error/Offline → valid Relink → Ready. The
+  normal paths had a clean warning/error console; the forced decoder failure
+  emitted one expected warning and did not retry.
+- [ ] Later slices: bounded local codec fallback/resource policy, explicit
+  partial-track consent, capability caching, optional proxy/fallback work, and
+  the broader browser/codec fixture matrix.
 
 ## Test strategy per layer (unchanged from original)
 

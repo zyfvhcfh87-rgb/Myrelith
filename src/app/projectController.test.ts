@@ -12,6 +12,8 @@ import {
   type ProjectSettings,
 } from '../domain/projectSettings'
 import type { MediaAsset } from '../domain/schema'
+import type { MediaCompatibilityReport } from '../domain/mediaCompatibility'
+import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import {
@@ -72,6 +74,95 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
   }
 }
 
+function readyReport(
+  overrides: Partial<MediaCompatibilityReport> = {},
+): MediaCompatibilityReport {
+  return {
+    status: 'ready',
+    container: {
+      name: 'MP4',
+      mimeType: 'video/mp4',
+      fullMimeType: 'video/mp4; codecs="avc1.64042a, mp4a.40.2"',
+    },
+    durationMicroseconds: 2_000_000,
+    tracks: [],
+    reason: null,
+    detail: null,
+    ...overrides,
+  }
+}
+
+function readyInspection(asset: MediaAsset): MediaProbeResult {
+  return {
+    status: 'ready',
+    asset,
+    compatibility: readyReport({
+      durationMicroseconds: asset.durationMicroseconds,
+    }),
+  }
+}
+
+function unsupportedInspection(
+  detail = 'The primary video codec is not supported in this browser.',
+  asset = makeAsset(),
+): MediaProbeResult {
+  const tracks: MediaCompatibilityReport['tracks'] = []
+  if (asset.kind === 'video') {
+    tracks.push({
+      kind: 'video',
+      number: 1,
+      primary: true,
+      codec: 'prores',
+      codecParameter: 'ap4h',
+      internalCodecId: 'ap4h',
+      decoderConfig: null,
+      decodable: false,
+      reason: 'unsupported-codec',
+      detail,
+      width: asset.width,
+      height: asset.height,
+      codedWidth: asset.width,
+      codedHeight: asset.height,
+      frameRate: asset.frameRate,
+      sampleRate: null,
+      channels: null,
+    })
+  }
+  if (asset.hasAudio) {
+    tracks.push({
+      kind: 'audio',
+      number: 1,
+      primary: true,
+      codec: 'aac',
+      codecParameter: 'mp4a.40.2',
+      internalCodecId: 'mp4a',
+      decoderConfig: null,
+      decodable: true,
+      reason: null,
+      detail: null,
+      width: null,
+      height: null,
+      codedWidth: null,
+      codedHeight: null,
+      frameRate: null,
+      sampleRate: asset.audioSampleRate,
+      channels: asset.audioChannels,
+    })
+  }
+  return {
+    status: 'unsupported',
+    asset: null,
+    compatibility: {
+      ...readyReport(),
+      status: 'unsupported',
+      durationMicroseconds: asset.durationMicroseconds,
+      tracks,
+      reason: 'unsupported-codec',
+      detail,
+    },
+  }
+}
+
 function descriptorFrom(
   asset: MediaAsset,
   overrides: Partial<PortableAssetDescriptor> = {},
@@ -113,11 +204,15 @@ function makeProject(
 function makeDeps(
   overrides: Partial<ProjectControllerDeps> = {},
 ): ProjectControllerDeps {
+  let compatibilityRequestId = 0
   return {
     createDocumentId: vi.fn(() => 'doc-new'),
+    createCompatibilityRequestId: vi.fn(
+      () => `compat-test-${++compatibilityRequestId}`,
+    ),
     now: vi.fn(() => 1_234),
     readText: vi.fn(async () => ''),
-    inspectMedia: vi.fn(async () => makeAsset()),
+    inspectMedia: vi.fn(async () => readyInspection(makeAsset())),
     disposeExport: vi.fn(async () => undefined),
     disposeTransport: vi.fn(async () => undefined),
     disposePreview: vi.fn(),
@@ -210,6 +305,30 @@ async function activateSavedProject(
   return deps
 }
 
+function installOfflineCompatibility(
+  descriptor: PortableAssetDescriptor,
+  report: MediaCompatibilityReport,
+): void {
+  const requestId = 'previous-compatibility'
+  const media = useMediaStore.getState()
+  expect(media.startCompatibility({
+    id: descriptor.id,
+    requestId,
+    fileName: descriptor.fileName,
+    declaredMimeType: descriptor.mimeType,
+    size: descriptor.size,
+    lastModified: descriptor.lastModified,
+    status: 'checking',
+    report: null,
+  })).toBe(true)
+  expect(useMediaStore.getState().setCompatibility(
+    descriptor.id,
+    requestId,
+    report.status,
+    report,
+  )).toBe(true)
+}
+
 beforeEach(() => {
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   resetProjectController({ revokeObjectURL: URL.revokeObjectURL })
@@ -222,6 +341,7 @@ beforeEach(() => {
     descriptors: new Map(),
     assets: new Map(),
     visuals: new Map(),
+    compatibility: new Map(),
   })
   useTransportStore.getState().resetTransport()
 })
@@ -690,7 +810,7 @@ describe('portable project resume', () => {
       readText: vi.fn(async () => serialized),
       loadMediaHandle: vi.fn(async () => handle),
       queryMediaPermission: vi.fn(async () => 'granted' as const),
-      inspectMedia: vi.fn(async () => analyzed),
+      inspectMedia: vi.fn(async () => readyInspection(analyzed)),
     })
 
     await expect(
@@ -717,7 +837,145 @@ describe('portable project resume', () => {
       id: 'asset-stable',
       objectUrl: 'blob:auto-restored',
     })
+    expect(useMediaStore.getState().compatibility.get('asset-stable'))
+      .toMatchObject({
+        id: 'asset-stable',
+        status: 'ready',
+        report: { status: 'ready', container: { name: 'MP4' } },
+      })
     expect(deps.requestMediaPermission).not.toHaveBeenCalled()
+  })
+
+  test('keeps an unchanged unsupported remembered handle and opens it offline with diagnostics', async () => {
+    const expected = makeAsset()
+    const descriptor = descriptorFrom(expected)
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const source = new File(['12345678'], descriptor.fileName, {
+      type: descriptor.mimeType,
+      lastModified: descriptor.lastModified,
+    })
+    const handle = makeHandle(source)
+    const inspection = unsupportedInspection('Native ProRes decoding is unavailable.')
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(async () => handle),
+      queryMediaPermission: vi.fn(async () => 'granted' as const),
+      inspectMedia: vi.fn(async () => inspection),
+    })
+
+    await expect(openProjectFile(
+      new File([serialized], 'unsupported.webcut'),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+    expect(deps.forgetMediaHandle).not.toHaveBeenCalled()
+
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+    const media = useMediaStore.getState()
+    expect(media.assets.has(descriptor.id)).toBe(false)
+    expect(media.compatibility.get(descriptor.id)).toEqual({
+      id: descriptor.id,
+      requestId: 'compat-test-1',
+      fileName: descriptor.fileName,
+      declaredMimeType: descriptor.mimeType,
+      size: descriptor.size,
+      lastModified: descriptor.lastModified,
+      status: 'unsupported',
+      report: inspection.compatibility,
+    })
+  })
+
+  test('an incompatible manual handle supersedes an old permission-prompt handle', async () => {
+    const expected = makeAsset()
+    const descriptor = descriptorFrom(expected)
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const oldFile = new File(['12345678'], descriptor.fileName, {
+      type: descriptor.mimeType,
+      lastModified: descriptor.lastModified,
+    })
+    const replacement = new File(['abcdefgh'], descriptor.fileName, {
+      type: descriptor.mimeType,
+      lastModified: descriptor.lastModified + 1,
+    })
+    const oldHandle = makeHandle(oldFile)
+    const replacementHandle = makeHandle(replacement)
+    const inspection = unsupportedInspection(
+      'The replacement codec is unavailable in this browser.',
+    )
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(async () => oldHandle),
+      queryMediaPermission: vi.fn(async () => 'prompt' as const),
+      pickMediaFiles: vi.fn(async () => [{
+        file: replacement,
+        handle: replacementHandle,
+      }]),
+      inspectMedia: vi.fn(async () => inspection),
+    })
+
+    await openProjectFile(new File([serialized], 'prompt.webcut'), deps)
+    expect(useProjectSessionStore.getState().candidate?.assets[0].status)
+      .toBe('remembered')
+
+    await expect(chooseProjectMedia(deps)).resolves.toEqual({
+      status: 'failed',
+      message: inspection.compatibility.detail,
+    })
+    expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
+      'doc-saved',
+      descriptor.id,
+      replacementHandle,
+    )
+    expect(useProjectSessionStore.getState().candidate?.assets[0].status)
+      .toBe('missing')
+
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+    expect(deps.requestMediaPermission).not.toHaveBeenCalled()
+    expect(deps.inspectMedia).toHaveBeenCalledOnce()
+    expect(useMediaStore.getState().assets.has(descriptor.id)).toBe(false)
+    expect(useMediaStore.getState().compatibility.get(descriptor.id))
+      .toMatchObject({ status: 'unsupported', report: inspection.compatibility })
+  })
+
+  test('does not attach or remember a non-Ready report that contradicts the descriptor', async () => {
+    const expected = makeAsset()
+    const descriptor = descriptorFrom(expected)
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const selected = new File(['abcdefgh'], descriptor.fileName, {
+      type: descriptor.mimeType,
+      lastModified: descriptor.lastModified,
+    })
+    const handle = makeHandle(selected)
+    const inspection = unsupportedInspection(
+      'The selected codec is unavailable.',
+      makeAsset({
+        durationMicroseconds: expected.durationMicroseconds + 1_000_000,
+        width: 1280,
+        height: 720,
+      }),
+    )
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      pickMediaFiles: vi.fn(async () => [{ file: selected, handle }]),
+      inspectMedia: vi.fn(async () => inspection),
+    })
+
+    await openProjectFile(new File([serialized], 'mismatch.webcut'), deps)
+    await expect(chooseProjectMedia(deps)).resolves.toEqual({
+      status: 'failed',
+      message: inspection.compatibility.detail,
+    })
+
+    expect(deps.rememberMediaHandle).not.toHaveBeenCalled()
+    expect(useProjectSessionStore.getState().candidate?.assets[0].status)
+      .toBe('missing')
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+    expect(useMediaStore.getState().compatibility.has(descriptor.id)).toBe(false)
   })
 
   test('uses the Open click to grant a remembered source, then activates', async () => {
@@ -735,7 +993,7 @@ describe('portable project resume', () => {
       loadMediaHandle: vi.fn(async () => handle),
       queryMediaPermission: vi.fn(async () => 'prompt' as const),
       requestMediaPermission,
-      inspectMedia: vi.fn(async () => analyzed),
+      inspectMedia: vi.fn(async () => readyInspection(analyzed)),
     })
     await openProjectFile(new File([serialized], 'permission.webcut'), deps)
 
@@ -778,7 +1036,7 @@ describe('portable project resume', () => {
       readText: vi.fn(async () => serialized),
       loadMediaHandle: vi.fn(async () => handle),
       queryMediaPermission: vi.fn(async () => 'granted' as const),
-      inspectMedia: vi.fn(async () => changed),
+      inspectMedia: vi.fn(async () => readyInspection(changed)),
     })
     await openProjectFile(new File([serialized], 'changed.webcut'), changedDeps)
 
@@ -806,7 +1064,7 @@ describe('portable project resume', () => {
       fileName: 'original.mp4',
     })
     const serialized = serializeProjectFile(makeProject([descriptor]))
-    const inspectMedia = vi.fn(async () => analyzed)
+    const inspectMedia = vi.fn(async () => readyInspection(analyzed))
     const deps = makeDeps({
       readText: vi.fn(async () => serialized),
       inspectMedia,
@@ -826,6 +1084,8 @@ describe('portable project resume', () => {
     expect(inspectMedia).toHaveBeenCalledWith(
       sourceFile,
       DEFAULT_PROJECT_SETTINGS.frameRate,
+      expect.stringMatching(/^probe_compat-test-/),
+      expect.any(AbortSignal),
     )
     expect(useProjectSessionStore.getState().candidate?.assets).toEqual([
       {
@@ -859,7 +1119,7 @@ describe('portable project resume', () => {
     const deps = makeDeps({
       readText: vi.fn(async () => serialized),
       pickMediaFiles: vi.fn(async () => [{ file: source, handle }]),
-      inspectMedia: vi.fn(async () => analyzed),
+      inspectMedia: vi.fn(async () => readyInspection(analyzed)),
     })
     await openProjectFile(new File([serialized], 'legacy.webcut'), deps)
 
@@ -886,7 +1146,7 @@ describe('portable project resume', () => {
     })
     const deps = makeDeps({
       readText: vi.fn(async () => serialized),
-      inspectMedia: vi.fn(async () => mismatch),
+      inspectMedia: vi.fn(async () => readyInspection(mismatch)),
     })
 
     await openProjectFile(new File([serialized], 'edit.webcut'), deps)
@@ -918,9 +1178,9 @@ describe('portable project resume', () => {
       descriptorFrom(first, { id: 'stable-1' }),
       descriptorFrom(second, { id: 'stable-2' }),
     ]))
-    const secondGate = deferred<MediaAsset>()
+    const secondGate = deferred<MediaProbeResult>()
     const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
-      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(readyInspection(first))
       .mockImplementationOnce(() => secondGate.promise)
     const deps = makeDeps({
       readText: vi.fn(async () => serialized),
@@ -944,13 +1204,13 @@ describe('portable project resume', () => {
       },
     })
 
-    secondGate.resolve(second)
+    secondGate.resolve(readyInspection(second))
     await expect(connecting).resolves.toEqual({ status: 'ready' })
     expect(useProjectSessionStore.getState().phase).toBe('idle')
   })
 
   test('leaving during analysis revokes its late URL and cannot reopen the screen', async () => {
-    const analyzedGate = deferred<MediaAsset>()
+    const analyzedGate = deferred<MediaProbeResult>()
     const descriptor = descriptorFrom(makeAsset())
     const serialized = serializeProjectFile(makeProject([descriptor]))
     const deps = makeDeps({
@@ -964,7 +1224,7 @@ describe('portable project resume', () => {
     ], deps)
     await flush()
     returnToProjectHome()
-    analyzedGate.resolve(makeAsset({ objectUrl: 'blob:late' }))
+    analyzedGate.resolve(readyInspection(makeAsset({ objectUrl: 'blob:late' })))
 
     await expect(connecting).resolves.toEqual({ status: 'cancelled' })
     expect(deps.revokeObjectURL).toHaveBeenCalledWith('blob:late')
@@ -1033,7 +1293,7 @@ describe('active-project media relink', () => {
       objectUrl: 'blob:individual-relink',
     })
     const deps = await activateSavedProject([descriptor], {
-      inspectMedia: vi.fn(async () => analyzed),
+      inspectMedia: vi.fn(async () => readyInspection(analyzed)),
       pickMediaFiles: vi.fn(async () => [{
         file: selection.file,
         handle: selection.handle,
@@ -1067,6 +1327,133 @@ describe('active-project media relink', () => {
       .toMatchObject({ phase: 'complete', connectedCount: 1 })
   })
 
+  test('an unsupported individual relink stays offline with its exact guarded report', async () => {
+    const descriptor = descriptorFrom(makeAsset())
+    const selection = makeFolderSelection(descriptor.fileName)
+    const inspection = unsupportedInspection('The selected HEVC profile is unavailable.')
+    const deps = await activateSavedProject([descriptor], {
+      inspectMedia: vi.fn(async () => inspection),
+      pickMediaFiles: vi.fn(async () => [{
+        file: selection.file,
+        handle: selection.handle,
+      }]),
+    })
+
+    await expect(chooseActiveAssetMedia(descriptor.id, deps)).resolves.toEqual({
+      status: 'failed',
+      message: inspection.compatibility.detail,
+    })
+
+    const media = useMediaStore.getState()
+    expect(media.assets.has(descriptor.id)).toBe(false)
+    expect(media.compatibility.get(descriptor.id)).toMatchObject({
+      id: descriptor.id,
+      requestId: 'compat-test-1',
+      status: 'unsupported',
+      report: inspection.compatibility,
+    })
+    expect(deps.rememberMediaHandle).not.toHaveBeenCalled()
+    expect(useProjectSessionStore.getState().activeMediaRelink).toMatchObject({
+      phase: 'complete',
+      connectedCount: 0,
+      skippedCount: 1,
+      errors: [inspection.compatibility.detail],
+    })
+  })
+
+  test('a mismatched individual relink restores the prior settled report', async () => {
+    const descriptor = descriptorFrom(makeAsset())
+    const selection = makeFolderSelection(
+      descriptor.fileName,
+      `selected/${descriptor.fileName}`,
+      descriptor.lastModified,
+    )
+    const analyzed = makeAsset({
+      fileName: selection.file.name,
+      size: selection.file.size,
+      lastModified: selection.file.lastModified,
+      durationFrames: 90,
+      durationMicroseconds: 3_000_000,
+      objectUrl: 'blob:mismatched-relink',
+    })
+    const deps = await activateSavedProject([descriptor], {
+      inspectMedia: vi.fn(async () => readyInspection(analyzed)),
+      pickMediaFiles: vi.fn(async () => [{
+        file: selection.file,
+        handle: selection.handle,
+      }]),
+    })
+    const previousReport = unsupportedInspection(
+      'The previous runtime check could not decode this source.',
+    ).compatibility
+    installOfflineCompatibility(descriptor, previousReport)
+
+    await expect(chooseActiveAssetMedia(descriptor.id, deps)).resolves
+      .toEqual({
+        status: 'failed',
+        message: `"${selection.file.name}" does not match "${descriptor.fileName}".`,
+      })
+
+    const media = useMediaStore.getState()
+    expect(media.assets.has(descriptor.id)).toBe(false)
+    expect(media.compatibility.get(descriptor.id)).toMatchObject({
+      id: descriptor.id,
+      requestId: 'compat-test-1',
+      status: 'unsupported',
+    })
+    expect(media.compatibility.get(descriptor.id)?.report).toBe(previousReport)
+    expect(deps.revokeObjectURL).toHaveBeenCalledWith('blob:mismatched-relink')
+  })
+
+  test('cancelling an in-flight individual relink restores the prior settled report', async () => {
+    const descriptor = descriptorFrom(makeAsset())
+    const selection = makeFolderSelection(
+      descriptor.fileName,
+      `selected/${descriptor.fileName}`,
+      descriptor.lastModified,
+    )
+    const inspection = deferred<MediaProbeResult>()
+    const deps = await activateSavedProject([descriptor], {
+      inspectMedia: vi.fn(() => inspection.promise),
+      pickMediaFiles: vi.fn(async () => [{
+        file: selection.file,
+        handle: selection.handle,
+      }]),
+    })
+    const previousReport = unsupportedInspection(
+      'The previous runtime check could not decode this source.',
+    ).compatibility
+    installOfflineCompatibility(descriptor, previousReport)
+
+    const choosing = chooseActiveAssetMedia(descriptor.id, deps)
+    await flush()
+    expect(useMediaStore.getState().compatibility.get(descriptor.id))
+      .toMatchObject({
+        requestId: 'compat-test-1',
+        status: 'checking',
+        report: previousReport,
+      })
+
+    cancelActiveMediaRelink(deps)
+    expect(useMediaStore.getState().compatibility.get(descriptor.id))
+      .toMatchObject({
+        requestId: 'compat-test-1',
+        status: 'unsupported',
+        report: previousReport,
+      })
+
+    inspection.resolve(readyInspection(makeAsset({
+      fileName: selection.file.name,
+      size: selection.file.size,
+      lastModified: selection.file.lastModified,
+      objectUrl: 'blob:cancelled-relink',
+    })))
+    await expect(choosing).resolves.toEqual({ status: 'cancelled' })
+    expect(deps.revokeObjectURL).toHaveBeenCalledWith('blob:cancelled-relink')
+    expect(useMediaStore.getState().compatibility.get(descriptor.id)?.report)
+      .toBe(previousReport)
+  })
+
   test('a folder scan connects unique matches while leaving other sources offline', async () => {
     const first = descriptorFrom(makeAsset(), {
       id: 'folder-first',
@@ -1093,16 +1480,16 @@ describe('active-project media relink', () => {
       relativePath: 'chosen/notes.txt',
     }
     const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
-      .mockResolvedValueOnce(makeAsset({
+      .mockResolvedValueOnce(readyInspection(makeAsset({
         id: 'folder-scan',
         fileName: matching.file.name,
         objectUrl: 'blob:folder-scan',
-      }))
-      .mockResolvedValueOnce(makeAsset({
+      })))
+      .mockResolvedValueOnce(readyInspection(makeAsset({
         id: 'folder-analysis',
         fileName: matching.file.name,
         objectUrl: 'blob:folder-unique',
-      }))
+      })))
     const deps = await activateSavedProject([first, second], {
       inspectMedia,
     })
@@ -1146,7 +1533,7 @@ describe('active-project media relink', () => {
       analyzed.lastModified,
     )
     const deps = await activateSavedProject([first, second], {
-      inspectMedia: vi.fn(async () => analyzed),
+      inspectMedia: vi.fn(async () => readyInspection(analyzed)),
     })
 
     await expect(connectActiveMediaFolder([selection], deps)).resolves.toEqual({
@@ -1189,10 +1576,10 @@ describe('active-project media relink', () => {
       analyzed.lastModified,
     )
     const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
-      .mockResolvedValueOnce(analyzed)
-      .mockResolvedValueOnce(makeAsset({
+      .mockResolvedValueOnce(readyInspection(analyzed))
+      .mockResolvedValueOnce(readyInspection(makeAsset({
         objectUrl: 'blob:confirmed-folder-source',
-      }))
+      })))
     const deps = await activateSavedProject([first, second], {
       inspectMedia,
     })
@@ -1235,14 +1622,14 @@ describe('active-project media relink', () => {
     const firstUrl = 'blob:skip-copy-a'
     const secondUrl = 'blob:skip-copy-b'
     const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
-      .mockResolvedValueOnce(makeAsset({
+      .mockResolvedValueOnce(readyInspection(makeAsset({
         fileName: first.file.name,
         objectUrl: firstUrl,
-      }))
-      .mockResolvedValueOnce(makeAsset({
+      })))
+      .mockResolvedValueOnce(readyInspection(makeAsset({
         fileName: second.file.name,
         objectUrl: secondUrl,
-      }))
+      })))
     const deps = await activateSavedProject([descriptor], { inspectMedia })
     await connectActiveMediaFolder([first, second], deps)
     const ambiguity = useProjectSessionStore.getState()
@@ -1278,14 +1665,14 @@ describe('active-project media relink', () => {
     const firstUrl = 'blob:cancel-copy-a'
     const secondUrl = 'blob:cancel-copy-b'
     const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
-      .mockResolvedValueOnce(makeAsset({
+      .mockResolvedValueOnce(readyInspection(makeAsset({
         fileName: first.file.name,
         objectUrl: firstUrl,
-      }))
-      .mockResolvedValueOnce(makeAsset({
+      })))
+      .mockResolvedValueOnce(readyInspection(makeAsset({
         fileName: second.file.name,
         objectUrl: secondUrl,
-      }))
+      })))
     const deps = await activateSavedProject([descriptor], { inspectMedia })
     await connectActiveMediaFolder([first, second], deps)
     expect(useProjectSessionStore.getState().activeMediaRelink.phase)
@@ -1312,14 +1699,14 @@ describe('active-project media relink', () => {
     const firstUrl = 'blob:superseded-copy-a'
     const secondUrl = 'blob:superseded-copy-b'
     const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
-      .mockResolvedValueOnce(makeAsset({
+      .mockResolvedValueOnce(readyInspection(makeAsset({
         fileName: first.file.name,
         objectUrl: firstUrl,
-      }))
-      .mockResolvedValueOnce(makeAsset({
+      })))
+      .mockResolvedValueOnce(readyInspection(makeAsset({
         fileName: second.file.name,
         objectUrl: secondUrl,
-      }))
+      })))
     const deps = await activateSavedProject([descriptor], { inspectMedia })
     await connectActiveMediaFolder([first, second], deps)
     expect(useProjectSessionStore.getState().activeMediaRelink.phase)
@@ -1367,14 +1754,14 @@ describe('active-project media relink', () => {
     const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>(
       async (file) => {
         const index = Number(file.name.slice('unique-'.length, -'.mp4'.length))
-        return makeAsset({
+        return readyInspection(makeAsset({
           id: `temporary-${inspectionId}`,
           fileName: file.name,
           size: file.size,
           lastModified: file.lastModified,
           durationMicroseconds: 2_000_000 + index,
           objectUrl: `blob:large-folder-${inspectionId++}`,
-        })
+        }))
       },
     )
     const deps = await activateSavedProject(descriptors, { inspectMedia })
@@ -1421,8 +1808,8 @@ describe('active-project media relink', () => {
     const scanUrl = 'blob:remember-race-scan'
     const sourceUrl = 'blob:remember-race'
     const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
-      .mockResolvedValueOnce(makeAsset({ objectUrl: scanUrl }))
-      .mockResolvedValueOnce(makeAsset({ objectUrl: sourceUrl }))
+      .mockResolvedValueOnce(readyInspection(makeAsset({ objectUrl: scanUrl })))
+      .mockResolvedValueOnce(readyInspection(makeAsset({ objectUrl: sourceUrl })))
     const deps = await activateSavedProject([descriptor], {
       inspectMedia,
       rememberMediaHandle: vi.fn(() => remember.promise),

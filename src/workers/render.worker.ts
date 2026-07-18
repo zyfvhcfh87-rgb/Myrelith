@@ -50,7 +50,10 @@ import type {
   StreamingCompositeSourceEntry,
   ToRenderWorker,
 } from './render-protocol'
-import { openWorkerVideoSource } from './video-source'
+import {
+  WorkerVideoSourceOpenError,
+  openWorkerVideoSource,
+} from './video-source'
 import type {
   DecodedVideoFrame,
   VideoFrameCursor,
@@ -1062,6 +1065,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
   async function handleReleaseAsset(assetId: AssetId): Promise<void> {
     const revision = nextAssetRevision(assetId)
+    const lifecycle = workerLifecycle
     try {
       supersede()
       const state = assets.get(assetId)
@@ -1069,7 +1073,27 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         teardownAsset(state)
         assets.delete(assetId)
       }
-      await removeStreamingAsset(assetId)
+      try {
+        await removeStreamingAsset(assetId)
+      } catch (error) {
+        if (!assetRevisionIsCurrent(assetId, revision, lifecycle)) {
+          // This cleanup belonged to a source that a newer open already
+          // replaced. Keep the diagnostic global so it cannot reject or
+          // disconnect that newer asset generation.
+          if (workerLifecycle === lifecycle) {
+            env.post({
+              type: 'error',
+              message:
+                `stale release cleanup failed for asset ${assetId}: `
+                + (error instanceof Error
+                  ? `${error.name}: ${error.message}`
+                  : String(error)),
+            })
+          }
+          return
+        }
+        throw error
+      }
     } finally {
       clearAssetRevision(assetId, revision)
     }
@@ -1370,6 +1394,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           || msg.type === 'releaseAsset'
             ? msg.assetId
             : undefined,
+        ...(msg.type === 'openAsset' && e instanceof WorkerVideoSourceOpenError
+          ? { mediaFailure: e.failure }
+          : {}),
         message: `worker ${msg.type} failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`,
       })
     }

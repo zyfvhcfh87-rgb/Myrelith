@@ -45,6 +45,7 @@ import type {
   VideoFrameCursor,
   WorkerVideoSource,
 } from './video-source'
+import { WorkerVideoSourceOpenError } from './video-source'
 
 /* ------------------------------------------------------------------ */
 /* Timebase: 10 fps doc + assets → one frame = 100_000 µs exactly       */
@@ -84,6 +85,8 @@ interface FakeOptions {
   streamBitmapGate?: Promise<void>
   /** Holds Blob-source opening for revision-race tests. */
   openSourceGate?: Promise<void>
+  /** Rejects Blob-source opening after the optional gate. */
+  openSourceError?: Error
 }
 
 /** Same real-semantics fake as decode.worker.test.ts, plus an error hook. */
@@ -270,6 +273,23 @@ class FakeVideoSource implements WorkerVideoSource {
   }
 }
 
+class DeferredFailingCloseVideoSource extends FakeVideoSource {
+  private readonly closeGate: Promise<void>
+  private readonly closeFailure: Error
+
+  constructor(closeGate: Promise<void>, closeFailure: Error) {
+    super()
+    this.closeGate = closeGate
+    this.closeFailure = closeFailure
+  }
+
+  override async close(): Promise<void> {
+    await super.close()
+    await this.closeGate
+    throw this.closeFailure
+  }
+}
+
 interface CtxOp {
   surface: 'visible' | 'scratch'
   name: string
@@ -391,6 +411,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     openVideoSource: async (blob) => {
       openedBlobs.push(blob)
       await opts.openSourceGate
+      if (opts.openSourceError) throw opts.openSourceError
       const source = sourcesToOpen.shift()
       if (!source) throw new Error('test did not queue a streaming source')
       return source
@@ -1374,6 +1395,28 @@ describe('streaming response contract', () => {
     })
     expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
   })
+
+  test('an open failure carries pre-track media classification to the bridge', async () => {
+    const sourceFailure = new WorkerVideoSourceOpenError({
+      trackKind: null,
+      reason: 'resource-unavailable',
+    }, new Error('Input construction failed'))
+    const h = makeHarness({ openSourceError: sourceFailure })
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+
+    await h.core.handleMessage(openMsg('A'))
+
+    expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
+      type: 'error',
+      assetId: 'A',
+      mediaFailure: {
+        trackKind: null,
+        reason: 'resource-unavailable',
+      },
+      message: expect.stringContaining('Input construction failed'),
+    }])
+  })
 })
 
 describe('streaming frame ownership', () => {
@@ -1402,6 +1445,40 @@ describe('streaming frame ownership', () => {
 
     await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
     expect(winningSource.closeCount).toBe(1)
+  })
+
+  test('a stale release cleanup failure cannot poison a newer asset open', async () => {
+    const closeGate = deferredVoid()
+    const closeFailure = new Error('old source close failed')
+    const oldSource = new DeferredFailingCloseVideoSource(
+      closeGate.promise,
+      closeFailure,
+    )
+    const replacement = new FakeVideoSource()
+    const h = makeHarness()
+    await setupStreaming(h, makeDoc([]), [['A', oldSource]])
+
+    const release = h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    await microtasks()
+    h.sourcesToOpen.push(replacement)
+    const reopen = h.core.handleMessage(openMsg('A', new Blob(['replacement'])))
+    await reopen
+
+    closeGate.resolve()
+    await release
+
+    expect(replacement.closeCount).toBe(0)
+    expect(h.posts.filter((post) => post.type === 'assetConfigured')).toEqual([
+      { type: 'assetConfigured', assetId: 'A' },
+      { type: 'assetConfigured', assetId: 'A' },
+    ])
+    expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
+      type: 'error',
+      message: expect.stringContaining('stale release cleanup failed for asset A'),
+    }])
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    expect(replacement.closeCount).toBe(1)
   })
 
   test('release waits for an in-progress bitmap copy and closes its late result', async () => {

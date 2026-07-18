@@ -133,6 +133,23 @@ export interface WaveformResult {
   height: number
 }
 
+/** Pre-track source setup failed, so no video/audio track can be blamed. */
+export class MediaVisualSourceError extends Error {
+  constructor(cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    super(detail.slice(0, 2_048), { cause })
+    this.name = 'MediaVisualSourceError'
+  }
+}
+
+function createVisualInput(file: Blob): Input {
+  try {
+    return new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
+  } catch (cause) {
+    throw new MediaVisualSourceError(cause)
+  }
+}
+
 /** Waveform ink — light, so it reads on the green audio clip blocks. */
 const WAVEFORM_COLOR = 'rgba(226, 248, 236, 0.85)'
 
@@ -142,40 +159,48 @@ const WAVEFORM_COLOR = 'rgba(226, 248, 236, 0.85)'
  * The caller owns the returned URL (mediaStore takes it over).
  */
 export async function generateFilmstrip(file: Blob): Promise<FilmstripResult | null> {
-  const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
-  const track = await input.getPrimaryVideoTrack()
-  if (!track) return null
-  const durationSec = await input.computeDuration()
-  const timestamps = filmstripTimestamps(durationSec)
-  if (timestamps.length === 0) return null
+  const input = createVisualInput(file)
+  try {
+    const track = await input.getPrimaryVideoTrack()
+    if (!track) return null
+    const durationSec = await input.computeDuration()
+    const timestamps = filmstripTimestamps(durationSec)
+    if (timestamps.length === 0) return null
 
-  // poolSize 1: the sink reuses one canvas; we draw each frame into the
-  // strip before pulling the next, so reuse can never corrupt a tile.
-  const sink = new CanvasSink(track, { height: TILE_HEIGHT, poolSize: 1 })
-  let strip: OffscreenCanvas | null = null
-  let ctx: OffscreenCanvasRenderingContext2D | null = null
-  let tileWidth = 0
-  let index = 0
-  for await (const wrapped of sink.canvasesAtTimestamps(timestamps)) {
-    if (wrapped) {
-      if (!strip) {
-        tileWidth = Math.max(1, wrapped.canvas.width)
-        strip = new OffscreenCanvas(tileWidth * timestamps.length, TILE_HEIGHT)
-        ctx = strip.getContext('2d')
-        if (!ctx) return null
+    // poolSize 1: the sink reuses one canvas; we draw each frame into the
+    // strip before pulling the next, so reuse can never corrupt a tile.
+    const sink = new CanvasSink(track, { height: TILE_HEIGHT, poolSize: 1 })
+    let strip: OffscreenCanvas | null = null
+    let ctx: OffscreenCanvasRenderingContext2D | null = null
+    let tileWidth = 0
+    let index = 0
+    for await (const wrapped of sink.canvasesAtTimestamps(timestamps)) {
+      if (wrapped) {
+        if (!strip) {
+          tileWidth = Math.max(1, wrapped.canvas.width)
+          strip = new OffscreenCanvas(tileWidth * timestamps.length, TILE_HEIGHT)
+          ctx = strip.getContext('2d')
+          if (!ctx) return null
+        }
+        ctx?.drawImage(wrapped.canvas, index * tileWidth, 0, tileWidth, TILE_HEIGHT)
       }
-      ctx?.drawImage(wrapped.canvas, index * tileWidth, 0, tileWidth, TILE_HEIGHT)
+      index++ // an undecodable timestamp leaves its tile black, strip stays aligned
     }
-    index++ // an undecodable timestamp leaves its tile black, strip stays aligned
-  }
-  if (!strip) return null
+    if (!strip) return null
 
-  const blob = await strip.convertToBlob({ type: 'image/jpeg', quality: 0.75 })
-  return {
-    url: URL.createObjectURL(blob),
-    tiles: timestamps.length,
-    tileWidth,
-    tileHeight: TILE_HEIGHT,
+    const blob = await strip.convertToBlob({ type: 'image/jpeg', quality: 0.75 })
+    return {
+      url: URL.createObjectURL(blob),
+      tiles: timestamps.length,
+      tileWidth,
+      tileHeight: TILE_HEIGHT,
+    }
+  } finally {
+    try {
+      input.dispose()
+    } catch {
+      // Cleanup must not hide a decode failure or invalidate a finished URL.
+    }
   }
 }
 
@@ -186,23 +211,37 @@ export async function generateFilmstrip(file: Blob): Promise<FilmstripResult | n
  * caller owns the returned URL (mediaStore takes it over).
  */
 export async function generateWaveform(file: Blob): Promise<WaveformResult | null> {
-  const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
-  const track = await input.getPrimaryAudioTrack()
-  if (!track) return null
-  const durationSec = await input.computeDuration()
-  const width = waveformWidth(durationSec)
-  if (width === 0) return null
+  const input = createVisualInput(file)
+  try {
+    const track = await input.getPrimaryAudioTrack()
+    if (!track) return null
+    const durationSec = await input.computeDuration()
+    const width = waveformWidth(durationSec)
+    if (width === 0) return null
 
-  const peaks = new Float32Array(width)
-  const sink = new AudioBufferSink(track)
-  for await (const { buffer, timestamp } of sink.buffers()) {
-    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-      accumulatePeaks(peaks, buffer.getChannelData(ch), buffer.sampleRate, timestamp, durationSec)
+    const peaks = new Float32Array(width)
+    const sink = new AudioBufferSink(track)
+    for await (const { buffer, timestamp } of sink.buffers()) {
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        accumulatePeaks(
+          peaks,
+          buffer.getChannelData(ch),
+          buffer.sampleRate,
+          timestamp,
+          durationSec,
+        )
+      }
+    }
+
+    const path = waveformPath(peaks, WAVEFORM_HEIGHT)
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${WAVEFORM_HEIGHT}" preserveAspectRatio="none"><path d="${path}" fill="${WAVEFORM_COLOR}"/></svg>`
+    const blob = new Blob([svg], { type: 'image/svg+xml' })
+    return { url: URL.createObjectURL(blob), width, height: WAVEFORM_HEIGHT }
+  } finally {
+    try {
+      input.dispose()
+    } catch {
+      // Cleanup must not hide a decode failure or invalidate a finished URL.
     }
   }
-
-  const path = waveformPath(peaks, WAVEFORM_HEIGHT)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${WAVEFORM_HEIGHT}" preserveAspectRatio="none"><path d="${path}" fill="${WAVEFORM_COLOR}"/></svg>`
-  const blob = new Blob([svg], { type: 'image/svg+xml' })
-  return { url: URL.createObjectURL(blob), width, height: WAVEFORM_HEIGHT }
 }

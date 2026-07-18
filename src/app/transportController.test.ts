@@ -7,8 +7,17 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type {
+  MediaCompatibilityItem,
+  MediaCompatibilityReport,
+  MediaTrackCompatibility,
+} from '../domain/mediaCompatibility'
+import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { Clip, MediaAsset, TimelineDoc, Track } from '../domain/schema'
-import type { TimelineAudioPlaybackSession } from '../pipeline/playback-audio'
+import type {
+  TimelineAudioPlaybackSession,
+  TimelineAudioPlaybackWarning,
+} from '../pipeline/playback-audio'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
@@ -83,6 +92,95 @@ function makeAsset(id = 'asset-1'): MediaAsset {
     audioChannels: 2,
     decoderConfigB64: null,
   }
+}
+
+function descriptorFrom(asset: MediaAsset): PortableAssetDescriptor {
+  return {
+    id: asset.id,
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    size: asset.size,
+    lastModified: asset.lastModified,
+    kind: asset.kind,
+    durationMicroseconds: asset.durationMicroseconds,
+    nativeFrameRate: asset.frameRate,
+    width: asset.width,
+    height: asset.height,
+    hasAudio: asset.hasAudio,
+    audioSampleRate: asset.audioSampleRate,
+    audioChannels: asset.audioChannels,
+  }
+}
+
+function readyAudioTrack(): MediaTrackCompatibility {
+  return {
+    kind: 'audio',
+    number: 1,
+    primary: true,
+    codec: 'aac',
+    codecParameter: 'mp4a.40.2',
+    internalCodecId: 'mp4a',
+    decoderConfig: {
+      codec: 'mp4a.40.2',
+      descriptionBytes: 2,
+      codedWidth: null,
+      codedHeight: null,
+      sampleRate: 48_000,
+      channels: 2,
+    },
+    decodable: true,
+    reason: null,
+    detail: null,
+    width: null,
+    height: null,
+    codedWidth: null,
+    codedHeight: null,
+    frameRate: null,
+    sampleRate: 48_000,
+    channels: 2,
+  }
+}
+
+function readyCompatibility(
+  asset: MediaAsset,
+  requestId: string,
+): MediaCompatibilityItem {
+  const report: MediaCompatibilityReport = {
+    status: 'ready',
+    container: {
+      name: 'MPEG-4',
+      mimeType: 'video/mp4',
+      fullMimeType: 'video/mp4; codecs="avc1.640028, mp4a.40.2"',
+    },
+    durationMicroseconds: asset.durationMicroseconds,
+    tracks: [readyAudioTrack()],
+    reason: null,
+    detail: null,
+  }
+  return {
+    id: asset.id,
+    requestId,
+    fileName: asset.fileName,
+    declaredMimeType: asset.mimeType,
+    size: asset.size,
+    lastModified: asset.lastModified,
+    status: 'ready',
+    report,
+  }
+}
+
+function seedReadyAsset(
+  asset = makeAsset(),
+  requestId = 'compat-audio-1',
+): MediaCompatibilityItem {
+  const compatibility = readyCompatibility(asset, requestId)
+  useMediaStore.setState({
+    descriptors: new Map([[asset.id, descriptorFrom(asset)]]),
+    assets: new Map([[asset.id, asset]]),
+    visuals: new Map(),
+    compatibility: new Map([[asset.id, compatibility]]),
+  })
+  return compatibility
 }
 
 function makeAudioSession(anchorTime: number): TimelineAudioPlaybackSession & {
@@ -186,7 +284,9 @@ beforeEach(() => {
     descriptors: new Map(),
     assets: new Map([['asset-1', makeAsset()]]),
     visuals: new Map(),
+    compatibility: new Map(),
   })
+  URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   fake = makeFakeDeps()
   configureTransport(fake.deps)
 })
@@ -510,6 +610,269 @@ describe('live audio integration', () => {
     fake.pump()
     expect(transport().playheadFrame).toBe(30)
     warning.mockRestore()
+  })
+
+  test('an asset-scoped audio decode warning publishes a guarded runtime failure', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const asset = makeAsset()
+    seedReadyAsset(asset)
+    const failure = new Error('hardware decoder reset')
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fake.startAudio.mockImplementationOnce(async (
+      _context,
+      _doc,
+      _fromFrame,
+      _resolveAsset,
+      options,
+    ) => {
+      options.onWarning?.({
+        scope: 'media',
+        stage: 'decode',
+        clipId: 'clipA',
+        assetId: asset.id,
+        trackKind: 'audio',
+        reason: 'decode-failed',
+        cause: failure,
+      })
+      return makeAudioSession(0)
+    })
+
+    play()
+
+    await vi.waitFor(() => {
+      expect(useMediaStore.getState().compatibility.get(asset.id)?.status)
+        .toBe('error')
+    })
+    const media = useMediaStore.getState()
+    expect(media.assets.has(asset.id)).toBe(false)
+    expect(media.descriptors.has(asset.id)).toBe(true)
+    expect(media.compatibility.get(asset.id)?.report).toMatchObject({
+      status: 'error',
+      reason: 'decode-failed',
+      detail: 'Audio playback failed: hardware decoder reset',
+      tracks: [expect.objectContaining({
+        kind: 'audio',
+        decodable: false,
+        reason: 'decode-failed',
+        detail: 'hardware decoder reset',
+      })],
+      runtimeFailures: [{
+        surface: 'audio-playback',
+        trackKind: 'audio',
+        reason: 'decode-failed',
+        detail: 'hardware decoder reset',
+      }],
+    })
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(asset.objectUrl)
+    expect(warning).toHaveBeenCalledWith(
+      '[transportController] audio clip "clipA" decode failed:',
+      'hardware decoder reset',
+    )
+    warning.mockRestore()
+  })
+
+  test('a pre-track audio source warning stays file-level and resource-unavailable', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const asset = makeAsset()
+    seedReadyAsset(asset)
+    const failure = new Error('captured playback Blob disappeared')
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fake.startAudio.mockImplementationOnce(async (
+      _context,
+      _doc,
+      _fromFrame,
+      _resolveAsset,
+      options,
+    ) => {
+      options.onWarning?.({
+        scope: 'media',
+        stage: 'source-open',
+        clipId: 'clipA',
+        assetId: asset.id,
+        trackKind: null,
+        reason: 'resource-unavailable',
+        cause: failure,
+      })
+      return makeAudioSession(0)
+    })
+
+    play()
+
+    await vi.waitFor(() => {
+      expect(useMediaStore.getState().compatibility.get(asset.id)?.status)
+        .toBe('error')
+    })
+    expect(useMediaStore.getState().compatibility.get(asset.id)?.report)
+      .toMatchObject({
+        reason: 'resource-unavailable',
+        tracks: [expect.objectContaining({
+          kind: 'audio',
+          decodable: true,
+          reason: null,
+        })],
+        runtimeFailures: [{
+          surface: 'audio-playback',
+          trackKind: null,
+          reason: 'resource-unavailable',
+          detail: failure.message,
+        }],
+      })
+    warning.mockRestore()
+  })
+
+  test('an offline audio clip stays silent without disabling an online sibling', async () => {
+    const online = makeAsset('asset-online')
+    const offline = makeAsset('asset-offline')
+    const onlineClip = { ...makeClip('online', 0, 120), assetId: online.id }
+    const offlineClip = { ...makeClip('offline', 0, 120), assetId: offline.id }
+    useDocumentStore.getState().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', []),
+        makeTrack('A1', [onlineClip, offlineClip], 'audio'),
+      ],
+    })
+    useMediaStore.setState({
+      descriptors: new Map([
+        [online.id, descriptorFrom(online)],
+        [offline.id, descriptorFrom(offline)],
+      ]),
+      assets: new Map([[online.id, online]]),
+      visuals: new Map(),
+      compatibility: new Map([[
+        online.id,
+        readyCompatibility(online, 'compat-online'),
+      ]]),
+    })
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fake.startAudio.mockImplementationOnce(async (
+      _context,
+      _doc,
+      _fromFrame,
+      resolveAsset,
+      options,
+    ) => {
+      await expect(resolveAsset(online.id)).resolves.toBeInstanceOf(Blob)
+      expect(() => resolveAsset(offline.id)).toThrow(
+        `Playback media asset "${offline.id}" is missing from the media pool`,
+      )
+      options.onWarning?.({
+        scope: 'media',
+        stage: 'source-open',
+        clipId: offlineClip.id,
+        assetId: offline.id,
+        trackKind: null,
+        reason: 'resource-unavailable',
+        cause: new Error('offline source'),
+      })
+      return makeAudioSession(0)
+    })
+
+    play()
+
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+    expect(fake.fetchBlob).toHaveBeenCalledOnce()
+    expect(fake.fetchBlob).toHaveBeenCalledWith(online.objectUrl)
+    expect(fake.startAudio).toHaveBeenCalledTimes(1)
+    expect(useMediaStore.getState().assets.get(online.id)).toBe(online)
+    expect(transport().isPlaying).toBe(true)
+    warning.mockRestore()
+  })
+
+  test('global audio output and cleanup warnings do not blame the media asset', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const asset = makeAsset()
+    const compatibility = seedReadyAsset(asset)
+    const outputFailure = new Error('speaker scheduling failed')
+    const cleanupFailure = new Error('cursor close failed')
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fake.startAudio.mockImplementationOnce(async (
+      _context,
+      _doc,
+      _fromFrame,
+      _resolveAsset,
+      options,
+    ) => {
+      options.onWarning?.({
+        scope: 'global',
+        stage: 'output-schedule',
+        cause: outputFailure,
+      })
+      options.onWarning?.({
+        scope: 'global',
+        stage: 'cleanup',
+        cause: cleanupFailure,
+      })
+      return makeAudioSession(0)
+    })
+
+    play()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(useMediaStore.getState().compatibility.get(asset.id))
+      .toBe(compatibility)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+    expect(warning).toHaveBeenCalledWith(
+      '[transportController] audio output scheduling failed:',
+      'speaker scheduling failed',
+    )
+    expect(warning).toHaveBeenCalledWith(
+      '[transportController] audio cleanup failed:',
+      'cursor close failed',
+    )
+    warning.mockRestore()
+  })
+
+  test('a late audio warning cannot downgrade a newer source generation', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const original = makeAsset()
+    seedReadyAsset(original, 'compat-old')
+    let onWarning:
+      | ((warning: TimelineAudioPlaybackWarning) => void)
+      | undefined
+    fake.startAudio.mockImplementationOnce(async (
+      _context,
+      _doc,
+      _fromFrame,
+      _resolveAsset,
+      options,
+    ) => {
+      onWarning = options.onWarning
+      return makeAudioSession(0)
+    })
+
+    play()
+    await vi.waitFor(() => expect(onWarning).toBeDefined())
+    pause()
+
+    const replacement = { ...original, objectUrl: 'blob:replacement' }
+    const replacementCompatibility = readyCompatibility(
+      replacement,
+      'compat-new',
+    )
+    useMediaStore.setState({
+      assets: new Map([[replacement.id, replacement]]),
+      compatibility: new Map([[
+        replacement.id,
+        replacementCompatibility,
+      ]]),
+    })
+
+    onWarning?.({
+      scope: 'media',
+      stage: 'source-open',
+      clipId: 'clipA',
+      assetId: original.id,
+      trackKind: null,
+      reason: 'resource-unavailable',
+      cause: new Error('late old-source failure'),
+    })
+
+    expect(useMediaStore.getState().assets.get(original.id)).toBe(replacement)
+    expect(useMediaStore.getState().compatibility.get(original.id))
+      .toBe(replacementCompatibility)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
   })
 
   test('a rejected AudioContext resume stops silent playback cleanly', async () => {

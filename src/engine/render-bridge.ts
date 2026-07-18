@@ -23,6 +23,7 @@
  * fake worker; the deprecated path also injects fake chunk providers.
  */
 
+import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, ClipId, FrameRate, TimelineDoc } from '../domain/schema'
 import { visibleVideoLayersAtFrame } from '../domain/selectors'
 import type { VisibleVideoLayer } from '../domain/selectors'
@@ -62,15 +63,39 @@ interface LegacyAssetSource {
   protocol: 'legacy'
   rate: FrameRate
   chunkProvider: ChunkProvider
+  runtimeToken: object
+}
+
+export interface RenderAssetOpenFailure {
+  trackKind: 'video' | null
+  reason: MediaRuntimeFailure['reason']
+}
+
+/** Typed worker-source setup rejection for the preview composition root. */
+export class RenderAssetOpenError extends Error {
+  readonly failure: RenderAssetOpenFailure
+
+  constructor(message: string, failure: RenderAssetOpenFailure) {
+    super(message)
+    this.name = 'RenderAssetOpenError'
+    this.failure = failure
+  }
 }
 
 /** Blob-backed source owned and decoded by the render worker. */
 interface StreamingAssetSource {
   protocol: 'streaming'
   rate: FrameRate
+  runtimeToken: object
 }
 
 type AssetSource = LegacyAssetSource | StreamingAssetSource
+
+interface PendingRender {
+  resolve: (result: RenderFrameResult) => void
+  /** Exact source objects captured when this request was posted. */
+  sources: Map<AssetId, AssetSource>
+}
 
 export class RenderWorkerBridge {
   private readonly worker: WorkerLike
@@ -83,7 +108,7 @@ export class RenderWorkerBridge {
   private nextRequestId = 1
   /** Id of the newest renderFrame CALL — stale calls detect supersession. */
   private latestCallId = 0
-  private readonly pending = new Map<number, (result: RenderFrameResult) => void>()
+  private readonly pending = new Map<number, PendingRender>()
   private readonly pendingConfigures = new Map<
     AssetId,
     { resolve: () => void; reject: (error: Error) => void }
@@ -91,6 +116,12 @@ export class RenderWorkerBridge {
   private disposed = false
   /** Errors not tied to a request (decoder faults, stray failures). */
   onWorkerError: ((message: string) => void) | null = null
+  /** Current asset-scoped decode failure, paired with its exact open token. */
+  onAssetError: ((
+    assetId: AssetId,
+    runtimeToken: object,
+    message: string,
+  ) => void) | null = null
   /** An asset's decoder became ready — a good moment to re-render. */
   onAssetReady: ((assetId: AssetId) => void) | null = null
 
@@ -130,7 +161,12 @@ export class RenderWorkerBridge {
       return Promise.reject(new Error(`asset ${assetId} registration already pending`))
     }
     this.sourceRevision++
-    this.sources.set(assetId, { protocol: 'legacy', rate, chunkProvider })
+    this.sources.set(assetId, {
+      protocol: 'legacy',
+      rate,
+      chunkProvider,
+      runtimeToken: {},
+    })
     return new Promise((resolve, reject) => {
       this.pendingConfigures.set(assetId, { resolve, reject })
       this.post({ type: 'configureAsset', assetId, config }, [])
@@ -142,13 +178,18 @@ export class RenderWorkerBridge {
    * once (never transferred), and the bridge retains only its native rate for
    * exact timestamp conversion. Resolves when the worker can decode it.
    */
-  openAsset(assetId: AssetId, blob: Blob, rate: FrameRate): Promise<void> {
+  openAsset(
+    assetId: AssetId,
+    blob: Blob,
+    rate: FrameRate,
+    runtimeToken: object = {},
+  ): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('bridge disposed'))
     if (this.pendingConfigures.has(assetId)) {
       return Promise.reject(new Error(`asset ${assetId} registration already pending`))
     }
     this.sourceRevision++
-    this.sources.set(assetId, { protocol: 'streaming', rate })
+    this.sources.set(assetId, { protocol: 'streaming', rate, runtimeToken })
     return new Promise((resolve, reject) => {
       this.pendingConfigures.set(assetId, { resolve, reject })
       this.post({ type: 'openAsset', assetId, blob }, [])
@@ -285,7 +326,12 @@ export class RenderWorkerBridge {
     this.settlePendingAsSuperseded()
 
     return new Promise((resolve) => {
-      this.pending.set(requestId, resolve)
+      this.pending.set(requestId, {
+        resolve,
+        sources: new Map(
+          [...wants.values()].map(({ assetId, source }) => [assetId, source]),
+        ),
+      })
       this.post(
         { type: 'composite', requestId, frame, sources: entries },
         entries.flatMap((entry) => entry.chunks.map((chunk) => chunk.data)),
@@ -301,11 +347,13 @@ export class RenderWorkerBridge {
     mode: RenderMode,
   ): Promise<RenderFrameResult> {
     const entries: StreamingCompositeSourceEntry[] = []
+    const requestSources = new Map<AssetId, AssetSource>()
     for (const layer of layers) {
       const clip = layer.clip
       const source = this.sources.get(clip.assetId)
       if (!source) continue
       if (source.protocol !== 'streaming') continue // prevalidated above
+      requestSources.set(clip.assetId, source)
       const assetFrame = rescaleFrames(layer.sourceFrame, doc.frameRate, source.rate)
       const targetSec = framesToSeconds(assetFrame, source.rate)
       entries.push({
@@ -320,7 +368,7 @@ export class RenderWorkerBridge {
     // show the same asset frame while owning independent playback cursors.
     this.settlePendingAsSuperseded()
     return new Promise((resolve) => {
-      this.pending.set(requestId, resolve)
+      this.pending.set(requestId, { resolve, sources: requestSources })
       this.post({ type: 'renderFrame', requestId, frame, mode, sources: entries }, [])
     })
   }
@@ -340,7 +388,7 @@ export class RenderWorkerBridge {
   }
 
   private settlePendingAsSuperseded(): void {
-    for (const resolve of this.pending.values()) resolve(SUPERSEDED)
+    for (const pending of this.pending.values()) pending.resolve(SUPERSEDED)
     this.pending.clear()
   }
 
@@ -357,10 +405,10 @@ export class RenderWorkerBridge {
         break
       }
       case 'compositeDone': {
-        const resolve = this.pending.get(msg.requestId)
-        if (!resolve) break // late reply for a superseded request: ignore
+        const pending = this.pending.get(msg.requestId)
+        if (!pending) break // late reply for a superseded request: ignore
         this.pending.delete(msg.requestId)
-        resolve({
+        pending.resolve({
           status: msg.status,
           drawnClipIds: msg.drawnClipIds,
           missingClipIds: msg.missingClipIds,
@@ -382,7 +430,9 @@ export class RenderWorkerBridge {
           this.pendingConfigures.delete(msg.assetId)
           this.sources.delete(msg.assetId)
           this.sourceRevision++
-          waiter.reject(new Error(msg.message))
+          waiter.reject(msg.mediaFailure
+            ? new RenderAssetOpenError(msg.message, msg.mediaFailure)
+            : new Error(msg.message))
           break
         }
         // Request-fatal errors settle the composite: the worker sends NO
@@ -390,10 +440,10 @@ export class RenderWorkerBridge {
         // carry an assetId and are followed by a compositeDone — those go
         // to onWorkerError below, not here.)
         if (msg.requestId !== undefined && msg.assetId === undefined) {
-          const resolve = this.pending.get(msg.requestId)
-          if (resolve) {
+          const pending = this.pending.get(msg.requestId)
+          if (pending) {
             this.pending.delete(msg.requestId)
-            resolve({
+            pending.resolve({
               status: 'error',
               drawnClipIds: [],
               missingClipIds: [],
@@ -401,6 +451,18 @@ export class RenderWorkerBridge {
               message: msg.message,
             })
             break
+          }
+        }
+        if (msg.requestId !== undefined && msg.assetId !== undefined) {
+          const source = this.pending.get(msg.requestId)?.sources.get(msg.assetId)
+          // A diagnostic from an older request/open must never poison the
+          // source that currently owns this durable asset id.
+          if (source && this.sources.get(msg.assetId) === source) {
+            this.onAssetError?.(
+              msg.assetId,
+              source.runtimeToken,
+              msg.message,
+            )
           }
         }
         this.onWorkerError?.(msg.message)

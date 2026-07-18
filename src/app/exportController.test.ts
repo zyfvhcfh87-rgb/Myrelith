@@ -7,6 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { MediaAsset, TimelineDoc } from '../domain/schema'
 import type {
   ExportDeps as PipelineExportDeps,
@@ -198,6 +199,7 @@ beforeEach(() => {
     descriptors: new Map(),
     assets: new Map(),
     visuals: new Map(),
+    compatibility: new Map(),
   })
   useMediaStore.getState().addAsset(ASSET)
 })
@@ -452,6 +454,94 @@ describe('exportController cancellation', () => {
 })
 
 describe('exportController failures and ownership', () => {
+  test('reports an asset-scoped export failure while preserving the exact rejection', async () => {
+    const failure = new MediaAssetRuntimeError(ASSET.id, {
+      surface: 'export',
+      trackKind: 'video',
+      reason: 'decode-failed',
+      detail: 'video decode failed during export',
+    })
+    const h = makeHarness(() =>
+      (async function* (): ExportRun {
+        yield 0
+        throw failure
+      })(),
+    )
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toBe(failure)
+
+    const media = useMediaStore.getState()
+    expect(media.descriptors.has(ASSET.id)).toBe(true)
+    expect(media.assets.has(ASSET.id)).toBe(false)
+    expect(media.compatibility.get(ASSET.id)).toMatchObject({
+      id: ASSET.id,
+      fileName: ASSET.fileName,
+      status: 'error',
+      report: {
+        status: 'error',
+        reason: 'decode-failed',
+        detail: 'Export failed: video decode failed during export',
+        runtimeFailures: [{
+          surface: 'export',
+          trackKind: 'video',
+          reason: 'decode-failed',
+          detail: 'video decode failed during export',
+        }],
+      },
+    })
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(ASSET.objectUrl)
+  })
+
+  test('ignores a typed failure from an export snapshot after the asset is relinked', async () => {
+    const gate = deferred<void>()
+    const failure = new MediaAssetRuntimeError(ASSET.id, {
+      surface: 'export',
+      trackKind: 'audio',
+      reason: 'resource-unavailable',
+      detail: 'old captured source disappeared',
+    })
+    const observed = observeRun(
+      (async function* (): ExportRun {
+        yield 0
+        await gate.promise
+        throw failure
+      })(),
+    )
+    const h = makeHarness(() => observed.run)
+    const completion = startExport(SETTINGS, {}, h.deps)
+    await vi.waitFor(() => expect(observed.next).toHaveBeenCalledTimes(2))
+
+    const replacement = {
+      ...ASSET,
+      objectUrl: 'blob:replacement-source',
+    }
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    expect(useMediaStore.getState().connectAsset(replacement)).toBe(true)
+    gate.resolve()
+
+    await expect(completion).rejects.toBe(failure)
+    const media = useMediaStore.getState()
+    expect(media.assets.get(ASSET.id)).toBe(replacement)
+    expect(media.compatibility.has(ASSET.id)).toBe(false)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(
+      replacement.objectUrl,
+    )
+  })
+
+  test('does not publish ordinary encoder or observer failures as media failures', async () => {
+    const failure = new Error('encoder failed globally')
+    const h = makeHarness(() =>
+      (async function* (): ExportRun {
+        yield 0
+        throw failure
+      })(),
+    )
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toBe(failure)
+    expect(useMediaStore.getState().assets.get(ASSET.id)).toBe(ASSET)
+    expect(useMediaStore.getState().compatibility.size).toBe(0)
+  })
+
   test('a progress callback failure closes the generator and remains primary', async () => {
     const callbackFailure = new Error('progress consumer failed')
     const cleanupFailure = new Error('cleanup also failed')

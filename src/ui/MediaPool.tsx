@@ -23,6 +23,7 @@ import {
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import {
   compatibilityAllowsTimelineUse,
+  mediaRuntimeSurfaceLabel,
   type MediaCompatibilityItem,
   type MediaCompatibilityStatus,
   type MediaTrackCompatibility,
@@ -124,15 +125,25 @@ function formatTrack(track: MediaTrackCompatibility): string {
 function CompatibilityDiagnostics({
   item,
   busy,
+  onRetry,
 }: {
   item: MediaCompatibilityItem
   busy: boolean
+  onRetry?: () => void
 }) {
   const report = item.report
   const retryable = item.status === 'limited'
     || item.status === 'unsupported'
     || item.status === 'error'
-  const failedTracks = report?.tracks.filter((track) => !track.decodable) ?? []
+  const runtimeFailures = report?.runtimeFailures ?? []
+  const failedTracks = report?.tracks.filter((track) => (
+    !track.decodable
+    && !runtimeFailures.some((failure) =>
+      failure.trackKind === track.kind
+      && failure.reason === track.reason
+      && failure.detail === track.detail,
+    )
+  )) ?? []
 
   return (
     <section
@@ -150,13 +161,13 @@ function CompatibilityDiagnostics({
         >
           Compatibility: {COMPATIBILITY_LABELS[item.status]}
         </p>
-        {retryable ? (
+        {retryable && onRetry ? (
           <button
             className="media-compatibility-retry"
             type="button"
             aria-label={`Retry compatibility check for ${item.fileName}`}
             disabled={busy}
-            onClick={() => void retryMediaCompatibility(item.id)}
+            onClick={onRetry}
           >
             Retry
           </button>
@@ -185,7 +196,7 @@ function CompatibilityDiagnostics({
               </div>
             ))}
           </dl>
-          {report.detail ? (
+          {report.detail && runtimeFailures.length === 0 ? (
             <p className="media-compatibility-summary">{report.detail}</p>
           ) : null}
           {failedTracks.length > 0 ? (
@@ -194,6 +205,16 @@ function CompatibilityDiagnostics({
                 <li key={`${track.kind}-${track.number}`}>
                   <strong>{trackLabel(track)}:</strong>{' '}
                   {track.detail ?? 'This track is not usable in this browser.'}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {runtimeFailures.length > 0 ? (
+            <ul className="media-compatibility-failures">
+              {runtimeFailures.map((failure, index) => (
+                <li key={`${failure.surface}-${failure.trackKind}-${index}`}>
+                  <strong>{mediaRuntimeSurfaceLabel(failure.surface)}:</strong>{' '}
+                  {failure.detail}
                 </li>
               ))}
             </ul>
@@ -467,6 +488,9 @@ export default function MediaPool() {
                   <CompatibilityDiagnostics
                     item={compatibilityItem}
                     busy={importBusy || relinkBusy}
+                    onRetry={descriptor
+                      ? undefined
+                      : () => void retryMediaCompatibility(id)}
                   />
                 ) : null}
               </li>

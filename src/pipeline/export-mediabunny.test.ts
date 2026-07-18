@@ -13,6 +13,7 @@ import {
   vi,
   type Mock,
 } from 'vitest'
+import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { compositeFrame } from './render'
 import type { ExportSettings } from './export'
@@ -918,12 +919,87 @@ describe('createMediabunnyExportMediaSource', () => {
     )
     const lease = await media.openFrame(0)
 
-    await expect(lease.getFrame('asset-a', 0)).rejects.toThrow(message)
+    const failure = await lease.getFrame('asset-a', 0).catch((cause) => cause)
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'asset-a',
+      message: expect.stringContaining(message),
+      failure: {
+        surface: 'export',
+        trackKind: 'video',
+        reason: 'decode-failed',
+        detail: expect.stringContaining(message),
+      },
+    })
     await lease.close()
     await media.close()
 
     expect(inputAt().dispose).toHaveBeenCalledOnce()
     expect(mb.canvasSinks).toHaveLength(0)
+  })
+
+  test('types Blob resolution and decode-stream failures without typing bitmap-copy failures', async () => {
+    const unavailable = new Error('captured Blob is unavailable')
+    const unavailableMedia = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
+      async () => { throw unavailable },
+    )
+    const unavailableLease = await unavailableMedia.openFrame(0)
+
+    const sourceFailure = await unavailableLease.getFrame('asset-a', 0)
+      .catch((cause) => cause)
+    expect(sourceFailure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(sourceFailure).toMatchObject({
+      assetId: 'asset-a',
+      message: unavailable.message,
+      failure: {
+        surface: 'export',
+        trackKind: null,
+        reason: 'resource-unavailable',
+        detail: unavailable.message,
+      },
+    })
+    expect(sourceFailure.cause).toBe(unavailable)
+    await unavailableLease.close()
+    await unavailableMedia.close()
+
+    const decodeFailure = new Error('video cursor failed')
+    mb.inputTracks.push(videoTrack())
+    mb.canvasSinkHandlers.push(async () => { throw decodeFailure })
+    const decodeMedia = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'asset-b', sourceStart: 0 }], 1),
+      async () => new Blob(['asset-b']),
+    )
+    const decodeLease = await decodeMedia.openFrame(0)
+    const typedDecodeFailure = await decodeLease.getFrame('asset-b', 0)
+      .catch((cause) => cause)
+    expect(typedDecodeFailure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(typedDecodeFailure).toMatchObject({
+      assetId: 'asset-b',
+      failure: {
+        surface: 'export',
+        trackKind: 'video',
+        reason: 'decode-failed',
+        detail: decodeFailure.message,
+      },
+    })
+    expect(typedDecodeFailure.cause).toBe(decodeFailure)
+    await decodeLease.close()
+    await decodeMedia.close()
+
+    const bitmapFailure = new Error('bitmap copy failed')
+    mb.inputTracks.push(videoTrack())
+    mb.canvasSinkHandlers.push(async () => wrappedCanvas())
+    createBitmap.mockRejectedValueOnce(bitmapFailure)
+    const bitmapMedia = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'asset-c', sourceStart: 0 }], 1),
+      async () => new Blob(['asset-c']),
+    )
+    const bitmapLease = await bitmapMedia.openFrame(0)
+    await expect(bitmapLease.getFrame('asset-c', 0)).rejects.toBe(bitmapFailure)
+    expect(bitmapFailure).not.toBeInstanceOf(MediaAssetRuntimeError)
+    await bitmapLease.close()
+    await bitmapMedia.close()
   })
 })
 
@@ -1383,7 +1459,19 @@ describe('createMediabunnyExportSink audio behavior', () => {
       resolveAsset,
     )
 
-    await expect(sink.addFrame(0, 1_001 / 30_000)).rejects.toThrow(message)
+    const failure = await sink.addFrame(0, 1_001 / 30_000)
+      .catch((cause) => cause)
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'bad-asset',
+      message: expect.stringContaining(message),
+      failure: {
+        surface: 'export',
+        trackKind: 'audio',
+        reason: 'decode-failed',
+        detail: expect.stringContaining(message),
+      },
+    })
     await sink.cancel()
 
     expect(resolveAsset).toHaveBeenCalledOnce()
@@ -1392,5 +1480,56 @@ describe('createMediabunnyExportSink audio behavior', () => {
     expect(audioSourceAt().add).not.toHaveBeenCalled()
     expect(audioSourceAt().close).not.toHaveBeenCalled()
     expect(mb.audioSinks).toHaveLength(0)
+  })
+
+  test('types audio Blob and decoded-sample read failures with the exact asset id', async () => {
+    const doc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('bad-audio', 'bad-asset', 1)),
+    ])
+    const unavailable = new Error('audio Blob is unavailable')
+    const unavailableSink = await createMediabunnyExportSink(
+      doc,
+      SETTINGS,
+      async () => { throw unavailable },
+    )
+
+    const sourceFailure = await unavailableSink.addFrame(0, 1_001 / 30_000)
+      .catch((cause) => cause)
+    expect(sourceFailure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(sourceFailure).toMatchObject({
+      assetId: 'bad-asset',
+      failure: {
+        surface: 'export',
+        trackKind: null,
+        reason: 'resource-unavailable',
+        detail: unavailable.message,
+      },
+    })
+    expect(sourceFailure.cause).toBe(unavailable)
+
+    const decoded = decodedAudioSample([new Float32Array([0.25])], 48_000)
+    const readFailure = new Error('decoded plane read failed')
+    decoded.copyTo.mockImplementationOnce(() => { throw readFailure })
+    mb.audioTracks.push(audioTrack())
+    mb.audioSinkSampleSequences.push([decoded])
+    const readSink = await createMediabunnyExportSink(
+      doc,
+      SETTINGS,
+      async () => new Blob(['audio']),
+    )
+    const typedReadFailure = await readSink.addFrame(0, 1_001 / 30_000)
+      .catch((cause) => cause)
+    expect(typedReadFailure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(typedReadFailure).toMatchObject({
+      assetId: 'bad-asset',
+      failure: {
+        surface: 'export',
+        trackKind: 'audio',
+        reason: 'decode-failed',
+        detail: readFailure.message,
+      },
+    })
+    expect(typedReadFailure.cause).toBe(readFailure)
+    expect(decoded.close).toHaveBeenCalledOnce()
   })
 })

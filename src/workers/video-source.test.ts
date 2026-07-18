@@ -8,7 +8,10 @@ import type {
   VideoTrackLike,
   WorkerVideoSourceEnv,
 } from './video-source'
-import { openWorkerVideoSource } from './video-source'
+import {
+  WorkerVideoSourceOpenError,
+  openWorkerVideoSource,
+} from './video-source'
 
 interface TrackedFrame extends VideoFrameLike {
   closeCount: number
@@ -375,6 +378,27 @@ describe('worker video source', () => {
 
     await source.close()
     expect(() => source.openSeekLane(0)).toThrow('video source is closed')
+  })
+
+  test('types pre-track Input construction as a file-level resource failure', async () => {
+    const cause = new Error('Mediabunny Input construction failed')
+    const env: WorkerVideoSourceEnv = {
+      createInput: () => { throw cause },
+      createSampleSink: () => { throw new Error('sink must not be created') },
+    }
+
+    const failure = await openWorkerVideoSource(new Blob(), env)
+      .catch((error) => error)
+
+    expect(failure).toBeInstanceOf(WorkerVideoSourceOpenError)
+    expect(failure).toMatchObject({
+      message: cause.message,
+      failure: {
+        trackKind: null,
+        reason: 'resource-unavailable',
+      },
+    })
+    expect(failure.cause).toBe(cause)
   })
 
   test.each([

@@ -16,8 +16,9 @@ complete MVP editing and MP4 export flow.
 - Reopen validated `.webcut` files from Recent and recover bounded local safety
   copies after a reload or crash; recovery is always offered explicitly and is
   never presented as a user-owned save.
-- Import local video/audio files through a content-based browser compatibility
-  check, then generate metadata, filmstrips, and waveforms for Ready sources.
+- Import or reconnect local video/audio files through one content-based browser
+  compatibility check, then generate metadata, filmstrips, and waveforms only
+  for Ready sources.
 - Edit on a multi-track timeline with select, razor, trim, ripple trim, slip,
   and slide tools, including dragging clips between same-kind tracks.
 - Keep imported audio/video pairs linked through edits, with manual unlinking
@@ -79,13 +80,13 @@ WebCodecs, transferable `OffscreenCanvas`, Web Audio, workers, and browser
 support for the source and output codecs. Other browsers are currently
 unverified.
 
-Direct imports inspect the container from file bytes, build the real decoder
-configuration for every video/audio track, and ask whether the current browser
-supports each configuration. This is a metadata/config-support check, not a
-sample decode of the whole stream. The Media Pool shows `Ready`, `Limited`,
-`Unsupported`, or `Error` with container/track details. Anything except
-`Ready` stays off the timeline and remains available for explicit Retry or
-Remove.
+Imports, Resume, and Relink inspect the container from file bytes, build the
+real decoder configuration for every video/audio track, and ask whether the
+current browser supports each configuration. This is a metadata/config-support
+check, not a sample decode of the whole stream. The Media Pool shows `Ready`,
+`Limited`, `Unsupported`, or `Error` with container/track details. A rejected
+new import remains available for explicit Retry or Remove. A project source
+that is not Ready stays Offline and uses Relink.
 
 | Direct-import source | Current Windows Chrome for Testing result |
 |---|---|
@@ -93,11 +94,13 @@ Remove.
 | QuickTime/MOV with ProRes 422 HQ video | Unsupported (verified) |
 | Other containers/codecs | Probed at runtime; support depends on Chrome, the OS, and the real track configuration |
 
-This is Issue #19's native-probe slice. Resume/Relink already enforce this
-native boundary while re-analyzing a source, but publishing the same guarded
-report and actionable diagnostics there is a later slice, as are decode
-fallback and partial-track consent. WebCut does not silently drop a failed
-track or claim a fallback that is not implemented.
+Issue #19's first two slices now carry that native report through import,
+Resume, and Relink. A confirmed preview, filmstrip, waveform, live-audio, or
+export source failure updates only the exact connected source generation,
+leaves its durable project descriptor Offline, and exposes Relink without an
+implicit retry loop. Decode fallback and partial-track consent are still not
+implemented; WebCut does not silently drop a failed track or claim a fallback
+that does not exist.
 
 ## Current limitations
 

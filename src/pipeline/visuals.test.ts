@@ -9,12 +9,23 @@
 
 import { describe, expect, test } from 'vitest'
 import {
+  MediaVisualSourceError,
   accumulatePeaks,
   filmstripTimestamps,
   waveformPath,
   waveformWidth,
   WAVEFORM_HEIGHT,
 } from './visuals'
+
+describe('MediaVisualSourceError', () => {
+  test('retains the pre-track Input construction cause', () => {
+    const cause = new Error('source setup failed')
+    const error = new MediaVisualSourceError(cause)
+
+    expect(error.message).toBe(cause.message)
+    expect(error.cause).toBe(cause)
+  })
+})
 
 describe('filmstripTimestamps', () => {
   test('one tile per ~2s, sampled at bucket midpoints', () => {

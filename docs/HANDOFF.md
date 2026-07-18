@@ -51,8 +51,9 @@ and the open list below.
 | Post-MVP project system — Slice 6 offline media | ✅ done | open-offline + one-file/folder relink + ambiguity UI + export preflight; 881 tests + Chrome offline→folder-relink gate |
 | Post-MVP #11 — cross-track clip dragging | ✅ done | same-kind video/audio lane targeting + vertical ghost; 885 tests + user manual drag gate |
 | Post-MVP #19 — compatibility Slice 1 | ✅ done | byte-detected container + every-track native config-support probe; guarded session reports + accessible Media Pool diagnostics; 184 focused + 979 total tests; Chrome for Testing Ready/Unsupported/720px gate |
+| Post-MVP #19 — compatibility Slice 2 | ✅ done | Resume/Relink reports + exact-generation preview/visuals/audio/export feedback; 303 focused + 1,021 total tests; in-app Chromium Ready/Unsupported/runtime-failure/recovery/720p gate |
 
-979 tests green · `npm run build` and `npm run lint` clean · every phase
+1,021 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -274,14 +275,42 @@ a fresh guarded request on explicit Retry, and was removable by keyboard. The
 180px Media Pool had no card overflow at the 720px shell gate; the final console
 had 0 warnings and 0 errors.
 
-**Next: keep Issue #19 open and ask before selecting its next slice.** Native
-direct-import probing is complete; decode fallback, explicit partial-track
-consent, and publishing guarded compatibility reports/actions through
-Resume/Relink and downstream runtime failures remain separate work. Those
-relink paths already enforce the native probe while re-analyzing. Future
-project-storage work is also separate opt-in media caching with
-quota/eviction UX and multi-tab recovery ownership; do not imply recovery or a
-portable `.webcut` contains source bytes today.
+Issue #19 Slice 2 carries the same typed result through remembered/manual
+Resume, individual Relink, and accepted folder matches. Project activation now
+installs connected sources and their Ready reports together; non-Ready reports
+stay on durable Offline descriptors. A descriptor check preserves its previous
+settled report while Checking and restores it if the attempt is cancelled,
+selects the wrong file, or loses the final guarded commit. Store transitions
+enforce descriptor identity, report/status consistency, and Ready/connected
+parity without changing provisional direct imports.
+
+Preview, filmstrip, waveform, live-audio, and export source failures now report
+through one app-layer runtime seam. Every consumer captures the exact object URL
+and compatibility generation before async work. Only that connection can be
+disconnected; stale render requests, stale worker release cleanup, and late
+visual/audio/export failures are diagnostic-only. File/Blob/Input failures are
+typed as file-level `resource-unavailable`; actual track open/decode failures
+are track-specific `decode-failed`; global output/pump/cleanup failures never
+poison an asset. Media Pool announces one surface-specific runtime diagnostic,
+keeps the source Offline, exposes Relink rather than import Retry, and publishes
+a fresh Ready report after successful recovery.
+
+The in-app Chromium gate passed 2026-07-18 at 1280×720 through WebCut's ordinary
+file-input fallback. H.264/AAC relinked Offline → Ready with exact report facts;
+ProRes relinked to Unsupported; selecting the wrong H.264 replacement restored
+the prior ProRes report. A generated AAC file with valid metadata/config but
+corrupted samples reached Ready at probe, failed waveform decode once, became
+Offline with one `Waveform: Decoding error.` diagnostic and no Retry, then a
+valid same-media Relink returned it to Ready. The normal path console was clean;
+the forced failure emitted one expected warning and did not repeat. The 720p
+shell and 228px diagnostics card had no horizontal or vertical overflow.
+
+**Next: keep Issue #19 open and ask before selecting its next slice.** Remaining
+work is bounded local codec fallback/resource policy, explicit partial-track
+consent, capability caching, optional proxy/fallback exploration, and a broader
+browser/codec fixture matrix. Future project-storage work is also separate
+opt-in media caching with quota/eviction UX and multi-tab recovery ownership;
+do not imply recovery or a portable `.webcut` contains source bytes today.
 
 ## What works today (user-visible)
 
@@ -438,31 +467,41 @@ surface; it is not a second zoom and never enters document history.
   Only one run (including setup/cancel cleanup) may own the controller slot.
   Slice 6 preflights the pure `outputMediaAssetIds` selection first, so a
   missing output source fails with exact filenames before Blob retention,
-  adapter creation, or generator startup.
+  adapter creation, or generator startup. Asset resolver/open/decode failures
+  carry typed identity to Slice 2's exact-generation compatibility seam;
+  encoder/muxer/cancellation/cleanup failures remain global.
 - `src/app/projectController.ts` + `localMediaHandles.ts` — project activation
   installs the full descriptor catalog plus whatever connected subset is
   available. Active Relink and Scan folder are project-generation guarded,
   retain Files/handles/candidates outside Zustand, enforce bounded recursive
   enumeration, stage no long-lived scan URLs, re-inspect accepted candidates,
   preserve saved asset ids, and publish only serializable progress/ambiguity
-  summaries. Confirmed handles are remembered for later automatic Resume.
+  summaries. Slice 2 also publishes the typed compatibility report for every
+  remembered/manual Resume and accepted Relink, preserving the previous settled
+  report through a guarded failed/cancelled attempt. Confirmed handles are
+  remembered for later automatic Resume.
 - `src/domain/mediaCompatibility.ts` +
   `src/pipeline/mediaCompatibilityProbe.ts` — serializable compatibility facts
   and the content-based, metadata-only native probe. The probe checks every A/V
   track with bounded concurrency, explicit decoder configs, resource ceilings,
-  exact-once Input disposal, and no object URL until Ready.
+  exact-once Input disposal, and no object URL until Ready. Runtime facts retain
+  the originating surface, optional track kind, bounded detail, and typed reason.
+- `src/app/mediaCompatibilityController.ts` — Slice 2 composition seam: captures
+  the exact asset object URL and compatibility request generation, projects a
+  typed runtime failure onto the existing report, and atomically disconnects
+  only that matching source while retaining its descriptor Offline.
 - `src/app/mediaImportController.ts` — import composition root: owns selected
   Files/handles and retained retry resources outside Zustand, publishes guarded
   session compatibility requests, commits complete Ready assets exactly once,
   guards project-change/cancellation races, and owns every uncommitted object
-  URL. Project relink keeps the legacy ready-asset wrapper through the shared
-  File-analysis seam in `src/app/mediaInspection.ts` until a later #19 slice.
+  URL. `src/app/mediaInspection.ts` now exposes the same typed probe result to
+  import and project reconnection callers.
 - `src/ui/MediaImportDialog.tsx` — accessible analysis/error/FPS-decision UI;
   exact rates, explicit choices, disabled-Match explanation, Escape handling.
 - `src/ui/MediaPool.tsx` — descriptor rows plus session-only compatibility
-  rows; named live statuses, wrapped container/every-track diagnostics, exact
-  Retry/Remove actions, and Ready-only drag gating with a second live check at
-  the timeline drop boundary.
+  rows; named live statuses, wrapped container/every-track/runtime diagnostics,
+  direct-import Retry/Remove versus descriptor-backed Relink actions, and
+  Ready-only drag gating with a second live check at the timeline drop boundary.
 - `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
   code loads only on Start; progress is frame-coalesced; cancellation and retry
   are explicit states; Blob URL/download ownership, filename safety, modal
@@ -707,11 +746,13 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #19 remains open after Slice 1. Direct imports now have conservative
-  native browser probing and fail-closed timeline entry. Still separate:
-  software decode fallback, explicit partial-track import consent, capability
-  caching/policy, and compatibility reports for remembered Resume/Relink and
-  preview/audio/export boundaries. Do not imply those paths exist yet.
+- Issue #19 remains open after Slice 2. Import, remembered/manual Resume,
+  individual/folder Relink, and confirmed preview/visuals/audio/export source
+  failures now share guarded compatibility reports and fail-closed timeline
+  entry. Still separate: bounded local codec fallback/resource policy, explicit
+  partial-track import consent, capability caching, optional proxy/fallback
+  exploration, and the broader browser/codec fixture matrix. Do not imply those
+  fallback paths exist yet.
 - Slices 4–6 now cover portable Save/Save As,
   permission-aware automatic source reconnection, removable Recent shortcuts,
   open-offline sessions, individual/folder relinking, live save after a writable

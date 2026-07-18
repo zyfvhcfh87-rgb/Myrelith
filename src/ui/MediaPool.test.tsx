@@ -23,10 +23,11 @@ import {
   connectActiveAssetMedia,
 } from '../app/projectController'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
-import type {
-  MediaCompatibilityItem,
-  MediaCompatibilityReport,
-  MediaTrackCompatibility,
+import {
+  withMediaRuntimeFailure,
+  type MediaCompatibilityItem,
+  type MediaCompatibilityReport,
+  type MediaTrackCompatibility,
 } from '../domain/mediaCompatibility'
 import type { MediaAsset } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
@@ -558,6 +559,35 @@ describe('MediaPool presentation', () => {
       name: 'Retry compatibility check for beach.mp4',
     })).toBeEnabled()
     expect(screen.getByTitle('beach.mp4')).toHaveAttribute('draggable', 'false')
+  })
+
+  test('descriptor runtime diagnostics keep Relink recovery and never offer import Retry', () => {
+    seedOfflineDescriptor()
+    vi.mocked(canRememberImportedMedia).mockReturnValue(true)
+    const runtimeDetail = 'hardware decoder stopped'
+    const report = withMediaRuntimeFailure(makeReport(), {
+      surface: 'preview',
+      trackKind: 'video',
+      reason: 'decode-failed',
+      detail: runtimeDetail,
+    })
+    seedCompatibility(makeCompatibility({
+      status: 'error',
+      report,
+    }))
+    render(<MediaPool />)
+
+    expect(screen.getByRole('status', {
+      name: 'beach.mp4 compatibility status',
+    })).toHaveTextContent('Compatibility: Error')
+    expect(screen.getAllByText(runtimeDetail)).toHaveLength(1)
+    expect(screen.queryByText(`Preview failed: ${runtimeDetail}`))
+      .not.toBeInTheDocument()
+    expect(screen.queryByRole('button', {
+      name: 'Retry compatibility check for beach.mp4',
+    })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Relink beach.mp4' }))
+    expect(chooseActiveAssetMedia).toHaveBeenCalledWith('asset-9')
   })
 
   test('offers one folder scan while offline sources exist', () => {

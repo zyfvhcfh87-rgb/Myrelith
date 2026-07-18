@@ -13,6 +13,10 @@ import {
   BlobSource,
   Input,
 } from 'mediabunny'
+import {
+  MediaAssetRuntimeError,
+  type MediaRuntimeFailure,
+} from '../domain/mediaCompatibility'
 import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
 import { audibleTracks, docDurationFrames } from '../domain/selectors'
 import { framesToSeconds, rangeEnd } from '../domain/time'
@@ -22,6 +26,30 @@ export const PLAYBACK_AUDIO_START_LEAD_SECONDS = 0.05
 export const PLAYBACK_AUDIO_PUMP_INTERVAL_MS = 100
 
 const TIME_EPSILON = 1e-7
+
+function runtimeFailureDetail(cause: unknown): string {
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  return detail.slice(0, 2_048)
+}
+
+function playbackAssetError(
+  assetId: AssetId,
+  reason: MediaRuntimeFailure['reason'],
+  cause: unknown,
+): MediaAssetRuntimeError {
+  if (
+    cause instanceof MediaAssetRuntimeError
+    && cause.assetId === assetId
+    && cause.failure.surface === 'audio-playback'
+    && cause.failure.trackKind === null
+  ) return cause
+  return new MediaAssetRuntimeError(assetId, {
+    surface: 'audio-playback',
+    trackKind: null,
+    reason,
+    detail: runtimeFailureDetail(cause),
+  }, cause)
+}
 
 export type PlaybackAssetResolver = (assetId: AssetId) => Promise<Blob>
 
@@ -93,9 +121,25 @@ export interface PlaybackAudioDeps {
   pumpIntervalMs: number
 }
 
+export type TimelineAudioPlaybackWarning =
+  | {
+      scope: 'media'
+      stage: 'source-open' | 'decode' | 'decoded-timing'
+      clipId: ClipId
+      assetId: AssetId
+      trackKind: MediaRuntimeFailure['trackKind']
+      reason: MediaRuntimeFailure['reason']
+      cause: unknown
+    }
+  | {
+      scope: 'global'
+      stage: 'output-schedule' | 'pump' | 'cleanup'
+      cause: unknown
+    }
+
 export interface StartTimelineAudioOptions {
   signal?: AbortSignal
-  onWarning?: (clipId: ClipId | null, cause: unknown) => void
+  onWarning?: (warning: TimelineAudioPlaybackWarning) => void
 }
 
 interface AudioClipPlan {
@@ -279,13 +323,23 @@ export function createMediabunnyPlaybackAudioSource(
 
     const pending = (async () => {
       if (closed) throw new Error('Playback audio source is closed')
-      const blob = await resolveAsset(assetId)
+      let blob: Blob
+      try {
+        blob = await resolveAsset(assetId)
+      } catch (cause) {
+        throw playbackAssetError(assetId, 'resource-unavailable', cause)
+      }
       if (closed) throw new Error('Playback audio source is closed')
 
-      const input = new Input({
-        source: new BlobSource(blob),
-        formats: ALL_FORMATS,
-      })
+      let input: Input
+      try {
+        input = new Input({
+          source: new BlobSource(blob),
+          formats: ALL_FORMATS,
+        })
+      } catch (cause) {
+        throw playbackAssetError(assetId, 'resource-unavailable', cause)
+      }
       openInputs.add(input)
       try {
         const track = await input.getPrimaryAudioTrack()
@@ -644,8 +698,29 @@ export async function startTimelineAudioPlayback(
   let closePromise: Promise<void> | null = null
   let abortHandler: (() => void) | null = null
 
-  const warn = (clipId: ClipId | null, cause: unknown): void => {
-    options.onWarning?.(clipId, cause)
+  const warnMedia = (
+    plan: AudioClipPlan,
+    stage: Extract<TimelineAudioPlaybackWarning, { scope: 'media' }>['stage'],
+    cause: unknown,
+    reason: MediaRuntimeFailure['reason'] = 'decode-failed',
+    trackKind: MediaRuntimeFailure['trackKind'] = 'audio',
+  ): void => {
+    options.onWarning?.({
+      scope: 'media',
+      stage,
+      clipId: plan.clipId,
+      assetId: plan.assetId,
+      trackKind,
+      reason,
+      cause,
+    })
+  }
+
+  const warnGlobal = (
+    stage: Extract<TimelineAudioPlaybackWarning, { scope: 'global' }>['stage'],
+    cause: unknown,
+  ): void => {
+    options.onWarning?.({ scope: 'global', stage, cause })
   }
 
   const closeCursor = async (clipId: ClipId): Promise<void> => {
@@ -692,7 +767,19 @@ export async function startTimelineAudioPlayback(
     } catch (cause) {
       if (stopped) return null
       failedClips.add(plan.clipId)
-      warn(plan.clipId, cause)
+      const reason =
+        cause instanceof MediaAssetRuntimeError
+        && cause.assetId === plan.assetId
+        && cause.failure.surface === 'audio-playback'
+          ? cause.failure.reason
+          : 'decode-failed'
+      const trackKind =
+        cause instanceof MediaAssetRuntimeError
+        && cause.assetId === plan.assetId
+        && cause.failure.surface === 'audio-playback'
+          ? cause.failure.trackKind
+          : 'audio'
+      warnMedia(plan, 'source-open', cause, reason, trackKind)
       return null
     }
   }
@@ -723,7 +810,7 @@ export async function startTimelineAudioPlayback(
           if (stopped) break
           failedClips.add(plan.clipId)
           cursorState.done = true
-          warn(plan.clipId, cause)
+          warnMedia(plan, 'decode', cause)
           break
         }
         if (stopped) break
@@ -745,7 +832,11 @@ export async function startTimelineAudioPlayback(
         || usableDuration <= 0
       ) {
         cursorState.pending = null
-        warn(plan.clipId, new Error('Decoded audio buffer has invalid timing'))
+        warnMedia(
+          plan,
+          'decoded-timing',
+          new Error('Decoded audio buffer has invalid timing'),
+        )
         continue
       }
 
@@ -786,7 +877,7 @@ export async function startTimelineAudioPlayback(
       try {
         await closeCursor(plan.clipId)
       } catch (cause) {
-        warn(plan.clipId, cause)
+        warnGlobal('cleanup', cause)
       }
     }
     return events
@@ -829,7 +920,7 @@ export async function startTimelineAudioPlayback(
       try {
         output.schedule({ ...event, when, offset, duration })
       } catch (cause) {
-        warn(event.clipId, cause)
+        warnGlobal('output-schedule', cause)
       }
     }
   }
@@ -902,8 +993,8 @@ export async function startTimelineAudioPlayback(
           failure = cause
         }
         if (failure !== undefined) {
-          warn(null, failure)
-          void stop().catch((cause) => warn(null, cause))
+          warnGlobal('pump', failure)
+          void stop().catch((cause) => warnGlobal('cleanup', cause))
         } else {
           queuePump()
         }
@@ -912,7 +1003,7 @@ export async function startTimelineAudioPlayback(
   }
 
   abortHandler = () => {
-    void stop().catch((cause) => warn(null, cause))
+    void stop().catch((cause) => warnGlobal('cleanup', cause))
   }
   options.signal?.addEventListener('abort', abortHandler, { once: true })
 

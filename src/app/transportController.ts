@@ -31,12 +31,19 @@ import {
 import type {
   PlaybackAssetResolver,
   StartTimelineAudioOptions,
+  TimelineAudioPlaybackWarning,
   TimelineAudioPlaybackDiagnostics,
   TimelineAudioPlaybackSession,
 } from '../pipeline/playback-audio'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
+import {
+  captureMediaRuntimeGuard,
+  mediaRuntimeFailure,
+  reportMediaRuntimeFailure,
+  type MediaRuntimeGuard,
+} from './mediaCompatibilityController'
 
 /** The slice of AudioContext we use (fake-able in tests). */
 export interface ClockContext extends PlaybackClock {
@@ -121,6 +128,39 @@ function warnAudio(message: string, cause: unknown): void {
     `[transportController] ${message}:`,
     cause instanceof Error ? cause.message : cause,
   )
+}
+
+function audioWarningMessage(warning: TimelineAudioPlaybackWarning): string {
+  if (warning.scope === 'media') {
+    if (warning.stage === 'source-open') {
+      return `audio clip "${warning.clipId}" source open failed`
+    }
+    if (warning.stage === 'decoded-timing') {
+      return `audio clip "${warning.clipId}" produced invalid decoded timing`
+    }
+    return `audio clip "${warning.clipId}" decode failed`
+  }
+  if (warning.stage === 'output-schedule') {
+    return 'audio output scheduling failed'
+  }
+  if (warning.stage === 'pump') return 'audio refill failed'
+  return 'audio cleanup failed'
+}
+
+function captureAudioRuntimeGuards(
+  doc: TimelineDoc,
+  fromFrame: number,
+  assets: ReadonlyMap<AssetId, MediaAsset>,
+): Map<AssetId, MediaRuntimeGuard> {
+  const guards = new Map<AssetId, MediaRuntimeGuard>()
+  for (const assetId of audioPlaybackAssetIds(doc, fromFrame)) {
+    const asset = assets.get(assetId)
+    const guard = captureMediaRuntimeGuard(assetId)
+    if (asset && guard?.objectUrl === asset.objectUrl) {
+      guards.set(assetId, guard)
+    }
+  }
+  return guards
 }
 
 function audioAssetsKey(
@@ -281,6 +321,7 @@ function startPlayback(fromFrame: number): void {
   const abort = new AbortController()
   state.startupAbort = abort
   const assets = new Map(useMediaStore.getState().assets)
+  const runtimeGuards = captureAudioRuntimeGuards(doc, from, assets)
   state.audioPlanKey = audioPlaybackPlanKey(doc)
   // Keep the media fingerprint stable as the playhead advances; otherwise an
   // unrelated media-pool edit after an early clip ends would look like a
@@ -320,13 +361,21 @@ function startPlayback(fromFrame: number): void {
       resolveAsset,
       {
         signal: abort.signal,
-        onWarning: (clipId, cause) =>
-          warnAudio(
-            clipId
-              ? `audio clip "${clipId}" was silenced`
-              : 'audio refill failed',
-            cause,
-          ),
+        onWarning: (warning) => {
+          warnAudio(audioWarningMessage(warning), warning.cause)
+          if (warning.scope !== 'media') return
+          const guard = runtimeGuards.get(warning.assetId)
+          if (!guard) return
+          reportMediaRuntimeFailure(
+            guard,
+            mediaRuntimeFailure(
+              'audio-playback',
+              warning.trackKind,
+              warning.cause,
+              warning.reason,
+            ),
+          )
+        },
       },
     )
     if (

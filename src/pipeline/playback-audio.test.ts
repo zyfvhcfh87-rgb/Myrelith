@@ -13,7 +13,9 @@ import type {
   TimelineDoc,
   Track,
 } from '../domain/schema'
+import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import {
+  createMediabunnyPlaybackAudioSource,
   createWebAudioPlaybackOutput,
   startTimelineAudioPlayback,
   type PlaybackAssetResolver,
@@ -612,12 +614,194 @@ describe('startTimelineAudioPlayback scheduling', () => {
       h.deps,
     )
 
-    expect(onWarning).toHaveBeenCalledWith('bad', failure)
+    expect(onWarning).toHaveBeenCalledWith({
+      scope: 'media',
+      stage: 'decode',
+      clipId: 'bad',
+      assetId: 'asset-bad',
+      trackKind: 'audio',
+      reason: 'decode-failed',
+      cause: failure,
+    })
     expect(h.output.scheduled.map(({ clipId }) => clipId)).toEqual(['good'])
 
     await session.stop()
     expect(bad.cursor.close).toHaveBeenCalledOnce()
     expect(good.cursor.close).toHaveBeenCalledOnce()
+  })
+
+  test('identifies source-open and invalid decoded-timing warnings by asset', async () => {
+    const openFailure = new Error('source could not be opened')
+    const doc = makeDoc([
+      makeTrack('A-open', 'audio', [makeClip('open', 0, 10)]),
+      makeTrack('A-timing', 'audio', [makeClip('timing', 0, 10)]),
+    ])
+    const h = makePlaybackHarness()
+    h.media.enqueue('asset-open', openFailure)
+    h.media.enqueue(
+      'asset-timing',
+      makeCursor([decodedBuffer('invalid', Number.NaN, 0.5)]).cursor,
+    )
+    const onWarning = vi.fn()
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      { onWarning },
+      h.deps,
+    )
+
+    expect(onWarning).toHaveBeenCalledWith({
+      scope: 'media',
+      stage: 'source-open',
+      clipId: 'open',
+      assetId: 'asset-open',
+      trackKind: 'audio',
+      reason: 'decode-failed',
+      cause: openFailure,
+    })
+    expect(onWarning).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'media',
+      stage: 'decoded-timing',
+      clipId: 'timing',
+      assetId: 'asset-timing',
+      cause: expect.objectContaining({
+        message: 'Decoded audio buffer has invalid timing',
+      }),
+    }))
+
+    await session.stop()
+  })
+
+  test('types a source Blob failure as resource-unavailable and retains its cause', async () => {
+    const unavailable = new Error('playback Blob is unavailable')
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('offline', 0, 10)]),
+    ])
+    const h = makePlaybackHarness()
+    const onWarning = vi.fn()
+    const resolveAsset = vi.fn(async () => {
+      throw unavailable
+    })
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      resolveAsset,
+      { onWarning },
+      {
+        ...h.deps,
+        createMediaSource: createMediabunnyPlaybackAudioSource,
+      },
+    )
+
+    const warning = onWarning.mock.calls[0]?.[0]
+    expect(warning).toMatchObject({
+      scope: 'media',
+      stage: 'source-open',
+      clipId: 'offline',
+      assetId: 'asset-offline',
+      trackKind: null,
+      reason: 'resource-unavailable',
+      cause: expect.objectContaining({
+        assetId: 'asset-offline',
+        failure: {
+          surface: 'audio-playback',
+          trackKind: null,
+          reason: 'resource-unavailable',
+          detail: unavailable.message,
+        },
+      }),
+    })
+    expect(warning.cause).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(warning.cause.cause).toBe(unavailable)
+
+    await session.stop()
+  })
+
+  test('keeps output scheduling and cursor cleanup warnings global', async () => {
+    const schedulingFailure = new Error('speaker rejected the buffer')
+    const cleanupFailure = new Error('cursor cleanup failed')
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('global-warning', 0, 10)]),
+    ])
+    const h = makePlaybackHarness()
+    const cursor = makeCursor([decodedBuffer('decoded', 0, 0.5)])
+    cursor.cursor.close = vi.fn(async () => {
+      throw cleanupFailure
+    })
+    h.media.enqueue('asset-global-warning', cursor.cursor)
+    h.output.output.schedule = vi.fn(() => {
+      throw schedulingFailure
+    })
+    const onWarning = vi.fn()
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      { onWarning },
+      h.deps,
+    )
+
+    expect(onWarning).toHaveBeenCalledWith({
+      scope: 'global',
+      stage: 'output-schedule',
+      cause: schedulingFailure,
+    })
+    expect(onWarning).toHaveBeenCalledWith({
+      scope: 'global',
+      stage: 'cleanup',
+      cause: cleanupFailure,
+    })
+    expect(onWarning.mock.calls.every(([warning]) => (
+      warning.scope === 'global'
+    ))).toBe(true)
+
+    await session.stop()
+  })
+
+  test('reports a refill-pump failure as global before stopping cleanly', async () => {
+    const pumpFailure = new Error('audio clock disappeared')
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [makeClip('pump-warning', 0, 20)]),
+    ], 20)
+    const h = makePlaybackHarness()
+    h.media.enqueue(
+      'asset-pump-warning',
+      makeCursor([
+        decodedBuffer('first', 0, 0.5),
+        decodedBuffer('second', 0.5, 0.5),
+      ]).cursor,
+    )
+    const onWarning = vi.fn()
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      { onWarning },
+      h.deps,
+    )
+    vi.mocked(h.output.output.currentTime).mockImplementation(() => {
+      throw pumpFailure
+    })
+
+    h.timers.runNext()
+
+    await vi.waitFor(() => expect(onWarning).toHaveBeenCalledWith({
+      scope: 'global',
+      stage: 'pump',
+      cause: pumpFailure,
+    }))
+    expect(onWarning.mock.calls.every(([warning]) => (
+      warning.scope === 'global'
+    ))).toBe(true)
+    await expect(session.stop()).resolves.toBeUndefined()
   })
 
   test('does not reopen a clip after its decoder reaches natural EOF', async () => {

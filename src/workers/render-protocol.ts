@@ -26,6 +26,7 @@
  * invalidates its clip, or target/mode policy identifies a real discontinuity.
  */
 
+import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import type { ChunkPayload } from './decode-protocol'
 
@@ -193,7 +194,12 @@ export type FromRenderWorker =
        * compositeDone); assetId ties it to one asset source/decoder.
        */
       type: 'error'
-      requestId?: number
-      assetId?: AssetId
-      message: string
+       requestId?: number
+       assetId?: AssetId
+       /** Present only when worker source setup identified a media boundary. */
+       mediaFailure?: {
+         trackKind: 'video' | null
+         reason: MediaRuntimeFailure['reason']
+       }
+       message: string
     }

@@ -78,6 +78,24 @@ function makeCompatibilityItem(
   }
 }
 
+function compatibilityForAsset(
+  asset: MediaAsset,
+  status: MediaCompatibilityItem['status'] = 'ready',
+  report: MediaCompatibilityReport | null = makeCompatibilityReport(),
+  requestId = 'asset-request',
+): MediaCompatibilityItem {
+  return {
+    id: asset.id,
+    requestId,
+    fileName: asset.fileName,
+    declaredMimeType: asset.mimeType,
+    size: asset.size,
+    lastModified: asset.lastModified,
+    status,
+    report,
+  }
+}
+
 const getState = () => useMediaStore.getState()
 
 beforeEach(() => {
@@ -130,7 +148,7 @@ describe('mediaStore', () => {
     })
   })
 
-  test('does not replace an active check or start one for a committed id', () => {
+  test('does not replace an active check or start one for a connected id', () => {
     const first = makeCompatibilityItem()
     expect(getState().startCompatibility(first)).toBe(true)
     const active = getState().compatibility
@@ -154,10 +172,114 @@ describe('mediaStore', () => {
     expect(getState().assets.has(asset.id)).toBe(false)
     expect(getState().descriptors.has(asset.id)).toBe(true)
     const disconnected = getState().compatibility
-    expect(getState().startCompatibility(makeCompatibilityItem({
-      requestId: 'request-4',
-    }))).toBe(false)
-    expect(getState().compatibility).toBe(disconnected)
+    const relink = compatibilityForAsset(
+      asset,
+      'checking',
+      null,
+      'request-4',
+    )
+    expect(getState().startCompatibility(relink)).toBe(true)
+    expect(getState().compatibility).not.toBe(disconnected)
+    expect(getState().compatibility.get(asset.id)).toBe(relink)
+  })
+
+  test('descriptor-backed checks require exact identity and preserve the settled report', () => {
+    const asset = makeAsset()
+    expect(getState().addAsset(asset)).toBe(true)
+    getState().disconnectAsset(asset.id)
+
+    const mismatched = compatibilityForAsset(
+      { ...asset, fileName: 'different.mp4' },
+      'checking',
+      null,
+      'mismatched-request',
+    )
+    const beforeMismatch = getState().compatibility
+    expect(getState().startCompatibility(mismatched)).toBe(false)
+    expect(getState().compatibility).toBe(beforeMismatch)
+
+    const previousReport: MediaCompatibilityReport = {
+      ...makeCompatibilityReport(),
+      status: 'error',
+      reason: 'decode-failed',
+      detail: 'Preview failed after the initial probe.',
+    }
+    const previousCheck = compatibilityForAsset(
+      asset,
+      'checking',
+      null,
+      'previous-request',
+    )
+    expect(getState().startCompatibility(previousCheck)).toBe(true)
+    expect(getState().setCompatibility(
+      asset.id,
+      previousCheck.requestId,
+      'error',
+      previousReport,
+    )).toBe(true)
+
+    const relink = compatibilityForAsset(
+      asset,
+      'checking',
+      null,
+      'relink-request',
+    )
+    expect(getState().startCompatibility(relink)).toBe(true)
+    expect(getState().compatibility.get(asset.id)).toEqual({
+      ...relink,
+      report: previousReport,
+    })
+    expect(getState().compatibility.get(asset.id)?.report).toBe(previousReport)
+  })
+
+  test('descriptor-backed results require matching status and connection parity', () => {
+    const asset = makeAsset()
+    expect(getState().addAsset(asset)).toBe(true)
+    getState().disconnectAsset(asset.id)
+    const checking = compatibilityForAsset(
+      asset,
+      'checking',
+      null,
+      'descriptor-request',
+    )
+    expect(getState().startCompatibility(checking)).toBe(true)
+
+    const before = getState().compatibility
+    const readyReport = makeCompatibilityReport()
+    expect(getState().setCompatibility(
+      asset.id,
+      checking.requestId,
+      'ready',
+      readyReport,
+    )).toBe(false)
+    expect(getState().compatibility).toBe(before)
+    expect(getState().compatibility.get(asset.id)).toBe(checking)
+
+    expect(getState().setCompatibility(
+      asset.id,
+      checking.requestId,
+      'error',
+      readyReport,
+    )).toBe(false)
+    expect(getState().compatibility).toBe(before)
+
+    const errorReport: MediaCompatibilityReport = {
+      ...readyReport,
+      status: 'error',
+      reason: 'decode-failed',
+      detail: 'The decoder stopped.',
+    }
+    expect(getState().setCompatibility(
+      asset.id,
+      checking.requestId,
+      'error',
+      errorReport,
+    )).toBe(true)
+    expect(getState().compatibility.get(asset.id)).toEqual({
+      ...checking,
+      status: 'error',
+      report: errorReport,
+    })
   })
 
   test('removeCompatibility drops a compatibility-only item', () => {
@@ -169,6 +291,16 @@ describe('mediaStore', () => {
     expect(getState().compatibility.has(item.id)).toBe(false)
     expect(getState().descriptors.size).toBe(0)
     expect(getState().assets.size).toBe(0)
+  })
+
+  test('request-guarded removal cannot erase a newer relink generation', () => {
+    const item = makeCompatibilityItem()
+    expect(getState().startCompatibility(item)).toBe(true)
+
+    expect(getState().removeCompatibility(item.id, 'stale-request')).toBe(false)
+    expect(getState().compatibility.get(item.id)).toBe(item)
+    expect(getState().removeCompatibility(item.id, item.requestId)).toBe(true)
+    expect(getState().compatibility.has(item.id)).toBe(false)
   })
 
   test('disconnect, remove, replace, and clear discard session compatibility', () => {
@@ -268,6 +400,106 @@ describe('mediaStore', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith(outgoing.objectUrl)
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:old-film')
     expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(incoming.objectUrl)
+  })
+
+  test('atomically installs Resume compatibility for online and offline sources', () => {
+    const online = makeAsset({ id: 'online' })
+    const offline = makeAsset({ id: 'offline', fileName: 'offline.mov' })
+    const ready = compatibilityForAsset(online)
+    const unsupportedReport: MediaCompatibilityReport = {
+      ...makeCompatibilityReport(),
+      status: 'unsupported',
+      reason: 'unsupported-codec',
+      detail: 'ProRes is not supported natively.',
+    }
+    const unsupported = compatibilityForAsset(
+      offline,
+      'unsupported',
+      unsupportedReport,
+      'offline-request',
+    )
+
+    expect(getState().replaceAssets(
+      [descriptorFor(online), descriptorFor(offline)],
+      [online],
+      [ready, unsupported],
+    )).toBe(true)
+    expect(getState().compatibility).toEqual(new Map([
+      [online.id, ready],
+      [offline.id, unsupported],
+    ]))
+
+    const before = getState()
+    expect(getState().replaceAssets(
+      [descriptorFor(online), descriptorFor(offline)],
+      [online],
+      [{ ...unsupported, status: 'ready', report: makeCompatibilityReport() }],
+    )).toBe(false)
+    expect(getState().descriptors).toBe(before.descriptors)
+    expect(getState().assets).toBe(before.assets)
+    expect(getState().compatibility).toBe(before.compatibility)
+  })
+
+  test('runtime failure disconnects only the exact URL and report generation', () => {
+    const asset = makeAsset()
+    const ready = compatibilityForAsset(asset)
+    expect(getState().addAsset(asset)).toBe(true)
+    expect(getState().setCompatibility(
+      asset.id,
+      ready.requestId,
+      'ready',
+      ready.report,
+    )).toBe(false)
+    // Install a Ready generation through the atomic reconnect seam.
+    getState().disconnectAsset(asset.id)
+    expect(getState().connectAsset(asset, ready)).toBe(true)
+    vi.mocked(URL.revokeObjectURL).mockClear()
+
+    const failureReport: MediaCompatibilityReport = {
+      ...makeCompatibilityReport(),
+      status: 'error',
+      reason: 'decode-failed',
+      detail: 'Preview failed: decoder stopped.',
+    }
+    const failed = compatibilityForAsset(
+      asset,
+      'error',
+      failureReport,
+      ready.requestId,
+    )
+
+    expect(getState().failAssetCompatibility(
+      asset.id,
+      'blob:stale',
+      ready.requestId,
+      failed,
+    )).toBe(false)
+    expect(getState().failAssetCompatibility(
+      asset.id,
+      asset.objectUrl,
+      'stale-request',
+      failed,
+    )).toBe(false)
+    expect(getState().assets.get(asset.id)).toBe(asset)
+
+    expect(getState().failAssetCompatibility(
+      asset.id,
+      asset.objectUrl,
+      ready.requestId,
+      failed,
+    )).toBe(true)
+    expect(getState().assets.has(asset.id)).toBe(false)
+    expect(getState().descriptors.get(asset.id)).toEqual(descriptorFor(asset))
+    expect(getState().compatibility.get(asset.id)).toBe(failed)
+    expect(URL.revokeObjectURL).toHaveBeenCalledOnce()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(asset.objectUrl)
+    expect(getState().failAssetCompatibility(
+      asset.id,
+      asset.objectUrl,
+      ready.requestId,
+      failed,
+    )).toBe(false)
+    expect(URL.revokeObjectURL).toHaveBeenCalledOnce()
   })
 
   test('invalid replacement is a no-op and leaves incoming ownership with caller', () => {

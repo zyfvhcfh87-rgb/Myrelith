@@ -57,22 +57,6 @@ export type MediaProbeResult =
       compatibility: MediaCompatibilityReport
     }
 
-export class MediaCompatibilityError extends Error {
-  readonly compatibility: MediaCompatibilityReport
-
-  constructor(compatibility: MediaCompatibilityReport) {
-    const trackDetail = compatibility.tracks.find((track) => !track.decodable)
-      ?.detail
-    super(
-      compatibility.detail
-      ?? trackDetail
-      ?? 'The selected file is not compatible with this browser.',
-    )
-    this.name = 'MediaCompatibilityError'
-    this.compatibility = compatibility
-  }
-}
-
 interface VideoProbe {
   report: MediaTrackCompatibility
   decoderConfig: VideoDecoderConfig | null

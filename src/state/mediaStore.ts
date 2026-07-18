@@ -123,6 +123,42 @@ function connectionMapFrom(
   return connected
 }
 
+function compatibilityMatchesDescriptor(
+  item: MediaCompatibilityItem,
+  descriptor: PortableAssetDescriptor,
+): boolean {
+  return item.id === descriptor.id
+    && item.fileName === descriptor.fileName
+    && item.declaredMimeType === descriptor.mimeType
+    && item.size === descriptor.size
+    && item.lastModified === descriptor.lastModified
+    && (
+      item.status === 'checking'
+        ? item.report === null || item.report.status !== 'ready'
+        : item.report?.status === item.status
+    )
+}
+
+function compatibilityMapFrom(
+  catalog: ReadonlyMap<string, PortableAssetDescriptor>,
+  assets: ReadonlyMap<string, MediaAsset>,
+  items: Iterable<MediaCompatibilityItem>,
+): Map<string, MediaCompatibilityItem> | null {
+  const compatibility = new Map<string, MediaCompatibilityItem>()
+  for (const item of items) {
+    const descriptor = catalog.get(item.id)
+    if (
+      compatibility.has(item.id)
+      || !descriptor
+      || !compatibilityMatchesDescriptor(item, descriptor)
+      || item.status === 'checking'
+      || (item.status === 'ready') !== assets.has(item.id)
+    ) return null
+    compatibility.set(item.id, item)
+  }
+  return compatibility
+}
+
 export interface MediaState {
   /** Durable portable descriptors for every project source, online or offline. */
   descriptors: Map<string, PortableAssetDescriptor>
@@ -133,7 +169,7 @@ export interface MediaState {
   /** Session-only compatibility checks and provisional rejected imports. */
   compatibility: Map<string, MediaCompatibilityItem>
 
-  /** Begin a new guarded compatibility request for an uncommitted item. */
+  /** Begin a guarded import or offline-relink compatibility request. */
   startCompatibility: (item: MediaCompatibilityItem) => boolean
   /** Publish only when the same request still owns the visible item. */
   setCompatibility: (
@@ -143,7 +179,7 @@ export interface MediaState {
     report: MediaCompatibilityReport | null,
   ) => boolean
   /** Remove a provisional/final session report without creating a descriptor. */
-  removeCompatibility: (id: string) => void
+  removeCompatibility: (id: string, requestId?: string) => boolean
 
   /**
    * Import one fully analyzed asset atomically: add its durable descriptor and
@@ -155,7 +191,20 @@ export interface MediaState {
    * Connect an analyzed source to an existing descriptor without replacing the
    * descriptor Map or descriptor object. The caller retains ownership on false.
    */
-  connectAsset: (asset: MediaAsset) => boolean
+  connectAsset: (
+    asset: MediaAsset,
+    compatibility?: MediaCompatibilityItem,
+  ) => boolean
+  /**
+   * Disconnect only the exact failed connection/report generation and retain
+   * its durable descriptor plus an actionable non-Ready report.
+   */
+  failAssetCompatibility: (
+    id: string,
+    expectedObjectUrl: string,
+    expectedRequestId: string | null,
+    item: MediaCompatibilityItem,
+  ) => boolean
   /**
    * Drop only the session connection and visuals. The durable descriptor stays
    * in the project catalog so the source can be reconnected later.
@@ -169,6 +218,7 @@ export interface MediaState {
   replaceAssets: (
     descriptors: Iterable<PortableAssetDescriptor>,
     assets: Iterable<MediaAsset>,
+    compatibility?: Iterable<MediaCompatibilityItem>,
   ) => boolean
   /** Revoke and remove every descriptor, connection, and generated visual. */
   clearAssets: () => void
@@ -197,16 +247,27 @@ export const useMediaStore = create<MediaState>()((set) => ({
     let started = false
     set((state) => {
       const current = state.compatibility.get(item.id)
+      const descriptor = state.descriptors.get(item.id)
       if (
         item.status !== 'checking'
-        || state.descriptors.has(item.id)
         || state.assets.has(item.id)
         || current?.status === 'checking'
+        || (descriptor !== undefined
+          && !compatibilityMatchesDescriptor(item, descriptor))
       ) {
         return state
       }
+      const previousReport = descriptor !== undefined
+        && current !== undefined
+        && compatibilityMatchesDescriptor(current, descriptor)
+        && current.report?.status !== 'ready'
+          ? current.report
+          : null
+      const checkingItem = previousReport === null
+        ? item
+        : { ...item, report: previousReport }
       const compatibility = new Map(state.compatibility)
-      compatibility.set(item.id, item)
+      compatibility.set(item.id, checkingItem)
       started = true
       return { compatibility }
     })
@@ -219,21 +280,37 @@ export const useMediaStore = create<MediaState>()((set) => ({
       const current = state.compatibility.get(id)
       if (!current || current.requestId !== requestId) return state
       if (current.status === status && current.report === report) return state
+      const next = { ...current, status, report }
+      const descriptor = state.descriptors.get(id)
+      if (
+        descriptor !== undefined
+        && (
+          !compatibilityMatchesDescriptor(next, descriptor)
+          || (status === 'ready') !== state.assets.has(id)
+        )
+      ) return state
       const compatibility = new Map(state.compatibility)
-      compatibility.set(id, { ...current, status, report })
+      compatibility.set(id, next)
       updated = true
       return { compatibility }
     })
     return updated
   },
 
-  removeCompatibility: (id) =>
+  removeCompatibility: (id, requestId) => {
+    let removed = false
     set((state) => {
-      if (!state.compatibility.has(id)) return state
+      const current = state.compatibility.get(id)
+      if (!current || (requestId !== undefined && current.requestId !== requestId)) {
+        return state
+      }
       const compatibility = new Map(state.compatibility)
       compatibility.delete(id)
+      removed = true
       return { compatibility }
-    }),
+    })
+    return removed
+  },
 
   addAsset: (asset) => {
     let added = false
@@ -251,7 +328,7 @@ export const useMediaStore = create<MediaState>()((set) => ({
     return added
   },
 
-  connectAsset: (asset) => {
+  connectAsset: (asset, readyCompatibility) => {
     let connected = false
     set((state) => {
       const descriptor = state.descriptors.get(asset.id)
@@ -259,15 +336,63 @@ export const useMediaStore = create<MediaState>()((set) => ({
         state.assets.has(asset.id)
         || !descriptor
         || !connectionMatchesDescriptor(descriptor, asset)
+        || (
+          readyCompatibility !== undefined
+          && (
+            readyCompatibility.status !== 'ready'
+            || !compatibilityMatchesDescriptor(readyCompatibility, descriptor)
+          )
+        )
       ) {
         return state
       }
       const assets = new Map(state.assets)
       assets.set(asset.id, asset)
+      const compatibility = readyCompatibility === undefined
+        ? state.compatibility
+        : new Map(state.compatibility).set(asset.id, readyCompatibility)
       connected = true
-      return { assets }
+      return { assets, compatibility }
     })
     return connected
+  },
+
+  failAssetCompatibility: (
+    id,
+    expectedObjectUrl,
+    expectedRequestId,
+    item,
+  ) => {
+    let failed = false
+    set((state) => {
+      const descriptor = state.descriptors.get(id)
+      const asset = state.assets.get(id)
+      const current = state.compatibility.get(id)
+      if (
+        !descriptor
+        || !asset
+        || asset.objectUrl !== expectedObjectUrl
+        || (current?.requestId ?? null) !== expectedRequestId
+        || item.status === 'checking'
+        || item.status === 'ready'
+        || !compatibilityMatchesDescriptor(item, descriptor)
+      ) return state
+
+      const existingVisuals = state.visuals.get(id)
+      revokeUrls([
+        asset.objectUrl,
+        ...(existingVisuals ? visualUrls(existingVisuals) : []),
+      ])
+      const assets = new Map(state.assets)
+      assets.delete(id)
+      const visuals = new Map(state.visuals)
+      visuals.delete(id)
+      const compatibility = new Map(state.compatibility)
+      compatibility.set(id, item)
+      failed = true
+      return { assets, visuals, compatibility }
+    })
+    return failed
   },
 
   disconnectAsset: (id) =>
@@ -289,11 +414,17 @@ export const useMediaStore = create<MediaState>()((set) => ({
       return { assets, visuals, compatibility }
     }),
 
-  replaceAssets: (nextDescriptors, nextAssets) => {
+  replaceAssets: (nextDescriptors, nextAssets, nextCompatibility = []) => {
     const descriptors = descriptorMapFrom(nextDescriptors)
     if (!descriptors) return false
     const assets = connectionMapFrom(descriptors, nextAssets)
     if (!assets) return false
+    const compatibility = compatibilityMapFrom(
+      descriptors,
+      assets,
+      nextCompatibility,
+    )
+    if (!compatibility) return false
 
     const protectedUrls = new Set(
       Array.from(assets.values(), (asset) => asset.objectUrl),
@@ -309,7 +440,7 @@ export const useMediaStore = create<MediaState>()((set) => ({
         descriptors,
         assets,
         visuals: new Map(),
-        compatibility: new Map(),
+        compatibility,
       }
     })
     return true

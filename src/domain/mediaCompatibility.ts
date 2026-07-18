@@ -12,6 +12,7 @@ export type MediaCompatibilityReason =
   | 'unsupported-codec'
   | 'malformed-media'
   | 'resource-limit'
+  | 'resource-unavailable'
   | 'decode-failed'
 
 export type MediaCompatibilityStatus =
@@ -76,6 +77,105 @@ export interface MediaCompatibilityReport {
   /** File-level reason. Track-specific failures live on the track itself. */
   reason: MediaCompatibilityReason | null
   detail: string | null
+  /** Asset-scoped failures observed after the metadata probe completed. */
+  runtimeFailures?: MediaRuntimeFailure[]
+}
+
+export type MediaRuntimeSurface =
+  | 'preview'
+  | 'filmstrip'
+  | 'waveform'
+  | 'audio-playback'
+  | 'export'
+
+export interface MediaRuntimeFailure {
+  surface: MediaRuntimeSurface
+  trackKind: 'video' | 'audio' | null
+  reason: Extract<
+    MediaCompatibilityReason,
+    'decode-failed' | 'resource-unavailable'
+  >
+  detail: string
+}
+
+const RUNTIME_SURFACE_LABELS: Record<MediaRuntimeSurface, string> = {
+  preview: 'Preview',
+  filmstrip: 'Thumbnail',
+  waveform: 'Waveform',
+  'audio-playback': 'Audio playback',
+  export: 'Export',
+}
+
+export function mediaRuntimeSurfaceLabel(surface: MediaRuntimeSurface): string {
+  return RUNTIME_SURFACE_LABELS[surface]
+}
+
+/** A typed pipeline error that keeps asset identity out of message parsing. */
+export class MediaAssetRuntimeError extends Error {
+  readonly assetId: string
+  readonly failure: MediaRuntimeFailure
+
+  constructor(
+    assetId: string,
+    failure: MediaRuntimeFailure,
+    cause?: unknown,
+  ) {
+    super(failure.detail, { cause })
+    this.name = 'MediaAssetRuntimeError'
+    this.assetId = assetId
+    this.failure = failure
+  }
+}
+
+/** Preserve probe facts while marking only the implicated primary track. */
+export function withMediaRuntimeFailure(
+  previous: MediaCompatibilityReport | null,
+  failure: MediaRuntimeFailure,
+): MediaCompatibilityReport {
+  let markedTrack = false
+  const tracks = (previous?.tracks ?? []).map((track) => {
+    if (
+      markedTrack
+      || failure.trackKind === null
+      || track.kind !== failure.trackKind
+      || !track.primary
+    ) return { ...track }
+    markedTrack = true
+    return {
+      ...track,
+      decodable: false,
+      reason: failure.reason,
+      detail: failure.detail,
+    }
+  })
+  if (!markedTrack && failure.trackKind !== null) {
+    const fallbackIndex = tracks.findIndex(
+      (track) => track.kind === failure.trackKind,
+    )
+    if (fallbackIndex >= 0) {
+      const track = tracks[fallbackIndex]
+      tracks[fallbackIndex] = {
+        ...track,
+        decodable: false,
+        reason: failure.reason,
+        detail: failure.detail,
+      }
+    }
+  }
+
+  const runtimeFailures = [
+    ...(previous?.runtimeFailures ?? []),
+    { ...failure },
+  ]
+  return {
+    status: 'error',
+    container: previous?.container ? { ...previous.container } : null,
+    durationMicroseconds: previous?.durationMicroseconds ?? null,
+    tracks,
+    reason: failure.reason,
+    detail: `${mediaRuntimeSurfaceLabel(failure.surface)} failed: ${failure.detail}`,
+    runtimeFailures,
+  }
 }
 
 /**
