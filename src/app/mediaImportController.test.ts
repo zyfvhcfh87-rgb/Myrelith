@@ -3,18 +3,25 @@ import {
   DEFAULT_PROJECT_SETTINGS,
   createTimelineDoc,
 } from '../domain/projectSettings'
+import type {
+  MediaCompatibilityItem,
+  MediaCompatibilityReport,
+} from '../domain/mediaCompatibility'
 import type { Clip, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
-import { microsecondsToFrames } from '../domain/time'
+import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
+import { microsecondsDurationToFrames } from '../domain/time'
 import {
   INITIAL_MEDIA_IMPORT_STATE,
   useMediaImportStore,
+  type MediaImportPhase,
 } from '../state/mediaImportStore'
 import {
   cancelMediaImport,
-  dismissMediaImportError,
   importMedia,
   importMediaFromHandle,
+  removeMediaCompatibility,
   resetMediaImportController,
+  retryMediaCompatibility,
   resolveMediaImportDecision,
   type MediaImportDeps,
 } from './mediaImportController'
@@ -43,6 +50,35 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
     audioChannels: 2,
     decoderConfigB64: '{"codec":"avc1.64042a"}',
     ...overrides,
+  }
+}
+
+function makeCompatibility(
+  status: MediaCompatibilityReport['status'] = 'ready',
+  overrides: Partial<MediaCompatibilityReport> = {},
+): MediaCompatibilityReport {
+  return {
+    status,
+    container: {
+      name: 'MPEG-4 Part 14',
+      mimeType: 'video/mp4',
+      fullMimeType: 'video/mp4; codecs="avc1.64042a, mp4a.40.2"',
+    },
+    durationMicroseconds: 2_000_000,
+    tracks: [],
+    reason: status === 'ready' ? null : 'unsupported-codec',
+    detail: status === 'ready' ? null : 'This browser cannot decode this codec.',
+    ...overrides,
+  }
+}
+
+function readyProbe(asset: MediaAsset): MediaProbeResult {
+  return {
+    status: 'ready',
+    asset,
+    compatibility: makeCompatibility('ready', {
+      durationMicroseconds: asset.durationMicroseconds,
+    }),
   }
 }
 
@@ -81,6 +117,7 @@ function deferred<T>() {
 interface Fixture {
   deps: MediaImportDeps
   assets: Map<string, MediaAsset>
+  compatibility: Map<string, MediaCompatibilityItem>
   currentDocument(): TimelineDoc
   setDocument(document: TimelineDoc): void
   inspect: ReturnType<typeof vi.fn<MediaImportDeps['inspect']>>
@@ -88,6 +125,9 @@ interface Fixture {
   reconformAssets: ReturnType<typeof vi.fn<MediaImportDeps['reconformAssets']>>
   rememberMediaHandle: ReturnType<
     typeof vi.fn<MediaImportDeps['rememberMediaHandle']>
+  >
+  forgetMediaHandle: ReturnType<
+    typeof vi.fn<MediaImportDeps['forgetMediaHandle']>
   >
   revokeObjectURL: ReturnType<typeof vi.fn<MediaImportDeps['revokeObjectURL']>>
 }
@@ -102,7 +142,13 @@ function makeFixture(
 ): Fixture {
   let document = startingDocument
   const assets = new Map<string, MediaAsset>()
-  const inspect = vi.fn(async () => analyzed)
+  const compatibility = new Map<string, MediaCompatibilityItem>()
+  let requestCount = 0
+  const inspect = vi.fn(async (
+    _file: File,
+    _rate: FrameRate,
+    assetId: string,
+  ) => readyProbe({ ...analyzed, id: assetId }))
   const replaceDocument = vi.fn((next: TimelineDoc) => {
     document = next
   })
@@ -110,13 +156,19 @@ function makeFixture(
     for (const [id, asset] of assets) {
       assets.set(id, {
         ...asset,
-        durationFrames: microsecondsToFrames(asset.durationMicroseconds, rate),
+        durationFrames: microsecondsDurationToFrames(
+          asset.durationMicroseconds,
+          rate,
+        ),
       })
     }
   })
   const rememberMediaHandle = vi.fn(async () => undefined)
+  const forgetMediaHandle = vi.fn(async () => undefined)
   const revokeObjectURL = vi.fn()
   const deps: MediaImportDeps = {
+    createAssetId: () => analyzed.id,
+    createRequestId: () => `request-${++requestCount}`,
     inspect,
     getDocument: () => document,
     replaceDocument,
@@ -127,12 +179,32 @@ function makeFixture(
       return true
     },
     reconformAssets,
+    startCompatibility: (item) => {
+      const current = compatibility.get(item.id)
+      if (current?.status === 'checking' || assets.has(item.id)) return false
+      compatibility.set(item.id, item)
+      return true
+    },
+    hasCompatibility: (id, requestId) => (
+      compatibility.get(id)?.requestId === requestId
+    ),
+    setCompatibility: (id, requestId, status, report) => {
+      const current = compatibility.get(id)
+      if (!current || current.requestId !== requestId) return false
+      compatibility.set(id, { ...current, status, report })
+      return true
+    },
+    removeCompatibility: (id) => {
+      compatibility.delete(id)
+    },
     rememberMediaHandle,
+    forgetMediaHandle,
     revokeObjectURL,
   }
   return {
     deps,
     assets,
+    compatibility,
     currentDocument: () => document,
     setDocument: (next) => {
       document = next
@@ -141,13 +213,20 @@ function makeFixture(
     replaceDocument,
     reconformAssets,
     rememberMediaHandle,
+    forgetMediaHandle,
     revokeObjectURL,
   }
 }
 
 const file = () => new File(['source'], 'source.mp4', { type: 'video/mp4' })
-const flush = async (): Promise<void> => {
-  for (let i = 0; i < 10; i++) await Promise.resolve()
+const waitForImportPhase = async (expected: MediaImportPhase): Promise<void> => {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (useMediaImportStore.getState().phase === expected) return
+    await Promise.resolve()
+  }
+  throw new Error(
+    `Media import did not reach ${expected}; current phase is ${useMediaImportStore.getState().phase}`,
+  )
 }
 
 beforeEach(() => {
@@ -165,7 +244,12 @@ describe('mediaImportController', () => {
     })
 
     expect(fixture.inspect).toHaveBeenCalledOnce()
-    expect(fixture.inspect).toHaveBeenCalledWith(expect.any(File), F30)
+    expect(fixture.inspect).toHaveBeenCalledWith(
+      expect.any(File),
+      F30,
+      'asset-new',
+      expect.any(AbortSignal),
+    )
     expect(fixture.assets.get('asset-new')).toMatchObject({
       durationFrames: 60,
       frameRate: F30,
@@ -173,6 +257,24 @@ describe('mediaImportController', () => {
     expect(fixture.replaceDocument).not.toHaveBeenCalled()
     expect(fixture.revokeObjectURL).not.toHaveBeenCalled()
     expect(useMediaImportStore.getState().phase).toBe('idle')
+    expect(fixture.compatibility.get('asset-new')).toMatchObject({
+      status: 'ready',
+      report: { status: 'ready' },
+    })
+  })
+
+  test('commits a positive sub-frame source as one timeline frame', async () => {
+    const fixture = makeFixture(makeAsset({
+      durationFrames: 1,
+      durationMicroseconds: 1,
+      frameRate: F30,
+    }))
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toMatchObject({
+      status: 'imported',
+    })
+
+    expect(fixture.assets.get('asset-new')?.durationFrames).toBe(1)
   })
 
   test('a handle-aware import remembers the capability only after commit', async () => {
@@ -199,7 +301,7 @@ describe('mediaImportController', () => {
   test('Keep preserves project FPS and conforms duration from microseconds', async () => {
     const fixture = makeFixture()
     const result = importMedia(file(), fixture.deps)
-    await flush()
+    await waitForImportPhase('awaiting-decision')
 
     expect(fixture.assets).toHaveLength(0)
     expect(useMediaImportStore.getState()).toMatchObject({
@@ -230,7 +332,7 @@ describe('mediaImportController', () => {
       durationFrames: 60,
     }))
     const result = importMedia(file(), fixture.deps)
-    await flush()
+    await waitForImportPhase('awaiting-decision')
 
     expect(resolveMediaImportDecision('match-source-rate')).toBe(true)
     await expect(result).resolves.toMatchObject({ status: 'imported' })
@@ -246,7 +348,7 @@ describe('mediaImportController', () => {
     const fixture = makeFixture()
     const startingDocument = fixture.currentDocument()
     const result = importMedia(file(), fixture.deps)
-    await flush()
+    await waitForImportPhase('awaiting-decision')
 
     expect(cancelMediaImport()).toBe(true)
     await expect(result).resolves.toEqual({ status: 'cancelled' })
@@ -274,7 +376,7 @@ describe('mediaImportController', () => {
     }
     const fixture = makeFixture(makeAsset(), edited)
     const result = importMedia(file(), fixture.deps)
-    await flush()
+    await waitForImportPhase('awaiting-decision')
 
     expect(useMediaImportStore.getState().prompt).toMatchObject({
       canMatchSource: false,
@@ -288,7 +390,7 @@ describe('mediaImportController', () => {
   test('Match is disabled for a source rate outside project presets', async () => {
     const fixture = makeFixture(makeAsset({ frameRate: { num: 120, den: 1 } }))
     const result = importMedia(file(), fixture.deps)
-    await flush()
+    await waitForImportPhase('awaiting-decision')
 
     expect(useMediaImportStore.getState().prompt).toMatchObject({
       canMatchSource: false,
@@ -301,15 +403,25 @@ describe('mediaImportController', () => {
   })
 
   test('Cancel during analysis waits for cleanup and never commits late work', async () => {
-    const pending = deferred<MediaAsset>()
+    const pending = deferred<MediaProbeResult>()
     const fixture = makeFixture()
-    fixture.deps.inspect = vi.fn(() => pending.promise)
+    const inspect = vi.fn((
+      _file: File,
+      _rate: FrameRate,
+      _assetId: string,
+      _signal: AbortSignal,
+    ) => pending.promise)
+    fixture.deps.inspect = inspect
     const result = importMedia(file(), fixture.deps)
-    await flush()
+    await waitForImportPhase('analyzing')
 
+    const signal = inspect.mock.calls[0]?.[3]
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(signal?.aborted).toBe(false)
     expect(cancelMediaImport()).toBe(true)
+    expect(signal?.aborted).toBe(true)
     expect(useMediaImportStore.getState().phase).toBe('cancelling')
-    pending.resolve(makeAsset())
+    pending.resolve(readyProbe(makeAsset()))
     await expect(result).resolves.toEqual({ status: 'cancelled' })
 
     expect(fixture.assets).toHaveLength(0)
@@ -318,7 +430,7 @@ describe('mediaImportController', () => {
   })
 
   test('a second selection reports busy while one import owns the flow', async () => {
-    const pending = deferred<MediaAsset>()
+    const pending = deferred<MediaProbeResult>()
     const fixture = makeFixture()
     fixture.deps.inspect = vi.fn(() => pending.promise)
     const first = importMedia(file(), fixture.deps)
@@ -327,37 +439,197 @@ describe('mediaImportController', () => {
       status: 'busy',
     })
     cancelMediaImport()
-    pending.resolve(makeAsset())
+    pending.resolve(readyProbe(makeAsset()))
     await expect(first).resolves.toEqual({ status: 'cancelled' })
   })
 
-  test('inspection failure is explicit and dismissible', async () => {
+  test('inspection failure stays visible and retryable in session media state', async () => {
     const fixture = makeFixture()
     fixture.deps.inspect = vi.fn(async () => {
       throw new Error('unsupported container')
     })
 
-    await expect(importMedia(file(), fixture.deps)).resolves.toEqual({
+    await expect(importMedia(file(), fixture.deps)).resolves.toMatchObject({
       status: 'failed',
       message: 'Could not import "source.mp4": unsupported container',
+      itemId: 'asset-new',
     })
     expect(useMediaImportStore.getState()).toMatchObject({
-      phase: 'error',
-      error: expect.stringContaining('unsupported container'),
+      phase: 'idle',
+    })
+    expect(fixture.compatibility.get('asset-new')).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'decode-failed',
+        detail: expect.stringContaining('unsupported container'),
+      },
     })
     expect(fixture.assets).toHaveLength(0)
+  })
 
-    dismissMediaImportError()
+  test('typed unsupported media stays visible and is never committed', async () => {
+    const fixture = makeFixture()
+    const compatibility = makeCompatibility('unsupported')
+    fixture.inspect.mockResolvedValueOnce({
+      status: 'unsupported',
+      asset: null,
+      compatibility,
+    })
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toEqual({
+      status: 'unsupported',
+      itemId: 'asset-new',
+    })
+
+    expect(fixture.assets).toHaveLength(0)
+    expect(fixture.compatibility.get('asset-new')).toMatchObject({
+      status: 'unsupported',
+      report: compatibility,
+    })
+    expect(fixture.inspect).toHaveBeenCalledOnce()
+    expect(useMediaImportStore.getState().phase).toBe('idle')
+  })
+
+  test('typed limited media stays visible and is never committed', async () => {
+    const fixture = makeFixture()
+    const compatibility = makeCompatibility('limited')
+    fixture.inspect.mockResolvedValueOnce({
+      status: 'limited',
+      asset: null,
+      compatibility,
+    })
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toEqual({
+      status: 'limited',
+      itemId: 'asset-new',
+    })
+
+    expect(fixture.assets).toHaveLength(0)
+    expect(fixture.compatibility.get('asset-new')).toMatchObject({
+      status: 'limited',
+      report: compatibility,
+    })
+    expect(useMediaImportStore.getState().phase).toBe('idle')
+  })
+
+  test('typed probe errors stay visible with their exact detail', async () => {
+    const fixture = makeFixture()
+    const compatibility = makeCompatibility('error', {
+      reason: 'malformed-media',
+      detail: 'The media duration is missing or invalid.',
+    })
+    fixture.inspect.mockResolvedValueOnce({
+      status: 'error',
+      asset: null,
+      compatibility,
+    })
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toEqual({
+      status: 'failed',
+      message: 'The media duration is missing or invalid.',
+      itemId: 'asset-new',
+    })
+
+    expect(fixture.assets).toHaveLength(0)
+    expect(fixture.compatibility.get('asset-new')).toMatchObject({
+      status: 'error',
+      report: compatibility,
+    })
+    expect(useMediaImportStore.getState().phase).toBe('idle')
+  })
+
+  test('retry runs only on explicit action and can promote a row to ready', async () => {
+    const fixture = makeFixture(makeAsset({ frameRate: F30 }))
+    const unsupported = makeCompatibility('unsupported')
+    fixture.inspect
+      .mockResolvedValueOnce({
+        status: 'unsupported',
+        asset: null,
+        compatibility: unsupported,
+      })
+      .mockResolvedValueOnce(readyProbe(makeAsset({ frameRate: F30 })))
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toMatchObject({
+      status: 'unsupported',
+    })
+    expect(fixture.inspect).toHaveBeenCalledOnce()
+
+    await expect(retryMediaCompatibility('asset-new')).resolves.toEqual({
+      status: 'imported',
+      assetId: 'asset-new',
+    })
+    expect(fixture.inspect).toHaveBeenCalledTimes(2)
+    expect(fixture.assets.has('asset-new')).toBe(true)
+    expect(fixture.compatibility.get('asset-new')?.status).toBe('ready')
+  })
+
+  test('retry preserves a selected file handle and remembers it after commit', async () => {
+    const fixture = makeFixture(makeAsset({ frameRate: F30 }))
+    const selected = file()
+    const handle = {
+      kind: 'file',
+      name: selected.name,
+      getFile: vi.fn(async () => selected),
+    } as unknown as LocalMediaFileHandle
+    fixture.inspect
+      .mockResolvedValueOnce({
+        status: 'unsupported',
+        asset: null,
+        compatibility: makeCompatibility('unsupported'),
+      })
+      .mockResolvedValueOnce(readyProbe(makeAsset({ frameRate: F30 })))
+
+    await expect(
+      importMediaFromHandle(selected, handle, fixture.deps),
+    ).resolves.toMatchObject({ status: 'unsupported' })
+    expect(fixture.rememberMediaHandle).not.toHaveBeenCalled()
+
+    await expect(retryMediaCompatibility('asset-new')).resolves.toEqual({
+      status: 'imported',
+      assetId: 'asset-new',
+    })
+    expect(fixture.rememberMediaHandle).toHaveBeenCalledWith(
+      'doc-import',
+      'asset-new',
+      handle,
+    )
+  })
+
+  test('removing a checking row aborts and late work cannot resurrect it', async () => {
+    const pending = deferred<MediaProbeResult>()
+    const fixture = makeFixture()
+    const inspect = vi.fn((
+      _file: File,
+      _rate: FrameRate,
+      _assetId: string,
+      _signal: AbortSignal,
+    ) => pending.promise)
+    fixture.deps.inspect = inspect
+    const result = importMedia(file(), fixture.deps)
+    await waitForImportPhase('analyzing')
+
+    expect(fixture.compatibility.get('asset-new')?.status).toBe('checking')
+    const signal = inspect.mock.calls[0]?.[3]
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(removeMediaCompatibility('asset-new')).toBe(true)
+    expect(signal?.aborted).toBe(true)
+    expect(useMediaImportStore.getState().phase).toBe('cancelling')
+    pending.resolve(readyProbe(makeAsset()))
+
+    await expect(result).resolves.toEqual({ status: 'cancelled' })
+    expect(fixture.compatibility.has('asset-new')).toBe(false)
+    expect(fixture.assets).toHaveLength(0)
+    expect(fixture.revokeObjectURL).toHaveBeenCalledWith('blob:source')
     expect(useMediaImportStore.getState().phase).toBe('idle')
   })
 
   test('project replacement during analysis rejects the stale import', async () => {
-    const pending = deferred<MediaAsset>()
+    const pending = deferred<MediaProbeResult>()
     const fixture = makeFixture()
     fixture.deps.inspect = vi.fn(() => pending.promise)
     const result = importMedia(file(), fixture.deps)
     fixture.setDocument({ ...fixture.currentDocument(), id: 'another-doc' })
-    pending.resolve(makeAsset())
+    pending.resolve(readyProbe(makeAsset()))
 
     await expect(result).resolves.toMatchObject({
       status: 'failed',
@@ -370,7 +642,7 @@ describe('mediaImportController', () => {
   test('settings change while the prompt is open rejects the stale choice', async () => {
     const fixture = makeFixture()
     const result = importMedia(file(), fixture.deps)
-    await flush()
+    await waitForImportPhase('awaiting-decision')
     fixture.setDocument({ ...fixture.currentDocument(), frameRate: F24 })
 
     expect(resolveMediaImportDecision('keep-project-rate')).toBe(true)
@@ -394,6 +666,7 @@ describe('mediaImportController', () => {
       message: expect.stringContaining('already in use'),
     })
     expect(fixture.assets.get('asset-new')?.objectUrl).toBe('blob:existing')
-    expect(fixture.revokeObjectURL).toHaveBeenCalledWith('blob:source')
+    expect(fixture.inspect).not.toHaveBeenCalled()
+    expect(fixture.revokeObjectURL).not.toHaveBeenCalled()
   })
 })

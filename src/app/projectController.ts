@@ -17,7 +17,7 @@ import {
   type ProjectSettings,
 } from '../domain/projectSettings'
 import type { FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
-import { microsecondsToFrames, rateEquals } from '../domain/time'
+import { microsecondsDurationToFrames, rateEquals } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import {
@@ -731,7 +731,7 @@ function relinkedAsset(
     size: descriptor.size,
     lastModified: descriptor.lastModified,
     kind: descriptor.kind,
-    durationFrames: microsecondsToFrames(
+    durationFrames: microsecondsDurationToFrames(
       descriptor.durationMicroseconds,
       documentRate,
     ),

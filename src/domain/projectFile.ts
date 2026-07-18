@@ -17,7 +17,7 @@ import type {
   Track,
   Transform,
 } from './schema'
-import { microsecondsToFrames } from './time'
+import { microsecondsDurationToFrames } from './time'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
@@ -432,7 +432,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
     startFrame: number
     durationFrames: number
   }
-  const assetDurationFrames = microsecondsToFrames(
+  const assetDurationFrames = microsecondsDurationToFrames(
     asset.durationMicroseconds,
     context.documentFrameRate,
   )

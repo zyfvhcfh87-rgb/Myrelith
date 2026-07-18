@@ -1436,6 +1436,13 @@
     transform 120ms ease;
 }
 
+.media-item:has(.media-compatibility) {
+  grid-template-areas:
+    'thumbnail details remove'
+    'compatibility compatibility compatibility';
+  align-items: start;
+}
+
 .media-item:hover {
   background: #202020;
   border-color: #3b3b3b;
@@ -1449,6 +1456,20 @@
 .media-item[data-connection='offline']:hover {
   background: #211f1c;
   border-color: #665641;
+}
+
+.media-item[data-connection='provisional'] {
+  background: #191c21;
+  border-color: #343c47;
+}
+
+.media-item[data-compatibility='limited'] {
+  border-color: #65552f;
+}
+
+.media-item[data-compatibility='unsupported'],
+.media-item[data-compatibility='error'] {
+  border-color: #654040;
 }
 
 .media-item[draggable='true'] {
@@ -1485,6 +1506,25 @@
   color: #8c7655;
   background: #15130f;
   border-color: #514531;
+}
+
+.media-thumbnail[data-state='checking'] {
+  color: #77a9e5;
+  background: #101722;
+  border-color: #31537b;
+}
+
+.media-thumbnail[data-state='limited'] {
+  color: #d4ae62;
+  background: #19150d;
+  border-color: #66552e;
+}
+
+.media-thumbnail[data-state='unsupported'],
+.media-thumbnail[data-state='error'] {
+  color: #d47979;
+  background: #1b1012;
+  border-color: #6b383d;
 }
 
 .media-thumbnail-icon {
@@ -1596,6 +1636,139 @@
 }
 
 .media-remove:focus-visible {
+  outline: 2px solid #76a8ea;
+  outline-offset: 1px;
+}
+
+.media-compatibility {
+  grid-area: compatibility;
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  color: #9da8b6;
+  background: #15181d;
+  border: 1px solid #2d343e;
+  border-radius: 5px;
+}
+
+.media-compatibility-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.media-compatibility-status {
+  margin: 0;
+  color: #93b9e8;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+}
+
+.media-compatibility[data-status='ready'] .media-compatibility-status {
+  color: #80c79a;
+}
+
+.media-compatibility[data-status='limited'] .media-compatibility-status {
+  color: #e0bd73;
+}
+
+.media-compatibility[data-status='unsupported'] .media-compatibility-status,
+.media-compatibility[data-status='error'] .media-compatibility-status {
+  color: #ee9999;
+}
+
+.media-compatibility-note,
+.media-compatibility-summary {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.media-compatibility-summary {
+  color: #d6a2a2;
+}
+
+.media-compatibility-grid {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.media-compatibility-grid > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(66px, 0.42fr) minmax(0, 1fr);
+  gap: 6px;
+}
+
+.media-compatibility-grid dt {
+  color: #788493;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.media-compatibility-grid dd {
+  min-width: 0;
+  margin: 0;
+  color: #b9c3cf;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 8px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.media-compatibility-failures {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  color: #e2aaaa;
+  font-size: 9px;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.media-compatibility-failures li {
+  overflow-wrap: anywhere;
+}
+
+.media-compatibility-failures strong {
+  color: #f0bcbc;
+  font-weight: 700;
+}
+
+.media-compatibility-retry {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 8px;
+  color: #dce8f7;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 650;
+  background: #29384b;
+  border: 1px solid #455d79;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.media-compatibility-retry:hover:not(:disabled) {
+  background: #334963;
+  border-color: #5b7ba1;
+}
+
+.media-compatibility-retry:disabled {
+  cursor: progress;
+  opacity: 0.45;
+}
+
+.media-compatibility-retry:focus-visible {
   outline: 2px solid #76a8ea;
   outline-offset: 1px;
 }
@@ -2151,6 +2324,26 @@
     grid-template-columns: 210px minmax(0, 1fr) 220px;
   }
 
+  .media-list {
+    padding: 7px;
+  }
+
+  .media-item {
+    grid-template-columns: 64px minmax(0, 1fr) 20px;
+    gap: 7px;
+    padding: 5px;
+  }
+
+  .media-thumbnail {
+    width: 64px;
+    height: 36px;
+  }
+
+  .media-remove {
+    width: 20px;
+    height: 20px;
+  }
+
   .transport-tools .tool-button {
     min-width: 22px;
     padding-right: 3px;
@@ -2188,6 +2381,26 @@
   .app-shell {
     min-width: 720px;
     grid-template-columns: 180px minmax(0, 1fr) 180px;
+  }
+
+  .media-list {
+    padding: 6px;
+  }
+
+  .media-item {
+    grid-template-columns: 56px minmax(0, 1fr) 20px;
+    gap: 6px;
+    padding: 4px;
+  }
+
+  .media-thumbnail {
+    width: 56px;
+    height: 32px;
+  }
+
+  .media-compatibility-grid > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1px;
   }
 
   .transport-tools .tool-button {

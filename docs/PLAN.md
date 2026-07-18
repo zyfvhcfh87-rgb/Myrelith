@@ -443,6 +443,40 @@ user-approved plan or an explicitly selected item from HANDOFF.md's open list.
   filmstrip/waveform rendering, and linked A/V alignment with a clean
   secure-origin warning/error console.
 
+## Post-MVP issue #19 — Slice 1 ✅ DONE (2026-07-18) Native compatibility probe
+
+Issue #19 remains open; this approved slice establishes the conservative native
+boundary before any fallback or partial-track policy is selected.
+
+- [x] Detect containers from file bytes with Mediabunny rather than trusting
+  extension or declared MIME; inspect every video/audio track with its real
+  decoder configuration and the current browser's `canDecode()` result.
+- [x] Preserve unknown-codec, unsupported-codec, malformed-media,
+  resource-limit, and unexpected probe failures as serializable facts.
+  Bound file bytes, total tracks, decoder descriptions, coded dimensions/pixels,
+  duration, frame rate, audio sample rate, channels, and probe concurrency.
+- [x] Dispose the probe Input exactly once on success, failure, and abort. Create
+  an object URL only after the complete report is Ready.
+- [x] Keep File/handle resources in the app controller; publish generation-safe
+  request-id session reports through mediaStore. Explicit Retry starts a fresh
+  generation; Remove aborts checking and late results cannot resurrect rows.
+- [x] Render checking/ready/limited/unsupported/error rows in Media Pool with
+  accessible live status, container and every-track facts, specific wrapped
+  reasons without CSS clipping, and named Retry/Remove controls. Only Ready
+  imports are draggable;
+  dragstart and timeline drop both recheck live compatibility.
+- [x] Preserve positive sub-frame media as one frame through probe, commit,
+  reconformance, project validation, relink construction, and UI duration math.
+- [x] Verification: 184 focused domain/probe/state/controller/UI/drop tests and
+  979 total tests green; production build, lint, and diff checks green. Windows
+  Chrome for Testing passed H.264/AAC MP4 Ready → linked A/V drop, ProRes MOV
+  Unsupported/non-draggable → fresh explicit Retry → keyboard Remove, 720px
+  wrapped diagnostics, and a 0-warning/0-error console.
+- [ ] Later slices: explicit decode fallback and its resource policy;
+  user-consented partial-track import; guarded report state and actionable
+  diagnostics for Resume/Relink plus downstream preview/audio/export failures;
+  broader browser/codec matrix. Resume/Relink already enforce the native probe.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

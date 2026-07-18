@@ -798,6 +798,8 @@ describe('portable project resume', () => {
     const analyzed = makeAsset({
       id: 'asset-random-session-id',
       objectUrl: 'blob:relinked-source',
+      durationFrames: 999,
+      durationMicroseconds: 1,
     })
     const descriptor = descriptorFrom(analyzed, {
       id: 'asset-stable',
@@ -840,7 +842,7 @@ describe('portable project resume', () => {
       id: 'asset-stable',
       fileName: 'original.mp4',
       objectUrl: 'blob:relinked-source',
-      durationFrames: 60,
+      durationFrames: 1,
     })
     expect(deps.revokeObjectURL).not.toHaveBeenCalled()
   })

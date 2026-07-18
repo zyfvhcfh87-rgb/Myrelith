@@ -25,6 +25,7 @@ import type { DragEvent as ReactDragEvent } from 'react'
 import type { Track as TrackData } from '../../domain/schema'
 import { createLinkGroupId } from '../../domain/linking'
 import { clipFromAsset } from '../../domain/operations'
+import { compatibilityAllowsTimelineUse } from '../../domain/mediaCompatibility'
 import { rangeEnd } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
@@ -94,8 +95,13 @@ function Track({
         if (!acceptsDrag(e)) return
         e.preventDefault()
         const assetId = e.dataTransfer.getData(ASSET_DRAG_TYPE)
-        const asset = useMediaStore.getState().assets.get(assetId)
-        if (!asset) return
+        const media = useMediaStore.getState()
+        const asset = media.assets.get(assetId)
+        if (
+          !asset
+          || asset.durationFrames <= 0
+          || !compatibilityAllowsTimelineUse(media.compatibility.get(assetId))
+        ) return
         // Same px→frame mapping as the ruler: the lane's left edge is the
         // current global origin, while pointer deltas remain local pixels.
         const rect = e.currentTarget.getBoundingClientRect()

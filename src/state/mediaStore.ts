@@ -6,9 +6,14 @@
  */
 
 import { create } from 'zustand'
+import type {
+  MediaCompatibilityItem,
+  MediaCompatibilityReport,
+  MediaCompatibilityStatus,
+} from '../domain/mediaCompatibility'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { FrameRate, MediaAsset } from '../domain/schema'
-import { microsecondsToFrames } from '../domain/time'
+import { microsecondsDurationToFrames } from '../domain/time'
 
 /**
  * Precomputed timeline eye-candy for one connected asset (filmstrip on video
@@ -125,6 +130,20 @@ export interface MediaState {
   assets: Map<string, MediaAsset>
   /** Generated clip visuals for connected assets, keyed by asset id. */
   visuals: Map<string, AssetVisuals>
+  /** Session-only compatibility checks and provisional rejected imports. */
+  compatibility: Map<string, MediaCompatibilityItem>
+
+  /** Begin a new guarded compatibility request for an uncommitted item. */
+  startCompatibility: (item: MediaCompatibilityItem) => boolean
+  /** Publish only when the same request still owns the visible item. */
+  setCompatibility: (
+    id: string,
+    requestId: string,
+    status: MediaCompatibilityStatus,
+    report: MediaCompatibilityReport | null,
+  ) => boolean
+  /** Remove a provisional/final session report without creating a descriptor. */
+  removeCompatibility: (id: string) => void
 
   /**
    * Import one fully analyzed asset atomically: add its durable descriptor and
@@ -172,6 +191,49 @@ export const useMediaStore = create<MediaState>()((set) => ({
   descriptors: new Map(),
   assets: new Map(),
   visuals: new Map(),
+  compatibility: new Map(),
+
+  startCompatibility: (item) => {
+    let started = false
+    set((state) => {
+      const current = state.compatibility.get(item.id)
+      if (
+        item.status !== 'checking'
+        || state.descriptors.has(item.id)
+        || state.assets.has(item.id)
+        || current?.status === 'checking'
+      ) {
+        return state
+      }
+      const compatibility = new Map(state.compatibility)
+      compatibility.set(item.id, item)
+      started = true
+      return { compatibility }
+    })
+    return started
+  },
+
+  setCompatibility: (id, requestId, status, report) => {
+    let updated = false
+    set((state) => {
+      const current = state.compatibility.get(id)
+      if (!current || current.requestId !== requestId) return state
+      if (current.status === status && current.report === report) return state
+      const compatibility = new Map(state.compatibility)
+      compatibility.set(id, { ...current, status, report })
+      updated = true
+      return { compatibility }
+    })
+    return updated
+  },
+
+  removeCompatibility: (id) =>
+    set((state) => {
+      if (!state.compatibility.has(id)) return state
+      const compatibility = new Map(state.compatibility)
+      compatibility.delete(id)
+      return { compatibility }
+    }),
 
   addAsset: (asset) => {
     let added = false
@@ -212,7 +274,8 @@ export const useMediaStore = create<MediaState>()((set) => ({
     set((state) => {
       const asset = state.assets.get(id)
       const existingVisuals = state.visuals.get(id)
-      if (!asset && !existingVisuals) return state
+      const existingCompatibility = state.compatibility.has(id)
+      if (!asset && !existingVisuals && !existingCompatibility) return state
       revokeUrls([
         ...(asset ? [asset.objectUrl] : []),
         ...(existingVisuals ? visualUrls(existingVisuals) : []),
@@ -221,7 +284,9 @@ export const useMediaStore = create<MediaState>()((set) => ({
       assets.delete(id)
       const visuals = new Map(state.visuals)
       visuals.delete(id)
-      return { assets, visuals }
+      const compatibility = new Map(state.compatibility)
+      compatibility.delete(id)
+      return { assets, visuals, compatibility }
     }),
 
   replaceAssets: (nextDescriptors, nextAssets) => {
@@ -240,7 +305,12 @@ export const useMediaStore = create<MediaState>()((set) => ({
         outgoingUrls.push(...visualUrls(visuals))
       }
       revokeUrls(outgoingUrls, protectedUrls)
-      return { descriptors, assets, visuals: new Map() }
+      return {
+        descriptors,
+        assets,
+        visuals: new Map(),
+        compatibility: new Map(),
+      }
     })
     return true
   },
@@ -251,6 +321,7 @@ export const useMediaStore = create<MediaState>()((set) => ({
         state.descriptors.size === 0
         && state.assets.size === 0
         && state.visuals.size === 0
+        && state.compatibility.size === 0
       ) {
         return state
       }
@@ -264,6 +335,7 @@ export const useMediaStore = create<MediaState>()((set) => ({
         descriptors: new Map(),
         assets: new Map(),
         visuals: new Map(),
+        compatibility: new Map(),
       }
     }),
 
@@ -272,7 +344,10 @@ export const useMediaStore = create<MediaState>()((set) => ({
       const descriptor = state.descriptors.get(id)
       const asset = state.assets.get(id)
       const existingVisuals = state.visuals.get(id)
-      if (!descriptor && !asset && !existingVisuals) return state
+      const existingCompatibility = state.compatibility.has(id)
+      if (!descriptor && !asset && !existingVisuals && !existingCompatibility) {
+        return state
+      }
       revokeUrls([
         ...(asset ? [asset.objectUrl] : []),
         ...(existingVisuals ? visualUrls(existingVisuals) : []),
@@ -283,14 +358,16 @@ export const useMediaStore = create<MediaState>()((set) => ({
       assets.delete(id)
       const visuals = new Map(state.visuals)
       visuals.delete(id)
-      return { descriptors, assets, visuals }
+      const compatibility = new Map(state.compatibility)
+      compatibility.delete(id)
+      return { descriptors, assets, visuals, compatibility }
     }),
 
   reconformAssets: (rate) =>
     set((state) => {
       let assets: Map<string, MediaAsset> | null = null
       for (const asset of state.assets.values()) {
-        const durationFrames = microsecondsToFrames(
+        const durationFrames = microsecondsDurationToFrames(
           asset.durationMicroseconds,
           rate,
         )

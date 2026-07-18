@@ -469,6 +469,21 @@ describe('portable project file', () => {
     expect(() => validateProjectFile(project)).toThrow(/beyond the referenced asset duration/)
   })
 
+  test('accepts one-frame clips for positive sub-frame media', () => {
+    const project = makeProject()
+    project.assets[0].durationMicroseconds = 1
+    for (const track of project.document.tracks) {
+      track.transitions = []
+      for (const clip of track.clips) {
+        if (clip.assetId !== 'video-z') continue
+        clip.sourceRange = { startFrame: 0, durationFrames: 1 }
+        clip.timelineRange.durationFrames = 1
+      }
+    }
+
+    expect(() => validateProjectFile(project)).not.toThrow()
+  })
+
   test('rejects future project-format and timeline-schema versions', () => {
     const futureFile = makeProject()
     ;(futureFile as unknown as { formatVersion: number }).formatVersion =

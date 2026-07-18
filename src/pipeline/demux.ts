@@ -13,7 +13,7 @@ import { ALL_FORMATS, BlobSource, Input } from 'mediabunny'
 import type { InputAudioTrack, InputVideoTrack } from 'mediabunny'
 import type { FrameRate, MediaAsset } from '../domain/schema'
 import {
-  microsecondsToFrames,
+  microsecondsDurationToFrames,
   secondsToMicroseconds,
   snapToStandardRate,
 } from '../domain/time'
@@ -144,7 +144,10 @@ export async function loadAsset(
       lastModified: file.lastModified,
       objectUrl: URL.createObjectURL(file),
       kind: videoTrack ? 'video' : 'audio',
-      durationFrames: microsecondsToFrames(durationMicroseconds, effectiveRate),
+      durationFrames: microsecondsDurationToFrames(
+        durationMicroseconds,
+        effectiveRate,
+      ),
       durationMicroseconds,
       frameRate,
       width: videoTrack ? videoTrack.displayWidth : null,

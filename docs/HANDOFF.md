@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-17)
+## Status (2026-07-18)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -50,8 +50,9 @@ and the open list below.
 | Post-MVP project system — Slice 5 local library | ✅ done | Recent handles + explicit three-generation recovery; 840 tests + Chrome reload/recover/discard/picker-entry gate |
 | Post-MVP project system — Slice 6 offline media | ✅ done | open-offline + one-file/folder relink + ambiguity UI + export preflight; 881 tests + Chrome offline→folder-relink gate |
 | Post-MVP #11 — cross-track clip dragging | ✅ done | same-kind video/audio lane targeting + vertical ghost; 885 tests + user manual drag gate |
+| Post-MVP #19 — compatibility Slice 1 | ✅ done | byte-detected container + every-track native config-support probe; guarded session reports + accessible Media Pool diagnostics; 184 focused + 979 total tests; Chrome for Testing Ready/Unsupported/720px gate |
 
-909 tests green · `npm run build` and `npm run lint` clean · every phase
+979 tests green · `npm run build` and `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -252,9 +253,33 @@ selection auto-matched and re-analyzed the MP4, restored thumbnail/Preview and
 the same timeline clip, reported `1 connected · 0 skipped`, and enabled Start
 export. The final warning/error console was empty.
 
-**Next: ask the user to select the next post-MVP issue.** Issue #9 and
-folder/batch relinking are complete. Future project-storage work is separate
-opt-in media caching with
+Issue #19 Slice 1 adds a conservative direct-import compatibility boundary.
+`pipeline/mediaCompatibilityProbe.ts` detects the container from bytes, probes
+every A/V track with its explicit decoder configuration and the browser's real
+`canDecode()` support result, and applies bounded file/track/config/dimension/
+duration/rate/channel limits before creating any long-lived object URL. This
+is a metadata/config-support check rather than an end-to-end sample decode. The app
+controller owns File/handle resources outside Zustand, publishes request-id-
+guarded serializable session reports, and retains rejected files only for an
+explicit Retry/Remove action. Ready is the only new-import status allowed to
+drag or drop; existing project connections without a report remain usable for
+backward compatibility. Media Pool diagnostics expose specific container,
+track, codec, dimensions/rates, and wrapped failure details in a responsive
+live region.
+
+The Chrome-for-Testing gate passed 2026-07-18 with generated disk fixtures. H.264/AAC
+MP4 reported Ready with exact MP4/video/audio facts and dragged into one linked
+A/V pair. ProRes 422 HQ MOV reported Unsupported, stayed non-draggable, created
+a fresh guarded request on explicit Retry, and was removable by keyboard. The
+180px Media Pool had no card overflow at the 720px shell gate; the final console
+had 0 warnings and 0 errors.
+
+**Next: keep Issue #19 open and ask before selecting its next slice.** Native
+direct-import probing is complete; decode fallback, explicit partial-track
+consent, and publishing guarded compatibility reports/actions through
+Resume/Relink and downstream runtime failures remain separate work. Those
+relink paths already enforce the native probe while re-analyzing. Future
+project-storage work is also separate opt-in media caching with
 quota/eviction UX and multi-tab recovery ownership; do not imply recovery or a
 portable `.webcut` contains source bytes today.
 
@@ -421,13 +446,23 @@ surface; it is not a second zoom and never enters document history.
   enumeration, stage no long-lived scan URLs, re-inspect accepted candidates,
   preserve saved asset ids, and publish only serializable progress/ambiguity
   summaries. Confirmed handles are remembered for later automatic Resume.
-- `src/app/mediaImportController.ts` — Slice 2 import composition root: owns
-  the selected File and analyzed resource until Keep/Match/Cancel resolves,
-  commits complete assets exactly once, guards project-change races, and owns
-  every uncommitted object URL. Import and project relink share the one real
-  File-analysis seam in `src/app/mediaInspection.ts`.
+- `src/domain/mediaCompatibility.ts` +
+  `src/pipeline/mediaCompatibilityProbe.ts` — serializable compatibility facts
+  and the content-based, metadata-only native probe. The probe checks every A/V
+  track with bounded concurrency, explicit decoder configs, resource ceilings,
+  exact-once Input disposal, and no object URL until Ready.
+- `src/app/mediaImportController.ts` — import composition root: owns selected
+  Files/handles and retained retry resources outside Zustand, publishes guarded
+  session compatibility requests, commits complete Ready assets exactly once,
+  guards project-change/cancellation races, and owns every uncommitted object
+  URL. Project relink keeps the legacy ready-asset wrapper through the shared
+  File-analysis seam in `src/app/mediaInspection.ts` until a later #19 slice.
 - `src/ui/MediaImportDialog.tsx` — accessible analysis/error/FPS-decision UI;
   exact rates, explicit choices, disabled-Match explanation, Escape handling.
+- `src/ui/MediaPool.tsx` — descriptor rows plus session-only compatibility
+  rows; named live statuses, wrapped container/every-track diagnostics, exact
+  Retry/Remove actions, and Ready-only drag gating with a second live check at
+  the timeline drop boundary.
 - `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
   code loads only on Start; progress is frame-coalesced; cancellation and retry
   are explicit states; Blob URL/download ownership, filename safety, modal
@@ -672,6 +707,11 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
+- Issue #19 remains open after Slice 1. Direct imports now have conservative
+  native browser probing and fail-closed timeline entry. Still separate:
+  software decode fallback, explicit partial-track import consent, capability
+  caching/policy, and compatibility reports for remembered Resume/Relink and
+  preview/audio/export boundaries. Do not imply those paths exist yet.
 - Slices 4–6 now cover portable Save/Save As,
   permission-aware automatic source reconnection, removable Recent shortcuts,
   open-offline sessions, individual/folder relinking, live save after a writable

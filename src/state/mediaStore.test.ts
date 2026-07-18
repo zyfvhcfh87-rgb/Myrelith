@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type {
+  MediaCompatibilityItem,
+  MediaCompatibilityReport,
+} from '../domain/mediaCompatibility'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { MediaAsset } from '../domain/schema'
 import { useMediaStore } from './mediaStore'
@@ -43,6 +47,37 @@ function descriptorFor(asset: MediaAsset): PortableAssetDescriptor {
   }
 }
 
+function makeCompatibilityReport(): MediaCompatibilityReport {
+  return {
+    status: 'ready',
+    container: {
+      name: 'MPEG-4',
+      mimeType: 'video/mp4',
+      fullMimeType: 'video/mp4; codecs="avc1.640028, mp4a.40.2"',
+    },
+    durationMicroseconds: 10_000_000,
+    tracks: [],
+    reason: null,
+    detail: null,
+  }
+}
+
+function makeCompatibilityItem(
+  overrides: Partial<MediaCompatibilityItem> = {},
+): MediaCompatibilityItem {
+  return {
+    id: 'candidate-1',
+    requestId: 'request-1',
+    fileName: 'candidate.mp4',
+    declaredMimeType: 'video/mp4',
+    size: 1_024,
+    lastModified: 1_725_000_000_000,
+    status: 'checking',
+    report: null,
+    ...overrides,
+  }
+}
+
 const getState = () => useMediaStore.getState()
 
 beforeEach(() => {
@@ -50,11 +85,115 @@ beforeEach(() => {
     descriptors: new Map(),
     assets: new Map(),
     visuals: new Map(),
+    compatibility: new Map(),
   })
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
 })
 
 describe('mediaStore', () => {
+  test('compatibility results are guarded by the current request generation', () => {
+    const first = makeCompatibilityItem()
+    expect(getState().startCompatibility(first)).toBe(true)
+
+    const checking = getState().compatibility
+    expect(getState().setCompatibility(
+      first.id,
+      'stale-request',
+      'ready',
+      makeCompatibilityReport(),
+    )).toBe(false)
+    expect(getState().compatibility).toBe(checking)
+    expect(getState().compatibility.get(first.id)).toBe(first)
+
+    getState().removeCompatibility(first.id)
+    const second = makeCompatibilityItem({ requestId: 'request-2' })
+    expect(getState().startCompatibility(second)).toBe(true)
+    expect(getState().setCompatibility(
+      first.id,
+      first.requestId,
+      'ready',
+      makeCompatibilityReport(),
+    )).toBe(false)
+    expect(getState().compatibility.get(first.id)).toBe(second)
+
+    const report = makeCompatibilityReport()
+    expect(getState().setCompatibility(
+      second.id,
+      second.requestId,
+      'ready',
+      report,
+    )).toBe(true)
+    expect(getState().compatibility.get(second.id)).toEqual({
+      ...second,
+      status: 'ready',
+      report,
+    })
+  })
+
+  test('does not replace an active check or start one for a committed id', () => {
+    const first = makeCompatibilityItem()
+    expect(getState().startCompatibility(first)).toBe(true)
+    const active = getState().compatibility
+
+    expect(getState().startCompatibility(makeCompatibilityItem({
+      requestId: 'request-2',
+    }))).toBe(false)
+    expect(getState().compatibility).toBe(active)
+    expect(getState().compatibility.get(first.id)).toBe(first)
+
+    getState().removeCompatibility(first.id)
+    const asset = makeAsset({ id: first.id })
+    expect(getState().addAsset(asset)).toBe(true)
+    const committed = getState().compatibility
+    expect(getState().startCompatibility(makeCompatibilityItem({
+      requestId: 'request-3',
+    }))).toBe(false)
+    expect(getState().compatibility).toBe(committed)
+
+    getState().disconnectAsset(asset.id)
+    expect(getState().assets.has(asset.id)).toBe(false)
+    expect(getState().descriptors.has(asset.id)).toBe(true)
+    const disconnected = getState().compatibility
+    expect(getState().startCompatibility(makeCompatibilityItem({
+      requestId: 'request-4',
+    }))).toBe(false)
+    expect(getState().compatibility).toBe(disconnected)
+  })
+
+  test('removeCompatibility drops a compatibility-only item', () => {
+    const item = makeCompatibilityItem()
+    expect(getState().startCompatibility(item)).toBe(true)
+
+    getState().removeCompatibility(item.id)
+
+    expect(getState().compatibility.has(item.id)).toBe(false)
+    expect(getState().descriptors.size).toBe(0)
+    expect(getState().assets.size).toBe(0)
+  })
+
+  test('disconnect, remove, replace, and clear discard session compatibility', () => {
+    const start = (requestId: string) => {
+      expect(getState().startCompatibility(makeCompatibilityItem({ requestId }))).toBe(true)
+      expect(getState().compatibility.size).toBe(1)
+    }
+
+    start('disconnect-request')
+    getState().disconnectAsset('candidate-1')
+    expect(getState().compatibility.size).toBe(0)
+
+    start('remove-request')
+    getState().removeAsset('candidate-1')
+    expect(getState().compatibility.size).toBe(0)
+
+    start('replace-request')
+    expect(getState().replaceAssets([], [])).toBe(true)
+    expect(getState().compatibility.size).toBe(0)
+
+    start('clear-request')
+    getState().clearAssets()
+    expect(getState().compatibility.size).toBe(0)
+  })
+
   test('commits only complete analyzed assets and rejects duplicate ids', () => {
     const asset = makeAsset()
 
@@ -153,10 +292,17 @@ describe('mediaStore', () => {
       durationFrames: 150,
       durationMicroseconds: 5_000_000,
     }))
+    getState().addAsset(makeAsset({
+      id: 'asset-short',
+      objectUrl: 'blob:asset-short',
+      durationFrames: 1,
+      durationMicroseconds: 1,
+    }))
 
     getState().reconformAssets({ num: 60, den: 1 })
     expect(getState().assets.get('asset-1')?.durationFrames).toBe(600)
     expect(getState().assets.get('asset-2')?.durationFrames).toBe(300)
+    expect(getState().assets.get('asset-short')?.durationFrames).toBe(1)
 
     const conformed = getState().assets
     getState().reconformAssets({ num: 60, den: 1 })

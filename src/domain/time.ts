@@ -173,6 +173,19 @@ export function microsecondsToFrames(
 }
 
 /**
+ * Convert a non-negative duration while preserving the invariant that every
+ * positive source occupies at least one document frame. Point/timestamp math
+ * must continue to use {@link microsecondsToFrames} directly.
+ */
+export function microsecondsDurationToFrames(
+  microseconds: number,
+  rate: FrameRate,
+): number {
+  const frames = microsecondsToFrames(microseconds, rate)
+  return microseconds > 0 ? Math.max(1, frames) : 0
+}
+
+/**
  * Non-negative document frames -> nearest canonical integer microsecond.
  * This is the exact integer-safe inverse boundary used when a source duration
  * starts from frame metadata rather than a container duration.

@@ -13,6 +13,8 @@ import {
   chooseMediaForImport,
   forgetImportedMediaHandle,
   importMedia,
+  removeMediaCompatibility,
+  retryMediaCompatibility,
 } from '../app/mediaImportController'
 import {
   canChooseActiveMediaFolder,
@@ -21,6 +23,11 @@ import {
   connectActiveAssetMedia,
 } from '../app/projectController'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
+import type {
+  MediaCompatibilityItem,
+  MediaCompatibilityReport,
+  MediaTrackCompatibility,
+} from '../domain/mediaCompatibility'
 import type { MediaAsset } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { INITIAL_MEDIA_IMPORT_STATE, useMediaImportStore } from '../state/mediaImportStore'
@@ -41,6 +48,11 @@ vi.mock('../app/mediaImportController', () => ({
   })),
   forgetImportedMediaHandle: vi.fn(),
   importMedia: vi.fn(async () => ({ status: 'imported', assetId: 'mock' })),
+  removeMediaCompatibility: vi.fn(() => true),
+  retryMediaCompatibility: vi.fn(async () => ({
+    status: 'imported',
+    assetId: 'mock',
+  })),
   cancelMediaImport: vi.fn(),
   dismissMediaImportError: vi.fn(),
   resolveMediaImportDecision: vi.fn(),
@@ -90,6 +102,100 @@ function seedAsset(asset: MediaAsset, assetVisuals?: AssetVisuals): void {
   })
 }
 
+function makeTrack(
+  overrides: Partial<MediaTrackCompatibility> = {},
+): MediaTrackCompatibility {
+  return {
+    kind: 'video',
+    number: 1,
+    primary: true,
+    codec: 'avc',
+    codecParameter: 'avc1.640028',
+    internalCodecId: 'avc1',
+    decoderConfig: {
+      codec: 'avc1.640028',
+      descriptionBytes: 4,
+      codedWidth: 1920,
+      codedHeight: 1080,
+      sampleRate: null,
+      channels: null,
+    },
+    decodable: true,
+    reason: null,
+    detail: null,
+    width: 1920,
+    height: 1080,
+    codedWidth: 1920,
+    codedHeight: 1080,
+    frameRate: { num: 30, den: 1 },
+    sampleRate: null,
+    channels: null,
+    ...overrides,
+  }
+}
+
+function makeReport(
+  status: MediaCompatibilityReport['status'] = 'ready',
+  overrides: Partial<MediaCompatibilityReport> = {},
+): MediaCompatibilityReport {
+  return {
+    status,
+    container: {
+      name: 'MPEG-4 Part 14',
+      mimeType: 'video/mp4',
+      fullMimeType: 'video/mp4; codecs="avc1.640028, mp4a.40.2"',
+    },
+    durationMicroseconds: 4_000_000,
+    tracks: [
+      makeTrack(),
+      makeTrack({
+        kind: 'audio',
+        codec: 'aac',
+        codecParameter: 'mp4a.40.2',
+        internalCodecId: 'mp4a',
+        decoderConfig: {
+          codec: 'mp4a.40.2',
+          descriptionBytes: 0,
+          codedWidth: null,
+          codedHeight: null,
+          sampleRate: 48_000,
+          channels: 2,
+        },
+        width: null,
+        height: null,
+        codedWidth: null,
+        codedHeight: null,
+        frameRate: null,
+        sampleRate: 48_000,
+        channels: 2,
+      }),
+    ],
+    reason: null,
+    detail: null,
+    ...overrides,
+  }
+}
+
+function makeCompatibility(
+  overrides: Partial<MediaCompatibilityItem> = {},
+): MediaCompatibilityItem {
+  return {
+    id: 'asset-9',
+    requestId: 'request-1',
+    fileName: 'beach.mp4',
+    declaredMimeType: 'video/mp4',
+    size: 1_024,
+    lastModified: 1_725_000_000_000,
+    status: 'checking',
+    report: null,
+    ...overrides,
+  }
+}
+
+function seedCompatibility(item: MediaCompatibilityItem): void {
+  useMediaStore.setState({ compatibility: new Map([[item.id, item]]) })
+}
+
 function descriptorFromAsset(asset: MediaAsset): PortableAssetDescriptor {
   return {
     id: asset.id,
@@ -115,6 +221,7 @@ function seedOfflineDescriptor(
     descriptors: new Map([[descriptor.id, descriptor]]),
     assets: new Map(),
     visuals: new Map(),
+    compatibility: new Map(),
   })
 }
 
@@ -128,6 +235,7 @@ beforeEach(() => {
     descriptors: new Map(),
     assets: new Map(),
     visuals: new Map(),
+    compatibility: new Map(),
   })
   useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
   useProjectSessionStore.setState({
@@ -139,6 +247,8 @@ beforeEach(() => {
   vi.mocked(importMedia).mockClear()
   vi.mocked(chooseMediaForImport).mockClear()
   vi.mocked(forgetImportedMediaHandle).mockClear()
+  vi.mocked(removeMediaCompatibility).mockClear()
+  vi.mocked(retryMediaCompatibility).mockClear()
   vi.mocked(canRememberImportedMedia).mockReturnValue(false)
   vi.mocked(canChooseActiveMediaFolder).mockReset()
   vi.mocked(canChooseActiveMediaFolder).mockReturnValue(false)
@@ -238,7 +348,7 @@ describe('MediaPool presentation', () => {
     seedAsset(makeAsset())
     render(<MediaPool />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'remove beach.mp4' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove beach.mp4' }))
 
     expect(forgetImportedMediaHandle).toHaveBeenCalledWith('asset-9')
     expect(screen.queryByTitle('beach.mp4')).not.toBeInTheDocument()
@@ -283,7 +393,7 @@ describe('MediaPool presentation', () => {
     const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined)
     render(<MediaPool />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'remove beach.mp4' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove beach.mp4' }))
 
     expect(alert).toHaveBeenCalledWith(
       'Remove this media\'s clips from the timeline before removing its source.',
@@ -324,6 +434,130 @@ describe('MediaPool presentation', () => {
     })
 
     expect(connectActiveAssetMedia).toHaveBeenCalledWith('asset-9', file)
+  })
+
+  test('keeps a checking provisional file visible, announced, and non-draggable', () => {
+    seedCompatibility(makeCompatibility())
+    render(<MediaPool />)
+
+    const card = screen.getByTitle('beach.mp4')
+    expect(card).toHaveAttribute('data-connection', 'provisional')
+    expect(card).toHaveAttribute('draggable', 'false')
+    expect(screen.getByRole('status', {
+      name: 'beach.mp4 compatibility status',
+    })).toHaveTextContent('Compatibility: Checking')
+    expect(screen.getByText('Reading container and track metadata…'))
+      .toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove beach.mp4' }))
+    expect(removeMediaCompatibility).toHaveBeenCalledWith('asset-9')
+  })
+
+  test('shows detected container and every ready track diagnostic', () => {
+    seedAsset(makeAsset())
+    seedCompatibility(makeCompatibility({
+      status: 'ready',
+      report: makeReport(),
+    }))
+    render(<MediaPool />)
+
+    expect(screen.getByRole('status', {
+      name: 'beach.mp4 compatibility status',
+    })).toHaveTextContent('Compatibility: Ready')
+    expect(screen.getByText('Container')).toBeInTheDocument()
+    expect(screen.getByText(/MPEG-4 Part 14/)).toBeInTheDocument()
+    expect(screen.getByText('Video track 1 (primary)')).toBeInTheDocument()
+    expect(screen.getByText('Audio track 1 (primary)')).toBeInTheDocument()
+    expect(screen.getByTitle('beach.mp4')).toHaveAttribute('draggable', 'true')
+  })
+
+  test('rechecks live compatibility before writing drag data', () => {
+    seedAsset(makeAsset())
+    seedCompatibility(makeCompatibility({
+      status: 'ready',
+      report: makeReport(),
+    }))
+    render(<MediaPool />)
+    const card = screen.getByTitle('beach.mp4')
+    const setData = vi.fn()
+
+    useMediaStore.setState({
+      compatibility: new Map([[
+        'asset-9',
+        makeCompatibility({
+          status: 'unsupported',
+          report: makeReport('unsupported', {
+            reason: 'unsupported-codec',
+            detail: 'Decoder support changed before the drag began.',
+          }),
+        }),
+      ]]),
+    })
+    fireEvent.dragStart(card, {
+      dataTransfer: { setData, effectAllowed: 'none' },
+    })
+
+    expect(setData).not.toHaveBeenCalled()
+  })
+
+  test('keeps limited media out of drag flow and exposes exact retryable failure', () => {
+    const failedAudio = makeTrack({
+      kind: 'audio',
+      codec: 'prores-audio',
+      codecParameter: 'apac',
+      internalCodecId: 'apac',
+      decoderConfig: null,
+      decodable: false,
+      reason: 'unsupported-codec',
+      detail: 'This browser cannot decode this audio codec.',
+      width: null,
+      height: null,
+      codedWidth: null,
+      codedHeight: null,
+      frameRate: null,
+      sampleRate: 48_000,
+      channels: 2,
+    })
+    seedCompatibility(makeCompatibility({
+      status: 'limited',
+      report: makeReport('limited', {
+        tracks: [makeTrack(), failedAudio],
+        reason: 'unsupported-codec',
+        detail: 'Some media tracks are not usable in this browser.',
+      }),
+    }))
+    render(<MediaPool />)
+
+    expect(screen.getByTitle('beach.mp4')).toHaveAttribute('draggable', 'false')
+    expect(screen.getByText('This browser cannot decode this audio codec.'))
+      .toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Retry compatibility check for beach.mp4',
+    }))
+    expect(retryMediaCompatibility).toHaveBeenCalledWith('asset-9')
+  })
+
+  test('shows an exact file-level failure when no tracks could be inspected', () => {
+    seedCompatibility(makeCompatibility({
+      status: 'error',
+      report: makeReport('error', {
+        container: null,
+        durationMicroseconds: null,
+        tracks: [],
+        reason: 'malformed-media',
+        detail: 'The media is damaged or incomplete: truncated header.',
+      }),
+    }))
+    render(<MediaPool />)
+
+    expect(screen.getByText('Not detected')).toBeInTheDocument()
+    expect(screen.getByText(
+      'The media is damaged or incomplete: truncated header.',
+    )).toBeInTheDocument()
+    expect(screen.getByRole('button', {
+      name: 'Retry compatibility check for beach.mp4',
+    })).toBeEnabled()
+    expect(screen.getByTitle('beach.mp4')).toHaveAttribute('draggable', 'false')
   })
 
   test('offers one folder scan while offline sources exist', () => {

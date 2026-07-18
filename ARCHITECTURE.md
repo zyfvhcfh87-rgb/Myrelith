@@ -167,6 +167,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   disconnection, removal, late visual results, and `clearAssets()` revoke each
   owned source/generated URL exactly once. Project persistence serializes the
   descriptors, never the session-only connected resources or URLs.
+  `compatibility: Map<AssetId, MediaCompatibilityItem>` is also session-only:
+  `startCompatibility` accepts only an uncommitted id with no active check,
+  `setCompatibility` accepts only the request generation that still owns that
+  row, and removal/project replacement invalidates late results. Reports are
+  small serializable facts with no live resources. Files, handles, Inputs, and
+  abort controllers stay app-layer; a Ready object URL transfers only to the
+  existing asset/visual owners, never into compatibility state.
 - `ProjectSessionState` — `src/state/projectSessionStore.ts`: serializable
   launch/editor screen, operation phase, active-project labels, resume and
   active-editor relink summaries (including ambiguity choices), and the

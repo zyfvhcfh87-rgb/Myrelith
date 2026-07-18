@@ -1,35 +1,36 @@
 /**
- * The one real File -> MediaAsset inspection path used by import and relink.
- * The returned asset owns one live object URL; callers must either commit it
- * to mediaStore or revoke it on every rejected/cancelled path.
+ * Shared File inspection facades. Imports consume the typed compatibility
+ * result; legacy project relink callers keep the ready-asset wrapper until
+ * compatibility is threaded through that separate workflow.
  */
 
 import type { FrameRate, MediaAsset } from '../domain/schema'
-import { loadAsset, type LoadedAsset } from '../pipeline/demux'
+import {
+  MediaCompatibilityError,
+  probeMediaFile,
+  type MediaProbeResult,
+} from '../pipeline/mediaCompatibilityProbe'
 
-function discardLoadedAsset(loaded: LoadedAsset): void {
-  try {
-    loaded.input.dispose()
-  } catch {
-    // Preserve the useful inspection error while still releasing the URL.
-  }
-  URL.revokeObjectURL(loaded.asset.objectUrl)
+export function inspectMediaFileCompatibility(
+  file: File,
+  documentRate: FrameRate,
+  assetId: string,
+  signal?: AbortSignal,
+): Promise<MediaProbeResult> {
+  return probeMediaFile(file, documentRate, assetId, signal)
 }
 
 export async function inspectMediaFile(
   file: File,
   documentRate: FrameRate,
 ): Promise<MediaAsset> {
-  const loaded = await loadAsset(file, documentRate)
-  if (loaded.asset.kind === 'video' && !loaded.asset.frameRate) {
-    discardLoadedAsset(loaded)
-    throw new Error(`"${file.name}" has no detectable video frame rate`)
+  const result = await probeMediaFile(
+    file,
+    documentRate,
+    `asset_${crypto.randomUUID()}`,
+  )
+  if (result.status !== 'ready') {
+    throw new MediaCompatibilityError(result.compatibility)
   }
-  try {
-    loaded.input.dispose()
-  } catch (cause) {
-    URL.revokeObjectURL(loaded.asset.objectUrl)
-    throw cause
-  }
-  return loaded.asset
+  return result.asset
 }

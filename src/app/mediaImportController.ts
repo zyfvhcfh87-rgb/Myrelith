@@ -8,9 +8,14 @@
  */
 
 import { isProjectFrameRatePreset } from '../domain/projectSettings'
+import type {
+  MediaCompatibilityItem,
+  MediaCompatibilityReport,
+  MediaCompatibilityStatus,
+} from '../domain/mediaCompatibility'
 import type { FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
 import {
-  microsecondsToFrames,
+  microsecondsDurationToFrames,
   rateEquals,
 } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
@@ -28,7 +33,8 @@ import {
   supportsLocalMediaHandles,
   type LocalMediaFileHandle,
 } from './localMediaHandles'
-import { inspectMediaFile } from './mediaInspection'
+import { inspectMediaFileCompatibility } from './mediaInspection'
+import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 
 export type MediaImportDecision =
   | 'keep-project-rate'
@@ -37,44 +43,92 @@ export type MediaImportDecision =
 
 export type MediaImportResult =
   | { status: 'imported'; assetId: string }
+  | { status: 'limited'; itemId: string }
+  | { status: 'unsupported'; itemId: string }
   | { status: 'cancelled' }
   | { status: 'busy' }
-  | { status: 'failed'; message: string }
+  | { status: 'failed'; message: string; itemId?: string }
 
 export interface MediaImportDeps {
-  inspect(file: File, documentRate: FrameRate): Promise<MediaAsset>
+  createAssetId(): string
+  createRequestId(): string
+  inspect(
+    file: File,
+    documentRate: FrameRate,
+    assetId: string,
+    signal: AbortSignal,
+  ): Promise<MediaProbeResult>
   getDocument(): TimelineDoc
   replaceDocument(document: TimelineDoc): void
   hasAsset(assetId: string): boolean
   addAsset(asset: MediaAsset): boolean
   reconformAssets(rate: FrameRate): void
+  startCompatibility(item: MediaCompatibilityItem): boolean
+  hasCompatibility(id: string, requestId: string): boolean
+  setCompatibility(
+    id: string,
+    requestId: string,
+    status: MediaCompatibilityStatus,
+    report: MediaCompatibilityReport | null,
+  ): boolean
+  removeCompatibility(id: string): void
   rememberMediaHandle(
     documentId: string,
     assetId: string,
     handle: LocalMediaFileHandle,
   ): Promise<void>
+  forgetMediaHandle(documentId: string, assetId: string): Promise<void>
   revokeObjectURL(url: string): void
 }
 
 const realDeps: MediaImportDeps = {
-  inspect: inspectMediaFile,
+  createAssetId: () => `asset_${crypto.randomUUID()}`,
+  createRequestId: () => `compat_${crypto.randomUUID()}`,
+  inspect: inspectMediaFileCompatibility,
   getDocument: () => useDocumentStore.getState().doc,
   replaceDocument: (document) => useDocumentStore.getState().setDoc(document),
   hasAsset: (assetId) => useMediaStore.getState().descriptors.has(assetId),
   addAsset: (asset) => useMediaStore.getState().addAsset(asset),
   reconformAssets: (rate) => useMediaStore.getState().reconformAssets(rate),
+  startCompatibility: (item) => (
+    useMediaStore.getState().startCompatibility(item)
+  ),
+  hasCompatibility: (id, requestId) => (
+    useMediaStore.getState().compatibility.get(id)?.requestId === requestId
+  ),
+  setCompatibility: (id, requestId, status, report) => (
+    useMediaStore.getState().setCompatibility(id, requestId, status, report)
+  ),
+  removeCompatibility: (id) => (
+    useMediaStore.getState().removeCompatibility(id)
+  ),
   rememberMediaHandle: (documentId, assetId, handle) => (
     localMediaHandleRegistry.remember(documentId, assetId, handle)
+  ),
+  forgetMediaHandle: (documentId, assetId) => (
+    localMediaHandleRegistry.forget(documentId, assetId)
   ),
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
 }
 
 interface ActiveImport {
+  itemId: string
+  requestId: string
+  deps: MediaImportDeps
+  abortController: AbortController
   cancelled: boolean
   resolveDecision: ((decision: MediaImportDecision) => void) | null
 }
 
+interface RetainedImport {
+  file: File
+  handle: LocalMediaFileHandle | null
+  documentId: string
+  deps: MediaImportDeps
+}
+
 let activeImport: ActiveImport | null = null
+const retainedImports = new Map<string, RetainedImport>()
 
 function cloneRate(rate: FrameRate): FrameRate {
   return { num: rate.num, den: rate.den }
@@ -111,6 +165,47 @@ function errorMessage(fileName: string, cause: unknown): string {
   return `Could not import "${fileName}": ${detail}`
 }
 
+function unexpectedCompatibility(
+  fileName: string,
+  cause: unknown,
+): MediaCompatibilityReport {
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  return {
+    status: 'error',
+    container: null,
+    durationMicroseconds: null,
+    tracks: [],
+    reason: 'decode-failed',
+    detail: `Could not check "${fileName}": ${detail}`,
+  }
+}
+
+function checkingItem(
+  id: string,
+  requestId: string,
+  file: File,
+): MediaCompatibilityItem {
+  return {
+    id,
+    requestId,
+    fileName: file.name,
+    declaredMimeType: file.type,
+    size: file.size,
+    lastModified: file.lastModified,
+    status: 'checking',
+    report: null,
+  }
+}
+
+function cancelOperation(operation: ActiveImport, removeItem = true): void {
+  operation.cancelled = true
+  operation.abortController.abort()
+  if (removeItem) operation.deps.removeCompatibility(operation.itemId)
+  retainedImports.delete(operation.itemId)
+  operation.resolveDecision?.('cancel')
+  operation.resolveDecision = null
+}
+
 function documentStillMatches(
   document: TimelineDoc,
   documentId: string,
@@ -124,16 +219,37 @@ async function importSelectedMedia(
   file: File,
   handle: LocalMediaFileHandle | null,
   deps: MediaImportDeps,
+  existingItemId?: string,
 ): Promise<MediaImportResult> {
   if (activeImport) return { status: 'busy' }
 
+  const itemId = existingItemId ?? deps.createAssetId()
+  if (deps.hasAsset(itemId)) {
+    return {
+      status: 'failed',
+      message: `Could not import "${file.name}": asset id ${itemId} is already in use`,
+    }
+  }
+  const requestId = deps.createRequestId()
+  if (!deps.startCompatibility(checkingItem(itemId, requestId, file))) {
+    return {
+      status: 'failed',
+      message: `Could not start a compatibility check for "${file.name}".`,
+      itemId,
+    }
+  }
   const operation: ActiveImport = {
+    itemId,
+    requestId,
+    deps,
+    abortController: new AbortController(),
     cancelled: false,
     resolveDecision: null,
   }
   activeImport = operation
   const startingDocument = deps.getDocument()
   let analyzed: MediaAsset | null = null
+  let probeReturned = false
   let committed = false
 
   const setUi = (next: MediaImportState): void => {
@@ -148,8 +264,19 @@ async function importSelectedMedia(
   })
 
   try {
-    analyzed = await deps.inspect(file, startingDocument.frameRate)
-    if (activeImport !== operation || operation.cancelled) {
+    const inspection = await deps.inspect(
+      file,
+      startingDocument.frameRate,
+      itemId,
+      operation.abortController.signal,
+    )
+    probeReturned = true
+    if (inspection.status === 'ready') analyzed = inspection.asset
+    if (
+      activeImport !== operation
+      || operation.cancelled
+      || !deps.hasCompatibility(itemId, requestId)
+    ) {
       return { status: 'cancelled' }
     }
 
@@ -158,13 +285,51 @@ async function importSelectedMedia(
       throw new Error('the active project changed while the file was being analyzed')
     }
 
+    if (inspection.status !== 'ready') {
+      if (!deps.setCompatibility(
+        itemId,
+        requestId,
+        inspection.status,
+        inspection.compatibility,
+      )) {
+        return { status: 'cancelled' }
+      }
+      retainedImports.set(itemId, {
+        file,
+        handle,
+        documentId: startingDocument.id,
+        deps,
+      })
+      setUi({ ...INITIAL_MEDIA_IMPORT_STATE })
+      if (inspection.status === 'limited') {
+        return { status: 'limited', itemId }
+      }
+      if (inspection.status === 'unsupported') {
+        return { status: 'unsupported', itemId }
+      }
+      return {
+        status: 'failed',
+        message: inspection.compatibility.detail
+          ?? `Could not check "${file.name}".`,
+        itemId,
+      }
+    }
+
+    const readyAsset = inspection.asset
+    deps.setCompatibility(
+      itemId,
+      requestId,
+      'checking',
+      inspection.compatibility,
+    )
+
     let decision: MediaImportDecision = 'keep-project-rate'
     let prompt: MediaImportPrompt | null = null
     if (
-      analyzed.frameRate
-      && !rateEquals(analyzed.frameRate, decisionDocument.frameRate)
+      readyAsset.frameRate
+      && !rateEquals(readyAsset.frameRate, decisionDocument.frameRate)
     ) {
-      prompt = promptFor(file.name, decisionDocument, analyzed.frameRate)
+      prompt = promptFor(file.name, decisionDocument, readyAsset.frameRate)
       setUi({
         phase: 'awaiting-decision',
         fileName: file.name,
@@ -196,29 +361,34 @@ async function importSelectedMedia(
       throw new Error('the project settings changed while the import decision was open')
     }
 
-    if (deps.hasAsset(analyzed.id)) {
-      throw new Error(`asset id ${analyzed.id} is already in use`)
+    if (deps.hasAsset(itemId)) {
+      throw new Error(`asset id ${itemId} is already in use`)
     }
 
     let finalRate = commitDocument.frameRate
     if (decision === 'match-source-rate') {
-      if (!analyzed.frameRate) {
+      if (!readyAsset.frameRate) {
         throw new Error('this source has no video frame rate to match')
       }
-      const latestPrompt = promptFor(file.name, commitDocument, analyzed.frameRate)
+      const latestPrompt = promptFor(
+        file.name,
+        commitDocument,
+        readyAsset.frameRate,
+      )
       if (!latestPrompt.canMatchSource) {
         throw new Error(
           latestPrompt.matchUnavailableReason
             ?? 'the source frame rate cannot be used for this project',
         )
       }
-      finalRate = analyzed.frameRate
+      finalRate = readyAsset.frameRate
     }
 
     const committedAsset: MediaAsset = {
-      ...analyzed,
-      durationFrames: microsecondsToFrames(
-        analyzed.durationMicroseconds,
+      ...readyAsset,
+      id: itemId,
+      durationFrames: microsecondsDurationToFrames(
+        readyAsset.durationMicroseconds,
         finalRate,
       ),
     }
@@ -226,6 +396,13 @@ async function importSelectedMedia(
       throw new Error(`asset id ${committedAsset.id} is already in use`)
     }
     committed = true
+    retainedImports.delete(itemId)
+    deps.setCompatibility(
+      itemId,
+      requestId,
+      'ready',
+      inspection.compatibility,
+    )
 
     if (decision === 'match-source-rate') {
       deps.replaceDocument({
@@ -242,6 +419,12 @@ async function importSelectedMedia(
           committedAsset.id,
           handle,
         )
+        if (!deps.hasAsset(committedAsset.id)) {
+          await deps.forgetMediaHandle(
+            commitDocument.id,
+            committedAsset.id,
+          )
+        }
       } catch (cause) {
         // The import already committed successfully. Remembering its browser
         // capability is a local convenience and must never roll media back.
@@ -256,6 +439,20 @@ async function importSelectedMedia(
       return { status: 'cancelled' }
     }
     const message = errorMessage(file.name, cause)
+    if (!probeReturned && deps.hasCompatibility(itemId, requestId)) {
+      const report = unexpectedCompatibility(file.name, cause)
+      deps.setCompatibility(itemId, requestId, 'error', report)
+      retainedImports.set(itemId, {
+        file,
+        handle,
+        documentId: startingDocument.id,
+        deps,
+      })
+      setUi({ ...INITIAL_MEDIA_IMPORT_STATE })
+      return { status: 'failed', message, itemId }
+    }
+    deps.removeCompatibility(itemId)
+    retainedImports.delete(itemId)
     setUi({
       phase: 'error',
       fileName: file.name,
@@ -267,6 +464,8 @@ async function importSelectedMedia(
     if (analyzed && !committed) deps.revokeObjectURL(analyzed.objectUrl)
     if (activeImport === operation) {
       if (operation.cancelled) {
+        deps.removeCompatibility(itemId)
+        retainedImports.delete(itemId)
         useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
       }
       activeImport = null
@@ -289,6 +488,58 @@ export function importMediaFromHandle(
   deps: MediaImportDeps = realDeps,
 ): Promise<MediaImportResult> {
   return importSelectedMedia(file, handle, deps)
+}
+
+/** Re-run a settled compatibility check only after an explicit user action. */
+export function retryMediaCompatibility(
+  itemId: string,
+  deps?: MediaImportDeps,
+): Promise<MediaImportResult> {
+  if (activeImport) return Promise.resolve({ status: 'busy' })
+  const retained = retainedImports.get(itemId)
+  if (!retained) {
+    return Promise.resolve({
+      status: 'failed',
+      message: 'That media file is no longer available to retry.',
+      itemId,
+    })
+  }
+  const operationDeps = deps ?? retained.deps
+  if (operationDeps.getDocument().id !== retained.documentId) {
+    retainedImports.delete(itemId)
+    operationDeps.removeCompatibility(itemId)
+    return Promise.resolve({
+      status: 'failed',
+      message: 'The active project changed before this retry could start.',
+      itemId,
+    })
+  }
+  return importSelectedMedia(
+    retained.file,
+    retained.handle,
+    operationDeps,
+    itemId,
+  )
+}
+
+/** Remove a provisional compatibility row and invalidate any in-flight work. */
+export function removeMediaCompatibility(itemId: string): boolean {
+  const operation = activeImport
+  if (operation?.itemId === itemId) {
+    cancelOperation(operation)
+    useMediaImportStore.setState((state) => ({
+      ...state,
+      phase: 'cancelling',
+      prompt: null,
+      error: null,
+    }))
+    return true
+  }
+  const retained = retainedImports.get(itemId)
+  if (!retained) return false
+  retainedImports.delete(itemId)
+  retained.deps.removeCompatibility(itemId)
+  return true
 }
 
 export function canRememberImportedMedia(): boolean {
@@ -334,6 +585,10 @@ export function resolveMediaImportDecision(
   if (!operation?.resolveDecision) return false
   const prompt = useMediaImportStore.getState().prompt
   if (decision === 'match-source-rate' && !prompt?.canMatchSource) return false
+  if (decision === 'cancel') {
+    cancelOperation(operation)
+    return true
+  }
   const resolve = operation.resolveDecision
   operation.resolveDecision = null
   resolve(decision)
@@ -347,13 +602,13 @@ export function cancelMediaImport(): boolean {
   if (operation.resolveDecision) {
     return resolveMediaImportDecision('cancel')
   }
-  operation.cancelled = true
   useMediaImportStore.setState((state) => ({
     ...state,
     phase: 'cancelling',
     prompt: null,
     error: null,
   }))
+  cancelOperation(operation)
   return true
 }
 
@@ -366,10 +621,11 @@ export function dismissMediaImportError(): void {
 /** Test/teardown seam: invalidates late work without letting it touch UI state. */
 export function resetMediaImportController(): void {
   const operation = activeImport
-  if (operation) {
-    operation.cancelled = true
-    operation.resolveDecision?.('cancel')
+  if (operation) cancelOperation(operation)
+  for (const [itemId, retained] of retainedImports) {
+    retained.deps.removeCompatibility(itemId)
   }
+  retainedImports.clear()
   activeImport = null
   useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
 }

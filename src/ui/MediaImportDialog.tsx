@@ -128,14 +128,16 @@ export default function MediaImportDialog() {
             <div className="media-import-dialog-header">
               <span className="media-import-eyebrow">Media import</span>
               <h2 id="media-import-title">
-                {phase === 'cancelling' ? 'Cancelling…' : 'Analyzing media…'}
+                {phase === 'cancelling'
+                  ? 'Cancelling…'
+                  : 'Checking media compatibility…'}
               </h2>
             </div>
             <div className="media-import-dialog-body">
               <p id="media-import-description" role="status">
                 {phase === 'cancelling'
                   ? 'Finishing cleanup safely.'
-                  : `Reading timing and stream metadata for ${fileName ?? 'the selected file'}.`}
+                  : `Reading container and track metadata for ${fileName ?? 'the selected file'}.`}
               </p>
             </div>
             <div className="media-import-dialog-actions">
