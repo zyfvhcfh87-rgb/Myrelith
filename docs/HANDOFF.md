@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-18)
+## Status (2026-07-19)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -52,8 +52,11 @@ and the open list below.
 | Post-MVP #11 — cross-track clip dragging | ✅ done | same-kind video/audio lane targeting + vertical ghost; 885 tests + user manual drag gate |
 | Post-MVP #19 — compatibility Slice 1 | ✅ done | byte-detected container + every-track native config-support probe; guarded session reports + accessible Media Pool diagnostics; 184 focused + 979 total tests; Chrome for Testing Ready/Unsupported/720px gate |
 | Post-MVP #19 — compatibility Slice 2 | ✅ done | Resume/Relink reports + exact-generation preview/visuals/audio/export feedback; 303 focused + 1,021 total tests; in-app Chromium Ready/Unsupported/runtime-failure/recovery/720p gate |
+| Post-MVP #19 — compatibility Slice 3 | ✅ done | one lazy local-decoder seam for ProRes + AC-3/E-AC-3 across probe/visuals/preview/audio/export; bounded automatic policy; 1,042 tests + in-app Chromium import/preview/playback/export gate |
 
-1,021 tests green · `npm run build` and `npm run lint` clean · every phase
+1,042 tests green · `npm run build` passes with the known large-chunk warning
+(1.144 MB lazy AC-3 chunk; existing app chunk also exceeds 500 kB) ·
+`npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -305,10 +308,42 @@ valid same-media Relink returned it to Ready. The normal path console was clean;
 the forced failure emitted one expected warning and did not repeat. The 720p
 shell and 228px diagnostics card had no horizontal or vertical overflow.
 
+Issue #19 Slice 3 adds one realm-local, concurrency-safe decoder-registration
+seam used by import probing, filmstrip/waveform generation, the render worker,
+live audio, and export. Native `canDecode()` always runs first. Only normalized
+ProRes or AC-3/E-AC-3 can lazy-load the exact locally bundled Mediabunny
+1.50.9 extension, after which the same track is probed again; successful
+reports record `Native browser decoder`, `Local fallback (ProRes)`, or `Local
+fallback (AC-3/E-AC-3)` instead of claiming generic support. Failed loads can
+be retried explicitly and overlapping requests share one loader promise per
+realm. Vite emits independent lazy chunks for the main and worker realms and
+dedupes their Mediabunny core instance.
+
+Automatic fallback is intentionally conservative: at most 8 GiB, 2 hours,
+DCI 4K30 ProRes pixel throughput, and 8-channel/48 kHz AC-3/E-AC-3. Above that
+boundary the asset remains visible with a `resource-limit` diagnostic; WebCut
+does not silently proxy it or omit a track. The probe checks cancellation
+before and after the non-abortable module load and decoder checks, so an
+aborted generation cannot publish Ready. ProRes correctness does not require
+cross-origin isolation: TurboRes uses its slower message-passing worker mode;
+shared-memory optimization remains a measured future choice. The AC-3
+extension embeds FFmpeg, so distribution/license review is still a public-
+shipping gate rather than a completed Slice 3 checkbox.
+
+The in-app Chromium gate passed 2026-07-19 with generated native H.264/AAC,
+ProRes 422/AAC, H.264/AC-3, and H.264/E-AC-3 fixtures. All four reported Ready
+with exact decoder paths and generated thumbnails; ProRes visibly rendered
+through the render worker; playback crossed into the AC-3 clip with a clean
+warning/error console. A real mixed ProRes + AC-3 timeline exported and
+downloaded a 4.000s MP4 that `ffprobe` identified as 1920×1080 H.264 plus
+48 kHz stereo AAC. The ProRes packages were advanced together from 1.50.3 to
+1.50.9 because the older release predated the upstream all-key-packet fix and
+returned null for sparse thumbnail seeks.
+
 **Next: keep Issue #19 open and ask before selecting its next slice.** Remaining
-work is bounded local codec fallback/resource policy, explicit partial-track
-consent, capability caching, optional proxy/fallback exploration, and a broader
-browser/codec fixture matrix. Future project-storage work is also separate
+work is explicit partial-track consent, capability caching, optional
+user-consented proxy conversion, broader browser/codec fixtures, and the final
+distribution/security review. Future project-storage work is also separate
 opt-in media caching with quota/eviction UX and multi-tab recovery ownership;
 do not imply recovery or a portable `.webcut` contains source bytes today.
 
@@ -746,13 +781,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #19 remains open after Slice 2. Import, remembered/manual Resume,
+- Issue #19 remains open after Slice 3. Import, remembered/manual Resume,
   individual/folder Relink, and confirmed preview/visuals/audio/export source
   failures now share guarded compatibility reports and fail-closed timeline
-  entry. Still separate: bounded local codec fallback/resource policy, explicit
-  partial-track import consent, capability caching, optional proxy/fallback
-  exploration, and the broader browser/codec fixture matrix. Do not imply those
-  fallback paths exist yet.
+  entry. ProRes and AC-3/E-AC-3 have bounded, locally bundled, lazy fallbacks
+  across every decode surface. Still separate: explicit partial-track import
+  consent, capability caching, user-consented proxy conversion, the broader
+  browser/codec fixture matrix, and final distribution/security review. Do not
+  imply those later paths exist yet.
 - Slices 4–6 now cover portable Save/Save As,
   permission-aware automatic source reconnection, removable Recent shortcuts,
   open-offline sessions, individual/folder relinking, live save after a writable

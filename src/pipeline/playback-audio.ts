@@ -17,6 +17,7 @@ import {
   MediaAssetRuntimeError,
   type MediaRuntimeFailure,
 } from '../domain/mediaCompatibility'
+import { ensureMediaDecoderSupport } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
 import { audibleTracks, docDurationFrames } from '../domain/selectors'
 import { framesToSeconds, rangeEnd } from '../domain/time'
@@ -346,10 +347,13 @@ export function createMediabunnyPlaybackAudioSource(
         if (!track) {
           throw new Error(`Playback asset "${assetId}" has no audio track`)
         }
-        if (!(await track.canDecode())) {
-          throw new Error(
-            `Playback asset "${assetId}" audio cannot be decoded in this browser`,
-          )
+        const codec = await track.getCodec()
+        const support = await ensureMediaDecoderSupport({
+          codec,
+          canDecode: () => track.canDecode(),
+        })
+        if (!support.decodable) {
+          throw new Error(support.failure.detail)
         }
         if (closed) throw new Error('Playback audio source is closed')
         const asset: DecodedAudioAsset = {

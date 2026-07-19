@@ -128,6 +128,7 @@ function readyAudioTrack(): MediaTrackCompatibility {
       sampleRate: 48_000,
       channels: 2,
     },
+    decoderPath: 'native',
     decodable: true,
     reason: null,
     detail: null,

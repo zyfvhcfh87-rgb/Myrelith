@@ -18,6 +18,27 @@ import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { compositeFrame } from './render'
 import type { ExportSettings } from './export'
 
+const localDecoders = vi.hoisted(() => ({
+  proresRegistered: false,
+  proresRegistrations: 0,
+  ac3Registered: false,
+  ac3Registrations: 0,
+}))
+
+vi.mock('@mediabunny/prores', () => ({
+  registerProresDecoder: () => {
+    localDecoders.proresRegistered = true
+    localDecoders.proresRegistrations++
+  },
+}))
+
+vi.mock('@mediabunny/ac3', () => ({
+  registerAc3Decoder: () => {
+    localDecoders.ac3Registered = true
+    localDecoders.ac3Registrations++
+  },
+}))
+
 interface FakeInputRecord {
   source: unknown
   getPrimaryVideoTrack: Mock<() => Promise<unknown | null>>
@@ -580,13 +601,28 @@ function deferred<T>(): {
   return { promise, resolve }
 }
 
-function videoTrack(canDecode = true) {
-  return { canDecode: vi.fn(async () => canDecode) }
+function videoTrack(
+  canDecode: boolean | (() => boolean) = true,
+  codec = 'avc',
+) {
+  return {
+    getCodec: vi.fn(async () => codec),
+    canDecode: vi.fn(async () => (
+      typeof canDecode === 'function' ? canDecode() : canDecode
+    )),
+  }
 }
 
-function audioTrack(canDecode = true, numberOfChannels = 1) {
+function audioTrack(
+  canDecode: boolean | (() => boolean) = true,
+  numberOfChannels = 1,
+  codec = 'aac',
+) {
   return {
-    canDecode: vi.fn(async () => canDecode),
+    getCodec: vi.fn(async () => codec),
+    canDecode: vi.fn(async () => (
+      typeof canDecode === 'function' ? canDecode() : canDecode
+    )),
     getNumberOfChannels: vi.fn(async () => numberOfChannels),
   }
 }
@@ -829,6 +865,30 @@ describe('createMediabunnyExportMediaSource', () => {
     expect(fakeBitmaps[1].close).toHaveBeenCalledOnce()
     expect(canvasIteratorAt().return).toHaveBeenCalledOnce()
     expect(inputAt().dispose).toHaveBeenCalledOnce()
+  })
+
+  test('loads local ProRes support before allocating the export sink', async () => {
+    const track = videoTrack(
+      () => localDecoders.proresRegistered,
+      'prores',
+    )
+    const registrationsBefore = localDecoders.proresRegistrations
+    mb.inputTracks.push(track)
+    mb.canvasSinkHandlers.push(async () => wrappedCanvas())
+    const media = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'prores-asset', sourceStart: 0 }], 1),
+      async () => new Blob(['prores']),
+    )
+    const lease = await media.openFrame(0)
+
+    const bitmap = await lease.getFrame('prores-asset', 0)
+
+    expect(bitmap).toBe(fakeBitmaps[0])
+    expect(localDecoders.proresRegistrations).toBe(registrationsBefore + 1)
+    expect(track.canDecode).toHaveBeenCalledTimes(2)
+    expect(canvasSinkAt().track).toBe(track)
+    await lease.close()
+    await media.close()
   })
 
   test('serializes same-asset canvas reuse until each bitmap copy is stable', async () => {
@@ -1182,6 +1242,36 @@ describe('createMediabunnyExportSink video behavior', () => {
 })
 
 describe('createMediabunnyExportSink audio behavior', () => {
+  test('loads local E-AC-3 support before allocating the audio sink', async () => {
+    const doc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('eac3-clip', 'eac3-asset', 1)),
+    ])
+    const track = audioTrack(
+      () => localDecoders.ac3Registered,
+      6,
+      'eac3',
+    )
+    const decoded = decodedAudioSample(
+      Array.from({ length: 6 }, () => new Float32Array(1_602)),
+      48_000,
+    )
+    const registrationsBefore = localDecoders.ac3Registrations
+    mb.audioTracks.push(track)
+    mb.audioSinkSampleSequences.push([decoded])
+    const sink = await createMediabunnyExportSink(
+      doc,
+      SETTINGS,
+      async () => new Blob(['eac3']),
+    )
+
+    await sink.addFrame(0, 1_001 / 30_000)
+
+    expect(localDecoders.ac3Registrations).toBe(registrationsBefore + 1)
+    expect(track.canDecode).toHaveBeenCalledTimes(2)
+    expect(audioSinkAt().track).toBe(track)
+    await sink.cancel()
+  })
+
   test('registers AAC, resamples mono, and writes the exact NTSC sample schedule with closed resources', async () => {
     const doc = makeAudioDoc([
       makeAudioTrack(

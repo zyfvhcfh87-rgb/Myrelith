@@ -28,6 +28,7 @@ import {
   MediaAssetRuntimeError,
   type MediaRuntimeFailure,
 } from '../domain/mediaCompatibility'
+import { ensureMediaDecoderSupport } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, TimelineDoc } from '../domain/schema'
 import {
   docDurationFrames,
@@ -221,19 +222,23 @@ export function createMediabunnyExportMediaSource(
             new Error(`Export asset "${assetId}" has no video track`),
           )
         }
-        let decodable: boolean
+        let support: Awaited<ReturnType<typeof ensureMediaDecoderSupport>>
         try {
-          decodable = await track.canDecode()
+          const codec = await track.getCodec()
+          support = await ensureMediaDecoderSupport({
+            codec,
+            canDecode: () => track.canDecode(),
+          })
         } catch (cause) {
           throw exportAssetError(assetId, 'video', 'decode-failed', cause)
         }
-        if (!decodable) {
+        if (!support.decodable) {
           throw exportAssetError(
             assetId,
             'video',
             'decode-failed',
             new Error(
-              `Export asset "${assetId}" cannot be decoded in this browser`,
+              `Export asset "${assetId}" cannot be decoded: ${support.failure.detail}`,
             ),
           )
         }
@@ -742,19 +747,23 @@ export function createMediabunnyExportAudioSource(
             new Error(`Export asset "${assetId}" has no audio track`),
           )
         }
-        let decodable: boolean
+        let support: Awaited<ReturnType<typeof ensureMediaDecoderSupport>>
         try {
-          decodable = await track.canDecode()
+          const codec = await track.getCodec()
+          support = await ensureMediaDecoderSupport({
+            codec,
+            canDecode: () => track.canDecode(),
+          })
         } catch (cause) {
           throw exportAssetError(assetId, 'audio', 'decode-failed', cause)
         }
-        if (!decodable) {
+        if (!support.decodable) {
           throw exportAssetError(
             assetId,
             'audio',
             'decode-failed',
             new Error(
-              `Export asset "${assetId}" audio cannot be decoded in this browser`,
+              `Export asset "${assetId}" audio cannot be decoded: ${support.failure.detail}`,
             ),
           )
         }

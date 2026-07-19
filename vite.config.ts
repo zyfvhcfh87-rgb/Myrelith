@@ -5,6 +5,14 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Codec extensions must register against the same Mediabunny instance in
+  // each realm. Module workers also need ES chunks for lazy decoder imports.
+  resolve: {
+    dedupe: ['mediabunny'],
+  },
+  worker: {
+    format: 'es',
+  },
   // External preview harnesses may assign an isolated port through PORT;
   // plain `npm run dev` keeps Vite's 5173 default.
   server: {

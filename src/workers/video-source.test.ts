@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
+import type { DecoderCheckResult } from '../codecs/mediaCodecFallbacks'
 import type {
   VideoFrameLike,
   VideoInputLike,
@@ -154,10 +155,16 @@ class FakeSink implements VideoSampleSinkLike {
 
 class FakeTrack implements VideoTrackLike {
   readonly decodable: boolean
+  readonly codec: string
   canDecodeCount = 0
 
-  constructor(decodable = true) {
+  constructor(decodable = true, codec = 'avc') {
     this.decodable = decodable
+    this.codec = codec
+  }
+
+  async getCodec(): Promise<string> {
+    return this.codec
   }
 
   async canDecode(): Promise<boolean> {
@@ -197,6 +204,25 @@ function makeHarness(
   let sinkIndex = 0
   const env: WorkerVideoSourceEnv = {
     createInput: () => input,
+    ensureDecoderSupport: async (target): Promise<DecoderCheckResult> => {
+      const decodable = await target.canDecode()
+      return decodable
+        ? {
+            decodable: true,
+            path: 'native',
+            attemptedFallback: null,
+            failure: null,
+          }
+        : {
+            decodable: false,
+            path: null,
+            attemptedFallback: null,
+            failure: {
+              reason: 'unsupported-codec',
+              detail: 'video track cannot be decoded in this worker',
+            },
+          }
+    },
     createSampleSink: () => {
       const sink = sinks[sinkIndex++]
       if (!sink) throw new Error('test did not provide a sink for this lane')
@@ -384,6 +410,9 @@ describe('worker video source', () => {
     const cause = new Error('Mediabunny Input construction failed')
     const env: WorkerVideoSourceEnv = {
       createInput: () => { throw cause },
+      ensureDecoderSupport: () => {
+        throw new Error('decoder check must not run')
+      },
       createSampleSink: () => { throw new Error('sink must not be created') },
     }
 
@@ -413,5 +442,28 @@ describe('worker video source', () => {
     await expect(openWorkerVideoSource(new Blob(), h.env)).rejects.toThrow(message)
     expect(h.input.disposeCount).toBe(1)
     expect(h.createdSinkCount()).toBe(0)
+  })
+
+  test('awaits the shared worker fallback seam before creating a sink', async () => {
+    const track = new FakeTrack(false, 'prores')
+    const h = makeHarness([], track)
+    h.env.ensureDecoderSupport = vi.fn(async (
+      target,
+    ): Promise<DecoderCheckResult> => {
+      expect(target.codec).toBe('prores')
+      return {
+        decodable: true,
+        path: 'local-prores',
+        attemptedFallback: 'prores',
+        failure: null,
+      }
+    })
+
+    const source = await openWorkerVideoSource(new Blob(), h.env)
+
+    expect(h.env.ensureDecoderSupport).toHaveBeenCalledOnce()
+    expect(h.createdSinkCount()).toBe(0)
+    await source.close()
+    expect(h.input.disposeCount).toBe(1)
   })
 })

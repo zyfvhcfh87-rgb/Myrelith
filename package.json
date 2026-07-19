@@ -12,8 +12,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mediabunny/ac3": "1.50.9",
+    "@mediabunny/prores": "1.50.9",
     "immer": "^11.1.9",
-    "mediabunny": "^1.50.3",
+    "mediabunny": "1.50.9",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "zustand": "^5.0.14"

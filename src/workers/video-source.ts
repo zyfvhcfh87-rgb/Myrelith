@@ -20,6 +20,11 @@ import {
 } from 'mediabunny'
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { InputVideoTrack } from 'mediabunny'
+import {
+  ensureMediaDecoderSupport,
+  type DecoderCheckResult,
+  type DecoderCheckTarget,
+} from '../codecs/mediaCodecFallbacks'
 
 const MICROSECONDS_PER_SECOND = 1_000_000
 
@@ -79,6 +84,7 @@ export interface VideoSampleLike {
 }
 
 export interface VideoTrackLike {
+  getCodec(): Promise<string | null>
   canDecode(): Promise<boolean>
 }
 
@@ -101,6 +107,7 @@ export interface VideoSampleSinkLike {
 
 export interface WorkerVideoSourceEnv {
   createInput(blob: Blob): VideoInputLike
+  ensureDecoderSupport(target: DecoderCheckTarget): Promise<DecoderCheckResult>
   /** Called once per lane so clips sharing an asset keep independent cursors. */
   createSampleSink(track: VideoTrackLike): VideoSampleSinkLike
 }
@@ -135,6 +142,7 @@ const browserEnv: WorkerVideoSourceEnv = {
     source: new BlobSource(blob),
     formats: ALL_FORMATS,
   }),
+  ensureDecoderSupport: (target) => ensureMediaDecoderSupport(target),
   createSampleSink: (track) => new VideoSampleSink(
     track as InputVideoTrack,
     { optimizeForLatency: true },
@@ -389,8 +397,13 @@ export async function openWorkerVideoSource(
   try {
     const track = await input.getPrimaryVideoTrack()
     if (!track) throw new Error('media has no video track')
-    if (!(await track.canDecode())) {
-      throw new Error('video track cannot be decoded in this worker')
+    const codec = await track.getCodec()
+    const support = await env.ensureDecoderSupport({
+      codec,
+      canDecode: () => track.canDecode(),
+    })
+    if (!support.decodable) {
+      throw new Error(support.failure.detail)
     }
     return new WorkerVideoSourceImpl(input, track, env)
   } catch (cause) {

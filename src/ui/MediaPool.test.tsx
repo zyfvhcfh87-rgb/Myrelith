@@ -121,6 +121,7 @@ function makeTrack(
       sampleRate: null,
       channels: null,
     },
+    decoderPath: 'native',
     decodable: true,
     reason: null,
     detail: null,
@@ -469,7 +470,61 @@ describe('MediaPool presentation', () => {
     expect(screen.getByText(/MPEG-4 Part 14/)).toBeInTheDocument()
     expect(screen.getByText('Video track 1 (primary)')).toBeInTheDocument()
     expect(screen.getByText('Audio track 1 (primary)')).toBeInTheDocument()
+    expect(screen.getAllByText(/Native browser decoder/)).toHaveLength(2)
     expect(screen.getByTitle('beach.mp4')).toHaveAttribute('draggable', 'true')
+  })
+
+  test('identifies locally decoded ProRes and AC-3 tracks honestly', () => {
+    seedAsset(makeAsset())
+    seedCompatibility(makeCompatibility({
+      status: 'ready',
+      report: makeReport('ready', {
+        tracks: [
+          makeTrack({
+            codec: 'prores',
+            codecParameter: 'apch',
+            internalCodecId: 'apch',
+            decoderConfig: {
+              codec: 'apch',
+              descriptionBytes: 0,
+              codedWidth: 1920,
+              codedHeight: 1080,
+              sampleRate: null,
+              channels: null,
+            },
+            decoderPath: 'local-prores',
+          }),
+          makeTrack({
+            kind: 'audio',
+            codec: 'eac3',
+            codecParameter: 'ec-3',
+            internalCodecId: 'ec-3',
+            decoderConfig: {
+              codec: 'ec-3',
+              descriptionBytes: 0,
+              codedWidth: null,
+              codedHeight: null,
+              sampleRate: 48_000,
+              channels: 6,
+            },
+            decoderPath: 'local-ac3',
+            width: null,
+            height: null,
+            codedWidth: null,
+            codedHeight: null,
+            frameRate: null,
+            sampleRate: 48_000,
+            channels: 6,
+          }),
+        ],
+      }),
+    }))
+
+    render(<MediaPool />)
+
+    expect(screen.getByText(/Local fallback \(ProRes\)/)).toBeInTheDocument()
+    expect(screen.getByText(/Local fallback \(AC-3\/E-AC-3\)/))
+      .toBeInTheDocument()
   })
 
   test('rechecks live compatibility before writing drag data', () => {

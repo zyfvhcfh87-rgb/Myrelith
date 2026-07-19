@@ -22,6 +22,7 @@
  */
 
 import { ALL_FORMATS, AudioBufferSink, BlobSource, CanvasSink, Input } from 'mediabunny'
+import { ensureMediaDecoderSupport } from '../codecs/mediaCodecFallbacks'
 
 /* ------------------------------------------------------------------ */
 /* Tunables                                                             */
@@ -163,6 +164,12 @@ export async function generateFilmstrip(file: Blob): Promise<FilmstripResult | n
   try {
     const track = await input.getPrimaryVideoTrack()
     if (!track) return null
+    const codec = await track.getCodec()
+    const support = await ensureMediaDecoderSupport({
+      codec,
+      canDecode: () => track.canDecode(),
+    })
+    if (!support.decodable) throw new Error(support.failure.detail)
     const durationSec = await input.computeDuration()
     const timestamps = filmstripTimestamps(durationSec)
     if (timestamps.length === 0) return null
@@ -215,6 +222,12 @@ export async function generateWaveform(file: Blob): Promise<WaveformResult | nul
   try {
     const track = await input.getPrimaryAudioTrack()
     if (!track) return null
+    const codec = await track.getCodec()
+    const support = await ensureMediaDecoderSupport({
+      codec,
+      canDecode: () => track.canDecode(),
+    })
+    if (!support.decodable) throw new Error(support.failure.detail)
     const durationSec = await input.computeDuration()
     const width = waveformWidth(durationSec)
     if (width === 0) return null

@@ -13,6 +13,10 @@ import {
   UnsupportedInputFormatError,
 } from 'mediabunny'
 import type { InputAudioTrack, InputVideoTrack } from 'mediabunny'
+import {
+  ensureMediaDecoderSupport,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 import type {
   MediaCompatibilityReport,
   MediaDecoderConfigSummary,
@@ -71,6 +75,11 @@ interface ProbeCoreResult {
   primaryVideo: VideoProbe | null
   primaryAudio: AudioProbe | null
 }
+
+type ProbeFallbackBudget = Pick<
+  LocalDecoderBudget,
+  'fileBytes' | 'durationMicroseconds'
+>
 
 function makeAbortError(): Error {
   const error = new Error('Media compatibility check was cancelled')
@@ -189,6 +198,7 @@ function emptyTrack(
     codecParameter: null,
     internalCodecId: null,
     decoderConfig: null,
+    decoderPath: null,
     decodable: false,
     reason: 'malformed-media',
     detail,
@@ -326,6 +336,7 @@ async function probeVideoTrack(
   track: InputVideoTrack,
   number: number,
   primary: boolean,
+  fallbackBudget: ProbeFallbackBudget,
   signal?: AbortSignal,
 ): Promise<VideoProbe> {
   try {
@@ -378,6 +389,7 @@ async function probeVideoTrack(
       ? null
       : snapToStandardRate(stats.averagePacketRate)
     let decodable = false
+    let decoderPath: MediaTrackCompatibility['decoderPath'] = null
     let reason: MediaTrackCompatibility['reason'] = null
     let detail: string | null = null
 
@@ -392,11 +404,22 @@ async function probeVideoTrack(
       detail = 'The video decoder configuration is missing or invalid.'
     } else {
       try {
-        decodable = await track.canDecode()
+        const support = await ensureMediaDecoderSupport({
+          codec,
+          canDecode: () => track.canDecode(),
+          budget: {
+            ...fallbackBudget,
+            width: codedWidth,
+            height: codedHeight,
+            framesPerSecond: stats.averagePacketRate,
+          },
+        }, signal)
+        decodable = support.decodable
+        decoderPath = support.path
         throwIfAborted(signal)
-        if (!decodable) {
-          reason = 'unsupported-codec'
-          detail = 'This browser cannot decode this video codec.'
+        if (support.decodable === false) {
+          reason = support.failure.reason
+          detail = support.failure.detail
         }
       } catch (cause) {
         if (signal?.aborted) throw makeAbortError()
@@ -418,6 +441,7 @@ async function probeVideoTrack(
         codecParameter: boundedDiagnosticToken(codecParameter),
         internalCodecId: serializeInternalCodecId(internalCodecId),
         decoderConfig: decoderConfigSummary,
+        decoderPath,
         decodable,
         reason,
         detail,
@@ -453,6 +477,7 @@ async function probeAudioTrack(
   track: InputAudioTrack,
   number: number,
   primary: boolean,
+  fallbackBudget: ProbeFallbackBudget,
   signal?: AbortSignal,
 ): Promise<AudioProbe> {
   try {
@@ -490,6 +515,7 @@ async function probeAudioTrack(
       ?? decoderCodecProblem(decoderConfig, 'audio')
     )
     let decodable = false
+    let decoderPath: MediaTrackCompatibility['decoderPath'] = null
     let reason: MediaTrackCompatibility['reason'] = null
     let detail: string | null = null
     if (problem) {
@@ -503,11 +529,21 @@ async function probeAudioTrack(
       detail = 'The audio decoder configuration is missing or invalid.'
     } else {
       try {
-        decodable = await track.canDecode()
+        const support = await ensureMediaDecoderSupport({
+          codec,
+          canDecode: () => track.canDecode(),
+          budget: {
+            ...fallbackBudget,
+            sampleRate,
+            channels,
+          },
+        }, signal)
+        decodable = support.decodable
+        decoderPath = support.path
         throwIfAborted(signal)
-        if (!decodable) {
-          reason = 'unsupported-codec'
-          detail = 'This browser cannot decode this audio codec.'
+        if (support.decodable === false) {
+          reason = support.failure.reason
+          detail = support.failure.detail
         }
       } catch (cause) {
         if (signal?.aborted) throw makeAbortError()
@@ -529,6 +565,7 @@ async function probeAudioTrack(
         codecParameter: boundedDiagnosticToken(codecParameter),
         internalCodecId: serializeInternalCodecId(internalCodecId),
         decoderConfig: decoderConfigSummary,
+        decoderPath,
         decodable,
         reason,
         detail,
@@ -634,6 +671,7 @@ function detectedFullMimeType(
 async function probeOpenedInput(
   input: Input,
   fileName: string,
+  fileBytes: number,
   signal?: AbortSignal,
 ): Promise<ProbeCoreResult> {
   throwIfAborted(signal)
@@ -712,24 +750,34 @@ async function probeOpenedInput(
       primary: track === primaryAudio,
     })),
   ]
-  const [durationSec, probes] = await Promise.all([
-    input.computeDuration([...videoTracks, ...audioTracks]),
-    mapWithConcurrency(combinedTracks, async (entry) => (
+  const durationSec = await input.computeDuration([
+    ...videoTracks,
+    ...audioTracks,
+  ])
+  throwIfAborted(signal)
+  const fallbackBudget: ProbeFallbackBudget = {
+    fileBytes,
+    durationMicroseconds: Number.isFinite(durationSec) && durationSec > 0
+      ? Math.round(durationSec * 1_000_000)
+      : Number.MAX_SAFE_INTEGER,
+  }
+  const probes = await mapWithConcurrency(combinedTracks, async (entry) => (
       entry.kind === 'video'
         ? probeVideoTrack(
             entry.track,
             entry.number,
             entry.primary,
+            fallbackBudget,
             signal,
           )
         : probeAudioTrack(
             entry.track,
             entry.number,
             entry.primary,
+            fallbackBudget,
             signal,
           )
-    )),
-  ])
+    ))
   throwIfAborted(signal)
 
   const tracks = probes.map((probe) => probe.report)
@@ -843,7 +891,7 @@ export async function probeMediaFile(
 
   let core: ProbeCoreResult
   try {
-    core = await probeOpenedInput(input, file.name, signal)
+    core = await probeOpenedInput(input, file.name, file.size, signal)
   } catch (cause) {
     if (signal?.aborted) throw makeAbortError()
     if (cause instanceof UnsupportedInputFormatError) {

@@ -81,6 +81,15 @@ const COMPATIBILITY_LABELS: Record<MediaCompatibilityStatus, string> = {
   error: 'Error',
 }
 
+const DECODER_PATH_LABELS: Record<
+  NonNullable<MediaTrackCompatibility['decoderPath']>,
+  string
+> = {
+  native: 'Native browser decoder',
+  'local-prores': 'Local fallback (ProRes)',
+  'local-ac3': 'Local fallback (AC-3/E-AC-3)',
+}
+
 function formatRate(rate: FrameRate): string {
   const framesPerSecond = rate.num / rate.den
   if (Number.isInteger(framesPerSecond)) return String(framesPerSecond)
@@ -119,6 +128,7 @@ function formatTrack(track: MediaTrackCompatibility): string {
       ?? track.internalCodecId
       ?? 'Unknown codec',
   )
+  if (track.decoderPath) parts.push(DECODER_PATH_LABELS[track.decoderPath])
   return parts.join(' · ')
 }
 

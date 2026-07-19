@@ -18,6 +18,7 @@ function track(
     codecParameter: kind === 'video' ? 'avc1.640028' : 'mp4a.40.2',
     internalCodecId: null,
     decoderConfig: null,
+    decoderPath: 'native',
     decodable: true,
     reason: null,
     detail: null,

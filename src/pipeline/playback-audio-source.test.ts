@@ -33,7 +33,11 @@ vi.mock('mediabunny', () => {
         media.failTrackCount--
         return null
       }
-      return { canDecode: async () => true, input: this }
+      return {
+        getCodec: async () => 'aac',
+        canDecode: async () => true,
+        input: this,
+      }
     }
 
     dispose() {

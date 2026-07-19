@@ -22,6 +22,11 @@ export type MediaCompatibilityStatus =
   | 'unsupported'
   | 'error'
 
+export type MediaDecoderPath =
+  | 'native'
+  | 'local-prores'
+  | 'local-ac3'
+
 export type SettledMediaCompatibilityStatus = Exclude<
   MediaCompatibilityStatus,
   'checking'
@@ -57,6 +62,8 @@ export interface MediaTrackCompatibility {
   /** Container-specific codec identifier, serialized for diagnostics. */
   internalCodecId: string | null
   decoderConfig: MediaDecoderConfigSummary | null
+  /** Decoder selected by the compatibility check in this browser realm. */
+  decoderPath: MediaDecoderPath | null
   decodable: boolean
   reason: MediaCompatibilityReason | null
   detail: string | null

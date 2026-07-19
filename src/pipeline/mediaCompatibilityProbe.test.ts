@@ -6,6 +6,27 @@ import {
   type MediaProbeResult,
 } from './mediaCompatibilityProbe'
 
+const localDecoders = vi.hoisted(() => ({
+  proresRegistered: false,
+  proresRegistrations: 0,
+  ac3Registered: false,
+  ac3Registrations: 0,
+}))
+
+vi.mock('@mediabunny/prores', () => ({
+  registerProresDecoder: () => {
+    localDecoders.proresRegistered = true
+    localDecoders.proresRegistrations++
+  },
+}))
+
+vi.mock('@mediabunny/ac3', () => ({
+  registerAc3Decoder: () => {
+    localDecoders.ac3Registered = true
+    localDecoders.ac3Registrations++
+  },
+}))
+
 interface FakeVideoTrack {
   isVideoTrack: ReturnType<typeof vi.fn>
   isAudioTrack: ReturnType<typeof vi.fn>
@@ -206,6 +227,7 @@ describe('probeMediaFile', () => {
         codec: 'avc',
         codecParameter: 'avc1.640028',
         internalCodecId: 'avc1',
+        decoderPath: 'native',
         decodable: true,
         width: 1920,
         height: 1080,
@@ -220,6 +242,7 @@ describe('probeMediaFile', () => {
         kind: 'audio',
         codec: 'aac',
         codecParameter: 'mp4a.40.2',
+        decoderPath: 'native',
         decodable: true,
         sampleRate: 48_000,
         channels: 2,
@@ -427,13 +450,110 @@ describe('probeMediaFile', () => {
             kind: 'audio',
             decodable: false,
             reason: 'unsupported-codec',
-            detail: 'This browser cannot decode this audio codec.',
+            detail: expect.stringContaining('no reviewed local fallback'),
           },
         ],
       },
     })
     expect(URL.createObjectURL).not.toHaveBeenCalled()
     expect(media.disposeCount).toBe(1)
+  })
+
+  test('promotes ProRes to Ready only after the local decoder recheck', async () => {
+    media.videoTracks = [videoTrack({
+      getCodec: vi.fn(async () => 'prores'),
+      getCodecParameterString: vi.fn(async () => 'apch'),
+      getInternalCodecId: vi.fn(async () => 'apch'),
+      getDecoderConfig: vi.fn(async () => ({
+        codec: 'apch',
+        codedWidth: 1920,
+        codedHeight: 1080,
+      })),
+      canDecode: vi.fn(async () => localDecoders.proresRegistered),
+    })]
+    media.audioTracks = []
+    const registrationsBefore = localDecoders.proresRegistrations
+
+    const result = await probeMediaFile(selectedFile(), F30, 'asset-prores')
+
+    expect(result.status).toBe('ready')
+    expect(result.compatibility.tracks).toEqual([
+      expect.objectContaining({
+        codec: 'prores',
+        decoderPath: 'local-prores',
+        decodable: true,
+        reason: null,
+      }),
+    ])
+    expect(localDecoders.proresRegistrations).toBe(registrationsBefore + 1)
+    expect(media.videoTracks[0].canDecode).toHaveBeenCalledTimes(2)
+  })
+
+  test('uses one local decoder path for both AC-3 codec variants', async () => {
+    media.videoTracks = []
+    media.audioTracks = [audioTrack({
+      getCodec: vi.fn(async () => 'eac3'),
+      getCodecParameterString: vi.fn(async () => 'ec-3'),
+      getInternalCodecId: vi.fn(async () => 'ec-3'),
+      getDecoderConfig: vi.fn(async () => ({
+        codec: 'ec-3',
+        sampleRate: 48_000,
+        numberOfChannels: 6,
+      })),
+      getNumberOfChannels: vi.fn(async () => 6),
+      canDecode: vi.fn(async () => localDecoders.ac3Registered),
+    })]
+    const registrationsBefore = localDecoders.ac3Registrations
+
+    const result = await probeMediaFile(selectedFile(), F30, 'asset-eac3')
+
+    expect(result.status).toBe('ready')
+    expect(result.compatibility.tracks).toEqual([
+      expect.objectContaining({
+        codec: 'eac3',
+        decoderPath: 'local-ac3',
+        channels: 6,
+        decodable: true,
+      }),
+    ])
+    expect(localDecoders.ac3Registrations).toBe(registrationsBefore + 1)
+    expect(media.audioTracks[0].canDecode).toHaveBeenCalledTimes(2)
+  })
+
+  test('warns instead of loading fallback above the documented duration budget', async () => {
+    media.durationSec = 2 * 60 * 60 + 1
+    media.videoTracks = [videoTrack({
+      getCodec: vi.fn(async () => 'prores'),
+      getCodecParameterString: vi.fn(async () => 'apch'),
+      getInternalCodecId: vi.fn(async () => 'apch'),
+      getDecoderConfig: vi.fn(async () => ({
+        codec: 'apch',
+        codedWidth: 1920,
+        codedHeight: 1080,
+      })),
+      canDecode: vi.fn(async () => false),
+    })]
+    media.audioTracks = []
+    const registrationsBefore = localDecoders.proresRegistrations
+
+    const result = await probeMediaFile(
+      selectedFile(),
+      F30,
+      'asset-prores-budget',
+    )
+
+    expect(result).toMatchObject({
+      status: 'unsupported',
+      compatibility: {
+        tracks: [{
+          decoderPath: null,
+          reason: 'resource-limit',
+          detail: expect.stringContaining('2-hour automatic decode budget'),
+        }],
+      },
+    })
+    expect(localDecoders.proresRegistrations).toBe(registrationsBefore)
+    expect(media.videoTracks[0].canDecode).toHaveBeenCalledOnce()
   })
 
   test('distinguishes an unknown codec from a known unsupported codec', async () => {

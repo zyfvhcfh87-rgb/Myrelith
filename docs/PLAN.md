@@ -511,6 +511,46 @@ guarded session truth across project reconnection and downstream consumers.
   partial-track consent, capability caching, optional proxy/fallback work, and
   the broader browser/codec fixture matrix.
 
+## Post-MVP issue #19 — Slice 3 ✅ DONE (2026-07-19) Shared local decoder fallback
+
+Issue #19 remains open; this slice implements the approved direct-decoder
+fallback and its automatic resource boundary without adding partial-track
+consent or proxy conversion.
+
+- [x] Add one realm-local codec-registration seam used by import probing,
+  filmstrip/waveform generation, render-worker sources, live audio, and export.
+  Native `canDecode()` runs first; only normalized ProRes or AC-3/E-AC-3 can
+  load a fallback, and the same track is checked again after registration.
+- [x] Pin `mediabunny`, `@mediabunny/prores`, and `@mediabunny/ac3` together at
+  exact version 1.50.9 and bundle them locally behind literal dynamic imports.
+  Vite dedupes the core package, emits ES workers, and leaves independent lazy
+  chunks for the main and render-worker realms.
+- [x] Make registration idempotent and concurrency-safe per realm. Successful
+  registrations retain their decoder path, failed loads clear the pending slot
+  for an explicit retry, and abort checks surround the non-abortable import and
+  decoder-support calls so a cancelled probe cannot publish Ready.
+- [x] Bound automatic fallback at 8 GiB, 2 hours, DCI 4K30 ProRes pixel
+  throughput, and 8-channel/48 kHz AC-3/E-AC-3. Exceeding a budget returns an
+  exact `resource-limit` diagnostic; WebCut neither silently omits a track nor
+  converts the source.
+- [x] Keep diagnostics honest and state-only in Media Pool: every supported
+  track names `Native browser decoder`, `Local fallback (ProRes)`, or `Local
+  fallback (AC-3/E-AC-3)`. Unknown codecs never trigger a fallback load.
+- [x] Evaluate cross-origin isolation before treating it as a requirement.
+  ProRes is correct without isolation through TurboRes's message-passing worker
+  mode; a shared-memory optimization remains future measured work. All decoder
+  code is locally bundled and no executable decoder is downloaded at runtime.
+- [x] Verification: 1,042 tests across 63 files, production build, lint, and
+  diff checks green. In-app Chromium imported generated native H.264/AAC,
+  ProRes/AAC, H.264/AC-3, and H.264/E-AC-3 fixtures with exact Ready paths and
+  generated thumbnails; ProRes rendered in Preview; playback crossed into the
+  AC-3 clip; a mixed timeline exported a downloaded 4.000s 1920×1080 H.264 +
+  48 kHz stereo AAC MP4; warning/error console stayed clean.
+- [ ] Later slices: explicit informed partial-track import, capability caching,
+  user-consented proxy conversion, broader browser/codec fixtures, and final
+  bundle-size/license/browser-isolation/low-memory shipping review. The AC-3
+  extension embeds FFmpeg, so distribution compliance is not claimed complete.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +
