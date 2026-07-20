@@ -472,9 +472,11 @@ boundary before any fallback or partial-track policy is selected.
   Chrome for Testing passed H.264/AAC MP4 Ready → linked A/V drop, ProRes MOV
   Unsupported/non-draggable → fresh explicit Retry → keyboard Remove, 720px
   wrapped diagnostics, and a 0-warning/0-error console.
-- [ ] Later slices after Slice 2: explicit local decode fallback and its
-  resource policy; user-consented partial-track import; capability caching;
-  optional proxy/fallback spike; broader browser/codec fixture matrix.
+- [x] Follow-ups: Slices 2–5 implement lifecycle feedback, bounded local
+  fallback, explicit partial-track import, and session capability caching;
+  Slice 6 records the measured proxy-conversion no-go below.
+- [ ] Broader browser/codec fixture matrix and final distribution/security
+  review remain.
 
 ## Post-MVP issue #19 — Slice 2 ✅ DONE (2026-07-18) Lifecycle + runtime feedback
 
@@ -507,9 +509,11 @@ guarded session truth across project reconnection and downstream consumers.
   AAC Ready-at-probe → one Waveform Error/Offline → valid Relink → Ready. The
   normal paths had a clean warning/error console; the forced decoder failure
   emitted one expected warning and did not retry.
-- [ ] Later slices: bounded local codec fallback/resource policy, explicit
-  partial-track consent, capability caching, optional proxy/fallback work, and
-  the broader browser/codec fixture matrix.
+- [x] Follow-ups: Slices 3–5 implement bounded local fallback, explicit
+  partial-track consent, and capability caching; Slice 6 records the measured
+  proxy-conversion no-go below.
+- [ ] Broader browser/codec fixture matrix and final distribution/security
+  review remain.
 
 ## Post-MVP issue #19 — Slice 3 ✅ DONE (2026-07-19) Shared local decoder fallback
 
@@ -549,10 +553,11 @@ consent or proxy conversion.
 - [x] Slice 4 follow-up: explicit informed partial-track import (see below).
 - [x] Slice 5 follow-up: session capability caching with exact boundary
   revalidation (see below).
-- [ ] Remaining slices: user-consented proxy conversion,
-  broader browser/codec fixtures, and final bundle-size/license/browser-
-  isolation/low-memory shipping review. The AC-3 extension embeds FFmpeg, so
-  distribution compliance is not claimed complete.
+- [x] Slice 6 follow-up: measured optional proxy-conversion decision (see
+  below); the stock browser/WASM candidate is formally out of scope.
+- [ ] Remaining work: broader browser/codec fixtures and final bundle-size/
+  license/browser-isolation/low-memory shipping review. The AC-3 extension
+  embeds FFmpeg, so distribution compliance is not claimed complete.
 
 ## Post-MVP issue #19 — Slice 4 ✅ DONE (2026-07-20) Explicit partial-track import
 
@@ -588,9 +593,9 @@ proxy conversion.
   clean. The known 1.144 MB lazy AC-3 and main-chunk advisories remain.
 - [x] Slice 5 follow-up: session capability caching with exact boundary
   revalidation (see below).
-- [ ] Remaining slices: optional user-consented proxy
-  conversion, broader browser/codec fixtures, and final distribution/security
-  review.
+- [x] Slice 6 follow-up: measured optional proxy-conversion no-go (see below).
+- [ ] Remaining work: broader browser/codec fixtures and final distribution/
+  security review.
 
 ## Post-MVP issue #19 — Slice 5 ✅ DONE (2026-07-20) Capability caching and boundary revalidation
 
@@ -628,8 +633,47 @@ objects, or capability results in `.webcut` projects.
   Export ready through video + audio decode. No error overlay, warning/error
   console entry, or page-level overflow appeared. The known 1.144 MB lazy AC-3
   and main-chunk advisories remain.
-- [ ] Remaining slices: optional user-consented proxy conversion, broader
-  browser/codec fixtures, and final distribution/security review.
+- [x] Slice 6 follow-up: measured optional proxy-conversion no-go (see below).
+- [ ] Remaining work: broader browser/codec fixtures and final distribution/
+  security review.
+
+## Post-MVP issue #19 — Slice 6 ✅ DECIDED (2026-07-20) Optional proxy conversion
+
+Issue #19 remains open. This optional slice ran the worker/WASM spike and makes
+a firm no-go decision for built-in browser-side proxy conversion in the current
+issue. This is a completed decision, not a shipped proxy feature; the detailed
+record is in [the Slice 6 proxy-conversion decision](decisions/ISSUE_19_PROXY_CONVERSION.md).
+
+- [x] Run a temporary, locally hosted `ffmpeg.wasm` 0.12.15 / core 0.12.10
+  single-thread worker spike against both an 8.008 s VP9/Opus mechanics fixture
+  and a Limited 8.021 s MPEG-2/AAC Matroska whose MPEG-2 video returned `false`
+  from `canDecode`. The direct-decoder-gap 9,009,804-byte source converted in
+  4,197.4 ms to a 10,393,232-byte H.264/AAC MP4 whose two output configurations
+  returned `true` from `canDecode`; the warning/error console stayed clean.
+- [x] Exercise cancellation while conversion is active. Hard worker
+  termination returned in 0.2 ms, prevented late completion, invalidated the
+  worker, and required a full core reload; it did not prove immediate memory
+  reclamation or cleanup. The experimental progress callback also emitted an
+  invalid 1.15-trillion intermediate value on the rerun.
+- [x] Reject the stock candidate on bounded-I/O, progress, licensing, and
+  source/proxy-identity gates; low-memory performance and exact cleanup remain
+  unproven and therefore fail closed. Its raw core is 32.2 MB, its documented
+  input ceiling is 2 GB, and `readFile()` returns one whole WASM-FS buffer
+  rather than an atomic streaming OPFS sink.
+- [x] Keep proxy consent, storage, and lifecycle UI out of production. No
+  converter dependency, proxy bytes, Zustand state, or `.webcut` field is
+  added; the original file remains the sole source/relink identity.
+- [x] Record strict reopen conditions: reviewed redistributable encoder,
+  streaming OPFS I/O, first-class original/proxy provenance, representative
+  low-memory benchmarks, monotonic progress, bounded clean cancellation, and
+  an explicit cross-origin-isolation decision.
+- [x] Browser evidence: Mediabunny reopened the derived MP4 and both decoder
+  configurations returned `canDecode: true`; in-app Chromium also verified the
+  hard-cancel/reload state with no console warning or error. Full tests, build,
+  lint, and diff checks remained green after the documentation-only decision.
+- [ ] Remaining work: broader browser/codec fixtures and the final distribution/
+  security review, including the already shipped AC-3 fallback's FFmpeg
+  obligations.
 
 ## Test strategy per layer (unchanged from original)
 

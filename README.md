@@ -88,19 +88,24 @@ check, not a sample decode of the whole stream. The Media Pool shows `Ready`,
 new import remains available for explicit Retry or Remove. A project source
 that is not Ready stays Offline and uses Relink.
 
-| Direct-import source | Current Windows Chrome for Testing result |
+| Direct-import source | Verified Windows Chromium result |
 |---|---|
 | MP4 with H.264/AVC video + AAC audio | Ready (verified) |
-| QuickTime/MOV with ProRes 422 HQ video | Unsupported (verified) |
+| QuickTime/MOV with ProRes 422 HQ video + AAC audio | Ready through the locally bundled ProRes fallback (verified) |
+| H.264/AVC video + AC-3 or E-AC-3 audio | Ready through the locally bundled audio fallback (verified) |
+| One fully decodable track kind plus one failed track kind | Limited; explicit review can import video-only or audio-only (verified) |
 | Other containers/codecs | Probed at runtime; support depends on Chrome, the OS, and the real track configuration |
 
-Issue #19's first two slices now carry that native report through import,
-Resume, and Relink. A confirmed preview, filmstrip, waveform, live-audio, or
-export source failure updates only the exact connected source generation,
-leaves its durable project descriptor Offline, and exposes Relink without an
-implicit retry loop. Decode fallback and partial-track consent are still not
-implemented; WebCut does not silently drop a failed track or claim a fallback
-that does not exist.
+Issue #19's completed slices carry that report through import, Resume, Relink,
+preview, filmstrip, waveform, live audio, and export. ProRes and AC-3/E-AC-3 can
+lazy-load reviewed, version-pinned, locally bundled decoder extensions behind
+resource limits. A safe whole-kind partial import requires an explicit dialog
+and persists the user's choice across reconnection. Confirmed runtime failures
+update only the exact connected source generation and expose Relink without an
+implicit retry loop.
+The measured browser-side proxy-conversion candidate is formally out of scope
+for Issue #19's current release; see
+[the decision record](docs/decisions/ISSUE_19_PROXY_CONVERSION.md).
 
 ## Current limitations
 
@@ -122,8 +127,11 @@ that does not exist.
 - Linked audio/video pairs can be unlinked, but arbitrary clips cannot be
   manually re-linked yet.
 - Native media compatibility depends on the codecs exposed by the browser and
-  operating system. There is no software decode fallback or partial-track
-  import yet; Limited and Unsupported direct imports remain non-draggable.
+  operating system. WebCut has bounded local decoder fallbacks for ProRes and
+  AC-3/E-AC-3, plus explicit video-only/audio-only import when exactly one whole
+  track kind is safe to keep. Other Limited and Unsupported imports remain
+  non-draggable. There is no built-in proxy converter; convert externally and
+  import the result as a new source when no direct or partial path applies.
 
 ## Quality checks
 

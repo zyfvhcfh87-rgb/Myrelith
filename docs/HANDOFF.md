@@ -55,6 +55,7 @@ and the open list below.
 | Post-MVP #19 — compatibility Slice 3 | ✅ done | one lazy local-decoder seam for ProRes + AC-3/E-AC-3 across probe/visuals/preview/audio/export; bounded automatic policy; 1,042 tests + in-app Chromium import/preview/playback/export gate |
 | Post-MVP #19 — compatibility Slice 4 | ✅ done | explicit whole-kind consent + durable video-only/audio-only projection across import/Resume/Relink/runtime/export; 1,072 tests + in-app Chromium dual-path gate |
 | Post-MVP #19 — compatibility Slice 5 | ✅ done | bounded realm-local exact-config capability cache; probe reuse + forced render/visuals/audio/export revalidation; 1,092 tests + in-app Chromium playback/export gate |
+| Post-MVP #19 — compatibility Slice 6 | ✅ no-go decided | measured local worker/WASM proxy spike, including a Limited source with browser-unsupported video; failed bounded-I/O/progress/license/provenance gates with low-memory behavior unproven; no converter shipped |
 
 1,092 tests green · `npm run build` passes with the known large-chunk warning
 (1.144 MB lazy AC-3 chunk; existing app chunk also exceeds 500 kB) ·
@@ -394,12 +395,39 @@ and preview frame rendered, playback exercised render plus live-audio decode,
 and full video + audio export reached Export ready. The page fit the viewport,
 no error overlay appeared, and the warning/error console was empty.
 
+Issue #19 Slice 6 makes the optional proxy-conversion decision. A locally hosted
+`ffmpeg.wasm` 0.12.15/core 0.12.10 single-thread worker converted both a
+VP9/Opus mechanics fixture and a Limited source with browser-unsupported video.
+The latter was an 8.021 s, 1280×720 MPEG-2/AAC Matroska: video returned `false`
+from `canDecode`, AAC returned true, and its 9.01 MB input became a 10.39 MB
+H.264/AAC MP4 in 4,197.4 ms. Mediabunny reopened the output and both decoder
+configurations returned true. Chrome 150 ran on a Ryzen 9 5900X/31.9 GiB host;
+this does not prove low-memory or sample-level editing behavior.
+
+`terminate()` returned during an active VP9/Opus rerun in 0.2 ms, prevented a
+late completion, invalidated the worker, and made a full core reload mandatory;
+that timing does not prove immediate WASM-memory reclamation or exact cleanup.
+The experimental progress callback also emitted an invalid 1.15-trillion
+intermediate value. The measured `writeFile`/`readFile` path used whole
+WASM-FS input/output buffers; WORKERFS can avoid the input copy, but there is no
+public atomic streaming OPFS output sink.
+
+The result is a firm no-go for a built-in proxy feature in this issue. The stock
+core also has a documented 2 GB input ceiling, requires cross-origin isolation
+for its multi-thread option, and is packaged GPL-2.0-or-later with x264. WebCut
+also needs a separate original/proxy provenance model before a downscaled or
+CFR representation can safely cross preview, visuals, audio, render, export,
+Save/Resume, Relink, and cleanup. The
+full evidence and reopen gates are in
+`docs/decisions/ISSUE_19_PROXY_CONVERSION.md`. No converter dependency, proxy
+bytes, state, or project-schema field was shipped.
+
 **Next: keep Issue #19 open and ask before selecting its next slice.** Remaining
-work is optional user-consented proxy conversion, broader browser/codec
-fixtures, and the final distribution/security review. Future project-storage
-work is also separate opt-in media caching with quota/eviction UX and multi-tab
-recovery ownership; do not imply recovery or a portable `.webcut` contains
-source bytes today.
+work is the broader browser/codec fixture matrix and final distribution/security
+review, including the existing AC-3 fallback's FFmpeg obligations. Future
+project-storage work is also separate opt-in media caching with quota/eviction
+UX and multi-tab recovery ownership; do not imply recovery or a portable
+`.webcut` contains source bytes today.
 
 ## What works today (user-visible)
 
@@ -842,17 +870,17 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #19 remains open after Slice 5. Import, remembered/manual Resume,
+- Issue #19 remains open after Slice 6. Import, remembered/manual Resume,
   individual/folder Relink, and confirmed preview/visuals/audio/export source
   failures now share guarded compatibility reports and fail-closed timeline
   entry. ProRes and AC-3/E-AC-3 have bounded, locally bundled, lazy fallbacks
   across every decode surface. Explicit video-only/audio-only imports now
   require informed consent and persist across project reconnection. Session
   capability facts are now bounded, non-persistent, invalidated with source and
-  runtime changes, and revalidated at every actual decode boundary. Still
-  separate: user-consented proxy conversion, the broader browser/codec fixture
-  matrix, and final distribution/security review. Do not imply those later
-  paths exist yet.
+  runtime changes, and revalidated at every actual decode boundary. The
+  measured optional proxy path is formally no-go and out of scope; do not imply
+  an in-app converter exists. Still separate: the broader browser/codec fixture
+  matrix and final distribution/security review.
 - Slices 4–6 now cover portable Save/Save As,
   permission-aware automatic source reconnection, removable Recent shortcuts,
   open-offline sessions, individual/folder relinking, live save after a writable
