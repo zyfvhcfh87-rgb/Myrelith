@@ -182,25 +182,42 @@ describe('media codec fallback registry', () => {
     expect(loadProres).toHaveBeenCalledTimes(2)
   })
 
-  test('cancellation cannot publish success after an in-flight load', async () => {
+  test('cancellation settles before an in-flight load and cannot publish success', async () => {
     let registered = false
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
       release = resolve
     })
-    const registry = createMediaCodecFallbackRegistry(loaders(async () => {
+    const loadProres = vi.fn(async () => {
       await gate
       registered = true
-    }))
+    })
+    const registry = createMediaCodecFallbackRegistry(loaders(loadProres))
     const controller = new AbortController()
     const pending = registry.ensureDecodable({
       codec: 'prores',
       canDecode: async () => registered,
     }, controller.signal)
 
+    await vi.waitFor(() => expect(loadProres).toHaveBeenCalledOnce())
     controller.abort()
-    release()
-    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    const outcome = pending.then(
+      () => 'resolved',
+      (cause: unknown) => cause instanceof Error ? cause.name : 'unknown',
+    )
+    try {
+      await expect(Promise.race([
+        outcome,
+        new Promise<string>((resolve) => {
+          setTimeout(() => resolve('still-pending'), 25)
+        }),
+      ])).resolves.toBe('AbortError')
+      expect(registered).toBe(false)
+    } finally {
+      release()
+      await Promise.allSettled([pending])
+    }
+    await vi.waitFor(() => expect(registered).toBe(true))
     await expect(registry.ensureDecodable({
       codec: 'prores',
       canDecode: async () => registered,

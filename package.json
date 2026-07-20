@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "qa:issue19:fixtures": "node scripts/generate-issue-19-fixtures.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview"

@@ -10,6 +10,7 @@ const media = vi.hoisted(() => ({
   iterators: [] as Array<{ returnCalls: number }>,
   failTrackCount: 0,
   bufferOpensOnDisposedInput: 0,
+  trackGate: null as Promise<void> | null,
 }))
 
 vi.mock('mediabunny', () => {
@@ -29,6 +30,7 @@ vi.mock('mediabunny', () => {
     }
 
     async getPrimaryAudioTrack() {
+      if (media.trackGate) await media.trackGate
       if (media.failTrackCount > 0) {
         media.failTrackCount--
         return null
@@ -96,6 +98,7 @@ beforeEach(() => {
   media.iterators.length = 0
   media.failTrackCount = 0
   media.bufferOpensOnDisposedInput = 0
+  media.trackGate = null
 })
 
 describe('createMediabunnyPlaybackAudioSource ownership', () => {
@@ -198,5 +201,29 @@ describe('createMediabunnyPlaybackAudioSource ownership', () => {
     expect(resolveAsset).toHaveBeenCalledTimes(2)
     await retry.close()
     await expect(source.close()).resolves.toBeUndefined()
+  })
+
+  test('close disposes a pending Input promptly and exactly once', async () => {
+    let releaseTrack!: () => void
+    media.trackGate = new Promise<void>((resolve) => {
+      releaseTrack = resolve
+    })
+    const source = createMediabunnyPlaybackAudioSource(
+      async () => new Blob(['media']),
+    )
+    const opening = source.openClip({
+      assetId: 'asset-1',
+      startTime: 0,
+      endTime: 1,
+    })
+
+    await vi.waitFor(() => expect(media.inputs).toHaveLength(1))
+    const closing = source.close()
+    expect(media.inputs[0].disposeCalls).toBe(1)
+
+    releaseTrack()
+    await expect(opening).rejects.toThrow('Playback audio source is closed')
+    await expect(closing).resolves.toBeUndefined()
+    expect(media.inputs[0].disposeCalls).toBe(1)
   })
 })

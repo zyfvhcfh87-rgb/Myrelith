@@ -123,6 +123,45 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw makeAbortError()
 }
 
+/**
+ * Stop awaiting a non-abortable browser/module operation as soon as the caller
+ * aborts. The underlying promise keeps its rejection handler and may finish
+ * one-time realm registration in the background, but it can no longer publish
+ * a result to the cancelled check.
+ */
+function awaitWithAbort<T>(
+  operation: Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (!signal) return operation
+  if (signal.aborted) return Promise.reject(makeAbortError())
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const abort = (): void => {
+      if (settled) return
+      settled = true
+      reject(makeAbortError())
+    }
+    signal.addEventListener('abort', abort, { once: true })
+
+    void operation.then(
+      (value) => {
+        if (settled) return
+        settled = true
+        signal.removeEventListener('abort', abort)
+        resolve(value)
+      },
+      (cause: unknown) => {
+        if (settled) return
+        settled = true
+        signal.removeEventListener('abort', abort)
+        reject(cause)
+      },
+    )
+  })
+}
+
 function exactBytes(source: unknown): Uint8Array | null {
   try {
     if (ArrayBuffer.isView(source)) {
@@ -626,7 +665,10 @@ export function createMediaCodecFallbackRegistry(
       const family = decoderFamily(target.codec)
       const keyRevision = capabilityRevision
       const keySourceGeneration = sourceGeneration(target.sourceId)
-      const cacheKey = await decoderCapabilityCacheKey(target)
+      const cacheKey = await awaitWithAbort(
+        decoderCapabilityCacheKey(target),
+        signal,
+      )
       throwIfAborted(signal)
 
       if (
@@ -664,7 +706,10 @@ export function createMediaCodecFallbackRegistry(
 
       try {
         if (family && registered.has(family)) {
-          const nativeSupport = await nativeOnlyDecoderSupport(target)
+          const nativeSupport = await awaitWithAbort(
+            nativeOnlyDecoderSupport(target),
+            signal,
+          )
           throwIfAborted(signal)
           if (nativeSupport === true) {
             return finish({
@@ -675,7 +720,10 @@ export function createMediaCodecFallbackRegistry(
             })
           }
 
-          const effectivelyDecodable = await target.canDecode()
+          const effectivelyDecodable = await awaitWithAbort(
+            target.canDecode(),
+            signal,
+          )
           throwIfAborted(signal)
           if (effectivelyDecodable) {
             return finish({
@@ -708,7 +756,10 @@ export function createMediaCodecFallbackRegistry(
           })
         }
 
-        const initiallyDecodable = await target.canDecode()
+        const initiallyDecodable = await awaitWithAbort(
+          target.canDecode(),
+          signal,
+        )
         throwIfAborted(signal)
 
         if (initiallyDecodable) {
@@ -744,7 +795,7 @@ export function createMediaCodecFallbackRegistry(
           }
         }
 
-        await register(family)
+        await awaitWithAbort(register(family), signal)
         throwIfAborted(signal)
         // Registration is a runtime change and deliberately invalidated the
         // old write token. The post-registration check is fresh evidence.
@@ -755,7 +806,10 @@ export function createMediaCodecFallbackRegistry(
           ? beginWrite(cacheKey, keySourceGeneration)
           : null
 
-        const nativeSupport = await nativeOnlyDecoderSupport(target)
+        const nativeSupport = await awaitWithAbort(
+          nativeOnlyDecoderSupport(target),
+          signal,
+        )
         throwIfAborted(signal)
         if (nativeSupport === true) {
           return finish({
@@ -766,7 +820,7 @@ export function createMediaCodecFallbackRegistry(
           })
         }
 
-        const decodable = await target.canDecode()
+        const decodable = await awaitWithAbort(target.canDecode(), signal)
         throwIfAborted(signal)
         if (!decodable) {
           return finish({

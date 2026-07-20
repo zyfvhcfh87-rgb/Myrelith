@@ -56,9 +56,10 @@ and the open list below.
 | Post-MVP #19 — compatibility Slice 4 | ✅ done | explicit whole-kind consent + durable video-only/audio-only projection across import/Resume/Relink/runtime/export; 1,072 tests + in-app Chromium dual-path gate |
 | Post-MVP #19 — compatibility Slice 5 | ✅ done | bounded realm-local exact-config capability cache; probe reuse + forced render/visuals/audio/export revalidation; 1,092 tests + in-app Chromium playback/export gate |
 | Post-MVP #19 — compatibility Slice 6 | ✅ no-go decided | measured local worker/WASM proxy spike, including a Limited source with browser-unsupported video; failed bounded-I/O/progress/license/provenance gates with low-memory behavior unproven; no converter shipped |
+| **Post-MVP #19 — final closeout** | ✅ closed | 13-file real codec/damage matrix; prompt cancellation + exact disposal races fixed; 265 focused + 1,094 total tests; Chrome 150 and Edge 150 full VP9/Opus playback/cancel/export gates; closes at 46/49 with three rejected proxy children intentionally unchecked |
 
-1,092 tests green · `npm run build` passes with the known large-chunk warning
-(1.144 MB lazy AC-3 chunk; existing app chunk also exceeds 500 kB) ·
+1,094 tests green · `npm run build` passes with the known large-chunk warning
+(three generated chunks exceed 500 kB) ·
 `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
@@ -422,12 +423,31 @@ full evidence and reopen gates are in
 `docs/decisions/ISSUE_19_PROXY_CONVERSION.md`. No converter dependency, proxy
 bytes, state, or project-schema field was shipped.
 
-**Next: keep Issue #19 open and ask before selecting its next slice.** Remaining
-work is the broader browser/codec fixture matrix and final distribution/security
-review, including the existing AC-3 fallback's FFmpeg obligations. Future
-project-storage work is also separate opt-in media caching with quota/eviction
-UX and multi-tab recovery ownership; do not imply recovery or a portable
-`.webcut` contains source bytes today.
+Issue #19 final closeout adds the reproducible
+`scripts/generate-issue-19-fixtures.mjs` matrix and closes the last three
+ownership races. A cancelled fallback caller now rejects promptly and cannot
+publish after a non-abortable module/browser operation; live-audio Inputs have
+one exact-once disposer even when close overtakes track open; the legacy decode
+worker closes bitmaps that arrive after its generation changes. The focused
+suite passed 265/265 and the full suite passed 1,094/1,094.
+
+Chrome 150 and Edge 150 each ran real VP9/Opus through Ready import, thumbnail,
+waveform, linked A/V drop, ruler seek, decoded Preview, live-audio scheduling,
+active export cancellation, retry, and downloaded MP4. Both outputs probed as
+1280×720 H.264 at 30 fps plus 48 kHz stereo AAC, and both runs had no console
+or page error. The broader Chrome matrix also recorded local AC-3/E-AC-3,
+host-native HEVC/AV1, spoofed WebM bytes under `.mp4`, unknown/malformed
+partial-track choices, truncation, empty input, and random bytes. Edge is still
+Chromium-based; Firefox/WebKit remain untested.
+
+**Next: Issue #19 is closed at 46/49.** The three unchecked proxy implementation
+children are the intentional no-go outcome, not forgotten work. Public
+distribution remains a separate gate: add the WebCut license and third-party
+notices/source links, finish FFmpeg/LGPL and Dolby review, and run representative
+low-memory testing before making a release-compliance claim. Future project
+storage is also separate opt-in media caching with quota/eviction UX and
+multi-tab recovery ownership; do not imply recovery or a portable `.webcut`
+contains source bytes today.
 
 ## What works today (user-visible)
 
@@ -847,6 +867,9 @@ surface; it is not a second zoom and never enters document history.
 - `ffmpeg`/`ffprobe` are installed as of 2026-07-12. They generated and probed
   the 5.2b A/V fixture/result; keep the in-browser generator below when a test
   needs a same-origin `File` without touching disk.
+- `npm run qa:issue19:fixtures` regenerates Issue #19's ignored 13-file native,
+  fallback, unknown, malformed, truncated, spoofed, empty, and random-byte
+  matrix plus a hash/ffprobe manifest under `.tmp/issue-19-codec-fixtures/`.
 - Generate a labeled test MP4 IN THE BROWSER:
   import mediabunny via `/@fs/E:/ClaudeSpace/WebCut/node_modules/mediabunny/dist/modules/src/index.js`,
   `Output` + `Mp4OutputFormat` + `BufferTarget` + `CanvasSource`, draw
@@ -870,17 +893,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #19 remains open after Slice 6. Import, remembered/manual Resume,
-  individual/folder Relink, and confirmed preview/visuals/audio/export source
-  failures now share guarded compatibility reports and fail-closed timeline
-  entry. ProRes and AC-3/E-AC-3 have bounded, locally bundled, lazy fallbacks
-  across every decode surface. Explicit video-only/audio-only imports now
-  require informed consent and persist across project reconnection. Session
-  capability facts are now bounded, non-persistent, invalidated with source and
-  runtime changes, and revalidated at every actual decode boundary. The
-  measured optional proxy path is formally no-go and out of scope; do not imply
-  an in-app converter exists. Still separate: the broader browser/codec fixture
-  matrix and final distribution/security review.
+- Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
+  Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
+  explicit partial-track consent, capability caching/revalidation, prompt
+  cancellation, exact disposal, the real codec/damage matrix, and Chrome/Edge
+  gates are complete. The three unchecked proxy implementation children are
+  intentionally rejected by the measured no-go decision; do not imply an
+  in-app converter exists. Public-distribution licensing/notices and
+  representative low-memory certification remain separate release work.
 - Slices 4–6 now cover portable Save/Save As,
   permission-aware automatic source reconnection, removable Recent shortcuts,
   open-offline sessions, individual/folder relinking, live save after a writable

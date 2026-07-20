@@ -298,6 +298,11 @@ export function createMediabunnyPlaybackAudioSource(
   let closed = false
   let closePromise: Promise<void> | null = null
 
+  const disposeInputOnce = (input: Input): void => {
+    if (!openInputs.delete(input)) return
+    input.dispose()
+  }
+
   const disposeAsset = (
     assetId: AssetId,
     asset: DecodedAudioAsset,
@@ -306,8 +311,7 @@ export function createMediabunnyPlaybackAudioSource(
     asset.disposed = true
     sessions.delete(assetId)
     resolvedAssets.delete(assetId)
-    openInputs.delete(asset.input)
-    asset.input.dispose()
+    disposeInputOnce(asset.input)
   }
 
   const releaseAsset = (
@@ -372,11 +376,10 @@ export function createMediabunnyPlaybackAudioSource(
         return asset
       } catch (cause) {
         try {
-          input.dispose()
+          disposeInputOnce(input)
         } catch {
           // Preserve the decode/open failure over disposal cleanup.
         }
-        openInputs.delete(input)
         throw cause
       }
     })()
@@ -480,11 +483,9 @@ export function createMediabunnyPlaybackAudioSource(
       }
       for (const input of [...openInputs]) {
         try {
-          input.dispose()
+          disposeInputOnce(input)
         } catch (cause) {
           failure ??= cause
-        } finally {
-          openInputs.delete(input)
         }
       }
 

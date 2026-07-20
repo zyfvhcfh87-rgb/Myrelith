@@ -57,6 +57,8 @@ interface FakeOptions {
   flushRejects?: boolean
   /** Drain one queue slot per microtask after each decode, like a live decoder. */
   autoDrain?: boolean
+  /** Hold bitmap copies so teardown races can be exercised deterministically. */
+  bitmapGate?: Promise<void>
 }
 
 /**
@@ -168,6 +170,7 @@ function makeHarness(opts: FakeOptions = {}, drawImpl?: () => void): Harness {
     isConfigSupported: async () => ({ supported: opts.supported ?? true }),
     createChunk: (payload) => payload,
     createBitmap: async (frame) => {
+      if (opts.bitmapGate) await opts.bitmapGate
       const bitmap: TrackedBitmap = {
         width: frame.displayWidth,
         height: frame.displayHeight,
@@ -513,5 +516,24 @@ describe('seek supersession', () => {
 
     await h.core.handleMessage(seekMsg(300, 0, gop()))
     expect(h.posts.at(-1)).toMatchObject({ type: 'error', requestId: 300 })
+  })
+
+  test('a bitmap copy that resolves after close is closed instead of cached', async () => {
+    let releaseBitmap!: () => void
+    const bitmapGate = new Promise<void>((resolve) => {
+      releaseBitmap = resolve
+    })
+    const h = makeHarness({ bitmapGate })
+    await setup(h)
+    await h.core.handleMessage(seekMsg(301, 0, [chunk(0, 'key')]))
+
+    await h.core.handleMessage({ type: 'close' })
+    releaseBitmap()
+    await microtasks()
+
+    expect(h.frames).toHaveLength(1)
+    expect(h.frames[0].closed).toBe(true)
+    expect(h.bitmaps).toHaveLength(1)
+    expect(h.bitmaps[0].closed).toBe(true)
   })
 })

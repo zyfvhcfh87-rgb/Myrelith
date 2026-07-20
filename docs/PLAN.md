@@ -445,8 +445,9 @@ user-approved plan or an explicitly selected item from HANDOFF.md's open list.
 
 ## Post-MVP issue #19 — Slice 1 ✅ DONE (2026-07-18) Native compatibility probe
 
-Issue #19 remains open; this approved slice establishes the conservative native
-boundary before any fallback or partial-track policy is selected.
+At this slice boundary, Issue #19 remained open; this approved slice establishes
+the conservative native boundary before any fallback or partial-track policy
+is selected.
 
 - [x] Detect containers from file bytes with Mediabunny rather than trusting
   extension or declared MIME; inspect every video/audio track with its real
@@ -475,13 +476,14 @@ boundary before any fallback or partial-track policy is selected.
 - [x] Follow-ups: Slices 2–5 implement lifecycle feedback, bounded local
   fallback, explicit partial-track import, and session capability caching;
   Slice 6 records the measured proxy-conversion no-go below.
-- [ ] Broader browser/codec fixture matrix and final distribution/security
-  review remain.
+- [x] Final browser/codec fixture matrix and distribution/security review
+  completed in the closeout section below.
 
 ## Post-MVP issue #19 — Slice 2 ✅ DONE (2026-07-18) Lifecycle + runtime feedback
 
-Issue #19 remains open; this slice makes the native compatibility result one
-guarded session truth across project reconnection and downstream consumers.
+At this slice boundary, Issue #19 remained open; this slice makes the native
+compatibility result one guarded session truth across project reconnection and
+downstream consumers.
 
 - [x] Thread the typed native probe through remembered Resume, manual Resume,
   individual Relink, accepted folder matches, and active-project recovery.
@@ -512,14 +514,14 @@ guarded session truth across project reconnection and downstream consumers.
 - [x] Follow-ups: Slices 3–5 implement bounded local fallback, explicit
   partial-track consent, and capability caching; Slice 6 records the measured
   proxy-conversion no-go below.
-- [ ] Broader browser/codec fixture matrix and final distribution/security
-  review remain.
+- [x] Final browser/codec fixture matrix and distribution/security review
+  completed in the closeout section below.
 
 ## Post-MVP issue #19 — Slice 3 ✅ DONE (2026-07-19) Shared local decoder fallback
 
-Issue #19 remains open; this slice implements the approved direct-decoder
-fallback and its automatic resource boundary without adding partial-track
-consent or proxy conversion.
+At this slice boundary, Issue #19 remained open; this slice implements the
+approved direct-decoder fallback and its automatic resource boundary without
+adding partial-track consent or proxy conversion.
 
 - [x] Add one realm-local codec-registration seam used by import probing,
   filmstrip/waveform generation, render-worker sources, live audio, and export.
@@ -555,15 +557,15 @@ consent or proxy conversion.
   revalidation (see below).
 - [x] Slice 6 follow-up: measured optional proxy-conversion decision (see
   below); the stock browser/WASM candidate is formally out of scope.
-- [ ] Remaining work: broader browser/codec fixtures and final bundle-size/
-  license/browser-isolation/low-memory shipping review. The AC-3 extension
-  embeds FFmpeg, so distribution compliance is not claimed complete.
+- [x] Final fixture and shipping-boundary review completed below. The AC-3
+  extension embeds FFmpeg, so public-distribution compliance remains separate
+  and is not claimed complete.
 
 ## Post-MVP issue #19 — Slice 4 ✅ DONE (2026-07-20) Explicit partial-track import
 
-Issue #19 remains open; this slice adds explicit whole-kind omission only when
-the other track kind is fully decodable. It does not add automatic omission or
-proxy conversion.
+At this slice boundary, Issue #19 remained open; this slice adds explicit
+whole-kind omission only when the other track kind is fully decodable. It does
+not add automatic omission or proxy conversion.
 
 - [x] Preserve a bounded Limited candidate only when every track of exactly one
   kind is decodable and the other present kind has a specific failure. Keep the
@@ -594,14 +596,14 @@ proxy conversion.
 - [x] Slice 5 follow-up: session capability caching with exact boundary
   revalidation (see below).
 - [x] Slice 6 follow-up: measured optional proxy-conversion no-go (see below).
-- [ ] Remaining work: broader browser/codec fixtures and final distribution/
-  security review.
+- [x] Final browser/codec fixture matrix and distribution/security review
+  completed in the closeout section below.
 
 ## Post-MVP issue #19 — Slice 5 ✅ DONE (2026-07-20) Capability caching and boundary revalidation
 
-Issue #19 remains open; this slice caches only settled decoder capability facts
-for the current JavaScript realm. It does not persist source bytes, decoder
-objects, or capability results in `.webcut` projects.
+At this slice boundary, Issue #19 remained open; this slice caches only settled
+decoder capability facts for the current JavaScript realm. It does not persist
+source bytes, decoder objects, or capability results in `.webcut` projects.
 
 - [x] Add one shared, bounded cache keyed by decode boundary, track kind,
   normalized codec, and a SHA-256 hash of the canonical decoder configuration,
@@ -634,15 +636,16 @@ objects, or capability results in `.webcut` projects.
   console entry, or page-level overflow appeared. The known 1.144 MB lazy AC-3
   and main-chunk advisories remain.
 - [x] Slice 6 follow-up: measured optional proxy-conversion no-go (see below).
-- [ ] Remaining work: broader browser/codec fixtures and final distribution/
-  security review.
+- [x] Final browser/codec fixture matrix and distribution/security review
+  completed in the closeout section below.
 
 ## Post-MVP issue #19 — Slice 6 ✅ DECIDED (2026-07-20) Optional proxy conversion
 
-Issue #19 remains open. This optional slice ran the worker/WASM spike and makes
-a firm no-go decision for built-in browser-side proxy conversion in the current
-issue. This is a completed decision, not a shipped proxy feature; the detailed
-record is in [the Slice 6 proxy-conversion decision](decisions/ISSUE_19_PROXY_CONVERSION.md).
+At this slice boundary, Issue #19 remained open. This optional slice ran the
+worker/WASM spike and makes a firm no-go decision for built-in browser-side
+proxy conversion in the current issue. This is a completed decision, not a
+shipped proxy feature; the detailed record is in
+[the Slice 6 proxy-conversion decision](decisions/ISSUE_19_PROXY_CONVERSION.md).
 
 - [x] Run a temporary, locally hosted `ffmpeg.wasm` 0.12.15 / core 0.12.10
   single-thread worker spike against both an 8.008 s VP9/Opus mechanics fixture
@@ -671,9 +674,43 @@ record is in [the Slice 6 proxy-conversion decision](decisions/ISSUE_19_PROXY_CO
   configurations returned `canDecode: true`; in-app Chromium also verified the
   hard-cancel/reload state with no console warning or error. Full tests, build,
   lint, and diff checks remained green after the documentation-only decision.
-- [ ] Remaining work: broader browser/codec fixtures and the final distribution/
-  security review, including the already shipped AC-3 fallback's FFmpeg
-  obligations.
+- [x] Final browser/codec fixture matrix and distribution/security review
+  completed below, including an explicit boundary around the AC-3 fallback's
+  FFmpeg obligations.
+
+## Post-MVP issue #19 — Final closeout ✅ DONE (2026-07-20)
+
+Issue #19 is implementation-complete and closes at 46/49 checklist items. The
+three proxy implementation children remain intentionally unchecked because the
+measured Slice 6 decision rejected that feature; no converter is implied.
+Detailed evidence lives in
+[the codec closeout record](decisions/ISSUE_19_CODEC_CLOSEOUT.md).
+
+- [x] Add a reproducible 13-file real-media generator covering native AVC/AAC,
+  VP9/Opus, local AC-3/E-AC-3, HEVC, AV1, spoofed extension/MIME, unknown
+  codec, malformed configuration, two truncation shapes, empty input, and
+  random bytes. The ignored manifest records byte sizes, hashes, and ffprobe
+  output.
+- [x] Verify exact Chrome diagnostics: native VP9/Opus, native HEVC/AV1 on the
+  tested host, one shared AC-3/E-AC-3 fallback family, byte-detected WebM under
+  a `.mp4` name, safe audio-only choices for unknown/malformed video, and
+  honest Unsupported/Error states for damaged or non-media inputs.
+- [x] Close the final ownership gaps: prompt abort for fallback checks without
+  late publication, exact-once live-audio Input disposal when close overtakes
+  open, and stale-bitmap closure after decoder-worker teardown.
+- [x] Verification: 265/265 focused tests across 14 files; 1,094/1,094 total
+  tests across 64 files; production build, lint, audit, and diff checks green.
+  The known three chunks over 500 kB remain a warning, not a hidden pass.
+- [x] Chrome 150 and Edge 150 each passed real VP9/Opus import → thumbnail +
+  waveform → linked A/V drop → exact ruler seek → preview/live-audio playback
+  → active cancel → retry/download. Both outputs probed as 1280×720 H.264 at
+  30 fps plus 48 kHz stereo AAC; both browser runs had zero console/page
+  errors. Edge is Chromium-based, so Firefox/WebKit diversity remains untested.
+- [x] Complete the distribution/security review. Exact package pins, local
+  lazy bundles, zero production advisories, and no runtime decoder downloads
+  are established. Public release still requires a WebCut license,
+  third-party/source notices, FFmpeg/LGPL and Dolby review, and representative
+  low-memory testing; Issue #19 closure does not certify those gates.
 
 ## Test strategy per layer (unchanged from original)
 

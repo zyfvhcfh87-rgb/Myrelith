@@ -27,3 +27,8 @@ dist-ssr
 dist
 # Vitest
 coverage
+
+# Reproducible local QA artifacts (see npm run qa:issue19:fixtures)
+.tmp/
+.npm-cache/
+.playwright-cli/
