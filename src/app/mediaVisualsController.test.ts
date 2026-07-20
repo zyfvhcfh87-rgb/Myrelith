@@ -51,7 +51,11 @@ function fakeDeps(over: Partial<VisualsDeps> = {}): VisualsDeps {
 
 let assetCounter = 0
 
-const addAsset = (name: string, type: string): MediaAsset => {
+const addAsset = (
+  name: string,
+  type: string,
+  overrides: Partial<MediaAsset> = {},
+): MediaAsset => {
   const kind = type.startsWith('video/')
     ? 'video'
     : type.startsWith('audio/')
@@ -74,6 +78,7 @@ const addAsset = (name: string, type: string): MediaAsset => {
     audioSampleRate: kind !== 'image' ? 48_000 : null,
     audioChannels: kind !== 'image' ? 2 : null,
     decoderConfigB64: kind === 'video' ? '{"codec":"avc1.64042a"}' : null,
+    ...overrides,
   }
   expect(useMediaStore.getState().addAsset(asset)).toBe(true)
   return asset
@@ -112,6 +117,33 @@ describe('mediaVisualsController', () => {
     expect(deps.generateFilmstrip).not.toHaveBeenCalled()
     expect(deps.generateWaveform).toHaveBeenCalledTimes(1)
     expect(deps.fetchBlob).toHaveBeenCalledTimes(1) // image never fetched
+  })
+
+  test('partial imports generate visuals only for the retained track kind', async () => {
+    const deps = fakeDeps()
+    initMediaVisuals(deps)
+    const videoOnly = addAsset('picture-only.mp4', 'video/mp4', {
+      partialTrackSelection: 'video-only',
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    })
+    const audioOnly = addAsset('sound-only.mp4', 'audio/mp4', {
+      partialTrackSelection: 'audio-only',
+    })
+    await flush()
+
+    expect(deps.fetchBlob).toHaveBeenCalledTimes(2)
+    expect(deps.generateFilmstrip).toHaveBeenCalledOnce()
+    expect(deps.generateWaveform).toHaveBeenCalledOnce()
+    expect(useMediaStore.getState().visuals.get(videoOnly.id)).toEqual({
+      filmstrip: strip,
+      waveform: null,
+    })
+    expect(useMediaStore.getState().visuals.get(audioOnly.id)).toEqual({
+      filmstrip: null,
+      waveform: wave,
+    })
   })
 
   test('assets present BEFORE init are picked up by the initial scan', async () => {

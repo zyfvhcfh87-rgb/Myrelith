@@ -11,7 +11,7 @@
 
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
-import { outputMediaAssetIds } from '../domain/selectors'
+import { audibleTracks, outputMediaAssetIds } from '../domain/selectors'
 import {
   exportTimeline,
   type ExportDeps as PipelineExportDeps,
@@ -170,6 +170,35 @@ function retainReferencedBlobs(
   }
 }
 
+/** Fail closed if stale/corrupt clips target a track the import omitted. */
+function partialTrackConflict(
+  doc: TimelineDoc,
+  assets: ReadonlyMap<AssetId, MediaAsset>,
+): string | null {
+  const audibleTrackIds = new Set(audibleTracks(doc).map((track) => track.id))
+  for (const track of doc.tracks) {
+    const contributes = track.kind === 'video'
+      ? !track.hidden
+      : audibleTrackIds.has(track.id)
+    if (!contributes) continue
+    for (const clip of track.clips) {
+      if (
+        clip.text
+        || (track.kind === 'video' ? clip.opacity <= 0 : clip.volume <= 0)
+      ) continue
+      const asset = assets.get(clip.assetId)
+      if (!asset) continue
+      if (track.kind === 'audio' && !asset.hasAudio) {
+        return `Audio clip "${clip.name}" cannot be exported because "${asset.fileName}" was imported without audio.`
+      }
+      if (track.kind === 'video' && asset.kind === 'audio') {
+        return `Video clip "${clip.name}" cannot be exported because "${asset.fileName}" was imported as audio only.`
+      }
+    }
+  }
+  return null
+}
+
 /** Preserve setup as the primary failure while releasing pre-start ownership. */
 async function rejectAfterClosingMedia(
   media: ExportMediaSource,
@@ -307,6 +336,8 @@ export function startExport(
       `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`,
     ))
   }
+  const trackConflict = partialTrackConflict(doc, assets)
+  if (trackConflict) return Promise.reject(new Error(trackConflict))
   const resolveAsset = createAssetResolver(assets, deps.fetchBlob)
   retainReferencedBlobs(doc, resolveAsset)
 

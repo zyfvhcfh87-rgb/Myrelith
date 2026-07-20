@@ -15,6 +15,7 @@ import type {
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { Clip, MediaAsset, TimelineDoc, Track } from '../domain/schema'
 import type {
+  PlaybackAssetResolver,
   TimelineAudioPlaybackSession,
   TimelineAudioPlaybackWarning,
 } from '../pipeline/playback-audio'
@@ -373,6 +374,38 @@ describe('play / pause', () => {
 })
 
 describe('live audio integration', () => {
+  test('refuses to resolve a video-only asset for audio playback before fetching', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const videoOnly = {
+      ...makeAsset(),
+      partialTrackSelection: 'video-only' as const,
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    }
+    useMediaStore.setState({
+      assets: new Map([[videoOnly.id, videoOnly]]),
+    })
+    let resolveAsset!: PlaybackAssetResolver
+    fake.startAudio.mockImplementationOnce(async (
+      _context,
+      _doc,
+      _fromFrame,
+      resolver,
+    ) => {
+      resolveAsset = resolver
+      return makeAudioSession(0)
+    })
+
+    play()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+
+    expect(() => resolveAsset(videoOnly.id)).toThrow(
+      'Playback media asset "fixture.mp4" has no imported audio track',
+    )
+    expect(fake.fetchBlob).not.toHaveBeenCalled()
+  })
+
   test('audible playback waits for priming and shares the session anchor exactly', async () => {
     useDocumentStore.getState().setDoc(makeAudibleDoc())
     const prime = deferred<TimelineAudioPlaybackSession>()

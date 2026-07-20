@@ -185,6 +185,11 @@ function createAssetResolver(
         `Playback media asset "${assetId}" is missing from the media pool`,
       )
     }
+    if (!asset.hasAudio) {
+      throw new Error(
+        `Playback media asset "${asset.fileName}" has no imported audio track`,
+      )
+    }
     try {
       return Promise.resolve(fetchBlob(asset.objectUrl))
     } catch (cause) {

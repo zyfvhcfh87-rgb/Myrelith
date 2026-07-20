@@ -5,7 +5,11 @@
  */
 
 import { create } from 'zustand'
-import type { AssetKind, FrameRate } from '../domain/schema'
+import type {
+  AssetKind,
+  FrameRate,
+  PartialTrackImportSelection,
+} from '../domain/schema'
 
 export type ProjectScreen = 'home' | 'new-project' | 'resume' | 'editor'
 export type ProjectSessionPhase =
@@ -22,6 +26,7 @@ export interface RelinkAssetSummary {
   id: string
   fileName: string
   kind: AssetKind
+  partialTrackSelection?: PartialTrackImportSelection
   /** Remembered means Chrome has the handle but needs one click for access. */
   status: 'missing' | 'remembered' | 'ready'
 }

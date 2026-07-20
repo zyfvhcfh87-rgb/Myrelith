@@ -14,6 +14,7 @@ const harness = vi.hoisted(() => ({
     canDecode(): Promise<boolean>
   },
   events: [] as string[],
+  durationTrackSets: [] as unknown[][],
   inputs: [] as Array<{ dispose: ReturnType<typeof vi.fn> }>,
   canvasSinks: [] as unknown[],
   audioSinks: [] as unknown[],
@@ -44,7 +45,8 @@ vi.mock('mediabunny', () => {
       return harness.audioTrack
     }
 
-    async computeDuration() {
+    async computeDuration(tracks: readonly unknown[] = []) {
+      harness.durationTrackSets.push([...tracks])
       return 1
     }
   }
@@ -123,6 +125,7 @@ beforeEach(() => {
   harness.videoTrack = null
   harness.audioTrack = null
   harness.events.length = 0
+  harness.durationTrackSets.length = 0
   harness.inputs.length = 0
   harness.canvasSinks.length = 0
   harness.audioSinks.length = 0
@@ -132,7 +135,7 @@ beforeEach(() => {
 })
 
 describe('Mediabunny visual fallback wiring', () => {
-  test('checks local ProRes support before constructing a CanvasSink', async () => {
+  test('checks local ProRes support and measures only its video track', async () => {
     const track = {
       getCodec: vi.fn(async () => 'prores'),
       canDecode: vi.fn(async () => false),
@@ -158,10 +161,11 @@ describe('Mediabunny visual fallback wiring', () => {
     expect(harness.canvasSinks).toEqual([
       { track, options: { height: 44, poolSize: 1 } },
     ])
+    expect(harness.durationTrackSets).toEqual([[track]])
     expect(harness.inputs[0].dispose).toHaveBeenCalledOnce()
   })
 
-  test('checks local AC-3 support before constructing an AudioBufferSink', async () => {
+  test('checks local AC-3 support and measures only its audio track', async () => {
     const track = {
       getCodec: vi.fn(async () => 'ac3'),
       canDecode: vi.fn(async () => false),
@@ -184,6 +188,7 @@ describe('Mediabunny visual fallback wiring', () => {
     })
     expect(harness.events).toEqual(['decoder-check', 'audio-sink'])
     expect(harness.audioSinks).toEqual([{ track }])
+    expect(harness.durationTrackSets).toEqual([[track]])
     expect(harness.inputs[0].dispose).toHaveBeenCalledOnce()
   })
 })

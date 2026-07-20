@@ -6,7 +6,9 @@
  * controller facades; the component reads serializable store projections only.
  */
 
+import { useEffect, useRef, useState } from 'react'
 import {
+  acceptPartialMediaImport,
   canRememberImportedMedia,
   chooseMediaForImport,
   forgetImportedMediaHandle,
@@ -24,11 +26,16 @@ import type { PortableAssetDescriptor } from '../domain/projectFile'
 import {
   compatibilityAllowsTimelineUse,
   mediaRuntimeSurfaceLabel,
+  omittedPartialImportTracks,
+  partialTrackImportOption,
   type MediaCompatibilityItem,
   type MediaCompatibilityStatus,
   type MediaTrackCompatibility,
 } from '../domain/mediaCompatibility'
-import type { FrameRate } from '../domain/schema'
+import type {
+  FrameRate,
+  PartialTrackImportSelection,
+} from '../domain/schema'
 import {
   formatTimecode,
   microsecondsDurationToFrames,
@@ -56,13 +63,19 @@ function formatAssetMetadata(
     const dimensions = descriptor.width && descriptor.height
       ? `${descriptor.width}×${descriptor.height}`
       : 'Video'
-    return `${dimensions} · ${duration}`
+    const projection = descriptor.partialTrackSelection === 'video-only'
+      ? ' · Video only'
+      : ''
+    return `${dimensions} · ${duration}${projection}`
   }
   if (descriptor.kind === 'audio') {
     const quality = descriptor.audioSampleRate
       ? `${descriptor.audioSampleRate / 1_000} kHz`
       : 'Audio'
-    return `${quality} · ${duration}`
+    const projection = descriptor.partialTrackSelection === 'audio-only'
+      ? ' · Audio only'
+      : ''
+    return `${quality} · ${duration}${projection}`
   }
   return `Image · ${duration}`
 }
@@ -135,19 +148,27 @@ function formatTrack(track: MediaTrackCompatibility): string {
 function CompatibilityDiagnostics({
   item,
   busy,
+  onReviewPartial,
   onRetry,
 }: {
   item: MediaCompatibilityItem
   busy: boolean
+  onReviewPartial?: (
+    selection: PartialTrackImportSelection,
+    trigger: HTMLButtonElement,
+  ) => void
   onRetry?: () => void
 }) {
   const report = item.report
+  const partialOption = partialTrackImportOption(report)
+  const acceptedOmissions = report ? omittedPartialImportTracks(report) : []
   const retryable = item.status === 'limited'
     || item.status === 'unsupported'
     || item.status === 'error'
   const runtimeFailures = report?.runtimeFailures ?? []
   const failedTracks = report?.tracks.filter((track) => (
     !track.decodable
+    && !acceptedOmissions.includes(track)
     && !runtimeFailures.some((failure) =>
       failure.trackKind === track.kind
       && failure.reason === track.reason
@@ -170,6 +191,9 @@ function CompatibilityDiagnostics({
           aria-atomic="true"
         >
           Compatibility: {COMPATIBILITY_LABELS[item.status]}
+          {item.status === 'ready' && report?.partialImport
+            ? ` — ${report.partialImport.selection === 'video-only' ? 'video only' : 'audio only'}`
+            : ''}
         </p>
         {retryable && onRetry ? (
           <button
@@ -207,7 +231,22 @@ function CompatibilityDiagnostics({
             ))}
           </dl>
           {report.detail && runtimeFailures.length === 0 ? (
-            <p className="media-compatibility-summary">{report.detail}</p>
+            <p
+              className="media-compatibility-summary"
+              data-partial-import={report.partialImport ? 'accepted' : undefined}
+            >
+              {report.detail}
+            </p>
+          ) : null}
+          {acceptedOmissions.length > 0 ? (
+            <ul className="media-partial-import-omissions">
+              {acceptedOmissions.map((track) => (
+                <li key={`${track.kind}-${track.number}`}>
+                  <strong>{trackLabel(track)} omitted:</strong>{' '}
+                  {track.detail ?? 'Omitted by the explicit partial-import choice.'}
+                </li>
+              ))}
+            </ul>
           ) : null}
           {failedTracks.length > 0 ? (
             <ul className="media-compatibility-failures">
@@ -229,9 +268,158 @@ function CompatibilityDiagnostics({
               ))}
             </ul>
           ) : null}
+          {partialOption && onReviewPartial ? (
+            <div className="media-partial-import-action">
+              <p>
+                Importing {partialOption === 'video-only' ? 'video only' : 'audio only'} will
+                omit{' '}
+                {report.tracks
+                  .filter((track) => track.kind !== (
+                    partialOption === 'video-only' ? 'video' : 'audio'
+                  ))
+                  .map(trackLabel)
+                  .join(', ')}.
+                {' '}The omitted track content will not appear on the timeline or in exports.
+              </p>
+              <button
+                className="media-partial-import-button"
+                type="button"
+                aria-label={`Review ${partialOption} import for ${item.fileName}`}
+                aria-haspopup="dialog"
+                disabled={busy}
+                onClick={(event) => onReviewPartial(
+                  partialOption,
+                  event.currentTarget,
+                )}
+              >
+                Review {partialOption === 'video-only' ? 'video only' : 'audio only'}
+              </button>
+            </div>
+          ) : null}
         </>
       )}
     </section>
+  )
+}
+
+interface PartialTrackImportReview {
+  itemId: string
+  selection: PartialTrackImportSelection
+}
+
+function PartialTrackImportDialog({
+  item,
+  selection,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  item: MediaCompatibilityItem
+  selection: PartialTrackImportSelection
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const keptKind = selection === 'video-only' ? 'video' : 'audio'
+  const omittedKind = keptKind === 'video' ? 'audio' : 'video'
+  const keptTracks = item.report?.tracks.filter(
+    (track) => track.kind === keptKind,
+  ) ?? []
+  const omittedTracks = item.report?.tracks.filter(
+    (track) => track.kind === omittedKind,
+  ) ?? []
+  const keptLabels = keptTracks.map(trackLabel).join(', ')
+  const omittedLabels = omittedTracks.map(trackLabel).join(', ')
+  const titleId = 'media-partial-import-title'
+  const descriptionId = 'media-partial-import-description'
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    if (typeof dialog.showModal === 'function') {
+      if (!dialog.open) dialog.showModal()
+    } else {
+      dialog.setAttribute('open', '')
+    }
+    return () => {
+      if (typeof dialog.close === 'function') {
+        if (dialog.open) dialog.close()
+      } else {
+        dialog.removeAttribute('open')
+      }
+    }
+  }, [])
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="media-partial-import-dialog"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+      aria-busy={busy}
+      onCancel={(event) => {
+        event.preventDefault()
+        if (!busy) onCancel()
+      }}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <div className="media-partial-import-card">
+        <header className="media-partial-import-header">
+          <span className="media-import-eyebrow">Track choice</span>
+          <h2 id={titleId}>
+            Import “{item.fileName}” without {omittedKind}?
+          </h2>
+        </header>
+        <div className="media-partial-import-body">
+          <p id={descriptionId}>
+            The original file stays unchanged. WebCut will use {keptLabels} and
+            {' '}omit {omittedLabels}. Omitted {omittedKind} will not appear on
+            {' '}the timeline or in exports.
+          </p>
+          <dl className="media-partial-import-facts">
+            {keptTracks.map((track) => (
+              <div key={`keep-${track.kind}-${track.number}`}>
+                <dt>Keep</dt>
+                <dd>
+                  <strong>{trackLabel(track)}</strong>
+                  <span>{formatTrack(track)}</span>
+                </dd>
+              </div>
+            ))}
+            {omittedTracks.map((track) => (
+              <div key={`omit-${track.kind}-${track.number}`} data-action="omit">
+                <dt>Omit</dt>
+                <dd>
+                  <strong>{trackLabel(track)}</strong>
+                  <span>{formatTrack(track)}</span>
+                  <span>{track.detail ?? 'This track is not usable in this browser.'}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        <div className="media-partial-import-dialog-actions">
+          <button
+            type="button"
+            className="media-import-secondary"
+            autoFocus
+            disabled={busy}
+            onClick={onCancel}
+          >
+            Keep as Limited
+          </button>
+          <button
+            type="button"
+            className="media-import-primary"
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            Import {selection === 'video-only' ? 'video only' : 'audio only'}
+          </button>
+        </div>
+      </div>
+    </dialog>
   )
 }
 
@@ -289,6 +477,9 @@ export default function MediaPool() {
     || relinkPhase === 'awaiting-choice'
   const handlePickerAvailable = canRememberImportedMedia()
   const folderPickerAvailable = canChooseActiveMediaFolder()
+  const [partialReview, setPartialReview] =
+    useState<PartialTrackImportReview | null>(null)
+  const partialReviewTriggerRef = useRef<HTMLButtonElement | null>(null)
   let offlineCount = 0
   for (const descriptor of descriptors.values()) {
     if (!assets.has(descriptor.id)) offlineCount++
@@ -297,6 +488,33 @@ export default function MediaPool() {
     ...descriptors.keys(),
     ...[...compatibility.keys()].filter((id) => !descriptors.has(id)),
   ]
+  const partialReviewItem = partialReview
+    ? compatibility.get(partialReview.itemId)
+    : undefined
+  const partialReviewIsValid = Boolean(partialReview
+    && partialReviewItem?.status === 'limited'
+    && partialTrackImportOption(partialReviewItem.report) === partialReview.selection
+    && !descriptors.has(partialReview.itemId))
+  const validPartialReview = partialReviewIsValid
+    && partialReview
+    && partialReviewItem
+      ? { review: partialReview, item: partialReviewItem }
+      : null
+
+  const closePartialReview = (restoreFocus: boolean): void => {
+    const trigger = partialReviewTriggerRef.current
+    partialReviewTriggerRef.current = null
+    setPartialReview(null)
+    if (restoreFocus && trigger) {
+      requestAnimationFrame(() => {
+        if (trigger.isConnected) trigger.focus()
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (partialReview && !partialReviewIsValid) closePartialReview(true)
+  }, [partialReview, partialReviewIsValid])
 
   return (
     <div className="media-pool">
@@ -498,6 +716,12 @@ export default function MediaPool() {
                   <CompatibilityDiagnostics
                     item={compatibilityItem}
                     busy={importBusy || relinkBusy}
+                    onReviewPartial={descriptor
+                      ? undefined
+                      : (selection, trigger) => {
+                          partialReviewTriggerRef.current = trigger
+                          setPartialReview({ itemId: id, selection })
+                        }}
                     onRetry={descriptor
                       ? undefined
                       : () => void retryMediaCompatibility(id)}
@@ -510,6 +734,19 @@ export default function MediaPool() {
       )}
       <MediaImportDialog />
       <MediaRelinkDialog />
+      {validPartialReview ? (
+        <PartialTrackImportDialog
+          item={validPartialReview.item}
+          selection={validPartialReview.review.selection}
+          busy={importBusy || relinkBusy}
+          onCancel={() => closePartialReview(true)}
+          onConfirm={() => {
+            const { itemId, selection } = validPartialReview.review
+            closePartialReview(false)
+            void acceptPartialMediaImport(itemId, selection)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

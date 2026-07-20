@@ -4,7 +4,11 @@
  * resources, so compatibility never leaks into TimelineDoc or persistence.
  */
 
-import type { FrameRate } from './schema'
+import type {
+  FrameRate,
+  MediaAsset,
+  PartialTrackImportSelection,
+} from './schema'
 
 export type MediaCompatibilityReason =
   | 'unsupported-container'
@@ -74,6 +78,8 @@ export interface MediaTrackCompatibility {
   frameRate: FrameRate | null
   sampleRate: number | null
   channels: number | null
+  /** Track duration when the container exposes it safely. */
+  durationMicroseconds?: number
 }
 
 export interface MediaCompatibilityReport {
@@ -84,8 +90,152 @@ export interface MediaCompatibilityReport {
   /** File-level reason. Track-specific failures live on the track itself. */
   reason: MediaCompatibilityReason | null
   detail: string | null
+  /** Explicit user choice applied to this connected session asset. */
+  partialImport?: {
+    selection: PartialTrackImportSelection
+  }
   /** Asset-scoped failures observed after the metadata probe completed. */
   runtimeFailures?: MediaRuntimeFailure[]
+}
+
+function selectedTrackKind(
+  selection: PartialTrackImportSelection,
+): MediaTrackCompatibility['kind'] {
+  return selection === 'video-only' ? 'video' : 'audio'
+}
+
+/** The one safe partial-import choice offered by a Limited report, if any. */
+export function partialTrackImportOption(
+  report: MediaCompatibilityReport | null,
+): PartialTrackImportSelection | null {
+  if (!report || report.status !== 'limited' || report.partialImport) return null
+
+  const choices = (['video-only', 'audio-only'] as const).filter((selection) => {
+    const selectedKind = selectedTrackKind(selection)
+    const selected = report.tracks.filter((track) => track.kind === selectedKind)
+    const omitted = report.tracks.filter((track) => track.kind !== selectedKind)
+    return selected.length > 0
+      && selected.every((track) => track.decodable)
+      && omitted.length > 0
+      && omitted.some((track) => !track.decodable)
+  })
+  return choices.length === 1 ? choices[0] : null
+}
+
+/** Tracks intentionally excluded by an accepted partial-import report. */
+export function omittedPartialImportTracks(
+  report: MediaCompatibilityReport,
+): MediaTrackCompatibility[] {
+  const selection = report.partialImport?.selection
+  if (!selection) return []
+  const selectedKind = selectedTrackKind(selection)
+  return report.tracks.filter((track) => track.kind !== selectedKind)
+}
+
+function partialTrackSelectionIsUsable(
+  report: MediaCompatibilityReport,
+  selection: PartialTrackImportSelection,
+): boolean {
+  const selectedKind = selectedTrackKind(selection)
+  const selected = report.tracks.filter((track) => track.kind === selectedKind)
+  const omitted = report.tracks.filter((track) => track.kind !== selectedKind)
+  return selected.length > 0
+    && selected.every((track) => track.decodable)
+    && omitted.length > 0
+}
+
+function trackReference(track: MediaTrackCompatibility): string {
+  const kind = track.kind === 'video' ? 'Video' : 'Audio'
+  return `${kind} track ${track.number}${track.primary ? ' (primary)' : ''}`
+}
+
+function projectPartialTrackImport(
+  asset: MediaAsset,
+  report: MediaCompatibilityReport,
+  selection: PartialTrackImportSelection,
+): { asset: MediaAsset; compatibility: MediaCompatibilityReport } | null {
+  if (!partialTrackSelectionIsUsable(report, selection)) return null
+
+  const selectedKind = selectedTrackKind(selection)
+  if (selectedKind === 'video' && asset.kind !== 'video') return null
+  if (selectedKind === 'audio' && !asset.hasAudio) return null
+
+  const selectedTracks = report.tracks.filter(
+    (track) => track.kind === selectedKind,
+  )
+  const selectedPrimary = selectedTracks.find((track) => track.primary)
+    ?? selectedTracks[0]
+  const selectedDuration = selectedPrimary?.durationMicroseconds
+    ?? asset.durationMicroseconds
+  const omitted = report.tracks.filter((track) => track.kind !== selectedKind)
+  const omittedLabel = omitted.map(trackReference).join(', ')
+  const omittedCodecs = omitted.map((track) => {
+    const codec = track.codecParameter
+      ?? track.decoderConfig?.codec
+      ?? track.codec
+      ?? track.internalCodecId
+      ?? 'unknown codec'
+    return codec
+  }).join(', ')
+  const selectedLabel = selection === 'video-only' ? 'video only' : 'audio only'
+  const acceptedAsset: MediaAsset = selection === 'video-only'
+    ? {
+        ...asset,
+        kind: 'video',
+        partialTrackSelection: selection,
+        durationMicroseconds: selectedDuration,
+        hasAudio: false,
+        audioSampleRate: null,
+        audioChannels: null,
+      }
+    : {
+        ...asset,
+        kind: 'audio',
+        partialTrackSelection: selection,
+        durationMicroseconds: selectedDuration,
+        frameRate: null,
+        width: null,
+        height: null,
+        hasAudio: true,
+        decoderConfigB64: null,
+      }
+
+  return {
+    asset: acceptedAsset,
+    compatibility: {
+      ...report,
+      status: 'ready',
+      reason: null,
+      detail: `Imported ${selectedLabel}. ${omittedLabel} ${omitted.length === 1 ? 'is' : 'are'} omitted. Omitted ${omitted.length === 1 ? 'codec' : 'codecs'}: ${omittedCodecs}. This choice was confirmed by you.`,
+      partialImport: { selection },
+    },
+  }
+}
+
+/**
+ * Turn a Limited probe into the exact single-kind asset explicitly offered to
+ * the user. Returns null instead of accepting a hidden or stale choice.
+ */
+export function acceptPartialTrackImport(
+  asset: MediaAsset,
+  report: MediaCompatibilityReport,
+  selection: PartialTrackImportSelection,
+): { asset: MediaAsset; compatibility: MediaCompatibilityReport } | null {
+  if (partialTrackImportOption(report) !== selection) return null
+  return projectPartialTrackImport(asset, report, selection)
+}
+
+/** Reapply a saved choice even when this browser can now decode both tracks. */
+export function reapplyPartialTrackImport(
+  asset: MediaAsset,
+  report: MediaCompatibilityReport,
+  selection: PartialTrackImportSelection,
+): { asset: MediaAsset; compatibility: MediaCompatibilityReport } | null {
+  if (
+    report.status !== 'ready'
+    && partialTrackImportOption(report) !== selection
+  ) return null
+  return projectPartialTrackImport(asset, report, selection)
 }
 
 export type MediaRuntimeSurface =
@@ -181,6 +331,9 @@ export function withMediaRuntimeFailure(
     tracks,
     reason: failure.reason,
     detail: `${mediaRuntimeSurfaceLabel(failure.surface)} failed: ${failure.detail}`,
+    ...(previous?.partialImport
+      ? { partialImport: { ...previous.partialImport } }
+      : {}),
     runtimeFailures,
   }
 }

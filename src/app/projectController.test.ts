@@ -11,7 +11,10 @@ import {
   createTimelineDoc,
   type ProjectSettings,
 } from '../domain/projectSettings'
-import type { MediaAsset } from '../domain/schema'
+import type {
+  MediaAsset,
+  PartialTrackImportSelection,
+} from '../domain/schema'
 import type { MediaCompatibilityReport } from '../domain/mediaCompatibility'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 import { useDocumentStore } from '../state/documentStore'
@@ -165,6 +168,110 @@ function unsupportedInspection(
   }
 }
 
+function partialDescriptor(
+  selection: PartialTrackImportSelection,
+  durationMicroseconds: number,
+  overrides: Partial<PortableAssetDescriptor> = {},
+): PortableAssetDescriptor {
+  const effective = selection === 'video-only'
+    ? makeAsset({
+        partialTrackSelection: selection,
+        durationMicroseconds,
+        hasAudio: false,
+        audioSampleRate: null,
+        audioChannels: null,
+      })
+    : makeAsset({
+        kind: 'audio',
+        partialTrackSelection: selection,
+        durationMicroseconds,
+        frameRate: null,
+        width: null,
+        height: null,
+        hasAudio: true,
+        decoderConfigB64: null,
+      })
+  return descriptorFrom(effective, overrides)
+}
+
+function multitrackInspection(
+  asset: MediaAsset,
+  options: {
+    status?: 'ready' | 'limited'
+    videoDecodable?: boolean
+    audioDecodable?: boolean
+    videoDurationMicroseconds?: number
+    audioDurationMicroseconds?: number
+    includeVideo?: boolean
+    includeAudio?: boolean
+  } = {},
+): MediaProbeResult {
+  const status = options.status ?? 'ready'
+  const videoDecodable = options.videoDecodable ?? true
+  const audioDecodable = options.audioDecodable ?? true
+  const tracks: MediaCompatibilityReport['tracks'] = []
+  if (options.includeVideo !== false) {
+    tracks.push({
+      kind: 'video',
+      number: 1,
+      primary: true,
+      codec: 'avc',
+      codecParameter: 'avc1.64042a',
+      internalCodecId: 'avc1',
+      decoderConfig: null,
+      decoderPath: videoDecodable ? 'native' : null,
+      decodable: videoDecodable,
+      reason: videoDecodable ? null : 'unsupported-codec',
+      detail: videoDecodable ? null : 'The selected video track cannot decode.',
+      width: asset.width,
+      height: asset.height,
+      codedWidth: asset.width,
+      codedHeight: asset.height,
+      frameRate: asset.frameRate,
+      sampleRate: null,
+      channels: null,
+      durationMicroseconds: options.videoDurationMicroseconds
+        ?? asset.durationMicroseconds,
+    })
+  }
+  if (options.includeAudio !== false) {
+    tracks.push({
+      kind: 'audio',
+      number: 1,
+      primary: true,
+      codec: 'aac',
+      codecParameter: 'mp4a.40.2',
+      internalCodecId: 'mp4a',
+      decoderConfig: null,
+      decoderPath: audioDecodable ? 'native' : null,
+      decodable: audioDecodable,
+      reason: audioDecodable ? null : 'unsupported-codec',
+      detail: audioDecodable ? null : 'The selected audio track cannot decode.',
+      width: null,
+      height: null,
+      codedWidth: null,
+      codedHeight: null,
+      frameRate: null,
+      sampleRate: asset.audioSampleRate,
+      channels: asset.audioChannels,
+      durationMicroseconds: options.audioDurationMicroseconds
+        ?? asset.durationMicroseconds,
+    })
+  }
+  const compatibility = readyReport({
+    status,
+    durationMicroseconds: asset.durationMicroseconds,
+    tracks,
+    reason: status === 'limited' ? 'unsupported-codec' : null,
+    detail: status === 'limited'
+      ? 'Some media tracks are not usable in this browser.'
+      : null,
+  })
+  return status === 'ready'
+    ? { status, asset, compatibility }
+    : { status, asset, compatibility }
+}
+
 function descriptorFrom(
   asset: MediaAsset,
   overrides: Partial<PortableAssetDescriptor> = {},
@@ -176,6 +283,9 @@ function descriptorFrom(
     size: asset.size,
     lastModified: asset.lastModified,
     kind: asset.kind,
+    ...(asset.partialTrackSelection === undefined
+      ? {}
+      : { partialTrackSelection: asset.partialTrackSelection }),
     durationMicroseconds: asset.durationMicroseconds,
     nativeFrameRate: asset.frameRate,
     width: asset.width,
@@ -848,6 +958,64 @@ describe('portable project resume', () => {
     expect(deps.requestMediaPermission).not.toHaveBeenCalled()
   })
 
+  test('reapplies a saved video-only choice when a remembered source becomes fully decodable', async () => {
+    const descriptor = partialDescriptor('video-only', 2_000_000)
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const source = new File(['12345678'], descriptor.fileName, {
+      type: descriptor.mimeType,
+      lastModified: descriptor.lastModified,
+    })
+    const handle = makeHandle(source)
+    const analyzed = makeAsset({
+      id: 'remembered-analysis',
+      objectUrl: 'blob:remembered-full-source',
+      durationFrames: 240,
+      durationMicroseconds: 4_000_000,
+      hasAudio: true,
+    })
+    const inspection = multitrackInspection(analyzed, {
+      videoDurationMicroseconds: descriptor.durationMicroseconds,
+      audioDurationMicroseconds: 4_000_000,
+    })
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(async () => handle),
+      queryMediaPermission: vi.fn(async () => 'granted' as const),
+      inspectMedia: vi.fn(async () => inspection),
+    })
+
+    await expect(openProjectFile(
+      new File([serialized], 'remembered-partial.webcut'),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+
+    const media = useMediaStore.getState()
+    expect(media.assets.get(descriptor.id)).toMatchObject({
+      id: descriptor.id,
+      objectUrl: 'blob:remembered-full-source',
+      kind: 'video',
+      partialTrackSelection: 'video-only',
+      durationMicroseconds: 2_000_000,
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    })
+    expect(media.descriptors.get(descriptor.id)).toEqual(descriptor)
+    expect(media.compatibility.get(descriptor.id)).toMatchObject({
+      status: 'ready',
+      report: {
+        status: 'ready',
+        partialImport: { selection: 'video-only' },
+      },
+    })
+    expect(deps.revokeObjectURL).not.toHaveBeenCalledWith(
+      'blob:remembered-full-source',
+    )
+  })
+
   test('keeps an unchanged unsupported remembered handle and opens it offline with diagnostics', async () => {
     const expected = makeAsset()
     const descriptor = descriptorFrom(expected)
@@ -1136,6 +1304,64 @@ describe('portable project resume', () => {
       .toBe('ready')
   })
 
+  test('manual Resume relink preserves a saved audio-only choice after both tracks become decodable', async () => {
+    const descriptor = partialDescriptor('audio-only', 3_000_000)
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const source = new File(['12345678'], descriptor.fileName, {
+      type: descriptor.mimeType,
+      lastModified: descriptor.lastModified,
+    })
+    const handle = makeHandle(source)
+    const analyzed = makeAsset({
+      id: 'manual-analysis',
+      objectUrl: 'blob:manual-full-source',
+      durationFrames: 300,
+      durationMicroseconds: 5_000_000,
+      hasAudio: true,
+    })
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      pickMediaFiles: vi.fn(async () => [{ file: source, handle }]),
+      inspectMedia: vi.fn(async () => multitrackInspection(analyzed, {
+        videoDurationMicroseconds: 5_000_000,
+        audioDurationMicroseconds: descriptor.durationMicroseconds,
+      })),
+    })
+    await openProjectFile(new File([serialized], 'audio-only.webcut'), deps)
+
+    await expect(chooseProjectMedia(deps)).resolves.toEqual({ status: 'ready' })
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+
+    const media = useMediaStore.getState()
+    expect(media.assets.get(descriptor.id)).toMatchObject({
+      kind: 'audio',
+      partialTrackSelection: 'audio-only',
+      durationMicroseconds: 3_000_000,
+      frameRate: null,
+      width: null,
+      height: null,
+      hasAudio: true,
+      decoderConfigB64: null,
+    })
+    expect(media.compatibility.get(descriptor.id)).toMatchObject({
+      status: 'ready',
+      report: {
+        status: 'ready',
+        partialImport: { selection: 'audio-only' },
+      },
+    })
+    expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
+      'doc-saved',
+      descriptor.id,
+      handle,
+    )
+    expect(deps.revokeObjectURL).not.toHaveBeenCalledWith(
+      'blob:manual-full-source',
+    )
+  })
+
   test('a metadata mismatch is revoked and leaves the active session untouched', async () => {
     const current = useDocumentStore.getState().doc
     const expected = makeAsset()
@@ -1329,6 +1555,103 @@ describe('active-project media relink', () => {
       .toMatchObject({ phase: 'complete', connectedCount: 1 })
   })
 
+  test('an individual relink missing the intentionally omitted kind restores the settled report', async () => {
+    const descriptor = partialDescriptor('video-only', 2_000_000)
+    const selection = makeFolderSelection(
+      descriptor.fileName,
+      `selected/${descriptor.fileName}`,
+      descriptor.lastModified,
+    )
+    const analyzed = makeAsset({
+      id: descriptor.id,
+      fileName: selection.file.name,
+      lastModified: selection.file.lastModified,
+      objectUrl: 'blob:no-omitted-audio',
+      durationMicroseconds: descriptor.durationMicroseconds,
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    })
+    const deps = await activateSavedProject([descriptor], {
+      inspectMedia: vi.fn(async () => multitrackInspection(analyzed, {
+        includeAudio: false,
+        videoDurationMicroseconds: descriptor.durationMicroseconds,
+      })),
+      pickMediaFiles: vi.fn(async () => [{
+        file: selection.file,
+        handle: selection.handle,
+      }]),
+    })
+    const previousReport = unsupportedInspection(
+      'The previous runtime did not support the omitted audio track.',
+    ).compatibility
+    installOfflineCompatibility(descriptor, previousReport)
+
+    await expect(chooseActiveAssetMedia(descriptor.id, deps)).resolves
+      .toMatchObject({ status: 'failed' })
+
+    const item = useMediaStore.getState().compatibility.get(descriptor.id)
+    expect(useMediaStore.getState().assets.has(descriptor.id)).toBe(false)
+    expect(item).toMatchObject({ status: 'unsupported' })
+    expect(item?.report).toBe(previousReport)
+    expect(item?.status).not.toBe('checking')
+    expect(deps.revokeObjectURL).toHaveBeenCalledWith('blob:no-omitted-audio')
+    expect(deps.rememberMediaHandle).not.toHaveBeenCalled()
+  })
+
+  test('an individual relink whose saved track kind now fails stays Limited instead of Checking', async () => {
+    const descriptor = partialDescriptor('video-only', 2_000_000)
+    const selection = makeFolderSelection(
+      descriptor.fileName,
+      `selected/${descriptor.fileName}`,
+      descriptor.lastModified,
+    )
+    const analyzed = makeAsset({
+      id: descriptor.id,
+      fileName: selection.file.name,
+      lastModified: selection.file.lastModified,
+      objectUrl: 'blob:selected-video-failed',
+      durationMicroseconds: 4_000_000,
+      hasAudio: true,
+    })
+    const inspection = multitrackInspection(analyzed, {
+      status: 'limited',
+      videoDecodable: false,
+      audioDecodable: true,
+      videoDurationMicroseconds: descriptor.durationMicroseconds,
+      audioDurationMicroseconds: 4_000_000,
+    })
+    const deps = await activateSavedProject([descriptor], {
+      inspectMedia: vi.fn(async () => inspection),
+      pickMediaFiles: vi.fn(async () => [{
+        file: selection.file,
+        handle: selection.handle,
+      }]),
+    })
+
+    await expect(chooseActiveAssetMedia(descriptor.id, deps)).resolves
+      .toEqual({
+        status: 'failed',
+        message: inspection.compatibility.detail,
+      })
+
+    const media = useMediaStore.getState()
+    expect(media.assets.has(descriptor.id)).toBe(false)
+    expect(media.compatibility.get(descriptor.id)).toMatchObject({
+      status: 'limited',
+      report: { status: 'limited' },
+    })
+    expect(media.compatibility.get(descriptor.id)?.report?.partialImport)
+      .toBeUndefined()
+    expect(media.compatibility.get(descriptor.id)?.report)
+      .toBe(inspection.compatibility)
+    expect(media.compatibility.get(descriptor.id)?.status).not.toBe('checking')
+    expect(deps.revokeObjectURL).toHaveBeenCalledWith(
+      'blob:selected-video-failed',
+    )
+    expect(deps.rememberMediaHandle).not.toHaveBeenCalled()
+  })
+
   test('an unsupported individual relink stays offline with its exact guarded report', async () => {
     const descriptor = descriptorFrom(makeAsset())
     const selection = makeFolderSelection(descriptor.fileName)
@@ -1393,7 +1716,7 @@ describe('active-project media relink', () => {
     await expect(chooseActiveAssetMedia(descriptor.id, deps)).resolves
       .toEqual({
         status: 'failed',
-        message: `"${selection.file.name}" does not match "${descriptor.fileName}".`,
+        message: `"${selection.file.name}" could not be verified as "${descriptor.fileName}".`,
       })
 
     const media = useMediaStore.getState()
@@ -1522,6 +1845,70 @@ describe('active-project media relink', () => {
       skippedCount: 1,
       errors: [],
       ambiguity: null,
+    })
+  })
+
+  test('folder relink reapplies a saved video-only choice on both scan and connection probes', async () => {
+    const descriptor = partialDescriptor('video-only', 2_000_000, {
+      id: 'folder-partial',
+    })
+    const selection = makeFolderSelection(
+      descriptor.fileName,
+      `chosen/${descriptor.fileName}`,
+      descriptor.lastModified,
+    )
+    const rawAsset = (objectUrl: string): MediaAsset => makeAsset({
+      id: 'temporary-folder-analysis',
+      fileName: selection.file.name,
+      lastModified: selection.file.lastModified,
+      objectUrl,
+      durationFrames: 240,
+      durationMicroseconds: 4_000_000,
+      hasAudio: true,
+    })
+    const inspectMedia = vi.fn<ProjectControllerDeps['inspectMedia']>()
+      .mockResolvedValueOnce(multitrackInspection(
+        rawAsset('blob:partial-folder-scan'),
+        {
+          videoDurationMicroseconds: descriptor.durationMicroseconds,
+          audioDurationMicroseconds: 4_000_000,
+        },
+      ))
+      .mockResolvedValueOnce(multitrackInspection(
+        rawAsset('blob:partial-folder-connected'),
+        {
+          videoDurationMicroseconds: descriptor.durationMicroseconds,
+          audioDurationMicroseconds: 4_000_000,
+        },
+      ))
+    const deps = await activateSavedProject([descriptor], { inspectMedia })
+
+    await expect(connectActiveMediaFolder([selection], deps)).resolves.toEqual({
+      status: 'ready',
+    })
+
+    const media = useMediaStore.getState()
+    expect(inspectMedia).toHaveBeenCalledTimes(2)
+    expect(deps.revokeObjectURL).toHaveBeenCalledWith(
+      'blob:partial-folder-scan',
+    )
+    expect(deps.revokeObjectURL).not.toHaveBeenCalledWith(
+      'blob:partial-folder-connected',
+    )
+    expect(media.assets.get(descriptor.id)).toMatchObject({
+      id: descriptor.id,
+      objectUrl: 'blob:partial-folder-connected',
+      kind: 'video',
+      partialTrackSelection: 'video-only',
+      durationMicroseconds: descriptor.durationMicroseconds,
+      hasAudio: false,
+    })
+    expect(media.compatibility.get(descriptor.id)).toMatchObject({
+      status: 'ready',
+      report: {
+        status: 'ready',
+        partialImport: { selection: 'video-only' },
+      },
     })
   })
 

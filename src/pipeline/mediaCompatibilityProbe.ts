@@ -23,6 +23,7 @@ import type {
   MediaTrackCompatibility,
   SettledMediaCompatibilityStatus,
 } from '../domain/mediaCompatibility'
+import { partialTrackImportOption } from '../domain/mediaCompatibility'
 import type { FrameRate, MediaAsset } from '../domain/schema'
 import {
   microsecondsDurationToFrames,
@@ -56,7 +57,12 @@ export type MediaProbeResult =
       compatibility: MediaCompatibilityReport
     }
   | {
-      status: Exclude<SettledMediaCompatibilityStatus, 'ready'>
+      status: 'limited'
+      asset: MediaAsset | null
+      compatibility: MediaCompatibilityReport
+    }
+  | {
+      status: Exclude<SettledMediaCompatibilityStatus, 'ready' | 'limited'>
       asset: null
       compatibility: MediaCompatibilityReport
     }
@@ -750,10 +756,12 @@ async function probeOpenedInput(
       primary: track === primaryAudio,
     })),
   ]
-  const durationSec = await input.computeDuration([
-    ...videoTracks,
-    ...audioTracks,
-  ])
+  const [durationSec, primaryVideoDurationSec, primaryAudioDurationSec] =
+    await Promise.all([
+      input.computeDuration([...videoTracks, ...audioTracks]),
+      primaryVideo ? input.computeDuration([primaryVideo]) : Promise.resolve(null),
+      primaryAudio ? input.computeDuration([primaryAudio]) : Promise.resolve(null),
+    ])
   throwIfAborted(signal)
   const fallbackBudget: ProbeFallbackBudget = {
     fileBytes,
@@ -780,7 +788,25 @@ async function probeOpenedInput(
     ))
   throwIfAborted(signal)
 
-  const tracks = probes.map((probe) => probe.report)
+  const trackDurationMicroseconds = (
+    duration: number | null,
+  ): number | null => (
+    duration !== null && Number.isFinite(duration) && duration > 0
+      ? secondsToMicroseconds(duration)
+      : null
+  )
+  const primaryDurations = {
+    video: trackDurationMicroseconds(primaryVideoDurationSec),
+    audio: trackDurationMicroseconds(primaryAudioDurationSec),
+  }
+  const tracks = probes.map((probe) => {
+    const durationMicroseconds = probe.report.primary
+      ? primaryDurations[probe.report.kind]
+      : null
+    return durationMicroseconds === null
+      ? probe.report
+      : { ...probe.report, durationMicroseconds }
+  })
   container = {
     ...container,
     fullMimeType: detectedFullMimeType(container.mimeType, tracks),
@@ -916,7 +942,8 @@ export async function probeMediaFile(
     disposeOnce()
   }
 
-  if (core.compatibility.status !== 'ready') {
+  const partialOption = partialTrackImportOption(core.compatibility)
+  if (core.compatibility.status !== 'ready' && partialOption === null) {
     return {
       status: core.compatibility.status,
       asset: null,
@@ -956,5 +983,9 @@ export async function probeMediaFile(
     audioChannels: audio?.channels ?? null,
     decoderConfigB64,
   }
-  return { status: 'ready', asset, compatibility: core.compatibility }
+  return {
+    status: core.compatibility.status === 'ready' ? 'ready' : 'limited',
+    asset,
+    compatibility: core.compatibility,
+  }
 }

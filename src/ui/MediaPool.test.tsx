@@ -6,9 +6,17 @@
  * keeps import, metadata, removal, and drag-readiness behavior intact.
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import {
+  acceptPartialMediaImport,
   canRememberImportedMedia,
   chooseMediaForImport,
   forgetImportedMediaHandle,
@@ -42,6 +50,10 @@ import {
 import MediaPool from './MediaPool'
 
 vi.mock('../app/mediaImportController', () => ({
+  acceptPartialMediaImport: vi.fn(async () => ({
+    status: 'imported',
+    assetId: 'asset-9',
+  })),
   canRememberImportedMedia: vi.fn(() => false),
   chooseMediaForImport: vi.fn(async () => ({
     status: 'imported',
@@ -198,6 +210,71 @@ function seedCompatibility(item: MediaCompatibilityItem): void {
   useMediaStore.setState({ compatibility: new Map([[item.id, item]]) })
 }
 
+function seedVideoOnlyCandidate(): void {
+  const failedAudio = makeTrack({
+    kind: 'audio',
+    codec: 'prores-audio',
+    codecParameter: 'apac',
+    internalCodecId: 'apac',
+    decoderConfig: null,
+    decodable: false,
+    reason: 'unsupported-codec',
+    detail: 'This browser cannot decode this audio codec.',
+    width: null,
+    height: null,
+    codedWidth: null,
+    codedHeight: null,
+    frameRate: null,
+    sampleRate: 48_000,
+    channels: 2,
+  })
+  seedCompatibility(makeCompatibility({
+    status: 'limited',
+    report: makeReport('limited', {
+      tracks: [makeTrack(), failedAudio],
+      reason: 'unsupported-codec',
+      detail: 'Some media tracks are not usable in this browser.',
+    }),
+  }))
+}
+
+function seedAudioOnlyCandidate(): void {
+  const failedVideo = makeTrack({
+    decodable: false,
+    reason: 'unsupported-codec',
+    detail: 'This browser cannot decode this video codec.',
+  })
+  const usableAudio = makeTrack({
+    kind: 'audio',
+    codec: 'aac',
+    codecParameter: 'mp4a.40.2',
+    internalCodecId: 'mp4a',
+    decoderConfig: {
+      codec: 'mp4a.40.2',
+      descriptionBytes: 0,
+      codedWidth: null,
+      codedHeight: null,
+      sampleRate: 48_000,
+      channels: 2,
+    },
+    width: null,
+    height: null,
+    codedWidth: null,
+    codedHeight: null,
+    frameRate: null,
+    sampleRate: 48_000,
+    channels: 2,
+  })
+  seedCompatibility(makeCompatibility({
+    status: 'limited',
+    report: makeReport('limited', {
+      tracks: [failedVideo, usableAudio],
+      reason: 'unsupported-codec',
+      detail: 'Some media tracks are not usable in this browser.',
+    }),
+  }))
+}
+
 function descriptorFromAsset(asset: MediaAsset): PortableAssetDescriptor {
   return {
     id: asset.id,
@@ -206,6 +283,9 @@ function descriptorFromAsset(asset: MediaAsset): PortableAssetDescriptor {
     size: asset.size,
     lastModified: asset.lastModified,
     kind: asset.kind,
+    ...(asset.partialTrackSelection === undefined
+      ? {}
+      : { partialTrackSelection: asset.partialTrackSelection }),
     durationMicroseconds: asset.durationMicroseconds,
     nativeFrameRate: asset.frameRate,
     width: asset.width,
@@ -247,6 +327,7 @@ beforeEach(() => {
     activeMediaRelink: INITIAL_ACTIVE_MEDIA_RELINK,
   })
   vi.mocked(importMedia).mockClear()
+  vi.mocked(acceptPartialMediaImport).mockClear()
   vi.mocked(chooseMediaForImport).mockClear()
   vi.mocked(forgetImportedMediaHandle).mockClear()
   vi.mocked(removeMediaCompatibility).mockClear()
@@ -591,6 +672,152 @@ describe('MediaPool presentation', () => {
       name: 'Retry compatibility check for beach.mp4',
     }))
     expect(retryMediaCompatibility).toHaveBeenCalledWith('asset-9')
+  })
+
+  test('reviews a video-only import in an explicitly named dialog before committing', async () => {
+    seedVideoOnlyCandidate()
+    render(<MediaPool />)
+
+    const review = screen.getByRole('button', {
+      name: 'Review video-only import for beach.mp4',
+    })
+    expect(review).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(acceptPartialMediaImport).not.toHaveBeenCalled()
+
+    fireEvent.click(review)
+
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Import “beach.mp4” without audio?',
+    })
+    expect(dialog).toHaveAccessibleDescription(
+      'The original file stays unchanged. WebCut will use Video track 1 (primary) and omit Audio track 1 (primary). Omitted audio will not appear on the timeline or in exports.',
+    )
+    expect(within(dialog).getByText('Video track 1 (primary)')).toBeInTheDocument()
+    expect(within(dialog).getByText('Audio track 1 (primary)')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', {
+        name: 'Keep as Limited',
+      })).toHaveFocus()
+    })
+    expect(acceptPartialMediaImport).not.toHaveBeenCalled()
+  })
+
+  test('Escape keeps the Limited row and restores focus to its review action', async () => {
+    seedVideoOnlyCandidate()
+    render(<MediaPool />)
+    const review = screen.getByRole('button', {
+      name: 'Review video-only import for beach.mp4',
+    })
+    fireEvent.click(review)
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Import “beach.mp4” without audio?',
+    })
+
+    const cancelEvent = new Event('cancel', { cancelable: true })
+    fireEvent(dialog, cancelEvent)
+
+    expect(cancelEvent.defaultPrevented).toBe(true)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTitle('beach.mp4')).toHaveAttribute(
+      'data-compatibility',
+      'limited',
+    )
+    expect(screen.getByRole('status', {
+      name: 'beach.mp4 compatibility status',
+    })).toHaveTextContent('Compatibility: Limited')
+    expect(acceptPartialMediaImport).not.toHaveBeenCalled()
+    await waitFor(() => expect(review).toHaveFocus())
+  })
+
+  test('Keep as Limited cancels without removing or importing the row', async () => {
+    seedVideoOnlyCandidate()
+    render(<MediaPool />)
+    const review = screen.getByRole('button', {
+      name: 'Review video-only import for beach.mp4',
+    })
+    fireEvent.click(review)
+    await screen.findByRole('dialog', {
+      name: 'Import “beach.mp4” without audio?',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep as Limited' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTitle('beach.mp4')).toHaveAttribute(
+      'data-compatibility',
+      'limited',
+    )
+    expect(screen.getByRole('button', {
+      name: 'Review video-only import for beach.mp4',
+    })).toBeInTheDocument()
+    expect(acceptPartialMediaImport).not.toHaveBeenCalled()
+    await waitFor(() => expect(review).toHaveFocus())
+  })
+
+  test('confirms the reviewed video-only import exactly once', async () => {
+    seedVideoOnlyCandidate()
+    render(<MediaPool />)
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Review video-only import for beach.mp4',
+    }))
+    await screen.findByRole('dialog', {
+      name: 'Import “beach.mp4” without audio?',
+    })
+
+    const confirm = screen.getByRole('button', { name: 'Import video only' })
+    fireEvent.click(confirm)
+
+    expect(acceptPartialMediaImport).toHaveBeenCalledOnce()
+    expect(acceptPartialMediaImport).toHaveBeenCalledWith(
+      'asset-9',
+      'video-only',
+    )
+  })
+
+  test('mirrors informed consent for an audio-only import', async () => {
+    seedAudioOnlyCandidate()
+    render(<MediaPool />)
+
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Review audio-only import for beach.mp4',
+    }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Import “beach.mp4” without video?',
+    })
+    expect(dialog).toHaveAccessibleDescription(
+      'The original file stays unchanged. WebCut will use Audio track 1 (primary) and omit Video track 1 (primary). Omitted video will not appear on the timeline or in exports.',
+    )
+
+    fireEvent.click(within(dialog).getByRole('button', {
+      name: 'Import audio only',
+    }))
+    expect(acceptPartialMediaImport).toHaveBeenCalledOnce()
+    expect(acceptPartialMediaImport).toHaveBeenCalledWith(
+      'asset-9',
+      'audio-only',
+    )
+  })
+
+  test('names an accepted projection in Ready status and durable metadata', () => {
+    const asset = makeAsset({
+      partialTrackSelection: 'video-only',
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    })
+    seedAsset(asset)
+    seedCompatibility(makeCompatibility({
+      status: 'ready',
+      report: makeReport('ready', {
+        partialImport: { selection: 'video-only' },
+      }),
+    }))
+    render(<MediaPool />)
+
+    expect(screen.getByRole('status', {
+      name: 'beach.mp4 compatibility status',
+    })).toHaveTextContent('Compatibility: Ready — video only')
+    expect(screen.getByText(/Video only/)).toBeInTheDocument()
   })
 
   test('shows an exact file-level failure when no tracks could be inspected', () => {

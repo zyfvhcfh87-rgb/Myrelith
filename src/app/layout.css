@@ -1694,6 +1694,10 @@
   color: #d6a2a2;
 }
 
+.media-compatibility-summary[data-partial-import='accepted'] {
+  color: #d9be82;
+}
+
 .media-compatibility-grid {
   display: grid;
   gap: 5px;
@@ -1742,6 +1746,207 @@
 .media-compatibility-failures strong {
   color: #f0bcbc;
   font-weight: 700;
+}
+
+.media-partial-import-omissions {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  color: #d9be82;
+  font-size: 9px;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.media-partial-import-omissions li {
+  overflow-wrap: anywhere;
+}
+
+.media-partial-import-omissions strong {
+  color: #f0d49a;
+}
+
+.media-partial-import-action {
+  display: grid;
+  gap: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #413b2d;
+}
+
+.media-partial-import-action p {
+  margin: 0;
+  color: #d9be82;
+  font-size: 9px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.media-partial-import-button {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  color: #201b10;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 750;
+  background: #dfbd72;
+  border: 1px solid #f0d18d;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.media-partial-import-button:hover:not(:disabled) {
+  background: #edce88;
+}
+
+.media-partial-import-button:disabled {
+  cursor: progress;
+  opacity: 0.45;
+}
+
+.media-partial-import-button:focus-visible {
+  outline: 2px solid #f0d18d;
+  outline-offset: 2px;
+}
+
+.media-partial-import-dialog {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+  color: #e8edf5;
+  background: #181a1f;
+  border: 1px solid #4b4435;
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 62%);
+  transform: translate(-50%, -50%);
+}
+
+.media-partial-import-dialog::backdrop {
+  background: rgb(3 5 8 / 76%);
+  backdrop-filter: blur(3px);
+}
+
+.media-partial-import-card {
+  min-width: 0;
+}
+
+.media-partial-import-header {
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid #332f27;
+}
+
+.media-partial-import-header h2 {
+  margin: 4px 0 0;
+  color: #f3f6fb;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.media-partial-import-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px 22px 20px;
+}
+
+.media-partial-import-body > p {
+  margin: 0;
+  color: #aeb5c0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.media-partial-import-facts {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  background: #373329;
+  border: 1px solid #373329;
+  border-radius: 8px;
+}
+
+.media-partial-import-facts > div {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 14px;
+  background: #1d2026;
+}
+
+.media-partial-import-facts > div[data-action='omit'] {
+  background: #242019;
+}
+
+.media-partial-import-facts dt {
+  color: #8c95a2;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.media-partial-import-facts dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.media-partial-import-facts strong,
+.media-partial-import-facts span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.media-partial-import-facts strong {
+  color: #e6eaf0;
+  font-size: 11px;
+}
+
+.media-partial-import-facts span {
+  margin-top: 3px;
+  color: #919aa7;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.media-partial-import-facts [data-action='omit'] dt,
+.media-partial-import-facts [data-action='omit'] strong {
+  color: #e5c680;
+}
+
+.media-partial-import-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px 18px;
+  background: #15171b;
+  border-top: 1px solid #332f27;
+}
+
+.media-partial-import-dialog-actions button {
+  min-height: 32px;
+  padding: 0 13px;
+  font-size: 11px;
+  font-weight: 650;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.media-partial-import-dialog-actions button:disabled {
+  cursor: progress;
+  opacity: 0.45;
+}
+
+.media-partial-import-dialog-actions button:focus-visible {
+  outline: 2px solid #f0d18d;
+  outline-offset: 2px;
 }
 
 .media-compatibility-retry {

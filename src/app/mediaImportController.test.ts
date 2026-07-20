@@ -6,8 +6,15 @@ import {
 import type {
   MediaCompatibilityItem,
   MediaCompatibilityReport,
+  MediaTrackCompatibility,
 } from '../domain/mediaCompatibility'
-import type { Clip, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
+import type {
+  Clip,
+  FrameRate,
+  MediaAsset,
+  PartialTrackImportSelection,
+  TimelineDoc,
+} from '../domain/schema'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 import { microsecondsDurationToFrames } from '../domain/time'
 import {
@@ -16,6 +23,7 @@ import {
   type MediaImportPhase,
 } from '../state/mediaImportStore'
 import {
+  acceptPartialMediaImport,
   cancelMediaImport,
   importMedia,
   importMediaFromHandle,
@@ -69,6 +77,72 @@ function makeCompatibility(
     reason: status === 'ready' ? null : 'unsupported-codec',
     detail: status === 'ready' ? null : 'This browser cannot decode this codec.',
     ...overrides,
+  }
+}
+
+function compatibilityTrack(
+  kind: MediaTrackCompatibility['kind'],
+  decodable: boolean,
+  durationMicroseconds: number,
+): MediaTrackCompatibility {
+  return {
+    kind,
+    number: 1,
+    primary: true,
+    codec: kind === 'video' ? 'avc' : 'aac',
+    codecParameter: kind === 'video' ? 'avc1.64042a' : 'mp4a.40.2',
+    internalCodecId: null,
+    decoderConfig: null,
+    decoderPath: decodable ? 'native' : null,
+    decodable,
+    reason: decodable ? null : 'unsupported-codec',
+    detail: decodable ? null : `${kind} decoder unavailable`,
+    width: kind === 'video' ? 1920 : null,
+    height: kind === 'video' ? 1080 : null,
+    codedWidth: kind === 'video' ? 1920 : null,
+    codedHeight: kind === 'video' ? 1080 : null,
+    frameRate: kind === 'video' ? F60 : null,
+    sampleRate: kind === 'audio' ? 48_000 : null,
+    channels: kind === 'audio' ? 2 : null,
+    durationMicroseconds,
+  }
+}
+
+function limitedPartialProbe(
+  asset: MediaAsset,
+  selection: PartialTrackImportSelection,
+  selectedDurationMicroseconds: number,
+  omittedDurationMicroseconds: number,
+): MediaProbeResult {
+  const videoOnly = selection === 'video-only'
+  return {
+    status: 'limited',
+    asset,
+    compatibility: makeCompatibility('limited', {
+      durationMicroseconds: Math.max(
+        selectedDurationMicroseconds,
+        omittedDurationMicroseconds,
+      ),
+      tracks: [
+        compatibilityTrack(
+          'video',
+          videoOnly,
+          videoOnly
+            ? selectedDurationMicroseconds
+            : omittedDurationMicroseconds,
+        ),
+        compatibilityTrack(
+          'audio',
+          !videoOnly,
+          videoOnly
+            ? omittedDurationMicroseconds
+            : selectedDurationMicroseconds,
+        ),
+      ],
+      detail: videoOnly
+        ? 'The audio track cannot be decoded.'
+        : 'The video track cannot be decoded.',
+    }),
   }
 }
 
@@ -188,6 +262,7 @@ function makeFixture(
     hasCompatibility: (id, requestId) => (
       compatibility.get(id)?.requestId === requestId
     ),
+    getCompatibility: (id) => compatibility.get(id),
     setCompatibility: (id, requestId, status, report) => {
       const current = compatibility.get(id)
       if (!current || current.requestId !== requestId) return false
@@ -510,6 +585,284 @@ describe('mediaImportController', () => {
       report: compatibility,
     })
     expect(useMediaImportStore.getState().phase).toBe('idle')
+  })
+
+  test('Limited stays provisional until video-only confirmation re-probes and commits', async () => {
+    const fixture = makeFixture()
+    const initial = limitedPartialProbe(
+      makeAsset({
+        objectUrl: 'blob:limited-video-initial',
+        frameRate: F30,
+        durationMicroseconds: 5_000_000,
+      }),
+      'video-only',
+      3_000_000,
+      5_000_000,
+    )
+    const confirmed = limitedPartialProbe(
+      makeAsset({
+        objectUrl: 'blob:limited-video-confirmed',
+        frameRate: F30,
+        durationMicroseconds: 5_000_000,
+      }),
+      'video-only',
+      3_000_000,
+      5_000_000,
+    )
+    fixture.inspect.mockReset()
+    fixture.inspect
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(confirmed)
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toEqual({
+      status: 'limited',
+      itemId: 'asset-new',
+    })
+    expect(fixture.assets).toHaveLength(0)
+    expect(fixture.compatibility.get('asset-new')).toMatchObject({
+      status: 'limited',
+      report: initial.compatibility,
+    })
+    expect(fixture.inspect).toHaveBeenCalledOnce()
+    expect(fixture.revokeObjectURL).toHaveBeenCalledOnce()
+    expect(fixture.revokeObjectURL).toHaveBeenCalledWith(
+      'blob:limited-video-initial',
+    )
+
+    await expect(
+      acceptPartialMediaImport('asset-new', 'video-only', fixture.deps),
+    ).resolves.toEqual({ status: 'imported', assetId: 'asset-new' })
+
+    expect(fixture.inspect).toHaveBeenCalledTimes(2)
+    expect(fixture.assets.get('asset-new')).toMatchObject({
+      objectUrl: 'blob:limited-video-confirmed',
+      kind: 'video',
+      partialTrackSelection: 'video-only',
+      durationMicroseconds: 3_000_000,
+      durationFrames: 90,
+      frameRate: F30,
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    })
+    expect(fixture.compatibility.get('asset-new')).toMatchObject({
+      status: 'ready',
+      report: {
+        status: 'ready',
+        partialImport: { selection: 'video-only' },
+      },
+    })
+    expect(fixture.revokeObjectURL).toHaveBeenCalledOnce()
+  })
+
+  test('audio-only confirmation re-probes and skips the source FPS decision', async () => {
+    const fixture = makeFixture()
+    const initial = limitedPartialProbe(
+      makeAsset({
+        objectUrl: 'blob:limited-audio-initial',
+        frameRate: F60,
+        durationMicroseconds: 8_000_000,
+      }),
+      'audio-only',
+      4_000_000,
+      8_000_000,
+    )
+    const confirmed = limitedPartialProbe(
+      makeAsset({
+        objectUrl: 'blob:limited-audio-confirmed',
+        frameRate: F60,
+        durationMicroseconds: 8_000_000,
+      }),
+      'audio-only',
+      4_000_000,
+      8_000_000,
+    )
+    fixture.inspect.mockReset()
+    fixture.inspect
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(confirmed)
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toMatchObject({
+      status: 'limited',
+    })
+    const result = acceptPartialMediaImport(
+      'asset-new',
+      'audio-only',
+      fixture.deps,
+    )
+    await Promise.resolve()
+    expect(useMediaImportStore.getState().phase).not.toBe('awaiting-decision')
+    await expect(result).resolves.toEqual({
+      status: 'imported',
+      assetId: 'asset-new',
+    })
+
+    expect(fixture.inspect).toHaveBeenCalledTimes(2)
+    expect(fixture.replaceDocument).not.toHaveBeenCalled()
+    expect(fixture.reconformAssets).not.toHaveBeenCalled()
+    expect(fixture.assets.get('asset-new')).toMatchObject({
+      objectUrl: 'blob:limited-audio-confirmed',
+      kind: 'audio',
+      partialTrackSelection: 'audio-only',
+      durationMicroseconds: 4_000_000,
+      durationFrames: 120,
+      frameRate: null,
+      width: null,
+      height: null,
+      hasAudio: true,
+      decoderConfigB64: null,
+    })
+    expect(fixture.revokeObjectURL).toHaveBeenCalledTimes(1)
+    expect(fixture.revokeObjectURL).toHaveBeenCalledWith(
+      'blob:limited-audio-initial',
+    )
+  })
+
+  test('rejects a stale visible partial choice without re-probing', async () => {
+    const fixture = makeFixture()
+    const initial = limitedPartialProbe(
+      makeAsset({ objectUrl: 'blob:stale-visible' }),
+      'video-only',
+      2_000_000,
+      2_000_000,
+    )
+    fixture.inspect.mockReset()
+    fixture.inspect.mockResolvedValueOnce(initial)
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toMatchObject({
+      status: 'limited',
+    })
+    const row = fixture.compatibility.get('asset-new')
+    if (!row) throw new Error('Limited fixture row missing')
+    fixture.compatibility.set('asset-new', { ...row, status: 'unsupported' })
+
+    await expect(
+      acceptPartialMediaImport('asset-new', 'video-only', fixture.deps),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      message: expect.stringContaining('no longer available'),
+      itemId: 'asset-new',
+    })
+    expect(fixture.inspect).toHaveBeenCalledOnce()
+    expect(fixture.assets).toHaveLength(0)
+    expect(fixture.revokeObjectURL).toHaveBeenCalledExactlyOnceWith(
+      'blob:stale-visible',
+    )
+  })
+
+  test('fails and revokes when the confirmed choice disappears on re-probe', async () => {
+    const fixture = makeFixture()
+    const initial = limitedPartialProbe(
+      makeAsset({ objectUrl: 'blob:stale-reprobe-initial' }),
+      'video-only',
+      2_000_000,
+      2_000_000,
+    )
+    const changed = limitedPartialProbe(
+      makeAsset({ objectUrl: 'blob:stale-reprobe-candidate' }),
+      'audio-only',
+      2_000_000,
+      2_000_000,
+    )
+    fixture.inspect.mockReset()
+    fixture.inspect
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(changed)
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toMatchObject({
+      status: 'limited',
+    })
+    await expect(
+      acceptPartialMediaImport('asset-new', 'video-only', fixture.deps),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      message: expect.stringContaining('no longer available'),
+    })
+
+    expect(fixture.inspect).toHaveBeenCalledTimes(2)
+    expect(fixture.assets).toHaveLength(0)
+    expect(fixture.revokeObjectURL).toHaveBeenCalledTimes(2)
+    expect(fixture.revokeObjectURL).toHaveBeenNthCalledWith(
+      1,
+      'blob:stale-reprobe-initial',
+    )
+    expect(fixture.revokeObjectURL).toHaveBeenNthCalledWith(
+      2,
+      'blob:stale-reprobe-candidate',
+    )
+  })
+
+  test('partial FPS cancel restores the Limited row and retained confirmation', async () => {
+    const fixture = makeFixture()
+    const initial = limitedPartialProbe(
+      makeAsset({
+        objectUrl: 'blob:partial-cancel-initial',
+        frameRate: F60,
+      }),
+      'video-only',
+      2_000_000,
+      2_000_000,
+    )
+    const prompted = limitedPartialProbe(
+      makeAsset({
+        objectUrl: 'blob:partial-cancel-prompted',
+        frameRate: F60,
+      }),
+      'video-only',
+      2_000_000,
+      2_000_000,
+    )
+    const retried = limitedPartialProbe(
+      makeAsset({
+        objectUrl: 'blob:partial-cancel-retry',
+        frameRate: F30,
+      }),
+      'video-only',
+      2_000_000,
+      2_000_000,
+    )
+    fixture.inspect.mockReset()
+    fixture.inspect
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(prompted)
+      .mockResolvedValueOnce(retried)
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toMatchObject({
+      status: 'limited',
+    })
+    const confirmation = acceptPartialMediaImport(
+      'asset-new',
+      'video-only',
+      fixture.deps,
+    )
+    await waitForImportPhase('awaiting-decision')
+    expect(fixture.assets).toHaveLength(0)
+
+    expect(cancelMediaImport()).toBe(true)
+    await expect(confirmation).resolves.toEqual({ status: 'cancelled' })
+    expect(fixture.compatibility.get('asset-new')).toMatchObject({
+      status: 'limited',
+      report: initial.compatibility,
+    })
+    expect(fixture.revokeObjectURL).toHaveBeenCalledTimes(2)
+    expect(fixture.revokeObjectURL).toHaveBeenNthCalledWith(
+      1,
+      'blob:partial-cancel-initial',
+    )
+    expect(fixture.revokeObjectURL).toHaveBeenNthCalledWith(
+      2,
+      'blob:partial-cancel-prompted',
+    )
+
+    await expect(
+      acceptPartialMediaImport('asset-new', 'video-only', fixture.deps),
+    ).resolves.toEqual({ status: 'imported', assetId: 'asset-new' })
+    expect(fixture.inspect).toHaveBeenCalledTimes(3)
+    expect(fixture.assets.get('asset-new')).toMatchObject({
+      objectUrl: 'blob:partial-cancel-retry',
+      partialTrackSelection: 'video-only',
+    })
+    expect(fixture.revokeObjectURL).toHaveBeenCalledTimes(2)
   })
 
   test('typed probe errors stay visible with their exact detail', async () => {

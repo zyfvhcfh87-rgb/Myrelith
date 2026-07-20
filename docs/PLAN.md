@@ -546,10 +546,47 @@ consent or proxy conversion.
   generated thumbnails; ProRes rendered in Preview; playback crossed into the
   AC-3 clip; a mixed timeline exported a downloaded 4.000s 1920×1080 H.264 +
   48 kHz stereo AAC MP4; warning/error console stayed clean.
-- [ ] Later slices: explicit informed partial-track import, capability caching,
-  user-consented proxy conversion, broader browser/codec fixtures, and final
-  bundle-size/license/browser-isolation/low-memory shipping review. The AC-3
-  extension embeds FFmpeg, so distribution compliance is not claimed complete.
+- [x] Slice 4 follow-up: explicit informed partial-track import (see below).
+- [ ] Remaining slices: capability caching, user-consented proxy conversion,
+  broader browser/codec fixtures, and final bundle-size/license/browser-
+  isolation/low-memory shipping review. The AC-3 extension embeds FFmpeg, so
+  distribution compliance is not claimed complete.
+
+## Post-MVP issue #19 — Slice 4 ✅ DONE (2026-07-20) Explicit partial-track import
+
+Issue #19 remains open; this slice adds explicit whole-kind omission only when
+the other track kind is fully decodable. It does not add automatic omission or
+proxy conversion.
+
+- [x] Preserve a bounded Limited candidate only when every track of exactly one
+  kind is decodable and the other present kind has a specific failure. Keep the
+  provisional File/handle and object URL controller-owned; unsafe Limited
+  results remain URL-free and cannot offer partial import.
+- [x] Require an explicit native consent dialog before committing anything.
+  The dialog names the kept and omitted kinds, codecs, exact failure, unchanged
+  source file, and timeline/export consequence; cancel keeps the Limited row
+  and returns focus to its review action.
+- [x] Project an accepted choice into an effective `video-only` or `audio-only`
+  asset. Timeline drops, visuals, preview/audio lookup, and export all use that
+  projection; stale invalid clips fail export before source acquisition rather
+  than silently reviving the omitted track.
+- [x] Persist the choice in portable project format v2 with strict descriptor
+  validation and v1 migration. Remembered/manual Resume, individual Relink,
+  folder matching, and accepted staged re-probes reapply the saved projection,
+  including when another browser could decode both original tracks.
+- [x] Keep the accepted omission visible in Ready Media Pool diagnostics while
+  excluding it from active failures. Relink and runtime errors preserve the
+  choice, selected-track duration, effective kind, audio presence, and decoder
+  configuration invariants.
+- [x] Verification: 1,072 tests across 63 files, production build, lint, and
+  diff checks green. In-app Chromium at 1280×720 imported generated H.264/DTS
+  and MPEG-2/AAC MKVs, exercised safe cancellation/focus restoration, then
+  confirmed exact video-only and audio-only Ready paths with the omission facts
+  still visible. No error overlay appeared and the Vite runtime log stayed
+  clean. The known 1.144 MB lazy AC-3 and main-chunk advisories remain.
+- [ ] Remaining slices: capability caching, optional user-consented proxy
+  conversion, broader browser/codec fixtures, and final distribution/security
+  review.
 
 ## Test strategy per layer (unchanged from original)
 

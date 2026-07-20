@@ -13,7 +13,16 @@ import type {
   MediaCompatibilityReport,
   MediaCompatibilityStatus,
 } from '../domain/mediaCompatibility'
-import type { FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
+import {
+  partialTrackImportOption,
+  reapplyPartialTrackImport,
+} from '../domain/mediaCompatibility'
+import type {
+  FrameRate,
+  MediaAsset,
+  PartialTrackImportSelection,
+  TimelineDoc,
+} from '../domain/schema'
 import {
   microsecondsDurationToFrames,
   rateEquals,
@@ -65,6 +74,7 @@ export interface MediaImportDeps {
   reconformAssets(rate: FrameRate): void
   startCompatibility(item: MediaCompatibilityItem): boolean
   hasCompatibility(id: string, requestId: string): boolean
+  getCompatibility(id: string): MediaCompatibilityItem | undefined
   setCompatibility(
     id: string,
     requestId: string,
@@ -96,6 +106,7 @@ const realDeps: MediaImportDeps = {
   hasCompatibility: (id, requestId) => (
     useMediaStore.getState().compatibility.get(id)?.requestId === requestId
   ),
+  getCompatibility: (id) => useMediaStore.getState().compatibility.get(id),
   setCompatibility: (id, requestId, status, report) => (
     useMediaStore.getState().setCompatibility(id, requestId, status, report)
   ),
@@ -117,6 +128,9 @@ interface ActiveImport {
   deps: MediaImportDeps
   abortController: AbortController
   cancelled: boolean
+  /** Limited row restored when a confirmed partial import is cancelled. */
+  cancelFallback: MediaCompatibilityItem | null
+  cancelledItemSettled: boolean
   resolveDecision: ((decision: MediaImportDecision) => void) | null
 }
 
@@ -197,11 +211,34 @@ function checkingItem(
   }
 }
 
-function cancelOperation(operation: ActiveImport, removeItem = true): void {
+function settleCancelledCompatibility(
+  operation: ActiveImport,
+  preserveFallback: boolean,
+): void {
+  if (operation.cancelledItemSettled) return
+  operation.cancelledItemSettled = true
+  const fallback = preserveFallback ? operation.cancelFallback : null
+  const restored = fallback
+    ? operation.deps.setCompatibility(
+        operation.itemId,
+        operation.requestId,
+        fallback.status,
+        fallback.report,
+      )
+    : false
+  if (!restored) {
+    operation.deps.removeCompatibility(operation.itemId)
+    retainedImports.delete(operation.itemId)
+  }
+}
+
+function cancelOperation(
+  operation: ActiveImport,
+  preserveFallback = true,
+): void {
   operation.cancelled = true
   operation.abortController.abort()
-  if (removeItem) operation.deps.removeCompatibility(operation.itemId)
-  retainedImports.delete(operation.itemId)
+  settleCancelledCompatibility(operation, preserveFallback)
   operation.resolveDecision?.('cancel')
   operation.resolveDecision = null
 }
@@ -220,6 +257,8 @@ async function importSelectedMedia(
   handle: LocalMediaFileHandle | null,
   deps: MediaImportDeps,
   existingItemId?: string,
+  requestedPartialSelection?: PartialTrackImportSelection,
+  cancelFallback: MediaCompatibilityItem | null = null,
 ): Promise<MediaImportResult> {
   if (activeImport) return { status: 'busy' }
 
@@ -244,6 +283,8 @@ async function importSelectedMedia(
     deps,
     abortController: new AbortController(),
     cancelled: false,
+    cancelFallback,
+    cancelledItemSettled: false,
     resolveDecision: null,
   }
   activeImport = operation
@@ -271,7 +312,7 @@ async function importSelectedMedia(
       operation.abortController.signal,
     )
     probeReturned = true
-    if (inspection.status === 'ready') analyzed = inspection.asset
+    if (inspection.asset) analyzed = inspection.asset
     if (
       activeImport !== operation
       || operation.cancelled
@@ -285,7 +326,39 @@ async function importSelectedMedia(
       throw new Error('the active project changed while the file was being analyzed')
     }
 
-    if (inspection.status !== 'ready') {
+    const partialAcceptance = requestedPartialSelection && inspection.asset
+      ? reapplyPartialTrackImport(
+          inspection.asset,
+          inspection.compatibility,
+          requestedPartialSelection,
+        )
+      : null
+    if (requestedPartialSelection && partialAcceptance === null) {
+      const fallbackStatus = inspection.status === 'ready'
+        ? cancelFallback?.status ?? 'limited'
+        : inspection.status
+      const fallbackReport = inspection.status === 'ready'
+        ? cancelFallback?.report ?? inspection.compatibility
+        : inspection.compatibility
+      if (!deps.setCompatibility(
+        itemId,
+        requestId,
+        fallbackStatus,
+        fallbackReport,
+      )) return { status: 'cancelled' }
+      setUi({ ...INITIAL_MEDIA_IMPORT_STATE })
+      return {
+        status: 'failed',
+        message: `The confirmed ${requestedPartialSelection} choice is no longer available after rechecking the file. Review the updated compatibility details.`,
+        itemId,
+      }
+    }
+    const acceptedAsset = partialAcceptance?.asset
+      ?? (inspection.status === 'ready' ? inspection.asset : null)
+    const acceptedCompatibility = partialAcceptance?.compatibility
+      ?? (inspection.status === 'ready' ? inspection.compatibility : null)
+
+    if (!acceptedAsset || !acceptedCompatibility) {
       if (!deps.setCompatibility(
         itemId,
         requestId,
@@ -315,12 +388,12 @@ async function importSelectedMedia(
       }
     }
 
-    const readyAsset = inspection.asset
+    const readyAsset = acceptedAsset
     deps.setCompatibility(
       itemId,
       requestId,
       'checking',
-      inspection.compatibility,
+      acceptedCompatibility,
     )
 
     let decision: MediaImportDecision = 'keep-project-rate'
@@ -401,7 +474,7 @@ async function importSelectedMedia(
       itemId,
       requestId,
       'ready',
-      inspection.compatibility,
+      acceptedCompatibility,
     )
 
     if (decision === 'match-source-rate') {
@@ -464,8 +537,7 @@ async function importSelectedMedia(
     if (analyzed && !committed) deps.revokeObjectURL(analyzed.objectUrl)
     if (activeImport === operation) {
       if (operation.cancelled) {
-        deps.removeCompatibility(itemId)
-        retainedImports.delete(itemId)
+        settleCancelledCompatibility(operation, true)
         useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
       }
       activeImport = null
@@ -522,11 +594,57 @@ export function retryMediaCompatibility(
   )
 }
 
+/** Commit the single safe track kind offered by a visible Limited report. */
+export function acceptPartialMediaImport(
+  itemId: string,
+  selection: PartialTrackImportSelection,
+  deps?: MediaImportDeps,
+): Promise<MediaImportResult> {
+  if (activeImport) return Promise.resolve({ status: 'busy' })
+  const retained = retainedImports.get(itemId)
+  if (!retained) {
+    return Promise.resolve({
+      status: 'failed',
+      message: 'That partial import is no longer available.',
+      itemId,
+    })
+  }
+  const operationDeps = deps ?? retained.deps
+  const item = operationDeps.getCompatibility(itemId)
+  if (
+    item?.status !== 'limited'
+    || partialTrackImportOption(item.report) !== selection
+  ) {
+    return Promise.resolve({
+      status: 'failed',
+      message: 'That partial import choice is no longer available.',
+      itemId,
+    })
+  }
+  if (operationDeps.getDocument().id !== retained.documentId) {
+    retainedImports.delete(itemId)
+    operationDeps.removeCompatibility(itemId)
+    return Promise.resolve({
+      status: 'failed',
+      message: 'The active project changed before this partial import could start.',
+      itemId,
+    })
+  }
+  return importSelectedMedia(
+    retained.file,
+    retained.handle,
+    operationDeps,
+    itemId,
+    selection,
+    item,
+  )
+}
+
 /** Remove a provisional compatibility row and invalidate any in-flight work. */
 export function removeMediaCompatibility(itemId: string): boolean {
   const operation = activeImport
   if (operation?.itemId === itemId) {
-    cancelOperation(operation)
+    cancelOperation(operation, false)
     useMediaImportStore.setState((state) => ({
       ...state,
       phase: 'cancelling',
@@ -621,7 +739,7 @@ export function dismissMediaImportError(): void {
 /** Test/teardown seam: invalidates late work without letting it touch UI state. */
 export function resetMediaImportController(): void {
   const operation = activeImport
-  if (operation) cancelOperation(operation)
+  if (operation) cancelOperation(operation, false)
   for (const [itemId, retained] of retainedImports) {
     retained.deps.removeCompatibility(itemId)
   }

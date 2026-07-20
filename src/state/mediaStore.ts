@@ -56,6 +56,9 @@ function descriptorFromAsset(asset: MediaAsset): PortableAssetDescriptor {
     size: asset.size,
     lastModified: asset.lastModified,
     kind: asset.kind,
+    ...(asset.partialTrackSelection === undefined
+      ? {}
+      : { partialTrackSelection: asset.partialTrackSelection }),
     durationMicroseconds: asset.durationMicroseconds,
     nativeFrameRate: asset.frameRate === null ? null : { ...asset.frameRate },
     width: asset.width,
@@ -84,6 +87,7 @@ function connectionMatchesDescriptor(
     && descriptor.size === asset.size
     && descriptor.lastModified === asset.lastModified
     && descriptor.kind === asset.kind
+    && descriptor.partialTrackSelection === asset.partialTrackSelection
     && descriptor.durationMicroseconds === asset.durationMicroseconds
     && ratesMatch(descriptor.nativeFrameRate, asset.frameRate)
     && descriptor.width === asset.width
@@ -127,7 +131,10 @@ function compatibilityMatchesDescriptor(
   item: MediaCompatibilityItem,
   descriptor: PortableAssetDescriptor,
 ): boolean {
-  return item.id === descriptor.id
+  const readySelectionMatches = item.status !== 'ready'
+    || item.report?.partialImport?.selection === descriptor.partialTrackSelection
+  return readySelectionMatches
+    && item.id === descriptor.id
     && item.fileName === descriptor.fileName
     && item.declaredMimeType === descriptor.mimeType
     && item.size === descriptor.size

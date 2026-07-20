@@ -101,9 +101,9 @@ async function process(
     asset.kind === 'video'
       ? deps.generateFilmstrip(blob)
       : Promise.resolve(null),
-    // video OR audio may carry an audio track; the generator returns
-    // null by itself when there is none.
-    deps.generateWaveform(blob),
+    asset.hasAudio
+      ? deps.generateWaveform(blob)
+      : Promise.resolve(null),
   ])
   const filmstrip = filmstripResult.status === 'fulfilled'
     ? filmstripResult.value

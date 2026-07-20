@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-19)
+## Status (2026-07-20)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -53,8 +53,9 @@ and the open list below.
 | Post-MVP #19 — compatibility Slice 1 | ✅ done | byte-detected container + every-track native config-support probe; guarded session reports + accessible Media Pool diagnostics; 184 focused + 979 total tests; Chrome for Testing Ready/Unsupported/720px gate |
 | Post-MVP #19 — compatibility Slice 2 | ✅ done | Resume/Relink reports + exact-generation preview/visuals/audio/export feedback; 303 focused + 1,021 total tests; in-app Chromium Ready/Unsupported/runtime-failure/recovery/720p gate |
 | Post-MVP #19 — compatibility Slice 3 | ✅ done | one lazy local-decoder seam for ProRes + AC-3/E-AC-3 across probe/visuals/preview/audio/export; bounded automatic policy; 1,042 tests + in-app Chromium import/preview/playback/export gate |
+| Post-MVP #19 — compatibility Slice 4 | ✅ done | explicit whole-kind consent + durable video-only/audio-only projection across import/Resume/Relink/runtime/export; 1,072 tests + in-app Chromium dual-path gate |
 
-1,042 tests green · `npm run build` passes with the known large-chunk warning
+1,072 tests green · `npm run build` passes with the known large-chunk warning
 (1.144 MB lazy AC-3 chunk; existing app chunk also exceeds 500 kB) ·
 `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -340,12 +341,39 @@ downloaded a 4.000s MP4 that `ffprobe` identified as 1920×1080 H.264 plus
 1.50.9 because the older release predated the upstream all-key-packet fix and
 returned null for sparse thumbnail seeks.
 
+Issue #19 Slice 4 adds a conservative whole-kind partial-import seam. A Limited
+source offers video-only or audio-only only when every track of the kept kind
+is decodable and the other present kind has a concrete failure. The controller
+retains that provisional source until a native dialog explicitly names the
+kept and omitted tracks, codecs, failure reason, unchanged original file, and
+timeline/export consequence. Cancel keeps the Limited row and restores focus;
+confirm atomically commits an effective one-kind asset while leaving the
+accepted omission visible in its Ready diagnostics.
+
+The effective asset is authoritative downstream: video-only suppresses audio
+clips, waveforms, live-audio fetches, and audio export; audio-only suppresses
+video clips, filmstrips, preview decoder configuration, and video export.
+Export rejects any stale clip that contradicts that projection before opening
+the source. Portable project format v2 stores the explicit selection, migrates
+v1 projects, and reapplies the same omission across remembered/manual Resume,
+individual Relink, folder matching, and accepted staged re-probes. A later
+browser gaining support for both original tracks therefore cannot silently
+resurrect the track the user chose to omit.
+
+The in-app Chromium gate passed 2026-07-20 at 1280×720 with generated MKVs.
+H.264/DTS offered video-only; MPEG-2/AAC offered audio-only. Both dialogs showed
+the exact kept/omitted facts with safe initial focus; cancellation preserved the
+Limited row and restored its trigger focus, and confirmation produced the exact
+Ready projection with the omission still visible. Video-only generated a
+filmstrip without a waveform; audio-only stayed free of a video filmstrip. No
+error overlay appeared and the Vite runtime log contained no error.
+
 **Next: keep Issue #19 open and ask before selecting its next slice.** Remaining
-work is explicit partial-track consent, capability caching, optional
-user-consented proxy conversion, broader browser/codec fixtures, and the final
-distribution/security review. Future project-storage work is also separate
-opt-in media caching with quota/eviction UX and multi-tab recovery ownership;
-do not imply recovery or a portable `.webcut` contains source bytes today.
+work is capability caching, optional user-consented proxy conversion, broader
+browser/codec fixtures, and the final distribution/security review. Future
+project-storage work is also separate opt-in media caching with quota/eviction
+UX and multi-tab recovery ownership; do not imply recovery or a portable
+`.webcut` contains source bytes today.
 
 ## What works today (user-visible)
 
@@ -781,12 +809,13 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #19 remains open after Slice 3. Import, remembered/manual Resume,
+- Issue #19 remains open after Slice 4. Import, remembered/manual Resume,
   individual/folder Relink, and confirmed preview/visuals/audio/export source
   failures now share guarded compatibility reports and fail-closed timeline
   entry. ProRes and AC-3/E-AC-3 have bounded, locally bundled, lazy fallbacks
-  across every decode surface. Still separate: explicit partial-track import
-  consent, capability caching, user-consented proxy conversion, the broader
+  across every decode surface. Explicit video-only/audio-only imports now
+  require informed consent and persist across project reconnection. Still
+  separate: capability caching, user-consented proxy conversion, the broader
   browser/codec fixture matrix, and final distribution/security review. Do not
   imply those later paths exist yet.
 - Slices 4–6 now cover portable Save/Save As,

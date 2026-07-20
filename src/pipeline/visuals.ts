@@ -170,7 +170,7 @@ export async function generateFilmstrip(file: Blob): Promise<FilmstripResult | n
       canDecode: () => track.canDecode(),
     })
     if (!support.decodable) throw new Error(support.failure.detail)
-    const durationSec = await input.computeDuration()
+    const durationSec = await input.computeDuration([track])
     const timestamps = filmstripTimestamps(durationSec)
     if (timestamps.length === 0) return null
 
@@ -228,7 +228,7 @@ export async function generateWaveform(file: Blob): Promise<WaveformResult | nul
       canDecode: () => track.canDecode(),
     })
     if (!support.decodable) throw new Error(support.failure.detail)
-    const durationSec = await input.computeDuration()
+    const durationSec = await input.computeDuration([track])
     const width = waveformWidth(durationSec)
     if (width === 0) return null
 

@@ -70,8 +70,11 @@ export type TransitionId = string
 /* Media assets                                                         */
 /* ------------------------------------------------------------------ */
 
-/** What an imported asset fundamentally contains. */
+/** Track kind exposed to the editor after any explicit partial projection. */
 export type AssetKind = 'video' | 'audio' | 'image'
+
+/** A durable, explicitly confirmed choice to omit one source track kind. */
+export type PartialTrackImportSelection = 'video-only' | 'audio-only'
 
 /**
  * An imported source file, registered in state/mediaStore. Immutable once
@@ -94,8 +97,14 @@ export interface MediaAsset {
    * re-linked on load.
    */
   objectUrl: string
-  /** Kind of media contained in the file. */
+  /** Effective track kind available to timeline and runtime consumers. */
   kind: AssetKind
+  /**
+   * Present only when the user explicitly imported one usable track kind from
+   * a multi-track source. The choice is durable so relinking never silently
+   * restores an omitted track on another browser or machine.
+   */
+  partialTrackSelection?: PartialTrackImportSelection
   /**
    * Total playable length in document-rate frames (see MVP note in the file
    * header). Images use a nominal default chosen at import.
@@ -114,7 +123,7 @@ export interface MediaAsset {
   width: number | null
   /** Pixel height of the video/image stream; null for audio-only. */
   height: number | null
-  /** True when the file contains an audio stream. */
+  /** True only when audio is included in this imported projection. */
   hasAudio: boolean
   /** Sample rate (Hz) of the audio stream; null when hasAudio is false. */
   audioSampleRate: number | null

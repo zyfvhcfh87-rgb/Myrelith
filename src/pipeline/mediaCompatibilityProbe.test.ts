@@ -59,6 +59,9 @@ const media = vi.hoisted(() => ({
   format: { name: 'MPEG-4 Part 14', mimeType: 'video/mp4' },
   fullMimeType: 'video/mp4; codecs="avc1.640028, mp4a.40.2"',
   durationSec: 4,
+  videoDurationSec: 4,
+  audioDurationSec: 4,
+  computeDurationCount: 0,
   videoTracks: [] as FakeVideoTrack[],
   audioTracks: [] as FakeAudioTrack[],
   disposeCount: 0,
@@ -113,7 +116,18 @@ vi.mock('mediabunny', () => {
       return media.audioTracks[0] ?? null
     }
 
-    async computeDuration(): Promise<number> {
+    async computeDuration(
+      tracks: Array<FakeVideoTrack | FakeAudioTrack>,
+    ): Promise<number> {
+      media.computeDurationCount++
+      if (media.computeDurationCount === 1) return media.durationSec
+      if (tracks.length !== 1) return media.durationSec
+      if (media.videoTracks.includes(tracks[0] as FakeVideoTrack)) {
+        return media.videoDurationSec
+      }
+      if (media.audioTracks.includes(tracks[0] as FakeAudioTrack)) {
+        return media.audioDurationSec
+      }
       return media.durationSec
     }
 
@@ -182,6 +196,9 @@ beforeEach(() => {
   media.format = { name: 'Matroska', mimeType: 'video/x-matroska' }
   media.fullMimeType = 'video/x-matroska; codecs="avc1.640028, mp4a.40.2"'
   media.durationSec = 4
+  media.videoDurationSec = 4
+  media.audioDurationSec = 4
+  media.computeDurationCount = 0
   media.videoTracks = [videoTrack()]
   media.audioTracks = [audioTrack()]
   media.disposeCount = 0
@@ -434,24 +451,69 @@ describe('probeMediaFile', () => {
     expect(media.disposeCount).toBe(1)
   })
 
-  test('returns limited when only one track is decodable and creates no URL', async () => {
+  test('returns an owned candidate for a safe Limited choice and reports primary-track durations', async () => {
+    media.durationSec = 9
+    media.videoDurationSec = 3
+    media.audioDurationSec = 7
     media.audioTracks = [audioTrack({ canDecode: vi.fn(async () => false) })]
 
     const result = await probeMediaFile(selectedFile(), F30, 'asset-limited')
 
     expect(result).toMatchObject({
       status: 'limited',
-      asset: null,
+      asset: {
+        id: 'asset-limited',
+        objectUrl: 'blob:compatible',
+        kind: 'video',
+        durationMicroseconds: 9_000_000,
+        durationFrames: 270,
+        hasAudio: true,
+      },
       compatibility: {
+        durationMicroseconds: 9_000_000,
         reason: 'unsupported-codec',
         tracks: [
-          { kind: 'video', decodable: true },
+          {
+            kind: 'video',
+            primary: true,
+            decodable: true,
+            durationMicroseconds: 3_000_000,
+          },
           {
             kind: 'audio',
+            primary: true,
             decodable: false,
+            durationMicroseconds: 7_000_000,
             reason: 'unsupported-codec',
             detail: expect.stringContaining('no reviewed local fallback'),
           },
+        ],
+      },
+    })
+    expect(URL.createObjectURL).toHaveBeenCalledOnce()
+    expect(media.disposeCount).toBe(1)
+  })
+
+  test('keeps an unsafe Limited result URL-free when no whole track kind is usable', async () => {
+    media.videoTracks = [
+      videoTrack(),
+      videoTrack({ canDecode: vi.fn(async () => false) }),
+    ]
+    media.audioTracks = []
+
+    const result = await probeMediaFile(
+      selectedFile(),
+      F30,
+      'asset-unsafe-limited',
+    )
+
+    expect(result).toMatchObject({
+      status: 'limited',
+      asset: null,
+      compatibility: {
+        tracks: [
+          { kind: 'video', decodable: true },
+          { kind: 'video', decodable: false },
         ],
       },
     })

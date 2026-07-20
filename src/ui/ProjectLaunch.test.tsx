@@ -213,6 +213,41 @@ describe('ProjectLaunch', () => {
     expect(controller.activateResumedProject).toHaveBeenCalledOnce()
   })
 
+  test('names durable partial-track choices on the Resume screen', () => {
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      candidate: {
+        origin: 'file',
+        projectFileName: 'partial.webcut',
+        projectName: 'Partial imports',
+        width: 1920,
+        height: 1080,
+        frameRate: { num: 30, den: 1 },
+        audioSampleRate: 48_000,
+        assets: [
+          {
+            id: 'video-only',
+            fileName: 'silent-source.mkv',
+            kind: 'video',
+            partialTrackSelection: 'video-only',
+            status: 'missing',
+          },
+          {
+            id: 'audio-only',
+            fileName: 'sound-source.mkv',
+            kind: 'audio',
+            partialTrackSelection: 'audio-only',
+            status: 'ready',
+          },
+        ],
+      },
+    })
+    render(<ProjectLaunch />)
+
+    expect(screen.getByText('video only')).toBeInTheDocument()
+    expect(screen.getByText('audio only')).toBeInTheDocument()
+  })
+
   test('recovery is explicit and never described as a saved project', () => {
     useProjectSessionStore.setState({
       screen: 'resume',

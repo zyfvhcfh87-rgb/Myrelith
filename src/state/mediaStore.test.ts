@@ -37,6 +37,9 @@ function descriptorFor(asset: MediaAsset): PortableAssetDescriptor {
     size: asset.size,
     lastModified: asset.lastModified,
     kind: asset.kind,
+    ...(asset.partialTrackSelection === undefined
+      ? {}
+      : { partialTrackSelection: asset.partialTrackSelection }),
     durationMicroseconds: asset.durationMicroseconds,
     nativeFrameRate: asset.frameRate,
     width: asset.width,
@@ -376,6 +379,48 @@ describe('mediaStore', () => {
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
   })
 
+  test('keeps partial selection identical across descriptor, asset, and Ready report', () => {
+    const projected = makeAsset({
+      partialTrackSelection: 'video-only',
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    })
+    expect(getState().addAsset(projected)).toBe(true)
+    expect(getState().descriptors.get(projected.id)).toMatchObject({
+      partialTrackSelection: 'video-only',
+      hasAudio: false,
+    })
+    getState().disconnectAsset(projected.id)
+    vi.mocked(URL.revokeObjectURL).mockClear()
+
+    const restoredRawTracks = {
+      ...projected,
+      objectUrl: 'blob:restored-raw-tracks',
+      partialTrackSelection: undefined,
+      hasAudio: true,
+      audioSampleRate: 48_000,
+      audioChannels: 2,
+    }
+    expect(getState().connectAsset(restoredRawTracks)).toBe(false)
+
+    const missingChoice = compatibilityForAsset(projected)
+    expect(getState().connectAsset(projected, missingChoice)).toBe(false)
+
+    const acceptedReport: MediaCompatibilityReport = {
+      ...makeCompatibilityReport(),
+      partialImport: { selection: 'video-only' },
+    }
+    const accepted = compatibilityForAsset(
+      projected,
+      'ready',
+      acceptedReport,
+    )
+    expect(getState().connectAsset(projected, accepted)).toBe(true)
+    expect(getState().compatibility.get(projected.id)).toBe(accepted)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+  })
+
   test('atomically replaces the catalog and connected subset', () => {
     const outgoing = makeAsset()
     getState().addAsset(outgoing)
@@ -438,6 +483,46 @@ describe('mediaStore', () => {
     expect(getState().descriptors).toBe(before.descriptors)
     expect(getState().assets).toBe(before.assets)
     expect(getState().compatibility).toBe(before.compatibility)
+  })
+
+  test('keeps connected Ready and offline Limited parity for a partial descriptor', () => {
+    const partial = makeAsset({
+      partialTrackSelection: 'audio-only',
+      kind: 'audio',
+      frameRate: null,
+      width: null,
+      height: null,
+      decoderConfigB64: null,
+    })
+    const descriptor = descriptorFor(partial)
+    const acceptedReport: MediaCompatibilityReport = {
+      ...makeCompatibilityReport(),
+      partialImport: { selection: 'audio-only' },
+    }
+    const ready = compatibilityForAsset(partial, 'ready', acceptedReport)
+
+    expect(getState().replaceAssets([descriptor], [partial], [ready])).toBe(true)
+    const connectedState = getState()
+    expect(getState().replaceAssets([descriptor], [], [ready])).toBe(false)
+    expect(getState().assets).toBe(connectedState.assets)
+    expect(getState().compatibility).toBe(connectedState.compatibility)
+
+    const limitedReport: MediaCompatibilityReport = {
+      ...makeCompatibilityReport(),
+      status: 'limited',
+      reason: 'unsupported-codec',
+      detail: 'The selected audio track cannot decode in this browser.',
+    }
+    const limited = compatibilityForAsset(
+      partial,
+      'limited',
+      limitedReport,
+      'partial-limited',
+    )
+    expect(getState().replaceAssets([descriptor], [], [limited])).toBe(true)
+    expect(getState().assets.has(partial.id)).toBe(false)
+    expect(getState().compatibility.get(partial.id)).toBe(limited)
+    expect(getState().compatibility.get(partial.id)?.status).not.toBe('checking')
   })
 
   test('runtime failure disconnects only the exact URL and report generation', () => {

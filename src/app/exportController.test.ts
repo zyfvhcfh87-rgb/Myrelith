@@ -98,6 +98,27 @@ const ASSET: MediaAsset = {
   decoderConfigB64: null,
 }
 
+function docWithSourceClipOn(
+  kind: 'video' | 'audio',
+  clipName = ASSET.fileName,
+): TimelineDoc {
+  const sourceTrack = DOC.tracks[0]
+  if (!sourceTrack) throw new Error('export source-track fixture missing')
+  return {
+    ...DOC,
+    tracks: [{
+      ...sourceTrack,
+      id: kind === 'video' ? 'V1' : 'A1',
+      kind,
+      name: kind === 'video' ? 'V1' : 'A1',
+      clips: sourceTrack.clips.map((clip) => ({
+        ...clip,
+        name: clipName,
+      })),
+    }],
+  }
+}
+
 type ExportRun = AsyncGenerator<number, ExportResult | undefined, void>
 
 function deferred<T = void>(): {
@@ -217,6 +238,66 @@ describe('exportController wiring and completion', () => {
 
     await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
       'Reconnect 1 offline source before exporting: source.mp4.',
+    )
+
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('rejects an audio clip from a video-only import before fetching', async () => {
+    const videoOnly: MediaAsset = {
+      ...ASSET,
+      partialTrackSelection: 'video-only',
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    }
+    useDocumentStore.setState({
+      doc: docWithSourceClipOn('audio'),
+      past: [],
+      future: [],
+    })
+    useMediaStore.setState({
+      assets: new Map([[videoOnly.id, videoOnly]]),
+    })
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      'Audio clip "source.mp4" cannot be exported because "source.mp4" was imported without audio.',
+    )
+
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('rejects a video clip from an audio-only import before fetching', async () => {
+    const audioOnly: MediaAsset = {
+      ...ASSET,
+      fileName: 'source.m4a',
+      mimeType: 'audio/mp4',
+      kind: 'audio',
+      partialTrackSelection: 'audio-only',
+      frameRate: null,
+      width: null,
+      height: null,
+      decoderConfigB64: null,
+    }
+    useDocumentStore.setState({
+      doc: docWithSourceClipOn('video', audioOnly.fileName),
+      past: [],
+      future: [],
+    })
+    useMediaStore.setState({
+      assets: new Map([[audioOnly.id, audioOnly]]),
+    })
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      'Video clip "source.m4a" cannot be exported because "source.m4a" was imported as audio only.',
     )
 
     expect(h.fetchBlob).not.toHaveBeenCalled()
