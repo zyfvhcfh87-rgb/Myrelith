@@ -608,6 +608,121 @@ describe('probeMediaFile', () => {
     expect(media.audioTracks[0].canDecode).toHaveBeenCalledTimes(2)
   })
 
+  test.each([
+    {
+      label: 'track metadata is larger',
+      trackWidth: 4096,
+      trackHeight: 2160,
+      configWidth: 1920,
+      configHeight: 1080,
+    },
+    {
+      label: 'decoder configuration is larger',
+      trackWidth: 1920,
+      trackHeight: 1080,
+      configWidth: 4096,
+      configHeight: 2160,
+    },
+  ])('keeps the larger ProRes pixel cost when $label', async ({
+    trackWidth,
+    trackHeight,
+    configWidth,
+    configHeight,
+  }) => {
+    media.videoTracks = [videoTrack({
+      getCodec: vi.fn(async () => 'prores'),
+      getCodecParameterString: vi.fn(async () => 'apch'),
+      getInternalCodecId: vi.fn(async () => 'apch'),
+      getDecoderConfig: vi.fn(async () => ({
+        codec: 'apch',
+        codedWidth: configWidth,
+        codedHeight: configHeight,
+      })),
+      getCodedWidth: vi.fn(async () => trackWidth),
+      getCodedHeight: vi.fn(async () => trackHeight),
+      getDisplayWidth: vi.fn(async () => trackWidth),
+      getDisplayHeight: vi.fn(async () => trackHeight),
+      computePacketStats: vi.fn(async () => ({ averagePacketRate: 60 })),
+      canDecode: vi.fn(async () => localDecoders.proresRegistered),
+    })]
+    media.audioTracks = []
+    const registrationsBefore = localDecoders.proresRegistrations
+
+    const result = await probeMediaFile(
+      selectedFile(),
+      F30,
+      `asset-prores-cost-${trackWidth}`,
+    )
+
+    expect(result).toMatchObject({
+      status: 'unsupported',
+      compatibility: {
+        tracks: [{
+          decoderPath: null,
+          reason: 'resource-limit',
+          detail: expect.stringContaining('DCI 4K at 30 fps'),
+        }],
+      },
+    })
+    expect(localDecoders.proresRegistrations).toBe(registrationsBefore)
+  })
+
+  test.each([
+    {
+      label: 'track metadata is larger',
+      trackSampleRate: 96_000,
+      trackChannels: 8,
+      configSampleRate: 48_000,
+      configChannels: 2,
+    },
+    {
+      label: 'decoder configuration is larger',
+      trackSampleRate: 48_000,
+      trackChannels: 2,
+      configSampleRate: 96_000,
+      configChannels: 8,
+    },
+  ])('keeps the larger AC-3 limits when $label', async ({
+    trackSampleRate,
+    trackChannels,
+    configSampleRate,
+    configChannels,
+  }) => {
+    media.videoTracks = []
+    media.audioTracks = [audioTrack({
+      getCodec: vi.fn(async () => 'ac3'),
+      getCodecParameterString: vi.fn(async () => 'ac-3'),
+      getInternalCodecId: vi.fn(async () => 'ac-3'),
+      getDecoderConfig: vi.fn(async () => ({
+        codec: 'ac-3',
+        sampleRate: configSampleRate,
+        numberOfChannels: configChannels,
+      })),
+      getSampleRate: vi.fn(async () => trackSampleRate),
+      getNumberOfChannels: vi.fn(async () => trackChannels),
+      canDecode: vi.fn(async () => localDecoders.ac3Registered),
+    })]
+    const registrationsBefore = localDecoders.ac3Registrations
+
+    const result = await probeMediaFile(
+      selectedFile(),
+      F30,
+      `asset-ac3-cost-${trackSampleRate}`,
+    )
+
+    expect(result).toMatchObject({
+      status: 'unsupported',
+      compatibility: {
+        tracks: [{
+          decoderPath: null,
+          reason: 'resource-limit',
+          detail: expect.stringContaining('48 kHz'),
+        }],
+      },
+    })
+    expect(localDecoders.ac3Registrations).toBe(registrationsBefore)
+  })
+
   test('warns instead of loading fallback above the documented duration budget', async () => {
     media.durationSec = 2 * 60 * 60 + 1
     media.videoTracks = [videoTrack({
@@ -641,7 +756,9 @@ describe('probeMediaFile', () => {
       },
     })
     expect(localDecoders.proresRegistrations).toBe(registrationsBefore)
-    expect(media.videoTracks[0].canDecode).toHaveBeenCalledOnce()
+    // The family was registered by an earlier probe, but an over-budget
+    // source must still fail before attempting that local decoder.
+    expect(media.videoTracks[0].canDecode).not.toHaveBeenCalled()
   })
 
   test('distinguishes an unknown codec from a known unsupported codec', async () => {

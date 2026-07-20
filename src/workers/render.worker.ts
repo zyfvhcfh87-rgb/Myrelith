@@ -38,6 +38,7 @@ import { visibleVideoLayersAtFrame } from '../domain/selectors'
 import {
   invalidateMediaDecoderRuntime,
   invalidateMediaDecoderSource,
+  type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 import type { Composite2D, FrameSource } from '../pipeline/render'
 import { compositeFrame } from '../pipeline/render'
@@ -100,7 +101,11 @@ export interface RenderWorkerEnv {
   /** GPU-copy a frame into a decoder-independent bitmap (createImageBitmap). */
   createBitmap(frame: DecodableFrame): Promise<BitmapLike>
   /** Open one worker-owned Mediabunny source for a structured-cloned Blob. */
-  openVideoSource(blob: Blob, sourceId: AssetId): Promise<WorkerVideoSource>
+  openVideoSource(
+    blob: Blob,
+    sourceId: AssetId,
+    budget: LocalDecoderBudget,
+  ): Promise<WorkerVideoSource>
   /** Forget session capability facts before an asset source changes. */
   invalidateDecoderSource(sourceId: AssetId): void
   /** Forget every realm-local capability fact when this worker closes. */
@@ -1038,7 +1043,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
     let source: WorkerVideoSource
     try {
-      source = await env.openVideoSource(msg.blob, msg.assetId)
+      source = await env.openVideoSource(msg.blob, msg.assetId, msg.budget)
     } catch (error) {
       if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
       env.invalidateDecoderSource(msg.assetId)
@@ -1488,10 +1493,9 @@ if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
       }),
     createBitmap: (frame) =>
       createImageBitmap(frame as unknown as ImageBitmapSource),
-    openVideoSource: (blob, sourceId) => openWorkerVideoSource(
+    openVideoSource: (blob, sourceId, budget) => openWorkerVideoSource(
       blob,
-      undefined,
-      sourceId,
+      { sourceId, budget },
     ),
     invalidateDecoderSource: invalidateMediaDecoderSource,
     invalidateDecoderRuntime: invalidateMediaDecoderRuntime,

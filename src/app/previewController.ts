@@ -27,8 +27,13 @@
  * exists for tests and real teardown.
  */
 
+import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
 import { visibleVideoLayersAtFrame } from '../domain/selectors'
+import {
+  mediaAssetDecoderBudget,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 import type { RenderFrameResult } from '../engine/render-bridge'
 import {
   RenderAssetOpenError,
@@ -54,6 +59,7 @@ export interface BridgeLike {
     assetId: AssetId,
     blob: Blob,
     rate: FrameRate,
+    budget: LocalDecoderBudget,
     runtimeToken: object,
   ): Promise<void>
   releaseAsset(assetId: AssetId): void
@@ -178,8 +184,7 @@ async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void>
     status: 'loading' as const,
   }
   state.assetStates.set(asset.id, pipelineState)
-  let failureReason: 'decode-failed' | 'resource-unavailable' =
-    'resource-unavailable'
+  let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
   let failureTrackKind: 'video' | null = null
   try {
     const blob = await deps.fetchBlob(asset.objectUrl)
@@ -191,7 +196,13 @@ async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void>
     if (!asset.frameRate) {
       throw new Error(`"${asset.fileName}": missing frame rate`)
     }
-    await bridge.openAsset(asset.id, blob, asset.frameRate, guard)
+    await bridge.openAsset(
+      asset.id,
+      blob,
+      asset.frameRate,
+      mediaAssetDecoderBudget(asset, blob.size),
+      guard,
+    )
     if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) {
       return
     }

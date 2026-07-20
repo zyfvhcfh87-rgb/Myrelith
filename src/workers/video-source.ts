@@ -23,8 +23,10 @@ import type { InputVideoTrack } from 'mediabunny'
 import {
   beginMediaDecoderSource,
   ensureMediaDecoderSupport,
+  refineVideoDecoderBudget,
   type DecoderCheckResult,
   type DecoderCheckTarget,
+  type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 
 const MICROSECONDS_PER_SECOND = 1_000_000
@@ -118,6 +120,11 @@ export interface WorkerVideoSourceEnv {
 export interface WorkerVideoSourceOpenFailure {
   trackKind: 'video' | null
   reason: MediaRuntimeFailure['reason']
+}
+
+export interface OpenWorkerVideoSourceOptions {
+  sourceId?: string
+  budget: LocalDecoderBudget
 }
 
 /** Typed pre-ready failure carried through the worker protocol. */
@@ -385,10 +392,11 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
  */
 export async function openWorkerVideoSource(
   blob: Blob,
+  options: OpenWorkerVideoSourceOptions,
   env: WorkerVideoSourceEnv = browserEnv,
-  sourceId?: string,
 ): Promise<WorkerVideoSource> {
   if (!(blob instanceof Blob)) throw new TypeError('blob must be a Blob')
+  const { sourceId } = options
   if (sourceId !== undefined) env.beginDecoderSource(sourceId)
 
   let input: VideoInputLike
@@ -407,6 +415,11 @@ export async function openWorkerVideoSource(
       track.getCodec(),
       track.getDecoderConfig(),
     ])
+    const budget = refineVideoDecoderBudget(
+      options.budget,
+      blob.size,
+      configuration,
+    )
     const support = await env.ensureDecoderSupport({
       codec,
       canDecode: () => track.canDecode(),
@@ -415,9 +428,13 @@ export async function openWorkerVideoSource(
       sourceId,
       boundary: 'render',
       policy: 'revalidate',
+      budget,
     })
     if (!support.decodable) {
-      throw new Error(support.failure.detail)
+      throw new WorkerVideoSourceOpenError({
+        trackKind: 'video',
+        reason: support.failure.reason,
+      }, new Error(support.failure.detail))
     }
     return new WorkerVideoSourceImpl(input, track, env)
   } catch (cause) {

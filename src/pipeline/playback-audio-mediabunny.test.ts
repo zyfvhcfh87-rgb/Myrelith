@@ -2,7 +2,18 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type {
   DecoderCheckResult,
   DecoderCheckTarget,
+  LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
+import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
+
+const AUDIO_BUDGET: LocalDecoderBudget = {
+  fileBytes: 1,
+  durationMicroseconds: 1_000_000,
+  sampleRate: 44_100,
+  channels: 2,
+}
+
+const resolvedAudio = (blob: Blob) => ({ blob, budget: AUDIO_BUDGET })
 
 const harness = vi.hoisted(() => ({
   track: null as null | {
@@ -16,9 +27,15 @@ const harness = vi.hoisted(() => ({
   ensureDecoderSupport: vi.fn(),
 }))
 
-vi.mock('../codecs/mediaCodecFallbacks', () => ({
-  ensureMediaDecoderSupport: harness.ensureDecoderSupport,
-}))
+vi.mock('../codecs/mediaCodecFallbacks', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../codecs/mediaCodecFallbacks')
+  >()
+  return {
+    ...actual,
+    ensureMediaDecoderSupport: harness.ensureDecoderSupport,
+  }
+})
 
 vi.mock('mediabunny', () => {
   class BlobSource {
@@ -79,6 +96,7 @@ describe('Mediabunny live-audio fallback wiring', () => {
       canDecode: vi.fn(async () => false),
     }
     harness.track = track
+    const blob = new Blob(['eac3'])
     harness.ensureDecoderSupport.mockImplementation(async (
       target: DecoderCheckTarget,
     ): Promise<DecoderCheckResult> => {
@@ -90,6 +108,12 @@ describe('Mediabunny live-audio fallback wiring', () => {
         sourceId: 'asset-eac3',
         boundary: 'audio-playback',
         policy: 'revalidate',
+        budget: {
+          ...AUDIO_BUDGET,
+          fileBytes: blob.size,
+          sampleRate: 48_000,
+          channels: 6,
+        },
       })
       expect(target.configuration).toBe(configuration)
       expect(await target.canDecode()).toBe(false)
@@ -101,7 +125,7 @@ describe('Mediabunny live-audio fallback wiring', () => {
       }
     })
     const source = createMediabunnyPlaybackAudioSource(
-      async () => new Blob(['eac3']),
+      async () => resolvedAudio(blob),
     )
 
     const cursor = await source.openClip({
@@ -139,7 +163,7 @@ describe('Mediabunny live-audio fallback wiring', () => {
       },
     })
     const source = createMediabunnyPlaybackAudioSource(
-      async () => new Blob(['bad-eac3']),
+      async () => resolvedAudio(new Blob(['bad-eac3'])),
     )
 
     await expect(source.openClip({
@@ -148,6 +172,50 @@ describe('Mediabunny live-audio fallback wiring', () => {
       endTime: 1,
     })).rejects.toThrow('Local E-AC-3 decoder rejected')
 
+    expect(harness.sinks).toHaveLength(0)
+    expect(harness.inputs[0].dispose).toHaveBeenCalledOnce()
+    await source.close()
+  })
+
+  test('preserves a resource-limit rejection and allocates no audio sink', async () => {
+    harness.track = {
+      getCodec: vi.fn(async () => 'eac3'),
+      getDecoderConfig: vi.fn(async () => ({
+        codec: 'ec-3',
+        numberOfChannels: 6,
+        sampleRate: 48_000,
+      })),
+      canDecode: vi.fn(async () => false),
+    }
+    harness.ensureDecoderSupport.mockResolvedValue({
+      decodable: false,
+      path: null,
+      attemptedFallback: 'ac3',
+      failure: {
+        reason: 'resource-limit',
+        detail: 'Local E-AC-3 safety budget is incomplete.',
+      },
+    })
+    const source = createMediabunnyPlaybackAudioSource(
+      async () => resolvedAudio(new Blob(['bad-eac3'])),
+    )
+
+    const failure = await source.openClip({
+      assetId: 'asset-large-eac3',
+      startTime: 0,
+      endTime: 1,
+    }).catch((cause) => cause)
+
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'asset-large-eac3',
+      failure: {
+        surface: 'audio-playback',
+        trackKind: 'audio',
+        reason: 'resource-limit',
+        detail: 'Local E-AC-3 safety budget is incomplete.',
+      },
+    })
     expect(harness.sinks).toHaveLength(0)
     expect(harness.inputs[0].dispose).toHaveBeenCalledOnce()
     await source.close()

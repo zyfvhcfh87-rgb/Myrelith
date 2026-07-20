@@ -58,10 +58,20 @@ Three final ownership gaps were fixed and regression-tested:
   still finish safely in the background.
 - Live-audio Inputs pass through one exact-once disposal guard, including a
   close that overtakes a pending track open.
+- A committed import releases the editor immediately and observes its
+  remembered-handle write in the background. Explicit source removal queues
+  its handle deletion after any pending write, while project teardown never
+  infers deletion from an empty media store.
+- Preview, filmstrip, waveform, live-audio, and export revalidation carry the
+  immutable probed source budget plus the live Blob/configuration cost. Missing
+  or invalid fallback metadata fails closed before local decoder loading/use,
+  preserving the exact `resource-limit` reason through UI diagnostics.
+- Filmstrip decoder output and the joined canvas have explicit width bounds,
+  including hostile source aspect ratios.
 - The legacy decoder worker captures its generation before asynchronous bitmap
   creation and closes a late bitmap instead of caching it after teardown.
 
-The focused Issue #19 suite passed 265/265 tests across 14 files. Together with
+The focused Issue #19 suite passed 346/346 tests across 16 files. Together with
 the existing probe, import-controller, runtime-boundary, worker, audio, export,
 and cache suites, it covers every serializable reason code, prompt abort,
 exact disposal, remove/re-add races, fallback registration/retry/coalescing,
@@ -92,8 +102,8 @@ untested.
 
 ## Validation
 
-- Focused Issue #19 tests: 265/265 passed across 14 files.
-- Full Vitest suite: 1,094/1,094 passed across 64 files.
+- Focused Issue #19 tests: 346/346 passed across 16 files.
+- Full Vitest suite: 1,127/1,127 passed across 64 files.
 - TypeScript and production Vite build: passed; the existing three chunks over
   500 kB remain a documented warning.
 - Lint: passed with zero diagnostics.

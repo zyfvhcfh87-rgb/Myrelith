@@ -18,6 +18,7 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
+import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import type { Composite2D } from '../pipeline/render'
 import type { ChunkPayload } from './decode-protocol'
@@ -46,6 +47,14 @@ import type {
   WorkerVideoSource,
 } from './video-source'
 import { WorkerVideoSourceOpenError } from './video-source'
+
+const DECODE_BUDGET: LocalDecoderBudget = {
+  fileBytes: 5,
+  durationMicroseconds: 1_000_000,
+  width: 1920,
+  height: 1080,
+  framesPerSecond: 30,
+}
 
 /* ------------------------------------------------------------------ */
 /* Timebase: 10 fps doc + assets → one frame = 100_000 µs exactly       */
@@ -363,6 +372,7 @@ interface Harness {
   sourcesToOpen: FakeVideoSource[]
   openedBlobs: Blob[]
   openedSourceIds: string[]
+  openedBudgets: LocalDecoderBudget[]
   invalidatedSourceIds: string[]
   runtimeInvalidationCount(): number
   decoders: FakeDecoder[]
@@ -383,6 +393,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   const sourcesToOpen: FakeVideoSource[] = []
   const openedBlobs: Blob[] = []
   const openedSourceIds: string[] = []
+  const openedBudgets: LocalDecoderBudget[] = []
   const invalidatedSourceIds: string[] = []
   let runtimeInvalidations = 0
   const decoders: FakeDecoder[] = []
@@ -414,9 +425,10 @@ function makeHarness(opts: FakeOptions = {}): Harness {
       bitmaps.push(bitmap)
       return bitmap
     },
-    openVideoSource: async (blob, sourceId) => {
+    openVideoSource: async (blob, sourceId, budget) => {
       openedBlobs.push(blob)
       openedSourceIds.push(sourceId)
+      openedBudgets.push(budget)
       await opts.openSourceGate
       if (opts.openSourceError) throw opts.openSourceError
       const source = sourcesToOpen.shift()
@@ -472,6 +484,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     sourcesToOpen,
     openedBlobs,
     openedSourceIds,
+    openedBudgets,
     invalidatedSourceIds,
     runtimeInvalidationCount: () => runtimeInvalidations,
     decoders,
@@ -597,10 +610,15 @@ const cfgMsg = (assetId: string): ToRenderWorker => ({
   config: { codec: 'avc1.640028' },
 })
 
-const openMsg = (assetId: string, blob = new Blob(['video'])): ToRenderWorker => ({
+const openMsg = (
+  assetId: string,
+  blob = new Blob(['video']),
+  budget: LocalDecoderBudget = DECODE_BUDGET,
+): ToRenderWorker => ({
   type: 'openAsset',
   assetId,
   blob,
+  budget,
 })
 
 function compMsg(
@@ -1454,6 +1472,31 @@ describe('streaming response contract', () => {
       },
       message: expect.stringContaining('Input construction failed'),
     }])
+    expect(h.openedBudgets).toEqual([DECODE_BUDGET])
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
+  })
+
+  test('an open failure carries a video resource limit to the bridge', async () => {
+    const sourceFailure = new WorkerVideoSourceOpenError({
+      trackKind: 'video',
+      reason: 'resource-limit',
+    }, new Error('Local ProRes safety budget is incomplete'))
+    const h = makeHarness({ openSourceError: sourceFailure })
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+
+    await h.core.handleMessage(openMsg('A'))
+
+    expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
+      type: 'error',
+      assetId: 'A',
+      mediaFailure: {
+        trackKind: 'video',
+        reason: 'resource-limit',
+      },
+      message: expect.stringContaining('Local ProRes safety budget is incomplete'),
+    }])
+    expect(h.openedBudgets).toEqual([DECODE_BUDGET])
     expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
   })
 })

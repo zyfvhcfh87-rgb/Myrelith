@@ -17,7 +17,11 @@ import {
   MediaAssetRuntimeError,
   type MediaRuntimeFailure,
 } from '../domain/mediaCompatibility'
-import { ensureMediaDecoderSupport } from '../codecs/mediaCodecFallbacks'
+import {
+  ensureMediaDecoderSupport,
+  refineAudioDecoderBudget,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
 import { audibleTracks, docDurationFrames } from '../domain/selectors'
 import { framesToSeconds, rangeEnd } from '../domain/time'
@@ -37,22 +41,30 @@ function playbackAssetError(
   assetId: AssetId,
   reason: MediaRuntimeFailure['reason'],
   cause: unknown,
+  trackKind: MediaRuntimeFailure['trackKind'] = null,
 ): MediaAssetRuntimeError {
   if (
     cause instanceof MediaAssetRuntimeError
     && cause.assetId === assetId
     && cause.failure.surface === 'audio-playback'
-    && cause.failure.trackKind === null
+    && cause.failure.trackKind === trackKind
   ) return cause
   return new MediaAssetRuntimeError(assetId, {
     surface: 'audio-playback',
-    trackKind: null,
+    trackKind,
     reason,
     detail: runtimeFailureDetail(cause),
   }, cause)
 }
 
-export type PlaybackAssetResolver = (assetId: AssetId) => Promise<Blob>
+export interface ResolvedPlaybackAsset {
+  blob: Blob
+  budget: LocalDecoderBudget
+}
+
+export type PlaybackAssetResolver = (
+  assetId: AssetId,
+) => Promise<ResolvedPlaybackAsset>
 
 export interface PlaybackAudioBuffer {
   buffer: AudioBuffer
@@ -328,12 +340,13 @@ export function createMediabunnyPlaybackAudioSource(
 
     const pending = (async () => {
       if (closed) throw new Error('Playback audio source is closed')
-      let blob: Blob
+      let resolved: ResolvedPlaybackAsset
       try {
-        blob = await resolveAsset(assetId)
+        resolved = await resolveAsset(assetId)
       } catch (cause) {
         throw playbackAssetError(assetId, 'resource-unavailable', cause)
       }
+      const { blob } = resolved
       if (closed) throw new Error('Playback audio source is closed')
 
       let input: Input
@@ -361,9 +374,19 @@ export function createMediabunnyPlaybackAudioSource(
           sourceId: assetId,
           boundary: 'audio-playback',
           policy: 'revalidate',
+          budget: refineAudioDecoderBudget(
+            resolved.budget,
+            blob.size,
+            configuration,
+          ),
         })
         if (!support.decodable) {
-          throw new Error(support.failure.detail)
+          throw playbackAssetError(
+            assetId,
+            support.failure.reason,
+            new Error(support.failure.detail),
+            'audio',
+          )
         }
         if (closed) throw new Error('Playback audio source is closed')
         const asset: DecodedAudioAsset = {

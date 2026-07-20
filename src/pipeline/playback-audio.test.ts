@@ -277,7 +277,15 @@ function makePlaybackHarness(options: PlaybackHarnessOptions = {}): {
   deps: PlaybackAudioDeps
 } {
   const context = {} as AudioContext
-  const resolveAsset: PlaybackAssetResolver = async () => new Blob()
+  const resolveAsset: PlaybackAssetResolver = async () => ({
+    blob: new Blob(),
+    budget: {
+      fileBytes: 0,
+      durationMicroseconds: 1_000_000,
+      sampleRate: 48_000,
+      channels: 2,
+    },
+  })
   const media = makeMediaHarness()
   const output = makeOutputHarness(options.currentTime ?? 5)
   const timers = makeTimerHarness()

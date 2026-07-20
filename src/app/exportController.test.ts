@@ -346,7 +346,18 @@ describe('exportController wiring and completion', () => {
     const firstBlob = resolverFromMedia(ASSET.id)
     const secondBlob = resolverFromSink(ASSET.id)
     expect(firstBlob).toBe(secondBlob)
-    await firstBlob
+    await expect(firstBlob).resolves.toEqual({
+      blob: expect.any(Blob),
+      budget: {
+        fileBytes: ASSET.size,
+        durationMicroseconds: ASSET.durationMicroseconds,
+        width: ASSET.width,
+        height: ASSET.height,
+        framesPerSecond: 30,
+        sampleRate: ASSET.audioSampleRate,
+        channels: ASSET.audioChannels,
+      },
+    })
     expect(h.fetchBlob).toHaveBeenCalledOnce()
     expect(h.fetchBlob).toHaveBeenCalledWith(ASSET.objectUrl)
 
@@ -567,6 +578,37 @@ describe('exportController failures and ownership', () => {
           trackKind: 'video',
           reason: 'decode-failed',
           detail: 'video decode failed during export',
+        }],
+      },
+    })
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(ASSET.objectUrl)
+  })
+
+  test('reports an export decoder budget rejection as a resource limit', async () => {
+    const failure = new MediaAssetRuntimeError(ASSET.id, {
+      surface: 'export',
+      trackKind: 'video',
+      reason: 'resource-limit',
+      detail: 'Local ProRes safety budget is incomplete.',
+    })
+    const h = makeHarness(() =>
+      (async function* (): ExportRun {
+        yield 0
+        throw failure
+      })(),
+    )
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toBe(failure)
+
+    expect(useMediaStore.getState().compatibility.get(ASSET.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'resource-limit',
+        runtimeFailures: [{
+          surface: 'export',
+          trackKind: 'video',
+          reason: 'resource-limit',
+          detail: 'Local ProRes safety budget is incomplete.',
         }],
       },
     })

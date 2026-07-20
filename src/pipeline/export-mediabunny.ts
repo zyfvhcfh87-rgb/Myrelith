@@ -28,7 +28,12 @@ import {
   MediaAssetRuntimeError,
   type MediaRuntimeFailure,
 } from '../domain/mediaCompatibility'
-import { ensureMediaDecoderSupport } from '../codecs/mediaCodecFallbacks'
+import {
+  ensureMediaDecoderSupport,
+  refineAudioDecoderBudget,
+  refineVideoDecoderBudget,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 import type { AssetId, TimelineDoc } from '../domain/schema'
 import {
   docDurationFrames,
@@ -54,10 +59,15 @@ import {
 } from './export-audio'
 import { compositeFrame, type Composite2D } from './render'
 
-/** Resolves the session Blob/File behind a timeline asset id. */
+/** Resolves one immutable session source and its local-fallback safety budget. */
+export interface ResolvedExportAsset {
+  blob: Blob
+  budget: LocalDecoderBudget
+}
+
 export type ExportAssetResolver = (
   assetId: AssetId,
-) => Blob | Promise<Blob>
+) => ResolvedExportAsset | Promise<ResolvedExportAsset>
 
 interface DecodedAsset {
   input: Input
@@ -178,9 +188,9 @@ export function createMediabunnyExportMediaSource(
       if (!sourceFrames || sourceFrames.length === 0) {
         throw new Error(`Export asset "${assetId}" was not scheduled`)
       }
-      let blob: Blob
+      let resolved: ResolvedExportAsset
       try {
-        blob = await resolveAsset(assetId)
+        resolved = await resolveAsset(assetId)
       } catch (cause) {
         throw exportAssetError(
           assetId,
@@ -189,6 +199,7 @@ export function createMediabunnyExportMediaSource(
           cause,
         )
       }
+      const { blob } = resolved
       if (closed) throw new Error('Export media source is closed')
 
       let input: Input
@@ -234,6 +245,11 @@ export function createMediabunnyExportMediaSource(
             sourceId: assetId,
             boundary: 'export-video',
             policy: 'revalidate',
+            budget: refineVideoDecoderBudget(
+              resolved.budget,
+              blob.size,
+              configuration,
+            ),
           })
         } catch (cause) {
           throw exportAssetError(assetId, 'video', 'decode-failed', cause)
@@ -242,7 +258,7 @@ export function createMediabunnyExportMediaSource(
           throw exportAssetError(
             assetId,
             'video',
-            'decode-failed',
+            support.failure.reason,
             new Error(
               `Export asset "${assetId}" cannot be decoded: ${support.failure.detail}`,
             ),
@@ -710,9 +726,9 @@ export function createMediabunnyExportAudioSource(
 
     const pending = (async (): Promise<DecodedAudioAsset> => {
       if (closed) throw new Error('Export audio source is closed')
-      let blob: Blob
+      let resolved: ResolvedExportAsset
       try {
-        blob = await resolveAsset(assetId)
+        resolved = await resolveAsset(assetId)
       } catch (cause) {
         throw exportAssetError(
           assetId,
@@ -721,6 +737,7 @@ export function createMediabunnyExportAudioSource(
           cause,
         )
       }
+      const { blob } = resolved
       if (closed) throw new Error('Export audio source is closed')
 
       let input: Input
@@ -765,6 +782,11 @@ export function createMediabunnyExportAudioSource(
             sourceId: assetId,
             boundary: 'export-audio',
             policy: 'revalidate',
+            budget: refineAudioDecoderBudget(
+              resolved.budget,
+              blob.size,
+              configuration,
+            ),
           })
         } catch (cause) {
           throw exportAssetError(assetId, 'audio', 'decode-failed', cause)
@@ -773,7 +795,7 @@ export function createMediabunnyExportAudioSource(
           throw exportAssetError(
             assetId,
             'audio',
-            'decode-failed',
+            support.failure.reason,
             new Error(
               `Export asset "${assetId}" audio cannot be decoded: ${support.failure.detail}`,
             ),

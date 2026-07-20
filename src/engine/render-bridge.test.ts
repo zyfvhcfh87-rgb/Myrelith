@@ -13,6 +13,7 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
+import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, FrameRate, TimelineDoc, Track } from '../domain/schema'
 import type { ChunkPayload } from '../workers/decode-protocol'
 import type { FromRenderWorker, ToRenderWorker } from '../workers/render-protocol'
@@ -26,6 +27,15 @@ import type { ChunkProvider, WorkerLike } from './worker-bridge'
 const R30: FrameRate = { num: 30, den: 1 }
 const R60: FrameRate = { num: 60, den: 1 }
 const R_NTSC: FrameRate = { num: 30_000, den: 1_001 }
+const BUDGET: LocalDecoderBudget = {
+  fileBytes: 5,
+  durationMicroseconds: 1_000_000,
+  width: 1920,
+  height: 1080,
+  framesPerSecond: 30,
+  sampleRate: 48_000,
+  channels: 2,
+}
 
 class FakeWorker implements WorkerLike {
   posted: Array<{ msg: ToRenderWorker; transfer: Transferable[] }> = []
@@ -141,7 +151,7 @@ function openAcked(
   rate: FrameRate,
   runtimeToken: object = {},
 ): Promise<void> {
-  const done = ctx.bridge.openAsset(assetId, blob, rate, runtimeToken)
+  const done = ctx.bridge.openAsset(assetId, blob, rate, BUDGET, runtimeToken)
   ctx.worker.emit({ type: 'assetConfigured', assetId })
   return done
 }
@@ -369,10 +379,15 @@ describe('Blob-backed streaming path', () => {
     const ready: string[] = []
     bridge.onAssetReady = (assetId) => ready.push(assetId)
 
-    const done = bridge.openAsset('A', blob, R_NTSC)
+    const done = bridge.openAsset('A', blob, R_NTSC, BUDGET)
 
     expect(worker.openAssets()).toHaveLength(1)
-    expect(worker.openAssets()[0]).toEqual({ type: 'openAsset', assetId: 'A', blob })
+    expect(worker.openAssets()[0]).toEqual({
+      type: 'openAsset',
+      assetId: 'A',
+      blob,
+      budget: BUDGET,
+    })
     expect(worker.posted.find((post) => post.msg.type === 'openAsset')?.transfer).toEqual([])
 
     worker.emit({ type: 'assetConfigured', assetId: 'A' })
@@ -385,8 +400,8 @@ describe('Blob-backed streaming path', () => {
     const firstBlob = new Blob(['first'])
     const secondBlob = new Blob(['second'])
 
-    const first = bridge.openAsset('A', firstBlob, R30)
-    await expect(bridge.openAsset('A', secondBlob, R60)).rejects.toThrow(
+    const first = bridge.openAsset('A', firstBlob, R30, BUDGET)
+    await expect(bridge.openAsset('A', secondBlob, R60, BUDGET)).rejects.toThrow(
       'asset A registration already pending',
     )
     expect(worker.openAssets().map((message) => message.blob)).toEqual([firstBlob])
@@ -394,7 +409,7 @@ describe('Blob-backed streaming path', () => {
     worker.emit({ type: 'assetConfigured', assetId: 'A' })
     await expect(first).resolves.toBeUndefined()
 
-    const replacement = bridge.openAsset('A', secondBlob, R60)
+    const replacement = bridge.openAsset('A', secondBlob, R60, BUDGET)
     expect(worker.openAssets().map((message) => message.blob)).toEqual([
       firstBlob,
       secondBlob,
@@ -566,7 +581,7 @@ describe('Blob-backed streaming path', () => {
   test('an open error removes the failed registration', async () => {
     const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
     const { worker, bridge } = makeBridge(doc)
-    const opening = bridge.openAsset('A', new Blob(['bad']), R30)
+    const opening = bridge.openAsset('A', new Blob(['bad']), R30, BUDGET)
 
     worker.emit({ type: 'error', assetId: 'A', message: 'container unsupported' })
     await expect(opening).rejects.toThrow('container unsupported')
@@ -587,7 +602,7 @@ describe('Blob-backed streaming path', () => {
 
   test('a typed worker source failure preserves file-level classification', async () => {
     const { worker, bridge } = makeBridge(makeDoc([]))
-    const opening = bridge.openAsset('A', new Blob(['bad']), R30)
+    const opening = bridge.openAsset('A', new Blob(['bad']), R30, BUDGET)
 
     worker.emit({
       type: 'error',
@@ -609,12 +624,36 @@ describe('Blob-backed streaming path', () => {
     })
   })
 
+  test('a typed worker source failure preserves a video resource limit', async () => {
+    const { worker, bridge } = makeBridge(makeDoc([]))
+    const opening = bridge.openAsset('A', new Blob(['bad']), R30, BUDGET)
+
+    worker.emit({
+      type: 'error',
+      assetId: 'A',
+      mediaFailure: {
+        trackKind: 'video',
+        reason: 'resource-limit',
+      },
+      message: 'worker openAsset failed: ProRes budget exceeded',
+    })
+
+    const failure = await opening.catch((cause) => cause)
+    expect(failure).toBeInstanceOf(RenderAssetOpenError)
+    expect(failure).toMatchObject({
+      failure: {
+        trackKind: 'video',
+        reason: 'resource-limit',
+      },
+    })
+  })
+
   test('a stale release cleanup warning cannot reject a pending replacement', async () => {
     const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
     const { worker, bridge } = makeBridge(doc)
     const warnings: string[] = []
     bridge.onWorkerError = (message) => warnings.push(message)
-    const opening = bridge.openAsset('A', new Blob(['replacement']), R30)
+    const opening = bridge.openAsset('A', new Blob(['replacement']), R30, BUDGET)
 
     worker.emit({
       type: 'error',
@@ -641,7 +680,7 @@ describe('Blob-backed streaming path', () => {
   test('releaseAsset rejects a pending open and omits its source afterward', async () => {
     const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
     const { worker, bridge } = makeBridge(doc)
-    const opening = bridge.openAsset('A', new Blob(['video']), R30)
+    const opening = bridge.openAsset('A', new Blob(['video']), R30, BUDGET)
 
     bridge.releaseAsset('A')
     await expect(opening).rejects.toThrow('asset released')
@@ -932,7 +971,13 @@ describe('reply routing', () => {
     const oldResult = bridge.renderFrame(1, 'seek')
     const oldRequestId = worker.renderFrames()[0].requestId
 
-    const replacement = bridge.openAsset('A', new Blob(['second']), R60, newToken)
+    const replacement = bridge.openAsset(
+      'A',
+      new Blob(['second']),
+      R60,
+      BUDGET,
+      newToken,
+    )
     worker.emit({
       type: 'error',
       requestId: oldRequestId,

@@ -695,10 +695,13 @@ Detailed evidence lives in
   tested host, one shared AC-3/E-AC-3 fallback family, byte-detected WebM under
   a `.mp4` name, safe audio-only choices for unknown/malformed video, and
   honest Unsupported/Error states for damaged or non-media inputs.
-- [x] Close the final ownership gaps: prompt abort for fallback checks without
-  late publication, exact-once live-audio Input disposal when close overtakes
-  open, and stale-bitmap closure after decoder-worker teardown.
-- [x] Verification: 265/265 focused tests across 14 files; 1,094/1,094 total
+- [x] Close the final ownership and runtime-safety gaps: prompt abort for
+  fallback checks without late publication, exact-once live-audio Input
+  disposal when close overtakes open, stale-bitmap closure after decoder-worker
+  teardown, non-blocking post-commit handle persistence, bounded filmstrip
+  canvases, and fail-closed fallback budgets at preview, visual, live-audio,
+  and export decode boundaries.
+- [x] Verification: 346/346 focused tests across 16 files; 1,127/1,127 total
   tests across 64 files; production build, lint, audit, and diff checks green.
   The known three chunks over 500 kB remain a warning, not a hidden pass.
 - [x] Chrome 150 and Edge 150 each passed real VP9/Opus import → thumbnail +

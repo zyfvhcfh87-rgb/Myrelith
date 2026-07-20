@@ -28,6 +28,7 @@
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
+import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { ChunkPayload } from './decode-protocol'
 
 /**
@@ -67,6 +68,8 @@ export interface OpenAssetMessage {
   type: 'openAsset'
   assetId: AssetId
   blob: Blob
+  /** Immutable import metadata required before a local fallback may run. */
+  budget: LocalDecoderBudget
 }
 
 /**

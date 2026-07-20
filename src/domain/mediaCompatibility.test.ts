@@ -116,6 +116,39 @@ describe('runtime media compatibility', () => {
     expect(() => JSON.stringify(report)).not.toThrow()
   })
 
+  test('keeps a runtime resource limit distinct from a decode failure', () => {
+    const report = withMediaRuntimeFailure(readyReport(), {
+      surface: 'export',
+      trackKind: 'video',
+      reason: 'resource-limit',
+      detail: 'Local ProRes safety budget is incomplete.',
+    })
+
+    expect(report).toMatchObject({
+      status: 'error',
+      reason: 'resource-limit',
+      detail: 'Export failed: Local ProRes safety budget is incomplete.',
+      tracks: [
+        expect.objectContaining({
+          kind: 'video',
+          decodable: false,
+          reason: 'resource-limit',
+        }),
+        expect.objectContaining({
+          kind: 'audio',
+          decodable: true,
+          reason: null,
+        }),
+      ],
+      runtimeFailures: [{
+        surface: 'export',
+        trackKind: 'video',
+        reason: 'resource-limit',
+        detail: 'Local ProRes safety budget is incomplete.',
+      }],
+    })
+  })
+
   test('typed runtime errors retain exact asset identity without message parsing', () => {
     const cause = new DOMException('decoder reset', 'EncodingError')
     const failure = {

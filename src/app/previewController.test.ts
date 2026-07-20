@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type {
   Clip,
@@ -41,6 +42,7 @@ class FakeBridge implements BridgeLike {
     assetId: string
     blob: Blob
     rate: FrameRate
+    budget: LocalDecoderBudget
     runtimeToken: object
   }> = []
   released: string[] = []
@@ -50,6 +52,7 @@ class FakeBridge implements BridgeLike {
     assetId: string,
     blob: Blob,
     rate: FrameRate,
+    budget: LocalDecoderBudget,
     runtimeToken: object,
   ) => Promise<void> = async () => {}
   renderImpl: (
@@ -70,10 +73,11 @@ class FakeBridge implements BridgeLike {
     assetId: string,
     blob: Blob,
     rate: FrameRate,
+    budget: LocalDecoderBudget,
     runtimeToken: object,
   ): Promise<void> {
-    this.opened.push({ assetId, blob, rate, runtimeToken })
-    await this.openImpl(assetId, blob, rate, runtimeToken)
+    this.opened.push({ assetId, blob, rate, budget, runtimeToken })
+    await this.openImpl(assetId, blob, rate, budget, runtimeToken)
     this.onAssetReady?.(assetId)
   }
 
@@ -253,6 +257,15 @@ describe('previewController', () => {
       assetId: asset.id,
       blob,
       rate: F60,
+      budget: {
+        fileBytes: 1,
+        durationMicroseconds: 2_000_000,
+        width: 1920,
+        height: 1080,
+        framesPerSecond: 60,
+        sampleRate: 48_000,
+        channels: 2,
+      },
       runtimeToken: expect.objectContaining({
         assetId: asset.id,
         objectUrl: asset.objectUrl,
@@ -338,6 +351,11 @@ describe('previewController', () => {
       assetId: reconnected.id,
       blob,
       rate: F60,
+      budget: expect.objectContaining({
+        fileBytes: 1,
+        durationMicroseconds: 2_000_000,
+        framesPerSecond: 60,
+      }),
       runtimeToken: expect.objectContaining({
         assetId: reconnected.id,
         objectUrl: reconnected.objectUrl,
@@ -375,6 +393,11 @@ describe('previewController', () => {
       assetId: online.id,
       blob,
       rate: F60,
+      budget: expect.objectContaining({
+        fileBytes: 1,
+        durationMicroseconds: 2_000_000,
+        framesPerSecond: 60,
+      }),
       runtimeToken: expect.objectContaining({
         assetId: online.id,
         objectUrl: online.objectUrl,
@@ -636,6 +659,35 @@ describe('previewController', () => {
           trackKind: null,
           reason: 'resource-unavailable',
           detail: 'worker openAsset failed: Input construction failed',
+        }],
+      },
+    })
+    warn.mockRestore()
+  })
+
+  test('a worker decoder budget rejection remains a video resource limit', async () => {
+    const { deps, bridge } = makeDeps()
+    bridge.openImpl = async () => {
+      throw new RenderAssetOpenError(
+        'worker openAsset failed: ProRes budget exceeded',
+        { trackKind: 'video', reason: 'resource-limit' },
+      )
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    initPreview(canvasEl(), deps)
+    const bad = seedAsset({ id: 'large-prores', fileName: 'large.mov' })
+    await flush()
+
+    expect(useMediaStore.getState().assets.has(bad.id)).toBe(false)
+    expect(useMediaStore.getState().compatibility.get(bad.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'resource-limit',
+        runtimeFailures: [{
+          surface: 'preview',
+          trackKind: 'video',
+          reason: 'resource-limit',
+          detail: 'worker openAsset failed: ProRes budget exceeded',
         }],
       },
     })

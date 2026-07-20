@@ -10,6 +10,7 @@
  */
 
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
+import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { audibleTracks, outputMediaAssetIds } from '../domain/selectors'
 import {
@@ -120,10 +121,13 @@ function createAssetResolver(
   assets: ReadonlyMap<AssetId, MediaAsset>,
   fetchBlob: ExportControllerDeps['fetchBlob'],
 ): ExportAssetResolver {
-  const blobPromises = new Map<AssetId, Promise<Blob>>()
+  const assetPromises = new Map<
+    AssetId,
+    ReturnType<ExportAssetResolver>
+  >()
 
   return (assetId) => {
-    const cached = blobPromises.get(assetId)
+    const cached = assetPromises.get(assetId)
     if (cached) return cached
 
     const asset = assets.get(assetId)
@@ -136,13 +140,16 @@ function createAssetResolver(
     // fetchBlob starts synchronously here. Pre-warming referenced ids before
     // the run is exposed therefore retains their Blobs before removeAsset can
     // revoke an object URL; later video/audio opens share the cached promise.
-    let pending: Promise<Blob>
+    let pending: ReturnType<ExportAssetResolver>
     try {
-      pending = Promise.resolve(fetchBlob(asset.objectUrl))
+      pending = Promise.resolve(fetchBlob(asset.objectUrl)).then((blob) => ({
+        blob,
+        budget: mediaAssetDecoderBudget(asset, blob.size),
+      }))
     } catch (cause) {
       pending = Promise.reject(cause)
     }
-    blobPromises.set(assetId, pending)
+    assetPromises.set(assetId, pending)
     return pending
   }
 }

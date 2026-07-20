@@ -11,6 +11,7 @@ import type {
   MediaCompatibilityReason,
   MediaDecoderPath,
 } from '../domain/mediaCompatibility'
+import type { MediaAsset } from '../domain/schema'
 
 export type LocalDecoderId = 'prores' | 'ac3'
 
@@ -37,6 +38,118 @@ export interface LocalDecoderBudget {
   framesPerSecond?: number | null
   sampleRate?: number | null
   channels?: number | null
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === 'number'
+    && Number.isSafeInteger(value)
+    && value > 0
+}
+
+function conservativeFileBytes(
+  rememberedFileBytes: number,
+  liveFileBytes: number,
+): number {
+  if (
+    !Number.isSafeInteger(rememberedFileBytes)
+    || rememberedFileBytes < 0
+    || !Number.isSafeInteger(liveFileBytes)
+    || liveFileBytes < 0
+  ) return Number.NaN
+  return Math.max(rememberedFileBytes, liveFileBytes)
+}
+
+/**
+ * Add live video configuration cost without ever lowering probed facts.
+ * Dimensions stay paired: rotated 4096x2160 and 2160x4096 frames have the
+ * same decode cost and must not be inflated into a fictitious 4096x4096 frame.
+ * Invalid immutable dimensions remain invalid so fallback use still fails
+ * closed instead of being repaired by later, mutable runtime metadata.
+ */
+export function refineVideoDecoderBudget(
+  budget: LocalDecoderBudget,
+  liveFileBytes: number,
+  configuration: VideoDecoderConfig | null | undefined,
+): LocalDecoderBudget {
+  const rememberedWidth = budget.width
+  const rememberedHeight = budget.height
+  const liveWidth = configuration?.codedWidth
+  const liveHeight = configuration?.codedHeight
+  let largerLiveDimensions: { width: number; height: number } | null = null
+  if (
+    isPositiveSafeInteger(rememberedWidth)
+    && isPositiveSafeInteger(rememberedHeight)
+    && isPositiveSafeInteger(liveWidth)
+    && isPositiveSafeInteger(liveHeight)
+    && liveWidth * liveHeight > rememberedWidth * rememberedHeight
+  ) {
+    largerLiveDimensions = { width: liveWidth, height: liveHeight }
+  }
+
+  return {
+    ...budget,
+    fileBytes: conservativeFileBytes(budget.fileBytes, liveFileBytes),
+    ...(largerLiveDimensions ?? {}),
+  }
+}
+
+/**
+ * Add live audio configuration cost without lowering either independent
+ * ceiling. Invalid immutable values remain invalid so local fallback use
+ * continues to fail closed.
+ */
+export function refineAudioDecoderBudget(
+  budget: LocalDecoderBudget,
+  liveFileBytes: number,
+  configuration: AudioDecoderConfig | null | undefined,
+): LocalDecoderBudget {
+  const sampleRate = isPositiveSafeInteger(budget.sampleRate)
+    && isPositiveSafeInteger(configuration?.sampleRate)
+    ? Math.max(budget.sampleRate, configuration.sampleRate)
+    : budget.sampleRate
+  const channels = isPositiveSafeInteger(budget.channels)
+    && isPositiveSafeInteger(configuration?.numberOfChannels)
+    ? Math.max(budget.channels, configuration.numberOfChannels)
+    : budget.channels
+
+  return {
+    ...budget,
+    fileBytes: conservativeFileBytes(budget.fileBytes, liveFileBytes),
+    sampleRate,
+    channels,
+  }
+}
+
+/**
+ * Build the conservative, session-only budget every runtime decode boundary
+ * must carry. The connected asset is the immutable result of the import or
+ * relink probe; the live Blob size is folded in so a mismatched source can
+ * never lower the file-size ceiling.
+ */
+export function mediaAssetDecoderBudget(
+  asset: Pick<
+    MediaAsset,
+    | 'size'
+    | 'durationMicroseconds'
+    | 'frameRate'
+    | 'width'
+    | 'height'
+    | 'audioSampleRate'
+    | 'audioChannels'
+  >,
+  blobSize: number = asset.size,
+): LocalDecoderBudget {
+  return {
+    fileBytes: conservativeFileBytes(asset.size, blobSize),
+    durationMicroseconds: asset.durationMicroseconds,
+    width: asset.width,
+    height: asset.height,
+    framesPerSecond: asset.frameRate
+      ? asset.frameRate.num / asset.frameRate.den
+      : null,
+    sampleRate: asset.audioSampleRate,
+    channels: asset.audioChannels,
+  }
 }
 
 export const LOCAL_DECODER_LIMITS = Object.freeze({
@@ -303,8 +416,36 @@ export function localDecoderBudgetProblem(
   budget: LocalDecoderBudget | undefined,
 ): DecoderCheckFailure | null {
   const family = decoderFamily(codec)
-  if (!family || !budget) return null
+  if (!family) return null
   const label = fallbackLabel(family)
+
+  if (!budget) {
+    return {
+      reason: 'resource-limit',
+      detail: `Local ${label} fallback is disabled because complete, valid source safety metadata is unavailable. Reconnect or re-import the source and retry.`,
+    }
+  }
+  const commonBudgetIsValid = Number.isSafeInteger(budget.fileBytes)
+    && budget.fileBytes >= 0
+    && Number.isSafeInteger(budget.durationMicroseconds)
+    && budget.durationMicroseconds > 0
+  const familyBudgetIsValid = family === 'prores'
+    ? Number.isSafeInteger(budget.width)
+      && (budget.width ?? 0) > 0
+      && Number.isSafeInteger(budget.height)
+      && (budget.height ?? 0) > 0
+      && Number.isFinite(budget.framesPerSecond)
+      && (budget.framesPerSecond ?? 0) > 0
+    : Number.isSafeInteger(budget.sampleRate)
+      && (budget.sampleRate ?? 0) > 0
+      && Number.isSafeInteger(budget.channels)
+      && (budget.channels ?? 0) > 0
+  if (!commonBudgetIsValid || !familyBudgetIsValid) {
+    return {
+      reason: 'resource-limit',
+      detail: `Local ${label} fallback is disabled because complete, valid source safety metadata is unavailable. Reconnect or re-import the source and retry.`,
+    }
+  }
 
   if (budget.fileBytes > LOCAL_DECODER_LIMITS.maxFileBytes) {
     return {
@@ -720,6 +861,19 @@ export function createMediaCodecFallbackRegistry(
             })
           }
 
+          const resourceProblem = localDecoderBudgetProblem(
+            target.codec,
+            target.budget,
+          )
+          if (resourceProblem) {
+            return {
+              decodable: false,
+              path: null,
+              attemptedFallback: family,
+              failure: resourceProblem,
+            }
+          }
+
           const effectivelyDecodable = await awaitWithAbort(
             target.canDecode(),
             signal,
@@ -732,18 +886,6 @@ export function createMediaCodecFallbackRegistry(
               attemptedFallback: null,
               failure: null,
             })
-          }
-          const resourceProblem = localDecoderBudgetProblem(
-            target.codec,
-            target.budget,
-          )
-          if (resourceProblem) {
-            return {
-              decodable: false,
-              path: null,
-              attemptedFallback: family,
-              failure: resourceProblem,
-            }
           }
           return finish({
             decodable: false,

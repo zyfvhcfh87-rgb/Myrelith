@@ -16,6 +16,8 @@ import type { InputAudioTrack, InputVideoTrack } from 'mediabunny'
 import {
   beginMediaDecoderSource,
   ensureMediaDecoderSupport,
+  refineAudioDecoderBudget,
+  refineVideoDecoderBudget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 import type {
@@ -420,12 +422,12 @@ async function probeVideoTrack(
           sourceId,
           boundary: 'probe',
           policy: 'reuse',
-          budget: {
+          budget: refineVideoDecoderBudget({
             ...fallbackBudget,
             width: codedWidth,
             height: codedHeight,
             framesPerSecond: stats.averagePacketRate,
-          },
+          }, fallbackBudget.fileBytes, decoderConfig),
         }, signal)
         decodable = support.decodable
         decoderPath = support.path
@@ -551,11 +553,11 @@ async function probeAudioTrack(
           sourceId,
           boundary: 'probe',
           policy: 'reuse',
-          budget: {
+          budget: refineAudioDecoderBudget({
             ...fallbackBudget,
             sampleRate,
             channels,
-          },
+          }, fallbackBudget.fileBytes, decoderConfig),
         }, signal)
         decodable = support.decodable
         decoderPath = support.path

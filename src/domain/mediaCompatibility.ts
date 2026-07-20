@@ -250,7 +250,10 @@ export interface MediaRuntimeFailure {
   trackKind: 'video' | 'audio' | null
   reason: Extract<
     MediaCompatibilityReason,
-    'decode-failed' | 'resource-unavailable'
+    | 'unsupported-codec'
+    | 'resource-limit'
+    | 'decode-failed'
+    | 'resource-unavailable'
   >
   detail: string
 }

@@ -5,9 +5,28 @@ import {
   LocalDecoderLoadError,
   createMediaCodecFallbackRegistry,
   localDecoderBudgetProblem,
+  mediaAssetDecoderBudget,
+  refineAudioDecoderBudget,
+  refineVideoDecoderBudget,
   type DecoderCheckTarget,
+  type LocalDecoderBudget,
   type MediaCodecFallbackLoaders,
 } from './mediaCodecFallbacks'
+
+const PRORES_BUDGET = {
+  fileBytes: 1024,
+  durationMicroseconds: 1_000_000,
+  width: 1920,
+  height: 1080,
+  framesPerSecond: 30,
+} satisfies LocalDecoderBudget
+
+const AC3_BUDGET = {
+  fileBytes: 1024,
+  durationMicroseconds: 1_000_000,
+  sampleRate: 48_000,
+  channels: 6,
+} satisfies LocalDecoderBudget
 
 function loaders(
   prores: () => void | Promise<void> = () => undefined,
@@ -83,6 +102,110 @@ describe('media codec fallback registry', () => {
     expect(loadAc3).not.toHaveBeenCalled()
   })
 
+  test.each([
+    {
+      label: 'missing ProRes metadata',
+      codec: 'prores',
+      budget: undefined,
+    },
+    {
+      label: 'incomplete ProRes metadata',
+      codec: 'prores',
+      budget: {
+        fileBytes: 1024,
+        durationMicroseconds: 1_000_000,
+        width: 1920,
+        height: 1080,
+      },
+    },
+    {
+      label: 'invalid ProRes metadata',
+      codec: 'prores',
+      budget: { ...PRORES_BUDGET, width: 0 },
+    },
+    {
+      label: 'invalid common file size',
+      codec: 'prores',
+      budget: { ...PRORES_BUDGET, fileBytes: -1 },
+    },
+    {
+      label: 'incomplete AC-3 metadata',
+      codec: 'ac3',
+      budget: {
+        fileBytes: 1024,
+        durationMicroseconds: 1_000_000,
+        sampleRate: 48_000,
+      },
+    },
+    {
+      label: 'invalid E-AC-3 metadata',
+      codec: 'eac3',
+      budget: { ...AC3_BUDGET, channels: 0 },
+    },
+    {
+      label: 'invalid common duration',
+      codec: 'ac3',
+      budget: { ...AC3_BUDGET, durationMicroseconds: 0 },
+    },
+  ])('fails closed for $label before loading a decoder', async ({
+    codec,
+    budget,
+  }) => {
+    const loadProres = vi.fn()
+    const loadAc3 = vi.fn()
+    const canDecode = vi.fn(async () => false)
+    const registry = createMediaCodecFallbackRegistry(
+      loaders(loadProres, loadAc3),
+    )
+
+    await expect(registry.ensureDecodable({
+      codec,
+      budget,
+      canDecode,
+    })).resolves.toMatchObject({
+      decodable: false,
+      path: null,
+      attemptedFallback: codec === 'prores' ? 'prores' : 'ac3',
+      failure: { reason: 'resource-limit' },
+    })
+    expect(canDecode).toHaveBeenCalledOnce()
+    expect(loadProres).not.toHaveBeenCalled()
+    expect(loadAc3).not.toHaveBeenCalled()
+  })
+
+  test('fails closed before using an already-registered fallback', async () => {
+    let registered = false
+    const loadProres = vi.fn(() => {
+      registered = true
+    })
+    const registry = createMediaCodecFallbackRegistry(loaders(loadProres))
+    await registry.ensureDecodable({
+      codec: 'prores',
+      budget: PRORES_BUDGET,
+      canDecode: async () => registered,
+    })
+
+    const canDecode = vi.fn(async () => true)
+    await expect(registry.ensureDecodable({
+      codec: 'prores',
+      configuration: {
+        codec: 'apch',
+        codedWidth: 1920,
+        codedHeight: 1080,
+      },
+      trackKind: 'video',
+      canDecodeNatively: async () => false,
+      canDecode,
+    })).resolves.toMatchObject({
+      decodable: false,
+      path: null,
+      attemptedFallback: 'prores',
+      failure: { reason: 'resource-limit' },
+    })
+    expect(loadProres).toHaveBeenCalledOnce()
+    expect(canDecode).not.toHaveBeenCalled()
+  })
+
   test('loads ProRes once, rechecks support, and remembers the local path', async () => {
     let registered = false
     const loadProres = vi.fn(() => {
@@ -91,6 +214,7 @@ describe('media codec fallback registry', () => {
     const registry = createMediaCodecFallbackRegistry(loaders(loadProres))
     const target = {
       codec: 'prores',
+      budget: PRORES_BUDGET,
       canDecode: vi.fn(async () => registered),
     }
 
@@ -118,10 +242,12 @@ describe('media codec fallback registry', () => {
 
     const ac3 = await registry.ensureDecodable({
       codec: 'ac3',
+      budget: AC3_BUDGET,
       canDecode: async () => registered,
     })
     const eac3 = await registry.ensureDecodable({
       codec: 'eac3',
+      budget: AC3_BUDGET,
       canDecode: async () => registered,
     })
 
@@ -143,6 +269,7 @@ describe('media codec fallback registry', () => {
     const registry = createMediaCodecFallbackRegistry(loaders(loadProres))
     const target = {
       codec: 'prores',
+      budget: PRORES_BUDGET,
       canDecode: async () => registered,
     }
 
@@ -166,6 +293,7 @@ describe('media codec fallback registry', () => {
     const registry = createMediaCodecFallbackRegistry(loaders(loadProres))
     const target = {
       codec: 'prores',
+      budget: PRORES_BUDGET,
       canDecode: async () => registered,
     }
 
@@ -196,6 +324,7 @@ describe('media codec fallback registry', () => {
     const controller = new AbortController()
     const pending = registry.ensureDecodable({
       codec: 'prores',
+      budget: PRORES_BUDGET,
       canDecode: async () => registered,
     }, controller.signal)
 
@@ -220,6 +349,7 @@ describe('media codec fallback registry', () => {
     await vi.waitFor(() => expect(registered).toBe(true))
     await expect(registry.ensureDecodable({
       codec: 'prores',
+      budget: PRORES_BUDGET,
       canDecode: async () => registered,
     })).resolves.toMatchObject({ path: 'local-prores' })
   })
@@ -417,6 +547,7 @@ describe('media codec fallback registry', () => {
       codec: 'prores',
       configuration: { codec: 'apch' },
       canDecodeNatively: async () => false,
+      budget: PRORES_BUDGET,
     })
     registry.beginSource('source-a')
     const oldCheck = registry.ensureDecodable(target)
@@ -490,6 +621,7 @@ describe('media codec fallback registry', () => {
     }))
     await registry.ensureDecodable({
       codec: 'prores',
+      budget: PRORES_BUDGET,
       canDecode: async () => registered,
     })
 
@@ -497,8 +629,8 @@ describe('media codec fallback registry', () => {
       codec: 'prores',
       canDecode: async () => false,
       budget: {
+        ...PRORES_BUDGET,
         fileBytes: LOCAL_DECODER_LIMITS.maxFileBytes + 1,
-        durationMicroseconds: 1_000_000,
       },
     })).resolves.toMatchObject({
       decodable: false,
@@ -517,6 +649,7 @@ describe('media codec fallback registry', () => {
       codec: 'prores',
       configuration: { codec: 'apch' },
       canDecodeNatively: async () => false,
+      budget: PRORES_BUDGET,
     }))
 
     registry.beginSource('native')
@@ -655,9 +788,102 @@ describe('local decoder budgets', () => {
     durationMicroseconds: 1_000_000,
   }
 
+  test('derives a complete session budget and keeps the larger Blob size', () => {
+    expect(mediaAssetDecoderBudget({
+      size: 1024,
+      durationMicroseconds: 2_000_000,
+      frameRate: { num: 60_000, den: 1_001 },
+      width: 3840,
+      height: 2160,
+      audioSampleRate: 48_000,
+      audioChannels: 6,
+    }, 2048)).toEqual({
+      fileBytes: 2048,
+      durationMicroseconds: 2_000_000,
+      framesPerSecond: 60_000 / 1_001,
+      width: 3840,
+      height: 2160,
+      sampleRate: 48_000,
+      channels: 6,
+    })
+  })
+
+  test('keeps the dimension pair with the larger pixel cost', () => {
+    const rememberedLarge = {
+      ...PRORES_BUDGET,
+      width: 4096,
+      height: 2160,
+    }
+    expect(refineVideoDecoderBudget(
+      rememberedLarge,
+      512,
+      { codec: 'apch', codedWidth: 1920, codedHeight: 1080 },
+    )).toEqual(rememberedLarge)
+
+    expect(refineVideoDecoderBudget(
+      PRORES_BUDGET,
+      2048,
+      { codec: 'apch', codedWidth: 4096, codedHeight: 2160 },
+    )).toEqual({
+      ...PRORES_BUDGET,
+      fileBytes: 2048,
+      width: 4096,
+      height: 2160,
+    })
+  })
+
+  test('keeps an equal-area rotated dimension pair without inflating it', () => {
+    const portrait = {
+      ...PRORES_BUDGET,
+      width: 2160,
+      height: 4096,
+    }
+    expect(refineVideoDecoderBudget(
+      portrait,
+      portrait.fileBytes,
+      { codec: 'apch', codedWidth: 4096, codedHeight: 2160 },
+    )).toEqual(portrait)
+  })
+
+  test('maxes live audio limits independently without lowering either fact', () => {
+    expect(refineAudioDecoderBudget({
+      ...AC3_BUDGET,
+      sampleRate: 96_000,
+      channels: 2,
+    }, 2048, {
+      codec: 'ec-3',
+      sampleRate: 48_000,
+      numberOfChannels: 8,
+    })).toEqual({
+      ...AC3_BUDGET,
+      fileBytes: 2048,
+      sampleRate: 96_000,
+      channels: 8,
+    })
+  })
+
+  test('does not repair invalid immutable fallback metadata', () => {
+    expect(refineVideoDecoderBudget({
+      ...PRORES_BUDGET,
+      width: null,
+    }, 2048, {
+      codec: 'apch',
+      codedWidth: 1920,
+      codedHeight: 1080,
+    })).toMatchObject({ width: null })
+    expect(refineAudioDecoderBudget({
+      ...AC3_BUDGET,
+      channels: null,
+    }, 2048, {
+      codec: 'ac-3',
+      sampleRate: 48_000,
+      numberOfChannels: 6,
+    })).toMatchObject({ channels: null })
+  })
+
   test('warns before loading files above the automatic fallback size', () => {
     expect(localDecoderBudgetProblem('prores', {
-      ...base,
+      ...PRORES_BUDGET,
       fileBytes: LOCAL_DECODER_LIMITS.maxFileBytes + 1,
     })).toMatchObject({ reason: 'resource-limit' })
   })

@@ -18,8 +18,13 @@
  */
 
 import type { AssetId, MediaAsset } from '../domain/schema'
+import {
+  mediaAssetDecoderBudget,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 import type { FilmstripResult, WaveformResult } from '../pipeline/visuals'
 import {
+  MediaVisualDecodeError,
   MediaVisualSourceError,
   generateFilmstrip,
   generateWaveform,
@@ -35,11 +40,11 @@ export interface VisualsDeps {
   fetchBlob: (url: string) => Promise<Blob>
   generateFilmstrip: (
     file: Blob,
-    sourceId?: string,
+    options: { sourceId?: string; budget: LocalDecoderBudget },
   ) => Promise<FilmstripResult | null>
   generateWaveform: (
     file: Blob,
-    sourceId?: string,
+    options: { sourceId?: string; budget: LocalDecoderBudget },
   ) => Promise<WaveformResult | null>
 }
 
@@ -103,12 +108,17 @@ async function process(
     || current?.objectUrl !== asset.objectUrl
   ) return
 
+  const decodeOptions = {
+    sourceId: asset.id,
+    budget: mediaAssetDecoderBudget(asset, blob.size),
+  }
+
   const [filmstripResult, waveformResult] = await Promise.allSettled([
     asset.kind === 'video'
-      ? deps.generateFilmstrip(blob, asset.id)
+      ? deps.generateFilmstrip(blob, decodeOptions)
       : Promise.resolve(null),
     asset.hasAudio
-      ? deps.generateWaveform(blob, asset.id)
+      ? deps.generateWaveform(blob, decodeOptions)
       : Promise.resolve(null),
   ])
   const filmstrip = filmstripResult.status === 'fulfilled'
@@ -149,7 +159,9 @@ async function process(
         failure.cause,
         failure.cause instanceof MediaVisualSourceError
           ? 'resource-unavailable'
-          : 'decode-failed',
+          : failure.cause instanceof MediaVisualDecodeError
+            ? failure.cause.failure.reason
+            : 'decode-failed',
       ),
     )
     return

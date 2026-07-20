@@ -705,6 +705,55 @@ describe('live audio integration', () => {
     warning.mockRestore()
   })
 
+  test('an audio decoder budget warning stays an exact resource limit', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const asset = makeAsset()
+    seedReadyAsset(asset)
+    const failure = new Error('Local E-AC-3 safety budget is incomplete.')
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    fake.startAudio.mockImplementationOnce(async (
+      _context,
+      _doc,
+      _fromFrame,
+      _resolveAsset,
+      options,
+    ) => {
+      options.onWarning?.({
+        scope: 'media',
+        stage: 'source-open',
+        clipId: 'clipA',
+        assetId: asset.id,
+        trackKind: 'audio',
+        reason: 'resource-limit',
+        cause: failure,
+      })
+      return makeAudioSession(0)
+    })
+
+    play()
+
+    await vi.waitFor(() => {
+      expect(useMediaStore.getState().compatibility.get(asset.id)?.status)
+        .toBe('error')
+    })
+    expect(useMediaStore.getState().compatibility.get(asset.id)?.report)
+      .toMatchObject({
+        reason: 'resource-limit',
+        tracks: [expect.objectContaining({
+          kind: 'audio',
+          decodable: false,
+          reason: 'resource-limit',
+        })],
+        runtimeFailures: [{
+          surface: 'audio-playback',
+          trackKind: 'audio',
+          reason: 'resource-limit',
+          detail: failure.message,
+        }],
+      })
+    warning.mockRestore()
+  })
+
   test('a pre-track audio source warning stays file-level and resource-unavailable', async () => {
     useDocumentStore.getState().setDoc(makeAudibleDoc())
     const asset = makeAsset()
@@ -786,7 +835,20 @@ describe('live audio integration', () => {
       resolveAsset,
       options,
     ) => {
-      await expect(resolveAsset(online.id)).resolves.toBeInstanceOf(Blob)
+      await expect(resolveAsset(online.id)).resolves.toMatchObject({
+        blob: expect.any(Blob),
+        budget: {
+          fileBytes: online.size,
+          durationMicroseconds: online.durationMicroseconds,
+          width: online.width,
+          height: online.height,
+          framesPerSecond: online.frameRate
+            ? online.frameRate.num / online.frameRate.den
+            : null,
+          sampleRate: online.audioSampleRate,
+          channels: online.audioChannels,
+        },
+      })
       expect(() => resolveAsset(offline.id)).toThrow(
         `Playback media asset "${offline.id}" is missing from the media pool`,
       )

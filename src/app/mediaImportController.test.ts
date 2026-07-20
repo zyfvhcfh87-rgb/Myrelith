@@ -200,9 +200,6 @@ interface Fixture {
   rememberMediaHandle: ReturnType<
     typeof vi.fn<MediaImportDeps['rememberMediaHandle']>
   >
-  forgetMediaHandle: ReturnType<
-    typeof vi.fn<MediaImportDeps['forgetMediaHandle']>
-  >
   revokeObjectURL: ReturnType<typeof vi.fn<MediaImportDeps['revokeObjectURL']>>
 }
 
@@ -238,7 +235,6 @@ function makeFixture(
     }
   })
   const rememberMediaHandle = vi.fn(async () => undefined)
-  const forgetMediaHandle = vi.fn(async () => undefined)
   const revokeObjectURL = vi.fn()
   const deps: MediaImportDeps = {
     createAssetId: () => analyzed.id,
@@ -273,7 +269,6 @@ function makeFixture(
       compatibility.delete(id)
     },
     rememberMediaHandle,
-    forgetMediaHandle,
     revokeObjectURL,
   }
   return {
@@ -288,7 +283,6 @@ function makeFixture(
     replaceDocument,
     reconformAssets,
     rememberMediaHandle,
-    forgetMediaHandle,
     revokeObjectURL,
   }
 }
@@ -371,6 +365,111 @@ describe('mediaImportController', () => {
       'asset-new',
       handle,
     )
+  })
+
+  test('a deferred handle write does not block the editor after commit', async () => {
+    const fixture = makeFixture(makeAsset({ frameRate: F30 }))
+    const remembering = deferred<void>()
+    fixture.rememberMediaHandle.mockImplementation(() => remembering.promise)
+    const selected = file()
+    const handle = {
+      kind: 'file',
+      name: selected.name,
+      getFile: vi.fn(async () => selected),
+    } as unknown as LocalMediaFileHandle
+
+    await expect(
+      importMediaFromHandle(selected, handle, fixture.deps),
+    ).resolves.toEqual({
+      status: 'imported',
+      assetId: 'asset-new',
+    })
+
+    const signal = fixture.inspect.mock.calls[0]?.[3]
+    expect(fixture.assets.has('asset-new')).toBe(true)
+    expect(fixture.compatibility.get('asset-new')?.status).toBe('ready')
+    expect(fixture.rememberMediaHandle).toHaveBeenCalledWith(
+      'doc-import',
+      'asset-new',
+      handle,
+    )
+    expect(cancelMediaImport()).toBe(false)
+    expect(removeMediaCompatibility('asset-new')).toBe(false)
+    expect(signal?.aborted).toBe(false)
+    expect(useMediaImportStore.getState().phase).toBe('idle')
+    expect(fixture.revokeObjectURL).not.toHaveBeenCalled()
+
+    const second = makeFixture(makeAsset({
+      id: 'asset-second',
+      frameRate: F30,
+    }))
+    await expect(importMedia(file(), second.deps)).resolves.toEqual({
+      status: 'imported',
+      assetId: 'asset-second',
+    })
+
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    remembering.reject(new Error('IndexedDB write failed'))
+    await vi.waitFor(() => {
+      expect(consoleWarn).toHaveBeenCalledWith(
+        'Could not finish remembering the imported media file',
+        expect.objectContaining({ message: 'IndexedDB write failed' }),
+      )
+    })
+    expect(useMediaImportStore.getState().phase).toBe('idle')
+    expect(fixture.compatibility.get('asset-new')?.status).toBe('ready')
+    consoleWarn.mockRestore()
+  })
+
+  test('leaving to Home keeps the queued handle and late persistence cannot clobber new import UI', async () => {
+    const fixture = makeFixture(makeAsset({ frameRate: F30 }))
+    const getDocument = vi.fn(fixture.deps.getDocument)
+    fixture.deps.getDocument = getDocument
+    const remembering = deferred<void>()
+    fixture.rememberMediaHandle.mockImplementation(() => remembering.promise)
+    const selected = file()
+    const handle = {
+      kind: 'file',
+      name: selected.name,
+      getFile: vi.fn(async () => selected),
+    } as unknown as LocalMediaFileHandle
+
+    await expect(
+      importMediaFromHandle(selected, handle, fixture.deps),
+    ).resolves.toMatchObject({ status: 'imported' })
+
+    // Production leaveActiveProject resets the import controller and clears
+    // media while intentionally retaining the outgoing TimelineDoc in memory.
+    // Finishing the already-queued sidecar write must not infer asset removal.
+    resetMediaImportController()
+    fixture.assets.clear()
+    expect(fixture.currentDocument().id).toBe('doc-import')
+
+    const pendingProbe = deferred<MediaProbeResult>()
+    const nextFixture = makeFixture(makeAsset({
+      id: 'asset-next-project',
+      frameRate: F30,
+    }))
+    nextFixture.deps.inspect = vi.fn(() => pendingProbe.promise)
+    const nextImport = importMedia(file(), nextFixture.deps)
+    await waitForImportPhase('analyzing')
+
+    const documentReadsBeforePersistence = getDocument.mock.calls.length
+    remembering.resolve(undefined)
+    await remembering.promise
+    await Promise.resolve()
+
+    // The background write has no store-inferred deletion path, and it cannot
+    // clear or otherwise mutate a newer import's UI ownership.
+    expect(getDocument).toHaveBeenCalledTimes(documentReadsBeforePersistence)
+    expect(useMediaImportStore.getState().phase).toBe('analyzing')
+
+    expect(cancelMediaImport()).toBe(true)
+    pendingProbe.resolve(readyProbe(makeAsset({
+      id: 'asset-next-project',
+      frameRate: F30,
+    })))
+    await expect(nextImport).resolves.toEqual({ status: 'cancelled' })
   })
 
   test('Keep preserves project FPS and conforms duration from microseconds', async () => {

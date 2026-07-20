@@ -18,6 +18,7 @@
  * pauses with the playhead on the last frame.
  */
 
+import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { docDurationFrames } from '../domain/selectors'
 import { PlaybackEngine } from '../engine/playback-engine'
@@ -191,7 +192,10 @@ function createAssetResolver(
       )
     }
     try {
-      return Promise.resolve(fetchBlob(asset.objectUrl))
+      return Promise.resolve(fetchBlob(asset.objectUrl)).then((blob) => ({
+        blob,
+        budget: mediaAssetDecoderBudget(asset, blob.size),
+      }))
     } catch (cause) {
       return Promise.reject(cause)
     }

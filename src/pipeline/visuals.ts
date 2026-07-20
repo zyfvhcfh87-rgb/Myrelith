@@ -22,7 +22,13 @@
  */
 
 import { ALL_FORMATS, AudioBufferSink, BlobSource, CanvasSink, Input } from 'mediabunny'
-import { ensureMediaDecoderSupport } from '../codecs/mediaCodecFallbacks'
+import {
+  ensureMediaDecoderSupport,
+  refineAudioDecoderBudget,
+  refineVideoDecoderBudget,
+  type DecoderCheckFailure,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 
 /* ------------------------------------------------------------------ */
 /* Tunables                                                             */
@@ -34,6 +40,8 @@ const TILE_SECONDS = 2
 const MAX_TILES = 48
 /** Tile height ≈ the clip block's inner height (56px lane − insets). */
 export const TILE_HEIGHT = 44
+/** Keep both decoder output and the joined strip below browser canvas limits. */
+const FILMSTRIP_MAX_WIDTH = 16_000
 
 /** Waveform image resolution: pixels per second of audio. */
 const WAVEFORM_PX_PER_SECOND = 100
@@ -134,6 +142,29 @@ export interface WaveformResult {
   height: number
 }
 
+function filmstripTileWidth(
+  displayWidth: number,
+  displayHeight: number,
+  tileCount: number,
+): number {
+  if (
+    !Number.isSafeInteger(displayWidth)
+    || displayWidth <= 0
+    || !Number.isSafeInteger(displayHeight)
+    || displayHeight <= 0
+    || !Number.isSafeInteger(tileCount)
+    || tileCount <= 0
+    || tileCount > MAX_TILES
+  ) return 0
+
+  const perTileLimit = Math.floor(FILMSTRIP_MAX_WIDTH / tileCount)
+  const aspectWidth = Math.max(
+    1,
+    Math.round((displayWidth / displayHeight) * TILE_HEIGHT),
+  )
+  return Math.max(1, Math.min(perTileLimit, aspectWidth))
+}
+
 /** Pre-track source setup failed, so no video/audio track can be blamed. */
 export class MediaVisualSourceError extends Error {
   constructor(cause: unknown) {
@@ -141,6 +172,22 @@ export class MediaVisualSourceError extends Error {
     super(detail.slice(0, 2_048), { cause })
     this.name = 'MediaVisualSourceError'
   }
+}
+
+/** A decoder capability boundary rejected the selected visual track. */
+export class MediaVisualDecodeError extends Error {
+  readonly failure: DecoderCheckFailure
+
+  constructor(failure: DecoderCheckFailure) {
+    super(failure.detail)
+    this.name = 'MediaVisualDecodeError'
+    this.failure = { ...failure }
+  }
+}
+
+export interface MediaVisualDecodeOptions {
+  sourceId?: string
+  budget: LocalDecoderBudget
 }
 
 function createVisualInput(file: Blob): Input {
@@ -161,42 +208,69 @@ const WAVEFORM_COLOR = 'rgba(226, 248, 236, 0.85)'
  */
 export async function generateFilmstrip(
   file: Blob,
-  sourceId?: string,
+  options: MediaVisualDecodeOptions,
 ): Promise<FilmstripResult | null> {
   const input = createVisualInput(file)
   try {
     const track = await input.getPrimaryVideoTrack()
     if (!track) return null
-    const [codec, configuration] = await Promise.all([
+    const [codec, configuration, displayWidth, displayHeight] = await Promise.all([
       track.getCodec(),
       track.getDecoderConfig(),
+      track.getDisplayWidth(),
+      track.getDisplayHeight(),
     ])
     const support = await ensureMediaDecoderSupport({
       codec,
       canDecode: () => track.canDecode(),
       configuration,
       trackKind: 'video',
-      sourceId,
+      sourceId: options.sourceId,
       boundary: 'filmstrip',
       policy: 'revalidate',
+      budget: refineVideoDecoderBudget(
+        options.budget,
+        file.size,
+        configuration,
+      ),
     })
-    if (!support.decodable) throw new Error(support.failure.detail)
+    if (!support.decodable) throw new MediaVisualDecodeError(support.failure)
     const durationSec = await input.computeDuration([track])
     const timestamps = filmstripTimestamps(durationSec)
     if (timestamps.length === 0) return null
+    const tileWidth = filmstripTileWidth(
+      displayWidth,
+      displayHeight,
+      timestamps.length,
+    )
+    if (tileWidth === 0) {
+      throw new RangeError('Video display dimensions are invalid for a filmstrip')
+    }
+    const stripWidth = tileWidth * timestamps.length
+    if (
+      !Number.isSafeInteger(stripWidth)
+      || stripWidth > FILMSTRIP_MAX_WIDTH
+    ) {
+      throw new RangeError('Filmstrip dimensions exceed the safe canvas limit')
+    }
 
     // poolSize 1: the sink reuses one canvas; we draw each frame into the
-    // strip before pulling the next, so reuse can never corrupt a tile.
-    const sink = new CanvasSink(track, { height: TILE_HEIGHT, poolSize: 1 })
+    // strip before pulling the next, so reuse can never corrupt a tile. Both
+    // sink dimensions are explicit so hostile aspect ratios cannot allocate
+    // an oversized intermediate canvas before the joined strip is bounded.
+    const sink = new CanvasSink(track, {
+      width: tileWidth,
+      height: TILE_HEIGHT,
+      fit: 'contain',
+      poolSize: 1,
+    })
     let strip: OffscreenCanvas | null = null
     let ctx: OffscreenCanvasRenderingContext2D | null = null
-    let tileWidth = 0
     let index = 0
     for await (const wrapped of sink.canvasesAtTimestamps(timestamps)) {
       if (wrapped) {
         if (!strip) {
-          tileWidth = Math.max(1, wrapped.canvas.width)
-          strip = new OffscreenCanvas(tileWidth * timestamps.length, TILE_HEIGHT)
+          strip = new OffscreenCanvas(stripWidth, TILE_HEIGHT)
           ctx = strip.getContext('2d')
           if (!ctx) return null
         }
@@ -230,7 +304,7 @@ export async function generateFilmstrip(
  */
 export async function generateWaveform(
   file: Blob,
-  sourceId?: string,
+  options: MediaVisualDecodeOptions,
 ): Promise<WaveformResult | null> {
   const input = createVisualInput(file)
   try {
@@ -245,11 +319,16 @@ export async function generateWaveform(
       canDecode: () => track.canDecode(),
       configuration,
       trackKind: 'audio',
-      sourceId,
+      sourceId: options.sourceId,
       boundary: 'waveform',
       policy: 'revalidate',
+      budget: refineAudioDecoderBudget(
+        options.budget,
+        file.size,
+        configuration,
+      ),
     })
-    if (!support.decodable) throw new Error(support.failure.detail)
+    if (!support.decodable) throw new MediaVisualDecodeError(support.failure)
     const durationSec = await input.computeDuration([track])
     const width = waveformWidth(durationSec)
     if (width === 0) return null

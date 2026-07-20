@@ -6,7 +6,10 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { MediaAsset } from '../domain/schema'
-import { MediaVisualSourceError } from '../pipeline/visuals'
+import {
+  MediaVisualDecodeError,
+  MediaVisualSourceError,
+} from '../pipeline/visuals'
 import { useMediaStore } from '../state/mediaStore'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
 import type { VisualsDeps } from './mediaVisualsController'
@@ -97,11 +100,30 @@ describe('mediaVisualsController', () => {
     expect(deps.generateWaveform).toHaveBeenCalledTimes(1)
     expect(deps.generateFilmstrip).toHaveBeenCalledWith(
       expect.any(Blob),
-      a.id,
+      {
+        sourceId: a.id,
+        budget: {
+          fileBytes: 1,
+          durationMicroseconds: 2_000_000,
+          width: 1920,
+          height: 1080,
+          framesPerSecond: 30,
+          sampleRate: 48_000,
+          channels: 2,
+        },
+      },
     )
     expect(deps.generateWaveform).toHaveBeenCalledWith(
       expect.any(Blob),
-      a.id,
+      expect.objectContaining({
+        sourceId: a.id,
+        budget: expect.objectContaining({
+          fileBytes: 1,
+          durationMicroseconds: 2_000_000,
+          sampleRate: 48_000,
+          channels: 2,
+        }),
+      }),
     )
     expect(useMediaStore.getState().visuals.get(a.id)).toEqual({
       filmstrip: strip,
@@ -215,6 +237,34 @@ describe('mediaVisualsController', () => {
           trackKind: 'video',
           reason: 'decode-failed',
           detail: 'thumbnail decode failed',
+        }],
+      },
+    })
+  })
+
+  test('a filmstrip budget rejection stays an exact resource limit', async () => {
+    const deps = fakeDeps({
+      generateFilmstrip: vi.fn(async () => {
+        throw new MediaVisualDecodeError({
+          reason: 'resource-limit',
+          detail: 'Local ProRes safety budget is incomplete.',
+        })
+      }),
+    })
+    initMediaVisuals(deps)
+    const asset = addAsset('large-prores.mov', 'video/quicktime')
+    await flush()
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(wave.url)
+    expect(useMediaStore.getState().compatibility.get(asset.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'resource-limit',
+        runtimeFailures: [{
+          surface: 'filmstrip',
+          trackKind: 'video',
+          reason: 'resource-limit',
+          detail: 'Local ProRes safety budget is incomplete.',
         }],
       },
     })

@@ -25,6 +25,7 @@
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, ClipId, FrameRate, TimelineDoc } from '../domain/schema'
+import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import { visibleVideoLayersAtFrame } from '../domain/selectors'
 import type { VisibleVideoLayer } from '../domain/selectors'
 import { framesToSeconds, rescaleFrames } from '../domain/time'
@@ -182,6 +183,7 @@ export class RenderWorkerBridge {
     assetId: AssetId,
     blob: Blob,
     rate: FrameRate,
+    budget: LocalDecoderBudget,
     runtimeToken: object = {},
   ): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('bridge disposed'))
@@ -192,7 +194,7 @@ export class RenderWorkerBridge {
     this.sources.set(assetId, { protocol: 'streaming', rate, runtimeToken })
     return new Promise((resolve, reject) => {
       this.pendingConfigures.set(assetId, { resolve, reject })
-      this.post({ type: 'openAsset', assetId, blob }, [])
+      this.post({ type: 'openAsset', assetId, blob, budget }, [])
     })
   }
 

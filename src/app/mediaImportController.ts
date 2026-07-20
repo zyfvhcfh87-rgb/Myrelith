@@ -87,7 +87,6 @@ export interface MediaImportDeps {
     assetId: string,
     handle: LocalMediaFileHandle,
   ): Promise<void>
-  forgetMediaHandle(documentId: string, assetId: string): Promise<void>
   revokeObjectURL(url: string): void
 }
 
@@ -115,9 +114,6 @@ const realDeps: MediaImportDeps = {
   ),
   rememberMediaHandle: (documentId, assetId, handle) => (
     localMediaHandleRegistry.remember(documentId, assetId, handle)
-  ),
-  forgetMediaHandle: (documentId, assetId) => (
-    localMediaHandleRegistry.forget(documentId, assetId)
   ),
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
 }
@@ -249,6 +245,21 @@ function documentStillMatches(
   rate: FrameRate,
 ): boolean {
   return document.id === documentId && rateEquals(document.frameRate, rate)
+}
+
+async function rememberCommittedMediaHandle(
+  deps: MediaImportDeps,
+  documentId: string,
+  assetId: string,
+  handle: LocalMediaFileHandle,
+): Promise<void> {
+  try {
+    await deps.rememberMediaHandle(documentId, assetId, handle)
+  } catch (cause) {
+    // The import is already committed. Remembering its browser capability is
+    // an observed local convenience and must never roll media or UI state back.
+    console.warn('Could not finish remembering the imported media file', cause)
+  }
 }
 
 /** Analyze and, after any required decision, commit one selected file. */
@@ -485,27 +496,19 @@ async function importSelectedMedia(
       deps.reconformAssets(finalRate)
     }
 
-    if (handle) {
-      try {
-        await deps.rememberMediaHandle(
-          commitDocument.id,
-          committedAsset.id,
-          handle,
-        )
-        if (!deps.hasAsset(committedAsset.id)) {
-          await deps.forgetMediaHandle(
-            commitDocument.id,
-            committedAsset.id,
-          )
-        }
-      } catch (cause) {
-        // The import already committed successfully. Remembering its browser
-        // capability is a local convenience and must never roll media back.
-        console.warn('Could not remember the imported media file', cause)
-      }
+    if (activeImport === operation) {
+      activeImport = null
+      useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
     }
 
-    setUi({ ...INITIAL_MEDIA_IMPORT_STATE })
+    if (handle) {
+      void rememberCommittedMediaHandle(
+        deps,
+        commitDocument.id,
+        committedAsset.id,
+        handle,
+      )
+    }
     return { status: 'imported', assetId: committedAsset.id }
   } catch (cause) {
     if (activeImport !== operation || operation.cancelled) {
