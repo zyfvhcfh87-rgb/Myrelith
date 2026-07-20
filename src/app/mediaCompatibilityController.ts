@@ -14,6 +14,7 @@ import {
 } from '../domain/mediaCompatibility'
 import type { MediaAsset } from '../domain/schema'
 import { useMediaStore } from '../state/mediaStore'
+import { invalidateMediaDecoderSource } from '../codecs/mediaCodecFallbacks'
 
 export interface MediaRuntimeGuard {
   assetId: string
@@ -99,12 +100,14 @@ export function reportMediaRuntimeFailure(
     ?? `runtime_${++runtimeRequestId}`
   const report = withMediaRuntimeFailure(current?.report ?? null, failure)
   const item = compatibilityItemForAsset(asset, requestId, 'error', report)
-  return media.failAssetCompatibility(
+  const failed = media.failAssetCompatibility(
     guard.assetId,
     guard.objectUrl,
     guard.compatibilityRequestId,
     item,
   )
+  if (failed) invalidateMediaDecoderSource(guard.assetId)
+  return failed
 }
 
 /** Test/HMR seam; compatibility generations in state remain authoritative. */

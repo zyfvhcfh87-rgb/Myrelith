@@ -14,6 +14,21 @@ import type {
 
 export type LocalDecoderId = 'prores' | 'ac3'
 
+export type MediaDecoderCapabilityBoundary =
+  | 'probe'
+  | 'render'
+  | 'filmstrip'
+  | 'waveform'
+  | 'audio-playback'
+  | 'export-video'
+  | 'export-audio'
+
+export type MediaDecoderCapabilityPolicy = 'reuse' | 'revalidate'
+
+export type MediaDecoderConfiguration =
+  | VideoDecoderConfig
+  | AudioDecoderConfig
+
 export interface LocalDecoderBudget {
   fileBytes: number
   durationMicroseconds: number
@@ -32,10 +47,30 @@ export const LOCAL_DECODER_LIMITS = Object.freeze({
   maxAc3Channels: 8,
 })
 
+/** Session-only bounds; oversized configurations are checked but not cached. */
+export const MEDIA_DECODER_CAPABILITY_CACHE_LIMITS = Object.freeze({
+  maxEntries: 256,
+  maxSources: 1_024,
+  maxConfigurationBytes: 1024 * 1024,
+  maxConfigurationJsonCharacters: 16_384,
+})
+
 export interface DecoderCheckTarget {
   /** Mediabunny's normalized codec id, never a filename or MIME guess. */
   codec: string | null
   canDecode(): Promise<boolean>
+  /** Exact WebCodecs configuration. Omission keeps the check uncached. */
+  configuration?: MediaDecoderConfiguration | null
+  /** Track kind is part of the exact capability identity. */
+  trackKind?: 'video' | 'audio'
+  /** Durable id scoped to this realm; source replacement calls beginSource. */
+  sourceId?: string
+  /** Decode surface; runtime boundaries deliberately do not share entries. */
+  boundary?: MediaDecoderCapabilityBoundary
+  /** Runtime boundaries always revalidate even when an entry is warm. */
+  policy?: MediaDecoderCapabilityPolicy
+  /** Injectable native-only check for fallback-family provenance tests. */
+  canDecodeNatively?(): Promise<boolean>
   /** Supplied by the import probe before a local fallback may be loaded. */
   budget?: LocalDecoderBudget
 }
@@ -86,6 +121,119 @@ function makeAbortError(): Error {
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw makeAbortError()
+}
+
+function exactBytes(source: unknown): Uint8Array | null {
+  try {
+    if (ArrayBuffer.isView(source)) {
+      return new Uint8Array(
+        source.buffer,
+        source.byteOffset,
+        source.byteLength,
+      )
+    }
+    if (source && typeof source === 'object') {
+      return new Uint8Array(source as ArrayBuffer)
+    }
+  } catch {
+    // An exotic/invalid BufferSource simply makes this check uncacheable.
+  }
+  return null
+}
+
+function canonicalConfigurationValue(value: unknown, depth = 0): unknown {
+  if (depth > 8) throw new TypeError('Decoder configuration is too deeply nested')
+  if (
+    value === null
+    || typeof value === 'string'
+    || typeof value === 'boolean'
+  ) return value
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new TypeError('Decoder configuration contains a non-finite number')
+    }
+    return value
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => canonicalConfigurationValue(entry, depth + 1))
+  }
+  if (typeof value === 'object') {
+    const normalized: Record<string, unknown> = {}
+    const record = value as Record<string, unknown>
+    for (const key of Object.keys(record).sort()) {
+      const entry = record[key]
+      if (entry !== undefined) {
+        normalized[key] = canonicalConfigurationValue(entry, depth + 1)
+      }
+    }
+    return normalized
+  }
+  throw new TypeError('Decoder configuration contains an unsupported value')
+}
+
+async function decoderCapabilityCacheKey(
+  target: DecoderCheckTarget,
+): Promise<string | null> {
+  if (
+    !target.configuration
+    || !target.trackKind
+    || !target.sourceId
+    || !target.boundary
+    || target.codec === null
+    || target.codec.length > 256
+  ) return null
+
+  try {
+    const configuration = target.configuration as unknown as Record<
+      string,
+      unknown
+    >
+    const { description, ...plainConfiguration } = configuration
+    const descriptionBytes = description === undefined
+      ? new Uint8Array(0)
+      : exactBytes(description)
+    if (!descriptionBytes) return null
+
+    const canonical = JSON.stringify(canonicalConfigurationValue({
+      ...plainConfiguration,
+      descriptionPresent: description !== undefined,
+    }))
+    if (
+      canonical.length
+        > MEDIA_DECODER_CAPABILITY_CACHE_LIMITS.maxConfigurationJsonCharacters
+    ) return null
+
+    const encoder = new TextEncoder()
+    const metadata = encoder.encode(canonical)
+    if (
+      metadata.byteLength + descriptionBytes.byteLength
+        > MEDIA_DECODER_CAPABILITY_CACHE_LIMITS.maxConfigurationBytes
+    ) return null
+
+    const material = new Uint8Array(
+      4 + metadata.byteLength + descriptionBytes.byteLength,
+    )
+    new DataView(material.buffer).setUint32(0, metadata.byteLength, false)
+    material.set(metadata, 4)
+    material.set(descriptionBytes, 4 + metadata.byteLength)
+
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) return null
+    const digest = new Uint8Array(await subtle.digest('SHA-256', material))
+    const fingerprint = Array.from(
+      digest,
+      (byte) => byte.toString(16).padStart(2, '0'),
+    ).join('')
+    return [
+      target.boundary,
+      target.trackKind,
+      target.codec,
+      fingerprint,
+    ].join(':')
+  } catch {
+    // Capability checks remain correct when hashing is unavailable or unsafe.
+    return null
+  }
 }
 
 function decoderFamily(codec: string | null): LocalDecoderId | null {
@@ -184,6 +332,104 @@ export interface MediaCodecFallbackRegistry {
     target: DecoderCheckTarget,
     signal?: AbortSignal,
   ): Promise<DecoderCheckResult>
+  /** Register a new source generation; repeated ids invalidate older facts. */
+  beginSource(sourceId: string): void
+  /** Drop settled facts and block late writes for a removed/replaced source. */
+  invalidateSource(sourceId: string): void
+  /** Runtime changed, but irreversible fallback registrations remain loaded. */
+  invalidateRuntime(): void
+  /** Test/HMR seam: clears capability facts and known source generations. */
+  resetCapabilities(): void
+}
+
+interface CapabilityCacheEntry {
+  result: DecoderCheckResult
+  family: LocalDecoderId | null
+  sourceId: string
+}
+
+interface CapabilityWriteToken {
+  revision: number
+  sequence: number
+  sourceGeneration: number
+}
+
+function cloneDecoderCheckResult(
+  result: DecoderCheckResult,
+): DecoderCheckResult {
+  if (result.decodable) {
+    return {
+      decodable: true,
+      path: result.path,
+      attemptedFallback: result.attemptedFallback,
+      failure: null,
+    }
+  }
+  return {
+    decodable: false,
+    path: null,
+    attemptedFallback: result.attemptedFallback,
+    failure: { ...result.failure },
+  }
+}
+
+function cacheableDecoderCheckResult(
+  result: DecoderCheckResult,
+): DecoderCheckResult {
+  const cached = cloneDecoderCheckResult(result)
+  cached.attemptedFallback = null
+  return cached
+}
+
+async function nativeOnlyDecoderSupport(
+  target: DecoderCheckTarget,
+): Promise<boolean | null> {
+  if (!target.configuration || !target.trackKind) return null
+  try {
+    if (target.canDecodeNatively) return await target.canDecodeNatively()
+    const decoders = globalThis as unknown as {
+      VideoDecoder?: {
+        isConfigSupported(
+          config: VideoDecoderConfig,
+        ): Promise<{ supported?: boolean }>
+      }
+      AudioDecoder?: {
+        isConfigSupported(
+          config: AudioDecoderConfig,
+        ): Promise<{ supported?: boolean }>
+      }
+    }
+    const result = target.trackKind === 'video'
+      ? await decoders.VideoDecoder?.isConfigSupported(
+          target.configuration as VideoDecoderConfig,
+        )
+      : await decoders.AudioDecoder?.isConfigSupported(
+          target.configuration as AudioDecoderConfig,
+        )
+    return result ? result.supported === true : null
+  } catch {
+    // Mediabunny's effective check remains authoritative when the browser's
+    // native-only query is absent or rejects an extension-specific config.
+    return null
+  }
+}
+
+function applyCurrentBudget(
+  target: DecoderCheckTarget,
+  result: DecoderCheckResult,
+): DecoderCheckResult {
+  if (!result.decodable || result.path === 'native') {
+    return cloneDecoderCheckResult(result)
+  }
+  const family = decoderFamily(target.codec)
+  const problem = localDecoderBudgetProblem(target.codec, target.budget)
+  if (!family || !problem) return cloneDecoderCheckResult(result)
+  return {
+    decodable: false,
+    path: null,
+    attemptedFallback: family,
+    failure: problem,
+  }
 }
 
 /** Build an isolated registry (used by tests and once per production realm). */
@@ -192,6 +438,119 @@ export function createMediaCodecFallbackRegistry(
 ): MediaCodecFallbackRegistry {
   const registered = new Set<LocalDecoderId>()
   const pending = new Map<LocalDecoderId, Promise<void>>()
+  const settledCapabilities = new Map<string, CapabilityCacheEntry>()
+  const activeSources = new Set<string>()
+  const sourceGenerations = new Map<string, number>()
+  const latestWriteSequence = new Map<string, number>()
+  let capabilityRevision = 0
+  let writeSequence = 0
+  let sourceGenerationSequence = 0
+
+  const advanceRevision = (): void => {
+    capabilityRevision = capabilityRevision === Number.MAX_SAFE_INTEGER
+      ? 0
+      : capabilityRevision + 1
+    latestWriteSequence.clear()
+  }
+
+  const clearCapabilities = (): void => {
+    settledCapabilities.clear()
+    advanceRevision()
+  }
+
+  const invalidateFamily = (family: LocalDecoderId): void => {
+    for (const [key, entry] of settledCapabilities) {
+      if (entry.family === family) settledCapabilities.delete(key)
+    }
+    // Also blocks unrelated late writes. Losing one cache publication is safer
+    // than allowing a pre-registration answer to reappear after the realm
+    // gained a decoder.
+    advanceRevision()
+  }
+
+  const readCapability = (
+    key: string,
+    sourceId: string,
+  ): DecoderCheckResult | null => {
+    const entry = settledCapabilities.get(key)
+    if (!entry) return null
+    settledCapabilities.delete(key)
+    entry.sourceId = sourceId
+    settledCapabilities.set(key, entry)
+    return cloneDecoderCheckResult(entry.result)
+  }
+
+  const sourceGeneration = (sourceId: string | undefined): number | null => {
+    if (!sourceId || !activeSources.has(sourceId)) return null
+    return sourceGenerations.get(sourceId) ?? null
+  }
+
+  const sourceGenerationIsCurrent = (
+    sourceId: string | undefined,
+    generation: number | null,
+  ): boolean => (
+    sourceId !== undefined
+    && generation !== null
+    && activeSources.has(sourceId)
+    && sourceGenerations.get(sourceId) === generation
+  )
+
+  const beginWrite = (
+    key: string | null,
+    generation: number | null,
+  ): CapabilityWriteToken | null => {
+    if (!key || generation === null) return null
+    const sequence = ++writeSequence
+    latestWriteSequence.set(key, sequence)
+    return {
+      revision: capabilityRevision,
+      sequence,
+      sourceGeneration: generation,
+    }
+  }
+
+  const finishWrite = (
+    key: string | null,
+    token: CapabilityWriteToken | null,
+    sourceId: string | undefined,
+    family: LocalDecoderId | null,
+    result: DecoderCheckResult,
+  ): void => {
+    if (!key || !token || !sourceId) return
+    if (
+      token.revision !== capabilityRevision
+      || latestWriteSequence.get(key) !== token.sequence
+      || !sourceGenerationIsCurrent(sourceId, token.sourceGeneration)
+    ) return
+    latestWriteSequence.delete(key)
+    settledCapabilities.delete(key)
+    settledCapabilities.set(key, {
+      result: cacheableDecoderCheckResult(result),
+      family,
+      sourceId,
+    })
+    while (
+      settledCapabilities.size
+        > MEDIA_DECODER_CAPABILITY_CACHE_LIMITS.maxEntries
+    ) {
+      const oldest = settledCapabilities.keys().next().value as
+        | string
+        | undefined
+      if (oldest === undefined) break
+      settledCapabilities.delete(oldest)
+    }
+  }
+
+  const releaseWrite = (
+    key: string | null,
+    token: CapabilityWriteToken | null,
+  ): void => {
+    if (
+      key
+      && token
+      && latestWriteSequence.get(key) === token.sequence
+    ) latestWriteSequence.delete(key)
+  }
 
   const register = async (family: LocalDecoderId): Promise<void> => {
     if (registered.has(family)) return
@@ -201,6 +560,7 @@ export function createMediaCodecFallbackRegistry(
     const load = loaders[family]()
       .then(() => {
         registered.add(family)
+        invalidateFamily(family)
       })
       .catch((cause: unknown) => {
         throw new LocalDecoderLoadError(family, cause)
@@ -213,70 +573,220 @@ export function createMediaCodecFallbackRegistry(
   }
 
   return {
+    beginSource(sourceId: string): void {
+      if (!sourceId) return
+      if (activeSources.has(sourceId)) clearCapabilities()
+      if (sourceGenerationSequence === Number.MAX_SAFE_INTEGER) {
+        activeSources.clear()
+        sourceGenerations.clear()
+        sourceGenerationSequence = 0
+        clearCapabilities()
+      }
+      sourceGenerationSequence++
+      activeSources.add(sourceId)
+      sourceGenerations.set(sourceId, sourceGenerationSequence)
+      if (
+        activeSources.size
+          > MEDIA_DECODER_CAPABILITY_CACHE_LIMITS.maxSources
+      ) {
+        activeSources.clear()
+        sourceGenerations.clear()
+        activeSources.add(sourceId)
+        sourceGenerations.set(sourceId, sourceGenerationSequence)
+        clearCapabilities()
+      }
+    },
+
+    invalidateSource(sourceId: string): void {
+      activeSources.delete(sourceId)
+      sourceGenerations.delete(sourceId)
+      for (const [key, entry] of settledCapabilities) {
+        if (entry.sourceId === sourceId) settledCapabilities.delete(key)
+      }
+      // Even with no settled entry, prevent an in-flight check for this source
+      // from repopulating the session cache after removal/replacement.
+      advanceRevision()
+    },
+
+    invalidateRuntime(): void {
+      clearCapabilities()
+    },
+
+    resetCapabilities(): void {
+      activeSources.clear()
+      sourceGenerations.clear()
+      clearCapabilities()
+    },
+
     async ensureDecodable(
       target: DecoderCheckTarget,
       signal?: AbortSignal,
     ): Promise<DecoderCheckResult> {
       throwIfAborted(signal)
       const family = decoderFamily(target.codec)
-      const initiallyDecodable = await target.canDecode()
+      const keyRevision = capabilityRevision
+      const keySourceGeneration = sourceGeneration(target.sourceId)
+      const cacheKey = await decoderCapabilityCacheKey(target)
       throwIfAborted(signal)
 
-      if (initiallyDecodable) {
-        return {
+      if (
+        target.policy === 'reuse'
+        && target.boundary === 'probe'
+        && cacheKey
+        && keyRevision === capabilityRevision
+        && target.sourceId
+        && sourceGenerationIsCurrent(
+          target.sourceId,
+          keySourceGeneration,
+        )
+      ) {
+        const cached = readCapability(cacheKey, target.sourceId)
+        if (cached) return applyCurrentBudget(target, cached)
+      }
+
+      let writeToken = keyRevision === capabilityRevision
+        && sourceGenerationIsCurrent(
+          target.sourceId,
+          keySourceGeneration,
+        )
+        ? beginWrite(cacheKey, keySourceGeneration)
+        : null
+      const finish = (result: DecoderCheckResult): DecoderCheckResult => {
+        finishWrite(
+          cacheKey,
+          writeToken,
+          target.sourceId,
+          family,
+          result,
+        )
+        return applyCurrentBudget(target, result)
+      }
+
+      try {
+        if (family && registered.has(family)) {
+          const nativeSupport = await nativeOnlyDecoderSupport(target)
+          throwIfAborted(signal)
+          if (nativeSupport === true) {
+            return finish({
+              decodable: true,
+              path: 'native',
+              attemptedFallback: null,
+              failure: null,
+            })
+          }
+
+          const effectivelyDecodable = await target.canDecode()
+          throwIfAborted(signal)
+          if (effectivelyDecodable) {
+            return finish({
+              decodable: true,
+              path: decoderPath(family),
+              attemptedFallback: null,
+              failure: null,
+            })
+          }
+          const resourceProblem = localDecoderBudgetProblem(
+            target.codec,
+            target.budget,
+          )
+          if (resourceProblem) {
+            return {
+              decodable: false,
+              path: null,
+              attemptedFallback: family,
+              failure: resourceProblem,
+            }
+          }
+          return finish({
+            decodable: false,
+            path: null,
+            attemptedFallback: null,
+            failure: {
+              reason: 'unsupported-codec',
+              detail: `WebCut's local ${fallbackLabel(family)} decoder does not support this track configuration.`,
+            },
+          })
+        }
+
+        const initiallyDecodable = await target.canDecode()
+        throwIfAborted(signal)
+
+        if (initiallyDecodable) {
+          return finish({
+            decodable: true,
+            path: 'native',
+            attemptedFallback: null,
+            failure: null,
+          })
+        }
+        if (!family) {
+          return finish({
+            decodable: false,
+            path: null,
+            attemptedFallback: null,
+            failure: {
+              reason: 'unsupported-codec',
+              detail: 'This browser cannot decode this media codec, and WebCut has no reviewed local fallback for it.',
+            },
+          })
+        }
+
+        const resourceProblem = localDecoderBudgetProblem(
+          target.codec,
+          target.budget,
+        )
+        if (resourceProblem) {
+          return {
+            decodable: false,
+            path: null,
+            attemptedFallback: family,
+            failure: resourceProblem,
+          }
+        }
+
+        await register(family)
+        throwIfAborted(signal)
+        // Registration is a runtime change and deliberately invalidated the
+        // old write token. The post-registration check is fresh evidence.
+        writeToken = sourceGenerationIsCurrent(
+          target.sourceId,
+          keySourceGeneration,
+        )
+          ? beginWrite(cacheKey, keySourceGeneration)
+          : null
+
+        const nativeSupport = await nativeOnlyDecoderSupport(target)
+        throwIfAborted(signal)
+        if (nativeSupport === true) {
+          return finish({
+            decodable: true,
+            path: 'native',
+            attemptedFallback: family,
+            failure: null,
+          })
+        }
+
+        const decodable = await target.canDecode()
+        throwIfAborted(signal)
+        if (!decodable) {
+          return finish({
+            decodable: false,
+            path: null,
+            attemptedFallback: family,
+            failure: {
+              reason: 'unsupported-codec',
+              detail: `WebCut's local ${fallbackLabel(family)} decoder does not support this track configuration.`,
+            },
+          })
+        }
+        return finish({
           decodable: true,
-          path: family && registered.has(family)
-            ? decoderPath(family)
-            : 'native',
-          attemptedFallback: null,
+          path: decoderPath(family),
+          attemptedFallback: family,
           failure: null,
-        }
-      }
-      if (!family) {
-        return {
-          decodable: false,
-          path: null,
-          attemptedFallback: null,
-          failure: {
-            reason: 'unsupported-codec',
-            detail: 'This browser cannot decode this media codec, and WebCut has no reviewed local fallback for it.',
-          },
-        }
-      }
-
-      const resourceProblem = localDecoderBudgetProblem(
-        target.codec,
-        target.budget,
-      )
-      if (resourceProblem) {
-        return {
-          decodable: false,
-          path: null,
-          attemptedFallback: family,
-          failure: resourceProblem,
-        }
-      }
-
-      await register(family)
-      throwIfAborted(signal)
-      const decodable = await target.canDecode()
-      throwIfAborted(signal)
-      if (!decodable) {
-        return {
-          decodable: false,
-          path: null,
-          attemptedFallback: family,
-          failure: {
-            reason: 'unsupported-codec',
-            detail: `WebCut's local ${fallbackLabel(family)} decoder does not support this track configuration.`,
-          },
-        }
-      }
-      return {
-        decodable: true,
-        path: decoderPath(family),
-        attemptedFallback: family,
-        failure: null,
+        })
+      } finally {
+        releaseWrite(cacheKey, writeToken)
       }
     },
   }
@@ -287,3 +797,15 @@ export const mediaCodecFallbackRegistry = createMediaCodecFallbackRegistry()
 
 export const ensureMediaDecoderSupport =
   mediaCodecFallbackRegistry.ensureDecodable
+
+export const beginMediaDecoderSource =
+  mediaCodecFallbackRegistry.beginSource
+
+export const invalidateMediaDecoderSource =
+  mediaCodecFallbackRegistry.invalidateSource
+
+export const invalidateMediaDecoderRuntime =
+  mediaCodecFallbackRegistry.invalidateRuntime
+
+export const resetMediaDecoderCapabilities =
+  mediaCodecFallbackRegistry.resetCapabilities

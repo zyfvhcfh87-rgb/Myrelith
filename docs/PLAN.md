@@ -547,7 +547,9 @@ consent or proxy conversion.
   AC-3 clip; a mixed timeline exported a downloaded 4.000s 1920×1080 H.264 +
   48 kHz stereo AAC MP4; warning/error console stayed clean.
 - [x] Slice 4 follow-up: explicit informed partial-track import (see below).
-- [ ] Remaining slices: capability caching, user-consented proxy conversion,
+- [x] Slice 5 follow-up: session capability caching with exact boundary
+  revalidation (see below).
+- [ ] Remaining slices: user-consented proxy conversion,
   broader browser/codec fixtures, and final bundle-size/license/browser-
   isolation/low-memory shipping review. The AC-3 extension embeds FFmpeg, so
   distribution compliance is not claimed complete.
@@ -584,9 +586,50 @@ proxy conversion.
   confirmed exact video-only and audio-only Ready paths with the omission facts
   still visible. No error overlay appeared and the Vite runtime log stayed
   clean. The known 1.144 MB lazy AC-3 and main-chunk advisories remain.
-- [ ] Remaining slices: capability caching, optional user-consented proxy
+- [x] Slice 5 follow-up: session capability caching with exact boundary
+  revalidation (see below).
+- [ ] Remaining slices: optional user-consented proxy
   conversion, broader browser/codec fixtures, and final distribution/security
   review.
+
+## Post-MVP issue #19 — Slice 5 ✅ DONE (2026-07-20) Capability caching and boundary revalidation
+
+Issue #19 remains open; this slice caches only settled decoder capability facts
+for the current JavaScript realm. It does not persist source bytes, decoder
+objects, or capability results in `.webcut` projects.
+
+- [x] Add one shared, bounded cache keyed by decode boundary, track kind,
+  normalized codec, and a SHA-256 hash of the canonical decoder configuration,
+  including exact description bytes. Store settled facts only — never a Blob,
+  Mediabunny Input, decoder, track, or mutable configuration object.
+- [x] Bound the cache to 256 LRU facts, 1,024 active sources, 1 MiB of copied
+  configuration material, and 16,384 canonical JSON characters. Unsafe,
+  oversized, or unhashable configurations bypass caching instead of weakening
+  the answer.
+- [x] Reuse probe results within the browser session, but force exact
+  native/fallback revalidation and cache refresh at render, filmstrip, waveform, live
+  audio, video-export, and audio-export decode boundaries.
+- [x] Register a fresh generation on source add; invalidate on source
+  removal/replacement, provisional or Offline transitions, confirmed runtime
+  failures, worker configure/release/open
+  failure/close, visible-page and BFCache restoration, and newly registered
+  fallback codecs. Source generations, runtime revisions, and latest-write
+  sequencing prevent stale and remove/re-add (ABA) writes from resurfacing.
+- [x] Keep the cache outside Zustand and the domain/project schema. Serialization
+  tests reject cache-like fields, so Save/Resume always recomputes support in the
+  destination runtime.
+- [x] Reapply current resource budgets before accepting a cached local-fallback
+  fact, and verify native-only provenance through WebCodecs rather than trusting
+  an earlier fallback answer.
+- [x] Verification: 1,092 tests across 64 files, production build, lint, and
+  diff checks green. In-app Chromium at 1280×720 opened and reconnected a
+  generated H.264/AAC project, reported both tracks Ready, generated a real
+  filmstrip and preview frame, completed render/live-audio playback, and reached
+  Export ready through video + audio decode. No error overlay, warning/error
+  console entry, or page-level overflow appeared. The known 1.144 MB lazy AC-3
+  and main-chunk advisories remain.
+- [ ] Remaining slices: optional user-consented proxy conversion, broader
+  browser/codec fixtures, and final distribution/security review.
 
 ## Test strategy per layer (unchanged from original)
 

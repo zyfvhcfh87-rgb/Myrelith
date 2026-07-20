@@ -362,6 +362,9 @@ interface Harness {
   normalizations: Array<Omit<DecodedVideoFrame, 'frame'>>
   sourcesToOpen: FakeVideoSource[]
   openedBlobs: Blob[]
+  openedSourceIds: string[]
+  invalidatedSourceIds: string[]
+  runtimeInvalidationCount(): number
   decoders: FakeDecoder[]
   ops: CtxOp[]
   visible: FakeSurface
@@ -379,6 +382,9 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   const normalizations: Array<Omit<DecodedVideoFrame, 'frame'>> = []
   const sourcesToOpen: FakeVideoSource[] = []
   const openedBlobs: Blob[] = []
+  const openedSourceIds: string[] = []
+  const invalidatedSourceIds: string[] = []
+  let runtimeInvalidations = 0
   const decoders: FakeDecoder[] = []
   const ops: CtxOp[] = []
   const visible = makeSurface('visible', ops)
@@ -408,14 +414,17 @@ function makeHarness(opts: FakeOptions = {}): Harness {
       bitmaps.push(bitmap)
       return bitmap
     },
-    openVideoSource: async (blob) => {
+    openVideoSource: async (blob, sourceId) => {
       openedBlobs.push(blob)
+      openedSourceIds.push(sourceId)
       await opts.openSourceGate
       if (opts.openSourceError) throw opts.openSourceError
       const source = sourcesToOpen.shift()
       if (!source) throw new Error('test did not queue a streaming source')
       return source
     },
+    invalidateDecoderSource: (sourceId) => invalidatedSourceIds.push(sourceId),
+    invalidateDecoderRuntime: () => { runtimeInvalidations++ },
     createStreamingBitmap: async (decoded) => {
       await opts.streamBitmapGate
       normalizations.push({
@@ -462,6 +471,9 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     normalizations,
     sourcesToOpen,
     openedBlobs,
+    openedSourceIds,
+    invalidatedSourceIds,
+    runtimeInvalidationCount: () => runtimeInvalidations,
     decoders,
     ops,
     visible,
@@ -947,6 +959,7 @@ describe('asset lifecycle', () => {
 
     await h.core.handleMessage(cfgMsg('A'))
 
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
     expect(h.decoders[0].isClosed).toBe(true)
     expect(h.bitmaps.every((b) => b.closed)).toBe(true) // old stream released
     expect(h.decoders).toHaveLength(2)
@@ -964,11 +977,36 @@ describe('asset lifecycle', () => {
 
     await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
 
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
     expect(h.decoders[0].isClosed).toBe(true)
     expect(h.bitmaps.every((b) => b.closed)).toBe(true)
 
     await h.core.handleMessage(compMsg(2, 2, [entry('A', 2, gop(0, 5))]))
     expect(doneFor(h, 2).missingClipIds).toEqual(['a'])
+  })
+
+  test('streaming source identity and capability invalidation follow worker lifecycle', async () => {
+    const h = makeHarness()
+    const original = new FakeVideoSource()
+    await setupStreaming(h, makeDoc([]), [['A', original]])
+
+    expect(h.openedSourceIds).toEqual(['A'])
+    expect(h.invalidatedSourceIds).toEqual(['A'])
+
+    const replacement = new FakeVideoSource()
+    h.sourcesToOpen.push(replacement)
+    await h.core.handleMessage(openMsg('A', new Blob(['replacement'])))
+
+    expect(h.openedSourceIds).toEqual(['A', 'A'])
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
+    expect(original.closeCount).toBe(1)
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A', 'A'])
+    expect(replacement.closeCount).toBe(1)
+
+    await h.core.handleMessage({ type: 'close' })
+    expect(h.runtimeInvalidationCount()).toBe(1)
   })
 })
 
@@ -1416,6 +1454,7 @@ describe('streaming response contract', () => {
       },
       message: expect.stringContaining('Input construction failed'),
     }])
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
   })
 })
 

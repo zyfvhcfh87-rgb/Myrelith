@@ -21,6 +21,7 @@ import {
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { InputVideoTrack } from 'mediabunny'
 import {
+  beginMediaDecoderSource,
   ensureMediaDecoderSupport,
   type DecoderCheckResult,
   type DecoderCheckTarget,
@@ -85,6 +86,7 @@ export interface VideoSampleLike {
 
 export interface VideoTrackLike {
   getCodec(): Promise<string | null>
+  getDecoderConfig(): Promise<VideoDecoderConfig | null>
   canDecode(): Promise<boolean>
 }
 
@@ -107,6 +109,7 @@ export interface VideoSampleSinkLike {
 
 export interface WorkerVideoSourceEnv {
   createInput(blob: Blob): VideoInputLike
+  beginDecoderSource(sourceId: string): void
   ensureDecoderSupport(target: DecoderCheckTarget): Promise<DecoderCheckResult>
   /** Called once per lane so clips sharing an asset keep independent cursors. */
   createSampleSink(track: VideoTrackLike): VideoSampleSinkLike
@@ -142,6 +145,7 @@ const browserEnv: WorkerVideoSourceEnv = {
     source: new BlobSource(blob),
     formats: ALL_FORMATS,
   }),
+  beginDecoderSource: beginMediaDecoderSource,
   ensureDecoderSupport: (target) => ensureMediaDecoderSupport(target),
   createSampleSink: (track) => new VideoSampleSink(
     track as InputVideoTrack,
@@ -382,8 +386,10 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
 export async function openWorkerVideoSource(
   blob: Blob,
   env: WorkerVideoSourceEnv = browserEnv,
+  sourceId?: string,
 ): Promise<WorkerVideoSource> {
   if (!(blob instanceof Blob)) throw new TypeError('blob must be a Blob')
+  if (sourceId !== undefined) env.beginDecoderSource(sourceId)
 
   let input: VideoInputLike
   try {
@@ -397,10 +403,18 @@ export async function openWorkerVideoSource(
   try {
     const track = await input.getPrimaryVideoTrack()
     if (!track) throw new Error('media has no video track')
-    const codec = await track.getCodec()
+    const [codec, configuration] = await Promise.all([
+      track.getCodec(),
+      track.getDecoderConfig(),
+    ])
     const support = await env.ensureDecoderSupport({
       codec,
       canDecode: () => track.canDecode(),
+      configuration,
+      trackKind: 'video',
+      sourceId,
+      boundary: 'render',
+      policy: 'revalidate',
     })
     if (!support.decodable) {
       throw new Error(support.failure.detail)

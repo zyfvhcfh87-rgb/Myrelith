@@ -33,8 +33,14 @@ import {
 
 export interface VisualsDeps {
   fetchBlob: (url: string) => Promise<Blob>
-  generateFilmstrip: (file: Blob) => Promise<FilmstripResult | null>
-  generateWaveform: (file: Blob) => Promise<WaveformResult | null>
+  generateFilmstrip: (
+    file: Blob,
+    sourceId?: string,
+  ) => Promise<FilmstripResult | null>
+  generateWaveform: (
+    file: Blob,
+    sourceId?: string,
+  ) => Promise<WaveformResult | null>
 }
 
 const realDeps: VisualsDeps = {
@@ -99,10 +105,10 @@ async function process(
 
   const [filmstripResult, waveformResult] = await Promise.allSettled([
     asset.kind === 'video'
-      ? deps.generateFilmstrip(blob)
+      ? deps.generateFilmstrip(blob, asset.id)
       : Promise.resolve(null),
     asset.hasAudio
-      ? deps.generateWaveform(blob)
+      ? deps.generateWaveform(blob, asset.id)
       : Promise.resolve(null),
   ])
   const filmstrip = filmstripResult.status === 'fulfilled'

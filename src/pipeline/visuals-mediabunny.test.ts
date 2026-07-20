@@ -7,10 +7,12 @@ import type {
 const harness = vi.hoisted(() => ({
   videoTrack: null as null | {
     getCodec(): Promise<string | null>
+    getDecoderConfig(): Promise<VideoDecoderConfig | null>
     canDecode(): Promise<boolean>
   },
   audioTrack: null as null | {
     getCodec(): Promise<string | null>
+    getDecoderConfig(): Promise<AudioDecoderConfig | null>
     canDecode(): Promise<boolean>
   },
   events: [] as string[],
@@ -136,8 +138,15 @@ beforeEach(() => {
 
 describe('Mediabunny visual fallback wiring', () => {
   test('checks local ProRes support and measures only its video track', async () => {
+    const configuration: VideoDecoderConfig = {
+      codec: 'apch',
+      codedWidth: 1920,
+      codedHeight: 1080,
+      description: new Uint8Array([1, 2, 3]),
+    }
     const track = {
       getCodec: vi.fn(async () => 'prores'),
+      getDecoderConfig: vi.fn(async () => configuration),
       canDecode: vi.fn(async () => false),
     }
     harness.videoTrack = track
@@ -145,11 +154,21 @@ describe('Mediabunny visual fallback wiring', () => {
       target: DecoderCheckTarget,
     ) => {
       harness.events.push('decoder-check')
-      expect(target.codec).toBe('prores')
+      expect(target).toMatchObject({
+        codec: 'prores',
+        configuration,
+        trackKind: 'video',
+        sourceId: 'asset-prores',
+        boundary: 'filmstrip',
+        policy: 'revalidate',
+      })
       return localSupport('local-prores')
     })
 
-    const result = await generateFilmstrip(new Blob(['prores']))
+    const result = await generateFilmstrip(
+      new Blob(['prores']),
+      'asset-prores',
+    )
 
     expect(result).toMatchObject({
       url: 'blob:visual',
@@ -166,8 +185,15 @@ describe('Mediabunny visual fallback wiring', () => {
   })
 
   test('checks local AC-3 support and measures only its audio track', async () => {
+    const configuration: AudioDecoderConfig = {
+      codec: 'ac-3',
+      sampleRate: 48_000,
+      numberOfChannels: 6,
+      description: new Uint8Array([4, 5, 6]),
+    }
     const track = {
       getCodec: vi.fn(async () => 'ac3'),
+      getDecoderConfig: vi.fn(async () => configuration),
       canDecode: vi.fn(async () => false),
     }
     harness.audioTrack = track
@@ -175,11 +201,18 @@ describe('Mediabunny visual fallback wiring', () => {
       target: DecoderCheckTarget,
     ) => {
       harness.events.push('decoder-check')
-      expect(target.codec).toBe('ac3')
+      expect(target).toMatchObject({
+        codec: 'ac3',
+        configuration,
+        trackKind: 'audio',
+        sourceId: 'asset-ac3',
+        boundary: 'waveform',
+        policy: 'revalidate',
+      })
       return localSupport('local-ac3')
     })
 
-    const result = await generateWaveform(new Blob(['ac3']))
+    const result = await generateWaveform(new Blob(['ac3']), 'asset-ac3')
 
     expect(result).toEqual({
       url: 'blob:visual',

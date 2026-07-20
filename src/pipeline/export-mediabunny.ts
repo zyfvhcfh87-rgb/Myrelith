@@ -225,9 +225,15 @@ export function createMediabunnyExportMediaSource(
         let support: Awaited<ReturnType<typeof ensureMediaDecoderSupport>>
         try {
           const codec = await track.getCodec()
+          const configuration = await track.getDecoderConfig()
           support = await ensureMediaDecoderSupport({
             codec,
             canDecode: () => track.canDecode(),
+            configuration,
+            trackKind: 'video',
+            sourceId: assetId,
+            boundary: 'export-video',
+            policy: 'revalidate',
           })
         } catch (cause) {
           throw exportAssetError(assetId, 'video', 'decode-failed', cause)
@@ -750,9 +756,15 @@ export function createMediabunnyExportAudioSource(
         let support: Awaited<ReturnType<typeof ensureMediaDecoderSupport>>
         try {
           const codec = await track.getCodec()
+          const configuration = await track.getDecoderConfig()
           support = await ensureMediaDecoderSupport({
             codec,
             canDecode: () => track.canDecode(),
+            configuration,
+            trackKind: 'audio',
+            sourceId: assetId,
+            boundary: 'export-audio',
+            policy: 'revalidate',
           })
         } catch (cause) {
           throw exportAssetError(assetId, 'audio', 'decode-failed', cause)

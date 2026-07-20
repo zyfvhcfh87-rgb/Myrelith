@@ -7,6 +7,7 @@ import type {
 const harness = vi.hoisted(() => ({
   track: null as null | {
     getCodec(): Promise<string | null>
+    getDecoderConfig(): Promise<AudioDecoderConfig | null>
     canDecode(): Promise<boolean>
   },
   events: [] as string[],
@@ -67,8 +68,14 @@ beforeEach(() => {
 
 describe('Mediabunny live-audio fallback wiring', () => {
   test('awaits local E-AC-3 support before constructing an audio sink', async () => {
+    const configuration: AudioDecoderConfig = {
+      codec: 'ec-3',
+      numberOfChannels: 6,
+      sampleRate: 48_000,
+    }
     const track = {
       getCodec: vi.fn(async () => 'eac3'),
+      getDecoderConfig: vi.fn(async () => configuration),
       canDecode: vi.fn(async () => false),
     }
     harness.track = track
@@ -76,7 +83,16 @@ describe('Mediabunny live-audio fallback wiring', () => {
       target: DecoderCheckTarget,
     ): Promise<DecoderCheckResult> => {
       harness.events.push('decoder-check')
-      expect(target.codec).toBe('eac3')
+      expect(target).toMatchObject({
+        codec: 'eac3',
+        configuration,
+        trackKind: 'audio',
+        sourceId: 'asset-eac3',
+        boundary: 'audio-playback',
+        policy: 'revalidate',
+      })
+      expect(target.configuration).toBe(configuration)
+      expect(await target.canDecode()).toBe(false)
       return {
         decodable: true,
         path: 'local-ac3',
@@ -96,6 +112,8 @@ describe('Mediabunny live-audio fallback wiring', () => {
 
     expect(harness.events).toEqual(['decoder-check', 'audio-sink'])
     expect(harness.sinks).toEqual([{ track }])
+    expect(track.getDecoderConfig).toHaveBeenCalledOnce()
+    expect(track.canDecode).toHaveBeenCalledOnce()
     await cursor.close()
     expect(harness.inputs[0].dispose).toHaveBeenCalledOnce()
     await source.close()
@@ -104,6 +122,11 @@ describe('Mediabunny live-audio fallback wiring', () => {
   test('disposes the Input when the fallback seam rejects the track', async () => {
     harness.track = {
       getCodec: vi.fn(async () => 'eac3'),
+      getDecoderConfig: vi.fn(async () => ({
+        codec: 'ec-3',
+        numberOfChannels: 6,
+        sampleRate: 48_000,
+      })),
       canDecode: vi.fn(async () => false),
     }
     harness.ensureDecoderSupport.mockResolvedValue({

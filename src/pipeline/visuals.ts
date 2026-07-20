@@ -159,15 +159,26 @@ const WAVEFORM_COLOR = 'rgba(226, 248, 236, 0.85)'
  * image (JPEG object URL). Returns null when the file has no video track.
  * The caller owns the returned URL (mediaStore takes it over).
  */
-export async function generateFilmstrip(file: Blob): Promise<FilmstripResult | null> {
+export async function generateFilmstrip(
+  file: Blob,
+  sourceId?: string,
+): Promise<FilmstripResult | null> {
   const input = createVisualInput(file)
   try {
     const track = await input.getPrimaryVideoTrack()
     if (!track) return null
-    const codec = await track.getCodec()
+    const [codec, configuration] = await Promise.all([
+      track.getCodec(),
+      track.getDecoderConfig(),
+    ])
     const support = await ensureMediaDecoderSupport({
       codec,
       canDecode: () => track.canDecode(),
+      configuration,
+      trackKind: 'video',
+      sourceId,
+      boundary: 'filmstrip',
+      policy: 'revalidate',
     })
     if (!support.decodable) throw new Error(support.failure.detail)
     const durationSec = await input.computeDuration([track])
@@ -217,15 +228,26 @@ export async function generateFilmstrip(file: Blob): Promise<FilmstripResult | n
  * zoom). Returns null when the file has no audio track. The
  * caller owns the returned URL (mediaStore takes it over).
  */
-export async function generateWaveform(file: Blob): Promise<WaveformResult | null> {
+export async function generateWaveform(
+  file: Blob,
+  sourceId?: string,
+): Promise<WaveformResult | null> {
   const input = createVisualInput(file)
   try {
     const track = await input.getPrimaryAudioTrack()
     if (!track) return null
-    const codec = await track.getCodec()
+    const [codec, configuration] = await Promise.all([
+      track.getCodec(),
+      track.getDecoderConfig(),
+    ])
     const support = await ensureMediaDecoderSupport({
       codec,
       canDecode: () => track.canDecode(),
+      configuration,
+      trackKind: 'audio',
+      sourceId,
+      boundary: 'waveform',
+      policy: 'revalidate',
     })
     if (!support.decodable) throw new Error(support.failure.detail)
     const durationSec = await input.computeDuration([track])

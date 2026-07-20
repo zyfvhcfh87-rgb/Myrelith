@@ -13,6 +13,7 @@ import {
   vi,
   type Mock,
 } from 'vitest'
+import type { DecoderCheckTarget } from '../codecs/mediaCodecFallbacks'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { compositeFrame } from './render'
@@ -24,6 +25,26 @@ const localDecoders = vi.hoisted(() => ({
   ac3Registered: false,
   ac3Registrations: 0,
 }))
+
+const decoderChecks = vi.hoisted(() => ({
+  targets: [] as DecoderCheckTarget[],
+}))
+
+vi.mock('../codecs/mediaCodecFallbacks', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../codecs/mediaCodecFallbacks')
+  >()
+  return {
+    ...actual,
+    ensureMediaDecoderSupport: (
+      target: DecoderCheckTarget,
+      signal?: AbortSignal,
+    ) => {
+      decoderChecks.targets.push(target)
+      return actual.ensureMediaDecoderSupport(target, signal)
+    },
+  }
+})
 
 vi.mock('@mediabunny/prores', () => ({
   registerProresDecoder: () => {
@@ -604,9 +625,15 @@ function deferred<T>(): {
 function videoTrack(
   canDecode: boolean | (() => boolean) = true,
   codec = 'avc',
+  configuration: VideoDecoderConfig = {
+    codec: codec === 'prores' ? 'apcn' : codec,
+    codedHeight: 180,
+    codedWidth: 320,
+  },
 ) {
   return {
     getCodec: vi.fn(async () => codec),
+    getDecoderConfig: vi.fn(async () => configuration),
     canDecode: vi.fn(async () => (
       typeof canDecode === 'function' ? canDecode() : canDecode
     )),
@@ -617,9 +644,15 @@ function audioTrack(
   canDecode: boolean | (() => boolean) = true,
   numberOfChannels = 1,
   codec = 'aac',
+  configuration: AudioDecoderConfig = {
+    codec: codec === 'eac3' ? 'ec-3' : codec,
+    numberOfChannels,
+    sampleRate: 48_000,
+  },
 ) {
   return {
     getCodec: vi.fn(async () => codec),
+    getDecoderConfig: vi.fn(async () => configuration),
     canDecode: vi.fn(async () => (
       typeof canDecode === 'function' ? canDecode() : canDecode
     )),
@@ -671,6 +704,7 @@ function wrappedCanvas(width = 320, height = 180) {
 }
 
 beforeEach(() => {
+  decoderChecks.targets.length = 0
   mb.blobSources.length = 0
   mb.inputs.length = 0
   mb.inputTracks.length = 0
@@ -829,7 +863,13 @@ describe('createMediabunnyExportMediaSource', () => {
     )
     const blob = new Blob(['asset-a'])
     const resolveAsset = vi.fn(async () => blob)
-    const track = videoTrack()
+    const configuration: VideoDecoderConfig = {
+      codec: 'avc1.64001f',
+      codedHeight: 180,
+      codedWidth: 320,
+      description: new Uint8Array([1, 2, 3]),
+    }
+    const track = videoTrack(true, 'avc', configuration)
     const wrapped = wrappedCanvas()
     mb.inputTracks.push(track)
     mb.canvasSinkHandlers.push(async () => wrapped)
@@ -849,7 +889,18 @@ describe('createMediabunnyExportMediaSource', () => {
     expect(mb.blobSources).toHaveLength(1)
     expect(mb.blobSources[0].blob).toBe(blob)
     expect(mb.inputs).toHaveLength(1)
+    expect(track.getDecoderConfig).toHaveBeenCalledOnce()
     expect(track.canDecode).toHaveBeenCalledOnce()
+    expect(decoderChecks.targets).toHaveLength(1)
+    expect(decoderChecks.targets[0]).toMatchObject({
+      codec: 'avc',
+      configuration,
+      trackKind: 'video',
+      sourceId: 'asset-a',
+      boundary: 'export-video',
+      policy: 'revalidate',
+    })
+    expect(decoderChecks.targets[0].configuration).toBe(configuration)
     expect(canvasSinkAt().track).toBe(track)
     expect(canvasSinkAt().options).toEqual({ poolSize: 1 })
     expect(canvasSinkAt().canvasesAtTimestamps).toHaveBeenCalledOnce()
@@ -1246,10 +1297,17 @@ describe('createMediabunnyExportSink audio behavior', () => {
     const doc = makeAudioDoc([
       makeAudioTrack('A1', makeAudioClip('eac3-clip', 'eac3-asset', 1)),
     ])
+    const configuration: AudioDecoderConfig = {
+      codec: 'ec-3',
+      description: new Uint8Array([4, 5, 6]),
+      numberOfChannels: 6,
+      sampleRate: 48_000,
+    }
     const track = audioTrack(
       () => localDecoders.ac3Registered,
       6,
       'eac3',
+      configuration,
     )
     const decoded = decodedAudioSample(
       Array.from({ length: 6 }, () => new Float32Array(1_602)),
@@ -1267,7 +1325,18 @@ describe('createMediabunnyExportSink audio behavior', () => {
     await sink.addFrame(0, 1_001 / 30_000)
 
     expect(localDecoders.ac3Registrations).toBe(registrationsBefore + 1)
+    expect(track.getDecoderConfig).toHaveBeenCalledOnce()
     expect(track.canDecode).toHaveBeenCalledTimes(2)
+    expect(decoderChecks.targets).toHaveLength(1)
+    expect(decoderChecks.targets[0]).toMatchObject({
+      codec: 'eac3',
+      configuration,
+      trackKind: 'audio',
+      sourceId: 'eac3-asset',
+      boundary: 'export-audio',
+      policy: 'revalidate',
+    })
+    expect(decoderChecks.targets[0].configuration).toBe(configuration)
     expect(audioSinkAt().track).toBe(track)
     await sink.cancel()
   })

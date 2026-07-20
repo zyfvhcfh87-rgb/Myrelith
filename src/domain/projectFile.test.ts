@@ -318,6 +318,9 @@ describe('portable project file', () => {
     const serialized = serializeProjectFile(snapshot)
     expect(serialized).not.toContain('objectUrl')
     expect(serialized).not.toContain('decoderConfigB64')
+    expect(serialized).not.toContain('decoderCapabilityCache')
+    expect(serialized).not.toContain('capabilityRevision')
+    expect(serialized).not.toContain('revalidate')
     expect(serialized).not.toContain('blob:')
   })
 
@@ -339,6 +342,8 @@ describe('portable project file', () => {
       objectUrl: 'blob:https://example.invalid/session',
       decoderConfigB64: 'session-decoder-data',
       visuals: { thumbnails: ['blob:thumbnail'] },
+      decoderCapabilityCache: { render: true },
+      capabilityRevision: 4,
       absolutePath: 'C:\\private\\camera.mov',
       handle: { kind: 'file' },
     })
@@ -348,6 +353,8 @@ describe('portable project file', () => {
     for (const forbidden of [
       'objectUrl',
       'decoderConfigB64',
+      'decoderCapabilityCache',
+      'capabilityRevision',
       'visuals',
       'absolutePath',
       'history',

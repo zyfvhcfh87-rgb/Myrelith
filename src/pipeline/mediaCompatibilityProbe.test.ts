@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { resetMediaDecoderCapabilities } from '../codecs/mediaCodecFallbacks'
 import type { FrameRate } from '../domain/schema'
 import {
   MEDIA_PROBE_LIMITS,
@@ -192,6 +193,7 @@ function selectedFile(): File {
 }
 
 beforeEach(() => {
+  resetMediaDecoderCapabilities()
   media.canRead = true
   media.format = { name: 'Matroska', mimeType: 'video/x-matroska' }
   media.fullMimeType = 'video/x-matroska; codecs="avc1.640028, mp4a.40.2"'
@@ -213,6 +215,21 @@ beforeEach(() => {
 })
 
 describe('probeMediaFile', () => {
+  test('reuses an exact probe capability across distinct sources', async () => {
+    media.audioTracks = []
+    const firstTrack = videoTrack()
+    media.videoTracks = [firstTrack]
+
+    await probeMediaFile(selectedFile(), F30, 'asset-cache-first')
+
+    const secondTrack = videoTrack()
+    media.videoTracks = [secondTrack]
+    await probeMediaFile(selectedFile(), F30, 'asset-cache-second')
+
+    expect(firstTrack.canDecode).toHaveBeenCalledOnce()
+    expect(secondTrack.canDecode).not.toHaveBeenCalled()
+  })
+
   test('detects content, reports every real track config, and disposes exactly once', async () => {
     const result = await probeMediaFile(
       selectedFile(),
@@ -386,7 +403,7 @@ describe('probeMediaFile', () => {
     let maxActive = 0
     let totalStarted = 0
     const releases: Array<() => void> = []
-    media.videoTracks = Array.from({ length: 8 }, () => videoTrack({
+    media.videoTracks = Array.from({ length: 8 }, (_, index) => videoTrack({
       getDecoderConfig: vi.fn(async () => {
         active++
         totalStarted++
@@ -401,6 +418,7 @@ describe('probeMediaFile', () => {
           codec: 'avc1.640028',
           codedWidth: 1920,
           codedHeight: 1080,
+          description: new Uint8Array([index]),
         }
       }),
     }))
@@ -409,7 +427,7 @@ describe('probeMediaFile', () => {
     const waitForStarts = async (expected: number): Promise<void> => {
       for (let attempt = 0; attempt < 100; attempt++) {
         if (totalStarted === expected) return
-        await Promise.resolve()
+        await new Promise((resolve) => setTimeout(resolve, 0))
       }
       throw new Error(`Expected ${expected} track probes, saw ${totalStarted}`)
     }
@@ -497,7 +515,15 @@ describe('probeMediaFile', () => {
   test('keeps an unsafe Limited result URL-free when no whole track kind is usable', async () => {
     media.videoTracks = [
       videoTrack(),
-      videoTrack({ canDecode: vi.fn(async () => false) }),
+      videoTrack({
+        getDecoderConfig: vi.fn(async () => ({
+          codec: 'avc1.640028',
+          codedWidth: 1920,
+          codedHeight: 1080,
+          description: new Uint8Array([9, 9, 9]),
+        })),
+        canDecode: vi.fn(async () => false),
+      }),
     ]
     media.audioTracks = []
 

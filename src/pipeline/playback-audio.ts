@@ -348,9 +348,15 @@ export function createMediabunnyPlaybackAudioSource(
           throw new Error(`Playback asset "${assetId}" has no audio track`)
         }
         const codec = await track.getCodec()
+        const configuration = await track.getDecoderConfig()
         const support = await ensureMediaDecoderSupport({
           codec,
           canDecode: () => track.canDecode(),
+          configuration,
+          trackKind: 'audio',
+          sourceId: assetId,
+          boundary: 'audio-playback',
+          policy: 'revalidate',
         })
         if (!support.decodable) {
           throw new Error(support.failure.detail)

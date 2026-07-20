@@ -35,6 +35,10 @@
 import { FrameRingBuffer } from '../engine/frame-cache'
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import { visibleVideoLayersAtFrame } from '../domain/selectors'
+import {
+  invalidateMediaDecoderRuntime,
+  invalidateMediaDecoderSource,
+} from '../codecs/mediaCodecFallbacks'
 import type { Composite2D, FrameSource } from '../pipeline/render'
 import { compositeFrame } from '../pipeline/render'
 import type { ChunkPayload } from './decode-protocol'
@@ -96,7 +100,11 @@ export interface RenderWorkerEnv {
   /** GPU-copy a frame into a decoder-independent bitmap (createImageBitmap). */
   createBitmap(frame: DecodableFrame): Promise<BitmapLike>
   /** Open one worker-owned Mediabunny source for a structured-cloned Blob. */
-  openVideoSource(blob: Blob): Promise<WorkerVideoSource>
+  openVideoSource(blob: Blob, sourceId: AssetId): Promise<WorkerVideoSource>
+  /** Forget session capability facts before an asset source changes. */
+  invalidateDecoderSource(sourceId: AssetId): void
+  /** Forget every realm-local capability fact when this worker closes. */
+  invalidateDecoderRuntime(): void
   /** Normalize orientation and copy a streamed frame. Does not close it. */
   createStreamingBitmap(frame: DecodedVideoFrame): Promise<BitmapLike>
   /** Create the scratch compositing surface (new OffscreenCanvas). */
@@ -908,6 +916,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     revision: number,
     lifecycle: number,
   ): Promise<void> {
+    env.invalidateDecoderSource(msg.assetId)
     supersede() // in-flight composites may reference the machinery we replace
     const existing = assets.get(msg.assetId)
     if (existing) {
@@ -1011,6 +1020,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     revision: number,
     lifecycle: number,
   ): Promise<void> {
+    env.invalidateDecoderSource(msg.assetId)
     supersede()
 
     const legacy = assets.get(msg.assetId)
@@ -1028,9 +1038,10 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
     let source: WorkerVideoSource
     try {
-      source = await env.openVideoSource(msg.blob)
+      source = await env.openVideoSource(msg.blob, msg.assetId)
     } catch (error) {
       if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
+      env.invalidateDecoderSource(msg.assetId)
       throw error
     }
     if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) {
@@ -1067,6 +1078,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     const revision = nextAssetRevision(assetId)
     const lifecycle = workerLifecycle
     try {
+      env.invalidateDecoderSource(assetId)
       supersede()
       const state = assets.get(assetId)
       if (state) {
@@ -1354,6 +1366,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         break
       case 'close': {
         workerLifecycle++
+        env.invalidateDecoderRuntime()
         supersede()
         assetRevisions.clear()
         desiredPlaybackLaneKeys.clear()
@@ -1475,7 +1488,13 @@ if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
       }),
     createBitmap: (frame) =>
       createImageBitmap(frame as unknown as ImageBitmapSource),
-    openVideoSource: (blob) => openWorkerVideoSource(blob),
+    openVideoSource: (blob, sourceId) => openWorkerVideoSource(
+      blob,
+      undefined,
+      sourceId,
+    ),
+    invalidateDecoderSource: invalidateMediaDecoderSource,
+    invalidateDecoderRuntime: invalidateMediaDecoderRuntime,
     createStreamingBitmap: createOrientedStreamingBitmap,
     createCanvas: (width, height) => new OffscreenCanvas(width, height),
     now: () => performance.now(),

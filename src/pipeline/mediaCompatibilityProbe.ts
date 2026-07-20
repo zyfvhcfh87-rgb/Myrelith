@@ -14,6 +14,7 @@ import {
 } from 'mediabunny'
 import type { InputAudioTrack, InputVideoTrack } from 'mediabunny'
 import {
+  beginMediaDecoderSource,
   ensureMediaDecoderSupport,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
@@ -343,6 +344,7 @@ async function probeVideoTrack(
   number: number,
   primary: boolean,
   fallbackBudget: ProbeFallbackBudget,
+  sourceId: string,
   signal?: AbortSignal,
 ): Promise<VideoProbe> {
   try {
@@ -413,6 +415,11 @@ async function probeVideoTrack(
         const support = await ensureMediaDecoderSupport({
           codec,
           canDecode: () => track.canDecode(),
+          configuration: decoderConfig,
+          trackKind: 'video',
+          sourceId,
+          boundary: 'probe',
+          policy: 'reuse',
           budget: {
             ...fallbackBudget,
             width: codedWidth,
@@ -484,6 +491,7 @@ async function probeAudioTrack(
   number: number,
   primary: boolean,
   fallbackBudget: ProbeFallbackBudget,
+  sourceId: string,
   signal?: AbortSignal,
 ): Promise<AudioProbe> {
   try {
@@ -538,6 +546,11 @@ async function probeAudioTrack(
         const support = await ensureMediaDecoderSupport({
           codec,
           canDecode: () => track.canDecode(),
+          configuration: decoderConfig,
+          trackKind: 'audio',
+          sourceId,
+          boundary: 'probe',
+          policy: 'reuse',
           budget: {
             ...fallbackBudget,
             sampleRate,
@@ -678,6 +691,7 @@ async function probeOpenedInput(
   input: Input,
   fileName: string,
   fileBytes: number,
+  sourceId: string,
   signal?: AbortSignal,
 ): Promise<ProbeCoreResult> {
   throwIfAborted(signal)
@@ -776,6 +790,7 @@ async function probeOpenedInput(
             entry.number,
             entry.primary,
             fallbackBudget,
+            sourceId,
             signal,
           )
         : probeAudioTrack(
@@ -783,6 +798,7 @@ async function probeOpenedInput(
             entry.number,
             entry.primary,
             fallbackBudget,
+            sourceId,
             signal,
           )
     ))
@@ -882,6 +898,8 @@ export async function probeMediaFile(
   assetId: string,
   signal?: AbortSignal,
 ): Promise<MediaProbeResult> {
+  throwIfAborted(signal)
+  beginMediaDecoderSource(assetId)
   if (!Number.isSafeInteger(file.size) || file.size <= 0) {
     const compatibility = fileFailure(
       'error',
@@ -917,7 +935,13 @@ export async function probeMediaFile(
 
   let core: ProbeCoreResult
   try {
-    core = await probeOpenedInput(input, file.name, file.size, signal)
+    core = await probeOpenedInput(
+      input,
+      file.name,
+      file.size,
+      assetId,
+      signal,
+    )
   } catch (cause) {
     if (signal?.aborted) throw makeAbortError()
     if (cause instanceof UnsupportedInputFormatError) {

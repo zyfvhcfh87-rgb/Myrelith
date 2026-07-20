@@ -54,8 +54,9 @@ and the open list below.
 | Post-MVP #19 — compatibility Slice 2 | ✅ done | Resume/Relink reports + exact-generation preview/visuals/audio/export feedback; 303 focused + 1,021 total tests; in-app Chromium Ready/Unsupported/runtime-failure/recovery/720p gate |
 | Post-MVP #19 — compatibility Slice 3 | ✅ done | one lazy local-decoder seam for ProRes + AC-3/E-AC-3 across probe/visuals/preview/audio/export; bounded automatic policy; 1,042 tests + in-app Chromium import/preview/playback/export gate |
 | Post-MVP #19 — compatibility Slice 4 | ✅ done | explicit whole-kind consent + durable video-only/audio-only projection across import/Resume/Relink/runtime/export; 1,072 tests + in-app Chromium dual-path gate |
+| Post-MVP #19 — compatibility Slice 5 | ✅ done | bounded realm-local exact-config capability cache; probe reuse + forced render/visuals/audio/export revalidation; 1,092 tests + in-app Chromium playback/export gate |
 
-1,072 tests green · `npm run build` passes with the known large-chunk warning
+1,092 tests green · `npm run build` passes with the known large-chunk warning
 (1.144 MB lazy AC-3 chunk; existing app chunk also exceeds 500 kB) ·
 `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -368,12 +369,37 @@ Ready projection with the omission still visible. Video-only generated a
 filmstrip without a waveform; audio-only stayed free of a video filmstrip. No
 error overlay appeared and the Vite runtime log contained no error.
 
+Issue #19 Slice 5 adds one browser-session capability cache in the codec leaf.
+It keys settled facts by decode boundary, track kind, normalized codec, and an
+exact canonical-configuration SHA-256 hash that includes description bytes. It
+retains no Blob, Mediabunny Input, track, decoder, or mutable configuration;
+LRU entry, active-source, copied-material, and canonical-JSON ceilings bound its
+memory. Unsafe or oversized keys simply bypass caching. The cache is realm-local
+only and remains outside Zustand and `.webcut`, so another browser or resumed
+session must establish its own facts.
+
+The metadata probe can reuse a settled session fact. Render-worker opens,
+filmstrips, waveforms, live audio, video export, and audio export always
+revalidate their exact configuration and refresh the fact. Source generations,
+runtime revisions, and per-key write sequencing reject late or remove/re-add
+(ABA) publications. Source replacement/removal, provisional or Offline state,
+confirmed runtime failure, worker replacement/release/open failure/close,
+fallback registration, foreground restoration, and BFCache restoration all
+invalidate the relevant facts. Cached fallback answers still reapply the
+current source budgets and native-only paths are re-proven with WebCodecs.
+
+The 2026-07-20 in-app Chromium gate opened and reconnected a generated 3.000s
+H.264/AAC project at 1280×720. Both tracks reported Ready, the real filmstrip
+and preview frame rendered, playback exercised render plus live-audio decode,
+and full video + audio export reached Export ready. The page fit the viewport,
+no error overlay appeared, and the warning/error console was empty.
+
 **Next: keep Issue #19 open and ask before selecting its next slice.** Remaining
-work is capability caching, optional user-consented proxy conversion, broader
-browser/codec fixtures, and the final distribution/security review. Future
-project-storage work is also separate opt-in media caching with quota/eviction
-UX and multi-tab recovery ownership; do not imply recovery or a portable
-`.webcut` contains source bytes today.
+work is optional user-consented proxy conversion, broader browser/codec
+fixtures, and the final distribution/security review. Future project-storage
+work is also separate opt-in media caching with quota/eviction UX and multi-tab
+recovery ownership; do not imply recovery or a portable `.webcut` contains
+source bytes today.
 
 ## What works today (user-visible)
 
@@ -553,6 +579,13 @@ surface; it is not a second zoom and never enters document history.
   the exact asset object URL and compatibility request generation, projects a
   typed runtime failure onto the existing report, and atomically disconnects
   only that matching source while retaining its descriptor Offline.
+- `src/codecs/mediaCodecFallbacks.ts` +
+  `src/app/mediaCapabilityController.ts` — Slices 3/5 shared decoder-support
+  seam and lifecycle composition root. Probe facts may be reused within one
+  realm; render, filmstrip, waveform, live-audio, and export boundaries always
+  revalidate exact configurations. Bounded generations/revisions reject stale
+  writes, while source/runtime/fallback/page lifecycle changes invalidate facts.
+  No cache state crosses into Zustand or portable project files.
 - `src/app/mediaImportController.ts` — import composition root: owns selected
   Files/handles and retained retry resources outside Zustand, publishes guarded
   session compatibility requests, commits complete Ready assets exactly once,
@@ -809,15 +842,17 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #19 remains open after Slice 4. Import, remembered/manual Resume,
+- Issue #19 remains open after Slice 5. Import, remembered/manual Resume,
   individual/folder Relink, and confirmed preview/visuals/audio/export source
   failures now share guarded compatibility reports and fail-closed timeline
   entry. ProRes and AC-3/E-AC-3 have bounded, locally bundled, lazy fallbacks
   across every decode surface. Explicit video-only/audio-only imports now
-  require informed consent and persist across project reconnection. Still
-  separate: capability caching, user-consented proxy conversion, the broader
-  browser/codec fixture matrix, and final distribution/security review. Do not
-  imply those later paths exist yet.
+  require informed consent and persist across project reconnection. Session
+  capability facts are now bounded, non-persistent, invalidated with source and
+  runtime changes, and revalidated at every actual decode boundary. Still
+  separate: user-consented proxy conversion, the broader browser/codec fixture
+  matrix, and final distribution/security review. Do not imply those later
+  paths exist yet.
 - Slices 4–6 now cover portable Save/Save As,
   permission-aware automatic source reconnection, removable Recent shortcuts,
   open-offline sessions, individual/folder relinking, live save after a writable

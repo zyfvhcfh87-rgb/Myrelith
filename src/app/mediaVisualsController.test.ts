@@ -95,6 +95,14 @@ describe('mediaVisualsController', () => {
 
     expect(deps.generateFilmstrip).toHaveBeenCalledTimes(1)
     expect(deps.generateWaveform).toHaveBeenCalledTimes(1)
+    expect(deps.generateFilmstrip).toHaveBeenCalledWith(
+      expect.any(Blob),
+      a.id,
+    )
+    expect(deps.generateWaveform).toHaveBeenCalledWith(
+      expect.any(Blob),
+      a.id,
+    )
     expect(useMediaStore.getState().visuals.get(a.id)).toEqual({
       filmstrip: strip,
       waveform: wave,
