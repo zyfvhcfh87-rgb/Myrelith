@@ -7,6 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { MediaAsset, TimelineDoc } from '../domain/schema'
 import type {
   ExportDeps as PipelineExportDeps,
@@ -95,6 +96,27 @@ const ASSET: MediaAsset = {
   audioSampleRate: 48_000,
   audioChannels: 2,
   decoderConfigB64: null,
+}
+
+function docWithSourceClipOn(
+  kind: 'video' | 'audio',
+  clipName = ASSET.fileName,
+): TimelineDoc {
+  const sourceTrack = DOC.tracks[0]
+  if (!sourceTrack) throw new Error('export source-track fixture missing')
+  return {
+    ...DOC,
+    tracks: [{
+      ...sourceTrack,
+      id: kind === 'video' ? 'V1' : 'A1',
+      kind,
+      name: kind === 'video' ? 'V1' : 'A1',
+      clips: sourceTrack.clips.map((clip) => ({
+        ...clip,
+        name: clipName,
+      })),
+    }],
+  }
 }
 
 type ExportRun = AsyncGenerator<number, ExportResult | undefined, void>
@@ -198,6 +220,7 @@ beforeEach(() => {
     descriptors: new Map(),
     assets: new Map(),
     visuals: new Map(),
+    compatibility: new Map(),
   })
   useMediaStore.getState().addAsset(ASSET)
 })
@@ -215,6 +238,66 @@ describe('exportController wiring and completion', () => {
 
     await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
       'Reconnect 1 offline source before exporting: source.mp4.',
+    )
+
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('rejects an audio clip from a video-only import before fetching', async () => {
+    const videoOnly: MediaAsset = {
+      ...ASSET,
+      partialTrackSelection: 'video-only',
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    }
+    useDocumentStore.setState({
+      doc: docWithSourceClipOn('audio'),
+      past: [],
+      future: [],
+    })
+    useMediaStore.setState({
+      assets: new Map([[videoOnly.id, videoOnly]]),
+    })
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      'Audio clip "source.mp4" cannot be exported because "source.mp4" was imported without audio.',
+    )
+
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('rejects a video clip from an audio-only import before fetching', async () => {
+    const audioOnly: MediaAsset = {
+      ...ASSET,
+      fileName: 'source.m4a',
+      mimeType: 'audio/mp4',
+      kind: 'audio',
+      partialTrackSelection: 'audio-only',
+      frameRate: null,
+      width: null,
+      height: null,
+      decoderConfigB64: null,
+    }
+    useDocumentStore.setState({
+      doc: docWithSourceClipOn('video', audioOnly.fileName),
+      past: [],
+      future: [],
+    })
+    useMediaStore.setState({
+      assets: new Map([[audioOnly.id, audioOnly]]),
+    })
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      'Video clip "source.m4a" cannot be exported because "source.m4a" was imported as audio only.',
     )
 
     expect(h.fetchBlob).not.toHaveBeenCalled()
@@ -263,7 +346,18 @@ describe('exportController wiring and completion', () => {
     const firstBlob = resolverFromMedia(ASSET.id)
     const secondBlob = resolverFromSink(ASSET.id)
     expect(firstBlob).toBe(secondBlob)
-    await firstBlob
+    await expect(firstBlob).resolves.toEqual({
+      blob: expect.any(Blob),
+      budget: {
+        fileBytes: ASSET.size,
+        durationMicroseconds: ASSET.durationMicroseconds,
+        width: ASSET.width,
+        height: ASSET.height,
+        framesPerSecond: 30,
+        sampleRate: ASSET.audioSampleRate,
+        channels: ASSET.audioChannels,
+      },
+    })
     expect(h.fetchBlob).toHaveBeenCalledOnce()
     expect(h.fetchBlob).toHaveBeenCalledWith(ASSET.objectUrl)
 
@@ -452,6 +546,125 @@ describe('exportController cancellation', () => {
 })
 
 describe('exportController failures and ownership', () => {
+  test('reports an asset-scoped export failure while preserving the exact rejection', async () => {
+    const failure = new MediaAssetRuntimeError(ASSET.id, {
+      surface: 'export',
+      trackKind: 'video',
+      reason: 'decode-failed',
+      detail: 'video decode failed during export',
+    })
+    const h = makeHarness(() =>
+      (async function* (): ExportRun {
+        yield 0
+        throw failure
+      })(),
+    )
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toBe(failure)
+
+    const media = useMediaStore.getState()
+    expect(media.descriptors.has(ASSET.id)).toBe(true)
+    expect(media.assets.has(ASSET.id)).toBe(false)
+    expect(media.compatibility.get(ASSET.id)).toMatchObject({
+      id: ASSET.id,
+      fileName: ASSET.fileName,
+      status: 'error',
+      report: {
+        status: 'error',
+        reason: 'decode-failed',
+        detail: 'Export failed: video decode failed during export',
+        runtimeFailures: [{
+          surface: 'export',
+          trackKind: 'video',
+          reason: 'decode-failed',
+          detail: 'video decode failed during export',
+        }],
+      },
+    })
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(ASSET.objectUrl)
+  })
+
+  test('reports an export decoder budget rejection as a resource limit', async () => {
+    const failure = new MediaAssetRuntimeError(ASSET.id, {
+      surface: 'export',
+      trackKind: 'video',
+      reason: 'resource-limit',
+      detail: 'Local ProRes safety budget is incomplete.',
+    })
+    const h = makeHarness(() =>
+      (async function* (): ExportRun {
+        yield 0
+        throw failure
+      })(),
+    )
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toBe(failure)
+
+    expect(useMediaStore.getState().compatibility.get(ASSET.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'resource-limit',
+        runtimeFailures: [{
+          surface: 'export',
+          trackKind: 'video',
+          reason: 'resource-limit',
+          detail: 'Local ProRes safety budget is incomplete.',
+        }],
+      },
+    })
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(ASSET.objectUrl)
+  })
+
+  test('ignores a typed failure from an export snapshot after the asset is relinked', async () => {
+    const gate = deferred<void>()
+    const failure = new MediaAssetRuntimeError(ASSET.id, {
+      surface: 'export',
+      trackKind: 'audio',
+      reason: 'resource-unavailable',
+      detail: 'old captured source disappeared',
+    })
+    const observed = observeRun(
+      (async function* (): ExportRun {
+        yield 0
+        await gate.promise
+        throw failure
+      })(),
+    )
+    const h = makeHarness(() => observed.run)
+    const completion = startExport(SETTINGS, {}, h.deps)
+    await vi.waitFor(() => expect(observed.next).toHaveBeenCalledTimes(2))
+
+    const replacement = {
+      ...ASSET,
+      objectUrl: 'blob:replacement-source',
+    }
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    expect(useMediaStore.getState().connectAsset(replacement)).toBe(true)
+    gate.resolve()
+
+    await expect(completion).rejects.toBe(failure)
+    const media = useMediaStore.getState()
+    expect(media.assets.get(ASSET.id)).toBe(replacement)
+    expect(media.compatibility.has(ASSET.id)).toBe(false)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(
+      replacement.objectUrl,
+    )
+  })
+
+  test('does not publish ordinary encoder or observer failures as media failures', async () => {
+    const failure = new Error('encoder failed globally')
+    const h = makeHarness(() =>
+      (async function* (): ExportRun {
+        yield 0
+        throw failure
+      })(),
+    )
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toBe(failure)
+    expect(useMediaStore.getState().assets.get(ASSET.id)).toBe(ASSET)
+    expect(useMediaStore.getState().compatibility.size).toBe(0)
+  })
+
   test('a progress callback failure closes the generator and remains primary', async () => {
     const callbackFailure = new Error('progress consumer failed')
     const cleanupFailure = new Error('cleanup also failed')

@@ -510,7 +510,13 @@ function ResumeProjectScreen() {
                   <li key={asset.id} data-status={asset.status}>
                     <div>
                       <strong>{asset.fileName}</strong>
-                      <span>{asset.kind}</span>
+                      <span>
+                        {asset.partialTrackSelection === 'video-only'
+                          ? 'video only'
+                          : asset.partialTrackSelection === 'audio-only'
+                            ? 'audio only'
+                            : asset.kind}
+                      </span>
                     </div>
                     <span>
                       {asset.status === 'ready'

@@ -18,6 +18,7 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
+import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import type { Composite2D } from '../pipeline/render'
 import type { ChunkPayload } from './decode-protocol'
@@ -45,6 +46,15 @@ import type {
   VideoFrameCursor,
   WorkerVideoSource,
 } from './video-source'
+import { WorkerVideoSourceOpenError } from './video-source'
+
+const DECODE_BUDGET: LocalDecoderBudget = {
+  fileBytes: 5,
+  durationMicroseconds: 1_000_000,
+  width: 1920,
+  height: 1080,
+  framesPerSecond: 30,
+}
 
 /* ------------------------------------------------------------------ */
 /* Timebase: 10 fps doc + assets → one frame = 100_000 µs exactly       */
@@ -84,6 +94,8 @@ interface FakeOptions {
   streamBitmapGate?: Promise<void>
   /** Holds Blob-source opening for revision-race tests. */
   openSourceGate?: Promise<void>
+  /** Rejects Blob-source opening after the optional gate. */
+  openSourceError?: Error
 }
 
 /** Same real-semantics fake as decode.worker.test.ts, plus an error hook. */
@@ -270,6 +282,23 @@ class FakeVideoSource implements WorkerVideoSource {
   }
 }
 
+class DeferredFailingCloseVideoSource extends FakeVideoSource {
+  private readonly closeGate: Promise<void>
+  private readonly closeFailure: Error
+
+  constructor(closeGate: Promise<void>, closeFailure: Error) {
+    super()
+    this.closeGate = closeGate
+    this.closeFailure = closeFailure
+  }
+
+  override async close(): Promise<void> {
+    await super.close()
+    await this.closeGate
+    throw this.closeFailure
+  }
+}
+
 interface CtxOp {
   surface: 'visible' | 'scratch'
   name: string
@@ -342,6 +371,10 @@ interface Harness {
   normalizations: Array<Omit<DecodedVideoFrame, 'frame'>>
   sourcesToOpen: FakeVideoSource[]
   openedBlobs: Blob[]
+  openedSourceIds: string[]
+  openedBudgets: LocalDecoderBudget[]
+  invalidatedSourceIds: string[]
+  runtimeInvalidationCount(): number
   decoders: FakeDecoder[]
   ops: CtxOp[]
   visible: FakeSurface
@@ -359,6 +392,10 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   const normalizations: Array<Omit<DecodedVideoFrame, 'frame'>> = []
   const sourcesToOpen: FakeVideoSource[] = []
   const openedBlobs: Blob[] = []
+  const openedSourceIds: string[] = []
+  const openedBudgets: LocalDecoderBudget[] = []
+  const invalidatedSourceIds: string[] = []
+  let runtimeInvalidations = 0
   const decoders: FakeDecoder[] = []
   const ops: CtxOp[] = []
   const visible = makeSurface('visible', ops)
@@ -388,13 +425,18 @@ function makeHarness(opts: FakeOptions = {}): Harness {
       bitmaps.push(bitmap)
       return bitmap
     },
-    openVideoSource: async (blob) => {
+    openVideoSource: async (blob, sourceId, budget) => {
       openedBlobs.push(blob)
+      openedSourceIds.push(sourceId)
+      openedBudgets.push(budget)
       await opts.openSourceGate
+      if (opts.openSourceError) throw opts.openSourceError
       const source = sourcesToOpen.shift()
       if (!source) throw new Error('test did not queue a streaming source')
       return source
     },
+    invalidateDecoderSource: (sourceId) => invalidatedSourceIds.push(sourceId),
+    invalidateDecoderRuntime: () => { runtimeInvalidations++ },
     createStreamingBitmap: async (decoded) => {
       await opts.streamBitmapGate
       normalizations.push({
@@ -441,6 +483,10 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     normalizations,
     sourcesToOpen,
     openedBlobs,
+    openedSourceIds,
+    openedBudgets,
+    invalidatedSourceIds,
+    runtimeInvalidationCount: () => runtimeInvalidations,
     decoders,
     ops,
     visible,
@@ -564,10 +610,15 @@ const cfgMsg = (assetId: string): ToRenderWorker => ({
   config: { codec: 'avc1.640028' },
 })
 
-const openMsg = (assetId: string, blob = new Blob(['video'])): ToRenderWorker => ({
+const openMsg = (
+  assetId: string,
+  blob = new Blob(['video']),
+  budget: LocalDecoderBudget = DECODE_BUDGET,
+): ToRenderWorker => ({
   type: 'openAsset',
   assetId,
   blob,
+  budget,
 })
 
 function compMsg(
@@ -926,6 +977,7 @@ describe('asset lifecycle', () => {
 
     await h.core.handleMessage(cfgMsg('A'))
 
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
     expect(h.decoders[0].isClosed).toBe(true)
     expect(h.bitmaps.every((b) => b.closed)).toBe(true) // old stream released
     expect(h.decoders).toHaveLength(2)
@@ -943,11 +995,36 @@ describe('asset lifecycle', () => {
 
     await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
 
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
     expect(h.decoders[0].isClosed).toBe(true)
     expect(h.bitmaps.every((b) => b.closed)).toBe(true)
 
     await h.core.handleMessage(compMsg(2, 2, [entry('A', 2, gop(0, 5))]))
     expect(doneFor(h, 2).missingClipIds).toEqual(['a'])
+  })
+
+  test('streaming source identity and capability invalidation follow worker lifecycle', async () => {
+    const h = makeHarness()
+    const original = new FakeVideoSource()
+    await setupStreaming(h, makeDoc([]), [['A', original]])
+
+    expect(h.openedSourceIds).toEqual(['A'])
+    expect(h.invalidatedSourceIds).toEqual(['A'])
+
+    const replacement = new FakeVideoSource()
+    h.sourcesToOpen.push(replacement)
+    await h.core.handleMessage(openMsg('A', new Blob(['replacement'])))
+
+    expect(h.openedSourceIds).toEqual(['A', 'A'])
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
+    expect(original.closeCount).toBe(1)
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A', 'A'])
+    expect(replacement.closeCount).toBe(1)
+
+    await h.core.handleMessage({ type: 'close' })
+    expect(h.runtimeInvalidationCount()).toBe(1)
   })
 })
 
@@ -1374,6 +1451,54 @@ describe('streaming response contract', () => {
     })
     expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
   })
+
+  test('an open failure carries pre-track media classification to the bridge', async () => {
+    const sourceFailure = new WorkerVideoSourceOpenError({
+      trackKind: null,
+      reason: 'resource-unavailable',
+    }, new Error('Input construction failed'))
+    const h = makeHarness({ openSourceError: sourceFailure })
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+
+    await h.core.handleMessage(openMsg('A'))
+
+    expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
+      type: 'error',
+      assetId: 'A',
+      mediaFailure: {
+        trackKind: null,
+        reason: 'resource-unavailable',
+      },
+      message: expect.stringContaining('Input construction failed'),
+    }])
+    expect(h.openedBudgets).toEqual([DECODE_BUDGET])
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
+  })
+
+  test('an open failure carries a video resource limit to the bridge', async () => {
+    const sourceFailure = new WorkerVideoSourceOpenError({
+      trackKind: 'video',
+      reason: 'resource-limit',
+    }, new Error('Local ProRes safety budget is incomplete'))
+    const h = makeHarness({ openSourceError: sourceFailure })
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+
+    await h.core.handleMessage(openMsg('A'))
+
+    expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
+      type: 'error',
+      assetId: 'A',
+      mediaFailure: {
+        trackKind: 'video',
+        reason: 'resource-limit',
+      },
+      message: expect.stringContaining('Local ProRes safety budget is incomplete'),
+    }])
+    expect(h.openedBudgets).toEqual([DECODE_BUDGET])
+    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
+  })
 })
 
 describe('streaming frame ownership', () => {
@@ -1402,6 +1527,40 @@ describe('streaming frame ownership', () => {
 
     await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
     expect(winningSource.closeCount).toBe(1)
+  })
+
+  test('a stale release cleanup failure cannot poison a newer asset open', async () => {
+    const closeGate = deferredVoid()
+    const closeFailure = new Error('old source close failed')
+    const oldSource = new DeferredFailingCloseVideoSource(
+      closeGate.promise,
+      closeFailure,
+    )
+    const replacement = new FakeVideoSource()
+    const h = makeHarness()
+    await setupStreaming(h, makeDoc([]), [['A', oldSource]])
+
+    const release = h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    await microtasks()
+    h.sourcesToOpen.push(replacement)
+    const reopen = h.core.handleMessage(openMsg('A', new Blob(['replacement'])))
+    await reopen
+
+    closeGate.resolve()
+    await release
+
+    expect(replacement.closeCount).toBe(0)
+    expect(h.posts.filter((post) => post.type === 'assetConfigured')).toEqual([
+      { type: 'assetConfigured', assetId: 'A' },
+      { type: 'assetConfigured', assetId: 'A' },
+    ])
+    expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
+      type: 'error',
+      message: expect.stringContaining('stale release cleanup failed for asset A'),
+    }])
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
+    expect(replacement.closeCount).toBe(1)
   })
 
   test('release waits for an in-progress bitmap copy and closes its late result', async () => {

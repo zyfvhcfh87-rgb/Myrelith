@@ -33,7 +33,9 @@ describe('MediaImportDialog', () => {
     })
     render(<MediaImportDialog />)
 
-    expect(screen.getByRole('dialog')).toHaveAccessibleName('Analyzing media…')
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(
+      'Checking media compatibility…',
+    )
     expect(screen.getByRole('status')).toHaveTextContent('camera.mp4')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel import' }))
     expect(cancelMediaImport).toHaveBeenCalledOnce()

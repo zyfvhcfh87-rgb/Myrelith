@@ -24,6 +24,16 @@ import {
   canEncodeAudio,
   canEncodeVideo,
 } from 'mediabunny'
+import {
+  MediaAssetRuntimeError,
+  type MediaRuntimeFailure,
+} from '../domain/mediaCompatibility'
+import {
+  ensureMediaDecoderSupport,
+  refineAudioDecoderBudget,
+  refineVideoDecoderBudget,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 import type { AssetId, TimelineDoc } from '../domain/schema'
 import {
   docDurationFrames,
@@ -49,10 +59,15 @@ import {
 } from './export-audio'
 import { compositeFrame, type Composite2D } from './render'
 
-/** Resolves the session Blob/File behind a timeline asset id. */
+/** Resolves one immutable session source and its local-fallback safety budget. */
+export interface ResolvedExportAsset {
+  blob: Blob
+  budget: LocalDecoderBudget
+}
+
 export type ExportAssetResolver = (
   assetId: AssetId,
-) => Blob | Promise<Blob>
+) => ResolvedExportAsset | Promise<ResolvedExportAsset>
 
 interface DecodedAsset {
   input: Input
@@ -62,6 +77,31 @@ interface DecodedAsset {
   nextRequestIndex: number
   /** Same-asset decodes serialize so the one-canvas pool is never reused early. */
   decodeTail: Promise<void>
+}
+
+function runtimeFailureDetail(cause: unknown): string {
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  return detail.slice(0, 2_048)
+}
+
+function exportAssetError(
+  assetId: AssetId,
+  trackKind: MediaRuntimeFailure['trackKind'],
+  reason: MediaRuntimeFailure['reason'],
+  cause: unknown,
+): MediaAssetRuntimeError {
+  if (
+    cause instanceof MediaAssetRuntimeError
+    && cause.assetId === assetId
+    && cause.failure.surface === 'export'
+    && cause.failure.trackKind === trackKind
+  ) return cause
+  return new MediaAssetRuntimeError(assetId, {
+    surface: 'export',
+    trackKind,
+    reason,
+    detail: runtimeFailureDetail(cause),
+  }, cause)
 }
 
 function assertFrame(value: number, label: string): void {
@@ -148,41 +188,109 @@ export function createMediabunnyExportMediaSource(
       if (!sourceFrames || sourceFrames.length === 0) {
         throw new Error(`Export asset "${assetId}" was not scheduled`)
       }
-      const blob = await resolveAsset(assetId)
+      let resolved: ResolvedExportAsset
+      try {
+        resolved = await resolveAsset(assetId)
+      } catch (cause) {
+        throw exportAssetError(
+          assetId,
+          null,
+          'resource-unavailable',
+          cause,
+        )
+      }
+      const { blob } = resolved
       if (closed) throw new Error('Export media source is closed')
 
-      const input = new Input({
-        source: new BlobSource(blob),
-        formats: ALL_FORMATS,
-      })
+      let input: Input
+      try {
+        input = new Input({
+          source: new BlobSource(blob),
+          formats: ALL_FORMATS,
+        })
+      } catch (cause) {
+        throw exportAssetError(
+          assetId,
+          null,
+          'resource-unavailable',
+          cause,
+        )
+      }
       openInputs.add(input)
 
       try {
-        const track = await input.getPrimaryVideoTrack()
-        if (!track) {
-          throw new Error(`Export asset "${assetId}" has no video track`)
+        let track: Awaited<ReturnType<Input['getPrimaryVideoTrack']>>
+        try {
+          track = await input.getPrimaryVideoTrack()
+        } catch (cause) {
+          throw exportAssetError(assetId, 'video', 'decode-failed', cause)
         }
-        if (!(await track.canDecode())) {
-          throw new Error(
-            `Export asset "${assetId}" cannot be decoded in this browser`,
+        if (!track) {
+          throw exportAssetError(
+            assetId,
+            'video',
+            'decode-failed',
+            new Error(`Export asset "${assetId}" has no video track`),
+          )
+        }
+        let support: Awaited<ReturnType<typeof ensureMediaDecoderSupport>>
+        try {
+          const codec = await track.getCodec()
+          const configuration = await track.getDecoderConfig()
+          support = await ensureMediaDecoderSupport({
+            codec,
+            canDecode: () => track.canDecode(),
+            configuration,
+            trackKind: 'video',
+            sourceId: assetId,
+            boundary: 'export-video',
+            policy: 'revalidate',
+            budget: refineVideoDecoderBudget(
+              resolved.budget,
+              blob.size,
+              configuration,
+            ),
+          })
+        } catch (cause) {
+          throw exportAssetError(assetId, 'video', 'decode-failed', cause)
+        }
+        if (!support.decodable) {
+          throw exportAssetError(
+            assetId,
+            'video',
+            support.failure.reason,
+            new Error(
+              `Export asset "${assetId}" cannot be decoded: ${support.failure.detail}`,
+            ),
           )
         }
         if (closed) throw new Error('Export media source is closed')
 
-        const sink = new CanvasSink(track, { poolSize: 1 })
         const timestamps = sourceFrames.map((sourceFrame) =>
           framesToSeconds(sourceFrame, doc.frameRate),
         )
+        let sink: CanvasSink
+        let canvases: ReturnType<CanvasSink['canvasesAtTimestamps']>
+        try {
+          sink = new CanvasSink(track, { poolSize: 1 })
+          canvases = sink.canvasesAtTimestamps(timestamps)
+        } catch (cause) {
+          throw exportAssetError(assetId, 'video', 'decode-failed', cause)
+        }
         return {
           input,
           sink,
           sourceFrames,
-          canvases: sink.canvasesAtTimestamps(timestamps),
+          canvases,
           nextRequestIndex: 0,
           decodeTail: Promise.resolve(),
         }
       } catch (cause) {
-        input.dispose()
+        try {
+          input.dispose()
+        } catch {
+          // Preserve the asset open/decode failure over disposal cleanup.
+        }
         openInputs.delete(input)
         throw cause
       }
@@ -255,10 +363,20 @@ export function createMediabunnyExportMediaSource(
           if (closed || leaseClosed) {
             throw new Error('Export frame lease is closed')
           }
-          const step = await asset.canvases.next()
+          let step: Awaited<ReturnType<typeof asset.canvases.next>>
+          try {
+            step = await asset.canvases.next()
+          } catch (cause) {
+            throw exportAssetError(assetId, 'video', 'decode-failed', cause)
+          }
           if (step.done) {
-            throw new Error(
-              `Export asset "${assetId}" decode stream ended early`,
+            throw exportAssetError(
+              assetId,
+              'video',
+              'decode-failed',
+              new Error(
+                `Export asset "${assetId}" decode stream ended early`,
+              ),
             )
           }
           const wrapped = step.value
@@ -419,12 +537,31 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
 
   private async pullChunk(): Promise<DecodedPcmChunk | null> {
     if (this.iteratorDone) return null
-    const step = await this.iterator.next()
+    let step: Awaited<ReturnType<typeof this.iterator.next>>
+    try {
+      step = await this.iterator.next()
+    } catch (cause) {
+      throw exportAssetError(
+        this.request.assetId,
+        'audio',
+        'decode-failed',
+        cause,
+      )
+    }
     if (step.done) {
       this.iteratorDone = true
       return null
     }
-    return copyDecodedSample(step.value)
+    try {
+      return copyDecodedSample(step.value)
+    } catch (cause) {
+      throw exportAssetError(
+        this.request.assetId,
+        'audio',
+        'decode-failed',
+        cause,
+      )
+    }
   }
 
   private async shiftChunk(): Promise<DecodedPcmChunk | null> {
@@ -589,36 +726,109 @@ export function createMediabunnyExportAudioSource(
 
     const pending = (async (): Promise<DecodedAudioAsset> => {
       if (closed) throw new Error('Export audio source is closed')
-      const blob = await resolveAsset(assetId)
+      let resolved: ResolvedExportAsset
+      try {
+        resolved = await resolveAsset(assetId)
+      } catch (cause) {
+        throw exportAssetError(
+          assetId,
+          null,
+          'resource-unavailable',
+          cause,
+        )
+      }
+      const { blob } = resolved
       if (closed) throw new Error('Export audio source is closed')
 
-      const input = new Input({
-        source: new BlobSource(blob),
-        formats: ALL_FORMATS,
-      })
+      let input: Input
+      try {
+        input = new Input({
+          source: new BlobSource(blob),
+          formats: ALL_FORMATS,
+        })
+      } catch (cause) {
+        throw exportAssetError(
+          assetId,
+          null,
+          'resource-unavailable',
+          cause,
+        )
+      }
       openInputs.add(input)
       try {
-        const track = await input.getPrimaryAudioTrack()
-        if (!track) {
-          throw new Error(`Export asset "${assetId}" has no audio track`)
+        let track: Awaited<ReturnType<Input['getPrimaryAudioTrack']>>
+        try {
+          track = await input.getPrimaryAudioTrack()
+        } catch (cause) {
+          throw exportAssetError(assetId, 'audio', 'decode-failed', cause)
         }
-        if (!(await track.canDecode())) {
-          throw new Error(
-            `Export asset "${assetId}" audio cannot be decoded in this browser`,
+        if (!track) {
+          throw exportAssetError(
+            assetId,
+            'audio',
+            'decode-failed',
+            new Error(`Export asset "${assetId}" has no audio track`),
           )
         }
-        const channelCount = await track.getNumberOfChannels()
+        let support: Awaited<ReturnType<typeof ensureMediaDecoderSupport>>
+        try {
+          const codec = await track.getCodec()
+          const configuration = await track.getDecoderConfig()
+          support = await ensureMediaDecoderSupport({
+            codec,
+            canDecode: () => track.canDecode(),
+            configuration,
+            trackKind: 'audio',
+            sourceId: assetId,
+            boundary: 'export-audio',
+            policy: 'revalidate',
+            budget: refineAudioDecoderBudget(
+              resolved.budget,
+              blob.size,
+              configuration,
+            ),
+          })
+        } catch (cause) {
+          throw exportAssetError(assetId, 'audio', 'decode-failed', cause)
+        }
+        if (!support.decodable) {
+          throw exportAssetError(
+            assetId,
+            'audio',
+            support.failure.reason,
+            new Error(
+              `Export asset "${assetId}" audio cannot be decoded: ${support.failure.detail}`,
+            ),
+          )
+        }
+        let channelCount: number
+        try {
+          channelCount = await track.getNumberOfChannels()
+        } catch (cause) {
+          throw exportAssetError(assetId, 'audio', 'decode-failed', cause)
+        }
         if (
           !Number.isSafeInteger(channelCount) ||
           channelCount <= 0 ||
           channelCount > 32
         ) {
-          throw new Error(
-            `Export asset "${assetId}" has an invalid audio channel count`,
+          throw exportAssetError(
+            assetId,
+            'audio',
+            'decode-failed',
+            new Error(
+              `Export asset "${assetId}" has an invalid audio channel count`,
+            ),
           )
         }
         if (closed) throw new Error('Export audio source is closed')
-        return { input, sink: new AudioSampleSink(track) }
+        let sink: AudioSampleSink
+        try {
+          sink = new AudioSampleSink(track)
+        } catch (cause) {
+          throw exportAssetError(assetId, 'audio', 'decode-failed', cause)
+        }
+        return { input, sink }
       } catch (cause) {
         try {
           input.dispose()
@@ -654,9 +864,19 @@ export function createMediabunnyExportAudioSource(
 
     const asset = await openAsset(request.assetId)
     if (closed) throw new Error('Export audio source is closed')
-    const iterator = asset.sink.samples(
-      request.startSample / request.sampleRate,
-    )
+    let iterator: ReturnType<AudioSampleSink['samples']>
+    try {
+      iterator = asset.sink.samples(
+        request.startSample / request.sampleRate,
+      )
+    } catch (cause) {
+      throw exportAssetError(
+        request.assetId,
+        'audio',
+        'decode-failed',
+        cause,
+      )
+    }
     let reader!: MediabunnyAudioClipReader
     reader = new MediabunnyAudioClipReader(iterator, request, () => {
       readers.delete(reader)

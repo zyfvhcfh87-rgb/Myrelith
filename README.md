@@ -16,7 +16,9 @@ complete MVP editing and MP4 export flow.
 - Reopen validated `.webcut` files from Recent and recover bounded local safety
   copies after a reload or crash; recovery is always offered explicitly and is
   never presented as a user-owned save.
-- Import local video files and generate metadata, filmstrips, and waveforms.
+- Import or reconnect local video/audio files through one content-based browser
+  compatibility check, then generate metadata, filmstrips, and waveforms only
+  for Ready sources.
 - Edit on a multi-track timeline with select, razor, trim, ripple trim, slip,
   and slide tools, including dragging clips between same-kind tracks.
 - Keep imported audio/video pairs linked through edits, with manual unlinking
@@ -34,7 +36,7 @@ Requirements:
 
 - Node.js `^20.19.0` or `>=22.12.0`
 - npm
-- A current desktop Chrome installation
+- A current desktop Chrome or Edge installation
 
 ```bash
 git clone https://github.com/zyfvhcfh87-rgb/WebCut.git
@@ -73,10 +75,45 @@ cache source videos; use **Save** or **Save As** for a user-owned project file.
 
 ## Browser support
 
-Desktop Chrome is the verified development target. Playback and export require
-WebCodecs, transferable `OffscreenCanvas`, Web Audio, workers, and browser
-support for the source and output codecs. Other browsers are currently
-unverified.
+Desktop Chrome is the primary development target. Windows Chrome 150 and Edge
+150 have both passed the VP9/Opus import, thumbnail, waveform, linked-drop,
+seek, live-audio, cancellation, and MP4 export gate. Edge is Chromium-based,
+so Firefox, Safari/WebKit, and independent-engine behavior remain unverified.
+Playback and export require WebCodecs, transferable `OffscreenCanvas`, Web
+Audio, workers, and browser support for the source and output codecs.
+
+Imports, Resume, and Relink inspect the container from file bytes, build the
+real decoder configuration for every video/audio track, and ask whether the
+current browser supports each configuration. This is a metadata/config-support
+check, not a sample decode of the whole stream. The Media Pool shows `Ready`,
+`Limited`, `Unsupported`, or `Error` with container/track details. A rejected
+new import remains available for explicit Retry or Remove. A project source
+that is not Ready stays Offline and uses Relink.
+
+| Direct-import source | Verified Windows Chromium result |
+|---|---|
+| MP4 with H.264/AVC video + AAC audio | Ready (verified) |
+| WebM with VP9 video + Opus audio | Ready through native Chrome/Edge decoders (verified) |
+| QuickTime/MOV with ProRes 422 HQ video + AAC audio | Ready through the locally bundled ProRes fallback (verified) |
+| H.264/AVC video + AC-3 or E-AC-3 audio | Ready through the locally bundled audio fallback (verified) |
+| HEVC/AAC MP4 or AV1/Opus WebM | Ready natively on the verified Windows Chrome 150 host; always probed again because OS/browser support varies |
+| One fully decodable track kind plus one failed track kind | Limited; explicit review can import video-only or audio-only (verified) |
+| Spoofed extension/MIME, unknown codec, malformed, truncated, empty, or random bytes | Content is identified from bytes and receives an honest Ready, Limited, Unsupported, or Error diagnostic (verified) |
+| Other containers/codecs | Probed at runtime; support depends on Chrome, the OS, and the real track configuration |
+
+Issue #19's completed slices carry that report through import, Resume, Relink,
+preview, filmstrip, waveform, live audio, and export. ProRes and AC-3/E-AC-3 can
+lazy-load reviewed, version-pinned, locally bundled decoder extensions behind
+resource limits. A safe whole-kind partial import requires an explicit dialog
+and persists the user's choice across reconnection. Confirmed runtime failures
+update only the exact connected source generation and expose Relink without an
+implicit retry loop.
+The measured browser-side proxy-conversion candidate is formally out of scope
+for Issue #19's current release; see
+[the decision record](docs/decisions/ISSUE_19_PROXY_CONVERSION.md).
+The final fixture matrix, lifecycle evidence, browser gates, and shipping
+boundary are recorded in
+[the Issue #19 closeout](docs/decisions/ISSUE_19_CODEC_CLOSEOUT.md).
 
 ## Current limitations
 
@@ -97,8 +134,17 @@ unverified.
 - The import UI accepts video and audio files. Images are not previewable.
 - Linked audio/video pairs can be unlinked, but arbitrary clips cannot be
   manually re-linked yet.
-- Media compatibility ultimately depends on the codecs exposed by the browser
-  and operating system.
+- Native media compatibility depends on the codecs exposed by the browser and
+  operating system. WebCut has bounded local decoder fallbacks for ProRes and
+  AC-3/E-AC-3, plus explicit video-only/audio-only import when exactly one whole
+  track kind is safe to keep. Other Limited and Unsupported imports remain
+  non-draggable. There is no built-in proxy converter; convert externally and
+  import the result as a new source when no direct or partial path applies.
+- Decoder extensions are version-pinned and bundled locally, but Issue #19's
+  implementation closeout is not a public-distribution certification. A
+  project license, third-party notices/source-availability links, exact FFmpeg
+  and Dolby review for AC-3/E-AC-3, and representative low-memory testing are
+  still required before a public release claim.
 
 ## Quality checks
 
@@ -110,6 +156,13 @@ npm run lint
 
 Use `npm run test:watch` while developing. `npm run preview` serves a completed
 production build locally.
+
+Issue #19's reproducible real-media matrix additionally requires `ffmpeg` and
+`ffprobe` on `PATH`:
+
+```bash
+npm run qa:issue19:fixtures
+```
 
 ## Architecture
 

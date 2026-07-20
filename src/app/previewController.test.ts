@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type {
   Clip,
@@ -13,12 +14,16 @@ import type {
   TimelineDoc,
   Track,
 } from '../domain/schema'
-import type { RenderFrameResult } from '../engine/render-bridge'
+import {
+  RenderAssetOpenError,
+  type RenderFrameResult,
+} from '../engine/render-bridge'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { useTransportStore } from '../state/transportStore'
 import type { RenderMode } from '../workers/render-protocol'
+import { resetMediaCompatibilityController } from './mediaCompatibilityController'
 import type { BridgeLike, PreviewDeps } from './previewController'
 import { disposePreview, initPreview } from './previewController'
 
@@ -26,22 +31,53 @@ const F60: FrameRate = { num: 60, den: 1 }
 
 class FakeBridge implements BridgeLike {
   onWorkerError: ((message: string) => void) | null = null
+  onAssetError: ((
+    assetId: string,
+    runtimeToken: object,
+    message: string,
+  ) => void) | null = null
   onAssetReady: ((assetId: string) => void) | null = null
   docs: TimelineDoc[] = []
-  opened: Array<{ assetId: string; blob: Blob; rate: FrameRate }> = []
+  opened: Array<{
+    assetId: string
+    blob: Blob
+    rate: FrameRate
+    budget: LocalDecoderBudget
+    runtimeToken: object
+  }> = []
   released: string[] = []
   rendered: Array<{ frame: number; mode: RenderMode }> = []
   disposed = false
-  openImpl: (assetId: string, blob: Blob, rate: FrameRate) => Promise<void> =
-    async () => {}
+  openImpl: (
+    assetId: string,
+    blob: Blob,
+    rate: FrameRate,
+    budget: LocalDecoderBudget,
+    runtimeToken: object,
+  ) => Promise<void> = async () => {}
+  renderImpl: (
+    frame: number,
+    mode: RenderMode,
+  ) => Promise<RenderFrameResult> = async () => ({
+    status: 'drawn',
+    drawnClipIds: [],
+    missingClipIds: [],
+    renderMs: 1,
+  })
 
   setDoc(doc: TimelineDoc): void {
     this.docs.push(doc)
   }
 
-  async openAsset(assetId: string, blob: Blob, rate: FrameRate): Promise<void> {
-    this.opened.push({ assetId, blob, rate })
-    await this.openImpl(assetId, blob, rate)
+  async openAsset(
+    assetId: string,
+    blob: Blob,
+    rate: FrameRate,
+    budget: LocalDecoderBudget,
+    runtimeToken: object,
+  ): Promise<void> {
+    this.opened.push({ assetId, blob, rate, budget, runtimeToken })
+    await this.openImpl(assetId, blob, rate, budget, runtimeToken)
     this.onAssetReady?.(assetId)
   }
 
@@ -51,7 +87,7 @@ class FakeBridge implements BridgeLike {
 
   async renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult> {
     this.rendered.push({ frame, mode })
-    return { status: 'drawn', drawnClipIds: [], missingClipIds: [], renderMs: 1 }
+    return this.renderImpl(frame, mode)
   }
 
   dispose(): void {
@@ -178,6 +214,8 @@ const initialDoc = useDocumentStore.getState().doc
 
 beforeEach(() => {
   assetCounter = 0
+  resetMediaCompatibilityController()
+  URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   useDocumentStore.getState().setDoc(initialDoc)
   useTransportStore.setState({
     playheadFrame: 0,
@@ -191,6 +229,7 @@ beforeEach(() => {
     descriptors: new Map(),
     assets: new Map(),
     visuals: new Map(),
+    compatibility: new Map(),
   })
   usePreviewStatusStore.getState().resetPreviewStatus()
 })
@@ -214,7 +253,24 @@ describe('previewController', () => {
 
     expect(deps.fetchBlob).toHaveBeenCalledOnce()
     expect(deps.fetchBlob).toHaveBeenCalledWith(asset.objectUrl)
-    expect(bridge.opened).toEqual([{ assetId: asset.id, blob, rate: F60 }])
+    expect(bridge.opened).toEqual([{
+      assetId: asset.id,
+      blob,
+      rate: F60,
+      budget: {
+        fileBytes: 1,
+        durationMicroseconds: 2_000_000,
+        width: 1920,
+        height: 1080,
+        framesPerSecond: 60,
+        sampleRate: 48_000,
+        channels: 2,
+      },
+      runtimeToken: expect.objectContaining({
+        assetId: asset.id,
+        objectUrl: asset.objectUrl,
+      }),
+    }])
     expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
 
     await nextFrame()
@@ -295,6 +351,15 @@ describe('previewController', () => {
       assetId: reconnected.id,
       blob,
       rate: F60,
+      budget: expect.objectContaining({
+        fileBytes: 1,
+        durationMicroseconds: 2_000_000,
+        framesPerSecond: 60,
+      }),
+      runtimeToken: expect.objectContaining({
+        assetId: reconnected.id,
+        objectUrl: reconnected.objectUrl,
+      }),
     }])
     expect(usePreviewStatusStore.getState().offlineVideoAssetIds).toEqual([])
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
@@ -324,7 +389,20 @@ describe('previewController', () => {
     expect(bridge.docs).toEqual([document])
     expect(deps.fetchBlob).toHaveBeenCalledOnce()
     expect(deps.fetchBlob).toHaveBeenCalledWith(online.objectUrl)
-    expect(bridge.opened).toEqual([{ assetId: online.id, blob, rate: F60 }])
+    expect(bridge.opened).toEqual([{
+      assetId: online.id,
+      blob,
+      rate: F60,
+      budget: expect.objectContaining({
+        fileBytes: 1,
+        durationMicroseconds: 2_000_000,
+        framesPerSecond: 60,
+      }),
+      runtimeToken: expect.objectContaining({
+        assetId: online.id,
+        objectUrl: online.objectUrl,
+      }),
+    }])
     expect(usePreviewStatusStore.getState().offlineVideoAssetIds)
       .toEqual([offline.id])
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
@@ -481,17 +559,16 @@ describe('previewController', () => {
     expect(bridge.opened).toHaveLength(0)
   })
 
-  test('a Blob fetch failure logs and retries on the next media change', async () => {
-    const { deps, bridge, blob } = makeDeps()
+  test('a Blob fetch failure disconnects the exact source without implicit retry', async () => {
+    const { deps, bridge } = makeDeps()
     let attempts = 0
     deps.fetchBlob = vi.fn(async () => {
       attempts++
-      if (attempts === 1) throw new Error('source URL unavailable')
-      return blob
+      throw new Error('source URL unavailable')
     })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     initPreview(canvasEl(), deps)
-    seedAsset({ id: 'bad', fileName: 'bad.mp4' })
+    const bad = seedAsset({ id: 'bad', fileName: 'bad.mp4' })
     await flush()
 
     expect(bridge.opened).toHaveLength(0)
@@ -499,24 +576,38 @@ describe('previewController', () => {
       expect.stringContaining('loading "bad.mp4" failed'),
       'source URL unavailable',
     )
+    expect(useMediaStore.getState().assets.has(bad.id)).toBe(false)
+    expect(useMediaStore.getState().descriptors.has(bad.id)).toBe(true)
+    expect(useMediaStore.getState().compatibility.get(bad.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'resource-unavailable',
+        runtimeFailures: [{
+          surface: 'preview',
+          trackKind: null,
+          reason: 'resource-unavailable',
+          detail: 'source URL unavailable',
+        }],
+      },
+    })
 
     seedAsset({ id: 'poke', kind: 'audio', frameRate: null })
     await flush()
-    expect(attempts).toBe(2)
-    expect(bridge.opened).toHaveLength(1)
+    expect(attempts).toBe(1)
+    expect(bridge.opened).toHaveLength(0)
     warn.mockRestore()
   })
 
-  test('a worker open failure logs and retries on the next media change', async () => {
+  test('a worker open failure disconnects the exact source without implicit retry', async () => {
     const { deps, bridge } = makeDeps()
     let attempts = 0
     bridge.openImpl = async () => {
       attempts++
-      if (attempts === 1) throw new Error('worker could not open source')
+      throw new Error('worker could not open source')
     }
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     initPreview(canvasEl(), deps)
-    seedAsset({ id: 'bad', fileName: 'bad.mp4' })
+    const bad = seedAsset({ id: 'bad', fileName: 'bad.mp4' })
     await flush()
 
     expect(attempts).toBe(1)
@@ -524,11 +615,82 @@ describe('previewController', () => {
       expect.stringContaining('loading "bad.mp4" failed'),
       'worker could not open source',
     )
+    expect(useMediaStore.getState().assets.has(bad.id)).toBe(false)
+    expect(useMediaStore.getState().compatibility.get(bad.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'decode-failed',
+        runtimeFailures: [{
+          surface: 'preview',
+          trackKind: 'video',
+          reason: 'decode-failed',
+          detail: 'worker could not open source',
+        }],
+      },
+    })
 
     seedAsset({ id: 'poke', kind: 'audio', frameRate: null })
     await flush()
-    expect(attempts).toBe(2)
-    expect(bridge.opened).toHaveLength(2)
+    expect(attempts).toBe(1)
+    expect(bridge.opened).toHaveLength(1)
+    warn.mockRestore()
+  })
+
+  test('a worker Input-construction failure remains file-level', async () => {
+    const { deps, bridge } = makeDeps()
+    bridge.openImpl = async () => {
+      throw new RenderAssetOpenError(
+        'worker openAsset failed: Input construction failed',
+        { trackKind: null, reason: 'resource-unavailable' },
+      )
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    initPreview(canvasEl(), deps)
+    const bad = seedAsset({ id: 'source-error', fileName: 'source-error.mp4' })
+    await flush()
+
+    expect(useMediaStore.getState().assets.has(bad.id)).toBe(false)
+    expect(useMediaStore.getState().compatibility.get(bad.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'resource-unavailable',
+        runtimeFailures: [{
+          surface: 'preview',
+          trackKind: null,
+          reason: 'resource-unavailable',
+          detail: 'worker openAsset failed: Input construction failed',
+        }],
+      },
+    })
+    warn.mockRestore()
+  })
+
+  test('a worker decoder budget rejection remains a video resource limit', async () => {
+    const { deps, bridge } = makeDeps()
+    bridge.openImpl = async () => {
+      throw new RenderAssetOpenError(
+        'worker openAsset failed: ProRes budget exceeded',
+        { trackKind: 'video', reason: 'resource-limit' },
+      )
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    initPreview(canvasEl(), deps)
+    const bad = seedAsset({ id: 'large-prores', fileName: 'large.mov' })
+    await flush()
+
+    expect(useMediaStore.getState().assets.has(bad.id)).toBe(false)
+    expect(useMediaStore.getState().compatibility.get(bad.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'resource-limit',
+        runtimeFailures: [{
+          surface: 'preview',
+          trackKind: 'video',
+          reason: 'resource-limit',
+          detail: 'worker openAsset failed: ProRes budget exceeded',
+        }],
+      },
+    })
     warn.mockRestore()
   })
 
@@ -599,10 +761,54 @@ describe('previewController', () => {
     expect(second.bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
   })
 
-  test('worker diagnostics keep their controller prefix', () => {
+  test('an asset-scoped worker failure disconnects the source it opened', async () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+    const asset = seedAsset({ id: 'runtime-bad' })
+    await flush()
+    const runtimeToken = bridge.opened[0].runtimeToken
+
+    bridge.onAssetError?.(asset.id, runtimeToken, 'decode exploded')
+
+    expect(useMediaStore.getState().assets.has(asset.id)).toBe(false)
+    expect(useMediaStore.getState().descriptors.has(asset.id)).toBe(true)
+    expect(useMediaStore.getState().compatibility.get(asset.id)).toMatchObject({
+      status: 'error',
+      report: {
+        runtimeFailures: [{
+          surface: 'preview',
+          trackKind: 'video',
+          reason: 'decode-failed',
+          detail: 'decode exploded',
+        }],
+      },
+    })
+  })
+
+  test('an asset failure from an old open cannot disconnect its replacement', async () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+    const original = seedAsset({ id: 'relinked' })
+    await flush()
+    const staleToken = bridge.opened[0].runtimeToken
+
+    useMediaStore.getState().disconnectAsset(original.id)
+    const replacement = { ...original, objectUrl: 'blob:replacement' }
+    expect(useMediaStore.getState().connectAsset(replacement)).toBe(true)
+    await flush()
+
+    bridge.onAssetError?.(original.id, staleToken, 'late old-source failure')
+
+    expect(useMediaStore.getState().assets.get(original.id)).toBe(replacement)
+    expect(useMediaStore.getState().compatibility.has(original.id)).toBe(false)
+  })
+
+  test('worker diagnostics keep their controller prefix without blaming media', async () => {
     const { deps, bridge } = makeDeps()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     initPreview(canvasEl(), deps)
+    const asset = seedAsset({ id: 'still-online' })
+    await flush()
 
     bridge.onWorkerError?.('decode exploded')
 
@@ -610,6 +816,33 @@ describe('previewController', () => {
       '[previewController] worker error:',
       'decode exploded',
     )
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(useMediaStore.getState().compatibility.has(asset.id)).toBe(false)
+    warn.mockRestore()
+  })
+
+  test('a request-global render result is diagnostic-only', async () => {
+    const { deps, bridge } = makeDeps()
+    bridge.renderImpl = async () => ({
+      status: 'error',
+      drawnClipIds: [],
+      missingClipIds: [],
+      renderMs: 1,
+      message: 'compositor unavailable',
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    initPreview(canvasEl(), deps)
+    const asset = seedAsset({ id: 'render-survivor' })
+    await flush()
+    await nextFrame()
+    await flush()
+
+    expect(warn).toHaveBeenCalledWith(
+      '[previewController] render failed:',
+      'compositor unavailable',
+    )
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(useMediaStore.getState().compatibility.has(asset.id)).toBe(false)
     warn.mockRestore()
   })
 

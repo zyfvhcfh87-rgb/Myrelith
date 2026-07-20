@@ -18,14 +18,34 @@
  */
 
 import type { AssetId, MediaAsset } from '../domain/schema'
+import {
+  mediaAssetDecoderBudget,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 import type { FilmstripResult, WaveformResult } from '../pipeline/visuals'
-import { generateFilmstrip, generateWaveform } from '../pipeline/visuals'
+import {
+  MediaVisualDecodeError,
+  MediaVisualSourceError,
+  generateFilmstrip,
+  generateWaveform,
+} from '../pipeline/visuals'
 import { useMediaStore } from '../state/mediaStore'
+import {
+  captureMediaRuntimeGuard,
+  mediaRuntimeFailure,
+  reportMediaRuntimeFailure,
+} from './mediaCompatibilityController'
 
 export interface VisualsDeps {
   fetchBlob: (url: string) => Promise<Blob>
-  generateFilmstrip: (file: Blob) => Promise<FilmstripResult | null>
-  generateWaveform: (file: Blob) => Promise<WaveformResult | null>
+  generateFilmstrip: (
+    file: Blob,
+    options: { sourceId?: string; budget: LocalDecoderBudget },
+  ) => Promise<FilmstripResult | null>
+  generateWaveform: (
+    file: Blob,
+    options: { sourceId?: string; budget: LocalDecoderBudget },
+  ) => Promise<WaveformResult | null>
 }
 
 const realDeps: VisualsDeps = {
@@ -61,30 +81,103 @@ async function process(
   generation: number,
 ): Promise<void> {
   if (asset.kind === 'image') return // images get neither strip nor waveform
+  const guard = captureMediaRuntimeGuard(asset.id)
+  if (!guard || guard.objectUrl !== asset.objectUrl) return
+
+  let blob: Blob
   try {
-    const blob = await deps.fetchBlob(asset.objectUrl)
-    const [filmstrip, waveform] = await Promise.all([
-      asset.kind === 'video' ? deps.generateFilmstrip(blob) : Promise.resolve(null),
-      // video OR audio may carry an audio track; the generator returns
-      // null by itself when there is none.
-      deps.generateWaveform(blob),
-    ])
-    if (!filmstrip && !waveform) return
-    const current = useMediaStore.getState().assets.get(asset.id)
-    if (
-      generation !== state.generation
-      || current?.objectUrl !== asset.objectUrl
-    ) {
-      revokeGenerated(filmstrip, waveform)
-      return
-    }
-    // The store takes URL ownership — it also handles the case where the
-    // asset was removed while we were decoding (revokes, stores nothing).
-    useMediaStore.getState().setAssetVisuals(asset.id, { filmstrip, waveform })
+    blob = await deps.fetchBlob(asset.objectUrl)
   } catch (err) {
     if (generation !== state.generation) return
     console.warn(`[mediaVisuals] generation failed for "${asset.fileName}"`, err)
+    reportMediaRuntimeFailure(
+      guard,
+      mediaRuntimeFailure(
+        asset.kind === 'video' ? 'filmstrip' : 'waveform',
+        null,
+        err,
+        'resource-unavailable',
+      ),
+    )
+    return
   }
+
+  const current = useMediaStore.getState().assets.get(asset.id)
+  if (
+    generation !== state.generation
+    || current?.objectUrl !== asset.objectUrl
+  ) return
+
+  const decodeOptions = {
+    sourceId: asset.id,
+    budget: mediaAssetDecoderBudget(asset, blob.size),
+  }
+
+  const [filmstripResult, waveformResult] = await Promise.allSettled([
+    asset.kind === 'video'
+      ? deps.generateFilmstrip(blob, decodeOptions)
+      : Promise.resolve(null),
+    asset.hasAudio
+      ? deps.generateWaveform(blob, decodeOptions)
+      : Promise.resolve(null),
+  ])
+  const filmstrip = filmstripResult.status === 'fulfilled'
+    ? filmstripResult.value
+    : null
+  const waveform = waveformResult.status === 'fulfilled'
+    ? waveformResult.value
+    : null
+
+  const failure = filmstripResult.status === 'rejected'
+    ? {
+        surface: 'filmstrip' as const,
+        trackKind: 'video' as const,
+        cause: filmstripResult.reason,
+      }
+    : waveformResult.status === 'rejected'
+      ? {
+          surface: 'waveform' as const,
+          trackKind: 'audio' as const,
+          cause: waveformResult.reason,
+        }
+      : null
+  if (failure) {
+    // allSettled preserves a successful sibling long enough to release it.
+    revokeGenerated(filmstrip, waveform)
+    if (generation !== state.generation) return
+    console.warn(
+      `[mediaVisuals] generation failed for "${asset.fileName}"`,
+      failure.cause,
+    )
+    reportMediaRuntimeFailure(
+      guard,
+      mediaRuntimeFailure(
+        failure.surface,
+        failure.cause instanceof MediaVisualSourceError
+          ? null
+          : failure.trackKind,
+        failure.cause,
+        failure.cause instanceof MediaVisualSourceError
+          ? 'resource-unavailable'
+          : failure.cause instanceof MediaVisualDecodeError
+            ? failure.cause.failure.reason
+            : 'decode-failed',
+      ),
+    )
+    return
+  }
+
+  if (!filmstrip && !waveform) return
+  const latest = useMediaStore.getState().assets.get(asset.id)
+  if (
+    generation !== state.generation
+    || latest?.objectUrl !== asset.objectUrl
+  ) {
+    revokeGenerated(filmstrip, waveform)
+    return
+  }
+  // The store takes URL ownership; disconnected late results are revoked.
+  useMediaStore.getState().setAssetVisuals(asset.id, { filmstrip, waveform })
 }
 
 function scan(deps: VisualsDeps): void {

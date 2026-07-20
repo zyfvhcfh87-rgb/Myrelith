@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-17)
+## Status (2026-07-20)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -50,8 +50,17 @@ and the open list below.
 | Post-MVP project system — Slice 5 local library | ✅ done | Recent handles + explicit three-generation recovery; 840 tests + Chrome reload/recover/discard/picker-entry gate |
 | Post-MVP project system — Slice 6 offline media | ✅ done | open-offline + one-file/folder relink + ambiguity UI + export preflight; 881 tests + Chrome offline→folder-relink gate |
 | Post-MVP #11 — cross-track clip dragging | ✅ done | same-kind video/audio lane targeting + vertical ghost; 885 tests + user manual drag gate |
+| Post-MVP #19 — compatibility Slice 1 | ✅ done | byte-detected container + every-track native config-support probe; guarded session reports + accessible Media Pool diagnostics; 184 focused + 979 total tests; Chrome for Testing Ready/Unsupported/720px gate |
+| Post-MVP #19 — compatibility Slice 2 | ✅ done | Resume/Relink reports + exact-generation preview/visuals/audio/export feedback; 303 focused + 1,021 total tests; in-app Chromium Ready/Unsupported/runtime-failure/recovery/720p gate |
+| Post-MVP #19 — compatibility Slice 3 | ✅ done | one lazy local-decoder seam for ProRes + AC-3/E-AC-3 across probe/visuals/preview/audio/export; bounded automatic policy; 1,042 tests + in-app Chromium import/preview/playback/export gate |
+| Post-MVP #19 — compatibility Slice 4 | ✅ done | explicit whole-kind consent + durable video-only/audio-only projection across import/Resume/Relink/runtime/export; 1,072 tests + in-app Chromium dual-path gate |
+| Post-MVP #19 — compatibility Slice 5 | ✅ done | bounded realm-local exact-config capability cache; probe reuse + forced render/visuals/audio/export revalidation; 1,092 tests + in-app Chromium playback/export gate |
+| Post-MVP #19 — compatibility Slice 6 | ✅ no-go decided | measured local worker/WASM proxy spike, including a Limited source with browser-unsupported video; failed bounded-I/O/progress/license/provenance gates with low-memory behavior unproven; no converter shipped |
+| **Post-MVP #19 — final closeout** | ✅ closed | 13-file real codec/damage matrix; prompt/commit cancellation + exact disposal races fixed; runtime fallback budgets and filmstrip canvases bounded; 346 focused + 1,127 total tests; Chrome 150 and Edge 150 full VP9/Opus playback/cancel/export gates; closes at 46/49 with three rejected proxy children intentionally unchecked |
 
-909 tests green · `npm run build` and `npm run lint` clean · every phase
+1,127 tests green · `npm run build` passes with the known large-chunk warning
+(three generated chunks exceed 500 kB) ·
+`npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -252,11 +261,197 @@ selection auto-matched and re-analyzed the MP4, restored thumbnail/Preview and
 the same timeline clip, reported `1 connected · 0 skipped`, and enabled Start
 export. The final warning/error console was empty.
 
-**Next: ask the user to select the next post-MVP issue.** Issue #9 and
-folder/batch relinking are complete. Future project-storage work is separate
-opt-in media caching with
-quota/eviction UX and multi-tab recovery ownership; do not imply recovery or a
-portable `.webcut` contains source bytes today.
+Issue #19 Slice 1 adds a conservative direct-import compatibility boundary.
+`pipeline/mediaCompatibilityProbe.ts` detects the container from bytes, probes
+every A/V track with its explicit decoder configuration and the browser's real
+`canDecode()` support result, and applies bounded file/track/config/dimension/
+duration/rate/channel limits before creating any long-lived object URL. This
+is a metadata/config-support check rather than an end-to-end sample decode. The app
+controller owns File/handle resources outside Zustand, publishes request-id-
+guarded serializable session reports, and retains rejected files only for an
+explicit Retry/Remove action. Ready is the only new-import status allowed to
+drag or drop; existing project connections without a report remain usable for
+backward compatibility. Media Pool diagnostics expose specific container,
+track, codec, dimensions/rates, and wrapped failure details in a responsive
+live region.
+
+The Chrome-for-Testing gate passed 2026-07-18 with generated disk fixtures. H.264/AAC
+MP4 reported Ready with exact MP4/video/audio facts and dragged into one linked
+A/V pair. ProRes 422 HQ MOV reported Unsupported, stayed non-draggable, created
+a fresh guarded request on explicit Retry, and was removable by keyboard. The
+180px Media Pool had no card overflow at the 720px shell gate; the final console
+had 0 warnings and 0 errors.
+
+Issue #19 Slice 2 carries the same typed result through remembered/manual
+Resume, individual Relink, and accepted folder matches. Project activation now
+installs connected sources and their Ready reports together; non-Ready reports
+stay on durable Offline descriptors. A descriptor check preserves its previous
+settled report while Checking and restores it if the attempt is cancelled,
+selects the wrong file, or loses the final guarded commit. Store transitions
+enforce descriptor identity, report/status consistency, and Ready/connected
+parity without changing provisional direct imports.
+
+Preview, filmstrip, waveform, live-audio, and export source failures now report
+through one app-layer runtime seam. Every consumer captures the exact object URL
+and compatibility generation before async work. Only that connection can be
+disconnected; stale render requests, stale worker release cleanup, and late
+visual/audio/export failures are diagnostic-only. File/Blob/Input failures are
+typed as file-level `resource-unavailable`; actual track open/decode failures
+are track-specific `decode-failed`; global output/pump/cleanup failures never
+poison an asset. Media Pool announces one surface-specific runtime diagnostic,
+keeps the source Offline, exposes Relink rather than import Retry, and publishes
+a fresh Ready report after successful recovery.
+
+The in-app Chromium gate passed 2026-07-18 at 1280×720 through WebCut's ordinary
+file-input fallback. H.264/AAC relinked Offline → Ready with exact report facts;
+ProRes relinked to Unsupported; selecting the wrong H.264 replacement restored
+the prior ProRes report. A generated AAC file with valid metadata/config but
+corrupted samples reached Ready at probe, failed waveform decode once, became
+Offline with one `Waveform: Decoding error.` diagnostic and no Retry, then a
+valid same-media Relink returned it to Ready. The normal path console was clean;
+the forced failure emitted one expected warning and did not repeat. The 720p
+shell and 228px diagnostics card had no horizontal or vertical overflow.
+
+Issue #19 Slice 3 adds one realm-local, concurrency-safe decoder-registration
+seam used by import probing, filmstrip/waveform generation, the render worker,
+live audio, and export. Native `canDecode()` always runs first. Only normalized
+ProRes or AC-3/E-AC-3 can lazy-load the exact locally bundled Mediabunny
+1.50.9 extension, after which the same track is probed again; successful
+reports record `Native browser decoder`, `Local fallback (ProRes)`, or `Local
+fallback (AC-3/E-AC-3)` instead of claiming generic support. Failed loads can
+be retried explicitly and overlapping requests share one loader promise per
+realm. Vite emits independent lazy chunks for the main and worker realms and
+dedupes their Mediabunny core instance.
+
+Automatic fallback is intentionally conservative: at most 8 GiB, 2 hours,
+DCI 4K30 ProRes pixel throughput, and 8-channel/48 kHz AC-3/E-AC-3. Above that
+boundary the asset remains visible with a `resource-limit` diagnostic; WebCut
+does not silently proxy it or omit a track. The probe checks cancellation
+before and after the non-abortable module load and decoder checks, so an
+aborted generation cannot publish Ready. ProRes correctness does not require
+cross-origin isolation: TurboRes uses its slower message-passing worker mode;
+shared-memory optimization remains a measured future choice. The AC-3
+extension embeds FFmpeg, so distribution/license review is still a public-
+shipping gate rather than a completed Slice 3 checkbox.
+
+The in-app Chromium gate passed 2026-07-19 with generated native H.264/AAC,
+ProRes 422/AAC, H.264/AC-3, and H.264/E-AC-3 fixtures. All four reported Ready
+with exact decoder paths and generated thumbnails; ProRes visibly rendered
+through the render worker; playback crossed into the AC-3 clip with a clean
+warning/error console. A real mixed ProRes + AC-3 timeline exported and
+downloaded a 4.000s MP4 that `ffprobe` identified as 1920×1080 H.264 plus
+48 kHz stereo AAC. The ProRes packages were advanced together from 1.50.3 to
+1.50.9 because the older release predated the upstream all-key-packet fix and
+returned null for sparse thumbnail seeks.
+
+Issue #19 Slice 4 adds a conservative whole-kind partial-import seam. A Limited
+source offers video-only or audio-only only when every track of the kept kind
+is decodable and the other present kind has a concrete failure. The controller
+retains that provisional source until a native dialog explicitly names the
+kept and omitted tracks, codecs, failure reason, unchanged original file, and
+timeline/export consequence. Cancel keeps the Limited row and restores focus;
+confirm atomically commits an effective one-kind asset while leaving the
+accepted omission visible in its Ready diagnostics.
+
+The effective asset is authoritative downstream: video-only suppresses audio
+clips, waveforms, live-audio fetches, and audio export; audio-only suppresses
+video clips, filmstrips, preview decoder configuration, and video export.
+Export rejects any stale clip that contradicts that projection before opening
+the source. Portable project format v2 stores the explicit selection, migrates
+v1 projects, and reapplies the same omission across remembered/manual Resume,
+individual Relink, folder matching, and accepted staged re-probes. A later
+browser gaining support for both original tracks therefore cannot silently
+resurrect the track the user chose to omit.
+
+The in-app Chromium gate passed 2026-07-20 at 1280×720 with generated MKVs.
+H.264/DTS offered video-only; MPEG-2/AAC offered audio-only. Both dialogs showed
+the exact kept/omitted facts with safe initial focus; cancellation preserved the
+Limited row and restored its trigger focus, and confirmation produced the exact
+Ready projection with the omission still visible. Video-only generated a
+filmstrip without a waveform; audio-only stayed free of a video filmstrip. No
+error overlay appeared and the Vite runtime log contained no error.
+
+Issue #19 Slice 5 adds one browser-session capability cache in the codec leaf.
+It keys settled facts by decode boundary, track kind, normalized codec, and an
+exact canonical-configuration SHA-256 hash that includes description bytes. It
+retains no Blob, Mediabunny Input, track, decoder, or mutable configuration;
+LRU entry, active-source, copied-material, and canonical-JSON ceilings bound its
+memory. Unsafe or oversized keys simply bypass caching. The cache is realm-local
+only and remains outside Zustand and `.webcut`, so another browser or resumed
+session must establish its own facts.
+
+The metadata probe can reuse a settled session fact. Render-worker opens,
+filmstrips, waveforms, live audio, video export, and audio export always
+revalidate their exact configuration and refresh the fact. Source generations,
+runtime revisions, and per-key write sequencing reject late or remove/re-add
+(ABA) publications. Source replacement/removal, provisional or Offline state,
+confirmed runtime failure, worker replacement/release/open failure/close,
+fallback registration, foreground restoration, and BFCache restoration all
+invalidate the relevant facts. Cached fallback answers still reapply the
+current source budgets and native-only paths are re-proven with WebCodecs.
+
+The 2026-07-20 in-app Chromium gate opened and reconnected a generated 3.000s
+H.264/AAC project at 1280×720. Both tracks reported Ready, the real filmstrip
+and preview frame rendered, playback exercised render plus live-audio decode,
+and full video + audio export reached Export ready. The page fit the viewport,
+no error overlay appeared, and the warning/error console was empty.
+
+Issue #19 Slice 6 makes the optional proxy-conversion decision. A locally hosted
+`ffmpeg.wasm` 0.12.15/core 0.12.10 single-thread worker converted both a
+VP9/Opus mechanics fixture and a Limited source with browser-unsupported video.
+The latter was an 8.021 s, 1280×720 MPEG-2/AAC Matroska: video returned `false`
+from `canDecode`, AAC returned true, and its 9.01 MB input became a 10.39 MB
+H.264/AAC MP4 in 4,197.4 ms. Mediabunny reopened the output and both decoder
+configurations returned true. Chrome 150 ran on a Ryzen 9 5900X/31.9 GiB host;
+this does not prove low-memory or sample-level editing behavior.
+
+`terminate()` returned during an active VP9/Opus rerun in 0.2 ms, prevented a
+late completion, invalidated the worker, and made a full core reload mandatory;
+that timing does not prove immediate WASM-memory reclamation or exact cleanup.
+The experimental progress callback also emitted an invalid 1.15-trillion
+intermediate value. The measured `writeFile`/`readFile` path used whole
+WASM-FS input/output buffers; WORKERFS can avoid the input copy, but there is no
+public atomic streaming OPFS output sink.
+
+The result is a firm no-go for a built-in proxy feature in this issue. The stock
+core also has a documented 2 GB input ceiling, requires cross-origin isolation
+for its multi-thread option, and is packaged GPL-2.0-or-later with x264. WebCut
+also needs a separate original/proxy provenance model before a downscaled or
+CFR representation can safely cross preview, visuals, audio, render, export,
+Save/Resume, Relink, and cleanup. The
+full evidence and reopen gates are in
+`docs/decisions/ISSUE_19_PROXY_CONVERSION.md`. No converter dependency, proxy
+bytes, state, or project-schema field was shipped.
+
+Issue #19 final closeout adds the reproducible
+`scripts/generate-issue-19-fixtures.mjs` matrix and closes the remaining
+ownership and runtime-safety races. A cancelled fallback caller now rejects
+promptly and cannot publish after a non-abortable module/browser operation;
+committed imports release the editor while remembered-handle persistence
+continues safely; live-audio Inputs have one exact-once disposer even when
+close overtakes track open; and the legacy decode worker closes bitmaps that
+arrive after its generation changes. Every runtime fallback boundary carries
+the probed source budget and fails closed when safety metadata is incomplete,
+while filmstrip decoder/joined canvases stay explicitly bounded. The focused
+suite passed 346/346 across 16 files and the full suite passed 1,127/1,127.
+
+Chrome 150 and Edge 150 each ran real VP9/Opus through Ready import, thumbnail,
+waveform, linked A/V drop, ruler seek, decoded Preview, live-audio scheduling,
+active export cancellation, retry, and downloaded MP4. Both outputs probed as
+1280×720 H.264 at 30 fps plus 48 kHz stereo AAC, and both runs had no console
+or page error. The broader Chrome matrix also recorded local AC-3/E-AC-3,
+host-native HEVC/AV1, spoofed WebM bytes under `.mp4`, unknown/malformed
+partial-track choices, truncation, empty input, and random bytes. Edge is still
+Chromium-based; Firefox/WebKit remain untested.
+
+**Next: Issue #19 is closed at 46/49.** The three unchecked proxy implementation
+children are the intentional no-go outcome, not forgotten work. Public
+distribution remains a separate gate: add the WebCut license and third-party
+notices/source links, finish FFmpeg/LGPL and Dolby review, and run representative
+low-memory testing before making a release-compliance claim. Future project
+storage is also separate opt-in media caching with quota/eviction UX and
+multi-tab recovery ownership; do not imply recovery or a portable `.webcut`
+contains source bytes today.
 
 ## What works today (user-visible)
 
@@ -413,21 +608,48 @@ surface; it is not a second zoom and never enters document history.
   Only one run (including setup/cancel cleanup) may own the controller slot.
   Slice 6 preflights the pure `outputMediaAssetIds` selection first, so a
   missing output source fails with exact filenames before Blob retention,
-  adapter creation, or generator startup.
+  adapter creation, or generator startup. Asset resolver/open/decode failures
+  carry typed identity to Slice 2's exact-generation compatibility seam;
+  encoder/muxer/cancellation/cleanup failures remain global.
 - `src/app/projectController.ts` + `localMediaHandles.ts` — project activation
   installs the full descriptor catalog plus whatever connected subset is
   available. Active Relink and Scan folder are project-generation guarded,
   retain Files/handles/candidates outside Zustand, enforce bounded recursive
   enumeration, stage no long-lived scan URLs, re-inspect accepted candidates,
   preserve saved asset ids, and publish only serializable progress/ambiguity
-  summaries. Confirmed handles are remembered for later automatic Resume.
-- `src/app/mediaImportController.ts` — Slice 2 import composition root: owns
-  the selected File and analyzed resource until Keep/Match/Cancel resolves,
-  commits complete assets exactly once, guards project-change races, and owns
-  every uncommitted object URL. Import and project relink share the one real
-  File-analysis seam in `src/app/mediaInspection.ts`.
+  summaries. Slice 2 also publishes the typed compatibility report for every
+  remembered/manual Resume and accepted Relink, preserving the previous settled
+  report through a guarded failed/cancelled attempt. Confirmed handles are
+  remembered for later automatic Resume.
+- `src/domain/mediaCompatibility.ts` +
+  `src/pipeline/mediaCompatibilityProbe.ts` — serializable compatibility facts
+  and the content-based, metadata-only native probe. The probe checks every A/V
+  track with bounded concurrency, explicit decoder configs, resource ceilings,
+  exact-once Input disposal, and no object URL until Ready. Runtime facts retain
+  the originating surface, optional track kind, bounded detail, and typed reason.
+- `src/app/mediaCompatibilityController.ts` — Slice 2 composition seam: captures
+  the exact asset object URL and compatibility request generation, projects a
+  typed runtime failure onto the existing report, and atomically disconnects
+  only that matching source while retaining its descriptor Offline.
+- `src/codecs/mediaCodecFallbacks.ts` +
+  `src/app/mediaCapabilityController.ts` — Slices 3/5 shared decoder-support
+  seam and lifecycle composition root. Probe facts may be reused within one
+  realm; render, filmstrip, waveform, live-audio, and export boundaries always
+  revalidate exact configurations. Bounded generations/revisions reject stale
+  writes, while source/runtime/fallback/page lifecycle changes invalidate facts.
+  No cache state crosses into Zustand or portable project files.
+- `src/app/mediaImportController.ts` — import composition root: owns selected
+  Files/handles and retained retry resources outside Zustand, publishes guarded
+  session compatibility requests, commits complete Ready assets exactly once,
+  guards project-change/cancellation races, and owns every uncommitted object
+  URL. `src/app/mediaInspection.ts` now exposes the same typed probe result to
+  import and project reconnection callers.
 - `src/ui/MediaImportDialog.tsx` — accessible analysis/error/FPS-decision UI;
   exact rates, explicit choices, disabled-Match explanation, Escape handling.
+- `src/ui/MediaPool.tsx` — descriptor rows plus session-only compatibility
+  rows; named live statuses, wrapped container/every-track/runtime diagnostics,
+  direct-import Retry/Remove versus descriptor-backed Relink actions, and
+  Ready-only drag gating with a second live check at the timeline drop boundary.
 - `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
   code loads only on Start; progress is frame-coalesced; cancellation and retry
   are explicit states; Blob URL/download ownership, filename safety, modal
@@ -649,6 +871,10 @@ surface; it is not a second zoom and never enters document history.
 - `ffmpeg`/`ffprobe` are installed as of 2026-07-12. They generated and probed
   the 5.2b A/V fixture/result; keep the in-browser generator below when a test
   needs a same-origin `File` without touching disk.
+- `npm run qa:issue19:fixtures` regenerates Issue #19's ignored 13-file native,
+  fallback, unknown, malformed, truncated, spoofed, empty, and random-byte
+  matrix plus a hash/ffprobe manifest under `.tmp/issue-19-codec-fixtures/`;
+  it exits nonzero when the expected container/codec/damage matrix drifts.
 - Generate a labeled test MP4 IN THE BROWSER:
   import mediabunny via `/@fs/E:/ClaudeSpace/WebCut/node_modules/mediabunny/dist/modules/src/index.js`,
   `Output` + `Mp4OutputFormat` + `BufferTarget` + `CanvasSource`, draw
@@ -672,6 +898,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
+- Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
+  Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
+  explicit partial-track consent, capability caching/revalidation, prompt
+  cancellation, exact disposal, the real codec/damage matrix, and Chrome/Edge
+  gates are complete. The three unchecked proxy implementation children are
+  intentionally rejected by the measured no-go decision; do not imply an
+  in-app converter exists. Public-distribution licensing/notices and
+  representative low-memory certification remain separate release work.
 - Slices 4–6 now cover portable Save/Save As,
   permission-aware automatic source reconnection, removable Recent shortcuts,
   open-offline sessions, individual/folder relinking, live save after a writable

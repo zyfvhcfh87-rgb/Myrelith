@@ -26,7 +26,7 @@
 import { memo, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Clip, TrackId, TrackKind } from '../../domain/schema'
-import { microsecondsToFrames, rangeEnd } from '../../domain/time'
+import { microsecondsDurationToFrames, rangeEnd } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import type { EditPreviewKind } from '../../state/transportStore'
@@ -114,7 +114,10 @@ function ClipView({
     if (connected) return connected.durationFrames
     const descriptor = s.descriptors.get(clip.assetId)
     return descriptor
-      ? microsecondsToFrames(descriptor.durationMicroseconds, documentRate)
+      ? microsecondsDurationToFrames(
+          descriptor.durationMicroseconds,
+          documentRate,
+        )
       : 0
   })
   const isOffline = useMediaStore(

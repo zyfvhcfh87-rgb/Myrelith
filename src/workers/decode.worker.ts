@@ -177,9 +177,14 @@ export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
     // Cache path: bitmap first, close the frame the moment the copy exists
     // (or failed). The bitmap belongs to the ring buffer from then on.
     const timestamp = frame.timestamp
+    const bitmapGeneration = generation
     void env
       .createBitmap(frame)
       .then((bitmap) => {
+        if (generation !== bitmapGeneration) {
+          bitmap.close()
+          return
+        }
         try {
           cache.put(timestamp, bitmap)
         } catch {

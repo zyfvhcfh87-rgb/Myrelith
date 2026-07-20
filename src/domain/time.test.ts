@@ -12,6 +12,7 @@ import {
   formatTimecode,
   framesToSeconds,
   growRange,
+  microsecondsDurationToFrames,
   microsecondsToFrames,
   rangeContains,
   rangeEnd,
@@ -113,6 +114,13 @@ describe('frames <-> canonical microseconds', () => {
     expect(microsecondsToFrames(16_667, F30)).toBe(1)
     expect(framesToMicroseconds(1, F60)).toBe(16_667)
     expect(secondsToMicroseconds(1.2345675)).toBe(1_234_568)
+  })
+
+  test('keeps every positive source duration at least one frame long', () => {
+    expect(microsecondsDurationToFrames(0, F30)).toBe(0)
+    expect(microsecondsDurationToFrames(1, F30)).toBe(1)
+    expect(microsecondsDurationToFrames(16_666, F30)).toBe(1)
+    expect(microsecondsDurationToFrames(16_667, F30)).toBe(1)
   })
 
   test('rejects values that cannot be represented safely', () => {

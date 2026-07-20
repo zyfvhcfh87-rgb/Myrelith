@@ -18,7 +18,16 @@ import {
   Input,
   VideoSampleSink,
 } from 'mediabunny'
+import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { InputVideoTrack } from 'mediabunny'
+import {
+  beginMediaDecoderSource,
+  ensureMediaDecoderSupport,
+  refineVideoDecoderBudget,
+  type DecoderCheckResult,
+  type DecoderCheckTarget,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 
 const MICROSECONDS_PER_SECOND = 1_000_000
 
@@ -78,6 +87,8 @@ export interface VideoSampleLike {
 }
 
 export interface VideoTrackLike {
+  getCodec(): Promise<string | null>
+  getDecoderConfig(): Promise<VideoDecoderConfig | null>
   canDecode(): Promise<boolean>
 }
 
@@ -100,8 +111,40 @@ export interface VideoSampleSinkLike {
 
 export interface WorkerVideoSourceEnv {
   createInput(blob: Blob): VideoInputLike
+  beginDecoderSource(sourceId: string): void
+  ensureDecoderSupport(target: DecoderCheckTarget): Promise<DecoderCheckResult>
   /** Called once per lane so clips sharing an asset keep independent cursors. */
   createSampleSink(track: VideoTrackLike): VideoSampleSinkLike
+}
+
+export interface WorkerVideoSourceOpenFailure {
+  trackKind: 'video' | null
+  reason: MediaRuntimeFailure['reason']
+}
+
+export interface OpenWorkerVideoSourceOptions {
+  sourceId?: string
+  budget: LocalDecoderBudget
+}
+
+/** Typed pre-ready failure carried through the worker protocol. */
+export class WorkerVideoSourceOpenError extends Error {
+  readonly failure: WorkerVideoSourceOpenFailure
+
+  constructor(failure: WorkerVideoSourceOpenFailure, cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    super(detail.slice(0, 2_048), { cause })
+    this.name = 'WorkerVideoSourceOpenError'
+    this.failure = failure
+  }
+}
+
+function workerVideoSourceOpenError(
+  failure: WorkerVideoSourceOpenFailure,
+  cause: unknown,
+): WorkerVideoSourceOpenError {
+  if (cause instanceof WorkerVideoSourceOpenError) return cause
+  return new WorkerVideoSourceOpenError(failure, cause)
 }
 
 const browserEnv: WorkerVideoSourceEnv = {
@@ -109,6 +152,8 @@ const browserEnv: WorkerVideoSourceEnv = {
     source: new BlobSource(blob),
     formats: ALL_FORMATS,
   }),
+  beginDecoderSource: beginMediaDecoderSource,
+  ensureDecoderSupport: (target) => ensureMediaDecoderSupport(target),
   createSampleSink: (track) => new VideoSampleSink(
     track as InputVideoTrack,
     { optimizeForLatency: true },
@@ -347,25 +392,66 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
  */
 export async function openWorkerVideoSource(
   blob: Blob,
+  options: OpenWorkerVideoSourceOptions,
   env: WorkerVideoSourceEnv = browserEnv,
 ): Promise<WorkerVideoSource> {
   if (!(blob instanceof Blob)) throw new TypeError('blob must be a Blob')
+  const { sourceId } = options
+  if (sourceId !== undefined) env.beginDecoderSource(sourceId)
 
-  const input = env.createInput(blob)
+  let input: VideoInputLike
+  try {
+    input = env.createInput(blob)
+  } catch (cause) {
+    throw workerVideoSourceOpenError({
+      trackKind: null,
+      reason: 'resource-unavailable',
+    }, cause)
+  }
   try {
     const track = await input.getPrimaryVideoTrack()
     if (!track) throw new Error('media has no video track')
-    if (!(await track.canDecode())) {
-      throw new Error('video track cannot be decoded in this worker')
+    const [codec, configuration] = await Promise.all([
+      track.getCodec(),
+      track.getDecoderConfig(),
+    ])
+    const budget = refineVideoDecoderBudget(
+      options.budget,
+      blob.size,
+      configuration,
+    )
+    const support = await env.ensureDecoderSupport({
+      codec,
+      canDecode: () => track.canDecode(),
+      configuration,
+      trackKind: 'video',
+      sourceId,
+      boundary: 'render',
+      policy: 'revalidate',
+      budget,
+    })
+    if (!support.decodable) {
+      throw new WorkerVideoSourceOpenError({
+        trackKind: 'video',
+        reason: support.failure.reason,
+      }, new Error(support.failure.detail))
     }
     return new WorkerVideoSourceImpl(input, track, env)
-  } catch (error) {
+  } catch (cause) {
+    const error = workerVideoSourceOpenError({
+      trackKind: 'video',
+      reason: 'decode-failed',
+    }, cause)
     try {
       input.dispose()
     } catch (disposeError) {
-      throw new AggregateError(
-        [error, disposeError],
-        'Failed to open worker video source',
+      throw new WorkerVideoSourceOpenError(
+        error.failure,
+        new AggregateError(
+          [error, disposeError],
+          'Failed to open worker video source',
+          { cause: error },
+        ),
       )
     }
     throw error

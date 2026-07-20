@@ -16,15 +16,16 @@ import type {
   TimelineDoc,
   Track,
   Transform,
+  PartialTrackImportSelection,
 } from './schema'
-import { microsecondsToFrames } from './time'
+import { microsecondsDurationToFrames } from './time'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
 
 export const PROJECT_FILE_FORMAT = 'webcut-project' as const
-export const CURRENT_PROJECT_FORMAT_VERSION = 1 as const
+export const CURRENT_PROJECT_FORMAT_VERSION = 2 as const
 export const CURRENT_TIMELINE_SCHEMA_VERSION = 1 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
@@ -54,7 +55,7 @@ export const PROJECT_FILE_LIMITS = {
   maxFiniteMagnitude: 1_000_000_000,
 } as const
 
-/** Durable source-file metadata used for display, matching, and relinking. */
+/** Durable effective-import metadata plus original-file relink identity. */
 export interface PortableAssetDescriptor {
   id: string
   fileName: string
@@ -62,6 +63,7 @@ export interface PortableAssetDescriptor {
   size: number
   lastModified: number
   kind: AssetKind
+  partialTrackSelection?: PartialTrackImportSelection
   durationMicroseconds: number
   nativeFrameRate: FrameRate | null
   width: number | null
@@ -71,14 +73,14 @@ export interface PortableAssetDescriptor {
   audioChannels: number | null
 }
 
-export interface ProjectFileV1 {
+export interface ProjectFileV2 {
   format: typeof PROJECT_FILE_FORMAT
   formatVersion: typeof CURRENT_PROJECT_FORMAT_VERSION
   document: TimelineDoc
   assets: PortableAssetDescriptor[]
 }
 
-export type ProjectFile = ProjectFileV1
+export type ProjectFile = ProjectFileV2
 
 export class ProjectFileError extends Error {
   constructor(message: string) {
@@ -228,7 +230,7 @@ function validateAsset(value: unknown, path: string): asserts value is PortableA
       'audioSampleRate',
       'audioChannels',
     ],
-    [],
+    ['partialTrackSelection'],
     path,
   )
   stringValue(asset.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
@@ -238,6 +240,13 @@ function validateAsset(value: unknown, path: string): asserts value is PortableA
   safeInteger(asset.lastModified, `${path}.lastModified`, 0)
   if (asset.kind !== 'video' && asset.kind !== 'audio' && asset.kind !== 'image') {
     fail(`${path}.kind`, 'expected video, audio, or image')
+  }
+  if (
+    asset.partialTrackSelection !== undefined
+    && asset.partialTrackSelection !== 'video-only'
+    && asset.partialTrackSelection !== 'audio-only'
+  ) {
+    fail(`${path}.partialTrackSelection`, 'expected video-only or audio-only')
   }
   safeInteger(asset.durationMicroseconds, `${path}.durationMicroseconds`, 0)
   validateNullableFrameRate(asset.nativeFrameRate, `${path}.nativeFrameRate`)
@@ -273,6 +282,18 @@ function validateAsset(value: unknown, path: string): asserts value is PortableA
   }
   if (asset.kind === 'audio' && !asset.hasAudio) {
     fail(path, 'audio assets must contain audio')
+  }
+  if (
+    asset.partialTrackSelection === 'video-only'
+    && (asset.kind !== 'video' || asset.hasAudio)
+  ) {
+    fail(path, 'video-only imports must be video assets without audio')
+  }
+  if (
+    asset.partialTrackSelection === 'audio-only'
+    && asset.kind !== 'audio'
+  ) {
+    fail(path, 'audio-only imports must be audio assets')
   }
   const audioMetadataPresent = asset.audioSampleRate !== null && asset.audioChannels !== null
   if (asset.hasAudio !== audioMetadataPresent) {
@@ -432,7 +453,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
     startFrame: number
     durationFrames: number
   }
-  const assetDurationFrames = microsecondsToFrames(
+  const assetDurationFrames = microsecondsDurationToFrames(
     asset.durationMicroseconds,
     context.documentFrameRate,
   )
@@ -683,8 +704,9 @@ export function validateProjectFile(value: unknown): ProjectFile {
 }
 
 /**
- * Upgrade a parsed historical value into the current format. Version 1 has no
- * predecessor yet; the explicit switch is the insertion point for migrations.
+ * Upgrade a parsed historical value into the current format. Version 2 adds
+ * the optional durable partial-track choice; existing v1 assets mean full
+ * import and therefore need no per-asset field.
  */
 export function migrateProjectFile(value: unknown): unknown {
   const project = record(value, '$')
@@ -697,6 +719,8 @@ export function migrateProjectFile(value: unknown): unknown {
   }
   switch (project.formatVersion) {
     case 1:
+      return { ...project, formatVersion: CURRENT_PROJECT_FORMAT_VERSION }
+    case CURRENT_PROJECT_FORMAT_VERSION:
       return project
     default:
       return fail('$.formatVersion', `unsupported project format ${project.formatVersion}`)
@@ -759,6 +783,9 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
         size: asset.size,
         lastModified: asset.lastModified,
         kind: asset.kind,
+        ...(asset.partialTrackSelection === undefined
+          ? {}
+          : { partialTrackSelection: asset.partialTrackSelection }),
         durationMicroseconds: asset.durationMicroseconds,
         nativeFrameRate:
           asset.nativeFrameRate === null ? null : { ...asset.nativeFrameRate },

@@ -173,7 +173,7 @@ describe('portable project file', () => {
     const parsed = parseProjectFile(serializeProjectFile(original))
 
     expect(parsed.format).toBe('webcut-project')
-    expect(parsed.formatVersion).toBe(1)
+    expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
     expect(parsed.document).toEqual(original.document)
     expect(parsed.assets.map((asset) => asset.id)).toEqual(['image-a', 'video-z'])
     expect(parsed.assets.find((asset) => asset.id === 'video-z')).toEqual(original.assets[0])
@@ -187,6 +187,117 @@ describe('portable project file', () => {
     )
     expect(parsed.document.tracks[0].transitions).toEqual(
       original.document.tracks[0].transitions,
+    )
+  })
+
+  test('migrates v1 projects to v2 without inventing a partial-track choice', () => {
+    const legacy = clone(makeProject()) as unknown as {
+      formatVersion: number
+      assets: Array<Record<string, unknown>>
+    }
+    legacy.formatVersion = 1
+    for (const asset of legacy.assets) delete asset.partialTrackSelection
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.formatVersion).toBe(2)
+    expect(parsed.assets).toHaveLength(2)
+    expect(
+      parsed.assets.every((asset) => asset.partialTrackSelection === undefined),
+    ).toBe(true)
+  })
+
+  test('round-trips durable video-only and audio-only descriptor choices', () => {
+    const project = makeProject()
+    project.assets.push(
+      {
+        id: 'partial-video',
+        fileName: 'picture-only.mov',
+        mimeType: 'video/quicktime',
+        size: 4_000_000,
+        lastModified: 1_725_000_000_010,
+        kind: 'video',
+        partialTrackSelection: 'video-only',
+        durationMicroseconds: 6_000_000,
+        nativeFrameRate: { num: 24, den: 1 },
+        width: 1_920,
+        height: 1_080,
+        hasAudio: false,
+        audioSampleRate: null,
+        audioChannels: null,
+      },
+      {
+        id: 'partial-audio',
+        fileName: 'sound-only.mp4',
+        mimeType: 'video/mp4',
+        size: 2_000_000,
+        lastModified: 1_725_000_000_011,
+        kind: 'audio',
+        partialTrackSelection: 'audio-only',
+        durationMicroseconds: 5_000_000,
+        nativeFrameRate: null,
+        width: null,
+        height: null,
+        hasAudio: true,
+        audioSampleRate: 48_000,
+        audioChannels: 2,
+      },
+    )
+
+    const serialized = serializeProjectFile(project)
+    const parsed = parseProjectFile(serialized)
+
+    expect(parsed.assets.find((asset) => asset.id === 'partial-video')).toEqual(
+      project.assets[2],
+    )
+    expect(parsed.assets.find((asset) => asset.id === 'partial-audio')).toEqual(
+      project.assets[3],
+    )
+    expect(serialized).toContain('partialTrackSelection')
+  })
+
+  test('rejects invalid partial-track descriptor combinations', () => {
+    const invalidSelection = makeProject()
+    Object.assign(invalidSelection.assets[1], {
+      partialTrackSelection: 'captions-only',
+    })
+    expect(() => validateProjectFile(invalidSelection)).toThrow(
+      /partialTrackSelection.*video-only or audio-only/,
+    )
+
+    const videoOnlyWithAudio = makeProject()
+    Object.assign(videoOnlyWithAudio.assets[0], {
+      partialTrackSelection: 'video-only',
+    })
+    expect(() => validateProjectFile(videoOnlyWithAudio)).toThrow(
+      /video-only imports must be video assets without audio/,
+    )
+
+    const videoOnlyImage = makeProject()
+    Object.assign(videoOnlyImage.assets[1], {
+      partialTrackSelection: 'video-only',
+    })
+    expect(() => validateProjectFile(videoOnlyImage)).toThrow(
+      /video-only imports must be video assets without audio/,
+    )
+
+    const audioOnlyVideo = makeProject()
+    Object.assign(audioOnlyVideo.assets[0], {
+      partialTrackSelection: 'audio-only',
+    })
+    expect(() => validateProjectFile(audioOnlyVideo)).toThrow(
+      /audio-only imports must be audio assets/,
+    )
+
+    const audioOnlyWithoutAudio = makeProject()
+    Object.assign(audioOnlyWithoutAudio.assets[1], {
+      kind: 'audio',
+      partialTrackSelection: 'audio-only',
+      width: null,
+      height: null,
+    })
+    expect(() => validateProjectFile(audioOnlyWithoutAudio)).toThrow(
+      /audio assets must contain audio/,
     )
   })
 
@@ -207,6 +318,9 @@ describe('portable project file', () => {
     const serialized = serializeProjectFile(snapshot)
     expect(serialized).not.toContain('objectUrl')
     expect(serialized).not.toContain('decoderConfigB64')
+    expect(serialized).not.toContain('decoderCapabilityCache')
+    expect(serialized).not.toContain('capabilityRevision')
+    expect(serialized).not.toContain('revalidate')
     expect(serialized).not.toContain('blob:')
   })
 
@@ -228,6 +342,8 @@ describe('portable project file', () => {
       objectUrl: 'blob:https://example.invalid/session',
       decoderConfigB64: 'session-decoder-data',
       visuals: { thumbnails: ['blob:thumbnail'] },
+      decoderCapabilityCache: { render: true },
+      capabilityRevision: 4,
       absolutePath: 'C:\\private\\camera.mov',
       handle: { kind: 'file' },
     })
@@ -237,6 +353,8 @@ describe('portable project file', () => {
     for (const forbidden of [
       'objectUrl',
       'decoderConfigB64',
+      'decoderCapabilityCache',
+      'capabilityRevision',
       'visuals',
       'absolutePath',
       'history',
@@ -467,6 +585,21 @@ describe('portable project file', () => {
     const project = makeProject()
     project.assets[0].durationMicroseconds = 100_000
     expect(() => validateProjectFile(project)).toThrow(/beyond the referenced asset duration/)
+  })
+
+  test('accepts one-frame clips for positive sub-frame media', () => {
+    const project = makeProject()
+    project.assets[0].durationMicroseconds = 1
+    for (const track of project.document.tracks) {
+      track.transitions = []
+      for (const clip of track.clips) {
+        if (clip.assetId !== 'video-z') continue
+        clip.sourceRange = { startFrame: 0, durationFrames: 1 }
+        clip.timelineRange.durationFrames = 1
+      }
+    }
+
+    expect(() => validateProjectFile(project)).not.toThrow()
   })
 
   test('rejects future project-format and timeline-schema versions', () => {

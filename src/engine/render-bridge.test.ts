@@ -13,10 +13,11 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
+import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, FrameRate, TimelineDoc, Track } from '../domain/schema'
 import type { ChunkPayload } from '../workers/decode-protocol'
 import type { FromRenderWorker, ToRenderWorker } from '../workers/render-protocol'
-import { RenderWorkerBridge } from './render-bridge'
+import { RenderAssetOpenError, RenderWorkerBridge } from './render-bridge'
 import type { ChunkProvider, WorkerLike } from './worker-bridge'
 
 /* ------------------------------------------------------------------ */
@@ -26,6 +27,15 @@ import type { ChunkProvider, WorkerLike } from './worker-bridge'
 const R30: FrameRate = { num: 30, den: 1 }
 const R60: FrameRate = { num: 60, den: 1 }
 const R_NTSC: FrameRate = { num: 30_000, den: 1_001 }
+const BUDGET: LocalDecoderBudget = {
+  fileBytes: 5,
+  durationMicroseconds: 1_000_000,
+  width: 1920,
+  height: 1080,
+  framesPerSecond: 30,
+  sampleRate: 48_000,
+  channels: 2,
+}
 
 class FakeWorker implements WorkerLike {
   posted: Array<{ msg: ToRenderWorker; transfer: Transferable[] }> = []
@@ -139,8 +149,9 @@ function openAcked(
   assetId: string,
   blob: Blob,
   rate: FrameRate,
+  runtimeToken: object = {},
 ): Promise<void> {
-  const done = ctx.bridge.openAsset(assetId, blob, rate)
+  const done = ctx.bridge.openAsset(assetId, blob, rate, BUDGET, runtimeToken)
   ctx.worker.emit({ type: 'assetConfigured', assetId })
   return done
 }
@@ -368,10 +379,15 @@ describe('Blob-backed streaming path', () => {
     const ready: string[] = []
     bridge.onAssetReady = (assetId) => ready.push(assetId)
 
-    const done = bridge.openAsset('A', blob, R_NTSC)
+    const done = bridge.openAsset('A', blob, R_NTSC, BUDGET)
 
     expect(worker.openAssets()).toHaveLength(1)
-    expect(worker.openAssets()[0]).toEqual({ type: 'openAsset', assetId: 'A', blob })
+    expect(worker.openAssets()[0]).toEqual({
+      type: 'openAsset',
+      assetId: 'A',
+      blob,
+      budget: BUDGET,
+    })
     expect(worker.posted.find((post) => post.msg.type === 'openAsset')?.transfer).toEqual([])
 
     worker.emit({ type: 'assetConfigured', assetId: 'A' })
@@ -384,8 +400,8 @@ describe('Blob-backed streaming path', () => {
     const firstBlob = new Blob(['first'])
     const secondBlob = new Blob(['second'])
 
-    const first = bridge.openAsset('A', firstBlob, R30)
-    await expect(bridge.openAsset('A', secondBlob, R60)).rejects.toThrow(
+    const first = bridge.openAsset('A', firstBlob, R30, BUDGET)
+    await expect(bridge.openAsset('A', secondBlob, R60, BUDGET)).rejects.toThrow(
       'asset A registration already pending',
     )
     expect(worker.openAssets().map((message) => message.blob)).toEqual([firstBlob])
@@ -393,7 +409,7 @@ describe('Blob-backed streaming path', () => {
     worker.emit({ type: 'assetConfigured', assetId: 'A' })
     await expect(first).resolves.toBeUndefined()
 
-    const replacement = bridge.openAsset('A', secondBlob, R60)
+    const replacement = bridge.openAsset('A', secondBlob, R60, BUDGET)
     expect(worker.openAssets().map((message) => message.blob)).toEqual([
       firstBlob,
       secondBlob,
@@ -565,7 +581,7 @@ describe('Blob-backed streaming path', () => {
   test('an open error removes the failed registration', async () => {
     const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
     const { worker, bridge } = makeBridge(doc)
-    const opening = bridge.openAsset('A', new Blob(['bad']), R30)
+    const opening = bridge.openAsset('A', new Blob(['bad']), R30, BUDGET)
 
     worker.emit({ type: 'error', assetId: 'A', message: 'container unsupported' })
     await expect(opening).rejects.toThrow('container unsupported')
@@ -584,10 +600,87 @@ describe('Blob-backed streaming path', () => {
     await expect(result).resolves.toMatchObject({ status: 'drawn' })
   })
 
+  test('a typed worker source failure preserves file-level classification', async () => {
+    const { worker, bridge } = makeBridge(makeDoc([]))
+    const opening = bridge.openAsset('A', new Blob(['bad']), R30, BUDGET)
+
+    worker.emit({
+      type: 'error',
+      assetId: 'A',
+      mediaFailure: {
+        trackKind: null,
+        reason: 'resource-unavailable',
+      },
+      message: 'worker openAsset failed: Input construction failed',
+    })
+
+    const failure = await opening.catch((cause) => cause)
+    expect(failure).toBeInstanceOf(RenderAssetOpenError)
+    expect(failure).toMatchObject({
+      failure: {
+        trackKind: null,
+        reason: 'resource-unavailable',
+      },
+    })
+  })
+
+  test('a typed worker source failure preserves a video resource limit', async () => {
+    const { worker, bridge } = makeBridge(makeDoc([]))
+    const opening = bridge.openAsset('A', new Blob(['bad']), R30, BUDGET)
+
+    worker.emit({
+      type: 'error',
+      assetId: 'A',
+      mediaFailure: {
+        trackKind: 'video',
+        reason: 'resource-limit',
+      },
+      message: 'worker openAsset failed: ProRes budget exceeded',
+    })
+
+    const failure = await opening.catch((cause) => cause)
+    expect(failure).toBeInstanceOf(RenderAssetOpenError)
+    expect(failure).toMatchObject({
+      failure: {
+        trackKind: 'video',
+        reason: 'resource-limit',
+      },
+    })
+  })
+
+  test('a stale release cleanup warning cannot reject a pending replacement', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    const warnings: string[] = []
+    bridge.onWorkerError = (message) => warnings.push(message)
+    const opening = bridge.openAsset('A', new Blob(['replacement']), R30, BUDGET)
+
+    worker.emit({
+      type: 'error',
+      message: 'stale release cleanup failed for asset A',
+    })
+    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+
+    await expect(opening).resolves.toBeUndefined()
+    expect(warnings).toEqual(['stale release cleanup failed for asset A'])
+    const result = bridge.renderFrame(1, 'seek')
+    expect(worker.renderFrames()[0].sources.map((source) => source.assetId))
+      .toEqual(['A'])
+    worker.emit({
+      type: 'compositeDone',
+      requestId: worker.renderFrames()[0].requestId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(result).resolves.toMatchObject({ status: 'drawn' })
+  })
+
   test('releaseAsset rejects a pending open and omits its source afterward', async () => {
     const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
     const { worker, bridge } = makeBridge(doc)
-    const opening = bridge.openAsset('A', new Blob(['video']), R30)
+    const opening = bridge.openAsset('A', new Blob(['video']), R30, BUDGET)
 
     bridge.releaseAsset('A')
     await expect(opening).rejects.toThrow('asset released')
@@ -813,27 +906,101 @@ describe('reply routing', () => {
     expect(warnings).toEqual(['decode failed: boom'])
   })
 
+  test('a streaming request error carries the exact source open token', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    const runtimeToken = { generation: 'source-A' }
+    await openAcked(
+      { worker, bridge },
+      'A',
+      new Blob(['video']),
+      R30,
+      runtimeToken,
+    )
+    const assetFailures: Array<{
+      assetId: string
+      runtimeToken: object
+      message: string
+    }> = []
+    bridge.onAssetError = (assetId, token, message) => {
+      assetFailures.push({ assetId, runtimeToken: token, message })
+    }
+
+    const result = bridge.renderFrame(1, 'seek')
+    const requestId = worker.renderFrames()[0].requestId
+    worker.emit({
+      type: 'error',
+      requestId,
+      assetId: 'A',
+      message: 'decode failed: boom',
+    })
+    worker.emit({
+      type: 'compositeDone',
+      requestId,
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: ['a'],
+      renderMs: 2,
+    })
+
+    await expect(result).resolves.toMatchObject({ status: 'drawn' })
+    expect(assetFailures).toEqual([{
+      assetId: 'A',
+      runtimeToken,
+      message: 'decode failed: boom',
+    }])
+  })
+
   test('an old render diagnostic cannot reject a pending asset replacement', async () => {
     const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
     const { worker, bridge } = makeBridge(doc)
-    await openAcked({ worker, bridge }, 'A', new Blob(['first']), R30)
+    const oldToken = { generation: 'old' }
+    const newToken = { generation: 'new' }
+    await openAcked(
+      { worker, bridge },
+      'A',
+      new Blob(['first']),
+      R30,
+      oldToken,
+    )
     const warnings: string[] = []
+    const assetFailures: object[] = []
     bridge.onWorkerError = (message) => warnings.push(message)
+    bridge.onAssetError = (_assetId, token) => assetFailures.push(token)
 
-    const replacement = bridge.openAsset('A', new Blob(['second']), R60)
+    const oldResult = bridge.renderFrame(1, 'seek')
+    const oldRequestId = worker.renderFrames()[0].requestId
+
+    const replacement = bridge.openAsset(
+      'A',
+      new Blob(['second']),
+      R60,
+      BUDGET,
+      newToken,
+    )
     worker.emit({
       type: 'error',
-      requestId: 99,
+      requestId: oldRequestId,
       assetId: 'A',
       message: 'late decode diagnostic',
     })
+    worker.emit({
+      type: 'compositeDone',
+      requestId: oldRequestId,
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: ['a'],
+      renderMs: 1,
+    })
     worker.emit({ type: 'assetConfigured', assetId: 'A' })
 
+    await expect(oldResult).resolves.toMatchObject({ status: 'drawn' })
     await expect(replacement).resolves.toBeUndefined()
     expect(warnings).toEqual(['late decode diagnostic'])
+    expect(assetFailures).toEqual([])
 
     const result = bridge.renderFrame(1, 'seek')
-    const render = worker.renderFrames()[0]
+    const render = worker.renderFrames().at(-1)!
     expect(render.sources.map((source) => source.assetId)).toEqual(['A'])
     worker.emit({
       type: 'compositeDone',

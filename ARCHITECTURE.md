@@ -7,6 +7,7 @@ non-negotiable rules. Re-read it at the start of every coding session.
 
 ```
   ui/  →  state/  →  domain/
+  engine/, pipeline/, workers/  →  codecs/  →  domain/
   engine/, pipeline/, workers/  →  domain/   (never import React)
   domain/  →  nothing (pure TS, no browser APIs)
 ```
@@ -19,6 +20,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
   `pipeline/`, `workers/`, or `engine/` directly from a `.tsx` file.
 - `engine/`, `pipeline/`, `workers/` may import `domain/`. They must never
   import React or anything from `ui/` or `state/`.
+- `codecs/` is a browser/worker-safe runtime leaf for reviewed local codec
+  registration and policy. It may import `domain/` types and external codec
+  packages, but never `state/`, `ui/`, `app/`, `engine/`, `pipeline/`, or
+  `workers/`.
 - `app/` is the COMPOSITION ROOT: non-component `.ts` controllers there
   (e.g. `app/previewController.ts`) may import state/ AND engine/pipeline
   to wire them together. ui components may import those controllers as
@@ -167,6 +172,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   disconnection, removal, late visual results, and `clearAssets()` revoke each
   owned source/generated URL exactly once. Project persistence serializes the
   descriptors, never the session-only connected resources or URLs.
+  `compatibility: Map<AssetId, MediaCompatibilityItem>` is also session-only:
+  `startCompatibility` accepts only an uncommitted id with no active check,
+  `setCompatibility` accepts only the request generation that still owns that
+  row, and removal/project replacement invalidates late results. Reports are
+  small serializable facts with no live resources. Files, handles, Inputs, and
+  abort controllers stay app-layer; a Ready object URL transfers only to the
+  existing asset/visual owners, never into compatibility state.
 - `ProjectSessionState` — `src/state/projectSessionStore.ts`: serializable
   launch/editor screen, operation phase, active-project labels, resume and
   active-editor relink summaries (including ambiguity choices), and the
@@ -228,6 +240,7 @@ src/
   engine/      playback-engine, worker-bridge, frame-cache
   workers/     decode.worker, render.worker
   pipeline/    demux, decode, render, export
+  codecs/      realm-local lazy decoder registration and resource policy
   ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector
   ui/timeline/ Timeline, Track, ClipView, Ruler, Playhead
   app/         App, project/persistence/controllers, layout.css

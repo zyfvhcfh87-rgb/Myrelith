@@ -9,8 +9,10 @@
  * cooperative cancellation at a generator yield boundary.
  */
 
+import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
+import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
-import { outputMediaAssetIds } from '../domain/selectors'
+import { audibleTracks, outputMediaAssetIds } from '../domain/selectors'
 import {
   exportTimeline,
   type ExportDeps as PipelineExportDeps,
@@ -25,6 +27,11 @@ import {
 } from '../pipeline/export-mediabunny'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import {
+  captureMediaRuntimeGuard,
+  reportMediaRuntimeFailure,
+  type MediaRuntimeGuard,
+} from './mediaCompatibilityController'
 
 export type { ExportResult, ExportSettings } from '../pipeline/export'
 
@@ -81,15 +88,46 @@ interface ActiveExport {
 
 const state: { active: ActiveExport | null } = { active: null }
 
+function captureExportRuntimeGuards(
+  assets: ReadonlyMap<AssetId, MediaAsset>,
+): Map<AssetId, MediaRuntimeGuard> {
+  const guards = new Map<AssetId, MediaRuntimeGuard>()
+  for (const assetId of assets.keys()) {
+    const guard = captureMediaRuntimeGuard(assetId)
+    if (guard) guards.set(assetId, guard)
+  }
+  return guards
+}
+
+function reportExportRuntimeFailure(
+  cause: unknown,
+  guards: ReadonlyMap<AssetId, MediaRuntimeGuard>,
+): void {
+  if (
+    !(cause instanceof MediaAssetRuntimeError)
+    || cause.failure.surface !== 'export'
+  ) return
+  const guard = guards.get(cause.assetId)
+  if (!guard) return
+  try {
+    reportMediaRuntimeFailure(guard, cause.failure)
+  } catch {
+    // Compatibility feedback must never replace the export's original error.
+  }
+}
+
 /** One URL fetch per asset and one stable media snapshot for the whole run. */
 function createAssetResolver(
   assets: ReadonlyMap<AssetId, MediaAsset>,
   fetchBlob: ExportControllerDeps['fetchBlob'],
 ): ExportAssetResolver {
-  const blobPromises = new Map<AssetId, Promise<Blob>>()
+  const assetPromises = new Map<
+    AssetId,
+    ReturnType<ExportAssetResolver>
+  >()
 
   return (assetId) => {
-    const cached = blobPromises.get(assetId)
+    const cached = assetPromises.get(assetId)
     if (cached) return cached
 
     const asset = assets.get(assetId)
@@ -102,13 +140,16 @@ function createAssetResolver(
     // fetchBlob starts synchronously here. Pre-warming referenced ids before
     // the run is exposed therefore retains their Blobs before removeAsset can
     // revoke an object URL; later video/audio opens share the cached promise.
-    let pending: Promise<Blob>
+    let pending: ReturnType<ExportAssetResolver>
     try {
-      pending = Promise.resolve(fetchBlob(asset.objectUrl))
+      pending = Promise.resolve(fetchBlob(asset.objectUrl)).then((blob) => ({
+        blob,
+        budget: mediaAssetDecoderBudget(asset, blob.size),
+      }))
     } catch (cause) {
       pending = Promise.reject(cause)
     }
-    blobPromises.set(assetId, pending)
+    assetPromises.set(assetId, pending)
     return pending
   }
 }
@@ -134,6 +175,35 @@ function retainReferencedBlobs(
       // audible clip needs it, the pipeline's later resolve reports the id.
     }
   }
+}
+
+/** Fail closed if stale/corrupt clips target a track the import omitted. */
+function partialTrackConflict(
+  doc: TimelineDoc,
+  assets: ReadonlyMap<AssetId, MediaAsset>,
+): string | null {
+  const audibleTrackIds = new Set(audibleTracks(doc).map((track) => track.id))
+  for (const track of doc.tracks) {
+    const contributes = track.kind === 'video'
+      ? !track.hidden
+      : audibleTrackIds.has(track.id)
+    if (!contributes) continue
+    for (const clip of track.clips) {
+      if (
+        clip.text
+        || (track.kind === 'video' ? clip.opacity <= 0 : clip.volume <= 0)
+      ) continue
+      const asset = assets.get(clip.assetId)
+      if (!asset) continue
+      if (track.kind === 'audio' && !asset.hasAudio) {
+        return `Audio clip "${clip.name}" cannot be exported because "${asset.fileName}" was imported without audio.`
+      }
+      if (track.kind === 'video' && asset.kind === 'audio') {
+        return `Video clip "${clip.name}" cannot be exported because "${asset.fileName}" was imported as audio only.`
+      }
+    }
+  }
+  return null
 }
 
 /** Preserve setup as the primary failure while releasing pre-start ownership. */
@@ -228,9 +298,13 @@ async function drainExport(
 function trackActiveExport(
   session: ExportSession | null,
   pending: Promise<ExportResult | undefined>,
+  runtimeGuards: ReadonlyMap<AssetId, MediaRuntimeGuard>,
 ): Promise<ExportResult | undefined> {
   const token = {}
-  const completion = pending.finally(() => {
+  const completion = pending.catch((cause) => {
+    reportExportRuntimeFailure(cause, runtimeGuards)
+    throw cause
+  }).finally(() => {
     if (state.active?.token === token) state.active = null
   })
   state.active = { token, session, completion }
@@ -257,6 +331,7 @@ export function startExport(
   const runSettings = { ...settings }
   const mediaState = useMediaStore.getState()
   const assets = new Map(mediaState.assets)
+  const runtimeGuards = captureExportRuntimeGuards(assets)
   const offline = [...outputMediaAssetIds(doc)].filter(
     (assetId) => !assets.has(assetId),
   )
@@ -268,6 +343,8 @@ export function startExport(
       `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`,
     ))
   }
+  const trackConflict = partialTrackConflict(doc, assets)
+  if (trackConflict) return Promise.reject(new Error(trackConflict))
   const resolveAsset = createAssetResolver(assets, deps.fetchBlob)
   retainReferencedBlobs(doc, resolveAsset)
 
@@ -278,9 +355,15 @@ export function startExport(
     media = deps.createMediaSource(doc, resolveAsset)
     generator = deps.runExport(doc, runSettings, media, pipelineDeps)
   } catch (cause) {
-    return media
-      ? trackActiveExport(null, rejectAfterClosingMedia(media, cause))
-      : Promise.reject(cause)
+    if (media) {
+      return trackActiveExport(
+        null,
+        rejectAfterClosingMedia(media, cause),
+        runtimeGuards,
+      )
+    }
+    reportExportRuntimeFailure(cause, runtimeGuards)
+    return Promise.reject(cause)
   }
 
   let firstStep: Promise<IteratorResult<number, ExportResult | undefined>>
@@ -289,7 +372,11 @@ export function startExport(
     // return(undefined) on a never-started generator would skip its finally.
     firstStep = generator.next()
   } catch (cause) {
-    return trackActiveExport(null, rejectAfterClosingMedia(media, cause))
+    return trackActiveExport(
+      null,
+      rejectAfterClosingMedia(media, cause),
+      runtimeGuards,
+    )
   }
 
   const session: ExportSession = {
@@ -301,6 +388,7 @@ export function startExport(
   return trackActiveExport(
     session,
     drainExport(session, firstStep, callbacks.onProgress),
+    runtimeGuards,
   )
 }
 

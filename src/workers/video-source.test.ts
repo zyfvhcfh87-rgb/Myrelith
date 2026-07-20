@@ -1,4 +1,8 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
+import type {
+  DecoderCheckResult,
+  LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 import type {
   VideoFrameLike,
   VideoInputLike,
@@ -8,7 +12,18 @@ import type {
   VideoTrackLike,
   WorkerVideoSourceEnv,
 } from './video-source'
-import { openWorkerVideoSource } from './video-source'
+import {
+  WorkerVideoSourceOpenError,
+  openWorkerVideoSource,
+} from './video-source'
+
+const DECODE_BUDGET: LocalDecoderBudget = {
+  fileBytes: 1,
+  durationMicroseconds: 1_000_000,
+  width: 1920,
+  height: 1080,
+  framesPerSecond: 30,
+}
 
 interface TrackedFrame extends VideoFrameLike {
   closeCount: number
@@ -151,10 +166,30 @@ class FakeSink implements VideoSampleSinkLike {
 
 class FakeTrack implements VideoTrackLike {
   readonly decodable: boolean
+  readonly codec: string
+  readonly configuration: VideoDecoderConfig | null
   canDecodeCount = 0
 
-  constructor(decodable = true) {
+  constructor(
+    decodable = true,
+    codec = 'avc',
+    configuration: VideoDecoderConfig | null = {
+      codec: 'avc1.640028',
+      codedWidth: 1920,
+      codedHeight: 1080,
+    },
+  ) {
     this.decodable = decodable
+    this.codec = codec
+    this.configuration = configuration
+  }
+
+  async getCodec(): Promise<string> {
+    return this.codec
+  }
+
+  async getDecoderConfig(): Promise<VideoDecoderConfig | null> {
+    return this.configuration
   }
 
   async canDecode(): Promise<boolean> {
@@ -183,6 +218,7 @@ class FakeInput implements VideoInputLike {
 interface Harness {
   input: FakeInput
   env: WorkerVideoSourceEnv
+  begunSourceIds: string[]
   createdSinkCount(): number
 }
 
@@ -191,16 +227,45 @@ function makeHarness(
   track: VideoTrackLike | null = new FakeTrack(),
 ): Harness {
   const input = new FakeInput(track)
+  const begunSourceIds: string[] = []
   let sinkIndex = 0
   const env: WorkerVideoSourceEnv = {
     createInput: () => input,
+    beginDecoderSource: (sourceId) => begunSourceIds.push(sourceId),
+    ensureDecoderSupport: async (target): Promise<DecoderCheckResult> => {
+      const decodable = await target.canDecode()
+      return decodable
+        ? {
+            decodable: true,
+            path: 'native',
+            attemptedFallback: null,
+            failure: null,
+          }
+        : {
+            decodable: false,
+            path: null,
+            attemptedFallback: null,
+            failure: {
+              reason: 'unsupported-codec',
+              detail: 'video track cannot be decoded in this worker',
+            },
+          }
+    },
     createSampleSink: () => {
       const sink = sinks[sinkIndex++]
       if (!sink) throw new Error('test did not provide a sink for this lane')
       return sink
     },
   }
-  return { input, env, createdSinkCount: () => sinkIndex }
+  return { input, env, begunSourceIds, createdSinkCount: () => sinkIndex }
+}
+
+function openHarness(harness: Harness) {
+  return openWorkerVideoSource(
+    new Blob(),
+    { budget: DECODE_BUDGET },
+    harness.env,
+  )
 }
 
 describe('worker video source', () => {
@@ -213,7 +278,7 @@ describe('worker video source', () => {
     const iterator = new FakeIterator(samples)
     const sink = new FakeSink(iterator)
     const h = makeHarness([sink])
-    const source = await openWorkerVideoSource(new Blob(), h.env)
+    const source = await openHarness(h)
     const cursor = source.openPlaybackLane({
       startTimestampUs: 33_366,
       endTimestampUs: 133_464,
@@ -259,7 +324,7 @@ describe('worker video source', () => {
     const playbackSink = new FakeSink(playbackIterator)
     const seekSink = new FakeSink(undefined, seekIterator)
     const h = makeHarness([playbackSink, seekSink])
-    const source = await openWorkerVideoSource(new Blob(), h.env)
+    const source = await openHarness(h)
 
     const playback = source.openPlaybackLane({ startTimestampUs: 500_000 })
     const seek = source.openSeekLane(1_234_567)
@@ -284,7 +349,7 @@ describe('worker video source', () => {
     sample.conversionError = new Error('VideoFrame conversion failed')
     const iterator = new FakeIterator([sample])
     const h = makeHarness([new FakeSink(iterator)])
-    const source = await openWorkerVideoSource(new Blob(), h.env)
+    const source = await openHarness(h)
     const cursor = source.openPlaybackLane({ startTimestampUs: 0 })
 
     await expect(cursor.next()).rejects.toThrow('VideoFrame conversion failed')
@@ -300,7 +365,7 @@ describe('worker video source', () => {
     const iterator = new PendingIterator<VideoSampleLike>()
     const sample = new TrackedSample(0)
     const h = makeHarness([new FakeSink(iterator)])
-    const source = await openWorkerVideoSource(new Blob(), h.env)
+    const source = await openHarness(h)
     const cursor = source.openPlaybackLane({ startTimestampUs: 0 })
 
     const pending = cursor.next()
@@ -323,7 +388,7 @@ describe('worker video source', () => {
     const iterator = new PendingIterator<VideoSampleLike>()
     const sample = new TrackedSample(0)
     const h = makeHarness([new FakeSink(iterator)])
-    const source = await openWorkerVideoSource(new Blob(), h.env)
+    const source = await openHarness(h)
     const cursor = source.openPlaybackLane({ startTimestampUs: 0 })
 
     const first = cursor.next()
@@ -344,7 +409,7 @@ describe('worker video source', () => {
       new FakeSink(firstIterator),
       new FakeSink(secondIterator),
     ])
-    const source = await openWorkerVideoSource(new Blob(), h.env)
+    const source = await openHarness(h)
     source.openPlaybackLane({ startTimestampUs: 0 })
     source.openPlaybackLane({ startTimestampUs: 1_000_000 })
 
@@ -359,7 +424,7 @@ describe('worker video source', () => {
 
   test('validates integer source time before opening a sink', async () => {
     const h = makeHarness()
-    const source = await openWorkerVideoSource(new Blob(), h.env)
+    const source = await openHarness(h)
 
     expect(() => source.openPlaybackLane({ startTimestampUs: 1.5 })).toThrow(
       'startTimestampUs must be a non-negative safe integer',
@@ -377,6 +442,35 @@ describe('worker video source', () => {
     expect(() => source.openSeekLane(0)).toThrow('video source is closed')
   })
 
+  test('types pre-track Input construction as a file-level resource failure', async () => {
+    const cause = new Error('Mediabunny Input construction failed')
+    const env: WorkerVideoSourceEnv = {
+      createInput: () => { throw cause },
+      beginDecoderSource: () => undefined,
+      ensureDecoderSupport: () => {
+        throw new Error('decoder check must not run')
+      },
+      createSampleSink: () => { throw new Error('sink must not be created') },
+    }
+
+    const failure = await openWorkerVideoSource(
+      new Blob(),
+      { budget: DECODE_BUDGET },
+      env,
+    )
+      .catch((error) => error)
+
+    expect(failure).toBeInstanceOf(WorkerVideoSourceOpenError)
+    expect(failure).toMatchObject({
+      message: cause.message,
+      failure: {
+        trackKind: null,
+        reason: 'resource-unavailable',
+      },
+    })
+    expect(failure.cause).toBe(cause)
+  })
+
   test.each([
     { label: 'missing video track', track: null, message: 'media has no video track' },
     {
@@ -386,7 +480,93 @@ describe('worker video source', () => {
     },
   ])('disposes input after $label initialization failure', async ({ track, message }) => {
     const h = makeHarness([], track)
-    await expect(openWorkerVideoSource(new Blob(), h.env)).rejects.toThrow(message)
+    await expect(openHarness(h)).rejects.toThrow(message)
+    expect(h.input.disposeCount).toBe(1)
+    expect(h.createdSinkCount()).toBe(0)
+  })
+
+  test('awaits the shared worker fallback seam before creating a sink', async () => {
+    const configuration: VideoDecoderConfig = {
+      codec: 'ap4h',
+      codedWidth: 1920,
+      codedHeight: 1080,
+      description: new Uint8Array([1, 2, 3]),
+    }
+    const track = new FakeTrack(false, 'prores', configuration)
+    const h = makeHarness([], track)
+    const file = new Blob(['prores'])
+    const staleBudget = {
+      ...DECODE_BUDGET,
+      width: 640,
+      height: 360,
+    }
+    h.env.ensureDecoderSupport = vi.fn(async (
+      target,
+    ): Promise<DecoderCheckResult> => {
+      expect(target).toMatchObject({
+        codec: 'prores',
+        configuration,
+        trackKind: 'video',
+        sourceId: 'asset-prores',
+        boundary: 'render',
+        policy: 'revalidate',
+        budget: {
+          ...staleBudget,
+          fileBytes: file.size,
+          width: 1920,
+          height: 1080,
+        },
+      })
+      return {
+        decodable: true,
+        path: 'local-prores',
+        attemptedFallback: 'prores',
+        failure: null,
+      }
+    })
+
+    const source = await openWorkerVideoSource(
+      file,
+      { sourceId: 'asset-prores', budget: staleBudget },
+      h.env,
+    )
+
+    expect(h.begunSourceIds).toEqual(['asset-prores'])
+    expect(h.env.ensureDecoderSupport).toHaveBeenCalledOnce()
+    expect(h.createdSinkCount()).toBe(0)
+    await source.close()
+    expect(h.input.disposeCount).toBe(1)
+  })
+
+  test('preserves a resource-limit rejection and allocates no sink', async () => {
+    const track = new FakeTrack(false, 'prores', {
+      codec: 'apch',
+      codedWidth: 1920,
+      codedHeight: 1080,
+    })
+    const h = makeHarness([], track)
+    h.env.ensureDecoderSupport = vi.fn(
+      async (): Promise<DecoderCheckResult> => ({
+        decodable: false,
+        path: null,
+        attemptedFallback: 'prores',
+        failure: {
+          reason: 'resource-limit',
+          detail: 'Local ProRes safety budget is incomplete.',
+        },
+      }),
+    )
+
+    const failure = await openHarness(h).catch((cause) => cause)
+
+    expect(failure).toBeInstanceOf(WorkerVideoSourceOpenError)
+    expect(failure).toMatchObject({
+      message: 'Local ProRes safety budget is incomplete.',
+      failure: {
+        trackKind: 'video',
+        reason: 'resource-limit',
+      },
+    })
     expect(h.input.disposeCount).toBe(1)
     expect(h.createdSinkCount()).toBe(0)
   })

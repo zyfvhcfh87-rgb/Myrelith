@@ -4,12 +4,26 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
+
+const AUDIO_BUDGET: LocalDecoderBudget = {
+  fileBytes: 5,
+  durationMicroseconds: 1_000_000,
+  sampleRate: 48_000,
+  channels: 2,
+}
+
+const resolvedAudio = () => ({
+  blob: new Blob(['media']),
+  budget: AUDIO_BUDGET,
+})
 
 const media = vi.hoisted(() => ({
   inputs: [] as Array<{ disposeCalls: number }>,
   iterators: [] as Array<{ returnCalls: number }>,
   failTrackCount: 0,
   bufferOpensOnDisposedInput: 0,
+  trackGate: null as Promise<void> | null,
 }))
 
 vi.mock('mediabunny', () => {
@@ -29,11 +43,21 @@ vi.mock('mediabunny', () => {
     }
 
     async getPrimaryAudioTrack() {
+      if (media.trackGate) await media.trackGate
       if (media.failTrackCount > 0) {
         media.failTrackCount--
         return null
       }
-      return { canDecode: async () => true, input: this }
+      return {
+        getCodec: async () => 'aac',
+        getDecoderConfig: async (): Promise<AudioDecoderConfig> => ({
+          codec: 'mp4a.40.2',
+          numberOfChannels: 2,
+          sampleRate: 48_000,
+        }),
+        canDecode: async () => true,
+        input: this,
+      }
     }
 
     dispose() {
@@ -87,11 +111,12 @@ beforeEach(() => {
   media.iterators.length = 0
   media.failTrackCount = 0
   media.bufferOpensOnDisposedInput = 0
+  media.trackGate = null
 })
 
 describe('createMediabunnyPlaybackAudioSource ownership', () => {
   test('shares an Input across overlapping cursors and evicts on the last close', async () => {
-    const resolveAsset = vi.fn(async () => new Blob(['media']))
+    const resolveAsset = vi.fn(async () => resolvedAudio())
     const source = createMediabunnyPlaybackAudioSource(resolveAsset)
 
     const first = await source.openClip({
@@ -119,7 +144,7 @@ describe('createMediabunnyPlaybackAudioSource ownership', () => {
 
   test('releases a finished asset before retaining the next one', async () => {
     const source = createMediabunnyPlaybackAudioSource(
-      async () => new Blob(['media']),
+      async () => resolvedAudio(),
     )
     const first = await source.openClip({
       assetId: 'asset-1',
@@ -143,7 +168,7 @@ describe('createMediabunnyPlaybackAudioSource ownership', () => {
   })
 
   test('reopens an asset when the last close overlaps the next clip open', async () => {
-    const resolveAsset = vi.fn(async () => new Blob(['media']))
+    const resolveAsset = vi.fn(async () => resolvedAudio())
     const source = createMediabunnyPlaybackAudioSource(resolveAsset)
     const first = await source.openClip({
       assetId: 'asset-1',
@@ -172,7 +197,7 @@ describe('createMediabunnyPlaybackAudioSource ownership', () => {
 
   test('does not cache or rethrow an already-reported open failure', async () => {
     media.failTrackCount = 1
-    const resolveAsset = vi.fn(async () => new Blob(['media']))
+    const resolveAsset = vi.fn(async () => resolvedAudio())
     const source = createMediabunnyPlaybackAudioSource(resolveAsset)
 
     await expect(source.openClip({
@@ -189,5 +214,29 @@ describe('createMediabunnyPlaybackAudioSource ownership', () => {
     expect(resolveAsset).toHaveBeenCalledTimes(2)
     await retry.close()
     await expect(source.close()).resolves.toBeUndefined()
+  })
+
+  test('close disposes a pending Input promptly and exactly once', async () => {
+    let releaseTrack!: () => void
+    media.trackGate = new Promise<void>((resolve) => {
+      releaseTrack = resolve
+    })
+    const source = createMediabunnyPlaybackAudioSource(
+      async () => resolvedAudio(),
+    )
+    const opening = source.openClip({
+      assetId: 'asset-1',
+      startTime: 0,
+      endTime: 1,
+    })
+
+    await vi.waitFor(() => expect(media.inputs).toHaveLength(1))
+    const closing = source.close()
+    expect(media.inputs[0].disposeCalls).toBe(1)
+
+    releaseTrack()
+    await expect(opening).rejects.toThrow('Playback audio source is closed')
+    await expect(closing).resolves.toBeUndefined()
+    expect(media.inputs[0].disposeCalls).toBe(1)
   })
 })

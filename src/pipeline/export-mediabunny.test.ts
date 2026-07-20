@@ -13,9 +13,68 @@ import {
   vi,
   type Mock,
 } from 'vitest'
+import {
+  LOCAL_DECODER_LIMITS,
+  type DecoderCheckTarget,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
+import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { compositeFrame } from './render'
 import type { ExportSettings } from './export'
+
+const DECODE_BUDGET: LocalDecoderBudget = {
+  fileBytes: 64,
+  durationMicroseconds: 1_000_000,
+  width: 1920,
+  height: 1080,
+  framesPerSecond: 30,
+  sampleRate: 48_000,
+  channels: 6,
+}
+
+const resolvedAsset = (blob: Blob) => ({ blob, budget: DECODE_BUDGET })
+
+const localDecoders = vi.hoisted(() => ({
+  proresRegistered: false,
+  proresRegistrations: 0,
+  ac3Registered: false,
+  ac3Registrations: 0,
+}))
+
+const decoderChecks = vi.hoisted(() => ({
+  targets: [] as DecoderCheckTarget[],
+}))
+
+vi.mock('../codecs/mediaCodecFallbacks', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../codecs/mediaCodecFallbacks')
+  >()
+  return {
+    ...actual,
+    ensureMediaDecoderSupport: (
+      target: DecoderCheckTarget,
+      signal?: AbortSignal,
+    ) => {
+      decoderChecks.targets.push(target)
+      return actual.ensureMediaDecoderSupport(target, signal)
+    },
+  }
+})
+
+vi.mock('@mediabunny/prores', () => ({
+  registerProresDecoder: () => {
+    localDecoders.proresRegistered = true
+    localDecoders.proresRegistrations++
+  },
+}))
+
+vi.mock('@mediabunny/ac3', () => ({
+  registerAc3Decoder: () => {
+    localDecoders.ac3Registered = true
+    localDecoders.ac3Registrations++
+  },
+}))
 
 interface FakeInputRecord {
   source: unknown
@@ -579,13 +638,40 @@ function deferred<T>(): {
   return { promise, resolve }
 }
 
-function videoTrack(canDecode = true) {
-  return { canDecode: vi.fn(async () => canDecode) }
+function videoTrack(
+  canDecode: boolean | (() => boolean) = true,
+  codec = 'avc',
+  configuration: VideoDecoderConfig = {
+    codec: codec === 'prores' ? 'apcn' : codec,
+    codedHeight: 180,
+    codedWidth: 320,
+  },
+) {
+  return {
+    getCodec: vi.fn(async () => codec),
+    getDecoderConfig: vi.fn(async () => configuration),
+    canDecode: vi.fn(async () => (
+      typeof canDecode === 'function' ? canDecode() : canDecode
+    )),
+  }
 }
 
-function audioTrack(canDecode = true, numberOfChannels = 1) {
+function audioTrack(
+  canDecode: boolean | (() => boolean) = true,
+  numberOfChannels = 1,
+  codec = 'aac',
+  configuration: AudioDecoderConfig = {
+    codec: codec === 'eac3' ? 'ec-3' : codec,
+    numberOfChannels,
+    sampleRate: 48_000,
+  },
+) {
   return {
-    canDecode: vi.fn(async () => canDecode),
+    getCodec: vi.fn(async () => codec),
+    getDecoderConfig: vi.fn(async () => configuration),
+    canDecode: vi.fn(async () => (
+      typeof canDecode === 'function' ? canDecode() : canDecode
+    )),
     getNumberOfChannels: vi.fn(async () => numberOfChannels),
   }
 }
@@ -634,6 +720,7 @@ function wrappedCanvas(width = 320, height = 180) {
 }
 
 beforeEach(() => {
+  decoderChecks.targets.length = 0
   mb.blobSources.length = 0
   mb.inputs.length = 0
   mb.inputTracks.length = 0
@@ -672,7 +759,7 @@ describe('createMediabunnyExportMediaSource', () => {
     mb.canvasSinkHandlers.push(async () => wrappedCanvas())
     const media = createMediabunnyExportMediaSource(
       doc,
-      async () => new Blob(['asset-a']),
+      async () => resolvedAsset(new Blob(['asset-a'])),
     )
     const ctx = new FakeOffscreenCanvas(doc.width, doc.height).context
     const drawn: string[][] = []
@@ -710,7 +797,7 @@ describe('createMediabunnyExportMediaSource', () => {
   test('fails lease close when a scheduled render request was omitted', async () => {
     const media = createMediabunnyExportMediaSource(
       makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
-      async () => new Blob(['asset-a']),
+      async () => resolvedAsset(new Blob(['asset-a'])),
     )
     const lease = await media.openFrame(0)
 
@@ -731,7 +818,7 @@ describe('createMediabunnyExportMediaSource', () => {
         ],
         1,
       ),
-      async (assetId) => new Blob([assetId]),
+      async (assetId) => resolvedAsset(new Blob([assetId])),
     )
     const lease = await media.openFrame(0)
 
@@ -755,7 +842,7 @@ describe('createMediabunnyExportMediaSource', () => {
         ],
         1,
       ),
-      async (assetId) => new Blob([assetId]),
+      async (assetId) => resolvedAsset(new Blob([assetId])),
     )
     const lease = await media.openFrame(0)
 
@@ -773,7 +860,7 @@ describe('createMediabunnyExportMediaSource', () => {
     mb.canvasSinkHandlers.push(async () => wrappedCanvas())
     const media = createMediabunnyExportMediaSource(
       makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
-      async () => new Blob(['asset-a']),
+      async () => resolvedAsset(new Blob(['asset-a'])),
     )
     const lease = await media.openFrame(0)
 
@@ -791,8 +878,14 @@ describe('createMediabunnyExportMediaSource', () => {
       2,
     )
     const blob = new Blob(['asset-a'])
-    const resolveAsset = vi.fn(async () => blob)
-    const track = videoTrack()
+    const resolveAsset = vi.fn(async () => resolvedAsset(blob))
+    const configuration: VideoDecoderConfig = {
+      codec: 'avc1.64001f',
+      codedHeight: 180,
+      codedWidth: 320,
+      description: new Uint8Array([1, 2, 3]),
+    }
+    const track = videoTrack(true, 'avc', configuration)
     const wrapped = wrappedCanvas()
     mb.inputTracks.push(track)
     mb.canvasSinkHandlers.push(async () => wrapped)
@@ -812,7 +905,18 @@ describe('createMediabunnyExportMediaSource', () => {
     expect(mb.blobSources).toHaveLength(1)
     expect(mb.blobSources[0].blob).toBe(blob)
     expect(mb.inputs).toHaveLength(1)
+    expect(track.getDecoderConfig).toHaveBeenCalledOnce()
     expect(track.canDecode).toHaveBeenCalledOnce()
+    expect(decoderChecks.targets).toHaveLength(1)
+    expect(decoderChecks.targets[0]).toMatchObject({
+      codec: 'avc',
+      configuration,
+      trackKind: 'video',
+      sourceId: 'asset-a',
+      boundary: 'export-video',
+      policy: 'revalidate',
+    })
+    expect(decoderChecks.targets[0].configuration).toBe(configuration)
     expect(canvasSinkAt().track).toBe(track)
     expect(canvasSinkAt().options).toEqual({ poolSize: 1 })
     expect(canvasSinkAt().canvasesAtTimestamps).toHaveBeenCalledOnce()
@@ -827,6 +931,65 @@ describe('createMediabunnyExportMediaSource', () => {
     expect(fakeBitmaps[0].close).toHaveBeenCalledOnce()
     expect(fakeBitmaps[1].close).toHaveBeenCalledOnce()
     expect(canvasIteratorAt().return).toHaveBeenCalledOnce()
+    expect(inputAt().dispose).toHaveBeenCalledOnce()
+  })
+
+  test('loads local ProRes support before allocating the export sink', async () => {
+    const track = videoTrack(
+      () => localDecoders.proresRegistered,
+      'prores',
+    )
+    const registrationsBefore = localDecoders.proresRegistrations
+    mb.inputTracks.push(track)
+    mb.canvasSinkHandlers.push(async () => wrappedCanvas())
+    const media = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'prores-asset', sourceStart: 0 }], 1),
+      async () => resolvedAsset(new Blob(['prores'])),
+    )
+    const lease = await media.openFrame(0)
+
+    const bitmap = await lease.getFrame('prores-asset', 0)
+
+    expect(bitmap).toBe(fakeBitmaps[0])
+    expect(localDecoders.proresRegistrations).toBe(registrationsBefore + 1)
+    expect(track.canDecode).toHaveBeenCalledTimes(2)
+    expect(canvasSinkAt().track).toBe(track)
+    await lease.close()
+    await media.close()
+  })
+
+  test('preserves a ProRes resource limit and allocates no export sink', async () => {
+    const track = videoTrack(false, 'prores')
+    const registrationsBefore = localDecoders.proresRegistrations
+    mb.inputTracks.push(track)
+    const media = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'large-prores', sourceStart: 0 }], 1),
+      async () => ({
+        blob: new Blob(['prores']),
+        budget: {
+          ...DECODE_BUDGET,
+          fileBytes: LOCAL_DECODER_LIMITS.maxFileBytes + 1,
+        },
+      }),
+    )
+    const lease = await media.openFrame(0)
+
+    const failure = await lease.getFrame('large-prores', 0)
+      .catch((cause) => cause)
+
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'large-prores',
+      failure: {
+        surface: 'export',
+        trackKind: 'video',
+        reason: 'resource-limit',
+      },
+    })
+    expect(localDecoders.proresRegistrations).toBe(registrationsBefore)
+    expect(mb.canvasSinks).toHaveLength(0)
+    await lease.close()
+    await media.close()
     expect(inputAt().dispose).toHaveBeenCalledOnce()
   })
 
@@ -847,7 +1010,7 @@ describe('createMediabunnyExportMediaSource', () => {
         ],
         1,
       ),
-      async () => new Blob(['asset-a']),
+      async () => resolvedAsset(new Blob(['asset-a'])),
     )
     const lease = await media.openFrame(0)
 
@@ -890,7 +1053,7 @@ describe('createMediabunnyExportMediaSource', () => {
         ],
         1,
       ),
-      async (assetId) => new Blob([assetId]),
+      async (assetId) => resolvedAsset(new Blob([assetId])),
     )
     const lease = await media.openFrame(0)
 
@@ -908,29 +1071,108 @@ describe('createMediabunnyExportMediaSource', () => {
   })
 
   test.each([
-    ['has no video track', null],
-    ['cannot be decoded', videoTrack(false)],
-  ])('rejects an asset that %s and still disposes its input', async (message, track) => {
+    ['has no video track', null, 'decode-failed'],
+    ['cannot be decoded', videoTrack(false), 'unsupported-codec'],
+  ])('rejects an asset that %s and still disposes its input', async (
+    message,
+    track,
+    reason,
+  ) => {
     mb.inputTracks.push(track)
     const media = createMediabunnyExportMediaSource(
       makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
-      async () => new Blob(['bad']),
+      async () => resolvedAsset(new Blob(['bad'])),
     )
     const lease = await media.openFrame(0)
 
-    await expect(lease.getFrame('asset-a', 0)).rejects.toThrow(message)
+    const failure = await lease.getFrame('asset-a', 0).catch((cause) => cause)
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'asset-a',
+      message: expect.stringContaining(message),
+      failure: {
+        surface: 'export',
+        trackKind: 'video',
+        reason,
+        detail: expect.stringContaining(message),
+      },
+    })
     await lease.close()
     await media.close()
 
     expect(inputAt().dispose).toHaveBeenCalledOnce()
     expect(mb.canvasSinks).toHaveLength(0)
   })
+
+  test('types Blob resolution and decode-stream failures without typing bitmap-copy failures', async () => {
+    const unavailable = new Error('captured Blob is unavailable')
+    const unavailableMedia = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
+      async () => { throw unavailable },
+    )
+    const unavailableLease = await unavailableMedia.openFrame(0)
+
+    const sourceFailure = await unavailableLease.getFrame('asset-a', 0)
+      .catch((cause) => cause)
+    expect(sourceFailure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(sourceFailure).toMatchObject({
+      assetId: 'asset-a',
+      message: unavailable.message,
+      failure: {
+        surface: 'export',
+        trackKind: null,
+        reason: 'resource-unavailable',
+        detail: unavailable.message,
+      },
+    })
+    expect(sourceFailure.cause).toBe(unavailable)
+    await unavailableLease.close()
+    await unavailableMedia.close()
+
+    const decodeFailure = new Error('video cursor failed')
+    mb.inputTracks.push(videoTrack())
+    mb.canvasSinkHandlers.push(async () => { throw decodeFailure })
+    const decodeMedia = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'asset-b', sourceStart: 0 }], 1),
+      async () => resolvedAsset(new Blob(['asset-b'])),
+    )
+    const decodeLease = await decodeMedia.openFrame(0)
+    const typedDecodeFailure = await decodeLease.getFrame('asset-b', 0)
+      .catch((cause) => cause)
+    expect(typedDecodeFailure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(typedDecodeFailure).toMatchObject({
+      assetId: 'asset-b',
+      failure: {
+        surface: 'export',
+        trackKind: 'video',
+        reason: 'decode-failed',
+        detail: decodeFailure.message,
+      },
+    })
+    expect(typedDecodeFailure.cause).toBe(decodeFailure)
+    await decodeLease.close()
+    await decodeMedia.close()
+
+    const bitmapFailure = new Error('bitmap copy failed')
+    mb.inputTracks.push(videoTrack())
+    mb.canvasSinkHandlers.push(async () => wrappedCanvas())
+    createBitmap.mockRejectedValueOnce(bitmapFailure)
+    const bitmapMedia = createMediabunnyExportMediaSource(
+      makeVideoDoc([{ assetId: 'asset-c', sourceStart: 0 }], 1),
+      async () => resolvedAsset(new Blob(['asset-c'])),
+    )
+    const bitmapLease = await bitmapMedia.openFrame(0)
+    await expect(bitmapLease.getFrame('asset-c', 0)).rejects.toBe(bitmapFailure)
+    expect(bitmapFailure).not.toBeInstanceOf(MediaAssetRuntimeError)
+    await bitmapLease.close()
+    await bitmapMedia.close()
+  })
 })
 
 describe('createMediabunnyExportSink video behavior', () => {
   test('probes AVC and wires an exact-rate MP4 canvas track without audio for a video-only document', async () => {
     const doc = makeDoc()
-    const resolveAsset = vi.fn(async () => new Blob(['unused']))
+    const resolveAsset = vi.fn(async () => resolvedAsset(new Blob(['unused'])))
     const sink = await createMediabunnyExportSink(
       doc,
       SETTINGS,
@@ -979,7 +1221,7 @@ describe('createMediabunnyExportSink video behavior', () => {
     const sink = await createMediabunnyExportSink(
       doc,
       SETTINGS,
-      async () => new Blob(['unused']),
+      async () => resolvedAsset(new Blob(['unused'])),
     )
 
     let settled = false
@@ -1012,7 +1254,7 @@ describe('createMediabunnyExportSink video behavior', () => {
       createMediabunnyExportSink(
         makeDoc(),
         SETTINGS,
-        async () => new Blob(['unused']),
+        async () => resolvedAsset(new Blob(['unused'])),
       ),
     ).rejects.toThrow('AVC encoding is not supported for 64x48')
 
@@ -1024,7 +1266,7 @@ describe('createMediabunnyExportSink video behavior', () => {
     const sink = await createMediabunnyExportSink(
       makeDoc(),
       SETTINGS,
-      async () => new Blob(['unused']),
+      async () => resolvedAsset(new Blob(['unused'])),
     )
 
     await sink.cancel()
@@ -1047,7 +1289,7 @@ describe('createMediabunnyExportSink video behavior', () => {
       createMediabunnyExportSink(
         makeDoc(),
         SETTINGS,
-        async () => new Blob(['unused']),
+        async () => resolvedAsset(new Blob(['unused'])),
       ),
     ).rejects.toBe(startError)
 
@@ -1075,7 +1317,7 @@ describe('createMediabunnyExportSink video behavior', () => {
     const sink = await createMediabunnyExportSink(
       doc,
       SETTINGS,
-      async () => new Blob(['unused']),
+      async () => resolvedAsset(new Blob(['unused'])),
     )
 
     const operation =
@@ -1094,7 +1336,7 @@ describe('createMediabunnyExportSink video behavior', () => {
     const sink = await createMediabunnyExportSink(
       makeDoc(),
       SETTINGS,
-      async () => new Blob(['unused']),
+      async () => resolvedAsset(new Blob(['unused'])),
     )
 
     await expect(sink.finalize()).rejects.toThrow(
@@ -1106,6 +1348,91 @@ describe('createMediabunnyExportSink video behavior', () => {
 })
 
 describe('createMediabunnyExportSink audio behavior', () => {
+  test('loads local E-AC-3 support before allocating the audio sink', async () => {
+    const doc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('eac3-clip', 'eac3-asset', 1)),
+    ])
+    const configuration: AudioDecoderConfig = {
+      codec: 'ec-3',
+      description: new Uint8Array([4, 5, 6]),
+      numberOfChannels: 6,
+      sampleRate: 48_000,
+    }
+    const track = audioTrack(
+      () => localDecoders.ac3Registered,
+      6,
+      'eac3',
+      configuration,
+    )
+    const decoded = decodedAudioSample(
+      Array.from({ length: 6 }, () => new Float32Array(1_602)),
+      48_000,
+    )
+    const registrationsBefore = localDecoders.ac3Registrations
+    mb.audioTracks.push(track)
+    mb.audioSinkSampleSequences.push([decoded])
+    const sink = await createMediabunnyExportSink(
+      doc,
+      SETTINGS,
+      async () => resolvedAsset(new Blob(['eac3'])),
+    )
+
+    await sink.addFrame(0, 1_001 / 30_000)
+
+    expect(localDecoders.ac3Registrations).toBe(registrationsBefore + 1)
+    expect(track.getDecoderConfig).toHaveBeenCalledOnce()
+    expect(track.canDecode).toHaveBeenCalledTimes(2)
+    expect(decoderChecks.targets).toHaveLength(1)
+    expect(decoderChecks.targets[0]).toMatchObject({
+      codec: 'eac3',
+      configuration,
+      trackKind: 'audio',
+      sourceId: 'eac3-asset',
+      boundary: 'export-audio',
+      policy: 'revalidate',
+    })
+    expect(decoderChecks.targets[0].configuration).toBe(configuration)
+    expect(audioSinkAt().track).toBe(track)
+    await sink.cancel()
+  })
+
+  test('preserves an E-AC-3 resource limit and allocates no audio sink', async () => {
+    const doc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('eac3-clip', 'large-eac3', 1)),
+    ])
+    const track = audioTrack(false, 6, 'eac3')
+    const registrationsBefore = localDecoders.ac3Registrations
+    mb.audioTracks.push(track)
+    const sink = await createMediabunnyExportSink(
+      doc,
+      SETTINGS,
+      async () => ({
+        blob: new Blob(['eac3']),
+        budget: {
+          ...DECODE_BUDGET,
+          fileBytes: LOCAL_DECODER_LIMITS.maxFileBytes + 1,
+        },
+      }),
+    )
+
+    const failure = await sink.addFrame(0, 1_001 / 30_000)
+      .catch((cause) => cause)
+
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'large-eac3',
+      failure: {
+        surface: 'export',
+        trackKind: 'audio',
+        reason: 'resource-limit',
+      },
+    })
+    expect(localDecoders.ac3Registrations).toBe(registrationsBefore)
+    expect(mb.audioSinks).toHaveLength(0)
+    expect(inputAt().dispose).toHaveBeenCalledOnce()
+    await sink.cancel()
+  })
+
   test('registers AAC, resamples mono, and writes the exact NTSC sample schedule with closed resources', async () => {
     const doc = makeAudioDoc([
       makeAudioTrack(
@@ -1117,7 +1444,7 @@ describe('createMediabunnyExportSink audio behavior', () => {
     nativeMono[1] = 1
     const decoded = decodedAudioSample([nativeMono], 24_000)
     const track = audioTrack(true, 1)
-    const resolveAsset = vi.fn(async () => new Blob(['audio']))
+    const resolveAsset = vi.fn(async () => resolvedAsset(new Blob(['audio'])))
     mb.audioTracks.push(track)
     mb.audioSinkSampleSequences.push([decoded])
 
@@ -1214,7 +1541,7 @@ describe('createMediabunnyExportSink audio behavior', () => {
     const sink = await createMediabunnyExportSink(
       doc,
       SETTINGS,
-      async () => new Blob(['surround']),
+      async () => resolvedAsset(new Blob(['surround'])),
     )
 
     await sink.addFrame(0, 1_001 / 30_000)
@@ -1245,7 +1572,7 @@ describe('createMediabunnyExportSink audio behavior', () => {
     const sink = await createMediabunnyExportSink(
       doc,
       SETTINGS,
-      async () => new Blob(['audio']),
+      async () => resolvedAsset(new Blob(['audio'])),
     )
 
     let settled = false
@@ -1295,7 +1622,7 @@ describe('createMediabunnyExportSink audio behavior', () => {
     const sink = await createMediabunnyExportSink(
       doc,
       SETTINGS,
-      async () => new Blob(['audio']),
+      async () => resolvedAsset(new Blob(['audio'])),
     )
 
     let rejected = false
@@ -1337,7 +1664,9 @@ describe('createMediabunnyExportSink audio behavior', () => {
         { solo: true },
       ),
     ])
-    const resolveAsset = vi.fn(async () => new Blob(['should-not-open']))
+    const resolveAsset = vi.fn(async () => (
+      resolvedAsset(new Blob(['should-not-open']))
+    ))
     const sink = await createMediabunnyExportSink(
       doc,
       SETTINGS,
@@ -1366,9 +1695,13 @@ describe('createMediabunnyExportSink audio behavior', () => {
   })
 
   test.each([
-    ['has no audio track', 'missing'],
-    ['audio cannot be decoded', 'undecodable'],
-  ])('fails when an audible asset %s and cleans up exactly once', async (message, kind) => {
+    ['has no audio track', 'missing', 'decode-failed'],
+    ['audio cannot be decoded', 'undecodable', 'unsupported-codec'],
+  ])('fails when an audible asset %s and cleans up exactly once', async (
+    message,
+    kind,
+    reason,
+  ) => {
     const doc = makeAudioDoc([
       makeAudioTrack(
         'A1',
@@ -1376,14 +1709,26 @@ describe('createMediabunnyExportSink audio behavior', () => {
       ),
     ])
     mb.audioTracks.push(kind === 'missing' ? null : audioTrack(false))
-    const resolveAsset = vi.fn(async () => new Blob(['bad']))
+    const resolveAsset = vi.fn(async () => resolvedAsset(new Blob(['bad'])))
     const sink = await createMediabunnyExportSink(
       doc,
       SETTINGS,
       resolveAsset,
     )
 
-    await expect(sink.addFrame(0, 1_001 / 30_000)).rejects.toThrow(message)
+    const failure = await sink.addFrame(0, 1_001 / 30_000)
+      .catch((cause) => cause)
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'bad-asset',
+      message: expect.stringContaining(message),
+      failure: {
+        surface: 'export',
+        trackKind: 'audio',
+        reason,
+        detail: expect.stringContaining(message),
+      },
+    })
     await sink.cancel()
 
     expect(resolveAsset).toHaveBeenCalledOnce()
@@ -1392,5 +1737,56 @@ describe('createMediabunnyExportSink audio behavior', () => {
     expect(audioSourceAt().add).not.toHaveBeenCalled()
     expect(audioSourceAt().close).not.toHaveBeenCalled()
     expect(mb.audioSinks).toHaveLength(0)
+  })
+
+  test('types audio Blob and decoded-sample read failures with the exact asset id', async () => {
+    const doc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('bad-audio', 'bad-asset', 1)),
+    ])
+    const unavailable = new Error('audio Blob is unavailable')
+    const unavailableSink = await createMediabunnyExportSink(
+      doc,
+      SETTINGS,
+      async () => { throw unavailable },
+    )
+
+    const sourceFailure = await unavailableSink.addFrame(0, 1_001 / 30_000)
+      .catch((cause) => cause)
+    expect(sourceFailure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(sourceFailure).toMatchObject({
+      assetId: 'bad-asset',
+      failure: {
+        surface: 'export',
+        trackKind: null,
+        reason: 'resource-unavailable',
+        detail: unavailable.message,
+      },
+    })
+    expect(sourceFailure.cause).toBe(unavailable)
+
+    const decoded = decodedAudioSample([new Float32Array([0.25])], 48_000)
+    const readFailure = new Error('decoded plane read failed')
+    decoded.copyTo.mockImplementationOnce(() => { throw readFailure })
+    mb.audioTracks.push(audioTrack())
+    mb.audioSinkSampleSequences.push([decoded])
+    const readSink = await createMediabunnyExportSink(
+      doc,
+      SETTINGS,
+      async () => resolvedAsset(new Blob(['audio'])),
+    )
+    const typedReadFailure = await readSink.addFrame(0, 1_001 / 30_000)
+      .catch((cause) => cause)
+    expect(typedReadFailure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(typedReadFailure).toMatchObject({
+      assetId: 'bad-asset',
+      failure: {
+        surface: 'export',
+        trackKind: 'audio',
+        reason: 'decode-failed',
+        detail: readFailure.message,
+      },
+    })
+    expect(typedReadFailure.cause).toBe(readFailure)
+    expect(decoded.close).toHaveBeenCalledOnce()
   })
 })

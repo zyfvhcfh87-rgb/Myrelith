@@ -17,6 +17,7 @@ import type {
   TimelineDoc,
   Track as TrackData,
 } from '../domain/schema'
+import type { MediaCompatibilityStatus } from '../domain/mediaCompatibility'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
@@ -124,12 +125,38 @@ beforeEach(() => {
     inOut: null,
     dragPreview: null,
   })
-  useMediaStore.setState({ descriptors: new Map(), assets: new Map() })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+    compatibility: new Map(),
+  })
   doc().setDoc(makeDoc())
 })
 
 function seedAsset(asset: MediaAsset): void {
   expect(useMediaStore.getState().addAsset(asset)).toBe(true)
+}
+
+function seedCompatibility(
+  asset: MediaAsset,
+  status: MediaCompatibilityStatus,
+): void {
+  useMediaStore.setState({
+    compatibility: new Map([[
+      asset.id,
+      {
+        id: asset.id,
+        requestId: 'request-drag',
+        fileName: asset.fileName,
+        declaredMimeType: asset.mimeType,
+        size: asset.size,
+        lastModified: asset.lastModified,
+        status,
+        report: null,
+      },
+    ]]),
+  })
 }
 
 /* ------------------------------------------------------------------ */
@@ -138,11 +165,22 @@ function seedAsset(asset: MediaAsset): void {
 
 describe('MediaPool drag source', () => {
   test('rows are draggable only once metadata is ready', () => {
-    seedAsset(makeAsset())
+    const checking = makeAsset()
+    seedAsset(checking)
+    seedCompatibility(checking, 'checking')
     seedAsset(makeAsset({ id: 'asset-raw', fileName: 'raw.mov', durationFrames: 0 }))
     render(<MediaPool />)
-    expect(screen.getByTitle('beach.mp4')).toHaveAttribute('draggable', 'true')
+    expect(screen.getByTitle('beach.mp4')).toHaveAttribute('draggable', 'false')
     expect(screen.getByTitle('raw.mov')).toHaveAttribute('draggable', 'false')
+  })
+
+  test('a ready compatibility report enables the drag source', () => {
+    const asset = makeAsset()
+    seedAsset(asset)
+    seedCompatibility(asset, 'ready')
+    render(<MediaPool />)
+
+    expect(screen.getByTitle('beach.mp4')).toHaveAttribute('draggable', 'true')
   })
 
   test('dragstart advertises asset id + kind per the dnd contract', () => {
@@ -377,6 +415,23 @@ describe('Track drop target', () => {
       dataTransfer: assetDragData({ id: 'asset-gone', kind: 'video' }),
       clientX: 60,
     })
+    expect(trackById('V1').clips).toHaveLength(0)
+    expect(doc().past).toHaveLength(0)
+  })
+
+  test('a compatibility change during drag is rejected at the drop boundary', () => {
+    const asset = makeAsset()
+    seedAsset(asset)
+    seedCompatibility(asset, 'ready')
+    render(<Track track={trackById('V1')} />)
+    const lane = screen.getByTestId('track-V1')
+    const dataTransfer = assetDragData(asset)
+
+    fireEvent.dragOver(lane, { dataTransfer })
+    expect(lane).toHaveClass('drop-target')
+    act(() => seedCompatibility(asset, 'limited'))
+    fireEvent.drop(lane, { dataTransfer, clientX: 60 })
+
     expect(trackById('V1').clips).toHaveLength(0)
     expect(doc().past).toHaveLength(0)
   })

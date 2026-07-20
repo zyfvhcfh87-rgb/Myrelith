@@ -27,24 +27,50 @@
  * exists for tests and real teardown.
  */
 
+import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
 import { visibleVideoLayersAtFrame } from '../domain/selectors'
+import {
+  mediaAssetDecoderBudget,
+  type LocalDecoderBudget,
+} from '../codecs/mediaCodecFallbacks'
 import type { RenderFrameResult } from '../engine/render-bridge'
-import { createRenderWorker, RenderWorkerBridge } from '../engine/render-bridge'
+import {
+  RenderAssetOpenError,
+  RenderWorkerBridge,
+  createRenderWorker,
+} from '../engine/render-bridge'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { useTransportStore } from '../state/transportStore'
 import type { RenderMode } from '../workers/render-protocol'
+import {
+  captureMediaRuntimeGuard,
+  mediaRuntimeFailure,
+  reportMediaRuntimeFailure,
+  type MediaRuntimeGuard,
+} from './mediaCompatibilityController'
 
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
   setDoc(doc: TimelineDoc): void
-  openAsset(assetId: AssetId, blob: Blob, rate: FrameRate): Promise<void>
+  openAsset(
+    assetId: AssetId,
+    blob: Blob,
+    rate: FrameRate,
+    budget: LocalDecoderBudget,
+    runtimeToken: object,
+  ): Promise<void>
   releaseAsset(assetId: AssetId): void
   renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult>
   dispose(): void
   onWorkerError: ((message: string) => void) | null
+  onAssetError: ((
+    assetId: AssetId,
+    runtimeToken: object,
+    message: string,
+  ) => void) | null
   onAssetReady: ((assetId: AssetId) => void) | null
 }
 
@@ -68,7 +94,10 @@ interface ControllerState {
   bridge: BridgeLike | null
   /** Per-asset pipeline status. Absent = not started (or failed: retried
    * on the next mediaStore change). Removal releases the worker source. */
-  assetStates: Map<AssetId, 'loading' | 'ready'>
+  assetStates: Map<AssetId, {
+    objectUrl: string
+    status: 'loading' | 'ready' | 'failed'
+  }>
   unsubscribes: Array<() => void>
   rafPending: boolean
   /** Invalidates callbacks queued for a disposed/replaced bridge. */
@@ -121,7 +150,26 @@ function scheduleRender(): void {
       }
     }
     usePreviewStatusStore.getState().setOfflineVideoAssetIds(offlineIds)
-    void bridge.renderFrame(transport.playheadFrame, modeForTransport(transport))
+    void bridge
+      .renderFrame(transport.playheadFrame, modeForTransport(transport))
+      .then((result) => {
+        if (
+          state.renderGeneration === generation
+          && state.bridge === bridge
+          && result.status === 'error'
+        ) {
+          console.warn(
+            '[previewController] render failed:',
+            result.message ?? 'unknown render error',
+          )
+        }
+      }, (cause) => {
+        if (state.renderGeneration !== generation || state.bridge !== bridge) return
+        console.warn(
+          '[previewController] render failed:',
+          cause instanceof Error ? cause.message : cause,
+        )
+      })
   })
 }
 
@@ -129,22 +177,58 @@ function scheduleRender(): void {
 async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void> {
   const bridge = state.bridge
   if (!bridge) return
-  state.assetStates.set(asset.id, 'loading')
+  const guard = captureMediaRuntimeGuard(asset.id)
+  if (!guard || guard.objectUrl !== asset.objectUrl) return
+  const pipelineState = {
+    objectUrl: asset.objectUrl,
+    status: 'loading' as const,
+  }
+  state.assetStates.set(asset.id, pipelineState)
+  let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
+  let failureTrackKind: 'video' | null = null
   try {
     const blob = await deps.fetchBlob(asset.objectUrl)
-    if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
+    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) {
+      return
+    }
+    failureReason = 'decode-failed'
+    failureTrackKind = 'video'
     if (!asset.frameRate) {
       throw new Error(`"${asset.fileName}": missing frame rate`)
     }
-    await bridge.openAsset(asset.id, blob, asset.frameRate)
-    if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
-    state.assetStates.set(asset.id, 'ready')
+    await bridge.openAsset(
+      asset.id,
+      blob,
+      asset.frameRate,
+      mediaAssetDecoderBudget(asset, blob.size),
+      guard,
+    )
+    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) {
+      return
+    }
+    state.assetStates.set(asset.id, {
+      objectUrl: asset.objectUrl,
+      status: 'ready',
+    })
   } catch (e) {
-    if (state.bridge !== bridge || !state.assetStates.has(asset.id)) return
-    state.assetStates.delete(asset.id) // retriable on the next media change
+    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) {
+      return
+    }
+    state.assetStates.set(asset.id, {
+      objectUrl: asset.objectUrl,
+      status: 'failed',
+    })
+    if (e instanceof RenderAssetOpenError) {
+      failureReason = e.failure.reason
+      failureTrackKind = e.failure.trackKind
+    }
     console.warn(
       `[previewController] loading "${asset.fileName}" failed:`,
       e instanceof Error ? e.message : e,
+    )
+    reportMediaRuntimeFailure(
+      guard,
+      mediaRuntimeFailure('preview', failureTrackKind, e, failureReason),
     )
   }
 }
@@ -157,7 +241,12 @@ function syncAssets(deps: PreviewDeps): void {
 
   for (const asset of assets.values()) {
     if (asset.kind !== 'video') continue // audio/images never reach the preview
-    if (state.assetStates.has(asset.id)) continue
+    const current = state.assetStates.get(asset.id)
+    if (current?.objectUrl === asset.objectUrl) continue
+    if (current) {
+      state.assetStates.delete(asset.id)
+      bridge.releaseAsset(asset.id)
+    }
     void loadOneAsset(deps, asset)
   }
 
@@ -195,6 +284,14 @@ export function initPreview(
   }
   bridge.onWorkerError = (message) =>
     console.warn('[previewController] worker error:', message)
+  bridge.onAssetError = (assetId, runtimeToken, message) => {
+    const guard = runtimeToken as MediaRuntimeGuard
+    if (guard.assetId !== assetId) return
+    reportMediaRuntimeFailure(
+      guard,
+      mediaRuntimeFailure('preview', 'video', message),
+    )
+  }
   // A source came online: repaint so its clips fill in (retry policy).
   bridge.onAssetReady = () =>
     scheduleRender()
