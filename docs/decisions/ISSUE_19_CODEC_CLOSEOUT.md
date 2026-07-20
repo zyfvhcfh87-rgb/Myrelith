@@ -19,8 +19,9 @@ npm run qa:issue19:fixtures
 
 The generator requires `ffmpeg` and `ffprobe` on `PATH`. It writes ignored QA
 artifacts to `.tmp/issue-19-codec-fixtures/`, including a manifest with byte
-sizes, SHA-256 hashes, and `ffprobe` results. No fixture bytes enter the product
-bundle.
+sizes, SHA-256 hashes, and `ffprobe` results. It exits nonzero when a required
+container, codec, geometry, audio configuration, or designed-damage outcome
+does not match the matrix. No fixture bytes enter the product bundle.
 
 | Fixture | Observed Windows Chrome 150 result |
 |---|---|

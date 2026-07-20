@@ -869,7 +869,8 @@ surface; it is not a second zoom and never enters document history.
   needs a same-origin `File` without touching disk.
 - `npm run qa:issue19:fixtures` regenerates Issue #19's ignored 13-file native,
   fallback, unknown, malformed, truncated, spoofed, empty, and random-byte
-  matrix plus a hash/ffprobe manifest under `.tmp/issue-19-codec-fixtures/`.
+  matrix plus a hash/ffprobe manifest under `.tmp/issue-19-codec-fixtures/`;
+  it exits nonzero when the expected container/codec/damage matrix drifts.
 - Generate a labeled test MP4 IN THE BROWSER:
   import mediabunny via `/@fs/E:/ClaudeSpace/WebCut/node_modules/mediabunny/dist/modules/src/index.js`,
   `Output` + `Mp4OutputFormat` + `BufferTarget` + `CanvasSource`, draw

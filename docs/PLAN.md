@@ -690,7 +690,7 @@ Detailed evidence lives in
   VP9/Opus, local AC-3/E-AC-3, HEVC, AV1, spoofed extension/MIME, unknown
   codec, malformed configuration, two truncation shapes, empty input, and
   random bytes. The ignored manifest records byte sizes, hashes, and ffprobe
-  output.
+  output, and generation fails closed on a container/codec/shape mismatch.
 - [x] Verify exact Chrome diagnostics: native VP9/Opus, native HEVC/AV1 on the
   tested host, one shared AC-3/E-AC-3 fallback family, byte-detected WebM under
   a `.mp4` name, safe audio-only choices for unknown/malformed video, and
