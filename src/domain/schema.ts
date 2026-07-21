@@ -255,8 +255,10 @@ export interface Clip {
   /**
    * Clips sharing this id are LINKED: edits follow the link at the store
    * layer (moving/trimming/splitting/deleting one member applies the same
-   * edit to the rest). Created at A/V drop, when one dropped asset yields a
-   * video clip + audio clip pair. Absent means unlinked (the common case).
+   * edit to the rest). Created either at A/V drop, when one dropped asset
+   * yields a video clip + audio clip pair, or by the pure manual-link domain
+   * operation. Manually linked clips may have different assets and ranges.
+   * Absent means unlinked (the common case).
    * By construction a present linkGroupId implies at least one partner
    * clip exists somewhere in the doc — operations that would orphan a
    * member (leaving it alone in its group) strip or reassign the id

@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-20)
+## Status (2026-07-21)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -57,8 +57,9 @@ and the open list below.
 | Post-MVP #19 — compatibility Slice 5 | ✅ done | bounded realm-local exact-config capability cache; probe reuse + forced render/visuals/audio/export revalidation; 1,092 tests + in-app Chromium playback/export gate |
 | Post-MVP #19 — compatibility Slice 6 | ✅ no-go decided | measured local worker/WASM proxy spike, including a Limited source with browser-unsupported video; failed bounded-I/O/progress/license/provenance gates with low-memory behavior unproven; no converter shipped |
 | **Post-MVP #19 — final closeout** | ✅ closed | 13-file real codec/damage matrix; prompt/commit cancellation + exact disposal races fixed; runtime fallback budgets and filmstrip canvases bounded; 346 focused + 1,127 total tests; Chrome 150 and Edge 150 full VP9/Opus playback/cancel/export gates; closes at 46/49 with three rejected proxy children intentionally unchecked |
+| Post-MVP #12 — manual linking Slice 1 | ✅ done | pure eligibility/link operation + collision-safe document-aware ids across manual link, linked split, and A/V drop; 57 focused + 1,138 total tests; no rendered behavior yet |
 
-1,127 tests green · `npm run build` passes with the known large-chunk warning
+1,138 tests green · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -560,10 +561,12 @@ surface; it is not a second zoom and never enters document history.
   `resolveCrossfade` (canonical centered-window geometry),
   `visibleVideoLayersAtFrame` (THE preview/export visual plan),
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
-  derived reads, never stored), `linking.ts` (4.3.8: linked-pair
-  wrappers around the base ops — same delta to every linkGroupId
-  member, atomic rollback; unlinkClip dissolves a group; the store's
-  geometry actions call THESE, not the base ops).
+  derived reads, never stored), `linking.ts` (4.3.8 linked-pair wrappers around
+  the base ops — same delta to every `linkGroupId` member, atomic rollback;
+  `unlinkClip` dissolves a group; Issue #12 Slice 1 adds pure
+  `getLinkClipsEligibility` + `linkClips` and document-aware collision-safe
+  group ids; the store's geometry actions call these wrappers, while the
+  manual-link store action belongs to the next slice).
 - `src/domain/projectSettings.ts` — authoritative project presets, strict
   settings validation, and the pure empty-document factory.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
@@ -915,10 +918,13 @@ surface; it is not a second zoom and never enters document history.
   Multi-tab recovery ownership is not coordinated yet, so do not edit/discard
   the same journal from two tabs. Any future media caching needs explicit
   opt-in, quota/eviction UX, and a separate security/storage review.
-- A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
-  domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
-  (unlink is one-way today, undo aside) and linked-pair awareness in a
-  future multi-select. Post-MVP.
+- Issue #12 Slice 1 now provides the pure, fully tested manual-link contract
+  for one unlinked video clip plus one unlinked audio clip. It preserves
+  unequal assets/ranges/offsets and uses document-aware ids so UUID collisions
+  cannot merge groups during manual link, linked split, or A/V drop. It is not
+  user-invokable yet: later slices still own the history-backed store action,
+  pair-selection interaction, relative-offset preview, accessible Link UI,
+  browser gate, and linked-pair awareness in a future multi-select.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their

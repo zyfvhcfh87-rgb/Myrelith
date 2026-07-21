@@ -264,6 +264,50 @@ describe('Track drop target', () => {
     expect(secondAudio.linkGroupId).toBe(secondVideo.linkGroupId)
   })
 
+  test('A/V drop suffixes a colliding generated linkGroupId without merging groups', () => {
+    const uuid = '00000000-0000-4000-8000-000000000012'
+    const existingGroupId = `link_${uuid}`
+    seedAsset(makeAsset()) // hasAudio: true
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video', [
+          { ...makeClip('existingV', 0, 120), linkGroupId: existingGroupId },
+        ]),
+        makeTrack('A1', 'audio', [
+          { ...makeClip('existingA', 0, 120), linkGroupId: existingGroupId },
+        ]),
+        makeTrack('VL', 'video', [], true),
+      ],
+    })
+    render(<Track track={trackById('V1')} />)
+
+    const uuidSpy = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(uuid)
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000013')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000014')
+    try {
+      fireEvent.drop(screen.getByTestId('track-V1'), {
+        dataTransfer: assetDragData(makeAsset()),
+        clientX: 240,
+      })
+    } finally {
+      uuidSpy.mockRestore()
+    }
+
+    const [existingVideo, newVideo] = trackById('V1').clips
+    const [existingAudio, newAudio] = trackById('A1').clips
+    expect(existingVideo.linkGroupId).toBe(existingGroupId)
+    expect(existingAudio.linkGroupId).toBe(existingGroupId)
+    expect(newVideo.linkGroupId).toBe(`${existingGroupId}_2`)
+    expect(newAudio.linkGroupId).toBe(newVideo.linkGroupId)
+    expect(doc().past).toHaveLength(1)
+
+    doc().undo()
+    expect(trackById('V1').clips).toEqual([existingVideo])
+    expect(trackById('A1').clips).toEqual([existingAudio])
+  })
+
   test('silent video (hasAudio false) drops as a lone video clip', () => {
     seedAsset(makeAsset({ hasAudio: false, audioSampleRate: null, audioChannels: null }))
     render(<Track track={trackById('V1')} />)

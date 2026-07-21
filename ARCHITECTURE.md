@@ -110,6 +110,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - Document duration is derived (selectors), never stored.
 - `TimelineDoc` must survive `JSON.stringify`/`parse` losslessly (undo
   history depends on it); `MediaAsset.objectUrl` is session-scoped.
+- A present `Clip.linkGroupId` identifies exactly one video clip plus one
+  audio clip. `domain/linking.ts` owns the pure manual-link contract:
+  `getLinkClipsEligibility` returns stable rejection reasons and `linkClips`
+  links only two distinct, existing, unlocked, currently unlinked clips in
+  video-then-audio order. It changes no asset, range, or clip metadata;
+  manually linked partners may have different assets and ranges. Link-group
+  ids are minted against the current document so a UUID collision cannot
+  merge unrelated pairs. Re-linking requires an explicit unlink first.
 
 ## Store action contracts
 

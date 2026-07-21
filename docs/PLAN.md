@@ -715,6 +715,33 @@ Detailed evidence lives in
   third-party/source notices, FFmpeg/LGPL and Dolby review, and representative
   low-memory testing; Issue #19 closure does not certify those gates.
 
+## Post-MVP issue #12 — Slice 1 ✅ DONE (2026-07-21) Pure manual-link contract
+
+At this slice boundary, Issue #12 remains open. This slice establishes the
+domain contract and collision-safe identity needed by every later manual-link
+surface; it does not expose a new store action or user interaction yet.
+
+- [x] Add pure `getLinkClipsEligibility` with stable, position-specific
+  rejection reasons shared by the eventual UI and `linkClips` operation.
+- [x] Accept only two distinct, existing clips in video-then-audio order when
+  both owning tracks are unlocked and both clips are currently unlinked.
+  Rejections warn and return the exact input document reference.
+- [x] Link by adding one shared `linkGroupId` only. Different assets, source
+  starts, timeline starts, durations, relative offsets, transitions, and all
+  other clip/document metadata remain unchanged and JSON-safe.
+- [x] Mint group ids against every id already in the current document, with a
+  deterministic numeric suffix on UUID collision. Reuse that same contract in
+  manual linking, linked split, and imported A/V-pair creation so unrelated
+  pairs cannot merge accidentally.
+- [x] Verification: 57/57 focused tests across the domain and A/V-drop
+  integration; 1,138/1,138 total tests across 64 files; production build,
+  lint, and diff checks green. No browser gate applies because Slice 1 changes
+  no rendered behavior.
+
+Remaining Issue #12 slices own the history-backed store action, pair-selection
+interaction, relative-offset preview, accessible Link UI, and real-browser
+behavior gate. Manual linking is therefore not user-invokable at this boundary.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

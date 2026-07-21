@@ -123,7 +123,7 @@ function Track({
             ? documentStore.doc.tracks.find((t) => t.kind === 'audio' && !t.locked)
             : undefined
         if (audioLane) {
-          const linkGroupId = createLinkGroupId()
+          const linkGroupId = createLinkGroupId(documentStore.doc)
           documentStore.insertClips([
             { trackId: track.id, clip: clipFromAsset(asset, frame, linkGroupId) },
             { trackId: audioLane.id, clip: clipFromAsset(asset, frame, linkGroupId) },
