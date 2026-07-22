@@ -81,12 +81,12 @@ describe('transportStore', () => {
     expect(getState().timelineOriginFrame).toBe(0)
   })
 
-  test('dragPreview sets, normalizes the frame, and clears', () => {
-    getState().setDragPreview({ clipId: 'clipA', startFrame: 41.6 })
-    expect(getState().dragPreview).toEqual({ clipId: 'clipA', startFrame: 42 })
+  test('dragPreview sets, normalizes the signed delta, and clears', () => {
+    getState().setDragPreview({ clipId: 'clipA', deltaFrames: 41.6 })
+    expect(getState().dragPreview).toEqual({ clipId: 'clipA', deltaFrames: 42 })
 
-    getState().setDragPreview({ clipId: 'clipA', startFrame: -20 })
-    expect(getState().dragPreview).toEqual({ clipId: 'clipA', startFrame: 0 })
+    getState().setDragPreview({ clipId: 'clipA', deltaFrames: -20.4 })
+    expect(getState().dragPreview).toEqual({ clipId: 'clipA', deltaFrames: -20 })
 
     getState().setDragPreview(null)
     expect(getState().dragPreview).toBeNull()
@@ -94,22 +94,22 @@ describe('transportStore', () => {
 
   test('setDragPreview touches ONLY dragPreview', () => {
     getState().setPlayheadFrame(77)
-    getState().setDragPreview({ clipId: 'clipA', startFrame: 10 })
+    getState().setDragPreview({ clipId: 'clipA', deltaFrames: 10 })
     expect(getState().playheadFrame).toBe(77)
     expect(getState().zoom).toBe(1)
     expect(getState().isScrubbing).toBe(false)
   })
 
-  test('setDragPreview preserves cross-track target metadata while normalizing only the frame', () => {
+  test('setDragPreview preserves cross-track metadata while normalizing only the delta', () => {
     getState().setDragPreview({
       clipId: 'clipA',
-      startFrame: 41.6,
+      deltaFrames: 41.6,
       targetTrackId: 'V2',
       trackOffsetY: -55.5,
     })
     expect(getState().dragPreview).toEqual({
       clipId: 'clipA',
-      startFrame: 42,
+      deltaFrames: 42,
       targetTrackId: 'V2',
       trackOffsetY: -55.5,
     })
@@ -134,7 +134,7 @@ describe('transportStore', () => {
     getState().setPresetZoom('detail', 0.5)
     getState().setTimelineOriginFrame(50_000)
     getState().setInOut({ startFrame: 10, durationFrames: 20 })
-    getState().setDragPreview({ clipId: 'clipA', startFrame: 10 })
+    getState().setDragPreview({ clipId: 'clipA', deltaFrames: 10 })
     getState().setTool('slide')
     getState().setSelectedClip('clipA')
     getState().toggleClipSelection('clipB')
@@ -270,15 +270,15 @@ describe('Phase 4.2 tool / selection / edit-preview state', () => {
 
 describe('Phase 4.3.8 linked clip previews', () => {
   test('setDragPreview preserves linkGroupId when given, omits it when not, and clears with null', () => {
-    getState().setDragPreview({ clipId: 'clipA', startFrame: 10, linkGroupId: 'link_1' })
+    getState().setDragPreview({ clipId: 'clipA', deltaFrames: 10, linkGroupId: 'link_1' })
     expect(getState().dragPreview).toEqual({
       clipId: 'clipA',
-      startFrame: 10,
+      deltaFrames: 10,
       linkGroupId: 'link_1',
     })
 
-    getState().setDragPreview({ clipId: 'clipB', startFrame: 20 })
-    expect(getState().dragPreview).toEqual({ clipId: 'clipB', startFrame: 20 })
+    getState().setDragPreview({ clipId: 'clipB', deltaFrames: 20 })
+    expect(getState().dragPreview).toEqual({ clipId: 'clipB', deltaFrames: 20 })
     expect(getState().dragPreview?.linkGroupId).toBeUndefined()
 
     getState().setDragPreview(null)

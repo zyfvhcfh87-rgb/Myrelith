@@ -60,8 +60,9 @@ and the open list below.
 | Post-MVP #12 — manual linking Slice 1 | ✅ done | pure eligibility/link operation + collision-safe document-aware ids across manual link, linked split, and A/V drop; 57 focused + 1,138 total tests; no rendered behavior yet |
 | Post-MVP #12 — manual linking Slice 2 | ✅ done | canonical history-backed store action; one-entry link, exact undo/redo id, rejection preserves populated redo branches; 90 focused + 1,142 total tests; no rendered behavior yet |
 | Post-MVP #12 — manual linking Slice 3 | ✅ done | ephemeral multi-selection + primary clip, pointer/keyboard selection, accessible Link reasons/control; 54 focused + 1,152 total tests; in-app Chromium 1280×720 interaction gate |
+| Post-MVP #12 — manual linking Slice 4 | ✅ done | signed-delta linked move previews preserve unequal offsets; complete linked edit/rollback matrix; 129 focused + 1,159 total tests; real Chrome A/V move/undo/redo/unlink/playback gate |
 
-1,152 tests green · `npm run build` passes with the known large-chunk warning
+1,159 tests green · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -496,7 +497,11 @@ entry; undo re-links). Issue #12 Slice 3 adds ephemeral ordered
 Ctrl/Cmd-click toggles without starting a move, and Ctrl/Cmd+Enter provides the
 additive keyboard path. Inspector keeps editing the primary while its native
 Link button accepts exactly one eligible video + audio pair in either order;
-the adjacent live status always explains why linking is unavailable. Transform
+the adjacent live status always explains why linking is unavailable. Slice 4
+stores a signed drag delta instead of the gesture owner's absolute start, so
+every linked member ghosts from its own committed start even when manual
+linking preserved unequal timeline offsets. Pointer movement remains transport-
+only and pointerup still commits one atomic linked move. Transform
 and volume stay per-half on purpose. The full editing toolset (4.2): toolbar
 buttons or A/B/T/Y/U — select (normal click selects one, body
 drag moves horizontally or between same-kind lanes with snap-back on illegal
@@ -589,6 +594,7 @@ surface; it is not a second zoom and never enters document history.
   serializable Recent/recovery summaries for Home.
 - `src/state/transportStore.ts` — ephemeral playback/tool/selection state,
   including ordered unique `selectedClipIds` plus primary `selectedClipId`, and
+  signed `dragPreview.deltaFrames` shared by every linked move participant,
   authoritative timeline `zoom`, `zoomMode`, remembered `customZoom`, and the
   translation-only `timelineOriginFrame`; selection, preset/custom zoom, and
   origin setters never enter document undo/redo history.
@@ -929,17 +935,21 @@ surface; it is not a second zoom and never enters document history.
   Multi-tab recovery ownership is not coordinated yet, so do not edit/discard
   the same journal from two tabs. Any future media caching needs explicit
   opt-in, quota/eviction UX, and a separate security/storage review.
-- Issue #12 Slices 1–3 now provide the pure manual-link contract, canonical
+- Issue #12 Slices 1–4 now provide the pure manual-link contract, canonical
   history-backed store action, ephemeral pointer/keyboard pair selection, and
   accessible Inspector Link control for one unlinked video plus one unlinked
   audio clip. Unequal assets/ranges/offsets are preserved; ids are
   collision-safe; one link is one undo entry; redo restores the exact authored
   id; every rejection leaves even a populated redo branch untouched. Link is
   user-invokable now, with visible reasons for invalid/stale selections and the
-  existing Unlink/badges/partner highlighting retained. The remaining slice
-  must change linked move preview from an absolute owner start to an
-  owner-relative delta so unequal-offset partners ghost from their own starts,
-  then pass the final Chrome movement/accessibility gate before issue closeout.
+  existing Unlink/badges/partner highlighting retained. Linked move preview is
+  now a signed shared delta, so unequal-offset partners ghost from their own
+  starts while the committed document stays untouched until one pointerup
+  action. The unequal move/trim/ripple/slip/slide/split/delete matrix and atomic
+  rejection rollback are covered. The real Chrome final gate passed relink,
+  unequal trim/offset, live linked move, exact undo/redo, final unlink, and
+  phase-synced A/V playback with no warning/error logs. Implementation is
+  complete; the still-open GitHub issue is ready for explicit closeout.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their

@@ -21,8 +21,8 @@ import type { ClipId, TimeRange, TrackId } from '../domain/schema'
  */
 export interface DragPreview {
   clipId: ClipId
-  /** Where the dragged clip's timelineRange would start right now. */
-  startFrame: number
+  /** Signed frame delta from every participating clip's committed start. */
+  deltaFrames: number
   /** Same-kind lane currently under the gesture owner, when cross-track. */
   targetTrackId?: TrackId
   /** Pixel offset from the source lane used to ghost the owner vertically. */
@@ -120,8 +120,9 @@ export interface TransportState {
   /** Set or clear the in/out selection. */
   setInOut: (inOut: TimeRange | null) => void
   /**
-   * Update or clear the clip-drag preview. Frame is forced to a
-   * non-negative integer like the playhead. No other field is touched.
+   * Update or clear the clip-drag preview. deltaFrames is rounded to an
+   * integer and stays signed so linked members can each add it to their own
+   * committed start. No other field is touched.
    */
   setDragPreview: (preview: DragPreview | null) => void
   /** Switch the active timeline tool. */
@@ -206,7 +207,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
   setDragPreview: (preview) =>
     set({
       dragPreview: preview
-        ? { ...preview, startFrame: Math.max(0, Math.round(preview.startFrame)) }
+        ? { ...preview, deltaFrames: Math.round(preview.deltaFrames) }
         : null,
     }),
   setTool: (tool) => set({ tool }),

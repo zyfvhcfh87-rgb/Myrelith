@@ -84,11 +84,11 @@ function ClipView({
   // to the clip that does (partners ghost the same preview) — every other,
   // unrelated clip's subscription still never fires, so render isolation
   // for UNLINKED clips is unchanged.
-  const previewStart = useTransportStore((s) =>
+  const movePreviewDelta = useTransportStore((s) =>
     s.dragPreview &&
     (s.dragPreview.clipId === clip.id ||
       (clip.linkGroupId !== undefined && s.dragPreview.linkGroupId === clip.linkGroupId))
-      ? s.dragPreview.startFrame
+      ? s.dragPreview.deltaFrames
       : null,
   )
   // Only the gesture owner changes lanes. A linked partner follows the
@@ -151,7 +151,7 @@ function ClipView({
     [clip.id],
   )
 
-  const scheduleMovePreview = useScrubScheduler((startFrame: number) => {
+  const scheduleMovePreview = useScrubScheduler((deltaFrames: number) => {
     // Same session guard as scheduleEditPreview below: a rAF flush can land
     // AFTER pointerup already committed and cleared the preview — without
     // this check the stale flush re-posts a dragPreview that nothing ever
@@ -162,7 +162,7 @@ function ClipView({
       const crossTrack = active.targetTrackId !== trackId
       setDragPreview({
         clipId: clip.id,
-        startFrame,
+        deltaFrames,
         linkGroupId: clip.linkGroupId,
         ...(crossTrack
           ? {
@@ -183,14 +183,10 @@ function ClipView({
   /* ---------------- geometry (committed + live preview) ------------- */
 
   const tl = clip.timelineRange
-  // previewStart may belong to a LINKED PARTNER's gesture (widened slice
-  // above). It is still the gesture owner's ABSOLUTE start, which is correct
-  // for synchronized A/V-drop pairs but not for Issue #12's manually linked
-  // clips when their starts differ. Slice 4 replaces that move-preview value
-  // with an owner-relative delta so every partner ghosts from its own start.
-  // editPreview below already carries a RELATIVE deltaFrames and therefore
-  // renders correctly on unequal-offset partners without special-casing.
-  let startFrame = previewStart ?? tl.startFrame
+  // A linked gesture shares one signed delta, never the gesture owner's
+  // absolute start. Every member therefore ghosts from its own committed
+  // position even when manually linked clips have unequal timeline offsets.
+  let startFrame = tl.startFrame + (movePreviewDelta ?? 0)
   let durationFrames = tl.durationFrames
   let badge: string | null = null
   if (editPreview) {
@@ -215,7 +211,7 @@ function ClipView({
         break
     }
   }
-  const dragging = previewStart !== null || editPreview !== null
+  const dragging = movePreviewDelta !== null || editPreview !== null
 
   // Source in-point as currently DISPLAYED: slip and start-side trims
   // shift the material under the clip, so the visual tracks the gesture
@@ -367,7 +363,7 @@ function ClipView({
       ...boundsFor(mode),
     }
     if (mode === 'move') {
-      setDragPreview({ clipId: clip.id, startFrame: tl.startFrame, linkGroupId: clip.linkGroupId })
+      setDragPreview({ clipId: clip.id, deltaFrames: 0, linkGroupId: clip.linkGroupId })
     } else {
       setEditPreview({ clipId: clip.id, kind: mode, deltaFrames: 0, linkGroupId: clip.linkGroupId })
     }
@@ -527,7 +523,7 @@ function ClipView({
           const target = trackTargetAt(e.clientX, e.clientY)
           s.targetTrackId = target.trackId
           s.trackOffsetY = target.offsetY
-          scheduleMovePreview(s.originFrame + deltaFromEvent(e))
+          scheduleMovePreview(deltaFromEvent(e))
         } else {
           scheduleEditPreview(deltaFromEvent(e))
         }

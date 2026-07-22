@@ -230,6 +230,13 @@ function makeManualLinkDoc(options: ManualLinkDocOptions = {}): TimelineDoc {
   })
 }
 
+function makeLinkedManualEditDoc(): TimelineDoc {
+  const unlinked = makeManualLinkDoc()
+  const linked = linkClips(unlinked, 'vManual', 'aManual')
+  if (linked === unlinked) throw new Error('manual edit fixture failed to link')
+  return deepFreeze(linked)
+}
+
 function clipsOf(doc: TimelineDoc, trackId: string): Clip[] {
   const track = doc.tracks.find((t) => t.id === trackId)
   if (!track) throw new Error(`no track ${trackId}`)
@@ -511,6 +518,163 @@ describe('getLinkClipsEligibility + linkClips', () => {
     expect(clipIn(afterSecond, 'VM', 'vManual').linkGroupId).toBe(base)
     expect(clipIn(afterSecond, 'VM', 'vSecondManual').linkGroupId).toBe(`${base}_2`)
     expect(clipIn(afterSecond, 'AM', 'aSecondManual').linkGroupId).toBe(`${base}_2`)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Unequal manual-link edit acceptance matrix                          */
+/* ------------------------------------------------------------------ */
+
+describe('unequal manual-link edit acceptance matrix', () => {
+  test('move applies one delta to unequal starts without changing either range shape', () => {
+    const doc = makeLinkedManualEditDoc()
+    const videoBefore = clipIn(doc, 'VM', 'vManual')
+    const audioBefore = clipIn(doc, 'AM', 'aManual')
+    const offsetBefore =
+      videoBefore.timelineRange.startFrame - audioBefore.timelineRange.startFrame
+
+    const out = linkedMoveClip(doc, videoBefore.id, 'VM', 32)
+    const videoAfter = clipIn(out, 'VM', videoBefore.id)
+    const audioAfter = clipIn(out, 'AM', audioBefore.id)
+
+    expect(videoAfter.timelineRange).toEqual({ startFrame: 32, durationFrames: 80 })
+    expect(audioAfter.timelineRange).toEqual({ startFrame: 0, durationFrames: 45 })
+    expect(videoAfter.sourceRange).toBe(videoBefore.sourceRange)
+    expect(audioAfter.sourceRange).toBe(audioBefore.sourceRange)
+    expect(
+      videoAfter.timelineRange.startFrame - audioAfter.timelineRange.startFrame,
+    ).toBe(offsetBefore)
+  })
+
+  test('trim, ripple, slip, and slide keep their per-member unequal geometry', () => {
+    const doc = makeLinkedManualEditDoc()
+
+    const trimmed = linkedTrimClip(doc, 'vManual', 'start', 3)
+    expect(clipIn(trimmed, 'VM', 'vManual')).toMatchObject({
+      timelineRange: { startFrame: 40, durationFrames: 77 },
+      sourceRange: { startFrame: 14, durationFrames: 77 },
+    })
+    expect(clipIn(trimmed, 'AM', 'aManual')).toMatchObject({
+      timelineRange: { startFrame: 8, durationFrames: 42 },
+      sourceRange: { startFrame: 25, durationFrames: 42 },
+    })
+
+    const rippled = linkedRippleTrim(doc, 'vManual', 'end', -5)
+    expect(clipIn(rippled, 'VM', 'vManual').timelineRange).toEqual({
+      startFrame: 37,
+      durationFrames: 75,
+    })
+    expect(clipIn(rippled, 'AM', 'aManual').timelineRange).toEqual({
+      startFrame: 5,
+      durationFrames: 40,
+    })
+    expect(clipIn(rippled, 'VM', 'vAfterManual').timelineRange.startFrame).toBe(112)
+    expect(clipIn(rippled, 'VM', 'vSecondManual').timelineRange.startFrame).toBe(195)
+    expect(clipIn(rippled, 'AM', 'aSecondManual').timelineRange.startFrame).toBe(95)
+
+    const slipped = linkedSlipClip(doc, 'vManual', 4)
+    expect(clipIn(slipped, 'VM', 'vManual').sourceRange).toEqual({
+      startFrame: 15,
+      durationFrames: 80,
+    })
+    expect(clipIn(slipped, 'AM', 'aManual').sourceRange).toEqual({
+      startFrame: 26,
+      durationFrames: 45,
+    })
+    expect(clipIn(slipped, 'VM', 'vManual').timelineRange).toBe(
+      clipIn(doc, 'VM', 'vManual').timelineRange,
+    )
+    expect(clipIn(slipped, 'AM', 'aManual').timelineRange).toBe(
+      clipIn(doc, 'AM', 'aManual').timelineRange,
+    )
+
+    const slid = linkedSlideClip(doc, 'vManual', 5)
+    expect(clipIn(slid, 'VM', 'vManual').timelineRange).toEqual({
+      startFrame: 42,
+      durationFrames: 80,
+    })
+    expect(clipIn(slid, 'AM', 'aManual').timelineRange).toEqual({
+      startFrame: 10,
+      durationFrames: 45,
+    })
+    expect(clipIn(slid, 'VM', 'vAfterManual')).toMatchObject({
+      timelineRange: { startFrame: 122, durationFrames: 25 },
+      sourceRange: { startFrame: 9, durationFrames: 25 },
+    })
+    expect(clipIn(slid, 'AM', 'aSecondManual')).toBe(
+      clipIn(doc, 'AM', 'aSecondManual'),
+    )
+  })
+
+  test('split keeps unequal left members linked and pairs only the two new rights', () => {
+    const doc = makeLinkedManualEditDoc()
+    const originalGroup = clipIn(doc, 'VM', 'vManual').linkGroupId
+    const out = linkedSplitClipAtFrame(doc, 'vManual', 40)
+    const videoLeft = clipIn(out, 'VM', 'vManual')
+    const audioLeft = clipIn(out, 'AM', 'aManual')
+    const videoRight = clipsOf(out, 'VM').find(
+      (clip) => clip.id !== videoLeft.id && clip.timelineRange.startFrame === 40,
+    )
+    const audioRight = clipsOf(out, 'AM').find(
+      (clip) => clip.id !== audioLeft.id && clip.timelineRange.startFrame === 40,
+    )
+    if (!videoRight || !audioRight) throw new Error('unequal split rights missing')
+
+    expect(videoLeft).toMatchObject({
+      timelineRange: { startFrame: 37, durationFrames: 3 },
+      sourceRange: { startFrame: 11, durationFrames: 3 },
+      linkGroupId: originalGroup,
+    })
+    expect(audioLeft).toMatchObject({
+      timelineRange: { startFrame: 5, durationFrames: 35 },
+      sourceRange: { startFrame: 22, durationFrames: 35 },
+      linkGroupId: originalGroup,
+    })
+    expect(videoRight).toMatchObject({
+      timelineRange: { startFrame: 40, durationFrames: 77 },
+      sourceRange: { startFrame: 14, durationFrames: 77 },
+    })
+    expect(audioRight).toMatchObject({
+      timelineRange: { startFrame: 40, durationFrames: 10 },
+      sourceRange: { startFrame: 57, durationFrames: 10 },
+    })
+    expect(videoRight.linkGroupId).toBeDefined()
+    expect(videoRight.linkGroupId).toBe(audioRight.linkGroupId)
+    expect(videoRight.linkGroupId).not.toBe(originalGroup)
+    expect(linkedPartners(out, videoRight.id).map((clip) => clip.id)).toEqual([
+      audioRight.id,
+    ])
+    expect(out.tracks[0].transitions[0]?.fromClipId).toBe(videoRight.id)
+  })
+
+  test('ripple delete removes both unequal members and shifts each track by its own duration', () => {
+    const doc = makeLinkedManualEditDoc()
+    const groupId = clipIn(doc, 'VM', 'vManual').linkGroupId
+    const out = linkedRippleDelete(doc, 'vManual')
+
+    expect(clipsOf(out, 'VM').map((clip) => [clip.id, clip.timelineRange.startFrame])).toEqual([
+      ['vAfterManual', 37],
+      ['vSecondManual', 120],
+    ])
+    expect(clipsOf(out, 'AM').map((clip) => [clip.id, clip.timelineRange.startFrame])).toEqual([
+      ['aSecondManual', 55],
+    ])
+    expect(
+      out.tracks.flatMap((track) => track.clips).some((clip) => clip.linkGroupId === groupId),
+    ).toBe(false)
+  })
+
+  test('a partner timeline-floor failure and a locked unequal partner both roll back exactly', () => {
+    const doc = makeLinkedManualEditDoc()
+    expect(linkedMoveClip(doc, 'vManual', 'VM', 31)).toBe(doc)
+
+    const locked = deepFreeze({
+      ...doc,
+      tracks: doc.tracks.map((track) =>
+        track.id === 'AM' ? { ...track, locked: true } : track,
+      ),
+    })
+    expect(linkedTrimClip(locked, 'vManual', 'end', -5)).toBe(locked)
   })
 })
 

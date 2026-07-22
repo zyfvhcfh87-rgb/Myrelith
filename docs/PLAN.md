@@ -805,6 +805,41 @@ for manually linked clips with unequal starts, followed by the final Chrome
 movement/accessibility gate and issue closeout. Slice 3 does not claim that
 later acceptance boundary.
 
+## Post-MVP issue #12 — Slice 4 ✅ DONE (2026-07-22) Offset-safe linked previews
+
+Issue #12's implementation checklist is complete at this slice boundary. The
+GitHub issue remains open only for an explicit closeout action.
+
+- [x] Replace the move preview's owner-absolute `startFrame` with a signed,
+  integer `deltaFrames`. Pointer movement remains rAF-coalesced transport state
+  only; pointerup still dispatches one history-backed `moveClip` action.
+- [x] Render every linked participant at its own committed
+  `timelineRange.startFrame + deltaFrames`. Cross-track target metadata remains
+  owner-only, so linked partners preserve their lane and unequal authored
+  offset throughout the live gesture.
+- [x] Cover unequal manual-link move, trim, ripple trim, slip, slide, split,
+  and ripple-delete paths with distinct source ranges, durations, timeline
+  starts, and neighboring geometry. Verify exact atomic rollback for collision,
+  timeline-floor, and locked-partner rejection.
+- [x] Verify linked move preview leaves the document untouched, commits exactly
+  one undo entry, preserves each clip's source/duration and pair offset, and
+  restores exact documents through undo and redo. An illegal linked drop snaps
+  both ghosts back and creates no history.
+- [x] Verification: 129/129 focused linking/transport/timeline/store tests;
+  1,159/1,159 total tests across 64 files; production build, lint, and diff
+  checks green.
+- [x] Real Chrome final gate with a generated 320×180 H.264/AAC source: unlink,
+  trim the audio half from timeline frame 30 to 45/source frame 15, relink, and
+  move the video by +20. The live document stayed at 30/45 while ghosts rendered
+  at 50/65; pointerup added one entry, undo/redo restored exact linked states,
+  final unlink preserved 50/65, and playback at timeline frame 94 resolved both
+  halves to source frame 44. Preview rendered the real video and warning/error
+  logs stayed empty.
+
+No implementation slice remains for Issue #12. Closing the GitHub issue is a
+separate repository action and is not implied by this local implementation
+commit.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

@@ -159,11 +159,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `setPresetZoom` updates rendered zoom + Full/Detail mode without overwriting
   `customZoom`; `setTimelineOriginFrame` changes translation only. All four
   fields are ephemeral/non-history and reset deterministically. Also `inOut`,
-  `dragPreview` ({clipId, startFrame,
+  `dragPreview` ({clipId, deltaFrames,
   targetTrackId?, trackOffsetY?, linkGroupId?} | null — the live half of
-  the scrubbing-vs-committed pattern for select-tool moves; the optional
-  target fields ghost only the gesture owner over a same-kind lane while a
-  linked partner stays on its own lane; pointerup commits ONE
+  the scrubbing-vs-committed pattern for select-tool moves; every participating
+  ClipView renders its own committed `timelineRange.startFrame + deltaFrames`.
+  The optional target fields ghost only the gesture owner over a same-kind lane
+  while a linked partner stays on its own lane; pointerup commits ONE
   documentStore.moveClip and clears it), `tool`
   ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipIds` (ordered,
   unique, ephemeral, never in undo) plus `selectedClipId` (the primary member

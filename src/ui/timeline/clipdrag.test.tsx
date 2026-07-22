@@ -130,11 +130,11 @@ describe('drag: scrub-preview then commit', () => {
     const el = screen.getByTestId('clip-clipA')
 
     fireEvent.pointerDown(el, { pointerId: 1, clientX: 500 })
-    expect(transport().dragPreview).toEqual({ clipId: 'clipA', startFrame: 100 })
+    expect(transport().dragPreview).toEqual({ clipId: 'clipA', deltaFrames: 0 })
 
     fireEvent.pointerMove(el, { pointerId: 1, clientX: 560 }) // +60px @ zoom 1
     await waitFor(() =>
-      expect(transport().dragPreview?.startFrame).toBe(160),
+      expect(transport().dragPreview?.deltaFrames).toBe(60),
     )
     // The DOCUMENT is untouched mid-drag — the whole point of the pattern.
     expect(clipA().timelineRange.startFrame).toBe(100)
@@ -160,7 +160,7 @@ describe('drag: scrub-preview then commit', () => {
     fireEvent.pointerDown(el, { pointerId: 1, clientX: 500 })
     fireEvent.pointerMove(el, { pointerId: 1, clientX: 710 })
     await waitFor(() =>
-      expect(transport().dragPreview?.startFrame).toBe(310),
+      expect(transport().dragPreview?.deltaFrames).toBe(210),
     )
     fireEvent.pointerUp(el, { pointerId: 1, clientX: 710 })
 
@@ -186,7 +186,7 @@ describe('drag: scrub-preview then commit', () => {
     fireEvent.pointerDown(el, { pointerId: 1, clientX: 500 })
     fireEvent.pointerMove(el, { pointerId: 1, clientX: 0 }) // -500px, way past 0
     await waitFor(() =>
-      expect(transport().dragPreview?.startFrame).toBe(0),
+      expect(transport().dragPreview?.deltaFrames).toBe(-100),
     )
     fireEvent.pointerUp(el, { pointerId: 1, clientX: 0 })
     expect(clipA().timelineRange.startFrame).toBe(0)
@@ -198,7 +198,7 @@ describe('drag: scrub-preview then commit', () => {
     fireEvent.pointerDown(el, { pointerId: 1, clientX: 500 })
     fireEvent.pointerMove(el, { pointerId: 1, clientX: 620 })
     await waitFor(() =>
-      expect(transport().dragPreview?.startFrame).toBe(220),
+      expect(transport().dragPreview?.deltaFrames).toBe(120),
     )
     fireEvent.pointerCancel(el, { pointerId: 1 })
     expect(transport().dragPreview).toBeNull()
@@ -219,7 +219,7 @@ describe('drag: scrub-preview then commit', () => {
     fireEvent.pointerDown(el, { pointerId: 8, clientX: 500 })
     fireEvent.pointerMove(el, { pointerId: 8, clientX: 650 })
     await waitFor(() =>
-      expect(transport().dragPreview?.startFrame).toBe(250),
+      expect(transport().dragPreview?.deltaFrames).toBe(150),
     )
 
     expect(document.body.contains(el)).toBe(true)
@@ -272,7 +272,7 @@ describe('drag: same-kind track targeting', () => {
     await waitFor(() =>
       expect(transport().dragPreview).toMatchObject({
         clipId: 'clipA',
-        startFrame: 160,
+        deltaFrames: 60,
         targetTrackId: 'V2',
         trackOffsetY: -56,
       }),
@@ -309,7 +309,7 @@ describe('drag: same-kind track targeting', () => {
     await waitFor(() =>
       expect(transport().dragPreview).toMatchObject({
         clipId: 'clipA',
-        startFrame: 160,
+        deltaFrames: 0,
         targetTrackId: 'V1',
         trackOffsetY: 56,
       }),
@@ -346,7 +346,7 @@ describe('drag: same-kind track targeting', () => {
     await waitFor(() =>
       expect(transport().dragPreview).toMatchObject({
         clipId: 'audioA',
-        startFrame: 70,
+        deltaFrames: 30,
         targetTrackId: 'A2',
         trackOffsetY: 56,
       }),
@@ -380,11 +380,11 @@ describe('drag isolation', () => {
     fireEvent.pointerDown(elA, { pointerId: 1, clientX: 500 })
     fireEvent.pointerMove(elA, { pointerId: 1, clientX: 540 })
     await waitFor(() =>
-      expect(transport().dragPreview?.startFrame).toBe(140),
+      expect(transport().dragPreview?.deltaFrames).toBe(40),
     )
     fireEvent.pointerMove(elA, { pointerId: 1, clientX: 580 })
     await waitFor(() =>
-      expect(transport().dragPreview?.startFrame).toBe(180),
+      expect(transport().dragPreview?.deltaFrames).toBe(80),
     )
 
     expect(rendersA.mock.calls.length).toBeGreaterThan(0)
@@ -431,6 +431,40 @@ describe('linked clip gestures (A/V pairs)', () => {
     }
   }
 
+  /** A manually linked pair whose assets, source ranges, starts, and
+   * durations deliberately differ. */
+  function makeUnequalLinkedDoc(withAudioBlock = false): TimelineDoc {
+    const video = {
+      ...makeClip('vid', 100, 70),
+      assetId: 'asset-video',
+      sourceRange: { startFrame: 11, durationFrames: 70 },
+      linkGroupId: 'link_1',
+    }
+    const audio = {
+      ...makeClip('aud', 35, 40),
+      assetId: 'asset-audio',
+      sourceRange: { startFrame: 22, durationFrames: 40 },
+      linkGroupId: 'link_1',
+    }
+    return {
+      schemaVersion: 1,
+      id: 'doc-unequal-linked-drag',
+      name: 'unequal linked drag fixture',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [
+        makeTrack('V1', [video]),
+        makeTrack(
+          'A1',
+          withAudioBlock ? [audio, makeClip('audioBlock', 120, 20)] : [audio],
+          'audio',
+        ),
+      ],
+    }
+  }
+
   const v1 = () => doc().doc.tracks[0]
   const a1 = () => doc().doc.tracks[1]
   const vidClip = () => v1().clips.find((c) => c.id === 'vid') as Clip
@@ -449,7 +483,7 @@ describe('linked clip gestures (A/V pairs)', () => {
 
     fireEvent.pointerDown(videoEl, { pointerId: 1, clientX: 500 })
     fireEvent.pointerMove(videoEl, { pointerId: 1, clientX: 560 }) // +60px @ zoom 1
-    await waitFor(() => expect(transport().dragPreview?.startFrame).toBe(160))
+    await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(60))
 
     // Both halves visually follow the SAME preview — partner ghosts the gesture.
     expect(videoEl).toHaveStyle({ transform: 'translateX(160px)' })
@@ -464,6 +498,79 @@ describe('linked clip gestures (A/V pairs)', () => {
     expect(vidClip().timelineRange.startFrame).toBe(160)
     expect(audClip().timelineRange.startFrame).toBe(160)
     expect(doc().past).toHaveLength(1) // ONE entry for the whole linked move
+  })
+
+  test('unequal linked members preview and commit from their own starts with one shared delta', async () => {
+    doc().setDoc(makeUnequalLinkedDoc())
+    render(
+      <>
+        <Track track={v1()} />
+        <Track track={a1()} />
+      </>,
+    )
+    const videoEl = screen.getByTestId('clip-vid')
+    const audioEl = screen.getByTestId('clip-aud')
+
+    expect(videoEl).toHaveStyle({ transform: 'translateX(100px)', width: '70px' })
+    expect(audioEl).toHaveStyle({ transform: 'translateX(35px)', width: '40px' })
+
+    fireEvent.pointerDown(videoEl, { pointerId: 9, clientX: 500 })
+    fireEvent.pointerMove(videoEl, { pointerId: 9, clientX: 557 })
+    await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(57))
+
+    expect(videoEl).toHaveStyle({ transform: 'translateX(157px)', width: '70px' })
+    expect(audioEl).toHaveStyle({ transform: 'translateX(92px)', width: '40px' })
+    expect(vidClip().timelineRange).toEqual({ startFrame: 100, durationFrames: 70 })
+    expect(audClip().timelineRange).toEqual({ startFrame: 35, durationFrames: 40 })
+    expect(doc().past).toHaveLength(0)
+
+    fireEvent.pointerUp(videoEl, { pointerId: 9, clientX: 557 })
+
+    expect(vidClip().timelineRange).toEqual({ startFrame: 157, durationFrames: 70 })
+    expect(audClip().timelineRange).toEqual({ startFrame: 92, durationFrames: 40 })
+    expect(vidClip().sourceRange).toEqual({ startFrame: 11, durationFrames: 70 })
+    expect(audClip().sourceRange).toEqual({ startFrame: 22, durationFrames: 40 })
+    expect(
+      vidClip().timelineRange.startFrame - audClip().timelineRange.startFrame,
+    ).toBe(65)
+    expect(doc().past).toHaveLength(1)
+
+    doc().undo()
+    expect(vidClip().timelineRange.startFrame).toBe(100)
+    expect(audClip().timelineRange.startFrame).toBe(35)
+    doc().redo()
+    expect(vidClip().timelineRange.startFrame).toBe(157)
+    expect(audClip().timelineRange.startFrame).toBe(92)
+  })
+
+  test('an unequal linked collision snaps both previews back and commits no history', async () => {
+    doc().setDoc(makeUnequalLinkedDoc(true))
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    render(
+      <>
+        <Track track={v1()} />
+        <Track track={a1()} />
+      </>,
+    )
+    const videoEl = screen.getByTestId('clip-vid')
+    const audioEl = screen.getByTestId('clip-aud')
+
+    fireEvent.pointerDown(videoEl, { pointerId: 10, clientX: 500 })
+    fireEvent.pointerMove(videoEl, { pointerId: 10, clientX: 560 })
+    await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(60))
+    expect(videoEl).toHaveStyle({ transform: 'translateX(160px)' })
+    expect(audioEl).toHaveStyle({ transform: 'translateX(95px)' })
+
+    fireEvent.pointerUp(videoEl, { pointerId: 10, clientX: 560 })
+
+    expect(transport().dragPreview).toBeNull()
+    expect(videoEl).toHaveStyle({ transform: 'translateX(100px)' })
+    expect(audioEl).toHaveStyle({ transform: 'translateX(35px)' })
+    expect(vidClip().timelineRange.startFrame).toBe(100)
+    expect(audClip().timelineRange.startFrame).toBe(35)
+    expect(doc().past).toHaveLength(0)
+    expect(warnSpy).toHaveBeenCalled()
+    warnSpy.mockRestore()
   })
 
   test('cross-track video drag ghosts only the owner vertically while its linked audio partner stays on its lane', async () => {
@@ -488,7 +595,7 @@ describe('linked clip gestures (A/V pairs)', () => {
     await waitFor(() =>
       expect(transport().dragPreview).toMatchObject({
         clipId: 'vid',
-        startFrame: 160,
+        deltaFrames: 60,
         targetTrackId: 'V2',
         trackOffsetY: -56,
         linkGroupId: 'link_1',
@@ -519,7 +626,7 @@ describe('linked clip gestures (A/V pairs)', () => {
 
     fireEvent.pointerDown(loneEl, { pointerId: 1, clientX: 500 })
     fireEvent.pointerMove(loneEl, { pointerId: 1, clientX: 560 }) // +60px @ zoom 1
-    await waitFor(() => expect(transport().dragPreview?.startFrame).toBe(360))
+    await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(60))
     fireEvent.pointerUp(loneEl, { pointerId: 1, clientX: 560 })
 
     const lone = v1().clips.find((c) => c.id === 'lone') as Clip
