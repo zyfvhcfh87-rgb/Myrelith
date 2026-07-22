@@ -137,6 +137,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `setCrossfadeDuration(trackId, transitionId, durationFrames)`,
   `removeTransition(trackId, transitionId)`,
   `setClipVolume(clipId, volume)` (clamped [0,2]),
+  `linkClips(videoClipId, audioClipId)` (one history entry; delegates to the
+  pure domain contract, so rejection preserves the entire state and redo
+  branch by reference; undo/redo restore the exact generated group id),
   `unlinkClip(clipId)` (dissolves the clip's whole link group), `undo`,
   `redo`. The geometry actions (move/trim/rippleTrim/slip/slide/
   rippleDelete/splitClipAt/splitClipAtPlayhead) are LINK-AWARE: they

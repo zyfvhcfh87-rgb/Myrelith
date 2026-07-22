@@ -58,8 +58,9 @@ and the open list below.
 | Post-MVP #19 — compatibility Slice 6 | ✅ no-go decided | measured local worker/WASM proxy spike, including a Limited source with browser-unsupported video; failed bounded-I/O/progress/license/provenance gates with low-memory behavior unproven; no converter shipped |
 | **Post-MVP #19 — final closeout** | ✅ closed | 13-file real codec/damage matrix; prompt/commit cancellation + exact disposal races fixed; runtime fallback budgets and filmstrip canvases bounded; 346 focused + 1,127 total tests; Chrome 150 and Edge 150 full VP9/Opus playback/cancel/export gates; closes at 46/49 with three rejected proxy children intentionally unchecked |
 | Post-MVP #12 — manual linking Slice 1 | ✅ done | pure eligibility/link operation + collision-safe document-aware ids across manual link, linked split, and A/V drop; 57 focused + 1,138 total tests; no rendered behavior yet |
+| Post-MVP #12 — manual linking Slice 2 | ✅ done | canonical history-backed store action; one-entry link, exact undo/redo id, rejection preserves populated redo branches; 90 focused + 1,142 total tests; no rendered behavior yet |
 
-1,138 tests green · `npm run build` passes with the known large-chunk warning
+1,142 tests green · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -565,8 +566,9 @@ surface; it is not a second zoom and never enters document history.
   the base ops — same delta to every `linkGroupId` member, atomic rollback;
   `unlinkClip` dissolves a group; Issue #12 Slice 1 adds pure
   `getLinkClipsEligibility` + `linkClips` and document-aware collision-safe
-  group ids; the store's geometry actions call these wrappers, while the
-  manual-link store action belongs to the next slice).
+  group ids; Slice 2 exposes that operation through the canonical
+  history-backed `documentStore.linkClips`; the store's geometry actions call
+  these wrappers too).
 - `src/domain/projectSettings.ts` — authoritative project presets, strict
   settings validation, and the pure empty-document factory.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
@@ -918,13 +920,14 @@ surface; it is not a second zoom and never enters document history.
   Multi-tab recovery ownership is not coordinated yet, so do not edit/discard
   the same journal from two tabs. Any future media caching needs explicit
   opt-in, quota/eviction UX, and a separate security/storage review.
-- Issue #12 Slice 1 now provides the pure, fully tested manual-link contract
-  for one unlinked video clip plus one unlinked audio clip. It preserves
-  unequal assets/ranges/offsets and uses document-aware ids so UUID collisions
-  cannot merge groups during manual link, linked split, or A/V drop. It is not
-  user-invokable yet: later slices still own the history-backed store action,
-  pair-selection interaction, relative-offset preview, accessible Link UI,
-  browser gate, and linked-pair awareness in a future multi-select.
+- Issue #12 Slices 1–2 now provide the pure manual-link contract and its
+  canonical history-backed store action for one unlinked video clip plus one
+  unlinked audio clip. Unequal assets/ranges/offsets are preserved; ids are
+  collision-safe; one link is one undo entry; redo restores the exact authored
+  id; every rejection leaves even a populated redo branch untouched. It is not
+  user-invokable yet: later slices still own pair selection, relative-offset
+  feedback, the accessible Link UI, browser gates, and linked-pair awareness
+  in a future multi-select.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their

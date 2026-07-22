@@ -43,6 +43,7 @@ import {
   updateClipTransform,
 } from '../domain/operations'
 import {
+  linkClips as linkClipsInDocument,
   linkedMoveClip,
   linkedRippleDelete,
   linkedRippleTrim,
@@ -153,6 +154,12 @@ export interface DocumentState {
    * remain removable; unknown/mismatched ids and locked tracks are no-ops.
    */
   removeTransition: (trackId: TrackId, transitionId: TransitionId) => void
+  /**
+   * Link one existing video clip to one existing audio clip. A successful
+   * link is one history entry; the pure domain contract rejects invalid,
+   * locked, or already-linked pairs without changing history.
+   */
+  linkClips: (videoClipId: ClipId, audioClipId: ClipId) => void
   /**
    * Dissolve clipId's whole link group in one entry — every member loses
    * its linkGroupId (the Inspector's manual "unlink" button). A clip with
@@ -315,6 +322,14 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       commit(
         state,
         removeTransition(state.doc, trackId, transitionId),
+      ),
+    ),
+
+  linkClips: (videoClipId, audioClipId) =>
+    set((state) =>
+      commit(
+        state,
+        linkClipsInDocument(state.doc, videoClipId, audioClipId),
       ),
     ),
 

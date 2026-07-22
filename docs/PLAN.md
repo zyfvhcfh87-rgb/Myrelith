@@ -742,6 +742,32 @@ Remaining Issue #12 slices own the history-backed store action, pair-selection
 interaction, relative-offset preview, accessible Link UI, and real-browser
 behavior gate. Manual linking is therefore not user-invokable at this boundary.
 
+## Post-MVP issue #12 — Slice 2 ✅ DONE (2026-07-22) Store and history
+
+At this slice boundary, Issue #12 remains open. The pure Slice 1 operation is
+now available as a canonical document-store mutation, but no selection or
+rendered UI invokes it yet.
+
+- [x] Add `documentStore.linkClips(videoClipId, audioClipId)` as a thin adapter
+  over the pure domain operation. It uses the shared `commit` path instead of
+  duplicating validation or identity generation in state.
+- [x] Commit a valid link as exactly one history entry and clear any abandoned
+  redo branch. Every invalid, stale, locked, wrong-kind, or already-linked
+  call preserves `doc`, `past`, and an existing `future` array by reference.
+- [x] Undo restores the exact pre-link snapshot. Redo restores the exact
+  authored snapshot and original generated `linkGroupId` without invoking
+  `crypto.randomUUID()` again.
+- [x] Verify unequal assets/ranges remain metadata-only, unrelated tracks keep
+  structural identity, and all nine stable Slice 1 rejection reasons retain
+  the same no-history behavior through the store.
+- [x] Verification: 90/90 focused domain + state tests; 1,142/1,142 total tests
+  across 64 files; production build, lint, and diff checks green. No browser
+  gate applies because Slice 2 changes no rendered behavior.
+
+Remaining Issue #12 slices own pair selection, relative-offset feedback, the
+accessible Link command, and real-browser interaction/accessibility gates.
+Manual linking is still not user-invokable at this boundary.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

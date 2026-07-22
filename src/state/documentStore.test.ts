@@ -626,6 +626,217 @@ describe('track actions', () => {
 })
 
 /* ------------------------------------------------------------------ */
+/* Manual clip linking (Issue #12, Slice 2)                            */
+/* ------------------------------------------------------------------ */
+
+const EXISTING_MANUAL_PAIR = 'link_existing_manual_pair'
+
+/**
+ * Unequal, unrelated source clips plus every rejection shape needed by
+ * linkClips. VU carries unrelated transitions/flags so a metadata-only link
+ * cannot accidentally rewrite neighboring document structure unnoticed.
+ */
+function makeManualLinkStoreDoc(): TimelineDoc {
+  const video = {
+    ...makeClip('vManual', 120, 80),
+    assetId: 'asset-video-manual',
+    name: 'Manual video',
+    sourceRange: { startFrame: 45, durationFrames: 80 },
+    transform: {
+      x: 12,
+      y: -8,
+      scaleX: 1.25,
+      scaleY: 0.75,
+      rotation: 15,
+      anchorX: 0.25,
+      anchorY: 0.8,
+    },
+    opacity: 0.65,
+    effects: [
+      {
+        id: 'effect-video-manual',
+        type: 'brightness',
+        enabled: true,
+        params: { amount: 0.2 },
+      },
+    ],
+  }
+  const audio = {
+    ...makeClip('aManual', 30, 45),
+    assetId: 'asset-audio-manual',
+    name: 'Manual audio',
+    sourceRange: { startFrame: 9, durationFrames: 45 },
+    volume: 0.37,
+    effects: [
+      {
+        id: 'effect-audio-manual',
+        type: 'compressor',
+        enabled: false,
+        params: { threshold: -12 },
+      },
+    ],
+  }
+
+  return deepFreeze({
+    schemaVersion: 1,
+    id: 'doc-manual-link-store',
+    name: 'Manual link store test',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [
+      makeTrack('VM', 'video', [video]),
+      makeTrack('AM', 'audio', [audio]),
+      makeTrack('VM2', 'video', [
+        { ...makeClip('vSecondManual', 500, 60), assetId: 'asset-video-second' },
+      ]),
+      makeTrack('AM2', 'audio', [
+        { ...makeClip('aSecondManual', 420, 35), assetId: 'asset-audio-second' },
+      ]),
+      makeTrack('VL', 'video', [
+        makeClip('vLinkedManual', 700, 50, EXISTING_MANUAL_PAIR),
+      ]),
+      makeTrack('AL', 'audio', [
+        makeClip('aLinkedManual', 710, 40, EXISTING_MANUAL_PAIR),
+      ]),
+      makeTrack('VML', 'video', [makeClip('vLockedManual', 800, 30)], true),
+      makeTrack('AML', 'audio', [makeClip('aLockedManual', 850, 25)], true),
+      {
+        ...makeTrack('VU', 'video', [
+          makeClip('unrelatedA', 0, 20),
+          makeClip('unrelatedB', 20, 20),
+        ]),
+        name: 'Unrelated structure',
+        transitions: [crossfade('unrelated-transition', 'unrelatedA', 'unrelatedB', 4)],
+        hidden: true,
+        solo: true,
+      },
+    ],
+  })
+}
+
+describe('manual linkClips action', () => {
+  beforeEach(() => {
+    getState().setDoc(makeManualLinkStoreDoc())
+  })
+
+  function expectRejectionsWithoutStateChange(
+    cases: ReadonlyArray<readonly [reason: string, videoClipId: string, audioClipId: string]>,
+  ): void {
+    for (const [reason, videoClipId, audioClipId] of cases) {
+      getState().setDoc(makeManualLinkStoreDoc())
+      getState().renameTrack('VU', 'History branch marker')
+      getState().undo()
+      const before = getState()
+      expect(before.future).toHaveLength(1)
+      warnSpy.mockClear()
+
+      getState().linkClips(videoClipId, audioClipId)
+
+      expect(getState().doc, reason).toBe(before.doc)
+      expect(getState().past, reason).toBe(before.past)
+      expect(getState().future, reason).toBe(before.future)
+      expect(warnSpy, reason).toHaveBeenCalledWith(expect.stringContaining(reason))
+    }
+  }
+
+  test('links unequal clips as metadata only in exactly one history entry; undo/redo restore exact snapshots without rerunning UUID', () => {
+    const initial = getState().doc
+    const videoBefore = initial.tracks[0].clips[0]
+    const audioBefore = initial.tracks[1].clips[0]
+    const uuid = '44444444-4444-4444-8444-444444444444'
+    const expectedGroupId = `link_${uuid}`
+    const uuidSpy = vi.spyOn(crypto, 'randomUUID').mockReturnValue(uuid)
+
+    try {
+      getState().linkClips('vManual', 'aManual')
+      const authored = getState().doc
+      const linkedVideo = authored.tracks[0].clips[0]
+      const linkedAudio = authored.tracks[1].clips[0]
+
+      expect(linkedVideo).toEqual({ ...videoBefore, linkGroupId: expectedGroupId })
+      expect(linkedAudio).toEqual({ ...audioBefore, linkGroupId: expectedGroupId })
+      expect(linkedVideo.assetId).not.toBe(linkedAudio.assetId)
+      expect(linkedVideo.sourceRange).not.toEqual(linkedAudio.sourceRange)
+      expect(linkedVideo.timelineRange).not.toEqual(linkedAudio.timelineRange)
+      expect(authored.tracks[0]).toEqual({
+        ...initial.tracks[0],
+        clips: [{ ...videoBefore, linkGroupId: expectedGroupId }],
+      })
+      expect(authored.tracks[1]).toEqual({
+        ...initial.tracks[1],
+        clips: [{ ...audioBefore, linkGroupId: expectedGroupId }],
+      })
+      for (let index = 2; index < initial.tracks.length; index++) {
+        expect(authored.tracks[index]).toBe(initial.tracks[index])
+      }
+      expect(getState().past).toEqual([initial])
+      expect(getState().future).toEqual([])
+      expect(uuidSpy).toHaveBeenCalledTimes(1)
+
+      getState().undo()
+      expect(getState().doc).toBe(initial)
+      expect(getState().future).toEqual([authored])
+
+      getState().redo()
+      expect(getState().doc).toBe(authored)
+      expect(getState().doc.tracks[0].clips[0].linkGroupId).toBe(expectedGroupId)
+      expect(getState().past).toEqual([initial])
+      expect(getState().future).toEqual([])
+      expect(uuidSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      uuidSpy.mockRestore()
+    }
+  })
+
+  test('a successful divergent link after undo clears the previous redo branch', () => {
+    const firstUuid = '55555555-5555-4555-8555-555555555555'
+    const secondUuid = '66666666-6666-4666-8666-666666666666'
+    const uuidSpy = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(firstUuid)
+      .mockReturnValueOnce(secondUuid)
+
+    try {
+      getState().linkClips('vManual', 'aManual')
+      const abandoned = getState().doc
+      getState().undo()
+      expect(getState().future).toEqual([abandoned])
+
+      getState().linkClips('vSecondManual', 'aSecondManual')
+      expect(getState().future).toEqual([])
+      expect(getState().doc.tracks[0].clips[0].linkGroupId).toBeUndefined()
+      expect(getState().doc.tracks[1].clips[0].linkGroupId).toBeUndefined()
+      expect(getState().doc.tracks[2].clips[0].linkGroupId).toBe(`link_${secondUuid}`)
+      expect(getState().doc.tracks[3].clips[0].linkGroupId).toBe(`link_${secondUuid}`)
+      expect(getState().past).toHaveLength(1)
+      expect(uuidSpy).toHaveBeenCalledTimes(2)
+    } finally {
+      uuidSpy.mockRestore()
+    }
+  })
+
+  test('same, missing, and wrong-kind rejections preserve doc, history, and a populated future stack', () => {
+    expectRejectionsWithoutStateChange([
+      ['same-clip', 'vManual', 'vManual'],
+      ['video-clip-missing', 'missing-video', 'aManual'],
+      ['audio-clip-missing', 'vManual', 'missing-audio'],
+      ['first-clip-not-video', 'aManual', 'aSecondManual'],
+      ['second-clip-not-audio', 'vManual', 'vSecondManual'],
+    ])
+  })
+
+  test('locked and already-linked rejections preserve doc, history, and a populated future stack', () => {
+    expectRejectionsWithoutStateChange([
+      ['video-track-locked', 'vLockedManual', 'aManual'],
+      ['audio-track-locked', 'vManual', 'aLockedManual'],
+      ['video-clip-already-linked', 'vLinkedManual', 'aManual'],
+      ['audio-clip-already-linked', 'vManual', 'aLinkedManual'],
+    ])
+  })
+})
+
+/* ------------------------------------------------------------------ */
 /* Linked clips (Phase 4.3.8)                                          */
 /* ------------------------------------------------------------------ */
 
