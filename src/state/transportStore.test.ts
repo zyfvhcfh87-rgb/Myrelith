@@ -137,6 +137,7 @@ describe('transportStore', () => {
     getState().setDragPreview({ clipId: 'clipA', startFrame: 10 })
     getState().setTool('slide')
     getState().setSelectedClip('clipA')
+    getState().toggleClipSelection('clipB')
     getState().setEditPreview({
       clipId: 'clipA',
       kind: 'slide',
@@ -156,6 +157,7 @@ describe('transportStore', () => {
       inOut: null,
       dragPreview: null,
       tool: 'select',
+      selectedClipIds: [],
       selectedClipId: null,
       editPreview: null,
     })
@@ -168,14 +170,88 @@ describe('Phase 4.2 tool / selection / edit-preview state', () => {
     getState().setSelectedClip('clipA')
     getState().setTool('razor')
     expect(getState().tool).toBe('razor')
-    expect(getState().selectedClipId).toBe('clipA') // untouched
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA'],
+      selectedClipId: 'clipA',
+    }) // untouched
   })
 
-  test('selection sets and clears', () => {
+  test('setSelectedClip atomically replaces and clears multi-selection', () => {
     getState().setSelectedClip('clipA')
-    expect(getState().selectedClipId).toBe('clipA')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA'],
+      selectedClipId: 'clipA',
+    })
+
+    getState().toggleClipSelection('clipB')
+    getState().setSelectedClip('clipC')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipC'],
+      selectedClipId: 'clipC',
+    })
+
     getState().setSelectedClip(null)
-    expect(getState().selectedClipId).toBeNull()
+    expect(getState()).toMatchObject({
+      selectedClipIds: [],
+      selectedClipId: null,
+    })
+  })
+
+  test('toggleClipSelection appends unique ids and makes each addition primary', () => {
+    getState().toggleClipSelection('clipA')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA'],
+      selectedClipId: 'clipA',
+    })
+
+    getState().toggleClipSelection('clipB')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipB'],
+      selectedClipId: 'clipB',
+    })
+
+    getState().toggleClipSelection('clipC')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipB', 'clipC'],
+      selectedClipId: 'clipC',
+    })
+    expect(new Set(getState().selectedClipIds).size).toBe(3)
+  })
+
+  test('toggling the primary off promotes the last remaining selected clip', () => {
+    getState().toggleClipSelection('clipA')
+    getState().toggleClipSelection('clipB')
+    getState().toggleClipSelection('clipC')
+
+    getState().toggleClipSelection('clipC')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipB'],
+      selectedClipId: 'clipB',
+    })
+
+    getState().toggleClipSelection('clipB')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA'],
+      selectedClipId: 'clipA',
+    })
+
+    getState().toggleClipSelection('clipA')
+    expect(getState()).toMatchObject({
+      selectedClipIds: [],
+      selectedClipId: null,
+    })
+  })
+
+  test('toggling a non-primary clip off preserves the primary', () => {
+    getState().toggleClipSelection('clipA')
+    getState().toggleClipSelection('clipB')
+    getState().toggleClipSelection('clipC')
+
+    getState().toggleClipSelection('clipA')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipB', 'clipC'],
+      selectedClipId: 'clipC',
+    })
   })
 
   test('editPreview rounds deltas, keeps them signed, and clears', () => {

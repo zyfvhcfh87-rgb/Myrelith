@@ -169,6 +169,7 @@ beforeEach(() => {
     editPreview: null,
     tool: 'select',
     selectedClipId: null,
+    selectedClipIds: [],
   })
   documentState().setDoc(makeDoc())
 })

@@ -480,6 +480,7 @@ describe('new-project activation', () => {
       zoom: 4,
       tool: 'slide',
       selectedClipId: 'clip-old',
+      selectedClipIds: ['clip-old'],
     })
 
     const cleanupGate = deferred<void>()
@@ -518,6 +519,7 @@ describe('new-project activation', () => {
       zoom: 1,
       tool: 'select',
       selectedClipId: null,
+      selectedClipIds: [],
     })
     expect(useProjectSessionStore.getState()).toMatchObject({
       screen: 'editor',

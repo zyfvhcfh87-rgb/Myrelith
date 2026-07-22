@@ -48,9 +48,33 @@ function makeDoc(): TimelineDoc {
   }
 }
 
+function makeLinkedFixture(): TimelineDoc {
+  return {
+    ...makeDoc(),
+    tracks: [
+      makeTrack('V1', [{ ...makeClip('clipV', 0, 50), linkGroupId: 'link_1' }]),
+      makeTrack(
+        'A1',
+        [{ ...makeClip('clipLinkedA', 0, 50), linkGroupId: 'link_1' }],
+        'audio',
+      ),
+    ],
+  }
+}
+
 const doc = () => useDocumentStore.getState()
 const transport = () => useTransportStore.getState()
 const clipA = () => doc().doc.tracks[0].clips.find((c) => c.id === 'clipA') as Clip
+
+function setMultiSelection(selectedClipIds: readonly string[], primaryId?: string): void {
+  useTransportStore.setState({
+    selectedClipIds,
+    selectedClipId: primaryId ?? selectedClipIds[selectedClipIds.length - 1] ?? null,
+  })
+}
+
+const linkButton = () =>
+  screen.getByRole('button', { name: 'Link selected audio and video clips' })
 
 let warnSpy: ReturnType<typeof vi.spyOn>
 
@@ -64,6 +88,7 @@ beforeEach(() => {
     inOut: null,
     dragPreview: null,
     tool: 'select',
+    selectedClipIds: [],
     selectedClipId: null,
     editPreview: null,
   })
@@ -222,6 +247,133 @@ describe('audio clips (clip audio upgrade)', () => {
     doc().undo()
     rerender(<Inspector />)
     expect(screen.getByTestId('inspector-volume')).toHaveValue(1)
+  })
+})
+
+describe('manual A/V link control (Issue 12 Slice 3)', () => {
+  test('disabled states explain no, partial, same-kind, oversized, and stale selections', () => {
+    const { rerender } = render(<Inspector />)
+    expect(linkButton()).toBeDisabled()
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Select one video clip and one audio clip to link them.',
+    )
+
+    transport().setSelectedClip('clipA')
+    rerender(<Inspector />)
+    expect(linkButton()).toBeDisabled()
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Select one more clip with Ctrl/Cmd-click, or focus it and press Ctrl/Cmd+Enter.',
+    )
+
+    setMultiSelection(['clipA', 'clipB'], 'clipB')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Select one video clip and one audio clip; clips on the same kind of track cannot be linked.',
+    )
+
+    setMultiSelection(['clipA', 'clipB', 'clipD'], 'clipD')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Select exactly two clips: one video and one audio.',
+    )
+
+    setMultiSelection(['clipA', 'deleted-clip'], 'clipA')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAccessibleDescription(
+      'A selected clip is no longer available. Reselect the video and audio clips.',
+    )
+
+    setMultiSelection(['deleted-clip'], 'deleted-clip')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAccessibleDescription(
+      'A selected clip is no longer available. Reselect the video and audio clips.',
+    )
+  })
+
+  test('accepts either selection order and uses a native keyboard-operable button', () => {
+    setMultiSelection(['clipD', 'clipA'], 'clipA')
+    const { rerender } = render(<Inspector />)
+
+    expect(linkButton()).toBeEnabled()
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Ready to link the selected video and audio clips.',
+    )
+    expect(linkButton().tagName).toBe('BUTTON')
+    expect(linkButton()).toHaveAttribute('type', 'button')
+    linkButton().focus()
+    expect(linkButton()).toHaveFocus()
+
+    setMultiSelection(['clipA', 'clipD'], 'clipD')
+    rerender(<Inspector />)
+    expect(linkButton()).toBeEnabled()
+  })
+
+  test('links a valid pair in one history action without changing selection or primary', () => {
+    // Different assets/source offsets, hidden video, and muted audio are valid:
+    // manual linking joins existing timeline items without rewriting metadata.
+    const mixedDoc = makeDoc()
+    const videoTrack = mixedDoc.tracks[0]
+    const audioTrack = mixedDoc.tracks[1]
+    doc().setDoc({
+      ...mixedDoc,
+      tracks: [
+        { ...videoTrack, hidden: true },
+        {
+          ...audioTrack,
+          muted: true,
+          clips: audioTrack.clips.map((clip) => ({
+            ...clip,
+            assetId: 'different-asset',
+            sourceRange: { ...clip.sourceRange, startFrame: 17 },
+          })),
+        },
+      ],
+    })
+    setMultiSelection(['clipD', 'clipA'], 'clipA')
+    render(<Inspector />)
+
+    const selectionBefore = transport().selectedClipIds
+    fireEvent.click(linkButton())
+
+    const video = doc().doc.tracks[0].clips[0]
+    const audio = doc().doc.tracks[1].clips[0]
+    expect(video.linkGroupId).toBeDefined()
+    expect(audio.linkGroupId).toBe(video.linkGroupId)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().selectedClipIds).toBe(selectionBefore)
+    expect(transport().selectedClipIds).toEqual(['clipD', 'clipA'])
+    expect(transport().selectedClipId).toBe('clipA')
+
+    expect(linkButton()).toBeDisabled()
+    expect(linkButton()).toHaveAccessibleDescription(
+      'The selected video clip is already linked. Unlink it first.',
+    )
+    expect(screen.getByTestId('inspector-unlink')).toBeInTheDocument()
+  })
+
+  test('locked and already-linked pairs remain disabled with actionable reasons', () => {
+    const unlocked = makeDoc()
+    doc().setDoc({
+      ...unlocked,
+      tracks: unlocked.tracks.map((track) =>
+        track.id === 'V1' ? { ...track, locked: true } : track,
+      ),
+    })
+    setMultiSelection(['clipA', 'clipD'], 'clipA')
+    const { rerender } = render(<Inspector />)
+    expect(linkButton()).toBeDisabled()
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Unlock the selected video track before linking.',
+    )
+
+    doc().setDoc(makeLinkedFixture())
+    setMultiSelection(['clipV', 'clipLinkedA'], 'clipV')
+    rerender(<Inspector />)
+    expect(linkButton()).toBeDisabled()
+    expect(linkButton()).toHaveAccessibleDescription(
+      'The selected video clip is already linked. Unlink it first.',
+    )
+    expect(screen.getByTestId('inspector-unlink')).toBeInTheDocument()
   })
 })
 

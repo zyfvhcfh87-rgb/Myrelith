@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-21)
+## Status (2026-07-22)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -59,8 +59,9 @@ and the open list below.
 | **Post-MVP #19 — final closeout** | ✅ closed | 13-file real codec/damage matrix; prompt/commit cancellation + exact disposal races fixed; runtime fallback budgets and filmstrip canvases bounded; 346 focused + 1,127 total tests; Chrome 150 and Edge 150 full VP9/Opus playback/cancel/export gates; closes at 46/49 with three rejected proxy children intentionally unchecked |
 | Post-MVP #12 — manual linking Slice 1 | ✅ done | pure eligibility/link operation + collision-safe document-aware ids across manual link, linked split, and A/V drop; 57 focused + 1,138 total tests; no rendered behavior yet |
 | Post-MVP #12 — manual linking Slice 2 | ✅ done | canonical history-backed store action; one-entry link, exact undo/redo id, rejection preserves populated redo branches; 90 focused + 1,142 total tests; no rendered behavior yet |
+| Post-MVP #12 — manual linking Slice 3 | ✅ done | ephemeral multi-selection + primary clip, pointer/keyboard selection, accessible Link reasons/control; 54 focused + 1,152 total tests; in-app Chromium 1280×720 interaction gate |
 
-1,142 tests green · `npm run build` passes with the known large-chunk warning
+1,152 tests green · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -490,8 +491,14 @@ pair). Linked clips show a tiny 🔗 badge; every geometry edit
 (move/trim/ripple/slip/slide/razor/S/Delete) applies to BOTH halves
 atomically — the partner even ghosts the gesture live — and the
 Inspector's "🔗 Unlink audio/video" button dissolves the group (one
-entry; undo re-links). Transform and volume stay per-half on purpose. The full editing
-toolset (4.2): toolbar buttons or A/B/T/Y/U — select (click selects, body
+entry; undo re-links). Issue #12 Slice 3 adds ephemeral ordered
+`selectedClipIds` plus one primary clip: normal click replaces the selection,
+Ctrl/Cmd-click toggles without starting a move, and Ctrl/Cmd+Enter provides the
+additive keyboard path. Inspector keeps editing the primary while its native
+Link button accepts exactly one eligible video + audio pair in either order;
+the adjacent live status always explains why linking is unavailable. Transform
+and volume stay per-half on purpose. The full editing toolset (4.2): toolbar
+buttons or A/B/T/Y/U — select (normal click selects one, body
 drag moves horizontally or between same-kind lanes with snap-back on illegal
 drops, edge drag trims), razor
 (click cuts at the pointer frame), ripple trim (edges; downstream
@@ -567,8 +574,9 @@ surface; it is not a second zoom and never enters document history.
   `unlinkClip` dissolves a group; Issue #12 Slice 1 adds pure
   `getLinkClipsEligibility` + `linkClips` and document-aware collision-safe
   group ids; Slice 2 exposes that operation through the canonical
-  history-backed `documentStore.linkClips`; the store's geometry actions call
-  these wrappers too).
+  history-backed `documentStore.linkClips`; Slice 3 resolves the ephemeral UI
+  pair through the same eligibility contract before dispatch; the store's
+  geometry actions call these wrappers too).
 - `src/domain/projectSettings.ts` — authoritative project presets, strict
   settings validation, and the pure empty-document factory.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
@@ -579,10 +587,11 @@ surface; it is not a second zoom and never enters document history.
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
   handles, or recovery payloads. `src/state/projectLibraryStore.ts` holds only
   serializable Recent/recovery summaries for Home.
-- `src/state/transportStore.ts` — ephemeral playback/tool/selection state plus
+- `src/state/transportStore.ts` — ephemeral playback/tool/selection state,
+  including ordered unique `selectedClipIds` plus primary `selectedClipId`, and
   authoritative timeline `zoom`, `zoomMode`, remembered `customZoom`, and the
-  translation-only `timelineOriginFrame`; preset/custom zoom and origin setters
-  never enter document undo/redo history.
+  translation-only `timelineOriginFrame`; selection, preset/custom zoom, and
+  origin setters never enter document undo/redo history.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
   candidates off-store, restores granted local handles, requests remembered
   permission only from the Open click, matches relinked media exactly,
@@ -920,14 +929,17 @@ surface; it is not a second zoom and never enters document history.
   Multi-tab recovery ownership is not coordinated yet, so do not edit/discard
   the same journal from two tabs. Any future media caching needs explicit
   opt-in, quota/eviction UX, and a separate security/storage review.
-- Issue #12 Slices 1–2 now provide the pure manual-link contract and its
-  canonical history-backed store action for one unlinked video clip plus one
-  unlinked audio clip. Unequal assets/ranges/offsets are preserved; ids are
+- Issue #12 Slices 1–3 now provide the pure manual-link contract, canonical
+  history-backed store action, ephemeral pointer/keyboard pair selection, and
+  accessible Inspector Link control for one unlinked video plus one unlinked
+  audio clip. Unequal assets/ranges/offsets are preserved; ids are
   collision-safe; one link is one undo entry; redo restores the exact authored
-  id; every rejection leaves even a populated redo branch untouched. It is not
-  user-invokable yet: later slices still own pair selection, relative-offset
-  feedback, the accessible Link UI, browser gates, and linked-pair awareness
-  in a future multi-select.
+  id; every rejection leaves even a populated redo branch untouched. Link is
+  user-invokable now, with visible reasons for invalid/stale selections and the
+  existing Unlink/badges/partner highlighting retained. The remaining slice
+  must change linked move preview from an absolute owner start to an
+  owner-relative delta so unequal-offset partners ghost from their own starts,
+  then pass the final Chrome movement/accessibility gate before issue closeout.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their

@@ -165,13 +165,20 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   target fields ghost only the gesture owner over a same-kind lane while a
   linked partner stays on its own lane; pointerup commits ONE
   documentStore.moveClip and clears it), `tool`
-  ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipId`
-  (ephemeral, never in undo), `editPreview` ({clipId, kind, deltaFrames,
+  ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipIds` (ordered,
+  unique, ephemeral, never in undo) plus `selectedClipId` (the primary member
+  retained for single-clip surfaces such as Inspector), `editPreview`
+  ({clipId, kind, deltaFrames,
   linkGroupId?} | null — same live-preview contract for trim/ripple/
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
-  ghost a linked gesture live. No history, no side effects, never
-  touches documentStore. `resetTransport()` restores every field to its
-  initial value when a different project is activated.
+  ghost a linked gesture live. Normal selection replaces both selection
+  fields; Ctrl/Cmd pointer or keyboard activation toggles membership and
+  promotes the newly added clip to primary. The Inspector resolves the live
+  selection against the current document, enables its native Link button only
+  for one eligible video + audio pair, and shows the current rejection reason
+  otherwise. Selection has no history, no persistence, and no side effects;
+  transportStore never touches documentStore. `resetTransport()` restores
+  every field to its initial value when a different project is activated.
 - `MediaState` — `src/state/mediaStore.ts`: `descriptors: Map<AssetId,
   PortableAssetDescriptor>` is the durable project catalog, while
   `assets: Map<AssetId, MediaAsset>` is only the currently connected subset.

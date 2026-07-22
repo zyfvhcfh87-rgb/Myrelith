@@ -768,6 +768,43 @@ Remaining Issue #12 slices own pair selection, relative-offset feedback, the
 accessible Link command, and real-browser interaction/accessibility gates.
 Manual linking is still not user-invokable at this boundary.
 
+## Post-MVP issue #12 — Slice 3 ✅ DONE (2026-07-22) Multi-selection and controls
+
+At this slice boundary, Issue #12 remains open, but manual linking is now a
+complete user-visible action. Offset-safe linked move previews and the final
+unequal-offset movement acceptance gate remain deliberately deferred.
+
+- [x] Replace the single timeline selection with ordered, unique, ephemeral
+  `selectedClipIds` plus one primary `selectedClipId` retained for Inspector
+  compatibility. Both reset with transport state and never enter history or
+  project persistence.
+- [x] Make a normal clip click replace the selection and Ctrl/Cmd-click toggle
+  membership without accidentally starting a drag. Newly added clips become
+  primary; removing the primary promotes the most recent remaining member.
+- [x] Give each clip pressed-button semantics, an exact accessible name,
+  visible keyboard focus, and Enter/Space activation. Ctrl/Cmd+Enter provides
+  the additive keyboard path without claiming a browser-reserved shortcut.
+- [x] Add a native Inspector Link button that is enabled only for exactly one
+  eligible video clip plus one eligible audio clip, in either selection order.
+  It resolves fresh document/selection state before dispatching the canonical
+  one-entry store action and preserves both selections plus their primary.
+- [x] Keep Link visible while unavailable and connect it to actionable status
+  copy for zero/one/oversized, stale/deleted, same-kind, locked, and
+  already-linked selections. Existing Unlink, badges, partner highlighting,
+  different assets/ranges, hidden/muted tracks, and transition metadata remain
+  intact.
+- [x] Verification: 54/54 focused transport/timeline/Inspector tests;
+  1,152/1,152 total tests across 64 files; production build, lint, and diff
+  checks green. In-app Chromium at 1280×720 passed normal click, Ctrl-click,
+  Ctrl+Enter selection, primary Inspector state, Link/Unlink, linked badges,
+  unequal source/timeline offsets, status copy, and a zero-warning/error
+  console gate.
+
+The remaining Issue #12 slice owns owner-relative `deltaFrames` drag previews
+for manually linked clips with unequal starts, followed by the final Chrome
+movement/accessibility gate and issue closeout. Slice 3 does not claim that
+later acceptance boundary.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

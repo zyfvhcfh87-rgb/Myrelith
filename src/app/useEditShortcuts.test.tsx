@@ -74,6 +74,7 @@ beforeEach(() => {
     dragPreview: null,
     tool: 'select',
     selectedClipId: null,
+    selectedClipIds: [],
     editPreview: null,
   })
   doc().setDoc(makeDoc())
@@ -190,6 +191,7 @@ describe('Delete — ripple delete the selection', () => {
     expect(v1.clips[0].id).toBe('clipB')
     expect(v1.clips[0].timelineRange.startFrame).toBe(150) // rippled left by 50
     expect(transport().selectedClipId).toBeNull()
+    expect(transport().selectedClipIds).toEqual([])
     expect(doc().past).toHaveLength(1)
   })
 

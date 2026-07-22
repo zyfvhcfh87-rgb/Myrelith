@@ -549,6 +549,21 @@
   outline-offset: -2px;
 }
 
+/* Every selected clip keeps the blue group outline. The Inspector-compatible
+   primary selection gets an extra inner ring so its ownership is unambiguous. */
+.clip-view.selected.primary-selected {
+  outline-color: #cfe5ff;
+  box-shadow: inset 0 0 0 2px rgba(92, 159, 230, 0.9);
+}
+
+/* ClipView is a keyboard-operable pressed button. Keep focus outside the
+   selection rings so focused and selected states remain independently clear. */
+.clip-view:focus-visible {
+  z-index: 6;
+  outline: 2px solid #ffd978;
+  outline-offset: 2px;
+}
+
 /* Edge handles for trim (select tool) / ripple trim (trim tool). */
 .clip-edge {
   position: absolute;

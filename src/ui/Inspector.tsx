@@ -18,8 +18,12 @@
  */
 
 import { useEffect, useState } from 'react'
+import {
+  getLinkClipsEligibility,
+  type LinkClipsRejectionReason,
+} from '../domain/linking'
 import type { ClipTransformPatch } from '../domain/operations'
-import type { ClipId } from '../domain/schema'
+import type { ClipId, TimelineDoc } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
@@ -94,6 +98,154 @@ function UnlinkButton({ clipId }: { clipId: ClipId }) {
   )
 }
 
+type LinkSelectionReason =
+  | 'no-selection'
+  | 'one-selected'
+  | 'too-many-selected'
+  | 'selected-clip-missing'
+  | 'same-track-kind'
+  | LinkClipsRejectionReason
+
+type LinkSelectionResolution =
+  | {
+      eligible: true
+      videoClipId: ClipId
+      audioClipId: ClipId
+    }
+  | {
+      eligible: false
+      reason: LinkSelectionReason
+    }
+
+const LINK_REASON_MESSAGES: Record<LinkSelectionReason, string> = {
+  'no-selection': 'Select one video clip and one audio clip to link them.',
+  'one-selected':
+    'Select one more clip with Ctrl/Cmd-click, or focus it and press Ctrl/Cmd+Enter.',
+  'too-many-selected': 'Select exactly two clips: one video and one audio.',
+  'selected-clip-missing':
+    'A selected clip is no longer available. Reselect the video and audio clips.',
+  'same-track-kind':
+    'Select one video clip and one audio clip; clips on the same kind of track cannot be linked.',
+  'same-clip': 'Choose two different clips to create a link.',
+  'video-clip-missing':
+    'The selected video clip is no longer available. Reselect both clips.',
+  'audio-clip-missing':
+    'The selected audio clip is no longer available. Reselect both clips.',
+  'first-clip-not-video': 'The first link target must be a video clip.',
+  'second-clip-not-audio': 'The second link target must be an audio clip.',
+  'video-track-locked': 'Unlock the selected video track before linking.',
+  'audio-track-locked': 'Unlock the selected audio track before linking.',
+  'video-clip-already-linked':
+    'The selected video clip is already linked. Unlink it first.',
+  'audio-clip-already-linked':
+    'The selected audio clip is already linked. Unlink it first.',
+}
+
+/**
+ * Convert the ephemeral timeline selection into the domain operation's
+ * explicit (video, audio) argument order. Selection order is deliberately
+ * irrelevant: Ctrl/Cmd-clicking audio then video is just as valid as the
+ * reverse order.
+ */
+function resolveLinkSelection(
+  doc: TimelineDoc,
+  selectedClipIds: readonly ClipId[],
+): LinkSelectionResolution {
+  if (selectedClipIds.length === 0) return { eligible: false, reason: 'no-selection' }
+
+  const selected = selectedClipIds.map((clipId) => ({
+    clipId,
+    clip: findClip(doc, clipId),
+    track: trackOfClip(doc, clipId),
+  }))
+  if (selected.some(({ clip, track }) => !clip || !track)) {
+    return { eligible: false, reason: 'selected-clip-missing' }
+  }
+  if (selectedClipIds.length === 1) return { eligible: false, reason: 'one-selected' }
+  if (selectedClipIds.length > 2) {
+    return { eligible: false, reason: 'too-many-selected' }
+  }
+
+  const video = selected.find(({ track }) => track?.kind === 'video')
+  const audio = selected.find(({ track }) => track?.kind === 'audio')
+  if (!video || !audio) return { eligible: false, reason: 'same-track-kind' }
+
+  const eligibility = getLinkClipsEligibility(doc, video.clipId, audio.clipId)
+  if (!eligibility.eligible) return eligibility
+
+  return {
+    eligible: true,
+    videoClipId: video.clipId,
+    audioClipId: audio.clipId,
+  }
+}
+
+/**
+ * Manual A/V link control. It stays visible even when there is no primary
+ * clip, so disabled states always explain the exact next action. The click
+ * path resolves both stores again rather than trusting render-time state;
+ * stale/deleted selections therefore fail closed with visible feedback.
+ */
+function LinkSelectionControl() {
+  const selectedClipIds = useTransportStore((s) => s.selectedClipIds)
+  const timelineDoc = useDocumentStore((s) => s.doc)
+  const resolution = resolveLinkSelection(timelineDoc, selectedClipIds)
+  const [rejectionMessage, setRejectionMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    setRejectionMessage(null)
+  }, [selectedClipIds, timelineDoc])
+
+  const statusMessage = rejectionMessage ??
+    (resolution.eligible
+      ? 'Ready to link the selected video and audio clips.'
+      : LINK_REASON_MESSAGES[resolution.reason])
+
+  const linkSelectedClips = (): void => {
+    const latestDocStore = useDocumentStore.getState()
+    const latestSelection = useTransportStore.getState().selectedClipIds
+    const latestResolution = resolveLinkSelection(latestDocStore.doc, latestSelection)
+
+    if (!latestResolution.eligible) {
+      setRejectionMessage(LINK_REASON_MESSAGES[latestResolution.reason])
+      return
+    }
+
+    const before = latestDocStore.doc
+    latestDocStore.linkClips(
+      latestResolution.videoClipId,
+      latestResolution.audioClipId,
+    )
+    if (useDocumentStore.getState().doc === before) {
+      setRejectionMessage(
+        'Linking was rejected because the project changed. Reselect both clips and try again.',
+      )
+    }
+  }
+
+  return (
+    <div className="inspector-linking" data-testid="inspector-linking">
+      <button
+        type="button"
+        className="inspector-link"
+        disabled={!resolution.eligible}
+        aria-describedby="inspector-link-status"
+        onClick={linkSelectedClips}
+      >
+        Link selected audio and video clips
+      </button>
+      <span
+        id="inspector-link-status"
+        className="inspector-link-status"
+        role="status"
+        aria-live="polite"
+      >
+        {statusMessage}
+      </span>
+    </div>
+  )
+}
+
 export default function Inspector() {
   const selectedClipId = useTransportStore((s) => s.selectedClipId)
   const clip = useDocumentStore((s) =>
@@ -110,6 +262,7 @@ export default function Inspector() {
       <div className="panel-placeholder">
         <span className="placeholder-title">Inspector</span>
         <span className="placeholder-note">select a clip to edit it</span>
+        <LinkSelectionControl />
       </div>
     )
   }
@@ -118,6 +271,7 @@ export default function Inspector() {
     return (
       <div className="inspector-panel" key={clip.id} data-testid="inspector-panel">
         <div className="inspector-title">{clip.name}</div>
+        <LinkSelectionControl />
         {clip.linkGroupId !== undefined && <UnlinkButton clipId={clip.id} />}
         <div className="inspector-grid">
           <NumberField
@@ -143,6 +297,7 @@ export default function Inspector() {
     /* key: switching clips remounts the fields, dropping stale drafts. */
     <div className="inspector-panel" key={clip.id} data-testid="inspector-panel">
       <div className="inspector-title">{clip.name}</div>
+      <LinkSelectionControl />
       {clip.linkGroupId !== undefined && <UnlinkButton clipId={clip.id} />}
       <div className="inspector-grid">
         <NumberField

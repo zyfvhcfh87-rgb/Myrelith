@@ -24,7 +24,10 @@
  */
 
 import { memo, useEffect, useRef } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react'
 import type { Clip, TrackId, TrackKind } from '../../domain/schema'
 import { microsecondsDurationToFrames, rangeEnd } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
@@ -71,7 +74,12 @@ function ClipView({
 }: ClipViewProps) {
   const zoom = useTransportStore((s) => s.zoom)
   const tool = useTransportStore((s) => s.tool)
-  const isSelected = useTransportStore((s) => s.selectedClipId === clip.id)
+  const isSelected = useTransportStore((s) =>
+    s.selectedClipIds.includes(clip.id),
+  )
+  const isPrimarySelection = useTransportStore(
+    (s) => s.selectedClipId === clip.id,
+  )
   // Narrow slices: null unless THIS clip owns the live gesture OR is linked
   // to the clip that does (partners ghost the same preview) — every other,
   // unrelated clip's subscription still never fires, so render isolation
@@ -176,12 +184,12 @@ function ClipView({
 
   const tl = clip.timelineRange
   // previewStart may belong to a LINKED PARTNER's gesture (widened slice
-  // above). Linked halves share identical timelineRanges by construction
-  // (created together at A/V drop, and every linked geometry edit applies
-  // the same delta to both), so rendering the gesture owner's ABSOLUTE
-  // startFrame here is correct for the partner too — no per-clip delta math
-  // needed. editPreview below carries a RELATIVE deltaFrames instead, so the
-  // switch already renders correctly on the partner with no special-casing.
+  // above). It is still the gesture owner's ABSOLUTE start, which is correct
+  // for synchronized A/V-drop pairs but not for Issue #12's manually linked
+  // clips when their starts differ. Slice 4 replaces that move-preview value
+  // with an owner-relative delta so every partner ghosts from its own start.
+  // editPreview below already carries a RELATIVE deltaFrames and therefore
+  // renders correctly on unequal-offset partners without special-casing.
   let startFrame = previewStart ?? tl.startFrame
   let durationFrames = tl.durationFrames
   let badge: string | null = null
@@ -433,6 +441,13 @@ function ClipView({
         return
       }
       case 'select':
+        // Modifier selection is a discrete toggle, never the start of a
+        // move. This makes adding/removing a partner safe even if the pointer
+        // shifts a few pixels while Ctrl/Command is held.
+        if (e.ctrlKey || e.metaKey) {
+          transport.toggleClipSelection(clip.id)
+          return
+        }
         transport.setSelectedClip(clip.id)
         startGesture(e, 'move')
         return
@@ -460,6 +475,21 @@ function ClipView({
     startGesture(e, transport.tool === 'trim' ? `ripple-${edge}` : `trim-${edge}`)
   }
 
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+
+    // Match native button activation without relying on a browser-reserved
+    // shortcut. Keyboard selection intentionally never starts a drag/edit.
+    e.preventDefault()
+    e.stopPropagation()
+    const transport = useTransportStore.getState()
+    if (e.ctrlKey || e.metaKey) {
+      transport.toggleClipSelection(clip.id)
+    } else {
+      transport.setSelectedClip(clip.id)
+    }
+  }
+
   const showEdges = hasVisibleSlice && (tool === 'select' || tool === 'trim')
   const showStartEdge = showEdges && displayedStartFrame === startFrame
   const showEndEdge =
@@ -468,10 +498,16 @@ function ClipView({
   return (
     <div
       ref={rootRef}
-      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isOffline ? ' offline' : ''}${hasVisibleSlice ? '' : ' virtual-gesture-host'}`}
+      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isSelected && isPrimarySelection ? ' primary-selected' : ''}${isOffline ? ' offline' : ''}${hasVisibleSlice ? '' : ' virtual-gesture-host'}`}
       data-testid={`clip-${clip.id}`}
       data-offline={isOffline ? 'true' : 'false'}
+      data-primary-selected={isSelected && isPrimarySelection ? 'true' : 'false'}
       data-virtual-gesture-host={hasVisibleSlice ? 'false' : 'true'}
+      role="button"
+      tabIndex={0}
+      aria-label={`${clip.name}, ${trackKind} clip`}
+      aria-pressed={isSelected}
+      title="Select clip. Hold Ctrl or Command while clicking, or with Enter or Space, to add or remove it from the selection."
       style={{
         transform:
           previewTrackOffsetY === 0
@@ -480,6 +516,7 @@ function ClipView({
         width: hasVisibleSlice ? displayedDurationFrames * zoom : 1,
       }}
       onPointerDown={onBodyPointerDown}
+      onKeyDown={onKeyDown}
       onPointerMove={(e) => {
         // Gate on OUR session state, never on capture status — capture can
         // fail (and did, in browser verification) while the gesture is
