@@ -291,7 +291,7 @@ describe('selection (select tool)', () => {
     fireEvent.pointerDown(clipA, { pointerId: 1, clientX: 120 })
     fireEvent.pointerUp(clipA, { pointerId: 1, clientX: 120 })
 
-    fireEvent.pointerDown(clipB, {
+    fireEvent.pointerDown(screen.getByTestId('clip-clipB-edge-start'), {
       pointerId: 2,
       clientX: 170,
       ctrlKey: true,
@@ -313,7 +313,7 @@ describe('selection (select tool)', () => {
     expect(transport().dragPreview).toBeNull()
 
     // Removing a non-primary clip leaves the current primary alone.
-    fireEvent.pointerDown(clipB, {
+    fireEvent.pointerDown(screen.getByTestId('clip-clipB-edge-end'), {
       pointerId: 4,
       clientX: 170,
       ctrlKey: true,

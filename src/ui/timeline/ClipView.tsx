@@ -503,6 +503,14 @@ function ClipView({
   ): void => {
     e.stopPropagation() // the body handler must not also start a gesture
     const transport = useTransportStore.getState() // current tool, as above
+    // In Select mode the handle is still part of the clip's pointer target:
+    // modifier activation must toggle selection instead of beginning a trim.
+    if (transport.tool === 'select' && (e.ctrlKey || e.metaKey)) {
+      if (findClip(useDocumentStore.getState().doc, clip.id)) {
+        transport.toggleClipSelection(clip.id)
+      }
+      return
+    }
     if (
       startGesture(
         e,
