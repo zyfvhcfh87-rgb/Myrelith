@@ -85,6 +85,7 @@ beforeEach(() => {
     dragPreview: null,
     tool: 'select',
     selectedClipId: null,
+    selectedClipIds: [],
     editPreview: null,
   })
   useMediaStore.setState({

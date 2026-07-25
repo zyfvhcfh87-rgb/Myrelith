@@ -10,6 +10,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   createLinkGroupId,
+  getLinkClipsEligibility,
+  linkClips,
   linkedMoveClip,
   linkedPartners,
   linkedRippleDelete,
@@ -156,6 +158,85 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
   })
 }
 
+interface ManualLinkDocOptions {
+  videoLocked?: boolean
+  audioLocked?: boolean
+  videoHidden?: boolean
+  audioMuted?: boolean
+  videoLinkGroupId?: string
+  audioLinkGroupId?: string
+  secondVideoLinkGroupId?: string
+  secondAudioLinkGroupId?: string
+}
+
+/**
+ * Deliberately non-synchronized manual-link fixture. The candidate clips use
+ * different assets, timeline starts, source starts, and durations; linking
+ * must preserve every one of those facts and add relationship metadata only.
+ */
+function makeManualLinkDoc(options: ManualLinkDocOptions = {}): TimelineDoc {
+  const video = {
+    ...makeClip('vManual', 37, 80, 11, options.videoLinkGroupId),
+    assetId: 'asset-video-manual',
+  }
+  const videoAfter = {
+    ...makeClip('vAfterManual', 117, 30, 4),
+    assetId: 'asset-video-after',
+  }
+  const secondVideo = {
+    ...makeClip('vSecondManual', 200, 60, 8, options.secondVideoLinkGroupId),
+    assetId: 'asset-video-second',
+  }
+  const audio = {
+    ...makeClip('aManual', 5, 45, 22, options.audioLinkGroupId),
+    assetId: 'asset-audio-manual',
+  }
+  const secondAudio = {
+    ...makeClip('aSecondManual', 100, 30, 3, options.secondAudioLinkGroupId),
+    assetId: 'asset-audio-second',
+  }
+
+  const videoTrack: Track = {
+    ...makeTrack('VM', 'video', [video, videoAfter, secondVideo], options.videoLocked),
+    hidden: options.videoHidden ?? false,
+    transitions: [{
+      id: 'transition-manual',
+      type: 'crossfade',
+      fromClipId: video.id,
+      toClipId: videoAfter.id,
+      durationFrames: 12,
+    }],
+  }
+  const audioTrack: Track = {
+    ...makeTrack('AM', 'audio', [audio, secondAudio], options.audioLocked),
+    muted: options.audioMuted ?? false,
+  }
+
+  return deepFreeze({
+    schemaVersion: 1,
+    id: 'doc-manual-link',
+    name: 'Manual link test doc',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [
+      videoTrack,
+      audioTrack,
+      makeTrack('VU', 'video', [
+        { ...makeClip('vUnrelated', 400, 20), assetId: 'asset-unrelated' },
+      ]),
+    ],
+  })
+}
+
+function makeLinkedManualEditDoc(): TimelineDoc {
+  const unlinked = makeManualLinkDoc()
+  const linked = linkClips(unlinked, 'vManual', 'aManual')
+  if (linked === unlinked) throw new Error('manual edit fixture failed to link')
+  return deepFreeze(linked)
+}
+
 function clipsOf(doc: TimelineDoc, trackId: string): Clip[] {
   const track = doc.tracks.find((t) => t.id === trackId)
   if (!track) throw new Error(`no track ${trackId}`)
@@ -195,7 +276,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  warnSpy.mockRestore()
+  vi.restoreAllMocks()
 })
 
 /* ------------------------------------------------------------------ */
@@ -248,10 +329,352 @@ describe('insertClip + linkGroupId', () => {
 
 describe('createLinkGroupId', () => {
   test('mints a unique, prefixed id', () => {
-    const a = createLinkGroupId()
-    const b = createLinkGroupId()
+    const doc = makeManualLinkDoc()
+    const a = createLinkGroupId(doc)
+    const b = createLinkGroupId(doc)
     expect(a).toMatch(/^link_/)
     expect(a).not.toBe(b)
+  })
+
+  test('skips every colliding document id with a deterministic numeric suffix', () => {
+    const uuid = '11111111-1111-4111-8111-111111111111'
+    const base = `link_${uuid}`
+    const doc = makeManualLinkDoc({
+      videoLinkGroupId: base,
+      secondAudioLinkGroupId: base,
+      secondVideoLinkGroupId: `${base}_2`,
+      audioLinkGroupId: `${base}_2`,
+    })
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(uuid)
+
+    expect(createLinkGroupId(doc)).toBe(`${base}_3`)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* manual link eligibility + operation                                 */
+/* ------------------------------------------------------------------ */
+
+describe('getLinkClipsEligibility + linkClips', () => {
+  test('links a valid unequal video/audio pair by changing linkGroupId only', () => {
+    const doc = makeManualLinkDoc()
+    const videoBefore = clipIn(doc, 'VM', 'vManual')
+    const audioBefore = clipIn(doc, 'AM', 'aManual')
+    const videoTrackBefore = doc.tracks[0]
+    const audioTrackBefore = doc.tracks[1]
+    const unrelatedTrackBefore = doc.tracks[2]
+    const relativeOffsetBefore =
+      videoBefore.timelineRange.startFrame - audioBefore.timelineRange.startFrame
+
+    expect(getLinkClipsEligibility(doc, videoBefore.id, audioBefore.id)).toEqual({
+      eligible: true,
+    })
+
+    const out = linkClips(doc, videoBefore.id, audioBefore.id)
+    const videoAfter = clipIn(out, 'VM', videoBefore.id)
+    const audioAfter = clipIn(out, 'AM', audioBefore.id)
+    const groupId = videoAfter.linkGroupId
+
+    expect(out).not.toBe(doc)
+    expect(groupId).toMatch(/^link_/)
+    expect(audioAfter.linkGroupId).toBe(groupId)
+    expect(videoAfter).toEqual({ ...videoBefore, linkGroupId: groupId })
+    expect(audioAfter).toEqual({ ...audioBefore, linkGroupId: groupId })
+
+    // Linking is relationship metadata, never synchronization or geometry.
+    expect(videoAfter.assetId).not.toBe(audioAfter.assetId)
+    expect(videoAfter.sourceRange).toEqual({ startFrame: 11, durationFrames: 80 })
+    expect(videoAfter.timelineRange).toEqual({ startFrame: 37, durationFrames: 80 })
+    expect(audioAfter.sourceRange).toEqual({ startFrame: 22, durationFrames: 45 })
+    expect(audioAfter.timelineRange).toEqual({ startFrame: 5, durationFrames: 45 })
+    expect(
+      videoAfter.timelineRange.startFrame - audioAfter.timelineRange.startFrame,
+    ).toBe(relativeOffsetBefore)
+
+    // Only the two clips and their containing tracks are rebuilt.
+    expect(videoAfter).not.toBe(videoBefore)
+    expect(audioAfter).not.toBe(audioBefore)
+    expect(out.tracks[0]).not.toBe(videoTrackBefore)
+    expect(out.tracks[1]).not.toBe(audioTrackBefore)
+    expect(out.tracks[0].clips[1]).toBe(videoTrackBefore.clips[1])
+    expect(out.tracks[0].clips[2]).toBe(videoTrackBefore.clips[2])
+    expect(out.tracks[1].clips[1]).toBe(audioTrackBefore.clips[1])
+    expect(out.tracks[2]).toBe(unrelatedTrackBefore)
+    expect(out.frameRate).toBe(doc.frameRate)
+  })
+
+  test('preserves transition metadata and survives a lossless JSON round-trip', () => {
+    const doc = makeManualLinkDoc()
+    const transitionsBefore = doc.tracks[0].transitions
+    const transitionBefore = transitionsBefore[0]
+
+    const out = linkClips(doc, 'vManual', 'aManual')
+    const roundTrip = JSON.parse(JSON.stringify(out)) as TimelineDoc
+
+    expect(out.tracks[0].transitions).toBe(transitionsBefore)
+    expect(out.tracks[0].transitions[0]).toBe(transitionBefore)
+    expect(roundTrip).toEqual(out)
+    expect(clipIn(roundTrip, 'VM', 'vManual').linkGroupId).toBe(
+      clipIn(roundTrip, 'AM', 'aManual').linkGroupId,
+    )
+  })
+
+  test('allows candidates on hidden and muted tracks', () => {
+    const doc = makeManualLinkDoc({ videoHidden: true, audioMuted: true })
+
+    expect(getLinkClipsEligibility(doc, 'vManual', 'aManual')).toEqual({ eligible: true })
+    const out = linkClips(doc, 'vManual', 'aManual')
+
+    expect(out).not.toBe(doc)
+    expect(clipIn(out, 'VM', 'vManual').linkGroupId).toBe(
+      clipIn(out, 'AM', 'aManual').linkGroupId,
+    )
+    expect(out.tracks[0].hidden).toBe(true)
+    expect(out.tracks[1].muted).toBe(true)
+  })
+
+  test('rejects the same clip id and each missing argument with exact reasons', () => {
+    const doc = makeManualLinkDoc()
+    const cases = [
+      ['vManual', 'vManual', 'same-clip'],
+      ['missing-video', 'aManual', 'video-clip-missing'],
+      ['vManual', 'missing-audio', 'audio-clip-missing'],
+    ] as const
+
+    for (const [videoId, audioId, reason] of cases) {
+      expect(getLinkClipsEligibility(doc, videoId, audioId)).toEqual({
+        eligible: false,
+        reason,
+      })
+      expect(linkClips(doc, videoId, audioId)).toBe(doc)
+    }
+  })
+
+  test('rejects swapped and same-kind arguments with position-specific reasons', () => {
+    const doc = makeManualLinkDoc()
+    const cases = [
+      ['aManual', 'vManual', 'first-clip-not-video'],
+      ['aManual', 'aSecondManual', 'first-clip-not-video'],
+      ['vManual', 'vSecondManual', 'second-clip-not-audio'],
+    ] as const
+
+    for (const [videoId, audioId, reason] of cases) {
+      expect(getLinkClipsEligibility(doc, videoId, audioId)).toEqual({
+        eligible: false,
+        reason,
+      })
+      expect(linkClips(doc, videoId, audioId)).toBe(doc)
+    }
+  })
+
+  test('rejects either locked track with member-specific reasons', () => {
+    const videoLocked = makeManualLinkDoc({ videoLocked: true })
+    const audioLocked = makeManualLinkDoc({ audioLocked: true })
+
+    expect(getLinkClipsEligibility(videoLocked, 'vManual', 'aManual')).toEqual({
+      eligible: false,
+      reason: 'video-track-locked',
+    })
+    expect(linkClips(videoLocked, 'vManual', 'aManual')).toBe(videoLocked)
+    expect(getLinkClipsEligibility(audioLocked, 'vManual', 'aManual')).toEqual({
+      eligible: false,
+      reason: 'audio-track-locked',
+    })
+    expect(linkClips(audioLocked, 'vManual', 'aManual')).toBe(audioLocked)
+  })
+
+  test('requires explicit unlinking when either candidate already belongs to a group', () => {
+    const videoLinked = makeManualLinkDoc({
+      videoLinkGroupId: 'link_existing_video',
+      secondAudioLinkGroupId: 'link_existing_video',
+    })
+    const audioLinked = makeManualLinkDoc({
+      audioLinkGroupId: 'link_existing_audio',
+      secondVideoLinkGroupId: 'link_existing_audio',
+    })
+
+    expect(getLinkClipsEligibility(videoLinked, 'vManual', 'aManual')).toEqual({
+      eligible: false,
+      reason: 'video-clip-already-linked',
+    })
+    expect(linkClips(videoLinked, 'vManual', 'aManual')).toBe(videoLinked)
+    expect(getLinkClipsEligibility(audioLinked, 'vManual', 'aManual')).toEqual({
+      eligible: false,
+      reason: 'audio-clip-already-linked',
+    })
+    expect(linkClips(audioLinked, 'vManual', 'aManual')).toBe(audioLinked)
+  })
+
+  test('sequential links in an evolving document receive distinct collision-safe groups', () => {
+    const uuid = '22222222-2222-4222-8222-222222222222'
+    const base = `link_${uuid}`
+    const doc = makeManualLinkDoc()
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(uuid)
+
+    const afterFirst = linkClips(doc, 'vManual', 'aManual')
+    const afterSecond = linkClips(afterFirst, 'vSecondManual', 'aSecondManual')
+
+    expect(clipIn(afterFirst, 'VM', 'vManual').linkGroupId).toBe(base)
+    expect(clipIn(afterSecond, 'VM', 'vManual').linkGroupId).toBe(base)
+    expect(clipIn(afterSecond, 'VM', 'vSecondManual').linkGroupId).toBe(`${base}_2`)
+    expect(clipIn(afterSecond, 'AM', 'aSecondManual').linkGroupId).toBe(`${base}_2`)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Unequal manual-link edit acceptance matrix                          */
+/* ------------------------------------------------------------------ */
+
+describe('unequal manual-link edit acceptance matrix', () => {
+  test('move applies one delta to unequal starts without changing either range shape', () => {
+    const doc = makeLinkedManualEditDoc()
+    const videoBefore = clipIn(doc, 'VM', 'vManual')
+    const audioBefore = clipIn(doc, 'AM', 'aManual')
+    const offsetBefore =
+      videoBefore.timelineRange.startFrame - audioBefore.timelineRange.startFrame
+
+    const out = linkedMoveClip(doc, videoBefore.id, 'VM', 32)
+    const videoAfter = clipIn(out, 'VM', videoBefore.id)
+    const audioAfter = clipIn(out, 'AM', audioBefore.id)
+
+    expect(videoAfter.timelineRange).toEqual({ startFrame: 32, durationFrames: 80 })
+    expect(audioAfter.timelineRange).toEqual({ startFrame: 0, durationFrames: 45 })
+    expect(videoAfter.sourceRange).toBe(videoBefore.sourceRange)
+    expect(audioAfter.sourceRange).toBe(audioBefore.sourceRange)
+    expect(
+      videoAfter.timelineRange.startFrame - audioAfter.timelineRange.startFrame,
+    ).toBe(offsetBefore)
+  })
+
+  test('trim, ripple, slip, and slide keep their per-member unequal geometry', () => {
+    const doc = makeLinkedManualEditDoc()
+
+    const trimmed = linkedTrimClip(doc, 'vManual', 'start', 3)
+    expect(clipIn(trimmed, 'VM', 'vManual')).toMatchObject({
+      timelineRange: { startFrame: 40, durationFrames: 77 },
+      sourceRange: { startFrame: 14, durationFrames: 77 },
+    })
+    expect(clipIn(trimmed, 'AM', 'aManual')).toMatchObject({
+      timelineRange: { startFrame: 8, durationFrames: 42 },
+      sourceRange: { startFrame: 25, durationFrames: 42 },
+    })
+
+    const rippled = linkedRippleTrim(doc, 'vManual', 'end', -5)
+    expect(clipIn(rippled, 'VM', 'vManual').timelineRange).toEqual({
+      startFrame: 37,
+      durationFrames: 75,
+    })
+    expect(clipIn(rippled, 'AM', 'aManual').timelineRange).toEqual({
+      startFrame: 5,
+      durationFrames: 40,
+    })
+    expect(clipIn(rippled, 'VM', 'vAfterManual').timelineRange.startFrame).toBe(112)
+    expect(clipIn(rippled, 'VM', 'vSecondManual').timelineRange.startFrame).toBe(195)
+    expect(clipIn(rippled, 'AM', 'aSecondManual').timelineRange.startFrame).toBe(95)
+
+    const slipped = linkedSlipClip(doc, 'vManual', 4)
+    expect(clipIn(slipped, 'VM', 'vManual').sourceRange).toEqual({
+      startFrame: 15,
+      durationFrames: 80,
+    })
+    expect(clipIn(slipped, 'AM', 'aManual').sourceRange).toEqual({
+      startFrame: 26,
+      durationFrames: 45,
+    })
+    expect(clipIn(slipped, 'VM', 'vManual').timelineRange).toBe(
+      clipIn(doc, 'VM', 'vManual').timelineRange,
+    )
+    expect(clipIn(slipped, 'AM', 'aManual').timelineRange).toBe(
+      clipIn(doc, 'AM', 'aManual').timelineRange,
+    )
+
+    const slid = linkedSlideClip(doc, 'vManual', 5)
+    expect(clipIn(slid, 'VM', 'vManual').timelineRange).toEqual({
+      startFrame: 42,
+      durationFrames: 80,
+    })
+    expect(clipIn(slid, 'AM', 'aManual').timelineRange).toEqual({
+      startFrame: 10,
+      durationFrames: 45,
+    })
+    expect(clipIn(slid, 'VM', 'vAfterManual')).toMatchObject({
+      timelineRange: { startFrame: 122, durationFrames: 25 },
+      sourceRange: { startFrame: 9, durationFrames: 25 },
+    })
+    expect(clipIn(slid, 'AM', 'aSecondManual')).toBe(
+      clipIn(doc, 'AM', 'aSecondManual'),
+    )
+  })
+
+  test('split keeps unequal left members linked and pairs only the two new rights', () => {
+    const doc = makeLinkedManualEditDoc()
+    const originalGroup = clipIn(doc, 'VM', 'vManual').linkGroupId
+    const out = linkedSplitClipAtFrame(doc, 'vManual', 40)
+    const videoLeft = clipIn(out, 'VM', 'vManual')
+    const audioLeft = clipIn(out, 'AM', 'aManual')
+    const videoRight = clipsOf(out, 'VM').find(
+      (clip) => clip.id !== videoLeft.id && clip.timelineRange.startFrame === 40,
+    )
+    const audioRight = clipsOf(out, 'AM').find(
+      (clip) => clip.id !== audioLeft.id && clip.timelineRange.startFrame === 40,
+    )
+    if (!videoRight || !audioRight) throw new Error('unequal split rights missing')
+
+    expect(videoLeft).toMatchObject({
+      timelineRange: { startFrame: 37, durationFrames: 3 },
+      sourceRange: { startFrame: 11, durationFrames: 3 },
+      linkGroupId: originalGroup,
+    })
+    expect(audioLeft).toMatchObject({
+      timelineRange: { startFrame: 5, durationFrames: 35 },
+      sourceRange: { startFrame: 22, durationFrames: 35 },
+      linkGroupId: originalGroup,
+    })
+    expect(videoRight).toMatchObject({
+      timelineRange: { startFrame: 40, durationFrames: 77 },
+      sourceRange: { startFrame: 14, durationFrames: 77 },
+    })
+    expect(audioRight).toMatchObject({
+      timelineRange: { startFrame: 40, durationFrames: 10 },
+      sourceRange: { startFrame: 57, durationFrames: 10 },
+    })
+    expect(videoRight.linkGroupId).toBeDefined()
+    expect(videoRight.linkGroupId).toBe(audioRight.linkGroupId)
+    expect(videoRight.linkGroupId).not.toBe(originalGroup)
+    expect(linkedPartners(out, videoRight.id).map((clip) => clip.id)).toEqual([
+      audioRight.id,
+    ])
+    expect(out.tracks[0].transitions[0]?.fromClipId).toBe(videoRight.id)
+  })
+
+  test('ripple delete removes both unequal members and shifts each track by its own duration', () => {
+    const doc = makeLinkedManualEditDoc()
+    const groupId = clipIn(doc, 'VM', 'vManual').linkGroupId
+    const out = linkedRippleDelete(doc, 'vManual')
+
+    expect(clipsOf(out, 'VM').map((clip) => [clip.id, clip.timelineRange.startFrame])).toEqual([
+      ['vAfterManual', 37],
+      ['vSecondManual', 120],
+    ])
+    expect(clipsOf(out, 'AM').map((clip) => [clip.id, clip.timelineRange.startFrame])).toEqual([
+      ['aSecondManual', 55],
+    ])
+    expect(
+      out.tracks.flatMap((track) => track.clips).some((clip) => clip.linkGroupId === groupId),
+    ).toBe(false)
+  })
+
+  test('a partner timeline-floor failure and a locked unequal partner both roll back exactly', () => {
+    const doc = makeLinkedManualEditDoc()
+    expect(linkedMoveClip(doc, 'vManual', 'VM', 31)).toBe(doc)
+
+    const locked = deepFreeze({
+      ...doc,
+      tracks: doc.tracks.map((track) =>
+        track.id === 'AM' ? { ...track, locked: true } : track,
+      ),
+    })
+    expect(linkedTrimClip(locked, 'vManual', 'end', -5)).toBe(locked)
   })
 })
 
@@ -529,6 +952,45 @@ describe('linkedSplitClipAtFrame', () => {
     expect(vRight.linkGroupId).toBeDefined()
     expect(vRight.linkGroupId).toBe(aRight.linkGroupId)
     expect(vRight.linkGroupId).not.toBe(PAIR1)
+  })
+
+  test('a colliding generated id cannot merge split rights into an existing group', () => {
+    const uuid = '33333333-3333-4333-8333-333333333333'
+    const collisionGroup = `link_${uuid}`
+    const base = makeDoc()
+    const doc = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => {
+        if (!track.clips.some((clip) => clip.linkGroupId === PAIR2)) return track
+        return {
+          ...track,
+          clips: track.clips.map((clip) =>
+            clip.linkGroupId === PAIR2 ? { ...clip, linkGroupId: collisionGroup } : clip,
+          ),
+        }
+      }),
+    })
+    vi.spyOn(crypto, 'randomUUID')
+      // The two splits mint clip ids first; only the group-id call collides.
+      .mockReturnValueOnce('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+      .mockReturnValueOnce('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+      .mockReturnValue(uuid)
+
+    const out = linkedSplitClipAtFrame(doc, 'vClip', 40)
+    const vRight = clipsOf(out, 'V1').find(
+      (clip) => clip.id !== 'vClip' && clip.timelineRange.startFrame === 40,
+    )
+    const aRight = clipsOf(out, 'A1').find(
+      (clip) => clip.id !== 'aClip' && clip.timelineRange.startFrame === 40,
+    )
+    if (!vRight || !aRight) throw new Error('right halves not found')
+
+    expect(vRight.linkGroupId).toBe(`${collisionGroup}_2`)
+    expect(aRight.linkGroupId).toBe(`${collisionGroup}_2`)
+    expect(linkedPartners(out, vRight.id).map((clip) => clip.id)).toEqual([aRight.id])
+    expect(clipIn(out, 'V2', 'vClip2').linkGroupId).toBe(collisionGroup)
+    expect(clipIn(out, 'AL', 'aClip2').linkGroupId).toBe(collisionGroup)
+    expect(linkedPartners(out, 'vClip2').map((clip) => clip.id)).toEqual(['aClip2'])
   })
 
   test('split via the audio member rebinds the video outgoing transition to the video right half', () => {

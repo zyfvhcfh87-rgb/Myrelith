@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-20)
+## Status (2026-07-25)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -57,10 +57,19 @@ and the open list below.
 | Post-MVP #19 — compatibility Slice 5 | ✅ done | bounded realm-local exact-config capability cache; probe reuse + forced render/visuals/audio/export revalidation; 1,092 tests + in-app Chromium playback/export gate |
 | Post-MVP #19 — compatibility Slice 6 | ✅ no-go decided | measured local worker/WASM proxy spike, including a Limited source with browser-unsupported video; failed bounded-I/O/progress/license/provenance gates with low-memory behavior unproven; no converter shipped |
 | **Post-MVP #19 — final closeout** | ✅ closed | 13-file real codec/damage matrix; prompt/commit cancellation + exact disposal races fixed; runtime fallback budgets and filmstrip canvases bounded; 346 focused + 1,127 total tests; Chrome 150 and Edge 150 full VP9/Opus playback/cancel/export gates; closes at 46/49 with three rejected proxy children intentionally unchecked |
+| Post-MVP #12 — manual linking Slice 1 | ✅ done | pure eligibility/link operation + collision-safe document-aware ids across manual link, linked split, and A/V drop; 57 focused + 1,138 total tests; no rendered behavior yet |
+| Post-MVP #12 — manual linking Slice 2 | ✅ done | canonical history-backed store action; one-entry link, exact undo/redo id, rejection preserves populated redo branches; 90 focused + 1,142 total tests; no rendered behavior yet |
+| Post-MVP #12 — historical local Slice 3 bundle | ✅ done | multi-selection/control foundation (maps into original Slices 5–6); 54 focused + 1,152 total tests; in-app Chromium interaction gate |
+| Post-MVP #12 — historical local Slice 4 bundle | ✅ done | signed-delta linked move previews + unequal edit/rollback matrix (maps into original Slices 3–4); 129 focused + 1,159 total tests; real Chrome A/V gate |
+| Post-MVP #12 — original Slice 3 integrity | ✅ done | unequal edit/rollback matrix plus orphan-safe track removal; each lone unlocked survivor is unlinked in the same one-entry operation, while a locked survivor rejects atomically |
+| Post-MVP #12 — original Slice 4 previews | ✅ done | signed-delta rendering plus fresh group-wide pointerdown bounds for move/trim/ripple/slip/slide across connected and offline media |
+| Post-MVP #12 — original Slice 5 | ✅ done | app-level stale/deleted selection reconciliation; surviving-primary promotion, undo non-resurrection, track/project replacement, and history/serialization isolation; 82 focused + 1,173 total tests; in-app Chromium delete/undo/track-removal gate |
+| Post-MVP #12 — original Slice 6 | ✅ done | focusable pressed clip controls + focusable `aria-disabled` Inspector Link/Unlink with visible described reasons; exact-target race rejection, retained pair selection/primary, badges/highlighting, focus handoff; 100 focused + 1,184 total tests; targeted in-app Chromium accessibility gate |
+| Post-MVP #12 — original Slice 7 / closeout | ✅ complete | orphan-safe removal, group-wide bounds, and immutable pointerdown document guard; 359 focused + 1,209 total tests; Chrome 150 full import/re-link/move/undo/redo/playback gate with a clean console |
 
-1,127 tests green · `npm run build` passes with the known large-chunk warning
+1,209 tests green across 66 files · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
-`npm run lint` clean · every phase
+`npm run lint` clean · `npm audit --omit=dev` reports 0 vulnerabilities · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -488,8 +497,30 @@ pair). Linked clips show a tiny 🔗 badge; every geometry edit
 (move/trim/ripple/slip/slide/razor/S/Delete) applies to BOTH halves
 atomically — the partner even ghosts the gesture live — and the
 Inspector's "🔗 Unlink audio/video" button dissolves the group (one
-entry; undo re-links). Transform and volume stay per-half on purpose. The full editing
-toolset (4.2): toolbar buttons or A/B/T/Y/U — select (click selects, body
+entry; undo re-links). The historical Issue #12 Slice 3 bundle adds ephemeral
+  ordered `selectedClipIds` plus one primary clip: normal pointer/unmodified
+  keyboard activation replaces the selection, while Ctrl/Cmd pointer/keyboard
+  activation toggles without starting a move. Inspector keeps editing the
+  primary while its native Link/Unlink commands stay focusable with
+  `aria-disabled` when unavailable; adjacent described status explains why,
+  and activation dispatches only for the exact rendered eligible pair after a
+  latest-state preflight. Original Slice 5 completes that selection lifecycle through an
+app-level reconciliation controller: deleted/stale ids are pruned after every
+document snapshot, surviving order is stable, the latest survivor becomes
+Inspector primary when needed, and undo restores document content without
+resurrecting selection. The historical Slice 4 bundle
+stores a signed drag delta instead of the gesture owner's absolute start, so
+every linked member ghosts from its own committed start even when manual
+linking preserved unequal timeline offsets. Slice 7 now derives a shared legal
+delta at pointerdown by intersecting the owner and linked partner's timeline,
+source, duration, and headroom bounds from one fresh document/media snapshot.
+The gesture keeps that exact document reference; if document state changes
+before release, its preview is cleared and pointerup cannot commit stale
+geometry.
+Pointer movement remains transport-only and pointerup still commits one atomic
+linked move. Transform
+and volume stay per-half on purpose. The full editing toolset (4.2): toolbar
+buttons or A/B/T/Y/U — select (normal click selects one, body
 drag moves horizontally or between same-kind lanes with snap-back on illegal
 drops, edge drag trims), razor
 (click cuts at the pointer frame), ripple trim (edges; downstream
@@ -525,7 +556,9 @@ get stripes + a not-allowed cursor. Track management (4.3.6):
 double-click a header to RENAME inline (Enter/blur commits, Escape
 cancels; the badge shows the name, the id never changes), the ×
 DELETES a track with its clips (one undo restores both; disabled
-while locked), and audio rows have SOLO next to mute — while any
+while locked). The same operation dissolves the group id on every lone
+unlocked linked survivor; a locked survivor rejects the whole deletion, so no
+orphaned group can enter history. Audio rows have SOLO next to mute — while any
 track is solo the other audio lanes dim. Solo/mute semantics live in
 ONE place, domain `audibleTracks` (mute wins over solo); both export and live
 playback consume that selector rather than re-deriving flags. Clip visuals
@@ -554,16 +587,22 @@ surface; it is not a second zoom and never enters document history.
   `time.ts` (conversions incl. exact integer microseconds,
   `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn;
-  5.1e-1 track-scoped `addCrossfade`/`setCrossfadeDuration`/
+  Slice 7 `removeTrack` atomically dissolves lone unlocked link survivors or
+  rejects for a locked survivor; 5.1e-1 track-scoped
+  `addCrossfade`/`setCrossfadeDuration`/
   `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
   `resolveCrossfade` (canonical centered-window geometry),
   `visibleVideoLayersAtFrame` (THE preview/export visual plan),
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
-  derived reads, never stored), `linking.ts` (4.3.8: linked-pair
-  wrappers around the base ops — same delta to every linkGroupId
-  member, atomic rollback; unlinkClip dissolves a group; the store's
-  geometry actions call THESE, not the base ops).
+  derived reads, never stored), `linking.ts` (4.3.8 linked-pair wrappers around
+  the base ops — same delta to every `linkGroupId` member, atomic rollback;
+  `unlinkClip` dissolves a group; Issue #12 Slice 1 adds pure
+  `getLinkClipsEligibility` + `linkClips` and document-aware collision-safe
+  group ids; Slice 2 exposes that operation through the canonical
+  history-backed `documentStore.linkClips`; Slice 3 resolves the ephemeral UI
+  pair through the same eligibility contract before dispatch; the store's
+  geometry actions call these wrappers too).
 - `src/domain/projectSettings.ts` — authoritative project presets, strict
   settings validation, and the pure empty-document factory.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
@@ -574,10 +613,22 @@ surface; it is not a second zoom and never enters document history.
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
   handles, or recovery payloads. `src/state/projectLibraryStore.ts` holds only
   serializable Recent/recovery summaries for Home.
-- `src/state/transportStore.ts` — ephemeral playback/tool/selection state plus
+- `src/state/transportStore.ts` — ephemeral playback/tool/selection state,
+  including ordered unique `selectedClipIds` plus primary `selectedClipId`, and
+  document-agnostic `reconcileClipSelection(existingIds)` for stable stale-id
+  pruning, plus signed `dragPreview.deltaFrames` shared by every linked move
+  participant,
   authoritative timeline `zoom`, `zoomMode`, remembered `customZoom`, and the
-  translation-only `timelineOriginFrame`; preset/custom zoom and origin setters
-  never enter document undo/redo history.
+  translation-only `timelineOriginFrame`; selection, preset/custom zoom, and
+  origin setters never enter document undo/redo history.
+- `src/app/selectionReconciliationController.ts` — original Issue #12 Slice 5
+  composition seam: observes document-reference changes, supplies the current
+  clip-id set to transport, and keeps selection consistent without either store
+  importing the other or selection entering history/persistence.
+- `src/ui/Inspector.tsx` — original Issue #12 Slice 6 shared Link/Unlink command
+  group: focusable `aria-disabled` controls, visible described availability,
+  exact rendered-intent/latest-state race checks, live rejection announcements,
+  retained primary selection, and post-Unlink focus handoff.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
   candidates off-store, restores granted local handles, requests remembered
   permission only from the Open click, matches relinked media exactly,
@@ -759,10 +810,19 @@ surface; it is not a second zoom and never enters document history.
   ancestor (app shell marks it; bare tests get a fallback window), and local
   positions relative to the bounded timeline origin; the logical endpoint
   always gets a right-anchored end label in the last physical window.
+- `src/ui/timeline/gestureBounds.ts` — pure Slice 7 pointerdown interval
+  intersection across the gesture owner and linked partner, using one fresh
+  document/media snapshot for timeline, source, duration, and headroom
+  bounds in both connected and offline sessions.
 - `src/ui/timeline/ClipView.tsx` — the 4.2 gesture heart: one session ref
   routes body/edge pointerdowns by the CURRENT tool (getState(), not the
   render closure!); previews via transportStore.editPreview, one commit
-  per gesture; slip clamps live against mediaStore asset bounds. Long clips
+  per gesture; slip clamps live against mediaStore asset bounds. Slice 7 keeps
+  the immutable pointerdown document reference in that session, clears its
+  preview if the document changes, and skips any stale pointerup commit.
+  Slice 6 keeps the clip root a stable pressed button, preserves independent
+  focus/selected/primary visuals, hides decorative link badges from its
+  accessible name, and highlights every live linked-preview participant. Long clips
   render only their intersection with the bounded window; filmstrip buckets
   and the normalized waveform viewBox remain aligned to the original source.
   `ui/Toolbar.tsx` = tool buttons; `app/useEditShortcuts.ts` = A/B/T/Y/U,
@@ -915,10 +975,51 @@ surface; it is not a second zoom and never enters document history.
   Multi-tab recovery ownership is not coordinated yet, so do not edit/discard
   the same journal from two tabs. Any future media caching needs explicit
   opt-in, quota/eviction UX, and a separate security/storage review.
-- A/V pairs from one drop ARE linked since 4.3.8 (`Clip.linkGroupId`,
-  domain/linking.ts). Not yet in scope: RE-linking two arbitrary clips
-  (unlink is one-way today, undo aside) and linked-pair awareness in a
-  future multi-select. Post-MVP.
+- Issue #12 follows the original seven-slice blueprint; the older local
+  “Slice 3/4” labels were compressed commit notes, not authoritative
+  renumbering. All seven original slices are complete. The pure manual-link
+  contract, canonical one-entry store action, exact undo/redo identity,
+  reconciled ephemeral pair selection, accessible Link/Unlink controls,
+  unequal-edit matrix, and signed owner-relative previews are all in place.
+  Track removal can no longer create an orphan group: it dissolves every lone
+  unlocked survivor in the same history entry, while a locked survivor rejects
+  the whole operation by reference. `gestureBounds.ts` intersects every linked
+  participant’s timeline, source, duration, and headroom interval from one
+  fresh pointerdown document/media snapshot. A gesture retains that exact
+  document reference; a mid-gesture document replacement clears the preview
+  and skips the stale pointerup commit. Collision safety remains enforced by
+  the canonical domain operation at commit, with rejection snapping the
+  previews back and adding no history.
+  Selection reconciliation prunes only missing ids after delete, split undo,
+  track removal, or project replacement; it preserves survivor order/primary,
+  never resurrects on undo, and leaves document history and portable
+  serialization untouched. Link accepts exactly one unlinked video and one
+  unlinked audio clip in either selection order. Unequal assets, ranges, and
+  offsets are supported; redo restores the exact authored group id; every
+  rejection preserves even a populated redo branch. Focusable pressed clip
+  controls, visible described reasons, latest-state race checks, badges,
+  partner highlighting, retained selection/primary, keyboard activation, and
+  post-Unlink focus handoff complete the acceptance surface.
+  Final verification passed 359 focused Issue #12 tests across 12 files and
+  1,209 total tests across 66 files. Build passed with only the known three
+  chunks above 500 kB; lint passed; `npm audit --omit=dev` reported 0
+  vulnerabilities; diff checking was clean apart from informational
+  line-ending notices.
+  Real Chrome 150 at 1600×1000 passed the final gate through the supported file
+  input fallback with an actual 2.0 s 320×180 30 fps H.264 + mono 48 kHz AAC
+  fixture. Import reached Ready and dropped the linked pair. Deleting V1
+  dissolved A1’s lone link and Ctrl+Z restored both V1 and the pair. After
+  Unlink, an audio head trim changed the timeline/source/duration tuple from
+  20/0/60 to 30/10/50 while V1 stayed
+  20/0/60; keyboard pair selection and Link restored the unequal-offset pair.
+  A live +15 move rendered 35/45 while the document remained 20/30 and history
+  remained at 4; release added exactly one entry at 35/45 with offset 10.
+  Ctrl+Z restored 20/30 and Ctrl+Y restored 35/45. Keyboard activation then
+  performed the final Unlink. Playback at timeline frame 62 mapped both clips
+  to source frame 27, rendered the real video, and reported 35 live audio nodes
+  with RMS 0.0898. Chrome recorded 0 warnings and 0 errors. All 30 GitHub #12
+  checklist items now have matching code, test, and browser evidence for the
+  normal-merge closeout.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their

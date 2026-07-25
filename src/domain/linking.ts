@@ -3,10 +3,10 @@
  * TimelineDoc. Phase 4.3.8.
  *
  * A "link group" is a set of clips sharing `Clip.linkGroupId` (see
- * schema.ts). By construction every group has exactly two members — the
- * video half and audio half created together from one A/V drop — but the
- * functions below handle any group size defensively rather than assuming
- * pairs everywhere.
+ * schema.ts). By construction every group has exactly two members — one
+ * video clip and one audio clip, whether linked manually or created together
+ * from one A/V drop — but the functions below handle any group size
+ * defensively rather than assuming pairs everywhere.
  *
  * Contract (matches operations.ts):
  * - Every function returns a NEW TimelineDoc; the input is never mutated.
@@ -47,13 +47,87 @@ function reject(doc: TimelineDoc, op: string, why: string): TimelineDoc {
 /* Group id / membership reads                                          */
 /* ------------------------------------------------------------------ */
 
+/** Stable reasons why two selected clips cannot form a new A/V link. */
+export type LinkClipsRejectionReason =
+  | 'same-clip'
+  | 'video-clip-missing'
+  | 'audio-clip-missing'
+  | 'first-clip-not-video'
+  | 'second-clip-not-audio'
+  | 'video-track-locked'
+  | 'audio-track-locked'
+  | 'video-clip-already-linked'
+  | 'audio-clip-already-linked'
+
+/** Result shared by the domain operation and UI availability checks. */
+export type LinkClipsEligibility =
+  | { eligible: true }
+  | { eligible: false; reason: LinkClipsRejectionReason }
+
 /**
- * Mint a fresh, unique link-group id. crypto.randomUUID is a standard
- * global in Node and workers too, so domain/ stays runnable outside the
- * browser (same rationale as operations.ts's internal newId).
+ * Check whether `videoClipId` and `audioClipId` can form a new link pair.
+ * Validation order is deliberate so callers always receive one stable,
+ * actionable reason for the same document state.
  */
-export function createLinkGroupId(): string {
-  return `link_${crypto.randomUUID()}`
+export function getLinkClipsEligibility(
+  doc: TimelineDoc,
+  videoClipId: ClipId,
+  audioClipId: ClipId,
+): LinkClipsEligibility {
+  if (videoClipId === audioClipId) return { eligible: false, reason: 'same-clip' }
+
+  const videoClip = findClip(doc, videoClipId)
+  const audioClip = findClip(doc, audioClipId)
+  if (!videoClip) return { eligible: false, reason: 'video-clip-missing' }
+  if (!audioClip) return { eligible: false, reason: 'audio-clip-missing' }
+
+  const videoTrack = trackOfClip(doc, videoClipId)
+  const audioTrack = trackOfClip(doc, audioClipId)
+  if (videoTrack?.kind !== 'video') {
+    return { eligible: false, reason: 'first-clip-not-video' }
+  }
+  if (audioTrack?.kind !== 'audio') {
+    return { eligible: false, reason: 'second-clip-not-audio' }
+  }
+
+  if (videoTrack.locked) return { eligible: false, reason: 'video-track-locked' }
+  if (audioTrack.locked) return { eligible: false, reason: 'audio-track-locked' }
+
+  if (videoClip.linkGroupId !== undefined) {
+    return { eligible: false, reason: 'video-clip-already-linked' }
+  }
+  if (audioClip.linkGroupId !== undefined) {
+    return { eligible: false, reason: 'audio-clip-already-linked' }
+  }
+
+  return { eligible: true }
+}
+
+/**
+ * Mint a link-group id absent from every current group in `doc`.
+ * crypto.randomUUID is a standard global in Node and workers too, so
+ * domain/ stays runnable outside the browser. If the UUID base already
+ * exists, a bounded scan chooses the first free numeric suffix.
+ */
+export function createLinkGroupId(doc: TimelineDoc): string {
+  const existing = new Set<string>()
+  for (const track of doc.tracks) {
+    for (const clip of track.clips) {
+      if (clip.linkGroupId !== undefined) existing.add(clip.linkGroupId)
+    }
+  }
+
+  const base = `link_${crypto.randomUUID()}`
+  if (!existing.has(base)) return base
+
+  for (let suffix = 2; suffix <= existing.size + 1; suffix++) {
+    const candidate = `${base}_${suffix}`
+    if (!existing.has(candidate)) return candidate
+  }
+
+  // Unreachable by the pigeonhole principle, but keeps the return total:
+  // the finite set cannot occupy base plus every suffix checked above.
+  return `${base}_${existing.size + 2}`
 }
 
 /**
@@ -121,6 +195,27 @@ function setLinkGroupIdOnClips(
     return { ...track, clips }
   })
   return changed ? { ...doc, tracks } : doc
+}
+
+/**
+ * Link one unlinked video clip to one unlinked audio clip without changing
+ * either clip's asset, geometry, or metadata. Invalid calls warn and return
+ * the exact input reference; successful calls rebuild only the two owning
+ * tracks and clips.
+ */
+export function linkClips(
+  doc: TimelineDoc,
+  videoClipId: ClipId,
+  audioClipId: ClipId,
+): TimelineDoc {
+  const eligibility = getLinkClipsEligibility(doc, videoClipId, audioClipId)
+  if (!eligibility.eligible) return reject(doc, 'linkClips', eligibility.reason)
+
+  return setLinkGroupIdOnClips(
+    doc,
+    [videoClipId, audioClipId],
+    createLinkGroupId(doc),
+  )
 }
 
 /**
@@ -322,9 +417,9 @@ export function linkedRippleDelete(doc: TimelineDoc, clipId: ClipId): TimelineDo
 
 /**
  * Split the TARGET at `frame`, and every OTHER group member whose
- * timelineRange strictly contains `frame` (skipped defensively when a
- * member does not — by construction all members share the target's range,
- * so this is normally everyone). Rejected exactly like splitClipAtFrame
+ * timelineRange strictly contains `frame` (skipped when a member does not;
+ * manually linked members may have unequal ranges). Rejected exactly like
+ * splitClipAtFrame
  * would reject the target alone (unknown clip, non-integer frame, locked
  * track, frame not strictly inside) — that rejection (and its warning) is
  * reused as-is, with no extra `[linking]` warning stacked on top.
@@ -366,7 +461,7 @@ export function linkedSplitClipAtFrame(
   }
 
   if (newRightHalfIds.length >= 2) {
-    working = setLinkGroupIdOnClips(working, newRightHalfIds, createLinkGroupId())
+    working = setLinkGroupIdOnClips(working, newRightHalfIds, createLinkGroupId(working))
   } else if (newRightHalfIds.length === 1) {
     working = removeLinkGroupIdFromClips(working, newRightHalfIds)
   }

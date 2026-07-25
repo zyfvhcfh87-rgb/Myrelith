@@ -110,6 +110,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - Document duration is derived (selectors), never stored.
 - `TimelineDoc` must survive `JSON.stringify`/`parse` losslessly (undo
   history depends on it); `MediaAsset.objectUrl` is session-scoped.
+- A present `Clip.linkGroupId` identifies exactly one video clip plus one
+  audio clip. `domain/linking.ts` owns the pure manual-link contract:
+  `getLinkClipsEligibility` returns stable rejection reasons and `linkClips`
+  links only two distinct, existing, unlocked, currently unlinked clips in
+  video-then-audio order. It changes no asset, range, or clip metadata;
+  manually linked partners may have different assets and ranges. Link-group
+  ids are minted against the current document so a UUID collision cannot
+  merge unrelated pairs. Re-linking requires an explicit unlink first.
+  Track removal must never leave a one-clip link group: removing an unlocked
+  track dissolves the group id on each lone unlocked survivor in the same
+  document mutation; if a required survivor is on a locked track, the entire
+  removal rejects by returning the original document reference.
 
 ## Store action contracts
 
@@ -124,11 +136,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `addTrack(kind)`, `setTrackFlags(trackId, {hidden?, muted?, solo?,
   locked?})` (idempotent patches push no history entry; flags and
   renames WORK on locked tracks — metadata, not content),
-  `renameTrack(trackId, name)`, `removeTrack(trackId)` (locked tracks
-  reject), `addCrossfade(fromClipId, toClipId, durationFrames)`,
+  `renameTrack(trackId, name)`, `removeTrack(trackId)` (a locked target
+  rejects; surviving linked partners are unlinked atomically, while a locked
+  survivor rejects the whole removal), `addCrossfade(fromClipId, toClipId,
+  durationFrames)`,
   `setCrossfadeDuration(trackId, transitionId, durationFrames)`,
   `removeTransition(trackId, transitionId)`,
   `setClipVolume(clipId, volume)` (clamped [0,2]),
+  `linkClips(videoClipId, audioClipId)` (one history entry; delegates to the
+  pure domain contract, so rejection preserves the entire state and redo
+  branch by reference; undo/redo restore the exact generated group id),
   `unlinkClip(clipId)` (dissolves the clip's whole link group), `undo`,
   `redo`. The geometry actions (move/trim/rippleTrim/slip/slide/
   rippleDelete/splitClipAt/splitClipAtPlayhead) are LINK-AWARE: they
@@ -148,19 +165,43 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `setPresetZoom` updates rendered zoom + Full/Detail mode without overwriting
   `customZoom`; `setTimelineOriginFrame` changes translation only. All four
   fields are ephemeral/non-history and reset deterministically. Also `inOut`,
-  `dragPreview` ({clipId, startFrame,
+  `dragPreview` ({clipId, deltaFrames,
   targetTrackId?, trackOffsetY?, linkGroupId?} | null — the live half of
-  the scrubbing-vs-committed pattern for select-tool moves; the optional
-  target fields ghost only the gesture owner over a same-kind lane while a
-  linked partner stays on its own lane; pointerup commits ONE
+  the scrubbing-vs-committed pattern for select-tool moves; every participating
+  ClipView renders its own committed `timelineRange.startFrame + deltaFrames`.
+  The optional target fields ghost only the gesture owner over a same-kind lane
+  while a linked partner stays on its own lane; pointerup commits ONE
   documentStore.moveClip and clears it), `tool`
-  ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipId`
-  (ephemeral, never in undo), `editPreview` ({clipId, kind, deltaFrames,
+  ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipIds` (ordered,
+  unique, ephemeral, never in undo) plus `selectedClipId` (the primary member
+  retained for single-clip surfaces such as Inspector), `editPreview`
+  ({clipId, kind, deltaFrames,
   linkGroupId?} | null — same live-preview contract for trim/ripple/
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
-  ghost a linked gesture live. No history, no side effects, never
-  touches documentStore. `resetTransport()` restores every field to its
-  initial value when a different project is activated.
+  ghost a linked gesture live. At pointerdown, `ui/timeline/gestureBounds.ts`
+  uses one fresh document/media snapshot to intersect every participating
+  linked member's legal signed-delta interval, so no owner can preview beyond
+  a partner's timeline, source, duration, and headroom bounds. The
+  gesture session retains that exact pointer-down document reference and group
+  identity; if the committed document changes before pointerup, the preview is
+  cleared and no stale commit is dispatched. Normal pointer or unmodified
+  keyboard selection replaces both selection fields; Ctrl/Cmd pointer or
+  keyboard activation toggles membership and promotes the newly added clip to
+  primary. The
+  Inspector resolves the live selection against the current document. Its
+  native Link/Unlink commands remain keyboard-focusable and expose
+  `aria-disabled` while unavailable; activation dispatches only for the exact
+  rendered eligible pair after a latest-state preflight, and adjacent visible
+  `aria-describedby` status explains unavailable states while a live status
+  announces raced/rejected actions. Selection has no history, no persistence,
+  and no side effects; transportStore never touches documentStore. The app-only
+  `selectionReconciliationController` is the composition bridge: on each
+  document-reference change it supplies the current clip-id set to
+  `reconcileClipSelection`, which synchronously removes stale ids while
+  preserving survivor order and the current primary (or promoting the latest
+  survivor). Undo can restore document clips but never resurrects selection.
+  `resetTransport()` restores every field to its initial value when a different
+  project is activated.
 - `MediaState` — `src/state/mediaStore.ts`: `descriptors: Map<AssetId,
   PortableAssetDescriptor>` is the durable project catalog, while
   `assets: Map<AssetId, MediaAsset>` is only the currently connected subset.

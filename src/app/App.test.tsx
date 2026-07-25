@@ -5,8 +5,10 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import App from './App'
+import type { Clip, TimelineDoc } from '../domain/schema'
+import { useDocumentStore } from '../state/documentStore'
 import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
@@ -16,9 +18,57 @@ import {
   useTransportStore,
 } from '../state/transportStore'
 
+function makeClip(id: string, startFrame: number): Clip {
+  return {
+    id,
+    assetId: 'asset-app-selection',
+    name: id,
+    sourceRange: { startFrame: 0, durationFrames: 30 },
+    timelineRange: { startFrame, durationFrames: 30 },
+    transform: {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    },
+    opacity: 1,
+    volume: 1,
+    effects: [],
+  }
+}
+
+function makeDocument(): TimelineDoc {
+  return {
+    schemaVersion: 1,
+    id: 'doc-app-selection',
+    name: 'App selection fixture',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48_000,
+    tracks: [
+      {
+        id: 'V1',
+        kind: 'video',
+        name: 'V1',
+        clips: [makeClip('clipA', 0), makeClip('clipB', 60)],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      },
+    ],
+  }
+}
+
 beforeEach(() => {
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
   useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
+  useDocumentStore.setState({ doc: makeDocument(), past: [], future: [] })
 })
 
 describe('App shell', () => {
@@ -59,6 +109,27 @@ describe('App shell', () => {
     expect(
       shell?.querySelector('.area-transport > .timeline-zoom-controls'),
     ).not.toBeNull()
+  })
+
+  test('owns and releases document-to-selection reconciliation', () => {
+    useProjectSessionStore.setState({ screen: 'editor' })
+    useTransportStore.getState().setSelectedClip('clipA')
+    useTransportStore.getState().toggleClipSelection('clipB')
+    const { unmount } = render(<App />)
+
+    act(() => useDocumentStore.getState().rippleDelete('clipB'))
+
+    expect(useTransportStore.getState()).toMatchObject({
+      selectedClipIds: ['clipA'],
+      selectedClipId: 'clipA',
+    })
+
+    unmount()
+    act(() => useDocumentStore.getState().removeTrack('V1'))
+    expect(useTransportStore.getState()).toMatchObject({
+      selectedClipIds: ['clipA'],
+      selectedClipId: 'clipA',
+    })
   })
 
   test('makes every editing surface inert while the project is closing', () => {

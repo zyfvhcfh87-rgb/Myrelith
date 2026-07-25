@@ -24,14 +24,21 @@
  */
 
 import { memo, useEffect, useRef } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { Clip, TrackId, TrackKind } from '../../domain/schema'
-import { microsecondsDurationToFrames, rangeEnd } from '../../domain/time'
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react'
+import type { Clip, TimelineDoc, TrackId, TrackKind } from '../../domain/schema'
+import { findClip, trackOfClip } from '../../domain/selectors'
+import { microsecondsDurationToFrames } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
-import type { EditPreviewKind } from '../../state/transportStore'
 import { useTransportStore } from '../../state/transportStore'
 import { visibleFilmstripBuckets } from './clipVisualPlan'
+import {
+  linkedGestureBounds,
+  type GestureMode,
+} from './gestureBounds'
 import { useScrubScheduler } from './useScrubScheduler'
 import { frameToTimelineLocalPx } from './timelineViewport'
 
@@ -46,13 +53,15 @@ interface ClipViewProps {
   timelineWindowEndFrame?: number
 }
 
-type GestureMode = 'move' | EditPreviewKind
-
 /** Live drag-session values; refs, so moves never re-render anything extra. */
 interface GestureSession {
   mode: GestureMode
   pointerStartX: number
+  /** Exact immutable document snapshot this gesture was opened against. */
+  document: TimelineDoc
   originFrame: number
+  /** Link identity from the same fresh document snapshot as the bounds. */
+  linkGroupId?: string
   /** Current same-kind lane under the pointer during a move gesture. */
   targetTrackId: TrackId
   /** Target-lane top minus source-lane top, for the vertical ghost. */
@@ -71,16 +80,21 @@ function ClipView({
 }: ClipViewProps) {
   const zoom = useTransportStore((s) => s.zoom)
   const tool = useTransportStore((s) => s.tool)
-  const isSelected = useTransportStore((s) => s.selectedClipId === clip.id)
+  const isSelected = useTransportStore((s) =>
+    s.selectedClipIds.includes(clip.id),
+  )
+  const isPrimarySelection = useTransportStore(
+    (s) => s.selectedClipId === clip.id,
+  )
   // Narrow slices: null unless THIS clip owns the live gesture OR is linked
   // to the clip that does (partners ghost the same preview) — every other,
   // unrelated clip's subscription still never fires, so render isolation
   // for UNLINKED clips is unchanged.
-  const previewStart = useTransportStore((s) =>
+  const movePreviewDelta = useTransportStore((s) =>
     s.dragPreview &&
     (s.dragPreview.clipId === clip.id ||
       (clip.linkGroupId !== undefined && s.dragPreview.linkGroupId === clip.linkGroupId))
-      ? s.dragPreview.startFrame
+      ? s.dragPreview.deltaFrames
       : null,
   )
   // Only the gesture owner changes lanes. A linked partner follows the
@@ -143,7 +157,7 @@ function ClipView({
     [clip.id],
   )
 
-  const scheduleMovePreview = useScrubScheduler((startFrame: number) => {
+  const scheduleMovePreview = useScrubScheduler((deltaFrames: number) => {
     // Same session guard as scheduleEditPreview below: a rAF flush can land
     // AFTER pointerup already committed and cleared the preview — without
     // this check the stale flush re-posts a dragPreview that nothing ever
@@ -154,8 +168,8 @@ function ClipView({
       const crossTrack = active.targetTrackId !== trackId
       setDragPreview({
         clipId: clip.id,
-        startFrame,
-        linkGroupId: clip.linkGroupId,
+        deltaFrames,
+        linkGroupId: active.linkGroupId,
         ...(crossTrack
           ? {
               targetTrackId: active.targetTrackId,
@@ -166,23 +180,24 @@ function ClipView({
     }
   })
   const scheduleEditPreview = useScrubScheduler((deltaFrames: number) => {
-    const mode = session.current?.mode
-    if (mode && mode !== 'move') {
-      setEditPreview({ clipId: clip.id, kind: mode, deltaFrames, linkGroupId: clip.linkGroupId })
+    const active = session.current
+    if (active && active.mode !== 'move') {
+      setEditPreview({
+        clipId: clip.id,
+        kind: active.mode,
+        deltaFrames,
+        linkGroupId: active.linkGroupId,
+      })
     }
   })
 
   /* ---------------- geometry (committed + live preview) ------------- */
 
   const tl = clip.timelineRange
-  // previewStart may belong to a LINKED PARTNER's gesture (widened slice
-  // above). Linked halves share identical timelineRanges by construction
-  // (created together at A/V drop, and every linked geometry edit applies
-  // the same delta to both), so rendering the gesture owner's ABSOLUTE
-  // startFrame here is correct for the partner too — no per-clip delta math
-  // needed. editPreview below carries a RELATIVE deltaFrames instead, so the
-  // switch already renders correctly on the partner with no special-casing.
-  let startFrame = previewStart ?? tl.startFrame
+  // A linked gesture shares one signed delta, never the gesture owner's
+  // absolute start. Every member therefore ghosts from its own committed
+  // position even when manually linked clips have unequal timeline offsets.
+  let startFrame = tl.startFrame + (movePreviewDelta ?? 0)
   let durationFrames = tl.durationFrames
   let badge: string | null = null
   if (editPreview) {
@@ -207,7 +222,7 @@ function ClipView({
         break
     }
   }
-  const dragging = previewStart !== null || editPreview !== null
+  const dragging = movePreviewDelta !== null || editPreview !== null
 
   // Source in-point as currently DISPLAYED: slip and start-side trims
   // shift the material under the clip, so the visual tracks the gesture
@@ -277,32 +292,24 @@ function ClipView({
 
   /* ---------------- gesture plumbing -------------------------------- */
 
-  /** Signed-delta clamp per mode: timeline floor, source floor, and (when
-   * the asset is known) the source ceiling — live-accurate previews. */
-  const boundsFor = (mode: GestureMode): { minDelta: number; maxDelta: number } => {
-    const src = clip.sourceRange
-    // Text clips have no media descriptor and intentionally remain extendable.
-    // Unknown non-text sources stay clamped defensively at their current end.
-    const headroom = clip.text
-      ? Number.POSITIVE_INFINITY
-      : Math.max(0, assetDurationFrames - rangeEnd(src))
-    switch (mode) {
-      case 'move':
-      case 'slide':
-        return { minDelta: -tl.startFrame, maxDelta: Number.POSITIVE_INFINITY }
-      case 'trim-start':
-        return {
-          minDelta: Math.max(-tl.startFrame, -src.startFrame),
-          maxDelta: tl.durationFrames - 1,
-        }
-      case 'ripple-start':
-        return { minDelta: -src.startFrame, maxDelta: tl.durationFrames - 1 }
-      case 'trim-end':
-      case 'ripple-end':
-        return { minDelta: -(tl.durationFrames - 1), maxDelta: headroom }
-      case 'slip':
-        return { minDelta: -src.startFrame, maxDelta: headroom }
-    }
+  /** Intersect every linked member's timeline/source interval from fresh
+   * document and media state at pointer-down. */
+  const boundsFor = (
+    currentDoc: TimelineDoc,
+    mode: GestureMode,
+  ): { minDelta: number; maxDelta: number } => {
+    const media = useMediaStore.getState()
+    return linkedGestureBounds(currentDoc, clip.id, mode, (member) => {
+      const connected = media.assets.get(member.assetId)
+      if (connected) return connected.durationFrames
+      const descriptor = media.descriptors.get(member.assetId)
+      return descriptor
+        ? microsecondsDurationToFrames(
+            descriptor.durationMicroseconds,
+            currentDoc.frameRate,
+          )
+        : 0
+    })
   }
 
   const deltaFromEvent = (e: ReactPointerEvent<HTMLDivElement>): number => {
@@ -349,25 +356,44 @@ function ClipView({
   const startGesture = (
     e: ReactPointerEvent<HTMLDivElement>,
     mode: GestureMode,
-  ): void => {
+  ): boolean => {
+    const currentDoc = useDocumentStore.getState().doc
+    const currentClip = findClip(currentDoc, clip.id)
+    const currentTrack = trackOfClip(currentDoc, clip.id)
+    // A capture-phase edit can make this rendered ClipView stale before its
+    // own pointer handler runs. Fail closed instead of mixing snapshots.
+    if (!currentClip || currentTrack?.id !== trackId) return false
+
     session.current = {
       mode,
       pointerStartX: e.clientX,
-      originFrame: tl.startFrame,
+      document: currentDoc,
+      originFrame: currentClip.timelineRange.startFrame,
+      linkGroupId: currentClip.linkGroupId,
       targetTrackId: trackId,
       trackOffsetY: 0,
-      ...boundsFor(mode),
+      ...boundsFor(currentDoc, mode),
     }
     if (mode === 'move') {
-      setDragPreview({ clipId: clip.id, startFrame: tl.startFrame, linkGroupId: clip.linkGroupId })
+      setDragPreview({
+        clipId: clip.id,
+        deltaFrames: 0,
+        linkGroupId: currentClip.linkGroupId,
+      })
     } else {
-      setEditPreview({ clipId: clip.id, kind: mode, deltaFrames: 0, linkGroupId: clip.linkGroupId })
+      setEditPreview({
+        clipId: clip.id,
+        kind: mode,
+        deltaFrames: 0,
+        linkGroupId: currentClip.linkGroupId,
+      })
     }
     try {
       rootRef.current?.setPointerCapture(e.pointerId)
     } catch {
       /* synthetic/inactive pointer — drag still works via move events */
     }
+    return true
   }
 
   const endGesture = (): void => {
@@ -378,8 +404,15 @@ function ClipView({
 
   const commitGesture = (e: ReactPointerEvent<HTMLDivElement>): void => {
     const s = session.current as GestureSession
-    const delta = deltaFromEvent(e)
     const store = useDocumentStore.getState()
+    // Undo/redo or another edit may replace the immutable document while the
+    // pointer is captured. Never retarget a stale delta onto that new snapshot
+    // (whose link group and asset bounds may differ).
+    if (store.doc !== s.document) {
+      endGesture()
+      return
+    }
+    const delta = deltaFromEvent(e)
     const moveTarget =
       s.mode === 'move' ? trackTargetAt(e.clientX, e.clientY) : null
     // Commit exactly once, and only when something actually changed.
@@ -425,27 +458,41 @@ function ClipView({
     switch (transport.tool) {
       case 'razor': {
         // Split at the pointer frame — a click edit, no drag phase.
+        const currentDoc = useDocumentStore.getState().doc
+        const currentClip = findClip(currentDoc, clip.id)
+        if (!currentClip || trackOfClip(currentDoc, clip.id)?.id !== trackId) return
         const rect = e.currentTarget.getBoundingClientRect()
         const frame =
-          displayedStartFrame + Math.round((e.clientX - rect.left) / zoom)
+          Math.max(currentClip.timelineRange.startFrame, timelineOriginFrame) +
+          Math.round((e.clientX - rect.left) / zoom)
         useDocumentStore.getState().splitClipAt(clip.id, frame)
-        transport.setSelectedClip(clip.id)
+        if (findClip(useDocumentStore.getState().doc, clip.id)) {
+          transport.setSelectedClip(clip.id)
+        }
         return
       }
       case 'select':
-        transport.setSelectedClip(clip.id)
-        startGesture(e, 'move')
+        // Modifier selection is a discrete toggle, never the start of a
+        // move. This makes adding/removing a partner safe even if the pointer
+        // shifts a few pixels while Ctrl/Command is held.
+        if (e.ctrlKey || e.metaKey) {
+          if (findClip(useDocumentStore.getState().doc, clip.id)) {
+            transport.toggleClipSelection(clip.id)
+          }
+          return
+        }
+        if (startGesture(e, 'move')) transport.setSelectedClip(clip.id)
         return
       case 'trim':
-        transport.setSelectedClip(clip.id) // edges do the trimming
+        if (findClip(useDocumentStore.getState().doc, clip.id)) {
+          transport.setSelectedClip(clip.id) // edges do the trimming
+        }
         return
       case 'slip':
-        transport.setSelectedClip(clip.id)
-        startGesture(e, 'slip')
+        if (startGesture(e, 'slip')) transport.setSelectedClip(clip.id)
         return
       case 'slide':
-        transport.setSelectedClip(clip.id)
-        startGesture(e, 'slide')
+        if (startGesture(e, 'slide')) transport.setSelectedClip(clip.id)
         return
     }
   }
@@ -456,8 +503,38 @@ function ClipView({
   ): void => {
     e.stopPropagation() // the body handler must not also start a gesture
     const transport = useTransportStore.getState() // current tool, as above
-    transport.setSelectedClip(clip.id)
-    startGesture(e, transport.tool === 'trim' ? `ripple-${edge}` : `trim-${edge}`)
+    // In Select mode the handle is still part of the clip's pointer target:
+    // modifier activation must toggle selection instead of beginning a trim.
+    if (transport.tool === 'select' && (e.ctrlKey || e.metaKey)) {
+      if (findClip(useDocumentStore.getState().doc, clip.id)) {
+        transport.toggleClipSelection(clip.id)
+      }
+      return
+    }
+    if (
+      startGesture(
+        e,
+        transport.tool === 'trim' ? `ripple-${edge}` : `trim-${edge}`,
+      )
+    ) {
+      transport.setSelectedClip(clip.id)
+    }
+  }
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+
+    // Match native button activation without relying on a browser-reserved
+    // shortcut. Keyboard selection intentionally never starts a drag/edit.
+    e.preventDefault()
+    e.stopPropagation()
+    const transport = useTransportStore.getState()
+    if (!findClip(useDocumentStore.getState().doc, clip.id)) return
+    if (e.ctrlKey || e.metaKey) {
+      transport.toggleClipSelection(clip.id)
+    } else {
+      transport.setSelectedClip(clip.id)
+    }
   }
 
   const showEdges = hasVisibleSlice && (tool === 'select' || tool === 'trim')
@@ -468,10 +545,16 @@ function ClipView({
   return (
     <div
       ref={rootRef}
-      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isOffline ? ' offline' : ''}${hasVisibleSlice ? '' : ' virtual-gesture-host'}`}
+      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isSelected && isPrimarySelection ? ' primary-selected' : ''}${isOffline ? ' offline' : ''}${hasVisibleSlice ? '' : ' virtual-gesture-host'}`}
       data-testid={`clip-${clip.id}`}
       data-offline={isOffline ? 'true' : 'false'}
+      data-primary-selected={isSelected && isPrimarySelection ? 'true' : 'false'}
       data-virtual-gesture-host={hasVisibleSlice ? 'false' : 'true'}
+      role="button"
+      tabIndex={0}
+      aria-label={`${clip.name}, ${trackKind} clip`}
+      aria-pressed={isSelected}
+      title="Select clip. Hold Ctrl or Command while clicking, or with Enter or Space, to add or remove it from the selection."
       style={{
         transform:
           previewTrackOffsetY === 0
@@ -480,6 +563,7 @@ function ClipView({
         width: hasVisibleSlice ? displayedDurationFrames * zoom : 1,
       }}
       onPointerDown={onBodyPointerDown}
+      onKeyDown={onKeyDown}
       onPointerMove={(e) => {
         // Gate on OUR session state, never on capture status — capture can
         // fail (and did, in browser verification) while the gesture is
@@ -490,7 +574,7 @@ function ClipView({
           const target = trackTargetAt(e.clientX, e.clientY)
           s.targetTrackId = target.trackId
           s.trackOffsetY = target.offsetY
-          scheduleMovePreview(s.originFrame + deltaFromEvent(e))
+          scheduleMovePreview(deltaFromEvent(e))
         } else {
           scheduleEditPreview(deltaFromEvent(e))
         }
@@ -627,6 +711,7 @@ function ClipView({
             <span
               className="clip-link-badge"
               data-testid={`clip-${clip.id}-link`}
+              aria-hidden="true"
             >
               🔗
             </span>

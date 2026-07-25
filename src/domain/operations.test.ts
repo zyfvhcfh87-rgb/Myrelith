@@ -1425,6 +1425,80 @@ describe('removeTrack', () => {
     expect(out.tracks.some((t) => t.kind === 'audio')).toBe(false)
   })
 
+  test('dissolves every link group that would leave one surviving partner', () => {
+    const base = makeDoc()
+    const firstGroup = 'link_removed_track_first'
+    const secondGroup = 'link_removed_track_second'
+    const doc = deepFreeze({
+      ...base,
+      tracks: [
+        {
+          ...base.tracks[0],
+          clips: [
+            { ...base.tracks[0].clips[0], linkGroupId: firstGroup },
+            { ...base.tracks[0].clips[1], linkGroupId: secondGroup },
+            base.tracks[0].clips[2],
+          ],
+        },
+        base.tracks[1],
+        {
+          ...base.tracks[2],
+          hidden: true,
+          muted: true,
+          clips: [
+            { ...base.tracks[2].clips[0], linkGroupId: firstGroup },
+            {
+              ...makeClip('clipF', 100, 40),
+              linkGroupId: secondGroup,
+            },
+          ],
+        },
+        base.tracks[3],
+      ],
+    })
+
+    const out = removeTrack(doc, 'V1')
+    const firstSurvivor = clipIn(out, 'A1', 'clipD')
+    const secondSurvivor = clipIn(out, 'A1', 'clipF')
+
+    expect(out.tracks.map((track) => track.id)).toEqual(['V2', 'A1', 'VL'])
+    expect('linkGroupId' in firstSurvivor).toBe(false)
+    expect('linkGroupId' in secondSurvivor).toBe(false)
+    expect(out.tracks[0]).toBe(doc.tracks[1])
+    expect(out.tracks[1]).not.toBe(doc.tracks[2])
+    expect(out.tracks[2]).toBe(doc.tracks[3])
+    expect(JSON.parse(JSON.stringify(out))).toEqual(out)
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('rejects atomically when dissolving an orphan would edit a locked partner', () => {
+    const base = makeDoc()
+    const groupId = 'link_locked_track_survivor'
+    const doc = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => {
+        if (track.id === 'A1') {
+          return {
+            ...track,
+            clips: [{ ...track.clips[0], linkGroupId: groupId }],
+          }
+        }
+        if (track.id === 'VL') {
+          return {
+            ...track,
+            clips: [{ ...track.clips[0], linkGroupId: groupId }],
+          }
+        }
+        return track
+      }),
+    })
+
+    expect(removeTrack(doc, 'A1')).toBe(doc)
+    expect(clipIn(doc, 'A1', 'clipD').linkGroupId).toBe(groupId)
+    expect(clipIn(doc, 'VL', 'clipE').linkGroupId).toBe(groupId)
+    expect(warnSpy).toHaveBeenCalledOnce()
+  })
+
   test('locked and unknown tracks are rejected', () => {
     const doc = makeDoc()
     expect(removeTrack(doc, 'VL')).toBe(doc)

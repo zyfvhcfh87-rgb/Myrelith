@@ -21,8 +21,8 @@ import type { ClipId, TimeRange, TrackId } from '../domain/schema'
  */
 export interface DragPreview {
   clipId: ClipId
-  /** Where the dragged clip's timelineRange would start right now. */
-  startFrame: number
+  /** Signed frame delta from every participating clip's committed start. */
+  deltaFrames: number
   /** Same-kind lane currently under the gesture owner, when cross-track. */
   targetTrackId?: TrackId
   /** Pixel offset from the source lane used to ghost the owner vertically. */
@@ -89,7 +89,15 @@ export interface TransportState {
   dragPreview: DragPreview | null
   /** Active timeline tool (Phase 4.2). */
   tool: TimelineTool
-  /** The selected clip, or null. Ephemeral UI state — never in undo. */
+  /**
+   * Ordered selected clips. Ephemeral UI state — never in undo/history.
+   * The final id is the most recently added clip.
+   */
+  selectedClipIds: readonly ClipId[]
+  /**
+   * Primary selected clip for single-clip surfaces such as the Inspector,
+   * or null. When present it is always a member of selectedClipIds.
+   */
   selectedClipId: ClipId | null
   /** Trim/ripple/slip/slide gesture preview, or null when none is live. */
   editPreview: EditPreview | null
@@ -112,14 +120,23 @@ export interface TransportState {
   /** Set or clear the in/out selection. */
   setInOut: (inOut: TimeRange | null) => void
   /**
-   * Update or clear the clip-drag preview. Frame is forced to a
-   * non-negative integer like the playhead. No other field is touched.
+   * Update or clear the clip-drag preview. deltaFrames is rounded to an
+   * integer and stays signed so linked members can each add it to their own
+   * committed start. No other field is touched.
    */
   setDragPreview: (preview: DragPreview | null) => void
   /** Switch the active timeline tool. */
   setTool: (tool: TimelineTool) => void
-  /** Select a clip (or clear with null). */
+  /** Replace the selection with one clip (or clear both fields with null). */
   setSelectedClip: (clipId: ClipId | null) => void
+  /** Add/remove one clip from the ordered selection and update its primary. */
+  toggleClipSelection: (clipId: ClipId) => void
+  /**
+   * Drop selected ids that no longer exist in the active document. The app
+   * composition root supplies the valid ids so this store stays document-
+   * agnostic; surviving order and primary selection remain stable.
+   */
+  reconcileClipSelection: (existingClipIds: ReadonlySet<ClipId>) => void
   /**
    * Update or clear the edit-gesture preview. deltaFrames is rounded to an
    * integer (negative allowed — deltas are signed).
@@ -128,6 +145,8 @@ export interface TransportState {
   /** Clear every session-owned playback/navigation value for a new project. */
   resetTransport: () => void
 }
+
+const EMPTY_SELECTED_CLIP_IDS: readonly ClipId[] = Object.freeze([])
 
 export const INITIAL_TRANSPORT_STATE = Object.freeze({
   playheadFrame: 0,
@@ -140,6 +159,7 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   inOut: null,
   dragPreview: null,
   tool: 'select' as TimelineTool,
+  selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
   selectedClipId: null,
   editPreview: null,
 })
@@ -193,11 +213,76 @@ export const useTransportStore = create<TransportState>()((set) => ({
   setDragPreview: (preview) =>
     set({
       dragPreview: preview
-        ? { ...preview, startFrame: Math.max(0, Math.round(preview.startFrame)) }
+        ? { ...preview, deltaFrames: Math.round(preview.deltaFrames) }
         : null,
     }),
   setTool: (tool) => set({ tool }),
-  setSelectedClip: (clipId) => set({ selectedClipId: clipId }),
+  setSelectedClip: (clipId) =>
+    set((state) => {
+      if (clipId === null) {
+        return state.selectedClipId === null && state.selectedClipIds.length === 0
+          ? state
+          : {
+              selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
+              selectedClipId: null,
+            }
+      }
+
+      return state.selectedClipId === clipId &&
+        state.selectedClipIds.length === 1 &&
+        state.selectedClipIds[0] === clipId
+        ? state
+        : { selectedClipIds: [clipId], selectedClipId: clipId }
+    }),
+  toggleClipSelection: (clipId) =>
+    set((state) => {
+      if (!state.selectedClipIds.includes(clipId)) {
+        return {
+          selectedClipIds: [...state.selectedClipIds, clipId],
+          selectedClipId: clipId,
+        }
+      }
+
+      const selectedClipIds = state.selectedClipIds.filter(
+        (selectedId) => selectedId !== clipId,
+      )
+      return {
+        selectedClipIds:
+          selectedClipIds.length === 0
+            ? EMPTY_SELECTED_CLIP_IDS
+            : selectedClipIds,
+        selectedClipId:
+          state.selectedClipId === clipId
+            ? (selectedClipIds[selectedClipIds.length - 1] ?? null)
+            : state.selectedClipId,
+      }
+    }),
+  reconcileClipSelection: (existingClipIds) =>
+    set((state) => {
+      const selectedClipIds = state.selectedClipIds.filter((clipId) =>
+        existingClipIds.has(clipId),
+      )
+      const selectedClipId =
+        state.selectedClipId !== null &&
+        selectedClipIds.includes(state.selectedClipId)
+          ? state.selectedClipId
+          : (selectedClipIds[selectedClipIds.length - 1] ?? null)
+
+      if (
+        selectedClipIds.length === state.selectedClipIds.length &&
+        selectedClipId === state.selectedClipId
+      ) {
+        return state
+      }
+
+      return {
+        selectedClipIds:
+          selectedClipIds.length === 0
+            ? EMPTY_SELECTED_CLIP_IDS
+            : selectedClipIds,
+        selectedClipId,
+      }
+    }),
   setEditPreview: (preview) =>
     set({
       editPreview: preview

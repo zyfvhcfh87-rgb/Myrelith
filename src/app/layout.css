@@ -2703,6 +2703,52 @@
   color: #8a94a0;
 }
 
+/* Issue 12 Slice 6: discoverable A/V Link/Unlink command group plus
+   persistent, programmatically associated availability/rejection copy. */
+.inspector-linking {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+}
+
+.inspector-link {
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d9ecff;
+  background: #244668;
+  border: 1px solid #3f719f;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.inspector-link:hover:not([aria-disabled='true']) {
+  color: #fff;
+  background: #2d5780;
+}
+
+.inspector-link:focus-visible,
+.inspector-unlink:focus-visible {
+  outline: 2px solid #8dc9ff;
+  outline-offset: 2px;
+}
+
+.inspector-link[aria-disabled='true'] {
+  color: #747d86;
+  background: #202327;
+  border-color: #34393f;
+  cursor: not-allowed;
+}
+
+.inspector-link-status {
+  color: #8f9ba7;
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: left;
+}
+
 /* Manual A/V unlink (Phase 4.3.8) — mirrors the .track-toggle chip look. */
 .inspector-unlink {
   align-self: flex-start;
@@ -2715,9 +2761,16 @@
   cursor: pointer;
 }
 
-.inspector-unlink:hover {
+.inspector-unlink:hover:not([aria-disabled='true']) {
   background: #2d2d2d;
   color: #ddd;
+}
+
+.inspector-unlink[aria-disabled='true'] {
+  color: #747d86;
+  border-color: #34393f;
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 /* Phase 3.1 placeholder styling — dies as real panels replace it. */

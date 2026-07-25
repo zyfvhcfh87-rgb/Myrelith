@@ -7,12 +7,15 @@
  * the doc changes under them (undo, canvas gestures, clip switching).
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import { initSelectionReconciliation } from '../app/selectionReconciliationController'
 import Inspector from './Inspector'
+import Timeline from './timeline/Timeline'
 
 function makeClip(id: string, tlStart: number, duration: number): Clip {
   return {
@@ -48,9 +51,35 @@ function makeDoc(): TimelineDoc {
   }
 }
 
+function makeLinkedFixture(): TimelineDoc {
+  return {
+    ...makeDoc(),
+    tracks: [
+      makeTrack('V1', [{ ...makeClip('clipV', 0, 50), linkGroupId: 'link_1' }]),
+      makeTrack(
+        'A1',
+        [{ ...makeClip('clipLinkedA', 0, 50), linkGroupId: 'link_1' }],
+        'audio',
+      ),
+    ],
+  }
+}
+
 const doc = () => useDocumentStore.getState()
 const transport = () => useTransportStore.getState()
 const clipA = () => doc().doc.tracks[0].clips.find((c) => c.id === 'clipA') as Clip
+
+function setMultiSelection(selectedClipIds: readonly string[], primaryId?: string): void {
+  useTransportStore.setState({
+    selectedClipIds,
+    selectedClipId: primaryId ?? selectedClipIds[selectedClipIds.length - 1] ?? null,
+  })
+}
+
+const linkButton = () =>
+  screen.getByRole('button', { name: 'Link selected audio and video clips' })
+const unlinkButton = () =>
+  screen.getByRole('button', { name: 'Unlink audio/video' })
 
 let warnSpy: ReturnType<typeof vi.spyOn>
 
@@ -64,6 +93,7 @@ beforeEach(() => {
     inOut: null,
     dragPreview: null,
     tool: 'select',
+    selectedClipIds: [],
     selectedClipId: null,
     editPreview: null,
   })
@@ -84,6 +114,25 @@ describe('Inspector', () => {
     expect(screen.getByTestId('inspector-x')).toHaveValue(0)
     expect(screen.getByTestId('inspector-scale-x')).toHaveValue(1)
     expect(screen.getByTestId('inspector-opacity')).toHaveValue(1)
+  })
+
+  test('follows the promoted primary when the selected clip is deleted', () => {
+    const dispose = initSelectionReconciliation()
+    try {
+      setMultiSelection(['clipA', 'clipB'], 'clipB')
+      render(<Inspector />)
+      expect(screen.getByText('clipB.mp4')).toBeInTheDocument()
+
+      act(() => doc().rippleDelete('clipB'))
+
+      expect(transport()).toMatchObject({
+        selectedClipIds: ['clipA'],
+        selectedClipId: 'clipA',
+      })
+      expect(screen.getByText('clipA.mp4')).toBeInTheDocument()
+    } finally {
+      dispose()
+    }
   })
 
   test('Enter commits ONE updateClipTransform (one undo entry)', () => {
@@ -225,6 +274,351 @@ describe('audio clips (clip audio upgrade)', () => {
   })
 })
 
+describe('manual A/V link controls (Issue 12 Slice 6)', () => {
+  test('unavailable Link stays discoverable and explains no, partial, same-kind, oversized, and stale selections', () => {
+    const { rerender } = render(<Inspector />)
+    expect(linkButton()).not.toBeDisabled()
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Select one video clip and one audio clip to link them.',
+    )
+    linkButton().focus()
+    expect(linkButton()).toHaveFocus()
+
+    const initialDoc = doc().doc
+    const initialPast = doc().past
+    fireEvent.click(linkButton())
+    expect(doc().doc).toBe(initialDoc)
+    expect(doc().past).toBe(initialPast)
+    expect(warnSpy).not.toHaveBeenCalled()
+
+    transport().setSelectedClip('clipA')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Select one more clip with Ctrl/Cmd-click, or focus it and press Ctrl/Cmd+Enter.',
+    )
+
+    setMultiSelection(['clipA', 'clipB'], 'clipB')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Select one video clip and one audio clip; clips on the same kind of track cannot be linked.',
+    )
+
+    setMultiSelection(['clipA', 'clipB', 'clipD'], 'clipD')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Select exactly two clips: one video and one audio.',
+    )
+
+    setMultiSelection(['clipA', 'deleted-clip'], 'clipA')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAccessibleDescription(
+      'A selected clip is no longer available. Reselect the video and audio clips.',
+    )
+
+    setMultiSelection(['deleted-clip'], 'deleted-clip')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAccessibleDescription(
+      'A selected clip is no longer available. Reselect the video and audio clips.',
+    )
+  })
+
+  test('accepts either selection order and uses a native keyboard-operable button', () => {
+    setMultiSelection(['clipD', 'clipA'], 'clipA')
+    const { rerender } = render(<Inspector />)
+
+    expect(linkButton()).not.toBeDisabled()
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'false')
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Ready to link the selected video and audio clips.',
+    )
+    expect(linkButton().tagName).toBe('BUTTON')
+    expect(linkButton()).toHaveAttribute('type', 'button')
+    linkButton().focus()
+    expect(linkButton()).toHaveFocus()
+
+    setMultiSelection(['clipA', 'clipD'], 'clipD')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'false')
+  })
+
+  test('links a valid pair in one history action without changing selection or primary', () => {
+    // Different assets/source offsets, hidden video, and muted audio are valid:
+    // manual linking joins existing timeline items without rewriting metadata.
+    const mixedDoc = makeDoc()
+    const videoTrack = mixedDoc.tracks[0]
+    const audioTrack = mixedDoc.tracks[1]
+    doc().setDoc({
+      ...mixedDoc,
+      tracks: [
+        { ...videoTrack, hidden: true },
+        {
+          ...audioTrack,
+          muted: true,
+          clips: audioTrack.clips.map((clip) => ({
+            ...clip,
+            assetId: 'different-asset',
+            sourceRange: { ...clip.sourceRange, startFrame: 17 },
+          })),
+        },
+      ],
+    })
+    setMultiSelection(['clipD', 'clipA'], 'clipA')
+    render(<Inspector />)
+
+    const selectionBefore = transport().selectedClipIds
+    fireEvent.click(linkButton())
+
+    const video = doc().doc.tracks[0].clips[0]
+    const audio = doc().doc.tracks[1].clips[0]
+    expect(video.linkGroupId).toBeDefined()
+    expect(audio.linkGroupId).toBe(video.linkGroupId)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().selectedClipIds).toBe(selectionBefore)
+    expect(transport().selectedClipIds).toEqual(['clipD', 'clipA'])
+    expect(transport().selectedClipId).toBe('clipA')
+
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(linkButton()).toHaveAccessibleDescription(
+      'The selected video clip is already linked. Unlink it first.',
+    )
+    expect(screen.getByTestId('inspector-unlink')).toBeInTheDocument()
+  })
+
+  test('locked and already-linked pairs remain disabled with actionable reasons', () => {
+    const unlocked = makeDoc()
+    doc().setDoc({
+      ...unlocked,
+      tracks: unlocked.tracks.map((track) =>
+        track.id === 'V1' ? { ...track, locked: true } : track,
+      ),
+    })
+    setMultiSelection(['clipA', 'clipD'], 'clipA')
+    const { rerender } = render(<Inspector />)
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Unlock the selected video track before linking.',
+    )
+
+    doc().setDoc(makeLinkedFixture())
+    setMultiSelection(['clipV', 'clipLinkedA'], 'clipV')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(linkButton()).toHaveAccessibleDescription(
+      'The selected video clip is already linked. Unlink it first.',
+    )
+    expect(screen.getByTestId('inspector-unlink')).toBeInTheDocument()
+  })
+
+  test('audio-side locked and already-linked pairs expose their own reasons', () => {
+    const unlocked = makeDoc()
+    doc().setDoc({
+      ...unlocked,
+      tracks: unlocked.tracks.map((track) =>
+        track.id === 'A1' ? { ...track, locked: true } : track,
+      ),
+    })
+    setMultiSelection(['clipA', 'clipD'], 'clipD')
+    const { rerender } = render(<Inspector />)
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Unlock the selected audio track before linking.',
+    )
+
+    const linked = makeLinkedFixture()
+    doc().setDoc({
+      ...linked,
+      tracks: linked.tracks.map((track) =>
+        track.id === 'V1'
+          ? { ...track, clips: [...track.clips, makeClip('clipA', 60, 40)] }
+          : track,
+      ),
+    })
+    setMultiSelection(['clipA', 'clipLinkedA'], 'clipLinkedA')
+    rerender(<Inspector />)
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(linkButton()).toHaveAccessibleDescription(
+      'The selected audio clip is already linked. Unlink it first.',
+    )
+  })
+
+  test('activation rechecks fresh state and suppresses a newly locked pair without warning', () => {
+    setMultiSelection(['clipA', 'clipD'], 'clipD')
+    let raced = false
+    render(
+      <div
+        onClickCapture={() => {
+          if (raced) return
+          raced = true
+          const current = doc().doc
+          doc().setDoc({
+            ...current,
+            tracks: current.tracks.map((track) =>
+              track.id === 'A1' ? { ...track, locked: true } : track,
+            ),
+          })
+        }}
+      >
+        <Inspector />
+      </div>,
+    )
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'false')
+
+    fireEvent.click(linkButton())
+
+    expect(doc().doc.tracks[0].clips[0].linkGroupId).toBeUndefined()
+    expect(doc().doc.tracks[1].clips[0].linkGroupId).toBeUndefined()
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(linkButton()).toHaveAccessibleDescription(
+      'Unlock the selected audio track before linking.',
+    )
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('a formerly unavailable Link requires a second activation after becoming eligible', () => {
+    const locked = makeDoc()
+    locked.tracks[1] = { ...locked.tracks[1], locked: true }
+    doc().setDoc(locked)
+    setMultiSelection(['clipA', 'clipD'], 'clipD')
+    let raced = false
+    render(
+      <div
+        onClickCapture={() => {
+          if (raced) return
+          raced = true
+          doc().setDoc(makeDoc())
+        }}
+      >
+        <Inspector />
+      </div>,
+    )
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
+
+    fireEvent.click(linkButton())
+
+    expect(doc().doc.tracks[0].clips[0].linkGroupId).toBeUndefined()
+    expect(doc().doc.tracks[1].clips[0].linkGroupId).toBeUndefined()
+    expect(doc().past).toHaveLength(0)
+    expect(linkButton()).toHaveAttribute('aria-disabled', 'false')
+    expect(screen.getByTestId('inspector-linking-action-status')).toHaveTextContent(
+      'Link availability changed. Review the selected clips, then activate Link again.',
+    )
+
+    fireEvent.click(linkButton())
+    expect(doc().doc.tracks[0].clips[0].linkGroupId).toBeDefined()
+    expect(doc().doc.tracks[1].clips[0].linkGroupId).toBeDefined()
+    expect(doc().past).toHaveLength(1)
+  })
+
+  test('a raced valid selection never links a different pair than the rendered target', () => {
+    setMultiSelection(['clipA', 'clipD'], 'clipD')
+    let raced = false
+    render(
+      <div
+        onClickCapture={() => {
+          if (raced) return
+          raced = true
+          setMultiSelection(['clipB', 'clipD'], 'clipD')
+        }}
+      >
+        <Inspector />
+      </div>,
+    )
+
+    fireEvent.click(linkButton())
+
+    expect(doc().doc.tracks[0].clips[0].linkGroupId).toBeUndefined()
+    expect(doc().doc.tracks[0].clips[1].linkGroupId).toBeUndefined()
+    expect(doc().doc.tracks[1].clips[0].linkGroupId).toBeUndefined()
+    expect(doc().past).toHaveLength(0)
+    expect(screen.getByTestId('inspector-linking-action-status')).toHaveTextContent(
+      'Linking was not completed because the selection changed. Review the selected clips and try again.',
+    )
+  })
+
+  test('a defensive store no-op reports rejection and preserves selection/history', () => {
+    setMultiSelection(['clipA', 'clipD'], 'clipD')
+    const originalLinkClips = doc().linkClips
+    const rejectedLink = vi.fn()
+    useDocumentStore.setState({ linkClips: rejectedLink })
+
+    try {
+      render(<Inspector />)
+      const beforeDoc = doc().doc
+      const beforePast = doc().past
+      const beforeSelection = transport().selectedClipIds
+
+      fireEvent.click(linkButton())
+
+      expect(rejectedLink).toHaveBeenCalledOnce()
+      expect(doc().doc).toBe(beforeDoc)
+      expect(doc().past).toBe(beforePast)
+      expect(transport().selectedClipIds).toBe(beforeSelection)
+      expect(screen.getByTestId('inspector-linking-action-status')).toHaveTextContent(
+        'Linking was rejected because the project changed. Reselect both clips and try again.',
+      )
+    } finally {
+      useDocumentStore.setState({ linkClips: originalLinkClips })
+    }
+  })
+
+  test('keyboard-only Link and Unlink retain both rendered selections, primary, and badges', async () => {
+    const user = userEvent.setup()
+    render(
+      <>
+        <Timeline />
+        <Inspector />
+      </>,
+    )
+
+    const video = screen.getByRole('button', {
+      name: 'clipA.mp4, video clip',
+    })
+    const audio = screen.getByRole('button', {
+      name: 'clipD.mp4, audio clip',
+    })
+    await user.click(video)
+    audio.focus()
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    expect(video).toHaveAttribute('aria-pressed', 'true')
+    expect(audio).toHaveAttribute('aria-pressed', 'true')
+    expect(video).toHaveClass('selected')
+    expect(audio).toHaveClass('selected', 'primary-selected')
+    expect(screen.getByTestId('inspector-panel')).toHaveTextContent('clipD.mp4')
+
+    linkButton().focus()
+    await user.keyboard('{Enter}')
+
+    expect(doc().past).toHaveLength(1)
+    expect(transport().selectedClipIds).toEqual(['clipA', 'clipD'])
+    expect(transport().selectedClipId).toBe('clipD')
+    expect(screen.getByTestId('clip-clipA-link')).toBeInTheDocument()
+    expect(screen.getByTestId('clip-clipD-link')).toBeInTheDocument()
+    expect(video).toHaveAttribute('aria-pressed', 'true')
+    expect(audio).toHaveAttribute('aria-pressed', 'true')
+    expect(audio).toHaveAttribute('data-primary-selected', 'true')
+
+    unlinkButton().focus()
+    expect(unlinkButton()).toHaveAccessibleDescription(
+      'Ready to unlink this audio/video pair.',
+    )
+    await user.keyboard(' ')
+
+    expect(doc().past).toHaveLength(2)
+    expect(screen.queryByTestId('clip-clipA-link')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('clip-clipD-link')).not.toBeInTheDocument()
+    expect(transport().selectedClipIds).toEqual(['clipA', 'clipD'])
+    expect(transport().selectedClipId).toBe('clipD')
+    expect(video).toHaveAttribute('aria-pressed', 'true')
+    expect(audio).toHaveAttribute('aria-pressed', 'true')
+    expect(audio).toHaveAttribute('data-primary-selected', 'true')
+    expect(linkButton()).toHaveFocus()
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+})
+
 describe('linked clips (unlink control)', () => {
   /** V1's 'clipV' and A1's 'clipLinkedA' share a group — a linked pair. */
   function makeLinkedDoc(): TimelineDoc {
@@ -249,6 +643,176 @@ describe('linked clips (unlink control)', () => {
     transport().setSelectedClip('clipLinkedA')
     render(<Inspector />)
     expect(screen.getByTestId('inspector-unlink')).toBeInTheDocument()
+  })
+
+  test('Unlink reacts to either linked track locking, stays focusable, and rejects without warning', () => {
+    doc().setDoc(makeLinkedDoc())
+    transport().setSelectedClip('clipV')
+    render(<Inspector />)
+    expect(unlinkButton()).toHaveAttribute('aria-disabled', 'false')
+
+    const partnerLocked = makeLinkedDoc()
+    partnerLocked.tracks[1] = { ...partnerLocked.tracks[1], locked: true }
+    act(() => doc().setDoc(partnerLocked))
+
+    expect(unlinkButton()).not.toBeDisabled()
+    expect(unlinkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(unlinkButton()).toHaveAccessibleDescription(
+      'Unlock audio track A1 before unlinking.',
+    )
+    unlinkButton().focus()
+    expect(unlinkButton()).toHaveFocus()
+
+    const beforeDoc = doc().doc
+    const beforePast = doc().past
+    fireEvent.click(unlinkButton())
+    expect(doc().doc).toBe(beforeDoc)
+    expect(doc().past).toBe(beforePast)
+    expect(warnSpy).not.toHaveBeenCalled()
+
+    const ownerLocked = makeLinkedDoc()
+    ownerLocked.tracks[0] = { ...ownerLocked.tracks[0], locked: true }
+    act(() => doc().setDoc(ownerLocked))
+    expect(unlinkButton()).toHaveAttribute('aria-disabled', 'true')
+    expect(unlinkButton()).toHaveAccessibleDescription(
+      'Unlock video track V1 before unlinking.',
+    )
+
+    const hiddenAndMuted = makeLinkedDoc()
+    hiddenAndMuted.tracks[0] = { ...hiddenAndMuted.tracks[0], hidden: true }
+    hiddenAndMuted.tracks[1] = { ...hiddenAndMuted.tracks[1], muted: true }
+    act(() => doc().setDoc(hiddenAndMuted))
+    expect(unlinkButton()).toHaveAttribute('aria-disabled', 'false')
+    expect(unlinkButton()).toHaveAccessibleDescription(
+      'Ready to unlink this audio/video pair.',
+    )
+  })
+
+  test('a formerly unavailable Unlink requires a second activation after becoming eligible', () => {
+    const locked = makeLinkedDoc()
+    locked.tracks[1] = { ...locked.tracks[1], locked: true }
+    doc().setDoc(locked)
+    transport().setSelectedClip('clipV')
+    let raced = false
+    render(
+      <div
+        onClickCapture={() => {
+          if (raced) return
+          raced = true
+          doc().setDoc(makeLinkedDoc())
+        }}
+      >
+        <Inspector />
+      </div>,
+    )
+    expect(unlinkButton()).toHaveAttribute('aria-disabled', 'true')
+
+    fireEvent.click(unlinkButton())
+
+    expect(doc().doc.tracks[0].clips[0].linkGroupId).toBe('link_1')
+    expect(doc().doc.tracks[1].clips[0].linkGroupId).toBe('link_1')
+    expect(doc().past).toHaveLength(0)
+    expect(unlinkButton()).toHaveAttribute('aria-disabled', 'false')
+    expect(screen.getByTestId('inspector-linking-action-status')).toHaveTextContent(
+      'Unlink availability changed. Review the selected clip, then activate Unlink again.',
+    )
+
+    fireEvent.click(unlinkButton())
+    expect(doc().doc.tracks[0].clips[0].linkGroupId).toBeUndefined()
+    expect(doc().doc.tracks[1].clips[0].linkGroupId).toBeUndefined()
+    expect(doc().past).toHaveLength(1)
+  })
+
+  test('a selection race keeps its Unlink rejection visible after the button disappears', () => {
+    doc().setDoc(makeLinkedDoc())
+    transport().setSelectedClip('clipV')
+    let raced = false
+    render(
+      <div
+        onClickCapture={() => {
+          if (raced) return
+          raced = true
+          transport().setSelectedClip(null)
+        }}
+      >
+        <Inspector />
+      </div>,
+    )
+    const beforeDoc = doc().doc
+    const beforePast = doc().past
+
+    fireEvent.click(unlinkButton())
+
+    expect(doc().doc).toBe(beforeDoc)
+    expect(doc().past).toBe(beforePast)
+    expect(screen.queryByTestId('inspector-unlink')).not.toBeInTheDocument()
+    expect(screen.getByTestId('inspector-linking-action-status')).toHaveTextContent(
+      'Select a linked clip to unlink its audio/video pair.',
+    )
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('a raced link-group replacement never unlinks a different pair', () => {
+    doc().setDoc(makeLinkedDoc())
+    transport().setSelectedClip('clipV')
+    let raced = false
+    render(
+      <div
+        onClickCapture={() => {
+          if (raced) return
+          raced = true
+          const replacement = makeLinkedDoc()
+          replacement.tracks = replacement.tracks.map((track) => ({
+            ...track,
+            clips: track.clips.map((clip) => ({
+              ...clip,
+              linkGroupId: 'link_2',
+            })),
+          }))
+          doc().setDoc(replacement)
+        }}
+      >
+        <Inspector />
+      </div>,
+    )
+
+    fireEvent.click(unlinkButton())
+
+    expect(doc().doc.tracks[0].clips[0].linkGroupId).toBe('link_2')
+    expect(doc().doc.tracks[1].clips[0].linkGroupId).toBe('link_2')
+    expect(doc().past).toHaveLength(0)
+    expect(screen.getByTestId('inspector-linking-action-status')).toHaveTextContent(
+      'Unlinking was not completed because the linked pair changed. Review the selected clip and try again.',
+    )
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('a defensive Unlink no-op reports rejection without changing references', () => {
+    doc().setDoc(makeLinkedDoc())
+    transport().setSelectedClip('clipV')
+    const originalUnlinkClip = doc().unlinkClip
+    const rejectedUnlink = vi.fn()
+    useDocumentStore.setState({ unlinkClip: rejectedUnlink })
+
+    try {
+      render(<Inspector />)
+      const beforeDoc = doc().doc
+      const beforePast = doc().past
+      const beforeSelection = transport().selectedClipIds
+
+      fireEvent.click(unlinkButton())
+
+      expect(rejectedUnlink).toHaveBeenCalledOnce()
+      expect(doc().doc).toBe(beforeDoc)
+      expect(doc().past).toBe(beforePast)
+      expect(transport().selectedClipIds).toBe(beforeSelection)
+      expect(screen.getByTestId('inspector-linking-action-status')).toHaveTextContent(
+        'Unlinking was rejected because the project changed. Select the linked clip and try again.',
+      )
+      expect(warnSpy).not.toHaveBeenCalled()
+    } finally {
+      useDocumentStore.setState({ unlinkClip: originalUnlinkClip })
+    }
   })
 
   test('clicking unlink dissolves the WHOLE pair in ONE history entry; the button then disappears', () => {
