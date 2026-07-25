@@ -7,11 +7,12 @@
  * the doc changes under them (undo, canvas gestures, clip switching).
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import { initSelectionReconciliation } from '../app/selectionReconciliationController'
 import Inspector from './Inspector'
 
 function makeClip(id: string, tlStart: number, duration: number): Clip {
@@ -109,6 +110,25 @@ describe('Inspector', () => {
     expect(screen.getByTestId('inspector-x')).toHaveValue(0)
     expect(screen.getByTestId('inspector-scale-x')).toHaveValue(1)
     expect(screen.getByTestId('inspector-opacity')).toHaveValue(1)
+  })
+
+  test('follows the promoted primary when the selected clip is deleted', () => {
+    const dispose = initSelectionReconciliation()
+    try {
+      setMultiSelection(['clipA', 'clipB'], 'clipB')
+      render(<Inspector />)
+      expect(screen.getByText('clipB.mp4')).toBeInTheDocument()
+
+      act(() => doc().rippleDelete('clipB'))
+
+      expect(transport()).toMatchObject({
+        selectedClipIds: ['clipA'],
+        selectedClipId: 'clipA',
+      })
+      expect(screen.getByText('clipA.mp4')).toBeInTheDocument()
+    } finally {
+      dispose()
+    }
   })
 
   test('Enter commits ONE updateClipTransform (one undo entry)', () => {

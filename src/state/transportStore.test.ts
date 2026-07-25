@@ -254,6 +254,46 @@ describe('Phase 4.2 tool / selection / edit-preview state', () => {
     })
   })
 
+  test('reconcileClipSelection preserves order and primary while pruning stale ids', () => {
+    getState().toggleClipSelection('clipA')
+    getState().toggleClipSelection('clipB')
+    getState().toggleClipSelection('clipC')
+
+    getState().reconcileClipSelection(new Set(['clipA', 'clipC']))
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipC'],
+      selectedClipId: 'clipC',
+    })
+
+    getState().setSelectedClip(null)
+    getState().toggleClipSelection('clipA')
+    getState().toggleClipSelection('clipB')
+    getState().toggleClipSelection('clipC')
+    getState().reconcileClipSelection(new Set(['clipA', 'clipB']))
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipB'],
+      selectedClipId: 'clipB',
+    })
+
+    getState().reconcileClipSelection(new Set())
+    expect(getState()).toMatchObject({
+      selectedClipIds: [],
+      selectedClipId: null,
+    })
+  })
+
+  test('reconcileClipSelection is reference-stable when every selected id still exists', () => {
+    getState().toggleClipSelection('clipA')
+    getState().toggleClipSelection('clipB')
+    const before = getState()
+    const selectionBefore = before.selectedClipIds
+
+    getState().reconcileClipSelection(new Set(['clipA', 'clipB', 'clipC']))
+
+    expect(getState()).toBe(before)
+    expect(getState().selectedClipIds).toBe(selectionBefore)
+  })
+
   test('editPreview rounds deltas, keeps them signed, and clears', () => {
     getState().setEditPreview({ clipId: 'clipA', kind: 'trim-start', deltaFrames: 4.6 })
     expect(getState().editPreview).toEqual({

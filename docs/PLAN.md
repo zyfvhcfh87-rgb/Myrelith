@@ -768,11 +768,32 @@ Remaining Issue #12 slices own pair selection, relative-offset feedback, the
 accessible Link command, and real-browser interaction/accessibility gates.
 Manual linking is still not user-invokable at this boundary.
 
-## Post-MVP issue #12 — Slice 3 ✅ DONE (2026-07-22) Multi-selection and controls
+### Issue #12 slice-numbering correction (2026-07-25)
 
-At this slice boundary, Issue #12 remains open, but manual linking is now a
-complete user-visible action. Offset-safe linked move previews and the final
-unequal-offset movement acceptance gate remain deliberately deferred.
+The original researched implementation plan has seven slices and remains the
+authoritative delivery boundary. The 2026-07-22 local notes accidentally
+compressed later work into two headings called “Slice 3” and “Slice 4”.
+Those historical headings are retained below only to match the commits they
+described:
+
+- original Slice 3 — global link-group integrity and unequal-edit matrix;
+- original Slice 4 — owner-relative live previews plus group-wide intersection
+  of every linked member’s timeline floor and source headroom;
+- original Slice 5 — ephemeral multi-selection, including document-to-
+  transport reconciliation for stale/deleted ids;
+- original Slice 6 — accessible Link/Unlink control acceptance;
+- original Slice 7 — complete gate and GitHub closeout.
+
+The first historical bundle established much of original Slices 5 and 6; the
+second established the unequal-edit matrix and original Slice 4’s signed-delta
+core. Neither historical label supersedes the seven-slice checklist.
+
+## Post-MVP issue #12 — Historical local Slice 3 bundle ✅ DONE (2026-07-22) Multi-selection and controls
+
+At this historical commit boundary, Issue #12 remains open, but manual linking
+is now a user-visible action. This bundle established the selection/control
+foundation later assigned to original Slices 5 and 6; stale-id lifecycle
+reconciliation, offset-safe previews, and final acceptance remained deferred.
 
 - [x] Replace the single timeline selection with ordered, unique, ephemeral
   `selectedClipIds` plus one primary `selectedClipId` retained for Inspector
@@ -800,15 +821,16 @@ unequal-offset movement acceptance gate remain deliberately deferred.
   unequal source/timeline offsets, status copy, and a zero-warning/error
   console gate.
 
-The remaining Issue #12 slice owns owner-relative `deltaFrames` drag previews
-for manually linked clips with unequal starts, followed by the final Chrome
-movement/accessibility gate and issue closeout. Slice 3 does not claim that
-later acceptance boundary.
+The next historical bundle owns owner-relative `deltaFrames` drag previews for
+manually linked clips with unequal starts and expands the unequal-edit matrix.
+It is not the final boundary of the original seven-slice plan.
 
-## Post-MVP issue #12 — Slice 4 ✅ DONE (2026-07-22) Offset-safe linked previews
+## Post-MVP issue #12 — Historical local Slice 4 bundle ✅ DONE (2026-07-22) Offset-safe linked previews
 
-Issue #12's implementation checklist is complete at this slice boundary. The
-GitHub issue remains open only for an explicit closeout action.
+This historical bundle completes original Slice 4’s signed-delta rendering
+core and most of original Slice 3’s unequal-edit matrix. Original Slice 4
+remains partial because preview bounds still come from the gesture owner rather
+than intersecting every linked member’s timeline floor and source headroom.
 
 - [x] Replace the move preview's owner-absolute `startFrame` with a signed,
   integer `deltaFrames`. Pointer movement remains rAF-coalesced transport state
@@ -828,17 +850,56 @@ GitHub issue remains open only for an explicit closeout action.
 - [x] Verification: 129/129 focused linking/transport/timeline/store tests;
   1,159/1,159 total tests across 64 files; production build, lint, and diff
   checks green.
-- [x] Real Chrome final gate with a generated 320×180 H.264/AAC source: unlink,
-  trim the audio half from timeline frame 30 to 45/source frame 15, relink, and
-  move the video by +20. The live document stayed at 30/45 while ghosts rendered
-  at 50/65; pointerup added one entry, undo/redo restored exact linked states,
-  final unlink preserved 50/65, and playback at timeline frame 94 resolved both
-  halves to source frame 44. Preview rendered the real video and warning/error
-  logs stayed empty.
+- [x] Historical real Chrome movement/playback gate with a generated 320×180
+  H.264/AAC source: unlink, trim the audio half from timeline frame 30 to
+  45/source frame 15, relink, and move the video by +20. The live document
+  stayed at 30/45 while ghosts rendered at 50/65; pointerup added one entry,
+  undo/redo restored exact linked states, final unlink preserved 50/65, and
+  playback at timeline frame 94 resolved both halves to source frame 44.
+  Preview rendered the real video and warning/error logs stayed empty. This was
+  not original Slice 7’s final keyboard/accessibility gate.
 
-No implementation slice remains for Issue #12. Closing the GitHub issue is a
-separate repository action and is not implied by this local implementation
-commit.
+## Post-MVP issue #12 — Slice 5 ✅ DONE (2026-07-25) Ephemeral selection reconciliation
+
+Original Slice 5 is complete at this boundary. Selection is still transport-
+only, but it now remains structurally consistent with every committed document
+snapshot instead of relying on individual edit callers to clear it.
+
+- [x] Add an atomic, document-agnostic `reconcileClipSelection(existingIds)`
+  transport action. It filters stale ids without reordering survivors, retains
+  a still-valid primary, promotes the latest survivor when the primary
+  disappears, clears deterministically when none survive, and returns the exact
+  store reference for a valid no-op.
+- [x] Add `app/selectionReconciliationController` as the only composition seam
+  importing both stores. It reconciles once at initialization and synchronously
+  after every document-reference change; neither store imports the other.
+- [x] Remove the Delete shortcut’s bespoke “clear all selection” branch.
+  Successful delete now prunes only clips that actually disappeared; rejected
+  locked edits preserve the exact selection and history references.
+- [x] Cover stale initialization, primary and linked-pair deletion, undo/redo,
+  split undo, track removal and undo, whole-project replacement, root lifecycle
+  ownership/disposal, reset, primary Inspector compatibility, Ctrl/Cmd
+  interaction, and empty-lane clearing. Undo may restore a clip in the document
+  but never resurrects its prior selection.
+- [x] Prove selection-only changes retain `doc`, `past`, and `future` by
+  reference and produce byte-identical portable project serialization with no
+  `selectedClip*` field.
+- [x] Verification: 82/82 focused tests across six files; 1,173/1,173 total
+  tests across 65 files; production build, lint, and diff checks green.
+- [x] In-app Chromium gate: selected Delta → Ctrl-selected Alpha → Ctrl-selected
+  Bravo (primary); Delete removed only Bravo and promoted Alpha; undo restored
+  Bravo unselected. Deleting Alpha’s track promoted Delta; undo restored the
+  track with Alpha/Bravo still unselected. Inspector followed every primary,
+  the editor had no blocking overlay, and warning/error logs stayed empty.
+
+Original Slice 6 (accessible Link/Unlink acceptance) and Slice 7 (full gate and
+explicit GitHub closeout) remain. Final closeout must also repair and verify:
+
+- the original Slice 3 track-removal integrity gap — removing one track can
+  currently leave a surviving linked partner with an orphaned `linkGroupId`;
+- the original Slice 4 preview-bound gap — live move/trim/ripple/slip limits
+  must intersect every linked member’s timeline floor and source headroom, not
+  only the gesture owner’s.
 
 ## Test strategy per layer (unchanged from original)
 

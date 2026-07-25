@@ -59,14 +59,7 @@ export function useEditShortcuts(): void {
         case 'backspace': {
           const selected = transport.selectedClipId
           if (!selected) return
-          const store = useDocumentStore.getState()
-          const before = store.doc
-          store.rippleDelete(selected)
-          // Clear the selection only if the clip actually went away
-          // (a locked track rejects and keeps the clip).
-          if (useDocumentStore.getState().doc !== before) {
-            transport.setSelectedClip(null)
-          }
+          useDocumentStore.getState().rippleDelete(selected)
           break
         }
         default:

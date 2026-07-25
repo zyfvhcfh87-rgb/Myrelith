@@ -178,8 +178,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   selection against the current document, enables its native Link button only
   for one eligible video + audio pair, and shows the current rejection reason
   otherwise. Selection has no history, no persistence, and no side effects;
-  transportStore never touches documentStore. `resetTransport()` restores
-  every field to its initial value when a different project is activated.
+  transportStore never touches documentStore. The app-only
+  `selectionReconciliationController` is the composition bridge: on each
+  document-reference change it supplies the current clip-id set to
+  `reconcileClipSelection`, which synchronously removes stale ids while
+  preserving survivor order and the current primary (or promoting the latest
+  survivor). Undo can restore document clips but never resurrects selection.
+  `resetTransport()` restores every field to its initial value when a different
+  project is activated.
 - `MediaState` — `src/state/mediaStore.ts`: `descriptors: Map<AssetId,
   PortableAssetDescriptor>` is the durable project catalog, while
   `assets: Map<AssetId, MediaAsset>` is only the currently connected subset.

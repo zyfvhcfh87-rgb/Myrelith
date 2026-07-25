@@ -171,6 +171,9 @@ const renderTrack = () => render(<Track track={v1()} />)
 describe('selection (select tool)', () => {
   test('normal pointer selection replaces the group, begins a move, and empty-lane pointerdown clears it', () => {
     renderTrack()
+    const documentBefore = doc().doc
+    const pastBefore = doc().past
+    const futureBefore = doc().future
     fireEvent.pointerDown(screen.getByTestId('clip-clipA'), { pointerId: 1, clientX: 120 })
     expect(transport().selectedClipId).toBe('clipA')
     expect(transport().selectedClipIds).toEqual(['clipA'])
@@ -194,6 +197,9 @@ describe('selection (select tool)', () => {
     fireEvent.pointerDown(screen.getByTestId('track-V1'), { pointerId: 3, clientX: 700 })
     expect(transport().selectedClipId).toBeNull()
     expect(transport().selectedClipIds).toEqual([])
+    expect(doc().doc).toBe(documentBefore)
+    expect(doc().past).toBe(pastBefore)
+    expect(doc().future).toBe(futureBefore)
   })
 
   test('Ctrl/Command-pointerdown toggles clips, updates primary, and never starts a drag', () => {

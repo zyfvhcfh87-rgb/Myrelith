@@ -25,6 +25,7 @@ import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
 import { useEditShortcuts } from './useEditShortcuts'
 import { initMediaVisuals } from './mediaVisualsController'
 import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
+import { initSelectionReconciliation } from './selectionReconciliationController'
 
 interface EditorShellProps {
   closing: boolean
@@ -76,6 +77,7 @@ function EditorShell({ closing }: EditorShellProps) {
 
 export default function App() {
   useEffect(() => initMediaCapabilityLifecycle(), [])
+  useEffect(() => initSelectionReconciliation(), [])
   const editorActive = useProjectSessionStore(
     (state) => state.screen === 'editor',
   )

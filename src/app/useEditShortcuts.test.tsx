@@ -4,6 +4,7 @@
  * that installs the hook, fire window keydowns, assert store effects.
  */
 
+import { useEffect } from 'react'
 import { render } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
@@ -13,10 +14,12 @@ import {
   useProjectSessionStore,
 } from '../state/projectSessionStore'
 import { useTransportStore } from '../state/transportStore'
+import { initSelectionReconciliation } from './selectionReconciliationController'
 import { useEditShortcuts } from './useEditShortcuts'
 
 function Host() {
   useEditShortcuts()
+  useEffect(() => initSelectionReconciliation(), [])
   return <input data-testid="field" />
 }
 
@@ -181,7 +184,7 @@ describe('arrow keys — frame stepping (Phase 4 gate item)', () => {
 })
 
 describe('Delete — ripple delete the selection', () => {
-  test('deletes the selected clip, closes the gap, clears the selection', () => {
+  test('deletes the selected clip, closes the gap, and prunes its selection', () => {
     render(<Host />)
     transport().setSelectedClip('clipA')
     key({ key: 'Delete' })
@@ -193,6 +196,41 @@ describe('Delete — ripple delete the selection', () => {
     expect(transport().selectedClipId).toBeNull()
     expect(transport().selectedClipIds).toEqual([])
     expect(doc().past).toHaveLength(1)
+  })
+
+  test('deleting the primary preserves other selections through undo and redo', () => {
+    render(<Host />)
+    transport().setSelectedClip('clipB')
+    transport().toggleClipSelection('clipA')
+    expect(transport()).toMatchObject({
+      selectedClipIds: ['clipB', 'clipA'],
+      selectedClipId: 'clipA',
+    })
+
+    key({ key: 'Delete' })
+
+    expect(doc().doc.tracks[0].clips.map((clip) => clip.id)).toEqual(['clipB'])
+    expect(transport()).toMatchObject({
+      selectedClipIds: ['clipB'],
+      selectedClipId: 'clipB',
+    })
+    expect(doc().past).toHaveLength(1)
+
+    doc().undo()
+    expect(doc().doc.tracks[0].clips.map((clip) => clip.id)).toEqual([
+      'clipA',
+      'clipB',
+    ])
+    expect(transport()).toMatchObject({
+      selectedClipIds: ['clipB'],
+      selectedClipId: 'clipB',
+    })
+
+    doc().redo()
+    expect(transport()).toMatchObject({
+      selectedClipIds: ['clipB'],
+      selectedClipId: 'clipB',
+    })
   })
 
   test('Backspace works too; no selection is a no-op', () => {
@@ -209,10 +247,14 @@ describe('Delete — ripple delete the selection', () => {
 
   test('a clip on a locked track survives and STAYS selected', () => {
     render(<Host />)
-    transport().setSelectedClip('clipE')
+    transport().setSelectedClip('clipA')
+    transport().toggleClipSelection('clipE')
     key({ key: 'Delete' })
     expect(doc().doc.tracks[1].clips).toHaveLength(1)
-    expect(transport().selectedClipId).toBe('clipE') // rejection kept it
+    expect(transport()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipE'],
+      selectedClipId: 'clipE',
+    }) // rejection kept the exact selection
     expect(doc().past).toHaveLength(0)
     expect(warnSpy).toHaveBeenCalled()
   })

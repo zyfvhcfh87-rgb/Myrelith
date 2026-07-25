@@ -132,6 +132,12 @@ export interface TransportState {
   /** Add/remove one clip from the ordered selection and update its primary. */
   toggleClipSelection: (clipId: ClipId) => void
   /**
+   * Drop selected ids that no longer exist in the active document. The app
+   * composition root supplies the valid ids so this store stays document-
+   * agnostic; surviving order and primary selection remain stable.
+   */
+  reconcileClipSelection: (existingClipIds: ReadonlySet<ClipId>) => void
+  /**
    * Update or clear the edit-gesture preview. deltaFrames is rounded to an
    * integer (negative allowed — deltas are signed).
    */
@@ -249,6 +255,32 @@ export const useTransportStore = create<TransportState>()((set) => ({
           state.selectedClipId === clipId
             ? (selectedClipIds[selectedClipIds.length - 1] ?? null)
             : state.selectedClipId,
+      }
+    }),
+  reconcileClipSelection: (existingClipIds) =>
+    set((state) => {
+      const selectedClipIds = state.selectedClipIds.filter((clipId) =>
+        existingClipIds.has(clipId),
+      )
+      const selectedClipId =
+        state.selectedClipId !== null &&
+        selectedClipIds.includes(state.selectedClipId)
+          ? state.selectedClipId
+          : (selectedClipIds[selectedClipIds.length - 1] ?? null)
+
+      if (
+        selectedClipIds.length === state.selectedClipIds.length &&
+        selectedClipId === state.selectedClipId
+      ) {
+        return state
+      }
+
+      return {
+        selectedClipIds:
+          selectedClipIds.length === 0
+            ? EMPTY_SELECTED_CLIP_IDS
+            : selectedClipIds,
+        selectedClipId,
       }
     }),
   setEditPreview: (preview) =>
