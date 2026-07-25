@@ -116,6 +116,26 @@ const offlineDescriptor: PortableAssetDescriptor = {
   durationMicroseconds: 3_000_000,
 }
 
+const linkedVideoAsset: MediaAsset = {
+  ...connectedAsset,
+  id: 'asset-linked-video',
+  fileName: 'linked-video.mp4',
+}
+
+const linkedVideoDescriptor: PortableAssetDescriptor = {
+  ...connectedDescriptor,
+  id: linkedVideoAsset.id,
+  fileName: linkedVideoAsset.fileName,
+}
+
+const linkedAudioDescriptor: PortableAssetDescriptor = {
+  ...connectedDescriptor,
+  id: 'asset-linked-audio',
+  fileName: 'linked-audio.mp4',
+  // Exactly 65 document frames at 30 fps after canonical rounding.
+  durationMicroseconds: 2_166_667,
+}
+
 const doc = () => useDocumentStore.getState()
 const transport = () => useTransportStore.getState()
 const v1 = () => doc().doc.tracks[0]
@@ -135,6 +155,65 @@ function installOfflineBoundsFixture(): void {
   })
 }
 
+interface LinkedBoundsFixtureOptions {
+  videoTimelineStart?: number
+  audioTimelineStart?: number
+  videoSourceStart?: number
+  audioSourceStart?: number
+}
+
+function installLinkedBoundsFixture(
+  options: LinkedBoundsFixtureOptions = {},
+): void {
+  const groupId = 'link_preview_bounds'
+  const video = {
+    ...makeClip(
+      'linked-video',
+      options.videoTimelineStart ?? 100,
+      40,
+      options.videoSourceStart ?? 11,
+    ),
+    assetId: linkedVideoAsset.id,
+    linkGroupId: groupId,
+  }
+  const audio = {
+    ...makeClip(
+      'linked-audio',
+      options.audioTimelineStart ?? 35,
+      40,
+      options.audioSourceStart ?? 22,
+    ),
+    assetId: linkedAudioDescriptor.id,
+    linkGroupId: groupId,
+  }
+  doc().setDoc({
+    ...makeDoc(),
+    id: 'doc-linked-bounds',
+    name: 'linked bounds fixture',
+    tracks: [
+      makeTrack('V1', [video]),
+      { ...makeTrack('A1', [audio]), kind: 'audio' },
+    ],
+  })
+  useMediaStore.setState({
+    descriptors: new Map([
+      [linkedVideoDescriptor.id, linkedVideoDescriptor],
+      [linkedAudioDescriptor.id, linkedAudioDescriptor],
+    ]),
+    assets: new Map([[linkedVideoAsset.id, linkedVideoAsset]]),
+    visuals: new Map(),
+  })
+}
+
+function renderLinkedBoundsTracks() {
+  return render(
+    <>
+      <Track track={doc().doc.tracks[0]} />
+      <Track track={doc().doc.tracks[1]} />
+    </>,
+  )
+}
+
 function expectCurrentDocumentToRemainPortable(): void {
   const descriptors = useMediaStore.getState().descriptors.values()
   expect(() => serializeProjectFile(
@@ -146,6 +225,7 @@ let warnSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  warnSpy.mockClear()
   useTransportStore.setState({
     playheadFrame: 0,
     isPlaying: false,
@@ -583,6 +663,243 @@ describe('offline descriptor source bounds', () => {
       durationFrames: 50,
     })
     expect(doc().past).toHaveLength(1)
+    expectCurrentDocumentToRemainPortable()
+  })
+})
+
+describe('linked gesture bounds', () => {
+  test('plain trim-start uses the partner timeline floor for both live ghosts', async () => {
+    installLinkedBoundsFixture({ audioTimelineStart: 2 })
+    renderLinkedBoundsTracks()
+    const video = screen.getByTestId('clip-linked-video')
+    const audio = screen.getByTestId('clip-linked-audio')
+    const before = doc().doc
+
+    fireEvent.pointerDown(screen.getByTestId('clip-linked-video-edge-start'), {
+      pointerId: 18,
+      clientX: 100,
+    })
+    fireEvent.pointerMove(video, { pointerId: 18, clientX: 50 }) // raw -50
+    await waitFor(() => expect(transport().editPreview?.deltaFrames).toBe(-2))
+
+    expect(video).toHaveStyle({ transform: 'translateX(98px)', width: '42px' })
+    expect(audio).toHaveStyle({ transform: 'translateX(0px)', width: '42px' })
+    expect(doc().doc).toBe(before)
+    expect(doc().past).toHaveLength(0)
+
+    fireEvent.pointerUp(video, { pointerId: 18, clientX: 50 })
+
+    expect(doc().doc.tracks[0].clips[0]).toMatchObject({
+      timelineRange: { startFrame: 98, durationFrames: 42 },
+      sourceRange: { startFrame: 9, durationFrames: 42 },
+    })
+    expect(doc().doc.tracks[1].clips[0]).toMatchObject({
+      timelineRange: { startFrame: 0, durationFrames: 42 },
+      sourceRange: { startFrame: 20, durationFrames: 42 },
+    })
+    expect(doc().past).toEqual([before])
+    expect(warnSpy).not.toHaveBeenCalled()
+    expectCurrentDocumentToRemainPortable()
+  })
+
+  test('ripple-start uses the partner source floor while both timeline heads stay fixed', async () => {
+    installLinkedBoundsFixture({ audioSourceStart: 2 })
+    act(() => transport().setTool('trim'))
+    renderLinkedBoundsTracks()
+    const video = screen.getByTestId('clip-linked-video')
+    const audio = screen.getByTestId('clip-linked-audio')
+    const before = doc().doc
+
+    fireEvent.pointerDown(screen.getByTestId('clip-linked-video-edge-start'), {
+      pointerId: 19,
+      clientX: 100,
+    })
+    fireEvent.pointerMove(video, { pointerId: 19, clientX: 50 }) // raw -50
+    await waitFor(() => expect(transport().editPreview).toMatchObject({
+      kind: 'ripple-start',
+      deltaFrames: -2,
+    }))
+
+    expect(video).toHaveStyle({ transform: 'translateX(100px)', width: '42px' })
+    expect(audio).toHaveStyle({ transform: 'translateX(35px)', width: '42px' })
+    expect(doc().doc).toBe(before)
+
+    fireEvent.pointerUp(video, { pointerId: 19, clientX: 50 })
+
+    expect(doc().doc.tracks[0].clips[0]).toMatchObject({
+      timelineRange: { startFrame: 100, durationFrames: 42 },
+      sourceRange: { startFrame: 9, durationFrames: 42 },
+    })
+    expect(doc().doc.tracks[1].clips[0]).toMatchObject({
+      timelineRange: { startFrame: 35, durationFrames: 42 },
+      sourceRange: { startFrame: 0, durationFrames: 42 },
+    })
+    expect(doc().past).toEqual([before])
+    expect(warnSpy).not.toHaveBeenCalled()
+    expectCurrentDocumentToRemainPortable()
+  })
+
+  test('trim-end uses the offline partner asset headroom for both live ghosts and commit', async () => {
+    installLinkedBoundsFixture()
+    renderLinkedBoundsTracks()
+    const video = screen.getByTestId('clip-linked-video')
+    const audio = screen.getByTestId('clip-linked-audio')
+    const before = doc().doc
+
+    fireEvent.pointerDown(screen.getByTestId('clip-linked-video-edge-end'), {
+      pointerId: 20,
+      clientX: 140,
+    })
+    fireEvent.pointerMove(video, { pointerId: 20, clientX: 190 }) // raw +50
+    await waitFor(() => expect(transport().editPreview?.deltaFrames).toBe(3))
+
+    expect(video).toHaveStyle({ width: '43px' })
+    expect(audio).toHaveStyle({ width: '43px' })
+    expect(doc().doc).toBe(before)
+    expect(doc().past).toHaveLength(0)
+
+    fireEvent.pointerUp(video, { pointerId: 20, clientX: 190 })
+
+    const videoClip = doc().doc.tracks[0].clips[0]
+    const audioClip = doc().doc.tracks[1].clips[0]
+    expect(videoClip.sourceRange).toEqual({ startFrame: 11, durationFrames: 43 })
+    expect(audioClip.sourceRange).toEqual({ startFrame: 22, durationFrames: 43 })
+    expect(audioClip.sourceRange.startFrame + audioClip.sourceRange.durationFrames).toBe(65)
+    expect(doc().past).toEqual([before])
+    expect(warnSpy).not.toHaveBeenCalled()
+    expectCurrentDocumentToRemainPortable()
+  })
+
+  test('pointer-up cancels when the document changes during a linked trim', async () => {
+    installLinkedBoundsFixture()
+    renderLinkedBoundsTracks()
+    const video = screen.getByTestId('clip-linked-video')
+
+    fireEvent.pointerDown(screen.getByTestId('clip-linked-video-edge-end'), {
+      pointerId: 24,
+      clientX: 140,
+    })
+    fireEvent.pointerMove(video, { pointerId: 24, clientX: 190 })
+    await waitFor(() => expect(transport().editPreview?.deltaFrames).toBe(3))
+
+    act(() => doc().unlinkClip('linked-video'))
+    const interveningDoc = doc().doc
+    const interveningPast = doc().past
+    const interveningFuture = doc().future
+    expect(interveningDoc.tracks[0].clips[0].linkGroupId).toBeUndefined()
+    expect(interveningDoc.tracks[1].clips[0].linkGroupId).toBeUndefined()
+
+    fireEvent.pointerUp(video, { pointerId: 24, clientX: 190 })
+
+    expect(doc().doc).toBe(interveningDoc)
+    expect(doc().past).toBe(interveningPast)
+    expect(doc().future).toBe(interveningFuture)
+    expect(interveningDoc.tracks[0].clips[0].sourceRange).toEqual({
+      startFrame: 11,
+      durationFrames: 40,
+    })
+    expect(interveningDoc.tracks[1].clips[0].sourceRange).toEqual({
+      startFrame: 22,
+      durationFrames: 40,
+    })
+    expect(transport().dragPreview).toBeNull()
+    expect(transport().editPreview).toBeNull()
+    expect(warnSpy).not.toHaveBeenCalled()
+    expectCurrentDocumentToRemainPortable()
+  })
+
+  test('ripple-end routes through the same offline partner headroom', async () => {
+    installLinkedBoundsFixture()
+    act(() => transport().setTool('trim'))
+    renderLinkedBoundsTracks()
+    const video = screen.getByTestId('clip-linked-video')
+    const audio = screen.getByTestId('clip-linked-audio')
+    const before = doc().doc
+
+    fireEvent.pointerDown(screen.getByTestId('clip-linked-video-edge-end'), {
+      pointerId: 22,
+      clientX: 140,
+    })
+    fireEvent.pointerMove(video, { pointerId: 22, clientX: 190 })
+    await waitFor(() => expect(transport().editPreview).toMatchObject({
+      kind: 'ripple-end',
+      deltaFrames: 3,
+    }))
+
+    expect(video).toHaveStyle({ width: '43px' })
+    expect(audio).toHaveStyle({ width: '43px' })
+    expect(doc().doc).toBe(before)
+
+    fireEvent.pointerUp(video, { pointerId: 22, clientX: 190 })
+
+    expect(doc().doc.tracks[0].clips[0].sourceRange).toEqual({
+      startFrame: 11,
+      durationFrames: 43,
+    })
+    expect(doc().doc.tracks[1].clips[0].sourceRange).toEqual({
+      startFrame: 22,
+      durationFrames: 43,
+    })
+    expect(doc().past).toEqual([before])
+    expect(warnSpy).not.toHaveBeenCalled()
+    expectCurrentDocumentToRemainPortable()
+  })
+
+  test('slip uses the same partner headroom and stays one portable history entry', async () => {
+    installLinkedBoundsFixture()
+    act(() => transport().setTool('slip'))
+    renderLinkedBoundsTracks()
+    const video = screen.getByTestId('clip-linked-video')
+    const before = doc().doc
+
+    fireEvent.pointerDown(video, { pointerId: 21, clientX: 120 })
+    fireEvent.pointerMove(video, { pointerId: 21, clientX: 200 }) // raw +80
+    await waitFor(() => expect(transport().editPreview?.deltaFrames).toBe(3))
+    expect(doc().doc).toBe(before)
+
+    fireEvent.pointerUp(video, { pointerId: 21, clientX: 200 })
+
+    expect(doc().doc.tracks[0].clips[0].sourceRange).toEqual({
+      startFrame: 14,
+      durationFrames: 40,
+    })
+    expect(doc().doc.tracks[1].clips[0].sourceRange).toEqual({
+      startFrame: 25,
+      durationFrames: 40,
+    })
+    expect(doc().past).toEqual([before])
+    expect(warnSpy).not.toHaveBeenCalled()
+    expectCurrentDocumentToRemainPortable()
+  })
+
+  test('negative slip stops at the smallest linked source in-point', async () => {
+    installLinkedBoundsFixture({ audioSourceStart: 2 })
+    act(() => transport().setTool('slip'))
+    renderLinkedBoundsTracks()
+    const video = screen.getByTestId('clip-linked-video')
+    const audio = screen.getByTestId('clip-linked-audio')
+    const before = doc().doc
+
+    fireEvent.pointerDown(video, { pointerId: 23, clientX: 120 })
+    fireEvent.pointerMove(video, { pointerId: 23, clientX: 40 }) // raw -80
+    await waitFor(() => expect(transport().editPreview?.deltaFrames).toBe(-2))
+
+    expect(video).toHaveStyle({ transform: 'translateX(100px)', width: '40px' })
+    expect(audio).toHaveStyle({ transform: 'translateX(35px)', width: '40px' })
+    expect(doc().doc).toBe(before)
+
+    fireEvent.pointerUp(video, { pointerId: 23, clientX: 40 })
+
+    expect(doc().doc.tracks[0].clips[0].sourceRange).toEqual({
+      startFrame: 9,
+      durationFrames: 40,
+    })
+    expect(doc().doc.tracks[1].clips[0].sourceRange).toEqual({
+      startFrame: 0,
+      durationFrames: 40,
+    })
+    expect(doc().past).toEqual([before])
+    expect(warnSpy).not.toHaveBeenCalled()
     expectCurrentDocumentToRemainPortable()
   })
 })

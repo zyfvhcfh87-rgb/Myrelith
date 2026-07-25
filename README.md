@@ -21,8 +21,9 @@ complete MVP editing and MP4 export flow.
   for Ready sources.
 - Edit on a multi-track timeline with select, razor, trim, ripple trim, slip,
   and slide tools, including dragging clips between same-kind tracks.
-- Keep imported audio/video pairs linked through edits, with manual unlinking
-  and exact undo/redo history.
+- Keep imported audio/video pairs linked through edits, or manually link and
+  re-link exactly one eligible unlinked video clip with one eligible unlinked
+  audio clip, with manual unlinking and exact undo/redo history.
 - Hide, mute, solo, lock, rename, add, and remove tracks.
 - Adjust video transforms, opacity, and per-clip audio volume in the Inspector.
 - Author visual crossfades directly at eligible timeline seams.
@@ -79,6 +80,9 @@ Desktop Chrome is the primary development target. Windows Chrome 150 and Edge
 150 have both passed the VP9/Opus import, thumbnail, waveform, linked-drop,
 seek, live-audio, cancellation, and MP4 export gate. Edge is Chromium-based,
 so Firefox, Safari/WebKit, and independent-engine behavior remain unverified.
+Chrome 150 has also passed the complete manual A/V linking gate with actual
+H.264/AAC import, unlink/re-link, unequal offsets, group-safe track removal,
+live linked movement, undo/redo, playback, and a clean console.
 Playback and export require WebCodecs, transferable `OffscreenCanvas`, Web
 Audio, workers, and browser support for the source and output codecs.
 
@@ -132,8 +136,9 @@ boundary are recorded in
 - Crossfades are visual-only, so audio still hard-cuts. Dissolves involving
   transformed or transparent footage are not yet mathematically exact.
 - The import UI accepts video and audio files. Images are not previewable.
-- Linked audio/video pairs can be unlinked, but arbitrary clips cannot be
-  manually re-linked yet.
+- Manual linking accepts exactly one unlinked video clip plus one unlinked
+  audio clip. Replacing or merging an existing link group requires explicit
+  Unlink first.
 - Native media compatibility depends on the codecs exposed by the browser and
   operating system. WebCut has bounded local decoder fallbacks for ProRes and
   AC-3/E-AC-3, plus explicit video-only/audio-only import when exactly one whole

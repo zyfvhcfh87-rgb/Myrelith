@@ -594,6 +594,89 @@ describe('track actions', () => {
     expect(JSON.stringify(getState().doc)).toBe(initialJson)
   })
 
+  test('linked track removal dissolves the survivor in one undoable entry', () => {
+    const base = makeDoc()
+    const groupId = 'link_track_history'
+    const initial = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => {
+        if (track.id === 'V1') {
+          return {
+            ...track,
+            clips: [
+              { ...track.clips[0], linkGroupId: groupId },
+              track.clips[1],
+            ],
+          }
+        }
+        if (track.id === 'A1') {
+          return {
+            ...track,
+            clips: [{ ...track.clips[0], linkGroupId: groupId }],
+          }
+        }
+        return track
+      }),
+    })
+    getState().setDoc(initial)
+
+    getState().removeTrack('V1')
+    const removed = getState().doc
+    const survivor = removed.tracks.find((track) => track.id === 'A1')?.clips[0]
+    expect(getState().past).toEqual([initial])
+    expect(removed.tracks.some((track) => track.id === 'V1')).toBe(false)
+    expect(survivor).toBeDefined()
+    expect('linkGroupId' in (survivor as Clip)).toBe(false)
+
+    getState().undo()
+    expect(getState().doc).toBe(initial)
+    expect(getState().doc.tracks[0].clips[0].linkGroupId).toBe(groupId)
+
+    getState().redo()
+    expect(getState().doc).toBe(removed)
+    expect(getState().past).toEqual([initial])
+  })
+
+  test('locked linked survivor rejects track removal without touching redo', () => {
+    const base = makeDoc()
+    const groupId = 'link_locked_track_history'
+    const linked = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => {
+        if (track.id === 'V1') {
+          return {
+            ...track,
+            clips: [
+              { ...track.clips[0], linkGroupId: groupId },
+              track.clips[1],
+            ],
+          }
+        }
+        if (track.id === 'A1') {
+          return {
+            ...track,
+            locked: true,
+            clips: [{ ...track.clips[0], linkGroupId: groupId }],
+          }
+        }
+        return track
+      }),
+    })
+    getState().setDoc(linked)
+    getState().renameTrack('V2', 'Temporary name')
+    getState().undo()
+    const before = getState()
+
+    getState().removeTrack('V1')
+
+    expect(getState().doc).toBe(before.doc)
+    expect(getState().past).toBe(before.past)
+    expect(getState().future).toBe(before.future)
+    expect(getState().doc.tracks.some((track) => track.id === 'V1')).toBe(true)
+    expect(getState().doc.tracks[0].clips[0].linkGroupId).toBe(groupId)
+    expect(warnSpy).toHaveBeenCalledOnce()
+  })
+
   test('removeTrack on a locked track warns and pushes no history', () => {
     getState().setTrackFlags('A1', { locked: true })
     const before = getState().doc

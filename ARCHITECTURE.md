@@ -118,6 +118,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   manually linked partners may have different assets and ranges. Link-group
   ids are minted against the current document so a UUID collision cannot
   merge unrelated pairs. Re-linking requires an explicit unlink first.
+  Track removal must never leave a one-clip link group: removing an unlocked
+  track dissolves the group id on each lone unlocked survivor in the same
+  document mutation; if a required survivor is on a locked track, the entire
+  removal rejects by returning the original document reference.
 
 ## Store action contracts
 
@@ -132,8 +136,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `addTrack(kind)`, `setTrackFlags(trackId, {hidden?, muted?, solo?,
   locked?})` (idempotent patches push no history entry; flags and
   renames WORK on locked tracks — metadata, not content),
-  `renameTrack(trackId, name)`, `removeTrack(trackId)` (locked tracks
-  reject), `addCrossfade(fromClipId, toClipId, durationFrames)`,
+  `renameTrack(trackId, name)`, `removeTrack(trackId)` (a locked target
+  rejects; surviving linked partners are unlinked atomically, while a locked
+  survivor rejects the whole removal), `addCrossfade(fromClipId, toClipId,
+  durationFrames)`,
   `setCrossfadeDuration(trackId, transitionId, durationFrames)`,
   `removeTransition(trackId, transitionId)`,
   `setClipVolume(clipId, volume)` (clamped [0,2]),
@@ -172,9 +178,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   ({clipId, kind, deltaFrames,
   linkGroupId?} | null — same live-preview contract for trim/ripple/
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
-  ghost a linked gesture live. Normal pointer or unmodified keyboard selection
-  replaces both selection fields; Ctrl/Cmd pointer or keyboard activation
-  toggles membership and promotes the newly added clip to primary. The
+  ghost a linked gesture live. At pointerdown, `ui/timeline/gestureBounds.ts`
+  uses one fresh document/media snapshot to intersect every participating
+  linked member's legal signed-delta interval, so no owner can preview beyond
+  a partner's timeline, source, duration, and headroom bounds. The
+  gesture session retains that exact pointer-down document reference and group
+  identity; if the committed document changes before pointerup, the preview is
+  cleared and no stale commit is dispatched. Normal pointer or unmodified
+  keyboard selection replaces both selection fields; Ctrl/Cmd pointer or
+  keyboard activation toggles membership and promotes the newly added clip to
+  primary. The
   Inspector resolves the live selection against the current document. Its
   native Link/Unlink commands remain keyboard-focusable and expose
   `aria-disabled` while unavailable; activation dispatches only for the exact

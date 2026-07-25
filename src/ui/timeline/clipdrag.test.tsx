@@ -547,6 +547,91 @@ describe('linked clip gestures (A/V pairs)', () => {
     expect(audClip().timelineRange.startFrame).toBe(92)
   })
 
+  test('linked move clamps live to the earliest partner timeline floor', async () => {
+    doc().setDoc(makeUnequalLinkedDoc())
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    render(
+      <>
+        <Track track={v1()} />
+        <Track track={a1()} />
+      </>,
+    )
+    const videoEl = screen.getByTestId('clip-vid')
+    const audioEl = screen.getByTestId('clip-aud')
+    const before = doc().doc
+
+    fireEvent.pointerDown(videoEl, { pointerId: 11, clientX: 500 })
+    fireEvent.pointerMove(videoEl, { pointerId: 11, clientX: 400 }) // raw -100
+    await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(-35))
+
+    expect(videoEl).toHaveStyle({ transform: 'translateX(65px)' })
+    expect(audioEl).toHaveStyle({ transform: 'translateX(0px)' })
+    expect(doc().doc).toBe(before)
+    expect(doc().past).toHaveLength(0)
+
+    fireEvent.pointerUp(videoEl, { pointerId: 11, clientX: 400 })
+
+    expect(vidClip().timelineRange.startFrame).toBe(65)
+    expect(audClip().timelineRange.startFrame).toBe(0)
+    expect(
+      vidClip().timelineRange.startFrame - audClip().timelineRange.startFrame,
+    ).toBe(65)
+    expect(doc().past).toEqual([before])
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  test('capture-phase unlink uses the fresh group identity for the gesture session', () => {
+    doc().setDoc(makeUnequalLinkedDoc())
+    render(
+      <div onPointerDownCapture={() => doc().unlinkClip('vid')}>
+        <Track track={v1()} />
+        <Track track={a1()} />
+      </div>,
+    )
+    const videoEl = screen.getByTestId('clip-vid')
+
+    fireEvent.pointerDown(videoEl, { pointerId: 12, clientX: 500 })
+
+    expect(vidClip().linkGroupId).toBeUndefined()
+    expect(audClip().linkGroupId).toBeUndefined()
+    expect(transport().dragPreview).toMatchObject({
+      clipId: 'vid',
+      deltaFrames: 0,
+    })
+    expect(transport().dragPreview?.linkGroupId).toBeUndefined()
+    fireEvent.pointerUp(videoEl, { pointerId: 12, clientX: 500 })
+  })
+
+  test('capture-phase deletion cannot reintroduce a stale selected clip id', () => {
+    doc().setDoc(makeUnequalLinkedDoc())
+    act(() => transport().setSelectedClip('aud'))
+    render(
+      <div
+        onPointerDownCapture={() => {
+          const current = doc().doc
+          doc().setDoc({
+            ...current,
+            tracks: current.tracks.map((track) =>
+              track.id === 'V1' ? { ...track, clips: [] } : track,
+            ),
+          })
+        }}
+      >
+        <Track track={v1()} />
+        <Track track={a1()} />
+      </div>,
+    )
+    const staleVideoEl = screen.getByTestId('clip-vid')
+
+    fireEvent.pointerDown(staleVideoEl, { pointerId: 13, clientX: 500 })
+
+    expect(doc().doc.tracks[0].clips).toEqual([])
+    expect(transport().dragPreview).toBeNull()
+    expect(transport().selectedClipIds).toEqual(['aud'])
+    expect(transport().selectedClipId).toBe('aud')
+  })
+
   test('an unequal linked collision snaps both previews back and commits no history', async () => {
     doc().setDoc(makeUnequalLinkedDoc(true))
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})

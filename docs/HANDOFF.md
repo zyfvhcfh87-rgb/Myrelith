@@ -61,15 +61,15 @@ and the open list below.
 | Post-MVP #12 — manual linking Slice 2 | ✅ done | canonical history-backed store action; one-entry link, exact undo/redo id, rejection preserves populated redo branches; 90 focused + 1,142 total tests; no rendered behavior yet |
 | Post-MVP #12 — historical local Slice 3 bundle | ✅ done | multi-selection/control foundation (maps into original Slices 5–6); 54 focused + 1,152 total tests; in-app Chromium interaction gate |
 | Post-MVP #12 — historical local Slice 4 bundle | ✅ done | signed-delta linked move previews + unequal edit/rollback matrix (maps into original Slices 3–4); 129 focused + 1,159 total tests; real Chrome A/V gate |
-| Post-MVP #12 — original Slice 3 integrity | ⚠️ partial | unequal edit/rollback matrix covered; track removal can still orphan a surviving linked partner |
-| Post-MVP #12 — original Slice 4 previews | ⚠️ partial | signed-delta rendering covered; live bounds still use only the gesture owner instead of every linked member |
+| Post-MVP #12 — original Slice 3 integrity | ✅ done | unequal edit/rollback matrix plus orphan-safe track removal; each lone unlocked survivor is unlinked in the same one-entry operation, while a locked survivor rejects atomically |
+| Post-MVP #12 — original Slice 4 previews | ✅ done | signed-delta rendering plus fresh group-wide pointerdown bounds for move/trim/ripple/slip/slide across connected and offline media |
 | Post-MVP #12 — original Slice 5 | ✅ done | app-level stale/deleted selection reconciliation; surviving-primary promotion, undo non-resurrection, track/project replacement, and history/serialization isolation; 82 focused + 1,173 total tests; in-app Chromium delete/undo/track-removal gate |
 | Post-MVP #12 — original Slice 6 | ✅ done | focusable pressed clip controls + focusable `aria-disabled` Inspector Link/Unlink with visible described reasons; exact-target race rejection, retained pair selection/primary, badges/highlighting, focus handoff; 100 focused + 1,184 total tests; targeted in-app Chromium accessibility gate |
-| Post-MVP #12 — original Slice 7 / closeout | ⏳ remaining | repair the existing Slice 3 orphan and Slice 4 group-bound gaps, then run the complete regression/browser gate and explicitly close GitHub #12 |
+| Post-MVP #12 — original Slice 7 / closeout | ✅ complete | orphan-safe removal, group-wide bounds, and immutable pointerdown document guard; 359 focused + 1,209 total tests; Chrome 150 full import/re-link/move/undo/redo/playback gate with a clean console |
 
-1,184 tests green · `npm run build` passes with the known large-chunk warning
+1,209 tests green across 66 files · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
-`npm run lint` clean · every phase
+`npm run lint` clean · `npm audit --omit=dev` reports 0 vulnerabilities · every phase
 committed separately (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -511,8 +511,14 @@ Inspector primary when needed, and undo restores document content without
 resurrecting selection. The historical Slice 4 bundle
 stores a signed drag delta instead of the gesture owner's absolute start, so
 every linked member ghosts from its own committed start even when manual
-linking preserved unequal timeline offsets. Pointer movement remains transport-
-only and pointerup still commits one atomic linked move. Transform
+linking preserved unequal timeline offsets. Slice 7 now derives a shared legal
+delta at pointerdown by intersecting the owner and linked partner's timeline,
+source, duration, and headroom bounds from one fresh document/media snapshot.
+The gesture keeps that exact document reference; if document state changes
+before release, its preview is cleared and pointerup cannot commit stale
+geometry.
+Pointer movement remains transport-only and pointerup still commits one atomic
+linked move. Transform
 and volume stay per-half on purpose. The full editing toolset (4.2): toolbar
 buttons or A/B/T/Y/U — select (normal click selects one, body
 drag moves horizontally or between same-kind lanes with snap-back on illegal
@@ -550,7 +556,9 @@ get stripes + a not-allowed cursor. Track management (4.3.6):
 double-click a header to RENAME inline (Enter/blur commits, Escape
 cancels; the badge shows the name, the id never changes), the ×
 DELETES a track with its clips (one undo restores both; disabled
-while locked), and audio rows have SOLO next to mute — while any
+while locked). The same operation dissolves the group id on every lone
+unlocked linked survivor; a locked survivor rejects the whole deletion, so no
+orphaned group can enter history. Audio rows have SOLO next to mute — while any
 track is solo the other audio lanes dim. Solo/mute semantics live in
 ONE place, domain `audibleTracks` (mute wins over solo); both export and live
 playback consume that selector rather than re-deriving flags. Clip visuals
@@ -579,7 +587,9 @@ surface; it is not a second zoom and never enters document history.
   `time.ts` (conversions incl. exact integer microseconds,
   `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn;
-  5.1e-1 track-scoped `addCrossfade`/`setCrossfadeDuration`/
+  Slice 7 `removeTrack` atomically dissolves lone unlocked link survivors or
+  rejects for a locked survivor; 5.1e-1 track-scoped
+  `addCrossfade`/`setCrossfadeDuration`/
   `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
   `resolveCrossfade` (canonical centered-window geometry),
@@ -800,13 +810,19 @@ surface; it is not a second zoom and never enters document history.
   ancestor (app shell marks it; bare tests get a fallback window), and local
   positions relative to the bounded timeline origin; the logical endpoint
   always gets a right-anchored end label in the last physical window.
+- `src/ui/timeline/gestureBounds.ts` — pure Slice 7 pointerdown interval
+  intersection across the gesture owner and linked partner, using one fresh
+  document/media snapshot for timeline, source, duration, and headroom
+  bounds in both connected and offline sessions.
 - `src/ui/timeline/ClipView.tsx` — the 4.2 gesture heart: one session ref
   routes body/edge pointerdowns by the CURRENT tool (getState(), not the
   render closure!); previews via transportStore.editPreview, one commit
-  per gesture; slip clamps live against mediaStore asset bounds. Slice 6 keeps
-  the clip root a stable pressed button, preserves independent focus/selected/
-  primary visuals, hides decorative link badges from its accessible name, and
-  highlights every live linked-preview participant. Long clips
+  per gesture; slip clamps live against mediaStore asset bounds. Slice 7 keeps
+  the immutable pointerdown document reference in that session, clears its
+  preview if the document changes, and skips any stale pointerup commit.
+  Slice 6 keeps the clip root a stable pressed button, preserves independent
+  focus/selected/primary visuals, hides decorative link badges from its
+  accessible name, and highlights every live linked-preview participant. Long clips
   render only their intersection with the bounded window; filmstrip buckets
   and the normalized waveform viewBox remain aligned to the original source.
   `ui/Toolbar.tsx` = tool buttons; `app/useEditShortcuts.ts` = A/B/T/Y/U,
@@ -961,38 +977,49 @@ surface; it is not a second zoom and never enters document history.
   opt-in, quota/eviction UX, and a separate security/storage review.
 - Issue #12 follows the original seven-slice blueprint; the older local
   “Slice 3/4” labels were compressed commit notes, not authoritative
-  renumbering. Original Slices 1, 2, 5, and 6 are complete: the pure manual-link
-  contract, canonical history-backed store action, and reconciled ephemeral
-  pointer/keyboard pair selection are in place. Original Slice 3’s unequal
-  edit/rollback matrix and Slice 4’s signed-delta rendering core are present,
-  but both remain partial: track removal can orphan a surviving linked partner,
-  and live move/trim/ripple/slip bounds still come only from the gesture owner
-  instead of intersecting every member’s timeline floor/source headroom. The
-  standalone Inspector Link/Unlink acceptance gate is complete: commands stay
-  focusable while unavailable, visible described reasons and live race
-  rejection feedback are exact, pair selection/primary survives Link/Unlink,
-  badges and partner highlights remain, and focus is handed back after Unlink.
-  Selection reconciliation prunes
-  only missing ids after delete, split undo, track removal, or project
-  replacement; it preserves survivor order/primary, never resurrects on undo,
-  and leaves document history and portable serialization untouched. Manual
-  linking also includes an accessible Inspector Link control for one unlinked
-  video plus one unlinked audio clip. Unequal assets/ranges/offsets are
-  collision-safe; one link is one undo entry; redo restores the exact authored
-  id; every rejection leaves even a populated redo branch untouched. Link is
-  user-invokable now, with visible reasons for invalid/stale selections and the
-  existing Unlink/badges/partner highlighting retained. Linked move preview is
-  now a signed shared delta, so unequal-offset partners ghost from their own
-  starts while the committed document stays untouched until one pointerup
-  action. The unequal move/trim/ripple/slip/slide/split/delete matrix and atomic
-  rejection rollback are covered. The historical real Chrome
-  movement/playback gate passed relink, unequal trim/offset, live linked move,
-  exact undo/redo, final unlink, and phase-synced A/V playback with no
-  warning/error logs; it was not original Slice 7’s final gate. Before original
-  Slice 7 can close the still-open GitHub issue, original Slice 3’s
-  track-removal orphan gap and original Slice 4’s group-wide preview-bound gap
-  must be repaired, then the complete cross-slice regression/browser gate and
-  explicit GitHub closeout remain.
+  renumbering. All seven original slices are complete. The pure manual-link
+  contract, canonical one-entry store action, exact undo/redo identity,
+  reconciled ephemeral pair selection, accessible Link/Unlink controls,
+  unequal-edit matrix, and signed owner-relative previews are all in place.
+  Track removal can no longer create an orphan group: it dissolves every lone
+  unlocked survivor in the same history entry, while a locked survivor rejects
+  the whole operation by reference. `gestureBounds.ts` intersects every linked
+  participant’s timeline, source, duration, and headroom interval from one
+  fresh pointerdown document/media snapshot. A gesture retains that exact
+  document reference; a mid-gesture document replacement clears the preview
+  and skips the stale pointerup commit. Collision safety remains enforced by
+  the canonical domain operation at commit, with rejection snapping the
+  previews back and adding no history.
+  Selection reconciliation prunes only missing ids after delete, split undo,
+  track removal, or project replacement; it preserves survivor order/primary,
+  never resurrects on undo, and leaves document history and portable
+  serialization untouched. Link accepts exactly one unlinked video and one
+  unlinked audio clip in either selection order. Unequal assets, ranges, and
+  offsets are supported; redo restores the exact authored group id; every
+  rejection preserves even a populated redo branch. Focusable pressed clip
+  controls, visible described reasons, latest-state race checks, badges,
+  partner highlighting, retained selection/primary, keyboard activation, and
+  post-Unlink focus handoff complete the acceptance surface.
+  Final verification passed 359 focused Issue #12 tests across 12 files and
+  1,209 total tests across 66 files. Build passed with only the known three
+  chunks above 500 kB; lint passed; `npm audit --omit=dev` reported 0
+  vulnerabilities; diff checking was clean apart from informational
+  line-ending notices.
+  Real Chrome 150 at 1600×1000 passed the final gate through the supported file
+  input fallback with an actual 2.0 s 320×180 30 fps H.264 + mono 48 kHz AAC
+  fixture. Import reached Ready and dropped the linked pair. Deleting V1
+  dissolved A1’s lone link and Ctrl+Z restored both V1 and the pair. After
+  Unlink, an audio head trim changed the timeline/source/duration tuple from
+  20/0/60 to 30/10/50 while V1 stayed
+  20/0/60; keyboard pair selection and Link restored the unequal-offset pair.
+  A live +15 move rendered 35/45 while the document remained 20/30 and history
+  remained at 4; release added exactly one entry at 35/45 with offset 10.
+  Ctrl+Z restored 20/30 and Ctrl+Y restored 35/45. Keyboard activation then
+  performed the final Unlink. Playback at timeline frame 62 mapped both clips
+  to source frame 27, rendered the real video, and reported 35 live audio nodes
+  with RMS 0.0898. Chrome recorded 0 warnings and 0 errors. All 30 GitHub #12
+  checklist items now have matching code, test, and browser evidence for the
+  normal-merge closeout.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their

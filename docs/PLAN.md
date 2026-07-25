@@ -827,10 +827,11 @@ It is not the final boundary of the original seven-slice plan.
 
 ## Post-MVP issue #12 — Historical local Slice 4 bundle ✅ DONE (2026-07-22) Offset-safe linked previews
 
-This historical bundle completes original Slice 4’s signed-delta rendering
-core and most of original Slice 3’s unequal-edit matrix. Original Slice 4
-remains partial because preview bounds still come from the gesture owner rather
-than intersecting every linked member’s timeline floor and source headroom.
+This historical bundle completed original Slice 4’s signed-delta rendering
+core and most of original Slice 3’s unequal-edit matrix. At this historical
+boundary, original Slice 4 remained partial because preview bounds still came
+from the gesture owner rather than intersecting every linked member’s timeline
+and source constraints. Original Slice 7 later closed that gap.
 
 - [x] Replace the move preview's owner-absolute `startFrame` with a signed,
   integer `deltaFrames`. Pointer movement remains rAF-coalesced transport state
@@ -922,14 +923,50 @@ history ownership into React.
   warning/error console gate. RTL `user-event` covers native Enter/Space Link
   and Unlink activation end-to-end.
 
-Issue #12 remains open. Original Slice 7 still owns the complete cross-slice
-regression/browser gate and explicit GitHub closeout. Before it can close,
-final work must also:
+## Post-MVP issue #12 — Slice 7 ✅ DONE (2026-07-25) Final integrity and closeout
 
-- repair original Slice 3 track-removal integrity so removing one track cannot
-  leave a surviving linked partner with an orphaned `linkGroupId`;
-- complete original Slice 4 preview bounds by intersecting every linked
-  member’s timeline floor and source headroom, not only the gesture owner’s.
+Original Slice 7 completes the cross-slice integrity, regression, and real-
+browser gate. All seven slices in the authoritative Issue #12 blueprint now
+have concrete code, test, and browser evidence.
+
+- [x] Repair track-removal integrity in the pure domain operation. Removing an
+  unlocked track now dissolves the group id on each lone unlocked survivor in
+  the same document/history mutation. If a required survivor is on a locked
+  track, the whole removal rejects with the original document reference, so no
+  orphan or partial history state can be created. Exact undo/redo is covered.
+- [x] Add pure `ui/timeline/gestureBounds.ts` interval intersection for move,
+  trim, ripple trim, slip, and slide. Every gesture derives its legal signed
+  delta from the owner and linked partner using one fresh pointerdown document
+  and media snapshot, including connected asset bounds and durable offline
+  descriptor bounds. Timeline, source, duration, and headroom limits are
+  group-wide; collision rejection and snap-back remain canonical at commit.
+- [x] Retain the exact pointerdown document reference and link-group identity
+  for the whole gesture. If committed document state changes before pointerup,
+  clear the transport preview and dispatch no stale geometry action. This
+  preserves the UI-reads-state-only boundary while keeping one successful
+  release equal to one history entry.
+- [x] Verification: 359/359 focused Issue #12 tests across 12 files and
+  1,209/1,209 total tests across 66 files. Production build passed with only
+  the known three chunks above 500 kB; lint passed;
+  `npm audit --omit=dev` reported 0 vulnerabilities; diff checking was clean
+  apart from informational line-ending notices.
+- [x] Real Chrome 150 at 1600×1000 passed through the supported file-input
+  fallback with an actual 2.0 s 320×180 30 fps H.264 + mono 48 kHz AAC
+  fixture. Import reached Ready and dropped the linked pair. Deleting V1
+  dissolved A1’s lone link; Ctrl+Z restored V1 and the exact pair. After
+  Unlink, an audio head trim changed the timeline/source/duration tuple from
+  20/0/60 to 30/10/50 while V1 stayed 20/0/60, then keyboard pair selection
+  and Link restored the unequal-offset pair.
+- [x] During a live +15 move, the ghosts rendered at 35/45 while the document
+  remained 20/30 and history remained at 4. Release added exactly one entry at
+  35/45 while retaining offset 10; Ctrl+Z restored 20/30 and Ctrl+Y restored
+  35/45. Keyboard activation performed the final Unlink. Playback at timeline
+  frame 62 mapped both clips to source frame 27, rendered the real video, and
+  reported 35 live audio nodes with RMS 0.0898. Chrome recorded 0 warnings and
+  0 errors.
+
+All 30 GitHub #12 implementation-checklist items now have matching code, test,
+and browser evidence for the normal-merge closeout.
 
 ## Test strategy per layer (unchanged from original)
 

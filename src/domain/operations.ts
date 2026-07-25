@@ -101,6 +101,13 @@ function byStart(a: Clip, b: Clip): number {
   return a.timelineRange.startFrame - b.timelineRange.startFrame
 }
 
+/** Rebuild a clip with the optional link key genuinely absent. */
+function withoutLinkGroupId(clip: Clip): Clip {
+  if (clip.linkGroupId === undefined) return clip
+  const { linkGroupId: _linkGroupId, ...rest } = clip
+  return rest
+}
+
 /** True when `range` overlaps any clip in `clips` other than `excludeId`. */
 function overlapsAny(
   clips: readonly Clip[],
@@ -1062,8 +1069,11 @@ export function renameTrack(
 
 /**
  * Delete a track AND everything on it (clips, transitions) — one op, so
- * one undo entry restores the lot. A locked track rejects (the lock is
- * exactly the "don't touch this content" guard); unknown ids reject.
+ * one undo entry restores the lot. Any link group that would be left with
+ * exactly one surviving member is dissolved in the same operation, keeping
+ * the document portable and the schema's no-orphan contract intact. A locked
+ * target or locked orphan survivor rejects atomically (the lock is exactly
+ * the "don't touch this content" guard); unknown ids reject.
  * Deleting the last track of a kind is allowed — the add-track buttons
  * and undo are both one click away, and nothing in the engine requires a
  * lane of each kind to exist.
@@ -1072,11 +1082,77 @@ export function removeTrack(doc: TimelineDoc, trackId: TrackId): TimelineDoc {
   const op = 'removeTrack'
   const trackIndex = doc.tracks.findIndex((t) => t.id === trackId)
   if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
-  if (doc.tracks[trackIndex].locked) {
+  const removedTrack = doc.tracks[trackIndex]
+  if (removedTrack.locked) {
     return reject(doc, op, `track ${trackId} is locked`)
   }
-  const tracks = doc.tracks.slice()
-  tracks.splice(trackIndex, 1)
+
+  const touchedGroups = new Set<string>()
+  for (const clip of removedTrack.clips) {
+    if (clip.linkGroupId !== undefined) touchedGroups.add(clip.linkGroupId)
+  }
+
+  const survivingCounts = new Map<string, number>()
+  if (touchedGroups.size > 0) {
+    for (let index = 0; index < doc.tracks.length; index++) {
+      if (index === trackIndex) continue
+      for (const clip of doc.tracks[index].clips) {
+        if (clip.linkGroupId !== undefined && touchedGroups.has(clip.linkGroupId)) {
+          survivingCounts.set(
+            clip.linkGroupId,
+            (survivingCounts.get(clip.linkGroupId) ?? 0) + 1,
+          )
+        }
+      }
+    }
+  }
+
+  const orphanedGroups = new Set<string>()
+  for (const groupId of touchedGroups) {
+    if (survivingCounts.get(groupId) === 1) orphanedGroups.add(groupId)
+  }
+
+  // Preflight every survivor before rebuilding anything. Dissolving its link
+  // is still an edit to that clip, so a locked partner blocks the whole op.
+  for (let index = 0; index < doc.tracks.length; index++) {
+    if (index === trackIndex) continue
+    const track = doc.tracks[index]
+    if (
+      track.locked &&
+      track.clips.some(
+        (clip) =>
+          clip.linkGroupId !== undefined &&
+          orphanedGroups.has(clip.linkGroupId),
+      )
+    ) {
+      return reject(doc, op, `linked survivor on track ${track.id} is locked`)
+    }
+  }
+
+  const tracks: Track[] = []
+  for (let index = 0; index < doc.tracks.length; index++) {
+    if (index === trackIndex) continue
+    const track = doc.tracks[index]
+    if (
+      !track.clips.some(
+        (clip) =>
+          clip.linkGroupId !== undefined &&
+          orphanedGroups.has(clip.linkGroupId),
+      )
+    ) {
+      tracks.push(track)
+      continue
+    }
+    tracks.push({
+      ...track,
+      clips: track.clips.map((clip) =>
+        clip.linkGroupId !== undefined &&
+        orphanedGroups.has(clip.linkGroupId)
+          ? withoutLinkGroupId(clip)
+          : clip,
+      ),
+    })
+  }
   return { ...doc, tracks }
 }
 
