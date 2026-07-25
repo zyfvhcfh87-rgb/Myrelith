@@ -488,6 +488,8 @@ describe('linked clip gestures (A/V pairs)', () => {
     // Both halves visually follow the SAME preview — partner ghosts the gesture.
     expect(videoEl).toHaveStyle({ transform: 'translateX(160px)' })
     expect(audioEl).toHaveStyle({ transform: 'translateX(160px)' })
+    expect(videoEl).toHaveClass('dragging')
+    expect(audioEl).toHaveClass('dragging')
     // Still mid-drag: the document itself is untouched.
     expect(vidClip().timelineRange.startFrame).toBe(100)
     expect(audClip().timelineRange.startFrame).toBe(100)
@@ -497,6 +499,8 @@ describe('linked clip gestures (A/V pairs)', () => {
 
     expect(vidClip().timelineRange.startFrame).toBe(160)
     expect(audClip().timelineRange.startFrame).toBe(160)
+    expect(videoEl).not.toHaveClass('dragging')
+    expect(audioEl).not.toHaveClass('dragging')
     expect(doc().past).toHaveLength(1) // ONE entry for the whole linked move
   })
 
@@ -560,12 +564,16 @@ describe('linked clip gestures (A/V pairs)', () => {
     await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(60))
     expect(videoEl).toHaveStyle({ transform: 'translateX(160px)' })
     expect(audioEl).toHaveStyle({ transform: 'translateX(95px)' })
+    expect(videoEl).toHaveClass('dragging')
+    expect(audioEl).toHaveClass('dragging')
 
     fireEvent.pointerUp(videoEl, { pointerId: 10, clientX: 560 })
 
     expect(transport().dragPreview).toBeNull()
     expect(videoEl).toHaveStyle({ transform: 'translateX(100px)' })
     expect(audioEl).toHaveStyle({ transform: 'translateX(35px)' })
+    expect(videoEl).not.toHaveClass('dragging')
+    expect(audioEl).not.toHaveClass('dragging')
     expect(vidClip().timelineRange.startFrame).toBe(100)
     expect(audClip().timelineRange.startFrame).toBe(35)
     expect(doc().past).toHaveLength(0)

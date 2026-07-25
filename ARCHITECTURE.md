@@ -172,13 +172,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   ({clipId, kind, deltaFrames,
   linkGroupId?} | null — same live-preview contract for trim/ripple/
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
-  ghost a linked gesture live. Normal selection replaces both selection
-  fields; Ctrl/Cmd pointer or keyboard activation toggles membership and
-  promotes the newly added clip to primary. The Inspector resolves the live
-  selection against the current document, enables its native Link button only
-  for one eligible video + audio pair, and shows the current rejection reason
-  otherwise. Selection has no history, no persistence, and no side effects;
-  transportStore never touches documentStore. The app-only
+  ghost a linked gesture live. Normal pointer or unmodified keyboard selection
+  replaces both selection fields; Ctrl/Cmd pointer or keyboard activation
+  toggles membership and promotes the newly added clip to primary. The
+  Inspector resolves the live selection against the current document. Its
+  native Link/Unlink commands remain keyboard-focusable and expose
+  `aria-disabled` while unavailable; activation dispatches only for the exact
+  rendered eligible pair after a latest-state preflight, and adjacent visible
+  `aria-describedby` status explains unavailable states while a live status
+  announces raced/rejected actions. Selection has no history, no persistence,
+  and no side effects; transportStore never touches documentStore. The app-only
   `selectionReconciliationController` is the composition bridge: on each
   document-reference change it supplies the current clip-id set to
   `reconcileClipSelection`, which synchronously removes stale ids while

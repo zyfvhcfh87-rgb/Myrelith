@@ -2703,7 +2703,8 @@
   color: #8a94a0;
 }
 
-/* Issue 12 Slice 3: manual A/V link action plus persistent availability copy. */
+/* Issue 12 Slice 6: discoverable A/V Link/Unlink command group plus
+   persistent, programmatically associated availability/rejection copy. */
 .inspector-linking {
   display: flex;
   flex-direction: column;
@@ -2723,7 +2724,7 @@
   cursor: pointer;
 }
 
-.inspector-link:hover:not(:disabled) {
+.inspector-link:hover:not([aria-disabled='true']) {
   color: #fff;
   background: #2d5780;
 }
@@ -2734,7 +2735,7 @@
   outline-offset: 2px;
 }
 
-.inspector-link:disabled {
+.inspector-link[aria-disabled='true'] {
   color: #747d86;
   background: #202327;
   border-color: #34393f;
@@ -2760,9 +2761,16 @@
   cursor: pointer;
 }
 
-.inspector-unlink:hover {
+.inspector-unlink:hover:not([aria-disabled='true']) {
   background: #2d2d2d;
   color: #ddd;
+}
+
+.inspector-unlink[aria-disabled='true'] {
+  color: #747d86;
+  border-color: #34393f;
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 /* Phase 3.1 placeholder styling — dies as real panels replace it. */

@@ -892,14 +892,44 @@ snapshot instead of relying on individual edit callers to clear it.
   track with Alpha/Bravo still unselected. Inspector followed every primary,
   the editor had no blocking overlay, and warning/error logs stayed empty.
 
-Original Slice 6 (accessible Link/Unlink acceptance) and Slice 7 (full gate and
-explicit GitHub closeout) remain. Final closeout must also repair and verify:
+## Post-MVP issue #12 — Slice 6 ✅ DONE (2026-07-25) Accessible Link/Unlink acceptance
 
-- the original Slice 3 track-removal integrity gap — removing one track can
-  currently leave a surviving linked partner with an orphaned `linkGroupId`;
-- the original Slice 4 preview-bound gap — live move/trim/ripple/slip limits
-  must intersect every linked member’s timeline floor and source headroom, not
-  only the gesture owner’s.
+Original Slice 6 is complete at this boundary. Manual linking is now
+keyboard-discoverable without moving document validation, selection, or
+history ownership into React.
+
+- [x] Keep every clip root focusable with a stable accessible name,
+  `aria-pressed`, Enter/Space activation, and focus styling visually distinct
+  from selected and primary-selected state. Forced-colors mode receives a
+  system-color outline fallback instead of relying on box shadow alone.
+- [x] Keep one shared Inspector command group in every primary/empty branch.
+  Unavailable Link/Unlink remains in the tab order with `aria-disabled` and an
+  adjacent visible reason connected by `aria-describedby`; activation
+  revalidates the exact rendered clip ids/link group against fresh state, so a
+  stale, changed, locked, or rejected target dispatches no unintended action
+  and announces an actionable reason.
+- [x] Link exactly one eligible video + audio pair in either order through the
+  canonical one-entry store action while retaining selection order and
+  primary. Preserve keyboard-operable Unlink, both linked badges, live partner
+  highlighting, and move focus to the stable Link command after Unlink removes
+  its own button.
+- [x] Verification: 100/100 focused tests across five files; 1,184/1,184 total
+  tests across 65 files; production build, lint, and diff checks green.
+  Targeted in-app Chromium passed pointer + Ctrl+Enter pair selection, two
+  pressed clips with one primary and distinct focus/selection rings, Link,
+  both badges, retained selection, Unlink focus handoff, a locked-partner
+  described reason, suppressed unavailable activation, and a zero
+  warning/error console gate. RTL `user-event` covers native Enter/Space Link
+  and Unlink activation end-to-end.
+
+Issue #12 remains open. Original Slice 7 still owns the complete cross-slice
+regression/browser gate and explicit GitHub closeout. Before it can close,
+final work must also:
+
+- repair original Slice 3 track-removal integrity so removing one track cannot
+  leave a surviving linked partner with an orphaned `linkGroupId`;
+- complete original Slice 4 preview bounds by intersecting every linked
+  member’s timeline floor and source headroom, not only the gesture owner’s.
 
 ## Test strategy per layer (unchanged from original)
 

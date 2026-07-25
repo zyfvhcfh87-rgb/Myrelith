@@ -17,9 +17,10 @@
  * Layering: ui/ → state/ + domain selectors only.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   getLinkClipsEligibility,
+  linkedPartners,
   type LinkClipsRejectionReason,
 } from '../domain/linking'
 import type { ClipTransformPatch } from '../domain/operations'
@@ -78,26 +79,6 @@ function NumberField({ label, value, step, testId, onCommit }: NumberFieldProps)
   )
 }
 
-/**
- * Manual "unlink" control (Phase 4.3.8): shown in BOTH lane-kind branches
- * below when the selected clip has a linkGroupId. Dissolves the whole
- * link group in one documentStore.unlinkClip call (one undo entry); the
- * clip then loses linkGroupId and the caller's own findClip subscription
- * makes the button disappear on its own — no local state to reset here.
- */
-function UnlinkButton({ clipId }: { clipId: ClipId }) {
-  return (
-    <button
-      type="button"
-      className="inspector-unlink"
-      data-testid="inspector-unlink"
-      onClick={() => useDocumentStore.getState().unlinkClip(clipId)}
-    >
-      🔗 Unlink audio/video
-    </button>
-  )
-}
-
 type LinkSelectionReason =
   | 'no-selection'
   | 'one-selected'
@@ -116,6 +97,24 @@ type LinkSelectionResolution =
       eligible: false
       reason: LinkSelectionReason
     }
+
+type UnlinkSelectionResolution =
+  | {
+      eligible: true
+      clipId: ClipId
+      linkGroupId: string
+    }
+  | {
+      eligible: false
+      message: string
+    }
+
+type LinkingActionFeedback = {
+  kind: 'link' | 'unlink'
+  doc: TimelineDoc
+  selectedClipIds: readonly ClipId[]
+  message: string
+}
 
 const LINK_REASON_MESSAGES: Record<LinkSelectionReason, string> = {
   'no-selection': 'Select one video clip and one audio clip to link them.',
@@ -181,54 +180,251 @@ function resolveLinkSelection(
 }
 
 /**
- * Manual A/V link control. It stays visible even when there is no primary
- * clip, so disabled states always explain the exact next action. The click
- * path resolves both stores again rather than trusting render-time state;
- * stale/deleted selections therefore fail closed with visible feedback.
+ * Keep Unlink availability live without duplicating the mutation itself.
+ * The domain operation rejects when any member's track is locked; resolving
+ * that same condition here prevents a silent no-op/console warning and gives
+ * the user an actionable reason before dispatch.
  */
-function LinkSelectionControl() {
+function resolveUnlinkSelection(
+  doc: TimelineDoc,
+  selectedClipId: ClipId | null,
+): UnlinkSelectionResolution {
+  if (selectedClipId === null) {
+    return {
+      eligible: false,
+      message: 'Select a linked clip to unlink its audio/video pair.',
+    }
+  }
+
+  const clip = findClip(doc, selectedClipId)
+  if (!clip) {
+    return {
+      eligible: false,
+      message: 'The selected clip is no longer available. Select a linked clip again.',
+    }
+  }
+  if (clip.linkGroupId === undefined) {
+    return {
+      eligible: false,
+      message: 'The selected clip is no longer linked. Select a linked clip again.',
+    }
+  }
+
+  for (const member of [clip, ...linkedPartners(doc, selectedClipId)]) {
+    const track = trackOfClip(doc, member.id)
+    if (track?.locked) {
+      return {
+        eligible: false,
+        message: `Unlock ${track.kind} track ${track.name} before unlinking.`,
+      }
+    }
+  }
+
+  return {
+    eligible: true,
+    clipId: selectedClipId,
+    linkGroupId: clip.linkGroupId,
+  }
+}
+
+function clipsShareLinkGroup(
+  doc: TimelineDoc,
+  videoClipId: ClipId,
+  audioClipId: ClipId,
+): boolean {
+  const video = findClip(doc, videoClipId)
+  const audio = findClip(doc, audioClipId)
+  return (
+    video?.linkGroupId !== undefined &&
+    audio?.linkGroupId === video.linkGroupId
+  )
+}
+
+/**
+ * Shared manual A/V command section. Link stays visible and focusable even
+ * when unavailable, while Unlink appears for the current primary clip's
+ * group. Both activation paths resolve the latest store snapshots rather
+ * than trusting render-time state, so stale/locked changes fail closed with
+ * visible status instead of dispatching a known rejection.
+ */
+function LinkSelectionControls() {
   const selectedClipIds = useTransportStore((s) => s.selectedClipIds)
+  const selectedClipId = useTransportStore((s) => s.selectedClipId)
   const timelineDoc = useDocumentStore((s) => s.doc)
   const resolution = resolveLinkSelection(timelineDoc, selectedClipIds)
-  const [rejectionMessage, setRejectionMessage] = useState<string | null>(null)
+  const selectedClip =
+    selectedClipId === null ? null : findClip(timelineDoc, selectedClipId)
+  const showUnlink = selectedClip?.linkGroupId !== undefined
+  const unlinkResolution = resolveUnlinkSelection(timelineDoc, selectedClipId)
+  const [actionFeedback, setActionFeedback] =
+    useState<LinkingActionFeedback | null>(null)
+  const linkButtonRef = useRef<HTMLButtonElement>(null)
+
+  const currentFeedback =
+    actionFeedback?.doc === timelineDoc &&
+    actionFeedback.selectedClipIds === selectedClipIds
+      ? actionFeedback
+      : null
 
   useEffect(() => {
-    setRejectionMessage(null)
-  }, [selectedClipIds, timelineDoc])
+    if (actionFeedback !== null && currentFeedback === null) {
+      setActionFeedback(null)
+    }
+  }, [actionFeedback, currentFeedback])
 
-  const statusMessage = rejectionMessage ??
-    (resolution.eligible
-      ? 'Ready to link the selected video and audio clips.'
-      : LINK_REASON_MESSAGES[resolution.reason])
+  const linkStatusMessage = resolution.eligible
+    ? 'Ready to link the selected video and audio clips.'
+    : LINK_REASON_MESSAGES[resolution.reason]
+  const unlinkStatusMessage = unlinkResolution.eligible
+    ? 'Ready to unlink this audio/video pair.'
+    : unlinkResolution.message
 
   const linkSelectedClips = (): void => {
     const latestDocStore = useDocumentStore.getState()
     const latestSelection = useTransportStore.getState().selectedClipIds
     const latestResolution = resolveLinkSelection(latestDocStore.doc, latestSelection)
 
-    if (!latestResolution.eligible) {
-      setRejectionMessage(LINK_REASON_MESSAGES[latestResolution.reason])
+    if (!resolution.eligible) {
+      setActionFeedback({
+        kind: 'link',
+        doc: latestDocStore.doc,
+        selectedClipIds: latestSelection,
+        message: latestResolution.eligible
+          ? 'Link availability changed. Review the selected clips, then activate Link again.'
+          : LINK_REASON_MESSAGES[latestResolution.reason],
+      })
       return
     }
 
-    const before = latestDocStore.doc
+    if (!latestResolution.eligible) {
+      setActionFeedback({
+        kind: 'link',
+        doc: latestDocStore.doc,
+        selectedClipIds: latestSelection,
+        message: LINK_REASON_MESSAGES[latestResolution.reason],
+      })
+      return
+    }
+
+    if (
+      latestResolution.videoClipId !== resolution.videoClipId ||
+      latestResolution.audioClipId !== resolution.audioClipId
+    ) {
+      setActionFeedback({
+        kind: 'link',
+        doc: latestDocStore.doc,
+        selectedClipIds: latestSelection,
+        message:
+          'Linking was not completed because the selection changed. Review the selected clips and try again.',
+      })
+      return
+    }
+
     latestDocStore.linkClips(
       latestResolution.videoClipId,
       latestResolution.audioClipId,
     )
-    if (useDocumentStore.getState().doc === before) {
-      setRejectionMessage(
-        'Linking was rejected because the project changed. Reselect both clips and try again.',
+    const afterDoc = useDocumentStore.getState().doc
+    if (
+      !clipsShareLinkGroup(
+        afterDoc,
+        latestResolution.videoClipId,
+        latestResolution.audioClipId,
       )
+    ) {
+      const afterSelection = useTransportStore.getState().selectedClipIds
+      const afterResolution = resolveLinkSelection(afterDoc, afterSelection)
+      setActionFeedback({
+        kind: 'link',
+        doc: afterDoc,
+        selectedClipIds: afterSelection,
+        message: afterResolution.eligible
+          ? 'Linking was rejected because the project changed. Reselect both clips and try again.'
+          : LINK_REASON_MESSAGES[afterResolution.reason],
+      })
     }
   }
 
+  const unlinkSelectedClip = (): void => {
+    const latestDocStore = useDocumentStore.getState()
+    const latestTransport = useTransportStore.getState()
+    const latestResolution = resolveUnlinkSelection(
+      latestDocStore.doc,
+      latestTransport.selectedClipId,
+    )
+
+    if (!showUnlink || !unlinkResolution.eligible) {
+      setActionFeedback({
+        kind: 'unlink',
+        doc: latestDocStore.doc,
+        selectedClipIds: latestTransport.selectedClipIds,
+        message: latestResolution.eligible
+          ? 'Unlink availability changed. Review the selected clip, then activate Unlink again.'
+          : latestResolution.message,
+      })
+      return
+    }
+
+    if (!latestResolution.eligible) {
+      setActionFeedback({
+        kind: 'unlink',
+        doc: latestDocStore.doc,
+        selectedClipIds: latestTransport.selectedClipIds,
+        message: latestResolution.message,
+      })
+      return
+    }
+
+    if (
+      latestResolution.clipId !== unlinkResolution.clipId ||
+      latestResolution.linkGroupId !== unlinkResolution.linkGroupId
+    ) {
+      setActionFeedback({
+        kind: 'unlink',
+        doc: latestDocStore.doc,
+        selectedClipIds: latestTransport.selectedClipIds,
+        message:
+          'Unlinking was not completed because the linked pair changed. Review the selected clip and try again.',
+      })
+      return
+    }
+
+    latestDocStore.unlinkClip(latestResolution.clipId)
+    const afterDoc = useDocumentStore.getState().doc
+    const afterClip = findClip(afterDoc, latestResolution.clipId)
+    if (afterClip?.linkGroupId !== undefined) {
+      const afterTransport = useTransportStore.getState()
+      const afterResolution = resolveUnlinkSelection(
+        afterDoc,
+        afterTransport.selectedClipId,
+      )
+      setActionFeedback({
+        kind: 'unlink',
+        doc: afterDoc,
+        selectedClipIds: afterTransport.selectedClipIds,
+        message: afterResolution.eligible
+          ? 'Unlinking was rejected because the project changed. Select the linked clip and try again.'
+          : afterResolution.message,
+      })
+      return
+    }
+
+    setActionFeedback(null)
+    linkButtonRef.current?.focus()
+  }
+
   return (
-    <div className="inspector-linking" data-testid="inspector-linking">
+    <div
+      className="inspector-linking"
+      data-testid="inspector-linking"
+      role="group"
+      aria-label="Audio/video linking"
+    >
       <button
+        ref={linkButtonRef}
         type="button"
         className="inspector-link"
-        disabled={!resolution.eligible}
+        aria-disabled={!resolution.eligible}
         aria-describedby="inspector-link-status"
         onClick={linkSelectedClips}
       >
@@ -237,10 +433,42 @@ function LinkSelectionControl() {
       <span
         id="inspector-link-status"
         className="inspector-link-status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {linkStatusMessage}
+      </span>
+      {showUnlink && (
+        <>
+          <button
+            type="button"
+            className="inspector-unlink"
+            data-testid="inspector-unlink"
+            aria-disabled={!unlinkResolution.eligible}
+            aria-describedby="inspector-unlink-status"
+            onClick={unlinkSelectedClip}
+          >
+            <span aria-hidden="true">🔗 </span>
+            Unlink audio/video
+          </button>
+          <span
+            id="inspector-unlink-status"
+            className="inspector-link-status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {unlinkStatusMessage}
+          </span>
+        </>
+      )}
+      <span
+        className="inspector-link-status"
+        data-testid="inspector-linking-action-status"
         role="status"
         aria-live="polite"
+        aria-atomic="true"
       >
-        {statusMessage}
+        {currentFeedback?.message ?? ''}
       </span>
     </div>
   )
@@ -261,19 +489,18 @@ export default function Inspector() {
     return (
       <div className="panel-placeholder">
         <span className="placeholder-title">Inspector</span>
+        <LinkSelectionControls />
         <span className="placeholder-note">select a clip to edit it</span>
-        <LinkSelectionControl />
       </div>
     )
   }
 
   if (laneKind === 'audio') {
     return (
-      <div className="inspector-panel" key={clip.id} data-testid="inspector-panel">
+      <div className="inspector-panel" data-testid="inspector-panel">
         <div className="inspector-title">{clip.name}</div>
-        <LinkSelectionControl />
-        {clip.linkGroupId !== undefined && <UnlinkButton clipId={clip.id} />}
-        <div className="inspector-grid">
+        <LinkSelectionControls />
+        <div className="inspector-grid" key={`${clip.id}:${laneKind}`}>
           <NumberField
             label="Volume"
             value={clip.volume}
@@ -294,12 +521,12 @@ export default function Inspector() {
   const t = clip.transform
 
   return (
-    /* key: switching clips remounts the fields, dropping stale drafts. */
-    <div className="inspector-panel" key={clip.id} data-testid="inspector-panel">
+    <div className="inspector-panel" data-testid="inspector-panel">
       <div className="inspector-title">{clip.name}</div>
-      <LinkSelectionControl />
-      {clip.linkGroupId !== undefined && <UnlinkButton clipId={clip.id} />}
-      <div className="inspector-grid">
+      <LinkSelectionControls />
+      {/* Switching clips remounts only the draft fields. The shared command
+          section stays mounted so a raced action can announce its result. */}
+      <div className="inspector-grid" key={`${clip.id}:${laneKind}`}>
         <NumberField
           label="Position X"
           value={t.x}

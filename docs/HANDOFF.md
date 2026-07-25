@@ -64,8 +64,10 @@ and the open list below.
 | Post-MVP #12 — original Slice 3 integrity | ⚠️ partial | unequal edit/rollback matrix covered; track removal can still orphan a surviving linked partner |
 | Post-MVP #12 — original Slice 4 previews | ⚠️ partial | signed-delta rendering covered; live bounds still use only the gesture owner instead of every linked member |
 | Post-MVP #12 — original Slice 5 | ✅ done | app-level stale/deleted selection reconciliation; surviving-primary promotion, undo non-resurrection, track/project replacement, and history/serialization isolation; 82 focused + 1,173 total tests; in-app Chromium delete/undo/track-removal gate |
+| Post-MVP #12 — original Slice 6 | ✅ done | focusable pressed clip controls + focusable `aria-disabled` Inspector Link/Unlink with visible described reasons; exact-target race rejection, retained pair selection/primary, badges/highlighting, focus handoff; 100 focused + 1,184 total tests; targeted in-app Chromium accessibility gate |
+| Post-MVP #12 — original Slice 7 / closeout | ⏳ remaining | repair the existing Slice 3 orphan and Slice 4 group-bound gaps, then run the complete regression/browser gate and explicitly close GitHub #12 |
 
-1,173 tests green · `npm run build` passes with the known large-chunk warning
+1,184 tests green · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -496,12 +498,13 @@ pair). Linked clips show a tiny 🔗 badge; every geometry edit
 atomically — the partner even ghosts the gesture live — and the
 Inspector's "🔗 Unlink audio/video" button dissolves the group (one
 entry; undo re-links). The historical Issue #12 Slice 3 bundle adds ephemeral
-ordered `selectedClipIds` plus one primary clip: normal click replaces the
-selection, Ctrl/Cmd-click toggles without starting a move, and Ctrl/Cmd+Enter
-provides the additive keyboard path. Inspector keeps editing the primary while
-its native Link button accepts exactly one eligible video + audio pair in
-either order; the adjacent live status always explains why linking is
-unavailable. Original Slice 5 completes that selection lifecycle through an
+  ordered `selectedClipIds` plus one primary clip: normal pointer/unmodified
+  keyboard activation replaces the selection, while Ctrl/Cmd pointer/keyboard
+  activation toggles without starting a move. Inspector keeps editing the
+  primary while its native Link/Unlink commands stay focusable with
+  `aria-disabled` when unavailable; adjacent described status explains why,
+  and activation dispatches only for the exact rendered eligible pair after a
+  latest-state preflight. Original Slice 5 completes that selection lifecycle through an
 app-level reconciliation controller: deleted/stale ids are pruned after every
 document snapshot, surviving order is stable, the latest survivor becomes
 Inspector primary when needed, and undo restores document content without
@@ -612,6 +615,10 @@ surface; it is not a second zoom and never enters document history.
   composition seam: observes document-reference changes, supplies the current
   clip-id set to transport, and keeps selection consistent without either store
   importing the other or selection entering history/persistence.
+- `src/ui/Inspector.tsx` — original Issue #12 Slice 6 shared Link/Unlink command
+  group: focusable `aria-disabled` controls, visible described availability,
+  exact rendered-intent/latest-state race checks, live rejection announcements,
+  retained primary selection, and post-Unlink focus handoff.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
   candidates off-store, restores granted local handles, requests remembered
   permission only from the Open click, matches relinked media exactly,
@@ -796,7 +803,10 @@ surface; it is not a second zoom and never enters document history.
 - `src/ui/timeline/ClipView.tsx` — the 4.2 gesture heart: one session ref
   routes body/edge pointerdowns by the CURRENT tool (getState(), not the
   render closure!); previews via transportStore.editPreview, one commit
-  per gesture; slip clamps live against mediaStore asset bounds. Long clips
+  per gesture; slip clamps live against mediaStore asset bounds. Slice 6 keeps
+  the clip root a stable pressed button, preserves independent focus/selected/
+  primary visuals, hides decorative link badges from its accessible name, and
+  highlights every live linked-preview participant. Long clips
   render only their intersection with the bounded window; filmstrip buckets
   and the normalized waveform viewBox remain aligned to the original source.
   `ui/Toolbar.tsx` = tool buttons; `app/useEditShortcuts.ts` = A/B/T/Y/U,
@@ -951,15 +961,18 @@ surface; it is not a second zoom and never enters document history.
   opt-in, quota/eviction UX, and a separate security/storage review.
 - Issue #12 follows the original seven-slice blueprint; the older local
   “Slice 3/4” labels were compressed commit notes, not authoritative
-  renumbering. Original Slices 1, 2, and 5 are complete: the pure manual-link
+  renumbering. Original Slices 1, 2, 5, and 6 are complete: the pure manual-link
   contract, canonical history-backed store action, and reconciled ephemeral
   pointer/keyboard pair selection are in place. Original Slice 3’s unequal
   edit/rollback matrix and Slice 4’s signed-delta rendering core are present,
   but both remain partial: track removal can orphan a surviving linked partner,
   and live move/trim/ripple/slip bounds still come only from the gesture owner
   instead of intersecting every member’s timeline floor/source headroom. The
-  accessible Inspector Link/Unlink foundation for original Slice 6 is present,
-  but its standalone acceptance slice remains. Selection reconciliation prunes
+  standalone Inspector Link/Unlink acceptance gate is complete: commands stay
+  focusable while unavailable, visible described reasons and live race
+  rejection feedback are exact, pair selection/primary survives Link/Unlink,
+  badges and partner highlights remain, and focus is handed back after Unlink.
+  Selection reconciliation prunes
   only missing ids after delete, split undo, track removal, or project
   replacement; it preserves survivor order/primary, never resurrects on undo,
   and leaves document history and portable serialization untouched. Manual
@@ -976,10 +989,10 @@ surface; it is not a second zoom and never enters document history.
   movement/playback gate passed relink, unequal trim/offset, live linked move,
   exact undo/redo, final unlink, and phase-synced A/V playback with no
   warning/error logs; it was not original Slice 7’s final gate. Before original
-  Slice 7 can close the still-open GitHub issue, original Slice 6 still needs
-  its explicit control/accessibility gate, the original Slice 3 track-removal
-  orphan gap must be repaired, and original Slice 4 must intersect live preview
-  bounds across every linked member’s timeline/source limits.
+  Slice 7 can close the still-open GitHub issue, original Slice 3’s
+  track-removal orphan gap and original Slice 4’s group-wide preview-bound gap
+  must be repaired, then the complete cross-slice regression/browser gate and
+  explicit GitHub closeout remain.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
   (the render worker replaced the single-asset path). Kept because their
   tests document the decoder semantics and render.worker imports their

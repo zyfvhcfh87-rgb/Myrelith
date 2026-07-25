@@ -660,6 +660,7 @@ function ClipView({
             <span
               className="clip-link-badge"
               data-testid={`clip-${clip.id}-link`}
+              aria-hidden="true"
             >
               🔗
             </span>
