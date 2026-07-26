@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-25)
+## Status (2026-07-26)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -66,8 +66,9 @@ and the open list below.
 | Post-MVP #12 — original Slice 5 | ✅ done | app-level stale/deleted selection reconciliation; surviving-primary promotion, undo non-resurrection, track/project replacement, and history/serialization isolation; 82 focused + 1,173 total tests; in-app Chromium delete/undo/track-removal gate |
 | Post-MVP #12 — original Slice 6 | ✅ done | focusable pressed clip controls + focusable `aria-disabled` Inspector Link/Unlink with visible described reasons; exact-target race rejection, retained pair selection/primary, badges/highlighting, focus handoff; 100 focused + 1,184 total tests; targeted in-app Chromium accessibility gate |
 | Post-MVP #12 — original Slice 7 / closeout | ✅ complete | orphan-safe removal, group-wide bounds, and immutable pointerdown document guard; 359 focused + 1,209 total tests; Chrome 150 full import/re-link/move/undo/redo/playback gate with a clean console |
+| Post-MVP #18 — static images Slice 1 | ✅ done | byte-sniffed PNG/JPEG/WebP/AVIF + immutable source/decode budgets; exact one-source ownership; deterministic 15-file matrix; 60 focused + 1,269 total tests; Chrome 150 41-fact module gate |
 
-1,209 tests green across 66 files · `npm run build` passes with the known large-chunk warning
+1,269 tests green across 68 files · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · `npm audit --omit=dev` reports 0 vulnerabilities · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -462,6 +463,41 @@ storage is also separate opt-in media caching with quota/eviction UX and
 multi-tab recovery ownership; do not imply recovery or a portable `.webcut`
 contains source bytes today.
 
+Issue #18 Slice 1 establishes the static-image pipeline leaf. A bounded byte
+inspector recognizes PNG, JPEG, WebP, and AVIF without trusting extension or
+declared MIME, rejects unsupported/malformed sources before decode, and
+publishes frozen source-size, candidate-dimension, allocation, and animation
+facts. PNG/APNG and WebP first-frame/container geometry is checked so hostile
+nested dimensions cannot bypass the predecode budget. AVIF item extents remain
+conservative budget candidates because clean-aperture, rotation, derived items,
+and WebCodecs track selection can legitimately change displayed geometry.
+They do not absolutely cap native AV1 decoder work: sequence-header maximum
+frame dimensions and intermediate images may exceed `ispe` before the browser
+returns a source WebCut can inspect. The 256 MiB ceiling bounds WebCut's
+estimates and accepted returned allocation, not every transient browser-decoder
+allocation. Future hardening should parse sequence-header limits where practical
+and stress hostile inputs in an isolated decoder context.
+
+The atomic decode seam reinspects the exact Blob, canonicalizes its sniffed MIME,
+and transfers exactly one caller-owned `ImageBitmap` or `VideoFrame`. It
+revalidates coded, visible, display, and native allocation limits, preserves
+orientation and alpha, closes every intermediate/cancelled/late resource, and
+observes `ImageDecoder.completed` before closing an incomplete stream.
+
+The reproducible 15-file fixture matrix and 60 focused tests cover all supported
+formats, animation headers, alpha, EXIF orientation, spoofed naming/MIME,
+malformed/truncated input, nested-frame budget attacks, allocation and
+cancellation races, and unsupported SVG/GIF. All 1,269 tests across 68 files,
+fixture replay, build, lint, audit, and diff checks passed. Real Chrome 150
+through local Vite passed 41 browser facts for both decode paths, including
+actual oriented pixel probes and exact caller close behavior, with 0 warnings
+and 0 errors.
+
+**Next: Issue #18 remains open.** Slice 1 has no Media Pool/import-controller,
+domain/state, timeline, preview, or export caller. Do not describe static images
+as user-visible or supported until the remaining slices wire and browser-test
+those paths.
+
 ## What works today (user-visible)
 
 Run `npm run dev` → project Home. Create a project with an explicit canvas,
@@ -478,6 +514,8 @@ live save. The toolbar shows dirty/saving/saved/error state, reload is guarded
 only while dirty, and returning to Projects confirms before safely closing the
 active media session. Import video or audio in the Media Pool; files are
 analyzed before they appear.
+Static-image files still do not enter this flow; Issue #18 Slice 1 is a
+pipeline-only foundation.
 An FPS mismatch opens an explicit
 Keep/Match/Cancel dialog, and every video asset gets its own decoder in the
 render worker. The Preview is the real timeline compositor (4.1): all visible
@@ -639,6 +677,16 @@ surface; it is not a second zoom and never enters document history.
   recovery IndexedDB records; `src/app/projectLibraryController.ts` keeps their
   handles/snapshots outside state. `src/ui/ProjectLaunch.tsx` is the Home, New
   Project, Resume, Recent, and explicit-Recovery UI facade.
+- `src/pipeline/static-image-inspection.ts` — Issue #18 Slice 1 bounded,
+  content-based PNG/JPEG/WebP/AVIF inspection. It owns immutable source,
+  candidate-dimension, decoded-allocation, and animation facts plus stable
+  unsupported, malformed, and resource-limit failures; it imports no UI or
+  state.
+- `src/pipeline/static-image.ts` — atomic browser/worker first-frame decode
+  seam. It reinspects the exact Blob, canonicalizes the sniffed MIME, transfers
+  one caller-owned `ImageBitmap` or `VideoFrame`, validates orientation-aware
+  geometry and native allocation, and owns prompt abort plus exact
+  decoder/frame/bitmap cleanup.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
@@ -931,6 +979,11 @@ surface; it is not a second zoom and never enters document history.
 - `ffmpeg`/`ffprobe` are installed as of 2026-07-12. They generated and probed
   the 5.2b A/V fixture/result; keep the in-browser generator below when a test
   needs a same-origin `File` without touching disk.
+- `npm run qa:issue18:fixtures` regenerates Issue #18's ignored deterministic
+  15-file PNG/JPEG/WebP/AVIF, animation-header, orientation, spoofed, malformed,
+  truncated, oversized, SVG, and GIF matrix plus `manifest.json` under
+  `.tmp/issue-18-image-fixtures/`; add `-- --validate-only` to fail when fixture
+  bytes, hashes, structural facts, or expected outcomes drift.
 - `npm run qa:issue19:fixtures` regenerates Issue #19's ignored 13-file native,
   fallback, unknown, malformed, truncated, spoofed, empty, and random-byte
   matrix plus a hash/ffprobe manifest under `.tmp/issue-19-codec-fixtures/`;
@@ -958,6 +1011,13 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
+- Issue #18 remains open after Slice 1. Content inspection, immutable source and
+  decoded-allocation budgets, first-frame decode ownership, deterministic
+  fixtures, and the real Chrome module gate are complete. Nothing calls this
+  foundation from the Media Pool or import flow yet; images have no durable
+  domain/source record, timeline semantics, preview/compositor path, export
+  path, or user-visible error/retry/accessibility surface. Do not describe still
+  images as supported until later slices wire and verify those boundaries.
 - Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
   Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
   explicit partial-track consent, capability caching/revalidation, prompt

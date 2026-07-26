@@ -968,6 +968,61 @@ have concrete code, test, and browser evidence.
 All 30 GitHub #12 implementation-checklist items now have matching code, test,
 and browser evidence for the normal-merge closeout.
 
+## Post-MVP issue #18 — Slice 1 ✅ DONE (2026-07-26) Static-image source foundation
+
+At this slice boundary, Issue #18 remains open. This pipeline-only slice
+establishes content-based inspection and first-frame decode ownership for
+raster-image sources; it does not make images importable or user-visible yet.
+
+- [x] Detect PNG, JPEG, WebP, and AVIF from a bounded source prefix instead of
+  trusting filenames or declared MIME types. Reject GIF, SVG, generic ISO BMFF,
+  unknown, malformed, and truncated input with stable typed failures; supported
+  bytes remain supported when their extension or declared MIME is spoofed.
+- [x] Publish frozen source-size, candidate-dimension, decoded-allocation, and
+  animation facts. Enforce immutable 256 MiB encoded, 4 MiB header-scan,
+  16,384 px edge, 67,108,864-pixel, and 256 MiB decoded-allocation ceilings
+  before browser decode. Validate PNG/APNG and WebP outer/first-frame geometry
+  so a small canvas cannot conceal a hostile nested frame.
+- [x] Keep inspection and decode atomic for the exact immutable Blob. Relabel
+  the Blob with the sniffed MIME, use orientation-aware `createImageBitmap` as
+  the primary path, and transfer frame zero directly from `ImageDecoder` when
+  the Blob path is unavailable. The fallback retains WebCodecs rotation/flip,
+  validates coded, visible, display, and native allocation bounds, and never
+  holds a second full-size bitmap beside the frame.
+- [x] Treat every AVIF `ispe` as a conservative predecode budget candidate,
+  not proof of the browser-selected primary item. Safe browser-decoded geometry
+  is authoritative after independent bounds checks, so valid clean-aperture,
+  rotation, auxiliary, derived-item, and selected-track behavior is not falsely
+  rejected.
+  Residual boundary: `ispe` cannot absolutely cap native AV1 decoder work;
+  sequence-header maximum frame dimensions and intermediate images may exceed
+  item extents before the browser returns a source we can inspect. The 256 MiB
+  ceiling therefore bounds WebCut's estimates and accepted returned allocation,
+  not every transient browser-decoder allocation. Future hardening should parse
+  sequence-header limits where practical and stress hostile inputs in an
+  isolated decoder context.
+- [x] Preserve first-frame-only animation disclosure without conflating encoded
+  PNG/WebP loop fields with WebCodecs repetition semantics. Abort wins promptly;
+  late bitmap/frame completions, decoder completion rejection, failures, and
+  successful caller ownership all have exact cleanup coverage.
+- [x] Add `npm run qa:issue18:fixtures` for a deterministic 15-file matrix
+  covering ordinary PNG/JPEG/WebP/AVIF, alpha, EXIF orientation, APNG/animated
+  WebP/AVIF sequence headers, spoofed MIME/extension, corrupt/truncated input,
+  oversized metadata, and explicitly unsupported SVG/GIF.
+- [x] Verification: 60/60 focused tests across two files; 1,269/1,269 total
+  tests across 68 files; fixture generation and validate-only replay,
+  production build, lint, audit, and diff checks green.
+- [x] Real Chrome 150 through local Vite passed 41 browser facts across all four
+  formats, alpha, actual EXIF-oriented pixels, APNG/WebP first-frame labels,
+  canonical MIME, typed hostile failures, both browser decode paths, and caller
+  close behavior. The console recorded 0 warnings and 0 errors.
+
+Remaining Issue #18 slices own the Media Pool/import controller, durable
+domain/state representation, timeline duration and editing semantics,
+preview/compositor integration, export behavior, and user-visible
+error/retry/accessibility surfaces. Images are therefore not importable,
+previewable, placeable, or exportable at this boundary.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +
