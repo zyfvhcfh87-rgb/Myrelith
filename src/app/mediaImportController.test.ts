@@ -26,7 +26,9 @@ import {
   acceptPartialMediaImport,
   cancelMediaImport,
   importMedia,
+  importMediaFiles,
   importMediaFromHandle,
+  MAX_MEDIA_IMPORT_BATCH_FILES,
   removeMediaCompatibility,
   resetMediaImportController,
   retryMediaCompatibility,
@@ -1120,5 +1122,91 @@ describe('mediaImportController', () => {
     expect(fixture.assets.get('asset-new')?.objectUrl).toBe('blob:existing')
     expect(fixture.inspect).not.toHaveBeenCalled()
     expect(fixture.revokeObjectURL).not.toHaveBeenCalled()
+  })
+
+  test('imports a multi-file selection sequentially with stable per-file rows', async () => {
+    const fixture = makeFixture(makeAsset({ frameRate: F30 }))
+    let id = 0
+    fixture.deps.createAssetId = () => `asset-batch-${++id}`
+    const firstInspection = deferred<MediaProbeResult>()
+    fixture.inspect
+      .mockImplementationOnce(() => firstInspection.promise)
+      .mockImplementationOnce(async (
+        _file,
+        _rate,
+        assetId,
+      ) => readyProbe(makeAsset({
+        id: assetId,
+        frameRate: F30,
+        objectUrl: 'blob:second',
+      })))
+
+    const importing = importMediaFiles([
+      new File(['one'], 'one.png', { type: 'image/png' }),
+      new File(['two'], 'two.webp', { type: 'image/webp' }),
+    ], fixture.deps)
+    await waitForImportPhase('analyzing')
+    expect(fixture.inspect).toHaveBeenCalledOnce()
+
+    firstInspection.resolve(readyProbe(makeAsset({
+      id: 'asset-batch-1',
+      frameRate: F30,
+      objectUrl: 'blob:first',
+    })))
+
+    await expect(importing).resolves.toEqual({
+      status: 'batch-complete',
+      results: [
+        { status: 'imported', assetId: 'asset-batch-1' },
+        { status: 'imported', assetId: 'asset-batch-2' },
+      ],
+    })
+    expect(fixture.inspect).toHaveBeenCalledTimes(2)
+    expect(fixture.assets.has('asset-batch-1')).toBe(true)
+    expect(fixture.assets.has('asset-batch-2')).toBe(true)
+  })
+
+  test('rejects an oversized picker batch before inspecting any file', async () => {
+    const fixture = makeFixture(makeAsset({ frameRate: F30 }))
+    const files = Array.from(
+      { length: MAX_MEDIA_IMPORT_BATCH_FILES + 1 },
+      (_, index) => new File(['x'], `${index}.png`, { type: 'image/png' }),
+    )
+
+    await expect(importMediaFiles(files, fixture.deps)).resolves.toEqual({
+      status: 'failed',
+      message: `Choose at most ${MAX_MEDIA_IMPORT_BATCH_FILES} media files at once.`,
+    })
+    expect(fixture.inspect).not.toHaveBeenCalled()
+    expect(useMediaImportStore.getState()).toMatchObject({
+      phase: 'error',
+      fileName: null,
+    })
+  })
+
+  test('cancelling one batch item prevents later files from starting', async () => {
+    const fixture = makeFixture(makeAsset({ frameRate: F30 }))
+    let id = 0
+    fixture.deps.createAssetId = () => `asset-cancel-${++id}`
+    const pending = deferred<MediaProbeResult>()
+    fixture.inspect.mockImplementationOnce(() => pending.promise)
+
+    const importing = importMediaFiles([
+      new File(['one'], 'one.png', { type: 'image/png' }),
+      new File(['two'], 'two.png', { type: 'image/png' }),
+    ], fixture.deps)
+    await waitForImportPhase('analyzing')
+    expect(cancelMediaImport()).toBe(true)
+    pending.resolve(readyProbe(makeAsset({
+      id: 'asset-cancel-1',
+      frameRate: F30,
+    })))
+
+    await expect(importing).resolves.toEqual({
+      status: 'batch-complete',
+      results: [{ status: 'cancelled' }],
+    })
+    expect(fixture.inspect).toHaveBeenCalledOnce()
+    expect(fixture.assets).toHaveLength(0)
   })
 })

@@ -1382,6 +1382,48 @@ function looksLikeSvg(bytes: Uint8Array): boolean {
   return false
 }
 
+function hasAvifBrand(bytes: Uint8Array): boolean {
+  if (bytes.length < 12 || !matchesAscii(bytes, 4, 'ftyp')) return false
+  const declaredSize = u32Be(bytes, 0)
+  const availableEnd = Math.min(
+    declaredSize >= 16 ? declaredSize : bytes.length,
+    bytes.length,
+  )
+  if (
+    matchesAscii(bytes, 8, 'avif')
+    || matchesAscii(bytes, 8, 'avis')
+  ) {
+    return true
+  }
+  for (let offset = 16; offset + 4 <= availableEnd; offset += 4) {
+    if (
+      matchesAscii(bytes, offset, 'avif')
+      || matchesAscii(bytes, offset, 'avis')
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+function detectStaticImageFormat(
+  bytes: Uint8Array,
+): StaticImageDetectedFormat {
+  if (hasBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+    return 'png'
+  }
+  if (hasBytes(bytes, [0xff, 0xd8])) return 'jpeg'
+  if (matchesAscii(bytes, 0, 'RIFF') && matchesAscii(bytes, 8, 'WEBP')) {
+    return 'webp'
+  }
+  if (hasAvifBrand(bytes)) return 'avif'
+  if (matchesAscii(bytes, 0, 'GIF87a') || matchesAscii(bytes, 0, 'GIF89a')) {
+    return 'gif'
+  }
+  if (looksLikeSvg(bytes)) return 'svg'
+  return null
+}
+
 function inspectStaticImageBytesWithLimits(
   sourceBytes: Uint8Array,
   totalFileBytes: number,
@@ -1398,29 +1440,31 @@ function inspectStaticImageBytesWithLimits(
       'The static-image source size is invalid.',
     )
   }
+  const bytes = sourceBytes.subarray(
+    0,
+    Math.min(sourceBytes.byteLength, limits.maxHeaderBytes),
+  )
+  const detectedFormat = detectStaticImageFormat(bytes)
   if (totalFileBytes > limits.maxFileBytes) {
     inspectionError(
       'resource-limit',
       'file-size-limit',
       `${totalFileBytes} bytes exceeds WebCut's ${limits.maxFileBytes}-byte static-image file limit.`,
+      detectedFormat,
     )
   }
-  const bytes = sourceBytes.subarray(
-    0,
-    Math.min(sourceBytes.byteLength, limits.maxHeaderBytes),
-  )
   const context = { bytes, totalFileBytes, limits }
 
-  if (hasBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+  if (detectedFormat === 'png') {
     return inspectPng(context)
   }
-  if (hasBytes(bytes, [0xff, 0xd8])) return inspectJpeg(context)
-  if (matchesAscii(bytes, 0, 'RIFF') && matchesAscii(bytes, 8, 'WEBP')) {
-    return inspectWebp(context)
+  if (detectedFormat === 'jpeg') return inspectJpeg(context)
+  if (detectedFormat === 'webp') return inspectWebp(context)
+  if (detectedFormat === 'avif') {
+    const avif = inspectAvif(context)
+    if (avif) return avif
   }
-  const avif = inspectAvif(context)
-  if (avif) return avif
-  if (matchesAscii(bytes, 0, 'GIF87a') || matchesAscii(bytes, 0, 'GIF89a')) {
+  if (detectedFormat === 'gif') {
     inspectionError(
       'unsupported-format',
       'unsupported-format',
@@ -1428,7 +1472,7 @@ function inspectStaticImageBytesWithLimits(
       'gif',
     )
   }
-  if (looksLikeSvg(bytes)) {
+  if (detectedFormat === 'svg') {
     inspectionError(
       'unsupported-format',
       'unsupported-format',
@@ -1475,13 +1519,6 @@ export async function inspectStaticImageBlob(
       'malformed-image',
       'malformed-image',
       'The static-image Blob size is invalid.',
-    )
-  }
-  if (blob.size > limits.maxFileBytes) {
-    inspectionError(
-      'resource-limit',
-      'file-size-limit',
-      `${blob.size} bytes exceeds WebCut's ${limits.maxFileBytes}-byte static-image file limit.`,
     )
   }
 

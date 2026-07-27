@@ -1017,11 +1017,53 @@ raster-image sources; it does not make images importable or user-visible yet.
   canonical MIME, typed hostile failures, both browser decode paths, and caller
   close behavior. The console recorded 0 warnings and 0 errors.
 
-Remaining Issue #18 slices own the Media Pool/import controller, durable
-domain/state representation, timeline duration and editing semantics,
-preview/compositor integration, export behavior, and user-visible
-error/retry/accessibility surfaces. Images are therefore not importable,
-previewable, placeable, or exportable at this boundary.
+At the Slice 1 boundary, later slices still owned the Media Pool/import
+controller, durable domain/state representation, timeline duration and editing
+semantics, preview/compositor integration, export behavior, and user-visible
+error/retry/accessibility surfaces. Images were therefore not importable,
+previewable, placeable, or exportable at that boundary.
+
+## Post-MVP issue #18 — Slice 2 ✅ DONE (2026-07-28) Still-image import and durable source records
+
+Issue #18 remains open. This slice makes verified PNG, JPEG, WebP, and AVIF
+sources importable, durable, reconnectable, and visible in the Media Pool. It
+deliberately stops before timeline authoring: a still needs explicit clip/source
+semantics rather than inheriting the existing timed-video range contract.
+
+- [x] Route imports, Resume, manual Relink, and folder Relink through one shared
+  inspection boundary. It byte-inspects before the timed-media probe, never
+  lets recognized malformed/unsupported images fall through as video, and
+  performs a real browser decode before creating an object URL or durable
+  `MediaAsset`.
+- [x] Represent every accepted still as an image asset with orientation-aware
+  dimensions, no audio/native frame rate/decoder config, and an exact canonical
+  five-second default expressed as integer microseconds and project-rate frame
+  math. Reuse the existing portable image descriptor, so Save/Resume needs no
+  project-format bump; reconnection requires the exact saved dimensions.
+- [x] Accept PNG, JPEG, WebP, and AVIF in native pickers, fallback inputs, and
+  bounded folder scans. Import up to 100 selected files through one sequential
+  queue so only one decode owns peak memory at a time; cancellation stops the
+  remaining queue and competing import/retry actions cannot interleave.
+- [x] Generate exactly one bounded Media Pool tile per image: at most 320×180,
+  encoded as PNG at most 1 MiB, rendered with contained aspect ratio, and owned by
+  the existing media-store URL lifecycle. Source, bitmap/frame, canvas, abort,
+  late completion, replacement, and removal paths retain exact cleanup.
+- [x] Show dimensions, five-second duration, content-derived format, decode
+  path, and an explicit “First frame only” label for animated inputs. Surface
+  actionable Unsupported/Error/Retry states for SVG, GIF, corrupt, oversized,
+  and browser-undecodable sources. Keep image rows non-draggable in both the
+  rendered affordance and the live drag-start guard until Slice 3 establishes
+  correct still-clip semantics.
+- [x] Verification: 212/212 focused tests across 12 files; 1,291/1,291 total
+  tests across 71 files; deterministic 15-file fixture replay, production
+  build, lint, audit, and diff checks green.
+- [x] In-app Chrome 150 imported PNG, EXIF-oriented JPEG, animated WebP, and
+  AVIF in one real multi-file selection. All four reached Ready with correct
+  dimensions, five-second metadata, bounded ready thumbnails, and
+  `draggable=false`; the animated WebP disclosed first-frame-only behavior.
+  Corrupt PNG stayed Error through Retry, while SVG and GIF stayed Unsupported
+  with actionable explanations. The Media Pool remained usable and the console
+  recorded 0 warnings and 0 errors.
 
 ## Test strategy per layer (unchanged from original)
 

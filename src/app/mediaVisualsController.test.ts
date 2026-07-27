@@ -10,6 +10,7 @@ import {
   MediaVisualDecodeError,
   MediaVisualSourceError,
 } from '../pipeline/visuals'
+import { StaticImageThumbnailError } from '../pipeline/static-image-thumbnail'
 import { useMediaStore } from '../state/mediaStore'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
 import type { VisualsDeps } from './mediaVisualsController'
@@ -41,6 +42,12 @@ afterEach(() => {
 })
 
 const strip = { url: 'blob:strip', tiles: 4, tileWidth: 78, tileHeight: 44 }
+const imageTile = {
+  url: 'blob:image-tile',
+  tiles: 1,
+  tileWidth: 80,
+  tileHeight: 44,
+}
 const wave = { url: 'blob:wave', width: 800, height: 44 }
 
 function fakeDeps(over: Partial<VisualsDeps> = {}): VisualsDeps {
@@ -48,6 +55,7 @@ function fakeDeps(over: Partial<VisualsDeps> = {}): VisualsDeps {
     fetchBlob: vi.fn(async () => new Blob(['x'])),
     generateFilmstrip: vi.fn(async () => strip),
     generateWaveform: vi.fn(async () => wave),
+    generateStaticImageThumbnail: vi.fn(async () => imageTile),
     ...over,
   }
 }
@@ -137,16 +145,28 @@ describe('mediaVisualsController', () => {
     expect(deps.generateWaveform).toHaveBeenCalledTimes(2) // b only
   })
 
-  test('audio assets skip the filmstrip; image assets skip everything', async () => {
+  test('audio gets a waveform while an image gets exactly one thumbnail tile', async () => {
     const deps = fakeDeps()
     initMediaVisuals(deps)
-    addAsset('song.mp3', 'audio/mpeg')
-    addAsset('photo.png', 'image/png')
+    const audio = addAsset('song.mp3', 'audio/mpeg')
+    const image = addAsset('photo.png', 'image/png')
     await flush()
 
     expect(deps.generateFilmstrip).not.toHaveBeenCalled()
     expect(deps.generateWaveform).toHaveBeenCalledTimes(1)
-    expect(deps.fetchBlob).toHaveBeenCalledTimes(1) // image never fetched
+    expect(deps.generateStaticImageThumbnail).toHaveBeenCalledOnce()
+    expect(deps.generateStaticImageThumbnail).toHaveBeenCalledWith(
+      expect.any(Blob),
+    )
+    expect(deps.fetchBlob).toHaveBeenCalledTimes(2)
+    expect(useMediaStore.getState().visuals.get(audio.id)).toEqual({
+      filmstrip: null,
+      waveform: wave,
+    })
+    expect(useMediaStore.getState().visuals.get(image.id)).toEqual({
+      filmstrip: imageTile,
+      waveform: null,
+    })
   })
 
   test('partial imports generate visuals only for the retained track kind', async () => {
@@ -265,6 +285,33 @@ describe('mediaVisualsController', () => {
           trackKind: 'video',
           reason: 'resource-limit',
           detail: 'Local ProRes safety budget is incomplete.',
+        }],
+      },
+    })
+  })
+
+  test('an image-thumbnail budget rejection is asset-scoped without blaming a video track', async () => {
+    const deps = fakeDeps({
+      generateStaticImageThumbnail: vi.fn(async () => {
+        throw new StaticImageThumbnailError(
+          'resource-limit',
+          'The still-image thumbnail is too large.',
+        )
+      }),
+    })
+    initMediaVisuals(deps)
+    const asset = addAsset('large.png', 'image/png')
+    await flush()
+
+    expect(useMediaStore.getState().compatibility.get(asset.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'resource-limit',
+        runtimeFailures: [{
+          surface: 'filmstrip',
+          trackKind: null,
+          reason: 'resource-limit',
+          detail: 'The still-image thumbnail is too large.',
         }],
       },
     })

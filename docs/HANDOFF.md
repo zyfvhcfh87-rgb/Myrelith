@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-26)
+## Status (2026-07-28)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -67,8 +67,9 @@ and the open list below.
 | Post-MVP #12 — original Slice 6 | ✅ done | focusable pressed clip controls + focusable `aria-disabled` Inspector Link/Unlink with visible described reasons; exact-target race rejection, retained pair selection/primary, badges/highlighting, focus handoff; 100 focused + 1,184 total tests; targeted in-app Chromium accessibility gate |
 | Post-MVP #12 — original Slice 7 / closeout | ✅ complete | orphan-safe removal, group-wide bounds, and immutable pointerdown document guard; 359 focused + 1,209 total tests; Chrome 150 full import/re-link/move/undo/redo/playback gate with a clean console |
 | Post-MVP #18 — static images Slice 1 | ✅ done | byte-sniffed PNG/JPEG/WebP/AVIF + immutable source/decode budgets; exact one-source ownership; deterministic 15-file matrix; 60 focused + 1,269 total tests; Chrome 150 41-fact module gate |
+| Post-MVP #18 — static images Slice 2 | ✅ done | verified multi-file import + durable five-second image records + Resume/Relink + bounded one-tile visuals; 212 focused + 1,291 total tests; in-app Chrome import/error/retry gate |
 
-1,269 tests green across 68 files · `npm run build` passes with the known large-chunk warning
+1,291 tests green across 71 files · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · `npm audit --omit=dev` reports 0 vulnerabilities · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -493,10 +494,26 @@ through local Vite passed 41 browser facts for both decode paths, including
 actual oriented pixel probes and exact caller close behavior, with 0 warnings
 and 0 errors.
 
-**Next: Issue #18 remains open.** Slice 1 has no Media Pool/import-controller,
-domain/state, timeline, preview, or export caller. Do not describe static images
-as user-visible or supported until the remaining slices wire and browser-test
-those paths.
+Issue #18 Slice 2 wires that foundation into the shared import/reconnection
+boundary. Verified images now receive durable orientation-aware dimensions and
+an exact five-second default, survive Save/Resume/manual Relink/folder Relink,
+and appear in the Media Pool with a bounded one-tile thumbnail, format/decode
+diagnostics, animated-first-frame disclosure, and actionable error/retry states.
+Native and fallback pickers accept multiple files through a maximum-100,
+sequential queue so only one image decode owns peak memory at a time.
+
+The focused Slice 2 suite passed 212/212 tests across 12 files and the full
+suite passed 1,291/1,291 across 71 files. Fixture replay, build, lint, audit,
+and diff checks passed. In-app Chrome 150 imported PNG, EXIF-oriented JPEG,
+animated WebP, and AVIF together; all four showed correct metadata and ready
+thumbnails. Corrupt PNG remained Error through Retry, SVG/GIF remained
+Unsupported, every image row remained non-draggable, and the console recorded
+0 warnings and 0 errors.
+
+**Next: Issue #18 remains open.** Slice 3 should establish still-clip source and
+timeline semantics before enabling image drag/drop. Preview/compositor and
+export integration remain later boundaries; do not describe still images as
+placeable, previewable, or exportable yet.
 
 ## What works today (user-visible)
 
@@ -512,10 +529,11 @@ Review the profile, then open it with ready or offline sources. In the editor,
 the first Save chooses a writable file; Save As chooses another; both turn on
 live save. The toolbar shows dirty/saving/saved/error state, reload is guarded
 only while dirty, and returning to Projects confirms before safely closing the
-active media session. Import video or audio in the Media Pool; files are
-analyzed before they appear.
-Static-image files still do not enter this flow; Issue #18 Slice 1 is a
-pipeline-only foundation.
+active media session. Import video, audio, or PNG/JPEG/WebP/AVIF still images
+in the Media Pool; files are byte-verified and analyzed before they appear.
+Still images receive orientation-aware dimensions, a five-second default, and
+one bounded thumbnail; they can Save/Resume/Relink but intentionally cannot be
+dragged to the timeline until Issue #18 Slice 3 defines their clip semantics.
 An FPS mismatch opens an explicit
 Keep/Match/Cancel dialog, and every video asset gets its own decoder in the
 render worker. The Preview is the real timeline compositor (4.1): all visible
@@ -687,6 +705,11 @@ surface; it is not a second zoom and never enters document history.
   one caller-owned `ImageBitmap` or `VideoFrame`, validates orientation-aware
   geometry and native allocation, and owns prompt abort plus exact
   decoder/frame/bitmap cleanup.
+- `src/domain/staticImage.ts` — Issue #18 Slice 2 canonical five-second still
+  duration and exact project-rate frame conversion.
+- `src/pipeline/static-image-thumbnail.ts` — one-tile image visual generator:
+  contained 320×180 maximum geometry, PNG output capped at 1 MiB, and exact
+  decoded-source/abort ownership.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
@@ -741,14 +764,20 @@ surface; it is not a second zoom and never enters document history.
   Files/handles and retained retry resources outside Zustand, publishes guarded
   session compatibility requests, commits complete Ready assets exactly once,
   guards project-change/cancellation races, and owns every uncommitted object
-  URL. `src/app/mediaInspection.ts` now exposes the same typed probe result to
-  import and project reconnection callers.
+  URL. Slice 2 adds a maximum-100 sequential multi-file queue with one active
+  decode and batch cancellation. `src/app/mediaInspection.ts` routes
+  byte-recognized images through real decode and five-second durable asset
+  construction before falling unknown bytes back to the timed-media probe; the
+  same result feeds import and project reconnection callers.
 - `src/ui/MediaImportDialog.tsx` — accessible analysis/error/FPS-decision UI;
   exact rates, explicit choices, disabled-Match explanation, Escape handling.
 - `src/ui/MediaPool.tsx` — descriptor rows plus session-only compatibility
   rows; named live statuses, wrapped container/every-track/runtime diagnostics,
   direct-import Retry/Remove versus descriptor-backed Relink actions, and
   Ready-only drag gating with a second live check at the timeline drop boundary.
+  Slice 2 adds multi-file fallback import, still dimensions/duration/first-frame
+  disclosure, contained one-tile thumbnails, and explicit non-draggable image
+  rows until the still-clip domain contract exists.
 - `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
   code loads only on Start; progress is frame-coalesced; cancellation and retry
   are explicit states; Blob URL/download ownership, filename safety, modal
@@ -1011,13 +1040,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #18 remains open after Slice 1. Content inspection, immutable source and
-  decoded-allocation budgets, first-frame decode ownership, deterministic
-  fixtures, and the real Chrome module gate are complete. Nothing calls this
-  foundation from the Media Pool or import flow yet; images have no durable
-  domain/source record, timeline semantics, preview/compositor path, export
-  path, or user-visible error/retry/accessibility surface. Do not describe still
-  images as supported until later slices wire and verify those boundaries.
+- Issue #18 remains open after Slice 2. Content inspection, immutable budgets,
+  first-frame decode ownership, multi-file import, durable five-second image
+  records, Save/Resume/Relink, bounded Media Pool thumbnails, diagnostics, and
+  user-visible error/retry/accessibility surfaces are complete. Image rows are
+  deliberately non-draggable: Slice 3 must define still source/timeline
+  semantics before clip authoring. Preview/compositor and export paths also
+  remain unwired, so describe still images as source-library supported, not
+  placeable, previewable, or exportable.
 - Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
   Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
   explicit partial-track consent, capability caching/revalidation, prompt

@@ -738,14 +738,14 @@ describe('static-image byte inspection', () => {
     )
   })
 
-  test('enforces encoded file size before parsing bytes', () => {
+  test('enforces encoded file size after retaining the detected format', () => {
     const error = expectInspectionError(
       () => inspectStaticImageBytes(png(10, 10), {
         totalFileBytes: STATIC_IMAGE_RESOURCE_LIMITS.maxFileBytes + 1,
       }),
       'resource-limit',
       'file-size-limit',
-      null,
+      'png',
     )
     expect(error.message).toContain('static-image file limit')
   })
@@ -871,8 +871,9 @@ describe('static-image Blob inspection', () => {
     expect(slice).toHaveBeenCalledWith(0, 128)
   })
 
-  test('rejects an oversized Blob before requesting any bytes', async () => {
-    const slice = vi.fn()
+  test('reads only a bounded prefix before rejecting an oversized image', async () => {
+    const sourceBytes = png(10, 10)
+    const slice = vi.fn(() => new Blob([sourceBytes]))
     const source = {
       size: STATIC_IMAGE_RESOURCE_LIMITS.maxFileBytes + 1,
       slice,
@@ -881,8 +882,27 @@ describe('static-image Blob inspection', () => {
     await expect(inspectStaticImageBlob(source)).rejects.toMatchObject({
       reason: 'resource-limit',
       code: 'file-size-limit',
+      detectedFormat: 'png',
     })
-    expect(slice).not.toHaveBeenCalled()
+    expect(slice).toHaveBeenCalledOnce()
+    expect(slice).toHaveBeenCalledWith(
+      0,
+      STATIC_IMAGE_RESOURCE_LIMITS.maxHeaderBytes,
+    )
+  })
+
+  test('leaves an oversized non-image available to the timed-media probe', async () => {
+    const slice = vi.fn(() => new Blob([bytes(0, 1, 2, 3)]))
+    const source = {
+      size: STATIC_IMAGE_RESOURCE_LIMITS.maxFileBytes + 1,
+      slice,
+    } as unknown as Blob
+
+    await expect(inspectStaticImageBlob(source)).rejects.toMatchObject({
+      reason: 'resource-limit',
+      code: 'file-size-limit',
+      detectedFormat: null,
+    })
   })
 
   test('snapshots stricter limits before awaiting Blob bytes', async () => {

@@ -16,10 +16,10 @@ import type { FrameRate, MediaAsset } from '../domain/schema'
 import { microsecondsDurationToFrames } from '../domain/time'
 
 /**
- * Precomputed timeline eye-candy for one connected asset (filmstrip on video
- * clips, waveform on audio clips), generated once per connection by
- * app/mediaVisualsController. Both images span the asset's full duration.
- * Every URL here is owned by this store.
+ * Precomputed visuals for one connected asset (filmstrip on video clips,
+ * one tile for a still image, waveform on audio clips), generated once per
+ * connection by app/mediaVisualsController. Timed-media visuals span the
+ * asset's full duration. Every URL here is owned by this store.
  */
 export interface AssetVisuals {
   filmstrip: {

@@ -66,10 +66,24 @@ export class LocalMediaFolderTraversalError extends Error {
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.mkv', '.webm', '.m4v'] as const
 const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'] as const
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.avif'] as const
 const SUPPORTED_MEDIA_EXTENSIONS = new Set<string>([
   ...VIDEO_EXTENSIONS,
   ...AUDIO_EXTENSIONS,
+  ...IMAGE_EXTENSIONS,
 ])
+
+export const MEDIA_FILE_INPUT_ACCEPT = [
+  'video/*',
+  'audio/*',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/avif',
+  ...VIDEO_EXTENSIONS,
+  ...AUDIO_EXTENSIONS,
+  ...IMAGE_EXTENSIONS,
+].join(',')
 
 interface LocalOpenFilePickerOptions {
   id?: string
@@ -264,10 +278,14 @@ export async function pickLocalMediaFiles(
     multiple,
     excludeAcceptAllOption: false,
     types: [{
-      description: 'Video and audio',
+      description: 'Video, audio, and still images',
       accept: {
         'video/*': [...VIDEO_EXTENSIONS],
         'audio/*': [...AUDIO_EXTENSIONS],
+        'image/png': ['.png'],
+        'image/jpeg': ['.jpg', '.jpeg'],
+        'image/webp': ['.webp'],
+        'image/avif': ['.avif'],
       },
     }],
   })
