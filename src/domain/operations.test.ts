@@ -98,6 +98,32 @@ function makeDoc(): TimelineDoc {
   })
 }
 
+function makeStillClip(
+  id: string,
+  tlStart: number,
+  duration: number,
+): Clip {
+  return {
+    ...makeClip(id, tlStart, duration),
+    assetId: 'image-1',
+    sourceMode: 'still',
+    sourceRange: { startFrame: 0, durationFrames: 1 },
+  }
+}
+
+function makeVideoDoc(clips: Clip[]): TimelineDoc {
+  return deepFreeze({
+    schemaVersion: 1,
+    id: 'doc-stills',
+    name: 'Still source tests',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [makeTrack('V1', 'video', clips)],
+  })
+}
+
 function clipsOf(doc: TimelineDoc, trackId: string): Clip[] {
   const track = doc.tracks.find((t) => t.id === trackId)
   if (!track) throw new Error(`no track ${trackId}`)
@@ -423,6 +449,7 @@ describe('clipFromAsset', () => {
     const c = clipFromAsset(asset(), 30)
     expect(c.assetId).toBe('asset-9')
     expect(c.name).toBe('beach.mp4')
+    expect(c.sourceMode).toBe('timed')
     expect(c.sourceRange).toEqual({ startFrame: 0, durationFrames: 120 })
     expect(c.timelineRange).toEqual({ startFrame: 30, durationFrames: 120 })
     expect(c.opacity).toBe(1)
@@ -435,6 +462,24 @@ describe('clipFromAsset', () => {
 
   test('every call mints a fresh clip id', () => {
     expect(clipFromAsset(asset(), 0).id).not.toBe(clipFromAsset(asset(), 0).id)
+  })
+
+  test('an image gets one still source frame and a nominal editable timeline duration', () => {
+    const c = clipFromAsset(asset({
+      kind: 'image',
+      fileName: 'poster.png',
+      mimeType: 'image/png',
+      durationFrames: 150,
+      durationMicroseconds: 5_000_000,
+      frameRate: null,
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    }), 45)
+
+    expect(c.sourceMode).toBe('still')
+    expect(c.sourceRange).toEqual({ startFrame: 0, durationFrames: 1 })
+    expect(c.timelineRange).toEqual({ startFrame: 45, durationFrames: 150 })
   })
 })
 
@@ -504,6 +549,29 @@ describe('insertClip', () => {
   test('result survives a JSON round-trip', () => {
     const out = insertClip(makeDoc(), 'V2', clipFromAsset(asset(), 0))
     expect(JSON.parse(JSON.stringify(out))).toEqual(out)
+  })
+
+  test('accepts canonical still geometry and rejects invented still source frames', () => {
+    const doc = makeVideoDoc([])
+    const still = makeStillClip('still', 10, 150)
+    const inserted = insertClip(doc, 'V1', still)
+    expect(clipIn(inserted, 'V1', 'still')).toMatchObject({
+      sourceMode: 'still',
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+      timelineRange: { startFrame: 10, durationFrames: 150 },
+    })
+
+    const malformed = {
+      ...makeStillClip('bad-still', 200, 30),
+      sourceRange: { startFrame: 1, durationFrames: 1 },
+    }
+    expect(insertClip(doc, 'V1', malformed)).toBe(doc)
+
+    const unknownMode = {
+      ...makeClip('bad-mode', 200, 30),
+      sourceMode: 'animated',
+    } as unknown as Clip
+    expect(insertClip(doc, 'V1', unknownMode)).toBe(doc)
   })
 })
 
@@ -677,6 +745,91 @@ describe('rippleTrim', () => {
     const out = rippleTrim(doc, 'clipA', 'end', -20)
     expect(out.tracks[1]).toBe(doc.tracks[1])
     expect(out.tracks[2]).toBe(doc.tracks[2])
+  })
+})
+
+describe('still-source editing semantics', () => {
+  test('razor halves both retain source frame 0 while partitioning timeline duration', () => {
+    const doc = makeVideoDoc([makeStillClip('still', 10, 100)])
+    const out = splitClipAtFrame(doc, 'still', 45)
+    const [left, right] = clipsOf(out, 'V1')
+
+    expect(left.timelineRange).toEqual({ startFrame: 10, durationFrames: 35 })
+    expect(right.timelineRange).toEqual({ startFrame: 45, durationFrames: 65 })
+    expect(left.sourceRange).toEqual({ startFrame: 0, durationFrames: 1 })
+    expect(right.sourceRange).toEqual({ startFrame: 0, durationFrames: 1 })
+    expect(left.sourceMode).toBe('still')
+    expect(right.sourceMode).toBe('still')
+  })
+
+  test('plain trims freely extend either edge without changing the still source', () => {
+    const doc = makeVideoDoc([makeStillClip('still', 100, 50)])
+    const extendedStart = trimClip(doc, 'still', 'start', -25)
+    expect(clipIn(extendedStart, 'V1', 'still')).toMatchObject({
+      timelineRange: { startFrame: 75, durationFrames: 75 },
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    })
+
+    const extendedEnd = trimClip(extendedStart, 'still', 'end', 500)
+    expect(clipIn(extendedEnd, 'V1', 'still')).toMatchObject({
+      timelineRange: { startFrame: 75, durationFrames: 575 },
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    })
+  })
+
+  test('ripple trims change timeline geometry and downstream positions only', () => {
+    const downstream = makeClip('downstream', 100, 20)
+    const doc = makeVideoDoc([makeStillClip('still', 0, 50), downstream])
+
+    const endExtended = rippleTrim(doc, 'still', 'end', 30)
+    expect(clipIn(endExtended, 'V1', 'still')).toMatchObject({
+      timelineRange: { startFrame: 0, durationFrames: 80 },
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    })
+    expect(clipIn(endExtended, 'V1', 'downstream').timelineRange.startFrame).toBe(130)
+
+    const startExtended = rippleTrim(doc, 'still', 'start', -25)
+    expect(clipIn(startExtended, 'V1', 'still')).toMatchObject({
+      timelineRange: { startFrame: 0, durationFrames: 75 },
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    })
+    expect(clipIn(startExtended, 'V1', 'downstream').timelineRange.startFrame).toBe(125)
+  })
+
+  test('slip is a silent same-reference no-op, including on a locked still track', () => {
+    const doc = makeVideoDoc([makeStillClip('still', 0, 50)])
+    expect(slipClip(doc, 'still', 20)).toBe(doc)
+    expect(warnSpy).not.toHaveBeenCalled()
+
+    const locked = deepFreeze({
+      ...doc,
+      tracks: [{ ...doc.tracks[0], locked: true }],
+    })
+    expect(slipClip(locked, 'still', 20)).toBe(locked)
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('slide preserves canonical source geometry for touching still neighbors', () => {
+    const target = makeClip('target', 50, 20)
+    const doc = makeVideoDoc([
+      makeStillClip('left-still', 0, 50),
+      target,
+      makeStillClip('right-still', 70, 30),
+    ])
+    const out = slideClip(doc, 'target', 5)
+
+    expect(clipIn(out, 'V1', 'left-still')).toMatchObject({
+      timelineRange: { startFrame: 0, durationFrames: 55 },
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    })
+    expect(clipIn(out, 'V1', 'target')).toMatchObject({
+      timelineRange: { startFrame: 55, durationFrames: 20 },
+      sourceRange: target.sourceRange,
+    })
+    expect(clipIn(out, 'V1', 'right-still')).toMatchObject({
+      timelineRange: { startFrame: 75, durationFrames: 25 },
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    })
   })
 })
 

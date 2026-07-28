@@ -33,6 +33,7 @@ function mediaClip(
     id,
     assetId,
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: sourceStart, durationFrames: duration },
     timelineRange: { startFrame: timelineStart, durationFrames: duration },
     transform: {
@@ -190,21 +191,69 @@ describe('portable project file', () => {
     )
   })
 
-  test('migrates v1 projects to v2 without inventing a partial-track choice', () => {
+  test('migrates v1 projects to v3 without inventing a partial-track choice', () => {
     const legacy = clone(makeProject()) as unknown as {
       formatVersion: number
       assets: Array<Record<string, unknown>>
+      document: TimelineDoc
     }
     legacy.formatVersion = 1
     for (const asset of legacy.assets) delete asset.partialTrackSelection
+    for (const track of legacy.document.tracks) {
+      for (const clip of track.clips) delete clip.sourceMode
+    }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.formatVersion).toBe(2)
+    expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
     expect(parsed.assets).toHaveLength(2)
     expect(
       parsed.assets.every((asset) => asset.partialTrackSelection === undefined),
     ).toBe(true)
+    expect(
+      parsed.document.tracks.flatMap((track) => track.clips)
+        .every((clip) => clip.sourceMode === 'timed'),
+    ).toBe(true)
+  })
+
+  test('migrates a v2 image clip to one still source frame without changing its timeline', () => {
+    const legacy = clone(makeProject()) as unknown as {
+      formatVersion: number
+      document: TimelineDoc
+    }
+    legacy.formatVersion = 2
+    const title = legacy.document.tracks[0].clips[2]
+    delete title.text
+    for (const track of legacy.document.tracks) {
+      for (const clip of track.clips) delete clip.sourceMode
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+    const migrated = parsed.document.tracks[0].clips[2]
+
+    expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
+    expect(migrated.sourceMode).toBe('still')
+    expect(migrated.sourceRange).toEqual({ startFrame: 0, durationFrames: 1 })
+    expect(migrated.timelineRange).toEqual({
+      startFrame: 24,
+      durationFrames: 20,
+    })
+    expect(parsed.document.tracks[0].clips[0].sourceMode).toBe('timed')
+  })
+
+  test('round-trips explicit still source semantics in the current format', () => {
+    const project = makeProject()
+    const title = project.document.tracks[0].clips[2]
+    delete title.text
+    title.sourceMode = 'still'
+    title.sourceRange = { startFrame: 0, durationFrames: 1 }
+
+    const parsed = parseProjectFile(serializeProjectFile(project))
+    expect(parsed.document.tracks[0].clips[2]).toMatchObject({
+      sourceMode: 'still',
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+      timelineRange: { startFrame: 24, durationFrames: 20 },
+    })
   })
 
   test('round-trips durable video-only and audio-only descriptor choices', () => {
@@ -495,6 +544,11 @@ describe('portable project file', () => {
       content: 'x'.repeat(PROJECT_FILE_LIMITS.maxTextCharacters),
     }
     delete project.document.tracks[0].clips[2].text
+    project.document.tracks[0].clips[2].sourceMode = 'still'
+    project.document.tracks[0].clips[2].sourceRange = {
+      startFrame: 0,
+      durationFrames: 1,
+    }
     const textClipCount = Math.floor(
       PROJECT_FILE_LIMITS.maxTotalTextCharacters / PROJECT_FILE_LIMITS.maxTextCharacters,
     )
@@ -579,6 +633,28 @@ describe('portable project file', () => {
     const missingEndpoint = makeProject()
     missingEndpoint.document.tracks[0].transitions[0].toClipId = 'not-a-clip'
     expect(() => validateProjectFile(missingEndpoint)).toThrow(/adjacent clips/)
+  })
+
+  test('requires valid explicit timed/still source semantics in current files', () => {
+    const missingMode = makeProject()
+    delete missingMode.document.tracks[0].clips[0].sourceMode
+    expect(() => validateProjectFile(missingMode)).toThrow(/missing field sourceMode/)
+
+    const timedImage = makeProject()
+    const imageClip = timedImage.document.tracks[0].clips[2]
+    delete imageClip.text
+    expect(() => validateProjectFile(timedImage)).toThrow(
+      /image clips must use still source mode/,
+    )
+
+    const malformedStill = makeProject()
+    const still = malformedStill.document.tracks[0].clips[2]
+    delete still.text
+    still.sourceMode = 'still'
+    still.sourceRange = { startFrame: 0, durationFrames: 2 }
+    expect(() => validateProjectFile(malformedStill)).toThrow(
+      /source frame 0 with duration 1/,
+    )
   })
 
   test('rejects source ranges beyond the portable asset duration', () => {

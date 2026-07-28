@@ -108,6 +108,35 @@ describe('gestureBoundsForClip', () => {
       Number.POSITIVE_INFINITY,
     )
   })
+
+  test('stills have timeline-only trim bounds and no slip interval', () => {
+    const member = {
+      ...clip('still', 'image-asset', 20, 150, 0),
+      sourceMode: 'still' as const,
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    }
+
+    expect(gestureBoundsForClip(member, 'trim-start', 150)).toEqual({
+      minDelta: -20,
+      maxDelta: 149,
+    })
+    expect(gestureBoundsForClip(member, 'ripple-start', 150)).toEqual({
+      minDelta: Number.NEGATIVE_INFINITY,
+      maxDelta: 149,
+    })
+    expect(gestureBoundsForClip(member, 'trim-end', 150)).toEqual({
+      minDelta: -149,
+      maxDelta: Number.POSITIVE_INFINITY,
+    })
+    expect(gestureBoundsForClip(member, 'ripple-end', 150)).toEqual({
+      minDelta: -149,
+      maxDelta: Number.POSITIVE_INFINITY,
+    })
+    expect(gestureBoundsForClip(member, 'slip', 150)).toEqual({
+      minDelta: 0,
+      maxDelta: 0,
+    })
+  })
 })
 
 describe('linkedGestureBounds', () => {

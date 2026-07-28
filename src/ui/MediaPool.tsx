@@ -621,7 +621,6 @@ export default function MediaPool() {
               : undefined
             const draggable = Boolean(
               asset
-              && asset.kind !== 'image'
               && asset.durationFrames > 0
               && compatibilityAllowsTimelineUse(compatibilityItem),
             )
@@ -642,7 +641,6 @@ export default function MediaPool() {
                   const liveAsset = liveMedia.assets.get(id)
                   if (
                     !liveAsset
-                    || liveAsset.kind === 'image'
                     || liveAsset.durationFrames <= 0
                     || !compatibilityAllowsTimelineUse(
                       liveMedia.compatibility.get(id),

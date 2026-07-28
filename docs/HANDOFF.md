@@ -68,8 +68,9 @@ and the open list below.
 | Post-MVP #12 — original Slice 7 / closeout | ✅ complete | orphan-safe removal, group-wide bounds, and immutable pointerdown document guard; 359 focused + 1,209 total tests; Chrome 150 full import/re-link/move/undo/redo/playback gate with a clean console |
 | Post-MVP #18 — static images Slice 1 | ✅ done | byte-sniffed PNG/JPEG/WebP/AVIF + immutable source/decode budgets; exact one-source ownership; deterministic 15-file matrix; 60 focused + 1,269 total tests; Chrome 150 41-fact module gate |
 | Post-MVP #18 — static images Slice 2 | ✅ done | verified multi-file import + durable five-second image records + Resume/Relink + bounded one-tile visuals; 212 focused + 1,291 total tests; in-app Chrome import/error/retry gate |
+| Post-MVP #18 — static images Slice 3 | ✅ done | explicit still source mode + v3 migration; placeable/editable five-second clips, frame-0 selectors, Slip no-op, repeated timeline tiles; 352 focused + 1,311 total tests; in-app Chrome Razor/crossfade/undo gate |
 
-1,291 tests green across 71 files · `npm run build` passes with the known large-chunk warning
+1,311 tests green across 71 files · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · `npm audit --omit=dev` reports 0 vulnerabilities · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -510,10 +511,38 @@ thumbnails. Corrupt PNG remained Error through Retry, SVG/GIF remained
 Unsupported, every image row remained non-draggable, and the console recorded
 0 warnings and 0 errors.
 
-**Next: Issue #18 remains open.** Slice 3 should establish still-clip source and
-timeline semantics before enabling image drag/drop. Preview/compositor and
-export integration remain later boundaries; do not describe still images as
-placeable, previewable, or exportable yet.
+Issue #18 Slice 3 establishes the still-clip timeline contract. Clips now carry
+an explicit `timed` or `still` source mode; every still owns canonical source
+range `[0, 1)` while its independent timeline range starts at the existing
+exact five-second default. Portable project format v3 requires that contract,
+and bounded asset-aware migration converts legacy image-media clips without
+misclassifying timed video/audio or text clips.
+
+Selectors map every ordinary and transition frame of a still to source frame 0.
+Move, trim, ripple, Razor, and Slide preserve `[0, 1)` while editing timeline
+geometry. Slip is a silent same-reference no-op for a still or a linked group
+containing one, so it creates neither a gesture preview nor a history entry.
+Ready images are now draggable to video lanes, and one bounded image tile
+repeats across the complete still clip, including split and extended ranges.
+The accessible clip name identifies a still image, and its Slip title explains
+why the tool is unavailable.
+
+The focused Slice 3 suite passed 352/352 tests across 10 files and the full
+suite passed 1,311/1,311 across 71 files. Fixture replay, build, lint, audit,
+and diff checks passed. In-app Chrome 150 imported a real 2×2 PNG, showed the
+Ready row as draggable, rendered the exact five-second still tile, Razor-split
+it into adjacent 75/75-frame halves, added a 15-frame crossfade, preserved
+identical rendered markup through a Slip attempt, and restored Razor/crossfade
+states through keyboard undo/redo. The console recorded 0 warnings and 0
+errors. The browser runner needed removed QA-only chooser/insertion adapters
+because it cannot carry a local file through File System Access or synthesize
+this HTML drag; the actual import, clip factory, store, editing, transition,
+and rendering paths ran unchanged, and focused UI tests cover data transfer.
+
+**Next: Issue #18 remains open.** The next slice should connect still-frame
+decode to the shared preview/compositor path. Export integration remains a
+later boundary; describe images as importable, placeable, and timeline-editable,
+but not preview-renderable or exportable yet.
 
 ## What works today (user-visible)
 
@@ -532,9 +561,12 @@ only while dirty, and returning to Projects confirms before safely closing the
 active media session. Import video, audio, or PNG/JPEG/WebP/AVIF still images
 in the Media Pool; files are byte-verified and analyzed before they appear.
 Still images receive orientation-aware dimensions, a five-second default, and
-one bounded thumbnail; they can Save/Resume/Relink but intentionally cannot be
-dragged to the timeline until Issue #18 Slice 3 defines their clip semantics.
-An FPS mismatch opens an explicit
+one bounded thumbnail; Ready rows drag to video lanes as explicit still clips.
+Their timeline duration can be moved, trimmed, rippled, split, slid, and joined
+by transitions while the single source frame remains fixed; Slip explains that
+it is unavailable and performs no edit. Save/Resume/Relink preserves that
+contract. The timeline tile repeats correctly, but Preview and export still do
+not decode image sources. An FPS mismatch opens an explicit
 Keep/Match/Cancel dialog, and every video asset gets its own decoder in the
 render worker. The Preview is the real timeline compositor (4.1): all visible
 video tracks draw bottom-to-top at the playhead with per-clip Transform
@@ -639,15 +671,20 @@ surface; it is not a second zoom and never enters document history.
 
 ## Map (key files, one line each)
 
-- `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates),
+- `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates,
+  and optional legacy-compatible `ClipSourceMode` with explicit `timed`/`still`
+  values in every new or persisted clip),
   `time.ts` (conversions incl. exact integer microseconds,
   `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn;
+  Issue #18 Slice 3 keeps still source `[0, 1)` through clip creation,
+  trim/ripple/Razor/Slide and makes Slip a silent same-reference no-op;
   Slice 7 `removeTrack` atomically dissolves lone unlocked link survivors or
   rejects for a locked survivor; 5.1e-1 track-scoped
   `addCrossfade`/`setCrossfadeDuration`/
   `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
+  with all ordinary and transition still samples fixed at source frame 0,
   `resolveCrossfade` (canonical centered-window geometry),
   `visibleVideoLayersAtFrame` (THE preview/export visual plan),
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
@@ -658,12 +695,16 @@ surface; it is not a second zoom and never enters document history.
   group ids; Slice 2 exposes that operation through the canonical
   history-backed `documentStore.linkClips`; Slice 3 resolves the ephemeral UI
   pair through the same eligibility contract before dispatch; the store's
-  geometry actions call these wrappers too).
+  geometry actions call these wrappers too; linked Slip also preflights every
+  member so a group containing a still remains one silent no-op).
 - `src/domain/projectSettings.ts` — authoritative project presets, strict
   settings validation, and the pure empty-document factory.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
   migration entry point, strict untrusted-input validation, and bounded durable
-  asset metadata; excludes every session-owned field.
+  asset metadata; excludes every session-owned field. Issue #18 Slice 3 bumps
+  the format to v3, requires explicit mode/range consistency in current files,
+  and migrates v1/v2 image-media clips to `still` `[0, 1)` while retaining
+  timed media and text semantics.
 - `src/state/projectSessionStore.ts` — serializable launch/editor screen,
   active-project labels, operation phase, relink status, and separate
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
@@ -776,8 +817,12 @@ surface; it is not a second zoom and never enters document history.
   direct-import Retry/Remove versus descriptor-backed Relink actions, and
   Ready-only drag gating with a second live check at the timeline drop boundary.
   Slice 2 adds multi-file fallback import, still dimensions/duration/first-frame
-  disclosure, contained one-tile thumbnails, and explicit non-draggable image
-  rows until the still-clip domain contract exists.
+  disclosure, and contained one-tile thumbnails. Slice 3 enables Ready image
+  rows through both drag guards now that the still-clip domain contract exists.
+- `src/ui/timeline/ClipView.tsx` + `gestureBounds.ts` — Slice 3 repeats one
+  bounded still tile across the complete timeline duration, exposes a clear
+  still-image accessible name/Slip explanation, gives still trims unbounded
+  source headroom, and constrains still Slip to exactly zero.
 - `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
   code loads only on Start; progress is frame-coalesced; cancellation and retry
   are explicit states; Blob URL/download ownership, filename safety, modal
@@ -1040,14 +1085,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #18 remains open after Slice 2. Content inspection, immutable budgets,
+- Issue #18 remains open after Slice 3. Content inspection, immutable budgets,
   first-frame decode ownership, multi-file import, durable five-second image
-  records, Save/Resume/Relink, bounded Media Pool thumbnails, diagnostics, and
-  user-visible error/retry/accessibility surfaces are complete. Image rows are
-  deliberately non-draggable: Slice 3 must define still source/timeline
-  semantics before clip authoring. Preview/compositor and export paths also
-  remain unwired, so describe still images as source-library supported, not
-  placeable, previewable, or exportable.
+  records, Save/Resume/Relink, bounded Media Pool thumbnails, diagnostics,
+  explicit still source/timeline semantics, project v3 migration, image
+  drag/drop, editing, transitions, exact undo/redo, and timeline visuals are
+  complete. Preview/compositor and export decoding remain unwired, so describe
+  still images as importable, placeable, and timeline-editable, but not
+  preview-renderable or exportable.
 - Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
   Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
   explicit partial-track consent, capability caching/revalidation, prompt

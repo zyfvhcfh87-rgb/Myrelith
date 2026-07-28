@@ -47,6 +47,7 @@ import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
+import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
 import MediaPool from './MediaPool'
 
 vi.mock('../app/mediaImportController', () => ({
@@ -416,7 +417,7 @@ describe('MediaPool presentation', () => {
     expect(thumbnail).toHaveStyle({ backgroundSize: '400% auto' })
   })
 
-  test('presents a verified animated still as one contained, non-draggable tile', () => {
+  test('presents a verified animated still as one contained, draggable tile', () => {
     const image = makeAsset({
       id: 'image-1',
       fileName: 'poster.webp',
@@ -471,7 +472,7 @@ describe('MediaPool presentation', () => {
 
     const card = screen.getByTitle('poster.webp')
     const thumbnail = screen.getByTestId('media-thumbnail-image-1')
-    expect(card).toHaveAttribute('draggable', 'false')
+    expect(card).toHaveAttribute('draggable', 'true')
     expect(screen.getByText(
       '640×360 · 00:00:05:00 · First frame only',
     )).toBeInTheDocument()
@@ -488,7 +489,8 @@ describe('MediaPool presentation', () => {
     fireEvent.dragStart(card, {
       dataTransfer: { setData, effectAllowed: 'none' },
     })
-    expect(setData).not.toHaveBeenCalled()
+    expect(setData).toHaveBeenCalledWith(ASSET_DRAG_TYPE, 'image-1')
+    expect(setData).toHaveBeenCalledWith(assetKindDragType('image'), 'image')
   })
 
   test('shows completed audio metadata instead of an analysis placeholder', () => {

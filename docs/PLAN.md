@@ -1065,6 +1065,48 @@ semantics rather than inheriting the existing timed-video range contract.
   with actionable explanations. The Media Pool remained usable and the console
   recorded 0 warnings and 0 errors.
 
+## Post-MVP issue #18 — Slice 3 ✅ DONE (2026-07-28) Still-clip timeline semantics
+
+Issue #18 remains open. This slice makes verified image sources placeable and
+fully editable on video lanes with one explicit still-source contract. Preview
+and export decoding remain later slices, so timeline authoring is complete
+without claiming that the viewer or exported file can render a still yet.
+
+- [x] Add explicit `timed` versus `still` clip source modes. Every still keeps
+  the canonical half-open source range `[0, 1)` while its timeline range owns
+  the independent visible duration. New image clips start at the existing exact
+  five-second default; timed video/audio/text behavior remains unchanged.
+- [x] Bump the portable project format to version 3. Current files require an
+  explicit valid source mode and reject inconsistent image/timed/source-range
+  combinations. The bounded v1/v2 migration resolves image-media clips to
+  `still` plus `[0, 1)` and preserves timed media/text clips as `timed`.
+- [x] Map every active still frame, including both sides of a crossfade, to
+  source frame 0. Move, start/end trim, ripple trim, Razor, and Slide may change
+  timeline geometry but preserve the canonical still source range. Slip is an
+  intentional same-reference no-op for a still and for any linked group that
+  contains one; no preview, warning, history entry, or redo loss is produced.
+- [x] Enable Ready image rows at both drag guards and create image drops through
+  the normal one-entry `clipFromAsset`/`insertClip` path. Still-aware gesture
+  bounds expose unlimited trim headroom and zero Slip range while retaining
+  locked-track and fresh-document protections.
+- [x] Render one contained image tile repeatedly across the complete still
+  timeline interval, including split and extended clips. Expose “still image
+  clip” in the accessible name and explain directly that Slip is unavailable.
+- [x] Verification: 352/352 focused tests across 10 domain/state/UI files;
+  1,311/1,311 total tests across 71 files; deterministic 15-file fixture replay,
+  production build, lint, audit, and diff checks green.
+- [x] In-app Chrome 150 imported a real 2×2 PNG, exposed a draggable Ready row,
+  and rendered a five-second `data-source-mode="still"` clip with one repeated
+  tile. Razor produced exact adjacent 75/75-frame still halves; a 15-frame
+  crossfade attached between them; Slip preserved identical rendered clip
+  markup; and keyboard undo/redo restored both Razor and crossfade states
+  exactly. The console recorded 0 warnings and 0 errors. Browser automation
+  used removed QA-only chooser/insertion adapters because its native File
+  System Access and HTML drag bridges could not carry the local fixture; the
+  real import, clip factory, store action, edit, transition, and render paths
+  were exercised, while the actual data-transfer boundary is covered by the
+  focused UI component tests.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

@@ -87,10 +87,11 @@ Never write to `documentStore` on every `pointermove`.
 - Ruler ticks, pointer-to-frame conversion, clips, transition seams, and the
   playhead all use the same `zoom` plus the shared origin translation. A clip
   is intersected with the current physical window before it emits DOM width.
-  Filmstrip buckets retain their source-frame offset within that slice, and
-  waveforms use a normalized source-time SVG viewBox rather than a gigantic
-  duration-scaled background. Long clips therefore stay aligned without
-  recreating the browser-width problem inside one visual element.
+  Timed filmstrip buckets retain their source-frame offset within that slice;
+  still clips repeat their one generated tile across the visible timeline
+  slice. Waveforms use a normalized source-time SVG viewBox rather than a
+  gigantic duration-scaled background. Long clips therefore stay aligned
+  without recreating the browser-width problem inside one visual element.
 
 ## Data model — `src/domain/schema.ts` (canonical, implemented)
 
@@ -102,8 +103,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `TimeRange` is **half-open** `[startFrame, startFrame + durationFrames)`;
   ranges that merely touch do not overlap. All ranges are integer frames at
   the document rate.
-- MVP: clips play at speed 1.0 and assets are conformed to the doc rate, so
-  `sourceRange.durationFrames === timelineRange.durationFrames` always.
+- `Clip.sourceMode` makes source mapping explicit. Timed clips play at speed
+  1.0 against conformed assets, so their source and timeline durations match.
+  Still clips always use `sourceRange = { startFrame: 0, durationFrames: 1 }`;
+  every timeline frame (including transition windows) resolves to source frame
+  0, while `timelineRange.durationFrames` is independently editable. Trim,
+  ripple, razor, and slide change timeline geometry without inventing source
+  frames; Slip is an intentional no-op.
 - Clips on one track are sorted by `timelineRange.startFrame` and pairwise
   non-overlapping; `operations.ts` rejects violations.
 - `TimelineDoc.tracks[0]` composites first (bottom layer).

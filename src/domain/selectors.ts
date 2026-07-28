@@ -127,13 +127,13 @@ export function outputMediaAssetIds(doc: TimelineDoc): Set<AssetId> {
 }
 
 /**
- * Map a timeline frame to the source-asset frame the clip shows there:
- * sourceRange start plus the offset into the clip. Pure integer math (MVP
- * speed 1.0 — source and timeline ranges have equal durations). Only
- * meaningful when `timelineFrame` is inside clip.timelineRange; callers
- * (compositor, split/trim ops) check that via activeClipAt/rangeContains.
+ * Map a timeline frame to the source-asset frame the clip shows there.
+ * Stills always resolve frame 0; timed clips add the offset into the clip to
+ * their source in-point. Only meaningful inside clip.timelineRange; callers
+ * check that via activeClipAt/rangeContains.
  */
 export function clipSourceFrame(clip: Clip, timelineFrame: number): number {
+  if (clip.sourceMode === 'still') return 0
   return (
     clip.sourceRange.startFrame + (timelineFrame - clip.timelineRange.startFrame)
   )
@@ -160,6 +160,9 @@ function clipOpacity(clip: Clip): number {
 
 function validSourceRange(clip: Clip): boolean {
   const { startFrame, durationFrames } = clip.sourceRange
+  if (clip.sourceMode === 'still') {
+    return startFrame === 0 && durationFrames === 1
+  }
   return (
     Number.isSafeInteger(startFrame) &&
     startFrame >= 0 &&
@@ -261,6 +264,7 @@ function crossfadeAt(track: Track, frame: number): ResolvedCrossfade | null {
 }
 
 function clampedTransitionSourceFrame(clip: Clip, frame: number): number {
+  if (clip.sourceMode === 'still') return 0
   const first = clip.sourceRange.startFrame
   const last = first + clip.sourceRange.durationFrames - 1
   return Math.max(first, Math.min(last, clipSourceFrame(clip, frame)))
