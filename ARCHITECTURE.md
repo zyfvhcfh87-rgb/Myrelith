@@ -34,8 +34,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
   - `workers/` may import `engine/frame-cache.ts` (pure class, no deps),
   - `workers/render.worker.ts` may import `pipeline/render.ts` (the pure
     compositing core: imports domain/ only, no browser I/O — the worker is
-    its runtime host, exactly like export.ts will be in Phase 5) and the
-    STRUCTURAL TYPES exported by `workers/decode.worker.ts` via
+    its runtime host, exactly like export.ts will be in Phase 5),
+    `pipeline/static-image.ts` (the bounded browser/worker-safe still-image
+    inspection + decode boundary), and the STRUCTURAL TYPES exported by
+    `workers/decode.worker.ts` via
     `import type` (erased at build time — a runtime import would register
     the decode worker's message listener inside the render worker),
   - `engine/worker-bridge.ts` references the worker FILE via
@@ -45,8 +47,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
 ## Non-negotiable rules
 
 1. **Close every frame.** Every `VideoFrame` / `AudioData` / `ImageBitmap`
-   MUST be `.close()`'d in a `finally` block or immediately after use. Never
-   store one in React state or a closure that outlives the current draw call.
+   MUST be `.close()`'d in a `finally` block or immediately after use. The
+   only resource allowed to outlive one draw is a bounded source/cache entry
+   with one explicit non-React owner and exact replacement/release/shutdown
+   cleanup. Never store one in React state or an unowned closure.
 2. **Integer frames, not floats.** All timeline math uses integer frame
    counts + `RationalTime`, never raw floating-point seconds. Convert to
    seconds only at the boundary (encoder/decoder/audio-clock).

@@ -34,6 +34,7 @@ class FakeBridge implements BridgeLike {
   onAssetError: ((
     assetId: string,
     runtimeToken: object,
+    trackKind: 'video' | null,
     message: string,
   ) => void) | null = null
   onAssetReady: ((assetId: string) => void) | null = null
@@ -45,6 +46,11 @@ class FakeBridge implements BridgeLike {
     budget: LocalDecoderBudget
     runtimeToken: object
   }> = []
+  openedImages: Array<{
+    assetId: string
+    blob: Blob
+    runtimeToken: object
+  }> = []
   released: string[] = []
   rendered: Array<{ frame: number; mode: RenderMode }> = []
   disposed = false
@@ -53,6 +59,11 @@ class FakeBridge implements BridgeLike {
     blob: Blob,
     rate: FrameRate,
     budget: LocalDecoderBudget,
+    runtimeToken: object,
+  ) => Promise<void> = async () => {}
+  openImageImpl: (
+    assetId: string,
+    blob: Blob,
     runtimeToken: object,
   ) => Promise<void> = async () => {}
   renderImpl: (
@@ -78,6 +89,16 @@ class FakeBridge implements BridgeLike {
   ): Promise<void> {
     this.opened.push({ assetId, blob, rate, budget, runtimeToken })
     await this.openImpl(assetId, blob, rate, budget, runtimeToken)
+    this.onAssetReady?.(assetId)
+  }
+
+  async openImage(
+    assetId: string,
+    blob: Blob,
+    runtimeToken: object,
+  ): Promise<void> {
+    this.openedImages.push({ assetId, blob, runtimeToken })
+    await this.openImageImpl(assetId, blob, runtimeToken)
     this.onAssetReady?.(assetId)
   }
 
@@ -132,8 +153,35 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
   }
 }
 
+function makeImageAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
+  const id = overrides.id ?? `image-${++assetCounter}`
+  return makeAsset({
+    id,
+    fileName: `${id}.png`,
+    mimeType: 'image/png',
+    objectUrl: `blob:${id}`,
+    kind: 'image',
+    durationFrames: 300,
+    durationMicroseconds: 5_000_000,
+    frameRate: null,
+    width: 640,
+    height: 360,
+    hasAudio: false,
+    audioSampleRate: null,
+    audioChannels: null,
+    decoderConfigB64: null,
+    ...overrides,
+  })
+}
+
 function seedAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
   const asset = makeAsset(overrides)
+  expect(useMediaStore.getState().addAsset(asset)).toBe(true)
+  return asset
+}
+
+function seedImageAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
+  const asset = makeImageAsset(overrides)
   expect(useMediaStore.getState().addAsset(asset)).toBe(true)
   return asset
 }
@@ -289,6 +337,43 @@ describe('previewController', () => {
     )
   })
 
+  test('hands an analyzed still Blob to the worker exactly once', async () => {
+    const { deps, bridge, blob } = makeDeps()
+    initPreview(canvasEl(), deps)
+    const image = seedImageAsset({
+      id: 'still',
+      objectUrl: 'blob:still-source',
+    })
+    await flush()
+
+    expect(deps.fetchBlob).toHaveBeenCalledOnce()
+    expect(deps.fetchBlob).toHaveBeenCalledWith(image.objectUrl)
+    expect(bridge.opened).toHaveLength(0)
+    expect(bridge.openedImages).toEqual([{
+      assetId: image.id,
+      blob,
+      runtimeToken: expect.objectContaining({
+        assetId: image.id,
+        objectUrl: image.objectUrl,
+      }),
+    }])
+
+    seedAsset({ id: 'audio-poke', kind: 'audio', frameRate: null })
+    await flush()
+    expect(bridge.openedImages).toHaveLength(1)
+  })
+
+  test('video and still assets keep separate worker-owned sources', async () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+    const video = seedAsset({ id: 'video' })
+    const image = seedImageAsset({ id: 'image' })
+    await flush()
+
+    expect(bridge.opened.map((entry) => entry.assetId)).toEqual([video.id])
+    expect(bridge.openedImages.map((entry) => entry.assetId)).toEqual([image.id])
+  })
+
   test('descriptor-only media is never fetched or opened', async () => {
     const offline = makeAsset({ id: 'offline-only' })
     expect(useMediaStore.getState().replaceAssets(
@@ -303,6 +388,7 @@ describe('previewController', () => {
 
     expect(deps.fetchBlob).not.toHaveBeenCalled()
     expect(bridge.opened).toHaveLength(0)
+    expect(bridge.openedImages).toHaveLength(0)
   })
 
   test('publishes only offline video sources visible at the current frame', async () => {
@@ -317,12 +403,12 @@ describe('previewController', () => {
     initPreview(canvasEl(), deps)
     await nextFrame()
 
-    expect(usePreviewStatusStore.getState().offlineVideoAssetIds)
+    expect(usePreviewStatusStore.getState().offlineVisualAssetIds)
       .toEqual([offline.id])
 
     useTransportStore.getState().setPlayheadFrame(30)
     await nextFrame()
-    expect(usePreviewStatusStore.getState().offlineVideoAssetIds).toEqual([])
+    expect(usePreviewStatusStore.getState().offlineVisualAssetIds).toEqual([])
   })
 
   test('reconnecting the current source clears offline status and repaints', async () => {
@@ -338,7 +424,7 @@ describe('previewController', () => {
     const { deps, bridge, blob } = makeDeps()
     initPreview(canvasEl(), deps)
     await nextFrame()
-    expect(usePreviewStatusStore.getState().offlineVideoAssetIds)
+    expect(usePreviewStatusStore.getState().offlineVisualAssetIds)
       .toEqual([reconnected.id])
     bridge.rendered.length = 0
 
@@ -361,7 +447,7 @@ describe('previewController', () => {
         objectUrl: reconnected.objectUrl,
       }),
     }])
-    expect(usePreviewStatusStore.getState().offlineVideoAssetIds).toEqual([])
+    expect(usePreviewStatusStore.getState().offlineVisualAssetIds).toEqual([])
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
   })
 
@@ -403,7 +489,7 @@ describe('previewController', () => {
         objectUrl: online.objectUrl,
       }),
     }])
-    expect(usePreviewStatusStore.getState().offlineVideoAssetIds)
+    expect(usePreviewStatusStore.getState().offlineVisualAssetIds)
       .toEqual([offline.id])
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
   })
@@ -636,6 +722,40 @@ describe('previewController', () => {
     warn.mockRestore()
   })
 
+  test('a still-image worker failure stays image-scoped and disconnects its source', async () => {
+    const { deps, bridge } = makeDeps()
+    bridge.openImageImpl = async () => {
+      throw new RenderAssetOpenError(
+        'worker openImage failed: decoded image exceeded its budget',
+        { trackKind: null, reason: 'resource-limit' },
+      )
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    initPreview(canvasEl(), deps)
+    const bad = seedImageAsset({
+      id: 'huge-image',
+      fileName: 'huge-image.png',
+    })
+    await flush()
+
+    expect(bridge.opened).toHaveLength(0)
+    expect(bridge.openedImages).toHaveLength(1)
+    expect(useMediaStore.getState().assets.has(bad.id)).toBe(false)
+    expect(useMediaStore.getState().compatibility.get(bad.id)).toMatchObject({
+      status: 'error',
+      report: {
+        reason: 'resource-limit',
+        runtimeFailures: [{
+          surface: 'preview',
+          trackKind: null,
+          reason: 'resource-limit',
+          detail: 'worker openImage failed: decoded image exceeded its budget',
+        }],
+      },
+    })
+    warn.mockRestore()
+  })
+
   test('a worker Input-construction failure remains file-level', async () => {
     const { deps, bridge } = makeDeps()
     bridge.openImpl = async () => {
@@ -768,7 +888,7 @@ describe('previewController', () => {
     await flush()
     const runtimeToken = bridge.opened[0].runtimeToken
 
-    bridge.onAssetError?.(asset.id, runtimeToken, 'decode exploded')
+    bridge.onAssetError?.(asset.id, runtimeToken, 'video', 'decode exploded')
 
     expect(useMediaStore.getState().assets.has(asset.id)).toBe(false)
     expect(useMediaStore.getState().descriptors.has(asset.id)).toBe(true)
@@ -797,7 +917,12 @@ describe('previewController', () => {
     expect(useMediaStore.getState().connectAsset(replacement)).toBe(true)
     await flush()
 
-    bridge.onAssetError?.(original.id, staleToken, 'late old-source failure')
+    bridge.onAssetError?.(
+      original.id,
+      staleToken,
+      'video',
+      'late old-source failure',
+    )
 
     expect(useMediaStore.getState().assets.get(original.id)).toBe(replacement)
     expect(useMediaStore.getState().compatibility.has(original.id)).toBe(false)

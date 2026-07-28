@@ -69,6 +69,13 @@ class FakeWorker implements WorkerLike {
       .map((p) => p.msg)
       .filter((m): m is Extract<ToRenderWorker, { type: 'openAsset' }> => m.type === 'openAsset')
   }
+  openImages(): Array<Extract<ToRenderWorker, { type: 'openImage' }>> {
+    return this.posted
+      .map((p) => p.msg)
+      .filter((m): m is Extract<ToRenderWorker, { type: 'openImage' }> =>
+        m.type === 'openImage',
+      )
+  }
 }
 
 function chunk(tag: number): ChunkPayload {
@@ -104,6 +111,18 @@ function makeClip(id: string, assetId: string, tlStart: number, duration: number
     effects: [],
     ...overrides,
   }
+}
+
+function makeStillClip(
+  id: string,
+  assetId: string,
+  tlStart: number,
+  duration: number,
+): Clip {
+  return makeClip(id, assetId, tlStart, duration, 0, {
+    sourceMode: 'still',
+    sourceRange: { startFrame: 0, durationFrames: 1 },
+  })
 }
 
 function makeTrack(id: string, kind: Track['kind'], clips: Clip[], overrides: Partial<Track> = {}): Track {
@@ -152,6 +171,18 @@ function openAcked(
   runtimeToken: object = {},
 ): Promise<void> {
   const done = ctx.bridge.openAsset(assetId, blob, rate, BUDGET, runtimeToken)
+  ctx.worker.emit({ type: 'assetConfigured', assetId })
+  return done
+}
+
+/** openImage + immediately ack it from the fake worker. */
+function openImageAcked(
+  ctx: { worker: FakeWorker; bridge: RenderWorkerBridge },
+  assetId: string,
+  blob: Blob,
+  runtimeToken: object = {},
+): Promise<void> {
+  const done = ctx.bridge.openImage(assetId, blob, runtimeToken)
   ctx.worker.emit({ type: 'assetConfigured', assetId })
   return done
 }
@@ -393,6 +424,89 @@ describe('Blob-backed streaming path', () => {
     worker.emit({ type: 'assetConfigured', assetId: 'A' })
     await expect(done).resolves.toBeUndefined()
     expect(ready).toEqual(['A'])
+  })
+
+  test('openImage structured-clones the Blob and retains no main-thread frame', async () => {
+    const { worker, bridge } = makeBridge(makeDoc([]))
+    const blob = new Blob(['png'], { type: 'image/png' })
+    const runtimeToken = { generation: 'still-A' }
+
+    const done = bridge.openImage('A', blob, runtimeToken)
+
+    expect(worker.openImages()).toEqual([{
+      type: 'openImage',
+      assetId: 'A',
+      blob,
+    }])
+    expect(worker.posted.find((post) => post.msg.type === 'openImage')?.transfer)
+      .toEqual([])
+
+    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    await expect(done).resolves.toBeUndefined()
+  })
+
+  test('openImage preserves a typed worker decode failure', async () => {
+    const { worker, bridge } = makeBridge(makeDoc([]))
+    const opening = bridge.openImage('IMAGE', new Blob(['bad-image']))
+
+    worker.emit({
+      type: 'error',
+      assetId: 'IMAGE',
+      mediaFailure: {
+        trackKind: null,
+        reason: 'resource-limit',
+      },
+      message: 'worker openImage failed: image budget exceeded',
+    })
+
+    const failure = await opening.catch((cause) => cause)
+    expect(failure).toBeInstanceOf(RenderAssetOpenError)
+    expect(failure).toMatchObject({
+      failure: {
+        trackKind: null,
+        reason: 'resource-limit',
+      },
+    })
+  })
+
+  test('static layers stay clip-keyed while every request targets frame and time zero', async () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [makeStillClip('one', 'IMAGE', 0, 200)]),
+      makeTrack('V2', 'video', [makeStillClip('two', 'IMAGE', 0, 200)]),
+    ])
+    const { worker, bridge } = makeBridge(doc)
+    await openImageAcked(
+      { worker, bridge },
+      'IMAGE',
+      new Blob(['png'], { type: 'image/png' }),
+    )
+
+    const result = bridge.renderFrame(137, 'playback')
+    const render = worker.renderFrames()[0]
+    expect(render.sources).toEqual([
+      {
+        clipId: 'one',
+        assetId: 'IMAGE',
+        sourceFrame: 0,
+        targetTimestampUs: 0,
+      },
+      {
+        clipId: 'two',
+        assetId: 'IMAGE',
+        sourceFrame: 0,
+        targetTimestampUs: 0,
+      },
+    ])
+
+    worker.emit({
+      type: 'compositeDone',
+      requestId: render.requestId,
+      status: 'drawn',
+      drawnClipIds: ['one', 'two'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(result).resolves.toMatchObject({ status: 'drawn' })
   })
 
   test('serializes same-asset setup until the pending acknowledgement arrives', async () => {
@@ -783,7 +897,7 @@ describe('latest-wins', () => {
     expect(worker.composites()).toHaveLength(0)
   })
 
-  test('disposing during a legacy chunk read never posts after termination', async () => {
+  test('disposing during a legacy read waits for worker cleanup before termination', async () => {
     const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
     const { worker, bridge } = makeBridge(doc)
     const pendingFetches: Array<(chunks: ChunkPayload[]) => void> = []
@@ -800,6 +914,8 @@ describe('latest-wins', () => {
     await expect(render).resolves.toMatchObject({ status: 'superseded' })
     expect(worker.composites()).toHaveLength(0)
     expect(worker.posted.at(-1)).toEqual({ msg: { type: 'close' }, transfer: [] })
+    expect(worker.terminated).toBe(false)
+    worker.emit({ type: 'closed' })
     expect(worker.terminated).toBe(true)
   })
 
@@ -920,10 +1036,11 @@ describe('reply routing', () => {
     const assetFailures: Array<{
       assetId: string
       runtimeToken: object
+      trackKind: 'video' | null
       message: string
     }> = []
-    bridge.onAssetError = (assetId, token, message) => {
-      assetFailures.push({ assetId, runtimeToken: token, message })
+    bridge.onAssetError = (assetId, token, trackKind, message) => {
+      assetFailures.push({ assetId, runtimeToken: token, trackKind, message })
     }
 
     const result = bridge.renderFrame(1, 'seek')
@@ -947,7 +1064,56 @@ describe('reply routing', () => {
     expect(assetFailures).toEqual([{
       assetId: 'A',
       runtimeToken,
+      trackKind: 'video',
       message: 'decode failed: boom',
+    }])
+  })
+
+  test('an image diagnostic carries its open token with no timed-video track', async () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [makeStillClip('still', 'IMAGE', 0, 100)]),
+    ])
+    const { worker, bridge } = makeBridge(doc)
+    const runtimeToken = { generation: 'image-source' }
+    await openImageAcked(
+      { worker, bridge },
+      'IMAGE',
+      new Blob(['image']),
+      runtimeToken,
+    )
+    const assetFailures: Array<{
+      assetId: string
+      runtimeToken: object
+      trackKind: 'video' | null
+      message: string
+    }> = []
+    bridge.onAssetError = (assetId, token, trackKind, message) => {
+      assetFailures.push({ assetId, runtimeToken: token, trackKind, message })
+    }
+
+    const result = bridge.renderFrame(1, 'seek')
+    const requestId = worker.renderFrames()[0].requestId
+    worker.emit({
+      type: 'error',
+      requestId,
+      assetId: 'IMAGE',
+      message: 'static source became unavailable',
+    })
+    worker.emit({
+      type: 'compositeDone',
+      requestId,
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: ['still'],
+      renderMs: 1,
+    })
+
+    await expect(result).resolves.toMatchObject({ status: 'drawn' })
+    expect(assetFailures).toEqual([{
+      assetId: 'IMAGE',
+      runtimeToken,
+      trackKind: null,
+      message: 'static source became unavailable',
     }])
   })
 
@@ -1040,9 +1206,11 @@ describe('reply routing', () => {
 
     bridge.dispose()
 
-    expect(worker.terminated).toBe(true)
     expect(worker.posted.at(-1)?.msg).toEqual({ type: 'close' })
+    expect(worker.terminated).toBe(false)
     await expect(inflight).resolves.toMatchObject({ status: 'superseded' })
     await expect(configuring).rejects.toThrow('bridge disposed')
+    worker.emit({ type: 'closed' })
+    expect(worker.terminated).toBe(true)
   })
 })

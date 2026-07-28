@@ -73,6 +73,19 @@ export interface OpenAssetMessage {
 }
 
 /**
+ * Open (or replace) one worker-owned static-image source. The Blob is
+ * structured-cloned with an empty transfer list. The worker performs the same
+ * content inspection and bounded first-frame decode used by import, retains
+ * exactly one ImageBitmap or VideoFrame, and replies `assetConfigured` only
+ * after that source is ready to draw.
+ */
+export interface OpenImageMessage {
+  type: 'openImage'
+  assetId: AssetId
+  blob: Blob
+}
+
+/**
  * Render one document frame from worker-owned streaming sources. Mode is
  * message-level so one composite can never mix playback and seek semantics.
  * No buffers are transferred; post with an EMPTY transfer list.
@@ -129,6 +142,7 @@ export type ToRenderWorker =
       doc: TimelineDoc
     }
   | OpenAssetMessage
+  | OpenImageMessage
   | {
       /**
        * Create (or replace) the decoder + frame cache for one asset. A
@@ -205,4 +219,11 @@ export type FromRenderWorker =
          reason: MediaRuntimeFailure['reason']
        }
        message: string
+    }
+  | {
+      /**
+       * All worker-owned sources have completed cleanup. The bridge may now
+       * terminate the worker realm without racing resource disposal.
+       */
+      type: 'closed'
     }

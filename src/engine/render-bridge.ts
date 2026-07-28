@@ -84,13 +84,24 @@ export class RenderAssetOpenError extends Error {
 }
 
 /** Blob-backed source owned and decoded by the render worker. */
-interface StreamingAssetSource {
+interface StreamingVideoAssetSource {
   protocol: 'streaming'
+  kind: 'video'
   rate: FrameRate
   runtimeToken: object
 }
 
-type AssetSource = LegacyAssetSource | StreamingAssetSource
+/** A retained frame-zero source decoded and owned by the render worker. */
+interface StreamingImageAssetSource {
+  protocol: 'streaming'
+  kind: 'image'
+  runtimeToken: object
+}
+
+type AssetSource =
+  | LegacyAssetSource
+  | StreamingVideoAssetSource
+  | StreamingImageAssetSource
 
 interface PendingRender {
   resolve: (result: RenderFrameResult) => void
@@ -121,6 +132,7 @@ export class RenderWorkerBridge {
   onAssetError: ((
     assetId: AssetId,
     runtimeToken: object,
+    trackKind: 'video' | null,
     message: string,
   ) => void) | null = null
   /** An asset's decoder became ready — a good moment to re-render. */
@@ -191,10 +203,41 @@ export class RenderWorkerBridge {
       return Promise.reject(new Error(`asset ${assetId} registration already pending`))
     }
     this.sourceRevision++
-    this.sources.set(assetId, { protocol: 'streaming', rate, runtimeToken })
+    this.sources.set(assetId, {
+      protocol: 'streaming',
+      kind: 'video',
+      rate,
+      runtimeToken,
+    })
     return new Promise((resolve, reject) => {
       this.pendingConfigures.set(assetId, { resolve, reject })
       this.post({ type: 'openAsset', assetId, blob, budget }, [])
+    })
+  }
+
+  /**
+   * Give the worker one Blob-backed still-image source. The worker re-runs the
+   * bounded content inspection, decodes frame zero once, and retains that
+   * source until replacement, release, or acknowledged worker shutdown.
+   */
+  openImage(
+    assetId: AssetId,
+    blob: Blob,
+    runtimeToken: object = {},
+  ): Promise<void> {
+    if (this.disposed) return Promise.reject(new Error('bridge disposed'))
+    if (this.pendingConfigures.has(assetId)) {
+      return Promise.reject(new Error(`asset ${assetId} registration already pending`))
+    }
+    this.sourceRevision++
+    this.sources.set(assetId, {
+      protocol: 'streaming',
+      kind: 'image',
+      runtimeToken,
+    })
+    return new Promise((resolve, reject) => {
+      this.pendingConfigures.set(assetId, { resolve, reject })
+      this.post({ type: 'openImage', assetId, blob }, [])
     })
   }
 
@@ -356,13 +399,19 @@ export class RenderWorkerBridge {
       if (!source) continue
       if (source.protocol !== 'streaming') continue // prevalidated above
       requestSources.set(clip.assetId, source)
-      const assetFrame = rescaleFrames(layer.sourceFrame, doc.frameRate, source.rate)
-      const targetSec = framesToSeconds(assetFrame, source.rate)
+      const targetTimestampUs = source.kind === 'image'
+        ? 0
+        : Math.round(
+            framesToSeconds(
+              rescaleFrames(layer.sourceFrame, doc.frameRate, source.rate),
+              source.rate,
+            ) * 1e6,
+          )
       entries.push({
         clipId: clip.id,
         assetId: clip.assetId,
         sourceFrame: layer.sourceFrame,
-        targetTimestampUs: Math.round(targetSec * 1e6),
+        targetTimestampUs,
       })
     }
 
@@ -381,7 +430,6 @@ export class RenderWorkerBridge {
     this.disposed = true
     this.sourceRevision++
     this.post({ type: 'close' }, [])
-    this.worker.terminate?.()
     this.settlePendingAsSuperseded()
     for (const waiter of this.pendingConfigures.values()) {
       waiter.reject(new Error('bridge disposed'))
@@ -463,11 +511,18 @@ export class RenderWorkerBridge {
             this.onAssetError?.(
               msg.assetId,
               source.runtimeToken,
+              source.protocol === 'streaming' && source.kind === 'image'
+                ? null
+                : 'video',
               msg.message,
             )
           }
         }
         this.onWorkerError?.(msg.message)
+        break
+      }
+      case 'closed': {
+        this.worker.terminate?.()
         break
       }
     }

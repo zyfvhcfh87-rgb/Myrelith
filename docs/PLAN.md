@@ -1107,6 +1107,46 @@ without claiming that the viewer or exported file can render a still yet.
   were exercised, while the actual data-transfer boundary is covered by the
   focused UI component tests.
 
+## Post-MVP issue #18 — Slice 4 ✅ DONE (2026-07-28) Worker-owned still preview
+
+Issue #18 remains open. This slice makes verified image sources render through
+the existing shared preview/compositor path while preserving one explicit
+live-resource owner. Export integration remains a later slice and is not
+claimed here.
+
+- [x] Add an `openImage` render-worker message that carries one Blob per asset.
+  The bridge records a static source kind, maps every still entry to source
+  frame/timestamp zero, and waits for a `closed` cleanup acknowledgment before
+  terminating the worker.
+- [x] Decode and retain exactly one worker-owned `ImageBitmap` or `VideoFrame`
+  for each open image asset. Share that same decoded source across ordinary
+  clips, stacked layers, scrub/play requests, and both sides of a transition
+  without copying it into React/Zustand state.
+- [x] Give each retained source an explicit in-flight loan count. Replacement
+  and release remove the source from future requests immediately, then close it
+  exactly once after the final active composite settles.
+- [x] Guard concurrent opens with per-asset revisions and abort signals.
+  Superseded opens, release-during-decode, close-during-decode, late success,
+  decode/resource-limit failure, replacement, and worker shutdown cannot
+  install stale state or leak/double-close a decoded source.
+- [x] Extend the shared compositor's frame source to accept either
+  `ImageBitmap` or Canvas-drawable `VideoFrame`, using presentation dimensions
+  for the latter. Generalize Preview/controller offline language from video to
+  visual sources while preserving typed runtime-failure identity.
+- [x] Verification: 128/128 focused tests across the render worker, bridge,
+  preview controller/UI, and compositor files; 1,327/1,327 total tests across
+  71 files; deterministic 15-file fixture replay, production build, lint,
+  audit, and diff checks green.
+- [x] In-app Chromium imported and previewed a real 280×175 JPEG, retained it
+  through a complete five-second playback, and applied live position, scale,
+  rotation, and opacity. Razor produced two still clips; a 15-frame same-asset
+  crossfade played with transformed pixels intact. The console recorded 0
+  warnings and 0 errors. Browser automation used removed QA-only
+  chooser/insertion adapters because its native File System Access and HTML
+  drag bridges could not carry the local fixture; the production import, clip
+  factory, worker decode, preview, transform, transition, and playback paths
+  ran unchanged.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

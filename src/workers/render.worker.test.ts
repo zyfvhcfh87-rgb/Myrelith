@@ -21,6 +21,10 @@ import { describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import type { Composite2D } from '../pipeline/render'
+import {
+  StaticImageDecodeError,
+  type DecodedStaticImage,
+} from '../pipeline/static-image'
 import type { ChunkPayload } from './decode-protocol'
 import type {
   BitmapLike,
@@ -373,6 +377,9 @@ interface Harness {
   openedBlobs: Blob[]
   openedSourceIds: string[]
   openedBudgets: LocalDecoderBudget[]
+  staticImagesToDecode: Array<Promise<DecodedStaticImage>>
+  decodedImageBlobs: Blob[]
+  decodedImageSignals: AbortSignal[]
   invalidatedSourceIds: string[]
   runtimeInvalidationCount(): number
   decoders: FakeDecoder[]
@@ -394,6 +401,9 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   const openedBlobs: Blob[] = []
   const openedSourceIds: string[] = []
   const openedBudgets: LocalDecoderBudget[] = []
+  const staticImagesToDecode: Array<Promise<DecodedStaticImage>> = []
+  const decodedImageBlobs: Blob[] = []
+  const decodedImageSignals: AbortSignal[] = []
   const invalidatedSourceIds: string[] = []
   let runtimeInvalidations = 0
   const decoders: FakeDecoder[] = []
@@ -434,6 +444,15 @@ function makeHarness(opts: FakeOptions = {}): Harness {
       const source = sourcesToOpen.shift()
       if (!source) throw new Error('test did not queue a streaming source')
       return source
+    },
+    decodeImage: (blob, signal) => {
+      decodedImageBlobs.push(blob)
+      decodedImageSignals.push(signal)
+      const decoded = staticImagesToDecode.shift()
+      if (!decoded) {
+        return Promise.reject(new Error('test did not queue a static image'))
+      }
+      return decoded
     },
     invalidateDecoderSource: (sourceId) => invalidatedSourceIds.push(sourceId),
     invalidateDecoderRuntime: () => { runtimeInvalidations++ },
@@ -485,6 +504,9 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     openedBlobs,
     openedSourceIds,
     openedBudgets,
+    staticImagesToDecode,
+    decodedImageBlobs,
+    decodedImageSignals,
     invalidatedSourceIds,
     runtimeInvalidationCount: () => runtimeInvalidations,
     decoders,
@@ -588,6 +610,55 @@ function streamDecoded(
   }
 }
 
+function makeStillClip(
+  id: string,
+  assetId: string,
+  tlStart: number,
+  duration: number,
+): Clip {
+  return {
+    ...makeClip(id, assetId, tlStart, duration),
+    sourceMode: 'still',
+    sourceRange: { startFrame: 0, durationFrames: 1 },
+  }
+}
+
+function makeStaticSource(
+  width = 320,
+  height = 180,
+): TrackedBitmap {
+  const source: TrackedBitmap = {
+    width,
+    height,
+    sourceTimestamp: 0,
+    closed: false,
+    closeCount: 0,
+    close() {
+      source.closeCount++
+      source.closed = true
+    },
+  }
+  return source
+}
+
+function decodedStaticImage(
+  source: TrackedBitmap,
+): DecodedStaticImage {
+  return {
+    source: source as unknown as ImageBitmap,
+    sourceKind: 'image-bitmap',
+    width: source.width,
+    height: source.height,
+    animation: {
+      isAnimated: false,
+      frameCount: 1,
+      loopCount: null,
+    },
+    decoderRepetitionCount: null,
+    decodePath: 'image-bitmap',
+  }
+}
+
 function streamEntry(
   clipId: string,
   assetId: string,
@@ -619,6 +690,15 @@ const openMsg = (
   assetId,
   blob,
   budget,
+})
+
+const openImageMsg = (
+  assetId: string,
+  blob = new Blob(['image'], { type: 'image/png' }),
+): ToRenderWorker => ({
+  type: 'openImage',
+  assetId,
+  blob,
 })
 
 function compMsg(
@@ -657,6 +737,18 @@ async function setupStreaming(
   }
 }
 
+async function setupStaticImage(
+  h: Harness,
+  doc: TimelineDoc,
+  assetId: string,
+  source: TrackedBitmap,
+): Promise<void> {
+  await h.core.handleMessage(initMsg(h))
+  await h.core.handleMessage(docMsg(doc))
+  h.staticImagesToDecode.push(Promise.resolve(decodedStaticImage(source)))
+  await h.core.handleMessage(openImageMsg(assetId))
+}
+
 const microtasks = async (n = 20): Promise<void> => {
   for (let i = 0; i < n; i++) await Promise.resolve()
 }
@@ -664,6 +756,17 @@ const microtasks = async (n = 20): Promise<void> => {
 function deferredVoid(): { promise: Promise<void>; resolve: () => void } {
   let resolve: () => void = () => undefined
   const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+function deferredValue<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+} {
+  let resolve: (value: T) => void = () => undefined
+  const promise = new Promise<T>((done) => {
     resolve = done
   })
   return { promise, resolve }
@@ -1730,5 +1833,201 @@ describe('streaming frame ownership', () => {
       message: 'streaming playback failed: streaming bitmap copy failed',
     })
     expect(doneFor(h, 1).missingClipIds).toEqual(['a'])
+  })
+})
+
+describe('static-image worker ownership', () => {
+  test('decodes once, reuses one retained source across scrub/play, and releases once', async () => {
+    const h = makeHarness()
+    const source = makeStaticSource()
+    const doc = makeDoc([
+      makeTrack('V1', [makeStillClip('still', 'IMAGE', 0, 10)]),
+    ])
+    await setupStaticImage(h, doc, 'IMAGE', source)
+
+    expect(h.decodedImageBlobs).toHaveLength(1)
+    expect(h.posts).toContainEqual({
+      type: 'assetConfigured',
+      assetId: 'IMAGE',
+    })
+
+    await h.core.handleMessage(
+      renderMsg(1, 0, 'seek', [streamEntry('still', 'IMAGE', 0, 0)]),
+    )
+    await h.core.handleMessage(
+      renderMsg(2, 9, 'playback', [streamEntry('still', 'IMAGE', 0, 0)]),
+    )
+
+    expect(doneFor(h, 1).drawnClipIds).toEqual(['still'])
+    expect(doneFor(h, 2).drawnClipIds).toEqual(['still'])
+    expect(
+      h.scratchDraws()
+        .filter((op) => op.args[0] === source),
+    ).toHaveLength(2)
+    expect(h.decodedImageBlobs).toHaveLength(1)
+    expect(source.closeCount).toBe(0)
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'IMAGE' })
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'IMAGE' })
+    expect(source.closeCount).toBe(1)
+  })
+
+  test('two layers share the same retained source without a second decode', async () => {
+    const h = makeHarness()
+    const source = makeStaticSource(64, 48)
+    const doc = makeDoc([
+      makeTrack('V1', [makeStillClip('bottom', 'IMAGE', 0, 10)]),
+      makeTrack('V2', [makeStillClip('top', 'IMAGE', 0, 10)]),
+    ])
+    await setupStaticImage(h, doc, 'IMAGE', source)
+
+    await h.core.handleMessage(
+      renderMsg(1, 4, 'seek', [
+        streamEntry('bottom', 'IMAGE', 0, 0),
+        streamEntry('top', 'IMAGE', 0, 0),
+      ]),
+    )
+
+    expect(doneFor(h, 1).drawnClipIds).toEqual(['bottom', 'top'])
+    expect(
+      h.scratchDraws()
+        .filter((op) => op.args[0] === source),
+    ).toHaveLength(2)
+    expect(h.decodedImageBlobs).toHaveLength(1)
+    expect(source.closeCount).toBe(0)
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'IMAGE' })
+    expect(source.closeCount).toBe(1)
+  })
+
+  test('replacement closes the old source and worker close closes the winner once', async () => {
+    const h = makeHarness()
+    const first = makeStaticSource()
+    const replacement = makeStaticSource()
+    await setupStaticImage(h, makeDoc([]), 'IMAGE', first)
+
+    h.staticImagesToDecode.push(
+      Promise.resolve(decodedStaticImage(replacement)),
+    )
+    await h.core.handleMessage(
+      openImageMsg('IMAGE', new Blob(['replacement'])),
+    )
+
+    expect(first.closeCount).toBe(1)
+    expect(replacement.closeCount).toBe(0)
+    expect(
+      h.posts.filter((post) => post.type === 'assetConfigured'),
+    ).toHaveLength(2)
+
+    await h.core.handleMessage({ type: 'close' })
+    expect(first.closeCount).toBe(1)
+    expect(replacement.closeCount).toBe(1)
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(1)
+  })
+
+  test('only the newest open installs and the stale decoded source closes once', async () => {
+    const h = makeHarness()
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    const stale = makeStaticSource()
+    const winner = makeStaticSource()
+    const staleDecode = deferredValue<DecodedStaticImage>()
+    const winningDecode = deferredValue<DecodedStaticImage>()
+    h.staticImagesToDecode.push(staleDecode.promise, winningDecode.promise)
+
+    const staleOpen = h.core.handleMessage(
+      openImageMsg('IMAGE', new Blob(['stale'])),
+    )
+    await microtasks()
+    const winningOpen = h.core.handleMessage(
+      openImageMsg('IMAGE', new Blob(['winner'])),
+    )
+    await microtasks()
+
+    expect(h.decodedImageSignals[0].aborted).toBe(true)
+    winningDecode.resolve(decodedStaticImage(winner))
+    await winningOpen
+    staleDecode.resolve(decodedStaticImage(stale))
+    await staleOpen
+
+    expect(stale.closeCount).toBe(1)
+    expect(winner.closeCount).toBe(0)
+    expect(
+      h.posts.filter((post) => post.type === 'assetConfigured'),
+    ).toEqual([{ type: 'assetConfigured', assetId: 'IMAGE' }])
+    expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'IMAGE' })
+    expect(winner.closeCount).toBe(1)
+  })
+
+  test('release aborts a pending decode and closes a late source without configuring it', async () => {
+    const h = makeHarness()
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    const late = makeStaticSource()
+    const decode = deferredValue<DecodedStaticImage>()
+    h.staticImagesToDecode.push(decode.promise)
+
+    const opening = h.core.handleMessage(openImageMsg('IMAGE'))
+    await microtasks()
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'IMAGE' })
+
+    expect(h.decodedImageSignals[0].aborted).toBe(true)
+    decode.resolve(decodedStaticImage(late))
+    await opening
+
+    expect(late.closeCount).toBe(1)
+    expect(
+      h.posts.filter((post) => post.type === 'assetConfigured'),
+    ).toHaveLength(0)
+    expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
+  })
+
+  test('worker close waits for a pending decode, then closes its late source exactly once', async () => {
+    const h = makeHarness()
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    const late = makeStaticSource()
+    const decode = deferredValue<DecodedStaticImage>()
+    h.staticImagesToDecode.push(decode.promise)
+
+    const opening = h.core.handleMessage(openImageMsg('IMAGE'))
+    await microtasks()
+    const closing = h.core.handleMessage({ type: 'close' })
+    await microtasks()
+
+    expect(h.decodedImageSignals[0].aborted).toBe(true)
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(0)
+    decode.resolve(decodedStaticImage(late))
+    await Promise.all([opening, closing])
+
+    expect(late.closeCount).toBe(1)
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(1)
+    expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
+  })
+
+  test('decode failures stay asset-scoped and preserve resource-limit classification', async () => {
+    const h = makeHarness()
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    h.staticImagesToDecode.push(Promise.reject(
+      new StaticImageDecodeError('resource-limit', 'png'),
+    ))
+
+    await h.core.handleMessage(openImageMsg('IMAGE'))
+
+    expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
+      type: 'error',
+      assetId: 'IMAGE',
+      mediaFailure: {
+        trackKind: null,
+        reason: 'resource-limit',
+      },
+      message: expect.stringContaining('worker openImage failed'),
+    }])
+    expect(
+      h.posts.filter((post) => post.type === 'assetConfigured'),
+    ).toHaveLength(0)
   })
 })

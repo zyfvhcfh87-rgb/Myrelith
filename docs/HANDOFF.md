@@ -69,8 +69,9 @@ and the open list below.
 | Post-MVP #18 — static images Slice 1 | ✅ done | byte-sniffed PNG/JPEG/WebP/AVIF + immutable source/decode budgets; exact one-source ownership; deterministic 15-file matrix; 60 focused + 1,269 total tests; Chrome 150 41-fact module gate |
 | Post-MVP #18 — static images Slice 2 | ✅ done | verified multi-file import + durable five-second image records + Resume/Relink + bounded one-tile visuals; 212 focused + 1,291 total tests; in-app Chrome import/error/retry gate |
 | Post-MVP #18 — static images Slice 3 | ✅ done | explicit still source mode + v3 migration; placeable/editable five-second clips, frame-0 selectors, Slip no-op, repeated timeline tiles; 352 focused + 1,311 total tests; in-app Chrome Razor/crossfade/undo gate |
+| Post-MVP #18 — static images Slice 4 | ✅ done | one worker-owned decoded still per asset; frame-0 reuse through scrub/play/compositing/transitions; exact replacement/release/cancel/close ownership; 128 focused + 1,327 total tests; in-app Chromium transform/crossfade gate |
 
-1,311 tests green across 71 files · `npm run build` passes with the known large-chunk warning
+1,327 tests green across 71 files · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · `npm audit --omit=dev` reports 0 vulnerabilities · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -539,10 +540,32 @@ because it cannot carry a local file through File System Access or synthesize
 this HTML drag; the actual import, clip factory, store, editing, transition,
 and rendering paths ran unchanged, and focused UI tests cover data transfer.
 
-**Next: Issue #18 remains open.** The next slice should connect still-frame
-decode to the shared preview/compositor path. Export integration remains a
-later boundary; describe images as importable, placeable, and timeline-editable,
-but not preview-renderable or exportable yet.
+Issue #18 Slice 4 connects that still contract to the shared preview compositor.
+The app sends each connected image Blob to the render worker once. The worker
+decodes and retains exactly one `ImageBitmap` or `VideoFrame` per asset, lends
+that same frame-zero source to every visible clip/layer, and keeps the live
+resource outside React/Zustand state. Per-source loans prevent replacement or
+release from closing a frame while a composite is drawing it. Revisions plus
+abort signals reject stale concurrent opens, while replacement, release,
+decode failure, cancellation, and acknowledged worker shutdown close every
+decoded source exactly once.
+
+The focused Slice 4 suite passed 128/128 tests across the render worker, bridge,
+preview controller/UI, and compositor files. The full suite passed
+1,327/1,327 across 71 files; deterministic fixture replay, production build,
+lint, audit, and diff checks passed. In-app Chromium imported a real 280×175
+JPEG, rendered it at frame zero, retained it through a complete five-second
+playback, applied position/scale/rotation/opacity live, Razor-split it, and
+played across a 15-frame same-asset crossfade with transformed pixels intact.
+The console recorded 0 warnings and 0 errors. The browser runner again needed
+removed QA-only chooser/insertion adapters because its native File System
+Access and HTML drag bridges cannot carry the local fixture; import,
+clip creation, worker decode, preview, transforms, transitions, and playback
+ran through the production paths.
+
+**Next: Issue #18 remains open.** Static images are now importable, placeable,
+timeline-editable, and preview-renderable. Export integration remains the next
+boundary; do not describe still images as exportable yet.
 
 ## What works today (user-visible)
 
@@ -753,10 +776,12 @@ surface; it is not a second zoom and never enters document history.
   decoded-source/abort ownership.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
-  Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
-  synchronous draw; `{drawn, missing}` result; per-clip try/finally. Since
-  5.1d it paints the selector's ordered ordinary/crossfade layers rather than
-  re-deriving active clips.
+  Injected `Composite2D` ctx + `FrameSource`; Slice 4 accepts either
+  `ImageBitmap` or Canvas-drawable `VideoFrame` sources without copying them.
+  The concurrent fetch phase precedes synchronous draw; `{drawn, missing}`
+  result and per-clip try/finally preserve source loans. Since 5.1d it paints
+  the selector's ordered ordinary/crossfade layers rather than re-deriving
+  active clips.
 - `src/pipeline/export.ts` — Phase 5.1a CFR orchestrator:
   `exportTimeline` derives length with `docDurationFrames`, composites every
   integer frame through an injected `compositeFrame`, awaits sink
@@ -864,21 +889,27 @@ surface; it is not a second zoom and never enters document history.
   actions preserve exact snapshot ids), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (durable descriptor
   catalog + connected analyzed subset + visual URL ownership + exact duration
-  reconformance), `previewStatusStore` (idempotent visible-offline projection),
+  reconformance), `previewStatusStore` (idempotent visible visual-source
+  offline projection),
   and
   `mediaImportStore` (serializable dialog status only; no File/Blob handles).
 - `src/workers/decode-protocol.ts` — canonical worker message types.
 - `src/workers/render-protocol.ts` — render-worker message types (types only).
-  The primary path sends each asset Blob once, then lightweight entries with
-  clip lane, asset, integer source frame, exact µs timestamp, and playback/seek
-  mode. The deprecated chunk-batch messages remain only for migration tests.
-  `setDoc` must precede renders built from it.
-- `src/workers/render.worker.ts` — Blob-backed compositing worker: one source
-  per asset; sequential, clip-keyed lanes for playback; request-scoped cursors
-  for seeks; tiny timestamp cache; FrameSource → compositeFrame on a scratch
-  canvas; newest-only blit via double buffering. Superseded presentation never
-  cancels a healthy playback lane, while discontinuities and every terminal
-  path close frames/cursors/sources exactly.
+  The primary path sends each timed-video Blob once through `configureAsset`
+  or each static-image Blob once through `openImage`, then lightweight entries
+  with clip lane, asset, integer source frame, exact µs timestamp, and
+  playback/seek mode. `closed` acknowledges completed worker cleanup before
+  bridge termination. The deprecated chunk-batch messages remain only for
+  migration tests. `setDoc` must precede renders built from it.
+- `src/workers/render.worker.ts` — Blob-backed compositing worker: timed video
+  keeps one source per asset, sequential clip-keyed playback lanes,
+  request-scoped seek cursors, and a tiny timestamp cache. Slice 4 adds one
+  retained frame-zero static source per image asset, shared across clips and
+  transition layers with explicit in-flight loans. Open revisions and abort
+  signals reject superseded work; replacement, release, failure, cancellation,
+  and worker close retire and close the source exactly once. All sources feed
+  `compositeFrame` on a scratch canvas; newest-only blit uses double buffering.
+  Superseded presentation never cancels a healthy playback lane.
 - `src/workers/decode.worker.ts` — injectable core (`createDecodeWorkerCore`);
   closes every VideoFrame ASAP, caches ImageBitmap copies (12) instead
   (raw frames starve the hw decoder pool!), backpressure at queue≥8,
@@ -902,17 +933,22 @@ surface; it is not a second zoom and never enters document history.
 - `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,
   `verifyKeyPackets`, bounded overshoot, bytes copied for transfer).
 - `src/engine/render-bridge.ts` — main-thread half of the render worker: keeps
-  the posted doc and per-asset rates, hands each Blob to the worker once, then
-  maps canonical visual layers to clip-keyed source-frame/µs requests with an
-  explicit playback/seek mode. Request ids remain latest-wins for presentation;
-  `onAssetReady`/`onWorkerError` are the controller hooks. The old encoded-batch
-  overload is deprecated and not used by preview.
+  the posted doc and per-asset source kind/rate, hands each Blob to the worker
+  once, then maps canonical visual layers to clip-keyed source-frame/µs
+  requests with an explicit playback/seek mode. Static entries always carry
+  frame zero/timestamp zero and never create timed playback lanes. Request ids
+  remain latest-wins for presentation; `onAssetReady`/`onWorkerError` are the
+  controller hooks. Disposal waits for the worker's cleanup acknowledgment
+  before termination. The old encoded-batch overload is deprecated and not
+  used by preview.
 - `src/app/previewController.ts` — THE COMPOSITION ROOT: only place stores
   meet engine/pipeline; DI seams for tests; idempotent per canvas
-  (StrictMode). It fetches each already-analyzed asset Blob, hands it to the
-  worker once, releases removed assets, forwards doc snapshots, and sends
-  rAF-coalesced document frames with playback/seek mode; re-renders on doc
-  change + assetConfigured (=the whole missing-clip retry policy).
+  (StrictMode). It fetches each already-analyzed video or image Blob, hands it
+  to the worker once through the matching open path, releases removed assets,
+  forwards doc snapshots, and sends rAF-coalesced document frames with
+  playback/seek mode; re-renders on doc change + assetConfigured (=the whole
+  missing-clip retry policy). Typed runtime failures preserve video/image
+  identity without pretending images have timed-video tracks.
 - `src/app/transportController.ts` — second composition root (same
   pattern): primes issue #5 live audio from immutable document/media snapshots,
   resumes AudioContext inside the click gesture, gives PlaybackEngine the exact
@@ -961,7 +997,9 @@ surface; it is not a second zoom and never enters document history.
   `timeline/ClipView.tsx` — Slice 6 offline UI: descriptor-driven media rows,
   per-source Relink, one folder scan, focus-trapped ambiguity confirmation,
   current-frame Preview guidance, and finite labeled offline clips. Offline
-  rows cannot be dragged; text clips remain intentionally extendable.
+  rows cannot be dragged; text clips remain intentionally extendable. Issue
+  #18 Slice 4 treats video and image descriptors as visual sources in Preview
+  guidance while keeping the canvas state-only and resource-free.
 - `src/ui/timeline/Track.tsx` + `TransitionSeam.tsx` (5.1e-3) — Track derives
   eligible touching video cuts from its committed snapshot; each seam marker
   subscribes only to zoom and opens a temporary Add/Apply/Remove duration
@@ -972,8 +1010,9 @@ surface; it is not a second zoom and never enters document history.
 
 1. Integer frames everywhere; seconds only at codec/clock boundaries.
 2. Every VideoFrame/AudioSample closed the moment its pixels/samples are
-   copied; ImageBitmaps in the ring buffer, closed on evict/clear. One owner
-   at all times.
+   copied, except an explicitly retained render source whose bounded owner
+   loans it without copying and closes it on replacement/release/shutdown.
+   ImageBitmaps in caches close on evict/clear. One owner at all times.
 3. Rejected domain ops return the SAME doc reference (callers detect via
    `===`; store pushes no history).
 4. Scrubbing/dragging writes transportStore only; pointerup commits ONE
@@ -1085,14 +1124,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #18 remains open after Slice 3. Content inspection, immutable budgets,
+- Issue #18 remains open after Slice 4. Content inspection, immutable budgets,
   first-frame decode ownership, multi-file import, durable five-second image
   records, Save/Resume/Relink, bounded Media Pool thumbnails, diagnostics,
   explicit still source/timeline semantics, project v3 migration, image
-  drag/drop, editing, transitions, exact undo/redo, and timeline visuals are
-  complete. Preview/compositor and export decoding remain unwired, so describe
-  still images as importable, placeable, and timeline-editable, but not
-  preview-renderable or exportable.
+  drag/drop, editing, transitions, exact undo/redo, timeline visuals, and
+  worker-owned preview/compositor decoding are complete. Describe still images
+  as importable, placeable, timeline-editable, and preview-renderable. Export
+  decoding remains unwired, so do not describe them as exportable.
 - Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
   Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
   explicit partial-track consent, capability caching/revalidation, prompt
@@ -1167,10 +1206,11 @@ surface; it is not a second zoom and never enters document history.
   still hard-cuts), and the
   source-over compensation is exact only for ordinary opaque full-frame
   footage; transformed/transparent dissolves need isolated compositing.
-  Images remain not previewable (video only). The minimal UI intentionally
-  surfaces currently eligible seams; a malformed serialized transition whose
-  endpoints are missing/gapped/text has no cleanup marker yet, although the
-  store's remove action can still delete it.
+  Static images now render through the same preview compositing/transition path,
+  but export integration remains open. The minimal UI intentionally surfaces
+  currently eligible seams; a malformed serialized transition whose endpoints
+  are missing/gapped/text has no cleanup marker yet, although the store's
+  remove action can still delete it.
 - Matching a source FPS intentionally stops being available once any clip is
   on the timeline. Supporting that later requires an explicit retime operation
   for clip ranges, source ranges, transitions, playhead, and undo history; it

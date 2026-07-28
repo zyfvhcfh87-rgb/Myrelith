@@ -9,7 +9,11 @@
 
 import { describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
-import type { Composite2D, FrameSource } from './render'
+import type {
+  Composite2D,
+  FrameSource,
+  RenderFrameSource,
+} from './render'
 import { compositeFrame } from './render'
 
 /* ------------------------------------------------------------------ */
@@ -74,6 +78,13 @@ function fakeBitmap(width: number, height: number): ImageBitmap {
   return { width, height } as unknown as ImageBitmap
 }
 
+function fakeVideoFrame(
+  displayWidth: number,
+  displayHeight: number,
+): VideoFrame {
+  return { displayWidth, displayHeight } as unknown as VideoFrame
+}
+
 /* ------------------------------------------------------------------ */
 /* Recording fakes                                                      */
 /* ------------------------------------------------------------------ */
@@ -128,7 +139,12 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
 
 /** Frame table keyed "assetId@sourceFrame"; unknown keys resolve null. */
 function makeSource(
-  frames: Record<string, ImageBitmap | null | Promise<ImageBitmap | null>> = {},
+  frames: Record<
+    string,
+    RenderFrameSource
+    | null
+    | Promise<RenderFrameSource | null>
+  > = {},
 ) {
   const requests: string[] = []
   const source: FrameSource = {
@@ -332,6 +348,24 @@ describe('compositeFrame — transform & opacity', () => {
     expect(ops('rotate')[0].args).toEqual([0])
     expect(ops('scale')[0].args).toEqual([1, 1])
     expect(ops('drawImage')[0].args.slice(1)).toEqual([-640, -360])
+  })
+
+  test('a retained VideoFrame uses presentation dimensions without copying', async () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [makeClip('still', 0, 10, {
+        assetId: 'IMAGE',
+        sourceMode: 'still',
+        sourceRange: { startFrame: 0, durationFrames: 1 },
+      })]),
+    ])
+    const frame = fakeVideoFrame(640, 360)
+    const { ctx, ops } = makeCtx()
+    const { source } = makeSource({ 'IMAGE@0': frame })
+
+    await compositeFrame(doc, 7, ctx, source)
+
+    expect(ops('translate')[0].args).toEqual([960, 540])
+    expect(ops('drawImage')[0].args).toEqual([frame, -320, -180])
   })
 
   test('scale→rotate→translate around a custom anchor, x/y offsets applied', async () => {

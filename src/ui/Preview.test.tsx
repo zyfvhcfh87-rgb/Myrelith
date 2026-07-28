@@ -27,6 +27,22 @@ const offlineVideo: PortableAssetDescriptor = {
   audioChannels: 2,
 }
 
+const offlineImage: PortableAssetDescriptor = {
+  id: 'offline-image',
+  fileName: 'title-card.png',
+  mimeType: 'image/png',
+  size: 4,
+  lastModified: 222,
+  kind: 'image',
+  durationMicroseconds: 5_000_000,
+  nativeFrameRate: null,
+  width: 1280,
+  height: 720,
+  hasAudio: false,
+  audioSampleRate: null,
+  audioChannels: null,
+}
+
 beforeEach(() => {
   previewController.initPreview.mockClear()
   useMediaStore.setState({
@@ -38,15 +54,35 @@ beforeEach(() => {
 })
 
 describe('Preview', () => {
-  test('offers reconnection instead of import when every video is offline', () => {
+  test('offers reconnection instead of import when every visual is offline', () => {
     render(<Preview />)
 
     expect(previewController.initPreview).toHaveBeenCalledWith(
       expect.any(HTMLCanvasElement),
     )
     const status = screen.getByRole('status')
-    expect(status).toHaveTextContent('Video sources are offline')
+    expect(status).toHaveTextContent('Visual sources are offline')
     expect(status).toHaveTextContent(/reconnect them in the Media panel/i)
-    expect(screen.queryByText(/import a video/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/import a video or still image/i))
+      .not.toBeInTheDocument()
+  })
+
+  test('names an offline still needed by the displayed frame', () => {
+    useMediaStore.setState({
+      descriptors: new Map([[offlineImage.id, offlineImage]]),
+      assets: new Map(),
+      visuals: new Map(),
+    })
+    usePreviewStatusStore.getState().setOfflineVisualAssetIds([
+      offlineImage.id,
+    ])
+
+    render(<Preview />)
+
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('Source offline')
+    expect(status).toHaveTextContent(
+      'Reconnect title-card.png in the Media panel.',
+    )
   })
 })
