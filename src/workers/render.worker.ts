@@ -50,8 +50,12 @@ import type {
 import { compositeFrame } from '../pipeline/render'
 import {
   decodeStaticImage,
+  staticImageDecodedByteLength,
+  STATIC_IMAGE_RESIDENT_BUDGET_BYTES,
   StaticImageDecodeError,
   type DecodedStaticImage,
+  type StaticImageDecodedByteReservation,
+  type StaticImageDecodedByteReserver,
   type StaticImageRenderSource,
 } from '../pipeline/static-image'
 import type { ChunkPayload } from './decode-protocol'
@@ -65,6 +69,7 @@ import type {
   FromRenderWorker,
   RenderFrameMessage,
   StreamingCompositeSourceEntry,
+  StreamingVideoSourceEntry,
   ToRenderWorker,
 } from './render-protocol'
 import {
@@ -119,7 +124,11 @@ export interface RenderWorkerEnv {
     budget: LocalDecoderBudget,
   ): Promise<WorkerVideoSource>
   /** Decode and transfer one bounded frame-zero image source to this owner. */
-  decodeImage(blob: Blob, signal: AbortSignal): Promise<DecodedStaticImage>
+  decodeImage(
+    blob: Blob,
+    signal: AbortSignal,
+    reserveDecodedBytes: StaticImageDecodedByteReserver,
+  ): Promise<DecodedStaticImage>
   /** Forget session capability facts before an asset source changes. */
   invalidateDecoderSource(sourceId: AssetId): void
   /** Forget every realm-local capability fact when this worker closes. */
@@ -190,6 +199,8 @@ interface StreamingAssetState {
 /** One retained static source, shared read-only across every frame request. */
 interface StaticImageAssetState {
   source: StaticImageRenderSource
+  decodedBytes: number
+  reservation: StaticImageDecodedByteReservation
   loans: number
   retired: boolean
   closed: boolean
@@ -212,6 +223,13 @@ interface StreamingLoan {
 interface StaticImageLoan {
   source: RenderFrameSource
   settle(): void
+}
+
+class StaticImageResidentBudgetError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+    this.name = 'StaticImageResidentBudgetError'
+  }
 }
 
 interface ClipDecodeIdentity {
@@ -246,8 +264,14 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   const streamingAssets = new Map<AssetId, StreamingAssetState>()
   /** Blob-backed static image states (one retained frame per asset). */
   const staticImageAssets = new Map<AssetId, StaticImageAssetState>()
+  /** Includes active and retired-but-borrowed stills until their actual close. */
+  let residentStaticImageBytes = 0
   /** Abortable opens let replacement/release/close retire late decodes. */
   const pendingStaticImageOpens = new Map<AssetId, PendingStaticImageOpen>()
+  /** The newest removed generation each asset must finish retiring behind. */
+  const staticImageRetirementByAsset = new Map<AssetId, Promise<void>>()
+  /** Every removed generation still owed an exact close before worker ACK. */
+  const outstandingStaticImageRetirements = new Set<Promise<void>>()
   const assetRevisions = new Map<AssetId, number>()
   /** Only seek cursors are presentation-scoped and cancelled on supersession. */
   const activeSeekCursors = new Set<VideoFrameCursor>()
@@ -403,6 +427,8 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
   function createStaticImageAssetState(
     source: StaticImageRenderSource,
+    decodedBytes: number,
+    reservation: StaticImageDecodedByteReservation,
   ): StaticImageAssetState {
     let resolveClosed: () => void = () => undefined
     let rejectClosed: (error: unknown) => void = () => undefined
@@ -412,6 +438,8 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     })
     return {
       source,
+      decodedBytes,
+      reservation,
       loans: 0,
       retired: false,
       closed: false,
@@ -421,16 +449,172 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
   }
 
+  function reserveStaticImageBytes(
+    inspectedDecodedBytes: number,
+  ): StaticImageDecodedByteReservation {
+    if (
+      !Number.isSafeInteger(inspectedDecodedBytes)
+      || inspectedDecodedBytes <= 0
+    ) {
+      throw new StaticImageResidentBudgetError(
+        'Inspected still-image allocation could not be accounted.',
+      )
+    }
+    if (
+      inspectedDecodedBytes > STATIC_IMAGE_RESIDENT_BUDGET_BYTES
+      || inspectedDecodedBytes
+        > STATIC_IMAGE_RESIDENT_BUDGET_BYTES - residentStaticImageBytes
+    ) {
+      throw new StaticImageResidentBudgetError(
+        'Resident still-image budget exceeded before decode: '
+        + `${residentStaticImageBytes} + ${inspectedDecodedBytes} > `
+        + `${STATIC_IMAGE_RESIDENT_BUDGET_BYTES} bytes.`,
+      )
+    }
+
+    residentStaticImageBytes += inspectedDecodedBytes
+    let bytes = inspectedDecodedBytes
+    let released = false
+    return {
+      reconcile: (decodedBytes) => {
+        if (
+          released
+          || !Number.isSafeInteger(decodedBytes)
+          || decodedBytes <= 0
+        ) return false
+        const otherResidentBytes = residentStaticImageBytes - bytes
+        if (
+          otherResidentBytes < 0
+          || decodedBytes
+            > STATIC_IMAGE_RESIDENT_BUDGET_BYTES - otherResidentBytes
+        ) return false
+        residentStaticImageBytes = otherResidentBytes + decodedBytes
+        bytes = decodedBytes
+        return true
+      },
+      release: () => {
+        if (released) return
+        released = true
+        residentStaticImageBytes -= bytes
+        bytes = 0
+        if (residentStaticImageBytes < 0) {
+          residentStaticImageBytes = 0
+          throw new Error('Resident still-image byte ledger underflow')
+        }
+      },
+    }
+  }
+
+  function rejectUninstalledStaticImage(
+    decoded: DecodedStaticImage,
+    reservations: readonly (
+      StaticImageDecodedByteReservation | null | undefined
+    )[],
+    message: string,
+    cause?: unknown,
+  ): never {
+    let cleanupError: unknown
+    try {
+      decoded.source.close()
+    } catch (error) {
+      cleanupError = error
+    }
+    const uniqueReservations = new Set(
+      reservations.filter(
+        (reservation): reservation is StaticImageDecodedByteReservation =>
+          reservation !== null && reservation !== undefined,
+      ),
+    )
+    for (const reservation of uniqueReservations) {
+      try {
+        reservation.release()
+      } catch (error) {
+        cleanupError = cleanupError === undefined
+          ? error
+          : new AggregateError(
+              [cleanupError, error],
+              'Still-image source and reservation cleanup failed',
+            )
+      }
+    }
+    const combinedCause = cause === undefined
+      ? cleanupError
+      : cleanupError === undefined
+        ? cause
+        : new AggregateError(
+            [cause, cleanupError],
+            'Still-image budget rejection cleanup failed',
+          )
+    throw new StaticImageResidentBudgetError(message, combinedCause)
+  }
+
+  function installStaticImage(
+    decoded: DecodedStaticImage,
+    expectedReservation: StaticImageDecodedByteReservation | null,
+  ): StaticImageAssetState {
+    const reservation = decoded.decodedByteReservation ?? null
+    if (reservation !== expectedReservation) {
+      return rejectUninstalledStaticImage(
+        decoded,
+        [expectedReservation, reservation],
+        'Still-image decoder returned a different resident-byte reservation.',
+      )
+    }
+    let decodedBytes: number
+    try {
+      decodedBytes = staticImageDecodedByteLength(decoded)
+    } catch (error) {
+      return rejectUninstalledStaticImage(
+        decoded,
+        [reservation],
+        'Decoded still-image allocation could not be accounted.',
+        error,
+      )
+    }
+    if (reservation === null) {
+      return rejectUninstalledStaticImage(
+        decoded,
+        [],
+        'Still-image decoder bypassed the required resident-byte reservation.',
+      )
+    }
+    if (!reservation.reconcile(decodedBytes)) {
+      return rejectUninstalledStaticImage(
+        decoded,
+        [reservation],
+        'Resident still-image budget exceeded while reconciling the exact '
+        + `${decodedBytes}-byte allocation.`,
+      )
+    }
+    return createStaticImageAssetState(
+      decoded.source,
+      decodedBytes,
+      reservation,
+    )
+  }
+
   /** Close only after every composite that borrowed this source has settled. */
   function maybeCloseStaticImage(state: StaticImageAssetState): void {
     if (!state.retired || state.loans !== 0 || state.closed) return
     state.closed = true
+    let closeError: unknown
     try {
       state.source.close()
-      state.resolveClosed()
     } catch (error) {
-      state.rejectClosed(error)
+      closeError = error
     }
+    try {
+      state.reservation.release()
+    } catch (error) {
+      closeError = closeError === undefined
+        ? error
+        : new AggregateError(
+            [closeError, error],
+            'Still-image source and reservation close failed',
+          )
+    }
+    if (closeError === undefined) state.resolveClosed()
+    else state.rejectClosed(closeError)
   }
 
   function retireStaticImage(state: StaticImageAssetState): Promise<void> {
@@ -439,11 +623,34 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     return state.closePromise
   }
 
+  function trackStaticImageRetirement(
+    assetId: AssetId,
+    state: StaticImageAssetState,
+  ): Promise<void> {
+    const retirement = retireStaticImage(state)
+    staticImageRetirementByAsset.set(assetId, retirement)
+    outstandingStaticImageRetirements.add(retirement)
+    const finished = () => {
+      if (staticImageRetirementByAsset.get(assetId) === retirement) {
+        staticImageRetirementByAsset.delete(assetId)
+      }
+      outstandingStaticImageRetirements.delete(retirement)
+    }
+    void retirement.then(finished, finished)
+    return retirement
+  }
+
   async function removeStaticImageAsset(assetId: AssetId): Promise<void> {
+    const previousRetirement = staticImageRetirementByAsset.get(assetId)
+    if (previousRetirement) {
+      // The operation that began this retirement owns its diagnostic. A newer
+      // generation only needs the exact-close barrier before it may decode.
+      await previousRetirement.catch(() => undefined)
+    }
     const state = staticImageAssets.get(assetId)
     if (!state) return
     staticImageAssets.delete(assetId)
-    await retireStaticImage(state)
+    await trackStaticImageRetirement(assetId, state)
   }
 
   function borrowStaticImage(
@@ -616,7 +823,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   }
 
   function playbackPolicyAllows(
-    entry: StreamingCompositeSourceEntry,
+    entry: StreamingVideoSourceEntry,
     revision: number,
   ): boolean {
     const key = playbackLaneKey(entry.assetId, entry.clipId)
@@ -629,8 +836,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   function applyPlaybackPolicy(
     msg: RenderFrameMessage,
   ): Promise<unknown[]> {
-    const videoSources = msg.sources.filter((entry) =>
-      streamingAssets.has(entry.assetId),
+    const videoSources = msg.sources.filter(
+      (entry): entry is StreamingVideoSourceEntry =>
+        entry.kind === 'video' && streamingAssets.has(entry.assetId),
     )
     const nextKeys = msg.mode === 'playback'
       ? new Set(videoSources.map((entry) =>
@@ -675,7 +883,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   }
 
   function playbackLaneIsCurrent(
-    entry: StreamingCompositeSourceEntry,
+    entry: StreamingVideoSourceEntry,
     state: StreamingAssetState,
     lane: PlaybackLaneState,
   ): boolean {
@@ -688,7 +896,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
   function shouldRestartPlaybackLane(
     lane: PlaybackLaneState,
-    entry: StreamingCompositeSourceEntry,
+    entry: StreamingVideoSourceEntry,
   ): boolean {
     if (lane.lastSourceFrame === null || lane.lastTargetTimestampUs === null) {
       return false
@@ -702,7 +910,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
   function createPlaybackLane(
     state: StreamingAssetState,
-    entry: StreamingCompositeSourceEntry,
+    entry: StreamingVideoSourceEntry,
   ): PlaybackLaneState {
     const lane: PlaybackLaneState = {
       clipId: entry.clipId,
@@ -723,7 +931,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
   async function resolvePlaybackEntry(
     state: StreamingAssetState,
-    entry: StreamingCompositeSourceEntry,
+    entry: StreamingVideoSourceEntry,
     loans: StreamingLoan[],
     requestId: number,
   ): Promise<BitmapLike | null> {
@@ -892,7 +1100,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
   async function resolveSeekEntry(
     state: StreamingAssetState,
-    entry: StreamingCompositeSourceEntry,
+    entry: StreamingVideoSourceEntry,
     myGen: number,
     loans: StreamingLoan[],
     requestId: number,
@@ -1065,6 +1273,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       env.post({
         type: 'error',
         assetId: msg.assetId,
+        setupId: msg.setupId,
         message: `codec not supported by this browser: ${msg.config.codec}`,
       })
       return
@@ -1122,7 +1331,11 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     state.decoder.ondequeue = () => wake(state)
     state.decoder.configure(msg.config)
     assets.set(msg.assetId, state)
-    env.post({ type: 'assetConfigured', assetId: msg.assetId })
+    env.post({
+      type: 'assetConfigured',
+      assetId: msg.assetId,
+      setupId: msg.setupId,
+    })
   }
 
   async function handleConfigureAsset(
@@ -1183,7 +1396,11 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       pendingCopies: new Set(),
       epoch: 0,
     })
-    env.post({ type: 'assetConfigured', assetId: msg.assetId })
+    env.post({
+      type: 'assetConfigured',
+      assetId: msg.assetId,
+      setupId: msg.setupId,
+    })
   }
 
   async function handleOpenAsset(
@@ -1206,8 +1423,11 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     return {
       trackKind: null,
       reason:
-        error instanceof StaticImageDecodeError
-        && error.reason === 'resource-limit'
+        error instanceof StaticImageResidentBudgetError
+        || (
+          error instanceof StaticImageDecodeError
+          && error.reason === 'resource-limit'
+        )
           ? 'resource-limit'
           : 'decode-failed',
     }
@@ -1258,9 +1478,35 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
 
     let decoded: DecodedStaticImage
+    let reservationRequested = false
+    const reservationCapture: {
+      current: StaticImageDecodedByteReservation | null
+    } = { current: null }
+    const reserveDecodedBytes: StaticImageDecodedByteReserver = (
+      inspectedDecodedBytes,
+    ) => {
+      if (reservationRequested) {
+        throw new StaticImageResidentBudgetError(
+          'Still-image decoder requested more than one byte reservation.',
+        )
+      }
+      reservationRequested = true
+      reservationCapture.current = reserveStaticImageBytes(
+        inspectedDecodedBytes,
+      )
+      return reservationCapture.current
+    }
     try {
-      decoded = await env.decodeImage(msg.blob, signal)
+      decoded = await env.decodeImage(
+        msg.blob,
+        signal,
+        reserveDecodedBytes,
+      )
     } catch (error) {
+      // The production decoder releases failed/cancelled leases itself. The
+      // worker repeats the idempotent release so a faulty injected decoder
+      // cannot strand realm budget after requesting a lease and rejecting.
+      reservationCapture.current?.release()
       if (
         signal.aborted
         || !assetRevisionIsCurrent(msg.assetId, revision, lifecycle)
@@ -1269,27 +1515,48 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       throw error
     }
 
+    const reservedBytes = reservationCapture.current
+    const returnedReservation = decoded.decodedByteReservation ?? null
+    if (returnedReservation !== reservedBytes) {
+      try {
+        rejectUninstalledStaticImage(
+          decoded,
+          [reservedBytes, returnedReservation],
+          'Still-image decoder returned a different resident-byte reservation.',
+        )
+      } catch (error) {
+        if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
+        throw error
+      }
+    }
+
     if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) {
       await closeStaleStaticImageSource(
         msg.assetId,
         decoded.source,
         lifecycle,
       )
+      reservedBytes?.release()
       return
     }
 
     staticImageAssets.set(
       msg.assetId,
-      createStaticImageAssetState(decoded.source),
+      installStaticImage(decoded, reservedBytes),
     )
-    env.post({ type: 'assetConfigured', assetId: msg.assetId })
+    env.post({
+      type: 'assetConfigured',
+      assetId: msg.assetId,
+      setupId: msg.setupId,
+    })
   }
 
   async function handleOpenImage(
     msg: Extract<ToRenderWorker, { type: 'openImage' }>,
   ): Promise<void> {
     const revision = nextAssetRevision(msg.assetId)
-    abortPendingStaticImageOpen(msg.assetId)
+    const previousOpen = pendingStaticImageOpens.get(msg.assetId)
+    previousOpen?.controller.abort()
     const lifecycle = workerLifecycle
     const controller = new AbortController()
     const operation: PendingStaticImageOpen = {
@@ -1298,12 +1565,16 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       done: Promise.resolve(),
     }
     pendingStaticImageOpens.set(msg.assetId, operation)
-    operation.done = openImageAtRevision(
-      msg,
-      revision,
-      lifecycle,
-      controller.signal,
-    )
+    operation.done = (async () => {
+      if (previousOpen) await previousOpen.done.catch(() => undefined)
+      if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
+      await openImageAtRevision(
+        msg,
+        revision,
+        lifecycle,
+        controller.signal,
+      )
+    })()
     try {
       await operation.done
     } finally {
@@ -1518,8 +1789,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           const queue = queues.get(`${assetId}@${sourceFrame}`)
           const entry = queue?.shift()
           if (!entry) return Promise.resolve(null)
-          const staticState = staticImageAssets.get(entry.assetId)
-          if (staticState) {
+          if (entry.kind === 'image') {
+            const staticState = staticImageAssets.get(entry.assetId)
+            if (!staticState) return Promise.resolve(null)
             const memoizedStatic = staticMemo.get(entry.assetId)
             if (memoizedStatic) return memoizedStatic
             const loan = borrowStaticImage(entry.assetId, staticState)
@@ -1638,12 +1910,18 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         assets.clear()
         const streaming = [...streamingAssets.values()]
         streamingAssets.clear()
-        const staticImages = [...staticImageAssets.values()]
+        const staticImages = [...staticImageAssets.entries()]
         staticImageAssets.clear()
+        for (const [assetId, state] of staticImages) {
+          trackStaticImageRetirement(assetId, state)
+        }
+        const staticRetirements = [
+          ...outstandingStaticImageRetirements,
+        ]
         const results = await Promise.allSettled(
           [
             ...streaming.map((state) => teardownStreamingAsset(state)),
-            ...staticImages.map((state) => retireStaticImage(state)),
+            ...staticRetirements,
             ...pendingImageOpens.map((pending) => pending.done),
           ],
         )
@@ -1677,6 +1955,11 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           || msg.type === 'releaseAsset'
             ? msg.assetId
             : undefined,
+        ...(msg.type === 'configureAsset'
+          || msg.type === 'openAsset'
+          || msg.type === 'openImage'
+          ? { setupId: msg.setupId }
+          : {}),
         ...(msg.type === 'openAsset' && e instanceof WorkerVideoSourceOpenError
           ? { mediaFailure: e.failure }
           : msg.type === 'openImage'
@@ -1766,7 +2049,8 @@ if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
       blob,
       { sourceId, budget },
     ),
-    decodeImage: (blob, signal) => decodeStaticImage(blob, { signal }),
+    decodeImage: (blob, signal, reserveDecodedBytes) =>
+      decodeStaticImage(blob, { signal, reserveDecodedBytes }),
     invalidateDecoderSource: invalidateMediaDecoderSource,
     invalidateDecoderRuntime: invalidateMediaDecoderRuntime,
     createStreamingBitmap: createOrientedStreamingBitmap,

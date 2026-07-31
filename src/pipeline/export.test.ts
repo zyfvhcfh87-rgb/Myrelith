@@ -44,6 +44,7 @@ function makeClip(durationFrames: number): Clip {
     id: 'clip-a',
     assetId: 'asset-a',
     name: 'clip-a',
+    sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames },
     timelineRange: { startFrame: 0, durationFrames },
     transform: {
@@ -83,7 +84,7 @@ function makeDoc(
         ]
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc',
     name: 'doc',
     frameRate,

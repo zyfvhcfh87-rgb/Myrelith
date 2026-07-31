@@ -200,7 +200,7 @@ export function createTimelineDoc(
   const videoTrack = emptyTrack('V1', 'video')
   const audioTrack = emptyTrack('A1', 'audio')
   const doc: TimelineDoc = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id,
     name: projectName,
     frameRate: { ...validated.frameRate },

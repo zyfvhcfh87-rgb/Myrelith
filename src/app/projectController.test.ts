@@ -882,15 +882,15 @@ describe('portable project resume', () => {
     })
   })
 
-  test('image-source projects resume offline and reconnect through the shared inspection path', async () => {
-    const image = makeAsset({
-      id: 'image-session-id',
+  test('image relink restores its saved duration after the import default changes', async () => {
+    const savedImage = makeAsset({
+      id: 'image-saved-id',
       fileName: 'poster.png',
       mimeType: 'image/png',
-      objectUrl: 'blob:relinked-image',
+      objectUrl: 'blob:saved-image',
       kind: 'image',
-      durationFrames: 150,
-      durationMicroseconds: 5_000_000,
+      durationFrames: 240,
+      durationMicroseconds: 8_000_000,
       frameRate: null,
       width: 800,
       height: 600,
@@ -899,7 +899,14 @@ describe('portable project resume', () => {
       audioChannels: null,
       decoderConfigB64: null,
     })
-    const descriptor = descriptorFrom(image, { id: 'image-stable' })
+    const descriptor = descriptorFrom(savedImage, { id: 'image-stable' })
+    const image = {
+      ...savedImage,
+      id: 'image-session-id',
+      objectUrl: 'blob:relinked-image',
+      durationFrames: 75,
+      durationMicroseconds: 2_500_000,
+    }
     const serialized = serializeProjectFile(
       makeProject([descriptor]),
     )
@@ -912,7 +919,7 @@ describe('portable project resume', () => {
           mimeType: 'image/png',
           fullMimeType: 'image/png',
         },
-        durationMicroseconds: 5_000_000,
+        durationMicroseconds: 2_500_000,
         tracks: [],
         image: {
           format: 'png',
@@ -960,8 +967,8 @@ describe('portable project resume', () => {
       fileName: 'poster.png',
       kind: 'image',
       objectUrl: 'blob:relinked-image',
-      durationFrames: 150,
-      durationMicroseconds: 5_000_000,
+      durationFrames: 240,
+      durationMicroseconds: 8_000_000,
       frameRate: null,
       width: 800,
       height: 600,

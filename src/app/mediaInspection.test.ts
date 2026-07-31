@@ -55,6 +55,7 @@ function decodedImage(
     sourceKind: 'image-bitmap',
     width: 640,
     height: 360,
+    decodedBytes: 921_600,
     animation: {
       isAnimated: false,
       frameCount: 1,
@@ -89,6 +90,7 @@ function dependencies(
     decodeStaticImage: vi.fn(async () => decodedImage(vi.fn())),
     probeTimedMedia: vi.fn(async () => timedResult()),
     createObjectUrl: vi.fn(() => 'blob:verified-image'),
+    getDefaultStillImageDurationMicroseconds: vi.fn(() => 5_000_000),
     ...overrides,
   }
 }
@@ -135,7 +137,7 @@ describe('shared media inspection', () => {
       asset: {
         id: 'asset-image',
         kind: 'image',
-        mimeType: 'application/octet-stream',
+        mimeType: 'image/png',
         objectUrl: 'blob:animated-poster',
         durationMicroseconds: 5_000_000,
         durationFrames: 150,
@@ -173,6 +175,27 @@ describe('shared media inspection', () => {
     expect(createObjectUrl).toHaveBeenCalledWith(file)
     expect(probeTimedMedia).not.toHaveBeenCalled()
     expect(close).toHaveBeenCalledOnce()
+  })
+
+  test('uses the current preference for each future image import', async () => {
+    const result = await inspectMediaFileCompatibility(
+      imageFile(),
+      RATE,
+      'asset-custom-duration',
+      undefined,
+      dependencies({
+        getDefaultStillImageDurationMicroseconds: vi.fn(() => 2_500_000),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      asset: {
+        durationMicroseconds: 2_500_000,
+        durationFrames: 75,
+      },
+      compatibility: { durationMicroseconds: 2_500_000 },
+    })
   })
 
   test('falls back to the timed-media probe only when bytes are not an image', async () => {

@@ -44,6 +44,7 @@ function makeClip(
     id,
     assetId: options.assetId ?? `asset-${id}`,
     name: id,
+    sourceMode: 'timed',
     sourceRange: {
       startFrame: options.sourceStart ?? 0,
       durationFrames: duration,
@@ -85,7 +86,7 @@ function makeTrack(
 
 function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc',
     name: 'Playback audio test',
     frameRate: F10,

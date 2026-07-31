@@ -58,6 +58,7 @@ function makeClip(
     id,
     assetId: 'asset-1',
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: srcStart, durationFrames: duration },
     timelineRange: { startFrame: tlStart, durationFrames: duration },
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
@@ -96,7 +97,7 @@ const PAIR4 = 'link_pair4'
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -144,7 +145,7 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-transition-linked',
     name: 'Linked transition test doc',
     frameRate: { num: 30, den: 1 },
@@ -213,7 +214,7 @@ function makeManualLinkDoc(options: ManualLinkDocOptions = {}): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-manual-link',
     name: 'Manual link test doc',
     frameRate: { num: 30, den: 1 },

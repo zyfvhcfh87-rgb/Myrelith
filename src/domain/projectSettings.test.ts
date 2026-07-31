@@ -117,7 +117,7 @@ describe('createTimelineDoc', () => {
     const doc = createTimelineDoc('  Demo project  ', settings, 'project-123')
 
     expect(doc).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: 'project-123',
       name: 'Demo project',
       frameRate: { num: 60_000, den: 1_001 },
@@ -177,7 +177,7 @@ describe('createTimelineDoc', () => {
     expect(second.frameRate).toEqual({ num: 30, den: 1 })
   })
 
-  test('keeps the legacy default document byte-compatible', () => {
+  test('keeps the default document deterministic at the current schema', () => {
     const doc = createTimelineDoc(
       'Untitled',
       DEFAULT_PROJECT_SETTINGS,
@@ -185,7 +185,7 @@ describe('createTimelineDoc', () => {
     )
 
     expect(JSON.stringify(doc)).toBe(JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: 'doc_default',
       name: 'Untitled',
       frameRate: { num: 30, den: 1 },

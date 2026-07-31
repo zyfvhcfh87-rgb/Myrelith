@@ -448,11 +448,7 @@ export function insertClip(
   if (!Number.isInteger(src.startFrame) || src.startFrame < 0) {
     return reject(doc, op, `source start must be an integer >= 0, got ${src.startFrame}`)
   }
-  if (
-    clip.sourceMode !== undefined
-    && clip.sourceMode !== 'timed'
-    && clip.sourceMode !== 'still'
-  ) {
+  if (clip.sourceMode !== 'timed' && clip.sourceMode !== 'still') {
     return reject(doc, op, `unknown source mode ${String(clip.sourceMode)}`)
   }
   if (

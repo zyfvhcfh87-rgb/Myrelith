@@ -27,7 +27,7 @@ import {
 
 export const PROJECT_FILE_FORMAT = 'webcut-project' as const
 export const CURRENT_PROJECT_FORMAT_VERSION = 3 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 1 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 2 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -475,6 +475,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   )
   if (
     !stillSource
+    && clip.text === undefined
     && sourceRange.startFrame + sourceRange.durationFrames > assetDurationFrames
   ) {
     fail(`${path}.sourceRange`, 'extends beyond the referenced asset duration')
@@ -723,9 +724,11 @@ export function validateProjectFile(value: unknown): ProjectFile {
 }
 
 /**
- * Add explicit source mapping to every historical clip. Image media clips
- * become canonical one-frame still sources while retaining their authored
- * timeline duration; timed and text clips keep their existing source range.
+ * Upgrade one schema-1 timeline to the explicit schema-2 source contract.
+ * Image media clips become canonical one-frame still sources while retaining
+ * their authored timeline duration. Text clips remain timed even when their
+ * historical backing asset is an image, because text renders its own payload
+ * rather than the referenced media pixels.
  */
 function migrateClipSourceModes(
   documentValue: unknown,
@@ -779,13 +782,48 @@ function migrateClipSourceModes(
     })
     return { ...track, clips }
   })
-  return { ...document, tracks }
+  return {
+    ...document,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
+    tracks,
+  }
 }
 
 /**
- * Upgrade a parsed historical value into the current format. Version 2 added
- * the optional durable partial-track choice. Version 3 adds explicit
- * timed/still clip source semantics.
+ * Upgrade a parsed historical timeline to the current nested schema. The
+ * outer project format and nested timeline schema are independent version
+ * boundaries: previously shipped v3 files can still contain a schema-1
+ * document and must therefore pass through this migration too.
+ */
+function migrateTimelineDocument(
+  documentValue: unknown,
+  assetsValue: unknown,
+): JsonRecord {
+  const document = record(documentValue, '$.document')
+  safeInteger(document.schemaVersion, '$.document.schemaVersion', 1)
+  if (document.schemaVersion > CURRENT_TIMELINE_SCHEMA_VERSION) {
+    fail(
+      '$.document.schemaVersion',
+      `unsupported future timeline schema ${document.schemaVersion}`,
+    )
+  }
+  switch (document.schemaVersion) {
+    case 1:
+      return migrateClipSourceModes(document, assetsValue)
+    case CURRENT_TIMELINE_SCHEMA_VERSION:
+      return document
+    default:
+      return fail(
+        '$.document.schemaVersion',
+        `unsupported timeline schema ${document.schemaVersion}`,
+      )
+  }
+}
+
+/**
+ * Upgrade a parsed historical value into the current format. Outer version 2
+ * added the optional durable partial-track choice; nested timeline schema 2
+ * makes every clip's timed/still source semantics explicit.
  */
 export function migrateProjectFile(value: unknown): unknown {
   const project = record(value, '$')
@@ -799,13 +837,12 @@ export function migrateProjectFile(value: unknown): unknown {
   switch (project.formatVersion) {
     case 1:
     case 2:
+    case CURRENT_PROJECT_FORMAT_VERSION:
       return {
         ...project,
         formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-        document: migrateClipSourceModes(project.document, project.assets),
+        document: migrateTimelineDocument(project.document, project.assets),
       }
-    case CURRENT_PROJECT_FORMAT_VERSION:
-      return project
     default:
       return fail('$.formatVersion', `unsupported project format ${project.formatVersion}`)
   }
@@ -838,7 +875,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           id: clip.id,
           assetId: clip.assetId,
           name: clip.name,
-          sourceMode: clip.sourceMode ?? 'timed',
+          sourceMode: clip.sourceMode,
           sourceRange: { ...clip.sourceRange },
           timelineRange: { ...clip.timelineRange },
           transform: { ...clip.transform },
@@ -894,14 +931,10 @@ export function createProjectFileSnapshot(
   descriptors: Iterable<PortableAssetDescriptor>,
 ): ProjectFile {
   const assets = Array.from(descriptors)
-  const normalizedDocument = migrateClipSourceModes(
-    document,
-    assets,
-  ) as unknown as TimelineDoc
   const project: ProjectFile = {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-    document: normalizedDocument,
+    document,
     assets,
   }
   validateProjectFile(project)

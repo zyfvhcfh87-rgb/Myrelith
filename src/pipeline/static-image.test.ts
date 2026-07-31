@@ -7,6 +7,7 @@ import {
 import {
   STATIC_IMAGE_BITMAP_OPTIONS,
   decodeStaticImage,
+  staticImageDecodedByteLength,
   type StaticImageDecodeEnvironment,
   type StaticImageDecoderCreateOptions,
   type StaticImageDecoderLike,
@@ -405,6 +406,128 @@ function imageDecoderEnvironment(
 }
 
 describe('decodeStaticImage', () => {
+  test('reserves before browser decode and transfers the reconciled lease', async () => {
+    const bitmap = trackedBitmap(20, 10)
+    const events: string[] = []
+    const reconcile = vi.fn((decodedBytes: number) => {
+      events.push(`reconcile:${decodedBytes}`)
+      return true
+    })
+    const release = vi.fn(() => events.push('release'))
+    const reservation = { reconcile, release }
+    const reserveDecodedBytes = vi.fn((inspectedDecodedBytes: number) => {
+      events.push(`reserve:${inspectedDecodedBytes}`)
+      return reservation
+    })
+    const createImageBitmap = vi.fn(async () => {
+      events.push('decode')
+      return bitmap
+    })
+
+    const result = await decodeStaticImage(
+      avifBlob([{ width: 64, height: 32 }]),
+      {
+        environment: { createImageBitmap },
+        reserveDecodedBytes,
+      },
+    )
+
+    expect(events).toEqual([
+      `reserve:${64 * 32 * 4}`,
+      'decode',
+      `reconcile:${20 * 10 * 4}`,
+    ])
+    expect(release).not.toHaveBeenCalled()
+    expect(result.decodedByteReservation).toBe(reservation)
+
+    result.source.close()
+    result.decodedByteReservation?.release()
+    expect(events.at(-1)).toBe('release')
+  })
+
+  test('upgrades the native-frame lease before decode and reconciles it down', async () => {
+    const frame = trackedFrame()
+    const decoder = trackedDecoder(frame)
+    const createImageBitmap = vi.fn(async () => {
+      throw new Error('Blob createImageBitmap rejected the format')
+    })
+    const { environment } = imageDecoderEnvironment(
+      decoder,
+      createImageBitmap,
+    )
+    const reconcile = vi.fn((_decodedBytes: number) => true)
+    const release = vi.fn()
+    const reservation = { reconcile, release }
+
+    const result = await decodeStaticImage(imageBlob(), {
+      environment,
+      reserveDecodedBytes: () => reservation,
+    })
+
+    expect(reconcile.mock.calls.map(([bytes]) => bytes)).toEqual([
+      64 * 32 * 8,
+      64 * 32 * 4,
+    ])
+    expect(decoder.decode).toHaveBeenCalledOnce()
+    expect(result.decodedByteReservation).toBe(reservation)
+    expect(release).not.toHaveBeenCalled()
+
+    result.source.close()
+    result.decodedByteReservation?.release()
+    expect(frame.closeCount).toBe(1)
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  test('rejects a failed native-frame lease upgrade before frame allocation', async () => {
+    const frame = trackedFrame()
+    const decoder = trackedDecoder(frame)
+    const createImageBitmap = vi.fn(async () => {
+      throw new Error('Blob createImageBitmap rejected the format')
+    })
+    const { environment } = imageDecoderEnvironment(
+      decoder,
+      createImageBitmap,
+    )
+    const release = vi.fn()
+    const reconcile = vi.fn((decodedBytes: number) =>
+      decodedBytes <= 64 * 32 * 4,
+    )
+
+    await expect(decodeStaticImage(imageBlob(), {
+      environment,
+      reserveDecodedBytes: () => ({ reconcile, release }),
+    })).rejects.toMatchObject({
+      name: 'StaticImageDecodeError',
+      reason: 'resource-limit',
+    })
+
+    expect(reconcile).toHaveBeenCalledWith(64 * 32 * 8)
+    expect(decoder.decode).not.toHaveBeenCalled()
+    expect(frame.closeCount).toBe(0)
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  test('closes the candidate and refunds when exact reconciliation fails', async () => {
+    const bitmap = trackedBitmap()
+    const release = vi.fn()
+
+    await expect(decodeStaticImage(imageBlob(), {
+      environment: {
+        createImageBitmap: vi.fn(async () => bitmap),
+      },
+      reserveDecodedBytes: () => ({
+        reconcile: () => false,
+        release,
+      }),
+    })).rejects.toMatchObject({
+      name: 'StaticImageDecodeError',
+      reason: 'resource-limit',
+    })
+
+    expect(bitmap.closeCount).toBe(1)
+    expect(release).toHaveBeenCalledOnce()
+  })
+
   test('uses canonical ImageDecoder policy and transfers only the final bitmap', async () => {
     const frame = trackedFrame()
     const bitmap = trackedBitmap()
@@ -457,6 +580,7 @@ describe('decodeStaticImage', () => {
       sourceKind: 'image-bitmap',
       width: 64,
       height: 32,
+      decodedBytes: 64 * 32 * 4,
       animation: {
         isAnimated: true,
         frameCount: 7,
@@ -465,6 +589,7 @@ describe('decodeStaticImage', () => {
       decoderRepetitionCount: 3,
       decodePath: 'image-bitmap',
     })
+    expect(staticImageDecodedByteLength(result)).toBe(64 * 32 * 4)
     expect(frame.closeCount).toBe(0)
     expect(decoder.closeCount).toBe(1)
     expect(bitmap.closeCount).toBe(0)
@@ -648,6 +773,7 @@ describe('decodeStaticImage', () => {
         height: 32,
       },
     })
+    expect(staticImageDecodedByteLength(result)).toBe(8_192)
     expect(result.source).toBe(frame)
     expect(result.sourceKind).toBe('video-frame')
     expect(result.width).toBe(64)
@@ -735,10 +861,15 @@ describe('decodeStaticImage', () => {
       decoder,
       createImageBitmap,
     )
+    const release = vi.fn()
 
     await expect(
       decodeStaticImage(imageBlob(), {
         environment,
+        reserveDecodedBytes: () => ({
+          reconcile: () => true,
+          release,
+        }),
       }),
     ).rejects.toMatchObject({
       name: 'StaticImageDecodeError',
@@ -749,6 +880,7 @@ describe('decodeStaticImage', () => {
     expect(frame.closeCount).toBe(0)
     expect(decoder.closeCount).toBe(1)
     expect(createImageBitmap).toHaveBeenCalledOnce()
+    expect(release).toHaveBeenCalledOnce()
   })
 
   test('accepts an orientation-swapped bitmap but closes a mismatched bitmap', async () => {
@@ -1096,6 +1228,57 @@ describe('decodeStaticImage', () => {
     expect(decoder.closeCount).toBe(1)
   })
 
+  test('holds a reserved late ImageDecoder allocation until cleanup settles', async () => {
+    const frame = trackedFrame()
+    const decodeGate = deferred<{ image: StaticImageFrameLike }>()
+    const decoder = trackedDecoder(frame, {
+      decode: async () => decodeGate.promise,
+    })
+    const createImageBitmap = vi.fn(async () => {
+      throw new Error('Blob createImageBitmap rejected the format')
+    })
+    const { environment } = imageDecoderEnvironment(
+      decoder,
+      createImageBitmap,
+    )
+    const controller = new AbortController()
+    const release = vi.fn()
+
+    const decoding = decodeStaticImage(imageBlob(), {
+      signal: controller.signal,
+      environment,
+      reserveDecodedBytes: () => ({
+        reconcile: () => true,
+        release,
+      }),
+    })
+    let settled = false
+    void decoding.then(
+      () => { settled = true },
+      () => { settled = true },
+    )
+    await vi.waitFor(() =>
+      expect(decoder.decode).toHaveBeenCalledOnce(),
+    )
+    const rejection = expect(decoding).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+
+    controller.abort()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    expect(frame.closeCount).toBe(0)
+    expect(release).not.toHaveBeenCalled()
+
+    decodeGate.resolve({ image: frame })
+    await rejection
+    expect(settled).toBe(true)
+    expect(frame.closeCount).toBe(1)
+    expect(decoder.closeCount).toBe(1)
+    expect(release).toHaveBeenCalledOnce()
+  })
+
   test('uses ImageDecoder directly when createImageBitmap is unavailable', async () => {
     const frame = trackedFrame()
     const decoder = trackedDecoder(frame)
@@ -1140,6 +1323,47 @@ describe('decodeStaticImage', () => {
     bitmapGate.resolve(lateBitmap)
     await vi.waitFor(() => expect(lateBitmap.closeCount).toBe(1))
     expect(lateBitmap.closeCount).toBe(1)
+  })
+
+  test('holds a reserved late bitmap allocation until cleanup settles', async () => {
+    const lateBitmap = trackedBitmap()
+    const bitmapGate = deferred<ImageBitmap>()
+    const createImageBitmap = vi.fn(async () => bitmapGate.promise)
+    const controller = new AbortController()
+    const release = vi.fn()
+
+    const decoding = decodeStaticImage(imageBlob(), {
+      signal: controller.signal,
+      environment: { createImageBitmap },
+      reserveDecodedBytes: () => ({
+        reconcile: () => true,
+        release,
+      }),
+    })
+    let settled = false
+    void decoding.then(
+      () => { settled = true },
+      () => { settled = true },
+    )
+    await vi.waitFor(() =>
+      expect(createImageBitmap).toHaveBeenCalledOnce(),
+    )
+    const rejection = expect(decoding).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+
+    controller.abort()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    expect(lateBitmap.closeCount).toBe(0)
+    expect(release).not.toHaveBeenCalled()
+
+    bitmapGate.resolve(lateBitmap)
+    await rejection
+    expect(settled).toBe(true)
+    expect(lateBitmap.closeCount).toBe(1)
+    expect(release).toHaveBeenCalledOnce()
   })
 
   test('sniffs the exact Blob and rejects SVG before browser decode', async () => {

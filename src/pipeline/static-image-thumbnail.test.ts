@@ -16,6 +16,7 @@ function decodedImage(
     sourceKind: 'image-bitmap',
     width,
     height,
+    decodedBytes: width * height * 4,
     animation: {
       isAnimated: false,
       frameCount: 1,

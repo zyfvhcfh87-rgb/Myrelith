@@ -423,7 +423,7 @@ const SETTINGS: ExportSettings = {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30_000, den: 1_001 },
@@ -450,6 +450,7 @@ function makeVideoDoc(
           id: `clip-${index + 1}`,
           assetId: request.assetId,
           name: `clip-${index + 1}`,
+          sourceMode: 'timed',
           sourceRange: {
             startFrame: request.sourceStart,
             durationFrames,
@@ -492,6 +493,7 @@ function makeAudioClip(
     id,
     assetId,
     name: id,
+    sourceMode: 'timed',
     sourceRange: {
       startFrame: options.sourceStart ?? 0,
       durationFrames,

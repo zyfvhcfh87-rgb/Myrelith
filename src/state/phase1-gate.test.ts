@@ -46,6 +46,7 @@ function makeClip(id: string, tlStart: number, duration: number, srcStart = 20):
     id,
     assetId: 'asset-1',
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: srcStart, durationFrames: duration },
     timelineRange: { startFrame: tlStart, durationFrames: duration },
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
@@ -61,7 +62,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-gate',
     name: 'Gate fixture',
     frameRate: { num: 30000, den: 1001 },

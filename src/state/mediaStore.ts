@@ -190,10 +190,15 @@ export interface MediaState {
 
   /**
    * Import one fully analyzed asset atomically: add its durable descriptor and
-   * connected session object together, then take ownership of its object URL.
-   * Duplicate ids are rejected; the caller retains URL ownership when false.
+   * connected session object together, optionally replacing the exact active
+   * import check with its canonical Ready result in the same transaction, then
+   * take ownership of its object URL. Duplicate/stale/mismatched commits are
+   * rejected; the caller retains URL ownership when false.
    */
-  addAsset: (asset: MediaAsset) => boolean
+  addAsset: (
+    asset: MediaAsset,
+    compatibility?: MediaCompatibilityItem,
+  ) => boolean
   /**
    * Connect an analyzed source to an existing descriptor without replacing the
    * descriptor Map or descriptor object. The caller retains ownership on false.
@@ -319,18 +324,36 @@ export const useMediaStore = create<MediaState>()((set) => ({
     return removed
   },
 
-  addAsset: (asset) => {
+  addAsset: (asset, readyCompatibility) => {
     let added = false
     set((state) => {
       if (state.descriptors.has(asset.id) || state.assets.has(asset.id)) {
         return state
       }
+      const descriptor = descriptorFromAsset(asset)
+      const currentCompatibility = state.compatibility.get(asset.id)
+      if (readyCompatibility === undefined) {
+        if (currentCompatibility !== undefined) return state
+      } else if (
+        readyCompatibility.status !== 'ready'
+        || !compatibilityMatchesDescriptor(readyCompatibility, descriptor)
+        || currentCompatibility?.status !== 'checking'
+        || currentCompatibility.requestId !== readyCompatibility.requestId
+        || currentCompatibility.fileName !== descriptor.fileName
+        || currentCompatibility.size !== descriptor.size
+        || currentCompatibility.lastModified !== descriptor.lastModified
+      ) {
+        return state
+      }
       const descriptors = new Map(state.descriptors)
-      descriptors.set(asset.id, descriptorFromAsset(asset))
+      descriptors.set(asset.id, descriptor)
       const assets = new Map(state.assets)
       assets.set(asset.id, asset)
+      const compatibility = readyCompatibility === undefined
+        ? state.compatibility
+        : new Map(state.compatibility).set(asset.id, readyCompatibility)
       added = true
-      return { descriptors, assets }
+      return { descriptors, assets, compatibility }
     })
     return added
   },

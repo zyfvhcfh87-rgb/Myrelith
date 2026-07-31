@@ -241,12 +241,11 @@ export interface Clip {
   /** Display name, defaults to the asset's fileName. */
   name: string
   /**
-   * Explicit timeline-to-source mapping. New and portable clips always carry
-   * this field. It remains optional in the in-memory type so historical
-   * timeline fixtures and pre-migration documents safely retain timed
-   * behavior until the project-file migration normalizes them.
+   * Explicit timeline-to-source mapping. Historical documents are migrated
+   * before they enter the current in-memory schema, so every live clip must
+   * carry this field.
    */
-  sourceMode?: ClipSourceMode
+  sourceMode: ClipSourceMode
   /**
    * Timed: the played source range in document-rate frames. Still: the
    * canonical one-frame range `{ startFrame: 0, durationFrames: 1 }`.
@@ -323,7 +322,7 @@ export interface Track {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 1. */
+  /** Schema version for forward-compatible project files. Currently 2. */
   schemaVersion: number
   /** Unique document id. */
   id: string

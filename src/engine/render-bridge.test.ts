@@ -40,6 +40,7 @@ const BUDGET: LocalDecoderBudget = {
 class FakeWorker implements WorkerLike {
   posted: Array<{ msg: ToRenderWorker; transfer: Transferable[] }> = []
   terminated = false
+  terminateCount = 0
   private listener: ((event: MessageEvent) => void) | null = null
 
   postMessage(message: unknown, transfer: Transferable[]): void {
@@ -49,6 +50,7 @@ class FakeWorker implements WorkerLike {
     this.listener = listener
   }
   terminate(): void {
+    this.terminateCount++
     this.terminated = true
   }
   emit(msg: FromRenderWorker): void {
@@ -75,6 +77,27 @@ class FakeWorker implements WorkerLike {
       .filter((m): m is Extract<ToRenderWorker, { type: 'openImage' }> =>
         m.type === 'openImage',
       )
+  }
+  setupMessages(): Array<Extract<ToRenderWorker, { setupId: number }>> {
+    return this.posted
+      .map((post) => post.msg)
+      .filter((message): message is Extract<ToRenderWorker, { setupId: number }> =>
+        'setupId' in message,
+      )
+  }
+  latestSetupId(assetId: string): number {
+    const setup = this.setupMessages()
+      .filter((message) => message.assetId === assetId)
+      .at(-1)
+    if (!setup) throw new Error(`no setup message posted for asset ${assetId}`)
+    return setup.setupId
+  }
+  ackLatestSetup(assetId: string): void {
+    this.emit({
+      type: 'assetConfigured',
+      assetId,
+      setupId: this.latestSetupId(assetId),
+    })
   }
 }
 
@@ -103,6 +126,7 @@ function makeClip(id: string, assetId: string, tlStart: number, duration: number
     id,
     assetId,
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: sourceStart, durationFrames: duration },
     timelineRange: { startFrame: tlStart, durationFrames: duration },
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
@@ -131,7 +155,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], overrides: Pa
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc',
     name: 'doc',
     frameRate: R30,
@@ -158,7 +182,7 @@ function configureAcked(
   provider: ChunkProvider,
 ): Promise<void> {
   const done = ctx.bridge.configureAsset(assetId, { codec: 'avc1.640028' }, rate, provider)
-  ctx.worker.emit({ type: 'assetConfigured', assetId })
+  ctx.worker.ackLatestSetup(assetId)
   return done
 }
 
@@ -171,7 +195,7 @@ function openAcked(
   runtimeToken: object = {},
 ): Promise<void> {
   const done = ctx.bridge.openAsset(assetId, blob, rate, BUDGET, runtimeToken)
-  ctx.worker.emit({ type: 'assetConfigured', assetId })
+  ctx.worker.ackLatestSetup(assetId)
   return done
 }
 
@@ -183,7 +207,7 @@ function openImageAcked(
   runtimeToken: object = {},
 ): Promise<void> {
   const done = ctx.bridge.openImage(assetId, blob, runtimeToken)
-  ctx.worker.emit({ type: 'assetConfigured', assetId })
+  ctx.worker.ackLatestSetup(assetId)
   return done
 }
 
@@ -416,12 +440,13 @@ describe('Blob-backed streaming path', () => {
     expect(worker.openAssets()[0]).toEqual({
       type: 'openAsset',
       assetId: 'A',
+      setupId: 1,
       blob,
       budget: BUDGET,
     })
     expect(worker.posted.find((post) => post.msg.type === 'openAsset')?.transfer).toEqual([])
 
-    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    worker.ackLatestSetup('A')
     await expect(done).resolves.toBeUndefined()
     expect(ready).toEqual(['A'])
   })
@@ -436,12 +461,13 @@ describe('Blob-backed streaming path', () => {
     expect(worker.openImages()).toEqual([{
       type: 'openImage',
       assetId: 'A',
+      setupId: 1,
       blob,
     }])
     expect(worker.posted.find((post) => post.msg.type === 'openImage')?.transfer)
       .toEqual([])
 
-    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    worker.ackLatestSetup('A')
     await expect(done).resolves.toBeUndefined()
   })
 
@@ -452,6 +478,7 @@ describe('Blob-backed streaming path', () => {
     worker.emit({
       type: 'error',
       assetId: 'IMAGE',
+      setupId: worker.latestSetupId('IMAGE'),
       mediaFailure: {
         trackKind: null,
         reason: 'resource-limit',
@@ -485,12 +512,14 @@ describe('Blob-backed streaming path', () => {
     const render = worker.renderFrames()[0]
     expect(render.sources).toEqual([
       {
+        kind: 'image',
         clipId: 'one',
         assetId: 'IMAGE',
         sourceFrame: 0,
         targetTimestampUs: 0,
       },
       {
+        kind: 'image',
         clipId: 'two',
         assetId: 'IMAGE',
         sourceFrame: 0,
@@ -520,7 +549,7 @@ describe('Blob-backed streaming path', () => {
     )
     expect(worker.openAssets().map((message) => message.blob)).toEqual([firstBlob])
 
-    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    worker.ackLatestSetup('A')
     await expect(first).resolves.toBeUndefined()
 
     const replacement = bridge.openAsset('A', secondBlob, R60, BUDGET)
@@ -528,7 +557,7 @@ describe('Blob-backed streaming path', () => {
       firstBlob,
       secondBlob,
     ])
-    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    worker.ackLatestSetup('A')
     await expect(replacement).resolves.toBeUndefined()
   })
 
@@ -546,12 +575,14 @@ describe('Blob-backed streaming path', () => {
     expect(first.mode).toBe('playback')
     expect(first.sources).toEqual([
       {
+        kind: 'video',
         clipId: 'one',
         assetId: 'A',
         sourceFrame: 100,
         targetTimestampUs: 3_336_667,
       },
       {
+        kind: 'video',
         clipId: 'two',
         assetId: 'A',
         sourceFrame: 100,
@@ -697,7 +728,12 @@ describe('Blob-backed streaming path', () => {
     const { worker, bridge } = makeBridge(doc)
     const opening = bridge.openAsset('A', new Blob(['bad']), R30, BUDGET)
 
-    worker.emit({ type: 'error', assetId: 'A', message: 'container unsupported' })
+    worker.emit({
+      type: 'error',
+      assetId: 'A',
+      setupId: worker.latestSetupId('A'),
+      message: 'container unsupported',
+    })
     await expect(opening).rejects.toThrow('container unsupported')
 
     const result = bridge.renderFrame(1, 'seek')
@@ -721,6 +757,7 @@ describe('Blob-backed streaming path', () => {
     worker.emit({
       type: 'error',
       assetId: 'A',
+      setupId: worker.latestSetupId('A'),
       mediaFailure: {
         trackKind: null,
         reason: 'resource-unavailable',
@@ -745,6 +782,7 @@ describe('Blob-backed streaming path', () => {
     worker.emit({
       type: 'error',
       assetId: 'A',
+      setupId: worker.latestSetupId('A'),
       mediaFailure: {
         trackKind: 'video',
         reason: 'resource-limit',
@@ -773,7 +811,7 @@ describe('Blob-backed streaming path', () => {
       type: 'error',
       message: 'stale release cleanup failed for asset A',
     })
-    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    worker.ackLatestSetup('A')
 
     await expect(opening).resolves.toBeUndefined()
     expect(warnings).toEqual(['stale release cleanup failed for asset A'])
@@ -812,6 +850,105 @@ describe('Blob-backed streaming path', () => {
       renderMs: 0,
     })
     await expect(result).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('a delayed old setup ack cannot resolve a release then reopen waiter', async () => {
+    const { worker, bridge } = makeBridge(makeDoc([]))
+    const ready: string[] = []
+    bridge.onAssetReady = (assetId) => ready.push(assetId)
+    const oldOpening = bridge.openImage('A', new Blob(['old-image']))
+    const oldSetupId = worker.latestSetupId('A')
+
+    bridge.releaseAsset('A')
+    await expect(oldOpening).rejects.toThrow('asset released')
+    const replacement = bridge.openAsset(
+      'A',
+      new Blob(['new-video']),
+      R30,
+      BUDGET,
+    )
+    const replacementSetupId = worker.latestSetupId('A')
+    expect(replacementSetupId).toBeGreaterThan(oldSetupId)
+    let replacementSettled = false
+    void replacement.then(
+      () => { replacementSettled = true },
+      () => { replacementSettled = true },
+    )
+
+    worker.emit({
+      type: 'assetConfigured',
+      assetId: 'A',
+      setupId: oldSetupId,
+    })
+    await flushMicrotasks()
+    expect(replacementSettled).toBe(false)
+    expect(ready).toEqual([])
+
+    worker.emit({
+      type: 'assetConfigured',
+      assetId: 'A',
+      setupId: replacementSetupId,
+    })
+    await expect(replacement).resolves.toBeUndefined()
+    expect(ready).toEqual(['A'])
+  })
+
+  test('a delayed old setup error cannot reject or remove a reopened source', async () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [makeStillClip('still', 'A', 0, 100)]),
+    ])
+    const { worker, bridge } = makeBridge(doc)
+    const warnings: string[] = []
+    bridge.onWorkerError = (message) => warnings.push(message)
+    const oldOpening = bridge.openAsset(
+      'A',
+      new Blob(['old-video']),
+      R30,
+      BUDGET,
+    )
+    const oldSetupId = worker.latestSetupId('A')
+
+    bridge.releaseAsset('A')
+    await expect(oldOpening).rejects.toThrow('asset released')
+    const replacement = bridge.openImage('A', new Blob(['new-image']))
+    const replacementSetupId = worker.latestSetupId('A')
+    let replacementSettled = false
+    void replacement.then(
+      () => { replacementSettled = true },
+      () => { replacementSettled = true },
+    )
+
+    worker.emit({
+      type: 'error',
+      assetId: 'A',
+      setupId: oldSetupId,
+      message: 'late old open failed',
+    })
+    await flushMicrotasks()
+    expect(replacementSettled).toBe(false)
+    expect(warnings).toEqual([])
+
+    worker.emit({
+      type: 'assetConfigured',
+      assetId: 'A',
+      setupId: replacementSetupId,
+    })
+    await expect(replacement).resolves.toBeUndefined()
+
+    const rendering = bridge.renderFrame(1, 'seek')
+    const render = worker.renderFrames().at(-1)!
+    expect(render.sources).toEqual([
+      expect.objectContaining({ kind: 'image', assetId: 'A' }),
+    ])
+    worker.emit({
+      type: 'compositeDone',
+      requestId: render.requestId,
+      status: 'drawn',
+      drawnClipIds: ['still'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(rendering).resolves.toMatchObject({ status: 'drawn' })
   })
 })
 
@@ -917,6 +1054,36 @@ describe('latest-wins', () => {
     expect(worker.terminated).toBe(false)
     worker.emit({ type: 'closed' })
     expect(worker.terminated).toBe(true)
+    expect(worker.terminateCount).toBe(1)
+    worker.emit({ type: 'closed' })
+    bridge.dispose()
+    expect(worker.terminateCount).toBe(1)
+    expect(worker.posted.filter(({ msg }) => msg.type === 'close')).toHaveLength(1)
+  })
+
+  test('a missing close acknowledgement falls back to exact-once termination', () => {
+    vi.useFakeTimers()
+    try {
+      const { worker, bridge } = makeBridge()
+
+      bridge.dispose()
+      bridge.dispose()
+      expect(worker.terminateCount).toBe(0)
+      expect(worker.posted.filter(({ msg }) => msg.type === 'close')).toHaveLength(1)
+
+      vi.advanceTimersByTime(999)
+      expect(worker.terminateCount).toBe(0)
+      vi.advanceTimersByTime(1)
+      expect(worker.terminateCount).toBe(1)
+
+      worker.emit({ type: 'closed' })
+      bridge.dispose()
+      expect(worker.terminateCount).toBe(1)
+      expect(worker.posted.filter(({ msg }) => msg.type === 'close')).toHaveLength(1)
+    } finally {
+      vi.clearAllTimers()
+      vi.useRealTimers()
+    }
   })
 
   test('posting a newer composite settles older posted ones as superseded', async () => {
@@ -968,7 +1135,7 @@ describe('reply routing', () => {
     bridge.onAssetReady = (assetId) => ready.push(assetId)
 
     const done = bridge.configureAsset('A', { codec: 'avc1.640028' }, R30, makeProvider().provider)
-    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    worker.ackLatestSetup('A')
     await expect(done).resolves.toBeUndefined()
     expect(ready).toEqual(['A'])
   })
@@ -976,7 +1143,12 @@ describe('reply routing', () => {
   test('an asset error while its configure is pending rejects the configure', async () => {
     const { worker, bridge } = makeBridge(makeDoc([]))
     const done = bridge.configureAsset('A', { codec: 'nope' }, R30, makeProvider().provider)
-    worker.emit({ type: 'error', assetId: 'A', message: 'codec not supported by this browser: nope' })
+    worker.emit({
+      type: 'error',
+      assetId: 'A',
+      setupId: worker.latestSetupId('A'),
+      message: 'codec not supported by this browser: nope',
+    })
     await expect(done).rejects.toThrow('codec not supported')
   })
 
@@ -1158,7 +1330,7 @@ describe('reply routing', () => {
       missingClipIds: ['a'],
       renderMs: 1,
     })
-    worker.emit({ type: 'assetConfigured', assetId: 'A' })
+    worker.ackLatestSetup('A')
 
     await expect(oldResult).resolves.toMatchObject({ status: 'drawn' })
     await expect(replacement).resolves.toBeUndefined()

@@ -13,7 +13,8 @@ if (import.meta.env.DEV) {
     import('./state/mediaStore'),
     import('./state/mediaImportStore'),
     import('./state/projectSessionStore'),
-  ]).then(([doc, transport, media, mediaImport, projectSession]) => {
+    import('./state/preferencesStore'),
+  ]).then(([doc, transport, media, mediaImport, projectSession, preferences]) => {
     Object.assign(window, {
       __stores: {
         document: doc.useDocumentStore,
@@ -21,6 +22,7 @@ if (import.meta.env.DEV) {
         media: media.useMediaStore,
         mediaImport: mediaImport.useMediaImportStore,
         projectSession: projectSession.useProjectSessionStore,
+        preferences: preferences.usePreferencesStore,
       },
     })
   })

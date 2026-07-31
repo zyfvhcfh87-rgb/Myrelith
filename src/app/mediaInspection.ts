@@ -13,10 +13,8 @@ import type {
   SettledMediaCompatibilityStatus,
 } from '../domain/mediaCompatibility'
 import type { FrameRate, MediaAsset } from '../domain/schema'
-import {
-  DEFAULT_STILL_IMAGE_DURATION_MICROSECONDS,
-  stillImageDurationFrames,
-} from '../domain/staticImage'
+import { stillImageDurationFrames } from '../domain/staticImage'
+import { usePreferencesStore } from '../state/preferencesStore'
 import {
   probeMediaFile,
   type MediaProbeResult,
@@ -40,6 +38,7 @@ export interface MediaInspectionDeps {
   decodeStaticImage: typeof decodeStaticImage
   probeTimedMedia: typeof probeMediaFile
   createObjectUrl: (source: Blob) => string
+  getDefaultStillImageDurationMicroseconds: () => number
 }
 
 const defaultDeps: MediaInspectionDeps = {
@@ -47,6 +46,9 @@ const defaultDeps: MediaInspectionDeps = {
   decodeStaticImage,
   probeTimedMedia: probeMediaFile,
   createObjectUrl: (source) => URL.createObjectURL(source),
+  getDefaultStillImageDurationMicroseconds: () => (
+    usePreferencesStore.getState().defaultStillImageDurationMicroseconds
+  ),
 }
 
 function imageContainer(
@@ -174,18 +176,19 @@ function readyImageResult(
   inspection: StaticImageInspection,
   decoded: DecodedStaticImage,
   objectUrl: string,
+  durationMicroseconds: number,
 ): MediaProbeResult {
   const animated = decoded.animation.isAnimated
   const asset: MediaAsset = {
     id: assetId,
     fileName: file.name,
-    mimeType: file.type,
+    mimeType: inspection.mimeType,
     size: file.size,
     lastModified: file.lastModified,
     objectUrl,
     kind: 'image',
-    durationFrames: stillImageDurationFrames(documentRate),
-    durationMicroseconds: DEFAULT_STILL_IMAGE_DURATION_MICROSECONDS,
+    durationFrames: stillImageDurationFrames(documentRate, durationMicroseconds),
+    durationMicroseconds,
     frameRate: null,
     width: decoded.width,
     height: decoded.height,
@@ -200,7 +203,7 @@ function readyImageResult(
     compatibility: {
       status: 'ready',
       container: imageContainer(inspection.format, inspection.mimeType),
-      durationMicroseconds: DEFAULT_STILL_IMAGE_DURATION_MICROSECONDS,
+      durationMicroseconds,
       tracks: [],
       image: {
         format: inspection.format,
@@ -227,6 +230,8 @@ export async function inspectMediaFileCompatibility(
   signal?: AbortSignal,
   deps: MediaInspectionDeps = defaultDeps,
 ): Promise<MediaProbeResult> {
+  const stillImageDurationMicroseconds =
+    deps.getDefaultStillImageDurationMicroseconds()
   let inspection: StaticImageInspection
   try {
     inspection = await deps.inspectStaticImage(file, { signal })
@@ -270,6 +275,7 @@ export async function inspectMediaFileCompatibility(
       inspection,
       decoded,
       objectUrl,
+      stillImageDurationMicroseconds,
     )
   } catch (cause) {
     if (

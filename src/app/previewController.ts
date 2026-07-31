@@ -11,9 +11,10 @@
  * - this file is where stores and machinery are ALLOWED to meet.
  *
  * What it does: owns one render worker + bridge for the lifetime of the
- * canvas. Watches mediaStore and gives every analyzed video/image Blob to the
- * bridge once (one worker-owned source per asset),
- * releasing assets that disappear;
+ * canvas. Watches mediaStore and gives every analyzed video Blob plus every
+ * document-referenced image Blob to the bridge once (one worker-owned source
+ * per asset), releasing images after their final document reference disappears
+ * and every source when its connected asset disappears;
  * watches documentStore and posts each new doc snapshot; watches
  * transportStore and renders its latest frame + playback/seek mode,
  * coalesced to one renderFrame per animation frame (the bridge further
@@ -243,14 +244,33 @@ async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void>
   }
 }
 
-/** Reconcile worker-owned sources with the media pool (adds + removals). */
+function documentAssetIds(doc: TimelineDoc): Set<AssetId> {
+  const ids = new Set<AssetId>()
+  for (const track of doc.tracks) {
+    for (const clip of track.clips) {
+      // Text clips render procedurally and never sample their backing asset.
+      // Legacy projects may validly carry image-backed text clips, so treating
+      // every clip id as a still-source reference would decode unused pixels.
+      if (clip.text === undefined) ids.add(clip.assetId)
+    }
+  }
+  return ids
+}
+
+/** Reconcile worker-owned sources with connected media + document references. */
 function syncAssets(deps: PreviewDeps): void {
   const bridge = state.bridge
   if (!bridge) return
   const assets = useMediaStore.getState().assets
+  const referencedIds = documentAssetIds(useDocumentStore.getState().doc)
+  const desiredIds = new Set<AssetId>()
 
   for (const asset of assets.values()) {
     if (asset.kind !== 'video' && asset.kind !== 'image') continue
+    // Timed-video behavior stays unchanged: connected videos are kept warm.
+    // A still owns a retained worker source only while the document uses it.
+    if (asset.kind === 'image' && !referencedIds.has(asset.id)) continue
+    desiredIds.add(asset.id)
     const current = state.assetStates.get(asset.id)
     if (current?.objectUrl === asset.objectUrl) continue
     if (current) {
@@ -261,7 +281,7 @@ function syncAssets(deps: PreviewDeps): void {
   }
 
   for (const id of [...state.assetStates.keys()]) {
-    if (!assets.has(id)) {
+    if (!desiredIds.has(id)) {
       state.assetStates.delete(id)
       bridge.releaseAsset(id)
     }
@@ -314,6 +334,7 @@ export function initPreview(
     useDocumentStore.subscribe((s, prev) => {
       if (s.doc !== prev.doc) {
         bridge.setDoc(s.doc)
+        syncAssets(deps)
         scheduleRender()
       }
     }),

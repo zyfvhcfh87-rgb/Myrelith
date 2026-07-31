@@ -59,6 +59,8 @@ const SUPERSEDED: RenderFrameResult = {
   renderMs: 0,
 }
 
+const WORKER_CLOSE_ACK_TIMEOUT_MS = 1_000
+
 /** Temporary keyframe-batch source retained while previewController migrates. */
 interface LegacyAssetSource {
   protocol: 'legacy'
@@ -118,14 +120,18 @@ export class RenderWorkerBridge {
   /** Invalidates legacy chunk reads when any source is replaced or removed. */
   private sourceRevision = 0
   private nextRequestId = 1
+  /** Monotonic identity for one configure/open attempt; prevents asset ABA. */
+  private nextSetupId = 1
   /** Id of the newest renderFrame CALL — stale calls detect supersession. */
   private latestCallId = 0
   private readonly pending = new Map<number, PendingRender>()
   private readonly pendingConfigures = new Map<
     AssetId,
-    { resolve: () => void; reject: (error: Error) => void }
+    { setupId: number; resolve: () => void; reject: (error: Error) => void }
   >()
   private disposed = false
+  private closeTimeout: ReturnType<typeof setTimeout> | null = null
+  private workerTerminated = false
   /** Errors not tied to a request (decoder faults, stray failures). */
   onWorkerError: ((message: string) => void) | null = null
   /** Current asset-scoped decode failure, paired with its exact open token. */
@@ -173,6 +179,7 @@ export class RenderWorkerBridge {
     if (this.pendingConfigures.has(assetId)) {
       return Promise.reject(new Error(`asset ${assetId} registration already pending`))
     }
+    const setupId = this.takeSetupId()
     this.sourceRevision++
     this.sources.set(assetId, {
       protocol: 'legacy',
@@ -181,8 +188,8 @@ export class RenderWorkerBridge {
       runtimeToken: {},
     })
     return new Promise((resolve, reject) => {
-      this.pendingConfigures.set(assetId, { resolve, reject })
-      this.post({ type: 'configureAsset', assetId, config }, [])
+      this.pendingConfigures.set(assetId, { setupId, resolve, reject })
+      this.post({ type: 'configureAsset', assetId, setupId, config }, [])
     })
   }
 
@@ -202,6 +209,7 @@ export class RenderWorkerBridge {
     if (this.pendingConfigures.has(assetId)) {
       return Promise.reject(new Error(`asset ${assetId} registration already pending`))
     }
+    const setupId = this.takeSetupId()
     this.sourceRevision++
     this.sources.set(assetId, {
       protocol: 'streaming',
@@ -210,8 +218,8 @@ export class RenderWorkerBridge {
       runtimeToken,
     })
     return new Promise((resolve, reject) => {
-      this.pendingConfigures.set(assetId, { resolve, reject })
-      this.post({ type: 'openAsset', assetId, blob, budget }, [])
+      this.pendingConfigures.set(assetId, { setupId, resolve, reject })
+      this.post({ type: 'openAsset', assetId, setupId, blob, budget }, [])
     })
   }
 
@@ -229,6 +237,7 @@ export class RenderWorkerBridge {
     if (this.pendingConfigures.has(assetId)) {
       return Promise.reject(new Error(`asset ${assetId} registration already pending`))
     }
+    const setupId = this.takeSetupId()
     this.sourceRevision++
     this.sources.set(assetId, {
       protocol: 'streaming',
@@ -236,8 +245,8 @@ export class RenderWorkerBridge {
       runtimeToken,
     })
     return new Promise((resolve, reject) => {
-      this.pendingConfigures.set(assetId, { resolve, reject })
-      this.post({ type: 'openImage', assetId, blob }, [])
+      this.pendingConfigures.set(assetId, { setupId, resolve, reject })
+      this.post({ type: 'openImage', assetId, setupId, blob }, [])
     })
   }
 
@@ -399,20 +408,28 @@ export class RenderWorkerBridge {
       if (!source) continue
       if (source.protocol !== 'streaming') continue // prevalidated above
       requestSources.set(clip.assetId, source)
-      const targetTimestampUs = source.kind === 'image'
-        ? 0
-        : Math.round(
+      if (source.kind === 'image') {
+        entries.push({
+          kind: 'image',
+          clipId: clip.id,
+          assetId: clip.assetId,
+          sourceFrame: 0,
+          targetTimestampUs: 0,
+        })
+      } else {
+        entries.push({
+          kind: 'video',
+          clipId: clip.id,
+          assetId: clip.assetId,
+          sourceFrame: layer.sourceFrame,
+          targetTimestampUs: Math.round(
             framesToSeconds(
               rescaleFrames(layer.sourceFrame, doc.frameRate, source.rate),
               source.rate,
             ) * 1e6,
-          )
-      entries.push({
-        clipId: clip.id,
-        assetId: clip.assetId,
-        sourceFrame: layer.sourceFrame,
-        targetTimestampUs,
-      })
+          ),
+        })
+      }
     }
 
     // Unlike the legacy batch table, entries stay clip-keyed. Two clips may
@@ -429,12 +446,26 @@ export class RenderWorkerBridge {
     if (this.disposed) return
     this.disposed = true
     this.sourceRevision++
+    this.closeTimeout = setTimeout(() => {
+      this.closeTimeout = null
+      this.terminateWorker()
+    }, WORKER_CLOSE_ACK_TIMEOUT_MS)
     this.post({ type: 'close' }, [])
     this.settlePendingAsSuperseded()
     for (const waiter of this.pendingConfigures.values()) {
       waiter.reject(new Error('bridge disposed'))
     }
     this.pendingConfigures.clear()
+  }
+
+  private terminateWorker(): void {
+    if (this.closeTimeout !== null) {
+      clearTimeout(this.closeTimeout)
+      this.closeTimeout = null
+    }
+    if (this.workerTerminated) return
+    this.workerTerminated = true
+    this.worker.terminate?.()
   }
 
   private settlePendingAsSuperseded(): void {
@@ -446,10 +477,21 @@ export class RenderWorkerBridge {
     this.worker.postMessage(msg, transfer)
   }
 
+  private takeSetupId(): number {
+    const setupId = this.nextSetupId
+    if (!Number.isSafeInteger(setupId)) {
+      throw new RangeError('Render worker setup id overflow')
+    }
+    this.nextSetupId++
+    return setupId
+  }
+
   private route(msg: FromRenderWorker): void {
     switch (msg.type) {
       case 'assetConfigured': {
-        this.pendingConfigures.get(msg.assetId)?.resolve()
+        const waiter = this.pendingConfigures.get(msg.assetId)
+        if (!waiter || waiter.setupId !== msg.setupId) break
+        waiter.resolve()
         this.pendingConfigures.delete(msg.assetId)
         this.onAssetReady?.(msg.assetId)
         break
@@ -471,12 +513,13 @@ export class RenderWorkerBridge {
         if (
           msg.requestId === undefined
           && msg.assetId !== undefined
-          && this.pendingConfigures.has(msg.assetId)
+          && msg.setupId !== undefined
         ) {
-          const waiter = this.pendingConfigures.get(msg.assetId) as {
-            resolve: () => void
-            reject: (error: Error) => void
-          }
+          const waiter = this.pendingConfigures.get(msg.assetId)
+          // A delayed failure from a released/replaced setup is inert. It
+          // must not reject or delete the current source, nor surface as a
+          // current worker diagnostic.
+          if (!waiter || waiter.setupId !== msg.setupId) break
           this.pendingConfigures.delete(msg.assetId)
           this.sources.delete(msg.assetId)
           this.sourceRevision++
@@ -522,7 +565,7 @@ export class RenderWorkerBridge {
         break
       }
       case 'closed': {
-        this.worker.terminate?.()
+        this.terminateWorker()
         break
       }
     }

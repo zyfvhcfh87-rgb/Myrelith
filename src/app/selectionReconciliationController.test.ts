@@ -17,6 +17,7 @@ function makeClip(id: string, startFrame: number, durationFrames: number): Clip 
     id,
     assetId: 'asset-1',
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames },
     timelineRange: { startFrame, durationFrames },
     transform: {
@@ -57,7 +58,7 @@ function makeAudioTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-selection-reconciliation',
     name: 'Selection reconciliation',
     frameRate: { num: 30, den: 1 },
