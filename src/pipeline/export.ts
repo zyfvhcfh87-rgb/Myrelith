@@ -13,6 +13,7 @@ import {
   compositeFrame,
   type Composite2D,
   type FrameSource,
+  type TransitionSurfaceProvider,
 } from './render'
 
 export interface ExportSettings {
@@ -37,6 +38,7 @@ export interface ExportMediaSource {
 
 export interface ExportVideoSink {
   ctx: Composite2D
+  transitionSurfaceProvider: TransitionSurfaceProvider
   /** Adds all encoded media belonging to this document frame. */
   addFrame(timestampSec: number, durationSec: number): Promise<void>
   finalize(): Promise<ExportResult>
@@ -103,7 +105,13 @@ async function compositeAndCloseLease(
   let failure: unknown
 
   try {
-    const result = await composite(doc, frame, sink.ctx, lease)
+    const result = await composite(
+      doc,
+      frame,
+      sink.ctx,
+      lease,
+      sink.transitionSurfaceProvider,
+    )
     if (result.missing.length > 0) {
       throw new Error(
         'Missing source media for clips: ' + result.missing.join(', '),

@@ -17,6 +17,7 @@ import type {
   Composite2D,
   CompositeResult,
   FrameSource,
+  TransitionSurfaceProvider,
 } from './render'
 import type {
   ExportDeps,
@@ -156,6 +157,7 @@ function makeHarness(options: HarnessOptions = {}) {
       frame: number,
       _ctx: Composite2D,
       _source: FrameSource,
+      _transitionSurfaceProvider: TransitionSurfaceProvider,
     ): Promise<CompositeResult> => {
       events.push('composite:' + frame)
       return (
@@ -187,6 +189,11 @@ function makeHarness(options: HarnessOptions = {}) {
 
   const sink: ExportVideoSink = {
     ctx,
+    transitionSurfaceProvider: {
+      get: () => {
+        throw new Error('fake composite unexpectedly requested surfaces')
+      },
+    },
     addFrame,
     finalize,
     cancel,
@@ -216,6 +223,7 @@ function makeHarness(options: HarnessOptions = {}) {
     closeMedia,
     leaseClose,
     composite,
+    sink,
     createVideoSink,
     addFrame,
     finalize,
@@ -250,6 +258,9 @@ describe('exportTimeline CFR scheduling', () => {
     expect(h.createVideoSink).toHaveBeenCalledWith(doc, SETTINGS)
     expect(h.openFrame.mock.calls.map(([frame]) => frame)).toEqual([0, 1, 2])
     expect(h.composite.mock.calls.map((call) => call[1])).toEqual([0, 1, 2])
+    expect(h.composite.mock.calls.every(
+      (call) => call[4] === h.sink.transitionSurfaceProvider,
+    )).toBe(true)
     expect(h.addFrame.mock.calls).toEqual([
       [0, 1 / 30],
       [1 / 30, 1 / 30],

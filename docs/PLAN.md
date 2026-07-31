@@ -983,11 +983,11 @@ premature closeout and remains open.
 | 4 — import, persisted default duration, and reconnect | ✅ complete | Historical local Slice 2 bundle plus the correction that persists **Default still-image duration** and restores each saved image duration during reconnect. |
 | 5 — Media Pool and timeline visuals | ✅ complete | Historical local Slices 2–3. |
 | 6 — worker preview | ✅ complete | Historical local Slice 4 bundle plus referenced-only image opening, discriminated video/image entries, one resident still per asset, exact loan/setup identities, a 256 MiB aggregate reserved-and-retained worker-realm budget, bounded close-ack timeout, and repeated seek/play/reopen coverage. |
-| 7 — correct transition compositor | ⏳ **open / next** | Render each transformed side into transparent scratch space, combine premultiplied outgoing/incoming pixels with `(1-p)` / `p` inside one isolated group, then source-over that group once onto lower tracks in the shared preview/export renderer. |
-| 8 — export | ⚠️ implementation present, acceptance provisional | Historical local Slice 5 bundle exists, but transition/parity acceptance remains provisional until original Slice 7 passes. |
+| 7 — correct transition compositor | ✅ complete | The selector exposes intrinsic opacity and transition weights separately. The shared preview/export renderer builds each transformed leg normally, adds the finished premultiplied legs with `(1-p)` / `p` inside one isolated group, and source-overs that group onto lower tracks exactly once. |
+| 8 — export | ⚠️ **implementation present / acceptance next** | Historical local Slice 5 bundle exists and now consumes the corrected shared compositor. Decode-once/reuse, frame-zero, cancellation/error cleanup, output reopen, and sampled-pixel export acceptance remain the next gate. |
 | 9 — acceptance and closeout | ⏳ open | Run the complete Issue #18 matrix and update evidence only after Slices 7–8 pass. |
 
-The corrective source suite passes 1,369/1,369 tests across 73 files. The
+The corrective source suite passes 1,380/1,380 tests across 74 files. The
 deterministic 15-file fixture replay, production build, lint, dependency audit,
 and diff checks pass. In-app Chromium also passed a real PNG import → 75-frame
 still placement → repeated seek/play → delete/release → undo/reopen cycle with
@@ -1177,9 +1177,10 @@ claimed here.
 
 ## Post-MVP issue #18 — Historical local Slice 5 bundle ✅ DONE (2026-07-31) Static-image export
 
-This bundle provides the original Slice 8 export implementation. Its final
-preview/export transition-parity acceptance remains provisional until original
-Slice 7 replaces the transition compositor and passes its pixel matrix.
+This bundle provides the original Slice 8 export implementation. Original
+Slice 7 has now replaced the transition compositor and passed its pixel matrix;
+decode-once/frame-zero, cleanup, output-reopen, and sampled preview/export
+acceptance are the next gate.
 
 - [x] Extend each immutable export asset resolution with its captured media
   kind. The visual export adapter branches only after resolving that exact
@@ -1250,10 +1251,45 @@ actual original Slice 6 boundary.
   reopened/rendered it through undo. Browser diagnostics recorded 0 warnings
   and 0 errors; all QA-only chooser/insertion adapters were removed afterward.
 
-**Next: original Slice 7 — correct transition compositor.** Issue #18 remains
-open. Original Slice 8 has an implementation but cannot receive final parity
-acceptance before Slice 7; original Slice 9 remains the final acceptance and
-closeout gate.
+## Post-MVP issue #18 — Original Slice 7 ✅ DONE (2026-07-31) Correct transition compositor
+
+Issue #18 remains open. This slice corrects the one shared visual compositor;
+the encoded-output and final acceptance gates remain original Slices 8–9.
+
+- [x] Remove the selector's opaque/full-frame source-over compensation. Every
+  ordinary/crossfade layer now carries intrinsic clip opacity, while transition
+  legs carry a separate track/transition identity and exact complementary
+  weight.
+- [x] Render each complete transformed leg with ordinary source-over semantics
+  into a reusable transparent leg surface. Add the finished leg to a reusable
+  isolated group with Canvas `lighter` and weight `(1-p)` / `p`, then source-over
+  that group onto lower tracks exactly once. A missing leg keeps its absent
+  weight and therefore fades through transparency instead of being
+  renormalized.
+- [x] Keep preview and export on the same `compositeFrame` implementation.
+  Their hosts own separate lazy surface pairs, allocate nothing for ordinary
+  frames, reuse the pair across transition frames, and resize it only when the
+  document canvas changes.
+- [x] Add exact premultiplied-RGBA goldens for opaque, transparent, intrinsic
+  opacity/lower-layer, transformed overlap/uncovered, still→video,
+  video→still, still→still, missing-leg, and ordinary-video cases. Worker and
+  export tests cover lazy allocation, clearing, reuse, resize, and provider
+  identity; the production streaming `renderFrame` adapter also crossfades a
+  retained image loan with a video loan and settles both ownership paths.
+- [x] Verification: 164/164 focused tests across 6 files and 1,380/1,380 total
+  tests across 74 files; production build, lint, and diff checks green.
+- [x] In-app Chromium ran the production `compositeFrame` through real
+  `OffscreenCanvas` contexts. Opaque midpoint was `[128,0,128,255]`, transparent
+  midpoint over green was `[64,127,64,255]`, transformed overlap/uncovered
+  samples matched within Canvas RGBA8 rounding, and ordinary video allocated no
+  transition surfaces. The editor loaded and timeline selection updated the
+  Inspector; browser diagnostics recorded 0 warnings and 0 errors. The
+  temporary QA exposure was removed before final verification.
+
+**Next: original Slice 8 — export acceptance.** Prove decode-once/reuse and
+frame-zero behavior, cancellation/error cleanup, transform/opacity/layer
+parity, output reopen, and sampled pixels against preview. Original Slice 9
+remains the complete Issue #18 matrix and closeout gate.
 
 ## Test strategy per layer (unchanged from original)
 

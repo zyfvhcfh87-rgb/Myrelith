@@ -322,7 +322,7 @@ class DeferredFailingCloseVideoSource extends FakeVideoSource {
 }
 
 interface CtxOp {
-  surface: 'visible' | 'scratch'
+  surface: 'visible' | 'scratch' | 'transition-leg' | 'transition-group'
   name: string
   args: unknown[]
 }
@@ -335,6 +335,7 @@ interface FakeSurface {
 /** A canvas whose 2D ctx logs ops; drawing a closed bitmap THROWS (real). */
 function makeSurface(surface: CtxOp['surface'], log: CtxOp[]): FakeSurface {
   let alpha = 1
+  let operation: GlobalCompositeOperation = 'source-over'
   let fill: Composite2D['fillStyle'] = ''
   const ctx: Composite2D = {
     get globalAlpha() {
@@ -343,6 +344,13 @@ function makeSurface(surface: CtxOp['surface'], log: CtxOp[]): FakeSurface {
     set globalAlpha(v) {
       alpha = v
       log.push({ surface, name: 'alpha', args: [v] })
+    },
+    get globalCompositeOperation() {
+      return operation
+    },
+    set globalCompositeOperation(v) {
+      operation = v
+      log.push({ surface, name: 'composite', args: [v] })
     },
     get fillStyle() {
       return fill
@@ -356,6 +364,8 @@ function makeSurface(surface: CtxOp['surface'], log: CtxOp[]): FakeSurface {
     translate: (x, y) => log.push({ surface, name: 'translate', args: [x, y] }),
     rotate: (a) => log.push({ surface, name: 'rotate', args: [a] }),
     scale: (x, y) => log.push({ surface, name: 'scale', args: [x, y] }),
+    clearRect: (x, y, w, h) =>
+      log.push({ surface, name: 'clearRect', args: [x, y, w, h] }),
     fillRect: (x, y, w, h) => log.push({ surface, name: 'fillRect', args: [x, y, w, h] }),
     drawImage: (image, dx, dy) => {
       if ((image as Partial<TrackedBitmap>).closed === true) {
@@ -407,6 +417,7 @@ interface Harness {
   ops: CtxOp[]
   visible: FakeSurface
   scratch: () => FakeSurface | null
+  createdSurfaces: () => FakeSurface[]
   blits: () => CtxOp[]
   scratchDraws: () => CtxOp[]
 }
@@ -434,6 +445,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   const ops: CtxOp[] = []
   const visible = makeSurface('visible', ops)
   let scratch: FakeSurface | null = null
+  const createdSurfaces: FakeSurface[] = []
 
   const env: RenderWorkerEnv = {
     post: (msg) => posts.push(msg),
@@ -530,10 +542,20 @@ function makeHarness(opts: FakeOptions = {}): Harness {
       return bitmap
     },
     createCanvas: (width, height) => {
-      scratch = makeSurface('scratch', ops)
-      scratch.canvas.width = width
-      scratch.canvas.height = height
-      return scratch.canvas
+      const labels: CtxOp['surface'][] = [
+        'scratch',
+        'transition-leg',
+        'transition-group',
+      ]
+      const surface = makeSurface(
+        labels[createdSurfaces.length] ?? 'transition-group',
+        ops,
+      )
+      surface.canvas.width = width
+      surface.canvas.height = height
+      createdSurfaces.push(surface)
+      scratch ??= surface
+      return surface.canvas
     },
     now: () => 0,
   }
@@ -567,6 +589,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     ops,
     visible,
     scratch: () => scratch,
+    createdSurfaces: () => [...createdSurfaces],
     blits: () => ops.filter((op) => op.surface === 'visible' && op.name === 'drawImage'),
     scratchDraws: () =>
       ops.filter((op) => op.surface === 'scratch' && op.name === 'drawImage'),
@@ -900,6 +923,7 @@ describe('composite happy path', () => {
     // Canvases adopted the doc size.
     expect(h.visible.raw).toEqual({ width: 320, height: 180 })
     expect(h.scratch()?.raw).toEqual({ width: 320, height: 180 })
+    expect(h.createdSurfaces()).toHaveLength(1)
 
     await h.core.handleMessage(
       compMsg(1, 2, [entry('A', 2, gop(0, 5)), entry('B', 2, gop(0, 5))]),
@@ -935,6 +959,86 @@ describe('composite happy path', () => {
     // close() proves the caches (and returned loans) own every bitmap.
     await h.core.handleMessage({ type: 'close' })
     expect(h.bitmaps.every((b) => b.closed)).toBe(true)
+  })
+
+  test('crossfades lazily allocate, clear, reuse, and resize isolated surfaces', async () => {
+    const from = makeClip('from', 'A', 0, 1)
+    const to = makeClip('to', 'B', 1, 1)
+    const track = {
+      ...makeTrack('V1', [from, to]),
+      transitions: [{
+        id: 'dissolve',
+        type: 'crossfade' as const,
+        fromClipId: from.id,
+        toClipId: to.id,
+        durationFrames: 1,
+      }],
+    }
+    const doc = makeDoc([track])
+    const h = makeHarness()
+    await setup(h, doc, ['A', 'B'])
+
+    expect(h.createdSurfaces()).toHaveLength(1)
+    await h.core.handleMessage(
+      compMsg(1, 1, [entry('A', 0, gop(0, 1)), entry('B', 0, gop(0, 1))]),
+    )
+
+    expect(doneFor(h, 1)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: ['from', 'to'],
+      missingClipIds: [],
+    })
+    const firstSurfaces = h.createdSurfaces()
+    expect(firstSurfaces).toHaveLength(3)
+    expect(firstSurfaces.map((surface) => surface.raw)).toEqual([
+      { width: 320, height: 180 },
+      { width: 320, height: 180 },
+      { width: 320, height: 180 },
+    ])
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-leg' && op.name === 'clearRect',
+      ),
+    ).toHaveLength(2)
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-group' && op.name === 'clearRect',
+      ),
+    ).toHaveLength(1)
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-group'
+          && op.name === 'composite'
+          && op.args[0] === 'lighter',
+      ),
+    ).toHaveLength(2)
+    expect(h.scratchDraws()).toHaveLength(1)
+    expect(h.scratchDraws()[0].args[0]).toBe(firstSurfaces[2].canvas)
+    expect(h.blits()).toHaveLength(1)
+
+    await h.core.handleMessage(
+      compMsg(2, 1, [entry('A', 0), entry('B', 0)]),
+    )
+    expect(doneFor(h, 2)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: ['from', 'to'],
+    })
+    expect(h.createdSurfaces()).toEqual(firstSurfaces)
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-group' && op.name === 'clearRect',
+      ),
+    ).toHaveLength(2)
+
+    await h.core.handleMessage({
+      type: 'setDoc',
+      doc: { ...doc, width: 640, height: 360 },
+    })
+    expect(h.createdSurfaces().map((surface) => surface.raw)).toEqual([
+      { width: 640, height: 360 },
+      { width: 640, height: 360 },
+      { width: 640, height: 360 },
+    ])
   })
 
   test('a repeat composite is served from the caches: zero new decodes', async () => {
@@ -1241,6 +1345,68 @@ describe('asset lifecycle', () => {
 /* ------------------------------------------------------------------ */
 
 describe('streaming playback lanes', () => {
+  test('an image-to-video crossfade uses isolated surfaces on the renderFrame path', async () => {
+    const h = makeHarness()
+    const from = makeStillClip('from', 'IMAGE', 0, 1)
+    const to = makeClip('to', 'VIDEO', 1, 1)
+    const doc = makeDoc([{
+      ...makeTrack('V1', [from, to]),
+      transitions: [{
+        id: 'dissolve',
+        type: 'crossfade',
+        fromClipId: from.id,
+        toClipId: to.id,
+        durationFrames: 1,
+      }],
+    }])
+    const image = makeStaticSource()
+    await setupStaticImage(h, doc, 'IMAGE', image)
+
+    const videoSource = new FakeVideoSource()
+    const cursor = new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ])
+    videoSource.queuePlayback(cursor)
+    h.sourcesToOpen.push(videoSource)
+    await h.core.handleMessage(openMsg('VIDEO'))
+
+    await h.core.handleMessage(renderMsg(1, 1, 'playback', [
+      stillEntry('from', 'IMAGE'),
+      streamEntry('to', 'VIDEO', 0),
+    ]))
+
+    expect(doneFor(h, 1)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: ['from', 'to'],
+      missingClipIds: [],
+    })
+    const surfaces = h.createdSurfaces()
+    expect(surfaces).toHaveLength(3)
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-leg' && op.name === 'drawImage',
+      ).map((op) => op.args[0]),
+    ).toEqual([image, h.streamingBitmaps[0]])
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-group'
+          && op.name === 'composite'
+          && op.args[0] === 'lighter',
+      ),
+    ).toHaveLength(2)
+    expect(h.scratchDraws()).toHaveLength(1)
+    expect(h.scratchDraws()[0].args[0]).toBe(surfaces[2].canvas)
+    expect(h.blits()).toHaveLength(1)
+    expect(image.closeCount).toBe(0)
+
+    await h.core.handleMessage({ type: 'close' })
+    expect(image.closeCount).toBe(1)
+    expect(videoSource.closeCount).toBe(1)
+    expect(cursor.closeCount).toBe(1)
+    expect(h.streamingBitmaps.every((bitmap) => bitmap.closeCount === 1)).toBe(true)
+  })
+
   test('a newer presentation reuses the clip cursor and keeps one-frame lookahead', async () => {
     const h = makeHarness()
     const source = new FakeVideoSource()

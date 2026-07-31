@@ -27,9 +27,10 @@
  *   A FrameSource must therefore resolve every request — per-asset
  *   latest-wins supersession across composites is fine, but dropping
  *   requests WITHIN one composite is not.
- * - Visual selection, including crossfade source frames and opacity, comes
- *   only from domain.visibleVideoLayersAtFrame. Preview and export consume
- *   that same ordered plan and must never duplicate its rules.
+ * - Visual selection, including crossfade source frames, intrinsic opacity,
+ *   and transition weights, comes only from
+ *   domain.visibleVideoLayersAtFrame. Preview and export consume that same
+ *   ordered plan and must never duplicate its rules.
  */
 
 import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
@@ -65,14 +66,39 @@ export interface FrameSource {
  */
 export interface Composite2D {
   globalAlpha: number
+  globalCompositeOperation: GlobalCompositeOperation
   fillStyle: string | CanvasGradient | CanvasPattern
   save(): void
   restore(): void
   translate(x: number, y: number): void
   rotate(angleRad: number): void
   scale(x: number, y: number): void
+  clearRect(x: number, y: number, w: number, h: number): void
   fillRect(x: number, y: number, w: number, h: number): void
-  drawImage(image: RenderFrameSource, dx: number, dy: number): void
+  drawImage(image: CanvasImageSource, dx: number, dy: number): void
+}
+
+/** One transparent, output-sized scratch surface owned by the caller. */
+export interface CompositeSurface {
+  canvas: CanvasImageSource
+  ctx: Composite2D
+}
+
+/**
+ * Persistent scratch surfaces for isolated transition composition. Preview
+ * and export own separate pairs so concurrent renders cannot overwrite one
+ * another. The compositor clears and reuses both surfaces per group.
+ */
+export interface TransitionSurfaces {
+  /** Renders one complete transformed clip with ordinary source-over rules. */
+  leg: CompositeSurface
+  /** Adds weighted premultiplied legs before one destination source-over. */
+  group: CompositeSurface
+}
+
+/** Lazily supplies persistent surfaces only when a frame has a transition. */
+export interface TransitionSurfaceProvider {
+  get(): TransitionSurfaces
 }
 
 /** What one composite accomplished, in bottom-to-top track order. */
@@ -98,6 +124,7 @@ export async function compositeFrame(
   frame: number,
   ctx: Composite2D,
   source: FrameSource,
+  transitionSurfaceProvider: TransitionSurfaceProvider,
 ): Promise<CompositeResult> {
   // Phase 1 — collect what needs pixels, bottom-to-top.
   const jobs = visibleVideoLayersAtFrame(doc, frame)
@@ -122,15 +149,41 @@ export async function compositeFrame(
   ctx.save()
   try {
     ctx.globalAlpha = 1
+    ctx.globalCompositeOperation = 'source-over'
     ctx.fillStyle = '#000000'
     ctx.fillRect(0, 0, doc.width, doc.height)
 
-    for (let i = 0; i < jobs.length; i++) {
+    for (let i = 0; i < jobs.length;) {
       const job = jobs[i]
+      if (job.transition !== null) {
+        const trackId = job.transition.trackId
+        const transitionId = job.transition.transitionId
+        let end = i + 1
+        while (
+          end < jobs.length
+          && jobs[end].transition?.trackId === trackId
+          && jobs[end].transition?.transitionId === transitionId
+        ) {
+          end++
+        }
+        compositeTransitionGroup(
+          doc,
+          ctx,
+          transitionSurfaceProvider,
+          jobs.slice(i, end),
+          images.slice(i, end),
+          drawn,
+          missing,
+        )
+        i = end
+        continue
+      }
+
       const clip = job.clip
       const image = images[i]
       if (image === null) {
         missing.push(clip.id)
+        i++
         continue
       }
       try {
@@ -144,12 +197,99 @@ export async function compositeFrame(
         )
         missing.push(clip.id)
       }
+      i++
     }
   } finally {
     ctx.restore()
   }
 
   return { drawn, missing }
+}
+
+function idsNotIn(left: ClipId[], right: ClipId[]): ClipId[] {
+  const seen = new Set(left)
+  return right.filter((id) => !seen.has(id))
+}
+
+/**
+ * Render complete legs normally, add their weighted premultiplied pixels
+ * with Porter-Duff plus (`lighter`), then source-over the isolated group onto
+ * lower tracks exactly once.
+ */
+function compositeTransitionGroup(
+  doc: TimelineDoc,
+  destination: Composite2D,
+  surfaceProvider: TransitionSurfaceProvider,
+  layers: VisibleVideoLayer[],
+  images: Array<RenderFrameSource | null>,
+  drawn: ClipId[],
+  missing: ClipId[],
+): void {
+  const ready: ClipId[] = []
+
+  try {
+    const surfaces = surfaceProvider.get()
+    clearSurface(surfaces.group.ctx, doc)
+
+    for (let i = 0; i < layers.length; i++) {
+      const layer = layers[i]
+      const image = images[i]
+      if (image === null) {
+        missing.push(layer.clip.id)
+        continue
+      }
+
+      try {
+        clearSurface(surfaces.leg.ctx, doc)
+        drawClip(surfaces.leg.ctx, doc, layer, image)
+
+        surfaces.group.ctx.save()
+        try {
+          surfaces.group.ctx.globalAlpha = layer.transition?.weight ?? 1
+          surfaces.group.ctx.globalCompositeOperation = 'lighter'
+          surfaces.group.ctx.drawImage(surfaces.leg.canvas, 0, 0)
+        } finally {
+          surfaces.group.ctx.restore()
+        }
+        ready.push(layer.clip.id)
+      } catch (e) {
+        console.warn(
+          `[render] drawing transition clip "${layer.clip.id}" failed:`,
+          e instanceof Error ? e.message : e,
+        )
+        missing.push(layer.clip.id)
+      }
+    }
+
+    if (ready.length === 0) return
+
+    destination.save()
+    try {
+      destination.globalAlpha = 1
+      destination.globalCompositeOperation = 'source-over'
+      destination.drawImage(surfaces.group.canvas, 0, 0)
+    } finally {
+      destination.restore()
+    }
+    drawn.push(...ready)
+  } catch (e) {
+    console.warn(
+      '[render] drawing isolated transition group failed:',
+      e instanceof Error ? e.message : e,
+    )
+    missing.push(...idsNotIn(missing, layers.map((layer) => layer.clip.id)))
+  }
+}
+
+function clearSurface(ctx: Composite2D, doc: TimelineDoc): void {
+  ctx.save()
+  try {
+    ctx.globalAlpha = 1
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.clearRect(0, 0, doc.width, doc.height)
+  } finally {
+    ctx.restore()
+  }
 }
 
 /**
@@ -179,6 +319,7 @@ function drawClip(
   ctx.save()
   try {
     ctx.globalAlpha = layer.opacity
+    ctx.globalCompositeOperation = 'source-over'
     ctx.translate(canvasX, canvasY)
     ctx.rotate((t.rotation * Math.PI) / 180)
     ctx.scale(t.scaleX, t.scaleY)

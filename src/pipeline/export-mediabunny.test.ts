@@ -20,7 +20,10 @@ import {
 } from '../codecs/mediaCodecFallbacks'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { AssetKind, Clip, TimelineDoc, Track } from '../domain/schema'
-import { compositeFrame } from './render'
+import {
+  compositeFrame,
+  type TransitionSurfaceProvider,
+} from './render'
 import type { ExportSettings } from './export'
 import { StaticImageDecodeError } from './static-image'
 
@@ -638,12 +641,14 @@ class FakeOffscreenCanvas {
   height: number
   readonly context = {
     globalAlpha: 1,
+    globalCompositeOperation: 'source-over' as GlobalCompositeOperation,
     fillStyle: '#000000',
     save: vi.fn(),
     restore: vi.fn(),
     translate: vi.fn(),
     rotate: vi.fn(),
     scale: vi.fn(),
+    clearRect: vi.fn(),
     fillRect: vi.fn(),
     drawImage: vi.fn(),
   }
@@ -720,6 +725,31 @@ function videoTrack(
     canDecode: vi.fn(async () => (
       typeof canDecode === 'function' ? canDecode() : canDecode
     )),
+  }
+}
+
+function fakeTransitionSurfaceProvider(
+  width: number,
+  height: number,
+): TransitionSurfaceProvider {
+  let surfaces: ReturnType<TransitionSurfaceProvider['get']> | null = null
+  return {
+    get: () => {
+      if (surfaces) return surfaces
+      const leg = new FakeOffscreenCanvas(width, height)
+      const group = new FakeOffscreenCanvas(width, height)
+      surfaces = {
+        leg: {
+          canvas: leg as unknown as CanvasImageSource,
+          ctx: leg.context,
+        },
+        group: {
+          canvas: group as unknown as CanvasImageSource,
+          ctx: group.context,
+        },
+      }
+      return surfaces
+    },
   }
 }
 
@@ -890,11 +920,21 @@ describe('createMediabunnyExportMediaSource', () => {
       ),
     )
     const canvas = new FakeOffscreenCanvas(doc.width, doc.height)
+    const transitionSurfaceProvider = fakeTransitionSurfaceProvider(
+      doc.width,
+      doc.height,
+    )
     const drawn: string[][] = []
 
     for (let frame = 0; frame < 6; frame++) {
       const lease = await media.openFrame(frame)
-      const result = await compositeFrame(doc, frame, canvas.context, lease)
+      const result = await compositeFrame(
+        doc,
+        frame,
+        canvas.context,
+        lease,
+        transitionSurfaceProvider,
+      )
       drawn.push(result.drawn)
       await lease.close()
     }
@@ -911,7 +951,7 @@ describe('createMediabunnyExportMediaSource', () => {
     expect(mb.inputs).toHaveLength(1)
     expect(createBitmap).toHaveBeenCalledTimes(4)
     expect(
-      canvas.context.drawImage.mock.calls
+      fakeCanvases.flatMap((candidate) => candidate.context.drawImage.mock.calls)
         .filter(([image]) => image === source),
     ).toHaveLength(5)
     expect(source.close).not.toHaveBeenCalled()
@@ -1007,11 +1047,21 @@ describe('createMediabunnyExportMediaSource', () => {
       async () => resolvedAsset(new Blob(['asset-a'])),
     )
     const ctx = new FakeOffscreenCanvas(doc.width, doc.height).context
+    const transitionSurfaceProvider = fakeTransitionSurfaceProvider(
+      doc.width,
+      doc.height,
+    )
     const drawn: string[][] = []
 
     for (let frame = 0; frame < 6; frame++) {
       const lease = await media.openFrame(frame)
-      const result = await compositeFrame(doc, frame, ctx, lease)
+      const result = await compositeFrame(
+        doc,
+        frame,
+        ctx,
+        lease,
+        transitionSurfaceProvider,
+      )
       drawn.push(result.drawn)
       await lease.close()
     }
@@ -1450,6 +1500,12 @@ describe('createMediabunnyExportSink video behavior', () => {
     expect(outputAt().addAudioTrack).not.toHaveBeenCalled()
     expect(outputAt().start).toHaveBeenCalledOnce()
     expect(sink.ctx).toBe(fakeCanvases[0].context)
+    const transitionSurfaces = sink.transitionSurfaceProvider.get()
+    expect(fakeCanvases).toHaveLength(3)
+    expect(transitionSurfaces.leg.canvas).toBe(fakeCanvases[1])
+    expect(transitionSurfaces.group.canvas).toBe(fakeCanvases[2])
+    expect(sink.transitionSurfaceProvider.get()).toBe(transitionSurfaces)
+    expect(fakeCanvases).toHaveLength(3)
     const deps = createMediabunnyExportDeps(resolveAsset)
     expect(deps.composite).toBe(compositeFrame)
     expect(deps.createVideoSink).toEqual(expect.any(Function))

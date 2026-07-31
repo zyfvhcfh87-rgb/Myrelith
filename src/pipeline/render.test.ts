@@ -13,8 +13,9 @@ import type {
   Composite2D,
   FrameSource,
   RenderFrameSource,
+  TransitionSurfaceProvider,
 } from './render'
-import { compositeFrame } from './render'
+import { compositeFrame as compositeFrameCore } from './render'
 
 /* ------------------------------------------------------------------ */
 /* Builders                                                             */
@@ -98,6 +99,7 @@ interface Op {
 function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
   const log: Op[] = []
   let alpha = 1
+  let operation: GlobalCompositeOperation = 'source-over'
   let fill: Composite2D['fillStyle'] = ''
   let depth = 0
   const ctx: Composite2D = {
@@ -107,6 +109,13 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
     set globalAlpha(v) {
       alpha = v
       log.push({ name: 'alpha', args: [v] })
+    },
+    get globalCompositeOperation() {
+      return operation
+    },
+    set globalCompositeOperation(v) {
+      operation = v
+      log.push({ name: 'composite', args: [v] })
     },
     get fillStyle() {
       return fill
@@ -126,6 +135,7 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
     translate: (x, y) => log.push({ name: 'translate', args: [x, y] }),
     rotate: (a) => log.push({ name: 'rotate', args: [a] }),
     scale: (x, y) => log.push({ name: 'scale', args: [x, y] }),
+    clearRect: (x, y, w, h) => log.push({ name: 'clearRect', args: [x, y, w, h] }),
     fillRect: (x, y, w, h) => log.push({ name: 'fillRect', args: [x, y, w, h] }),
     drawImage: (image, dx, dy) => {
       if (opts.throwOn === image) {
@@ -136,6 +146,34 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
   }
   const ops = (name: string) => log.filter((op) => op.name === name)
   return { ctx, log, ops, depth: () => depth }
+}
+
+function makeTransitionSurfaceProvider() {
+  const leg = makeCtx()
+  const group = makeCtx()
+  const legCanvas = fakeBitmap(1920, 1080)
+  const groupCanvas = fakeBitmap(1920, 1080)
+  let gets = 0
+  const provider: TransitionSurfaceProvider = {
+    get: () => {
+      gets++
+      return {
+        leg: { canvas: legCanvas, ctx: leg.ctx },
+        group: { canvas: groupCanvas, ctx: group.ctx },
+      }
+    },
+  }
+  return { provider, leg, group, legCanvas, groupCanvas, gets: () => gets }
+}
+
+function compositeFrame(
+  doc: TimelineDoc,
+  frame: number,
+  ctx: Composite2D,
+  source: FrameSource,
+  provider = makeTransitionSurfaceProvider().provider,
+) {
+  return compositeFrameCore(doc, frame, ctx, source, provider)
 }
 
 /** Frame table keyed "assetId@sourceFrame"; unknown keys resolve null. */
@@ -182,9 +220,15 @@ describe('compositeFrame — background & selection', () => {
     expect(depth()).toBe(0)
     // Alpha forced to 1 before the fill; fill covers the full composition.
     const names = log.map((op) => op.name)
-    expect(names.slice(0, 4)).toEqual(['save', 'alpha', 'fillStyle', 'fillRect'])
+    expect(names.slice(0, 5)).toEqual([
+      'save',
+      'alpha',
+      'composite',
+      'fillStyle',
+      'fillRect',
+    ])
     expect(log[1].args).toEqual([1])
-    expect(log[3].args).toEqual([0, 0, 1920, 1080])
+    expect(log[4].args).toEqual([0, 0, 1920, 1080])
   })
 
   test('skips audio tracks, hidden video tracks, gaps, and text clips', async () => {
@@ -271,7 +315,7 @@ describe('compositeFrame — stacking order & concurrency', () => {
     expect(result).toEqual({ drawn: ['bottom', 'top'], missing: [] })
   })
 
-  test('fetches a crossfade concurrently and fades incoming over outgoing', async () => {
+  test('fetches a crossfade concurrently and builds one isolated plus group', async () => {
     const outgoingImage = fakeBitmap(100, 100)
     const incomingImage = fakeBitmap(100, 100)
     const outgoing = deferred<ImageBitmap | null>()
@@ -290,23 +334,37 @@ describe('compositeFrame — stacking order & concurrency', () => {
       }),
     ])
     const { ctx, ops } = makeCtx()
+    const surfaces = makeTransitionSurfaceProvider()
     const { source, requests } = makeSource({
       'A@9': outgoing.promise,
       'B@0': incoming.promise,
     })
 
-    const composite = compositeFrame(doc, 10, ctx, source)
+    const composite = compositeFrame(doc, 10, ctx, source, surfaces.provider)
     expect(requests).toEqual(['A@9', 'B@0'])
 
     outgoing.resolve(outgoingImage)
     incoming.resolve(incomingImage)
     const result = await composite
 
-    expect(ops('drawImage').map((op) => op.args[0])).toEqual([
+    expect(surfaces.leg.ops('drawImage').map((op) => op.args[0])).toEqual([
       outgoingImage,
       incomingImage,
     ])
-    expect(ops('alpha').map((op) => op.args[0])).toEqual([1, 1, 0.5])
+    expect(surfaces.group.ops('drawImage').map((op) => op.args[0])).toEqual([
+      surfaces.legCanvas,
+      surfaces.legCanvas,
+    ])
+    expect(
+      surfaces.group.ops('composite').map((op) => op.args[0]),
+    ).toContain('lighter')
+    expect(
+      surfaces.group.ops('alpha').map((op) => op.args[0]),
+    ).toEqual([1, 0.5, 0.5])
+    expect(ops('drawImage').map((op) => op.args[0])).toEqual([
+      surfaces.groupCanvas,
+    ])
+    expect(surfaces.gets()).toBe(1)
     expect(result).toEqual({ drawn: ['from', 'to'], missing: [] })
   })
 
@@ -326,11 +384,23 @@ describe('compositeFrame — stacking order & concurrency', () => {
     ])
     const incomingImage = fakeBitmap(100, 100)
     const { ctx, ops } = makeCtx()
+    const surfaces = makeTransitionSurfaceProvider()
     const { source } = makeSource({ 'B@0': incomingImage })
 
-    const result = await compositeFrame(doc, 10, ctx, source)
+    const result = await compositeFrame(
+      doc,
+      10,
+      ctx,
+      source,
+      surfaces.provider,
+    )
 
-    expect(ops('drawImage').map((op) => op.args[0])).toEqual([incomingImage])
+    expect(surfaces.leg.ops('drawImage').map((op) => op.args[0])).toEqual([
+      incomingImage,
+    ])
+    expect(ops('drawImage').map((op) => op.args[0])).toEqual([
+      surfaces.groupCanvas,
+    ])
     expect(result).toEqual({ drawn: ['to'], missing: ['from'] })
   })
 })

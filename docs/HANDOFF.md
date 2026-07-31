@@ -72,11 +72,11 @@ and the open list below.
 | Post-MVP #18 — original Slice 4 import/default/reconnect | ✅ done | historical local Slice 2 bundle + correction: persisted **Default still-image duration** for future imports; reconnect restores each saved duration |
 | Post-MVP #18 — original Slice 5 Media Pool/timeline visuals | ✅ done | historical local Slices 2–3: bounded one-tile thumbnails, diagnostics, draggable Ready rows, repeated still timeline tiles |
 | Post-MVP #18 — original Slice 6 worker preview | ✅ done | historical local Slice 4 bundle + referenced-only image opening, discriminated protocol, one resident still/asset, exact loan/setup identities, aggregate 256 MiB reserved-and-retained worker budget, bounded close ack, repeated seek/play/reopen |
-| **Post-MVP #18 — original Slice 7 transition compositor** | ⏳ **next** | transformed sides rendered to transparent scratch, weighted `(1-p)` / `p` in one premultiplied group, then source-over once; shared preview/export pixel matrix |
-| Post-MVP #18 — original Slice 8 export | ⚠️ provisional | historical local Slice 5 implementation exists; final transition/parity acceptance waits for original Slice 7 |
+| Post-MVP #18 — original Slice 7 transition compositor | ✅ done | intrinsic opacity + explicit weights; complete transformed legs added with `lighter` inside one isolated group, then source-over once; exact software + Chromium pixel matrix |
+| **Post-MVP #18 — original Slice 8 export** | ⚠️ **implementation present / acceptance next** | historical local Slice 5 implementation consumes the corrected compositor; prove decode-once/frame-zero, cleanup, reopen, and sampled preview/export pixels |
 | Post-MVP #18 — original Slice 9 acceptance/closeout | ⏳ open | Issue #18 was reopened after premature closeout and remains open; run the full matrix and update evidence only after Slices 7–8 pass |
 
-The corrective Issue #18 source suite passes 1,369/1,369 tests across 73 files.
+The corrective Issue #18 source suite passes 1,380/1,380 tests across 74 files.
 Deterministic fixture replay, production build, lint, dependency audit, diff
 checks, and the real-browser Slice 6 cycle pass. Do not read this as the
 original Slice 9 gate. Earlier completed phases remain committed separately
@@ -476,9 +476,9 @@ Issue #18 follows the original researched nine-slice roadmap. The older local
 Slice 1–5 labels below describe delivery bundles, not an authoritative
 renumbering: local 1 maps to original 1; local 2 maps mainly to originals 4–5;
 local 3 maps to originals 2–3 and part of 5; local 4 maps to original 6; and
-local 5 implements original 8. Original Slice 7 is still open and next;
-original Slice 8 acceptance is provisional until then; original Slice 9 is
-open. Issue #18 was reopened after the premature closeout and remains open.
+local 5 implements original 8. Original Slice 7 is complete; original Slice 8
+acceptance is next; original Slice 9 is open. Issue #18 was reopened after the
+premature closeout and remains open.
 
 Historical local Slice 1 establishes the static-image pipeline leaf. A bounded byte
 inspector recognizes PNG, JPEG, WebP, and AVIF without trusting extension or
@@ -614,17 +614,28 @@ conservative 8-byte/pixel reservation and reconcile to the exact returned
 lease, and late completions retain exact ownership. Monotonic `setupId` values
 make delayed ACK/errors inert across release and cross-kind reopen. Repeated
 seek/play/reopen and replacement/release/active-loan/shutdown races are covered.
-The corrective source suite passes 1,369/1,369 tests across 73 files; fixture
+The corrective source suite passes 1,380/1,380 tests across 74 files; fixture
 replay, production build, lint, dependency audit, diff checks, and the real
 browser Slice 6 cycle pass with 0 warnings and 0 errors.
 
-**Next: original Slice 7 — correct transition compositor.** Render each
-transformed side into transparent scratch space, combine premultiplied pixels
-with `(1-p)` / `p` inside one isolated group, source-over that group once onto
-lower tracks in the shared preview/export renderer, then run its pixel matrix.
-Original Slice 8's
-implementation remains provisional until that parity passes; original Slice 9
-is the final acceptance/closeout gate. Issue #18 remains open.
+Original Slice 7 replaces the flat source-over compensation with one isolated
+premultiplied transition group in the shared preview/export renderer. Complete
+transformed legs render normally into a lazy reusable leg surface, add to a
+cleared group via `lighter` at `(1-p)` / `p`, and source-over that group once.
+Exact goldens cover opaque, transparent, intrinsic-opacity/lower-layer,
+transformed, still→video, video→still, still→still, missing-leg, and ordinary
+video cases. The production streaming `renderFrame` path also crossfades a
+retained image loan with a video loan through the isolated surfaces. The
+focused suite passes 164/164 across 6 files; the full suite
+passes 1,380/1,380 across 74. Real Chromium `OffscreenCanvas` samples matched
+the production compositor within normal RGBA8 rounding, ordinary frames made
+zero transition allocations, and browser diagnostics recorded 0 warnings and
+0 errors. All temporary QA exposure was removed.
+
+**Next: original Slice 8 — export acceptance.** Verify decode-once/reuse,
+frame-zero assertions, cancellation/error cleanup, transform/opacity/layer
+parity, output reopen, and sampled pixels against preview. Original Slice 9 is
+the final acceptance/closeout gate. Issue #18 remains open.
 
 ## What works today (user-visible)
 
@@ -840,14 +851,17 @@ surface; it is not a second zoom and never enters document history.
 - `src/pipeline/static-image-thumbnail.ts` — one-tile image visual generator:
   contained 320×180 maximum geometry, PNG output capped at 1 MiB, and exact
   decoded-source/abort ownership.
-- `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
+- `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source, transitionSurfaceProvider)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; Slice 4 accepts either
   `ImageBitmap` or Canvas-drawable `VideoFrame` sources without copying them.
   The concurrent fetch phase precedes synchronous draw; `{drawn, missing}`
-  result and per-clip try/finally preserve source loans. Since 5.1d it paints
-  the selector's ordered ordinary/crossfade layers rather than re-deriving
-  active clips.
+  result and per-clip try/finally preserve source loans. Since Issue #18
+  original Slice 7 it paints ordinary layers directly, but renders each
+  complete transformed crossfade leg into a transparent scratch, adds the
+  weighted premultiplied legs inside an isolated `lighter` group, and
+  source-overs that group onto lower tracks once. The surface provider is lazy,
+  so ordinary frames allocate no transition canvases.
 - `src/pipeline/export.ts` — Phase 5.1a CFR orchestrator:
   `exportTimeline` derives length with `docDurationFrames`, composites every
   integer frame through an injected `compositeFrame`, awaits sink
@@ -987,6 +1001,8 @@ surface; it is not a second zoom and never enters document history.
   superseded work; replacement, release, failure, cancellation, and worker
   close retire and close the source exactly once. All sources feed
   `compositeFrame` on a scratch canvas; newest-only blit uses double buffering.
+  Original Slice 7 adds one lazy worker-owned leg/group surface pair, reused
+  and cleared for transition frames and resized with the document canvas.
   Superseded presentation never cancels a healthy playback lane.
 - `src/workers/decode.worker.ts` — injectable core (`createDecodeWorkerCore`);
   closes every VideoFrame ASAP, caches ImageBitmap copies (12) instead
@@ -1276,13 +1292,11 @@ surface; it is not a second zoom and never enters document history.
   Revisit only if locale typing ever reports badInput problems.
 - Transition rendering, domain authoring, undoable store actions, and the
   5.1e-3 seam popover are complete. Current crossfades are visual-only (audio
-  still hard-cuts), and the
-  source-over compensation is exact only for ordinary opaque full-frame
-  footage. Issue #18 original Slice 7 must replace it with one isolated
-  premultiplied transition group for transformed/transparent and still↔video,
-  video↔still, and still↔still dissolves, shared by preview and export. The
-  historical local Slice 5 export implementation exists, but its parity
-  acceptance remains provisional until that compositor matrix passes. The
+  still hard-cuts). The shared isolated premultiplied transition group now
+  handles transformed, transparent, intrinsic-opacity, still↔video,
+  video↔still, and still↔still dissolves for preview and export. The historical
+  local Slice 5 export implementation exists; original Slice 8 must now
+  complete its encoded-output reopen and sampled-pixel acceptance. The
   minimal UI intentionally surfaces
   currently eligible seams; a malformed serialized transition whose endpoints
   are missing/gapped/text has no cleanup marker yet, although the store's

@@ -46,6 +46,8 @@ import type {
   Composite2D,
   FrameSource,
   RenderFrameSource,
+  TransitionSurfaceProvider,
+  TransitionSurfaces,
 } from '../pipeline/render'
 import { compositeFrame } from '../pipeline/render'
 import {
@@ -248,6 +250,10 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   let visibleCtx: Composite2D | null = null
   let scratch: RenderCanvasLike | null = null
   let scratchCtx: Composite2D | null = null
+  let transitionLeg: RenderCanvasLike | null = null
+  let transitionLegCtx: Composite2D | null = null
+  let transitionGroup: RenderCanvasLike | null = null
+  let transitionGroupCtx: Composite2D | null = null
   let doc: TimelineDoc | null = null
   /** Bumped by every composite/setDoc/configureAsset/releaseAsset/close;
    * stale composites and parked feed loops check it and unwind. */
@@ -333,7 +339,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     return generation
   }
 
-  /** Size both canvases to the doc; a resize wipes them (next blit repaints). */
+  /** Size every canvas to the doc; a resize wipes it before the next paint. */
   function syncCanvases(): void {
     if (!visible || !doc) return
     if (visible.width !== doc.width || visible.height !== doc.height) {
@@ -350,6 +356,53 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       scratch.width = doc.width
       scratch.height = doc.height
     }
+    if (
+      transitionLeg
+      && (
+        transitionLeg.width !== doc.width
+        || transitionLeg.height !== doc.height
+      )
+    ) {
+      transitionLeg.width = doc.width
+      transitionLeg.height = doc.height
+    }
+    if (
+      transitionGroup
+      && (
+        transitionGroup.width !== doc.width
+        || transitionGroup.height !== doc.height
+      )
+    ) {
+      transitionGroup.width = doc.width
+      transitionGroup.height = doc.height
+    }
+  }
+
+  const transitionSurfaceProvider: TransitionSurfaceProvider = {
+    get: (): TransitionSurfaces => {
+      if (!doc) throw new Error('transition surfaces requested before setDoc')
+      if (!transitionLeg) {
+        transitionLeg = env.createCanvas(doc.width, doc.height)
+        transitionLegCtx = transitionLeg.getContext('2d')
+      }
+      if (!transitionGroup) {
+        transitionGroup = env.createCanvas(doc.width, doc.height)
+        transitionGroupCtx = transitionGroup.getContext('2d')
+      }
+      if (!transitionLegCtx || !transitionGroupCtx) {
+        throw new Error('transition canvas 2d context unavailable')
+      }
+      return {
+        leg: {
+          canvas: transitionLeg as unknown as CanvasImageSource,
+          ctx: transitionLegCtx,
+        },
+        group: {
+          canvas: transitionGroup as unknown as CanvasImageSource,
+          ctx: transitionGroupCtx,
+        },
+      }
+    },
   }
 
   /** Cached timestamp within tolerance of the target, or null. */
@@ -1680,7 +1733,13 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       const target = scratchCtx
       let result
       try {
-        result = await compositeFrame(doc, msg.frame, target, source)
+        result = await compositeFrame(
+          doc,
+          msg.frame,
+          target,
+          source,
+          transitionSurfaceProvider,
+        )
       } finally {
         // Return every loan: ownership back to the cache — unless the
         // asset was reconfigured/released meanwhile (epoch mismatch), in
@@ -1815,7 +1874,13 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
       let result
       try {
-        result = await compositeFrame(renderDoc, msg.frame, scratchCtx, source)
+        result = await compositeFrame(
+          renderDoc,
+          msg.frame,
+          scratchCtx,
+          source,
+          transitionSurfaceProvider,
+        )
       } finally {
         for (const loan of loans) loan.settle()
         for (const loan of staticLoans) loan.settle()
