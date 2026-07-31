@@ -50,7 +50,16 @@ import type {
   ExportSettings,
   ExportVideoSink,
 } from './export'
-import { createBufferedExportResult } from './export'
+import {
+  createBufferedExportResult,
+  createDirectFileExportResult,
+} from './export'
+import {
+  DirectFileAbortError,
+  createDirectFileExportTarget,
+  type DirectFileExportTarget,
+  type PreparedExportFileCapability,
+} from './export-file-target'
 import {
   EXPORT_AUDIO_CHANNELS,
   TimelineAudioMixer,
@@ -1093,18 +1102,28 @@ function assertVideoSinkInputs(
 async function cancelSetup(
   output: Output,
   mixer: TimelineAudioMixer | null,
+  fileTarget: DirectFileExportTarget | null,
   primary: unknown,
 ): Promise<never> {
+  let integrityFailure: unknown
   try {
     await output.cancel()
   } catch {
     // The setup failure remains primary; Output owns its own cancel promise.
   }
   try {
+    await fileTarget?.abort(primary)
+  } catch (cause) {
+    // Losing the ability to discard staged bytes is the integrity-critical
+    // result and must remain visible to the user.
+    integrityFailure = cause
+  }
+  try {
     await mixer?.close()
   } catch {
     // The setup failure remains primary over decoder cleanup.
   }
+  if (integrityFailure !== undefined) throw integrityFailure
   throw primary
 }
 
@@ -1144,15 +1163,26 @@ function trimAacPaddingPacket(
     remaining / sampleRate
 }
 
-/** Creates and starts the selected buffered Mediabunny container/codec sink. */
+/** Creates and starts the selected buffered or direct-file Mediabunny sink. */
 export async function createMediabunnyExportSink(
   doc: TimelineDoc,
   settings: ExportSettings,
   resolveAsset: ExportAssetResolver,
   sourceBounds: SourceBoundsCatalog = new Map(),
+  fileDestination?: PreparedExportFileCapability,
 ): Promise<ExportVideoSink> {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
+  }
+  if (settings.destination === 'file' && !fileDestination) {
+    throw new TypeError(
+      'Direct file export requires a user-selected file destination',
+    )
+  }
+  if (settings.destination === 'download' && fileDestination) {
+    throw new TypeError(
+      'Browser download export cannot use a direct file destination',
+    )
   }
   const hasTimelineAudio = doc.tracks.some(
     (track) => track.kind === 'audio' && track.clips.length > 0,
@@ -1181,11 +1211,19 @@ export async function createMediabunnyExportSink(
     throw new Error('Could not create the export 2D context')
   }
 
-  const target = new BufferTarget()
-  const output = new Output({
-    format: createMediabunnyOutputFormat(settings.container),
-    target,
-  })
+  const format = createMediabunnyOutputFormat(settings.container)
+  const fileTarget = fileDestination
+    ? await createDirectFileExportTarget(fileDestination)
+    : null
+  let bufferTarget: BufferTarget | null = null
+  const target = fileTarget?.target ?? (bufferTarget = new BufferTarget())
+  let output: Output
+  try {
+    output = new Output({ format, target })
+  } catch (cause) {
+    await fileTarget?.abort(cause)
+    throw cause
+  }
   let source: CanvasSource
   let audioSource: AudioSampleSource | null = null
   let mixer: TimelineAudioMixer | null = null
@@ -1225,7 +1263,7 @@ export async function createMediabunnyExportSink(
     }
     await output.start()
   } catch (cause) {
-    return cancelSetup(output, mixer, cause)
+    return cancelSetup(output, mixer, fileTarget, cause)
   }
 
   type SinkState =
@@ -1239,7 +1277,7 @@ export async function createMediabunnyExportSink(
   let nextFrame = 0
   let transitionSurfaces: TransitionSurfaces | null = null
 
-  const cancel = (): Promise<void> => {
+  const cancelWithReason = (reason?: unknown): Promise<void> => {
     if (state === 'finalized' || state === 'canceled') {
       return Promise.resolve()
     }
@@ -1251,24 +1289,35 @@ export async function createMediabunnyExportSink(
         await output.cancel()
       } catch (cause) {
         failure = cause
+      }
+      try {
+        await fileTarget?.abort(reason ?? failure)
+      } catch (cause) {
+        // An abort failure means staged bytes may remain and outranks the
+        // ordinary operation/decoder cleanup error.
+        failure = cause
+      }
+      try {
+        await mixer?.close()
+      } catch (cause) {
+        failure ??= cause
       } finally {
-        try {
-          await mixer?.close()
-        } catch (cause) {
-          failure ??= cause
-        } finally {
-          state = 'canceled'
-        }
+        state = 'canceled'
       }
       if (failure !== undefined) throw failure
     })()
     return cancelPromise
   }
 
+  const cancel = (reason?: unknown): Promise<void> => cancelWithReason(reason)
+
   const failAfterCancel = async (primary: unknown): Promise<never> => {
     try {
-      await cancel()
-    } catch {
+      await cancelWithReason(primary)
+    } catch (cleanupCause) {
+      if (cleanupCause instanceof DirectFileAbortError) {
+        throw cleanupCause
+      }
       // Preserve the encode/finalize failure over cleanup failure.
     }
     throw primary
@@ -1320,20 +1369,30 @@ export async function createMediabunnyExportSink(
       )
     }
     state = 'finalizing'
+    let committedFile: Awaited<ReturnType<DirectFileExportTarget['commit']>>
+      | null = null
     try {
       await mixer?.close()
       source.close()
       audioSource?.close()
       await output.finalize()
+      committedFile = fileTarget ? await fileTarget.commit() : null
     } catch (cause) {
       return failAfterCancel(cause)
     }
 
     state = 'finalized'
-    if (target.buffer === null) {
+    if (committedFile) {
+      return createDirectFileExportResult(
+        committedFile.fileName,
+        committedFile.byteLength,
+        settings,
+      )
+    }
+    if (bufferTarget === null || bufferTarget.buffer === null) {
       throw new Error('Mediabunny finalized without an output buffer')
     }
-    return createBufferedExportResult(target.buffer, settings)
+    return createBufferedExportResult(bufferTarget.buffer, settings)
   }
 
   return {
@@ -1371,6 +1430,7 @@ export async function createMediabunnyExportSink(
 export function createMediabunnyExportDeps(
   resolveAsset: ExportAssetResolver,
   sourceBounds: SourceBoundsCatalog = new Map(),
+  fileDestination?: PreparedExportFileCapability,
 ): ExportDeps {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -1378,6 +1438,12 @@ export function createMediabunnyExportDeps(
   return {
     composite: compositeFrame,
     createVideoSink: (doc, settings) =>
-      createMediabunnyExportSink(doc, settings, resolveAsset, sourceBounds),
+      createMediabunnyExportSink(
+        doc,
+        settings,
+        resolveAsset,
+        sourceBounds,
+        fileDestination,
+      ),
   }
 }

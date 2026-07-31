@@ -178,6 +178,16 @@ interface FakeOutputRecord {
   cancel: Mock<() => Promise<void>>
 }
 
+interface FakeStreamTargetRecord {
+  options: unknown
+  write(chunk: {
+    type: 'write'
+    data: Uint8Array
+    position: number
+  }): Promise<void>
+  close(): Promise<void>
+}
+
 const mb = vi.hoisted(() => ({
   allFormats: { kind: 'all-formats' },
   blobSources: [] as Array<{ blob: Blob }>,
@@ -191,6 +201,7 @@ const mb = vi.hoisted(() => ({
   canvasIterators: [] as unknown[],
   targetBuffers: [] as Array<ArrayBuffer | null>,
   targets: [] as Array<{ buffer: ArrayBuffer | null }>,
+  streamTargets: [] as unknown[],
   canvasSourceAddHandlers: [] as Array<
     (timestampSec: number, durationSec: number) => Promise<void>
   >,
@@ -365,6 +376,28 @@ vi.mock('mediabunny', () => {
     }
   }
 
+  class StreamTarget {
+    options: unknown
+    #writer: WritableStreamDefaultWriter<unknown>
+    #closed = false
+
+    constructor(stream: WritableStream<unknown>, options: unknown) {
+      this.options = options
+      this.#writer = stream.getWriter()
+      mb.streamTargets.push(this)
+    }
+
+    write(chunk: unknown): Promise<void> {
+      return this.#writer.write(chunk)
+    }
+
+    async close(): Promise<void> {
+      if (this.#closed) return
+      this.#closed = true
+      await this.#writer.close()
+    }
+  }
+
   class WebMOutputFormat {
     kind = 'webm' as const
 
@@ -398,7 +431,7 @@ vi.mock('mediabunny', () => {
     finalize: Mock<() => Promise<void>>
     cancel: Mock<() => Promise<void>>
 
-    constructor(options: unknown) {
+    constructor(options: { target?: unknown }) {
       this.options = options
       this.addVideoTrack = vi.fn()
       this.addAudioTrack = vi.fn()
@@ -408,8 +441,21 @@ vi.mock('mediabunny', () => {
       const cancel =
         mb.outputCancelHandlers.shift() ?? (async () => undefined)
       this.start = vi.fn(start)
-      this.finalize = vi.fn(finalize)
-      this.cancel = vi.fn(cancel)
+      this.finalize = vi.fn(async () => {
+        await finalize()
+        if (options.target instanceof StreamTarget) {
+          await options.target.close()
+        }
+      })
+      this.cancel = vi.fn(async () => {
+        try {
+          await cancel()
+        } finally {
+          if (options.target instanceof StreamTarget) {
+            await options.target.close()
+          }
+        }
+      })
       mb.outputs.push(this)
     }
   }
@@ -426,6 +472,7 @@ vi.mock('mediabunny', () => {
     Input,
     Mp4OutputFormat,
     Output,
+    StreamTarget,
     WebMOutputFormat,
     canEncodeAudio: mb.canEncodeAudio,
     canEncodeVideo: mb.canEncodeVideo,
@@ -825,6 +872,10 @@ function outputAt(index = 0): FakeOutputRecord {
   return mb.outputs[index] as FakeOutputRecord
 }
 
+function streamTargetAt(index = 0): FakeStreamTargetRecord {
+  return mb.streamTargets[index] as FakeStreamTargetRecord
+}
+
 function deferred<T>(): {
   promise: Promise<T>
   resolve: (value: T) => void
@@ -953,6 +1004,7 @@ beforeEach(() => {
   mb.canvasIterators.length = 0
   mb.targetBuffers.length = 0
   mb.targets.length = 0
+  mb.streamTargets.length = 0
   mb.canvasSourceAddHandlers.length = 0
   mb.canvasSources.length = 0
   mb.audioSinkSampleSequences.length = 0
@@ -2020,14 +2072,129 @@ describe('createMediabunnyExportSink selected profiles', () => {
     },
   )
 
-  test('rejects direct-file and exact-duration Opus paths before allocation', async () => {
+  test('streams a direct-file profile and returns metadata without a buffer', async () => {
     const directFile = updateExportProfile(SETTINGS, { destination: 'file' })
-    await expect(createMediabunnyExportSink(
-      makeDoc(),
+    const write = vi.fn(async () => undefined)
+    const close = vi.fn(async () => undefined)
+    const abort = vi.fn(async () => undefined)
+    const writable = { write, close, abort } as unknown as
+      FileSystemWritableFileStream
+    const createWritable = vi.fn(async () => writable)
+    const handle = {
+      name: 'chosen-output.mp4',
+      createWritable,
+    } as unknown as FileSystemFileHandle
+    const takeFileHandle = vi.fn(() => handle)
+    const doc = makeVideoDoc(
+      [{ assetId: 'asset-a', sourceStart: 0 }],
+      1,
+    )
+    const sink = await createMediabunnyExportSink(
+      doc,
       directFile,
       async () => resolvedAsset(new Blob(['unused'])),
-    )).rejects.toThrow(/direct-file export adapter has not been enabled/)
+      new Map(),
+      { fileName: 'chosen-output.mp4', takeFileHandle },
+    )
 
+    await streamTargetAt().write({
+      type: 'write',
+      data: Uint8Array.from([1, 2, 3]),
+      position: 4,
+    })
+    await streamTargetAt().write({
+      type: 'write',
+      data: Uint8Array.from([9, 8]),
+      position: 0,
+    })
+    await sink.addFrame(0, 1_001 / 30_000)
+    const result = await sink.finalize()
+
+    expect(result).toEqual({
+      destination: 'file',
+      fileName: 'chosen-output.mp4',
+      byteLength: 7,
+      mimeType: 'video/mp4',
+      fileExtension: 'mp4',
+      profile: directFile,
+    })
+    expect(result).not.toHaveProperty('buffer')
+    expect(result).not.toHaveProperty('handle')
+    expect(takeFileHandle).toHaveBeenCalledOnce()
+    expect(createWritable).toHaveBeenCalledWith({ keepExistingData: false })
+    expect(write).toHaveBeenCalledTimes(2)
+    expect(close).toHaveBeenCalledOnce()
+    expect(abort).not.toHaveBeenCalled()
+    expect(mb.targets).toHaveLength(0)
+  })
+
+  test('cancels a direct-file sink exactly once without committing it', async () => {
+    const directFile = updateExportProfile(SETTINGS, { destination: 'file' })
+    const close = vi.fn(async () => undefined)
+    const abort = vi.fn(async () => undefined)
+    const writable = {
+      write: vi.fn(async () => undefined),
+      close,
+      abort,
+    } as unknown as FileSystemWritableFileStream
+    const handle = {
+      name: 'cancelled.mp4',
+      createWritable: vi.fn(async () => writable),
+    } as unknown as FileSystemFileHandle
+    const sink = await createMediabunnyExportSink(
+      makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
+      directFile,
+      async () => resolvedAsset(new Blob(['unused'])),
+      new Map(),
+      {
+        fileName: 'cancelled.mp4',
+        takeFileHandle: vi.fn(() => handle),
+      },
+    )
+
+    await Promise.all([sink.cancel(), sink.cancel()])
+
+    expect(outputAt().cancel).toHaveBeenCalledOnce()
+    expect(abort).toHaveBeenCalledOnce()
+    expect(close).not.toHaveBeenCalled()
+  })
+
+  test('aborts a direct file once and preserves an Output.start failure', async () => {
+    const directFile = updateExportProfile(SETTINGS, { destination: 'file' })
+    const failure = new Error('output start failed')
+    mb.outputStartHandlers.push(async () => {
+      throw failure
+    })
+    const close = vi.fn(async () => undefined)
+    const abort = vi.fn(async () => undefined)
+    const writable = {
+      write: vi.fn(async () => undefined),
+      close,
+      abort,
+    } as unknown as FileSystemWritableFileStream
+    const handle = {
+      name: 'failed.mp4',
+      createWritable: vi.fn(async () => writable),
+    } as unknown as FileSystemFileHandle
+
+    await expect(createMediabunnyExportSink(
+      makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
+      directFile,
+      async () => resolvedAsset(new Blob(['unused'])),
+      new Map(),
+      {
+        fileName: 'failed.mp4',
+        takeFileHandle: vi.fn(() => handle),
+      },
+    )).rejects.toBe(failure)
+
+    expect(outputAt().cancel).toHaveBeenCalledOnce()
+    expect(abort).toHaveBeenCalledOnce()
+    expect(abort).toHaveBeenCalledWith(failure)
+    expect(close).not.toHaveBeenCalled()
+  })
+
+  test('rejects exact-duration Opus before allocating an output', async () => {
     const audioDoc = makeAudioDoc([
       makeAudioTrack('A1', makeAudioClip('opus-clip', 'opus-asset', 1)),
     ])
@@ -2039,6 +2206,7 @@ describe('createMediabunnyExportSink selected profiles', () => {
 
     expect(fakeCanvases).toHaveLength(0)
     expect(mb.targets).toHaveLength(0)
+    expect(mb.streamTargets).toHaveLength(0)
     expect(mb.outputs).toHaveLength(0)
   })
 })

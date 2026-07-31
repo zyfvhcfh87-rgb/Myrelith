@@ -1752,7 +1752,7 @@ work.
 4. [x] Add recommended presets, visible Auto resolution, collapsible advanced
    controls, unavailable reasons, a clearly labelled size estimate, dynamic
    extension/MIME, and browser-local validation of the last selection.
-5. [ ] Add transactional direct-file streaming with picker-first activation,
+5. [x] Add transactional direct-file streaming with picker-first activation,
    positional-write backpressure, success commit, cancel/failure abort, and
    honest partial-file reporting tests.
 6. [ ] Evaluate optional pinned local encoder fallbacks only for a selected
@@ -1905,6 +1905,49 @@ work.
   Compatibility. Advanced controls expanded without overflow, an out-of-range
   0.05 Mbps draft exposed the exact accessible error and disabled Start, and
   browser warning/error logs remained empty.
+
+### Slice 5 evidence — bounded direct-to-file export (2026-07-31)
+
+- [x] A dedicated app facade validates the selected concrete profile before
+  touching the host picker, requests the exact MIME/extension filter inside
+  the initiating click's transient activation, and returns an opaque one-shot
+  handle capability. User cancellation, insecure/unavailable hosts, and picker
+  security failures remain distinct readable outcomes; file output never
+  silently changes into a browser download.
+- [x] The Mediabunny direct sink uses `StreamTarget` with one MiB bounded
+  chunks, awaited positional writes, and exact maximum-end byte accounting.
+  Proxy stream closure does not commit the native file: successful export
+  closes all media, finalizes the muxer, then commits exactly once, while
+  cancellation or any setup/write/finalize failure aborts exactly once. An
+  abort failure becomes the terminal integrity error so the UI never promises
+  that no partial file survived when cleanup is uncertain.
+- [x] The controller snapshots callbacks and the picker capability before its
+  first await, requires an exact profile/destination pair, reruns the fresh
+  capability gate, and treats an already-committed generator result as success
+  even if cancellation races the terminal return. Direct results carry only
+  frozen filename/byte-count/profile metadata and never retain a complete
+  output buffer or native handle.
+- [x] The dialog retains an explicitly saved file destination when the current
+  host cannot provide it, shows the exact unavailable reason, and requires the
+  user to switch destinations. A separate picker phase disables edits and
+  prevents double invocation; success names the committed file without making
+  a Blob URL, while cancellation and failed-abort copy preserve the empty-file
+  versus possibly-incomplete-file distinction.
+- [x] Focused gate: 146/146 tests across the generic export lifecycle, direct
+  file adapter, Mediabunny writer, controller, picker facade, and dialog
+  passed. Coverage includes synchronous picker invocation, bounded positional
+  writes and backpressure, exact-once commit/abort, setup/write/finalize
+  failures, cleanup precedence, terminal cancellation races, unsupported saved
+  choices, retry, focus, and zero-Blob direct success.
+- [x] Full gate: 1,620/1,620 tests across 85 files passed. Production
+  TypeScript/Vite build passed with only the pre-existing chunk-size advisory;
+  oxlint passed.
+- [x] In-app Chromium used the production dialog and writer with a real
+  transient user activation and an OPFS-backed native file handle. It streamed
+  a 1,098-byte MP4, then Mediabunny reopened it as AVC at exactly 1280×720 and
+  0.100 seconds with no audio track; the native video element loaded and played
+  it successfully. The picker observed active user activation, browser warning
+  and error logs were both zero, and the temporary QA module was removed.
 
 ## Test strategy per layer (unchanged from original)
 

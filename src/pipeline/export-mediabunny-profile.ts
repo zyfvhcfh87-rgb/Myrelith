@@ -24,12 +24,9 @@ export function mediabunnyExportImplementationUnavailableReason(
   profile: Readonly<ExportProfile>,
   includeAudio: boolean,
 ): string | null {
-  if (profile.destination !== 'download') {
-    return `WebCut's direct-file export adapter has not been enabled yet.`
-  }
   if (includeAudio && profile.audioCodec === 'opus') {
     return (
-      `WebCut's buffered WebM/Opus audio adapter is unavailable until exact ` +
+      `WebCut's WebM/Opus audio adapter is unavailable until exact ` +
       `Opus end-padding metadata can be written.`
     )
   }

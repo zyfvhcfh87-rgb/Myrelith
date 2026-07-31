@@ -19,6 +19,7 @@ import type {
   ExportMediaSource,
 } from '../pipeline/export'
 import type { ExportAssetResolver } from '../pipeline/export-mediabunny'
+import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import {
@@ -38,6 +39,30 @@ const RESULT: ExportResult = {
   mimeType: 'video/mp4',
   fileExtension: 'mp4',
   profile: DEFAULT_EXPORT_PROFILE,
+}
+
+const FILE_SETTINGS = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+  destination: 'file',
+})
+
+const FILE_RESULT: ExportResult = {
+  destination: 'file',
+  fileName: 'chosen.mp4',
+  byteLength: 3,
+  mimeType: 'video/mp4',
+  fileExtension: 'mp4',
+  profile: FILE_SETTINGS,
+}
+
+function fileDestination(
+  fileName = 'chosen.mp4',
+): ExportFileDestinationCapability {
+  return {
+    fileName,
+    takeFileHandle: vi.fn(() => {
+      throw new Error('Controller tests must not consume the native handle')
+    }),
+  }
 }
 
 const DOC: TimelineDoc = {
@@ -204,6 +229,7 @@ function makeHarness(
     (
       _resolver: ExportAssetResolver,
       _sourceBounds: SourceBoundsCatalog,
+      _fileDestination?: ExportFileDestinationCapability,
     ) => pipelineDeps,
   )
   const runExport = vi.fn(
@@ -250,6 +276,45 @@ afterEach(async () => {
 })
 
 describe('exportController wiring and completion', () => {
+  test('requires an exact destination capability/profile pairing', async () => {
+    const missing = makeHarness()
+    await expect(startExport(FILE_SETTINGS, {}, missing.deps)).rejects.toThrow(
+      /requires a user-selected file destination/,
+    )
+    expect(missing.preflightProfile).not.toHaveBeenCalled()
+    expect(missing.fetchBlob).not.toHaveBeenCalled()
+
+    const unexpected = makeHarness()
+    await expect(startExport(
+      SETTINGS,
+      { fileDestination: fileDestination() },
+      unexpected.deps,
+    )).rejects.toThrow(/download export cannot use a direct file destination/)
+    expect(unexpected.preflightProfile).not.toHaveBeenCalled()
+    expect(unexpected.fetchBlob).not.toHaveBeenCalled()
+  })
+
+  test('snapshots and forwards the selected one-shot file capability', async () => {
+    const selected = fileDestination('chosen.mp4')
+    const replacement = fileDestination('replacement.mp4')
+    const options: {
+      fileDestination?: ExportFileDestinationCapability
+    } = { fileDestination: selected }
+    const h = makeHarness(() => completedRun([0, 0.5], FILE_RESULT))
+
+    const completion = startExport(FILE_SETTINGS, options, h.deps)
+    options.fileDestination = replacement
+
+    await expect(completion).resolves.toBe(FILE_RESULT)
+    expect(h.createPipelineDeps.mock.calls[0][2]).toBe(selected)
+    expect(h.runExport).toHaveBeenCalledWith(
+      expect.any(Object),
+      FILE_SETTINGS,
+      h.media,
+      h.pipelineDeps,
+    )
+  })
+
   test('rejects referenced offline media before creating export resources', async () => {
     const descriptor = useMediaStore.getState().descriptors.get(ASSET.id)
     expect(descriptor).toBeDefined()
@@ -538,6 +603,31 @@ describe('exportController wiring and completion', () => {
 })
 
 describe('exportController cancellation', () => {
+  test('returns a committed file when cancellation loses the terminal race', async () => {
+    const finalizeGate = deferred<void>()
+    const observed = observeRun(
+      (async function* (): ExportRun {
+        yield 0
+        await finalizeGate.promise
+        return FILE_RESULT
+      })(),
+    )
+    const h = makeHarness(() => observed.run)
+    const completion = startExport(
+      FILE_SETTINGS,
+      { fileDestination: fileDestination() },
+      h.deps,
+    )
+    await vi.waitFor(() => expect(observed.next).toHaveBeenCalledTimes(2))
+
+    const cancellation = cancelExport()
+    finalizeGate.resolve()
+
+    await expect(completion).resolves.toBe(FILE_RESULT)
+    await expect(cancellation).resolves.toBeUndefined()
+    expect(observed.returnRun).not.toHaveBeenCalled()
+  })
+
   test('reserves the run before immediate cancellation and creates no resources', async () => {
     const observed = observeRun(
       (async function* (): ExportRun {

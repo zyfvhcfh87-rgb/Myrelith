@@ -18,6 +18,7 @@ import {
   type ExportSelectionId,
   type ExportVideoCodec,
 } from '../domain/exportProfile'
+import type { ExportFilePickerAvailability } from '../app/exportFilePicker'
 import {
   changeExportContainer,
   exportProfileSummary,
@@ -39,6 +40,7 @@ interface ExportProfilePickerProps {
   readonly availability: readonly Readonly<ExportPresetAvailability>[]
   readonly selectedSupported: boolean | null
   readonly selectedReason: string | null
+  readonly fileDestinationAvailability: ExportFilePickerAvailability
   readonly disabled: boolean
   readonly selectedInputRef: RefObject<HTMLInputElement | null>
   onSelect(selectionId: ExportSelectionId): void
@@ -174,6 +176,7 @@ export default function ExportProfilePicker({
   availability,
   selectedSupported,
   selectedReason,
+  fileDestinationAvailability,
   disabled,
   selectedInputRef,
   onSelect,
@@ -470,6 +473,7 @@ export default function ExportProfilePicker({
             <span>Destination</span>
             <select
               aria-label="Export destination"
+              aria-describedby="export-file-destination-help"
               title="Download to memory or stream to a user-selected file"
               value={profile.destination}
               disabled={disabled}
@@ -478,8 +482,18 @@ export default function ExportProfilePicker({
               }))}
             >
               <option value="download">Browser download</option>
-              <option value="file" disabled>Choose a file (not available yet)</option>
+              <option
+                value="file"
+                disabled={!fileDestinationAvailability.available}
+              >
+                Choose a file
+              </option>
             </select>
+            <small id="export-file-destination-help">
+              {fileDestinationAvailability.available
+                ? 'Choose a file to stream large exports without holding the movie in memory.'
+                : fileDestinationAvailability.reason}
+            </small>
           </label>
         </div>
       </details>

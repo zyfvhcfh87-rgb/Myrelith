@@ -27,6 +27,11 @@ import {
   type ExportResult,
 } from '../app/exportController'
 import {
+  getExportFilePickerAvailability,
+  requestExportFileDestination,
+  type ExportFileDestinationCapability,
+} from '../app/exportFilePicker'
+import {
   DEFAULT_EXPORT_PROFILE,
   EXPORT_PRESETS,
   exportPresetById,
@@ -51,6 +56,11 @@ vi.mock('../app/exportController', () => ({
 vi.mock('../app/exportCapabilitiesController', () => ({
   getExportPresetCapabilities: vi.fn(),
   checkCurrentExportProfile: vi.fn(),
+}))
+
+vi.mock('../app/exportFilePicker', () => ({
+  getExportFilePickerAvailability: vi.fn(),
+  requestExportFileDestination: vi.fn(),
 }))
 
 function capabilitySnapshot({
@@ -82,6 +92,20 @@ function exportResult(
   return {
     destination: 'download',
     buffer: new Uint8Array([1, 2, 3, 4]).buffer,
+    mimeType: profile.mimeType,
+    fileExtension: profile.fileExtension,
+    profile,
+  }
+}
+
+function directFileResult(
+  profile: Readonly<ExportProfile>,
+  fileName = `chosen.${profile.fileExtension}`,
+): ExportResult {
+  return {
+    destination: 'file',
+    fileName,
+    byteLength: 4,
     mimeType: profile.mimeType,
     fileExtension: profile.fileExtension,
     profile,
@@ -201,6 +225,8 @@ const startMock = vi.mocked(startExport)
 const cancelMock = vi.mocked(cancelExport)
 const presetCapabilitiesMock = vi.mocked(getExportPresetCapabilities)
 const customCapabilityMock = vi.mocked(checkCurrentExportProfile)
+const pickerAvailabilityMock = vi.mocked(getExportFilePickerAvailability)
+const requestFileDestinationMock = vi.mocked(requestExportFileDestination)
 
 beforeEach(() => {
   rafId = 0
@@ -234,6 +260,9 @@ beforeEach(() => {
     supported: true,
     reason: null,
   }))
+  pickerAvailabilityMock.mockReset()
+  pickerAvailabilityMock.mockReturnValue({ available: true, reason: null })
+  requestFileDestinationMock.mockReset()
 
   usePreferencesStore.setState({ ...INITIAL_PREFERENCES_STATE })
   useDocumentStore.setState({ doc: doc(), past: [], future: [] })
@@ -270,6 +299,37 @@ function profileRadio(label: string): HTMLInputElement {
 }
 
 describe('Export dialog configuration', () => {
+  test('keeps a stored file destination selected when this browser cannot write it', async () => {
+    const fileProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      destination: 'file',
+    })
+    const reason = 'Direct files require a secure supported browser.'
+    usePreferencesStore.setState({
+      exportSelection: { selectionId: 'custom', profile: fileProfile },
+    })
+    pickerAvailabilityMock.mockReturnValue({ available: false, reason })
+
+    render(<Toolbar />)
+    await openDialog()
+
+    const destination = screen.getByRole('combobox', {
+      name: 'Export destination',
+    })
+    expect(destination).toHaveValue('file')
+    expect(screen.getByRole('option', { name: 'Choose a file' })).toBeDisabled()
+    expect(await screen.findByText(`${reason} No codec will be substituted.`))
+      .toBeInTheDocument()
+    expect(screen.getByText(
+      `${reason} Choose Browser download explicitly to use it here.`,
+    )).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Profile unavailable' }))
+      .toBeDisabled()
+    expect(usePreferencesStore.getState().exportSelection).toEqual({
+      selectionId: 'custom',
+      profile: fileProfile,
+    })
+  })
+
   test('defaults to Compatibility, shows Auto resolution, isolates shortcuts, and restores focus', async () => {
     render(<Toolbar />)
     const trigger = screen.getByRole('button', { name: 'Export' })
@@ -572,6 +632,101 @@ describe('Export dialog configuration', () => {
 })
 
 describe('Export dialog lifecycle', () => {
+  test('picks before loading the controller and reports a committed direct file', async () => {
+    const fileProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      destination: 'file',
+    })
+    const capability: ExportFileDestinationCapability = {
+      fileName: 'final-cut.mp4',
+      takeFileHandle: vi.fn(() => {
+        throw new Error('The UI must not consume the native file handle')
+      }),
+    }
+    const picker = deferred<Awaited<ReturnType<
+      typeof requestExportFileDestination
+    >>>()
+    const order: string[] = []
+    requestFileDestinationMock.mockImplementation(() => {
+      order.push('picker')
+      return picker.promise
+    })
+    startMock.mockImplementation(async () => {
+      order.push('start')
+      return directFileResult(fileProfile, 'final-cut.mp4')
+    })
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+
+    fireEvent.change(screen.getByRole('combobox', {
+      name: 'Export destination',
+    }), { target: { value: 'file' } })
+    await waitFor(() => expect(customCapabilityMock).toHaveBeenCalledWith(
+      fileProfile,
+    ))
+    const start = await screen.findByRole('button', {
+      name: 'Choose file and export',
+    })
+    fireEvent.click(start)
+
+    expect(requestFileDestinationMock).toHaveBeenCalledWith(
+      fileProfile,
+      'My - Rough- Cut.mp4',
+    )
+    expect(order).toEqual(['picker'])
+    expect(startMock).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('button', {
+      name: 'Waiting for file selection…',
+    })).toBeDisabled()
+
+    await act(async () => {
+      picker.resolve({ status: 'selected', destination: capability })
+      await picker.promise
+    })
+
+    await screen.findByText('Export saved')
+    expect(order).toEqual(['picker', 'start'])
+    expect(startMock).toHaveBeenCalledWith(fileProfile, {
+      onProgress: expect.any(Function),
+      fileDestination: capability,
+    })
+    expect(screen.getByText(
+      'Your MP4 was written directly to final-cut.mp4.',
+    )).toBeInTheDocument()
+    await waitFor(() => expect(rafCallbacks.size).toBeGreaterThan(0))
+    flushAnimationFrame()
+    expect(screen.getByRole('button', { name: 'Export another' })).toHaveFocus()
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  test('keeps the file profile configured when the native picker is cancelled', async () => {
+    const fileProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      destination: 'file',
+    })
+    requestFileDestinationMock.mockResolvedValue({ status: 'cancelled' })
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+    fireEvent.change(screen.getByRole('combobox', {
+      name: 'Export destination',
+    }), { target: { value: 'file' } })
+    await waitFor(() => expect(customCapabilityMock).toHaveBeenCalledWith(
+      fileProfile,
+    ))
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Choose file and export',
+    }))
+
+    expect(await screen.findByText('No file selected.')).toBeInTheDocument()
+    expect(startMock).not.toHaveBeenCalled()
+    expect(screen.getByRole('combobox', { name: 'Export destination' }))
+      .toHaveValue('file')
+    expect(screen.getByRole('button', { name: 'Choose file and export' }))
+      .toBeEnabled()
+  })
+
   test('starts once, coalesces progress bursts, and waits for the real result', async () => {
     const completion = deferred<ExportResult | undefined>()
     let callbacks: ExportCallbacks | undefined

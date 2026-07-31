@@ -345,7 +345,7 @@ describe('Mediabunny capability adapter', () => {
     expect(mediabunnyExportCapabilityProbe.getImplementationUnavailableReason(
       directFile,
       true,
-    )).toMatch(/direct-file export adapter has not been enabled/)
+    )).toBeNull()
     expect(mediabunnyExportCapabilityProbe.getImplementationUnavailableReason(
       mono,
       false,

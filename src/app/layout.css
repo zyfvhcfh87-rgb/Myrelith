@@ -2541,6 +2541,7 @@
 
 .export-empty,
 .export-error,
+.export-file-message,
 .export-cancelled,
 .export-result {
   margin: 0;
@@ -2560,6 +2561,12 @@
   color: #ffb4b4;
   background: rgb(170 48 48 / 14%);
   border: 1px solid rgb(230 88 88 / 30%);
+}
+
+.export-file-message {
+  color: #b9cbea;
+  background: rgb(65 103 164 / 13%);
+  border: 1px solid rgb(92 132 196 / 28%);
 }
 
 .export-progress-panel {
@@ -2600,6 +2607,13 @@
   margin: 0;
   color: #737e8d;
   font-size: 9px;
+}
+
+.export-progress-panel > span {
+  display: block;
+  color: #d9e0ea;
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .export-result,

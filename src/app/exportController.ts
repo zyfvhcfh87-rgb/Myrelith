@@ -38,15 +38,20 @@ import {
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
 import { preflightExportProfile } from './exportCapabilitiesController'
+import type { ExportFileDestinationCapability } from './exportFilePicker'
 
 export type { ExportResult, ExportSettings } from '../pipeline/export'
 
 type ExportRun = AsyncGenerator<number, ExportResult | undefined, void>
 
-export interface ExportCallbacks {
+export interface ExportRunOptions {
   /** Receives every exact progress value yielded by the pipeline. */
   onProgress?: (progress: number) => void
+  /** Ephemeral one-shot capability; never stored in project/preferences state. */
+  fileDestination?: ExportFileDestinationCapability
 }
+
+export type ExportCallbacks = ExportRunOptions
 
 /** Browser/pipeline seams injected by tests; production uses realDeps. */
 export interface ExportControllerDeps {
@@ -64,6 +69,7 @@ export interface ExportControllerDeps {
   createPipelineDeps(
     resolveAsset: ExportAssetResolver,
     sourceBounds: SourceBoundsCatalog,
+    fileDestination?: ExportFileDestinationCapability,
   ): PipelineExportDeps
   runExport(
     doc: TimelineDoc,
@@ -85,7 +91,12 @@ const realDeps: ExportControllerDeps = {
     return response.blob()
   },
   createMediaSource: createMediabunnyExportMediaSource,
-  createPipelineDeps: createMediabunnyExportDeps,
+  createPipelineDeps: (resolveAsset, sourceBounds, fileDestination) =>
+    createMediabunnyExportDeps(
+      resolveAsset,
+      sourceBounds,
+      fileDestination,
+    ),
   runExport: exportTimeline,
 }
 
@@ -285,17 +296,17 @@ async function drainExport(
         throw cause
       }
 
-      if (session.cancelRequested) {
-        await returnGenerator(session)
-        return undefined
-      }
-
       if (step.done) {
         session.generatorDone = true
         if (step.value === undefined) {
           throw new Error('Export completed without an export result')
         }
         return step.value
+      }
+
+      if (session.cancelRequested) {
+        await returnGenerator(session)
+        return undefined
       }
 
       onProgress?.(step.value)
@@ -375,7 +386,11 @@ async function preflightAndRunExport(
   let media: ExportMediaSource | null = null
   let generator: ExportRun
   try {
-    const pipelineDeps = deps.createPipelineDeps(resolveAsset, sourceBounds)
+    const pipelineDeps = deps.createPipelineDeps(
+      resolveAsset,
+      sourceBounds,
+      callbacks.fileDestination,
+    )
     media = deps.createMediaSource(doc, resolveAsset, sourceBounds)
     if (lifecycle.cancelRequested) {
       await media.close()
@@ -415,9 +430,9 @@ async function preflightAndRunExport(
 /**
  * Start one export of the current immutable editor snapshot.
  *
- * Success resolves with the finished MP4 buffer. User cancellation resolves
- * undefined. Setup, pipeline, observer, and cancellation-cleanup failures
- * reject. A second run is rejected until the first run's cleanup is complete.
+ * Success resolves with buffered-download or committed-file metadata. User
+ * cancellation resolves undefined. Setup, pipeline, observer, and cleanup
+ * failures reject. A second run is rejected until exact cleanup finishes.
  */
 export function startExport(
   settings: ExportSettings,
@@ -434,6 +449,28 @@ export function startExport(
     runSettings = validateExportProfile(settings)
   } catch (cause) {
     return Promise.reject(cause)
+  }
+  if (
+    callbacks.onProgress !== undefined
+    && typeof callbacks.onProgress !== 'function'
+  ) {
+    return Promise.reject(new TypeError('Export progress callback must be a function'))
+  }
+  const runOptions: Readonly<ExportRunOptions> = Object.freeze({
+    ...(callbacks.onProgress ? { onProgress: callbacks.onProgress } : {}),
+    ...(callbacks.fileDestination
+      ? { fileDestination: callbacks.fileDestination }
+      : {}),
+  })
+  if (runSettings.destination === 'file' && !runOptions.fileDestination) {
+    return Promise.reject(new TypeError(
+      'Direct file export requires a user-selected file destination',
+    ))
+  }
+  if (runSettings.destination === 'download' && runOptions.fileDestination) {
+    return Promise.reject(new TypeError(
+      'Browser download export cannot use a direct file destination',
+    ))
   }
   const mediaState = useMediaStore.getState()
   const assets = new Map(mediaState.assets)
@@ -464,7 +501,7 @@ export function startExport(
       doc,
       runSettings,
       assets,
-      callbacks,
+      runOptions,
       deps,
     ),
     runtimeGuards,

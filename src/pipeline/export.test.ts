@@ -33,7 +33,12 @@ import type {
   ExportSettings,
   ExportVideoSink,
 } from './export'
-import { createBufferedExportResult, exportTimeline } from './export'
+import {
+  ExportCleanupIntegrityError,
+  createBufferedExportResult,
+  createDirectFileExportResult,
+  exportTimeline,
+} from './export'
 
 const SETTINGS: ExportSettings = DEFAULT_EXPORT_PROFILE
 
@@ -124,7 +129,7 @@ interface HarnessOptions {
     index: number,
   ) => Promise<void>
   finalize?: () => Promise<ExportResult>
-  cancel?: () => Promise<void>
+  cancel?: (reason?: unknown) => Promise<void>
   closeMedia?: () => Promise<void>
   closeLease?: (frame: number) => Promise<void>
   createSinkError?: Error
@@ -196,9 +201,9 @@ function makeHarness(options: HarnessOptions = {}) {
     return (await options.finalize?.()) ?? RESULT
   })
 
-  const cancel = vi.fn(async (): Promise<void> => {
+  const cancel = vi.fn(async (reason?: unknown): Promise<void> => {
     events.push('sink:cancel')
-    await options.cancel?.()
+    await options.cancel?.(reason)
   })
 
   const sink: ExportVideoSink = {
@@ -292,6 +297,47 @@ describe('createBufferedExportResult', () => {
   })
 })
 
+describe('createDirectFileExportResult', () => {
+  test('returns frozen metadata without exposing a buffer or file handle', () => {
+    const mutableProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      destination: 'file',
+    })
+    const result = createDirectFileExportResult(
+      'My project.mp4',
+      4_294_967_301,
+      mutableProfile,
+    )
+
+    expect(result).toEqual({
+      destination: 'file',
+      fileName: 'My project.mp4',
+      byteLength: 4_294_967_301,
+      mimeType: 'video/mp4',
+      fileExtension: 'mp4',
+      profile: mutableProfile,
+    })
+    expect(result).not.toHaveProperty('buffer')
+    expect(result).not.toHaveProperty('handle')
+    expect(Object.isFrozen(result)).toBe(true)
+    expect(Object.isFrozen(result.profile)).toBe(true)
+  })
+
+  test('rejects invalid names, sizes, and buffered destinations', () => {
+    const fileProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      destination: 'file',
+    })
+    expect(() => createDirectFileExportResult('', 1, fileProfile))
+      .toThrow(/file name/)
+    expect(() => createDirectFileExportResult('movie.mp4', -1, fileProfile))
+      .toThrow(/byte length/)
+    expect(() => createDirectFileExportResult(
+      'movie.mp4',
+      1,
+      DEFAULT_EXPORT_PROFILE,
+    )).toThrow(/file destination/)
+  })
+})
+
 describe('exportTimeline CFR scheduling', () => {
   test('renders every document frame in order and returns the finalized result', async () => {
     const doc = makeDoc(3)
@@ -315,7 +361,7 @@ describe('exportTimeline CFR scheduling', () => {
     expect(h.finalize).toHaveBeenCalledOnce()
     expect(h.cancel).not.toHaveBeenCalled()
     expect(h.closeMedia).toHaveBeenCalledOnce()
-    expect(completed.progress).toEqual([0, 1 / 4, 2 / 4, 3 / 4, 1])
+    expect(completed.progress).toEqual([0, 1 / 4, 2 / 4, 3 / 4])
     expect(completed.result).toBe(RESULT)
     expect(h.events).toEqual([
       'sink:create',
@@ -331,8 +377,8 @@ describe('exportTimeline CFR scheduling', () => {
       'composite:2',
       'lease:close:2',
       'add:2',
-      'sink:finalize',
       'media:close',
+      'sink:finalize',
     ])
   })
 
@@ -644,7 +690,7 @@ describe('exportTimeline ownership and failures', () => {
     expect(h.closeMedia).toHaveBeenCalledOnce()
   })
 
-  test('media cleanup completes before progress reaches one', async () => {
+  test('media cleanup completes before the sink can commit its result', async () => {
     const mediaError = new Error('media close failed')
     const h = makeHarness({
       closeMedia: async () => {
@@ -660,12 +706,36 @@ describe('exportTimeline ownership and failures', () => {
     })
     await expect(generator.next()).rejects.toBe(mediaError)
 
-    expect(h.finalize).toHaveBeenCalledOnce()
-    expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
     expect(h.closeMedia).toHaveBeenCalledOnce()
   })
 
-  test('return after progress one remains cancellation, not completion', async () => {
+  test('surfaces an output-integrity cleanup failure over an outer operation', async () => {
+    const primary = new Error('composite failed')
+    const integrity = new ExportCleanupIntegrityError(
+      'selected file may be incomplete',
+    )
+    const cancel = vi.fn(async (reason?: unknown) => {
+      expect(reason).toBe(primary)
+      throw integrity
+    })
+    const h = makeHarness({
+      composite: async () => {
+        throw primary
+      },
+      cancel,
+    })
+
+    await expect(
+      drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)),
+    ).rejects.toBe(integrity)
+
+    expect(cancel).toHaveBeenCalledWith(primary)
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('returns completion without a cancellable post-commit progress yield', async () => {
     const h = makeHarness()
     const generator = exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)
 
@@ -674,7 +744,10 @@ describe('exportTimeline ownership and failures', () => {
       value: 1 / 2,
       done: false,
     })
-    await expect(generator.next()).resolves.toEqual({ value: 1, done: false })
+    await expect(generator.next()).resolves.toEqual({
+      value: RESULT,
+      done: true,
+    })
     await expect(generator.return(undefined)).resolves.toEqual({
       value: undefined,
       done: true,

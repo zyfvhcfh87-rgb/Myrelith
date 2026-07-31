@@ -19,6 +19,11 @@ import {
   type ExportProfile,
   type ExportSelectionId,
 } from '../domain/exportProfile'
+import {
+  getExportFilePickerAvailability,
+  requestExportFileDestination,
+  type ExportFileDestinationCapability,
+} from '../app/exportFilePicker'
 import type { TimelineDoc } from '../domain/schema'
 import { docDurationFrames, outputMediaAssetIds } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
@@ -100,9 +105,11 @@ function loadExportCapabilities(): Promise<ExportCapabilitiesModule> {
 
 type ExportPhase =
   | 'configure'
+  | 'choosing-file'
   | 'running'
   | 'cancelling'
   | 'download'
+  | 'saved'
   | 'cancelled'
 
 interface DownloadReady {
@@ -110,6 +117,11 @@ interface DownloadReady {
   fileName: string
   formatLabel: string
   linkLabel: string
+}
+
+interface SavedFileReady {
+  fileName: string
+  formatLabel: string
 }
 
 interface ExportDialogProps {
@@ -123,6 +135,14 @@ function errorMessage(cause: unknown): string {
   return 'Export failed. Please try again.'
 }
 
+function directFileFailureMessage(cause: unknown): string {
+  const message = errorMessage(cause)
+  if (/selected file may be incomplete/i.test(message)) {
+    return message
+  }
+  return `${message} No partial video was kept; the selected file may remain empty.`
+}
+
 export default function ExportDialog({ onClose }: ExportDialogProps) {
   const doc = useDocumentStore((state) => state.doc)
   const hasContent = docDurationFrames(doc) > 0
@@ -133,6 +153,9 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   )
   const [initialPreference] = useState(
     () => usePreferencesStore.getState().exportSelection,
+  )
+  const [filePickerAvailability] = useState(
+    getExportFilePickerAvailability,
   )
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -154,10 +177,18 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   const capabilityTokenRef = useRef(0)
   const customCapabilityTokenRef = useRef(0)
   const previousSelectedSupportedRef = useRef<boolean | null>(null)
+  const runDestinationRef = useRef<'download' | 'file'>('download')
   const [phase, setPhase] = useState<ExportPhase>('configure')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [download, setDownload] = useState<DownloadReady | null>(null)
+  const [savedFile, setSavedFile] = useState<SavedFileReady | null>(null)
+  const [filePickerMessage, setFilePickerMessage] = useState<string | null>(
+    () => initialPreference.profile?.destination === 'file'
+      && !filePickerAvailability.available
+      ? `${filePickerAvailability.reason} Choose Browser download explicitly to use it here.`
+      : null,
+  )
   const [selectionId, setSelectionId] = useState<ExportUiSelectionId>(
     initialPreference.selectionId,
   )
@@ -252,6 +283,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     setSelectionId(nextSelectionId)
     setAdvancedDraftsValid(true)
     setError(null)
+    setFilePickerMessage(null)
   }, [])
 
   const selectCustomProfile = useCallback((
@@ -261,6 +293,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     setCustomProfile(profile)
     setSelectionId('custom')
     setError(null)
+    setFilePickerMessage(null)
   }, [])
 
   const currentPresetCapability = presetCapabilityState.doc === doc
@@ -318,6 +351,15 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     }
   }
 
+  if (
+    displayProfile.destination === 'file'
+    && !filePickerAvailability.available
+  ) {
+    selectedSupported = false
+    selectedReason = filePickerAvailability.reason
+    activeProfile = null
+  }
+
   const presetAvailability: readonly Readonly<ExportPresetAvailability>[] = [
     {
       selectionId: 'auto',
@@ -367,9 +409,11 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     cancelProgressFrame()
     revokeDownload()
     setDownload(null)
+    setSavedFile(null)
     setProgress(0)
     latestProgressRef.current = 0
     setError(null)
+    setFilePickerMessage(null)
     setPhase('configure')
   }
 
@@ -406,16 +450,46 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     if (runningRef.current || !canStart || exportSettings === null) return
     runningRef.current = true
     cancelRequestedRef.current = false
+    runDestinationRef.current = exportSettings.destination
     const token = ++runTokenRef.current
     cancelProgressFrame()
     revokeDownload()
     setDownload(null)
+    setSavedFile(null)
     setProgress(0)
     latestProgressRef.current = 0
     setError(null)
-    setPhase('running')
+    setFilePickerMessage(null)
+
+    let fileDestination: ExportFileDestinationCapability | undefined
 
     try {
+      if (exportSettings.destination === 'file') {
+        // Keep this call before the first await/dynamic import: the native
+        // save picker requires the Start button's transient user activation.
+        const pickerPromise = requestExportFileDestination(
+          exportSettings,
+          exportFileName(doc.name, exportSettings.fileExtension),
+        )
+        setPhase('choosing-file')
+        const pickerResult = await pickerPromise
+        if (!mountedRef.current || token !== runTokenRef.current) return
+        if (pickerResult.status === 'cancelled') {
+          runningRef.current = false
+          setFilePickerMessage('No file selected.')
+          setPhase('configure')
+          return
+        }
+        if (pickerResult.status !== 'selected') {
+          runningRef.current = false
+          setError(pickerResult.reason)
+          setPhase('configure')
+          return
+        }
+        fileDestination = pickerResult.destination
+      }
+
+      setPhase('running')
       const controller = await loadExportController()
       if (!mountedRef.current || token !== runTokenRef.current) {
         return
@@ -432,6 +506,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       controllerRunStartedRef.current = true
       const result = await controller.startExport(exportSettings, {
         onProgress: (value) => publishProgress(token, value),
+        ...(fileDestination ? { fileDestination } : {}),
       })
       controllerRunStartedRef.current = false
       runningRef.current = false
@@ -446,11 +521,19 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
 
       setProgress(1)
       latestProgressRef.current = 1
+      const formatLabel = result.profile.container === 'webm' ? 'WebM' : 'MP4'
+      if (result.destination === 'file') {
+        setSavedFile({
+          fileName: result.fileName,
+          formatLabel,
+        })
+        setPhase('saved')
+        return
+      }
       const url = URL.createObjectURL(
         new Blob([result.buffer], { type: result.mimeType }),
       )
       downloadUrlRef.current = url
-      const formatLabel = result.profile.container === 'webm' ? 'WebM' : 'MP4'
       setDownload({
         url,
         fileName: exportFileName(doc.name, result.fileExtension),
@@ -466,7 +549,9 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       cancelProgressFrame()
       setProgress(0)
       latestProgressRef.current = 0
-      setError(errorMessage(cause))
+      setError(fileDestination
+        ? directFileFailureMessage(cause)
+        : errorMessage(cause))
       setPhase('configure')
     }
   }
@@ -581,6 +666,9 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
         case 'configure':
           selectedProfileRef.current?.focus()
           break
+        case 'choosing-file':
+          phaseStatusRef.current?.focus()
+          break
         case 'running':
           cancelButtonRef.current?.focus()
           break
@@ -589,6 +677,9 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
           break
         case 'download':
           downloadLinkRef.current?.focus()
+          break
+        case 'saved':
+          backButtonRef.current?.focus()
           break
         case 'cancelled':
           backButtonRef.current?.focus()
@@ -615,7 +706,9 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     return () => cancelAnimationFrame(focusFrame)
   }, [phase, selectedSupported])
 
-  const busy = phase === 'running' || phase === 'cancelling'
+  const busy = phase === 'choosing-file'
+    || phase === 'running'
+    || phase === 'cancelling'
   const percent = Math.round(progress * 100)
 
   return (
@@ -694,6 +787,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             availability={presetAvailability}
             selectedSupported={selectedSupported}
             selectedReason={selectedReason}
+            fileDestinationAvailability={filePickerAvailability}
             disabled={phase !== 'configure'}
             selectedInputRef={selectedProfileRef}
             onSelect={selectRecommendedProfile}
@@ -756,13 +850,33 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             </p>
           )}
 
+          {filePickerMessage && phase === 'configure' && (
+            <p className="export-file-message" role="status">
+              {filePickerMessage}
+            </p>
+          )}
+
           {error && (
             <p className="export-error" role="alert">
               {error}
             </p>
           )}
 
-          {busy && (
+          {phase === 'choosing-file' && (
+            <section className="export-progress-panel">
+              <span
+                ref={phaseStatusRef}
+                role="status"
+                aria-live="polite"
+                tabIndex={-1}
+              >
+                Choose the export file in your browser…
+              </span>
+              <p>WebCut will begin encoding after you approve the destination.</p>
+            </section>
+          )}
+
+          {(phase === 'running' || phase === 'cancelling') && (
             <section className="export-progress-panel" aria-labelledby={progressId}>
               <div className="export-progress-heading">
                 <span
@@ -791,10 +905,27 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             </section>
           )}
 
+          {phase === 'saved' && savedFile && (
+            <section className="export-result" role="status" aria-live="polite">
+              <span className="export-result-mark" aria-hidden="true">✓</span>
+              <div>
+                <strong>Export saved</strong>
+                <span>
+                  Your {savedFile.formatLabel} was written directly to{' '}
+                  {savedFile.fileName}.
+                </span>
+              </div>
+            </section>
+          )}
+
           {phase === 'cancelled' && (
             <section className="export-cancelled" role="status" aria-live="polite">
               <strong>Export cancelled</strong>
-              <span>No download file was created.</span>
+              <span>
+                {runDestinationRef.current === 'file'
+                  ? 'No video was completed; the selected file may remain empty.'
+                  : 'No download file was created.'}
+              </span>
             </section>
           )}
         </div>
@@ -818,7 +949,10 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
                     ? 'Checking export support…'
                     : selectedSupported === false || !advancedDraftsValid
                       ? 'Profile unavailable'
-                      : error ? 'Retry export' : 'Start export'}
+                      : error ? 'Retry export'
+                        : displayProfile.destination === 'file'
+                          ? 'Choose file and export'
+                          : 'Start export'}
               </button>
             </>
           )}
@@ -831,6 +965,12 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
               onClick={requestCancel}
             >
               Cancel export
+            </button>
+          )}
+
+          {phase === 'choosing-file' && (
+            <button type="button" className="export-primary" disabled>
+              Waiting for file selection…
             </button>
           )}
 
@@ -856,6 +996,22 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
               >
                 {download.linkLabel}
               </a>
+            </>
+          )}
+
+          {phase === 'saved' && savedFile && (
+            <>
+              <button type="button" className="export-secondary" onClick={closeDialog}>
+                Close
+              </button>
+              <button
+                ref={backButtonRef}
+                type="button"
+                className="export-primary"
+                onClick={resetToConfigure}
+              >
+                Export another
+              </button>
             </>
           )}
 
