@@ -1693,6 +1693,336 @@ gate stops progression; later checkboxes are never completed early.
   clean. GitHub publication remains a normal merge of `codex/feature`, with
   the branch retained and only Issue #17 eligible for closeout.
 
+## Post-MVP issue #16 — capability-aware export profiles
+
+**IMPLEMENTATION COMPLETE (2026-08-01); closeout pending merge.**
+
+Issue #16 started from baseline commit `fd1d50e` and owns container, codecs,
+audio-off/mono/stereo layout, bitrate behavior, key-frame interval, MIME/file
+metadata, and buffered-versus-direct-file output. Issue #15 remains the sole
+authority for project dimensions, exact rational FPS, and audio sample rate;
+those values are read from one captured `TimelineDoc`, never duplicated in an
+export profile or dialog control. Compatibility remains the safe default and
+preserves the original MP4/AVC/AAC, stereo, 8 Mbps/192 kbps buffered-download
+behavior.
+
+### Frozen research and implementation boundaries
+
+- `domain/exportProfile.ts` is the browser-free allow-list and validation
+  boundary. `auto` is a selection policy, never a pipeline codec; it resolves
+  visibly to one concrete validated profile. Explicit selections are rejected
+  when unavailable and are never silently replaced.
+- Auto's documented order is Modern (WebM/AV1/Opus), Web
+  (WebM/VP9/Opus), then Compatibility (MP4/AVC/AAC). HEVC remains
+  explicit-only because both MP4 containment and the exact native encoder must
+  report support.
+- Mediabunny output formats provide containment through
+  `getSupportedVideoCodecs()` and `getSupportedAudioCodecs()`. Its
+  `canEncodeVideo()` and `canEncodeAudio()` helpers are useful UI hints, but
+  version 1.50.9 memoizes each exact configuration indefinitely. The
+  immediately-before-start authority will therefore be a disposable real
+  encode to `NullTarget` with the selected format, real dimensions/FPS, exact
+  channel count/sample rate/bitrates/modes, and real source classes. It fails
+  before decoder/encoder setup and never falls back to another profile. The
+  captured object-URL Blob lease is acquired before the first await so editor
+  changes cannot revoke the source snapshot while that probe is pending.
+- The buffered path retains `BufferTarget`. Direct-file output owns its picker
+  and writable stream in `app/`, acquires the handle first in the user click,
+  and adapts positional `StreamTarget` writes. Mediabunny may close its wrapper;
+  WebCut alone commits the underlying file on success or aborts it on cancel or
+  failure so a partial file is never reported as a successful export.
+- AAC tail trimming remains isolated. Mediabunny 1.50.9 is patched locally and
+  reproducibly for WebM/Opus: the encoder source records the exact post-
+  transform PCM end, the Matroska muxer writes the required `CodecDelay`,
+  80 ms `SeekPreRoll`, final-block `DiscardPadding`, version-4 header, and exact
+  presentation duration, and the demuxer applies the same timing metadata on
+  reopen. The patch is exact-version pinned, reapplied by `postinstall`, keeps
+  the package's reviewed TypeScript/MPL source beside the shipped ESM edits,
+  and fails closed on malformed or unrepresentable timing.
+
+### Ordered implementation gates
+
+1. [x] Freeze the allow-listed pure profile catalog, current safe default,
+   Auto order, exact-key validation, numeric bounds, audio-off shape,
+   container/codec pairing, container metadata, and destination contract.
+2. [x] Add cached capability hints plus the app-controller facade and fresh
+   disposable pre-start encode, including generation-safe cancellation and
+   changed-support/no-silent-fallback tests.
+3. [x] Generalize buffered video output across the selected container/codec,
+   then add explicit audio off/mono/stereo. Keep AAC and Opus tail policy
+   separate and do not enable WebM audio before its exact-duration gate passes.
+4. [x] Add recommended presets, visible Auto resolution, collapsible advanced
+   controls, unavailable reasons, a clearly labelled size estimate, dynamic
+   extension/MIME, and browser-local validation of the last selection.
+5. [x] Add transactional direct-file streaming with picker-first activation,
+   positional-write backpressure, success commit, cancel/failure abort, and
+   honest partial-file reporting tests.
+6. [x] Evaluate optional pinned local encoder fallbacks only for a selected
+   otherwise-unavailable codec. Keep them lazy, offline, and out of the initial
+   editor bundle; a documented no-go is valid evidence.
+7. [x] Reopen every enabled profile, verify container/codecs/dimensions/FPS/
+   channels/sample rate/duration/MIME/extension, exercise native Chrome
+   playback plus cancellation/write failure/retry/memory gates, then update
+   README/ARCHITECTURE/HANDOFF.
+8. [ ] Publish by normal merge, then close only Issue #16.
+
+### Slice 1 evidence — authoritative profile model (2026-07-31)
+
+- [x] Four concrete recommended profiles now carry every #16-owned field while
+  excluding all #15-owned project settings. The immutable Compatibility
+  profile exactly preserves today's MP4/AVC/AAC, stereo, 8 Mbps/192 kbps,
+  variable-bitrate, two-second-key-frame, buffered-download behavior.
+- [x] Auto is represented separately from concrete pipeline profiles and has a
+  deterministic Modern → Web → Compatibility order. HEVC cannot be selected
+  by Auto. MIME type and file extension are canonical container metadata, not
+  independently trusted strings.
+- [x] The pure validator rejects unknown/missing fields, unsupported enum
+  values, invalid container/video/audio triples, partial audio-off shapes,
+  mismatched MIME/extensions, fractional or unbounded bitrates, and key-frame
+  intervals outside zero through ten seconds or fractional microseconds. It
+  returns a detached frozen profile; the TypeScript contract also discriminates
+  audio-off from enabled mono/stereo shapes, and advanced changes pass through
+  the same runtime boundary.
+- [x] Focused gate: 42/42 profile tests passed. Production TypeScript/Vite
+  build passed with only the pre-existing chunk-size advisory; oxlint passed.
+  Full gate: 1,483/1,483 tests across 78 files passed. Production
+  TypeScript/Vite build passed with only the pre-existing chunk-size advisory;
+  oxlint and `git diff --check` passed. This slice is browser-free and changes
+  no rendered/export behavior, so its browser gate is not applicable.
+
+### Slice 2 evidence — capability discovery and fresh preflight (2026-07-31)
+
+- [x] The pipeline capability core now validates the concrete profile and
+  captured project settings, checks the selected Mediabunny format's exact
+  container metadata and codec containment, and forwards dimensions,
+  bitrates, bitrate modes, channel count, and sample rate to responsive
+  `canEncode*` hints. Audio-off and projects with no audio clips do not probe
+  or allocate an audio encoder.
+- [x] The app facade probes only the documented catalog, exposes Auto's exact
+  resolved preset, preserves explicit unsupported selections without fallback,
+  and performs an authoritative fresh check immediately before export. The
+  fresh adapter creates the selected output format, an actual-size sRGB canvas,
+  real encoder sources, exact rational track FPS, and bounded whole document
+  frames with the mixer's exact audio-block schedule through `NullTarget`,
+  bypassing Mediabunny's memoized helpers.
+- [x] The export controller reserves its singleton slot synchronously while
+  preflight is pending. It starts one cached Blob lease before the first await,
+  so removing media during the probe cannot revoke the captured source URL;
+  decoders, media sources, encoder output, and the export generator remain
+  delayed until support is confirmed. Cancellation aborts or safely outlives
+  an abort-ignoring probe. Setup re-entry and competing write ownership close
+  borrowed media exactly once while preserving the primary error.
+- [x] Capability truth is additionally bounded by one shared production-sink
+  matrix. A successful native HEVC, mono, or WebM probe cannot be advertised
+  until that same exact path is wired into the real export sink; Slice 3 will
+  widen this matrix together with the implementation and its adapter tests.
+- [x] At this slice, the exact-duration policy kept Opus audio profiles visibly
+  unavailable while the installed WebM muxer lacked end-padding metadata, but
+  still permitted capability probing for WebM video when the concrete export
+  had no audio. Slice 6 later lifted this gate after the pinned mux/demux
+  contract passed.
+  Disabling audio also excludes audio-only sources from offline/partial-source
+  gates and Blob retention without changing the historical default path.
+- [x] Focused gate: 206/206 tests across profile/selectors, capability core,
+  real Mediabunny adapter, app facade, pipeline, sink, export controller, and
+  dialog passed. Full gate: 1,527/1,527 tests across 81 files passed.
+  Production TypeScript/Vite build passed with only the pre-existing
+  chunk-size advisory; oxlint and `git diff --check` passed. Browser acceptance
+  is deferred to the first rendered profile UI and enabled alternate output;
+  this slice changes no visible controls and preserves the current export.
+
+### Slice 3 evidence — generalized buffered writer (2026-07-31)
+
+- [x] One shared output-format factory now selects Mediabunny's real
+  `Mp4OutputFormat` or `WebMOutputFormat`, and both capability discovery and
+  the writer consume it. The pinned-package contract is tested directly:
+  Mediabunny extensions include their leading dot while WebCut's canonical
+  profile/result extensions do not, so `.mp4`/`.webm` comparisons can no
+  longer make every real profile appear unavailable.
+- [x] The buffered writer passes the validated AVC, HEVC, VP9, or AV1 codec,
+  video/audio bitrates and modes, key-frame interval, exact rational track
+  rate, and selected container without substitution. MP4/AVC and MP4/HEVC,
+  plus video-only WebM/VP9 and WebM/AV1, share the existing bounded frame,
+  backpressure, cancellation, and cleanup ownership.
+- [x] The reviewed mixer remains one bounded stereo bus. Stereo output keeps
+  exact L/R interleaving; mono output averages `(L + R) / 2` only at the
+  encoder boundary, preserving duplicated mono level without clipping. AAC
+  packet-duration trimming is attached only to AAC; Opus audio remained behind
+  its exact end-padding policy until Slice 6. Audio-off still allocates no mixer
+  or encoder.
+- [x] Buffered results are now a frozen `destination: 'download'` branch with
+  the exact buffer, MIME type, extension, and detached concrete profile. The
+  writer derives all metadata from the validated profile. Direct-file
+  selections are explicitly unavailable until their transactional writer
+  lands, rather than being falsely approved and written to memory.
+- [x] Focused gate: 140/140 tests across the generic pipeline, capability
+  layers, pinned-format contract, real writer adapter, app controller, and
+  current dialog consumer passed. Full gate: 1,540/1,540 tests across 82 files
+  passed. Production TypeScript/Vite build passed with only the pre-existing
+  chunk-size advisory; oxlint and `git diff --check` passed.
+- [x] In-app Chromium ran the fresh probe, encoded, finalized, and reopened
+  actual 64×48 one-frame outputs. Compatibility reopened as MP4/AVC at exactly
+  1/30 second (718 bytes); Web reopened as WebM/VP9 at 0.033 seconds (421
+  bytes); Modern reopened as WebM/AV1 at 0.033 seconds (360 bytes). MIME,
+  extension, codec, and dimensions matched each selected profile. HEVC was
+  rejected at its native capability hint without fallback. The gate also
+  passed representative stereo and mono AAC probes. A second real 48 kHz,
+  60-fps, one-frame gate proved the duration-aware preflight and actual writer
+  both reject the exact 800-sample AAC tail with Chromium's same `Flushing
+  error`, so the failure is caught before writer allocation instead of being a
+  false positive. At that slice, Opus returned its explicit muxer reason;
+  browser warnings/errors were zero, and both temporary harnesses were removed.
+
+### Slice 4 evidence â€” persisted capability-aware export UI (2026-07-31)
+
+- [x] The dialog now presents Auto plus the four documented profiles as native
+  radio cards, resolves Auto visibly, disables unsupported choices with their
+  exact capability reason, and keeps Start disabled instead of substituting a
+  codec. The selected concrete container, video/audio codecs, channel layout,
+  MIME type, and extension remain visible before any encoder work begins.
+- [x] Collapsible advanced controls update only valid allow-listed profiles and
+  keep container metadata/audio coupling atomic. Video/audio bitrates and
+  modes, mono/stereo/off, key-frame interval, codec pair, and destination all
+  feed the same profile validator. Numeric draft errors are labelled with
+  units, bounds, `aria-invalid`, and a live Start-blocking explanation.
+- [x] The bitrate estimate uses exact integer/BigInt frame-rate math and adds
+  audio bitrate only when the selected profile and timeline actually write an
+  audio track. It is explicitly labelled approximate because variable-rate
+  encoding and container overhead can change the result. Audio-off also stops
+  offline audio-only media from blocking an otherwise complete video export.
+- [x] A separate versioned `webcut.export-selection:v1` preference remembers
+  only the last profile proven valid on this browser: a preset/Auto id or one
+  validated custom profile. Capability results, reasons, Auto's resolution,
+  and project-owned dimensions/FPS/sample rate are never persisted. Malformed
+  saved data falls back safely without disturbing the still-image preference.
+  A saved choice that becomes unavailable remains selected and blocks Start
+  with its exact reason; it is never silently substituted.
+- [x] Capability and custom-profile responses are generation-safe across edits
+  and document changes. Dialog lifecycle, focus, cancellation, progress,
+  dynamic MP4/WebM Blob metadata, URL revocation, retry, invalid drafts, stale
+  checks, exact-profile handoff, and offline-audio exclusion are covered.
+- [x] Focused gate: 111/111 tests across dialog, preferences, profile, and pure
+  UI helpers passed. Full gate: 1,590/1,590 tests across 83 files passed.
+  Production TypeScript/Vite build passed with only the pre-existing chunk-size
+  advisory; oxlint and `git diff --check` passed.
+- [x] In-app Chromium exercised the real capability facade. Compatibility was
+  the first-run default; Auto resolved visibly to Modern; selecting Web changed
+  the live summary to WebM/VP9/Opus with `video/webm` and `.webm`, survived a
+  close/reopen through the versioned preference, and was restored to
+  Compatibility. Advanced controls expanded without overflow, an out-of-range
+  0.05 Mbps draft exposed the exact accessible error and disabled Start, and
+  browser warning/error logs remained empty.
+
+### Slice 5 evidence — bounded direct-to-file export (2026-07-31)
+
+- [x] A dedicated app facade validates the selected concrete profile before
+  touching the host picker, requests the exact MIME/extension filter inside
+  the initiating click's transient activation, and returns an opaque one-shot
+  handle capability. User cancellation, insecure/unavailable hosts, and picker
+  security failures remain distinct readable outcomes; file output never
+  silently changes into a browser download.
+- [x] The Mediabunny direct sink uses `StreamTarget` with one MiB bounded
+  chunks, awaited positional writes, and exact maximum-end byte accounting.
+  Proxy stream closure does not commit the native file: successful export
+  closes all media, finalizes the muxer, then commits exactly once, while
+  cancellation or any setup/write/finalize failure aborts exactly once. An
+  abort failure becomes the terminal integrity error so the UI never promises
+  that no partial file survived when cleanup is uncertain.
+- [x] The controller snapshots callbacks and the picker capability before its
+  first await, requires an exact profile/destination pair, reruns the fresh
+  capability gate, and treats an already-committed generator result as success
+  even if cancellation races the terminal return. Direct results carry only
+  frozen filename/byte-count/profile metadata and never retain a complete
+  output buffer or native handle.
+- [x] The dialog retains an explicitly saved file destination when the current
+  host cannot provide it, shows the exact unavailable reason, and requires the
+  user to switch destinations. A separate picker phase disables edits and
+  prevents double invocation; success names the committed file without making
+  a Blob URL, while cancellation and failed-abort copy preserve the empty-file
+  versus possibly-incomplete-file distinction.
+- [x] Focused gate: 146/146 tests across the generic export lifecycle, direct
+  file adapter, Mediabunny writer, controller, picker facade, and dialog
+  passed. Coverage includes synchronous picker invocation, bounded positional
+  writes and backpressure, exact-once commit/abort, setup/write/finalize
+  failures, cleanup precedence, terminal cancellation races, unsupported saved
+  choices, retry, focus, and zero-Blob direct success.
+- [x] Full gate: 1,620/1,620 tests across 85 files passed. Production
+  TypeScript/Vite build passed with only the pre-existing chunk-size advisory;
+  oxlint passed.
+- [x] In-app Chromium used the production dialog and writer with a real
+  transient user activation and an OPFS-backed native file handle. It streamed
+  a 1,098-byte MP4, then Mediabunny reopened it as AVC at exactly 1280×720 and
+  0.100 seconds with no audio track; the native video element loaded and played
+  it successfully. The picker observed active user activation, browser warning
+  and error logs were both zero, and the temporary QA module was removed.
+
+### Slice 6 evidence - exact WebM/Opus timing and fallback decision (2026-07-31)
+
+- [x] A pinned `mediabunny@1.50.9` patch now carries the exact post-transform
+  PCM end from each encoding audio source and holds only the final open Opus
+  packet. It writes the OpusHead pre-skip as `CodecDelay`, keeps
+  `SeekPreRoll` at 80 ms, emits positive nanosecond `DiscardPadding` only on
+  the final `BlockGroup`, advertises Matroska/WebM version 4 with read version
+  2, and replaces coded tail time with exact presentation time. Packet duration
+  comes from the Opus TOC and impossible padding fails closed.
+- [x] The matching demux patch subtracts `CodecDelay` from packet timestamps,
+  applies signed `DiscardPadding`, derives otherwise-implicit final Opus packet
+  duration from its TOC, and preserves nanosecond timing on reopen. OpusHead is
+  cloned before repair; its original-input sample rate and Matroska
+  `SamplingFrequency` stay equal for 44.1, 48, and 96 kHz inputs even when
+  Chromium reports its internal 48 kHz encode clock. The caller's header is
+  never mutated.
+- [x] Independent EBML contract tests cover 1, 648, 649, and 960 submitted
+  samples, zero versus near-full final padding, exact `CodecDelay` and
+  `SeekPreRoll`, final-block placement, sub-millisecond serialized timestamps,
+  audio/video maximum duration, round-trip computed and metadata duration to
+  the format's 0.5 ns bound, and 44.1/96 kHz metadata repair.
+- [x] Optional local encoder fallbacks are a documented no-go for this issue.
+  The closest AAC extension does not preserve the selected bitrate-mode
+  semantics and adds FFmpeg LGPL/source/relink plus patent review. Opus, VP9,
+  AV1, AVC, and HEVC candidates are immature, stale, multi-megabyte,
+  whole-file-shaped, or carry disproportionate worker, licensing, cancellation,
+  and packet-adapter work. Runtime-native support remains honestly capability-
+  gated with no codec substitution.
+- [x] `patch-package@8.0.1` is exact-pinned; a clean `npm ci` reapplied the
+  patch successfully and npm reported zero vulnerabilities. Focused profile,
+  preflight, writer, and Opus contract gates passed 75/75 tests. Production
+  TypeScript/Vite build passed with only the existing chunk-size advisory, and
+  oxlint passed. Real Chromium A/V playback and the final cross-profile matrix
+  are recorded in Slice 7 below.
+
+### Slice 7 evidence — final profile/browser acceptance (2026-08-01)
+
+- [x] The production dialog reported Compatibility, Web, Modern, and HEVC as
+  Available on this Windows Chrome 150 host, and Auto resolved visibly to
+  Modern. Each exact configuration still passed the immediately-before-start
+  native preflight; this measured host result does not weaken runtime probing
+  or permit substitution on another browser or machine.
+- [x] All four profiles passed both buffered-download and direct-file export,
+  then reopened with their selected MP4/WebM container and AVC/VP9/AV1/HEVC
+  video plus AAC/Opus audio. Every base output was exactly 320×180 at
+  30000/1001 fps with 30 frames over 1.001 seconds, 48 kHz stereo, and 48,048
+  presented samples. Native video elements loaded and played every result.
+- [x] Advanced reopen gates passed AAC mono, audio-off, constant bitrate with a
+  500 ms key-frame interval, and video-only Web and Modern outputs. Together
+  with the base matrix, the browser run completed 17 gates and reopened 14
+  outputs without warnings or errors.
+- [x] Picker cancellation remained reusable without starting an export. Direct
+  cancellation after five staged writes aborted without success; retry worked.
+  Injected positioned-write failure plus abort-integrity failure surfaced the
+  explicit possibly-incomplete-file warning and preserved the sentinel file
+  content instead of reporting a false success.
+- [x] The high-entropy 1280×720 memory gate produced a 10,436,306-byte direct
+  file beside a 10,436,298-byte buffered result. Direct output kept chunks at or
+  below 1 MiB with one write maximum in flight, and its terminal result retained
+  no output buffer.
+- [x] Final automation passed 1,632/1,632 tests across 86 files.
+  `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities. The
+  optional local encoder fallback decision remains a no-go; runtime-native
+  support stays capability-gated with no codec substitution. Local
+  implementation is complete, while GitHub closeout remains pending the normal
+  merge.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

@@ -6,8 +6,9 @@
  * later decode can never mutate pixels still being composited. Static-image
  * decoding owns one retained first-frame source per asset for the whole export
  * session. Audio decode keeps one sequential cursor per active clip; encoding
- * owns one MP4 Output and awaits video plus exact-sample AAC writes for every
- * document frame.
+ * owns one selected MP4/WebM Output and awaits exact-profile video plus
+ * optional exact-sample AAC/Opus writes for every document frame. Its target
+ * is either buffered memory or the transactional direct-file stream.
  */
 
 import {
@@ -21,10 +22,7 @@ import {
   CanvasSource,
   type EncodedPacket,
   Input,
-  Mp4OutputFormat,
   Output,
-  canEncodeAudio,
-  canEncodeVideo,
 } from 'mediabunny'
 import {
   MediaAssetRuntimeError,
@@ -54,6 +52,16 @@ import type {
   ExportVideoSink,
 } from './export'
 import {
+  createBufferedExportResult,
+  createDirectFileExportResult,
+} from './export'
+import {
+  DirectFileAbortError,
+  createDirectFileExportTarget,
+  type DirectFileExportTarget,
+  type PreparedExportFileCapability,
+} from './export-file-target'
+import {
   EXPORT_AUDIO_CHANNELS,
   TimelineAudioMixer,
   audioSampleBoundary,
@@ -62,6 +70,10 @@ import {
   type ExportAudioMediaSource,
   type MixedAudioBlock,
 } from './export-audio'
+import {
+  createMediabunnyOutputFormat,
+  mediabunnyExportImplementationUnavailableReason,
+} from './export-mediabunny-profile'
 import {
   compositeFrame,
   type Composite2D,
@@ -1062,10 +1074,13 @@ export function createMediabunnyExportAudioSource(
 function assertVideoSinkInputs(
   doc: TimelineDoc,
   settings: ExportSettings,
+  includeAudio: boolean,
 ): number {
-  if (settings.format !== 'mp4' || settings.videoCodec !== 'avc') {
-    throw new TypeError('Mediabunny video export supports MP4/AVC only')
-  }
+  const implementationReason = mediabunnyExportImplementationUnavailableReason(
+    settings,
+    includeAudio,
+  )
+  if (implementationReason !== null) throw new TypeError(implementationReason)
   if (
     !Number.isSafeInteger(settings.videoBitrate) ||
     settings.videoBitrate <= 0
@@ -1085,32 +1100,48 @@ function assertVideoSinkInputs(
   return doc.frameRate.num / doc.frameRate.den
 }
 
-export const EXPORT_AUDIO_CODEC = 'aac'
-export const EXPORT_AUDIO_BITRATE = 192_000
-
 async function cancelSetup(
   output: Output,
   mixer: TimelineAudioMixer | null,
+  fileTarget: DirectFileExportTarget | null,
   primary: unknown,
 ): Promise<never> {
+  let integrityFailure: unknown
   try {
     await output.cancel()
   } catch {
     // The setup failure remains primary; Output owns its own cancel promise.
   }
   try {
+    await fileTarget?.abort(primary)
+  } catch (cause) {
+    // Losing the ability to discard staged bytes is the integrity-critical
+    // result and must remain visible to the user.
+    integrityFailure = cause
+  }
+  try {
     await mixer?.close()
   } catch {
     // The setup failure remains primary over decoder cleanup.
   }
+  if (integrityFailure !== undefined) throw integrityFailure
   throw primary
 }
 
-function interleaveAudioBlock(block: MixedAudioBlock): Float32Array {
-  const data = new Float32Array(block.sampleCount * EXPORT_AUDIO_CHANNELS)
+function interleaveAudioBlock(
+  block: MixedAudioBlock,
+  channelCount: 1 | 2,
+): Float32Array {
+  const data = new Float32Array(block.sampleCount * channelCount)
   for (let frame = 0; frame < block.sampleCount; frame++) {
-    data[frame * EXPORT_AUDIO_CHANNELS] = block.channels[0][frame]
-    data[frame * EXPORT_AUDIO_CHANNELS + 1] = block.channels[1][frame]
+    if (channelCount === 1) {
+      // The internal mix bus stays stereo. An arithmetic mean preserves a
+      // duplicated mono source's level and cannot clip two bounded channels.
+      data[frame] = (block.channels[0][frame] + block.channels[1][frame]) / 2
+    } else {
+      data[frame * channelCount] = block.channels[0][frame]
+      data[frame * channelCount + 1] = block.channels[1][frame]
+    }
   }
   return data
 }
@@ -1125,7 +1156,7 @@ function trimAacPaddingPacket(
   const remaining = Math.max(0, targetSamples - packetStart)
   if (packetSamples <= remaining) return
 
-  // Mediabunny 1.50.3 invokes onEncodedPacket synchronously immediately
+  // Mediabunny 1.50.9 invokes onEncodedPacket synchronously immediately
   // before handing this same object to the muxer. AAC encodes whole 1024-
   // sample packets; narrowing the final packet's container duration removes
   // codec padding without changing the exact PCM samples submitted.
@@ -1133,51 +1164,44 @@ function trimAacPaddingPacket(
     remaining / sampleRate
 }
 
-/** Creates and starts the real Mediabunny AVC/AAC MP4 sink. */
+/** Creates and starts the selected buffered or direct-file Mediabunny sink. */
 export async function createMediabunnyExportSink(
   doc: TimelineDoc,
   settings: ExportSettings,
   resolveAsset: ExportAssetResolver,
   sourceBounds: SourceBoundsCatalog = new Map(),
+  fileDestination?: PreparedExportFileCapability,
 ): Promise<ExportVideoSink> {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
   }
-  const frameRate = assertVideoSinkInputs(doc, settings)
-  const hasAudio = doc.tracks.some(
+  if (settings.destination === 'file' && !fileDestination) {
+    throw new TypeError(
+      'Direct file export requires a user-selected file destination',
+    )
+  }
+  if (settings.destination === 'download' && fileDestination) {
+    throw new TypeError(
+      'Browser download export cannot use a direct file destination',
+    )
+  }
+  const hasTimelineAudio = doc.tracks.some(
     (track) => track.kind === 'audio' && track.clips.length > 0,
   )
+  const audioSettings = settings.audioChannelLayout === 'off' || !hasTimelineAudio
+    ? null
+    : settings
+  const includeAudio = audioSettings !== null
+  const frameRate = assertVideoSinkInputs(doc, settings, includeAudio)
+  const outputAudioChannels = audioSettings
+    ? (audioSettings.audioChannelLayout === 'mono' ? 1 : 2)
+    : null
+  const hasAudio = audioSettings !== null
   const expectedFrames = docDurationFrames(doc)
   const expectedAudioSamples = hasAudio
     ? audioSampleBoundary(expectedFrames, doc)
     : 0
 
-  const [videoSupported, audioSupported] = await Promise.all([
-    canEncodeVideo('avc', {
-      width: doc.width,
-      height: doc.height,
-      bitrate: settings.videoBitrate,
-    }),
-    hasAudio
-      ? canEncodeAudio(EXPORT_AUDIO_CODEC, {
-          numberOfChannels: EXPORT_AUDIO_CHANNELS,
-          sampleRate: doc.audioSampleRate,
-          bitrate: EXPORT_AUDIO_BITRATE,
-        })
-      : Promise.resolve(true),
-  ])
-  if (!videoSupported) {
-    throw new Error(
-      `AVC encoding is not supported for ${doc.width}x${doc.height} ` +
-        `at ${settings.videoBitrate} bps`,
-    )
-  }
-  if (!audioSupported) {
-    throw new Error(
-      `AAC encoding is not supported for stereo ${doc.audioSampleRate} Hz ` +
-        `at ${EXPORT_AUDIO_BITRATE} bps`,
-    )
-  }
   if (typeof OffscreenCanvas === 'undefined') {
     throw new Error('OffscreenCanvas is not supported in this browser')
   }
@@ -1188,11 +1212,19 @@ export async function createMediabunnyExportSink(
     throw new Error('Could not create the export 2D context')
   }
 
-  const target = new BufferTarget()
-  const output = new Output({
-    format: new Mp4OutputFormat(),
-    target,
-  })
+  const format = createMediabunnyOutputFormat(settings.container)
+  const fileTarget = fileDestination
+    ? await createDirectFileExportTarget(fileDestination)
+    : null
+  let bufferTarget: BufferTarget | null = null
+  const target = fileTarget?.target ?? (bufferTarget = new BufferTarget())
+  let output: Output
+  try {
+    output = new Output({ format, target })
+  } catch (cause) {
+    await fileTarget?.abort(cause)
+    throw cause
+  }
   let source: CanvasSource
   let audioSource: AudioSampleSource | null = null
   let mixer: TimelineAudioMixer | null = null
@@ -1205,27 +1237,34 @@ export async function createMediabunnyExportSink(
         )
       : null
     source = new CanvasSource(canvas, {
-      codec: 'avc',
+      codec: settings.videoCodec,
       bitrate: settings.videoBitrate,
+      bitrateMode: settings.videoBitrateMode,
+      keyFrameInterval: settings.keyFrameIntervalMicroseconds / 1_000_000,
     })
     output.addVideoTrack(source, { frameRate })
-    if (hasAudio) {
+    if (audioSettings) {
       audioSource = new AudioSampleSource({
-        codec: EXPORT_AUDIO_CODEC,
-        bitrate: EXPORT_AUDIO_BITRATE,
-        onEncodedPacket: (packet) => {
-          trimAacPaddingPacket(
-            packet,
-            expectedAudioSamples,
-            doc.audioSampleRate,
-          )
-        },
+        codec: audioSettings.audioCodec,
+        bitrate: audioSettings.audioBitrate,
+        bitrateMode: audioSettings.audioBitrateMode,
+        ...(audioSettings.audioCodec === 'aac'
+          ? {
+              onEncodedPacket: (packet: EncodedPacket) => {
+                trimAacPaddingPacket(
+                  packet,
+                  expectedAudioSamples,
+                  doc.audioSampleRate,
+                )
+              },
+            }
+          : {}),
       })
       output.addAudioTrack(audioSource)
     }
     await output.start()
   } catch (cause) {
-    return cancelSetup(output, mixer, cause)
+    return cancelSetup(output, mixer, fileTarget, cause)
   }
 
   type SinkState =
@@ -1239,7 +1278,7 @@ export async function createMediabunnyExportSink(
   let nextFrame = 0
   let transitionSurfaces: TransitionSurfaces | null = null
 
-  const cancel = (): Promise<void> => {
+  const cancelWithReason = (reason?: unknown): Promise<void> => {
     if (state === 'finalized' || state === 'canceled') {
       return Promise.resolve()
     }
@@ -1251,24 +1290,35 @@ export async function createMediabunnyExportSink(
         await output.cancel()
       } catch (cause) {
         failure = cause
+      }
+      try {
+        await fileTarget?.abort(reason ?? failure)
+      } catch (cause) {
+        // An abort failure means staged bytes may remain and outranks the
+        // ordinary operation/decoder cleanup error.
+        failure = cause
+      }
+      try {
+        await mixer?.close()
+      } catch (cause) {
+        failure ??= cause
       } finally {
-        try {
-          await mixer?.close()
-        } catch (cause) {
-          failure ??= cause
-        } finally {
-          state = 'canceled'
-        }
+        state = 'canceled'
       }
       if (failure !== undefined) throw failure
     })()
     return cancelPromise
   }
 
+  const cancel = (reason?: unknown): Promise<void> => cancelWithReason(reason)
+
   const failAfterCancel = async (primary: unknown): Promise<never> => {
     try {
-      await cancel()
-    } catch {
+      await cancelWithReason(primary)
+    } catch (cleanupCause) {
+      if (cleanupCause instanceof DirectFileAbortError) {
+        throw cleanupCause
+      }
       // Preserve the encode/finalize failure over cleanup failure.
     }
     throw primary
@@ -1282,12 +1332,12 @@ export async function createMediabunnyExportSink(
     try {
       const videoWrite = source.add(timestampSec, durationSec)
       const audioWrite =
-        mixer && audioSource
+        mixer && audioSource && outputAudioChannels !== null
           ? mixer.writeFrame(nextFrame, async (block) => {
               const sample = new AudioSample({
-                data: interleaveAudioBlock(block),
+                data: interleaveAudioBlock(block, outputAudioChannels),
                 format: 'f32',
-                numberOfChannels: EXPORT_AUDIO_CHANNELS,
+                numberOfChannels: outputAudioChannels,
                 sampleRate: doc.audioSampleRate,
                 timestamp: block.startSample / doc.audioSampleRate,
               })
@@ -1320,20 +1370,30 @@ export async function createMediabunnyExportSink(
       )
     }
     state = 'finalizing'
+    let committedFile: Awaited<ReturnType<DirectFileExportTarget['commit']>>
+      | null = null
     try {
       await mixer?.close()
       source.close()
       audioSource?.close()
       await output.finalize()
+      committedFile = fileTarget ? await fileTarget.commit() : null
     } catch (cause) {
       return failAfterCancel(cause)
     }
 
     state = 'finalized'
-    if (target.buffer === null) {
+    if (committedFile) {
+      return createDirectFileExportResult(
+        committedFile.fileName,
+        committedFile.byteLength,
+        settings,
+      )
+    }
+    if (bufferTarget === null || bufferTarget.buffer === null) {
       throw new Error('Mediabunny finalized without an output buffer')
     }
-    return { buffer: target.buffer, mimeType: 'video/mp4' }
+    return createBufferedExportResult(bufferTarget.buffer, settings)
   }
 
   return {
@@ -1371,6 +1431,7 @@ export async function createMediabunnyExportSink(
 export function createMediabunnyExportDeps(
   resolveAsset: ExportAssetResolver,
   sourceBounds: SourceBoundsCatalog = new Map(),
+  fileDestination?: PreparedExportFileCapability,
 ): ExportDeps {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -1378,6 +1439,12 @@ export function createMediabunnyExportDeps(
   return {
     composite: compositeFrame,
     createVideoSink: (doc, settings) =>
-      createMediabunnyExportSink(doc, settings, resolveAsset, sourceBounds),
+      createMediabunnyExportSink(
+        doc,
+        settings,
+        resolveAsset,
+        sourceBounds,
+        fileDestination,
+      ),
   }
 }

@@ -3,7 +3,7 @@
 WebCut is an experimental, browser-native non-linear video editor built with
 React, TypeScript, WebCodecs, Mediabunny, Web Audio, and an
 OffscreenCanvas-based render worker. It runs locally in the browser and has a
-complete MVP editing and MP4 export flow.
+complete MVP editing flow plus capability-aware MP4/WebM export.
 
 ## Features
 
@@ -31,7 +31,9 @@ complete MVP editing and MP4 export flow.
   fades when both source files prove the required real handles.
 - Preview through worker-owned streaming video lanes with Web Audio as the
   shared audio/video clock.
-- Export and download cancellable H.264/AAC MP4 files from the browser.
+- Export cancellably with capability-aware Auto, Compatibility, Web, Modern,
+  and HEVC profiles; tune audio layout, bitrate behavior, and key-frame
+  interval, then use a buffered download or bounded direct-to-file save.
 
 ## Run locally
 
@@ -88,6 +90,16 @@ live linked movement, undo/redo, playback, and a clean console.
 The Issue #17 gate additionally passed transformed transparent stills over a
 visible checkerboard, distinct linked WAV tones, live curve edits and cleanup,
 and production AVC/AAC export/reopen with the expected gain ratios.
+The Issue #16 gate passed all four capability-probed profiles on this Windows
+Chrome 150 host: Compatibility MP4/AVC/AAC, Web WebM/VP9/Opus, Modern
+WebM/AV1/Opus, and HEVC MP4/HEVC/AAC. Auto resolved to Modern. Every profile
+passed both buffered-download and direct-file export, reopened at 320x180 and
+30000/1001 fps with 30 frames over 1.001 seconds, presented exactly 48,048
+stereo samples at 48 kHz, and loaded and played through a native video element.
+AAC mono, audio-off, constant-bitrate/500 ms key-frame, Web/Modern video-only,
+failure-recovery, and bounded-memory gates also passed with zero browser
+warnings or errors. These exact encoder configurations are always probed again
+because availability varies by browser, operating system, and hardware.
 Playback and export require WebCodecs, transferable `OffscreenCanvas`, Web
 Audio, workers, and browser support for the source and output codecs.
 
@@ -126,7 +138,12 @@ boundary are recorded in
 
 ## Current limitations
 
-- Export uses one fixed profile: MP4 with 8 Mbps H.264/AVC video and stereo AAC.
+- Export support depends on the current browser and operating system. Auto
+  tries Modern, then Web, then Compatibility; HEVC is explicit-only.
+  Unsupported profiles are disabled with a reason and are never silently
+  substituted. WebCut ships no local export encoder fallback.
+- Direct-to-file export requires secure-context File System Access support;
+  otherwise use the buffered browser-download destination.
 - Portable Save, Save As, Resume, validation, and media relinking are
   available, including browser-local automatic source reconnection, offline
   editing, individual relink, and bounded folder matching. Existing projects
@@ -152,6 +169,8 @@ boundary are recorded in
   track kind is safe to keep. Other Limited and Unsupported imports remain
   non-draggable. There is no built-in proxy converter; convert externally and
   import the result as a new source when no direct or partial path applies.
+  Those local fallbacks decode imported sources only; output encoders remain
+  browser-native and capability-gated.
 - Decoder extensions are version-pinned and bundled locally, but Issue #19's
   implementation closeout is not a public-distribution certification. A
   project license, third-party notices/source-availability links, exact FFmpeg

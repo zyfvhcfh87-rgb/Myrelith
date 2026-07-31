@@ -6,6 +6,12 @@
  * progress, and exact-once cleanup for per-frame and whole-export resources.
  */
 
+import {
+  validateExportProfile,
+  type ExportFileExtension,
+  type ExportMimeType,
+  type ExportProfile,
+} from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import { docDurationFrames } from '../domain/selectors'
@@ -17,15 +23,77 @@ import {
   type TransitionSurfaceProvider,
 } from './render'
 
-export interface ExportSettings {
-  format: 'mp4'
-  videoCodec: 'avc'
-  videoBitrate: number
+export type ExportSettings = ExportProfile
+
+/** Cleanup failure that can invalidate claims about an output destination. */
+export class ExportCleanupIntegrityError extends Error {}
+
+export interface BufferedExportResult {
+  readonly destination: 'download'
+  readonly buffer: ArrayBuffer
+  readonly mimeType: ExportMimeType
+  readonly fileExtension: ExportFileExtension
+  /** Concrete resolved profile used by the writer; never the Auto policy. */
+  readonly profile: Readonly<ExportProfile>
 }
 
-export interface ExportResult {
-  buffer: ArrayBuffer
-  mimeType: 'video/mp4'
+export interface DirectFileExportResult {
+  readonly destination: 'file'
+  readonly fileName: string
+  readonly byteLength: number
+  readonly mimeType: ExportMimeType
+  readonly fileExtension: ExportFileExtension
+  /** Concrete resolved profile used by the writer; never the Auto policy. */
+  readonly profile: Readonly<ExportProfile>
+}
+
+export type ExportResult = BufferedExportResult | DirectFileExportResult
+
+export function createBufferedExportResult(
+  buffer: ArrayBuffer,
+  value: Readonly<ExportProfile>,
+): Readonly<BufferedExportResult> {
+  if (!(buffer instanceof ArrayBuffer)) {
+    throw new TypeError('Buffered export result requires an ArrayBuffer')
+  }
+  const profile = validateExportProfile(value)
+  if (profile.destination !== 'download') {
+    throw new TypeError('Buffered export result requires the download destination')
+  }
+  return Object.freeze({
+    destination: 'download',
+    buffer,
+    mimeType: profile.mimeType,
+    fileExtension: profile.fileExtension,
+    profile,
+  })
+}
+
+export function createDirectFileExportResult(
+  fileName: string,
+  byteLength: number,
+  value: Readonly<ExportProfile>,
+): Readonly<DirectFileExportResult> {
+  if (typeof fileName !== 'string' || fileName.trim() === '') {
+    throw new TypeError('Direct-file export result requires a file name')
+  }
+  if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
+    throw new TypeError(
+      'Direct-file export result requires a non-negative safe byte length',
+    )
+  }
+  const profile = validateExportProfile(value)
+  if (profile.destination !== 'file') {
+    throw new TypeError('Direct-file export result requires the file destination')
+  }
+  return Object.freeze({
+    destination: 'file',
+    fileName,
+    byteLength,
+    mimeType: profile.mimeType,
+    fileExtension: profile.fileExtension,
+    profile,
+  })
 }
 
 export interface ExportFrameLease extends FrameSource {
@@ -45,7 +113,7 @@ export interface ExportVideoSink {
   /** Adds all encoded media belonging to this document frame. */
   addFrame(timestampSec: number, durationSec: number): Promise<void>
   finalize(): Promise<ExportResult>
-  cancel(): Promise<void>
+  cancel(reason?: unknown): Promise<void>
 }
 
 export interface ExportDeps {
@@ -56,24 +124,8 @@ export interface ExportDeps {
   ): Promise<ExportVideoSink>
 }
 
-function assertSettings(settings: ExportSettings): void {
-  if (typeof settings !== 'object' || settings === null) {
-    throw new TypeError('Export settings must be an object')
-  }
-  if (settings.format !== 'mp4') {
-    throw new TypeError('Unsupported export format: ' + settings.format)
-  }
-  if (settings.videoCodec !== 'avc') {
-    throw new TypeError(
-      'Unsupported export video codec: ' + settings.videoCodec,
-    )
-  }
-  if (
-    !Number.isSafeInteger(settings.videoBitrate) ||
-    settings.videoBitrate <= 0
-  ) {
-    throw new TypeError('videoBitrate must be a positive safe integer')
-  }
+function assertSettings(settings: ExportSettings): Readonly<ExportSettings> {
+  return validateExportProfile(settings)
 }
 
 function exportFrameCount(doc: TimelineDoc): number {
@@ -165,13 +217,14 @@ async function cleanupExport(
   sinkFinalized: boolean,
   closeMedia: () => Promise<void>,
   preserveOperationalFailure: boolean,
+  operationalCause?: unknown,
 ): Promise<void> {
   let cleanupFailed = false
   let cleanupFailure: unknown
 
   if (sink !== null && !sinkFinalized) {
     try {
-      await sink.cancel()
+      await sink.cancel(operationalCause)
     } catch (cause) {
       cleanupFailed = true
       cleanupFailure = cause
@@ -187,7 +240,13 @@ async function cleanupExport(
     }
   }
 
-  if (!preserveOperationalFailure && cleanupFailed) throw cleanupFailure
+  if (
+    cleanupFailed
+    && (
+      !preserveOperationalFailure
+      || cleanupFailure instanceof ExportCleanupIntegrityError
+    )
+  ) throw cleanupFailure
 }
 
 export async function* exportTimeline(
@@ -200,6 +259,7 @@ export async function* exportTimeline(
   let sinkFinalized = false
   let mediaClosed = false
   let operationalFailure = false
+  let operationalCause: unknown
 
   const closeMedia = async (): Promise<void> => {
     if (mediaClosed) return
@@ -208,7 +268,7 @@ export async function* exportTimeline(
   }
 
   try {
-    assertSettings(settings)
+    const validatedSettings = assertSettings(settings)
     const frameCount = exportFrameCount(doc)
     const frameDurationSec = assertBoundaryTime(
       framesToSeconds(1, doc.frameRate),
@@ -216,7 +276,7 @@ export async function* exportTimeline(
     )
     yield 0
 
-    sink = await deps.createVideoSink(doc, settings)
+    sink = await deps.createVideoSink(doc, validatedSettings)
     for (let frame = 0; frame < frameCount; frame++) {
       const lease = await media.openFrame(frame)
       await compositeAndCloseLease(
@@ -235,13 +295,16 @@ export async function* exportTimeline(
       yield (frame + 1) / (frameCount + 1)
     }
 
+    // Release every visual decoder before the muxer commits its terminal
+    // output. A close failure can still cancel a direct-file target here;
+    // after finalize succeeds the file is intentionally a completed result.
+    await closeMedia()
     const result = await sink.finalize()
     sinkFinalized = true
-    await closeMedia()
-    yield 1
     return result
   } catch (cause) {
     operationalFailure = true
+    operationalCause = cause
     throw cause
   } finally {
     await cleanupExport(
@@ -249,6 +312,7 @@ export async function* exportTimeline(
       sinkFinalized,
       closeMedia,
       operationalFailure,
+      operationalCause,
     )
   }
 }

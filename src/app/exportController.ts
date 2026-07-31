@@ -10,6 +10,7 @@
  */
 
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
+import { validateExportProfile } from '../domain/exportProfile'
 import {
   createSourceBoundsCatalog,
   type SourceBoundsCatalog,
@@ -36,18 +37,29 @@ import {
   reportMediaRuntimeFailure,
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
+import { preflightExportProfile } from './exportCapabilitiesController'
+import type { ExportFileDestinationCapability } from './exportFilePicker'
 
 export type { ExportResult, ExportSettings } from '../pipeline/export'
 
 type ExportRun = AsyncGenerator<number, ExportResult | undefined, void>
 
-export interface ExportCallbacks {
+export interface ExportRunOptions {
   /** Receives every exact progress value yielded by the pipeline. */
   onProgress?: (progress: number) => void
+  /** Ephemeral one-shot capability; never stored in project/preferences state. */
+  fileDestination?: ExportFileDestinationCapability
 }
+
+export type ExportCallbacks = ExportRunOptions
 
 /** Browser/pipeline seams injected by tests; production uses realDeps. */
 export interface ExportControllerDeps {
+  preflightProfile(
+    doc: TimelineDoc,
+    settings: ExportSettings,
+    signal: AbortSignal,
+  ): Promise<void>
   fetchBlob(url: string): Promise<Blob>
   createMediaSource(
     doc: TimelineDoc,
@@ -57,6 +69,7 @@ export interface ExportControllerDeps {
   createPipelineDeps(
     resolveAsset: ExportAssetResolver,
     sourceBounds: SourceBoundsCatalog,
+    fileDestination?: ExportFileDestinationCapability,
   ): PipelineExportDeps
   runExport(
     doc: TimelineDoc,
@@ -67,6 +80,7 @@ export interface ExportControllerDeps {
 }
 
 const realDeps: ExportControllerDeps = {
+  preflightProfile: preflightExportProfile,
   fetchBlob: async (url) => {
     const response = await fetch(url)
     if (!response.ok) {
@@ -77,7 +91,12 @@ const realDeps: ExportControllerDeps = {
     return response.blob()
   },
   createMediaSource: createMediabunnyExportMediaSource,
-  createPipelineDeps: createMediabunnyExportDeps,
+  createPipelineDeps: (resolveAsset, sourceBounds, fileDestination) =>
+    createMediabunnyExportDeps(
+      resolveAsset,
+      sourceBounds,
+      fileDestination,
+    ),
   runExport: exportTimeline,
 }
 
@@ -88,9 +107,15 @@ interface ExportSession {
   returnPromise: Promise<void> | null
 }
 
+interface ExportLifecycle {
+  cancelRequested: boolean
+  preflightAbort: AbortController
+  session: ExportSession | null
+}
+
 interface ActiveExport {
   token: object
-  session: ExportSession | null
+  lifecycle: ExportLifecycle
   completion: Promise<ExportResult | undefined>
 }
 
@@ -167,9 +192,11 @@ function createAssetResolver(
 function retainReferencedBlobs(
   doc: TimelineDoc,
   resolveAsset: ExportAssetResolver,
+  includeAudio: boolean,
 ): void {
   const assetIds = new Set<AssetId>()
   for (const track of doc.tracks) {
+    if (track.kind === 'audio' && !includeAudio) continue
     for (const clip of track.clips) assetIds.add(clip.assetId)
   }
 
@@ -190,12 +217,13 @@ function retainReferencedBlobs(
 function partialTrackConflict(
   doc: TimelineDoc,
   assets: ReadonlyMap<AssetId, MediaAsset>,
+  includeAudio: boolean,
 ): string | null {
   const audibleTrackIds = new Set(audibleTracks(doc).map((track) => track.id))
   for (const track of doc.tracks) {
     const contributes = track.kind === 'video'
       ? !track.hidden
-      : audibleTrackIds.has(track.id)
+      : includeAudio && audibleTrackIds.has(track.id)
     if (!contributes) continue
     for (const clip of track.clips) {
       if (
@@ -268,17 +296,17 @@ async function drainExport(
         throw cause
       }
 
-      if (session.cancelRequested) {
-        await returnGenerator(session)
-        return undefined
-      }
-
       if (step.done) {
         session.generatorDone = true
         if (step.value === undefined) {
           throw new Error('Export completed without an export result')
         }
         return step.value
+      }
+
+      if (session.cancelRequested) {
+        await returnGenerator(session)
+        return undefined
       }
 
       onProgress?.(step.value)
@@ -303,29 +331,108 @@ async function drainExport(
   }
 }
 
-/** Publish one completion promise and clear only its matching active slot. */
+/** Reserve the singleton slot synchronously, before asynchronous preflight. */
 function trackActiveExport(
-  session: ExportSession | null,
-  pending: Promise<ExportResult | undefined>,
+  lifecycle: ExportLifecycle,
+  start: () => Promise<ExportResult | undefined>,
   runtimeGuards: ReadonlyMap<AssetId, MediaRuntimeGuard>,
 ): Promise<ExportResult | undefined> {
   const token = {}
-  const completion = pending.catch((cause) => {
+  const completion = Promise.resolve().then(start).catch((cause) => {
     reportExportRuntimeFailure(cause, runtimeGuards)
     throw cause
   }).finally(() => {
     if (state.active?.token === token) state.active = null
   })
-  state.active = { token, session, completion }
+  state.active = { token, lifecycle, completion }
   return completion
+}
+
+async function preflightAndRunExport(
+  lifecycle: ExportLifecycle,
+  doc: TimelineDoc,
+  settings: ExportSettings,
+  assets: ReadonlyMap<AssetId, MediaAsset>,
+  callbacks: ExportCallbacks,
+  deps: ExportControllerDeps,
+): Promise<ExportResult | undefined> {
+  if (lifecycle.cancelRequested) return undefined
+  const includeAudio = settings.audioChannelLayout !== 'off'
+  const resolveAsset = createAssetResolver(assets, deps.fetchBlob)
+  const sourceBounds = createSourceBoundsCatalog(assets.values())
+  // Acquire the captured source URLs before the first await. The media store
+  // may revoke them while capability probing is pending; these cached Blob
+  // promises are the lightweight snapshot lease. Decoder/encoder setup still
+  // waits until the fresh profile probe succeeds.
+  retainReferencedBlobs(doc, resolveAsset, includeAudio)
+
+  const signal = lifecycle.preflightAbort.signal
+  try {
+    await deps.preflightProfile(doc, settings, signal)
+  } catch (cause) {
+    if (
+      lifecycle.cancelRequested &&
+      signal.aborted &&
+      cause === signal.reason
+    ) {
+      return undefined
+    }
+    throw cause
+  }
+  // A probe is allowed to ignore AbortSignal. Cancellation still prevents all
+  // decoder creation and pipeline work after it settles.
+  if (lifecycle.cancelRequested) return undefined
+
+  let media: ExportMediaSource | null = null
+  let generator: ExportRun
+  try {
+    const pipelineDeps = deps.createPipelineDeps(
+      resolveAsset,
+      sourceBounds,
+      callbacks.fileDestination,
+    )
+    media = deps.createMediaSource(doc, resolveAsset, sourceBounds)
+    if (lifecycle.cancelRequested) {
+      await media.close()
+      return undefined
+    }
+    generator = deps.runExport(doc, settings, media, pipelineDeps)
+    // Factories may synchronously re-enter cancellation. A never-started async
+    // generator has no finally ownership, so close controller-owned media here.
+    if (lifecycle.cancelRequested) {
+      await media.close()
+      return undefined
+    }
+  } catch (cause) {
+    if (media) return rejectAfterClosingMedia(media, cause)
+    throw cause
+  }
+
+  let firstStep: Promise<IteratorResult<number, ExportResult | undefined>>
+  try {
+    // Enter the generator body before exposing a running session. Calling
+    // return(undefined) on a never-started generator would skip its finally.
+    firstStep = generator.next()
+  } catch (cause) {
+    return rejectAfterClosingMedia(media, cause)
+  }
+
+  const session: ExportSession = {
+    generator,
+    cancelRequested: lifecycle.cancelRequested,
+    generatorDone: false,
+    returnPromise: null,
+  }
+  lifecycle.session = session
+  return drainExport(session, firstStep, callbacks.onProgress)
 }
 
 /**
  * Start one export of the current immutable editor snapshot.
  *
- * Success resolves with the finished MP4 buffer. User cancellation resolves
- * undefined. Setup, pipeline, observer, and cancellation-cleanup failures
- * reject. A second run is rejected until the first run's cleanup is complete.
+ * Success resolves with buffered-download or committed-file metadata. User
+ * cancellation resolves undefined. Setup, pipeline, observer, and cleanup
+ * failures reject. A second run is rejected until exact cleanup finishes.
  */
 export function startExport(
   settings: ExportSettings,
@@ -337,11 +444,39 @@ export function startExport(
   }
 
   const doc = useDocumentStore.getState().doc
-  const runSettings = { ...settings }
+  let runSettings: Readonly<ExportSettings>
+  try {
+    runSettings = validateExportProfile(settings)
+  } catch (cause) {
+    return Promise.reject(cause)
+  }
+  if (
+    callbacks.onProgress !== undefined
+    && typeof callbacks.onProgress !== 'function'
+  ) {
+    return Promise.reject(new TypeError('Export progress callback must be a function'))
+  }
+  const runOptions: Readonly<ExportRunOptions> = Object.freeze({
+    ...(callbacks.onProgress ? { onProgress: callbacks.onProgress } : {}),
+    ...(callbacks.fileDestination
+      ? { fileDestination: callbacks.fileDestination }
+      : {}),
+  })
+  if (runSettings.destination === 'file' && !runOptions.fileDestination) {
+    return Promise.reject(new TypeError(
+      'Direct file export requires a user-selected file destination',
+    ))
+  }
+  if (runSettings.destination === 'download' && runOptions.fileDestination) {
+    return Promise.reject(new TypeError(
+      'Browser download export cannot use a direct file destination',
+    ))
+  }
   const mediaState = useMediaStore.getState()
   const assets = new Map(mediaState.assets)
   const runtimeGuards = captureExportRuntimeGuards(assets)
-  const offline = [...outputMediaAssetIds(doc)].filter(
+  const includeAudio = runSettings.audioChannelLayout !== 'off'
+  const offline = [...outputMediaAssetIds(doc, includeAudio)].filter(
     (assetId) => !assets.has(assetId),
   )
   if (offline.length > 0) {
@@ -352,52 +487,23 @@ export function startExport(
       `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`,
     ))
   }
-  const trackConflict = partialTrackConflict(doc, assets)
+  const trackConflict = partialTrackConflict(doc, assets, includeAudio)
   if (trackConflict) return Promise.reject(new Error(trackConflict))
-  const resolveAsset = createAssetResolver(assets, deps.fetchBlob)
-  const sourceBounds = createSourceBoundsCatalog(assets.values())
-  retainReferencedBlobs(doc, resolveAsset)
-
-  let media: ExportMediaSource | null = null
-  let generator: ExportRun
-  try {
-    const pipelineDeps = deps.createPipelineDeps(resolveAsset, sourceBounds)
-    media = deps.createMediaSource(doc, resolveAsset, sourceBounds)
-    generator = deps.runExport(doc, runSettings, media, pipelineDeps)
-  } catch (cause) {
-    if (media) {
-      return trackActiveExport(
-        null,
-        rejectAfterClosingMedia(media, cause),
-        runtimeGuards,
-      )
-    }
-    reportExportRuntimeFailure(cause, runtimeGuards)
-    return Promise.reject(cause)
-  }
-
-  let firstStep: Promise<IteratorResult<number, ExportResult | undefined>>
-  try {
-    // Enter the generator body before publishing the active run. Calling
-    // return(undefined) on a never-started generator would skip its finally.
-    firstStep = generator.next()
-  } catch (cause) {
-    return trackActiveExport(
-      null,
-      rejectAfterClosingMedia(media, cause),
-      runtimeGuards,
-    )
-  }
-
-  const session: ExportSession = {
-    generator,
+  const lifecycle: ExportLifecycle = {
     cancelRequested: false,
-    generatorDone: false,
-    returnPromise: null,
+    preflightAbort: new AbortController(),
+    session: null,
   }
   return trackActiveExport(
-    session,
-    drainExport(session, firstStep, callbacks.onProgress),
+    lifecycle,
+    () => preflightAndRunExport(
+      lifecycle,
+      doc,
+      runSettings,
+      assets,
+      runOptions,
+      deps,
+    ),
     runtimeGuards,
   )
 }
@@ -406,7 +512,11 @@ export function startExport(
 export async function cancelExport(): Promise<void> {
   const active = state.active
   if (!active) return
-  if (active.session) active.session.cancelRequested = true
+  active.lifecycle.cancelRequested = true
+  active.lifecycle.preflightAbort.abort()
+  if (active.lifecycle.session) {
+    active.lifecycle.session.cancelRequested = true
+  }
   await active.completion
 }
 

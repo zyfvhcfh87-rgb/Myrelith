@@ -18,6 +18,11 @@ import {
   type DecoderCheckTarget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
+import {
+  DEFAULT_EXPORT_PROFILE,
+  exportPresetById,
+  updateExportProfile,
+} from '../domain/exportProfile'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { AssetKind, Clip, TimelineDoc, Track } from '../domain/schema'
@@ -173,6 +178,16 @@ interface FakeOutputRecord {
   cancel: Mock<() => Promise<void>>
 }
 
+interface FakeStreamTargetRecord {
+  options: unknown
+  write(chunk: {
+    type: 'write'
+    data: Uint8Array
+    position: number
+  }): Promise<void>
+  close(): Promise<void>
+}
+
 const mb = vi.hoisted(() => ({
   allFormats: { kind: 'all-formats' },
   blobSources: [] as Array<{ blob: Blob }>,
@@ -186,6 +201,7 @@ const mb = vi.hoisted(() => ({
   canvasIterators: [] as unknown[],
   targetBuffers: [] as Array<ArrayBuffer | null>,
   targets: [] as Array<{ buffer: ArrayBuffer | null }>,
+  streamTargets: [] as unknown[],
   canvasSourceAddHandlers: [] as Array<
     (timestampSec: number, durationSec: number) => Promise<void>
   >,
@@ -353,6 +369,38 @@ vi.mock('mediabunny', () => {
   }
 
   class Mp4OutputFormat {
+    kind = 'mp4' as const
+
+    constructor() {
+      mb.formats.push(this)
+    }
+  }
+
+  class StreamTarget {
+    options: unknown
+    #writer: WritableStreamDefaultWriter<unknown>
+    #closed = false
+
+    constructor(stream: WritableStream<unknown>, options: unknown) {
+      this.options = options
+      this.#writer = stream.getWriter()
+      mb.streamTargets.push(this)
+    }
+
+    write(chunk: unknown): Promise<void> {
+      return this.#writer.write(chunk)
+    }
+
+    async close(): Promise<void> {
+      if (this.#closed) return
+      this.#closed = true
+      await this.#writer.close()
+    }
+  }
+
+  class WebMOutputFormat {
+    kind = 'webm' as const
+
     constructor() {
       mb.formats.push(this)
     }
@@ -383,7 +431,7 @@ vi.mock('mediabunny', () => {
     finalize: Mock<() => Promise<void>>
     cancel: Mock<() => Promise<void>>
 
-    constructor(options: unknown) {
+    constructor(options: { target?: unknown }) {
       this.options = options
       this.addVideoTrack = vi.fn()
       this.addAudioTrack = vi.fn()
@@ -393,8 +441,21 @@ vi.mock('mediabunny', () => {
       const cancel =
         mb.outputCancelHandlers.shift() ?? (async () => undefined)
       this.start = vi.fn(start)
-      this.finalize = vi.fn(finalize)
-      this.cancel = vi.fn(cancel)
+      this.finalize = vi.fn(async () => {
+        await finalize()
+        if (options.target instanceof StreamTarget) {
+          await options.target.close()
+        }
+      })
+      this.cancel = vi.fn(async () => {
+        try {
+          await cancel()
+        } finally {
+          if (options.target instanceof StreamTarget) {
+            await options.target.close()
+          }
+        }
+      })
       mb.outputs.push(this)
     }
   }
@@ -411,14 +472,14 @@ vi.mock('mediabunny', () => {
     Input,
     Mp4OutputFormat,
     Output,
+    StreamTarget,
+    WebMOutputFormat,
     canEncodeAudio: mb.canEncodeAudio,
     canEncodeVideo: mb.canEncodeVideo,
   }
 })
 
 import {
-  EXPORT_AUDIO_BITRATE,
-  EXPORT_AUDIO_CODEC,
   createMediabunnyExportDeps,
   createMediabunnyExportAudioSource,
   createMediabunnyExportMediaSource as createRealExportMediaSource,
@@ -426,8 +487,7 @@ import {
 } from './export-mediabunny'
 
 const SETTINGS: ExportSettings = {
-  format: 'mp4',
-  videoCodec: 'avc',
+  ...DEFAULT_EXPORT_PROFILE,
   videoBitrate: 250_000,
 }
 
@@ -812,6 +872,10 @@ function outputAt(index = 0): FakeOutputRecord {
   return mb.outputs[index] as FakeOutputRecord
 }
 
+function streamTargetAt(index = 0): FakeStreamTargetRecord {
+  return mb.streamTargets[index] as FakeStreamTargetRecord
+}
+
 function deferred<T>(): {
   promise: Promise<T>
   resolve: (value: T) => void
@@ -940,6 +1004,7 @@ beforeEach(() => {
   mb.canvasIterators.length = 0
   mb.targetBuffers.length = 0
   mb.targets.length = 0
+  mb.streamTargets.length = 0
   mb.canvasSourceAddHandlers.length = 0
   mb.canvasSources.length = 0
   mb.audioSinkSampleSequences.length = 0
@@ -1207,8 +1272,11 @@ describe('createMediabunnyExportMediaSource', () => {
       ),
       addFrame: vi.fn(async () => undefined),
       finalize: vi.fn(async () => ({
+        destination: 'download' as const,
         buffer: new ArrayBuffer(0),
         mimeType: 'video/mp4' as const,
+        fileExtension: 'mp4' as const,
+        profile: DEFAULT_EXPORT_PROFILE,
       })),
       cancel: vi.fn(async () => undefined),
     }
@@ -1268,8 +1336,11 @@ describe('createMediabunnyExportMediaSource', () => {
         throw primary
       }),
       finalize: vi.fn(async () => ({
+        destination: 'download' as const,
         buffer: new ArrayBuffer(0),
         mimeType: 'video/mp4' as const,
+        fileExtension: 'mp4' as const,
+        profile: DEFAULT_EXPORT_PROFILE,
       })),
       cancel: vi.fn(async () => undefined),
     }
@@ -1721,7 +1792,7 @@ describe('createMediabunnyExportMediaSource', () => {
 })
 
 describe('createMediabunnyExportSink video behavior', () => {
-  test('probes AVC and wires an exact-rate MP4 canvas track without audio for a video-only document', async () => {
+  test('wires an exact-rate MP4 canvas track without audio for a video-only document', async () => {
     const doc = makeDoc()
     const resolveAsset = vi.fn(async () => resolvedAsset(new Blob(['unused'])))
     const sink = await createMediabunnyExportSink(
@@ -1730,11 +1801,7 @@ describe('createMediabunnyExportSink video behavior', () => {
       resolveAsset,
     )
 
-    expect(mb.canEncodeVideo).toHaveBeenCalledWith('avc', {
-      width: 64,
-      height: 48,
-      bitrate: 250_000,
-    })
+    expect(mb.canEncodeVideo).not.toHaveBeenCalled()
     expect(fakeCanvases).toHaveLength(1)
     expect(fakeCanvases[0]).toMatchObject({ width: 64, height: 48 })
     expect(fakeCanvases[0].getContext).toHaveBeenCalledWith(
@@ -1745,6 +1812,8 @@ describe('createMediabunnyExportSink video behavior', () => {
     expect(canvasSourceAt().encodingConfig).toEqual({
       codec: 'avc',
       bitrate: 250_000,
+      bitrateMode: 'variable',
+      keyFrameInterval: 2,
     })
     expect(outputAt().options).toEqual({
       format: mb.formats[0],
@@ -1807,27 +1876,30 @@ describe('createMediabunnyExportSink video behavior', () => {
     await pending
 
     await expect(sink.finalize()).resolves.toEqual({
+      destination: 'download',
       buffer: resultBuffer,
       mimeType: 'video/mp4',
+      fileExtension: 'mp4',
+      profile: SETTINGS,
     })
     expect(canvasSourceAt().close).toHaveBeenCalledOnce()
     expect(outputAt().finalize).toHaveBeenCalledOnce()
     expect(outputAt().cancel).not.toHaveBeenCalled()
   })
 
-  test('rejects unsupported AVC before allocating output resources', async () => {
+  test('does not reuse a stale cached capability result after fresh preflight', async () => {
     mb.canEncodeVideo.mockResolvedValue(false)
 
-    await expect(
-      createMediabunnyExportSink(
-        makeDoc(),
-        SETTINGS,
-        async () => resolvedAsset(new Blob(['unused'])),
-      ),
-    ).rejects.toThrow('AVC encoding is not supported for 64x48')
+    const sink = await createMediabunnyExportSink(
+      makeDoc(),
+      SETTINGS,
+      async () => resolvedAsset(new Blob(['unused'])),
+    )
 
-    expect(fakeCanvases).toHaveLength(0)
-    expect(mb.outputs).toHaveLength(0)
+    expect(mb.canEncodeVideo).not.toHaveBeenCalled()
+    expect(fakeCanvases).toHaveLength(1)
+    expect(mb.outputs).toHaveLength(1)
+    await sink.cancel()
   })
 
   test('cancels a started output exactly once without normal-closing the source', async () => {
@@ -1955,7 +2027,222 @@ describe('createMediabunnyExportAudioSource exact ranges', () => {
   })
 })
 
+describe('createMediabunnyExportSink selected profiles', () => {
+  test.each([
+    ['hevc', 'mp4', 'hevc', 'video/mp4', 'mp4'],
+    ['web', 'webm', 'vp9', 'video/webm', 'webm'],
+    ['modern', 'webm', 'av1', 'video/webm', 'webm'],
+  ] as const)(
+    'writes the %s video profile through its exact format and codec',
+    async (presetId, formatKind, codec, mimeType, fileExtension) => {
+      const profile = updateExportProfile(exportPresetById(presetId).profile, {
+        videoBitrate: 3_210_000,
+        videoBitrateMode: 'constant',
+        keyFrameIntervalMicroseconds: 750_000,
+      })
+      const doc = makeVideoDoc(
+        [{ assetId: 'asset-a', sourceStart: 0 }],
+        1,
+      )
+      const sink = await createMediabunnyExportSink(
+        doc,
+        profile,
+        async () => resolvedAsset(new Blob(['unused'])),
+      )
+
+      expect(mb.formats.at(-1)).toMatchObject({ kind: formatKind })
+      expect(canvasSourceAt().encodingConfig).toEqual({
+        codec,
+        bitrate: 3_210_000,
+        bitrateMode: 'constant',
+        keyFrameInterval: 0.75,
+      })
+      expect(mb.audioSources).toHaveLength(0)
+
+      await sink.addFrame(0, 1_001 / 30_000)
+      const result = await sink.finalize()
+      expect(result).toMatchObject({
+        destination: 'download',
+        mimeType,
+        fileExtension,
+        profile,
+      })
+      expect(Object.isFrozen(result)).toBe(true)
+      expect(Object.isFrozen(result.profile)).toBe(true)
+    },
+  )
+
+  test('streams a direct-file profile and returns metadata without a buffer', async () => {
+    const directFile = updateExportProfile(SETTINGS, { destination: 'file' })
+    const write = vi.fn(async () => undefined)
+    const close = vi.fn(async () => undefined)
+    const abort = vi.fn(async () => undefined)
+    const writable = { write, close, abort } as unknown as
+      FileSystemWritableFileStream
+    const createWritable = vi.fn(async () => writable)
+    const handle = {
+      name: 'chosen-output.mp4',
+      createWritable,
+    } as unknown as FileSystemFileHandle
+    const takeFileHandle = vi.fn(() => handle)
+    const doc = makeVideoDoc(
+      [{ assetId: 'asset-a', sourceStart: 0 }],
+      1,
+    )
+    const sink = await createMediabunnyExportSink(
+      doc,
+      directFile,
+      async () => resolvedAsset(new Blob(['unused'])),
+      new Map(),
+      { fileName: 'chosen-output.mp4', takeFileHandle },
+    )
+
+    await streamTargetAt().write({
+      type: 'write',
+      data: Uint8Array.from([1, 2, 3]),
+      position: 4,
+    })
+    await streamTargetAt().write({
+      type: 'write',
+      data: Uint8Array.from([9, 8]),
+      position: 0,
+    })
+    await sink.addFrame(0, 1_001 / 30_000)
+    const result = await sink.finalize()
+
+    expect(result).toEqual({
+      destination: 'file',
+      fileName: 'chosen-output.mp4',
+      byteLength: 7,
+      mimeType: 'video/mp4',
+      fileExtension: 'mp4',
+      profile: directFile,
+    })
+    expect(result).not.toHaveProperty('buffer')
+    expect(result).not.toHaveProperty('handle')
+    expect(takeFileHandle).toHaveBeenCalledOnce()
+    expect(createWritable).toHaveBeenCalledWith({ keepExistingData: false })
+    expect(write).toHaveBeenCalledTimes(2)
+    expect(close).toHaveBeenCalledOnce()
+    expect(abort).not.toHaveBeenCalled()
+    expect(mb.targets).toHaveLength(0)
+  })
+
+  test('cancels a direct-file sink exactly once without committing it', async () => {
+    const directFile = updateExportProfile(SETTINGS, { destination: 'file' })
+    const close = vi.fn(async () => undefined)
+    const abort = vi.fn(async () => undefined)
+    const writable = {
+      write: vi.fn(async () => undefined),
+      close,
+      abort,
+    } as unknown as FileSystemWritableFileStream
+    const handle = {
+      name: 'cancelled.mp4',
+      createWritable: vi.fn(async () => writable),
+    } as unknown as FileSystemFileHandle
+    const sink = await createMediabunnyExportSink(
+      makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
+      directFile,
+      async () => resolvedAsset(new Blob(['unused'])),
+      new Map(),
+      {
+        fileName: 'cancelled.mp4',
+        takeFileHandle: vi.fn(() => handle),
+      },
+    )
+
+    await Promise.all([sink.cancel(), sink.cancel()])
+
+    expect(outputAt().cancel).toHaveBeenCalledOnce()
+    expect(abort).toHaveBeenCalledOnce()
+    expect(close).not.toHaveBeenCalled()
+  })
+
+  test('aborts a direct file once and preserves an Output.start failure', async () => {
+    const directFile = updateExportProfile(SETTINGS, { destination: 'file' })
+    const failure = new Error('output start failed')
+    mb.outputStartHandlers.push(async () => {
+      throw failure
+    })
+    const close = vi.fn(async () => undefined)
+    const abort = vi.fn(async () => undefined)
+    const writable = {
+      write: vi.fn(async () => undefined),
+      close,
+      abort,
+    } as unknown as FileSystemWritableFileStream
+    const handle = {
+      name: 'failed.mp4',
+      createWritable: vi.fn(async () => writable),
+    } as unknown as FileSystemFileHandle
+
+    await expect(createMediabunnyExportSink(
+      makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1),
+      directFile,
+      async () => resolvedAsset(new Blob(['unused'])),
+      new Map(),
+      {
+        fileName: 'failed.mp4',
+        takeFileHandle: vi.fn(() => handle),
+      },
+    )).rejects.toBe(failure)
+
+    expect(outputAt().cancel).toHaveBeenCalledOnce()
+    expect(abort).toHaveBeenCalledOnce()
+    expect(abort).toHaveBeenCalledWith(failure)
+    expect(close).not.toHaveBeenCalled()
+  })
+
+  test('configures exact-duration Opus through the patched WebM adapter', async () => {
+    const audioDoc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('opus-clip', 'opus-asset', 1)),
+    ])
+    const profile = exportPresetById('web').profile
+    const sink = await createMediabunnyExportSink(
+      audioDoc,
+      profile,
+      async () => resolvedAsset(new Blob(['unused'])),
+    )
+
+    expect(mb.formats.at(-1)).toMatchObject({ kind: 'webm' })
+    expect(audioSourceAt().encodingConfig).toEqual({
+      codec: 'opus',
+      bitrate: profile.audioBitrate,
+      bitrateMode: profile.audioBitrateMode,
+    })
+    expect(fakeCanvases).toHaveLength(1)
+    expect(mb.targets).toHaveLength(1)
+    expect(mb.streamTargets).toHaveLength(0)
+    expect(outputAt().addAudioTrack).toHaveBeenCalledWith(audioSourceAt())
+
+    await sink.cancel()
+  })
+})
+
 describe('createMediabunnyExportSink audio behavior', () => {
+  test('explicit audio-off skips the mixer and output track even with audio clips', async () => {
+    const doc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('muted-export', 'audio-asset', 1)),
+    ])
+    const audioOff = updateExportProfile(SETTINGS, {
+      audioCodec: null,
+      audioChannelLayout: 'off',
+      audioBitrate: null,
+      audioBitrateMode: null,
+    })
+    const resolveAsset = vi.fn(async () => resolvedAsset(new Blob(['audio'])))
+
+    const sink = await createMediabunnyExportSink(doc, audioOff, resolveAsset)
+    await sink.addFrame(0, 1_001 / 30_000)
+    await sink.finalize()
+
+    expect(resolveAsset).not.toHaveBeenCalled()
+    expect(mb.audioSources).toHaveLength(0)
+    expect(mb.audioSinks).toHaveLength(0)
+    expect(outputAt().addAudioTrack).not.toHaveBeenCalled()
+  })
+
   test('encodes the shared absolute equal-power crossfade plan', async () => {
     const fixture = makeAudioCrossfadeDoc()
     const decodedFrom = decodedAudioSample([
@@ -2113,14 +2400,11 @@ describe('createMediabunnyExportSink audio behavior', () => {
       resolveAsset,
     )
 
-    expect(mb.canEncodeAudio).toHaveBeenCalledWith(EXPORT_AUDIO_CODEC, {
-      numberOfChannels: 2,
-      sampleRate: 48_000,
-      bitrate: EXPORT_AUDIO_BITRATE,
-    })
+    expect(mb.canEncodeAudio).not.toHaveBeenCalled()
     expect(audioSourceAt().encodingConfig).toEqual({
-      codec: EXPORT_AUDIO_CODEC,
-      bitrate: EXPORT_AUDIO_BITRATE,
+      codec: SETTINGS.audioCodec,
+      bitrate: SETTINGS.audioBitrate,
+      bitrateMode: SETTINGS.audioBitrateMode,
       onEncodedPacket: expect.any(Function),
     })
     const encodingConfig = audioSourceAt().encodingConfig as {
@@ -2184,6 +2468,44 @@ describe('createMediabunnyExportSink audio behavior', () => {
     expect(canvasSourceAt().close).toHaveBeenCalledOnce()
     expect(outputAt().finalize).toHaveBeenCalledOnce()
     expect(outputAt().cancel).not.toHaveBeenCalled()
+  })
+
+  test('encodes a mono layout by averaging the bounded stereo mix bus', async () => {
+    const doc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('mono-output', 'audio-asset', 1)),
+    ])
+    const left = new Float32Array(2_000).fill(0.8)
+    const right = new Float32Array(2_000).fill(0.2)
+    const decoded = decodedAudioSample([left, right], 48_000)
+    mb.audioTracks.push(audioTrack(true, 2))
+    mb.audioSinkSampleSequences.push([decoded])
+    const profile = updateExportProfile(SETTINGS, {
+      audioChannelLayout: 'mono',
+      audioBitrate: 96_000,
+      audioBitrateMode: 'constant',
+    })
+    const sink = await createMediabunnyExportSink(
+      doc,
+      profile,
+      async () => resolvedAsset(new Blob(['stereo-source'])),
+    )
+
+    await sink.addFrame(0, 1_001 / 30_000)
+    const result = await sink.finalize()
+
+    expect(audioSourceAt().encodingConfig).toMatchObject({
+      codec: 'aac',
+      bitrate: 96_000,
+      bitrateMode: 'constant',
+      onEncodedPacket: expect.any(Function),
+    })
+    const encoded = mb.encodedAudioSamples as FakeAudioSampleRecord[]
+    expect(encoded).toHaveLength(2)
+    expect(encoded.every((sample) => sample.numberOfChannels === 1)).toBe(true)
+    expect(encoded.every((sample) => (
+      [...sample.data].every((value) => Math.abs(value - 0.5) < 1e-6)
+    ))).toBe(true)
+    expect(result.profile.audioChannelLayout).toBe('mono')
   })
 
   test('downmixes 5.1 audio to the stereo export bus', async () => {

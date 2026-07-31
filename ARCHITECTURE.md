@@ -20,7 +20,7 @@ non-negotiable rules. Re-read it at the start of every coding session.
   `pipeline/`, `workers/`, or `engine/` directly from a `.tsx` file.
 - `engine/`, `pipeline/`, `workers/` may import `domain/`. They must never
   import React or anything from `ui/` or `state/`.
-- `codecs/` is a browser/worker-safe runtime leaf for reviewed local codec
+- `codecs/` is a browser/worker-safe runtime leaf for reviewed local decoder
   registration and policy. It may import `domain/` types and external codec
   packages, but never `state/`, `ui/`, `app/`, `engine/`, `pipeline/`, or
   `workers/`.
@@ -34,7 +34,7 @@ non-negotiable rules. Re-read it at the start of every coding session.
   - `workers/` may import `engine/frame-cache.ts` (pure class, no deps),
   - `workers/render.worker.ts` may import `pipeline/render.ts` (the pure
     compositing core: imports domain/ only, no browser I/O — the worker is
-    its runtime host, exactly like export.ts will be in Phase 5),
+    its runtime host, as `export.ts` is the finite export host),
     `pipeline/static-image.ts` (the bounded browser/worker-safe still-image
     inspection + decode boundary), and the STRUCTURAL TYPES exported by
     `workers/decode.worker.ts` via
@@ -158,6 +158,33 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   the exact BigInt-derived sample grid before one final sum/clamp. Invalid or
   unavailable audio falls back to the ordinary hard cut without weakening a
   valid visual crossfade.
+
+## Export profile and delivery contracts
+
+- `domain/exportProfile.ts` is the sole browser-free authority for allowed
+  concrete container, video/audio codec, channel-layout, bitrate, key-frame,
+  MIME, extension, and destination shapes. `auto` is selection policy only and
+  resolves Modern → Web → Compatibility; HEVC is explicit-only. Dimensions,
+  exact rational FPS, and audio sample rate remain `TimelineDoc` facts.
+- `pipeline/export-capabilities.ts` validates containment and native encoder
+  support. Cached catalog checks are hints; `app/exportController.ts` reruns
+  the exact disposable preflight before allocating an output writer or
+  encoder. An explicit unavailable profile fails with its reason; no profile
+  or codec substitution and no local encoder fallback are permitted.
+- Buffered output owns a `BufferTarget` result. Direct-file output begins with
+  a user-gesture picker in `app/`, passes only a one-shot opaque capability,
+  and uses `StreamTarget` with at most 1 MiB of awaited positioned writes.
+  WebCut commits only after successful mux finalization; cancellation or
+  failure aborts, and uncertain abort cleanup is a terminal integrity error.
+- AAC and Opus must preserve the exact scheduled presentation length. The
+  exact-version Mediabunny patch writes and reopens Opus `CodecDelay`, 80 ms
+  `SeekPreRoll`, final `DiscardPadding`, source-rate metadata, and exact
+  duration; malformed or unrepresentable timing fails closed.
+- Only a validated export selection may persist in its dedicated local
+  preference. Capability results, file handles, and output bytes never enter
+  project or Zustand state. Project dimensions, FPS, and sample rate remain
+  authoritative `TimelineDoc` facts and are not duplicated into that export
+  preference.
 
 ## Store action contracts
 
