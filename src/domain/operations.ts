@@ -38,6 +38,11 @@ import {
   crossfadeWindowsOverlap,
   resolveCrossfade,
 } from './selectors'
+import {
+  evaluateCrossfadeDraft,
+  resolveCrossfadePlan,
+  type SourceBoundsCatalog,
+} from './crossfadePlan'
 import { rangeEnd, rangeOverlap } from './time'
 
 /** Which clip edge a trim moves. */
@@ -303,6 +308,41 @@ export function addCrossfade(
 }
 
 /**
+ * Handle-aware authoring boundary. Rejected proposals retain the exact input
+ * document reference; successful proposals reuse the ordinary immutable op.
+ */
+export function addCrossfadeWithSourceBounds(
+  doc: TimelineDoc,
+  fromClipId: ClipId,
+  toClipId: ClipId,
+  durationFrames: number,
+  catalog: SourceBoundsCatalog,
+): TimelineDoc {
+  const from = locateClip(doc, fromClipId)
+  if (!from) return addCrossfade(doc, fromClipId, toClipId, durationFrames)
+  const evaluation = evaluateCrossfadeDraft(
+    doc,
+    from.track.id,
+    fromClipId,
+    toClipId,
+    durationFrames,
+    catalog,
+  )
+  if (evaluation.status !== 'available') {
+    const maximum = evaluation.status === 'unavailable'
+      && evaluation.maximumDurationFrames !== null
+      ? `; maximum ${evaluation.maximumDurationFrames} frames`
+      : ''
+    return reject(
+      doc,
+      'addCrossfadeWithSourceBounds',
+      `${evaluation.reason}${maximum}`,
+    )
+  }
+  return addCrossfade(doc, fromClipId, toClipId, durationFrames)
+}
+
+/**
  * Change one track-owned crossfade's duration without replacing its stable
  * id. A no-op duration is silent; malformed endpoints may be repaired only
  * when the new duration makes the complete canonical definition valid and
@@ -348,6 +388,46 @@ export function setCrossfadeDuration(
     )
   }
   return withTrack(doc, loc.trackIndex, nextTrack)
+}
+
+/** Handle-aware duration update with same-reference rejection semantics. */
+export function setCrossfadeDurationWithSourceBounds(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  transitionId: TransitionId,
+  durationFrames: number,
+  catalog: SourceBoundsCatalog,
+): TimelineDoc {
+  const locations = locateTrackTransitions(doc, trackId, transitionId)
+  if (locations.length !== 1) {
+    return setCrossfadeDuration(doc, trackId, transitionId, durationFrames)
+  }
+  const location = locations[0]
+  const transitions = location.track.transitions.slice()
+  transitions[location.transitionIndex] = {
+    ...location.transition,
+    durationFrames,
+  }
+  const tracks = doc.tracks.slice()
+  tracks[location.trackIndex] = { ...location.track, transitions }
+  const evaluation = resolveCrossfadePlan(
+    { ...doc, tracks },
+    trackId,
+    transitionId,
+    catalog,
+  )
+  if (evaluation.status !== 'available') {
+    const maximum = evaluation.status === 'unavailable'
+      && evaluation.maximumDurationFrames !== null
+      ? `; maximum ${evaluation.maximumDurationFrames} frames`
+      : ''
+    return reject(
+      doc,
+      'setCrossfadeDurationWithSourceBounds',
+      `${evaluation.reason}${maximum}`,
+    )
+  }
+  return setCrossfadeDuration(doc, trackId, transitionId, durationFrames)
 }
 
 /**

@@ -13,6 +13,7 @@ import type {
   Transition,
   TransitionId,
 } from './schema'
+import { resolveCrossfadeGeometry } from './crossfadePlan'
 import { rangeContains, rangeEnd } from './time'
 
 /**
@@ -167,69 +168,12 @@ function clipOpacity(clip: Clip): number {
   return Math.min(1, clip.opacity)
 }
 
-function validSourceRange(clip: Clip): boolean {
-  const { startFrame, durationFrames } = clip.sourceRange
-  if (clip.sourceMode === 'still') {
-    return startFrame === 0 && durationFrames === 1
-  }
-  return (
-    Number.isSafeInteger(startFrame) &&
-    startFrame >= 0 &&
-    Number.isSafeInteger(durationFrames) &&
-    durationFrames >= 1 &&
-    Number.isSafeInteger(startFrame + durationFrames - 1)
-  )
-}
-
 /** Resolve one transition using the canonical centered crossfade geometry. */
 export function resolveCrossfade(
   track: Track,
   transition: Transition,
 ): ResolvedCrossfade | null {
-  const durationFrames = transition.durationFrames
-  if (
-    track.kind !== 'video' ||
-    transition.type !== 'crossfade' ||
-    !Number.isSafeInteger(durationFrames) ||
-    durationFrames < 1
-  ) {
-    return null
-  }
-
-  const fromIndex = track.clips.findIndex(
-    (clip) => clip.id === transition.fromClipId,
-  )
-  if (fromIndex < 0 || fromIndex + 1 >= track.clips.length) return null
-  const from = track.clips[fromIndex]
-  const to = track.clips[fromIndex + 1]
-  if (to.id !== transition.toClipId || from.id === to.id) return null
-  if (from.text !== undefined || to.text !== undefined) return null
-  if (!validSourceRange(from) || !validSourceRange(to)) return null
-
-  const fromStart = from.timelineRange.startFrame
-  const cutFrame = rangeEnd(from.timelineRange)
-  const toEnd = rangeEnd(to.timelineRange)
-  if (
-    !Number.isSafeInteger(fromStart) ||
-    !Number.isSafeInteger(cutFrame) ||
-    !Number.isSafeInteger(toEnd) ||
-    cutFrame !== to.timelineRange.startFrame
-  ) {
-    return null
-  }
-
-  const startFrame = cutFrame - Math.floor(durationFrames / 2)
-  const endFrame = startFrame + durationFrames
-  if (
-    !Number.isSafeInteger(startFrame) ||
-    !Number.isSafeInteger(endFrame) ||
-    startFrame < fromStart ||
-    endFrame > toEnd
-  ) {
-    return null
-  }
-
-  return { transition, from, to, startFrame, endFrame, durationFrames }
+  return resolveCrossfadeGeometry(track, transition)
 }
 
 /** Half-open overlap for two resolved crossfade windows. */

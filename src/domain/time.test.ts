@@ -13,6 +13,7 @@ import {
   framesToSeconds,
   growRange,
   microsecondsDurationToFrames,
+  microsecondsTimestampToFrameCeil,
   microsecondsToFrames,
   rangeContains,
   rangeEnd,
@@ -107,6 +108,10 @@ describe('frames <-> canonical microseconds', () => {
     const tenSeconds = 10_000_000
     expect(microsecondsToFrames(tenSeconds, NTSC_2997)).toBe(300)
     expect(microsecondsToFrames(tenSeconds, NTSC_5994)).toBe(599)
+    expect(microsecondsTimestampToFrameCeil(
+      1_001_000_000,
+      NTSC_2997,
+    )).toBe(30_000)
   })
 
   test('rounds fractional frames and microseconds to the nearest integer', () => {

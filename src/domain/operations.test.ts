@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, Effect, MediaAsset, TimelineDoc, Track, Transition } from './schema'
 import {
   addCrossfade,
+  addCrossfadeWithSourceBounds,
   addEffect,
   addTrack,
   clipFromAsset,
@@ -23,6 +24,7 @@ import {
   rippleTrim,
   setClipVolume,
   setCrossfadeDuration,
+  setCrossfadeDurationWithSourceBounds,
   setTrackFlags,
   slideClip,
   slipClip,
@@ -912,6 +914,37 @@ function authoredTriple(durationFrames = 5): TimelineDoc {
 }
 
 describe('crossfade authoring', () => {
+  test('handle-aware add and duration changes reject with the same reference', () => {
+    const doc = makeCrossfadeDoc([
+      makeClip('A', 0, 10, 0),
+      makeClip('B', 10, 10, 10),
+    ])
+    const bounds = new Map([[
+      'asset-1',
+      {
+        video: {
+          status: 'exact' as const,
+          firstTimestampUs: 233_333,
+          endTimestampUs: 466_666,
+        },
+        audio: null,
+      },
+    ]])
+
+    expect(addCrossfadeWithSourceBounds(doc, 'A', 'B', 8, bounds)).toBe(doc)
+    const added = addCrossfadeWithSourceBounds(doc, 'A', 'B', 7, bounds)
+    expect(added).not.toBe(doc)
+    const authored = transitionsOf(added)[0]
+    expect(authored.durationFrames).toBe(7)
+    expect(setCrossfadeDurationWithSourceBounds(
+      added,
+      'V1',
+      authored.id,
+      8,
+      bounds,
+    )).toBe(added)
+  })
+
   test('adds ordered seam metadata with a fresh id and preserves structural sharing', () => {
     const doc = makeCrossfadeDoc([
       makeClip('A', 0, 10),

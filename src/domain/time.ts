@@ -186,6 +186,31 @@ export function microsecondsDurationToFrames(
 }
 
 /**
+ * Non-negative timestamp boundary -> first document frame at or after it.
+ * This is the exact half-open source-bounds adapter: frame `n` is present when
+ * its timestamp is below an exclusive end, so that end maps with ceiling.
+ */
+export function microsecondsTimestampToFrameCeil(
+  microseconds: number,
+  rate: FrameRate,
+): number {
+  assertValidRate(rate)
+  assertNonNegativeSafeInteger(
+    microseconds,
+    'microsecondsTimestampToFrameCeil',
+  )
+  const numerator = BigInt(microseconds) * BigInt(rate.num)
+  const denominator = BigInt(MICROSECONDS_PER_SECOND) * BigInt(rate.den)
+  const result = (numerator + denominator - 1n) / denominator
+  if (result > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError(
+      'microsecondsTimestampToFrameCeil: result exceeds Number.MAX_SAFE_INTEGER',
+    )
+  }
+  return Number(result)
+}
+
+/**
  * Non-negative document frames -> nearest canonical integer microsecond.
  * This is the exact integer-safe inverse boundary used when a source duration
  * starts from frame metadata rather than a container duration.

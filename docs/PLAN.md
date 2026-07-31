@@ -1516,6 +1516,33 @@ gate stops progression; later checkboxes are never completed early.
   no user-visible interaction surface, so browser acceptance remains assigned
   to the later visual/UI/audio slices.
 
+### Slice 2 evidence — pure grouped crossfade planner (2026-07-31)
+
+- [x] `crossfadePlan.ts` is the browser-free authority for seam validity,
+  centered odd/even windows, exact real-handle capacity, maximum duration,
+  per-frame grouped requests, and typed invalid/unavailable diagnostics. The
+  existing selector now delegates geometry to this authority instead of
+  maintaining a second implementation.
+- [x] Timed legs derive availability from persisted per-stream timestamp
+  bounds using exact BigInt ceiling conversion at document rate. Requests may
+  extend beyond the edited source range only when genuine decoded source
+  frames exist; still legs alone repeat source frame zero. Rejected authoring
+  and duration proposals retain the identical document reference.
+- [x] Linked audio resolution requires exactly one distinct audio partner per
+  visual leg at the same cut. Missing, ambiguous, misaligned, absent, unknown,
+  unsafe, or insufficient audio handles produce an independent typed audio
+  fallback while leaving a valid visual plan available.
+- [x] Focused gate: 185/185 tests across planner, selector, operation, and time
+  suites. Coverage includes one-frame and odd/even groups, negative and NTSC
+  timestamp bounds, slips/trims, stills, same-asset ranges, insufficient
+  handles, malformed/overlapping seams, linked-audio ambiguity/alignment, and
+  visual-versus-audio capacity independence.
+- [x] Full gate: 1,410/1,410 tests across 75 files; production build passed
+  with only the pre-existing chunk-size advisory; oxlint passed. This pure
+  domain slice changes no rendered behavior, so its browser gate is not
+  applicable. Slice 3 owns worker/preview/export visual consumption and removal
+  of the legacy timed-frame clamping path.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +
