@@ -40,6 +40,7 @@ import {
   type ExportProfile,
 } from '../domain/exportProfile'
 import type { Clip, MediaAsset, TimelineDoc, Track } from '../domain/schema'
+import { DirectFileAbortError } from '../pipeline/export-file-target'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import {
@@ -700,11 +701,20 @@ describe('Export dialog lifecycle', () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
 
-  test('keeps the file profile configured when the native picker is cancelled', async () => {
+  test('reuses the file profile after picker cancellation and starts from a fresh selection', async () => {
     const fileProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
       destination: 'file',
     })
-    requestFileDestinationMock.mockResolvedValue({ status: 'cancelled' })
+    const capability: ExportFileDestinationCapability = {
+      fileName: 'retry.mp4',
+      takeFileHandle: vi.fn(() => {
+        throw new Error('The UI must not consume the native file handle')
+      }),
+    }
+    requestFileDestinationMock
+      .mockResolvedValueOnce({ status: 'cancelled' })
+      .mockResolvedValueOnce({ status: 'selected', destination: capability })
+    startMock.mockResolvedValue(directFileResult(fileProfile, 'retry.mp4'))
     render(<Toolbar />)
     await openDialog()
     await readyStartButton()
@@ -725,6 +735,88 @@ describe('Export dialog lifecycle', () => {
       .toHaveValue('file')
     expect(screen.getByRole('button', { name: 'Choose file and export' }))
       .toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Choose file and export',
+    }))
+
+    expect(await screen.findByText('Export saved')).toBeInTheDocument()
+    expect(requestFileDestinationMock).toHaveBeenCalledTimes(2)
+    expect(requestFileDestinationMock).toHaveBeenNthCalledWith(
+      2,
+      fileProfile,
+      'My - Rough- Cut.mp4',
+    )
+    expect(startMock).toHaveBeenCalledOnce()
+    expect(startMock).toHaveBeenCalledWith(fileProfile, {
+      onProgress: expect.any(Function),
+      fileDestination: capability,
+    })
+    expect(screen.getByText(
+      'Your MP4 was written directly to retry.mp4.',
+    )).toBeInTheDocument()
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    {
+      label: 'a discarded ordinary failure',
+      failure: new Error('disk full'),
+      expected:
+        'disk full No partial video was kept; the selected file may remain empty.',
+      forbidden: 'selected file may be incomplete',
+    },
+    {
+      label: 'a failed abort',
+      failure: new DirectFileAbortError(
+        new Error('disk full'),
+        new Error('abort failed'),
+      ),
+      expected:
+        'Could not discard the selected export file; the selected file may be incomplete.',
+      forbidden: 'No partial video was kept',
+    },
+  ])('keeps direct-file failure copy honest for $label', async ({
+    failure,
+    expected,
+    forbidden,
+  }) => {
+    const fileProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      destination: 'file',
+    })
+    const capability: ExportFileDestinationCapability = {
+      fileName: 'failed.mp4',
+      takeFileHandle: vi.fn(() => {
+        throw new Error('The UI must not consume the native file handle')
+      }),
+    }
+    requestFileDestinationMock.mockResolvedValue({
+      status: 'selected',
+      destination: capability,
+    })
+    startMock.mockRejectedValue(failure)
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+    fireEvent.change(screen.getByRole('combobox', {
+      name: 'Export destination',
+    }), { target: { value: 'file' } })
+    await waitFor(() => expect(customCapabilityMock).toHaveBeenCalledWith(
+      fileProfile,
+    ))
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Choose file and export',
+    }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(expected)
+    expect(alert).not.toHaveTextContent(forbidden)
+    expect(startMock).toHaveBeenCalledWith(fileProfile, {
+      onProgress: expect.any(Function),
+      fileDestination: capability,
+    })
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
 
   test('starts once, coalesces progress bursts, and waits for the real result', async () => {

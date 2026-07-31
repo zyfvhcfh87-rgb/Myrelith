@@ -1693,16 +1693,18 @@ gate stops progression; later checkboxes are never completed early.
   clean. GitHub publication remains a normal merge of `codex/feature`, with
   the branch retained and only Issue #17 eligible for closeout.
 
-## Post-MVP issue #16 — capability-aware export profiles (IN PROGRESS, 2026-07-31)
+## Post-MVP issue #16 — capability-aware export profiles
 
-Issue #16 is open at baseline commit `fd1d50e` and owns container, codecs,
+**IMPLEMENTATION COMPLETE (2026-08-01); closeout pending merge.**
+
+Issue #16 started from baseline commit `fd1d50e` and owns container, codecs,
 audio-off/mono/stereo layout, bitrate behavior, key-frame interval, MIME/file
 metadata, and buffered-versus-direct-file output. Issue #15 remains the sole
 authority for project dimensions, exact rational FPS, and audio sample rate;
 those values are read from one captured `TimelineDoc`, never duplicated in an
-export profile or dialog control. The existing MP4/AVC/AAC, stereo,
-8 Mbps/192 kbps buffered download remains the safe default throughout the
-work.
+export profile or dialog control. Compatibility remains the safe default and
+preserves the original MP4/AVC/AAC, stereo, 8 Mbps/192 kbps buffered-download
+behavior.
 
 ### Frozen research and implementation boundaries
 
@@ -1758,10 +1760,11 @@ work.
 6. [x] Evaluate optional pinned local encoder fallbacks only for a selected
    otherwise-unavailable codec. Keep them lazy, offline, and out of the initial
    editor bundle; a documented no-go is valid evidence.
-7. [ ] Reopen every enabled profile, verify container/codecs/dimensions/FPS/
+7. [x] Reopen every enabled profile, verify container/codecs/dimensions/FPS/
    channels/sample rate/duration/MIME/extension, exercise native Chrome
    playback plus cancellation/write failure/retry/memory gates, then update
-   README/ARCHITECTURE/HANDOFF and close only Issue #16 after merge.
+   README/ARCHITECTURE/HANDOFF.
+8. [ ] Publish by normal merge, then close only Issue #16.
 
 ### Slice 1 evidence — authoritative profile model (2026-07-31)
 
@@ -1813,9 +1816,11 @@ work.
   matrix. A successful native HEVC, mono, or WebM probe cannot be advertised
   until that same exact path is wired into the real export sink; Slice 3 will
   widen this matrix together with the implementation and its adapter tests.
-- [x] The exact-duration policy keeps Opus audio profiles visibly unavailable
-  while the installed WebM muxer lacks end-padding metadata, but still permits
-  capability probing for WebM video when the concrete export has no audio.
+- [x] At this slice, the exact-duration policy kept Opus audio profiles visibly
+  unavailable while the installed WebM muxer lacked end-padding metadata, but
+  still permitted capability probing for WebM video when the concrete export
+  had no audio. Slice 6 later lifted this gate after the pinned mux/demux
+  contract passed.
   Disabling audio also excludes audio-only sources from offline/partial-source
   gates and Blob retention without changing the historical default path.
 - [x] Focused gate: 206/206 tests across profile/selectors, capability core,
@@ -1842,8 +1847,9 @@ work.
 - [x] The reviewed mixer remains one bounded stereo bus. Stereo output keeps
   exact L/R interleaving; mono output averages `(L + R) / 2` only at the
   encoder boundary, preserving duplicated mono level without clipping. AAC
-  packet-duration trimming is attached only to AAC; Opus audio remains behind
-  its exact end-padding policy. Audio-off still allocates no mixer or encoder.
+  packet-duration trimming is attached only to AAC; Opus audio remained behind
+  its exact end-padding policy until Slice 6. Audio-off still allocates no mixer
+  or encoder.
 - [x] Buffered results are now a frozen `destination: 'download'` branch with
   the exact buffer, MIME type, extension, and detached concrete profile. The
   writer derives all metadata from the validated profile. Direct-file
@@ -1864,8 +1870,8 @@ work.
   60-fps, one-frame gate proved the duration-aware preflight and actual writer
   both reject the exact 800-sample AAC tail with Chromium's same `Flushing
   error`, so the failure is caught before writer allocation instead of being a
-  false positive. Opus returned its explicit muxer reason, browser
-  warnings/errors were zero, and both temporary harnesses were removed.
+  false positive. At that slice, Opus returned its explicit muxer reason;
+  browser warnings/errors were zero, and both temporary harnesses were removed.
 
 ### Slice 4 evidence â€” persisted capability-aware export UI (2026-07-31)
 
@@ -1982,7 +1988,39 @@ work.
   preflight, writer, and Opus contract gates passed 75/75 tests. Production
   TypeScript/Vite build passed with only the existing chunk-size advisory, and
   oxlint passed. Real Chromium A/V playback and the final cross-profile matrix
-  remain Gate 7 work.
+  are recorded in Slice 7 below.
+
+### Slice 7 evidence — final profile/browser acceptance (2026-08-01)
+
+- [x] The production dialog reported Compatibility, Web, Modern, and HEVC as
+  Available on this Windows Chrome 150 host, and Auto resolved visibly to
+  Modern. Each exact configuration still passed the immediately-before-start
+  native preflight; this measured host result does not weaken runtime probing
+  or permit substitution on another browser or machine.
+- [x] All four profiles passed both buffered-download and direct-file export,
+  then reopened with their selected MP4/WebM container and AVC/VP9/AV1/HEVC
+  video plus AAC/Opus audio. Every base output was exactly 320×180 at
+  30000/1001 fps with 30 frames over 1.001 seconds, 48 kHz stereo, and 48,048
+  presented samples. Native video elements loaded and played every result.
+- [x] Advanced reopen gates passed AAC mono, audio-off, constant bitrate with a
+  500 ms key-frame interval, and video-only Web and Modern outputs. Together
+  with the base matrix, the browser run completed 17 gates and reopened 14
+  outputs without warnings or errors.
+- [x] Picker cancellation remained reusable without starting an export. Direct
+  cancellation after five staged writes aborted without success; retry worked.
+  Injected positioned-write failure plus abort-integrity failure surfaced the
+  explicit possibly-incomplete-file warning and preserved the sentinel file
+  content instead of reporting a false success.
+- [x] The high-entropy 1280×720 memory gate produced a 10,436,306-byte direct
+  file beside a 10,436,298-byte buffered result. Direct output kept chunks at or
+  below 1 MiB with one write maximum in flight, and its terminal result retained
+  no output buffer.
+- [x] Final automation passed 1,632/1,632 tests across 86 files.
+  `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities. The
+  optional local encoder fallback decision remains a no-go; runtime-native
+  support stays capability-gated with no codec substitution. Local
+  implementation is complete, while GitHub closeout remains pending the normal
+  merge.
 
 ## Test strategy per layer (unchanged from original)
 

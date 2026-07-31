@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-31)
+## Status (2026-08-01)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -76,6 +76,21 @@ and the open list below.
 | Post-MVP #18 — original Slice 8 export | ✅ done | typed source errors preserved; decode-once/frame-zero and real-source cleanup matrix; Chromium 60-frame AVC encode/reopen plus direct production Preview/output pixel parity and clean diagnostics |
 | **Post-MVP #18 — original Slice 9 acceptance/closeout** | ✅ complete | 693 focused + 1,385 total tests; 18-file hostile/orientation matrix; Chrome multi-import, edit, recovery/relink, layered crossfade, and export gate; Issue #18 closeout evidence complete |
 | **Post-MVP #17 — exact audio-aware crossfades** | ✅ complete | canonical grouped visual/audio plans, real per-stream handles, atomic accessible settings, exact live/export envelopes, 1,441 tests, and full-app Chromium transparent-layer/tone/export-reopen acceptance |
+| **Post-MVP #16 — capability-aware export profiles** | ✅ implementation complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; GitHub closeout pending merge |
+
+Issue #16 is locally implementation-complete; its GitHub closeout waits for a
+normal merge. The production dialog reports Compatibility, Web, Modern, and
+HEVC as Available on this Windows Chrome 150 host, and Auto resolves visibly to
+Modern. All four profiles passed buffered and direct-file export/reopen/native
+playback at 320×180, 30000/1001 fps, 30 frames/1.001s, 48 kHz stereo, and
+48,048 presented samples. AAC mono, audio-off, constant bitrate with a 500 ms
+key-frame interval, and Web/Modern video-only variants also passed. Across 17
+browser gates and 14 reopened outputs, picker cancellation/reuse, cancellation
+after five staged writes, positioned-write failure, abort-integrity reporting,
+retry, and bounded direct-file memory all behaved honestly with zero warnings
+or errors. Runtime-native capability gating remains authoritative: no codec is
+substituted, and the researched local encoder fallbacks were rejected for this
+slice.
 
 The Issue #17 suite passes 1,441/1,441 tests across 77 files. Production build,
 lint, diff checks, focused planner/UI/playback/export suites, exact browser
@@ -131,8 +146,8 @@ app export controller: it captures one document/settings/media snapshot,
 retains referenced Blobs before their object URLs can be revoked, shares one
 cached resolver across video and audio, explicitly drains progress through the
 final result, and serializes cancellation after any in-flight frame boundary.
-Phase 5.2b exposes that controller through the Toolbar: one honest fixed-profile
-modal shows the current timeline resolution, MP4/H.264, and 8 Mbps; progress is
+Phase 5.2b originally exposed that controller through the Toolbar: one honest
+fixed-profile modal showed the current timeline resolution, MP4/H.264, and 8 Mbps; progress is
 rAF-coalesced; cancellation waits for controller cleanup; success owns a Blob
 URL through download-link use and revokes it on close/reset/unmount. Empty timelines, setup/runtime
 errors, double starts, pre-controller cancellation, keyboard isolation, focus,
@@ -804,11 +819,14 @@ keeps the visual authoring path and explains the fallback. An authored seam
 shows `CF`; the same popover explicitly Applies the complete settings payload
 or Removes the crossfade. Domain rejection stays visible so a shorter duration
 can be tried, locked tracks disable the marker, and each successful Add/Apply/
-Remove is exactly one undo entry. The Toolbar's Export button (5.2b) opens a native modal
-with the timeline's fixed resolution and the MVP MP4/H.264 profile. Start shows
-real progress; Cancel drains cleanup before reporting cancellation; success
-offers an explicit `.mp4` download and keeps its object URL alive until the
-flow closes or resets. The Inspector (4.3)
+Remove is exactly one undo entry. The Toolbar's Export button opens a
+capability-aware modal. Timeline resolution, FPS, and sample rate remain
+project-owned and read-only; Auto plus Compatibility, Web, Modern, and HEVC
+show exact availability reasons. Validated advanced controls cover codecs,
+audio off/mono/stereo, bitrate behavior, key-frame interval, and destination.
+Success either owns a downloadable Blob URL or reports a committed direct file;
+Cancel drains cleanup, and file failures distinguish an empty target from a
+possibly incomplete one. The Inspector (4.3)
 edits the selected clip's position/scale/rotation/opacity — drafts while
 typing, commits on blur/Enter, Escape reverts — and the compositor
 preview reflects each commit immediately. Every gesture and every field
@@ -940,8 +958,11 @@ surface; it is not a second zoom and never enters document history.
 - `src/domain/staticImage.ts` — Issue #18 bounded still-duration validation and
   exact project-rate frame conversion.
 - `src/state/preferencesStore.ts` + `src/app/preferencesController.ts` — the
-  persisted, versioned **Default still-image duration** preference. It affects
-  future imports only and fails safely when browser storage is unavailable.
+  persisted, versioned **Default still-image duration** preference plus the
+  separate `webcut.export-selection:v1` last-known-valid export choice. Export
+  capabilities, project-owned dimensions/FPS/sample rate, file capabilities,
+  and output bytes are never persisted. Both preferences fail safely when
+  browser storage is unavailable.
 - `src/pipeline/static-image-thumbnail.ts` — one-tile image visual generator:
   contained 320×180 maximum geometry, PNG output capped at 1 MiB, and exact
   decoded-source/abort ownership.
@@ -980,6 +1001,10 @@ surface; it is not a second zoom and never enters document history.
   adapter creation, or generator startup. Asset resolver/open/decode failures
   carry typed identity to Slice 2's exact-generation compatibility seam;
   encoder/muxer/cancellation/cleanup failures remain global.
+  Issue #16 snapshots the exact validated profile/destination and optional
+  one-shot file capability, reserves the singleton during fresh preflight, and
+  returns discriminated buffered/direct results without retaining direct-file
+  bytes or handles.
 - `src/app/projectController.ts` + `localMediaHandles.ts` — project activation
   installs the full descriptor catalog plus whatever connected subset is
   available. Active Relink and Scan folder are project-generation guarded,
@@ -1030,11 +1055,30 @@ surface; it is not a second zoom and never enters document history.
   bounded still tile across the complete timeline duration, exposes a clear
   still-image accessible name/Slip explanation, gives still trims unbounded
   source headroom, and constrains still Slip to exactly zero.
-- `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
-  code loads only on Start; progress is frame-coalesced; cancellation and retry
-  are explicit states; Blob URL/download ownership, filename safety, modal
-  focus, and shortcut isolation stay local to the UI. `Toolbar.tsx` only owns
-  the trigger/open state and restores focus when the dialog closes.
+- `src/ui/ExportDialog.tsx` + `ExportProfilePicker.tsx` +
+  `exportProfileUi.ts` — preset-first capability-aware export UX:
+  generation-safe capability feedback, validated advanced drafts and size
+  estimates, download/direct-file result ownership, retry/cancellation, and
+  modal accessibility. Controller and capability code load behind their app
+  facades; `Toolbar.tsx` only owns trigger/open state and restores focus when
+  the dialog closes.
+- `src/domain/exportProfile.ts` — pure allow-list, validation, canonical
+  container metadata, Compatibility/Web/Modern/HEVC catalog, and deterministic
+  Modern → Web → Compatibility Auto policy. Issue #15-owned project dimensions,
+  rational FPS, and sample rate are deliberately absent.
+- `src/pipeline/export-capabilities.ts` +
+  `export-mediabunny-capabilities.ts` + `export-mediabunny-profile.ts` — exact
+  container/codec checks, cached hints, and disposable fresh native encoder
+  preflight. Explicit unavailable selections retain their reason without
+  substitution.
+- `src/app/exportCapabilitiesController.ts` + `exportFilePicker.ts` — app-layer
+  catalog/Auto facade and secure-context picker boundary. The picker validates
+  MIME/extension before the user gesture and returns an opaque one-shot file
+  capability; cancellation never starts an export.
+- `src/pipeline/export-file-target.ts` — transactional direct writer:
+  `StreamTarget`, at-most-1-MiB awaited positioned writes, maximum-end byte
+  accounting, success-only commit, cancel/failure abort, and terminal integrity
+  reporting when abort cannot prove an empty target.
 - `src/ui/timeline/TimelineZoomControls.tsx` + `timelineZoom.ts` — measured
   Full/Detail/Custom geometry, exponential slider mapping, rAF-coalesced input,
   post-layout playhead anchoring, ResizeObserver updates, and the exact logical
@@ -1063,9 +1107,12 @@ surface; it is not a second zoom and never enters document history.
   AudioSampleSink cursors with streaming resampling + channel downmix. Exact
   crossfade-handle readers reject EOF, PCM gaps/discontinuity, or unavailable
   interpolation rather than synthesizing samples;
-  OffscreenCanvas/CanvasSource + AudioSampleSource → AVC/AAC-in-MP4
-  BufferTarget. Both encoders are support-probed, writes honor backpressure,
-  every media sample closes, and terminal cleanup is exact-once. The video
+  OffscreenCanvas/CanvasSource + AudioSampleSource feed the exact validated MP4
+  or WebM format with AVC/HEVC/VP9/AV1 and optional AAC/Opus. Output uses either
+  `BufferTarget` or the transactional direct `StreamTarget`; the pinned
+  Mediabunny patch preserves exact WebM/Opus presentation length and reopen
+  metadata. Encoders are support-probed, writes honor backpressure, every media
+  sample closes, and terminal cleanup is exact-once. The video
   iterator schedule and each frame-local request derive from the canonical
   visual plan; frame leases fail closed on omitted, extra, or reordered
   requests. Issue #17 replaces the frozen-endpoint transition schedule with
@@ -1332,6 +1379,18 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
+- Issue #16 is locally implementation-complete at 1,632/1,632 tests across 86
+  files; its GitHub closeout waits for a normal merge. Auto resolves in the
+  documented Modern → Web → Compatibility order, HEVC remains explicit-only,
+  and every concrete configuration is capability-probed without substitution.
+  The Windows Chrome 150 gate passed all four profiles, both output
+  destinations, exact A/V reopen/playback, advanced audio/video variants,
+  cancellation/write-failure/retry, and bounded direct-file memory with a clean
+  console. Optional local AAC, Opus, VP9, AV1, AVC, and HEVC encoders were
+  researched and rejected for this slice because they failed required semantic,
+  maturity, size/integration, lifecycle, or licensing/provenance boundaries.
+  `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities. Issue
+  #15 remains the sole owner of project dimensions, FPS, and sample rate.
 - Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
   Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
   explicit partial-track consent, capability caching/revalidation, prompt

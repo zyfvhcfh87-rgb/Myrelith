@@ -315,6 +315,32 @@ describe('exportController wiring and completion', () => {
     )
   })
 
+  test('rejects a freshly unsupported direct profile before consuming or allocating output', async () => {
+    const failure = new Error(
+      'Compatibility became unavailable. No codec was substituted.',
+    )
+    const selected = fileDestination('unsupported.mp4')
+    const h = makeHarness()
+    h.preflightProfile.mockRejectedValueOnce(failure)
+
+    await expect(startExport(
+      FILE_SETTINGS,
+      { fileDestination: selected },
+      h.deps,
+    )).rejects.toBe(failure)
+
+    expect(h.preflightProfile).toHaveBeenCalledWith(
+      DOC,
+      FILE_SETTINGS,
+      expect.any(AbortSignal),
+    )
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
+    expect(selected.takeFileHandle).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
   test('rejects referenced offline media before creating export resources', async () => {
     const descriptor = useMediaStore.getState().descriptors.get(ASSET.id)
     expect(descriptor).toBeDefined()
