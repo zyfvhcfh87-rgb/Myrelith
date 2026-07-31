@@ -18,6 +18,7 @@ import type { TimelineDoc } from '../domain/schema'
 import { framesToSeconds } from '../domain/time'
 
 export interface ExportFormatCapabilities {
+  /** Mediabunny format extensions include their leading dot. */
   readonly fileExtension: string
   readonly mimeType: string
   getSupportedVideoCodecs(): readonly string[]
@@ -148,12 +149,12 @@ function inspectStaticCapability(
   try {
     if (
       format.mimeType !== profile.mimeType ||
-      format.fileExtension !== profile.fileExtension
+      format.fileExtension !== `.${profile.fileExtension}`
     ) {
       return unsupported(
         profile,
         `The installed ${profile.container.toUpperCase()} adapter reports ` +
-          `${format.mimeType} and .${format.fileExtension}, not ` +
+          `${format.mimeType} and ${format.fileExtension}, not ` +
           `${profile.mimeType} and .${profile.fileExtension}.`,
       )
     }

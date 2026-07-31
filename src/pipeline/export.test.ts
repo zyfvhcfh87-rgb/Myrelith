@@ -7,7 +7,10 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
-import { DEFAULT_EXPORT_PROFILE } from '../domain/exportProfile'
+import {
+  DEFAULT_EXPORT_PROFILE,
+  updateExportProfile,
+} from '../domain/exportProfile'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type {
   Clip,
@@ -30,13 +33,16 @@ import type {
   ExportSettings,
   ExportVideoSink,
 } from './export'
-import { exportTimeline } from './export'
+import { createBufferedExportResult, exportTimeline } from './export'
 
 const SETTINGS: ExportSettings = DEFAULT_EXPORT_PROFILE
 
 const RESULT: ExportResult = {
+  destination: 'download',
   buffer: Uint8Array.from([1, 2, 3]).buffer,
   mimeType: 'video/mp4',
+  fileExtension: 'mp4',
+  profile: DEFAULT_EXPORT_PROFILE,
 }
 
 function makeClip(durationFrames: number): Clip {
@@ -254,6 +260,37 @@ async function drain(
     progress.push(step.value)
   }
 }
+
+describe('createBufferedExportResult', () => {
+  test('derives canonical frozen metadata from a detached concrete profile', () => {
+    const buffer = Uint8Array.from([4, 5, 6]).buffer
+    const mutableProfile = { ...DEFAULT_EXPORT_PROFILE }
+    const result = createBufferedExportResult(buffer, mutableProfile)
+    mutableProfile.videoBitrate = 100_000
+
+    expect(result).toEqual({
+      destination: 'download',
+      buffer,
+      mimeType: 'video/mp4',
+      fileExtension: 'mp4',
+      profile: DEFAULT_EXPORT_PROFILE,
+    })
+    expect(result.profile).not.toBe(mutableProfile)
+    expect(Object.isFrozen(result)).toBe(true)
+    expect(Object.isFrozen(result.profile)).toBe(true)
+  })
+
+  test('rejects non-buffers and the not-yet-buffered file destination', () => {
+    expect(() => createBufferedExportResult(
+      new ArrayBuffer(0),
+      updateExportProfile(DEFAULT_EXPORT_PROFILE, { destination: 'file' }),
+    )).toThrow(/download destination/)
+    expect(() => createBufferedExportResult(
+      {} as ArrayBuffer,
+      DEFAULT_EXPORT_PROFILE,
+    )).toThrow(/ArrayBuffer/)
+  })
+})
 
 describe('exportTimeline CFR scheduling', () => {
   test('renders every document frame in order and returns the finalized result', async () => {

@@ -62,7 +62,7 @@ function makeDoc(includeAudio = true): TimelineDoc {
 
 function formatFor(profile: ExportProfile): ExportFormatCapabilities {
   return {
-    fileExtension: profile.fileExtension,
+    fileExtension: `.${profile.fileExtension}`,
     mimeType: profile.mimeType,
     getSupportedVideoCodecs: () => [profile.videoCodec],
     getSupportedAudioCodecs: () => profile.audioCodec ? [profile.audioCodec] : [],
@@ -138,7 +138,7 @@ describe('checkExportProfileSupport', () => {
   test('fails containment before probing encoders', async () => {
     const harness = makeProbe()
     harness.createFormat.mockReturnValue({
-      fileExtension: 'mp4',
+      fileExtension: '.mp4',
       mimeType: 'video/mp4',
       getSupportedVideoCodecs: () => [],
       getSupportedAudioCodecs: () => ['aac'],
@@ -198,7 +198,7 @@ describe('checkExportProfileSupport', () => {
   test('turns a container capability query failure into a readable result', async () => {
     const harness = makeProbe()
     harness.createFormat.mockReturnValue({
-      fileExtension: 'mp4',
+      fileExtension: '.mp4',
       mimeType: 'video/mp4',
       getSupportedVideoCodecs: () => {
         throw new Error('format query failed')

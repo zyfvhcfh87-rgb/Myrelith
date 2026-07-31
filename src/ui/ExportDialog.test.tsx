@@ -33,8 +33,11 @@ vi.mock('../app/exportController', () => ({
 }))
 
 const RESULT: ExportResult = {
+  destination: 'download',
   buffer: new Uint8Array([1, 2, 3, 4]).buffer,
   mimeType: 'video/mp4',
+  fileExtension: 'mp4',
+  profile: DEFAULT_EXPORT_PROFILE,
 }
 
 function clip(): Clip {

@@ -33,8 +33,11 @@ import {
 const SETTINGS: ExportSettings = DEFAULT_EXPORT_PROFILE
 
 const RESULT: ExportResult = {
+  destination: 'download',
   buffer: new Uint8Array([1, 2, 3]).buffer,
   mimeType: 'video/mp4',
+  fileExtension: 'mp4',
+  profile: DEFAULT_EXPORT_PROFILE,
 }
 
 const DOC: TimelineDoc = {

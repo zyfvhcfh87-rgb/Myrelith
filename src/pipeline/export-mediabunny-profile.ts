@@ -4,25 +4,33 @@
  * boundary so a successful probe can never advertise an unwired path.
  */
 
-import type { ExportProfile } from '../domain/exportProfile'
+import {
+  Mp4OutputFormat,
+  WebMOutputFormat,
+} from 'mediabunny'
+import type {
+  ExportContainer,
+  ExportProfile,
+} from '../domain/exportProfile'
+
+export function createMediabunnyOutputFormat(
+  container: ExportContainer,
+): Mp4OutputFormat | WebMOutputFormat {
+  if (container === 'mp4') return new Mp4OutputFormat()
+  return new WebMOutputFormat()
+}
 
 export function mediabunnyExportImplementationUnavailableReason(
   profile: Readonly<ExportProfile>,
   includeAudio: boolean,
 ): string | null {
-  if (profile.container !== 'mp4' || profile.videoCodec !== 'avc') {
-    return (
-      `WebCut's buffered export adapter has not enabled ` +
-      `${profile.container.toUpperCase()}/${profile.videoCodec.toUpperCase()} yet.`
-    )
+  if (profile.destination !== 'download') {
+    return `WebCut's direct-file export adapter has not been enabled yet.`
   }
-  if (
-    includeAudio &&
-    (profile.audioCodec !== 'aac' || profile.audioChannelLayout !== 'stereo')
-  ) {
+  if (includeAudio && profile.audioCodec === 'opus') {
     return (
-      `WebCut's buffered MP4/AVC adapter currently supports AAC stereo ` +
-      `or an export with no audio track.`
+      `WebCut's buffered WebM/Opus audio adapter is unavailable until exact ` +
+      `Opus end-padding metadata can be written.`
     )
   }
   return null

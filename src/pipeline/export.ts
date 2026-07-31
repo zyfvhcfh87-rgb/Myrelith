@@ -8,6 +8,8 @@
 
 import {
   validateExportProfile,
+  type ExportFileExtension,
+  type ExportMimeType,
   type ExportProfile,
 } from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
@@ -23,9 +25,36 @@ import {
 
 export type ExportSettings = ExportProfile
 
-export interface ExportResult {
-  buffer: ArrayBuffer
-  mimeType: 'video/mp4'
+export interface BufferedExportResult {
+  readonly destination: 'download'
+  readonly buffer: ArrayBuffer
+  readonly mimeType: ExportMimeType
+  readonly fileExtension: ExportFileExtension
+  /** Concrete resolved profile used by the writer; never the Auto policy. */
+  readonly profile: Readonly<ExportProfile>
+}
+
+/** Slice 3 is buffered-only; direct-file output will add a second branch. */
+export type ExportResult = BufferedExportResult
+
+export function createBufferedExportResult(
+  buffer: ArrayBuffer,
+  value: Readonly<ExportProfile>,
+): Readonly<BufferedExportResult> {
+  if (!(buffer instanceof ArrayBuffer)) {
+    throw new TypeError('Buffered export result requires an ArrayBuffer')
+  }
+  const profile = validateExportProfile(value)
+  if (profile.destination !== 'download') {
+    throw new TypeError('Buffered export result requires the download destination')
+  }
+  return Object.freeze({
+    destination: 'download',
+    buffer,
+    mimeType: profile.mimeType,
+    fileExtension: profile.fileExtension,
+    profile,
+  })
 }
 
 export interface ExportFrameLease extends FrameSource {

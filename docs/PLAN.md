@@ -1746,7 +1746,7 @@ work.
 2. [x] Add cached capability hints plus the app-controller facade and fresh
    disposable pre-start encode, including generation-safe cancellation and
    changed-support/no-silent-fallback tests.
-3. [ ] Generalize buffered video output across the selected container/codec,
+3. [x] Generalize buffered video output across the selected container/codec,
    then add explicit audio off/mono/stereo. Keep AAC and Opus tail policy
    separate and do not enable WebM audio before its exact-duration gate passes.
 4. [ ] Add recommended presets, visible Auto resolution, collapsible advanced
@@ -1799,8 +1799,9 @@ work.
   resolved preset, preserves explicit unsupported selections without fallback,
   and performs an authoritative fresh check immediately before export. The
   fresh adapter creates the selected output format, an actual-size sRGB canvas,
-  real encoder sources, exact rational track FPS, one video frame, and one
-  audio quantum through `NullTarget`, bypassing Mediabunny's memoized helpers.
+  real encoder sources, exact rational track FPS, and bounded whole document
+  frames with the mixer's exact audio-block schedule through `NullTarget`,
+  bypassing Mediabunny's memoized helpers.
 - [x] The export controller reserves its singleton slot synchronously while
   preflight is pending. It starts one cached Blob lease before the first await,
   so removing media during the probe cannot revoke the captured source URL;
@@ -1824,6 +1825,47 @@ work.
   chunk-size advisory; oxlint and `git diff --check` passed. Browser acceptance
   is deferred to the first rendered profile UI and enabled alternate output;
   this slice changes no visible controls and preserves the current export.
+
+### Slice 3 evidence — generalized buffered writer (2026-07-31)
+
+- [x] One shared output-format factory now selects Mediabunny's real
+  `Mp4OutputFormat` or `WebMOutputFormat`, and both capability discovery and
+  the writer consume it. The pinned-package contract is tested directly:
+  Mediabunny extensions include their leading dot while WebCut's canonical
+  profile/result extensions do not, so `.mp4`/`.webm` comparisons can no
+  longer make every real profile appear unavailable.
+- [x] The buffered writer passes the validated AVC, HEVC, VP9, or AV1 codec,
+  video/audio bitrates and modes, key-frame interval, exact rational track
+  rate, and selected container without substitution. MP4/AVC and MP4/HEVC,
+  plus video-only WebM/VP9 and WebM/AV1, share the existing bounded frame,
+  backpressure, cancellation, and cleanup ownership.
+- [x] The reviewed mixer remains one bounded stereo bus. Stereo output keeps
+  exact L/R interleaving; mono output averages `(L + R) / 2` only at the
+  encoder boundary, preserving duplicated mono level without clipping. AAC
+  packet-duration trimming is attached only to AAC; Opus audio remains behind
+  its exact end-padding policy. Audio-off still allocates no mixer or encoder.
+- [x] Buffered results are now a frozen `destination: 'download'` branch with
+  the exact buffer, MIME type, extension, and detached concrete profile. The
+  writer derives all metadata from the validated profile. Direct-file
+  selections are explicitly unavailable until their transactional writer
+  lands, rather than being falsely approved and written to memory.
+- [x] Focused gate: 140/140 tests across the generic pipeline, capability
+  layers, pinned-format contract, real writer adapter, app controller, and
+  current dialog consumer passed. Full gate: 1,540/1,540 tests across 82 files
+  passed. Production TypeScript/Vite build passed with only the pre-existing
+  chunk-size advisory; oxlint and `git diff --check` passed.
+- [x] In-app Chromium ran the fresh probe, encoded, finalized, and reopened
+  actual 64×48 one-frame outputs. Compatibility reopened as MP4/AVC at exactly
+  1/30 second (718 bytes); Web reopened as WebM/VP9 at 0.033 seconds (421
+  bytes); Modern reopened as WebM/AV1 at 0.033 seconds (360 bytes). MIME,
+  extension, codec, and dimensions matched each selected profile. HEVC was
+  rejected at its native capability hint without fallback. The gate also
+  passed representative stereo and mono AAC probes. A second real 48 kHz,
+  60-fps, one-frame gate proved the duration-aware preflight and actual writer
+  both reject the exact 800-sample AAC tail with Chromium's same `Flushing
+  error`, so the failure is caught before writer allocation instead of being a
+  false positive. Opus returned its explicit muxer reason, browser
+  warnings/errors were zero, and both temporary harnesses were removed.
 
 ## Test strategy per layer (unchanged from original)
 

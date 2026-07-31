@@ -4,37 +4,36 @@ import {
   AudioSample,
   AudioSampleSource,
   CanvasSource,
-  Mp4OutputFormat,
   NullTarget,
   Output,
-  WebMOutputFormat,
   canEncodeAudio,
   canEncodeVideo,
 } from 'mediabunny'
-import type {
-  ExportContainer,
-  ExportProfile,
-} from '../domain/exportProfile'
+import type { ExportProfile } from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
+import { docDurationFrames } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
+import {
+  audioSampleBoundary,
+  EXPORT_AUDIO_BLOCK_SAMPLES,
+} from './export-audio'
+import {
+  createMediabunnyOutputFormat,
+  mediabunnyExportImplementationUnavailableReason,
+} from './export-mediabunny-profile'
 import {
   exportAudioChannelCount,
   type ExportCapabilityProbe,
-  type ExportFormatCapabilities,
 } from './export-capabilities'
-import { mediabunnyExportImplementationUnavailableReason } from './export-mediabunny-profile'
+
+export { createMediabunnyOutputFormat } from './export-mediabunny-profile'
 
 const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
   alpha: false,
   colorSpace: 'srgb',
 }
 
-export function createMediabunnyOutputFormat(
-  container: ExportContainer,
-): ExportFormatCapabilities & (Mp4OutputFormat | WebMOutputFormat) {
-  if (container === 'mp4') return new Mp4OutputFormat()
-  return new WebMOutputFormat()
-}
+const REPRESENTATIVE_AUDIO_PROBE_SAMPLES = EXPORT_AUDIO_BLOCK_SAMPLES * 2
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return
@@ -44,8 +43,35 @@ function throwIfAborted(signal?: AbortSignal): void {
   throw error
 }
 
+function audioProbeFrameCount(doc: TimelineDoc, totalFrames: number): number {
+  if (
+    audioSampleBoundary(totalFrames, doc) <
+    REPRESENTATIVE_AUDIO_PROBE_SAMPLES
+  ) {
+    return totalFrames
+  }
+
+  let low = 1
+  let high = totalFrames
+  while (low < high) {
+    const midpoint = low + Math.floor((high - low) / 2)
+    if (
+      audioSampleBoundary(midpoint, doc) >=
+      REPRESENTATIVE_AUDIO_PROBE_SAMPLES
+    ) {
+      high = midpoint
+    } else {
+      low = midpoint + 1
+    }
+  }
+  return low
+}
+
 /**
- * Configure and encode one real-size video frame plus one exact audio quantum.
+ * Configure and encode one real-size video frame plus exact mixer-sized audio
+ * blocks. Short timelines use their complete sample count; longer timelines
+ * use enough whole frames to cross two blocks so Chromium must produce and
+ * flush a representative packet with the writer's real per-frame chunking.
  * Unlike canEncode*, each call creates new sources and therefore performs a
  * fresh native WebCodecs support check and actual encode.
  */
@@ -56,6 +82,22 @@ export async function runFreshMediabunnyExportProbe(
   signal?: AbortSignal,
 ): Promise<void> {
   throwIfAborted(signal)
+  if (includeAudio && profile.audioChannelLayout === 'off') {
+    throw new TypeError(
+      'An audio-off profile cannot run an audio capability probe',
+    )
+  }
+  const audioProfile =
+    includeAudio && profile.audioChannelLayout !== 'off' ? profile : null
+
+  const totalFrames = docDurationFrames(doc)
+  if (includeAudio && totalFrames === 0) {
+    throw new RangeError('Cannot probe audio for an empty export timeline')
+  }
+  const probeFrameCount = includeAudio
+    ? audioProbeFrameCount(doc, totalFrames)
+    : 1
+
   if (typeof OffscreenCanvas === 'undefined') {
     throw new Error('OffscreenCanvas is not supported in this browser')
   }
@@ -81,14 +123,11 @@ export async function runFreshMediabunnyExportProbe(
   output.addVideoTrack(videoSource, { frameRate })
 
   let audioSource: AudioSampleSource | null = null
-  if (includeAudio) {
-    if (profile.audioChannelLayout === 'off') {
-      throw new TypeError('An audio-off profile cannot run an audio capability probe')
-    }
+  if (audioProfile) {
     audioSource = new AudioSampleSource({
-      codec: profile.audioCodec,
-      bitrate: profile.audioBitrate,
-      bitrateMode: profile.audioBitrateMode,
+      codec: audioProfile.audioCodec,
+      bitrate: audioProfile.audioBitrate,
+      bitrateMode: audioProfile.audioBitrateMode,
     })
     output.addAudioTrack(audioSource)
   }
@@ -97,28 +136,45 @@ export async function runFreshMediabunnyExportProbe(
     await output.start()
     throwIfAborted(signal)
 
-    let audioSample: AudioSample | null = null
-    try {
-      const writes: Promise<void>[] = [videoSource.add(0, frameDuration)]
-      if (audioSource && profile.audioChannelLayout !== 'off') {
-        const channels = exportAudioChannelCount(profile)
-        const numberOfFrames = 1_024
-        audioSample = new AudioSample({
-          data: new Float32Array(numberOfFrames * channels),
-          format: 'f32',
-          numberOfChannels: channels,
-          sampleRate: doc.audioSampleRate,
-          timestamp: 0,
-        })
-        writes.push(audioSource.add(audioSample))
+    for (let frame = 0; frame < probeFrameCount; frame++) {
+      throwIfAborted(signal)
+      const audioWrite = async (): Promise<void> => {
+        if (!audioSource || !audioProfile) return
+        const channels = exportAudioChannelCount(audioProfile)
+        const frameEndSample = audioSampleBoundary(frame + 1, doc)
+        for (
+          let startSample = audioSampleBoundary(frame, doc);
+          startSample < frameEndSample;
+          startSample += EXPORT_AUDIO_BLOCK_SAMPLES
+        ) {
+          throwIfAborted(signal)
+          const numberOfFrames = Math.min(
+            EXPORT_AUDIO_BLOCK_SAMPLES,
+            frameEndSample - startSample,
+          )
+          const audioSample = new AudioSample({
+            data: new Float32Array(numberOfFrames * channels),
+            format: 'f32',
+            numberOfChannels: channels,
+            sampleRate: doc.audioSampleRate,
+            timestamp: startSample / doc.audioSampleRate,
+          })
+          try {
+            await audioSource.add(audioSample)
+          } finally {
+            audioSample.close()
+          }
+        }
       }
-      const settled = await Promise.allSettled(writes)
+
+      const settled = await Promise.allSettled([
+        videoSource.add(framesToSeconds(frame, doc.frameRate), frameDuration),
+        audioWrite(),
+      ])
       const failure = settled.find(
         (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
       )
       if (failure) throw failure.reason
-    } finally {
-      audioSample?.close()
     }
 
     throwIfAborted(signal)

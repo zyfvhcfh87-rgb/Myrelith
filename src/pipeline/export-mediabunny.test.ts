@@ -20,6 +20,7 @@ import {
 } from '../codecs/mediaCodecFallbacks'
 import {
   DEFAULT_EXPORT_PROFILE,
+  exportPresetById,
   updateExportProfile,
 } from '../domain/exportProfile'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
@@ -357,6 +358,16 @@ vi.mock('mediabunny', () => {
   }
 
   class Mp4OutputFormat {
+    kind = 'mp4' as const
+
+    constructor() {
+      mb.formats.push(this)
+    }
+  }
+
+  class WebMOutputFormat {
+    kind = 'webm' as const
+
     constructor() {
       mb.formats.push(this)
     }
@@ -415,6 +426,7 @@ vi.mock('mediabunny', () => {
     Input,
     Mp4OutputFormat,
     Output,
+    WebMOutputFormat,
     canEncodeAudio: mb.canEncodeAudio,
     canEncodeVideo: mb.canEncodeVideo,
   }
@@ -1208,8 +1220,11 @@ describe('createMediabunnyExportMediaSource', () => {
       ),
       addFrame: vi.fn(async () => undefined),
       finalize: vi.fn(async () => ({
+        destination: 'download' as const,
         buffer: new ArrayBuffer(0),
         mimeType: 'video/mp4' as const,
+        fileExtension: 'mp4' as const,
+        profile: DEFAULT_EXPORT_PROFILE,
       })),
       cancel: vi.fn(async () => undefined),
     }
@@ -1269,8 +1284,11 @@ describe('createMediabunnyExportMediaSource', () => {
         throw primary
       }),
       finalize: vi.fn(async () => ({
+        destination: 'download' as const,
         buffer: new ArrayBuffer(0),
         mimeType: 'video/mp4' as const,
+        fileExtension: 'mp4' as const,
+        profile: DEFAULT_EXPORT_PROFILE,
       })),
       cancel: vi.fn(async () => undefined),
     }
@@ -1806,8 +1824,11 @@ describe('createMediabunnyExportSink video behavior', () => {
     await pending
 
     await expect(sink.finalize()).resolves.toEqual({
+      destination: 'download',
       buffer: resultBuffer,
       mimeType: 'video/mp4',
+      fileExtension: 'mp4',
+      profile: SETTINGS,
     })
     expect(canvasSourceAt().close).toHaveBeenCalledOnce()
     expect(outputAt().finalize).toHaveBeenCalledOnce()
@@ -1951,6 +1972,74 @@ describe('createMediabunnyExportAudioSource exact ranges', () => {
     await source.close()
     expect(decoded.close).toHaveBeenCalledOnce()
     expect(inputAt().dispose).toHaveBeenCalledOnce()
+  })
+})
+
+describe('createMediabunnyExportSink selected profiles', () => {
+  test.each([
+    ['hevc', 'mp4', 'hevc', 'video/mp4', 'mp4'],
+    ['web', 'webm', 'vp9', 'video/webm', 'webm'],
+    ['modern', 'webm', 'av1', 'video/webm', 'webm'],
+  ] as const)(
+    'writes the %s video profile through its exact format and codec',
+    async (presetId, formatKind, codec, mimeType, fileExtension) => {
+      const profile = updateExportProfile(exportPresetById(presetId).profile, {
+        videoBitrate: 3_210_000,
+        videoBitrateMode: 'constant',
+        keyFrameIntervalMicroseconds: 750_000,
+      })
+      const doc = makeVideoDoc(
+        [{ assetId: 'asset-a', sourceStart: 0 }],
+        1,
+      )
+      const sink = await createMediabunnyExportSink(
+        doc,
+        profile,
+        async () => resolvedAsset(new Blob(['unused'])),
+      )
+
+      expect(mb.formats.at(-1)).toMatchObject({ kind: formatKind })
+      expect(canvasSourceAt().encodingConfig).toEqual({
+        codec,
+        bitrate: 3_210_000,
+        bitrateMode: 'constant',
+        keyFrameInterval: 0.75,
+      })
+      expect(mb.audioSources).toHaveLength(0)
+
+      await sink.addFrame(0, 1_001 / 30_000)
+      const result = await sink.finalize()
+      expect(result).toMatchObject({
+        destination: 'download',
+        mimeType,
+        fileExtension,
+        profile,
+      })
+      expect(Object.isFrozen(result)).toBe(true)
+      expect(Object.isFrozen(result.profile)).toBe(true)
+    },
+  )
+
+  test('rejects direct-file and exact-duration Opus paths before allocation', async () => {
+    const directFile = updateExportProfile(SETTINGS, { destination: 'file' })
+    await expect(createMediabunnyExportSink(
+      makeDoc(),
+      directFile,
+      async () => resolvedAsset(new Blob(['unused'])),
+    )).rejects.toThrow(/direct-file export adapter has not been enabled/)
+
+    const audioDoc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('opus-clip', 'opus-asset', 1)),
+    ])
+    await expect(createMediabunnyExportSink(
+      audioDoc,
+      exportPresetById('web').profile,
+      async () => resolvedAsset(new Blob(['unused'])),
+    )).rejects.toThrow(/exact Opus end-padding metadata/)
+
+    expect(fakeCanvases).toHaveLength(0)
+    expect(mb.targets).toHaveLength(0)
+    expect(mb.outputs).toHaveLength(0)
   })
 })
 
@@ -2202,6 +2291,44 @@ describe('createMediabunnyExportSink audio behavior', () => {
     expect(canvasSourceAt().close).toHaveBeenCalledOnce()
     expect(outputAt().finalize).toHaveBeenCalledOnce()
     expect(outputAt().cancel).not.toHaveBeenCalled()
+  })
+
+  test('encodes a mono layout by averaging the bounded stereo mix bus', async () => {
+    const doc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('mono-output', 'audio-asset', 1)),
+    ])
+    const left = new Float32Array(2_000).fill(0.8)
+    const right = new Float32Array(2_000).fill(0.2)
+    const decoded = decodedAudioSample([left, right], 48_000)
+    mb.audioTracks.push(audioTrack(true, 2))
+    mb.audioSinkSampleSequences.push([decoded])
+    const profile = updateExportProfile(SETTINGS, {
+      audioChannelLayout: 'mono',
+      audioBitrate: 96_000,
+      audioBitrateMode: 'constant',
+    })
+    const sink = await createMediabunnyExportSink(
+      doc,
+      profile,
+      async () => resolvedAsset(new Blob(['stereo-source'])),
+    )
+
+    await sink.addFrame(0, 1_001 / 30_000)
+    const result = await sink.finalize()
+
+    expect(audioSourceAt().encodingConfig).toMatchObject({
+      codec: 'aac',
+      bitrate: 96_000,
+      bitrateMode: 'constant',
+      onEncodedPacket: expect.any(Function),
+    })
+    const encoded = mb.encodedAudioSamples as FakeAudioSampleRecord[]
+    expect(encoded).toHaveLength(2)
+    expect(encoded.every((sample) => sample.numberOfChannels === 1)).toBe(true)
+    expect(encoded.every((sample) => (
+      [...sample.data].every((value) => Math.abs(value - 0.5) < 1e-6)
+    ))).toBe(true)
+    expect(result.profile.audioChannelLayout).toBe('mono')
   })
 
   test('downmixes 5.1 audio to the stereo export bus', async () => {

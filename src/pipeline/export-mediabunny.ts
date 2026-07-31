@@ -21,7 +21,6 @@ import {
   CanvasSource,
   type EncodedPacket,
   Input,
-  Mp4OutputFormat,
   Output,
 } from 'mediabunny'
 import {
@@ -51,6 +50,7 @@ import type {
   ExportSettings,
   ExportVideoSink,
 } from './export'
+import { createBufferedExportResult } from './export'
 import {
   EXPORT_AUDIO_CHANNELS,
   TimelineAudioMixer,
@@ -60,7 +60,10 @@ import {
   type ExportAudioMediaSource,
   type MixedAudioBlock,
 } from './export-audio'
-import { mediabunnyExportImplementationUnavailableReason } from './export-mediabunny-profile'
+import {
+  createMediabunnyOutputFormat,
+  mediabunnyExportImplementationUnavailableReason,
+} from './export-mediabunny-profile'
 import {
   compositeFrame,
   type Composite2D,
@@ -1105,11 +1108,20 @@ async function cancelSetup(
   throw primary
 }
 
-function interleaveAudioBlock(block: MixedAudioBlock): Float32Array {
-  const data = new Float32Array(block.sampleCount * EXPORT_AUDIO_CHANNELS)
+function interleaveAudioBlock(
+  block: MixedAudioBlock,
+  channelCount: 1 | 2,
+): Float32Array {
+  const data = new Float32Array(block.sampleCount * channelCount)
   for (let frame = 0; frame < block.sampleCount; frame++) {
-    data[frame * EXPORT_AUDIO_CHANNELS] = block.channels[0][frame]
-    data[frame * EXPORT_AUDIO_CHANNELS + 1] = block.channels[1][frame]
+    if (channelCount === 1) {
+      // The internal mix bus stays stereo. An arithmetic mean preserves a
+      // duplicated mono source's level and cannot clip two bounded channels.
+      data[frame] = (block.channels[0][frame] + block.channels[1][frame]) / 2
+    } else {
+      data[frame * channelCount] = block.channels[0][frame]
+      data[frame * channelCount + 1] = block.channels[1][frame]
+    }
   }
   return data
 }
@@ -1124,7 +1136,7 @@ function trimAacPaddingPacket(
   const remaining = Math.max(0, targetSamples - packetStart)
   if (packetSamples <= remaining) return
 
-  // Mediabunny 1.50.3 invokes onEncodedPacket synchronously immediately
+  // Mediabunny 1.50.9 invokes onEncodedPacket synchronously immediately
   // before handing this same object to the muxer. AAC encodes whole 1024-
   // sample packets; narrowing the final packet's container duration removes
   // codec padding without changing the exact PCM samples submitted.
@@ -1132,7 +1144,7 @@ function trimAacPaddingPacket(
     remaining / sampleRate
 }
 
-/** Creates and starts the real Mediabunny AVC/AAC MP4 sink. */
+/** Creates and starts the selected buffered Mediabunny container/codec sink. */
 export async function createMediabunnyExportSink(
   doc: TimelineDoc,
   settings: ExportSettings,
@@ -1142,11 +1154,17 @@ export async function createMediabunnyExportSink(
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
   }
-  const includeAudio = settings.audioChannelLayout !== 'off' && doc.tracks.some(
+  const hasTimelineAudio = doc.tracks.some(
     (track) => track.kind === 'audio' && track.clips.length > 0,
   )
+  const audioSettings = settings.audioChannelLayout === 'off' || !hasTimelineAudio
+    ? null
+    : settings
+  const includeAudio = audioSettings !== null
   const frameRate = assertVideoSinkInputs(doc, settings, includeAudio)
-  const audioSettings = includeAudio ? settings : null
+  const outputAudioChannels = audioSettings
+    ? (audioSettings.audioChannelLayout === 'mono' ? 1 : 2)
+    : null
   const hasAudio = audioSettings !== null
   const expectedFrames = docDurationFrames(doc)
   const expectedAudioSamples = hasAudio
@@ -1165,7 +1183,7 @@ export async function createMediabunnyExportSink(
 
   const target = new BufferTarget()
   const output = new Output({
-    format: new Mp4OutputFormat(),
+    format: createMediabunnyOutputFormat(settings.container),
     target,
   })
   let source: CanvasSource
@@ -1180,24 +1198,28 @@ export async function createMediabunnyExportSink(
         )
       : null
     source = new CanvasSource(canvas, {
-      codec: 'avc',
+      codec: settings.videoCodec,
       bitrate: settings.videoBitrate,
       bitrateMode: settings.videoBitrateMode,
       keyFrameInterval: settings.keyFrameIntervalMicroseconds / 1_000_000,
     })
     output.addVideoTrack(source, { frameRate })
-    if (hasAudio) {
+    if (audioSettings) {
       audioSource = new AudioSampleSource({
-        codec: audioSettings!.audioCodec,
-        bitrate: audioSettings!.audioBitrate,
-        bitrateMode: audioSettings!.audioBitrateMode,
-        onEncodedPacket: (packet) => {
-          trimAacPaddingPacket(
-            packet,
-            expectedAudioSamples,
-            doc.audioSampleRate,
-          )
-        },
+        codec: audioSettings.audioCodec,
+        bitrate: audioSettings.audioBitrate,
+        bitrateMode: audioSettings.audioBitrateMode,
+        ...(audioSettings.audioCodec === 'aac'
+          ? {
+              onEncodedPacket: (packet: EncodedPacket) => {
+                trimAacPaddingPacket(
+                  packet,
+                  expectedAudioSamples,
+                  doc.audioSampleRate,
+                )
+              },
+            }
+          : {}),
       })
       output.addAudioTrack(audioSource)
     }
@@ -1260,12 +1282,12 @@ export async function createMediabunnyExportSink(
     try {
       const videoWrite = source.add(timestampSec, durationSec)
       const audioWrite =
-        mixer && audioSource
+        mixer && audioSource && outputAudioChannels !== null
           ? mixer.writeFrame(nextFrame, async (block) => {
               const sample = new AudioSample({
-                data: interleaveAudioBlock(block),
+                data: interleaveAudioBlock(block, outputAudioChannels),
                 format: 'f32',
-                numberOfChannels: EXPORT_AUDIO_CHANNELS,
+                numberOfChannels: outputAudioChannels,
                 sampleRate: doc.audioSampleRate,
                 timestamp: block.startSample / doc.audioSampleRate,
               })
@@ -1311,7 +1333,7 @@ export async function createMediabunnyExportSink(
     if (target.buffer === null) {
       throw new Error('Mediabunny finalized without an output buffer')
     }
-    return { buffer: target.buffer, mimeType: 'video/mp4' }
+    return createBufferedExportResult(target.buffer, settings)
   }
 
   return {

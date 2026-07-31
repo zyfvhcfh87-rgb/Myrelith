@@ -58,7 +58,7 @@ const mb = vi.hoisted(() => ({
 vi.mock('mediabunny', () => {
   class Mp4OutputFormat {
     kind = 'mp4' as const
-    fileExtension = 'mp4'
+    fileExtension = '.mp4'
     mimeType = 'video/mp4'
 
     constructor() {
@@ -76,7 +76,7 @@ vi.mock('mediabunny', () => {
 
   class WebMOutputFormat {
     kind = 'webm' as const
-    fileExtension = 'webm'
+    fileExtension = '.webm'
     mimeType = 'video/webm'
 
     constructor() {
@@ -218,16 +218,53 @@ import {
 } from './export-mediabunny-capabilities'
 import { checkExportProfileSupport } from './export-capabilities'
 
-function makeDoc(): TimelineDoc {
+function makeDoc({
+  durationFrames = 30,
+  frameRate = { num: 30_000, den: 1_001 },
+}: {
+  durationFrames?: number
+  frameRate?: TimelineDoc['frameRate']
+} = {}): TimelineDoc {
   return {
     schemaVersion: 3,
     id: 'fresh-probe-doc',
     name: 'Fresh probe',
-    frameRate: { num: 30_000, den: 1_001 },
+    frameRate,
     width: 64,
     height: 48,
     audioSampleRate: 48_000,
-    tracks: [],
+    tracks: durationFrames === 0
+      ? []
+      : [{
+          id: 'V1',
+          kind: 'video',
+          name: 'V1',
+          clips: [{
+            id: 'video-clip',
+            assetId: 'video-asset',
+            name: 'video.mp4',
+            sourceMode: 'timed',
+            sourceRange: { startFrame: 0, durationFrames },
+            timelineRange: { startFrame: 0, durationFrames },
+            transform: {
+              x: 0,
+              y: 0,
+              scaleX: 1,
+              scaleY: 1,
+              rotation: 0,
+              anchorX: 0.5,
+              anchorY: 0.5,
+            },
+            opacity: 1,
+            volume: 1,
+            effects: [],
+          }],
+          transitions: [],
+          hidden: false,
+          muted: false,
+          solo: false,
+          locked: false,
+        }],
   }
 }
 
@@ -253,12 +290,12 @@ describe('Mediabunny capability adapter', () => {
   test('constructs the exact selected output format', () => {
     expect(createMediabunnyOutputFormat('mp4')).toMatchObject({
       kind: 'mp4',
-      fileExtension: 'mp4',
+      fileExtension: '.mp4',
       mimeType: 'video/mp4',
     })
     expect(createMediabunnyOutputFormat('webm')).toMatchObject({
       kind: 'webm',
-      fileExtension: 'webm',
+      fileExtension: '.webm',
       mimeType: 'video/webm',
     })
   })
@@ -291,9 +328,12 @@ describe('Mediabunny capability adapter', () => {
     })
   })
 
-  test('shares the currently executable sink matrix with capability discovery', async () => {
+  test('shares the generalized buffered sink matrix with capability discovery', async () => {
     const mono = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
       audioChannelLayout: 'mono',
+    })
+    const directFile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      destination: 'file',
     })
     const hevc = exportPresetById('hevc').profile
     const web = exportPresetById('web').profile
@@ -303,39 +343,41 @@ describe('Mediabunny capability adapter', () => {
       true,
     )).toBeNull()
     expect(mediabunnyExportCapabilityProbe.getImplementationUnavailableReason(
+      directFile,
+      true,
+    )).toMatch(/direct-file export adapter has not been enabled/)
+    expect(mediabunnyExportCapabilityProbe.getImplementationUnavailableReason(
       mono,
       false,
     )).toBeNull()
     expect(mediabunnyExportCapabilityProbe.getImplementationUnavailableReason(
       mono,
       true,
-    )).toMatch(/AAC stereo/)
+    )).toBeNull()
     expect(mediabunnyExportCapabilityProbe.getImplementationUnavailableReason(
       hevc,
       false,
-    )).toMatch(/has not enabled MP4\/HEVC/)
+    )).toBeNull()
     expect(mediabunnyExportCapabilityProbe.getImplementationUnavailableReason(
       web,
       false,
-    )).toMatch(/has not enabled WEBM\/VP9/)
+    )).toBeNull()
+    expect(mediabunnyExportCapabilityProbe.getImplementationUnavailableReason(
+      web,
+      true,
+    )).toMatch(/exact Opus end-padding metadata/)
 
     await expect(checkExportProfileSupport(
       makeDoc(),
       hevc,
       mediabunnyExportCapabilityProbe,
-    )).resolves.toMatchObject({
-      supported: false,
-      reason: expect.stringMatching(/has not enabled MP4\/HEVC/),
-    })
+    )).resolves.toMatchObject({ supported: true, reason: null })
     await expect(checkExportProfileSupport(
       makeDoc(),
       web,
       mediabunnyExportCapabilityProbe,
-    )).resolves.toMatchObject({
-      supported: false,
-      reason: expect.stringMatching(/has not enabled WEBM\/VP9/),
-    })
-    expect(mb.canEncodeVideo).not.toHaveBeenCalled()
+    )).resolves.toMatchObject({ supported: true, reason: null })
+    expect(mb.canEncodeVideo).toHaveBeenCalledTimes(2)
     expect(mb.canEncodeAudio).not.toHaveBeenCalled()
   })
 })
@@ -371,7 +413,17 @@ describe('runFreshMediabunnyExportProbe', () => {
       mb.canvasSources[0],
       { frameRate: 30_000 / 1_001 },
     )
-    expect(mb.canvasSources[0].add).toHaveBeenCalledWith(0, 1_001 / 30_000)
+    expect(mb.canvasSources[0].add).toHaveBeenCalledTimes(2)
+    expect(mb.canvasSources[0].add).toHaveBeenNthCalledWith(
+      1,
+      0,
+      1_001 / 30_000,
+    )
+    expect(mb.canvasSources[0].add).toHaveBeenNthCalledWith(
+      2,
+      1_001 / 30_000,
+      1_001 / 30_000,
+    )
 
     expect(mb.audioSources[0].config).toEqual({
       codec: 'aac',
@@ -379,14 +431,28 @@ describe('runFreshMediabunnyExportProbe', () => {
       bitrateMode: 'variable',
     })
     expect(mb.outputs[0].addAudioTrack).toHaveBeenCalledWith(mb.audioSources[0])
+    expect(mb.audioSamples).toHaveLength(4)
     expect(mb.audioSamples[0].init).toMatchObject({
       format: 'f32',
       numberOfChannels: 2,
       sampleRate: 48_000,
       timestamp: 0,
     })
-    expect(mb.audioSamples[0].init.data).toHaveLength(2_048)
-    expect(mb.audioSamples[0].close).toHaveBeenCalledTimes(1)
+    expect(mb.audioSamples.map((sample) => sample.init.data.length)).toEqual([
+      2_048,
+      1_156,
+      2_048,
+      1_154,
+    ])
+    expect(mb.audioSamples.map((sample) => sample.init.timestamp)).toEqual([
+      0,
+      1_024 / 48_000,
+      1_602 / 48_000,
+      2_626 / 48_000,
+    ])
+    for (const sample of mb.audioSamples) {
+      expect(sample.close).toHaveBeenCalledTimes(1)
+    }
     expect(mb.canvasSources[0].close).toHaveBeenCalledTimes(1)
     expect(mb.audioSources[0].close).toHaveBeenCalledTimes(1)
     expect(mb.outputs[0].start).toHaveBeenCalledTimes(1)
@@ -415,8 +481,84 @@ describe('runFreshMediabunnyExportProbe', () => {
       bitrate: 96_000,
       bitrateMode: 'constant',
     })
-    expect(mb.audioSamples[0].init.numberOfChannels).toBe(1)
-    expect(mb.audioSamples[0].init.data).toHaveLength(1_024)
+    expect(mb.audioSamples).toHaveLength(4)
+    for (const sample of mb.audioSamples) {
+      expect(sample.init.numberOfChannels).toBe(1)
+    }
+    expect(mb.audioSamples.map((sample) => sample.init.data.length)).toEqual([
+      1_024,
+      578,
+      1_024,
+      577,
+    ])
+  })
+
+  test('uses the exact shorter timeline sample count and mixer chunking', async () => {
+    const oneFrame60Fps = makeDoc({
+      durationFrames: 1,
+      frameRate: { num: 60, den: 1 },
+    })
+
+    await runFreshMediabunnyExportProbe(
+      oneFrame60Fps,
+      DEFAULT_EXPORT_PROFILE,
+      true,
+    )
+
+    expect(mb.audioSamples).toHaveLength(1)
+    expect(mb.audioSamples[0].init).toMatchObject({
+      numberOfChannels: 2,
+      sampleRate: 48_000,
+      timestamp: 0,
+    })
+    expect(mb.audioSamples[0].init.data).toHaveLength(1_600)
+    expect(mb.canvasSources[0].add).toHaveBeenCalledTimes(1)
+  })
+
+  test('uses whole document frames for a bounded representative probe', async () => {
+    const long60Fps = makeDoc({ frameRate: { num: 60, den: 1 } })
+
+    await runFreshMediabunnyExportProbe(
+      long60Fps,
+      DEFAULT_EXPORT_PROFILE,
+      true,
+    )
+
+    expect(mb.canvasSources[0].add).toHaveBeenCalledTimes(3)
+    expect(mb.audioSamples).toHaveLength(3)
+    expect(mb.audioSamples.map((sample) => sample.init.data.length)).toEqual([
+      1_600,
+      1_600,
+      1_600,
+    ])
+    expect(mb.audioSamples.map((sample) => sample.init.timestamp)).toEqual([
+      0,
+      800 / 48_000,
+      1_600 / 48_000,
+    ])
+  })
+
+  test('splits an exact short probe at the same 1024-sample boundary as the mixer', async () => {
+    const oneFrame30Fps = makeDoc({
+      durationFrames: 1,
+      frameRate: { num: 30, den: 1 },
+    })
+
+    await runFreshMediabunnyExportProbe(
+      oneFrame30Fps,
+      DEFAULT_EXPORT_PROFILE,
+      true,
+    )
+
+    expect(mb.audioSamples).toHaveLength(2)
+    expect(mb.audioSamples.map((sample) => sample.init.data.length)).toEqual([
+      2_048,
+      1_152,
+    ])
+    expect(mb.audioSamples.map((sample) => sample.init.timestamp)).toEqual([
+      0,
+      1_024 / 48_000,
+    ])
   })
 
   test('omits audio resources for a video-only probe', async () => {
@@ -457,7 +599,10 @@ describe('runFreshMediabunnyExportProbe', () => {
     releaseAudio()
     await rejection
 
-    expect(mb.audioSamples[0].close).toHaveBeenCalledTimes(1)
+    expect(mb.audioSamples).toHaveLength(2)
+    for (const sample of mb.audioSamples) {
+      expect(sample.close).toHaveBeenCalledTimes(1)
+    }
     expect(mb.outputs[0].cancel).toHaveBeenCalledTimes(1)
     expect(mb.outputs[0].finalize).not.toHaveBeenCalled()
   })
@@ -504,6 +649,17 @@ describe('runFreshMediabunnyExportProbe', () => {
       false,
       abort.signal,
     )).rejects.toThrow('stop now')
+
+    expect(canvases).toHaveLength(0)
+    expect(mb.outputs).toHaveLength(0)
+  })
+
+  test('rejects an empty audio timeline before allocating codec resources', async () => {
+    await expect(runFreshMediabunnyExportProbe(
+      makeDoc({ durationFrames: 0 }),
+      DEFAULT_EXPORT_PROFILE,
+      true,
+    )).rejects.toThrow('Cannot probe audio for an empty export timeline')
 
     expect(canvases).toHaveLength(0)
     expect(mb.outputs).toHaveLength(0)
