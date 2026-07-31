@@ -60,7 +60,7 @@ function makeTrack(id: string, clips: Clip[]): TrackData {
 /** V1: clipA [100,50) src@20 · clipB [150,80) touching A · clipC [280,40). */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'doc-tools',
     name: 'tools fixture',
     frameRate: { num: 30, den: 1 },
@@ -87,6 +87,10 @@ const connectedAsset: MediaAsset = {
   kind: 'video',
   durationFrames: 300,
   durationMicroseconds: 10_000_000,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+    audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+  },
   frameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,
@@ -104,6 +108,7 @@ const connectedDescriptor: PortableAssetDescriptor = {
   lastModified: connectedAsset.lastModified,
   kind: connectedAsset.kind,
   durationMicroseconds: connectedAsset.durationMicroseconds,
+  sourceBounds: connectedAsset.sourceBounds,
   nativeFrameRate: connectedAsset.frameRate,
   width: connectedAsset.width,
   height: connectedAsset.height,
@@ -115,6 +120,10 @@ const connectedDescriptor: PortableAssetDescriptor = {
 const offlineDescriptor: PortableAssetDescriptor = {
   ...connectedDescriptor,
   durationMicroseconds: 3_000_000,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 3_000_000 },
+    audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 3_000_000 },
+  },
 }
 
 const linkedVideoAsset: MediaAsset = {
@@ -131,6 +140,7 @@ const stillAsset: MediaAsset = {
   kind: 'image',
   durationFrames: 150,
   durationMicroseconds: 5_000_000,
+  sourceBounds: { video: null, audio: null },
   frameRate: null,
   width: 640,
   height: 360,
@@ -152,6 +162,10 @@ const linkedAudioDescriptor: PortableAssetDescriptor = {
   fileName: 'linked-audio.mp4',
   // Exactly 65 document frames at 30 fps after canonical rounding.
   durationMicroseconds: 2_166_667,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_166_667 },
+    audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_166_667 },
+  },
 }
 
 const doc = () => useDocumentStore.getState()
@@ -538,7 +552,7 @@ describe('razor tool', () => {
   test('razor-splitting a linked pair: left halves keep the original group, right halves share ONE new group', () => {
     // V1 'vid' and A1 'aud', same range [100,50), both in 'link_orig'.
     doc().setDoc({
-      schemaVersion: 2,
+      schemaVersion: 3,
       id: 'doc-tools-linked',
       name: 'tools linked fixture',
       frameRate: { num: 30, den: 1 },

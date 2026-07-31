@@ -371,6 +371,7 @@ function transitionTrack(
       fromClipId: from.id,
       toClipId: to.id,
       durationFrames,
+      audio: { enabled: true, curve: 'equal-power' },
     }],
   })
 }

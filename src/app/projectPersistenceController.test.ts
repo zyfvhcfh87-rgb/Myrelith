@@ -40,6 +40,10 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
     kind: 'video',
     durationFrames: 60,
     durationMicroseconds: 2_000_000,
+    sourceBounds: {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+      audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+    },
     frameRate: { num: 30, den: 1 },
     width: 1920,
     height: 1080,

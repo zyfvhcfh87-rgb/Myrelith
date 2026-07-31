@@ -77,6 +77,21 @@ export type AssetKind = 'video' | 'audio' | 'image'
 /** A durable, explicitly confirmed choice to omit one source track kind. */
 export type PartialTrackImportSelection = 'video-only' | 'audio-only'
 
+/** Proven timestamp extent for one primary timed stream, in integer µs. */
+export type SourceTimestampBounds =
+  | { status: 'exact'; firstTimestampUs: number; endTimestampUs: number }
+  | { status: 'unknown' }
+
+/**
+ * Timestamp extents for the effective imported projection. `null` means that
+ * stream kind is absent; `unknown` means a legacy project proves presence but
+ * did not persist enough metadata to prove exact source handles.
+ */
+export interface MediaSourceBounds {
+  video: SourceTimestampBounds | null
+  audio: SourceTimestampBounds | null
+}
+
 /**
  * An imported source file, registered in state/mediaStore. Immutable once
  * imported; clips reference it by id and never copy its data.
@@ -118,6 +133,8 @@ export interface MediaAsset {
    * count, otherwise a 60fps source becomes twice as long in a 30fps project.
    */
   durationMicroseconds: number
+  /** Independent primary-video/audio timestamp extents for handle planning. */
+  sourceBounds: MediaSourceBounds
   /** Native frame rate of the video stream; null for audio-only and images. */
   frameRate: FrameRate | null
   /** Pixel width of the video/image stream; null for audio-only. */
@@ -198,6 +215,15 @@ export interface Transition {
   toClipId: ClipId
   /** Transition length in document-rate frames. Integer >= 1. */
   durationFrames: number
+  /** Audio behavior for this authored transition. */
+  audio: TransitionAudioSettings
+}
+
+export type TransitionAudioCurve = 'linear' | 'equal-power'
+
+export interface TransitionAudioSettings {
+  enabled: boolean
+  curve: TransitionAudioCurve
 }
 
 /** Styling and content for a text clip (a clip whose `text` field is set). */

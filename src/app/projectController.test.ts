@@ -56,7 +56,7 @@ import {
 } from './localProjectStorage'
 
 function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
-  return {
+  const asset: MediaAsset = {
     id: 'asset-temp',
     fileName: 'source.mp4',
     mimeType: 'video/mp4',
@@ -66,6 +66,10 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
     kind: 'video',
     durationFrames: 60,
     durationMicroseconds: 2_000_000,
+    sourceBounds: {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+      audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+    },
     frameRate: { num: 60, den: 1 },
     width: 1920,
     height: 1080,
@@ -74,6 +78,22 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
     audioChannels: 2,
     decoderConfigB64: '{"codec":"avc1.64042a"}',
     ...overrides,
+  }
+  if (overrides.sourceBounds !== undefined) return asset
+  if (asset.kind === 'image') {
+    return { ...asset, sourceBounds: { video: null, audio: null } }
+  }
+  const exact = {
+    status: 'exact' as const,
+    firstTimestampUs: 0,
+    endTimestampUs: asset.durationMicroseconds,
+  }
+  return {
+    ...asset,
+    sourceBounds: {
+      video: asset.kind === 'video' ? exact : null,
+      audio: asset.hasAudio ? exact : null,
+    },
   }
 }
 
@@ -130,6 +150,8 @@ function unsupportedInspection(
       frameRate: asset.frameRate,
       sampleRate: null,
       channels: null,
+      durationMicroseconds: asset.durationMicroseconds,
+      sourceBounds: asset.sourceBounds.video ?? undefined,
     })
   }
   if (asset.hasAudio) {
@@ -152,6 +174,8 @@ function unsupportedInspection(
       frameRate: null,
       sampleRate: asset.audioSampleRate,
       channels: asset.audioChannels,
+      durationMicroseconds: asset.durationMicroseconds,
+      sourceBounds: asset.sourceBounds.audio ?? undefined,
     })
   }
   return {
@@ -232,6 +256,12 @@ function multitrackInspection(
       channels: null,
       durationMicroseconds: options.videoDurationMicroseconds
         ?? asset.durationMicroseconds,
+      sourceBounds: {
+        status: 'exact',
+        firstTimestampUs: 0,
+        endTimestampUs: options.videoDurationMicroseconds
+          ?? asset.durationMicroseconds,
+      },
     })
   }
   if (options.includeAudio !== false) {
@@ -256,6 +286,12 @@ function multitrackInspection(
       channels: asset.audioChannels,
       durationMicroseconds: options.audioDurationMicroseconds
         ?? asset.durationMicroseconds,
+      sourceBounds: {
+        status: 'exact',
+        firstTimestampUs: 0,
+        endTimestampUs: options.audioDurationMicroseconds
+          ?? asset.durationMicroseconds,
+      },
     })
   }
   const compatibility = readyReport({
@@ -287,6 +323,7 @@ function descriptorFrom(
       ? {}
       : { partialTrackSelection: asset.partialTrackSelection }),
     durationMicroseconds: asset.durationMicroseconds,
+    sourceBounds: asset.sourceBounds,
     nativeFrameRate: asset.frameRate,
     width: asset.width,
     height: asset.height,

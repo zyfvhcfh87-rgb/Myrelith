@@ -58,7 +58,7 @@ function makeAudioTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'doc-selection-reconciliation',
     name: 'Selection reconciliation',
     frameRate: { num: 30, den: 1 },
@@ -84,6 +84,10 @@ const descriptor: PortableAssetDescriptor = {
   lastModified: 1_725_000_000_000,
   kind: 'video',
   durationMicroseconds: 10_000_000,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+    audio: null,
+  },
   nativeFrameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,

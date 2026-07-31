@@ -62,7 +62,14 @@ function crossfade(
   toClipId: string,
   durationFrames: number,
 ): Transition {
-  return { id, type: 'crossfade', fromClipId, toClipId, durationFrames }
+  return {
+    id,
+    type: 'crossfade',
+    fromClipId,
+    toClipId,
+    durationFrames,
+    audio: { enabled: true, curve: 'equal-power' },
+  }
 }
 
 function makeTrack(

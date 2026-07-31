@@ -1489,6 +1489,33 @@ Each slice is documented with exact evidence before the next slice begins and
 is committed through a message file with Aryel as the sole author. A failing
 gate stops progression; later checkboxes are never completed early.
 
+### Slice 1 evidence — persistence and exact stream bounds (2026-07-31)
+
+- [x] Project format 4 now requires separate video/audio `sourceBounds` on
+  runtime assets and portable descriptors. Exact bounds retain signed integer
+  microsecond starts and end timestamps; `null` means absent and `unknown`
+  means a legacy file proves presence without proving handles.
+- [x] Mediabunny probing records `getFirstTimestamp()` and `computeDuration()`
+  independently for the primary video and audio streams. Still images carry no
+  timed bounds; partial-track projection removes the omitted stream's bounds.
+- [x] Timeline schema 3 requires transition audio intent. Existing schema-2
+  transitions migrate disabled/equal-power; new crossfades default to
+  enabled/equal-power. Project-v1/v2/v3 assets migrate to conservative unknown
+  bounds and acquire exact facts only after a compatible analyzed relink.
+- [x] Save/load validation rejects unknown fields, contradictory stream
+  presence, empty/reversed timestamp extents, and end timestamps beyond the
+  durable asset endpoint. Snapshot cloning isolates nested bounds and audio
+  settings. Exact descriptor facts must match; legacy unknown facts may be
+  upgraded atomically without weakening later relinks.
+- [x] Focused gate: 249/249 tests across project files, media probing,
+  compatibility projection, media state/relink, project resume, and transition
+  authoring. Added direct coverage for negative/non-zero starts, unequal A/V
+  ends, conservative migration, hostile bounds, and unknown-to-exact relink.
+- [x] Full gate: 1,389/1,389 tests across 74 files; production build passed
+  with only the pre-existing chunk-size advisory; oxlint passed. This slice has
+  no user-visible interaction surface, so browser acceptance remains assigned
+  to the later visual/UI/audio slices.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

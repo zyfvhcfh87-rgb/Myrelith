@@ -83,6 +83,10 @@ function makeAssets(): PortableAssetDescriptor[] {
       lastModified: 1_725_000_000_000,
       kind: 'video',
       durationMicroseconds: 8_000_000,
+      sourceBounds: {
+        video: { status: 'exact', firstTimestampUs: -10_000, endTimestampUs: 8_000_000 },
+        audio: { status: 'exact', firstTimestampUs: 20_000, endTimestampUs: 7_950_000 },
+      },
       nativeFrameRate: { num: 60_000, den: 1_001 },
       width: 3_840,
       height: 2_160,
@@ -98,6 +102,7 @@ function makeAssets(): PortableAssetDescriptor[] {
       lastModified: 1_725_000_000_001,
       kind: 'image',
       durationMicroseconds: 10_000_000,
+      sourceBounds: { video: null, audio: null },
       nativeFrameRate: null,
       width: 1_920,
       height: 1_080,
@@ -138,6 +143,7 @@ function makeDocument(): TimelineDoc {
       fromClipId: 'clip-a',
       toClipId: 'clip-b',
       durationFrames: 4,
+      audio: { enabled: true, curve: 'equal-power' },
     },
   ]
   const audioClip = mediaClip('clip-audio', 'video-z', 0, 5, 10)
@@ -195,7 +201,7 @@ describe('portable project file', () => {
     )
   })
 
-  test('migrates v1 projects to v3 without inventing a partial-track choice', () => {
+  test('migrates v1 projects to the current format without inventing a partial-track choice', () => {
     const legacy = clone(makeProject()) as unknown as {
       formatVersion: number
       assets: Array<Record<string, unknown>>
@@ -225,6 +231,37 @@ describe('portable project file', () => {
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
       text: { content: 'A portable title' },
+    })
+  })
+
+  test('migrates v3 bounds and transition audio conservatively', () => {
+    const legacy = clone(makeProject()) as unknown as {
+      formatVersion: number
+      assets: Array<Record<string, unknown>>
+      document: {
+        schemaVersion: number
+        tracks: Array<{ transitions: Array<Record<string, unknown>> }>
+      }
+    }
+    legacy.formatVersion = 3
+    legacy.document.schemaVersion = 2
+    for (const asset of legacy.assets) delete asset.sourceBounds
+    for (const track of legacy.document.tracks) {
+      for (const transition of track.transitions) delete transition.audio
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.assets.find((asset) => asset.id === 'video-z')?.sourceBounds)
+      .toEqual({
+        video: { status: 'unknown' },
+        audio: { status: 'unknown' },
+      })
+    expect(parsed.assets.find((asset) => asset.id === 'image-a')?.sourceBounds)
+      .toEqual({ video: null, audio: null })
+    expect(parsed.document.tracks[0].transitions[0].audio).toEqual({
+      enabled: false,
+      curve: 'equal-power',
     })
   })
 
@@ -327,6 +364,10 @@ describe('portable project file', () => {
         kind: 'video',
         partialTrackSelection: 'video-only',
         durationMicroseconds: 6_000_000,
+        sourceBounds: {
+          video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 6_000_000 },
+          audio: null,
+        },
         nativeFrameRate: { num: 24, den: 1 },
         width: 1_920,
         height: 1_080,
@@ -343,6 +384,10 @@ describe('portable project file', () => {
         kind: 'audio',
         partialTrackSelection: 'audio-only',
         durationMicroseconds: 5_000_000,
+        sourceBounds: {
+          video: null,
+          audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 5_000_000 },
+        },
         nativeFrameRate: null,
         width: null,
         height: null,
@@ -406,6 +451,40 @@ describe('portable project file', () => {
     })
     expect(() => validateProjectFile(audioOnlyWithoutAudio)).toThrow(
       /audio assets must contain audio/,
+    )
+  })
+
+  test('rejects hostile or contradictory source timestamp bounds', () => {
+    const reversed = makeProject()
+    reversed.assets[0].sourceBounds.video = {
+      status: 'exact',
+      firstTimestampUs: 10,
+      endTimestampUs: 10,
+    }
+    expect(() => validateProjectFile(reversed)).toThrow(
+      /endTimestampUs must be greater/,
+    )
+
+    const missingVideo = makeProject()
+    missingVideo.assets[0].sourceBounds.video = null
+    expect(() => validateProjectFile(missingVideo)).toThrow(
+      /video assets require video source bounds/,
+    )
+
+    const inventedImageTiming = makeProject()
+    inventedImageTiming.assets[1].sourceBounds.video = { status: 'unknown' }
+    expect(() => validateProjectFile(inventedImageTiming)).toThrow(
+      /image assets cannot have timed source bounds/,
+    )
+
+    const beyondAssetEnd = makeProject()
+    beyondAssetEnd.assets[0].sourceBounds.audio = {
+      status: 'exact',
+      firstTimestampUs: 0,
+      endTimestampUs: beyondAssetEnd.assets[0].durationMicroseconds + 1,
+    }
+    expect(() => validateProjectFile(beyondAssetEnd)).toThrow(
+      /cannot exceed the asset duration endpoint/,
     )
   })
 
@@ -692,6 +771,14 @@ describe('portable project file', () => {
     const missingEndpoint = makeProject()
     missingEndpoint.document.tracks[0].transitions[0].toClipId = 'not-a-clip'
     expect(() => validateProjectFile(missingEndpoint)).toThrow(/adjacent clips/)
+
+    const badAudioCurve = makeProject()
+    Object.assign(badAudioCurve.document.tracks[0].transitions[0].audio, {
+      curve: 'logarithmic',
+    })
+    expect(() => validateProjectFile(badAudioCurve)).toThrow(
+      /linear or equal-power/,
+    )
   })
 
   test('requires valid explicit timed/still source semantics in current files', () => {
@@ -725,6 +812,10 @@ describe('portable project file', () => {
   test('rejects source ranges beyond the portable asset duration', () => {
     const project = makeProject()
     project.assets[0].durationMicroseconds = 100_000
+    project.assets[0].sourceBounds = {
+      video: { status: 'exact', firstTimestampUs: -10_000, endTimestampUs: 100_000 },
+      audio: { status: 'exact', firstTimestampUs: 20_000, endTimestampUs: 100_000 },
+    }
     expect(() => validateProjectFile(project)).toThrow(/beyond the referenced asset duration/)
   })
 
@@ -743,6 +834,10 @@ describe('portable project file', () => {
   test('accepts one-frame clips for positive sub-frame media', () => {
     const project = makeProject()
     project.assets[0].durationMicroseconds = 1
+    project.assets[0].sourceBounds = {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 1 },
+      audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 1 },
+    }
     for (const track of project.document.tracks) {
       track.transitions = []
       for (const clip of track.clips) {

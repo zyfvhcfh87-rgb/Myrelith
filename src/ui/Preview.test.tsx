@@ -19,6 +19,10 @@ const offlineVideo: PortableAssetDescriptor = {
   lastModified: 111,
   kind: 'video',
   durationMicroseconds: 2_000_000,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+    audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+  },
   nativeFrameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,
@@ -35,6 +39,7 @@ const offlineImage: PortableAssetDescriptor = {
   lastModified: 222,
   kind: 'image',
   durationMicroseconds: 5_000_000,
+  sourceBounds: { video: null, audio: null },
   nativeFrameRate: null,
   width: 1280,
   height: 720,

@@ -86,6 +86,10 @@ function makeAsset(id = 'asset-1'): MediaAsset {
     kind: 'video',
     durationFrames: 120,
     durationMicroseconds: 4_000_000,
+    sourceBounds: {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+      audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+    },
     frameRate: { num: 30, den: 1 },
     width: 1920,
     height: 1080,
@@ -105,6 +109,7 @@ function descriptorFrom(asset: MediaAsset): PortableAssetDescriptor {
     lastModified: asset.lastModified,
     kind: asset.kind,
     durationMicroseconds: asset.durationMicroseconds,
+    sourceBounds: asset.sourceBounds,
     nativeFrameRate: asset.frameRate,
     width: asset.width,
     height: asset.height,

@@ -286,6 +286,7 @@ export function addCrossfade(
     fromClipId,
     toClipId,
     durationFrames,
+    audio: { enabled: true, curve: 'equal-power' },
   }
   const nextTrack: Track = {
     ...track,

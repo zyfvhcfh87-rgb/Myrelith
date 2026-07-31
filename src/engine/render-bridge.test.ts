@@ -232,6 +232,7 @@ describe('renderFrame entry building', () => {
           fromClipId: from.id,
           toClipId: to.id,
           durationFrames: 1,
+          audio: { enabled: true, curve: 'equal-power' },
         }],
       }),
     ])
@@ -268,6 +269,7 @@ describe('renderFrame entry building', () => {
           fromClipId: from.id,
           toClipId: to.id,
           durationFrames: 1,
+          audio: { enabled: true, curve: 'equal-power' },
         }],
       }),
     ])

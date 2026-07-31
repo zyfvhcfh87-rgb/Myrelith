@@ -82,6 +82,14 @@ const addAsset = (
     kind,
     durationFrames: 60,
     durationMicroseconds: 2_000_000,
+    sourceBounds: kind === 'image'
+      ? { video: null, audio: null }
+      : {
+          video: kind === 'video'
+            ? { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 }
+            : null,
+          audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+        },
     frameRate: kind === 'video' ? { num: 30, den: 1 } : null,
     width: kind === 'audio' ? null : 1920,
     height: kind === 'audio' ? null : 1080,

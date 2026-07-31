@@ -86,7 +86,14 @@ function crossfade(
   toClipId: string,
   durationFrames = 3,
 ): Transition {
-  return { id, type: 'crossfade', fromClipId, toClipId, durationFrames }
+  return {
+    id,
+    type: 'crossfade',
+    fromClipId,
+    toClipId,
+    durationFrames,
+    audio: { enabled: true, curve: 'equal-power' },
+  }
 }
 
 function makeTransitionDoc(

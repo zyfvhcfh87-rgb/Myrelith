@@ -141,6 +141,7 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
       fromClipId: video.id,
       toClipId: next.id,
       durationFrames: 10,
+      audio: { enabled: true, curve: 'equal-power' },
     }],
   }
 
@@ -206,6 +207,7 @@ function makeManualLinkDoc(options: ManualLinkDocOptions = {}): TimelineDoc {
       fromClipId: video.id,
       toClipId: videoAfter.id,
       durationFrames: 12,
+      audio: { enabled: true, curve: 'equal-power' },
     }],
   }
   const audioTrack: Track = {
@@ -260,6 +262,10 @@ const asset = (over: Partial<MediaAsset> = {}): MediaAsset => ({
   kind: 'video',
   durationFrames: 120,
   durationMicroseconds: 4_000_000,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+    audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+  },
   frameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,
@@ -1030,6 +1036,7 @@ describe('linkedSplitClipAtFrame', () => {
       fromClipId: videoRight.id,
       toClipId: 'vAfter',
       durationFrames: 10,
+      audio: { enabled: true, curve: 'equal-power' },
     }])
   })
 

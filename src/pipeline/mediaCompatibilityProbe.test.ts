@@ -62,6 +62,8 @@ const media = vi.hoisted(() => ({
   durationSec: 4,
   videoDurationSec: 4,
   audioDurationSec: 4,
+  videoFirstSec: 0,
+  audioFirstSec: 0,
   computeDurationCount: 0,
   videoTracks: [] as FakeVideoTrack[],
   audioTracks: [] as FakeAudioTrack[],
@@ -132,6 +134,18 @@ vi.mock('mediabunny', () => {
       return media.durationSec
     }
 
+    async getFirstTimestamp(
+      tracks: Array<FakeVideoTrack | FakeAudioTrack>,
+    ): Promise<number> {
+      if (media.videoTracks.includes(tracks[0] as FakeVideoTrack)) {
+        return media.videoFirstSec
+      }
+      if (media.audioTracks.includes(tracks[0] as FakeAudioTrack)) {
+        return media.audioFirstSec
+      }
+      return 0
+    }
+
     dispose(): void {
       media.disposeCount++
       media.onDispose?.()
@@ -200,6 +214,8 @@ beforeEach(() => {
   media.durationSec = 4
   media.videoDurationSec = 4
   media.audioDurationSec = 4
+  media.videoFirstSec = 0
+  media.audioFirstSec = 0
   media.computeDurationCount = 0
   media.videoTracks = [videoTrack()]
   media.audioTracks = [audioTrack()]
@@ -300,6 +316,39 @@ describe('probeMediaFile', () => {
     )
     expect(media.getMimeTypeCount).toBe(0)
     expect(media.disposeCount).toBe(1)
+  })
+
+  test('records signed starts and independent primary A/V end timestamps', async () => {
+    media.durationSec = 8
+    media.videoFirstSec = -0.25
+    media.videoDurationSec = 7.5
+    media.audioFirstSec = 0.125
+    media.audioDurationSec = 8
+
+    const result = await probeMediaFile(
+      selectedFile(),
+      F30,
+      'asset-offset-timestamps',
+    )
+
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') throw new Error('ready fixture rejected')
+    expect(result.asset.sourceBounds).toEqual({
+      video: {
+        status: 'exact',
+        firstTimestampUs: -250_000,
+        endTimestampUs: 7_500_000,
+      },
+      audio: {
+        status: 'exact',
+        firstTimestampUs: 125_000,
+        endTimestampUs: 8_000_000,
+      },
+    })
+    expect(result.compatibility.tracks).toEqual([
+      expect.objectContaining({ sourceBounds: result.asset.sourceBounds.video }),
+      expect.objectContaining({ sourceBounds: result.asset.sourceBounds.audio }),
+    ])
   })
 
   test('bounds attacker-controlled codec diagnostics before publishing them', async () => {

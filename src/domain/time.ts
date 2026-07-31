@@ -212,6 +212,22 @@ export function secondsToMicroseconds(seconds: number): number {
   return microseconds
 }
 
+/** Convert a finite signed timestamp boundary to integer µs. */
+export function timestampSecondsToMicroseconds(seconds: number): number {
+  if (!Number.isFinite(seconds)) {
+    throw new TypeError(
+      `timestampSecondsToMicroseconds: seconds must be finite, got ${seconds}`,
+    )
+  }
+  const microseconds = Math.round(seconds * MICROSECONDS_PER_SECOND)
+  if (!Number.isSafeInteger(microseconds)) {
+    throw new RangeError(
+      'timestampSecondsToMicroseconds: result exceeds safe integer precision',
+    )
+  }
+  return microseconds
+}
+
 /* ------------------------------------------------------------------ */
 /* Seconds boundary (float allowed here, and ONLY here)                 */
 /* ------------------------------------------------------------------ */

@@ -330,6 +330,7 @@ describe('compositeFrame — stacking order & concurrency', () => {
           fromClipId: from.id,
           toClipId: to.id,
           durationFrames: 1,
+          audio: { enabled: true, curve: 'equal-power' },
         }],
       }),
     ])
@@ -379,6 +380,7 @@ describe('compositeFrame — stacking order & concurrency', () => {
           fromClipId: from.id,
           toClipId: to.id,
           durationFrames: 1,
+          audio: { enabled: true, curve: 'equal-power' },
         }],
       }),
     ])

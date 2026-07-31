@@ -290,6 +290,7 @@ describe('visibleVideoLayersAtFrame', () => {
     fromClipId: from.id,
     toClipId: to.id,
     durationFrames: 3,
+    audio: { enabled: true, curve: 'equal-power' as const },
   }
   const transitionTrack = makeTrack('V1', 'video', [from, to], {
     transitions: [transition],
@@ -501,6 +502,7 @@ describe('visibleVideoLayersAtFrame', () => {
           fromClipId: 'A',
           toClipId: 'B',
           durationFrames: 3,
+          audio: { enabled: true, curve: 'equal-power' },
         },
         {
           id: 'duplicate-id',
@@ -508,6 +510,7 @@ describe('visibleVideoLayersAtFrame', () => {
           fromClipId: 'C',
           toClipId: 'D',
           durationFrames: 3,
+          audio: { enabled: true, curve: 'equal-power' },
         },
       ],
     })

@@ -972,6 +972,7 @@ describe('composite happy path', () => {
         fromClipId: from.id,
         toClipId: to.id,
         durationFrames: 1,
+        audio: { enabled: true, curve: 'equal-power' as const },
       }],
     }
     const doc = makeDoc([track])
@@ -1173,6 +1174,7 @@ describe('failure containment', () => {
         fromClipId: from.id,
         toClipId: to.id,
         durationFrames: 1,
+        audio: { enabled: true, curve: 'equal-power' as const },
       }],
     }
     const h = makeHarness()
@@ -1357,6 +1359,7 @@ describe('streaming playback lanes', () => {
         fromClipId: from.id,
         toClipId: to.id,
         durationFrames: 1,
+        audio: { enabled: true, curve: 'equal-power' },
       }],
     }])
     const image = makeStaticSource()

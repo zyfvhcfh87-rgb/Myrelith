@@ -435,6 +435,10 @@ const asset = (over: Partial<MediaAsset> = {}): MediaAsset => ({
   kind: 'video',
   durationFrames: 120,
   durationMicroseconds: 4_000_000,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+    audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+  },
   frameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,
@@ -472,6 +476,7 @@ describe('clipFromAsset', () => {
       mimeType: 'image/png',
       durationFrames: 150,
       durationMicroseconds: 5_000_000,
+      sourceBounds: { video: null, audio: null },
       frameRate: null,
       hasAudio: false,
       audioSampleRate: null,
@@ -848,7 +853,14 @@ function crossfade(
   toClipId: string,
   durationFrames: number,
 ): Transition {
-  return { id, type: 'crossfade', fromClipId, toClipId, durationFrames }
+  return {
+    id,
+    type: 'crossfade',
+    fromClipId,
+    toClipId,
+    durationFrames,
+    audio: { enabled: true, curve: 'equal-power' },
+  }
 }
 
 function makeCrossfadeDoc(
@@ -915,6 +927,7 @@ describe('crossfade authoring', () => {
       fromClipId: 'A',
       toClipId: 'B',
       durationFrames: 5,
+      audio: { enabled: true, curve: 'equal-power' },
     })
 
     const withBoth = addCrossfade(withLeft, 'B', 'C', 5)

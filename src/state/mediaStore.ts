@@ -13,6 +13,11 @@ import type {
 } from '../domain/mediaCompatibility'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { FrameRate, MediaAsset } from '../domain/schema'
+import {
+  cloneMediaSourceBounds,
+  mediaSourceBoundsAcceptAnalyzed,
+  mediaSourceBoundsEqual,
+} from '../domain/sourceBounds'
 import { microsecondsDurationToFrames } from '../domain/time'
 
 /**
@@ -60,6 +65,7 @@ function descriptorFromAsset(asset: MediaAsset): PortableAssetDescriptor {
       ? {}
       : { partialTrackSelection: asset.partialTrackSelection }),
     durationMicroseconds: asset.durationMicroseconds,
+    sourceBounds: cloneMediaSourceBounds(asset.sourceBounds),
     nativeFrameRate: asset.frameRate === null ? null : { ...asset.frameRate },
     width: asset.width,
     height: asset.height,
@@ -89,6 +95,7 @@ function connectionMatchesDescriptor(
     && descriptor.kind === asset.kind
     && descriptor.partialTrackSelection === asset.partialTrackSelection
     && descriptor.durationMicroseconds === asset.durationMicroseconds
+    && mediaSourceBoundsAcceptAnalyzed(descriptor.sourceBounds, asset.sourceBounds)
     && ratesMatch(descriptor.nativeFrameRate, asset.frameRate)
     && descriptor.width === asset.width
     && descriptor.height === asset.height
@@ -200,8 +207,8 @@ export interface MediaState {
     compatibility?: MediaCompatibilityItem,
   ) => boolean
   /**
-   * Connect an analyzed source to an existing descriptor without replacing the
-   * descriptor Map or descriptor object. The caller retains ownership on false.
+   * Connect an analyzed source to an existing descriptor. Legacy unknown source
+   * bounds are atomically upgraded from the analyzed asset on success.
    */
   connectAsset: (
     asset: MediaAsset,
@@ -378,11 +385,17 @@ export const useMediaStore = create<MediaState>()((set) => ({
       }
       const assets = new Map(state.assets)
       assets.set(asset.id, asset)
+      const descriptors = mediaSourceBoundsEqual(
+        descriptor.sourceBounds,
+        asset.sourceBounds,
+      )
+        ? state.descriptors
+        : new Map(state.descriptors).set(asset.id, descriptorFromAsset(asset))
       const compatibility = readyCompatibility === undefined
         ? state.compatibility
         : new Map(state.compatibility).set(asset.id, readyCompatibility)
       connected = true
-      return { assets, compatibility }
+      return { descriptors, assets, compatibility }
     })
     return connected
   },
@@ -449,6 +462,15 @@ export const useMediaStore = create<MediaState>()((set) => ({
     if (!descriptors) return false
     const assets = connectionMapFrom(descriptors, nextAssets)
     if (!assets) return false
+    for (const asset of assets.values()) {
+      const descriptor = descriptors.get(asset.id)
+      if (
+        descriptor
+        && !mediaSourceBoundsEqual(descriptor.sourceBounds, asset.sourceBounds)
+      ) {
+        descriptors.set(asset.id, descriptorFromAsset(asset))
+      }
+    }
     const compatibility = compatibilityMapFrom(
       descriptors,
       assets,

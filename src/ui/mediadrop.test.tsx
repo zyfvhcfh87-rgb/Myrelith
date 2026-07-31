@@ -40,6 +40,10 @@ function makeAsset(over: Partial<MediaAsset> = {}): MediaAsset {
     kind: 'video',
     durationFrames: 120,
     durationMicroseconds: 4_000_000,
+    sourceBounds: {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+      audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+    },
     frameRate: { num: 30, den: 1 },
     width: 1920,
     height: 1080,
@@ -256,6 +260,7 @@ describe('Track drop target', () => {
       kind: 'image',
       durationFrames: 150,
       durationMicroseconds: 5_000_000,
+      sourceBounds: { video: null, audio: null },
       frameRate: null,
       width: 640,
       height: 360,
