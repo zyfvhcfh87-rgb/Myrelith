@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest'
 import {
   DEFAULT_STILL_IMAGE_DURATION_MICROSECONDS,
+  isValidStillImageDurationMicroseconds,
+  STILL_IMAGE_DURATION_PREFERENCE_LIMITS,
   stillImageDurationFrames,
 } from './staticImage'
 
@@ -16,8 +18,21 @@ describe('still-image timing policy', () => {
     expect(stillImageDurationFrames({ num: 30, den: 1 }, 2_500_000)).toBe(75)
   })
 
+  test('bounds the persisted preference from one tenth of a second to one hour', () => {
+    expect(STILL_IMAGE_DURATION_PREFERENCE_LIMITS).toEqual({
+      minMicroseconds: 100_000,
+      maxMicroseconds: 3_600_000_000,
+    })
+    expect(isValidStillImageDurationMicroseconds(100_000)).toBe(true)
+    expect(isValidStillImageDurationMicroseconds(3_600_000_000)).toBe(true)
+    expect(isValidStillImageDurationMicroseconds(99_999)).toBe(false)
+    expect(isValidStillImageDurationMicroseconds(3_600_000_001)).toBe(false)
+  })
+
   test('retains the shared validation boundary', () => {
     expect(() => stillImageDurationFrames({ num: 30, den: 1 }, 1.5))
+      .toThrow(TypeError)
+    expect(() => stillImageDurationFrames({ num: 30, den: 1 }, 99_999))
       .toThrow(TypeError)
     expect(() => stillImageDurationFrames({ num: 0, den: 1 }))
       .toThrow(TypeError)

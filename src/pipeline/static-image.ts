@@ -150,7 +150,26 @@ export interface DecodeStaticImageOptions {
   /** May tighten, but never relax, the immutable inspection ceilings. */
   readonly limits?: StaticImageResourceLimitOverrides
   readonly environment?: StaticImageDecodeEnvironment
+  /**
+   * Optional shared-memory gate. Called once after bounded inspection and
+   * before any browser decoder may allocate pixels. A successful decode
+   * returns the reservation beside the render source; every rejected or
+   * cancelled path releases it here.
+   */
+  readonly reserveDecodedBytes?: StaticImageDecodedByteReserver
 }
+
+/** One caller-owned lease against a shared decoded-image byte budget. */
+export interface StaticImageDecodedByteReservation {
+  /** Atomically replace the inspected estimate with the exact allocation. */
+  reconcile(decodedBytes: number): boolean
+  /** Idempotently return the currently reserved bytes. */
+  release(): void
+}
+
+export type StaticImageDecodedByteReserver = (
+  inspectedDecodedBytes: number,
+) => StaticImageDecodedByteReservation
 
 export type StaticImageRenderSource = ImageBitmap | VideoFrame
 
@@ -160,6 +179,10 @@ export interface DecodedStaticImage {
   readonly sourceKind: 'image-bitmap' | 'video-frame'
   readonly width: number
   readonly height: number
+  /** Exact retained allocation used by worker-realm aggregate accounting. */
+  readonly decodedBytes: number
+  /** Present when reserveDecodedBytes supplied a caller-owned successful lease. */
+  readonly decodedByteReservation?: StaticImageDecodedByteReservation
   readonly animation: Readonly<StaticImageAnimationInfo>
   /**
    * WebCodecs repetition semantics are deliberately separate from the
@@ -169,6 +192,29 @@ export interface DecodedStaticImage {
    */
   readonly decoderRepetitionCount: number | null
   readonly decodePath: 'image-decoder' | 'image-bitmap'
+}
+
+/** Aggregate decoded-pixel ceiling shared by resident stills in one worker. */
+export const STATIC_IMAGE_RESIDENT_BUDGET_BYTES =
+  STATIC_IMAGE_RESOURCE_LIMITS.maxAggregateDecodedBytes
+
+/** Worst native WebCodecs still format: four 16-bit planes/channels. */
+const STATIC_IMAGE_NATIVE_FRAME_MAX_BYTES_PER_PIXEL = 8
+
+/**
+ * Return the decoded allocation retained by one successful result. Bitmaps use
+ * the policy's conservative RGBA size; VideoFrames report their complete coded
+ * allocation, including non-visible padding and native pixel format.
+ */
+export function staticImageDecodedByteLength(
+  decoded: DecodedStaticImage,
+): number {
+  const bytes = decoded.decodedBytes
+
+  if (!Number.isSafeInteger(bytes) || bytes <= 0) {
+    throw new RangeError('Decoded still-image allocation is invalid')
+  }
+  return bytes
 }
 
 function makeAbortError(): Error {
@@ -189,6 +235,7 @@ function awaitWithAbort<T>(
   pending: Promise<T>,
   signal: AbortSignal | undefined,
   onLateResolve?: (value: T) => void,
+  waitForLateSettlementOnAbort = false,
 ): Promise<T> {
   if (signal === undefined) return pending
   const settleLate = (value: T) => {
@@ -200,7 +247,23 @@ function awaitWithAbort<T>(
     }
   }
   if (signal.aborted) {
-    void pending.then(settleLate, () => {})
+    if (waitForLateSettlementOnAbort) {
+      return pending.then(
+        (value) => {
+          settleLate(value)
+          throw makeAbortError()
+        },
+        () => {
+          throw makeAbortError()
+        },
+      )
+    }
+    void pending.then(
+      (value) => {
+        settleLate(value)
+      },
+      () => {},
+    )
     return Promise.reject(makeAbortError())
   }
   return new Promise<T>((resolve, reject) => {
@@ -209,7 +272,7 @@ function awaitWithAbort<T>(
       if (aborted) return
       aborted = true
       signal.removeEventListener('abort', onAbort)
-      reject(makeAbortError())
+      if (!waitForLateSettlementOnAbort) reject(makeAbortError())
     }
     signal.addEventListener('abort', onAbort, { once: true })
     if (signal.aborted) {
@@ -220,13 +283,17 @@ function awaitWithAbort<T>(
       (value) => {
         if (aborted) {
           settleLate(value)
+          if (waitForLateSettlementOnAbort) reject(makeAbortError())
           return
         }
         signal.removeEventListener('abort', onAbort)
         resolve(value)
       },
       (cause: unknown) => {
-        if (aborted) return
+        if (aborted) {
+          if (waitForLateSettlementOnAbort) reject(makeAbortError())
+          return
+        }
         signal.removeEventListener('abort', onAbort)
         reject(cause)
       },
@@ -371,7 +438,7 @@ function validateDimensionBudget(
   height: number,
   inspection: StaticImageInspection,
   limits: StaticImageResourceLimits,
-): void {
+): number {
   if (
     !Number.isSafeInteger(width)
     || width <= 0
@@ -399,15 +466,16 @@ function validateDimensionBudget(
       inspection.format,
     )
   }
+  return decodedBytes
 }
 
 function validateDecodedBitmap(
   bitmap: ImageBitmap,
   inspection: StaticImageInspection,
   limits: StaticImageResourceLimits,
-): void {
+): number {
   const { width, height } = bitmap
-  validateDimensionBudget(
+  const decodedBytes = validateDimensionBudget(
     width,
     height,
     inspection,
@@ -425,18 +493,39 @@ function validateDecodedBitmap(
       inspection.format,
     )
   }
+  return decodedBytes
+}
+
+function conservativeNativeFrameReservationBytes(
+  inspection: StaticImageInspection,
+  limits: StaticImageResourceLimits,
+): number {
+  const decodedBytes =
+    inspection.pixelCount * STATIC_IMAGE_NATIVE_FRAME_MAX_BYTES_PER_PIXEL
+  if (
+    !Number.isSafeInteger(decodedBytes)
+    || decodedBytes <= 0
+    || decodedBytes > limits.maxAggregateDecodedBytes
+  ) {
+    throw new StaticImageDecodeError(
+      'resource-limit',
+      inspection.format,
+    )
+  }
+  return decodedBytes
 }
 
 interface StaticImagePresentationDimensions {
   width: number
   height: number
+  decodedBytes: number
 }
 
 function validateFrameAllocation(
   frame: StaticImageFrameLike,
   inspection: StaticImageInspection,
   limits: StaticImageResourceLimits,
-): void {
+): number {
   if (
     typeof frame.format !== 'string'
     || frame.format.length === 0
@@ -481,6 +570,7 @@ function validateFrameAllocation(
       inspection.format,
     )
   }
+  return allocationBytes
 }
 
 function validateDecodedFrame(
@@ -494,7 +584,7 @@ function validateDecodedFrame(
     inspection,
     limits,
   )
-  validateFrameAllocation(frame, inspection, limits)
+  const decodedBytes = validateFrameAllocation(frame, inspection, limits)
   const visibleRect = frame.visibleRect
   if (
     visibleRect === null
@@ -564,19 +654,26 @@ function validateDecodedFrame(
   return {
     width: frame.displayWidth,
     height: frame.displayHeight,
+    decodedBytes,
   }
 }
 
 function resultWithTransferredBitmap(
   bitmap: ImageBitmap,
+  decodedBytes: number,
   animation: StaticImageAnimationInfo,
   decoderRepetitionCount: number | null,
+  decodedByteReservation: StaticImageDecodedByteReservation | null,
 ): DecodedStaticImage {
   return Object.freeze({
     source: bitmap,
     sourceKind: 'image-bitmap',
     width: bitmap.width,
     height: bitmap.height,
+    decodedBytes,
+    ...(decodedByteReservation === null
+      ? {}
+      : { decodedByteReservation }),
     animation: Object.freeze({ ...animation }),
     decoderRepetitionCount,
     decodePath: 'image-bitmap',
@@ -588,12 +685,17 @@ function resultWithTransferredFrame(
   dimensions: StaticImagePresentationDimensions,
   animation: StaticImageAnimationInfo,
   decoderRepetitionCount: number | null,
+  decodedByteReservation: StaticImageDecodedByteReservation | null,
 ): DecodedStaticImage {
   return Object.freeze({
     source: frame as unknown as VideoFrame,
     sourceKind: 'video-frame',
     width: dimensions.width,
     height: dimensions.height,
+    decodedBytes: dimensions.decodedBytes,
+    ...(decodedByteReservation === null
+      ? {}
+      : { decodedByteReservation }),
     animation: Object.freeze({ ...animation }),
     decoderRepetitionCount,
     decodePath: 'image-decoder',
@@ -663,6 +765,8 @@ export async function decodeStaticImage(
   let bitmap: ImageBitmap | null = null
   let imageDecoderFailure: unknown
   let blobBitmapFailure: unknown
+  let byteReservation: StaticImageDecodedByteReservation | null = null
+  let byteReservationTransferred = false
 
   const closeDecoder = () => {
     if (decoder === null || decoderClosed) return
@@ -671,7 +775,22 @@ export async function decodeStaticImage(
   }
   const abortDecoder = () => closeDecoder()
 
+  const reconcileDecodedBytes = (decodedBytes: number) => {
+    if (
+      byteReservation !== null
+      && !byteReservation.reconcile(decodedBytes)
+    ) {
+      throw new StaticImageDecodeError(
+        'resource-limit',
+        inspection.format,
+      )
+    }
+  }
+
   try {
+    byteReservation = options.reserveDecodedBytes?.(
+      inspection.decodedBytes,
+    ) ?? null
     const decoderFactory = environment.imageDecoder
     if (decoderFactory !== undefined) {
       try {
@@ -725,16 +844,25 @@ export async function decodeStaticImage(
           ),
           signal,
           closeBitmap,
+          byteReservation !== null,
         )
         throwIfAborted(signal)
-        validateDecodedBitmap(bitmap, inspection, resourceLimits)
+        const decodedBytes = validateDecodedBitmap(
+          bitmap,
+          inspection,
+          resourceLimits,
+        )
+        reconcileDecodedBytes(decodedBytes)
 
         const result = resultWithTransferredBitmap(
           bitmap,
+          decodedBytes,
           animation,
           decoderRepetitionCount,
+          byteReservation,
         )
         bitmap = null
+        byteReservationTransferred = true
         return result
       } catch (cause) {
         if (signal?.aborted) throw makeAbortError()
@@ -765,6 +893,14 @@ export async function decodeStaticImage(
     }
 
     try {
+      // ImageDecoder may expose 10/12/16-bit planar storage. Upgrade the
+      // inspected RGBA lease before asking it to allocate a native frame.
+      reconcileDecodedBytes(
+        conservativeNativeFrameReservationBytes(
+          inspection,
+          resourceLimits,
+        ),
+      )
       const decoded = await awaitWithAbort(
         decoder.decode({
           frameIndex: 0,
@@ -772,6 +908,7 @@ export async function decodeStaticImage(
         }),
         signal,
         (lateDecoded) => closeFrame(lateDecoded.image),
+        byteReservation !== null,
       )
       frame = decoded.image
       throwIfAborted(signal)
@@ -780,13 +917,16 @@ export async function decodeStaticImage(
         inspection,
         resourceLimits,
       )
+      reconcileDecodedBytes(dimensions.decodedBytes)
       const result = resultWithTransferredFrame(
         frame,
         dimensions,
         animation,
         decoderRepetitionCount,
+        byteReservation,
       )
       frame = null
+      byteReservationTransferred = true
       return result
     } catch (cause) {
       if (signal?.aborted) throw makeAbortError()
@@ -808,8 +948,12 @@ export async function decodeStaticImage(
     }
   } finally {
     signal?.removeEventListener('abort', abortDecoder)
-    closeBitmap(bitmap)
-    closeFrame(frame)
-    closeDecoder()
+    try {
+      closeBitmap(bitmap)
+      closeFrame(frame)
+      closeDecoder()
+    } finally {
+      if (!byteReservationTransferred) byteReservation?.release()
+    }
   }
 }

@@ -20,8 +20,15 @@ import {
 } from '../codecs/mediaCodecFallbacks'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { AssetKind, Clip, TimelineDoc, Track } from '../domain/schema'
-import { compositeFrame } from './render'
-import type { ExportSettings } from './export'
+import {
+  compositeFrame,
+  type TransitionSurfaceProvider,
+} from './render'
+import {
+  exportTimeline,
+  type ExportSettings,
+  type ExportVideoSink,
+} from './export'
 import { StaticImageDecodeError } from './static-image'
 
 const DECODE_BUDGET: LocalDecoderBudget = {
@@ -423,7 +430,7 @@ const SETTINGS: ExportSettings = {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30_000, den: 1_001 },
@@ -450,6 +457,7 @@ function makeVideoDoc(
           id: `clip-${index + 1}`,
           assetId: request.assetId,
           name: `clip-${index + 1}`,
+          sourceMode: 'timed',
           sourceRange: {
             startFrame: request.sourceStart,
             durationFrames,
@@ -492,6 +500,7 @@ function makeAudioClip(
     id,
     assetId,
     name: id,
+    sourceMode: 'timed',
     sourceRange: {
       startFrame: options.sourceStart ?? 0,
       durationFrames,
@@ -584,14 +593,25 @@ function makeStillDoc(durationFrames = 5): TimelineDoc {
   }
 }
 
-function makeImageToVideoTransitionDoc(): TimelineDoc {
-  const from = makeAudioClip('image-from', 'image-asset', 3)
-  from.sourceMode = 'still'
-  from.sourceRange = { startFrame: 0, durationFrames: 1 }
-  const to = makeAudioClip('video-to', 'video-asset', 3, {
-    timelineStart: 3,
-    sourceStart: 20,
+function makeVisualTransitionDoc(
+  fromKind: 'image' | 'video',
+  toKind: 'image' | 'video',
+): TimelineDoc {
+  const from = makeAudioClip(`${fromKind}-from`, `${fromKind}-asset`, 3, {
+    sourceStart: fromKind === 'video' ? 10 : 0,
   })
+  const to = makeAudioClip(`${toKind}-to`, `${toKind}-asset`, 3, {
+    timelineStart: 3,
+    sourceStart: toKind === 'video' ? 20 : 0,
+  })
+  if (fromKind === 'image') {
+    from.sourceMode = 'still'
+    from.sourceRange = { startFrame: 0, durationFrames: 1 }
+  }
+  if (toKind === 'image') {
+    to.sourceMode = 'still'
+    to.sourceRange = { startFrame: 0, durationFrames: 1 }
+  }
   return {
     ...makeDoc(),
     tracks: [{
@@ -600,7 +620,7 @@ function makeImageToVideoTransitionDoc(): TimelineDoc {
       name: 'V1',
       clips: [from, to],
       transitions: [{
-        id: 'image-video-dissolve',
+        id: `${fromKind}-${toKind}-dissolve`,
         type: 'crossfade',
         fromClipId: from.id,
         toClipId: to.id,
@@ -636,12 +656,14 @@ class FakeOffscreenCanvas {
   height: number
   readonly context = {
     globalAlpha: 1,
+    globalCompositeOperation: 'source-over' as GlobalCompositeOperation,
     fillStyle: '#000000',
     save: vi.fn(),
     restore: vi.fn(),
     translate: vi.fn(),
     rotate: vi.fn(),
     scale: vi.fn(),
+    clearRect: vi.fn(),
     fillRect: vi.fn(),
     drawImage: vi.fn(),
   }
@@ -718,6 +740,31 @@ function videoTrack(
     canDecode: vi.fn(async () => (
       typeof canDecode === 'function' ? canDecode() : canDecode
     )),
+  }
+}
+
+function fakeTransitionSurfaceProvider(
+  width: number,
+  height: number,
+): TransitionSurfaceProvider {
+  let surfaces: ReturnType<TransitionSurfaceProvider['get']> | null = null
+  return {
+    get: () => {
+      if (surfaces) return surfaces
+      const leg = new FakeOffscreenCanvas(width, height)
+      const group = new FakeOffscreenCanvas(width, height)
+      surfaces = {
+        leg: {
+          canvas: leg as unknown as CanvasImageSource,
+          ctx: leg.context,
+        },
+        group: {
+          canvas: group as unknown as CanvasImageSource,
+          ctx: group.context,
+        },
+      }
+      return surfaces
+    },
   }
 }
 
@@ -862,66 +909,97 @@ describe('createMediabunnyExportMediaSource', () => {
     expect(source.close).toHaveBeenCalledOnce()
   })
 
-  test('composites an image-to-video crossfade with one still decode', async () => {
-    const doc = makeImageToVideoTransitionDoc()
-    const source = {
-      width: 320,
-      height: 180,
-      close: vi.fn(),
-    } as unknown as FakeBitmap
-    staticImageDecode.decode.mockResolvedValue({
-      source,
-      sourceKind: 'image-bitmap',
-      width: source.width,
-      height: source.height,
-      animation: { animated: false, frameCount: 1, loopCount: null },
-      decoderRepetitionCount: null,
-      decodePath: 'image-bitmap',
-    })
-    mb.inputTracks.push(videoTrack())
-    mb.canvasSinkHandlers.push(async () => wrappedCanvas())
-    const media = createMediabunnyExportMediaSource(
-      doc,
-      async (assetId) => resolvedAsset(
-        new Blob([assetId]),
-        assetId === 'image-asset' ? 'image' : 'video',
-      ),
-    )
-    const canvas = new FakeOffscreenCanvas(doc.width, doc.height)
-    const drawn: string[][] = []
+  test.each([
+    ['image-to-video', 'image', 'video', 4, 5, 1],
+    ['video-to-image', 'video', 'image', 5, 4, 1],
+    ['same-image-to-image', 'image', 'image', 0, 9, 0],
+  ] as const)(
+    'composites a %s crossfade with one retained still decode',
+    async (
+      _label,
+      fromKind,
+      toKind,
+      expectedVideoCopies,
+      expectedImageDraws,
+      expectedVideoInputs,
+    ) => {
+      const doc = makeVisualTransitionDoc(fromKind, toKind)
+      const source = {
+        width: 320,
+        height: 180,
+        close: vi.fn(),
+      } as unknown as FakeBitmap
+      staticImageDecode.decode.mockResolvedValue({
+        source,
+        sourceKind: 'image-bitmap',
+        width: source.width,
+        height: source.height,
+        animation: { animated: false, frameCount: 1, loopCount: null },
+        decoderRepetitionCount: null,
+        decodePath: 'image-bitmap',
+      })
+      if (expectedVideoInputs > 0) {
+        mb.inputTracks.push(videoTrack())
+        mb.canvasSinkHandlers.push(async () => wrappedCanvas())
+      }
+      const media = createMediabunnyExportMediaSource(
+        doc,
+        async (assetId) => resolvedAsset(
+          new Blob([assetId]),
+          assetId === 'image-asset' ? 'image' : 'video',
+        ),
+      )
+      const canvas = new FakeOffscreenCanvas(doc.width, doc.height)
+      const transitionSurfaceProvider = fakeTransitionSurfaceProvider(
+        doc.width,
+        doc.height,
+      )
+      const drawn: string[][] = []
 
-    for (let frame = 0; frame < 6; frame++) {
-      const lease = await media.openFrame(frame)
-      const result = await compositeFrame(doc, frame, canvas.context, lease)
-      drawn.push(result.drawn)
-      await lease.close()
-    }
+      for (let frame = 0; frame < 6; frame++) {
+        const lease = await media.openFrame(frame)
+        const result = await compositeFrame(
+          doc,
+          frame,
+          canvas.context,
+          lease,
+          transitionSurfaceProvider,
+        )
+        drawn.push(result.drawn)
+        await lease.close()
+      }
 
-    expect(drawn).toEqual([
-      ['image-from'],
-      ['image-from'],
-      ['image-from', 'video-to'],
-      ['image-from', 'video-to'],
-      ['image-from', 'video-to'],
-      ['video-to'],
-    ])
-    expect(staticImageDecode.decode).toHaveBeenCalledOnce()
-    expect(mb.inputs).toHaveLength(1)
-    expect(createBitmap).toHaveBeenCalledTimes(4)
-    expect(
-      canvas.context.drawImage.mock.calls
-        .filter(([image]) => image === source),
-    ).toHaveLength(5)
-    expect(source.close).not.toHaveBeenCalled()
-    for (const bitmap of fakeBitmaps) {
-      expect(bitmap.close).toHaveBeenCalledOnce()
-    }
+      expect(drawn).toEqual([
+        [`${fromKind}-from`],
+        [`${fromKind}-from`],
+        [`${fromKind}-from`, `${toKind}-to`],
+        [`${fromKind}-from`, `${toKind}-to`],
+        [`${fromKind}-from`, `${toKind}-to`],
+        [`${toKind}-to`],
+      ])
+      expect(staticImageDecode.decode).toHaveBeenCalledOnce()
+      expect(mb.inputs).toHaveLength(expectedVideoInputs)
+      expect(createBitmap).toHaveBeenCalledTimes(expectedVideoCopies)
+      expect(
+        fakeCanvases.flatMap(
+          (candidate) => candidate.context.drawImage.mock.calls,
+        ).filter(([image]) => image === source),
+      ).toHaveLength(expectedImageDraws)
+      expect(source.close).not.toHaveBeenCalled()
+      for (const bitmap of fakeBitmaps) {
+        expect(bitmap.close).toHaveBeenCalledOnce()
+      }
 
-    await media.close()
-    expect(source.close).toHaveBeenCalledOnce()
-    expect(canvasIteratorAt().return).toHaveBeenCalledOnce()
-    expect(inputAt().dispose).toHaveBeenCalledOnce()
-  })
+      await media.close()
+      expect(source.close).toHaveBeenCalledOnce()
+      if (expectedVideoInputs > 0) {
+        expect(canvasIteratorAt().return).toHaveBeenCalledOnce()
+        expect(inputAt().dispose).toHaveBeenCalledOnce()
+      } else {
+        expect(mb.canvasIterators).toHaveLength(0)
+      }
+    },
+  )
 
   test('preserves static-image resource-limit identity at the export boundary', async () => {
     const decodeFailure = new StaticImageDecodeError('resource-limit', 'png')
@@ -978,6 +1056,10 @@ describe('createMediabunnyExportMediaSource', () => {
     await vi.waitFor(() => expect(staticImageDecode.decode).toHaveBeenCalledOnce())
 
     const closed = media.close()
+    const decodeOptions = staticImageDecode.decode.mock.calls[0][1] as {
+      signal: AbortSignal
+    }
+    expect(decodeOptions.signal.aborted).toBe(true)
     decoded.resolve({
       source,
       sourceKind: 'image-bitmap',
@@ -996,6 +1078,123 @@ describe('createMediabunnyExportMediaSource', () => {
     expect(source.close).toHaveBeenCalledOnce()
   })
 
+  test('early export return cancels the sink and closes its retained still once', async () => {
+    const doc = makeStillDoc(3)
+    const source = {
+      width: 64,
+      height: 48,
+      close: vi.fn(),
+    } as unknown as FakeBitmap
+    staticImageDecode.decode.mockResolvedValue({
+      source,
+      sourceKind: 'image-bitmap',
+      width: source.width,
+      height: source.height,
+      animation: { animated: false, frameCount: 1, loopCount: null },
+      decoderRepetitionCount: null,
+      decodePath: 'image-bitmap',
+    })
+    const media = createMediabunnyExportMediaSource(
+      doc,
+      async () => resolvedAsset(new Blob(['still']), 'image'),
+    )
+    const openFrame = vi.spyOn(media, 'openFrame')
+    const closeMedia = vi.spyOn(media, 'close')
+    const canvas = new FakeOffscreenCanvas(doc.width, doc.height)
+    const sink: ExportVideoSink = {
+      ctx: canvas.context,
+      transitionSurfaceProvider: fakeTransitionSurfaceProvider(
+        doc.width,
+        doc.height,
+      ),
+      addFrame: vi.fn(async () => undefined),
+      finalize: vi.fn(async () => ({
+        buffer: new ArrayBuffer(0),
+        mimeType: 'video/mp4' as const,
+      })),
+      cancel: vi.fn(async () => undefined),
+    }
+    const run = exportTimeline(doc, SETTINGS, media, {
+      composite: compositeFrame,
+      createVideoSink: async () => sink,
+    })
+
+    await expect(run.next()).resolves.toEqual({ done: false, value: 0 })
+    await expect(run.next()).resolves.toEqual({ done: false, value: 1 / 4 })
+    expect(source.close).not.toHaveBeenCalled()
+    await expect(run.return(undefined)).resolves.toMatchObject({ done: true })
+
+    expect(openFrame).toHaveBeenCalledOnce()
+    expect(sink.addFrame).toHaveBeenCalledOnce()
+    expect(sink.finalize).not.toHaveBeenCalled()
+    expect(sink.cancel).toHaveBeenCalledOnce()
+    expect(closeMedia).toHaveBeenCalledOnce()
+    expect(source.close).toHaveBeenCalledOnce()
+    const decodeOptions = staticImageDecode.decode.mock.calls[0][1] as {
+      signal: AbortSignal
+    }
+    expect(decodeOptions.signal.aborted).toBe(true)
+  })
+
+  test('encoder failure stays primary while the retained still closes once', async () => {
+    const doc = makeStillDoc(2)
+    const source = {
+      width: 64,
+      height: 48,
+      close: vi.fn(),
+    } as unknown as FakeBitmap
+    staticImageDecode.decode.mockResolvedValue({
+      source,
+      sourceKind: 'image-bitmap',
+      width: source.width,
+      height: source.height,
+      animation: { animated: false, frameCount: 1, loopCount: null },
+      decoderRepetitionCount: null,
+      decodePath: 'image-bitmap',
+    })
+    const media = createMediabunnyExportMediaSource(
+      doc,
+      async () => resolvedAsset(new Blob(['still']), 'image'),
+    )
+    const openFrame = vi.spyOn(media, 'openFrame')
+    const closeMedia = vi.spyOn(media, 'close')
+    const primary = new Error('encoder failed')
+    const canvas = new FakeOffscreenCanvas(doc.width, doc.height)
+    const sink: ExportVideoSink = {
+      ctx: canvas.context,
+      transitionSurfaceProvider: fakeTransitionSurfaceProvider(
+        doc.width,
+        doc.height,
+      ),
+      addFrame: vi.fn(async () => {
+        throw primary
+      }),
+      finalize: vi.fn(async () => ({
+        buffer: new ArrayBuffer(0),
+        mimeType: 'video/mp4' as const,
+      })),
+      cancel: vi.fn(async () => undefined),
+    }
+    const run = exportTimeline(doc, SETTINGS, media, {
+      composite: compositeFrame,
+      createVideoSink: async () => sink,
+    })
+
+    await expect(run.next()).resolves.toEqual({ done: false, value: 0 })
+    await expect(run.next()).rejects.toBe(primary)
+
+    expect(openFrame).toHaveBeenCalledOnce()
+    expect(sink.addFrame).toHaveBeenCalledOnce()
+    expect(sink.finalize).not.toHaveBeenCalled()
+    expect(sink.cancel).toHaveBeenCalledOnce()
+    expect(closeMedia).toHaveBeenCalledOnce()
+    expect(source.close).toHaveBeenCalledOnce()
+    const decodeOptions = staticImageDecode.decode.mock.calls[0][1] as {
+      signal: AbortSignal
+    }
+    expect(decodeOptions.signal.aborted).toBe(true)
+  })
+
   test('uses the canonical crossfade plan for exact ordered decode timestamps', async () => {
     const doc = makeTransitionVideoDoc()
     mb.inputTracks.push(videoTrack())
@@ -1005,11 +1204,21 @@ describe('createMediabunnyExportMediaSource', () => {
       async () => resolvedAsset(new Blob(['asset-a'])),
     )
     const ctx = new FakeOffscreenCanvas(doc.width, doc.height).context
+    const transitionSurfaceProvider = fakeTransitionSurfaceProvider(
+      doc.width,
+      doc.height,
+    )
     const drawn: string[][] = []
 
     for (let frame = 0; frame < 6; frame++) {
       const lease = await media.openFrame(frame)
-      const result = await compositeFrame(doc, frame, ctx, lease)
+      const result = await compositeFrame(
+        doc,
+        frame,
+        ctx,
+        lease,
+        transitionSurfaceProvider,
+      )
       drawn.push(result.drawn)
       await lease.close()
     }
@@ -1448,6 +1657,12 @@ describe('createMediabunnyExportSink video behavior', () => {
     expect(outputAt().addAudioTrack).not.toHaveBeenCalled()
     expect(outputAt().start).toHaveBeenCalledOnce()
     expect(sink.ctx).toBe(fakeCanvases[0].context)
+    const transitionSurfaces = sink.transitionSurfaceProvider.get()
+    expect(fakeCanvases).toHaveLength(3)
+    expect(transitionSurfaces.leg.canvas).toBe(fakeCanvases[1])
+    expect(transitionSurfaces.group.canvas).toBe(fakeCanvases[2])
+    expect(sink.transitionSurfaceProvider.get()).toBe(transitionSurfaces)
+    expect(fakeCanvases).toHaveLength(3)
     const deps = createMediabunnyExportDeps(resolveAsset)
     expect(deps.composite).toBe(compositeFrame)
     expect(deps.createVideoSink).toEqual(expect.any(Function))

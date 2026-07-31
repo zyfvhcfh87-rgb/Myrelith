@@ -37,7 +37,7 @@ const RESULT: ExportResult = {
 }
 
 const DOC: TimelineDoc = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   id: 'doc-export-controller',
   name: 'Export controller fixture',
   frameRate: { num: 30, den: 1 },
@@ -54,6 +54,7 @@ const DOC: TimelineDoc = {
           id: 'clip-1',
           assetId: 'asset-1',
           name: 'source.mp4',
+          sourceMode: 'timed',
           sourceRange: { startFrame: 0, durationFrames: 2 },
           timelineRange: { startFrame: 0, durationFrames: 2 },
           transform: {

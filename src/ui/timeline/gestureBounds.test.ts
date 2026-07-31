@@ -18,6 +18,7 @@ function clip(
     id,
     assetId,
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: sourceStart, durationFrames: duration },
     timelineRange: { startFrame: timelineStart, durationFrames: duration },
     transform: {
@@ -55,7 +56,7 @@ function linkedDoc(
   audio = clip('audio', 'audio-asset', 35, 40, 2, 'link_bounds'),
 ): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'gesture-bounds',
     name: 'Gesture bounds',
     frameRate: { num: 30, den: 1 },

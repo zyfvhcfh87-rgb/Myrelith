@@ -22,6 +22,10 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function removeSourceMode(clip: Clip): void {
+  Reflect.deleteProperty(clip, 'sourceMode')
+}
+
 function mediaClip(
   id: string,
   assetId: string,
@@ -198,14 +202,16 @@ describe('portable project file', () => {
       document: TimelineDoc
     }
     legacy.formatVersion = 1
+    legacy.document.schemaVersion = 1
     for (const asset of legacy.assets) delete asset.partialTrackSelection
     for (const track of legacy.document.tracks) {
-      for (const clip of track.clips) delete clip.sourceMode
+      for (const clip of track.clips) removeSourceMode(clip)
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
     expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(parsed.assets).toHaveLength(2)
     expect(
       parsed.assets.every((asset) => asset.partialTrackSelection === undefined),
@@ -214,6 +220,12 @@ describe('portable project file', () => {
       parsed.document.tracks.flatMap((track) => track.clips)
         .every((clip) => clip.sourceMode === 'timed'),
     ).toBe(true)
+    expect(parsed.document.tracks[0].clips[2]).toMatchObject({
+      assetId: 'image-a',
+      sourceMode: 'timed',
+      sourceRange: { startFrame: 0, durationFrames: 20 },
+      text: { content: 'A portable title' },
+    })
   })
 
   test('migrates a v2 image clip to one still source frame without changing its timeline', () => {
@@ -222,16 +234,18 @@ describe('portable project file', () => {
       document: TimelineDoc
     }
     legacy.formatVersion = 2
+    legacy.document.schemaVersion = 1
     const title = legacy.document.tracks[0].clips[2]
     delete title.text
     for (const track of legacy.document.tracks) {
-      for (const clip of track.clips) delete clip.sourceMode
+      for (const clip of track.clips) removeSourceMode(clip)
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
     const migrated = parsed.document.tracks[0].clips[2]
 
     expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(migrated.sourceMode).toBe('still')
     expect(migrated.sourceRange).toEqual({ startFrame: 0, durationFrames: 1 })
     expect(migrated.timelineRange).toEqual({
@@ -239,6 +253,51 @@ describe('portable project file', () => {
       durationFrames: 20,
     })
     expect(parsed.document.tracks[0].clips[0].sourceMode).toBe('timed')
+  })
+
+  test('migrates shipped v3 schema-1 documents by asset kind, including image-backed text', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 1
+    const video = legacy.document.tracks[0].clips[0]
+    const imageBackedText = legacy.document.tracks[0].clips[2]
+    video.sourceMode = 'still'
+    imageBackedText.sourceMode = 'still'
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.tracks[0].clips[0]).toMatchObject({
+      assetId: 'video-z',
+      sourceMode: 'timed',
+      sourceRange: { startFrame: 5, durationFrames: 10 },
+    })
+    expect(parsed.document.tracks[0].clips[2]).toMatchObject({
+      assetId: 'image-a',
+      sourceMode: 'timed',
+      sourceRange: { startFrame: 0, durationFrames: 20 },
+      text: { content: 'A portable title' },
+    })
+  })
+
+  test('migrates image-backed text beyond the nominal image duration', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 1
+    const imageDescriptor = legacy.assets.find((asset) => asset.id === 'image-a')
+    if (!imageDescriptor) throw new Error('missing image fixture')
+    imageDescriptor.durationMicroseconds = 100_000
+    const imageBackedText = legacy.document.tracks[0].clips[2]
+    removeSourceMode(imageBackedText)
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.tracks[0].clips[2]).toMatchObject({
+      assetId: 'image-a',
+      sourceMode: 'timed',
+      sourceRange: { startFrame: 0, durationFrames: 20 },
+      timelineRange: { startFrame: 24, durationFrames: 20 },
+      text: { content: 'A portable title' },
+    })
   })
 
   test('round-trips explicit still source semantics in the current format', () => {
@@ -636,8 +695,14 @@ describe('portable project file', () => {
   })
 
   test('requires valid explicit timed/still source semantics in current files', () => {
+    const legacyNestedSchema = makeProject()
+    legacyNestedSchema.document.schemaVersion = 1
+    expect(() => validateProjectFile(legacyNestedSchema)).toThrow(
+      /unsupported timeline schema 1/,
+    )
+
     const missingMode = makeProject()
-    delete missingMode.document.tracks[0].clips[0].sourceMode
+    removeSourceMode(missingMode.document.tracks[0].clips[0])
     expect(() => validateProjectFile(missingMode)).toThrow(/missing field sourceMode/)
 
     const timedImage = makeProject()
@@ -661,6 +726,18 @@ describe('portable project file', () => {
     const project = makeProject()
     project.assets[0].durationMicroseconds = 100_000
     expect(() => validateProjectFile(project)).toThrow(/beyond the referenced asset duration/)
+  })
+
+  test('allows procedural text beyond its backing asset while preserving timed equality', () => {
+    const project = makeProject()
+    const imageDescriptor = project.assets.find((asset) => asset.id === 'image-a')
+    if (!imageDescriptor) throw new Error('missing image fixture')
+    imageDescriptor.durationMicroseconds = 100_000
+
+    expect(() => validateProjectFile(project)).not.toThrow()
+
+    project.document.tracks[0].clips[2].sourceRange.durationFrames = 19
+    expect(() => validateProjectFile(project)).toThrow(/durations must match/)
   })
 
   test('accepts one-frame clips for positive sub-frame media', () => {

@@ -38,6 +38,7 @@ function makeClip(
     id,
     assetId: options.assetId ?? `asset-${id}`,
     name: id,
+    sourceMode: 'timed',
     sourceRange: {
       startFrame: options.sourceStart ?? 0,
       durationFrames: duration,
@@ -83,7 +84,7 @@ function makeDoc(
   audioSampleRate = 48_000,
 ): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc',
     name: 'Audio export test',
     frameRate,

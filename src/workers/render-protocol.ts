@@ -49,7 +49,7 @@ export type RenderMode = 'playback' | 'seek'
  * key requested by compositeFrame; native timestamps are precomputed by the
  * main thread and stay integer microseconds across this boundary.
  */
-export interface StreamingCompositeSourceEntry {
+interface StreamingCompositeSourceEntryBase {
   clipId: ClipId
   assetId: AssetId
   /** Document-rate source frame from domain.visibleVideoLayersAtFrame(). */
@@ -57,6 +57,29 @@ export interface StreamingCompositeSourceEntry {
   /** Target presentation timestamp in the asset stream, integer µs. */
   targetTimestampUs: number
 }
+
+/** One timed-video request backed by a clip-keyed worker decode lane. */
+export interface StreamingVideoSourceEntry
+  extends StreamingCompositeSourceEntryBase {
+  kind: 'video'
+}
+
+/**
+ * One frame-zero still request backed by the asset's retained worker source.
+ * Literal zeroes make the no-timeline-decoder contract explicit on both sides
+ * of the worker boundary.
+ */
+export interface StreamingImageSourceEntry
+  extends StreamingCompositeSourceEntryBase {
+  kind: 'image'
+  sourceFrame: 0
+  targetTimestampUs: 0
+}
+
+/** Discriminated render-source request; never infer kind from registry state. */
+export type StreamingCompositeSourceEntry =
+  | StreamingVideoSourceEntry
+  | StreamingImageSourceEntry
 
 /**
  * Open (or replace) one worker-owned media source. Blob is structured-
@@ -67,6 +90,8 @@ export interface StreamingCompositeSourceEntry {
 export interface OpenAssetMessage {
   type: 'openAsset'
   assetId: AssetId
+  /** Bridge-issued identity echoed by the worker's setup reply. */
+  setupId: number
   blob: Blob
   /** Immutable import metadata required before a local fallback may run. */
   budget: LocalDecoderBudget
@@ -82,6 +107,8 @@ export interface OpenAssetMessage {
 export interface OpenImageMessage {
   type: 'openImage'
   assetId: AssetId
+  /** Bridge-issued identity echoed by the worker's setup reply. */
+  setupId: number
   blob: Blob
 }
 
@@ -153,6 +180,8 @@ export type ToRenderWorker =
        */
       type: 'configureAsset'
       assetId: AssetId
+      /** Bridge-issued identity echoed by the worker's setup reply. */
+      setupId: number
       config: VideoDecoderConfig
     }
   | {
@@ -187,6 +216,8 @@ export type FromRenderWorker =
       /** The asset's worker source/decoder is ready; renders may reference it. */
       type: 'assetConfigured'
       assetId: AssetId
+      /** Exact identity from configureAsset/openAsset/openImage. */
+      setupId: number
     }
   | {
       /** A render finished (exactly one per renderFrame/legacy composite). */
@@ -213,6 +244,8 @@ export type FromRenderWorker =
       type: 'error'
        requestId?: number
        assetId?: AssetId
+       /** Present only for a configure/open setup failure. */
+       setupId?: number
        /** Present only when worker source setup identified a media boundary. */
        mediaFailure?: {
          trackKind: 'video' | null

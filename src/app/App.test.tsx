@@ -23,6 +23,7 @@ function makeClip(id: string, startFrame: number): Clip {
     id,
     assetId: 'asset-app-selection',
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames: 30 },
     timelineRange: { startFrame, durationFrames: 30 },
     transform: {
@@ -42,7 +43,7 @@ function makeClip(id: string, startFrame: number): Clip {
 
 function makeDocument(): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-app-selection',
     name: 'App selection fixture',
     frameRate: { num: 30, den: 1 },

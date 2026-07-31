@@ -66,17 +66,22 @@ and the open list below.
 | Post-MVP #12 — original Slice 5 | ✅ done | app-level stale/deleted selection reconciliation; surviving-primary promotion, undo non-resurrection, track/project replacement, and history/serialization isolation; 82 focused + 1,173 total tests; in-app Chromium delete/undo/track-removal gate |
 | Post-MVP #12 — original Slice 6 | ✅ done | focusable pressed clip controls + focusable `aria-disabled` Inspector Link/Unlink with visible described reasons; exact-target race rejection, retained pair selection/primary, badges/highlighting, focus handoff; 100 focused + 1,184 total tests; targeted in-app Chromium accessibility gate |
 | Post-MVP #12 — original Slice 7 / closeout | ✅ complete | orphan-safe removal, group-wide bounds, and immutable pointerdown document guard; 359 focused + 1,209 total tests; Chrome 150 full import/re-link/move/undo/redo/playback gate with a clean console |
-| Post-MVP #18 — static images Slice 1 | ✅ done | byte-sniffed PNG/JPEG/WebP/AVIF + immutable source/decode budgets; exact one-source ownership; deterministic 15-file matrix; 60 focused + 1,269 total tests; Chrome 150 41-fact module gate |
-| Post-MVP #18 — static images Slice 2 | ✅ done | verified multi-file import + durable five-second image records + Resume/Relink + bounded one-tile visuals; 212 focused + 1,291 total tests; in-app Chrome import/error/retry gate |
-| Post-MVP #18 — static images Slice 3 | ✅ done | explicit still source mode + v3 migration; placeable/editable five-second clips, frame-0 selectors, Slip no-op, repeated timeline tiles; 352 focused + 1,311 total tests; in-app Chrome Razor/crossfade/undo gate |
-| Post-MVP #18 — static images Slice 4 | ✅ done | one worker-owned decoded still per asset; frame-0 reuse through scrub/play/compositing/transitions; exact replacement/release/cancel/close ownership; 128 focused + 1,327 total tests; in-app Chromium transform/crossfade gate |
-| Post-MVP #18 — static images Slice 5 | ✅ done | kind-aware export source; one retained still decode per asset; shared compositor image↔video transitions; 54 focused + 1,331 total tests; 210-frame Chromium MP4 export/re-import gate |
-| **Post-MVP #18 — Slice 6 / final closeout** | ✅ complete | 38/38 issue checklist items reviewed against code/tests/browser evidence; full local validation green; normally merged with `codex/feature` retained; Issue #18 closed completed |
+| Post-MVP #18 — original Slice 1 source foundation | ✅ done | historical local Slice 1 bundle: byte-sniffed PNG/JPEG/WebP/AVIF, immutable budgets, exact source ownership, fixture and Chrome module gates |
+| Post-MVP #18 — original Slice 2 schema/migration | ✅ done | historical local Slice 3 bundle + correction: `Clip.sourceMode` required; nested timeline schema 1→2; outer project format remains v3 |
+| Post-MVP #18 — original Slice 3 editing semantics | ✅ done | historical local Slice 3 bundle: canonical `[0, 1)` still source, frame-0 selectors, Slip no-op, editable independent timeline duration |
+| Post-MVP #18 — original Slice 4 import/default/reconnect | ✅ done | historical local Slice 2 bundle + correction: persisted **Default still-image duration** for future imports; reconnect restores each saved duration |
+| Post-MVP #18 — original Slice 5 Media Pool/timeline visuals | ✅ done | historical local Slices 2–3: bounded one-tile thumbnails, diagnostics, draggable Ready rows, repeated still timeline tiles |
+| Post-MVP #18 — original Slice 6 worker preview | ✅ done | historical local Slice 4 bundle + referenced-only image opening, discriminated protocol, one resident still/asset, exact loan/setup identities, aggregate 256 MiB reserved-and-retained worker budget, bounded close ack, repeated seek/play/reopen |
+| Post-MVP #18 — original Slice 7 transition compositor | ✅ done | intrinsic opacity + explicit weights; complete transformed legs added with `lighter` inside one isolated group, then source-over once; exact software + Chromium pixel matrix |
+| Post-MVP #18 — original Slice 8 export | ✅ done | typed source errors preserved; decode-once/frame-zero and real-source cleanup matrix; Chromium 60-frame AVC encode/reopen plus direct production Preview/output pixel parity and clean diagnostics |
+| **Post-MVP #18 — original Slice 9 acceptance/closeout** | ✅ complete | 693 focused + 1,385 total tests; 18-file hostile/orientation matrix; Chrome multi-import, edit, recovery/relink, layered crossfade, and export gate; Issue #18 closeout evidence complete |
 
-1,331 tests green across 71 files · `npm run build` passes with the known large-chunk warning
-(three generated chunks exceed 500 kB) ·
-`npm run lint` clean · `npm audit --omit=dev` reports 0 vulnerabilities · every phase
-committed separately (see `git log --oneline`). The user completed the
+The corrective Issue #18 source suite passes 1,385/1,385 tests across 74 files.
+Deterministic 18-file fixture replay, production build, lint,
+`npm audit --omit=dev`, diff checks, the real-browser Slice 8 encoded-output
+parity gate, and the final Slice 9 Chrome acceptance matrix pass. Earlier
+completed phases remain committed separately
+(see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
@@ -468,7 +473,15 @@ storage is also separate opt-in media caching with quota/eviction UX and
 multi-tab recovery ownership; do not imply recovery or a portable `.webcut`
 contains source bytes today.
 
-Issue #18 Slice 1 establishes the static-image pipeline leaf. A bounded byte
+Issue #18 follows the original researched nine-slice roadmap. The older local
+Slice 1–5 labels below describe delivery bundles, not an authoritative
+renumbering: local 1 maps to original 1; local 2 maps mainly to originals 4–5;
+local 3 maps to originals 2–3 and part of 5; local 4 maps to original 6; and
+local 5 implements original 8. Original Slices 7–9 are complete. Issue #18 was
+reopened after the premature closeout and then finished against the corrected
+nine-slice acceptance gate.
+
+Historical local Slice 1 establishes the static-image pipeline leaf. A bounded byte
 inspector recognizes PNG, JPEG, WebP, and AVIF without trusting extension or
 declared MIME, rejects unsupported/malformed sources before decode, and
 publishes frozen source-size, candidate-dimension, allocation, and animation
@@ -498,15 +511,15 @@ through local Vite passed 41 browser facts for both decode paths, including
 actual oriented pixel probes and exact caller close behavior, with 0 warnings
 and 0 errors.
 
-Issue #18 Slice 2 wires that foundation into the shared import/reconnection
+Historical local Slice 2 wires that foundation into the shared import/reconnection
 boundary. Verified images now receive durable orientation-aware dimensions and
-an exact five-second default, survive Save/Resume/manual Relink/folder Relink,
+the then-current five-second default, survive Save/Resume/manual Relink/folder Relink,
 and appear in the Media Pool with a bounded one-tile thumbnail, format/decode
 diagnostics, animated-first-frame disclosure, and actionable error/retry states.
 Native and fallback pickers accept multiple files through a maximum-100,
 sequential queue so only one image decode owns peak memory at a time.
 
-The focused Slice 2 suite passed 212/212 tests across 12 files and the full
+The focused historical local Slice 2 suite passed 212/212 tests across 12 files and the full
 suite passed 1,291/1,291 across 71 files. Fixture replay, build, lint, audit,
 and diff checks passed. In-app Chrome 150 imported PNG, EXIF-oriented JPEG,
 animated WebP, and AVIF together; all four showed correct metadata and ready
@@ -514,12 +527,12 @@ thumbnails. Corrupt PNG remained Error through Retry, SVG/GIF remained
 Unsupported, every image row remained non-draggable, and the console recorded
 0 warnings and 0 errors.
 
-Issue #18 Slice 3 establishes the still-clip timeline contract. Clips now carry
+Historical local Slice 3 establishes the still-clip timeline contract. Clips now carry
 an explicit `timed` or `still` source mode; every still owns canonical source
-range `[0, 1)` while its independent timeline range starts at the existing
-exact five-second default. Portable project format v3 requires that contract,
-and bounded asset-aware migration converts legacy image-media clips without
-misclassifying timed video/audio or text clips.
+range `[0, 1)` while its independent timeline range starts at the configured
+import default. The outer portable project format remains v3; nested timeline
+schema 2 requires `sourceMode`, and bounded nested-schema-1 migration converts
+legacy image-media clips without misclassifying timed video/audio or text clips.
 
 Selectors map every ordinary and transition frame of a still to source frame 0.
 Move, trim, ripple, Razor, and Slide preserve `[0, 1)` while editing timeline
@@ -530,7 +543,7 @@ repeats across the complete still clip, including split and extended ranges.
 The accessible clip name identifies a still image, and its Slip title explains
 why the tool is unavailable.
 
-The focused Slice 3 suite passed 352/352 tests across 10 files and the full
+The focused historical local Slice 3 suite passed 352/352 tests across 10 files and the full
 suite passed 1,311/1,311 across 71 files. Fixture replay, build, lint, audit,
 and diff checks passed. In-app Chrome 150 imported a real 2×2 PNG, showed the
 Ready row as draggable, rendered the exact five-second still tile, Razor-split
@@ -542,8 +555,9 @@ because it cannot carry a local file through File System Access or synthesize
 this HTML drag; the actual import, clip factory, store, editing, transition,
 and rendering paths ran unchanged, and focused UI tests cover data transfer.
 
-Issue #18 Slice 4 connects that still contract to the shared preview compositor.
-The app sends each connected image Blob to the render worker once. The worker
+Historical local Slice 4 connects that still contract to the shared preview
+compositor. The corrected app sends an image Blob only while the active
+document references that asset. The worker
 decodes and retains exactly one `ImageBitmap` or `VideoFrame` per asset, lends
 that same frame-zero source to every visible clip/layer, and keeps the live
 resource outside React/Zustand state. Per-source loans prevent replacement or
@@ -552,7 +566,7 @@ abort signals reject stale concurrent opens, while replacement, release,
 decode failure, cancellation, and acknowledged worker shutdown close every
 decoded source exactly once.
 
-The focused Slice 4 suite passed 128/128 tests across the render worker, bridge,
+The focused historical local Slice 4 suite passed 128/128 tests across the render worker, bridge,
 preview controller/UI, and compositor files. The full suite passed
 1,327/1,327 across 71 files; deterministic fixture replay, production build,
 lint, audit, and diff checks passed. In-app Chromium imported a real 280×175
@@ -565,7 +579,7 @@ Access and HTML drag bridges cannot carry the local fixture; import,
 clip creation, worker decode, preview, transforms, transitions, and playback
 ran through the production paths.
 
-Issue #18 Slice 5 connects image assets to export without creating a second
+Historical local Slice 5 implements original Slice 8 export without creating a second
 visual path. The captured resolver now includes each asset's kind. Timed videos
 keep one Mediabunny Input/CanvasSink iterator and per-frame bitmap leases;
 images pass through the bounded static-image inspector/decoder once and retain
@@ -574,7 +588,7 @@ borrow that source, while only terminal export-source cleanup closes it.
 Shutdown aborts pending image work, late success closes before publication, and
 resource-limit failures preserve typed export identity.
 
-The focused Slice 5 export adapter/controller suite passed 54/54 tests and the
+The focused historical local Slice 5 export adapter/controller suite passed 54/54 tests and the
 full suite passed 1,331/1,331 across 71 files. Deterministic fixture replay,
 production build, lint, audit, and diff checks passed. In-app Chromium imported
 an alpha PNG and generated H.264 video, exercised still trim/transform,
@@ -587,10 +601,86 @@ sole warning was the expected domain rejection from an intentionally attempted
 overlapping move. Removed QA-only chooser/insertion adapters bridged browser
 automation's File System Access and HTML drag limitations.
 
-**Next: publish/merge and close Issue #18.** Static images are now importable,
-placeable, timeline-editable, preview-renderable, and exportable on this local
-branch. GitHub Issue #18 remains open until the branch is published and its
-implementation checklist is closed against merged evidence.
+The corrective pass completes the original Slices 2, 4, and 6 boundaries that
+the historical bundle labels obscured. `Clip.sourceMode` is required under
+nested timeline schema 2 while the outer project format stays v3. **Default
+still-image duration** is a persisted preference for future imports, and
+reconnect restores each descriptor's saved duration rather than reapplying the
+current preference. The worker protocol discriminates video from image entries,
+opens images only while referenced, retains one still per asset behind an exact
+loan ledger, applies one aggregate 256 MiB reserved-and-retained worker-realm
+still budget, and uses a bounded close-ack timeout with exact-once termination.
+Pending decodes reserve before allocation, high-bit-depth fallback paths use a
+conservative 8-byte/pixel reservation and reconcile to the exact returned
+lease, and late completions retain exact ownership. Monotonic `setupId` values
+make delayed ACK/errors inert across release and cross-kind reopen. Repeated
+seek/play/reopen and replacement/release/active-loan/shutdown races are covered.
+The corrective source suite passes 1,380/1,380 tests across 74 files; fixture
+replay, production build, lint, dependency audit, diff checks, and the real
+browser Slice 6 cycle pass with 0 warnings and 0 errors.
+
+Original Slice 7 replaces the flat source-over compensation with one isolated
+premultiplied transition group in the shared preview/export renderer. Complete
+transformed legs render normally into a lazy reusable leg surface, add to a
+cleared group via `lighter` at `(1-p)` / `p`, and source-over that group once.
+Exact goldens cover opaque, transparent, intrinsic-opacity/lower-layer,
+transformed, still→video, video→still, still→still, missing-leg, and ordinary
+video cases. The production streaming `renderFrame` path also crossfades a
+retained image loan with a video loan through the isolated surfaces. The
+focused suite passes 164/164 across 6 files; the full suite
+passes 1,380/1,380 across 74. Real Chromium `OffscreenCanvas` samples matched
+the production compositor within normal RGBA8 rounding, ordinary frames made
+zero transition allocations, and browser diagnostics recorded 0 warnings and
+0 errors. All temporary QA exposure was removed.
+
+Original Slice 8 closes the encoded-output boundary. The production export
+orchestrator now preserves the exact typed source error that the shared preview
+compositor intentionally softens into `missing`; finite export therefore keeps
+asset/runtime identity without changing preview retry semantics. Adapter tests
+cover image→video, video→image, and same-asset image→image, proving one decode
+per still, frame-zero reuse, canonical timed requests, and exact frame-local and
+whole-export ownership. Early generator return and encoder failure now run
+against the real retained-image source, including abort and primary-error
+precedence. The focused suite passes 89/89 across 4 files; the full suite passes
+1,385/1,385 across 74.
+
+In-app Chromium 150 exported a production 320×180, 30 fps, 60-frame AVC MP4
+containing an opaque lower still, scaled/rotated semi-transparent RGBA still,
+transformed video, and a seven-frame still→video crossfade. Mediabunny 1.50.9
+reopened the exact 12,304-byte buffer at timestamp zero, reported 2.000 seconds,
+and decoded all 60 frames. Thirty 7×7 pre-encode/output patches across ordinary,
+outgoing, overlap, incoming, and video frames measured maximum patch-mean channel delta
+1.510, maximum patch RGB MAE 1.000, and selected-region RMSE 0.680 against
+limits 12/10/15; decoded alpha remained 255. Browser diagnostics recorded 0
+warnings and 0 errors. A stricter second pass mounted the normal editor, awaited
+the production Preview worker's drawn/no-missing result for each requested frame,
+and compared that transferred canvas directly with the reopened-output canvas in
+same-screen captures. The same 30 patches measured maximum patch-mean channel
+delta 3.143, maximum patch RGB MAE 2.347, and selected-region RMSE 1.693 against
+limits 12/10/15; all five complete 320×180 pairs measured RGB MAE 1.781 and RMSE
+2.934. Diagnostics again recorded 0 warnings and 0 errors. The temporary seed,
+observation hook, captures, and server logs were removed.
+
+Original Slice 9 completes the acceptance/closeout boundary. The focused
+source/import/project/edit/preview/export matrix passes 693/693 across 25 files;
+the complete suite remains 1,385/1,385 across 74. The deterministic matrix now
+contains 18 files: EXIF orientations 2, 5, and 7 add mirrored-horizontal,
+mirrored-transpose, and mirrored-transverse cases to the previous rotated JPEG
+coverage. Validate-only replay, production build, lint, audit, and diff checks
+all pass.
+
+In-app Chrome 150 multi-imported alpha PNG, rotated and mirrored JPEGs,
+animated WebP, and AVIF with exact orientation-aware display sizes and the
+explicit first-frame-only label. It content-sniffed a `.jpg` carrying PNG bytes,
+rejected corrupt/oversized/GIF/malformed inputs, reopened recovery and portable
+projects offline, accepted an exact relink, rejected a mismatched relink, edited
+transforms, Razor/undo, played the still timeline, authored a 15-frame
+still→still crossfade, and exported a relinked two-layer 320×180 AVC project.
+The final console had 0 warnings and 0 errors. Slice 8's exact-buffer reopen and
+sampled direct Preview/output comparisons remain the pixel-parity proof; the
+native disk-backed Save/Resume/Relink path remains covered by its earlier Chrome
+gate plus the complete persistence/controller suite. Temporary QA picker and
+portable-project helpers were removed before the final gates.
 
 ## What works today (user-visible)
 
@@ -608,8 +698,10 @@ live save. The toolbar shows dirty/saving/saved/error state, reload is guarded
 only while dirty, and returning to Projects confirms before safely closing the
 active media session. Import video, audio, or PNG/JPEG/WebP/AVIF still images
 in the Media Pool; files are byte-verified and analyzed before they appear.
-Still images receive orientation-aware dimensions, a five-second default, and
-one bounded thumbnail; Ready rows drag to video lanes as explicit still clips.
+Still images receive orientation-aware dimensions, the persisted **Default
+still-image duration** for future imports, and one bounded thumbnail; Ready rows
+drag to video lanes as explicit still clips. Changing the preference does not
+retime existing assets, and Resume/Relink restores each saved image duration.
 Their timeline duration can be moved, trimmed, rippled, split, slid, and joined
 by transitions while the single source frame remains fixed; Slip explains that
 it is unavailable and performs no edit. Save/Resume/Relink preserves that
@@ -721,14 +813,14 @@ surface; it is not a second zoom and never enters document history.
 ## Map (key files, one line each)
 
 - `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates,
-  and optional legacy-compatible `ClipSourceMode` with explicit `timed`/`still`
-  values in every new or persisted clip),
+  and required `ClipSourceMode` with explicit `timed`/`still` values in every
+  current clip),
   `time.ts` (conversions incl. exact integer microseconds,
   `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn;
-  Issue #18 Slice 3 keeps still source `[0, 1)` through clip creation,
+  Issue #18 original Slice 3 keeps still source `[0, 1)` through clip creation,
   trim/ripple/Razor/Slide and makes Slip a silent same-reference no-op;
-  Slice 7 `removeTrack` atomically dissolves lone unlocked link survivors or
+  Issue #12 original Slice 7 `removeTrack` atomically dissolves lone unlocked link survivors or
   rejects for a locked survivor; 5.1e-1 track-scoped
   `addCrossfade`/`setCrossfadeDuration`/
   `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
@@ -750,10 +842,11 @@ surface; it is not a second zoom and never enters document history.
   settings validation, and the pure empty-document factory.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
   migration entry point, strict untrusted-input validation, and bounded durable
-  asset metadata; excludes every session-owned field. Issue #18 Slice 3 bumps
-  the format to v3, requires explicit mode/range consistency in current files,
-  and migrates v1/v2 image-media clips to `still` `[0, 1)` while retaining
-  timed media and text semantics.
+  asset metadata; excludes every session-owned field. The outer project format
+  remains v3. Issue #18 original Slice 2 advances the nested timeline schema
+  from 1 to 2, requires explicit mode/range consistency in current snapshots,
+  and migrates nested-schema-1 image-media clips to `still` `[0, 1)` while
+  retaining timed media and text semantics.
 - `src/state/projectSessionStore.ts` — serializable launch/editor screen,
   active-project labels, operation phase, relink status, and separate
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
@@ -785,7 +878,7 @@ surface; it is not a second zoom and never enters document history.
   recovery IndexedDB records; `src/app/projectLibraryController.ts` keeps their
   handles/snapshots outside state. `src/ui/ProjectLaunch.tsx` is the Home, New
   Project, Resume, Recent, and explicit-Recovery UI facade.
-- `src/pipeline/static-image-inspection.ts` — Issue #18 Slice 1 bounded,
+- `src/pipeline/static-image-inspection.ts` — Issue #18 original Slice 1 bounded,
   content-based PNG/JPEG/WebP/AVIF inspection. It owns immutable source,
   candidate-dimension, decoded-allocation, and animation facts plus stable
   unsupported, malformed, and resource-limit failures; it imports no UI or
@@ -795,25 +888,34 @@ surface; it is not a second zoom and never enters document history.
   one caller-owned `ImageBitmap` or `VideoFrame`, validates orientation-aware
   geometry and native allocation, and owns prompt abort plus exact
   decoder/frame/bitmap cleanup.
-- `src/domain/staticImage.ts` — Issue #18 Slice 2 canonical five-second still
-  duration and exact project-rate frame conversion.
+- `src/domain/staticImage.ts` — Issue #18 bounded still-duration validation and
+  exact project-rate frame conversion.
+- `src/state/preferencesStore.ts` + `src/app/preferencesController.ts` — the
+  persisted, versioned **Default still-image duration** preference. It affects
+  future imports only and fails safely when browser storage is unavailable.
 - `src/pipeline/static-image-thumbnail.ts` — one-tile image visual generator:
   contained 320×180 maximum geometry, PNG output capped at 1 MiB, and exact
   decoded-source/abort ownership.
-- `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
+- `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source, transitionSurfaceProvider)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
   Injected `Composite2D` ctx + `FrameSource`; Slice 4 accepts either
   `ImageBitmap` or Canvas-drawable `VideoFrame` sources without copying them.
   The concurrent fetch phase precedes synchronous draw; `{drawn, missing}`
-  result and per-clip try/finally preserve source loans. Since 5.1d it paints
-  the selector's ordered ordinary/crossfade layers rather than re-deriving
-  active clips.
+  result and per-clip try/finally preserve source loans. Since Issue #18
+  original Slice 7 it paints ordinary layers directly, but renders each
+  complete transformed crossfade leg into a transparent scratch, adds the
+  weighted premultiplied legs inside an isolated `lighter` group, and
+  source-overs that group onto lower tracks once. The surface provider is lazy,
+  so ordinary frames allocate no transition canvases.
 - `src/pipeline/export.ts` — Phase 5.1a CFR orchestrator:
   `exportTimeline` derives length with `docDurationFrames`, composites every
   integer frame through an injected `compositeFrame`, awaits sink
   backpressure, and owns per-frame/export cleanup. Natural completion returns
   `ExportResult`; controller cancellation after iteration starts uses
-  `return(undefined)`.
+  `return(undefined)`. Original Issue #18 Slice 8 observes source-request
+  failures around the shared compositor: preview may still soften them to
+  `missing`, while finite export rethrows the exact original typed error before
+  the generic missing-media fallback.
 - `src/app/exportController.ts` — Phase 5.2a composition root: snapshots the
   current document/settings/media, eagerly retains every referenced Blob, and
   passes one cached Blob/budget/kind resolver to both Mediabunny adapter trees.
@@ -860,9 +962,10 @@ surface; it is not a second zoom and never enters document history.
   guards project-change/cancellation races, and owns every uncommitted object
   URL. Slice 2 adds a maximum-100 sequential multi-file queue with one active
   decode and batch cancellation. `src/app/mediaInspection.ts` routes
-  byte-recognized images through real decode and five-second durable asset
-  construction before falling unknown bytes back to the timed-media probe; the
-  same result feeds import and project reconnection callers.
+  byte-recognized images through real decode and configured-duration durable
+  asset construction before falling unknown bytes back to the timed-media
+  probe; project reconnection retains the saved descriptor duration rather than
+  applying the current preference.
 - `src/ui/MediaImportDialog.tsx` — accessible analysis/error/FPS-decision UI;
   exact rates, explicit choices, disabled-Match explanation, Escape handling.
 - `src/ui/MediaPool.tsx` — descriptor rows plus session-only compatibility
@@ -912,8 +1015,10 @@ surface; it is not a second zoom and never enters document history.
   every media sample closes, and terminal cleanup is exact-once. The video
   iterator schedule and each frame-local request derive from the canonical
   visual plan; frame leases fail closed on omitted, extra, or reordered
-  requests. Locked Mediabunny 1.50.3 handles the same-asset non-monotonic
-  sequence created by a frozen-endpoint crossfade (browser-proven in 5.1d).
+  requests. Locked Mediabunny 1.50.3 handled the same-asset non-monotonic
+  sequence created by a frozen-endpoint crossfade (browser-proven in 5.1d);
+  original Issue #18 Slice 8 independently passed encode/reopen/decode and
+  sampled-pixel acceptance against the currently installed 1.50.9.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
   100; rejected ops push no entry; 5.1e-2 transition add/duration/remove
   actions preserve exact snapshot ids), `transportStore` (playhead/zoom/
@@ -927,18 +1032,27 @@ surface; it is not a second zoom and never enters document history.
 - `src/workers/render-protocol.ts` — render-worker message types (types only).
   The primary path sends each timed-video Blob once through `configureAsset`
   or each static-image Blob once through `openImage`, then lightweight entries
-  with clip lane, asset, integer source frame, exact µs timestamp, and
-  playback/seek mode. `closed` acknowledges completed worker cleanup before
-  bridge termination. The deprecated chunk-batch messages remain only for
-  migration tests. `setDoc` must precede renders built from it.
+  discriminated as `video` or `image`. Video entries carry clip lane, asset,
+  integer source frame, exact µs timestamp, and playback/seek mode; image
+  entries carry literal frame/timestamp zero. `closed` acknowledges completed
+  worker cleanup before bounded-timeout bridge termination. The deprecated
+  chunk-batch messages remain only for migration tests. `setDoc` must precede
+  renders built from it.
 - `src/workers/render.worker.ts` — Blob-backed compositing worker: timed video
   keeps one source per asset, sequential clip-keyed playback lanes,
-  request-scoped seek cursors, and a tiny timestamp cache. Slice 4 adds one
+  request-scoped seek cursors, and a tiny timestamp cache. Original Slice 6 adds one
   retained frame-zero static source per image asset, shared across clips and
-  transition layers with explicit in-flight loans. Open revisions and abort
-  signals reject superseded work; replacement, release, failure, cancellation,
-  and worker close retire and close the source exactly once. All sources feed
+  transition layers with explicit lease identity and one aggregate 256 MiB
+  reserved-and-retained still budget for the worker realm. Pending fallback
+  decodes reserve conservatively before allocation, exact returned sizes are
+  reconciled, and retired sources remain charged until their final loan closes.
+  Monotonic setup identities prevent stale ACK/errors from settling a reopened
+  asset. Open revisions and abort signals reject
+  superseded work; replacement, release, failure, cancellation, and worker
+  close retire and close the source exactly once. All sources feed
   `compositeFrame` on a scratch canvas; newest-only blit uses double buffering.
+  Original Slice 7 adds one lazy worker-owned leg/group surface pair, reused
+  and cleared for transition frames and resized with the document canvas.
   Superseded presentation never cancels a healthy playback lane.
 - `src/workers/decode.worker.ts` — injectable core (`createDecodeWorkerCore`);
   closes every VideoFrame ASAP, caches ImageBitmap copies (12) instead
@@ -968,17 +1082,18 @@ surface; it is not a second zoom and never enters document history.
   requests with an explicit playback/seek mode. Static entries always carry
   frame zero/timestamp zero and never create timed playback lanes. Request ids
   remain latest-wins for presentation; `onAssetReady`/`onWorkerError` are the
-  controller hooks. Disposal waits for the worker's cleanup acknowledgment
-  before termination. The old encoded-batch overload is deprecated and not
-  used by preview.
+  controller hooks. Disposal waits for the worker's cleanup acknowledgment,
+  then uses a bounded timeout fallback with exact-once termination. The old
+  encoded-batch overload is deprecated and not used by preview.
 - `src/app/previewController.ts` — THE COMPOSITION ROOT: only place stores
   meet engine/pipeline; DI seams for tests; idempotent per canvas
-  (StrictMode). It fetches each already-analyzed video or image Blob, hands it
-  to the worker once through the matching open path, releases removed assets,
-  forwards doc snapshots, and sends rAF-coalesced document frames with
-  playback/seek mode; re-renders on doc change + assetConfigured (=the whole
-  missing-clip retry policy). Typed runtime failures preserve video/image
-  identity without pretending images have timed-video tracks.
+  (StrictMode). It keeps connected timed videos warm, but opens an analyzed
+  image Blob only while at least one clip in the active document references
+  that asset. Shared references produce one open; the final reference removal
+  releases it. It forwards doc snapshots and sends rAF-coalesced document
+  frames with playback/seek mode; re-renders on doc change + assetConfigured
+  (=the whole missing-clip retry policy). Typed runtime failures preserve
+  video/image identity without pretending images have timed-video tracks.
 - `src/app/transportController.ts` — second composition root (same
   pattern): primes issue #5 live audio from immutable document/media snapshots,
   resumes AudioContext inside the click gesture, gives PlaybackEngine the exact
@@ -1027,9 +1142,11 @@ surface; it is not a second zoom and never enters document history.
   `timeline/ClipView.tsx` — Slice 6 offline UI: descriptor-driven media rows,
   per-source Relink, one folder scan, focus-trapped ambiguity confirmation,
   current-frame Preview guidance, and finite labeled offline clips. Offline
-  rows cannot be dragged; text clips remain intentionally extendable. Issue
-  #18 Slice 4 treats video and image descriptors as visual sources in Preview
-  guidance while keeping the canvas state-only and resource-free.
+  rows cannot be dragged; text clips remain intentionally extendable. Media
+  Pool also exposes the persisted future-import still-duration preference.
+  Issue #18 original Slice 6 treats video and image descriptors as visual
+  sources in Preview guidance while keeping the canvas state-only and
+  resource-free.
 - `src/ui/timeline/Track.tsx` + `TransitionSeam.tsx` (5.1e-3) — Track derives
   eligible touching video cuts from its committed snapshot; each seam marker
   subscribes only to zoom and opens a temporary Add/Apply/Remove duration
@@ -1123,7 +1240,8 @@ surface; it is not a second zoom and never enters document history.
   the 5.2b A/V fixture/result; keep the in-browser generator below when a test
   needs a same-origin `File` without touching disk.
 - `npm run qa:issue18:fixtures` regenerates Issue #18's ignored deterministic
-  15-file PNG/JPEG/WebP/AVIF, animation-header, orientation, spoofed, malformed,
+  18-file PNG/JPEG/WebP/AVIF, animation-header, rotated/mirrored EXIF,
+  spoofed, malformed,
   truncated, oversized, SVG, and GIF matrix plus `manifest.json` under
   `.tmp/issue-18-image-fixtures/`; add `-- --validate-only` to fail when fixture
   bytes, hashes, structural facts, or expected outcomes drift.
@@ -1225,11 +1343,14 @@ surface; it is not a second zoom and never enters document history.
   Revisit only if locale typing ever reports badInput problems.
 - Transition rendering, domain authoring, undoable store actions, and the
   5.1e-3 seam popover are complete. Current crossfades are visual-only (audio
-  still hard-cuts), and the
-  source-over compensation is exact only for ordinary opaque full-frame
-  footage; transformed/transparent dissolves need isolated compositing.
-  Static images now render through the same preview compositing/transition path,
-  but export integration remains open. The minimal UI intentionally surfaces
+  still hard-cuts). The shared isolated premultiplied transition group now
+  handles transformed, transparent, intrinsic-opacity, still↔video,
+  video↔still, and still↔still dissolves for preview and export. The historical
+  local Slice 5 export implementation plus original Slice 8 now complete the
+  encoded-output reopen, cleanup, sampled pre-encode/output checks, and direct
+  production Preview/output pixel acceptance.
+  Original Slice 9 completed the full Chrome workflow/input matrix and Issue
+  #18 closeout evidence. The minimal UI intentionally surfaces
   currently eligible seams; a malformed serialized transition whose endpoints
   are missing/gapped/text has no cleanup marker yet, although the store's
   remove action can still delete it.

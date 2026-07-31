@@ -59,7 +59,11 @@ import {
   type ExportAudioMediaSource,
   type MixedAudioBlock,
 } from './export-audio'
-import { compositeFrame, type Composite2D } from './render'
+import {
+  compositeFrame,
+  type Composite2D,
+  type TransitionSurfaces,
+} from './render'
 import {
   decodeStaticImage,
   StaticImageDecodeError,
@@ -1169,6 +1173,7 @@ export async function createMediabunnyExportSink(
   let state: SinkState = 'open'
   let cancelPromise: Promise<void> | null = null
   let nextFrame = 0
+  let transitionSurfaces: TransitionSurfaces | null = null
 
   const cancel = (): Promise<void> => {
     if (state === 'finalized' || state === 'canceled') {
@@ -1269,6 +1274,29 @@ export async function createMediabunnyExportSink(
 
   return {
     ctx: context as Composite2D,
+    transitionSurfaceProvider: {
+      get: () => {
+        if (transitionSurfaces) return transitionSurfaces
+        const legCanvas = new OffscreenCanvas(doc.width, doc.height)
+        const legContext = legCanvas.getContext('2d')
+        const groupCanvas = new OffscreenCanvas(doc.width, doc.height)
+        const groupContext = groupCanvas.getContext('2d')
+        if (!legContext || !groupContext) {
+          throw new Error('Could not create export transition 2D contexts')
+        }
+        transitionSurfaces = {
+          leg: {
+            canvas: legCanvas,
+            ctx: legContext as Composite2D,
+          },
+          group: {
+            canvas: groupCanvas,
+            ctx: groupContext as Composite2D,
+          },
+        }
+        return transitionSurfaces
+      },
+    },
     addFrame,
     finalize,
     cancel,

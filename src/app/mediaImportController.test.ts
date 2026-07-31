@@ -3,10 +3,11 @@ import {
   DEFAULT_PROJECT_SETTINGS,
   createTimelineDoc,
 } from '../domain/projectSettings'
-import type {
-  MediaCompatibilityItem,
-  MediaCompatibilityReport,
-  MediaTrackCompatibility,
+import {
+  compatibilityAllowsTimelineUse,
+  type MediaCompatibilityItem,
+  type MediaCompatibilityReport,
+  type MediaTrackCompatibility,
 } from '../domain/mediaCompatibility'
 import type {
   Clip,
@@ -22,6 +23,7 @@ import {
   useMediaImportStore,
   type MediaImportPhase,
 } from '../state/mediaImportStore'
+import { useMediaStore } from '../state/mediaStore'
 import {
   acceptPartialMediaImport,
   cancelMediaImport,
@@ -163,6 +165,7 @@ function makeClip(): Clip {
     id: 'clip-1',
     assetId: 'existing',
     name: 'Edited clip',
+    sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames: 30 },
     timelineRange: { startFrame: 0, durationFrames: 30 },
     transform: {
@@ -245,9 +248,16 @@ function makeFixture(
     getDocument: () => document,
     replaceDocument,
     hasAsset: (id) => assets.has(id),
-    addAsset: (asset) => {
+    addAsset: (asset, readyCompatibility) => {
       if (assets.has(asset.id)) return false
+      const current = compatibility.get(asset.id)
+      if (
+        current?.status !== 'checking'
+        || current.requestId !== readyCompatibility.requestId
+        || readyCompatibility.status !== 'ready'
+      ) return false
       assets.set(asset.id, asset)
+      compatibility.set(asset.id, readyCompatibility)
       return true
     },
     reconformAssets,
@@ -303,9 +313,78 @@ const waitForImportPhase = async (expected: MediaImportPhase): Promise<void> => 
 beforeEach(() => {
   resetMediaImportController()
   useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+    compatibility: new Map(),
+  })
 })
 
 describe('mediaImportController', () => {
+  test('commits sniffed image MIME and Ready state atomically through the real store', async () => {
+    const genericFile = new File(['image'], 'poster.bin', {
+      type: 'application/octet-stream',
+      lastModified: 456,
+    })
+    const analyzed = makeAsset({
+      id: 'asset-sniffed-image',
+      fileName: genericFile.name,
+      mimeType: 'image/png',
+      size: genericFile.size,
+      lastModified: genericFile.lastModified,
+      objectUrl: 'blob:sniffed-image',
+      kind: 'image',
+      durationFrames: 150,
+      durationMicroseconds: 5_000_000,
+      frameRate: null,
+      width: 640,
+      height: 360,
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+      decoderConfigB64: null,
+    })
+    const fixture = makeFixture(analyzed)
+    const storeDeps: MediaImportDeps = {
+      ...fixture.deps,
+      hasAsset: (id) => useMediaStore.getState().descriptors.has(id),
+      addAsset: (asset, compatibility) => (
+        useMediaStore.getState().addAsset(asset, compatibility)
+      ),
+      startCompatibility: (item) => (
+        useMediaStore.getState().startCompatibility(item)
+      ),
+      hasCompatibility: (id, requestId) => (
+        useMediaStore.getState().compatibility.get(id)?.requestId === requestId
+      ),
+      getCompatibility: (id) => useMediaStore.getState().compatibility.get(id),
+      setCompatibility: (id, requestId, status, report) => (
+        useMediaStore.getState().setCompatibility(id, requestId, status, report)
+      ),
+      removeCompatibility: (id) => {
+        useMediaStore.getState().removeCompatibility(id)
+      },
+    }
+
+    await expect(importMedia(genericFile, storeDeps)).resolves.toEqual({
+      status: 'imported',
+      assetId: analyzed.id,
+    })
+
+    const media = useMediaStore.getState()
+    expect(media.assets.get(analyzed.id)?.mimeType).toBe('image/png')
+    expect(media.descriptors.get(analyzed.id)?.mimeType).toBe('image/png')
+    expect(media.compatibility.get(analyzed.id)).toMatchObject({
+      declaredMimeType: 'image/png',
+      status: 'ready',
+      report: { status: 'ready' },
+    })
+    expect(compatibilityAllowsTimelineUse(
+      media.compatibility.get(analyzed.id),
+    )).toBe(true)
+  })
+
   test('matching FPS analyzes once and commits a complete asset immediately', async () => {
     const fixture = makeFixture(makeAsset({ frameRate: F30, durationFrames: 999 }))
 

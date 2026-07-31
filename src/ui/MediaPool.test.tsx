@@ -47,6 +47,10 @@ import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
+import {
+  INITIAL_PREFERENCES_STATE,
+  usePreferencesStore,
+} from '../state/preferencesStore'
 import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
 import MediaPool from './MediaPool'
 
@@ -324,6 +328,7 @@ beforeEach(() => {
     compatibility: new Map(),
   })
   useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
+  usePreferencesStore.setState({ ...INITIAL_PREFERENCES_STATE })
   useProjectSessionStore.setState({
     ...INITIAL_PROJECT_SESSION_STATE,
     screen: 'editor',
@@ -349,6 +354,33 @@ beforeEach(() => {
 })
 
 describe('MediaPool presentation', () => {
+  test('edits the future-import duration with an exact accessible name', () => {
+    render(<MediaPool />)
+
+    const input = screen.getByRole('spinbutton', {
+      name: 'Default still-image duration',
+    })
+    expect(input).toHaveValue(5)
+    expect(input).toHaveAccessibleDescription('Future imports only')
+
+    fireEvent.change(input, { target: { value: '2.5' } })
+    fireEvent.blur(input)
+    expect(usePreferencesStore.getState()
+      .defaultStillImageDurationMicroseconds).toBe(2_500_000)
+
+    fireEvent.change(input, { target: { value: '4' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(input).toHaveValue(2.5)
+    expect(usePreferencesStore.getState()
+      .defaultStillImageDurationMicroseconds).toBe(2_500_000)
+
+    fireEvent.change(input, { target: { value: '0' } })
+    fireEvent.blur(input)
+    expect(input).toHaveValue(2.5)
+    expect(usePreferencesStore.getState()
+      .defaultStillImageDurationMicroseconds).toBe(2_500_000)
+  })
+
   test('delegates every selected fallback file to the bounded batch controller', () => {
     render(<MediaPool />)
 
@@ -537,6 +569,7 @@ describe('MediaPool presentation', () => {
                 id: 'clip-used-source',
                 assetId: asset.id,
                 name: asset.fileName,
+                sourceMode: 'timed',
                 sourceRange: { startFrame: 0, durationFrames: 30 },
                 timelineRange: { startFrame: 0, durationFrames: 30 },
                 transform: {

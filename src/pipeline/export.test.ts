@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
+import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type {
   Clip,
   FrameRate,
@@ -17,6 +18,7 @@ import type {
   Composite2D,
   CompositeResult,
   FrameSource,
+  TransitionSurfaceProvider,
 } from './render'
 import type {
   ExportDeps,
@@ -44,6 +46,7 @@ function makeClip(durationFrames: number): Clip {
     id: 'clip-a',
     assetId: 'asset-a',
     name: 'clip-a',
+    sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames },
     timelineRange: { startFrame: 0, durationFrames },
     transform: {
@@ -83,7 +86,7 @@ function makeDoc(
         ]
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc',
     name: 'doc',
     frameRate,
@@ -103,7 +106,14 @@ function deferredVoid(): { promise: Promise<void>; resolve: () => void } {
 }
 
 interface HarnessOptions {
-  composite?: (frame: number) => Promise<CompositeResult>
+  composite?: (
+    frame: number,
+    source: FrameSource,
+  ) => Promise<CompositeResult>
+  getFrame?: (
+    assetId: string,
+    sourceFrame: number,
+  ) => Promise<ImageBitmap | null>
   addFrame?: (
     timestampSec: number,
     durationSec: number,
@@ -131,9 +141,10 @@ function makeHarness(options: HarnessOptions = {}) {
       events.push('open:' + docFrame)
       return {
         getFrame: async (
-          _assetId: string,
-          _sourceFrame: number,
-        ): Promise<ImageBitmap | null> => null,
+          assetId: string,
+          sourceFrame: number,
+        ): Promise<ImageBitmap | null> =>
+          (await options.getFrame?.(assetId, sourceFrame)) ?? null,
         close: () => leaseClose(docFrame),
       }
     },
@@ -155,10 +166,11 @@ function makeHarness(options: HarnessOptions = {}) {
       frame: number,
       _ctx: Composite2D,
       _source: FrameSource,
+      _transitionSurfaceProvider: TransitionSurfaceProvider,
     ): Promise<CompositeResult> => {
       events.push('composite:' + frame)
       return (
-        (await options.composite?.(frame)) ?? {
+        (await options.composite?.(frame, _source)) ?? {
           drawn: ['clip-a'],
           missing: [],
         }
@@ -186,6 +198,11 @@ function makeHarness(options: HarnessOptions = {}) {
 
   const sink: ExportVideoSink = {
     ctx,
+    transitionSurfaceProvider: {
+      get: () => {
+        throw new Error('fake composite unexpectedly requested surfaces')
+      },
+    },
     addFrame,
     finalize,
     cancel,
@@ -215,6 +232,7 @@ function makeHarness(options: HarnessOptions = {}) {
     closeMedia,
     leaseClose,
     composite,
+    sink,
     createVideoSink,
     addFrame,
     finalize,
@@ -249,6 +267,9 @@ describe('exportTimeline CFR scheduling', () => {
     expect(h.createVideoSink).toHaveBeenCalledWith(doc, SETTINGS)
     expect(h.openFrame.mock.calls.map(([frame]) => frame)).toEqual([0, 1, 2])
     expect(h.composite.mock.calls.map((call) => call[1])).toEqual([0, 1, 2])
+    expect(h.composite.mock.calls.every(
+      (call) => call[4] === h.sink.transitionSurfaceProvider,
+    )).toBe(true)
     expect(h.addFrame.mock.calls).toEqual([
       [0, 1 / 30],
       [1 / 30, 1 / 30],
@@ -390,6 +411,37 @@ describe('exportTimeline validation', () => {
 })
 
 describe('exportTimeline ownership and failures', () => {
+  test('preserves a frame-source failure softened into missing by the compositor', async () => {
+    const sourceFailure = new MediaAssetRuntimeError('asset-a', {
+      surface: 'export',
+      trackKind: null,
+      reason: 'decode-failed',
+      detail: 'Export could not decode the image source.',
+    })
+    const h = makeHarness({
+      getFrame: async () => {
+        throw sourceFailure
+      },
+      composite: async (_frame, source) => {
+        const image = await source.getFrame('asset-a', 0).catch(() => null)
+        return {
+          drawn: image ? ['clip-a'] : [],
+          missing: image ? [] : ['clip-a'],
+        }
+      },
+    })
+
+    await expect(
+      drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)),
+    ).rejects.toBe(sourceFailure)
+
+    expect(h.leaseClose).toHaveBeenCalledOnce()
+    expect(h.addFrame).not.toHaveBeenCalled()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
   test('missing source media is fatal and cancels the sink', async () => {
     const h = makeHarness({
       composite: async () => ({

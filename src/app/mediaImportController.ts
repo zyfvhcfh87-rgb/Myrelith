@@ -42,6 +42,7 @@ import {
   supportsLocalMediaHandles,
   type LocalMediaFileHandle,
 } from './localMediaHandles'
+import { compatibilityItemForAsset } from './mediaCompatibilityController'
 import { inspectMediaFileCompatibility } from './mediaInspection'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 
@@ -81,7 +82,7 @@ export interface MediaImportDeps {
   getDocument(): TimelineDoc
   replaceDocument(document: TimelineDoc): void
   hasAsset(assetId: string): boolean
-  addAsset(asset: MediaAsset): boolean
+  addAsset(asset: MediaAsset, compatibility: MediaCompatibilityItem): boolean
   reconformAssets(rate: FrameRate): void
   startCompatibility(item: MediaCompatibilityItem): boolean
   hasCompatibility(id: string, requestId: string): boolean
@@ -108,7 +109,9 @@ const realDeps: MediaImportDeps = {
   getDocument: () => useDocumentStore.getState().doc,
   replaceDocument: (document) => useDocumentStore.getState().setDoc(document),
   hasAsset: (assetId) => useMediaStore.getState().descriptors.has(assetId),
-  addAsset: (asset) => useMediaStore.getState().addAsset(asset),
+  addAsset: (asset, compatibility) => (
+    useMediaStore.getState().addAsset(asset, compatibility)
+  ),
   reconformAssets: (rate) => useMediaStore.getState().reconformAssets(rate),
   startCompatibility: (item) => (
     useMediaStore.getState().startCompatibility(item)
@@ -499,17 +502,17 @@ async function importSelectedMedia(
         finalRate,
       ),
     }
-    if (!deps.addAsset(committedAsset)) {
-      throw new Error(`asset id ${committedAsset.id} is already in use`)
-    }
-    committed = true
-    retainedImports.delete(itemId)
-    deps.setCompatibility(
-      itemId,
+    const readyCompatibility = compatibilityItemForAsset(
+      committedAsset,
       requestId,
       'ready',
       acceptedCompatibility,
     )
+    if (!deps.addAsset(committedAsset, readyCompatibility)) {
+      throw new Error(`asset id ${committedAsset.id} is already in use`)
+    }
+    committed = true
+    retainedImports.delete(itemId)
 
     if (decision === 'match-source-rate') {
       deps.replaceDocument({

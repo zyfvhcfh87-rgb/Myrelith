@@ -25,6 +25,10 @@ import {
 } from '../app/projectController'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import {
+  isValidStillImageDurationMicroseconds,
+  STILL_IMAGE_DURATION_PREFERENCE_LIMITS,
+} from '../domain/staticImage'
+import {
   compatibilityAllowsTimelineUse,
   mediaRuntimeSurfaceLabel,
   omittedPartialImportTracks,
@@ -45,9 +49,79 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaImportStore } from '../state/mediaImportStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
+import { usePreferencesStore } from '../state/preferencesStore'
 import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
 import MediaImportDialog from './MediaImportDialog'
 import MediaRelinkDialog from './MediaRelinkDialog'
+
+function formatPreferenceSeconds(durationMicroseconds: number): string {
+  return String(durationMicroseconds / 1_000_000)
+}
+
+function StillImageDurationPreference() {
+  const durationMicroseconds = usePreferencesStore(
+    (state) => state.defaultStillImageDurationMicroseconds,
+  )
+  const setDurationMicroseconds = usePreferencesStore(
+    (state) => state.setDefaultStillImageDurationMicroseconds,
+  )
+  const [draft, setDraft] = useState(
+    () => formatPreferenceSeconds(durationMicroseconds),
+  )
+
+  useEffect(() => {
+    setDraft(formatPreferenceSeconds(durationMicroseconds))
+  }, [durationMicroseconds])
+
+  const restore = (): void => {
+    setDraft(formatPreferenceSeconds(durationMicroseconds))
+  }
+  const commit = (): void => {
+    const seconds = Number(draft)
+    const nextMicroseconds = Math.round(seconds * 1_000_000)
+    if (!isValidStillImageDurationMicroseconds(nextMicroseconds)) {
+      restore()
+      return
+    }
+    setDurationMicroseconds(nextMicroseconds)
+    setDraft(formatPreferenceSeconds(nextMicroseconds))
+  }
+
+  return (
+    <label className="media-still-duration">
+      <span className="media-still-duration-label">
+        Default still-image duration
+      </span>
+      <span className="media-still-duration-input">
+        <input
+          aria-label="Default still-image duration"
+          aria-describedby="media-still-duration-help"
+          type="number"
+          min={STILL_IMAGE_DURATION_PREFERENCE_LIMITS.minMicroseconds / 1_000_000}
+          max={STILL_IMAGE_DURATION_PREFERENCE_LIMITS.maxMicroseconds / 1_000_000}
+          step="0.1"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commit()
+              event.currentTarget.blur()
+            } else if (event.key === 'Escape') {
+              event.preventDefault()
+              restore()
+            }
+          }}
+        />
+        <span aria-hidden="true">s</span>
+      </span>
+      <span id="media-still-duration-help" className="media-still-duration-help">
+        Future imports only
+      </span>
+    </label>
+  )
+}
 
 function formatAssetMetadata(
   descriptor: PortableAssetDescriptor,
@@ -542,48 +616,51 @@ export default function MediaPool() {
   return (
     <div className="media-pool">
       <div className="media-pool-header">
-        <h2 className="media-pool-title">Media</h2>
-        <div className="media-pool-actions">
-          {folderPickerAvailable && offlineCount > 0 ? (
-            <button
-              className="media-folder-relink"
-              type="button"
-              disabled={importBusy || relinkBusy}
-              onClick={() => void chooseActiveMediaFolder()}
-            >
-              Scan folder
-            </button>
-          ) : null}
-          {handlePickerAvailable ? (
-            <button
-              className="media-import"
-              type="button"
-              disabled={importBusy || relinkBusy}
-              onClick={() => void chooseMediaForImport()}
-            >
-              <span aria-hidden="true">+</span>
-              <span>Import</span>
-            </button>
-          ) : (
-            <label className="media-import">
-              <span aria-hidden="true">+</span>
-              <span>Import</span>
-              <input
-                className="media-import-input"
-                aria-label="Import media"
-                type="file"
-                accept={MEDIA_FILE_INPUT_ACCEPT}
-                multiple
+        <div className="media-pool-header-main">
+          <h2 className="media-pool-title">Media</h2>
+          <div className="media-pool-actions">
+            {folderPickerAvailable && offlineCount > 0 ? (
+              <button
+                className="media-folder-relink"
+                type="button"
                 disabled={importBusy || relinkBusy}
-                onChange={(event) => {
-                  const files = [...(event.target.files ?? [])]
-                  event.target.value = ''
-                  if (files.length > 0) void importMediaFiles(files)
-                }}
-              />
-            </label>
-          )}
+                onClick={() => void chooseActiveMediaFolder()}
+              >
+                Scan folder
+              </button>
+            ) : null}
+            {handlePickerAvailable ? (
+              <button
+                className="media-import"
+                type="button"
+                disabled={importBusy || relinkBusy}
+                onClick={() => void chooseMediaForImport()}
+              >
+                <span aria-hidden="true">+</span>
+                <span>Import</span>
+              </button>
+            ) : (
+              <label className="media-import">
+                <span aria-hidden="true">+</span>
+                <span>Import</span>
+                <input
+                  className="media-import-input"
+                  aria-label="Import media"
+                  type="file"
+                  accept={MEDIA_FILE_INPUT_ACCEPT}
+                  multiple
+                  disabled={importBusy || relinkBusy}
+                  onChange={(event) => {
+                    const files = [...(event.target.files ?? [])]
+                    event.target.value = ''
+                    if (files.length > 0) void importMediaFiles(files)
+                  }}
+                />
+              </label>
+            )}
+          </div>
         </div>
+        <StillImageDurationPreference />
       </div>
 
       <MediaRelinkStatus />

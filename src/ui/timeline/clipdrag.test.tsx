@@ -22,6 +22,7 @@ function makeClip(id: string, tlStart: number, duration: number): Clip {
     id,
     assetId: 'asset-1',
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames: duration },
     timelineRange: { startFrame: tlStart, durationFrames: duration },
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
@@ -52,7 +53,7 @@ function makeTrack(
 /** V1: clipA [100,50), clipB [300,80) — room to move, room to collide. */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-drag',
     name: 'drag fixture',
     frameRate: { num: 30, den: 1 },
@@ -397,7 +398,7 @@ describe('linked clip gestures (A/V pairs)', () => {
    * the SAME range, both sharing 'link_1' — a linked pair by construction. */
   function makeLinkedDoc(): TimelineDoc {
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: 'doc-linked-drag',
       name: 'linked drag fixture',
       frameRate: { num: 30, den: 1 },
@@ -447,7 +448,7 @@ describe('linked clip gestures (A/V pairs)', () => {
       linkGroupId: 'link_1',
     }
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: 'doc-unequal-linked-drag',
       name: 'unequal linked drag fixture',
       frameRate: { num: 30, den: 1 },

@@ -549,6 +549,9 @@ function inspectFixture(bytes) {
 const validPng = staticPng()
 const corruptPng = corruptPngCrc(validPng)
 const orientedJpeg = jpegWithExifOrientation(ORIENTABLE_JPEG, 6)
+const mirroredHorizontalJpeg = jpegWithExifOrientation(ORIENTABLE_JPEG, 2)
+const mirroredTransposeJpeg = jpegWithExifOrientation(ORIENTABLE_JPEG, 5)
+const mirroredTransverseJpeg = jpegWithExifOrientation(ORIENTABLE_JPEG, 7)
 const jpegScanOffset = STATIC_JPEG.indexOf(Buffer.from([0xff, 0xda]))
 if (jpegScanOffset < 0) throw new Error('Static JPEG is missing its scan marker')
 
@@ -589,6 +592,51 @@ const fixtures = [
     declaredMimeType: 'image/jpeg',
     expectedImportOutcome: 'ready-oriented-2x4',
     bytes: orientedJpeg,
+    expectedInspection: {
+      format: 'jpeg',
+      mimeType: 'image/jpeg',
+      width: 4,
+      height: 2,
+      animationHint: false,
+      status: 'complete',
+    },
+  },
+  {
+    name: 'exif-mirrored-horizontal-4x2.jpg',
+    purpose: 'Asymmetric JPEG mirrored horizontally by EXIF orientation 2.',
+    declaredMimeType: 'image/jpeg',
+    expectedImportOutcome: 'ready-oriented-4x2',
+    bytes: mirroredHorizontalJpeg,
+    expectedInspection: {
+      format: 'jpeg',
+      mimeType: 'image/jpeg',
+      width: 4,
+      height: 2,
+      animationHint: false,
+      status: 'complete',
+    },
+  },
+  {
+    name: 'exif-mirrored-transpose-4x2.jpg',
+    purpose: 'Asymmetric JPEG mirrored across the top-left diagonal by EXIF orientation 5.',
+    declaredMimeType: 'image/jpeg',
+    expectedImportOutcome: 'ready-oriented-2x4',
+    bytes: mirroredTransposeJpeg,
+    expectedInspection: {
+      format: 'jpeg',
+      mimeType: 'image/jpeg',
+      width: 4,
+      height: 2,
+      animationHint: false,
+      status: 'complete',
+    },
+  },
+  {
+    name: 'exif-mirrored-transverse-4x2.jpg',
+    purpose: 'Asymmetric JPEG mirrored across the top-right diagonal by EXIF orientation 7.',
+    declaredMimeType: 'image/jpeg',
+    expectedImportOutcome: 'ready-oriented-2x4',
+    bytes: mirroredTransverseJpeg,
     expectedInspection: {
       format: 'jpeg',
       mimeType: 'image/jpeg',

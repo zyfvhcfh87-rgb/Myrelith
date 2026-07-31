@@ -21,6 +21,7 @@ function makeClip(id: string, tlStart: number, duration: number, sourceStart = 0
     id,
     assetId: 'asset-1',
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: sourceStart, durationFrames: duration },
     timelineRange: { startFrame: tlStart, durationFrames: duration },
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
@@ -52,7 +53,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -299,28 +300,29 @@ describe('visibleVideoLayersAtFrame', () => {
       id: layer.clip.id,
       sourceFrame: layer.sourceFrame,
       opacity: layer.opacity,
+      weight: layer.transition?.weight ?? null,
     }))
 
   test('uses one centered frozen-endpoint render plan across the full boundary', () => {
     const doc = makeDoc([transitionTrack])
 
     expect(summary(doc, 18)).toEqual([
-      { id: 'from', sourceFrame: 108, opacity: 1 },
+      { id: 'from', sourceFrame: 108, opacity: 1, weight: null },
     ])
     expect(summary(doc, 19)).toEqual([
-      { id: 'from', sourceFrame: 109, opacity: 1 },
-      { id: 'to', sourceFrame: 200, opacity: 0.25 },
+      { id: 'from', sourceFrame: 109, opacity: 1, weight: 0.75 },
+      { id: 'to', sourceFrame: 200, opacity: 1, weight: 0.25 },
     ])
     expect(summary(doc, 20)).toEqual([
-      { id: 'from', sourceFrame: 109, opacity: 1 },
-      { id: 'to', sourceFrame: 200, opacity: 0.5 },
+      { id: 'from', sourceFrame: 109, opacity: 1, weight: 0.5 },
+      { id: 'to', sourceFrame: 200, opacity: 1, weight: 0.5 },
     ])
     expect(summary(doc, 21)).toEqual([
-      { id: 'from', sourceFrame: 109, opacity: 1 },
-      { id: 'to', sourceFrame: 201, opacity: 0.75 },
+      { id: 'from', sourceFrame: 109, opacity: 1, weight: 0.25 },
+      { id: 'to', sourceFrame: 201, opacity: 1, weight: 0.75 },
     ])
     expect(summary(doc, 22)).toEqual([
-      { id: 'to', sourceFrame: 202, opacity: 1 },
+      { id: 'to', sourceFrame: 202, opacity: 1, weight: null },
     ])
   })
 
@@ -332,8 +334,8 @@ describe('visibleVideoLayersAtFrame', () => {
     ])
 
     expect(summary(doc, 20)).toEqual([
-      { id: 'from', sourceFrame: 109, opacity: 1 },
-      { id: 'to', sourceFrame: 200, opacity: 0.5 },
+      { id: 'from', sourceFrame: 109, opacity: 1, weight: 0.5 },
+      { id: 'to', sourceFrame: 200, opacity: 1, weight: 0.5 },
     ])
   })
 
@@ -355,20 +357,20 @@ describe('visibleVideoLayersAtFrame', () => {
     ])
 
     expect(summary(doc, 19)).toEqual([
-      { id: 'from', sourceFrame: 0, opacity: 1 },
-      { id: 'to', sourceFrame: 0, opacity: 0.25 },
+      { id: 'from', sourceFrame: 0, opacity: 1, weight: 0.75 },
+      { id: 'to', sourceFrame: 0, opacity: 1, weight: 0.25 },
     ])
     expect(summary(doc, 20)).toEqual([
-      { id: 'from', sourceFrame: 0, opacity: 1 },
-      { id: 'to', sourceFrame: 0, opacity: 0.5 },
+      { id: 'from', sourceFrame: 0, opacity: 1, weight: 0.5 },
+      { id: 'to', sourceFrame: 0, opacity: 1, weight: 0.5 },
     ])
     expect(summary(doc, 21)).toEqual([
-      { id: 'from', sourceFrame: 0, opacity: 1 },
-      { id: 'to', sourceFrame: 0, opacity: 0.75 },
+      { id: 'from', sourceFrame: 0, opacity: 1, weight: 0.25 },
+      { id: 'to', sourceFrame: 0, opacity: 1, weight: 0.75 },
     ])
   })
 
-  test('adjusts intrinsic opacities without a source-over dark dip', () => {
+  test('keeps intrinsic opacities separate from transition weights', () => {
     const fadedFrom = { ...from, opacity: 0.5 }
     const fadedTo = { ...to, opacity: 0.25 }
     const doc = makeDoc([
@@ -379,8 +381,18 @@ describe('visibleVideoLayersAtFrame', () => {
     const layers = visibleVideoLayersAtFrame(doc, 20)
 
     expect(layers.map((layer) => layer.clip.id)).toEqual(['from', 'to'])
-    expect(layers[0].opacity).toBeCloseTo(2 / 7, 12)
-    expect(layers[1].opacity).toBe(0.125)
+    expect(layers[0].opacity).toBe(0.5)
+    expect(layers[0].transition).toMatchObject({
+      trackId: 'V1',
+      transitionId: 'transition',
+      weight: 0.5,
+    })
+    expect(layers[1].opacity).toBe(0.25)
+    expect(layers[1].transition).toMatchObject({
+      trackId: 'V1',
+      transitionId: 'transition',
+      weight: 0.5,
+    })
   })
 
   test('skips hidden, audio, text, and zero-opacity media in the canonical plan', () => {

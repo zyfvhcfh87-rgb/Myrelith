@@ -37,6 +37,8 @@ import type {
   RenderFrameMessage,
   RenderMode,
   StreamingCompositeSourceEntry,
+  StreamingImageSourceEntry,
+  StreamingVideoSourceEntry,
   ToRenderWorker,
 } from './render-protocol'
 import type { RenderCanvasLike, RenderWorkerEnv } from './render.worker'
@@ -100,6 +102,8 @@ interface FakeOptions {
   openSourceGate?: Promise<void>
   /** Rejects Blob-source opening after the optional gate. */
   openSourceError?: Error
+  /** Replaces the still decoder for ownership-contract regressions. */
+  decodeImage?: RenderWorkerEnv['decodeImage']
 }
 
 /** Same real-semantics fake as decode.worker.test.ts, plus an error hook. */
@@ -286,6 +290,20 @@ class FakeVideoSource implements WorkerVideoSource {
   }
 }
 
+class GatedCloseCursor extends FakeStreamCursor {
+  private readonly closeGate: Promise<void>
+
+  constructor(closeGate: Promise<void>) {
+    super([], true)
+    this.closeGate = closeGate
+  }
+
+  override async close(): Promise<void> {
+    await this.closeGate
+    await super.close()
+  }
+}
+
 class DeferredFailingCloseVideoSource extends FakeVideoSource {
   private readonly closeGate: Promise<void>
   private readonly closeFailure: Error
@@ -304,7 +322,7 @@ class DeferredFailingCloseVideoSource extends FakeVideoSource {
 }
 
 interface CtxOp {
-  surface: 'visible' | 'scratch'
+  surface: 'visible' | 'scratch' | 'transition-leg' | 'transition-group'
   name: string
   args: unknown[]
 }
@@ -317,6 +335,7 @@ interface FakeSurface {
 /** A canvas whose 2D ctx logs ops; drawing a closed bitmap THROWS (real). */
 function makeSurface(surface: CtxOp['surface'], log: CtxOp[]): FakeSurface {
   let alpha = 1
+  let operation: GlobalCompositeOperation = 'source-over'
   let fill: Composite2D['fillStyle'] = ''
   const ctx: Composite2D = {
     get globalAlpha() {
@@ -325,6 +344,13 @@ function makeSurface(surface: CtxOp['surface'], log: CtxOp[]): FakeSurface {
     set globalAlpha(v) {
       alpha = v
       log.push({ surface, name: 'alpha', args: [v] })
+    },
+    get globalCompositeOperation() {
+      return operation
+    },
+    set globalCompositeOperation(v) {
+      operation = v
+      log.push({ surface, name: 'composite', args: [v] })
     },
     get fillStyle() {
       return fill
@@ -338,6 +364,8 @@ function makeSurface(surface: CtxOp['surface'], log: CtxOp[]): FakeSurface {
     translate: (x, y) => log.push({ surface, name: 'translate', args: [x, y] }),
     rotate: (a) => log.push({ surface, name: 'rotate', args: [a] }),
     scale: (x, y) => log.push({ surface, name: 'scale', args: [x, y] }),
+    clearRect: (x, y, w, h) =>
+      log.push({ surface, name: 'clearRect', args: [x, y, w, h] }),
     fillRect: (x, y, w, h) => log.push({ surface, name: 'fillRect', args: [x, y, w, h] }),
     drawImage: (image, dx, dy) => {
       if ((image as Partial<TrackedBitmap>).closed === true) {
@@ -377,7 +405,10 @@ interface Harness {
   openedBlobs: Blob[]
   openedSourceIds: string[]
   openedBudgets: LocalDecoderBudget[]
-  staticImagesToDecode: Array<Promise<DecodedStaticImage>>
+  queueStaticImageDecode(
+    decoded: DecodedStaticImage | Promise<DecodedStaticImage>,
+    inspectedDecodedBytes?: number,
+  ): void
   decodedImageBlobs: Blob[]
   decodedImageSignals: AbortSignal[]
   invalidatedSourceIds: string[]
@@ -386,6 +417,7 @@ interface Harness {
   ops: CtxOp[]
   visible: FakeSurface
   scratch: () => FakeSurface | null
+  createdSurfaces: () => FakeSurface[]
   blits: () => CtxOp[]
   scratchDraws: () => CtxOp[]
 }
@@ -401,7 +433,10 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   const openedBlobs: Blob[] = []
   const openedSourceIds: string[] = []
   const openedBudgets: LocalDecoderBudget[] = []
-  const staticImagesToDecode: Array<Promise<DecodedStaticImage>> = []
+  const staticImagesToDecode: Array<{
+    decoded: Promise<DecodedStaticImage>
+    inspectedDecodedBytes: number
+  }> = []
   const decodedImageBlobs: Blob[] = []
   const decodedImageSignals: AbortSignal[] = []
   const invalidatedSourceIds: string[] = []
@@ -410,6 +445,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   const ops: CtxOp[] = []
   const visible = makeSurface('visible', ops)
   let scratch: FakeSurface | null = null
+  const createdSurfaces: FakeSurface[] = []
 
   const env: RenderWorkerEnv = {
     post: (msg) => posts.push(msg),
@@ -445,15 +481,37 @@ function makeHarness(opts: FakeOptions = {}): Harness {
       if (!source) throw new Error('test did not queue a streaming source')
       return source
     },
-    decodeImage: (blob, signal) => {
-      decodedImageBlobs.push(blob)
-      decodedImageSignals.push(signal)
-      const decoded = staticImagesToDecode.shift()
-      if (!decoded) {
+    decodeImage: opts.decodeImage ?? ((blob, signal, reserveDecodedBytes) => {
+      const queued = staticImagesToDecode.shift()
+      if (!queued) {
         return Promise.reject(new Error('test did not queue a static image'))
       }
-      return decoded
-    },
+      let reservation
+      try {
+        reservation = reserveDecodedBytes(queued.inspectedDecodedBytes)
+      } catch (error) {
+        return Promise.reject(error)
+      }
+      decodedImageBlobs.push(blob)
+      decodedImageSignals.push(signal)
+      return queued.decoded.then(
+        (decoded) => {
+          if (!reservation.reconcile(decoded.decodedBytes)) {
+            decoded.source.close()
+            reservation.release()
+            throw new StaticImageDecodeError('resource-limit', 'png')
+          }
+          return {
+            ...decoded,
+            decodedByteReservation: reservation,
+          }
+        },
+        (error: unknown) => {
+          reservation.release()
+          throw error
+        },
+      )
+    }),
     invalidateDecoderSource: (sourceId) => invalidatedSourceIds.push(sourceId),
     invalidateDecoderRuntime: () => { runtimeInvalidations++ },
     createStreamingBitmap: async (decoded) => {
@@ -484,10 +542,20 @@ function makeHarness(opts: FakeOptions = {}): Harness {
       return bitmap
     },
     createCanvas: (width, height) => {
-      scratch = makeSurface('scratch', ops)
-      scratch.canvas.width = width
-      scratch.canvas.height = height
-      return scratch.canvas
+      const labels: CtxOp['surface'][] = [
+        'scratch',
+        'transition-leg',
+        'transition-group',
+      ]
+      const surface = makeSurface(
+        labels[createdSurfaces.length] ?? 'transition-group',
+        ops,
+      )
+      surface.canvas.width = width
+      surface.canvas.height = height
+      createdSurfaces.push(surface)
+      scratch ??= surface
+      return surface.canvas
     },
     now: () => 0,
   }
@@ -504,7 +572,15 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     openedBlobs,
     openedSourceIds,
     openedBudgets,
-    staticImagesToDecode,
+    queueStaticImageDecode: (decoded, inspectedDecodedBytes) => {
+      const exactBytes = decoded instanceof Promise
+        ? 320 * 180 * 4
+        : decoded.decodedBytes
+      staticImagesToDecode.push({
+        decoded: Promise.resolve(decoded),
+        inspectedDecodedBytes: inspectedDecodedBytes ?? exactBytes,
+      })
+    },
     decodedImageBlobs,
     decodedImageSignals,
     invalidatedSourceIds,
@@ -513,6 +589,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     ops,
     visible,
     scratch: () => scratch,
+    createdSurfaces: () => [...createdSurfaces],
     blits: () => ops.filter((op) => op.surface === 'visible' && op.name === 'drawImage'),
     scratchDraws: () =>
       ops.filter((op) => op.surface === 'scratch' && op.name === 'drawImage'),
@@ -534,6 +611,7 @@ function makeClip(
     id,
     assetId,
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: sourceStart, durationFrames: duration },
     timelineRange: { startFrame: tlStart, durationFrames: duration },
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
@@ -549,7 +627,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 10, den: 1 },
@@ -649,6 +727,7 @@ function decodedStaticImage(
     sourceKind: 'image-bitmap',
     width: source.width,
     height: source.height,
+    decodedBytes: source.width * source.height * 4,
     animation: {
       isAnimated: false,
       frameCount: 1,
@@ -664,8 +743,21 @@ function streamEntry(
   assetId: string,
   sourceFrame: number,
   targetTimestampUs = sourceFrame * FRAME_US,
-): StreamingCompositeSourceEntry {
-  return { clipId, assetId, sourceFrame, targetTimestampUs }
+): StreamingVideoSourceEntry {
+  return { kind: 'video', clipId, assetId, sourceFrame, targetTimestampUs }
+}
+
+function stillEntry(
+  clipId: string,
+  assetId: string,
+): StreamingImageSourceEntry {
+  return {
+    kind: 'image',
+    clipId,
+    assetId,
+    sourceFrame: 0,
+    targetTimestampUs: 0,
+  }
 }
 
 const initMsg = (h: Harness): ToRenderWorker => ({
@@ -675,9 +767,10 @@ const initMsg = (h: Harness): ToRenderWorker => ({
 
 const docMsg = (doc: TimelineDoc): ToRenderWorker => ({ type: 'setDoc', doc })
 
-const cfgMsg = (assetId: string): ToRenderWorker => ({
+const cfgMsg = (assetId: string, setupId = 1): ToRenderWorker => ({
   type: 'configureAsset',
   assetId,
+  setupId,
   config: { codec: 'avc1.640028' },
 })
 
@@ -685,9 +778,11 @@ const openMsg = (
   assetId: string,
   blob = new Blob(['video']),
   budget: LocalDecoderBudget = DECODE_BUDGET,
+  setupId = 1,
 ): ToRenderWorker => ({
   type: 'openAsset',
   assetId,
+  setupId,
   blob,
   budget,
 })
@@ -695,9 +790,11 @@ const openMsg = (
 const openImageMsg = (
   assetId: string,
   blob = new Blob(['image'], { type: 'image/png' }),
+  setupId = 1,
 ): ToRenderWorker => ({
   type: 'openImage',
   assetId,
+  setupId,
   blob,
 })
 
@@ -745,8 +842,35 @@ async function setupStaticImage(
 ): Promise<void> {
   await h.core.handleMessage(initMsg(h))
   await h.core.handleMessage(docMsg(doc))
-  h.staticImagesToDecode.push(Promise.resolve(decodedStaticImage(source)))
+  h.queueStaticImageDecode(decodedStaticImage(source))
   await h.core.handleMessage(openImageMsg(assetId))
+}
+
+async function beginStaticLoanWithParkedPlayback(
+  h: Harness,
+  source: TrackedBitmap,
+  videoSource: FakeVideoSource = new FakeVideoSource(),
+  cursor: FakeStreamCursor = new FakeStreamCursor([], true),
+): Promise<{
+  cursor: FakeStreamCursor
+  rendering: Promise<void>
+}> {
+  const doc = makeDoc([
+    makeTrack('V1', [makeStillClip('still', 'IMAGE', 0, 10)]),
+    makeTrack('V2', [makeClip('video', 'VIDEO', 0, 10)]),
+  ])
+  await setupStaticImage(h, doc, 'IMAGE', source)
+  videoSource.queuePlayback(cursor)
+  h.sourcesToOpen.push(videoSource)
+  await h.core.handleMessage(openMsg('VIDEO'))
+
+  const rendering = h.core.handleMessage(renderMsg(1, 0, 'playback', [
+    stillEntry('still', 'IMAGE'),
+    streamEntry('video', 'VIDEO', 0, 0),
+  ]))
+  await microtasks()
+  expect(videoSource.playbackCursors).toEqual([cursor])
+  return { cursor, rendering }
 }
 
 const microtasks = async (n = 20): Promise<void> => {
@@ -799,6 +923,7 @@ describe('composite happy path', () => {
     // Canvases adopted the doc size.
     expect(h.visible.raw).toEqual({ width: 320, height: 180 })
     expect(h.scratch()?.raw).toEqual({ width: 320, height: 180 })
+    expect(h.createdSurfaces()).toHaveLength(1)
 
     await h.core.handleMessage(
       compMsg(1, 2, [entry('A', 2, gop(0, 5)), entry('B', 2, gop(0, 5))]),
@@ -834,6 +959,86 @@ describe('composite happy path', () => {
     // close() proves the caches (and returned loans) own every bitmap.
     await h.core.handleMessage({ type: 'close' })
     expect(h.bitmaps.every((b) => b.closed)).toBe(true)
+  })
+
+  test('crossfades lazily allocate, clear, reuse, and resize isolated surfaces', async () => {
+    const from = makeClip('from', 'A', 0, 1)
+    const to = makeClip('to', 'B', 1, 1)
+    const track = {
+      ...makeTrack('V1', [from, to]),
+      transitions: [{
+        id: 'dissolve',
+        type: 'crossfade' as const,
+        fromClipId: from.id,
+        toClipId: to.id,
+        durationFrames: 1,
+      }],
+    }
+    const doc = makeDoc([track])
+    const h = makeHarness()
+    await setup(h, doc, ['A', 'B'])
+
+    expect(h.createdSurfaces()).toHaveLength(1)
+    await h.core.handleMessage(
+      compMsg(1, 1, [entry('A', 0, gop(0, 1)), entry('B', 0, gop(0, 1))]),
+    )
+
+    expect(doneFor(h, 1)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: ['from', 'to'],
+      missingClipIds: [],
+    })
+    const firstSurfaces = h.createdSurfaces()
+    expect(firstSurfaces).toHaveLength(3)
+    expect(firstSurfaces.map((surface) => surface.raw)).toEqual([
+      { width: 320, height: 180 },
+      { width: 320, height: 180 },
+      { width: 320, height: 180 },
+    ])
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-leg' && op.name === 'clearRect',
+      ),
+    ).toHaveLength(2)
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-group' && op.name === 'clearRect',
+      ),
+    ).toHaveLength(1)
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-group'
+          && op.name === 'composite'
+          && op.args[0] === 'lighter',
+      ),
+    ).toHaveLength(2)
+    expect(h.scratchDraws()).toHaveLength(1)
+    expect(h.scratchDraws()[0].args[0]).toBe(firstSurfaces[2].canvas)
+    expect(h.blits()).toHaveLength(1)
+
+    await h.core.handleMessage(
+      compMsg(2, 1, [entry('A', 0), entry('B', 0)]),
+    )
+    expect(doneFor(h, 2)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: ['from', 'to'],
+    })
+    expect(h.createdSurfaces()).toEqual(firstSurfaces)
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-group' && op.name === 'clearRect',
+      ),
+    ).toHaveLength(2)
+
+    await h.core.handleMessage({
+      type: 'setDoc',
+      doc: { ...doc, width: 640, height: 360 },
+    })
+    expect(h.createdSurfaces().map((surface) => surface.raw)).toEqual([
+      { width: 640, height: 360 },
+      { width: 640, height: 360 },
+      { width: 640, height: 360 },
+    ])
   })
 
   test('a repeat composite is served from the caches: zero new decodes', async () => {
@@ -1059,7 +1264,11 @@ describe('failure containment', () => {
   test('an unsupported codec posts an error and the asset never exists', async () => {
     const h = makeHarness({ supported: false })
     await setup(h, makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])]), ['A'])
-    expect(h.posts[0]).toMatchObject({ type: 'error', assetId: 'A' })
+    expect(h.posts[0]).toMatchObject({
+      type: 'error',
+      assetId: 'A',
+      setupId: 1,
+    })
     expect(h.decoders).toHaveLength(0)
 
     await h.core.handleMessage(compMsg(1, 3, [entry('A', 3, gop(0, 5))]))
@@ -1136,6 +1345,68 @@ describe('asset lifecycle', () => {
 /* ------------------------------------------------------------------ */
 
 describe('streaming playback lanes', () => {
+  test('an image-to-video crossfade uses isolated surfaces on the renderFrame path', async () => {
+    const h = makeHarness()
+    const from = makeStillClip('from', 'IMAGE', 0, 1)
+    const to = makeClip('to', 'VIDEO', 1, 1)
+    const doc = makeDoc([{
+      ...makeTrack('V1', [from, to]),
+      transitions: [{
+        id: 'dissolve',
+        type: 'crossfade',
+        fromClipId: from.id,
+        toClipId: to.id,
+        durationFrames: 1,
+      }],
+    }])
+    const image = makeStaticSource()
+    await setupStaticImage(h, doc, 'IMAGE', image)
+
+    const videoSource = new FakeVideoSource()
+    const cursor = new FakeStreamCursor([
+      streamDecoded(h, 0),
+      streamDecoded(h, FRAME_US),
+    ])
+    videoSource.queuePlayback(cursor)
+    h.sourcesToOpen.push(videoSource)
+    await h.core.handleMessage(openMsg('VIDEO'))
+
+    await h.core.handleMessage(renderMsg(1, 1, 'playback', [
+      stillEntry('from', 'IMAGE'),
+      streamEntry('to', 'VIDEO', 0),
+    ]))
+
+    expect(doneFor(h, 1)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: ['from', 'to'],
+      missingClipIds: [],
+    })
+    const surfaces = h.createdSurfaces()
+    expect(surfaces).toHaveLength(3)
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-leg' && op.name === 'drawImage',
+      ).map((op) => op.args[0]),
+    ).toEqual([image, h.streamingBitmaps[0]])
+    expect(
+      h.ops.filter(
+        (op) => op.surface === 'transition-group'
+          && op.name === 'composite'
+          && op.args[0] === 'lighter',
+      ),
+    ).toHaveLength(2)
+    expect(h.scratchDraws()).toHaveLength(1)
+    expect(h.scratchDraws()[0].args[0]).toBe(surfaces[2].canvas)
+    expect(h.blits()).toHaveLength(1)
+    expect(image.closeCount).toBe(0)
+
+    await h.core.handleMessage({ type: 'close' })
+    expect(image.closeCount).toBe(1)
+    expect(videoSource.closeCount).toBe(1)
+    expect(cursor.closeCount).toBe(1)
+    expect(h.streamingBitmaps.every((bitmap) => bitmap.closeCount === 1)).toBe(true)
+  })
+
   test('a newer presentation reuses the clip cursor and keeps one-frame lookahead', async () => {
     const h = makeHarness()
     const source = new FakeVideoSource()
@@ -1569,6 +1840,7 @@ describe('streaming response contract', () => {
     expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
       type: 'error',
       assetId: 'A',
+      setupId: 1,
       mediaFailure: {
         trackKind: null,
         reason: 'resource-unavailable',
@@ -1593,6 +1865,7 @@ describe('streaming response contract', () => {
     expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
       type: 'error',
       assetId: 'A',
+      setupId: 1,
       mediaFailure: {
         trackKind: 'video',
         reason: 'resource-limit',
@@ -1624,7 +1897,7 @@ describe('streaming frame ownership', () => {
     expect(staleSource.closeCount).toBe(1)
     expect(winningSource.closeCount).toBe(0)
     expect(h.posts.filter((post) => post.type === 'assetConfigured')).toEqual([
-      { type: 'assetConfigured', assetId: 'A' },
+      { type: 'assetConfigured', assetId: 'A', setupId: 1 },
     ])
     expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
 
@@ -1654,8 +1927,8 @@ describe('streaming frame ownership', () => {
 
     expect(replacement.closeCount).toBe(0)
     expect(h.posts.filter((post) => post.type === 'assetConfigured')).toEqual([
-      { type: 'assetConfigured', assetId: 'A' },
-      { type: 'assetConfigured', assetId: 'A' },
+      { type: 'assetConfigured', assetId: 'A', setupId: 1 },
+      { type: 'assetConfigured', assetId: 'A', setupId: 1 },
     ])
     expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
       type: 'error',
@@ -1849,13 +2122,14 @@ describe('static-image worker ownership', () => {
     expect(h.posts).toContainEqual({
       type: 'assetConfigured',
       assetId: 'IMAGE',
+      setupId: 1,
     })
 
     await h.core.handleMessage(
-      renderMsg(1, 0, 'seek', [streamEntry('still', 'IMAGE', 0, 0)]),
+      renderMsg(1, 0, 'seek', [stillEntry('still', 'IMAGE')]),
     )
     await h.core.handleMessage(
-      renderMsg(2, 9, 'playback', [streamEntry('still', 'IMAGE', 0, 0)]),
+      renderMsg(2, 9, 'playback', [stillEntry('still', 'IMAGE')]),
     )
 
     expect(doneFor(h, 1).drawnClipIds).toEqual(['still'])
@@ -1883,8 +2157,8 @@ describe('static-image worker ownership', () => {
 
     await h.core.handleMessage(
       renderMsg(1, 4, 'seek', [
-        streamEntry('bottom', 'IMAGE', 0, 0),
-        streamEntry('top', 'IMAGE', 0, 0),
+        stillEntry('bottom', 'IMAGE'),
+        stillEntry('top', 'IMAGE'),
       ]),
     )
 
@@ -1900,15 +2174,436 @@ describe('static-image worker ownership', () => {
     expect(source.closeCount).toBe(1)
   })
 
+  test('the source-entry discriminator never infers a still from registry state', async () => {
+    const h = makeHarness()
+    const source = makeStaticSource()
+    const doc = makeDoc([
+      makeTrack('V1', [makeStillClip('still', 'IMAGE', 0, 10)]),
+    ])
+    await setupStaticImage(h, doc, 'IMAGE', source)
+
+    await h.core.handleMessage(
+      renderMsg(1, 0, 'seek', [streamEntry('still', 'IMAGE', 0, 0)]),
+    )
+    expect(doneFor(h, 1).missingClipIds).toEqual(['still'])
+    expect(h.scratchDraws().filter((op) => op.args[0] === source)).toHaveLength(0)
+
+    await h.core.handleMessage(
+      renderMsg(2, 0, 'seek', [stillEntry('still', 'IMAGE')]),
+    )
+    expect(doneFor(h, 2).drawnClipIds).toEqual(['still'])
+    expect(h.scratchDraws().filter((op) => op.args[0] === source)).toHaveLength(1)
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'IMAGE' })
+    expect(source.closeCount).toBe(1)
+  })
+
+  test('pre-reserves concurrent candidates before any over-budget decode starts', async () => {
+    const h = makeHarness()
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    const first = makeStaticSource(8_192, 6_144)
+    const blocked = makeStaticSource(8_192, 4_096)
+    const firstDecode = deferredValue<DecodedStaticImage>()
+    h.queueStaticImageDecode(
+      firstDecode.promise,
+      first.width * first.height * 4,
+    )
+
+    const firstOpening = h.core.handleMessage(openImageMsg('FIRST'))
+    await microtasks()
+    expect(h.decodedImageBlobs).toHaveLength(1)
+
+    h.queueStaticImageDecode(decodedStaticImage(blocked))
+    await h.core.handleMessage(openImageMsg('BLOCKED'))
+
+    expect(h.decodedImageBlobs).toHaveLength(1)
+    expect(blocked.closeCount).toBe(0)
+    expect(h.posts).toContainEqual({
+      type: 'error',
+      assetId: 'BLOCKED',
+      setupId: 1,
+      mediaFailure: {
+        trackKind: null,
+        reason: 'resource-limit',
+      },
+      message: expect.stringContaining('before decode'),
+    })
+
+    firstDecode.resolve(decodedStaticImage(first))
+    await firstOpening
+    expect(h.posts).toContainEqual({
+      type: 'assetConfigured',
+      assetId: 'FIRST',
+      setupId: 1,
+    })
+    await h.core.handleMessage({ type: 'close' })
+    expect(first.closeCount).toBe(1)
+  })
+
+  test('reconciles estimates exactly and refunds failed upward adjustments', async () => {
+    const h = makeHarness()
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    const mib = 1024 * 1024
+    const refunded = makeStaticSource(8_192, 4_096) // 128 MiB exact
+    const upwardAdjustment = makeStaticSource(4_096, 4_096)
+    const fillsRefund = makeStaticSource(8_192, 4_096)
+
+    h.queueStaticImageDecode(
+      decodedStaticImage(refunded),
+      192 * mib,
+    )
+    await h.core.handleMessage(openImageMsg('REFUNDED'))
+
+    h.queueStaticImageDecode(
+      {
+        ...decodedStaticImage(upwardAdjustment),
+        // Models a padded/native VideoFrame allocation larger than RGBA
+        // inspection estimated for its visible geometry.
+        decodedBytes: 160 * mib,
+      },
+      64 * mib,
+    )
+    await h.core.handleMessage(openImageMsg('EXPANDED'))
+
+    expect(upwardAdjustment.closeCount).toBe(1)
+    expect(h.posts).toContainEqual({
+      type: 'error',
+      assetId: 'EXPANDED',
+      setupId: 1,
+      mediaFailure: {
+        trackKind: null,
+        reason: 'resource-limit',
+      },
+      message: expect.stringContaining('worker openImage failed'),
+    })
+
+    h.queueStaticImageDecode(decodedStaticImage(fillsRefund))
+    await h.core.handleMessage(openImageMsg('FILLS_REFUND'))
+    expect(
+      h.posts.filter((post) => post.type === 'assetConfigured'),
+    ).toEqual([
+      { type: 'assetConfigured', assetId: 'REFUNDED', setupId: 1 },
+      { type: 'assetConfigured', assetId: 'FILLS_REFUND', setupId: 1 },
+    ])
+
+    await h.core.handleMessage({ type: 'close' })
+    expect(refunded.closeCount).toBe(1)
+    expect(fillsRefund.closeCount).toBe(1)
+  })
+
+  test('enforces one 256 MiB resident-still budget and releases reservations once', async () => {
+    const h = makeHarness()
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    const fullBudget = makeStaticSource(8_192, 8_192)
+    const rejected = makeStaticSource(1, 1)
+    const acceptedAfterRelease = makeStaticSource(1, 1)
+
+    h.queueStaticImageDecode(decodedStaticImage(fullBudget))
+    await h.core.handleMessage(openImageMsg('FULL'))
+    h.queueStaticImageDecode(decodedStaticImage(rejected))
+    await h.core.handleMessage(openImageMsg('REJECTED'))
+
+    expect(fullBudget.closeCount).toBe(0)
+    expect(rejected.closeCount).toBe(0)
+    expect(h.decodedImageBlobs).toHaveLength(1)
+    expect(
+      h.posts.filter((post) => post.type === 'assetConfigured'),
+    ).toEqual([{
+      type: 'assetConfigured',
+      assetId: 'FULL',
+      setupId: 1,
+    }])
+    expect(h.posts.filter((post) => post.type === 'error')).toContainEqual({
+      type: 'error',
+      assetId: 'REJECTED',
+      setupId: 1,
+      mediaFailure: {
+        trackKind: null,
+        reason: 'resource-limit',
+      },
+      message: expect.stringContaining('Resident still-image budget exceeded'),
+    })
+
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'FULL' })
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'FULL' })
+    expect(fullBudget.closeCount).toBe(1)
+
+    h.queueStaticImageDecode(decodedStaticImage(acceptedAfterRelease))
+    await h.core.handleMessage(openImageMsg('AFTER'))
+    expect(h.posts).toContainEqual({
+      type: 'assetConfigured',
+      assetId: 'AFTER',
+      setupId: 1,
+    })
+    await h.core.handleMessage({ type: 'close' })
+    expect(acceptedAfterRelease.closeCount).toBe(1)
+  })
+
+  test('rejects a mismatched decoder lease and releases both reservations', async () => {
+    const faulty = makeStaticSource(8_192, 8_192)
+    const winner = makeStaticSource(8_192, 8_192)
+    const returnedRelease = vi.fn()
+    const returnedReservation = {
+      reconcile: vi.fn(() => true),
+      release: returnedRelease,
+    }
+    let decodeCall = 0
+    const h = makeHarness({
+      decodeImage: async (_blob, _signal, reserveDecodedBytes) => {
+        const capturedReservation = reserveDecodedBytes(
+          8_192 * 8_192 * 4,
+        )
+        decodeCall++
+        const decoded = decodedStaticImage(
+          decodeCall === 1 ? faulty : winner,
+        )
+        return {
+          ...decoded,
+          decodedByteReservation: decodeCall === 1
+            ? returnedReservation
+            : capturedReservation,
+        }
+      },
+    })
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([])))
+
+    await h.core.handleMessage(openImageMsg('FAULTY'))
+
+    expect(faulty.closeCount).toBe(1)
+    expect(returnedRelease).toHaveBeenCalledOnce()
+    expect(h.posts).toContainEqual({
+      type: 'error',
+      assetId: 'FAULTY',
+      setupId: 1,
+      mediaFailure: {
+        trackKind: null,
+        reason: 'resource-limit',
+      },
+      message: expect.stringContaining(
+        'different resident-byte reservation',
+      ),
+    })
+
+    // A second full-budget reservation proves the captured first lease was
+    // also returned, even though the injected decoder hid it from its result.
+    await h.core.handleMessage(openImageMsg('WINNER'))
+    expect(h.posts).toContainEqual({
+      type: 'assetConfigured',
+      assetId: 'WINNER',
+      setupId: 1,
+    })
+    await h.core.handleMessage({ type: 'close' })
+    expect(winner.closeCount).toBe(1)
+  })
+
+  test('replacement cannot close or re-budget an actively borrowed still', async () => {
+    const h = makeHarness()
+    const source = makeStaticSource()
+    const replacement = makeStaticSource()
+    const { cursor, rendering } = await beginStaticLoanWithParkedPlayback(
+      h,
+      source,
+    )
+    h.queueStaticImageDecode(decodedStaticImage(replacement))
+
+    const replacing = h.core.handleMessage(openImageMsg('IMAGE'))
+    await microtasks()
+    expect(source.closeCount).toBe(0)
+    expect(h.decodedImageBlobs).toHaveLength(1)
+
+    cursor.push(streamDecoded(h, 0))
+    cursor.push(streamDecoded(h, FRAME_US))
+    await Promise.all([rendering, replacing])
+
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(source.closeCount).toBe(1)
+    expect(replacement.closeCount).toBe(0)
+    expect(h.decodedImageBlobs).toHaveLength(2)
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'IMAGE' })
+    expect(replacement.closeCount).toBe(1)
+  })
+
+  test('release then reopen waits for the loaned generation before decoding', async () => {
+    const h = makeHarness()
+    const source = makeStaticSource(8_192, 8_192)
+    const replacement = makeStaticSource(8_192, 8_192)
+    const { cursor, rendering } = await beginStaticLoanWithParkedPlayback(
+      h,
+      source,
+    )
+
+    const releasing = h.core.handleMessage({
+      type: 'releaseAsset',
+      assetId: 'IMAGE',
+    })
+    await microtasks()
+    h.queueStaticImageDecode(decodedStaticImage(replacement))
+    const reopening = h.core.handleMessage(
+      openImageMsg('IMAGE', new Blob(['reopen'])),
+    )
+    await microtasks()
+
+    expect(source.closeCount).toBe(0)
+    expect(h.decodedImageBlobs).toHaveLength(1)
+
+    cursor.push(streamDecoded(h, 0))
+    cursor.push(streamDecoded(h, FRAME_US))
+    await Promise.all([rendering, releasing, reopening])
+
+    expect(source.closeCount).toBe(1)
+    expect(replacement.closeCount).toBe(0)
+    expect(h.decodedImageBlobs).toHaveLength(2)
+    expect(h.posts).toContainEqual({
+      type: 'assetConfigured',
+      assetId: 'IMAGE',
+      setupId: 1,
+    })
+    await h.core.handleMessage({ type: 'close' })
+    expect(replacement.closeCount).toBe(1)
+  })
+
+  test('open then open serializes behind the same active-loan retirement', async () => {
+    const h = makeHarness()
+    const source = makeStaticSource(8_192, 8_192)
+    const winner = makeStaticSource(8_192, 8_192)
+    const { cursor, rendering } = await beginStaticLoanWithParkedPlayback(
+      h,
+      source,
+    )
+    const staleBlob = new Blob(['stale replacement'])
+    const winnerBlob = new Blob(['winning replacement'])
+
+    const staleOpening = h.core.handleMessage(
+      openImageMsg('IMAGE', staleBlob),
+    )
+    await microtasks()
+    h.queueStaticImageDecode(decodedStaticImage(winner))
+    const winningOpening = h.core.handleMessage(
+      openImageMsg('IMAGE', winnerBlob),
+    )
+    await microtasks()
+
+    expect(source.closeCount).toBe(0)
+    expect(h.decodedImageBlobs).toHaveLength(1)
+
+    cursor.push(streamDecoded(h, 0))
+    cursor.push(streamDecoded(h, FRAME_US))
+    await Promise.all([rendering, staleOpening, winningOpening])
+
+    expect(source.closeCount).toBe(1)
+    expect(winner.closeCount).toBe(0)
+    expect(h.decodedImageBlobs).toHaveLength(2)
+    expect(h.decodedImageBlobs.at(-1)).toBe(winnerBlob)
+    await h.core.handleMessage({ type: 'close' })
+    expect(winner.closeCount).toBe(1)
+  })
+
+  test('release waits for an active still loan before closing exactly once', async () => {
+    const h = makeHarness()
+    const source = makeStaticSource(8_192, 8_192)
+    const rejectedWhileLoaned = makeStaticSource(1, 1)
+    const acceptedAfterLoan = makeStaticSource(1, 1)
+    const { cursor, rendering } = await beginStaticLoanWithParkedPlayback(
+      h,
+      source,
+    )
+
+    const releasing = h.core.handleMessage({
+      type: 'releaseAsset',
+      assetId: 'IMAGE',
+    })
+    await microtasks()
+    expect(source.closeCount).toBe(0)
+
+    h.queueStaticImageDecode(decodedStaticImage(rejectedWhileLoaned))
+    await h.core.handleMessage(openImageMsg('OTHER'))
+    expect(rejectedWhileLoaned.closeCount).toBe(0)
+    expect(h.decodedImageBlobs).toHaveLength(1)
+    expect(source.closeCount).toBe(0)
+
+    cursor.push(streamDecoded(h, 0))
+    cursor.push(streamDecoded(h, FRAME_US))
+    await Promise.all([rendering, releasing])
+
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(source.closeCount).toBe(1)
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'IMAGE' })
+    expect(source.closeCount).toBe(1)
+
+    h.queueStaticImageDecode(decodedStaticImage(acceptedAfterLoan))
+    await h.core.handleMessage(openImageMsg('OTHER'))
+    expect(h.posts).toContainEqual({
+      type: 'assetConfigured',
+      assetId: 'OTHER',
+      setupId: 1,
+    })
+    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'OTHER' })
+    expect(acceptedAfterLoan.closeCount).toBe(1)
+  })
+
+  test('worker close acknowledges only after an active still loan closes once', async () => {
+    const h = makeHarness()
+    const source = makeStaticSource()
+    const { rendering } = await beginStaticLoanWithParkedPlayback(h, source)
+
+    const closing = h.core.handleMessage({ type: 'close' })
+    expect(source.closeCount).toBe(0)
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(0)
+
+    await Promise.all([rendering, closing])
+
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(source.closeCount).toBe(1)
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(1)
+  })
+
+  test('worker close also awaits an active-loan retirement removed by release', async () => {
+    const h = makeHarness()
+    const source = makeStaticSource()
+    const closeGate = deferredValue<void>()
+    const videoSource = new FakeVideoSource()
+    const cursor = new GatedCloseCursor(closeGate.promise)
+    const { rendering } = await beginStaticLoanWithParkedPlayback(
+      h,
+      source,
+      videoSource,
+      cursor,
+    )
+
+    const imageRelease = h.core.handleMessage({
+      type: 'releaseAsset',
+      assetId: 'IMAGE',
+    })
+    await microtasks()
+    const videoRelease = h.core.handleMessage({
+      type: 'releaseAsset',
+      assetId: 'VIDEO',
+    })
+    await microtasks()
+    const closing = h.core.handleMessage({ type: 'close' })
+    await microtasks()
+
+    expect(source.closeCount).toBe(0)
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(0)
+
+    closeGate.resolve()
+    await Promise.all([rendering, imageRelease, videoRelease, closing])
+
+    expect(source.closeCount).toBe(1)
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(1)
+  })
+
   test('replacement closes the old source and worker close closes the winner once', async () => {
     const h = makeHarness()
     const first = makeStaticSource()
     const replacement = makeStaticSource()
     await setupStaticImage(h, makeDoc([]), 'IMAGE', first)
 
-    h.staticImagesToDecode.push(
-      Promise.resolve(decodedStaticImage(replacement)),
-    )
+    h.queueStaticImageDecode(decodedStaticImage(replacement))
     await h.core.handleMessage(
       openImageMsg('IMAGE', new Blob(['replacement'])),
     )
@@ -1929,11 +2624,13 @@ describe('static-image worker ownership', () => {
     const h = makeHarness()
     await h.core.handleMessage(initMsg(h))
     await h.core.handleMessage(docMsg(makeDoc([])))
-    const stale = makeStaticSource()
-    const winner = makeStaticSource()
+    const stale = makeStaticSource(8_192, 8_192)
+    const winner = makeStaticSource(8_192, 8_192)
     const staleDecode = deferredValue<DecodedStaticImage>()
     const winningDecode = deferredValue<DecodedStaticImage>()
-    h.staticImagesToDecode.push(staleDecode.promise, winningDecode.promise)
+    const fullBudgetBytes = 8_192 * 8_192 * 4
+    h.queueStaticImageDecode(staleDecode.promise, fullBudgetBytes)
+    h.queueStaticImageDecode(winningDecode.promise, fullBudgetBytes)
 
     const staleOpen = h.core.handleMessage(
       openImageMsg('IMAGE', new Blob(['stale'])),
@@ -1945,16 +2642,25 @@ describe('static-image worker ownership', () => {
     await microtasks()
 
     expect(h.decodedImageSignals[0].aborted).toBe(true)
-    winningDecode.resolve(decodedStaticImage(winner))
-    await winningOpen
+    expect(h.decodedImageBlobs).toHaveLength(1)
+
+    // The stale browser decode cannot be cancelled. Its full-budget lease
+    // remains charged until the late source arrives and is closed.
     staleDecode.resolve(decodedStaticImage(stale))
     await staleOpen
+    await vi.waitFor(() => expect(h.decodedImageBlobs).toHaveLength(2))
+    winningDecode.resolve(decodedStaticImage(winner))
+    await winningOpen
 
     expect(stale.closeCount).toBe(1)
     expect(winner.closeCount).toBe(0)
     expect(
       h.posts.filter((post) => post.type === 'assetConfigured'),
-    ).toEqual([{ type: 'assetConfigured', assetId: 'IMAGE' }])
+    ).toEqual([{
+      type: 'assetConfigured',
+      assetId: 'IMAGE',
+      setupId: 1,
+    }])
     expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
 
     await h.core.handleMessage({ type: 'releaseAsset', assetId: 'IMAGE' })
@@ -1967,7 +2673,7 @@ describe('static-image worker ownership', () => {
     await h.core.handleMessage(docMsg(makeDoc([])))
     const late = makeStaticSource()
     const decode = deferredValue<DecodedStaticImage>()
-    h.staticImagesToDecode.push(decode.promise)
+    h.queueStaticImageDecode(decode.promise)
 
     const opening = h.core.handleMessage(openImageMsg('IMAGE'))
     await microtasks()
@@ -1988,9 +2694,12 @@ describe('static-image worker ownership', () => {
     const h = makeHarness()
     await h.core.handleMessage(initMsg(h))
     await h.core.handleMessage(docMsg(makeDoc([])))
-    const late = makeStaticSource()
+    const late = makeStaticSource(8_192, 8_192)
     const decode = deferredValue<DecodedStaticImage>()
-    h.staticImagesToDecode.push(decode.promise)
+    h.queueStaticImageDecode(
+      decode.promise,
+      8_192 * 8_192 * 4,
+    )
 
     const opening = h.core.handleMessage(openImageMsg('IMAGE'))
     await microtasks()
@@ -2011,7 +2720,7 @@ describe('static-image worker ownership', () => {
     const h = makeHarness()
     await h.core.handleMessage(initMsg(h))
     await h.core.handleMessage(docMsg(makeDoc([])))
-    h.staticImagesToDecode.push(Promise.reject(
+    h.queueStaticImageDecode(Promise.reject(
       new StaticImageDecodeError('resource-limit', 'png'),
     ))
 
@@ -2020,6 +2729,7 @@ describe('static-image worker ownership', () => {
     expect(h.posts.filter((post) => post.type === 'error')).toEqual([{
       type: 'error',
       assetId: 'IMAGE',
+      setupId: 1,
       mediaFailure: {
         trackKind: null,
         reason: 'resource-limit',

@@ -41,6 +41,7 @@ function clip(): Clip {
     id: 'clip-1',
     assetId: 'asset-1',
     name: 'source.mp4',
+    sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames: 90 },
     timelineRange: { startFrame: 0, durationFrames: 90 },
     transform: {
@@ -74,7 +75,7 @@ function track(clips: Clip[]): Track {
 
 function doc(withContent = true): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'export-ui-doc',
     name: 'My / Rough: Cut.mp4',
     frameRate: { num: 30, den: 1 },

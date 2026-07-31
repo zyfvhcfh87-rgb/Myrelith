@@ -807,7 +807,8 @@ function descriptorMatches(
   return descriptor.size === analyzed.size
     && descriptor.kind === analyzed.kind
     && descriptor.partialTrackSelection === analyzed.partialTrackSelection
-    && descriptor.durationMicroseconds === analyzed.durationMicroseconds
+    && (descriptor.kind === 'image'
+      || descriptor.durationMicroseconds === analyzed.durationMicroseconds)
     && ratesMatch(descriptor.nativeFrameRate, analyzed.frameRate)
     && descriptor.width === analyzed.width
     && descriptor.height === analyzed.height
@@ -859,7 +860,8 @@ function compatibilityReportMatchesDescriptor(
       : report.durationMicroseconds
   if (
     file.size !== descriptor.size
-    || effectiveDuration !== descriptor.durationMicroseconds
+    || (descriptor.kind !== 'image'
+      && effectiveDuration !== descriptor.durationMicroseconds)
   ) return false
   if (descriptor.partialTrackSelection === 'video-only') {
     if (!video || !audio) return false

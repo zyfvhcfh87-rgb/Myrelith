@@ -8,8 +8,10 @@ import type {
   Clip,
   ClipId,
   Track,
+  TrackId,
   TimelineDoc,
   Transition,
+  TransitionId,
 } from './schema'
 import { rangeContains, rangeEnd } from './time'
 
@@ -22,7 +24,14 @@ import { rangeContains, rangeEnd } from './time'
 export interface VisibleVideoLayer {
   clip: Clip
   sourceFrame: number
+  /** The clip's own opacity. Transition weighting is applied separately. */
   opacity: number
+  /** Present only when this layer is one leg of an isolated transition. */
+  transition: {
+    trackId: TrackId
+    transitionId: TransitionId
+    weight: number
+  } | null
 }
 
 /**
@@ -275,7 +284,14 @@ function ordinaryVideoLayer(track: Track, frame: number): VisibleVideoLayer[] {
   if (!clip || clip.text !== undefined) return []
   const opacity = clipOpacity(clip)
   if (opacity <= 0) return []
-  return [{ clip, sourceFrame: clipSourceFrame(clip, frame), opacity }]
+  return [
+    {
+      clip,
+      sourceFrame: clipSourceFrame(clip, frame),
+      opacity,
+      transition: null,
+    },
+  ]
 }
 
 /**
@@ -285,10 +301,10 @@ function ordinaryVideoLayer(track: Track, frame: number): VisibleVideoLayer[] {
  * Crossfades are centered on the touching edit point. Because TimelineDoc
  * has no source-handle metadata, the incoming first frame freezes before the
  * cut and the outgoing last frame freezes after it; every request therefore
- * remains inside its clip's declared source range. The outgoing clip paints
- * first and the incoming clip fades over it. The opacity adjustment avoids
- * the dark midpoint produced by naively source-over drawing two
- * complementary globalAlpha values for ordinary opaque video.
+ * remains inside its clip's declared source range. Crossfade legs expose
+ * their intrinsic opacity and complementary transition weight separately;
+ * the shared renderer combines them as premultiplied pixels inside one
+ * isolated group before compositing that group over lower tracks.
  *
  * Invalid, stale, overlapping, or ambiguous transitions fall back to the
  * normal hard-cut selection.
@@ -311,27 +327,29 @@ export function visibleVideoLayersAtFrame(
     const progress = (index + 1) / (transition.durationFrames + 1)
     const fromBaseOpacity = clipOpacity(transition.from)
     const toBaseOpacity = clipOpacity(transition.to)
-    const toOpacity = progress * toBaseOpacity
-    const uncovered = 1 - toOpacity
-    const fromOpacity =
-      uncovered > 0
-        ? ((1 - progress) * fromBaseOpacity) / uncovered
-        : 0
 
-    // Outgoing then incoming: source-over now produces a linear dissolve for
-    // full-frame opaque media while still honoring intrinsic opacity.
-    if (fromOpacity > 0) {
+    if (fromBaseOpacity > 0) {
       layers.push({
         clip: transition.from,
         sourceFrame: clampedTransitionSourceFrame(transition.from, frame),
-        opacity: Math.min(1, fromOpacity),
+        opacity: fromBaseOpacity,
+        transition: {
+          trackId: track.id,
+          transitionId: transition.transition.id,
+          weight: 1 - progress,
+        },
       })
     }
-    if (toOpacity > 0) {
+    if (toBaseOpacity > 0) {
       layers.push({
         clip: transition.to,
         sourceFrame: clampedTransitionSourceFrame(transition.to, frame),
-        opacity: Math.min(1, toOpacity),
+        opacity: toBaseOpacity,
+        transition: {
+          trackId: track.id,
+          transitionId: transition.transition.id,
+          weight: progress,
+        },
       })
     }
   }

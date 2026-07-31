@@ -1,7 +1,7 @@
 /**
  * Composition-root tests for the preview pipeline. Imported media is already
- * analyzed before it reaches mediaStore, so this controller fetches each
- * video Blob once and forwards it directly to the worker bridge.
+ * analyzed before it reaches mediaStore, so this controller keeps connected
+ * videos warm and forwards each document-referenced still to the worker once.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -209,6 +209,7 @@ function makeClip(id: string, assetId: string): Clip {
     id,
     assetId,
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames: 30 },
     timelineRange: { startFrame: 0, durationFrames: 30 },
     transform: {
@@ -226,6 +227,14 @@ function makeClip(id: string, assetId: string): Clip {
   }
 }
 
+function makeStillClip(id: string, assetId: string): Clip {
+  return {
+    ...makeClip(id, assetId),
+    sourceMode: 'still',
+    sourceRange: { startFrame: 0, durationFrames: 1 },
+  }
+}
+
 function makeVideoDoc(assetIds: readonly string[]): TimelineDoc {
   const tracks: Track[] = assetIds.map((assetId, index) => ({
     id: `track-${index}`,
@@ -239,6 +248,50 @@ function makeVideoDoc(assetIds: readonly string[]): TimelineDoc {
     locked: false,
   }))
   return { ...initialDoc, tracks }
+}
+
+function makeStillDoc(assetIds: readonly string[]): TimelineDoc {
+  const tracks: Track[] = assetIds.map((assetId, index) => ({
+    id: `track-${index}`,
+    kind: 'video',
+    name: `V${index + 1}`,
+    clips: [makeStillClip(`clip-${index}`, assetId)],
+    transitions: [],
+    hidden: false,
+    muted: false,
+    solo: false,
+    locked: false,
+  }))
+  return { ...initialDoc, tracks }
+}
+
+function makeImageBackedTextDoc(assetId: string): TimelineDoc {
+  const textClip: Clip = {
+    ...makeClip('text-clip', assetId),
+    text: {
+      content: 'A title',
+      fontFamily: 'Arial',
+      fontSizePx: 48,
+      color: '#ffffff',
+      align: 'center',
+      bold: false,
+      italic: false,
+    },
+  }
+  return {
+    ...initialDoc,
+    tracks: [{
+      id: 'track-text',
+      kind: 'video',
+      name: 'V1',
+      clips: [textClip],
+      transitions: [],
+      hidden: false,
+      muted: false,
+      solo: false,
+      locked: false,
+    }],
+  }
 }
 
 const canvasEl = () => document.createElement('canvas')
@@ -287,7 +340,7 @@ afterEach(() => {
 })
 
 describe('previewController', () => {
-  test('opens an analyzed video\'s original Blob without re-demuxing', async () => {
+  test('keeps an unreferenced analyzed video warm without re-demuxing', async () => {
     const { deps, bridge, blob } = makeDeps()
     initPreview(canvasEl(), deps)
     expect(bridge.docs).toEqual([initialDoc])
@@ -337,8 +390,9 @@ describe('previewController', () => {
     )
   })
 
-  test('hands an analyzed still Blob to the worker exactly once', async () => {
+  test('hands a referenced still Blob to the worker exactly once', async () => {
     const { deps, bridge, blob } = makeDeps()
+    useDocumentStore.getState().setDoc(makeStillDoc(['still', 'still']))
     initPreview(canvasEl(), deps)
     const image = seedImageAsset({
       id: 'still',
@@ -363,15 +417,64 @@ describe('previewController', () => {
     expect(bridge.openedImages).toHaveLength(1)
   })
 
+  test('keeps an unreferenced still out of the worker', async () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+
+    seedImageAsset({ id: 'unused-still' })
+    await flush()
+
+    expect(deps.fetchBlob).not.toHaveBeenCalled()
+    expect(bridge.openedImages).toHaveLength(0)
+    expect(bridge.released).toHaveLength(0)
+  })
+
+  test('reconciles shared still references on every document change', async () => {
+    const { deps, bridge } = makeDeps()
+    const image = seedImageAsset({ id: 'shared-still' })
+    useDocumentStore.getState().setDoc(makeStillDoc([image.id, image.id]))
+    initPreview(canvasEl(), deps)
+    await flush()
+
+    expect(bridge.openedImages.map((entry) => entry.assetId)).toEqual([image.id])
+
+    useDocumentStore.getState().setDoc(makeStillDoc([image.id]))
+    expect(bridge.released).toEqual([])
+    expect(bridge.openedImages).toHaveLength(1)
+
+    useDocumentStore.getState().setDoc(makeStillDoc([]))
+    expect(bridge.released).toEqual([image.id])
+
+    useDocumentStore.getState().setDoc(makeStillDoc([image.id]))
+    await flush()
+    expect(bridge.openedImages.map((entry) => entry.assetId)).toEqual([
+      image.id,
+      image.id,
+    ])
+  })
+
   test('video and still assets keep separate worker-owned sources', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
     const video = seedAsset({ id: 'video' })
     const image = seedImageAsset({ id: 'image' })
+    useDocumentStore.getState().setDoc(makeStillDoc([image.id]))
     await flush()
 
     expect(bridge.opened.map((entry) => entry.assetId)).toEqual([video.id])
     expect(bridge.openedImages.map((entry) => entry.assetId)).toEqual([image.id])
+  })
+
+  test('does not open an image referenced only by a procedural text clip', async () => {
+    const { deps, bridge } = makeDeps()
+    const image = seedImageAsset({ id: 'text-backing-image' })
+    useDocumentStore.getState().setDoc(makeImageBackedTextDoc(image.id))
+
+    initPreview(canvasEl(), deps)
+    await flush()
+
+    expect(deps.fetchBlob).not.toHaveBeenCalled()
+    expect(bridge.openedImages).toHaveLength(0)
   })
 
   test('descriptor-only media is never fetched or opened', async () => {
@@ -731,6 +834,7 @@ describe('previewController', () => {
       )
     }
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    useDocumentStore.getState().setDoc(makeStillDoc(['huge-image']))
     initPreview(canvasEl(), deps)
     const bad = seedImageAsset({
       id: 'huge-image',

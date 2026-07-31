@@ -19,6 +19,7 @@ function makeClip(id: string, tlStart: number, duration: number): Clip {
     id,
     assetId: 'asset-1',
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames: duration },
     timelineRange: { startFrame: tlStart, durationFrames: duration },
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
@@ -35,7 +36,7 @@ function makeTrack(id: string, kind: TrackData['kind'], clips: Clip[] = []): Tra
 /** V1 (2 clips), V2 (empty), A1 (1 clip) — doc order = compositing order. */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-headers',
     name: 'header fixture',
     frameRate: { num: 30, den: 1 },

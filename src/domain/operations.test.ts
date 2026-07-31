@@ -56,6 +56,7 @@ function makeClip(
     id,
     assetId: 'asset-1',
     name: id,
+    sourceMode: 'timed',
     sourceRange: { startFrame: srcStart, durationFrames: duration },
     timelineRange: { startFrame: tlStart, durationFrames: duration },
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
@@ -78,7 +79,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -113,7 +114,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -572,6 +573,10 @@ describe('insertClip', () => {
       sourceMode: 'animated',
     } as unknown as Clip
     expect(insertClip(doc, 'V1', unknownMode)).toBe(doc)
+
+    const implicitMode = { ...makeClip('implicit-mode', 200, 30) }
+    Reflect.deleteProperty(implicitMode, 'sourceMode')
+    expect(insertClip(doc, 'V1', implicitMode as unknown as Clip)).toBe(doc)
   })
 })
 
@@ -853,7 +858,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },
