@@ -338,6 +338,63 @@ describe('transition action history', () => {
     expect(getState().past).toHaveLength(1)
   })
 
+  test('exact duration and audio settings add/apply atomically', () => {
+    getState().setDoc(makeExactTransitionDoc())
+    const initial = getState().doc
+    const catalog = exactCatalog()
+
+    getState().addCrossfadeWithSourceBounds(
+      'A',
+      'B',
+      {
+        durationFrames: 5,
+        audio: { enabled: true, curve: 'linear' },
+      },
+      catalog,
+    )
+    const authored = getState().doc
+    const transition = authored.tracks[0].transitions[0]
+    expect(transition).toMatchObject({
+      durationFrames: 5,
+      audio: { enabled: true, curve: 'linear' },
+    })
+    expect(getState().past).toEqual([initial])
+
+    getState().setCrossfadeSettings(
+      'V1',
+      transition.id,
+      {
+        durationFrames: 7,
+        audio: { enabled: false, curve: 'equal-power' },
+      },
+      catalog,
+    )
+    const edited = getState().doc
+    expect(edited.tracks[0].transitions[0]).toEqual({
+      ...transition,
+      durationFrames: 7,
+      audio: { enabled: false, curve: 'equal-power' },
+    })
+    expect(getState().past).toEqual([initial, authored])
+
+    getState().undo()
+    expect(getState().doc).toBe(authored)
+    getState().redo()
+    expect(getState().doc).toBe(edited)
+
+    expectRejectedWithoutStateChange(() => {
+      getState().setCrossfadeSettings(
+        'V1',
+        transition.id,
+        {
+          durationFrames: 7,
+          audio: { enabled: false, curve: 'equal-power' },
+        },
+        catalog,
+      )
+    })
+  })
+
   test('remove is one entry and undo/redo restore it byte-exactly', () => {
     getState().setDoc(makeTransitionDoc([crossfade('t1', 'A', 'B', 5)]))
     const initial = getState().doc
@@ -867,6 +924,39 @@ function makeManualLinkStoreDoc(): TimelineDoc {
       },
     ],
   })
+}
+
+function makeExactTransitionDoc(
+  transitions: Transition[] = [],
+  locked = false,
+): TimelineDoc {
+  const doc = makeTransitionDoc(transitions, [], locked)
+  return deepFreeze({
+    ...doc,
+    tracks: doc.tracks.map((track) => track.kind !== 'video'
+      ? track
+      : {
+          ...track,
+          clips: track.clips.map((clip) => ({
+            ...clip,
+            sourceRange: { ...clip.sourceRange, startFrame: 30 },
+          })),
+        }),
+  })
+}
+
+function exactCatalog() {
+  return new Map([[
+    'asset-1',
+    {
+      video: {
+        status: 'exact' as const,
+        firstTimestampUs: 0,
+        endTimestampUs: 10_000_000,
+      },
+      audio: null,
+    },
+  ]])
 }
 
 describe('manual linkClips action', () => {

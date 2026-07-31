@@ -11,6 +11,7 @@ import type {
 import {
   crossfadeFrameGroupAt,
   evaluateCrossfadeDraft,
+  evaluateCrossfadeUpdate,
   resolveCrossfadePlan,
   type SourceBoundsCatalog,
 } from './crossfadePlan'
@@ -558,6 +559,33 @@ describe('canonical crossfade planner', () => {
       maximumDurationFrames: 7,
     })
     expect(JSON.stringify(fixture.project)).toBe(withoutTransition)
+  })
+
+  test('evaluates a complete duration/audio replacement without mutation', () => {
+    const fixture = visualFixture(4)
+    const before = JSON.stringify(fixture.project)
+    const updated = evaluateCrossfadeUpdate(
+      fixture.project,
+      'V1',
+      'dissolve',
+      3,
+      fixture.bounds,
+      { enabled: false, curve: 'linear' },
+    )
+
+    expect(updated).toMatchObject({
+      status: 'available',
+      plan: {
+        durationFrames: 3,
+        transition: {
+          id: 'dissolve',
+          durationFrames: 3,
+          audio: { enabled: false, curve: 'linear' },
+        },
+        audio: { status: 'disabled' },
+      },
+    })
+    expect(JSON.stringify(fixture.project)).toBe(before)
   })
 
   test('fails unsafe centered windows closed', () => {

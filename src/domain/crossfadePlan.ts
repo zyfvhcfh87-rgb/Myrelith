@@ -712,6 +712,36 @@ export function evaluateCrossfadeDraft(
   return resolveCrossfadePlan({ ...doc, tracks }, trackId, id, catalog)
 }
 
+/** Evaluate one complete replacement without mutating the document. */
+export function evaluateCrossfadeUpdate(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  transitionId: TransitionId,
+  durationFrames: number,
+  catalog: SourceBoundsCatalog,
+  audio: Transition['audio'],
+): CrossfadePlanResolution {
+  const trackIndex = doc.tracks.findIndex((track) => track.id === trackId)
+  if (trackIndex < 0) return { status: 'invalid', reason: 'track-not-found' }
+  const track = doc.tracks[trackIndex]
+  const matches = track.transitions.flatMap((transition, index) =>
+    transition.id === transitionId ? [index] : [],
+  )
+  if (matches.length !== 1) {
+    return resolveCrossfadePlan(doc, trackId, transitionId, catalog)
+  }
+  const transitionIndex = matches[0]
+  const transitions = track.transitions.slice()
+  transitions[transitionIndex] = {
+    ...transitions[transitionIndex],
+    durationFrames,
+    audio: { ...audio },
+  }
+  const tracks = doc.tracks.slice()
+  tracks[trackIndex] = { ...track, transitions }
+  return resolveCrossfadePlan({ ...doc, tracks }, trackId, transitionId, catalog)
+}
+
 function clipOpacity(clip: Clip): number {
   if (!Number.isFinite(clip.opacity) || clip.opacity <= 0) return 0
   return Math.min(1, clip.opacity)

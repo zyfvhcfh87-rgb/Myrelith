@@ -40,13 +40,18 @@ import {
 } from './selectors'
 import {
   evaluateCrossfadeDraft,
-  resolveCrossfadePlan,
+  evaluateCrossfadeUpdate,
   type SourceBoundsCatalog,
 } from './crossfadePlan'
 import { rangeEnd, rangeOverlap } from './time'
 
 /** Which clip edge a trim moves. */
 export type TrimEdge = 'start' | 'end'
+
+export interface CrossfadeSettings {
+  durationFrames: number
+  audio: Transition['audio']
+}
 
 /* ------------------------------------------------------------------ */
 /* Internal helpers                                                     */
@@ -243,6 +248,7 @@ export function addCrossfade(
   fromClipId: ClipId,
   toClipId: ClipId,
   durationFrames: number,
+  audio: Transition['audio'] = { enabled: true, curve: 'equal-power' },
 ): TimelineDoc {
   const op = 'addCrossfade'
   if (!Number.isSafeInteger(durationFrames) || durationFrames < 1) {
@@ -251,6 +257,12 @@ export function addCrossfade(
       op,
       `durationFrames must be a safe integer >= 1, got ${durationFrames}`,
     )
+  }
+  if (
+    typeof audio.enabled !== 'boolean'
+    || (audio.curve !== 'linear' && audio.curve !== 'equal-power')
+  ) {
+    return reject(doc, op, 'invalid crossfade audio settings')
   }
   if (fromClipId === toClipId) {
     return reject(doc, op, 'crossfade endpoints must be distinct clips')
@@ -291,7 +303,7 @@ export function addCrossfade(
     fromClipId,
     toClipId,
     durationFrames,
-    audio: { enabled: true, curve: 'equal-power' },
+    audio: { ...audio },
   }
   const nextTrack: Track = {
     ...track,
@@ -317,9 +329,12 @@ export function addCrossfadeWithSourceBounds(
   toClipId: ClipId,
   durationFrames: number,
   catalog: SourceBoundsCatalog,
+  audio: Transition['audio'] = { enabled: true, curve: 'equal-power' },
 ): TimelineDoc {
   const from = locateClip(doc, fromClipId)
-  if (!from) return addCrossfade(doc, fromClipId, toClipId, durationFrames)
+  if (!from) {
+    return addCrossfade(doc, fromClipId, toClipId, durationFrames, audio)
+  }
   const evaluation = evaluateCrossfadeDraft(
     doc,
     from.track.id,
@@ -327,6 +342,7 @@ export function addCrossfadeWithSourceBounds(
     toClipId,
     durationFrames,
     catalog,
+    audio,
   )
   if (evaluation.status !== 'available') {
     const maximum = evaluation.status === 'unavailable'
@@ -339,7 +355,7 @@ export function addCrossfadeWithSourceBounds(
       `${evaluation.reason}${maximum}`,
     )
   }
-  return addCrossfade(doc, fromClipId, toClipId, durationFrames)
+  return addCrossfade(doc, fromClipId, toClipId, durationFrames, audio)
 }
 
 /**
@@ -390,6 +406,96 @@ export function setCrossfadeDuration(
   return withTrack(doc, loc.trackIndex, nextTrack)
 }
 
+/** Replace duration and audio intent together as one immutable edit. */
+export function setCrossfadeSettings(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  transitionId: TransitionId,
+  settings: CrossfadeSettings,
+): TimelineDoc {
+  const op = 'setCrossfadeSettings'
+  if (
+    !Number.isSafeInteger(settings.durationFrames)
+    || settings.durationFrames < 1
+  ) {
+    return reject(
+      doc,
+      op,
+      `durationFrames must be a safe integer >= 1, got ${settings.durationFrames}`,
+    )
+  }
+  if (
+    typeof settings.audio.enabled !== 'boolean'
+    || (
+      settings.audio.curve !== 'linear'
+      && settings.audio.curve !== 'equal-power'
+    )
+  ) {
+    return reject(doc, op, 'invalid crossfade audio settings')
+  }
+
+  const locations = locateTrackTransitions(doc, trackId, transitionId)
+  if (locations.length === 0) {
+    return reject(doc, op, `transition ${transitionId} not found`)
+  }
+  if (locations.length > 1) {
+    return reject(doc, op, `transition id ${transitionId} is ambiguous`)
+  }
+  const loc = locations[0]
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+  if (
+    loc.transition.durationFrames === settings.durationFrames
+    && loc.transition.audio.enabled === settings.audio.enabled
+    && loc.transition.audio.curve === settings.audio.curve
+  ) return doc
+
+  const transitions = loc.track.transitions.slice()
+  transitions[loc.transitionIndex] = {
+    ...loc.transition,
+    durationFrames: settings.durationFrames,
+    audio: { ...settings.audio },
+  }
+  const nextTrack: Track = { ...loc.track, transitions }
+  if (!validTransitionIndexes(nextTrack).has(loc.transitionIndex)) {
+    return reject(
+      doc,
+      op,
+      'crossfade window does not fit its clips or overlaps another transition',
+    )
+  }
+  return withTrack(doc, loc.trackIndex, nextTrack)
+}
+
+/** Handle-aware atomic settings update with same-reference rejection. */
+export function setCrossfadeSettingsWithSourceBounds(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  transitionId: TransitionId,
+  settings: CrossfadeSettings,
+  catalog: SourceBoundsCatalog,
+): TimelineDoc {
+  const evaluation = evaluateCrossfadeUpdate(
+    doc,
+    trackId,
+    transitionId,
+    settings.durationFrames,
+    catalog,
+    settings.audio,
+  )
+  if (evaluation.status !== 'available') {
+    const maximum = evaluation.status === 'unavailable'
+      && evaluation.maximumDurationFrames !== null
+      ? `; maximum ${evaluation.maximumDurationFrames} frames`
+      : ''
+    return reject(
+      doc,
+      'setCrossfadeSettingsWithSourceBounds',
+      `${evaluation.reason}${maximum}`,
+    )
+  }
+  return setCrossfadeSettings(doc, trackId, transitionId, settings)
+}
+
 /** Handle-aware duration update with same-reference rejection semantics. */
 export function setCrossfadeDurationWithSourceBounds(
   doc: TimelineDoc,
@@ -403,31 +509,16 @@ export function setCrossfadeDurationWithSourceBounds(
     return setCrossfadeDuration(doc, trackId, transitionId, durationFrames)
   }
   const location = locations[0]
-  const transitions = location.track.transitions.slice()
-  transitions[location.transitionIndex] = {
-    ...location.transition,
-    durationFrames,
-  }
-  const tracks = doc.tracks.slice()
-  tracks[location.trackIndex] = { ...location.track, transitions }
-  const evaluation = resolveCrossfadePlan(
-    { ...doc, tracks },
+  return setCrossfadeSettingsWithSourceBounds(
+    doc,
     trackId,
     transitionId,
+    {
+      durationFrames,
+      audio: location.transition.audio,
+    },
     catalog,
   )
-  if (evaluation.status !== 'available') {
-    const maximum = evaluation.status === 'unavailable'
-      && evaluation.maximumDurationFrames !== null
-      ? `; maximum ${evaluation.maximumDurationFrames} frames`
-      : ''
-    return reject(
-      doc,
-      'setCrossfadeDurationWithSourceBounds',
-      `${evaluation.reason}${maximum}`,
-    )
-  }
-  return setCrossfadeDuration(doc, trackId, transitionId, durationFrames)
 }
 
 /**

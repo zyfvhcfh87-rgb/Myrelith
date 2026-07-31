@@ -25,6 +25,8 @@ import {
   setClipVolume,
   setCrossfadeDuration,
   setCrossfadeDurationWithSourceBounds,
+  setCrossfadeSettings,
+  setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
   slideClip,
   slipClip,
@@ -943,6 +945,33 @@ describe('crossfade authoring', () => {
       8,
       bounds,
     )).toBe(added)
+
+    const settings = {
+      durationFrames: 5,
+      audio: { enabled: false, curve: 'linear' as const },
+    }
+    const updated = setCrossfadeSettingsWithSourceBounds(
+      added,
+      'V1',
+      authored.id,
+      settings,
+      bounds,
+    )
+    expect(updated).not.toBe(added)
+    expect(transitionsOf(updated)[0]).toEqual({
+      ...authored,
+      ...settings,
+    })
+    expect(transitionsOf(added)[0].audio).toEqual({
+      enabled: true,
+      curve: 'equal-power',
+    })
+    expect(setCrossfadeSettings(
+      updated,
+      'V1',
+      authored.id,
+      settings,
+    )).toBe(updated)
   })
 
   test('adds ordered seam metadata with a fresh id and preserves structural sharing', () => {

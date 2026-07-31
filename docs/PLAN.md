@@ -1573,6 +1573,36 @@ gate stops progression; later checkboxes are never completed early.
   rendered one preview canvas, exercised transport controls, found no blocking
   dialog/overlay, and recorded no browser console warnings or errors.
 
+### Slice 4 evidence — atomic state and accessible authoring UI (2026-07-31)
+
+- [x] Crossfade creation and editing now accept one typed settings payload for
+  duration plus linked-audio intent. Exact source-bound evaluation happens
+  before one immutable document-store commit, so Apply creates one history
+  entry and rejected or unchanged proposals preserve the identical document
+  reference and history.
+- [x] The seam popover exposes the exact accessible controls “Crossfade
+  duration in frames”, “Crossfade linked audio”, and “Audio crossfade curve”.
+  Its live status reports the exact visual maximum separately from linked-audio
+  availability, allowing a valid visual crossfade and durable audio intent to
+  survive an unavailable linked-audio fallback.
+- [x] Add, Apply, Remove, lock, Escape, outside-click, stale-transition, and
+  focus-restoration behavior remain explicit. The editor reads durable media
+  descriptors for real handle limits, closes when its transition identity
+  disappears or the track locks, and disables the curve selector while linked
+  audio is off.
+- [x] Focused gate: 252/252 tests across planner, operations, document store,
+  timeline transitions, timeline, clip drag, and edit tools. Coverage proves
+  real-handle maxima, linked-pair availability, one-entry atomic Apply,
+  exact undo/redo, no-op history stability, locking, stale popovers, keyboard
+  closure, removal, and adjacent-seam behavior.
+- [x] Full gate: 1,422/1,422 tests across 76 files; production build passed
+  with only the pre-existing chunk-size advisory; oxlint and `git diff --check`
+  passed. In-app Chromium exercised the production Timeline and stores with
+  touching real-handle stills: authored and reopened 21-frame settings, applied
+  31-frame equal-power settings, closed with Escape, verified lock-disable and
+  removal flows, found no clipping or blocking overlay, and recorded zero
+  console warnings or errors.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +
