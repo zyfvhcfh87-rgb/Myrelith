@@ -74,12 +74,13 @@ and the open list below.
 | Post-MVP #18 — original Slice 6 worker preview | ✅ done | historical local Slice 4 bundle + referenced-only image opening, discriminated protocol, one resident still/asset, exact loan/setup identities, aggregate 256 MiB reserved-and-retained worker budget, bounded close ack, repeated seek/play/reopen |
 | Post-MVP #18 — original Slice 7 transition compositor | ✅ done | intrinsic opacity + explicit weights; complete transformed legs added with `lighter` inside one isolated group, then source-over once; exact software + Chromium pixel matrix |
 | Post-MVP #18 — original Slice 8 export | ✅ done | typed source errors preserved; decode-once/frame-zero and real-source cleanup matrix; Chromium 60-frame AVC encode/reopen plus direct production Preview/output pixel parity and clean diagnostics |
-| **Post-MVP #18 — original Slice 9 acceptance/closeout** | ⏳ open | Issue #18 remains open; run the complete workflow/input matrix, then update the remote checklist and close only after it passes |
+| **Post-MVP #18 — original Slice 9 acceptance/closeout** | ✅ complete | 693 focused + 1,385 total tests; 18-file hostile/orientation matrix; Chrome multi-import, edit, recovery/relink, layered crossfade, and export gate; Issue #18 closeout evidence complete |
 
 The corrective Issue #18 source suite passes 1,385/1,385 tests across 74 files.
-Deterministic fixture replay, production build, lint, `npm audit --omit=dev`, diff
-checks, and the real-browser Slice 8 encoded-output parity gate pass. Do not
-read this as the original Slice 9 gate. Earlier completed phases remain committed separately
+Deterministic 18-file fixture replay, production build, lint,
+`npm audit --omit=dev`, diff checks, the real-browser Slice 8 encoded-output
+parity gate, and the final Slice 9 Chrome acceptance matrix pass. Earlier
+completed phases remain committed separately
 (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
@@ -476,9 +477,9 @@ Issue #18 follows the original researched nine-slice roadmap. The older local
 Slice 1–5 labels below describe delivery bundles, not an authoritative
 renumbering: local 1 maps to original 1; local 2 maps mainly to originals 4–5;
 local 3 maps to originals 2–3 and part of 5; local 4 maps to original 6; and
-local 5 implements original 8. Original Slices 7–8 are complete; original Slice
-9 acceptance/closeout is open. Issue #18 was reopened after the
-premature closeout and remains open.
+local 5 implements original 8. Original Slices 7–9 are complete. Issue #18 was
+reopened after the premature closeout and then finished against the corrected
+nine-slice acceptance gate.
 
 Historical local Slice 1 establishes the static-image pipeline leaf. A bounded byte
 inspector recognizes PNG, JPEG, WebP, and AVIF without trusting extension or
@@ -660,9 +661,26 @@ limits 12/10/15; all five complete 320×180 pairs measured RGB MAE 1.781 and RMS
 2.934. Diagnostics again recorded 0 warnings and 0 errors. The temporary seed,
 observation hook, captures, and server logs were removed.
 
-**Next: original Slice 9 — acceptance and closeout.** Run the complete Issue
-#18 Chrome workflow and input matrix, then update the remote checklist and
-close the issue only if that full gate passes. Issue #18 remains open.
+Original Slice 9 completes the acceptance/closeout boundary. The focused
+source/import/project/edit/preview/export matrix passes 693/693 across 25 files;
+the complete suite remains 1,385/1,385 across 74. The deterministic matrix now
+contains 18 files: EXIF orientations 2, 5, and 7 add mirrored-horizontal,
+mirrored-transpose, and mirrored-transverse cases to the previous rotated JPEG
+coverage. Validate-only replay, production build, lint, audit, and diff checks
+all pass.
+
+In-app Chrome 150 multi-imported alpha PNG, rotated and mirrored JPEGs,
+animated WebP, and AVIF with exact orientation-aware display sizes and the
+explicit first-frame-only label. It content-sniffed a `.jpg` carrying PNG bytes,
+rejected corrupt/oversized/GIF/malformed inputs, reopened recovery and portable
+projects offline, accepted an exact relink, rejected a mismatched relink, edited
+transforms, Razor/undo, played the still timeline, authored a 15-frame
+still→still crossfade, and exported a relinked two-layer 320×180 AVC project.
+The final console had 0 warnings and 0 errors. Slice 8's exact-buffer reopen and
+sampled direct Preview/output comparisons remain the pixel-parity proof; the
+native disk-backed Save/Resume/Relink path remains covered by its earlier Chrome
+gate plus the complete persistence/controller suite. Temporary QA picker and
+portable-project helpers were removed before the final gates.
 
 ## What works today (user-visible)
 
@@ -1222,7 +1240,8 @@ surface; it is not a second zoom and never enters document history.
   the 5.2b A/V fixture/result; keep the in-browser generator below when a test
   needs a same-origin `File` without touching disk.
 - `npm run qa:issue18:fixtures` regenerates Issue #18's ignored deterministic
-  15-file PNG/JPEG/WebP/AVIF, animation-header, orientation, spoofed, malformed,
+  18-file PNG/JPEG/WebP/AVIF, animation-header, rotated/mirrored EXIF,
+  spoofed, malformed,
   truncated, oversized, SVG, and GIF matrix plus `manifest.json` under
   `.tmp/issue-18-image-fixtures/`; add `-- --validate-only` to fail when fixture
   bytes, hashes, structural facts, or expected outcomes drift.
@@ -1330,8 +1349,8 @@ surface; it is not a second zoom and never enters document history.
   local Slice 5 export implementation plus original Slice 8 now complete the
   encoded-output reopen, cleanup, sampled pre-encode/output checks, and direct
   production Preview/output pixel acceptance.
-  Original Slice 9 still owns the complete Chrome workflow/input matrix and
-  Issue #18 closeout. The minimal UI intentionally surfaces
+  Original Slice 9 completed the full Chrome workflow/input matrix and Issue
+  #18 closeout evidence. The minimal UI intentionally surfaces
   currently eligible seams; a malformed serialized transition whose endpoints
   are missing/gapped/text has no cleanup marker yet, although the store's
   remove action can still delete it.

@@ -973,7 +973,7 @@ and browser evidence for the normal-merge closeout.
 The original researched nine-slice roadmap is authoritative. The five dated
 sections below are historical local delivery bundles; their shorter labels did
 not renumber or remove the original Slices 7–9. Issue #18 was reopened after a
-premature closeout and remains open.
+premature closeout; the corrected nine-slice gate is now complete.
 
 | Original slice | Status | Delivery mapping |
 |---|---|---|
@@ -985,16 +985,16 @@ premature closeout and remains open.
 | 6 — worker preview | ✅ complete | Historical local Slice 4 bundle plus referenced-only image opening, discriminated video/image entries, one resident still per asset, exact loan/setup identities, a 256 MiB aggregate reserved-and-retained worker-realm budget, bounded close-ack timeout, and repeated seek/play/reopen coverage. |
 | 7 — correct transition compositor | ✅ complete | The selector exposes intrinsic opacity and transition weights separately. The shared preview/export renderer builds each transformed leg normally, adds the finished premultiplied legs with `(1-p)` / `p` inside one isolated group, and source-overs that group onto lower tracks exactly once. |
 | 8 — export | ✅ complete | Historical local Slice 5 supplies the implementation; original Slice 8 adds typed-error preservation, complete still/video adapter and lifecycle coverage, and real Chromium encode → reopen gates against both the exact pre-encode canvas and the production worker-rendered Preview. |
-| 9 — acceptance and closeout | ⏳ open | Run the complete Issue #18 workflow/input matrix and update final evidence only after it passes. |
+| 9 — acceptance and closeout | ✅ complete | Complete automated and Chrome workflow/input matrices passed; the mirrored-EXIF fixture gap was closed and Issue #18 has matching closeout evidence. |
 
 The corrective source suite passes 1,385/1,385 tests across 74 files. The
-deterministic 15-file fixture replay, production build, lint,
+deterministic 18-file fixture replay, production build, lint,
 `npm audit --omit=dev`,
-and diff checks pass. Original Slice 8 additionally passed a real 60-frame AVC
+and diff checks pass. Original Slice 8 passed a real 60-frame AVC
 encode → exact-buffer reopen → full decode, with 30 pre-encode/output patches
 and a second 30-patch comparison between the production worker-rendered Preview
-and reopened output across ordinary and crossfade frames. This is not the original
-Slice 9 acceptance/closeout gate; Issue #18 remains open.
+and reopened output across ordinary and crossfade frames. Original Slice 9 then
+passed the complete acceptance matrix recorded below.
 
 ## Post-MVP issue #18 — Historical local Slice 1 bundle ✅ DONE (2026-07-26) Static-image source foundation
 
@@ -1334,9 +1334,49 @@ Slice 9 still owns the complete workflow/input matrix and final closeout.
   diagnostics again recorded 0 warnings and 0 errors; the temporary seed,
   observation hook, captures, and server logs were removed.
 
-**Next: original Slice 9 — acceptance and closeout.** Run the complete Issue
-#18 Chrome workflow and input matrix, then update the remote checklist and
-close the issue only if the full gate passes.
+## Post-MVP issue #18 — Original Slice 9 ✅ DONE (2026-07-31) Acceptance and closeout
+
+The final gate combines the complete automated matrix with direct Chrome
+workflow evidence. Timed animated-image playback remains deliberately out of
+scope: accepted animated PNG/WebP/AVIF sources use their default first frame and
+say **First frame only**; clock-driven animation belongs in a separate issue.
+
+- [x] Replayed 693/693 focused tests across 25 source/import, project,
+  timeline, preview, compositor, and export files. The complete suite passes
+  1,385/1,385 tests across 74 files; production build, lint,
+  `npm audit --omit=dev`, and both branch/current diff checks are green.
+- [x] Expanded the deterministic input matrix from 15 to 18 files with
+  asymmetric JPEG EXIF orientations 2, 5, and 7. Validate-only replay confirms
+  all 18 exact bytes, hashes, structural facts, and expected outcomes.
+- [x] In-app Chrome 150 multi-imported alpha PNG, rotated JPEG, three mirrored
+  JPEG cases, animated WebP, and AVIF. Reported display sizes were 2×2, 2×4,
+  4×2, 2×4, 2×4, 2×2, and 2×2 respectively; animated WebP explicitly stayed
+  first-frame-only. A `.jpg` containing PNG bytes was accepted as canonical
+  PNG, while corrupt PNG, a 100000×100000 header, GIF, and malformed AVIF
+  remained actionable Error/Unsupported rows.
+- [x] Chrome reopened a validated portable project, kept its sources offline,
+  rejected a mismatched relink without mutating the asset, and accepted the
+  exact original PNG on retry. The previously recorded disk-backed
+  Save/Resume/Relink gate plus focused persistence/controller tests cover the
+  native writable-handle path; the final run also recovered an eight-source
+  project and reconnected the matching source exactly.
+- [x] Chrome exercised transformed still clips, Razor, exact keyboard undo,
+  play-to-end, and a 15-frame still→still crossfade. A second validated project
+  reopened three still clips across two video layers with scale, rotation,
+  opacity, and a crossfade; after exact relink, the production export dialog
+  delivered a 320×180 H.264/AVC MP4. Original Slice 8's exact-buffer reopen and
+  sampled Preview/output pixel gates remain the encoded-pixel proof for this
+  same production renderer.
+- [x] Browser diagnostics recorded only Vite/React development messages: zero
+  warnings and zero errors. The temporary fallback-picker shim and generated
+  portable QA project were removed before the final automated gates.
+- [x] Late import removal, cancellation/error cleanup, frame-zero reuse,
+  output reopen, sampled pixels, and drag/trim geometry remain covered at their
+  deterministic controller/pipeline/UI boundaries; the final Chrome run adds
+  the integrated user-visible workflow without duplicating those hooks.
+
+All original Issue #18 implementation-checklist items now have matching code,
+test, and browser evidence for the normal-merge closeout.
 
 ## Test strategy per layer (unchanged from original)
 
