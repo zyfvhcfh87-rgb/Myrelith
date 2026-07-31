@@ -348,7 +348,7 @@ export interface Track {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 2. */
+  /** Schema version for forward-compatible project files. Currently 3. */
   schemaVersion: number
   /** Unique document id. */
   id: string

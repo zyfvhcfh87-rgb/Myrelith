@@ -120,6 +120,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - Document duration is derived (selectors), never stored.
 - `TimelineDoc` must survive `JSON.stringify`/`parse` losslessly (undo
   history depends on it); `MediaAsset.objectUrl` is session-scoped.
+- Each durable media descriptor carries independent video/audio source bounds.
+  `exact` bounds use signed integer microsecond timestamps, `unknown` is the
+  conservative migration state, and `null` means the stream is absent. Handle
+  planning must use these facts; a renderer or mixer must never invent media
+  by clamping a video endpoint, freezing audio, or padding an exact handle.
 - A present `Clip.linkGroupId` identifies exactly one video clip plus one
   audio clip. `domain/linking.ts` owns the pure manual-link contract:
   `getLinkClipsEligibility` returns stable rejection reasons and `linkClips`
@@ -132,6 +137,27 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   track dissolves the group id on each lone unlocked survivor in the same
   document mutation; if a required survivor is on a locked track, the entire
   removal rejects by returning the original document reference.
+
+## Crossfade planning, composition, and audio
+
+- `domain/crossfadePlan.ts` is the pure authority for one authored seam: exact
+  centered integer-frame geometry, genuine per-stream handle capacity, visual
+  source requests, unique aligned linked-audio partners, and typed fallback
+  reasons. Preview, live playback, and export receive the same immutable
+  document plus source-bounds facts and do not reconstruct seam geometry.
+- `domain/videoCompositionPlan.ts` carries ordinary paint items and grouped
+  crossfade items through the preview bridge, worker protocol, and export. The
+  compositor renders each complete transformed/effected/opacity-adjusted leg
+  to a reusable transparent surface, combines premultiplied weighted pixels in
+  declared Canvas2D sRGB, then composites the isolated group over lower tracks
+  exactly once. Surfaces and borrowed frames retain explicit bounded owners.
+- `domain/audioMixPlan.ts` is the shared live/export audible-contributor and
+  envelope contract. Valid linked fades open real virtual handle ranges and
+  apply clip volume with an absolute linear or equal-power envelope. Web Audio
+  schedules that plan against the shared audio anchor; export evaluates it on
+  the exact BigInt-derived sample grid before one final sum/clamp. Invalid or
+  unavailable audio falls back to the ordinary hard cut without weakening a
+  valid visual crossfade.
 
 ## Store action contracts
 
@@ -148,9 +174,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   renames WORK on locked tracks — metadata, not content),
   `renameTrack(trackId, name)`, `removeTrack(trackId)` (a locked target
   rejects; surviving linked partners are unlinked atomically, while a locked
-  survivor rejects the whole removal), `addCrossfade(fromClipId, toClipId,
-  durationFrames)`,
-  `setCrossfadeDuration(trackId, transitionId, durationFrames)`,
+  survivor rejects the whole removal),
+  `addCrossfadeWithSourceBounds(fromClipId, toClipId, settings, catalog)`,
+  `setCrossfadeSettings(trackId, transitionId, settings, catalog)`,
   `removeTransition(trackId, transitionId)`,
   `setClipVolume(clipId, volume)` (clamped [0,2]),
   `linkClips(videoClipId, audioClipId)` (one history entry; delegates to the

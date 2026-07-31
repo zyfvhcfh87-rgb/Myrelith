@@ -1663,6 +1663,36 @@ gate stops progression; later checkboxes are never completed early.
   encoding. Both outputs were exactly 2 seconds; console warnings and errors
   were empty, and the temporary export harness was removed.
 
+### Slice 7 evidence — acceptance and closeout (2026-07-31)
+
+- [x] README now describes exact isolated visual fades, optional linear or
+  equal-power linked audio, real-handle requirements, and deterministic audio
+  fallback. ARCHITECTURE records the canonical visual/audio plan boundaries,
+  sRGB isolation, exact sample envelope, and ownership rules. HANDOFF carries
+  the implementation map, browser numbers, and replaces the obsolete
+  visual-only/frozen-endpoint guidance.
+- [x] Final in-app Chromium acceptance used offset, rotated, semi-transparent
+  PNG legs with intrinsic holes over a visible checkerboard plus separately
+  linked 440 Hz left and 880 Hz right WAV sources. The production Preview
+  showed both weighted complete transforms while the lower layer remained
+  visible. The seam UI reported 60-frame visual and audio maxima; changing to
+  linear and back to equal power produced exactly one history entry each.
+- [x] Live linear and equal-power runs both exposed non-zero analyser RMS and
+  21–22 active Web Audio nodes. A seek stopped the previous generation, an
+  explicit Pause changed playing to false and cleared the audio session, and
+  terminal playback also cleaned up. No stale cursor or node remained.
+- [x] The normal Export dialog produced a 178,424-byte 320×180 AVC/AAC MP4.
+  Mediabunny reopened it at exactly 2.000 seconds and 48 kHz; volume-weighted
+  equal-power right/left ratios at 25/50/75% were 0.312/0.751/1.791 versus
+  expected 0.311/0.750/1.811, within AAC/window tolerance. Browser warnings
+  and errors were both zero; the temporary full-app fixture and logs were
+  removed.
+- [x] Final gate: 1,441/1,441 tests across 77 files, production build passed
+  with only the pre-existing chunk-size advisory, oxlint passed,
+  `npm audit --omit=dev` reported zero vulnerabilities, and diff checking was
+  clean. GitHub publication remains a normal merge of `codex/feature`, with
+  the branch retained and only Issue #17 eligible for closeout.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +
