@@ -1187,6 +1187,26 @@ closed against the merged evidence.
   chooser/insertion adapters were needed because browser automation cannot
   carry local files through the File System Access or HTML drag bridges.
 
+## Post-MVP issue #18 — Slice 6 ✅ COMPLETE (2026-07-31) Publication and closeout
+
+Issue #18 is complete at this boundary. The five implementation commits were
+reviewed as one delivery against all 38 GitHub checklist items, normally merged
+into `master`, and the issue was closed as completed. The ongoing
+`codex/feature` branch is retained.
+
+- [x] Review the complete Slice 1–5 diff against the import, domain, worker,
+  thumbnail/export, animated-image-policy, security, reliability, test, and
+  acceptance requirements. No implementation gap or unrelated file was found.
+- [x] Re-run the deterministic 15-file fixture validation, focused Issue #18
+  tests, all 1,331 repository tests, production build, lint, dependency audit,
+  and `git diff --check origin/master...HEAD`; every local gate passed. GitHub
+  exposes no required Actions/status check for this repository, so the complete
+  local bundle plus the recorded real-Chromium gates are the merge authority.
+- [x] Preserve the five coherent implementation commits with a normal merge;
+  do not squash or delete the working branch.
+- [x] Mark the GitHub implementation checklist 38/38, post the merged evidence,
+  and close only Issue #18 as `completed` after verifying the remote merge.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

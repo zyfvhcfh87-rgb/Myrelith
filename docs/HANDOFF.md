@@ -70,7 +70,8 @@ and the open list below.
 | Post-MVP #18 — static images Slice 2 | ✅ done | verified multi-file import + durable five-second image records + Resume/Relink + bounded one-tile visuals; 212 focused + 1,291 total tests; in-app Chrome import/error/retry gate |
 | Post-MVP #18 — static images Slice 3 | ✅ done | explicit still source mode + v3 migration; placeable/editable five-second clips, frame-0 selectors, Slip no-op, repeated timeline tiles; 352 focused + 1,311 total tests; in-app Chrome Razor/crossfade/undo gate |
 | Post-MVP #18 — static images Slice 4 | ✅ done | one worker-owned decoded still per asset; frame-0 reuse through scrub/play/compositing/transitions; exact replacement/release/cancel/close ownership; 128 focused + 1,327 total tests; in-app Chromium transform/crossfade gate |
-| Post-MVP #18 — static images Slice 5 | ✅ done locally | kind-aware export source; one retained still decode per asset; shared compositor image↔video transitions; 54 focused + 1,331 total tests; 210-frame Chromium MP4 export/re-import gate |
+| Post-MVP #18 — static images Slice 5 | ✅ done | kind-aware export source; one retained still decode per asset; shared compositor image↔video transitions; 54 focused + 1,331 total tests; 210-frame Chromium MP4 export/re-import gate |
+| **Post-MVP #18 — Slice 6 / final closeout** | ✅ complete | 38/38 issue checklist items reviewed against code/tests/browser evidence; full local validation green; normally merged with `codex/feature` retained; Issue #18 closed completed |
 
 1,331 tests green across 71 files · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
@@ -1153,14 +1154,6 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #18 is implementation-complete locally after Slice 5. Content
-  inspection, immutable budgets, first-frame ownership, import,
-  Save/Resume/Relink, thumbnails/diagnostics, explicit still timeline semantics,
-  editing/transitions/undo, preview, and kind-aware export are complete. One
-  retained still feeds every exported frame and image↔video transition through
-  the shared compositor, then closes exactly once. GitHub remains open until
-  this branch is published/merged and the issue checklist is closed against
-  merged evidence.
 - Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
   Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
   explicit partial-track consent, capability caching/revalidation, prompt
