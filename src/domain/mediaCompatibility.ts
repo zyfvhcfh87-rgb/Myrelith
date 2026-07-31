@@ -8,6 +8,7 @@ import type {
   FrameRate,
   MediaAsset,
   PartialTrackImportSelection,
+  SourceTimestampBounds,
 } from './schema'
 
 export type MediaCompatibilityReason =
@@ -80,6 +81,8 @@ export interface MediaTrackCompatibility {
   channels: number | null
   /** Track duration when the container exposes it safely. */
   durationMicroseconds?: number
+  /** Exact primary-stream timestamp extent when metadata probing proved it. */
+  sourceBounds?: SourceTimestampBounds
 }
 
 export interface MediaImageCompatibility {
@@ -200,6 +203,10 @@ function projectPartialTrackImport(
         kind: 'video',
         partialTrackSelection: selection,
         durationMicroseconds: selectedDuration,
+        sourceBounds: {
+          video: selectedPrimary?.sourceBounds ?? asset.sourceBounds.video,
+          audio: null,
+        },
         hasAudio: false,
         audioSampleRate: null,
         audioChannels: null,
@@ -209,6 +216,10 @@ function projectPartialTrackImport(
         kind: 'audio',
         partialTrackSelection: selection,
         durationMicroseconds: selectedDuration,
+        sourceBounds: {
+          video: null,
+          audio: selectedPrimary?.sourceBounds ?? asset.sourceBounds.audio,
+        },
         frameRate: null,
         width: null,
         height: null,

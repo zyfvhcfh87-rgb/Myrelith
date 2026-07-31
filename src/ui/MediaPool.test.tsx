@@ -100,6 +100,10 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
     kind: 'video',
     durationFrames: 120,
     durationMicroseconds: 4_000_000,
+    sourceBounds: {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+      audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+    },
     frameRate: { num: 30, den: 1 },
     width: 1920,
     height: 1080,
@@ -295,6 +299,7 @@ function descriptorFromAsset(asset: MediaAsset): PortableAssetDescriptor {
       ? {}
       : { partialTrackSelection: asset.partialTrackSelection }),
     durationMicroseconds: asset.durationMicroseconds,
+    sourceBounds: asset.sourceBounds,
     nativeFrameRate: asset.frameRate,
     width: asset.width,
     height: asset.height,

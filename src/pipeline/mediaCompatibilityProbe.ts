@@ -27,11 +27,16 @@ import type {
   SettledMediaCompatibilityStatus,
 } from '../domain/mediaCompatibility'
 import { partialTrackImportOption } from '../domain/mediaCompatibility'
-import type { FrameRate, MediaAsset } from '../domain/schema'
+import type {
+  FrameRate,
+  MediaAsset,
+  SourceTimestampBounds,
+} from '../domain/schema'
 import {
   microsecondsDurationToFrames,
   secondsToMicroseconds,
   snapToStandardRate,
+  timestampSecondsToMicroseconds,
 } from '../domain/time'
 import { serializeDecoderConfig } from './demux'
 
@@ -52,6 +57,29 @@ export const MEDIA_PROBE_LIMITS = Object.freeze({
   maxAudioSampleRate: 384_000,
   maxAudioChannels: 32,
 })
+
+function sourceTimestampBounds(
+  firstSeconds: number,
+  endSeconds: number,
+  label: string,
+): SourceTimestampBounds {
+  if (
+    !Number.isFinite(firstSeconds)
+    || !Number.isFinite(endSeconds)
+    || endSeconds <= 0
+  ) {
+    throw new Error(`${label} timestamps are missing or invalid.`)
+  }
+  const firstTimestampUs = timestampSecondsToMicroseconds(firstSeconds)
+  const endTimestampUs = secondsToMicroseconds(endSeconds)
+  if (
+    !Number.isSafeInteger(firstTimestampUs)
+    || endTimestampUs <= firstTimestampUs
+  ) {
+    throw new Error(`${label} timestamp extent is empty or exceeds safe precision.`)
+  }
+  return { status: 'exact', firstTimestampUs, endTimestampUs }
+}
 
 export type MediaProbeResult =
   | {
@@ -772,11 +800,19 @@ async function probeOpenedInput(
       primary: track === primaryAudio,
     })),
   ]
-  const [durationSec, primaryVideoDurationSec, primaryAudioDurationSec] =
+  const [
+    durationSec,
+    primaryVideoDurationSec,
+    primaryAudioDurationSec,
+    primaryVideoFirstSec,
+    primaryAudioFirstSec,
+  ] =
     await Promise.all([
       input.computeDuration([...videoTracks, ...audioTracks]),
       primaryVideo ? input.computeDuration([primaryVideo]) : Promise.resolve(null),
       primaryAudio ? input.computeDuration([primaryAudio]) : Promise.resolve(null),
+      primaryVideo ? input.getFirstTimestamp([primaryVideo]) : Promise.resolve(null),
+      primaryAudio ? input.getFirstTimestamp([primaryAudio]) : Promise.resolve(null),
     ])
   throwIfAborted(signal)
   const fallbackBudget: ProbeFallbackBudget = {
@@ -806,24 +842,35 @@ async function probeOpenedInput(
     ))
   throwIfAborted(signal)
 
-  const trackDurationMicroseconds = (
-    duration: number | null,
-  ): number | null => (
-    duration !== null && Number.isFinite(duration) && duration > 0
-      ? secondsToMicroseconds(duration)
-      : null
-  )
-  const primaryDurations = {
-    video: trackDurationMicroseconds(primaryVideoDurationSec),
-    audio: trackDurationMicroseconds(primaryAudioDurationSec),
+  const primaryMetadata = {
+    video: primaryVideoDurationSec === null || primaryVideoFirstSec === null
+      ? null
+      : {
+          durationMicroseconds: secondsToMicroseconds(primaryVideoDurationSec),
+          sourceBounds: sourceTimestampBounds(
+            primaryVideoFirstSec,
+            primaryVideoDurationSec,
+            'Primary video',
+          ),
+        },
+    audio: primaryAudioDurationSec === null || primaryAudioFirstSec === null
+      ? null
+      : {
+          durationMicroseconds: secondsToMicroseconds(primaryAudioDurationSec),
+          sourceBounds: sourceTimestampBounds(
+            primaryAudioFirstSec,
+            primaryAudioDurationSec,
+            'Primary audio',
+          ),
+        },
   }
   const tracks = probes.map((probe) => {
-    const durationMicroseconds = probe.report.primary
-      ? primaryDurations[probe.report.kind]
+    const metadata = probe.report.primary
+      ? primaryMetadata[probe.report.kind]
       : null
-    return durationMicroseconds === null
+    return metadata === null
       ? probe.report
-      : { ...probe.report, durationMicroseconds }
+      : { ...probe.report, ...metadata }
   })
   container = {
     ...container,
@@ -977,8 +1024,12 @@ export async function probeMediaFile(
     }
   }
 
-  const video = core.primaryVideo?.report ?? null
-  const audio = core.primaryAudio?.report ?? null
+  const video = core.compatibility.tracks.find(
+    (track) => track.kind === 'video' && track.primary,
+  ) ?? null
+  const audio = core.compatibility.tracks.find(
+    (track) => track.kind === 'audio' && track.primary,
+  ) ?? null
   const durationMicroseconds = core.compatibility.durationMicroseconds
   if (durationMicroseconds === null) {
     throw new Error('A ready compatibility report must include media duration')
@@ -990,6 +1041,12 @@ export async function probeMediaFile(
   const decoderConfigB64 = core.primaryVideo?.decoderConfig
     ? serializeDecoderConfig(core.primaryVideo.decoderConfig)
     : null
+  if (video && video.sourceBounds === undefined) {
+    throw new Error('A ready video report must include exact source bounds')
+  }
+  if (audio && audio.sourceBounds === undefined) {
+    throw new Error('A ready audio report must include exact source bounds')
+  }
   const objectUrl = URL.createObjectURL(file)
   const asset: MediaAsset = {
     id: assetId,
@@ -1001,6 +1058,10 @@ export async function probeMediaFile(
     kind: video ? 'video' : 'audio',
     durationFrames,
     durationMicroseconds,
+    sourceBounds: {
+      video: video?.sourceBounds ?? null,
+      audio: audio?.sourceBounds ?? null,
+    },
     frameRate: video?.frameRate ?? null,
     width: video?.width ?? null,
     height: video?.height ?? null,

@@ -37,10 +37,13 @@ import {
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, AssetKind, TimelineDoc } from '../domain/schema'
+import { docDurationFrames } from '../domain/selectors'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import {
-  docDurationFrames,
-  visibleVideoLayersAtFrame,
-} from '../domain/selectors'
+  createVideoCompositionPlanner,
+  videoCompositionRequests,
+  type VideoCompositionPlan,
+} from '../domain/videoCompositionPlan'
 import { framesToSeconds } from '../domain/time'
 import type {
   ExportDeps,
@@ -69,6 +72,10 @@ import {
   StaticImageDecodeError,
   type StaticImageRenderSource,
 } from './static-image'
+
+const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
+  colorSpace: 'srgb',
+}
 
 /** Resolves one immutable session source and its local-fallback safety budget. */
 export interface ResolvedExportAsset {
@@ -158,23 +165,31 @@ interface VideoFrameRequest {
 interface VideoRequestSchedule {
   frameCount: number
   byAsset: Map<AssetId, number[]>
+  plans: VideoCompositionPlan[]
 }
 
-function videoRequestSchedule(doc: TimelineDoc): VideoRequestSchedule {
+function videoRequestSchedule(
+  doc: TimelineDoc,
+  sourceBounds: SourceBoundsCatalog,
+): VideoRequestSchedule {
   const frameCount = docDurationFrames(doc)
   if (!Number.isSafeInteger(frameCount) || frameCount < 0) {
     throw new RangeError('Cannot schedule an invalid export timeline')
   }
 
   const byAsset = new Map<AssetId, number[]>()
+  const plans: VideoCompositionPlan[] = []
+  const planner = createVideoCompositionPlanner(doc, sourceBounds)
   for (let frame = 0; frame < frameCount; frame++) {
-    for (const { clip, sourceFrame } of visibleVideoLayersAtFrame(doc, frame)) {
-      const assetRequests = byAsset.get(clip.assetId)
-      if (assetRequests) assetRequests.push(sourceFrame)
-      else byAsset.set(clip.assetId, [sourceFrame])
+    const plan = planner.planFrame(frame)
+    plans.push(plan)
+    for (const request of videoCompositionRequests(plan)) {
+      const assetRequests = byAsset.get(request.clip.assetId)
+      if (assetRequests) assetRequests.push(request.sourceFrame)
+      else byAsset.set(request.clip.assetId, [request.sourceFrame])
     }
   }
-  return { frameCount, byAsset }
+  return { frameCount, byAsset, plans }
 }
 
 /**
@@ -184,6 +199,7 @@ function videoRequestSchedule(doc: TimelineDoc): VideoRequestSchedule {
 export function createMediabunnyExportMediaSource(
   doc: TimelineDoc,
   resolveAsset: ExportAssetResolver,
+  sourceBounds: SourceBoundsCatalog,
 ): ExportMediaSource {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -192,7 +208,7 @@ export function createMediabunnyExportMediaSource(
   framesToSeconds(0, doc.frameRate)
   const sessions = new Map<AssetId, Promise<DecodedVisualAsset>>()
   const openInputs = new Set<Input>()
-  const requests = videoRequestSchedule(doc)
+  const requests = videoRequestSchedule(doc, sourceBounds)
   const imageAbort = new AbortController()
   let closed = false
   let closePromise: Promise<void> | null = null
@@ -363,19 +379,20 @@ export function createMediabunnyExportMediaSource(
     if (docFrame >= requests.frameCount) {
       throw new Error(`Export received an extra document frame ${docFrame}`)
     }
-    const frameRequests: VideoFrameRequest[] = visibleVideoLayersAtFrame(
-      doc,
-      docFrame,
-    ).map(({ clip, sourceFrame }) => ({
-      assetId: clip.assetId,
-      sourceFrame,
-    }))
+    const plan = requests.plans[docFrame]
+    if (!plan) throw new Error(`Export frame ${docFrame} has no visual plan`)
+    const frameRequests: VideoFrameRequest[] = videoCompositionRequests(plan)
+      .map((request) => ({
+        assetId: request.clip.assetId,
+        sourceFrame: request.sourceFrame,
+      }))
 
     const bitmaps = new Set<ImageBitmap>()
     let leaseClosed = false
     let nextFrameRequestIndex = 0
 
     return {
+      plan,
       getFrame: async (
         assetId: AssetId,
         sourceFrame: number,
@@ -602,6 +619,18 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
   private iteratorDone = false
   private closePromise: Promise<void> | null = null
 
+  private incompleteSource(sample: number, detail: string): MediaAssetRuntimeError {
+    return exportAssetError(
+      this.request.assetId,
+      'audio',
+      'decode-failed',
+      new Error(
+        `Export audio clip "${this.request.clipId}" is missing exact sample `
+        + `${sample}: ${detail}`,
+      ),
+    )
+  }
+
   constructor(
     iterator: AsyncGenerator<AudioSample, void, unknown>,
     request: ExportAudioClipRequest,
@@ -713,10 +742,20 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
 
       while (true) {
         if (!this.current) {
-          if (this.iteratorDone) break
+          if (this.iteratorDone) {
+            if (this.request.requireComplete) {
+              throw this.incompleteSource(sourceSample, 'source ended early')
+            }
+            break
+          }
           this.current = await this.shiftChunk()
         }
-        if (!this.current) break
+        if (!this.current) {
+          if (this.request.requireComplete) {
+            throw this.incompleteSource(sourceSample, 'source ended early')
+          }
+          break
+        }
         if (sourceTime < pcmChunkEnd(this.current) - epsilon) break
         this.current = await this.shiftChunk()
       }
@@ -724,12 +763,20 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
       const chunk = this.current
       if (!chunk) {
         if (this.iteratorDone) {
+          if (this.request.requireComplete) {
+            throw this.incompleteSource(sourceSample, 'source ended early')
+          }
           this.nextSourceSample += sampleCount - outputIndex - 1
           break
         }
         continue
       }
-      if (sourceTime < chunk.timestampSec - epsilon) continue
+      if (sourceTime < chunk.timestampSec - epsilon) {
+        if (this.request.requireComplete) {
+          throw this.incompleteSource(sourceSample, 'decoded PCM has a gap')
+        }
+        continue
+      }
 
       const position = Math.max(
         0,
@@ -743,6 +790,12 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
       let nextChunk: DecodedPcmChunk | null = null
       if (lower + 1 >= chunk.frameCount && fraction > epsilon) {
         nextChunk = await this.peekChunk()
+        if (!nextChunk && this.request.requireComplete) {
+          throw this.incompleteSource(
+            sourceSample,
+            'the final decoded sample cannot be interpolated',
+          )
+        }
       }
 
       for (let channel = 0; channel < EXPORT_AUDIO_CHANNELS; channel++) {
@@ -752,6 +805,15 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
           second = this.sampleAt(chunk, channel, lower + 1)
         } else if (nextChunk) {
           const gap = Math.abs(nextChunk.timestampSec - pcmChunkEnd(chunk))
+          if (
+            this.request.requireComplete
+            && gap > 1.5 / chunk.sampleRate
+          ) {
+            throw this.incompleteSource(
+              sourceSample,
+              'decoded PCM has a discontinuity',
+            )
+          }
           second =
             gap <= 1.5 / chunk.sampleRate
               ? this.sampleAt(nextChunk, channel, 0)
@@ -1076,6 +1138,7 @@ export async function createMediabunnyExportSink(
   doc: TimelineDoc,
   settings: ExportSettings,
   resolveAsset: ExportAssetResolver,
+  sourceBounds: SourceBoundsCatalog = new Map(),
 ): Promise<ExportVideoSink> {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -1120,7 +1183,7 @@ export async function createMediabunnyExportSink(
   }
 
   const canvas = new OffscreenCanvas(doc.width, doc.height)
-  const context = canvas.getContext('2d')
+  const context = canvas.getContext('2d', SRGB_2D_CONTEXT)
   if (!context) {
     throw new Error('Could not create the export 2D context')
   }
@@ -1138,6 +1201,7 @@ export async function createMediabunnyExportSink(
       ? new TimelineAudioMixer(
           doc,
           createMediabunnyExportAudioSource(resolveAsset),
+          sourceBounds,
         )
       : null
     source = new CanvasSource(canvas, {
@@ -1278,9 +1342,9 @@ export async function createMediabunnyExportSink(
       get: () => {
         if (transitionSurfaces) return transitionSurfaces
         const legCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const legContext = legCanvas.getContext('2d')
+        const legContext = legCanvas.getContext('2d', SRGB_2D_CONTEXT)
         const groupCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const groupContext = groupCanvas.getContext('2d')
+        const groupContext = groupCanvas.getContext('2d', SRGB_2D_CONTEXT)
         if (!legContext || !groupContext) {
           throw new Error('Could not create export transition 2D contexts')
         }
@@ -1306,6 +1370,7 @@ export async function createMediabunnyExportSink(
 /** Production dependencies for exportTimeline, closed over the Blob resolver. */
 export function createMediabunnyExportDeps(
   resolveAsset: ExportAssetResolver,
+  sourceBounds: SourceBoundsCatalog = new Map(),
 ): ExportDeps {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -1313,6 +1378,6 @@ export function createMediabunnyExportDeps(
   return {
     composite: compositeFrame,
     createVideoSink: (doc, settings) =>
-      createMediabunnyExportSink(doc, settings, resolveAsset),
+      createMediabunnyExportSink(doc, settings, resolveAsset, sourceBounds),
   }
 }

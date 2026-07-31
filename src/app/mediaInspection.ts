@@ -189,6 +189,7 @@ function readyImageResult(
     kind: 'image',
     durationFrames: stillImageDurationFrames(documentRate, durationMicroseconds),
     durationMicroseconds,
+    sourceBounds: { video: null, audio: null },
     frameRate: null,
     width: decoded.width,
     height: decoded.height,

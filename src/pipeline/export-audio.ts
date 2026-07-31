@@ -7,12 +7,15 @@
  * behavior remain testable without WebCodecs.
  */
 
-import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
+import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import {
-  activeClipAt,
-  audibleTracks,
-  docDurationFrames,
-} from '../domain/selectors'
+  createTimelineAudioMixPlan,
+  crossfadeAudioGain,
+  type TimelineAudioClipPlan,
+  type TimelineAudioEnvelope,
+} from '../domain/audioMixPlan'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
+import { docDurationFrames } from '../domain/selectors'
 
 export const EXPORT_AUDIO_CHANNELS = 2
 export const EXPORT_AUDIO_BLOCK_SAMPLES = 1024
@@ -24,6 +27,8 @@ export interface ExportAudioClipRequest {
   endSample: number
   sampleRate: number
   channelCount: typeof EXPORT_AUDIO_CHANNELS
+  /** Crossfade handle legs must never freeze or zero-fill missing PCM. */
+  requireComplete?: true
 }
 
 export interface ExportAudioClipReader {
@@ -120,24 +125,17 @@ function audioSamplePhaseOffset(
 }
 
 interface ActiveReader {
-  clip: Clip
+  plan: SampleAudioClipPlan
   reader: ExportAudioClipReader
 }
 
-function timelineEndFrame(clip: Clip): number {
-  const end =
-    clip.timelineRange.startFrame + clip.timelineRange.durationFrames
-  if (!Number.isSafeInteger(end) || end < 0) {
-    throw new RangeError(`Clip "${clip.id}" has an invalid timeline range`)
-  }
-  return end
+interface SampleAudioEnvelope extends TimelineAudioEnvelope {
+  startSample: number
+  endSample: number
 }
 
-function assertVolume(clip: Clip): number {
-  if (!Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2) {
-    throw new RangeError(`Clip "${clip.id}" has an invalid volume`)
-  }
-  return clip.volume
+interface SampleAudioClipPlan extends TimelineAudioClipPlan {
+  sampleEnvelopes: SampleAudioEnvelope[]
 }
 
 function assertReaderBlock(
@@ -183,16 +181,29 @@ export class TimelineAudioMixer {
   private readonly doc: TimelineDoc
   private readonly source: ExportAudioMediaSource
   private readonly durationFrames: number
-  private readonly mixTracks: ReturnType<typeof audibleTracks>
+  private readonly mixPlans: SampleAudioClipPlan[]
   private readonly readers = new Map<ClipId, ActiveReader>()
   private nextFrame = 0
   private closePromise: Promise<void> | null = null
 
-  constructor(doc: TimelineDoc, source: ExportAudioMediaSource) {
+  constructor(
+    doc: TimelineDoc,
+    source: ExportAudioMediaSource,
+    catalog: SourceBoundsCatalog = new Map(),
+  ) {
     this.doc = doc
     this.source = source
     this.durationFrames = docDurationFrames(doc)
-    this.mixTracks = audibleTracks(doc)
+    this.mixPlans = createTimelineAudioMixPlan(doc, catalog).clips.map(
+      (plan) => ({
+        ...plan,
+        sampleEnvelopes: plan.envelopes.map((envelope) => ({
+          ...envelope,
+          startSample: audioSampleBoundary(envelope.startFrame, doc),
+          endSample: audioSampleBoundary(envelope.endFrame, doc),
+        })),
+      }),
+    )
     this.hasAudio = doc.tracks.some(
       (track) => track.kind === 'audio' && track.clips.length > 0,
     )
@@ -201,19 +212,17 @@ export class TimelineAudioMixer {
     audioSampleBoundary(this.durationFrames, doc)
   }
 
-  private activeClips(frame: number): Clip[] {
-    const clips: Clip[] = []
-    for (const track of this.mixTracks) {
-      const clip = activeClipAt(track, frame)
-      if (!clip) continue
-      const volume = assertVolume(clip)
-      if (volume > 0) clips.push(clip)
-    }
-    return clips
+  private activePlans(frame: number): SampleAudioClipPlan[] {
+    return this.mixPlans.filter((plan) =>
+      plan.timelineStartFrame <= frame
+      && frame < plan.timelineEndFrame,
+    )
   }
 
-  private async reconcileReaders(clips: readonly Clip[]): Promise<void> {
-    const wanted = new Set(clips.map((clip) => clip.id))
+  private async reconcileReaders(
+    plans: readonly SampleAudioClipPlan[],
+  ): Promise<void> {
+    const wanted = new Set(plans.map((plan) => plan.clipId))
     const stale: ExportAudioClipReader[] = []
     for (const [clipId, active] of this.readers) {
       if (wanted.has(clipId)) continue
@@ -222,41 +231,65 @@ export class TimelineAudioMixer {
     }
     await closeReaders(stale)
 
-    for (const clip of clips) {
-      if (this.readers.has(clip.id)) continue
+    for (const plan of plans) {
+      if (this.readers.has(plan.clipId)) continue
       const timelineStartSample = audioSampleBoundary(
-        clip.timelineRange.startFrame,
+        plan.timelineStartFrame,
         this.doc,
       )
       const timelineEndSample = audioSampleBoundary(
-        timelineEndFrame(clip),
+        plan.timelineEndFrame,
         this.doc,
       )
       const sourceStartSample =
         timelineStartSample +
         audioSamplePhaseOffset(
-          clip.sourceRange.startFrame,
-          clip.timelineRange.startFrame,
+          plan.sourceStartFrame,
+          plan.timelineStartFrame,
           this.doc,
         )
       if (!Number.isSafeInteger(sourceStartSample) || sourceStartSample < 0) {
-        throw new RangeError(`Clip "${clip.id}" has an invalid audio in-point`)
+        throw new RangeError(
+          `Clip "${plan.clipId}" has an invalid audio in-point`,
+        )
       }
       const sourceEndSample =
         sourceStartSample + (timelineEndSample - timelineStartSample)
       if (!Number.isSafeInteger(sourceEndSample)) {
-        throw new RangeError(`Clip "${clip.id}" audio range is too large`)
+        throw new RangeError(
+          `Clip "${plan.clipId}" audio range is too large`,
+        )
       }
       const reader = await this.source.openClip({
-        clipId: clip.id,
-        assetId: clip.assetId,
+        clipId: plan.clipId,
+        assetId: plan.assetId,
         startSample: sourceStartSample,
         endSample: sourceEndSample,
         sampleRate: this.doc.audioSampleRate,
         channelCount: EXPORT_AUDIO_CHANNELS,
+        ...(plan.sampleEnvelopes.length > 0
+          ? { requireComplete: true as const }
+          : {}),
       })
-      this.readers.set(clip.id, { clip, reader })
+      this.readers.set(plan.clipId, { plan, reader })
     }
+  }
+
+  private gainAtSample(plan: SampleAudioClipPlan, sample: number): number {
+    const envelope = plan.sampleEnvelopes.find((candidate) =>
+      sample >= candidate.startSample && sample < candidate.endSample,
+    )
+    if (!envelope) return plan.volume
+    const duration = envelope.endSample - envelope.startSample
+    if (duration <= 0) {
+      throw new RangeError('Audio crossfade sample window must be non-empty')
+    }
+    const progress = (sample - envelope.startSample) / duration
+    return plan.volume * crossfadeAudioGain(
+      envelope.curve,
+      envelope.role,
+      progress,
+    )
   }
 
   async writeFrame(
@@ -276,8 +309,8 @@ export class TimelineAudioMixer {
       throw new TypeError('Audio block writer must be a function')
     }
 
-    const clips = this.activeClips(docFrame)
-    await this.reconcileReaders(clips)
+    const plans = this.activePlans(docFrame)
+    await this.reconcileReaders(plans)
 
     const frameStart = audioSampleBoundary(docFrame, this.doc)
     const frameEnd = audioSampleBoundary(docFrame + 1, this.doc)
@@ -289,14 +322,16 @@ export class TimelineAudioMixer {
         frameEnd - blockStart,
       )
       const settled = await Promise.allSettled(
-        clips.map(async (clip) => {
-          const active = this.readers.get(clip.id)
+        plans.map(async (plan) => {
+          const active = this.readers.get(plan.clipId)
           if (!active) {
-            throw new Error(`Audio reader for clip "${clip.id}" is missing`)
+            throw new Error(
+              `Audio reader for clip "${plan.clipId}" is missing`,
+            )
           }
           const channels = await active.reader.read(sampleCount)
-          assertReaderBlock(clip.id, channels, sampleCount)
-          return { channels, volume: clip.volume }
+          assertReaderBlock(plan.clipId, channels, sampleCount)
+          return { channels, plan }
         }),
       )
       const failed = settled.find(
@@ -318,8 +353,9 @@ export class TimelineAudioMixer {
           if (!Number.isFinite(l) || !Number.isFinite(r)) {
             throw new Error('Decoded audio contains a non-finite sample')
           }
-          left[i] += l * input.volume
-          right[i] += r * input.volume
+          const gain = this.gainAtSample(input.plan, blockStart + i)
+          left[i] += l * gain
+          right[i] += r * gain
         }
       }
       for (let i = 0; i < sampleCount; i++) {

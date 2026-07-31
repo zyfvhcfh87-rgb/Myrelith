@@ -13,6 +13,8 @@ import type {
   ClipSourceMode,
   Effect,
   FrameRate,
+  MediaSourceBounds,
+  SourceTimestampBounds,
   TextProps,
   TimelineDoc,
   Track,
@@ -20,14 +22,15 @@ import type {
   PartialTrackImportSelection,
 } from './schema'
 import { microsecondsDurationToFrames } from './time'
+import { cloneMediaSourceBounds } from './sourceBounds'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
 
 export const PROJECT_FILE_FORMAT = 'webcut-project' as const
-export const CURRENT_PROJECT_FORMAT_VERSION = 3 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 2 as const
+export const CURRENT_PROJECT_FORMAT_VERSION = 4 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 3 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -66,6 +69,7 @@ export interface PortableAssetDescriptor {
   kind: AssetKind
   partialTrackSelection?: PartialTrackImportSelection
   durationMicroseconds: number
+  sourceBounds: MediaSourceBounds
   nativeFrameRate: FrameRate | null
   width: number | null
   height: number | null
@@ -74,14 +78,14 @@ export interface PortableAssetDescriptor {
   audioChannels: number | null
 }
 
-export interface ProjectFileV3 {
+export interface ProjectFileV4 {
   format: typeof PROJECT_FILE_FORMAT
   formatVersion: typeof CURRENT_PROJECT_FORMAT_VERSION
   document: TimelineDoc
   assets: PortableAssetDescriptor[]
 }
 
-export type ProjectFile = ProjectFileV3
+export type ProjectFile = ProjectFileV4
 
 export class ProjectFileError extends Error {
   constructor(message: string) {
@@ -212,6 +216,44 @@ function validateNullableSafeInteger(
   if (value !== null) safeInteger(value, path, minimum, maximum)
 }
 
+function validateSourceTimestampBounds(
+  value: unknown,
+  path: string,
+): asserts value is SourceTimestampBounds {
+  const bounds = record(value, path)
+  if (bounds.status === 'unknown') {
+    exactKeys(bounds, ['status'], [], path)
+    return
+  }
+  if (bounds.status !== 'exact') {
+    fail(`${path}.status`, 'expected exact or unknown')
+  }
+  exactKeys(bounds, ['status', 'firstTimestampUs', 'endTimestampUs'], [], path)
+  safeInteger(
+    bounds.firstTimestampUs,
+    `${path}.firstTimestampUs`,
+    -Number.MAX_SAFE_INTEGER,
+  )
+  safeInteger(bounds.endTimestampUs, `${path}.endTimestampUs`, 0)
+  if (bounds.endTimestampUs <= bounds.firstTimestampUs) {
+    fail(path, 'endTimestampUs must be greater than firstTimestampUs')
+  }
+}
+
+function validateMediaSourceBounds(
+  value: unknown,
+  path: string,
+): asserts value is MediaSourceBounds {
+  const bounds = record(value, path)
+  exactKeys(bounds, ['video', 'audio'], [], path)
+  if (bounds.video !== null) {
+    validateSourceTimestampBounds(bounds.video, `${path}.video`)
+  }
+  if (bounds.audio !== null) {
+    validateSourceTimestampBounds(bounds.audio, `${path}.audio`)
+  }
+}
+
 function validateAsset(value: unknown, path: string): asserts value is PortableAssetDescriptor {
   const asset = record(value, path)
   exactKeys(
@@ -224,6 +266,7 @@ function validateAsset(value: unknown, path: string): asserts value is PortableA
       'lastModified',
       'kind',
       'durationMicroseconds',
+      'sourceBounds',
       'nativeFrameRate',
       'width',
       'height',
@@ -250,6 +293,18 @@ function validateAsset(value: unknown, path: string): asserts value is PortableA
     fail(`${path}.partialTrackSelection`, 'expected video-only or audio-only')
   }
   safeInteger(asset.durationMicroseconds, `${path}.durationMicroseconds`, 0)
+  validateMediaSourceBounds(asset.sourceBounds, `${path}.sourceBounds`)
+  for (const [kind, bounds] of Object.entries(asset.sourceBounds)) {
+    if (
+      bounds?.status === 'exact'
+      && bounds.endTimestampUs > asset.durationMicroseconds
+    ) {
+      fail(
+        `${path}.sourceBounds.${kind}.endTimestampUs`,
+        'cannot exceed the asset duration endpoint',
+      )
+    }
+  }
   validateNullableFrameRate(asset.nativeFrameRate, `${path}.nativeFrameRate`)
   validateNullableSafeInteger(asset.width, `${path}.width`, 1, PROJECT_FILE_LIMITS.maxDimension)
   validateNullableSafeInteger(asset.height, `${path}.height`, 1, PROJECT_FILE_LIMITS.maxDimension)
@@ -299,6 +354,18 @@ function validateAsset(value: unknown, path: string): asserts value is PortableA
   const audioMetadataPresent = asset.audioSampleRate !== null && asset.audioChannels !== null
   if (asset.hasAudio !== audioMetadataPresent) {
     fail(path, 'audio metadata must match hasAudio')
+  }
+  if (asset.kind === 'image' && (asset.sourceBounds.video !== null || asset.sourceBounds.audio !== null)) {
+    fail(path, 'image assets cannot have timed source bounds')
+  }
+  if (asset.kind === 'video' && asset.sourceBounds.video === null) {
+    fail(path, 'video assets require video source bounds')
+  }
+  if (asset.kind === 'audio' && asset.sourceBounds.video !== null) {
+    fail(path, 'audio assets cannot have video source bounds')
+  }
+  if (asset.hasAudio !== (asset.sourceBounds.audio !== null)) {
+    fail(path, 'audio source bounds must match hasAudio')
   }
 }
 
@@ -534,7 +601,7 @@ function validateTransition(
   const transition = record(value, path)
   exactKeys(
     transition,
-    ['id', 'type', 'fromClipId', 'toClipId', 'durationFrames'],
+    ['id', 'type', 'fromClipId', 'toClipId', 'durationFrames', 'audio'],
     [],
     path,
   )
@@ -545,6 +612,12 @@ function validateTransition(
   stringValue(transition.fromClipId, `${path}.fromClipId`, PROJECT_FILE_LIMITS.maxIdCharacters)
   stringValue(transition.toClipId, `${path}.toClipId`, PROJECT_FILE_LIMITS.maxIdCharacters)
   safeInteger(transition.durationFrames, `${path}.durationFrames`, 1)
+  const audio = record(transition.audio, `${path}.audio`)
+  exactKeys(audio, ['enabled', 'curve'], [], `${path}.audio`)
+  booleanValue(audio.enabled, `${path}.audio.enabled`)
+  if (audio.curve !== 'linear' && audio.curve !== 'equal-power') {
+    fail(`${path}.audio.curve`, 'expected linear or equal-power')
+  }
   if (track.kind !== 'video') fail(path, 'transitions require a video track')
 
   const fromIndex = clipIndexById.get(transition.fromClipId)
@@ -784,15 +857,40 @@ function migrateClipSourceModes(
   })
   return {
     ...document,
-    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
+    schemaVersion: 2,
     tracks,
   }
+}
+
+/** Upgrade schema 2 transitions without claiming legacy audio behavior. */
+function migrateTransitionAudio(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    boundedArray(
+      track.transitions,
+      `$.document.tracks[${trackIndex}].transitions`,
+      PROJECT_FILE_LIMITS.maxTransitions,
+    )
+    return {
+      ...track,
+      transitions: track.transitions.map((transitionValue, transitionIndex) => ({
+        ...record(
+          transitionValue,
+          `$.document.tracks[${trackIndex}].transitions[${transitionIndex}]`,
+        ),
+        audio: { enabled: false, curve: 'equal-power' },
+      })),
+    }
+  })
+  return { ...document, schemaVersion: 3, tracks }
 }
 
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
- * boundaries: previously shipped v3 files can still contain a schema-1
+ * boundaries: previously shipped project files can still contain a schema-1
  * document and must therefore pass through this migration too.
  */
 function migrateTimelineDocument(
@@ -807,23 +905,35 @@ function migrateTimelineDocument(
       `unsupported future timeline schema ${document.schemaVersion}`,
     )
   }
-  switch (document.schemaVersion) {
-    case 1:
-      return migrateClipSourceModes(document, assetsValue)
-    case CURRENT_TIMELINE_SCHEMA_VERSION:
-      return document
-    default:
-      return fail(
-        '$.document.schemaVersion',
-        `unsupported timeline schema ${document.schemaVersion}`,
-      )
+  let migrated = document
+  if (migrated.schemaVersion === 1) {
+    migrated = migrateClipSourceModes(migrated, assetsValue)
   }
+  if (migrated.schemaVersion === 2) {
+    migrated = migrateTransitionAudio(migrated)
+  }
+  return migrated
+}
+
+function migrateLegacyAssetBounds(assetsValue: unknown): JsonRecord[] {
+  boundedArray(assetsValue, '$.assets', PROJECT_FILE_LIMITS.maxAssets)
+  return assetsValue.map((assetValue, index) => {
+    const asset = record(assetValue, `$.assets[${index}]`)
+    const hasVideo = asset.kind === 'video'
+    const hasAudio = asset.hasAudio === true
+    return {
+      ...asset,
+      sourceBounds: {
+        video: hasVideo ? { status: 'unknown' } : null,
+        audio: hasAudio ? { status: 'unknown' } : null,
+      },
+    }
+  })
 }
 
 /**
- * Upgrade a parsed historical value into the current format. Outer version 2
- * added the optional durable partial-track choice; nested timeline schema 2
- * makes every clip's timed/still source semantics explicit.
+ * Upgrade a parsed historical value into the current format. Outer version 4
+ * adds durable stream bounds; nested schema 3 adds transition audio settings.
  */
 export function migrateProjectFile(value: unknown): unknown {
   const project = record(value, '$')
@@ -837,10 +947,18 @@ export function migrateProjectFile(value: unknown): unknown {
   switch (project.formatVersion) {
     case 1:
     case 2:
-    case CURRENT_PROJECT_FORMAT_VERSION:
+    case 3: {
+      const assets = migrateLegacyAssetBounds(project.assets)
       return {
         ...project,
         formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
+        document: migrateTimelineDocument(project.document, assets),
+        assets,
+      }
+    }
+    case CURRENT_PROJECT_FORMAT_VERSION:
+      return {
+        ...project,
         document: migrateTimelineDocument(project.document, project.assets),
       }
     default:
@@ -890,7 +1008,10 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
           ...(clip.linkGroupId === undefined ? {} : { linkGroupId: clip.linkGroupId }),
         })),
-        transitions: track.transitions.map((transition) => ({ ...transition })),
+        transitions: track.transitions.map((transition) => ({
+          ...transition,
+          audio: { ...transition.audio },
+        })),
         hidden: track.hidden,
         muted: track.muted,
         solo: track.solo,
@@ -909,6 +1030,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           ? {}
           : { partialTrackSelection: asset.partialTrackSelection }),
         durationMicroseconds: asset.durationMicroseconds,
+        sourceBounds: cloneMediaSourceBounds(asset.sourceBounds),
         nativeFrameRate:
           asset.nativeFrameRate === null ? null : { ...asset.nativeFrameRate },
         width: asset.width,

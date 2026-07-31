@@ -10,6 +10,10 @@
  */
 
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
+import {
+  createSourceBoundsCatalog,
+  type SourceBoundsCatalog,
+} from '../domain/crossfadePlan'
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { audibleTracks, outputMediaAssetIds } from '../domain/selectors'
@@ -48,8 +52,12 @@ export interface ExportControllerDeps {
   createMediaSource(
     doc: TimelineDoc,
     resolveAsset: ExportAssetResolver,
+    sourceBounds: SourceBoundsCatalog,
   ): ExportMediaSource
-  createPipelineDeps(resolveAsset: ExportAssetResolver): PipelineExportDeps
+  createPipelineDeps(
+    resolveAsset: ExportAssetResolver,
+    sourceBounds: SourceBoundsCatalog,
+  ): PipelineExportDeps
   runExport(
     doc: TimelineDoc,
     settings: ExportSettings,
@@ -347,13 +355,14 @@ export function startExport(
   const trackConflict = partialTrackConflict(doc, assets)
   if (trackConflict) return Promise.reject(new Error(trackConflict))
   const resolveAsset = createAssetResolver(assets, deps.fetchBlob)
+  const sourceBounds = createSourceBoundsCatalog(assets.values())
   retainReferencedBlobs(doc, resolveAsset)
 
   let media: ExportMediaSource | null = null
   let generator: ExportRun
   try {
-    const pipelineDeps = deps.createPipelineDeps(resolveAsset)
-    media = deps.createMediaSource(doc, resolveAsset)
+    const pipelineDeps = deps.createPipelineDeps(resolveAsset, sourceBounds)
+    media = deps.createMediaSource(doc, resolveAsset, sourceBounds)
     generator = deps.runExport(doc, runSettings, media, pipelineDeps)
   } catch (cause) {
     if (media) {

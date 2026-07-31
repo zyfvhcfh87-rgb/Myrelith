@@ -75,11 +75,13 @@ and the open list below.
 | Post-MVP #18 — original Slice 7 transition compositor | ✅ done | intrinsic opacity + explicit weights; complete transformed legs added with `lighter` inside one isolated group, then source-over once; exact software + Chromium pixel matrix |
 | Post-MVP #18 — original Slice 8 export | ✅ done | typed source errors preserved; decode-once/frame-zero and real-source cleanup matrix; Chromium 60-frame AVC encode/reopen plus direct production Preview/output pixel parity and clean diagnostics |
 | **Post-MVP #18 — original Slice 9 acceptance/closeout** | ✅ complete | 693 focused + 1,385 total tests; 18-file hostile/orientation matrix; Chrome multi-import, edit, recovery/relink, layered crossfade, and export gate; Issue #18 closeout evidence complete |
+| **Post-MVP #17 — exact audio-aware crossfades** | ✅ complete | canonical grouped visual/audio plans, real per-stream handles, atomic accessible settings, exact live/export envelopes, 1,441 tests, and full-app Chromium transparent-layer/tone/export-reopen acceptance |
 
-The corrective Issue #18 source suite passes 1,385/1,385 tests across 74 files.
-Deterministic 18-file fixture replay, production build, lint,
-`npm audit --omit=dev`, diff checks, the real-browser Slice 8 encoded-output
-parity gate, and the final Slice 9 Chrome acceptance matrix pass. Earlier
+The Issue #17 suite passes 1,441/1,441 tests across 77 files. Production build,
+lint, diff checks, focused planner/UI/playback/export suites, exact browser
+tone gates, and the final full-app Chromium acceptance matrix pass. Issue #18's
+1,385-test corrective source suite and 18-file fixture matrix remain green in
+that total. Earlier
 completed phases remain committed separately
 (see `git log --oneline`). The user completed the
 Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
@@ -682,6 +684,43 @@ native disk-backed Save/Resume/Relink path remains covered by its earlier Chrome
 gate plus the complete persistence/controller suite. Temporary QA picker and
 portable-project helpers were removed before the final gates.
 
+Issue #17 completes exact audio-aware crossfades in eight independently gated
+slices. Project format 4 and timeline schema 3 persist independent exact or
+conservative video/audio bounds plus transition audio intent. The pure
+`crossfadePlan.ts` authority resolves centered odd/even windows, genuine handle
+capacity, grouped visual requests, and exactly one aligned linked-audio partner
+per leg. Invalid or unavailable audio retains a valid visual transition and
+falls back to the ordinary hard cut with a typed UI explanation.
+
+Preview and export both consume `videoCompositionPlan.ts`. The worker carries
+grouped clip-keyed requests without reconstructing adjacency; complete
+transformed/effected/opacity-adjusted legs combine on bounded reusable sRGB
+surfaces before the isolated group composites over lower tracks once. This
+preserves Issue #18's transparent/transformed correctness while replacing its
+temporary frozen timed endpoints with real source handles. Same-asset legs keep
+independent clip identity and requested frames are fetched once.
+
+The seam popover atomically edits duration, linked-audio intent, and linear or
+equal-power curve with exact visual/audio maxima and one undo entry. Shared
+`audioMixPlan.ts` facts drive both rolling Web Audio and export. Live playback
+schedules exact ramps/129-point bounded curves against the audio anchor and
+generation-safely restarts on relevant edits; export evaluates the same
+absolute envelope per BigInt-derived sample before final clipping. Exact handle
+readers fail closed on EOF, gaps, discontinuity, or missing interpolation
+instead of freezing or zero-filling PCM.
+
+The focused final export gate passed 109/109 and the full suite passed
+1,441/1,441 across 77 files. Chrome first encoded/reopened both curves with
+distinct 440 Hz left and 880 Hz right tones: linear ratios at 25/50/75% were
+0.333/1.001/2.996 and equal power was 0.415/0.999/2.413. The final full-app
+gate used rotated, offset, semi-transparent PNG legs over a checkerboard plus
+linked tone clips. Both curve edits were one history entry, live runs exposed
+non-zero RMS/nodes, seek/pause/end released the audio session, and the normal
+Export dialog produced a 178,424-byte 2.000-second AVC/AAC MP4. Reopen reported
+48 kHz and volume-weighted equal-power ratios 0.312/0.751/1.791, within AAC
+tolerance of 0.311/0.750/1.811. Browser warnings and errors were both zero;
+all temporary acceptance files and server logs were removed.
+
 ## What works today (user-visible)
 
 Run `npm run dev` → project Home. Create a project with an explicit canvas,
@@ -757,12 +796,15 @@ follows), slip (source shifts under a fixed clip, live-clamped to the
 asset, delta badge), slide (touching neighbors absorb). S splits under
 the playhead, Delete/Backspace ripple-deletes the selection, ←/→ steps
 the playhead one frame, empty-lane click deselects. Transition authoring
-(5.1e-3): each touching adjacent non-text video seam shows a tiny `+` marker;
-its popover chooses an integer frame duration before Add. An authored seam
-shows `CF`; the same popover explicitly Applies a new duration or Removes the
-crossfade. Domain rejection stays visible in the popover so a shorter duration
-can be tried, locked tracks disable the marker, and each successful button is
-exactly one undo entry. The Toolbar's Export button (5.2b) opens a native modal
+(5.1e-3 + Issue #17): each touching adjacent non-text video seam shows a tiny
+`+` marker. Its popover chooses an exact integer-frame duration, whether to
+crossfade unique aligned linked audio, and a linear or equal-power curve. It
+reports visual and audio handle maxima independently; unavailable linked audio
+keeps the visual authoring path and explains the fallback. An authored seam
+shows `CF`; the same popover explicitly Applies the complete settings payload
+or Removes the crossfade. Domain rejection stays visible so a shorter duration
+can be tried, locked tracks disable the marker, and each successful Add/Apply/
+Remove is exactly one undo entry. The Toolbar's Export button (5.2b) opens a native modal
 with the timeline's fixed resolution and the MVP MP4/H.264 profile. Start shows
 real progress; Cancel drains cleanup before reporting cancellation; success
 offers an explicit `.mp4` download and keeps its object URL alive until the
@@ -821,13 +863,12 @@ surface; it is not a second zoom and never enters document history.
   Issue #18 original Slice 3 keeps still source `[0, 1)` through clip creation,
   trim/ripple/Razor/Slide and makes Slip a silent same-reference no-op;
   Issue #12 original Slice 7 `removeTrack` atomically dissolves lone unlocked link survivors or
-  rejects for a locked survivor; 5.1e-1 track-scoped
-  `addCrossfade`/`setCrossfadeDuration`/
+  rejects for a locked survivor; Issue #17 adds exact-bounds-aware atomic
+  `addCrossfadeWithSourceBounds`/`setCrossfadeSettingsWithSourceBounds`/
   `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
   with all ordinary and transition still samples fixed at source frame 0,
-  `resolveCrossfade` (canonical centered-window geometry),
-  `visibleVideoLayersAtFrame` (THE preview/export visual plan),
+  `resolveCrossfade` (compatibility facade over the canonical planner),
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
   derived reads, never stored), `linking.ts` (4.3.8 linked-pair wrappers around
   the base ops — same delta to every `linkGroupId` member, atomic rollback;
@@ -838,15 +879,23 @@ surface; it is not a second zoom and never enters document history.
   pair through the same eligibility contract before dispatch; the store's
   geometry actions call these wrappers too; linked Slip also preflights every
   member so a group containing a still remains one silent no-op).
+- `src/domain/crossfadePlan.ts` + `videoCompositionPlan.ts` — Issue #17 pure
+  authorities for exact per-stream handles, centered grouped seams, linked
+  audio availability, clip-keyed frame requests, and the shared preview/export
+  paint plan. Invalid/malformed groups fall back deterministically.
+- `src/domain/audioMixPlan.ts` — shared live/export audible contributors,
+  virtual real-handle ranges, absolute envelopes, and bounded linear or
+  equal-power gain evaluation; ordinary mute/solo/hard-cut behavior remains
+  the fallback.
 - `src/domain/projectSettings.ts` — authoritative project presets, strict
   settings validation, and the pure empty-document factory.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
   migration entry point, strict untrusted-input validation, and bounded durable
-  asset metadata; excludes every session-owned field. The outer project format
-  remains v3. Issue #18 original Slice 2 advances the nested timeline schema
-  from 1 to 2, requires explicit mode/range consistency in current snapshots,
-  and migrates nested-schema-1 image-media clips to `still` `[0, 1)` while
-  retaining timed media and text semantics.
+  asset metadata; excludes every session-owned field. Issue #17 advances the
+  outer project format to 4 and nested timeline schema to 3 for independent
+  video/audio timestamp bounds and transition audio intent. Older snapshots
+  migrate conservatively; Issue #18's image-media migration still produces
+  `still` `[0, 1)` without changing timed media or text semantics.
 - `src/state/projectSessionStore.ts` — serializable launch/editor screen,
   active-project labels, operation phase, relink status, and separate
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
@@ -901,12 +950,13 @@ surface; it is not a second zoom and never enters document history.
   Injected `Composite2D` ctx + `FrameSource`; Slice 4 accepts either
   `ImageBitmap` or Canvas-drawable `VideoFrame` sources without copying them.
   The concurrent fetch phase precedes synchronous draw; `{drawn, missing}`
-  result and per-clip try/finally preserve source loans. Since Issue #18
-  original Slice 7 it paints ordinary layers directly, but renders each
+  result and per-clip try/finally preserve source loans. Issue #17 supplies an
+  explicit carried composition plan with genuine handle frames. Since Issue
+  #18 original Slice 7 it paints ordinary layers directly, but renders each
   complete transformed crossfade leg into a transparent scratch, adds the
   weighted premultiplied legs inside an isolated `lighter` group, and
-  source-overs that group onto lower tracks once. The surface provider is lazy,
-  so ordinary frames allocate no transition canvases.
+  source-overs that group onto lower tracks once in declared sRGB. The surface
+  provider is lazy, so ordinary frames allocate no transition canvases.
 - `src/pipeline/export.ts` — Phase 5.1a CFR orchestrator:
   `exportTimeline` derives length with `docDurationFrames`, composites every
   integer frame through an injected `compositeFrame`, awaits sink
@@ -918,7 +968,8 @@ surface; it is not a second zoom and never enters document history.
   the generic missing-media fallback.
 - `src/app/exportController.ts` — Phase 5.2a composition root: snapshots the
   current document/settings/media, eagerly retains every referenced Blob, and
-  passes one cached Blob/budget/kind resolver to both Mediabunny adapter trees.
+  passes one cached Blob/budget/kind resolver plus the identical exact
+  source-bounds catalog to both Mediabunny adapter trees.
   Slice 5 uses that captured kind to branch visual export without re-reading
   mutable media state. It is the
   sole explicit generator pump, preserving the final `ExportResult` while
@@ -992,36 +1043,38 @@ surface; it is not a second zoom and never enters document history.
   native-scroll edges without moving the logical viewport, and keep the final
   endpoint reachable. `Ruler.tsx`, clips, visuals, seams, and playhead all read
   the single transport `zoom` plus the shared translation origin.
-- `src/pipeline/export-audio.ts` — Phase 5.1c exact audio scheduler/mixer:
-  BigInt frame→sample boundaries; split/trim-stable signed source↔timeline
-  phase; `audibleTracks` selection; clip volume; 1024-sample bounded stereo
-  blocks; post-sum clipping;
-  one active sequential reader per audible clip; exact-once reader/source
-  cleanup. Browser codecs stay behind injected ports for Node tests.
-- `src/pipeline/playback-audio.ts` — issue #5 bounded live-audio scheduler:
-  derives clip plans from `audibleTracks`, lazily opens Mediabunny
-  `AudioBufferSink` cursors, and keeps only a rolling 0.75s lookahead. Web
-  Audio owns per-clip gain, resampling, mixing, analyser diagnostics, and the
-  shared future anchor. The last cursor releases its Input; EOF, abort, pause,
-  seek, muted-plan changes, and terminal cleanup cannot reopen or retain it.
+- `src/pipeline/export-audio.ts` — exact audio scheduler/mixer: consumes the
+  shared audio mix plan; maps frame boundaries and signed source↔timeline phase
+  to the BigInt sample grid; overlaps virtual linked-handle legs; applies clip
+  volume and absolute per-sample envelopes across 1024-sample blocks; clips
+  only the final sum; and owns one sequential reader per contributor with
+  exact-once cleanup. Browser codecs stay behind injected ports for Node tests.
+- `src/pipeline/playback-audio.ts` — bounded live-audio scheduler: consumes the
+  same plan, lazily opens Mediabunny `AudioBufferSink` cursors, and keeps only a
+  rolling 0.75s lookahead. Web Audio schedules exact linear ramps or bounded
+  129-point equal-power curves against the shared future anchor. The last
+  cursor releases its Input; EOF, abort, pause, seek, plan edits, and terminal
+  cleanup cannot reopen or retain it.
 - `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c/d production browser
   adapters: asset Blob/kind resolver → one Input/CanvasSink/timestamp iterator
   per video asset → lease-owned ImageBitmap copies, or one retained bounded
   frame-zero source per image asset → borrowed by every frame lease and closed
-  exactly once with the export source; active audio clips → lazy
-  AudioSampleSink cursors with streaming resampling + channel downmix;
+  exactly once with the export source; planned audio contributors → lazy
+  AudioSampleSink cursors with streaming resampling + channel downmix. Exact
+  crossfade-handle readers reject EOF, PCM gaps/discontinuity, or unavailable
+  interpolation rather than synthesizing samples;
   OffscreenCanvas/CanvasSource + AudioSampleSource → AVC/AAC-in-MP4
   BufferTarget. Both encoders are support-probed, writes honor backpressure,
   every media sample closes, and terminal cleanup is exact-once. The video
   iterator schedule and each frame-local request derive from the canonical
   visual plan; frame leases fail closed on omitted, extra, or reordered
-  requests. Locked Mediabunny 1.50.3 handled the same-asset non-monotonic
-  sequence created by a frozen-endpoint crossfade (browser-proven in 5.1d);
+  requests. Issue #17 replaces the frozen-endpoint transition schedule with
+  genuine handle requests while preserving independent same-asset clip lanes;
   original Issue #18 Slice 8 independently passed encode/reopen/decode and
   sampled-pixel acceptance against the currently installed 1.50.9.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
-  100; rejected ops push no entry; 5.1e-2 transition add/duration/remove
-  actions preserve exact snapshot ids), `transportStore` (playhead/zoom/
+  100; rejected ops push no entry; exact-bounds-aware transition settings and
+  remove actions preserve atomic history and exact snapshot ids), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (durable descriptor
   catalog + connected analyzed subset + visual URL ownership + exact duration
   reconformance), `previewStatusStore` (idempotent visible visual-source
@@ -1147,11 +1200,12 @@ surface; it is not a second zoom and never enters document history.
   Issue #18 original Slice 6 treats video and image descriptors as visual
   sources in Preview guidance while keeping the canvas state-only and
   resource-free.
-- `src/ui/timeline/Track.tsx` + `TransitionSeam.tsx` (5.1e-3) — Track derives
-  eligible touching video cuts from its committed snapshot; each seam marker
-  subscribes only to zoom and opens a temporary Add/Apply/Remove duration
-  form. Pointer/key events stop before clip gestures/global shortcuts, while
-  all writes stay on the documentStore transition actions.
+- `src/ui/timeline/Track.tsx` + `TransitionSeam.tsx` — Track derives eligible
+  touching video cuts from its committed snapshot; each seam marker opens an
+  accessible temporary form for exact duration, linked-audio intent, curve,
+  independent visual/audio availability, and Add/Apply/Remove. Pointer/key
+  events stop before clip gestures/global shortcuts, while one complete
+  settings payload reaches the documentStore per successful submit.
 
 ## Invariants that must survive refactors
 
@@ -1198,15 +1252,15 @@ surface; it is not a second zoom and never enters document history.
   that only records `getCanvas` calls will miss catastrophic decoder churn.
 - **Naive complementary Canvas2D alpha makes a crossfade dip dark.** With
   source-over, drawing outgoing at `1-p` and incoming at `p` attenuates the
-  outgoing pixels twice. 5.1d paints outgoing first with compensated alpha,
-  then incoming, which gives an exact linear dissolve for ordinary opaque
-  full-frame footage. General transformed/transparent cross-dissolves need
-  offscreen isolation; do not silently generalize this formula.
-- **Frozen transition endpoints make one asset seek backward.** With no
-  source-handle metadata, 5.1d repeats the outgoing last frame and incoming
-  first frame around the cut. A single asset can therefore produce a
-  non-monotonic `canvasesAtTimestamps` sequence. Mediabunny 1.50.3 supports
-  that path, but keep the real-browser seek/backtrack gate when upgrading it.
+  outgoing pixels twice. Issue #17/#18 render both complete legs into bounded
+  transparent surfaces, add their premultiplied weighted pixels inside one
+  isolated group, then source-over the group once. Never reintroduce direct
+  scalar-alpha draws or reconstruct a group outside the canonical plan.
+- **Never fake transition handles.** Exact persisted video/audio timestamp
+  bounds are the authority. Timed visual legs request genuine pre/post frames;
+  linked audio readers fail closed on missing PCM. `unknown`, absent,
+  insufficient, or ambiguous sources keep deterministic ordinary fallback
+  behavior and a visible reason instead of clamping, freezing, or zero-padding.
 - **Transitions belong to seams, not clip bodies.** Geometry edits retain a
   transition only when its same track-scoped definition was valid before and
   remains valid after; otherwise they discard it without rejecting the edit.
@@ -1219,6 +1273,12 @@ surface; it is not a second zoom and never enters document history.
   and then a second removal entry. 5.1e-3 uses explicit Add/Apply buttons and a
   temporary popover, which also lets a seam retry a shorter duration when its
   default would overlap a neighboring crossfade.
+- **Audio fade phase is absolute, never block-local.** Live decode windows and
+  1024-sample export blocks may begin anywhere inside a crossfade. Derive gain
+  from the contributor's complete envelope start/end and absolute timeline
+  frame/sample; restarting progress at each buffer produces audible steps and
+  preview/export drift. Equal-power automation stays on the tested bounded
+  129-point curve unless its error/ownership gates are replaced explicitly.
 - **AAC payload length is not timeline duration.** Chrome encodes whole
   1024-sample AAC packets: 48,048 submitted NTSC samples decode to a 48,128-
   sample payload. In locked Mediabunny 1.50.3, `onEncodedPacket` runs
@@ -1341,19 +1401,16 @@ surface; it is not a second zoom and never enters document history.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
-- Transition rendering, domain authoring, undoable store actions, and the
-  5.1e-3 seam popover are complete. Current crossfades are visual-only (audio
-  still hard-cuts). The shared isolated premultiplied transition group now
+- Issue #17/#18 transition rendering, exact handle planning, audio-aware domain
+  authoring, atomic store actions, accessible seam settings, live Web Audio,
+  and export parity are complete. The shared isolated premultiplied group
   handles transformed, transparent, intrinsic-opacity, still↔video,
-  video↔still, and still↔still dissolves for preview and export. The historical
-  local Slice 5 export implementation plus original Slice 8 now complete the
-  encoded-output reopen, cleanup, sampled pre-encode/output checks, and direct
-  production Preview/output pixel acceptance.
-  Original Slice 9 completed the full Chrome workflow/input matrix and Issue
-  #18 closeout evidence. The minimal UI intentionally surfaces
-  currently eligible seams; a malformed serialized transition whose endpoints
-  are missing/gapped/text has no cleanup marker yet, although the store's
-  remove action can still delete it.
+  video↔still, and still↔still dissolves. Valid unique aligned linked audio uses
+  the selected curve in preview/export; unavailable audio explains and falls
+  back without weakening the visual seam or inventing samples. The minimal UI
+  intentionally surfaces currently eligible seams; a malformed serialized
+  transition whose endpoints are missing/gapped/text has no cleanup marker
+  yet, although the store's remove action can still delete it.
 - Matching a source FPS intentionally stops being available once any clip is
   on the timeline. Supporting that later requires an explicit retime operation
   for clip ranges, source ranges, transitions, playhead, and undo history; it

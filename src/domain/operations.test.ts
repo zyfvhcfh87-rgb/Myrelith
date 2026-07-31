@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, Effect, MediaAsset, TimelineDoc, Track, Transition } from './schema'
 import {
   addCrossfade,
+  addCrossfadeWithSourceBounds,
   addEffect,
   addTrack,
   clipFromAsset,
@@ -23,6 +24,9 @@ import {
   rippleTrim,
   setClipVolume,
   setCrossfadeDuration,
+  setCrossfadeDurationWithSourceBounds,
+  setCrossfadeSettings,
+  setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
   slideClip,
   slipClip,
@@ -435,6 +439,10 @@ const asset = (over: Partial<MediaAsset> = {}): MediaAsset => ({
   kind: 'video',
   durationFrames: 120,
   durationMicroseconds: 4_000_000,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+    audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+  },
   frameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,
@@ -472,6 +480,7 @@ describe('clipFromAsset', () => {
       mimeType: 'image/png',
       durationFrames: 150,
       durationMicroseconds: 5_000_000,
+      sourceBounds: { video: null, audio: null },
       frameRate: null,
       hasAudio: false,
       audioSampleRate: null,
@@ -848,7 +857,14 @@ function crossfade(
   toClipId: string,
   durationFrames: number,
 ): Transition {
-  return { id, type: 'crossfade', fromClipId, toClipId, durationFrames }
+  return {
+    id,
+    type: 'crossfade',
+    fromClipId,
+    toClipId,
+    durationFrames,
+    audio: { enabled: true, curve: 'equal-power' },
+  }
 }
 
 function makeCrossfadeDoc(
@@ -900,6 +916,64 @@ function authoredTriple(durationFrames = 5): TimelineDoc {
 }
 
 describe('crossfade authoring', () => {
+  test('handle-aware add and duration changes reject with the same reference', () => {
+    const doc = makeCrossfadeDoc([
+      makeClip('A', 0, 10, 0),
+      makeClip('B', 10, 10, 10),
+    ])
+    const bounds = new Map([[
+      'asset-1',
+      {
+        video: {
+          status: 'exact' as const,
+          firstTimestampUs: 233_333,
+          endTimestampUs: 466_666,
+        },
+        audio: null,
+      },
+    ]])
+
+    expect(addCrossfadeWithSourceBounds(doc, 'A', 'B', 8, bounds)).toBe(doc)
+    const added = addCrossfadeWithSourceBounds(doc, 'A', 'B', 7, bounds)
+    expect(added).not.toBe(doc)
+    const authored = transitionsOf(added)[0]
+    expect(authored.durationFrames).toBe(7)
+    expect(setCrossfadeDurationWithSourceBounds(
+      added,
+      'V1',
+      authored.id,
+      8,
+      bounds,
+    )).toBe(added)
+
+    const settings = {
+      durationFrames: 5,
+      audio: { enabled: false, curve: 'linear' as const },
+    }
+    const updated = setCrossfadeSettingsWithSourceBounds(
+      added,
+      'V1',
+      authored.id,
+      settings,
+      bounds,
+    )
+    expect(updated).not.toBe(added)
+    expect(transitionsOf(updated)[0]).toEqual({
+      ...authored,
+      ...settings,
+    })
+    expect(transitionsOf(added)[0].audio).toEqual({
+      enabled: true,
+      curve: 'equal-power',
+    })
+    expect(setCrossfadeSettings(
+      updated,
+      'V1',
+      authored.id,
+      settings,
+    )).toBe(updated)
+  })
+
   test('adds ordered seam metadata with a fresh id and preserves structural sharing', () => {
     const doc = makeCrossfadeDoc([
       makeClip('A', 0, 10),
@@ -915,6 +989,7 @@ describe('crossfade authoring', () => {
       fromClipId: 'A',
       toClipId: 'B',
       durationFrames: 5,
+      audio: { enabled: true, curve: 'equal-power' },
     })
 
     const withBoth = addCrossfade(withLeft, 'B', 'C', 5)

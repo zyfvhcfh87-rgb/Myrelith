@@ -14,7 +14,9 @@ import type {
   Track as TrackData,
   Transition,
 } from '../../domain/schema'
+import type { PortableAssetDescriptor } from '../../domain/projectFile'
 import { useDocumentStore } from '../../state/documentStore'
+import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
 import Timeline from './Timeline'
 
@@ -24,7 +26,7 @@ function makeClip(id: string, startFrame: number, durationFrames: number): Clip 
     assetId: `asset-${id}`,
     name: id,
     sourceMode: 'timed',
-    sourceRange: { startFrame: 0, durationFrames },
+    sourceRange: { startFrame: 30, durationFrames },
     timelineRange: { startFrame, durationFrames },
     transform: {
       x: 0,
@@ -62,7 +64,44 @@ function crossfade(
   toClipId: string,
   durationFrames: number,
 ): Transition {
-  return { id, type: 'crossfade', fromClipId, toClipId, durationFrames }
+  return {
+    id,
+    type: 'crossfade',
+    fromClipId,
+    toClipId,
+    durationFrames,
+    audio: { enabled: true, curve: 'equal-power' },
+  }
+}
+
+function descriptor(id: string): PortableAssetDescriptor {
+  return {
+    id: `asset-${id}`,
+    fileName: `${id}.mp4`,
+    mimeType: 'video/mp4',
+    size: 1,
+    lastModified: 1,
+    kind: 'video',
+    durationMicroseconds: 10_000_000,
+    sourceBounds: {
+      video: {
+        status: 'exact',
+        firstTimestampUs: 0,
+        endTimestampUs: 10_000_000,
+      },
+      audio: {
+        status: 'exact',
+        firstTimestampUs: 0,
+        endTimestampUs: 10_000_000,
+      },
+    },
+    nativeFrameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    hasAudio: true,
+    audioSampleRate: 48_000,
+    audioChannels: 2,
+  }
 }
 
 function makeTrack(
@@ -149,6 +188,29 @@ function makeNeighboringTransitionDoc(): TimelineDoc {
   }
 }
 
+function makeLinkedAudioDoc(): TimelineDoc {
+  const base = makeDoc({ seeded: true })
+  const video = base.tracks[0]
+  return {
+    ...base,
+    tracks: [
+      {
+        ...video,
+        clips: video.clips.map((clip) => clip.id === 'A'
+          ? { ...clip, linkGroupId: 'link-A' }
+          : clip.id === 'B'
+            ? { ...clip, linkGroupId: 'link-B' }
+            : clip),
+      },
+      base.tracks[1],
+      makeTrack('A1', 'audio', [
+        { ...makeClip('M', 0, 30), linkGroupId: 'link-A' },
+        { ...makeClip('N', 30, 30), linkGroupId: 'link-B' },
+      ]),
+    ],
+  }
+}
+
 const documentState = () => useDocumentStore.getState()
 const track = (trackId: string) => {
   const found = documentState().doc.tracks.find((candidate) => candidate.id === trackId)
@@ -172,10 +234,29 @@ beforeEach(() => {
     selectedClipId: null,
     selectedClipIds: [],
   })
+  useMediaStore.setState({
+    descriptors: new Map(
+      ['A', 'B', 'C', 'gap', 'title', 'X', 'Y', 'M', 'N'].map(
+        (id): [string, PortableAssetDescriptor] => [
+          `asset-${id}`,
+          descriptor(id),
+        ],
+      ),
+    ),
+    assets: new Map(),
+    visuals: new Map(),
+    compatibility: new Map(),
+  })
   documentState().setDoc(makeDoc())
 })
 
 afterEach(() => {
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+    compatibility: new Map(),
+  })
   warnSpy.mockRestore()
 })
 
@@ -220,12 +301,11 @@ describe('timeline crossfade controls', () => {
     const authoredJson = JSON.stringify(authored)
     const transition = track('V1').transitions[0]
     expect(transition.durationFrames).toBe(15)
+    expect(transition.audio).toEqual({ enabled: true, curve: 'equal-power' })
     expect(documentState().past).toHaveLength(1)
-    expect(screen.getByTestId(`transition-duration-${transition.id}`)).toHaveValue(15)
-    expect(screen.getByTestId(`transition-remove-${transition.id}`)).toBeInTheDocument()
     expect(screen.getByTestId(`transition-toggle-${transition.id}`)).toHaveAttribute(
       'aria-expanded',
-      'true',
+      'false',
     )
 
     act(() => documentState().undo())
@@ -245,29 +325,51 @@ describe('timeline crossfade controls', () => {
     fireEvent.click(screen.getByTestId('transition-toggle-t1'))
     const duration = screen.getByTestId('transition-duration-t1')
     expect(duration).toHaveValue(5)
+    expect(screen.getByLabelText('Crossfade duration in frames')).toBe(duration)
+    expect(screen.getByLabelText('Crossfade linked audio')).toBeChecked()
+    expect(screen.getByLabelText('Audio crossfade curve')).toHaveValue(
+      'equal-power',
+    )
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Visual crossfade available up to 60 frames.',
+    )
 
     fireEvent.change(duration, { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Audio crossfade curve'), {
+      target: { value: 'linear' },
+    })
+    fireEvent.click(screen.getByLabelText('Crossfade linked audio'))
     expect(track('V1').transitions[0].durationFrames).toBe(5)
     expect(documentState().past).toHaveLength(0)
-    fireEvent.click(screen.getByTestId('transition-submit-A-B'))
+    fireEvent.submit(screen.getByRole('form', { name: 'Edit crossfade A to B' }))
 
     expect(track('V1').transitions[0].durationFrames).toBe(9)
+    expect(track('V1').transitions[0].audio).toEqual({
+      enabled: false,
+      curve: 'linear',
+    })
     expect(documentState().past).toHaveLength(1)
     expect(screen.getByTestId('transition-duration-t1')).toHaveValue(9)
 
     const edited = documentState().doc
     act(() => documentState().undo())
     expect(screen.getByTestId('transition-duration-t1')).toHaveValue(5)
+    expect(screen.getByLabelText('Crossfade linked audio')).toBeChecked()
+    expect(screen.getByLabelText('Audio crossfade curve')).toHaveValue(
+      'equal-power',
+    )
     act(() => documentState().redo())
     expect(documentState().doc).toBe(edited)
     expect(screen.getByTestId('transition-duration-t1')).toHaveValue(9)
+    expect(screen.getByLabelText('Crossfade linked audio')).not.toBeChecked()
+    expect(screen.getByLabelText('Audio crossfade curve')).toHaveValue('linear')
 
     const current = screen.getByTestId('transition-duration-t1')
     fireEvent.change(current, { target: { value: '0' } })
-    fireEvent.click(screen.getByTestId('transition-submit-A-B'))
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Enter a whole number from 1 to 60 frames.',
+      'Enter a whole number from 1 to 60 frames to check availability.',
     )
+    expect(screen.getByTestId('transition-submit-A-B')).toBeDisabled()
     expect(track('V1').transitions[0].durationFrames).toBe(9)
     expect(documentState().past).toHaveLength(1)
 
@@ -276,6 +378,64 @@ describe('timeline crossfade controls', () => {
     fireEvent.click(screen.getByTestId('transition-toggle-t1'))
     expect(screen.getByTestId('transition-duration-t1')).toHaveValue(9)
     expect(documentState().past).toHaveLength(1)
+  })
+
+  test('reports exact linked-audio availability from aligned partners', () => {
+    act(() => documentState().setDoc(makeLinkedAudioDoc()))
+    render(<Timeline />)
+
+    fireEvent.click(screen.getByTestId('transition-toggle-t1'))
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Linked audio available up to 60 frames.',
+    )
+    expect(screen.getByLabelText('Crossfade linked audio')).toBeChecked()
+
+    fireEvent.click(screen.getByLabelText('Crossfade linked audio'))
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Linked audio crossfade is off.',
+    )
+    expect(screen.getByLabelText('Audio crossfade curve')).toBeDisabled()
+  })
+
+  test('announces the real handle maximum and enables only a valid duration', () => {
+    const limited = descriptor('B')
+    limited.sourceBounds.video = {
+      status: 'exact',
+      firstTimestampUs: 933_334,
+      endTimestampUs: 10_000_000,
+    }
+    useMediaStore.setState((state) => ({
+      descriptors: new Map(state.descriptors).set(limited.id, limited),
+    }))
+    render(<Timeline />)
+
+    fireEvent.click(screen.getByTestId('transition-add-A-B'))
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Visual crossfade unavailable at this duration; maximum is 3 frames.',
+    )
+    expect(screen.getByTestId('transition-submit-A-B')).toBeDisabled()
+
+    fireEvent.change(screen.getByTestId('transition-duration-A-B'), {
+      target: { value: '3' },
+    })
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Visual crossfade available up to 3 frames.',
+    )
+    expect(screen.getByTestId('transition-submit-A-B')).toBeEnabled()
+  })
+
+  test('closes an open editor when its transition identity becomes stale', () => {
+    act(() => documentState().setDoc(makeDoc({ seeded: true })))
+    render(<Timeline />)
+    fireEvent.click(screen.getByTestId('transition-toggle-t1'))
+    expect(screen.getByTestId('transition-duration-t1')).toBeInTheDocument()
+
+    act(() => documentState().setDoc(makeDoc()))
+    expect(screen.queryByTestId('transition-duration-A-B')).not.toBeInTheDocument()
+    expect(screen.getByTestId('transition-add-A-B')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
   })
 
   test('remove ignores a dirty duration draft; undo restores the committed D5 exactly', () => {
@@ -312,11 +472,11 @@ describe('timeline crossfade controls', () => {
 
     fireEvent.click(screen.getByTestId('transition-add-B-C'))
     expect(screen.getByTestId('transition-duration-B-C')).toHaveValue(15)
-    fireEvent.click(screen.getByTestId('transition-submit-B-C'))
 
     expect(screen.getByRole('status')).toHaveTextContent(
-      'That duration overlaps a neighboring transition. Try fewer frames.',
+      'Visual crossfade unavailable: the window overlaps a neighboring transition.',
     )
+    expect(screen.getByTestId('transition-submit-B-C')).toBeDisabled()
     expect(track('V1').transitions).toEqual([
       crossfade('tAB', 'A', 'B', 15),
     ])
@@ -325,6 +485,7 @@ describe('timeline crossfade controls', () => {
     fireEvent.change(screen.getByTestId('transition-duration-B-C'), {
       target: { value: '4' },
     })
+    expect(screen.getByTestId('transition-submit-B-C')).toBeEnabled()
     fireEvent.click(screen.getByTestId('transition-submit-B-C'))
 
     expect(track('V1').transitions).toHaveLength(2)

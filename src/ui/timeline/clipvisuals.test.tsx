@@ -43,6 +43,10 @@ const asset: MediaAsset = {
   kind: 'video',
   durationFrames: 300,
   durationMicroseconds: 10_000_000,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+    audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+  },
   frameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,
@@ -60,6 +64,7 @@ const descriptor: PortableAssetDescriptor = {
   lastModified: asset.lastModified,
   kind: asset.kind,
   durationMicroseconds: asset.durationMicroseconds,
+  sourceBounds: asset.sourceBounds,
   nativeFrameRate: asset.frameRate,
   width: asset.width,
   height: asset.height,

@@ -14,6 +14,7 @@ import type {
   TimelineDoc,
   Track,
 } from '../domain/schema'
+import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type {
   Composite2D,
   CompositeResult,
@@ -140,6 +141,7 @@ function makeHarness(options: HarnessOptions = {}) {
     async (docFrame: number): Promise<ExportFrameLease> => {
       events.push('open:' + docFrame)
       return {
+        plan: { frame: docFrame, items: [] },
         getFrame: async (
           assetId: string,
           sourceFrame: number,
@@ -163,14 +165,14 @@ function makeHarness(options: HarnessOptions = {}) {
   const composite = vi.fn(
     async (
       _doc: TimelineDoc,
-      frame: number,
+      plan: VideoCompositionPlan,
       _ctx: Composite2D,
       _source: FrameSource,
       _transitionSurfaceProvider: TransitionSurfaceProvider,
     ): Promise<CompositeResult> => {
-      events.push('composite:' + frame)
+      events.push('composite:' + plan.frame)
       return (
-        (await options.composite?.(frame, _source)) ?? {
+        (await options.composite?.(plan.frame, _source)) ?? {
           drawn: ['clip-a'],
           missing: [],
         }
@@ -266,7 +268,7 @@ describe('exportTimeline CFR scheduling', () => {
     expect(h.createVideoSink).toHaveBeenCalledOnce()
     expect(h.createVideoSink).toHaveBeenCalledWith(doc, SETTINGS)
     expect(h.openFrame.mock.calls.map(([frame]) => frame)).toEqual([0, 1, 2])
-    expect(h.composite.mock.calls.map((call) => call[1])).toEqual([0, 1, 2])
+    expect(h.composite.mock.calls.map((call) => call[1].frame)).toEqual([0, 1, 2])
     expect(h.composite.mock.calls.every(
       (call) => call[4] === h.sink.transitionSurfaceProvider,
     )).toBe(true)

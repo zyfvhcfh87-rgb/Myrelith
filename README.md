@@ -16,9 +16,9 @@ complete MVP editing and MP4 export flow.
 - Reopen validated `.webcut` files from Recent and recover bounded local safety
   copies after a reload or crash; recovery is always offered explicitly and is
   never presented as a user-owned save.
-- Import or reconnect local video/audio files through one content-based browser
-  compatibility check, then generate metadata, filmstrips, and waveforms only
-  for Ready sources.
+- Import or reconnect local video/audio files and PNG/JPEG/WebP/AVIF still
+  images through one content-based browser compatibility check, then generate
+  bounded thumbnails, filmstrips, and waveforms only for Ready sources.
 - Edit on a multi-track timeline with select, razor, trim, ripple trim, slip,
   and slide tools, including dragging clips between same-kind tracks.
 - Keep imported audio/video pairs linked through edits, or manually link and
@@ -26,7 +26,9 @@ complete MVP editing and MP4 export flow.
   audio clip, with manual unlinking and exact undo/redo history.
 - Hide, mute, solo, lock, rename, add, and remove tracks.
 - Adjust video transforms, opacity, and per-clip audio volume in the Inspector.
-- Author visual crossfades directly at eligible timeline seams.
+- Author mathematically isolated crossfades directly at eligible timeline
+  seams. Linked A/V pairs can use synchronized linear or equal-power audio
+  fades when both source files prove the required real handles.
 - Preview through worker-owned streaming video lanes with Web Audio as the
   shared audio/video clock.
 - Export and download cancellable H.264/AAC MP4 files from the browser.
@@ -83,6 +85,9 @@ so Firefox, Safari/WebKit, and independent-engine behavior remain unverified.
 Chrome 150 has also passed the complete manual A/V linking gate with actual
 H.264/AAC import, unlink/re-link, unequal offsets, group-safe track removal,
 live linked movement, undo/redo, playback, and a clean console.
+The Issue #17 gate additionally passed transformed transparent stills over a
+visible checkerboard, distinct linked WAV tones, live curve edits and cleanup,
+and production AVC/AAC export/reopen with the expected gain ratios.
 Playback and export require WebCodecs, transferable `OffscreenCanvas`, Web
 Audio, workers, and browser support for the source and output codecs.
 
@@ -133,9 +138,11 @@ boundary are recorded in
   and do not cache source media. Recovery ownership is not coordinated across
   multiple open WebCut tabs, so the same recovery copy should not be edited or
   discarded from two tabs at once.
-- Crossfades are visual-only, so audio still hard-cuts. Dissolves involving
-  transformed or transparent footage are not yet mathematically exact.
-- The import UI accepts video and audio files. Images are not previewable.
+- Crossfades require touching clips on one video track. A linked-audio fade
+  additionally requires one unambiguous linked audio partner per visual leg,
+  the same timeline cut, and exact source bounds with sufficient handles. If
+  audio is unavailable, the UI explains why and retains the visual crossfade
+  with the ordinary audio hard cut; missing samples are never frozen or padded.
 - Manual linking accepts exactly one unlinked video clip plus one unlinked
   audio clip. Replacing or merging an existing link group requires explicit
   Unlink first.
@@ -193,7 +200,7 @@ For deeper project context, see:
 
 ## Project status
 
-The MVP gate is complete. Smooth preview, live audio, configurable project
-creation, portable save/resume, recent files, and explicit crash recovery are
-implemented. WebCut remains an experimental development project rather than a
-production-ready editor.
+The MVP gate is complete. Smooth preview, live audio, still images, exact
+audio-aware crossfades, configurable project creation, portable save/resume,
+recent files, and explicit crash recovery are implemented. WebCut remains an
+experimental development project rather than a production-ready editor.

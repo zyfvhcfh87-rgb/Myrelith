@@ -11,12 +11,29 @@
 
 import { ALL_FORMATS, BlobSource, Input } from 'mediabunny'
 import type { InputAudioTrack, InputVideoTrack } from 'mediabunny'
-import type { FrameRate, MediaAsset } from '../domain/schema'
+import type {
+  FrameRate,
+  MediaAsset,
+  SourceTimestampBounds,
+} from '../domain/schema'
 import {
   microsecondsDurationToFrames,
   secondsToMicroseconds,
   snapToStandardRate,
+  timestampSecondsToMicroseconds,
 } from '../domain/time'
+
+function exactSourceBounds(
+  firstSeconds: number,
+  endSeconds: number,
+): SourceTimestampBounds {
+  const firstTimestampUs = timestampSecondsToMicroseconds(firstSeconds)
+  const endTimestampUs = secondsToMicroseconds(endSeconds)
+  if (endTimestampUs <= firstTimestampUs) {
+    throw new Error('Media track timestamp extent is empty')
+  }
+  return { status: 'exact', firstTimestampUs, endTimestampUs }
+}
 
 /**
  * A freshly demuxed file: the serializable asset description plus the live
@@ -132,7 +149,19 @@ export async function loadAsset(
       if (config) decoderConfigB64 = serializeDecoderConfig(config)
     }
 
-    const durationSec = await input.computeDuration()
+    const [
+      durationSec,
+      videoFirstSec,
+      videoEndSec,
+      audioFirstSec,
+      audioEndSec,
+    ] = await Promise.all([
+      input.computeDuration(),
+      videoTrack ? videoTrack.getFirstTimestamp() : Promise.resolve(null),
+      videoTrack ? videoTrack.computeDuration() : Promise.resolve(null),
+      audioTrack ? audioTrack.getFirstTimestamp() : Promise.resolve(null),
+      audioTrack ? audioTrack.computeDuration() : Promise.resolve(null),
+    ])
     const durationMicroseconds = secondsToMicroseconds(durationSec)
     const effectiveRate = docRate ?? frameRate ?? { num: 30, den: 1 }
 
@@ -149,6 +178,14 @@ export async function loadAsset(
         effectiveRate,
       ),
       durationMicroseconds,
+      sourceBounds: {
+        video: videoFirstSec === null || videoEndSec === null
+          ? null
+          : exactSourceBounds(videoFirstSec, videoEndSec),
+        audio: audioFirstSec === null || audioEndSec === null
+          ? null
+          : exactSourceBounds(audioFirstSec, audioEndSec),
+      },
       frameRate,
       width: videoTrack ? videoTrack.displayWidth : null,
       height: videoTrack ? videoTrack.displayHeight : null,

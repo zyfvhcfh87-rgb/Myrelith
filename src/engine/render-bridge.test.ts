@@ -170,7 +170,22 @@ function makeDoc(tracks: Track[]): TimelineDoc {
 function makeBridge(doc?: TimelineDoc) {
   const worker = new FakeWorker()
   const bridge = new RenderWorkerBridge(worker)
-  if (doc) bridge.setDoc(doc)
+  if (doc) {
+    bridge.setSourceBoundsCatalog(new Map(
+      doc.tracks.flatMap((track) => track.clips.map((clip) => [
+        clip.assetId,
+        {
+          video: {
+            status: 'exact' as const,
+            firstTimestampUs: 0,
+            endTimestampUs: 1_000_000_000_000,
+          },
+          audio: null,
+        },
+      ] as const)),
+    ))
+    bridge.setDoc(doc)
+  }
   return { worker, bridge }
 }
 
@@ -232,6 +247,7 @@ describe('renderFrame entry building', () => {
           fromClipId: from.id,
           toClipId: to.id,
           durationFrames: 1,
+          audio: { enabled: true, curve: 'equal-power' },
         }],
       }),
     ])
@@ -246,20 +262,28 @@ describe('renderFrame entry building', () => {
 
     expect(b.calls[0].targetSec).toBeCloseTo((50 * 2) / 60, 9)
     expect(b.calls[0].toleranceSec).toBeCloseTo(1 / 120, 9)
-    expect(a.calls[0].targetSec).toBeCloseTo(39 / 30, 9)
+    expect(a.calls[0].targetSec).toBeCloseTo(40 / 30, 9)
     expect(a.calls[0].toleranceSec).toBeCloseTo(1 / 60, 9)
     expect(worker.composites()[0].sources.map((entry) => ({
       assetId: entry.assetId,
       sourceFrame: entry.sourceFrame,
     }))).toEqual([
-      { assetId: 'A', sourceFrame: 39 },
+      { assetId: 'A', sourceFrame: 40 },
       { assetId: 'B', sourceFrame: 50 },
     ])
+    expect(worker.composites()[0].plan).toMatchObject({
+      frame: 10,
+      items: [{
+        kind: 'crossfade',
+        trackId: 'V1',
+        transitionId: 'dissolve',
+      }],
+    })
   })
 
   test('dedupes identical transition source keys without suppressing either render layer', async () => {
     const from = makeClip('from', 'A', 0, 1)
-    const to = makeClip('to', 'A', 1, 1)
+    const to = makeClip('to', 'A', 1, 1, 1)
     const doc = makeDoc([
       makeTrack('V1', 'video', [from, to], {
         transitions: [{
@@ -268,6 +292,7 @@ describe('renderFrame entry building', () => {
           fromClipId: from.id,
           toClipId: to.id,
           durationFrames: 1,
+          audio: { enabled: true, curve: 'equal-power' },
         }],
       }),
     ])
@@ -280,7 +305,7 @@ describe('renderFrame entry building', () => {
 
     expect(a.calls).toHaveLength(1)
     expect(worker.composites()[0].sources).toHaveLength(1)
-    expect(worker.composites()[0].sources[0].sourceFrame).toBe(0)
+    expect(worker.composites()[0].sources[0].sourceFrame).toBe(1)
   })
   test('per-asset µs math: doc frames rescale to each asset rate; buffers transfer', async () => {
     const doc = makeDoc([

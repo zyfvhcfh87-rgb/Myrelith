@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { MediaAsset, TimelineDoc } from '../domain/schema'
 import type {
   ExportDeps as PipelineExportDeps,
@@ -90,6 +91,10 @@ const ASSET: MediaAsset = {
   kind: 'video',
   durationFrames: 60,
   durationMicroseconds: 2_000_000,
+  sourceBounds: {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+    audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+  },
   frameRate: { num: 30, den: 1 },
   width: 1920,
   height: 1080,
@@ -184,10 +189,17 @@ function makeHarness(
   const pipelineDeps = {} as PipelineExportDeps
   const fetchBlob = vi.fn(async () => new Blob(['source']))
   const createMediaSource = vi.fn(
-    (_doc: TimelineDoc, _resolver: ExportAssetResolver) => media,
+    (
+      _doc: TimelineDoc,
+      _resolver: ExportAssetResolver,
+      _sourceBounds: SourceBoundsCatalog,
+    ) => media,
   )
   const createPipelineDeps = vi.fn(
-    (_resolver: ExportAssetResolver) => pipelineDeps,
+    (
+      _resolver: ExportAssetResolver,
+      _sourceBounds: SourceBoundsCatalog,
+    ) => pipelineDeps,
   )
   const runExport = vi.fn(
     (
@@ -343,6 +355,10 @@ describe('exportController wiring and completion', () => {
     const resolverFromMedia = h.createMediaSource.mock.calls[0][1]
     const resolverFromSink = h.createPipelineDeps.mock.calls[0][0]
     expect(resolverFromSink).toBe(resolverFromMedia)
+    const boundsFromMedia = h.createMediaSource.mock.calls[0][2]
+    const boundsFromSink = h.createPipelineDeps.mock.calls[0][1]
+    expect(boundsFromSink).toBe(boundsFromMedia)
+    expect(boundsFromSink.get(ASSET.id)).toEqual(ASSET.sourceBounds)
 
     const firstBlob = resolverFromMedia(ASSET.id)
     const secondBlob = resolverFromSink(ASSET.id)

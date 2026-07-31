@@ -25,8 +25,10 @@ import {
 import type {
   FrameRate,
   MediaAsset,
+  MediaSourceBounds,
   TimelineDoc,
 } from '../domain/schema'
+import { mediaSourceBoundsAcceptAnalyzed } from '../domain/sourceBounds'
 import { microsecondsDurationToFrames, rateEquals } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -809,6 +811,10 @@ function descriptorMatches(
     && descriptor.partialTrackSelection === analyzed.partialTrackSelection
     && (descriptor.kind === 'image'
       || descriptor.durationMicroseconds === analyzed.durationMicroseconds)
+    && mediaSourceBoundsAcceptAnalyzed(
+      descriptor.sourceBounds,
+      analyzed.sourceBounds,
+    )
     && ratesMatch(descriptor.nativeFrameRate, analyzed.frameRate)
     && descriptor.width === analyzed.width
     && descriptor.height === analyzed.height
@@ -858,10 +864,21 @@ function compatibilityReportMatchesDescriptor(
     : descriptor.partialTrackSelection === 'audio-only'
       ? audio?.durationMicroseconds ?? report.durationMicroseconds
       : report.durationMicroseconds
+  const analyzedBounds: MediaSourceBounds = descriptor.kind === 'image'
+    ? { video: null, audio: null }
+    : {
+        video: descriptor.partialTrackSelection === 'audio-only'
+          ? null
+          : video?.sourceBounds ?? null,
+        audio: descriptor.partialTrackSelection === 'video-only'
+          ? null
+          : audio?.sourceBounds ?? null,
+      }
   if (
     file.size !== descriptor.size
     || (descriptor.kind !== 'image'
       && effectiveDuration !== descriptor.durationMicroseconds)
+    || !mediaSourceBoundsAcceptAnalyzed(descriptor.sourceBounds, analyzedBounds)
   ) return false
   if (descriptor.partialTrackSelection === 'video-only') {
     if (!video || !audio) return false

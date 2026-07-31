@@ -28,16 +28,20 @@
  *   latest-wins supersession across composites is fine, but dropping
  *   requests WITHIN one composite is not.
  * - Visual selection, including crossfade source frames, intrinsic opacity,
- *   and transition weights, comes only from
- *   domain.visibleVideoLayersAtFrame. Preview and export consume that same
- *   ordered plan and must never duplicate its rules.
+ *   and transition weights, arrives as an explicit VideoCompositionPlan.
+ *   Preview and export consume that same
+ *   ordered plan; this compositor never reconstructs groups by adjacency.
  */
 
 import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
 import {
-  visibleVideoLayersAtFrame,
-  type VisibleVideoLayer,
-} from '../domain/selectors'
+  videoCompositionRequests,
+  type VideoCompositionPlan,
+} from '../domain/videoCompositionPlan'
+import type {
+  CrossfadeFrameRequest,
+  VideoFrameRequest,
+} from '../domain/crossfadePlan'
 
 /**
  * A compositor-ready browser image. VideoFrame is retained here because the
@@ -121,26 +125,33 @@ export interface CompositeResult {
  */
 export async function compositeFrame(
   doc: TimelineDoc,
-  frame: number,
+  plan: VideoCompositionPlan,
   ctx: Composite2D,
   source: FrameSource,
   transitionSurfaceProvider: TransitionSurfaceProvider,
 ): Promise<CompositeResult> {
   // Phase 1 — collect what needs pixels, bottom-to-top.
-  const jobs = visibleVideoLayersAtFrame(doc, frame)
+  const requests = videoCompositionRequests(plan)
 
   // Phase 2 — fetch every needed frame concurrently.
   const images = await Promise.all(
-    jobs.map((job) =>
-      source.getFrame(job.clip.assetId, job.sourceFrame).catch((e) => {
+    requests.map((request) =>
+      source.getFrame(request.clip.assetId, request.sourceFrame).catch((e) => {
         console.warn(
-          `[render] getFrame failed for clip "${job.clip.id}":`,
+          `[render] getFrame failed for clip "${request.clip.id}":`,
           e instanceof Error ? e.message : e,
         )
         return null
       }),
     ),
   )
+  const imagesByRequest = new Map<
+    VideoFrameRequest,
+    RenderFrameSource | null
+  >()
+  for (let index = 0; index < requests.length; index++) {
+    imagesByRequest.set(requests[index], images[index])
+  }
 
   // Phase 3 — draw synchronously (no yields: images stay valid throughout).
   const drawn: ClipId[] = []
@@ -153,41 +164,29 @@ export async function compositeFrame(
     ctx.fillStyle = '#000000'
     ctx.fillRect(0, 0, doc.width, doc.height)
 
-    for (let i = 0; i < jobs.length;) {
-      const job = jobs[i]
-      if (job.transition !== null) {
-        const trackId = job.transition.trackId
-        const transitionId = job.transition.transitionId
-        let end = i + 1
-        while (
-          end < jobs.length
-          && jobs[end].transition?.trackId === trackId
-          && jobs[end].transition?.transitionId === transitionId
-        ) {
-          end++
-        }
+    for (const item of plan.items) {
+      if (item.kind === 'crossfade') {
         compositeTransitionGroup(
           doc,
           ctx,
           transitionSurfaceProvider,
-          jobs.slice(i, end),
-          images.slice(i, end),
+          item.requests,
+          imagesByRequest,
           drawn,
           missing,
         )
-        i = end
         continue
       }
 
-      const clip = job.clip
-      const image = images[i]
-      if (image === null) {
+      const request = item.request
+      const clip = request.clip
+      const image = imagesByRequest.get(request) ?? null
+      if (!image) {
         missing.push(clip.id)
-        i++
         continue
       }
       try {
-        drawClip(ctx, doc, job, image)
+        drawClip(ctx, doc, request, image)
         drawn.push(clip.id)
       } catch (e) {
         // e.g. the bitmap was closed under us — record and keep compositing.
@@ -197,7 +196,6 @@ export async function compositeFrame(
         )
         missing.push(clip.id)
       }
-      i++
     }
   } finally {
     ctx.restore()
@@ -220,8 +218,8 @@ function compositeTransitionGroup(
   doc: TimelineDoc,
   destination: Composite2D,
   surfaceProvider: TransitionSurfaceProvider,
-  layers: VisibleVideoLayer[],
-  images: Array<RenderFrameSource | null>,
+  requests: readonly [CrossfadeFrameRequest, CrossfadeFrameRequest],
+  imagesByRequest: ReadonlyMap<VideoFrameRequest, RenderFrameSource | null>,
   drawn: ClipId[],
   missing: ClipId[],
 ): void {
@@ -231,33 +229,33 @@ function compositeTransitionGroup(
     const surfaces = surfaceProvider.get()
     clearSurface(surfaces.group.ctx, doc)
 
-    for (let i = 0; i < layers.length; i++) {
-      const layer = layers[i]
-      const image = images[i]
-      if (image === null) {
-        missing.push(layer.clip.id)
+    for (const request of requests) {
+      if (request.opacity <= 0 || request.weight <= 0) continue
+      const image = imagesByRequest.get(request) ?? null
+      if (!image) {
+        missing.push(request.clip.id)
         continue
       }
 
       try {
         clearSurface(surfaces.leg.ctx, doc)
-        drawClip(surfaces.leg.ctx, doc, layer, image)
+        drawClip(surfaces.leg.ctx, doc, request, image)
 
         surfaces.group.ctx.save()
         try {
-          surfaces.group.ctx.globalAlpha = layer.transition?.weight ?? 1
+          surfaces.group.ctx.globalAlpha = request.weight
           surfaces.group.ctx.globalCompositeOperation = 'lighter'
           surfaces.group.ctx.drawImage(surfaces.leg.canvas, 0, 0)
         } finally {
           surfaces.group.ctx.restore()
         }
-        ready.push(layer.clip.id)
+        ready.push(request.clip.id)
       } catch (e) {
         console.warn(
-          `[render] drawing transition clip "${layer.clip.id}" failed:`,
+          `[render] drawing transition clip "${request.clip.id}" failed:`,
           e instanceof Error ? e.message : e,
         )
-        missing.push(layer.clip.id)
+        missing.push(request.clip.id)
       }
     }
 
@@ -277,7 +275,12 @@ function compositeTransitionGroup(
       '[render] drawing isolated transition group failed:',
       e instanceof Error ? e.message : e,
     )
-    missing.push(...idsNotIn(missing, layers.map((layer) => layer.clip.id)))
+    missing.push(...idsNotIn(
+      missing,
+      requests
+        .filter((request) => request.opacity > 0 && request.weight > 0)
+        .map((request) => request.clip.id),
+    ))
   }
 }
 
@@ -302,10 +305,10 @@ function clearSurface(ctx: Composite2D, doc: TimelineDoc): void {
 function drawClip(
   ctx: Composite2D,
   doc: TimelineDoc,
-  layer: VisibleVideoLayer,
+  request: VideoFrameRequest,
   image: RenderFrameSource,
 ): void {
-  const clip: Clip = layer.clip
+  const clip: Clip = request.clip
   const t = clip.transform
   const imageWidth = 'displayWidth' in image ? image.displayWidth : image.width
   const imageHeight = 'displayHeight' in image ? image.displayHeight : image.height
@@ -318,7 +321,7 @@ function drawClip(
 
   ctx.save()
   try {
-    ctx.globalAlpha = layer.opacity
+    ctx.globalAlpha = request.opacity
     ctx.globalCompositeOperation = 'source-over'
     ctx.translate(canvasX, canvasY)
     ctx.rotate((t.rotation * Math.PI) / 180)

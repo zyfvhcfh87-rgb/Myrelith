@@ -10,9 +10,12 @@ import { describe, expect, test, vi } from 'vitest'
 import type {
   Clip,
   FrameRate,
+  MediaSourceBounds,
   TimelineDoc,
   Track,
+  Transition,
 } from '../domain/schema'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { splitClipAtFrame, trimClip } from '../domain/operations'
 import { docDurationFrames } from '../domain/selectors'
 import {
@@ -32,7 +35,12 @@ function makeClip(
   id: string,
   timelineStart: number,
   duration: number,
-  options: { sourceStart?: number; volume?: number; assetId?: string } = {},
+  options: {
+    sourceStart?: number
+    volume?: number
+    assetId?: string
+    linkGroupId?: string
+  } = {},
 ): Clip {
   return {
     id,
@@ -56,6 +64,7 @@ function makeClip(
     opacity: 1,
     volume: options.volume ?? 1,
     effects: [],
+    ...(options.linkGroupId ? { linkGroupId: options.linkGroupId } : {}),
   }
 }
 
@@ -164,6 +173,80 @@ function captureBlock(block: MixedAudioBlock): CapturedBlock {
     startSample: block.startSample,
     sampleCount: block.sampleCount,
     channels: block.channels.map((channel) => Array.from(channel)),
+  }
+}
+
+function exactBounds(endSeconds = 20): MediaSourceBounds {
+  return {
+    video: {
+      status: 'exact',
+      firstTimestampUs: 0,
+      endTimestampUs: endSeconds * 1_000_000,
+    },
+    audio: {
+      status: 'exact',
+      firstTimestampUs: 0,
+      endTimestampUs: endSeconds * 1_000_000,
+    },
+  }
+}
+
+function crossfadeFixture(options: {
+  durationFrames?: number
+  curve?: Transition['audio']['curve']
+  frameRate?: FrameRate
+  audioSampleRate?: number
+  sameAudioAsset?: boolean
+} = {}): { doc: TimelineDoc; catalog: SourceBoundsCatalog } {
+  const videoFrom = makeClip('video-from', 0, 4, {
+    assetId: 'video-from-asset',
+    sourceStart: 4,
+    linkGroupId: 'from-link',
+  })
+  const videoTo = makeClip('video-to', 4, 4, {
+    assetId: 'video-to-asset',
+    sourceStart: 12,
+    linkGroupId: 'to-link',
+  })
+  const audioFrom = makeClip('audio-from', 0, 4, {
+    assetId: options.sameAudioAsset ? 'shared-audio' : 'audio-from-asset',
+    sourceStart: 4,
+    linkGroupId: 'from-link',
+  })
+  const audioTo = makeClip('audio-to', 4, 4, {
+    assetId: options.sameAudioAsset ? 'shared-audio' : 'audio-to-asset',
+    sourceStart: 12,
+    linkGroupId: 'to-link',
+  })
+  const transition: Transition = {
+    id: 'crossfade',
+    type: 'crossfade',
+    fromClipId: videoFrom.id,
+    toClipId: videoTo.id,
+    durationFrames: options.durationFrames ?? 4,
+    audio: { enabled: true, curve: options.curve ?? 'linear' },
+  }
+  const videoTrack = makeTrack('V1', 'video', [videoFrom, videoTo])
+  videoTrack.transitions = [transition]
+  const audioTrack = makeTrack('A1', 'audio', [audioFrom, audioTo])
+  const assetIds = [
+    'video-from-asset',
+    'video-to-asset',
+    audioFrom.assetId,
+    audioTo.assetId,
+  ]
+  return {
+    doc: {
+      ...makeDoc(
+        [videoTrack, audioTrack],
+        options.frameRate ?? { num: 1, den: 1 },
+        options.audioSampleRate ?? 4_096,
+      ),
+      schemaVersion: 3,
+    },
+    catalog: new Map(
+      [...new Set(assetIds)].map((assetId) => [assetId, exactBounds()]),
+    ),
   }
 }
 
@@ -451,6 +534,170 @@ describe('TimelineAudioMixer selection and mapping', () => {
       expect(block.channels[1][0]).toBe(1)
       expect(block.channels[1].at(-1)).toBe(1)
     }
+    await mixer.close()
+  })
+
+  test.each([1, 3, 4])(
+    'opens exact virtual source ranges for a %i-frame crossfade',
+    async (durationFrames) => {
+      const fixture = crossfadeFixture({
+        durationFrames,
+        audioSampleRate: 10,
+      })
+      const h = makeSource()
+      const mixer = new TimelineAudioMixer(
+        fixture.doc,
+        h.source,
+        fixture.catalog,
+      )
+      for (let frame = 0; frame < 8; frame++) {
+        await mixer.writeFrame(frame, async () => undefined)
+      }
+
+      const startFrame = 4 - Math.floor(durationFrames / 2)
+      const endFrame = startFrame + durationFrames
+      expect(h.requests).toEqual([
+        {
+          clipId: 'audio-from',
+          assetId: 'audio-from-asset',
+          startSample: 40,
+          endSample: (4 + endFrame) * 10,
+          sampleRate: 10,
+          channelCount: 2,
+          requireComplete: true,
+        },
+        {
+          clipId: 'audio-to',
+          assetId: 'audio-to-asset',
+          startSample: (startFrame + 8) * 10,
+          endSample: 160,
+          sampleRate: 10,
+          channelCount: 2,
+          requireComplete: true,
+        },
+      ])
+      await mixer.close()
+    },
+  )
+
+  test.each(['linear', 'equal-power'] as const)(
+    'evaluates %s gain from absolute samples across 1024-sample blocks',
+    async (curve) => {
+      const fixture = crossfadeFixture({ curve })
+      fixture.doc.tracks[1].clips[0].volume = 0.5
+      fixture.doc.tracks[1].clips[1].volume = 0.25
+      const h = makeSource((request, sampleCount) =>
+        request.clipId === 'audio-from'
+          ? [filled(sampleCount, 1), filled(sampleCount, 0)]
+          : [filled(sampleCount, 0), filled(sampleCount, 1)],
+      )
+      const mixer = new TimelineAudioMixer(
+        fixture.doc,
+        h.source,
+        fixture.catalog,
+      )
+      const observed = new Map<number, [number, number]>()
+      for (let frame = 0; frame < 8; frame++) {
+        await mixer.writeFrame(frame, async (block) => {
+          for (let index = 0; index < block.sampleCount; index++) {
+            observed.set(block.startSample + index, [
+              block.channels[0][index],
+              block.channels[1][index],
+            ])
+          }
+        })
+      }
+
+      const start = audioSampleBoundary(2, fixture.doc)
+      const end = audioSampleBoundary(6, fixture.doc)
+      const span = end - start
+      for (const offset of [0, 1_024, span / 2, span - 1]) {
+        const sample = start + offset
+        const pair = observed.get(sample)
+        if (!pair) throw new Error(`Missing mixed sample ${sample}`)
+        const progress = offset / span
+        const fromGain = curve === 'linear'
+          ? 1 - progress
+          : Math.cos(progress * Math.PI / 2)
+        const toGain = curve === 'linear'
+          ? progress
+          : Math.sin(progress * Math.PI / 2)
+        expect(pair[0]).toBeCloseTo(fromGain * 0.5, 5)
+        expect(pair[1]).toBeCloseTo(toGain * 0.25, 5)
+      }
+      await mixer.close()
+    },
+  )
+
+  test('keeps NTSC virtual ranges on the signed phase grid', async () => {
+    const fixture = crossfadeFixture({
+      durationFrames: 3,
+      frameRate: NTSC_2997,
+      audioSampleRate: 48_000,
+      sameAudioAsset: true,
+    })
+    const h = makeSource()
+    const mixer = new TimelineAudioMixer(
+      fixture.doc,
+      h.source,
+      fixture.catalog,
+    )
+    for (let frame = 0; frame < 8; frame++) {
+      await mixer.writeFrame(frame, async () => undefined)
+    }
+
+    const fromStart = audioSampleBoundary(4, fixture.doc)
+    const fromLength = audioSampleBoundary(6, fixture.doc)
+    const toStart =
+      audioSampleBoundary(3, fixture.doc)
+      + audioSampleBoundary(8, fixture.doc)
+    const toLength =
+      audioSampleBoundary(8, fixture.doc)
+      - audioSampleBoundary(3, fixture.doc)
+    expect(h.requests).toEqual([
+      expect.objectContaining({
+        clipId: 'audio-from',
+        assetId: 'shared-audio',
+        startSample: fromStart,
+        endSample: fromStart + fromLength,
+        requireComplete: true,
+      }),
+      expect.objectContaining({
+        clipId: 'audio-to',
+        assetId: 'shared-audio',
+        startSample: toStart,
+        endSample: toStart + toLength,
+        requireComplete: true,
+      }),
+    ])
+    expect(h.readers).toHaveLength(2)
+    await mixer.close()
+  })
+
+  test('fails instead of accepting a short exact-handle reader block', async () => {
+    const fixture = crossfadeFixture()
+    const source: ExportAudioMediaSource = {
+      openClip: vi.fn(async (_request) => ({
+        read: vi.fn(async (sampleCount: number) => [
+          new Float32Array(sampleCount - 1),
+          new Float32Array(sampleCount - 1),
+        ]),
+        close: vi.fn(),
+      })),
+      close: vi.fn(),
+    }
+    const mixer = new TimelineAudioMixer(
+      fixture.doc,
+      source,
+      fixture.catalog,
+    )
+
+    await expect(mixer.writeFrame(0, async () => undefined)).rejects.toThrow(
+      'returned an invalid block',
+    )
+    expect(source.openClip).toHaveBeenCalledWith(
+      expect.objectContaining({ requireComplete: true }),
+    )
     await mixer.close()
   })
 })

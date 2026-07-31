@@ -17,11 +17,15 @@ interface FakeVideoTrack {
   displayHeight: number
   computePacketStats: ReturnType<typeof vi.fn>
   getDecoderConfig: ReturnType<typeof vi.fn>
+  getFirstTimestamp: ReturnType<typeof vi.fn>
+  computeDuration: ReturnType<typeof vi.fn>
 }
 
 interface FakeAudioTrack {
   sampleRate: number
   numberOfChannels: number
+  getFirstTimestamp: ReturnType<typeof vi.fn>
+  computeDuration: ReturnType<typeof vi.fn>
 }
 
 const media = vi.hoisted(() => ({
@@ -144,12 +148,19 @@ describe('loadAsset duration conformance', () => {
   beforeEach(() => {
     media.disposeCount = 0
     media.durationSec = 10
-    media.audioTrack = { sampleRate: 48_000, numberOfChannels: 2 }
+    media.audioTrack = {
+      sampleRate: 48_000,
+      numberOfChannels: 2,
+      getFirstTimestamp: vi.fn(async () => 0),
+      computeDuration: vi.fn(async () => media.durationSec),
+    }
     media.videoTrack = {
       displayWidth: 1920,
       displayHeight: 1080,
       computePacketStats: vi.fn(async () => ({ averagePacketRate: 60 })),
       getDecoderConfig: vi.fn(async () => ({ codec: 'avc1.640028' })),
+      getFirstTimestamp: vi.fn(async () => 0),
+      computeDuration: vi.fn(async () => media.durationSec),
     }
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,

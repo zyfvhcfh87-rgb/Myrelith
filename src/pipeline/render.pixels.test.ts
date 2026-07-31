@@ -8,6 +8,7 @@
 
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import {
   compositeFrame,
   type Composite2D,
@@ -371,6 +372,7 @@ function transitionTrack(
       fromClipId: from.id,
       toClipId: to.id,
       durationFrames,
+      audio: { enabled: true, curve: 'equal-power' },
     }],
   })
 }
@@ -418,7 +420,19 @@ async function render(
   const source = makeSource(frames)
   const result = await compositeFrame(
     doc,
-    frame,
+    videoCompositionPlanAtFrame(doc, frame, new Map(
+      doc.tracks.flatMap((track) => track.clips.map((clip) => [
+        clip.assetId,
+        {
+          video: {
+            status: 'exact' as const,
+            firstTimestampUs: 0,
+            endTimestampUs: 1_000_000_000,
+          },
+          audio: null,
+        },
+      ] as const)),
+    )),
     output.context,
     source.source,
     surfaces.provider,
@@ -428,8 +442,12 @@ async function render(
 
 describe('compositeFrame pixel goldens', () => {
   test('opaque crossfade follows the exact quarter/midpoint/quarter sweep', async () => {
-    const from = makeClip('from', 'red', 0, 3)
-    const to = makeClip('to', 'blue', 3, 3)
+    const from = makeClip('from', 'red', 0, 3, {
+      sourceRange: { startFrame: 10, durationFrames: 3 },
+    })
+    const to = makeClip('to', 'blue', 3, 3, {
+      sourceRange: { startFrame: 20, durationFrames: 3 },
+    })
     const doc = makeDoc([transitionTrack(from, to, 3)])
     const frames = {
       red: solid(5, 5, [255, 0, 0, 255]),
@@ -519,7 +537,7 @@ describe('compositeFrame pixel goldens', () => {
 
   test.each([
     ['still', 'timed', ['A@0', 'B@20']],
-    ['timed', 'still', ['A@11', 'B@0']],
+    ['timed', 'still', ['A@12', 'B@0']],
     ['still', 'still', ['A@0', 'B@0']],
   ] as const)(
     '%s to %s shares the same midpoint pixels and canonical source frames',

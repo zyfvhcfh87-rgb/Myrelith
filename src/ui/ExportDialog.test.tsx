@@ -97,6 +97,10 @@ function asset(): MediaAsset {
     kind: 'video',
     durationFrames: 90,
     durationMicroseconds: 3_000_000,
+    sourceBounds: {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 3_000_000 },
+      audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 3_000_000 },
+    },
     frameRate: { num: 30, den: 1 },
     width: 1280,
     height: 720,

@@ -8,7 +8,7 @@ import type { MediaAsset } from '../domain/schema'
 import { useMediaStore } from './mediaStore'
 
 function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
-  return {
+  const asset: MediaAsset = {
     id: 'asset-1',
     fileName: 'holiday.mp4',
     mimeType: 'video/mp4',
@@ -18,6 +18,10 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
     kind: 'video',
     durationFrames: 300,
     durationMicroseconds: 10_000_000,
+    sourceBounds: {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+      audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+    },
     frameRate: { num: 60, den: 1 },
     width: 1920,
     height: 1080,
@@ -26,6 +30,22 @@ function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
     audioChannels: 2,
     decoderConfigB64: null,
     ...overrides,
+  }
+  if (overrides.sourceBounds !== undefined) return asset
+  if (asset.kind === 'image') {
+    return { ...asset, sourceBounds: { video: null, audio: null } }
+  }
+  const exact = {
+    status: 'exact' as const,
+    firstTimestampUs: 0,
+    endTimestampUs: asset.durationMicroseconds,
+  }
+  return {
+    ...asset,
+    sourceBounds: {
+      video: asset.kind === 'video' ? exact : null,
+      audio: asset.hasAudio ? exact : null,
+    },
   }
 }
 
@@ -41,6 +61,7 @@ function descriptorFor(asset: MediaAsset): PortableAssetDescriptor {
       ? {}
       : { partialTrackSelection: asset.partialTrackSelection }),
     durationMicroseconds: asset.durationMicroseconds,
+    sourceBounds: asset.sourceBounds,
     nativeFrameRate: asset.frameRate,
     width: asset.width,
     height: asset.height,
@@ -361,6 +382,43 @@ describe('mediaStore', () => {
     expect(getState().connectAsset(reconnected)).toBe(true)
     expect(getState().assets.get(first.id)).toBe(reconnected)
     expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(reconnected.objectUrl)
+  })
+
+  test('relink upgrades legacy unknown bounds without weakening exact matching', () => {
+    const analyzed = makeAsset({ objectUrl: 'blob:analyzed' })
+    const legacy = {
+      ...descriptorFor(analyzed),
+      sourceBounds: {
+        video: { status: 'unknown' as const },
+        audio: { status: 'unknown' as const },
+      },
+    }
+    expect(getState().replaceAssets([legacy], [])).toBe(true)
+
+    expect(getState().connectAsset({
+      ...analyzed,
+      sourceBounds: legacy.sourceBounds,
+    })).toBe(false)
+
+    expect(getState().connectAsset(analyzed)).toBe(true)
+    expect(getState().descriptors.get(analyzed.id)?.sourceBounds).toEqual(
+      analyzed.sourceBounds,
+    )
+
+    getState().disconnectAsset(analyzed.id)
+    const changed = {
+      ...analyzed,
+      objectUrl: 'blob:changed-bounds',
+      sourceBounds: {
+        ...analyzed.sourceBounds,
+        video: {
+          status: 'exact' as const,
+          firstTimestampUs: 1,
+          endTimestampUs: 10_000_000,
+        },
+      },
+    }
+    expect(getState().connectAsset(changed)).toBe(false)
   })
 
   test('rejects a mismatched connection without taking its URL', () => {

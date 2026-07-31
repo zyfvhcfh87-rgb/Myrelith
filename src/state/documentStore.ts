@@ -28,9 +28,16 @@ import type {
   TrackKind,
   TransitionId,
 } from '../domain/schema'
-import type { ClipTransformPatch, TrackFlagsPatch, TrimEdge } from '../domain/operations'
+import type {
+  ClipTransformPatch,
+  CrossfadeSettings,
+  TrackFlagsPatch,
+  TrimEdge,
+} from '../domain/operations'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import {
   addCrossfade,
+  addCrossfadeWithSourceBounds as addExactCrossfade,
   addEffect,
   addTrack,
   insertClip,
@@ -39,6 +46,7 @@ import {
   renameTrack,
   setClipVolume,
   setCrossfadeDuration,
+  setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
   updateClipTransform,
 } from '../domain/operations'
@@ -140,6 +148,13 @@ export interface DocumentState {
     toClipId: ClipId,
     durationFrames: number,
   ) => void
+  /** Add exact handle-aware duration/audio intent as one history entry. */
+  addCrossfadeWithSourceBounds: (
+    fromClipId: ClipId,
+    toClipId: ClipId,
+    settings: CrossfadeSettings,
+    catalog: SourceBoundsCatalog,
+  ) => void
   /**
    * Change one crossfade duration while preserving its id. `trackId` scopes
    * stale UI calls; unchanged or rejected edits add no history entry.
@@ -148,6 +163,13 @@ export interface DocumentState {
     trackId: TrackId,
     transitionId: TransitionId,
     durationFrames: number,
+  ) => void
+  /** Atomically replace duration and audio intent in one history entry. */
+  setCrossfadeSettings: (
+    trackId: TrackId,
+    transitionId: TransitionId,
+    settings: CrossfadeSettings,
+    catalog: SourceBoundsCatalog,
   ) => void
   /**
    * Remove one transition from its owning track. Stale endpoint definitions
@@ -304,6 +326,26 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       ),
     ),
 
+  addCrossfadeWithSourceBounds: (
+    fromClipId,
+    toClipId,
+    settings,
+    catalog,
+  ) =>
+    set((state) =>
+      commit(
+        state,
+        addExactCrossfade(
+          state.doc,
+          fromClipId,
+          toClipId,
+          settings.durationFrames,
+          catalog,
+          settings.audio,
+        ),
+      ),
+    ),
+
   setCrossfadeDuration: (trackId, transitionId, durationFrames) =>
     set((state) =>
       commit(
@@ -313,6 +355,20 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
           trackId,
           transitionId,
           durationFrames,
+        ),
+      ),
+    ),
+
+  setCrossfadeSettings: (trackId, transitionId, settings, catalog) =>
+    set((state) =>
+      commit(
+        state,
+        setCrossfadeSettingsWithSourceBounds(
+          state.doc,
+          trackId,
+          transitionId,
+          settings,
+          catalog,
         ),
       ),
     ),

@@ -24,6 +24,10 @@ function descriptor(
     lastModified: 100,
     kind: 'video',
     durationMicroseconds: 1_000_000,
+    sourceBounds: {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 1_000_000 },
+      audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 1_000_000 },
+    },
     nativeFrameRate: { num: 30, den: 1 },
     width: 1_920,
     height: 1_080,
@@ -46,6 +50,7 @@ function asset(id: string, objectUrl: string): MediaAsset {
     kind: source.kind,
     durationFrames: 30,
     durationMicroseconds: source.durationMicroseconds,
+    sourceBounds: source.sourceBounds,
     frameRate: { num: 30, den: 1 },
     width: source.width,
     height: source.height,

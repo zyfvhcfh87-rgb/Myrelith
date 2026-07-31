@@ -30,7 +30,15 @@
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
-import { visibleVideoLayersAtFrame } from '../domain/selectors'
+import {
+  createSourceBoundsCatalog,
+  type SourceBoundsCatalog,
+} from '../domain/crossfadePlan'
+import {
+  createVideoCompositionPlanner,
+  videoCompositionRequests,
+  type VideoCompositionPlanner,
+} from '../domain/videoCompositionPlan'
 import {
   mediaAssetDecoderBudget,
   type LocalDecoderBudget,
@@ -56,6 +64,7 @@ import {
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
   setDoc(doc: TimelineDoc): void
+  setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void
   openAsset(
     assetId: AssetId,
     blob: Blob,
@@ -99,6 +108,7 @@ const realDeps: PreviewDeps = {
 interface ControllerState {
   canvas: HTMLCanvasElement | null
   bridge: BridgeLike | null
+  visualPlanner: VideoCompositionPlanner | null
   /** Per-asset pipeline status. Absent = not started (or failed: retried
    * on the next mediaStore change). Removal releases the worker source. */
   assetStates: Map<AssetId, {
@@ -114,6 +124,7 @@ interface ControllerState {
 const state: ControllerState = {
   canvas: null,
   bridge: null,
+  visualPlanner: null,
   assetStates: new Map(),
   unsubscribes: [],
   rafPending: false,
@@ -127,6 +138,12 @@ function modeForTransport(transport: {
   return transport.isPlaying && !transport.isScrubbing ? 'playback' : 'seek'
 }
 
+function currentSourceBoundsCatalog(): SourceBoundsCatalog {
+  return createSourceBoundsCatalog(
+    useMediaStore.getState().descriptors.values(),
+  )
+}
+
 function scheduleRender(): void {
   const bridge = state.bridge
   if (state.rafPending || !bridge) return
@@ -138,15 +155,13 @@ function scheduleRender(): void {
     // Document frames go straight through — per-asset rescaling happens
     // inside the bridge; source cursor policy belongs to the worker.
     const transport = useTransportStore.getState()
-    const document = useDocumentStore.getState().doc
     const media = useMediaStore.getState()
     const offlineIds: AssetId[] = []
     const seen = new Set<AssetId>()
-    for (const layer of visibleVideoLayersAtFrame(
-      document,
-      transport.playheadFrame,
-    )) {
-      const id = layer.clip.assetId
+    const visualPlan = state.visualPlanner?.planFrame(transport.playheadFrame)
+    if (!visualPlan) return
+    for (const request of videoCompositionRequests(visualPlan)) {
+      const id = request.clip.assetId
       if (
         !seen.has(id)
         && media.descriptors.has(id)
@@ -328,11 +343,19 @@ export function initPreview(
   state.canvas = canvas
   state.bridge = bridge
 
-  bridge.setDoc(useDocumentStore.getState().doc)
+  const initialDoc = useDocumentStore.getState().doc
+  const initialBounds = currentSourceBoundsCatalog()
+  state.visualPlanner = createVideoCompositionPlanner(initialDoc, initialBounds)
+  bridge.setSourceBoundsCatalog(initialBounds)
+  bridge.setDoc(initialDoc)
 
   state.unsubscribes.push(
     useDocumentStore.subscribe((s, prev) => {
       if (s.doc !== prev.doc) {
+        state.visualPlanner = createVideoCompositionPlanner(
+          s.doc,
+          currentSourceBoundsCatalog(),
+        )
         bridge.setDoc(s.doc)
         syncAssets(deps)
         scheduleRender()
@@ -345,6 +368,12 @@ export function initPreview(
       ) scheduleRender()
     }),
     useMediaStore.subscribe(() => {
+      const bounds = currentSourceBoundsCatalog()
+      state.visualPlanner = createVideoCompositionPlanner(
+        useDocumentStore.getState().doc,
+        bounds,
+      )
+      bridge.setSourceBoundsCatalog(bounds)
       syncAssets(deps)
       scheduleRender()
     }),
@@ -362,6 +391,7 @@ export function disposePreview(): void {
   state.unsubscribes = []
   state.bridge?.dispose()
   state.bridge = null
+  state.visualPlanner = null
   state.canvas = null
   state.assetStates = new Map()
   state.rafPending = false

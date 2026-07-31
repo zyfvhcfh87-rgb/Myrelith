@@ -10,13 +10,20 @@ import { describe, expect, test, vi } from 'vitest'
 import type {
   Clip,
   FrameRate,
+  MediaSourceBounds,
   TimelineDoc,
   Track,
+  Transition,
 } from '../domain/schema'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import {
+  audioPlaybackAssetIds,
+  audioPlaybackPlanKey,
   createMediabunnyPlaybackAudioSource,
+  createEqualPowerPlaybackCurve,
   createWebAudioPlaybackOutput,
+  PLAYBACK_EQUAL_POWER_CURVE_POINTS,
   startTimelineAudioPlayback,
   type PlaybackAssetResolver,
   type PlaybackAudioBuffer,
@@ -38,6 +45,7 @@ function makeClip(
     assetId?: string
     sourceStart?: number
     volume?: number
+    linkGroupId?: string
   } = {},
 ): Clip {
   return {
@@ -62,6 +70,7 @@ function makeClip(
     opacity: 1,
     volume: options.volume ?? 1,
     effects: [],
+    ...(options.linkGroupId ? { linkGroupId: options.linkGroupId } : {}),
   }
 }
 
@@ -101,6 +110,80 @@ function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
       ),
       ...audioTracks,
     ],
+  }
+}
+
+function exactBounds(): MediaSourceBounds {
+  return {
+    video: {
+      status: 'exact',
+      firstTimestampUs: 0,
+      endTimestampUs: 10_000_000,
+    },
+    audio: {
+      status: 'exact',
+      firstTimestampUs: 0,
+      endTimestampUs: 10_000_000,
+    },
+  }
+}
+
+function crossfadePlaybackFixture(
+  curve: Transition['audio']['curve'] = 'linear',
+): { doc: TimelineDoc; catalog: SourceBoundsCatalog } {
+  const videoFrom = makeClip('video-from', 0, 10, {
+    assetId: 'video-from-asset',
+    sourceStart: 10,
+    linkGroupId: 'from-link',
+  })
+  const videoTo = makeClip('video-to', 10, 10, {
+    assetId: 'video-to-asset',
+    sourceStart: 30,
+    linkGroupId: 'to-link',
+  })
+  const audioFrom = makeClip('audio-from', 0, 10, {
+    assetId: 'audio-from-asset',
+    sourceStart: 10,
+    linkGroupId: 'from-link',
+    volume: 0.25,
+  })
+  const audioTo = makeClip('audio-to', 10, 10, {
+    assetId: 'audio-to-asset',
+    sourceStart: 30,
+    linkGroupId: 'to-link',
+    volume: 0.75,
+  })
+  const transition: Transition = {
+    id: 'crossfade',
+    type: 'crossfade',
+    fromClipId: videoFrom.id,
+    toClipId: videoTo.id,
+    durationFrames: 4,
+    audio: { enabled: true, curve },
+  }
+  const videoTrack = makeTrack('V1', 'video', [videoFrom, videoTo])
+  videoTrack.transitions = [transition]
+  return {
+    doc: {
+      schemaVersion: 3,
+      id: 'crossfade-playback',
+      name: 'Crossfade playback',
+      frameRate: F10,
+      width: 64,
+      height: 48,
+      audioSampleRate: 48_000,
+      tracks: [
+        videoTrack,
+        makeTrack('A-from', 'audio', [audioFrom]),
+        makeTrack('A-to', 'audio', [audioTo]),
+      ],
+    },
+    catalog: new Map([
+      ['video-from-asset', exactBounds()],
+      ['video-to-asset', exactBounds()],
+      ['audio-from-asset', exactBounds()],
+      ['audio-to-asset', exactBounds()],
+    ]),
   }
 }
 
@@ -307,6 +390,7 @@ interface FakeAudioParam {
   cancelScheduledValues: ReturnType<typeof vi.fn>
   setValueAtTime: ReturnType<typeof vi.fn>
   linearRampToValueAtTime: ReturnType<typeof vi.fn>
+  setValueCurveAtTime: ReturnType<typeof vi.fn>
 }
 
 interface FakeGainNode {
@@ -340,6 +424,7 @@ function makeWebAudioHarness(state: AudioContextState): {
       cancelScheduledValues: vi.fn(),
       setValueAtTime: vi.fn(),
       linearRampToValueAtTime: vi.fn(),
+      setValueCurveAtTime: vi.fn(),
     },
     connect: vi.fn(),
     disconnect: vi.fn(),
@@ -428,6 +513,178 @@ describe('startTimelineAudioPlayback scheduling', () => {
     expect(scheduledMid.volume).toBe(0.25)
 
     await session.stop()
+  })
+
+  test('opens real virtual handles and carries absolute linear envelopes', async () => {
+    const fixture = crossfadePlaybackFixture('linear')
+    const h = makePlaybackHarness({ lookaheadSeconds: 0.4 })
+    h.media.enqueue(
+      'audio-from-asset',
+      makeCursor([decodedBuffer('from-handle', 1.8, 0.4)]).cursor,
+    )
+    h.media.enqueue(
+      'audio-to-asset',
+      makeCursor([decodedBuffer('to-handle', 2.8, 0.4)]).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      fixture.doc,
+      8,
+      h.resolveAsset,
+      { sourceBoundsCatalog: fixture.catalog },
+      h.deps,
+    )
+
+    expect(h.media.requests).toEqual([
+      { assetId: 'audio-from-asset', startTime: 1.8, endTime: 2.2 },
+      { assetId: 'audio-to-asset', startTime: 2.8, endTime: 4 },
+    ])
+    expect(h.output.scheduled).toHaveLength(2)
+    expect(h.output.scheduled.map((event) => ({
+      clipId: event.clipId,
+      timelineStartTime: event.timelineStartTime,
+      duration: event.duration,
+      volume: event.volume,
+      envelope: event.envelope,
+    }))).toEqual([
+      {
+        clipId: 'audio-from',
+        timelineStartTime: 0.8,
+        duration: expect.closeTo(0.4, 10),
+        volume: 0.25,
+        envelope: {
+          startTime: 0.8,
+          endTime: 1.2,
+          role: 'from',
+          curve: 'linear',
+        },
+      },
+      {
+        clipId: 'audio-to',
+        timelineStartTime: 0.8,
+        duration: expect.closeTo(0.4, 10),
+        volume: 0.75,
+        envelope: {
+          startTime: 0.8,
+          endTime: 1.2,
+          role: 'to',
+          curve: 'linear',
+        },
+      },
+    ])
+    expect(audioPlaybackAssetIds(fixture.doc, 11, fixture.catalog)).toEqual([
+      'audio-from-asset',
+      'audio-to-asset',
+    ])
+
+    await session.stop()
+  })
+
+  test('keeps virtual-handle requests and envelopes on the NTSC frame clock', async () => {
+    const fixture = crossfadePlaybackFixture('equal-power')
+    fixture.doc.frameRate = { num: 30_000, den: 1_001 }
+    const frameSeconds = 1_001 / 30_000
+    const h = makePlaybackHarness({ lookaheadSeconds: 4 * frameSeconds })
+    h.media.enqueue(
+      'audio-from-asset',
+      makeCursor([decodedBuffer(
+        'ntsc-from',
+        18 * frameSeconds,
+        4 * frameSeconds,
+      )]).cursor,
+    )
+    h.media.enqueue(
+      'audio-to-asset',
+      makeCursor([decodedBuffer(
+        'ntsc-to',
+        28 * frameSeconds,
+        4 * frameSeconds,
+      )]).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      fixture.doc,
+      8,
+      h.resolveAsset,
+      { sourceBoundsCatalog: fixture.catalog },
+      h.deps,
+    )
+
+    expect(h.media.requests).toHaveLength(2)
+    expect(h.media.requests[0].startTime).toBeCloseTo(18 * frameSeconds)
+    expect(h.media.requests[0].endTime).toBeCloseTo(22 * frameSeconds)
+    expect(h.media.requests[1].startTime).toBeCloseTo(28 * frameSeconds)
+    const envelopes = h.output.scheduled.map((event) => event.envelope)
+    expect(envelopes).toHaveLength(2)
+    for (const envelope of envelopes) {
+      expect(envelope?.startTime).toBeCloseTo(8 * frameSeconds)
+      expect(envelope?.endTime).toBeCloseTo(12 * frameSeconds)
+      expect(envelope?.curve).toBe('equal-power')
+    }
+    await session.stop()
+  })
+
+  test('advances envelope phase when a decoded handle arrives late', async () => {
+    const fixture = crossfadePlaybackFixture('linear')
+    const h = makePlaybackHarness({ currentTime: 10, lookaheadSeconds: 0.4 })
+    // Anchor read, then one current-time read per sorted event.
+    h.output.queueTimes(10, 10, 10.1, 10.1)
+    h.media.enqueue(
+      'audio-from-asset',
+      makeCursor([decodedBuffer('late-from', 1.8, 0.4)]).cursor,
+    )
+    h.media.enqueue(
+      'audio-to-asset',
+      makeCursor([decodedBuffer('late-to', 2.8, 0.4)]).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      fixture.doc,
+      8,
+      h.resolveAsset,
+      { sourceBoundsCatalog: fixture.catalog },
+      h.deps,
+    )
+
+    expect(h.output.scheduled).toHaveLength(2)
+    for (const event of h.output.scheduled) {
+      expect(event.timelineStartTime).toBeCloseTo(0.85)
+      expect(event.offset).toBeCloseTo(0.05)
+      expect(event.duration).toBeCloseTo(0.35)
+    }
+    await session.stop()
+  })
+
+  test('fingerprints transition, link, curve, bounds, volume, mute, and solo facts', () => {
+    const fixture = crossfadePlaybackFixture('linear')
+    const baseline = audioPlaybackPlanKey(fixture.doc, fixture.catalog)
+    const variants: TimelineDoc[] = []
+    const mutate = (change: (doc: TimelineDoc) => void): void => {
+      const cloned = structuredClone(fixture.doc)
+      change(cloned)
+      variants.push(cloned)
+    }
+    mutate((doc) => { doc.tracks[0].transitions[0].audio.curve = 'equal-power' })
+    mutate((doc) => { delete doc.tracks[1].clips[0].linkGroupId })
+    mutate((doc) => { doc.tracks[1].clips[0].volume = 0.5 })
+    mutate((doc) => { doc.tracks[1].muted = true })
+    mutate((doc) => { doc.tracks[1].solo = true })
+    for (const variant of variants) {
+      expect(audioPlaybackPlanKey(variant, fixture.catalog)).not.toBe(baseline)
+    }
+    const changedBounds = new Map(fixture.catalog)
+    changedBounds.set('audio-from-asset', {
+      ...exactBounds(),
+      audio: {
+        status: 'exact',
+        firstTimestampUs: 1,
+        endTimestampUs: 10_000_000,
+      },
+    })
+    expect(audioPlaybackPlanKey(fixture.doc, changedBounds)).not.toBe(baseline)
   })
 
   test('uses canonical solo and mute selection and skips zero volume', async () => {
@@ -982,6 +1239,75 @@ describe('startTimelineAudioPlayback ownership', () => {
 })
 
 describe('createWebAudioPlaybackOutput ownership', () => {
+  test('uses exact ramps for linear legs and bounded curves for equal-power legs', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const buffer = { duration: 1 } as AudioBuffer
+
+    output.schedule({
+      clipId: 'linear-to',
+      buffer,
+      timelineStartTime: 0.9,
+      when: 10,
+      offset: 0,
+      duration: 0.2,
+      volume: 0.5,
+      envelope: {
+        startTime: 0.8,
+        endTime: 1.2,
+        role: 'to',
+        curve: 'linear',
+      },
+    })
+    const linearGain = h.gains[1].gain
+    expect(linearGain.setValueAtTime.mock.calls[0]?.[0]).toBeCloseTo(0.125)
+    expect(linearGain.setValueAtTime.mock.calls[0]?.[1]).toBe(10)
+    expect(
+      linearGain.linearRampToValueAtTime.mock.calls[0]?.[0],
+    ).toBeCloseTo(0.375)
+    expect(linearGain.linearRampToValueAtTime.mock.calls[0]?.[1]).toBe(10.2)
+    expect(linearGain.setValueCurveAtTime).not.toHaveBeenCalled()
+
+    output.schedule({
+      clipId: 'power-from',
+      buffer,
+      timelineStartTime: 0.8,
+      when: 10.2,
+      offset: 0,
+      duration: 0.4,
+      volume: 0.8,
+      envelope: {
+        startTime: 0.8,
+        endTime: 1.2,
+        role: 'from',
+        curve: 'equal-power',
+      },
+    })
+    const powerGain = h.gains[2].gain
+    const curveCall = powerGain.setValueCurveAtTime.mock.calls[0]
+    expect(curveCall?.[1]).toBe(10.2)
+    expect(curveCall?.[2]).toBe(0.4)
+    const curve = curveCall?.[0] as Float32Array
+    expect(curve).toHaveLength(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+    expect(curve[0]).toBeCloseTo(0.8)
+    expect(curve.at(-1)).toBeCloseTo(0)
+
+    let maximumInterpolationError = 0
+    for (let index = 0; index < curve.length - 1; index++) {
+      const interpolated = (curve[index] + curve[index + 1]) / 2
+      const progress = (index + 0.5) / (curve.length - 1)
+      const exact = Math.cos(progress * Math.PI / 2) * 0.8
+      maximumInterpolationError = Math.max(
+        maximumInterpolationError,
+        Math.abs(interpolated - exact),
+      )
+    }
+    expect(maximumInterpolationError).toBeLessThan(0.00003)
+    expect(createEqualPowerPlaybackCurve('from', 0, 1, 0.8)).toEqual(curve)
+
+    output.stop()
+  })
+
   test('ramps in once and synchronously cleans a suspended context', () => {
     const h = makeWebAudioHarness('suspended')
     const output = createWebAudioPlaybackOutput(h.context)
@@ -990,18 +1316,22 @@ describe('createWebAudioPlaybackOutput ownership', () => {
     output.schedule({
       clipId: 'clip-1',
       buffer,
+      timelineStartTime: 0,
       when: 10,
       offset: 0,
       duration: 0.5,
       volume: 0.75,
+      envelope: null,
     })
     output.schedule({
       clipId: 'clip-2',
       buffer,
+      timelineStartTime: 0.5,
       when: 10.5,
       offset: 0,
       duration: 0.5,
       volume: 0.5,
+      envelope: null,
     })
 
     const master = h.gains[0]
@@ -1029,10 +1359,12 @@ describe('createWebAudioPlaybackOutput ownership', () => {
       output.schedule({
         clipId: 'clip',
         buffer: { duration: 1 } as AudioBuffer,
+        timelineStartTime: 0,
         when: 10,
         offset: 0,
         duration: 1,
         volume: 1,
+        envelope: null,
       })
 
       output.stop()
