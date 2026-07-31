@@ -76,11 +76,12 @@ and the open list below.
 | Post-MVP #18 — original Slice 8 export | ✅ done | typed source errors preserved; decode-once/frame-zero and real-source cleanup matrix; Chromium 60-frame AVC encode/reopen plus direct production Preview/output pixel parity and clean diagnostics |
 | **Post-MVP #18 — original Slice 9 acceptance/closeout** | ✅ complete | 693 focused + 1,385 total tests; 18-file hostile/orientation matrix; Chrome multi-import, edit, recovery/relink, layered crossfade, and export gate; Issue #18 closeout evidence complete |
 | **Post-MVP #17 — exact audio-aware crossfades** | ✅ complete | canonical grouped visual/audio plans, real per-stream handles, atomic accessible settings, exact live/export envelopes, 1,441 tests, and full-app Chromium transparent-layer/tone/export-reopen acceptance |
-| **Post-MVP #16 — capability-aware export profiles** | ✅ implementation complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; GitHub closeout pending merge |
+| **Post-MVP #16 — capability-aware export profiles** | ✅ complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; PR #29 normally merged and Issue #16 closed |
 
-Issue #16 is locally implementation-complete; its GitHub closeout waits for a
-normal merge. The production dialog reports Compatibility, Web, Modern, and
-HEVC as Available on this Windows Chrome 150 host, and Auto resolves visibly to
+Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
+checklist and validation evidence were recorded, and the issue was closed as
+completed. The production dialog reports Compatibility, Web, Modern, and HEVC
+as Available on this Windows Chrome 150 host, and Auto resolves visibly to
 Modern. All four profiles passed buffered and direct-file export/reopen/native
 playback at 320×180, 30000/1001 fps, 30 frames/1.001s, 48 kHz stereo, and
 48,048 presented samples. AAC mono, audio-off, constant bitrate with a 500 ms
@@ -1379,8 +1380,9 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #16 is locally implementation-complete at 1,632/1,632 tests across 86
-  files; its GitHub closeout waits for a normal merge. Auto resolves in the
+- Issue #16 completed at 1,632/1,632 tests across 86 files. PR #29 was reviewed
+  at `ea5ccfb`, normally merged as `edb02d0`, and the issue was closed with its
+  checklist and fallback no-go reconciled. Auto resolves in the
   documented Modern → Web → Compatibility order, HEVC remains explicit-only,
   and every concrete configuration is capability-probed without substitution.
   The Windows Chrome 150 gate passed all four profiles, both output
