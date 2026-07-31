@@ -32,18 +32,31 @@ import {
 } from './transportController'
 import type { TransportDeps } from './transportController'
 
-function makeClip(id: string, tlStart: number, duration: number): Clip {
+function makeClip(
+  id: string,
+  tlStart: number,
+  duration: number,
+  options: {
+    assetId?: string
+    sourceStart?: number
+    linkGroupId?: string
+  } = {},
+): Clip {
   return {
     id,
-    assetId: 'asset-1',
+    assetId: options.assetId ?? 'asset-1',
     name: id,
     sourceMode: 'timed',
-    sourceRange: { startFrame: 0, durationFrames: duration },
+    sourceRange: {
+      startFrame: options.sourceStart ?? 0,
+      durationFrames: duration,
+    },
     timelineRange: { startFrame: tlStart, durationFrames: duration },
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
     opacity: 1,
     volume: 1,
     effects: [],
+    ...(options.linkGroupId ? { linkGroupId: options.linkGroupId } : {}),
   }
 }
 
@@ -97,6 +110,47 @@ function makeAsset(id = 'asset-1'): MediaAsset {
     audioSampleRate: 48_000,
     audioChannels: 2,
     decoderConfigB64: null,
+  }
+}
+
+function makeCrossfadeAudibleDoc(): TimelineDoc {
+  const videoFrom = makeClip('video-from', 0, 60, {
+    assetId: 'video-from-asset',
+    sourceStart: 20,
+    linkGroupId: 'from-link',
+  })
+  const videoTo = makeClip('video-to', 60, 60, {
+    assetId: 'video-to-asset',
+    sourceStart: 40,
+    linkGroupId: 'to-link',
+  })
+  const audioFrom = makeClip('audio-from', 0, 60, {
+    assetId: 'audio-from-asset',
+    sourceStart: 20,
+    linkGroupId: 'from-link',
+  })
+  const audioTo = makeClip('audio-to', 60, 60, {
+    assetId: 'audio-to-asset',
+    sourceStart: 40,
+    linkGroupId: 'to-link',
+  })
+  const videoTrack = makeTrack('V1', [videoFrom, videoTo])
+  videoTrack.transitions = [{
+    id: 'crossfade',
+    type: 'crossfade',
+    fromClipId: videoFrom.id,
+    toClipId: videoTo.id,
+    durationFrames: 10,
+    audio: { enabled: true, curve: 'linear' },
+  }]
+  return {
+    ...makeDoc(),
+    schemaVersion: 3,
+    tracks: [
+      videoTrack,
+      makeTrack('A-from', [audioFrom], 'audio'),
+      makeTrack('A-to', [audioTo], 'audio'),
+    ],
   }
 }
 
@@ -594,6 +648,67 @@ describe('live audio integration', () => {
 
     expect(fake.startAudio).toHaveBeenCalledTimes(2)
     expect(second.stop).not.toHaveBeenCalled()
+  })
+
+  test('transition, link, and source-bound edits replace live crossfade audio generations', async () => {
+    const doc = makeCrossfadeAudibleDoc()
+    useDocumentStore.getState().setDoc(doc)
+    const ids = [
+      'video-from-asset',
+      'video-to-asset',
+      'audio-from-asset',
+      'audio-to-asset',
+    ]
+    const assets = new Map(ids.map((id) => [id, makeAsset(id)]))
+    const descriptors = new Map(
+      [...assets].map(([id, asset]) => [id, descriptorFrom(asset)]),
+    )
+    useMediaStore.setState({ assets, descriptors })
+
+    const first = makeAudioSession(0)
+    const second = makeAudioSession(0.1)
+    const third = makeAudioSession(0.2)
+    const fourth = makeAudioSession(0.3)
+    fake.startAudio
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second)
+      .mockResolvedValueOnce(third)
+      .mockResolvedValueOnce(fourth)
+
+    play()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+    expect(fake.startAudio.mock.calls[0][4].sourceBoundsCatalog?.size).toBe(4)
+
+    const curveChanged = structuredClone(doc)
+    curveChanged.tracks[0].transitions[0].audio.curve = 'equal-power'
+    useDocumentStore.getState().setDoc(curveChanged)
+    expect(first.stop).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+    const linkChanged = structuredClone(curveChanged)
+    delete linkChanged.tracks[1].clips[0].linkGroupId
+    useDocumentStore.getState().setDoc(linkChanged)
+    expect(second.stop).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledTimes(3))
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+    const nextDescriptors = new Map(descriptors)
+    const changed = structuredClone(nextDescriptors.get('audio-from-asset'))
+    if (!changed || changed.sourceBounds.audio?.status !== 'exact') {
+      throw new Error('Expected exact audio descriptor bounds')
+    }
+    changed.sourceBounds.audio.endTimestampUs -= 1
+    nextDescriptors.set(changed.id, changed)
+    useMediaStore.setState({ descriptors: nextDescriptors })
+    expect(third.stop).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledTimes(4))
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+
+    pause()
+    expect(fourth.stop).toHaveBeenCalledOnce()
+    expect(fake.pendingCount()).toBe(0)
   })
 
   test('audible asset replacement re-primes; unrelated media changes do not', async () => {

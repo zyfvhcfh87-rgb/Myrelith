@@ -1603,6 +1603,41 @@ gate stops progression; later checkboxes are never completed early.
   removal flows, found no clipping or blocking overlay, and recorded zero
   console warnings or errors.
 
+### Slice 5 evidence — shared audio planning and live playback (2026-07-31)
+
+- [x] `audioMixPlan.ts` now builds the browser-free audible contributor set
+  shared with the next export slice. Valid linked crossfades extend each
+  existing audio clip into genuine pre/post source handles without mutating the
+  document; disabled, invalid, unavailable, or conflicting audio plans retain
+  the historical ordinary hard cut.
+- [x] Envelopes carry absolute transition windows and use one pure bounded gain
+  evaluator. Linear legs schedule exact `AudioParam` start/end ramps;
+  equal-power legs schedule deterministic 129-point curves whose interpolation
+  error is directly bounded in tests. Clip volume and canonical mute/solo
+  selection are applied once.
+- [x] Rolling playback splits decoded buffers only at envelope boundaries and
+  keeps phase relative to the complete crossfade window. A late buffer advances
+  timeline phase with its trimmed source offset instead of restarting the fade.
+  Virtual legs retain independent cursors even for shared assets and preserve
+  the existing bounded lookahead and cleanup ownership.
+- [x] Playback fingerprints now include transition, link, curve, source-bound,
+  volume, mute, and solo facts. Durable descriptor changes and document edits
+  generation-safely abort/stop and re-prime from the current frame; pause,
+  scrub, step, media replacement, and project disposal keep the prior teardown
+  contract.
+- [x] Focused gate: 92/92 tests across the audio plan, crossfade planner,
+  playback scheduler/output, Mediabunny source, and transport controller.
+  Coverage includes odd/even virtual ranges, unavailable fallback, both curves,
+  volume/mute/solo, NTSC time mapping, late-buffer phase, fingerprint changes,
+  output-node cleanup, source reuse, and stale-generation suppression.
+- [x] Full gate: 1,432/1,432 tests across 77 files; production build passed
+  with only the pre-existing chunk-size advisory; oxlint and `git diff --check`
+  passed. In-app Chromium decoded distinct 440 Hz left and 880 Hz right WAV
+  tones through the production Mediabunny/Web Audio path from frame 45. Linear
+  and equal-power runs both reported non-zero analyser RMS and live nodes during
+  the exact crossfade; Stop reached zero RMS and zero nodes. Console warnings
+  and errors were both empty, and the temporary tone harness was removed.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

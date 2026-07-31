@@ -23,14 +23,25 @@ import {
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
+import {
+  createTimelineAudioMixPlan,
+  crossfadeAudioGain,
+  type TimelineAudioEnvelope,
+} from '../domain/audioMixPlan'
+import type {
+  CrossfadeLegRole,
+  SourceBoundsCatalog,
+} from '../domain/crossfadePlan'
 import { audibleTracks, docDurationFrames } from '../domain/selectors'
 import { framesToSeconds, rangeEnd } from '../domain/time'
 
 export const PLAYBACK_AUDIO_LOOKAHEAD_SECONDS = 0.75
 export const PLAYBACK_AUDIO_START_LEAD_SECONDS = 0.05
 export const PLAYBACK_AUDIO_PUMP_INTERVAL_MS = 100
+export const PLAYBACK_EQUAL_POWER_CURVE_POINTS = 129
 
 const TIME_EPSILON = 1e-7
+const EMPTY_SOURCE_BOUNDS: SourceBoundsCatalog = new Map()
 
 function runtimeFailureDetail(cause: unknown): string {
   const detail = cause instanceof Error ? cause.message : String(cause)
@@ -91,10 +102,19 @@ export interface PlaybackAudioMediaSource {
 export interface ScheduledPlaybackAudio {
   clipId: ClipId
   buffer: AudioBuffer
+  timelineStartTime: number
   when: number
   offset: number
   duration: number
   volume: number
+  envelope: PlaybackAudioEnvelope | null
+}
+
+export interface PlaybackAudioEnvelope {
+  startTime: number
+  endTime: number
+  role: CrossfadeLegRole
+  curve: TimelineAudioEnvelope['curve']
 }
 
 export interface PlaybackAudioOutputDiagnostics {
@@ -153,6 +173,7 @@ export type TimelineAudioPlaybackWarning =
 export interface StartTimelineAudioOptions {
   signal?: AbortSignal
   onWarning?: (warning: TimelineAudioPlaybackWarning) => void
+  sourceBoundsCatalog?: SourceBoundsCatalog
 }
 
 interface AudioClipPlan {
@@ -166,6 +187,7 @@ interface AudioClipPlan {
   sourceStartTime: number
   sourceEndTime: number
   volume: number
+  envelopes: PlaybackAudioEnvelope[]
 }
 
 interface ClipCursorState {
@@ -177,6 +199,55 @@ interface ClipCursorState {
 
 interface PreparedAudioEvent extends ScheduledPlaybackAudio {
   timelineStartTime: number
+}
+
+function preparedEventsForOverlap(
+  plan: AudioClipPlan,
+  wrapped: PlaybackAudioBuffer,
+  bufferStart: number,
+  overlapStart: number,
+  overlapEnd: number,
+): PreparedAudioEvent[] {
+  const timelineStart =
+    plan.timelineStartTime + (overlapStart - plan.sourceStartTime)
+  const timelineEnd = timelineStart + (overlapEnd - overlapStart)
+  const boundaries = new Set([timelineStart, timelineEnd])
+  for (const envelope of plan.envelopes) {
+    if (
+      envelope.startTime > timelineStart + TIME_EPSILON
+      && envelope.startTime < timelineEnd - TIME_EPSILON
+    ) boundaries.add(envelope.startTime)
+    if (
+      envelope.endTime > timelineStart + TIME_EPSILON
+      && envelope.endTime < timelineEnd - TIME_EPSILON
+    ) boundaries.add(envelope.endTime)
+  }
+  const ordered = [...boundaries].sort((left, right) => left - right)
+  const events: PreparedAudioEvent[] = []
+  for (let index = 0; index < ordered.length - 1; index++) {
+    const segmentStart = ordered[index]
+    const segmentEnd = ordered[index + 1]
+    const duration = segmentEnd - segmentStart
+    if (duration <= TIME_EPSILON) continue
+    const midpoint = segmentStart + duration / 2
+    const envelope = plan.envelopes.find((candidate) =>
+      midpoint >= candidate.startTime
+      && midpoint < candidate.endTime,
+    ) ?? null
+    const sourceSegmentStart =
+      overlapStart + (segmentStart - timelineStart)
+    events.push({
+      clipId: plan.clipId,
+      buffer: wrapped.buffer,
+      timelineStartTime: segmentStart,
+      when: 0,
+      offset: sourceSegmentStart - bufferStart,
+      duration,
+      volume: plan.volume,
+      envelope,
+    })
+  }
+  return events
 }
 
 function assertFiniteTime(value: number, label: string): void {
@@ -205,61 +276,73 @@ function assertClipRange(clip: Clip): void {
   }
 }
 
-function buildAudioClipPlans(doc: TimelineDoc): AudioClipPlan[] {
-  const plans: AudioClipPlan[] = []
+function buildAudioClipPlans(
+  doc: TimelineDoc,
+  catalog: SourceBoundsCatalog = EMPTY_SOURCE_BOUNDS,
+): AudioClipPlan[] {
   for (const track of audibleTracks(doc)) {
-    for (const clip of track.clips) {
-      assertClipRange(clip)
-      if (clip.volume <= 0) continue
-
-      const timelineEndFrame = rangeEnd(clip.timelineRange)
-      const sourceEndFrame = rangeEnd(clip.sourceRange)
-      plans.push({
-        clipId: clip.id,
-        assetId: clip.assetId,
-        timelineStartFrame: clip.timelineRange.startFrame,
-        timelineEndFrame,
-        sourceStartFrame: clip.sourceRange.startFrame,
-        timelineStartTime: framesToSeconds(
-          clip.timelineRange.startFrame,
-          doc.frameRate,
-        ),
-        timelineEndTime: framesToSeconds(timelineEndFrame, doc.frameRate),
-        sourceStartTime: framesToSeconds(
-          clip.sourceRange.startFrame,
-          doc.frameRate,
-        ),
-        sourceEndTime: framesToSeconds(sourceEndFrame, doc.frameRate),
-        volume: clip.volume,
-      })
-    }
+    for (const clip of track.clips) assertClipRange(clip)
   }
-  return plans.sort((left, right) =>
-    left.timelineStartFrame - right.timelineStartFrame
-    || left.clipId.localeCompare(right.clipId),
-  )
+  return createTimelineAudioMixPlan(doc, catalog).clips.map((plan) => ({
+    clipId: plan.clipId,
+    assetId: plan.assetId,
+    timelineStartFrame: plan.timelineStartFrame,
+    timelineEndFrame: plan.timelineEndFrame,
+    sourceStartFrame: plan.sourceStartFrame,
+    timelineStartTime: framesToSeconds(plan.timelineStartFrame, doc.frameRate),
+    timelineEndTime: framesToSeconds(plan.timelineEndFrame, doc.frameRate),
+    sourceStartTime: framesToSeconds(plan.sourceStartFrame, doc.frameRate),
+    sourceEndTime: framesToSeconds(plan.sourceEndFrame, doc.frameRate),
+    volume: plan.volume,
+    envelopes: plan.envelopes.map((envelope) => ({
+      startTime: framesToSeconds(envelope.startFrame, doc.frameRate),
+      endTime: framesToSeconds(envelope.endFrame, doc.frameRate),
+      role: envelope.role,
+      curve: envelope.curve,
+    })),
+  }))
 }
 
 /** Stable fingerprint for changes that require a live audio re-prime. */
-export function audioPlaybackPlanKey(doc: TimelineDoc): string {
+export function audioPlaybackPlanKey(
+  doc: TimelineDoc,
+  catalog: SourceBoundsCatalog = EMPTY_SOURCE_BOUNDS,
+): string {
+  const assetIds = [...new Set(
+    doc.tracks.flatMap((track) => track.clips.map((clip) => clip.assetId)),
+  )].sort()
   return JSON.stringify({
     rate: doc.frameRate,
     sampleRate: doc.audioSampleRate,
     durationFrames: docDurationFrames(doc),
     tracks: doc.tracks
-      .filter((track) => track.kind === 'audio')
+      .filter((track) => track.kind === 'audio' || track.transitions.length > 0)
       .map((track) => ({
         id: track.id,
+        kind: track.kind,
         muted: track.muted,
         solo: track.solo,
         clips: track.clips.map((clip) => ({
           id: clip.id,
           assetId: clip.assetId,
+          sourceMode: clip.sourceMode,
           sourceRange: clip.sourceRange,
           timelineRange: clip.timelineRange,
           volume: clip.volume,
+          linkGroupId: clip.linkGroupId ?? null,
+        })),
+        transitions: track.transitions.map((transition) => ({
+          id: transition.id,
+          fromClipId: transition.fromClipId,
+          toClipId: transition.toClipId,
+          durationFrames: transition.durationFrames,
+          audio: transition.audio,
         })),
       })),
+    sourceBounds: assetIds.map((assetId) => [
+      assetId,
+      catalog.get(assetId) ?? null,
+    ]),
   })
 }
 
@@ -267,11 +350,12 @@ export function audioPlaybackPlanKey(doc: TimelineDoc): string {
 export function audioPlaybackAssetIds(
   doc: TimelineDoc,
   fromFrame = 0,
+  catalog: SourceBoundsCatalog = EMPTY_SOURCE_BOUNDS,
 ): AssetId[] {
   if (!Number.isSafeInteger(fromFrame) || fromFrame < 0) return []
   return [
     ...new Set(
-      buildAudioClipPlans(doc)
+      buildAudioClipPlans(doc, catalog)
         .filter((plan) => plan.timelineEndFrame > fromFrame)
         .map((plan) => plan.assetId),
     ),
@@ -281,9 +365,10 @@ export function audioPlaybackAssetIds(
 export function hasAudioPlaybackContent(
   doc: TimelineDoc,
   fromFrame: number,
+  catalog: SourceBoundsCatalog = EMPTY_SOURCE_BOUNDS,
 ): boolean {
   if (!Number.isSafeInteger(fromFrame) || fromFrame < 0) return false
-  return buildAudioClipPlans(doc).some(
+  return buildAudioClipPlans(doc, catalog).some(
     (plan) => plan.timelineEndFrame > fromFrame,
   )
 }
@@ -530,6 +615,74 @@ interface ActiveOutputNode {
   gain: GainNode
 }
 
+/** Bounded deterministic curve for one equal-power event segment. */
+export function createEqualPowerPlaybackCurve(
+  role: CrossfadeLegRole,
+  startProgress: number,
+  endProgress: number,
+  volume: number,
+): Float32Array {
+  if (
+    !Number.isFinite(startProgress)
+    || !Number.isFinite(endProgress)
+    || !Number.isFinite(volume)
+    || volume < 0
+    || volume > 2
+  ) {
+    throw new RangeError('Equal-power playback curve inputs are invalid')
+  }
+  const values = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+  const span = endProgress - startProgress
+  for (let index = 0; index < values.length; index++) {
+    const progress = startProgress + span * index / (values.length - 1)
+    values[index] = crossfadeAudioGain('equal-power', role, progress) * volume
+  }
+  return values
+}
+
+function scheduleNodeGain(
+  gain: AudioParam,
+  request: ScheduledPlaybackAudio,
+): void {
+  const envelope = request.envelope
+  if (!envelope) {
+    gain.value = request.volume
+    return
+  }
+  const envelopeDuration = envelope.endTime - envelope.startTime
+  if (!Number.isFinite(envelopeDuration) || envelopeDuration <= 0) {
+    throw new RangeError('Playback audio envelope has an invalid duration')
+  }
+  const startProgress =
+    (request.timelineStartTime - envelope.startTime) / envelopeDuration
+  const endProgress =
+    (request.timelineStartTime + request.duration - envelope.startTime)
+    / envelopeDuration
+  if (envelope.curve === 'linear') {
+    gain.setValueAtTime(
+      crossfadeAudioGain('linear', envelope.role, startProgress)
+        * request.volume,
+      request.when,
+    )
+    gain.linearRampToValueAtTime(
+      crossfadeAudioGain('linear', envelope.role, endProgress)
+        * request.volume,
+      request.when + request.duration,
+    )
+    return
+  }
+  gain.setValueCurveAtTime(
+    createEqualPowerPlaybackCurve(
+      envelope.role,
+      startProgress,
+      endProgress,
+      request.volume,
+    ),
+    request.when,
+    request.duration,
+  )
+}
+
 /** The only module that turns decoded buffers into an audible Web Audio graph. */
 export function createWebAudioPlaybackOutput(
   context: AudioContext,
@@ -573,7 +726,7 @@ export function createWebAudioPlaybackOutput(
     const source = context.createBufferSource()
     const gain = context.createGain()
     source.buffer = request.buffer
-    gain.gain.value = request.volume
+    scheduleNodeGain(gain.gain, request)
     source.connect(gain)
     gain.connect(master)
 
@@ -714,7 +867,10 @@ export async function startTimelineAudioPlayback(
     throw new RangeError('Audio playback start frame is outside the timeline')
   }
 
-  const plans = buildAudioClipPlans(doc).filter(
+  const plans = buildAudioClipPlans(
+    doc,
+    options.sourceBoundsCatalog ?? EMPTY_SOURCE_BOUNDS,
+  ).filter(
     (plan) => plan.timelineEndFrame > fromFrame,
   )
   const fromTime = framesToSeconds(fromFrame, doc.frameRate)
@@ -885,16 +1041,13 @@ export async function startTimelineAudioPlayback(
       const overlapStart = Math.max(sourceStart, bufferStart)
       const overlapEnd = Math.min(sourceEnd, bufferEnd)
       if (overlapEnd > overlapStart + TIME_EPSILON) {
-        events.push({
-          clipId: plan.clipId,
-          buffer: wrapped.buffer,
-          timelineStartTime:
-            plan.timelineStartTime + (overlapStart - plan.sourceStartTime),
-          when: 0,
-          offset: overlapStart - bufferStart,
-          duration: overlapEnd - overlapStart,
-          volume: plan.volume,
-        })
+        events.push(...preparedEventsForOverlap(
+          plan,
+          wrapped,
+          bufferStart,
+          overlapStart,
+          overlapEnd,
+        ))
       }
 
       if (bufferEnd <= sourceEnd + TIME_EPSILON) {
@@ -939,12 +1092,14 @@ export async function startTimelineAudioPlayback(
     for (const event of events) {
       if (stopped) return
       let when = anchorTime + (event.timelineStartTime - fromTime)
+      let timelineStartTime = event.timelineStartTime
       let offset = event.offset
       let duration = event.duration
       const now = output.currentTime()
       if (when < now) {
         const lateness = now - when
         when = now
+        timelineStartTime += lateness
         offset += lateness
         duration -= lateness
       }
@@ -952,7 +1107,13 @@ export async function startTimelineAudioPlayback(
       if (duration <= TIME_EPSILON) continue
 
       try {
-        output.schedule({ ...event, when, offset, duration })
+        output.schedule({
+          ...event,
+          timelineStartTime,
+          when,
+          offset,
+          duration,
+        })
       } catch (cause) {
         warnGlobal('output-schedule', cause)
       }

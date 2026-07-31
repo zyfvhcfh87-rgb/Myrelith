@@ -20,6 +20,10 @@
 
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
+import {
+  createSourceBoundsCatalog,
+  type SourceBoundsCatalog,
+} from '../domain/crossfadePlan'
 import { docDurationFrames } from '../domain/selectors'
 import { PlaybackEngine } from '../engine/playback-engine'
 import type { PlaybackClock } from '../engine/playback-engine'
@@ -152,9 +156,10 @@ function captureAudioRuntimeGuards(
   doc: TimelineDoc,
   fromFrame: number,
   assets: ReadonlyMap<AssetId, MediaAsset>,
+  catalog: SourceBoundsCatalog,
 ): Map<AssetId, MediaRuntimeGuard> {
   const guards = new Map<AssetId, MediaRuntimeGuard>()
-  for (const assetId of audioPlaybackAssetIds(doc, fromFrame)) {
+  for (const assetId of audioPlaybackAssetIds(doc, fromFrame, catalog)) {
     const asset = assets.get(assetId)
     const guard = captureMediaRuntimeGuard(assetId)
     if (asset && guard?.objectUrl === asset.objectUrl) {
@@ -168,10 +173,17 @@ function audioAssetsKey(
   doc: TimelineDoc,
   fromFrame: number,
   assets: ReadonlyMap<AssetId, MediaAsset>,
+  catalog: SourceBoundsCatalog,
 ): string {
-  return audioPlaybackAssetIds(doc, fromFrame)
+  return audioPlaybackAssetIds(doc, fromFrame, catalog)
     .map((id) => `${id}:${assets.get(id)?.objectUrl ?? '<missing>'}`)
     .join('|')
+}
+
+function currentSourceBoundsCatalog(): SourceBoundsCatalog {
+  return createSourceBoundsCatalog(
+    useMediaStore.getState().descriptors.values(),
+  )
 }
 
 /** Resolve from the immutable media snapshot; the live source owns caching. */
@@ -270,19 +282,22 @@ function ensureEngine(): PlaybackEngine {
       if (
         s.doc !== prev.doc
         && useTransportStore.getState().isPlaying
-        && audioPlaybackPlanKey(s.doc) !== state.audioPlanKey
+        && audioPlaybackPlanKey(s.doc, currentSourceBoundsCatalog())
+          !== state.audioPlanKey
       ) {
         restartPlayback()
       }
     }),
     useMediaStore.subscribe((s, prev) => {
       if (
-        s.assets !== prev.assets
+        (s.assets !== prev.assets || s.descriptors !== prev.descriptors)
         && useTransportStore.getState().isPlaying
       ) {
         const doc = useDocumentStore.getState().doc
+        const catalog = createSourceBoundsCatalog(s.descriptors.values())
         if (
-          audioAssetsKey(doc, 0, s.assets)
+          audioPlaybackPlanKey(doc, catalog) !== state.audioPlanKey
+          || audioAssetsKey(doc, 0, s.assets, catalog)
           !== state.audioAssetsKey
         ) {
           restartPlayback()
@@ -329,13 +344,15 @@ function startPlayback(fromFrame: number): void {
   const generation = ++state.playGeneration
   const abort = new AbortController()
   state.startupAbort = abort
-  const assets = new Map(useMediaStore.getState().assets)
-  const runtimeGuards = captureAudioRuntimeGuards(doc, from, assets)
-  state.audioPlanKey = audioPlaybackPlanKey(doc)
+  const media = useMediaStore.getState()
+  const assets = new Map(media.assets)
+  const catalog = createSourceBoundsCatalog(media.descriptors.values())
+  const runtimeGuards = captureAudioRuntimeGuards(doc, from, assets, catalog)
+  state.audioPlanKey = audioPlaybackPlanKey(doc, catalog)
   // Keep the media fingerprint stable as the playhead advances; otherwise an
   // unrelated media-pool edit after an early clip ends would look like a
   // playback-asset removal and cause an unnecessary restart.
-  state.audioAssetsKey = audioAssetsKey(doc, 0, assets)
+  state.audioAssetsKey = audioAssetsKey(doc, 0, assets, catalog)
 
   let resumePromise: Promise<unknown>
   try {
@@ -355,7 +372,7 @@ function startPlayback(fromFrame: number): void {
     useTransportStore.getState().setIsPlaying(false)
   })
 
-  if (!hasAudioPlaybackContent(doc, from)) {
+  if (!hasAudioPlaybackContent(doc, from, catalog)) {
     state.startupAbort = null
     engine.start(from, durationFrames, doc.frameRate, context.currentTime)
     return
@@ -370,6 +387,7 @@ function startPlayback(fromFrame: number): void {
       resolveAsset,
       {
         signal: abort.signal,
+        sourceBoundsCatalog: catalog,
         onWarning: (warning) => {
           warnAudio(audioWarningMessage(warning), warning.cause)
           if (warning.scope !== 'media') return
