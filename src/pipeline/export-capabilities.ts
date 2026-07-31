@@ -7,6 +7,7 @@
  */
 
 import {
+  exportProfileIncludesAudio,
   validateExportProfile,
   type ExportAudioCodec,
   type ExportBitrateMode,
@@ -16,6 +17,8 @@ import {
 } from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
 import { framesToSeconds } from '../domain/time'
+
+export { exportProfileIncludesAudio } from '../domain/exportProfile'
 
 export interface ExportFormatCapabilities {
   /** Mediabunny format extensions include their leading dot. */
@@ -104,16 +107,6 @@ function assertCapabilityDocument(doc: TimelineDoc): void {
     )
   }
   framesToSeconds(1, doc.frameRate)
-}
-
-/** Whether this exact document/profile combination would create an audio track. */
-export function exportProfileIncludesAudio(
-  doc: TimelineDoc,
-  profile: ExportProfile,
-): boolean {
-  return profile.audioChannelLayout !== 'off' && doc.tracks.some(
-    (track) => track.kind === 'audio' && track.clips.length > 0,
-  )
 }
 
 export function exportAudioChannelCount(

@@ -1,10 +1,9 @@
 /**
  * ui/ExportDialog.tsx — Phase 5.2b export settings/progress/download flow.
  *
- * The UI shows the one profile the pipeline really supports today: current
- * timeline dimensions, MP4/AVC, and the MVP bitrate. All codec/media work goes
- * through app/exportController; this component owns only short-lived view
- * state, rAF-coalesced progress, and its finished download object URL.
+ * Preset hints and custom-profile checks stay behind the app capability
+ * facade. The pre-start export controller remains authoritative; this
+ * component owns only view state, progress, and download URL lifetime.
  */
 
 import {
@@ -14,17 +13,71 @@ import {
   useRef,
   useState,
 } from 'react'
-import { DEFAULT_EXPORT_PROFILE } from '../domain/exportProfile'
+import {
+  DEFAULT_EXPORT_PROFILE,
+  EXPORT_PRESETS,
+  type ExportProfile,
+  type ExportSelectionId,
+} from '../domain/exportProfile'
+import type { TimelineDoc } from '../domain/schema'
 import { docDurationFrames, outputMediaAssetIds } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { usePreferencesStore } from '../state/preferencesStore'
+import ExportProfilePicker, {
+  type ExportPresetAvailability,
+} from './ExportProfilePicker'
+import {
+  estimateExportBytes,
+  exportFileName,
+  exportProfileSummary,
+  formatEstimatedFileSize,
+  profileForSelectionFallback,
+  type ExportUiSelectionId,
+} from './exportProfileUi'
 
 type ExportControllerModule = typeof import('../app/exportController')
 type ExportSettings = Parameters<ExportControllerModule['startExport']>[0]
+type ExportCapabilitiesModule =
+  typeof import('../app/exportCapabilitiesController')
+type ExportCapabilitySnapshot = Awaited<ReturnType<
+  ExportCapabilitiesModule['getExportPresetCapabilities']
+>>
+type ExportCapabilityResult = Awaited<ReturnType<
+  ExportCapabilitiesModule['checkCurrentExportProfile']
+>>
 
-const MVP_EXPORT_SETTINGS: ExportSettings = DEFAULT_EXPORT_PROFILE
+type PresetCapabilityState =
+  | {
+      readonly status: 'loading'
+      readonly doc: TimelineDoc
+    }
+  | {
+      readonly status: 'ready'
+      readonly doc: TimelineDoc
+      readonly snapshot: Readonly<ExportCapabilitySnapshot>
+    }
+  | {
+      readonly status: 'error'
+      readonly doc: TimelineDoc
+      readonly error: string
+    }
+
+type CustomCapabilityState =
+  | {
+      readonly status: 'loading'
+      readonly doc: TimelineDoc
+      readonly profile: Readonly<ExportProfile>
+    }
+  | {
+      readonly status: 'ready'
+      readonly doc: TimelineDoc
+      readonly profile: Readonly<ExportProfile>
+      readonly result: Readonly<ExportCapabilityResult>
+    }
 
 let controllerPromise: Promise<ExportControllerModule> | null = null
+let capabilitiesPromise: Promise<ExportCapabilitiesModule> | null = null
 
 /** Export codecs/adapters stay out of the initial editor bundle. */
 function loadExportController(): Promise<ExportControllerModule> {
@@ -33,6 +86,16 @@ function loadExportController(): Promise<ExportControllerModule> {
     throw cause
   })
   return controllerPromise
+}
+
+/** Capability code is also excluded from the initial editor bundle. */
+function loadExportCapabilities(): Promise<ExportCapabilitiesModule> {
+  capabilitiesPromise ??= import('../app/exportCapabilitiesController')
+    .catch((cause) => {
+      capabilitiesPromise = null
+      throw cause
+    })
+  return capabilitiesPromise
 }
 
 type ExportPhase =
@@ -45,6 +108,8 @@ type ExportPhase =
 interface DownloadReady {
   url: string
   fileName: string
+  formatLabel: string
+  linkLabel: string
 }
 
 interface ExportDialogProps {
@@ -58,40 +123,24 @@ function errorMessage(cause: unknown): string {
   return 'Export failed. Please try again.'
 }
 
-function exportFileName(projectName: string): string {
-  let base = projectName.trim().replace(/[. ]+$/g, '').replace(/\.mp4$/i, '')
-  base = base.replace(/[<>:"/\\|?*]/g, '-')
-  base = Array.from(base, (character) =>
-    character.charCodeAt(0) < 32 ? '-' : character,
-  ).join('')
-  base = Array.from(base).slice(0, 80).join('').replace(/[. ]+$/g, '')
-  if (
-    /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
-      .test(base)
-  ) {
-    base = `webcut-${base}`
-  }
-  return `${base || 'webcut-export'}.mp4`
-}
-
 export default function ExportDialog({ onClose }: ExportDialogProps) {
   const doc = useDocumentStore((state) => state.doc)
   const hasContent = docDurationFrames(doc) > 0
-  const offlineExportMessage = useMediaStore((state) => {
-    const offline = [...outputMediaAssetIds(doc)].filter(
-      (assetId) => !state.assets.has(assetId),
-    )
-    if (offline.length === 0) return null
-    const names = offline.map(
-      (assetId) => state.descriptors.get(assetId)?.fileName ?? assetId,
-    )
-    return `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`
-  })
+  const mediaAssets = useMediaStore((state) => state.assets)
+  const mediaDescriptors = useMediaStore((state) => state.descriptors)
+  const setExportSelectionPreference = usePreferencesStore(
+    (state) => state.setExportSelection,
+  )
+  const [initialPreference] = useState(
+    () => usePreferencesStore.getState().exportSelection,
+  )
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const selectedProfileRef = useRef<HTMLInputElement | null>(null)
   const startButtonRef = useRef<HTMLButtonElement | null>(null)
   const cancelButtonRef = useRef<HTMLButtonElement | null>(null)
   const phaseStatusRef = useRef<HTMLSpanElement | null>(null)
+  const capabilityStatusRef = useRef<HTMLDivElement | null>(null)
   const downloadLinkRef = useRef<HTMLAnchorElement | null>(null)
   const backButtonRef = useRef<HTMLButtonElement | null>(null)
   const mountedRef = useRef(false)
@@ -102,10 +151,27 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   const progressFrameRef = useRef<number | null>(null)
   const latestProgressRef = useRef(0)
   const downloadUrlRef = useRef<string | null>(null)
+  const capabilityTokenRef = useRef(0)
+  const customCapabilityTokenRef = useRef(0)
+  const previousSelectedSupportedRef = useRef<boolean | null>(null)
   const [phase, setPhase] = useState<ExportPhase>('configure')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [download, setDownload] = useState<DownloadReady | null>(null)
+  const [selectionId, setSelectionId] = useState<ExportUiSelectionId>(
+    initialPreference.selectionId,
+  )
+  const [customProfile, setCustomProfile] = useState<Readonly<ExportProfile>>(
+    initialPreference.profile ?? DEFAULT_EXPORT_PROFILE,
+  )
+  const [presetCapabilityState, setPresetCapabilityState] =
+    useState<Readonly<PresetCapabilityState>>(() => ({
+      status: 'loading',
+      doc,
+    }))
+  const [customCapabilityState, setCustomCapabilityState] =
+    useState<Readonly<CustomCapabilityState> | null>(null)
+  const [advancedDraftsValid, setAdvancedDraftsValid] = useState(true)
   const titleId = useId()
   const descriptionId = useId()
   const progressId = useId()
@@ -155,6 +221,147 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       .catch(() => undefined)
   }, [])
 
+  const refreshCapabilities = useCallback((requestDoc: TimelineDoc): void => {
+    const token = ++capabilityTokenRef.current
+    setPresetCapabilityState({ status: 'loading', doc: requestDoc })
+    void loadExportCapabilities()
+      .then(async (controller) => {
+        return controller.getExportPresetCapabilities()
+      })
+      .then((snapshot) => {
+        if (!mountedRef.current || token !== capabilityTokenRef.current) return
+        setPresetCapabilityState({
+          status: 'ready',
+          doc: requestDoc,
+          snapshot,
+        })
+      })
+      .catch((cause) => {
+        if (!mountedRef.current || token !== capabilityTokenRef.current) return
+        setPresetCapabilityState({
+          status: 'error',
+          doc: requestDoc,
+          error: errorMessage(cause),
+        })
+      })
+  }, [])
+
+  const selectRecommendedProfile = useCallback((
+    nextSelectionId: ExportSelectionId,
+  ): void => {
+    setSelectionId(nextSelectionId)
+    setAdvancedDraftsValid(true)
+    setError(null)
+  }, [])
+
+  const selectCustomProfile = useCallback((
+    profile: Readonly<ExportProfile>,
+  ): void => {
+    setCustomCapabilityState(null)
+    setCustomProfile(profile)
+    setSelectionId('custom')
+    setError(null)
+  }, [])
+
+  const currentPresetCapability = presetCapabilityState.doc === doc
+    ? presetCapabilityState
+    : null
+  const capabilitySnapshot = currentPresetCapability?.status === 'ready'
+    ? currentPresetCapability.snapshot
+    : null
+  const capabilityError = currentPresetCapability?.status === 'error'
+    ? currentPresetCapability.error
+    : null
+  const capabilityLoading = currentPresetCapability === null
+    || currentPresetCapability.status === 'loading'
+  const customCapability = customCapabilityState?.status === 'ready'
+    && customCapabilityState.doc === doc
+    && customCapabilityState.profile === customProfile
+    ? customCapabilityState.result
+    : null
+
+  let displayProfile = profileForSelectionFallback(selectionId, customProfile)
+  let activeProfile: Readonly<ExportProfile> | null = null
+  let selectedSupported: boolean | null = capabilityLoading ? null : false
+  let selectedReason: string | null = capabilityError
+
+  if (selectionId === 'custom') {
+    displayProfile = customProfile
+    if (customCapability) {
+      selectedSupported = customCapability.supported
+      selectedReason = customCapability.reason
+      activeProfile = customCapability.supported ? customCapability.profile : null
+    } else {
+      selectedSupported = null
+      selectedReason = null
+    }
+  } else if (capabilitySnapshot) {
+    const presetId = selectionId === 'auto'
+      ? capabilitySnapshot.autoPresetId
+      : selectionId
+    if (presetId === null) {
+      selectedSupported = false
+      selectedReason = 'No export profile supports this project in this browser.'
+    } else {
+      const result = capabilitySnapshot.presets.find(
+        (candidate) => candidate.presetId === presetId,
+      )
+      if (!result) {
+        selectedSupported = false
+        selectedReason = `Capability results are missing ${presetId}.`
+      } else {
+        displayProfile = result.profile
+        selectedSupported = result.supported
+        selectedReason = result.reason
+        activeProfile = result.supported ? result.profile : null
+      }
+    }
+  }
+
+  const presetAvailability: readonly Readonly<ExportPresetAvailability>[] = [
+    {
+      selectionId: 'auto',
+      supported: capabilitySnapshot
+        ? capabilitySnapshot.autoPresetId !== null
+        : capabilityError ? false : null,
+      reason: capabilitySnapshot?.autoPresetId === null
+        ? 'No documented profile is supported on this browser.'
+        : capabilityError,
+      autoPresetId: capabilitySnapshot?.autoPresetId,
+    },
+    ...EXPORT_PRESETS.map((preset) => {
+      const result = capabilitySnapshot?.presets.find(
+        (candidate) => candidate.presetId === preset.id,
+      )
+      return {
+        selectionId: preset.id,
+        supported: result?.supported ?? (capabilityError ? false : null),
+        reason: result?.reason ?? capabilityError,
+      }
+    }),
+  ]
+
+  const offline = [...outputMediaAssetIds(
+    doc,
+    displayProfile.audioChannelLayout !== 'off',
+  )].filter((assetId) => !mediaAssets.has(assetId))
+  const offlineExportMessage = offline.length === 0
+    ? null
+    : `Reconnect ${offline.length} offline source${
+        offline.length === 1 ? '' : 's'
+      } before exporting: ${offline.map(
+        (assetId) => mediaDescriptors.get(assetId)?.fileName ?? assetId,
+      ).join(', ')}.`
+
+  const canStart = hasContent
+    && offlineExportMessage === null
+    && selectedSupported === true
+    && activeProfile !== null
+    && advancedDraftsValid
+  const estimatedSize = formatEstimatedFileSize(
+    estimateExportBytes(doc, displayProfile),
+  )
+
   const resetToConfigure = (): void => {
     invalidateRun()
     cancelProgressFrame()
@@ -195,11 +402,11 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   }
 
   const beginExport = async (): Promise<void> => {
-    if (runningRef.current || !hasContent || offlineExportMessage) return
+    const exportSettings: ExportSettings | null = activeProfile
+    if (runningRef.current || !canStart || exportSettings === null) return
     runningRef.current = true
     cancelRequestedRef.current = false
     const token = ++runTokenRef.current
-    const fileName = exportFileName(doc.name)
     cancelProgressFrame()
     revokeDownload()
     setDownload(null)
@@ -223,7 +430,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       }
 
       controllerRunStartedRef.current = true
-      const result = await controller.startExport(MVP_EXPORT_SETTINGS, {
+      const result = await controller.startExport(exportSettings, {
         onProgress: (value) => publishProgress(token, value),
       })
       controllerRunStartedRef.current = false
@@ -243,7 +450,13 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
         new Blob([result.buffer], { type: result.mimeType }),
       )
       downloadUrlRef.current = url
-      setDownload({ url, fileName })
+      const formatLabel = result.profile.container === 'webm' ? 'WebM' : 'MP4'
+      setDownload({
+        url,
+        fileName: exportFileName(doc.name, result.fileExtension),
+        formatLabel,
+        linkLabel: `Download ${formatLabel}`,
+      })
       setPhase('download')
     } catch (cause) {
       if (!mountedRef.current || token !== runTokenRef.current) return
@@ -278,9 +491,13 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   }, [])
 
   useEffect(() => {
+    const capabilityToken = capabilityTokenRef
+    const customCapabilityToken = customCapabilityTokenRef
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      capabilityToken.current++
+      customCapabilityToken.current++
       invalidateRun()
       cancelProgressFrame()
       revokeDownload()
@@ -294,11 +511,75 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   ])
 
   useEffect(() => {
+    refreshCapabilities(doc)
+  }, [doc, refreshCapabilities])
+
+  useEffect(() => {
+    if (selectionId !== 'custom') {
+      customCapabilityTokenRef.current++
+      setCustomCapabilityState(null)
+      return
+    }
+    const token = ++customCapabilityTokenRef.current
+    const requestDoc = doc
+    const requestProfile = customProfile
+    setCustomCapabilityState({
+      status: 'loading',
+      doc: requestDoc,
+      profile: requestProfile,
+    })
+    void loadExportCapabilities()
+      .then(async (controller) => {
+        return controller.checkCurrentExportProfile(requestProfile)
+      })
+      .then((result) => {
+        if (
+          !mountedRef.current
+          || token !== customCapabilityTokenRef.current
+        ) return
+        setCustomCapabilityState({
+          status: 'ready',
+          doc: requestDoc,
+          profile: requestProfile,
+          result,
+        })
+      })
+      .catch((cause) => {
+        if (
+          !mountedRef.current
+          || token !== customCapabilityTokenRef.current
+        ) return
+        setCustomCapabilityState({
+          status: 'ready',
+          doc: requestDoc,
+          profile: requestProfile,
+          result: {
+            profile: requestProfile,
+            supported: false,
+            reason: errorMessage(cause),
+          },
+        })
+      })
+  }, [customProfile, doc, selectionId])
+
+  useEffect(() => {
+    if (selectedSupported !== true || activeProfile === null) return
+    setExportSelectionPreference({
+      selectionId,
+      profile: selectionId === 'custom' ? activeProfile : null,
+    })
+  }, [
+    activeProfile,
+    selectedSupported,
+    selectionId,
+    setExportSelectionPreference,
+  ])
+
+  useEffect(() => {
     const focusFrame = requestAnimationFrame(() => {
       switch (phase) {
         case 'configure':
-          if (hasContent) startButtonRef.current?.focus()
-          else closeButtonRef.current?.focus()
+          selectedProfileRef.current?.focus()
           break
         case 'running':
           cancelButtonRef.current?.focus()
@@ -315,7 +596,24 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       }
     })
     return () => cancelAnimationFrame(focusFrame)
-  }, [hasContent, phase])
+  }, [phase])
+
+  useEffect(() => {
+    const previous = previousSelectedSupportedRef.current
+    previousSelectedSupportedRef.current = selectedSupported
+    if (
+      phase !== 'configure'
+      || selectedSupported !== false
+      || previous === false
+    ) return
+    const focusFrame = requestAnimationFrame(() => {
+      const active = document.activeElement
+      if (active === selectedProfileRef.current || active === document.body) {
+        capabilityStatusRef.current?.focus()
+      }
+    })
+    return () => cancelAnimationFrame(focusFrame)
+  }, [phase, selectedSupported])
 
   const busy = phase === 'running' || phase === 'cancelling'
   const percent = Math.round(progress * 100)
@@ -370,20 +668,83 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
               </dd>
             </div>
             <div className="export-profile-row">
-              <dt>Format</dt>
+              <dt>Selected output</dt>
               <dd>
-                <strong>MP4 · H.264/AVC</strong>
-                <span>Format (fixed)</span>
+                <strong>{exportProfileSummary(displayProfile)}</strong>
+                <span>
+                  {displayProfile.mimeType} · .{displayProfile.fileExtension}
+                </span>
               </dd>
             </div>
             <div className="export-profile-row">
-              <dt>Video bitrate</dt>
+              <dt>Estimated size</dt>
               <dd>
-                <strong>8 Mbps</strong>
-                <span>MVP quality profile</span>
+                <strong>About {estimatedSize}</strong>
+                <span>
+                  Bitrate-based estimate; variable bitrate and container
+                  overhead can change the final size.
+                </span>
               </dd>
             </div>
           </dl>
+
+          <ExportProfilePicker
+            selectionId={selectionId}
+            profile={displayProfile}
+            availability={presetAvailability}
+            selectedSupported={selectedSupported}
+            selectedReason={selectedReason}
+            disabled={phase !== 'configure'}
+            selectedInputRef={selectedProfileRef}
+            onSelect={selectRecommendedProfile}
+            onChangeProfile={selectCustomProfile}
+            onDraftValidityChange={setAdvancedDraftsValid}
+          />
+
+          <div
+            ref={capabilityStatusRef}
+            className={`export-capability-status${
+              selectedSupported === false ? ' is-unavailable' : ''
+            }`}
+            role="status"
+            aria-live="polite"
+            tabIndex={-1}
+          >
+            {capabilityLoading && selectionId !== 'custom' ? (
+              <span>Checking export support for this project…</span>
+            ) : selectionId !== 'custom'
+              && capabilityError
+              && capabilitySnapshot === null ? (
+              <>
+                <span>Could not check export support: {capabilityError}</span>
+                <button
+                  type="button"
+                  className="export-inline-retry"
+                  onClick={() => refreshCapabilities(doc)}
+                >
+                  Retry capability check
+                </button>
+              </>
+            ) : !advancedDraftsValid ? (
+              <span>Fix the invalid advanced value before exporting.</span>
+            ) : selectedSupported === null ? (
+              <span>Checking this exact custom profile…</span>
+            ) : selectedSupported ? (
+              <span>
+                Ready to export exactly {exportProfileSummary(displayProfile)}.
+                {selectionId === 'auto' && capabilitySnapshot?.autoPresetId
+                  ? ` Auto selected ${EXPORT_PRESETS.find(
+                      (preset) => preset.id === capabilitySnapshot.autoPresetId,
+                    )?.label ?? capabilitySnapshot.autoPresetId}.`
+                  : ''}
+              </span>
+            ) : (
+              <span>
+                {selectedReason ?? 'The selected profile is unavailable.'}
+                {' '}No codec will be substituted.
+              </span>
+            )}
+          </div>
 
           {!hasContent && phase === 'configure' && (
             <p className="export-empty">Add a clip to the timeline before exporting.</p>
@@ -425,7 +786,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
               <span className="export-result-mark" aria-hidden="true">✓</span>
               <div>
                 <strong>Export ready</strong>
-                <span>Your MP4 is ready to download.</span>
+                <span>Your {download.formatLabel} is ready to download.</span>
               </div>
             </section>
           )}
@@ -448,12 +809,16 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
                 ref={startButtonRef}
                 type="button"
                 className="export-primary"
-                disabled={!hasContent || offlineExportMessage !== null}
+                disabled={!canStart}
                 onClick={() => void beginExport()}
               >
                 {offlineExportMessage
                   ? 'Reconnect media to export'
-                  : error ? 'Retry export' : 'Start export'}
+                  : capabilityLoading || selectedSupported === null
+                    ? 'Checking export support…'
+                    : selectedSupported === false || !advancedDraftsValid
+                      ? 'Profile unavailable'
+                      : error ? 'Retry export' : 'Start export'}
               </button>
             </>
           )}
@@ -489,7 +854,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
                 href={download.url}
                 download={download.fileName}
               >
-                Download MP4
+                {download.linkLabel}
               </a>
             </>
           )}

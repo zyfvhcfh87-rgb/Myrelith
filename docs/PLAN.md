@@ -1749,7 +1749,7 @@ work.
 3. [x] Generalize buffered video output across the selected container/codec,
    then add explicit audio off/mono/stereo. Keep AAC and Opus tail policy
    separate and do not enable WebM audio before its exact-duration gate passes.
-4. [ ] Add recommended presets, visible Auto resolution, collapsible advanced
+4. [x] Add recommended presets, visible Auto resolution, collapsible advanced
    controls, unavailable reasons, a clearly labelled size estimate, dynamic
    extension/MIME, and browser-local validation of the last selection.
 5. [ ] Add transactional direct-file streaming with picker-first activation,
@@ -1866,6 +1866,45 @@ work.
   error`, so the failure is caught before writer allocation instead of being a
   false positive. Opus returned its explicit muxer reason, browser
   warnings/errors were zero, and both temporary harnesses were removed.
+
+### Slice 4 evidence â€” persisted capability-aware export UI (2026-07-31)
+
+- [x] The dialog now presents Auto plus the four documented profiles as native
+  radio cards, resolves Auto visibly, disables unsupported choices with their
+  exact capability reason, and keeps Start disabled instead of substituting a
+  codec. The selected concrete container, video/audio codecs, channel layout,
+  MIME type, and extension remain visible before any encoder work begins.
+- [x] Collapsible advanced controls update only valid allow-listed profiles and
+  keep container metadata/audio coupling atomic. Video/audio bitrates and
+  modes, mono/stereo/off, key-frame interval, codec pair, and destination all
+  feed the same profile validator. Numeric draft errors are labelled with
+  units, bounds, `aria-invalid`, and a live Start-blocking explanation.
+- [x] The bitrate estimate uses exact integer/BigInt frame-rate math and adds
+  audio bitrate only when the selected profile and timeline actually write an
+  audio track. It is explicitly labelled approximate because variable-rate
+  encoding and container overhead can change the result. Audio-off also stops
+  offline audio-only media from blocking an otherwise complete video export.
+- [x] A separate versioned `webcut.export-selection:v1` preference remembers
+  only the last profile proven valid on this browser: a preset/Auto id or one
+  validated custom profile. Capability results, reasons, Auto's resolution,
+  and project-owned dimensions/FPS/sample rate are never persisted. Malformed
+  or unavailable saved choices fall back safely without disturbing the still-
+  image preference.
+- [x] Capability and custom-profile responses are generation-safe across edits
+  and document changes. Dialog lifecycle, focus, cancellation, progress,
+  dynamic MP4/WebM Blob metadata, URL revocation, retry, invalid drafts, stale
+  checks, exact-profile handoff, and offline-audio exclusion are covered.
+- [x] Focused gate: 111/111 tests across dialog, preferences, profile, and pure
+  UI helpers passed. Full gate: 1,590/1,590 tests across 83 files passed.
+  Production TypeScript/Vite build passed with only the pre-existing chunk-size
+  advisory; oxlint and `git diff --check` passed.
+- [x] In-app Chromium exercised the real capability facade. Compatibility was
+  the first-run default; Auto resolved visibly to Modern; selecting Web changed
+  the live summary to WebM/VP9/Opus with `video/webm` and `.webm`, survived a
+  close/reopen through the versioned preference, and was restored to
+  Compatibility. Advanced controls expanded without overflow, an out-of-range
+  0.05 Mbps draft exposed the exact accessible error and disabled Start, and
+  browser warning/error logs remained empty.
 
 ## Test strategy per layer (unchanged from original)
 

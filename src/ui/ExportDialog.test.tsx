@@ -1,9 +1,9 @@
 /**
- * ui/ExportDialog.test.tsx — Phase 5.2b export-flow integration at Toolbar.
+ * Capability-aware export-flow integration at Toolbar.
  *
- * The real codecs stay behind the app export controller. These tests prove
- * the rendered fixed profile, progress/cancel lifecycle, Blob download URL
- * ownership, retry behavior, focus restoration, and shortcut isolation.
+ * Codec discovery and export execution stay behind lazy app controllers. The
+ * mocks below keep this suite deterministic while exercising the rendered
+ * preset/custom UI, exact-profile handoff, lifecycle, and Blob URL ownership.
  */
 
 import {
@@ -16,15 +16,31 @@ import {
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
+  checkCurrentExportProfile,
+  getExportPresetCapabilities,
+  type ExportCapabilitySnapshot,
+} from '../app/exportCapabilitiesController'
+import {
   cancelExport,
   startExport,
   type ExportCallbacks,
   type ExportResult,
 } from '../app/exportController'
-import { DEFAULT_EXPORT_PROFILE } from '../domain/exportProfile'
+import {
+  DEFAULT_EXPORT_PROFILE,
+  EXPORT_PRESETS,
+  exportPresetById,
+  updateExportProfile,
+  type ExportPresetId,
+  type ExportProfile,
+} from '../domain/exportProfile'
 import type { Clip, MediaAsset, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import {
+  INITIAL_PREFERENCES_STATE,
+  usePreferencesStore,
+} from '../state/preferencesStore'
 import Toolbar from './Toolbar'
 
 vi.mock('../app/exportController', () => ({
@@ -32,12 +48,44 @@ vi.mock('../app/exportController', () => ({
   cancelExport: vi.fn(),
 }))
 
-const RESULT: ExportResult = {
-  destination: 'download',
-  buffer: new Uint8Array([1, 2, 3, 4]).buffer,
-  mimeType: 'video/mp4',
-  fileExtension: 'mp4',
-  profile: DEFAULT_EXPORT_PROFILE,
+vi.mock('../app/exportCapabilitiesController', () => ({
+  getExportPresetCapabilities: vi.fn(),
+  checkCurrentExportProfile: vi.fn(),
+}))
+
+function capabilitySnapshot({
+  autoPresetId = 'modern',
+  unsupported = {},
+}: {
+  autoPresetId?: ExportPresetId | null
+  unsupported?: Partial<Record<ExportPresetId, string>>
+} = {}): Readonly<ExportCapabilitySnapshot> {
+  return {
+    autoPresetId,
+    presets: EXPORT_PRESETS.map((preset) => {
+      const reason = unsupported[preset.id]
+      return {
+        presetId: preset.id,
+        profile: preset.profile,
+        supported: reason === undefined,
+        reason: reason ?? null,
+      }
+    }),
+  }
+}
+
+const SUPPORTED_CAPABILITIES = capabilitySnapshot()
+
+function exportResult(
+  profile: Readonly<ExportProfile>,
+): ExportResult {
+  return {
+    destination: 'download',
+    buffer: new Uint8Array([1, 2, 3, 4]).buffer,
+    mimeType: profile.mimeType,
+    fileExtension: profile.fileExtension,
+    profile,
+  }
 }
 
 function clip(): Clip {
@@ -74,6 +122,15 @@ function track(clips: Clip[]): Track {
     muted: false,
     solo: false,
     locked: false,
+  }
+}
+
+function audioTrack(clips: Clip[]): Track {
+  return {
+    ...track(clips),
+    id: 'A1',
+    kind: 'audio',
+    name: 'A1',
   }
 }
 
@@ -142,6 +199,8 @@ function flushAnimationFrame(): void {
 
 const startMock = vi.mocked(startExport)
 const cancelMock = vi.mocked(cancelExport)
+const presetCapabilitiesMock = vi.mocked(getExportPresetCapabilities)
+const customCapabilityMock = vi.mocked(checkCurrentExportProfile)
 
 beforeEach(() => {
   rafId = 0
@@ -162,9 +221,21 @@ beforeEach(() => {
   )
   URL.createObjectURL = vi.fn(() => 'blob:finished-export') as typeof URL.createObjectURL
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
+
   startMock.mockReset()
+  startMock.mockResolvedValue(undefined)
   cancelMock.mockReset()
   cancelMock.mockResolvedValue(undefined)
+  presetCapabilitiesMock.mockReset()
+  presetCapabilitiesMock.mockResolvedValue(SUPPORTED_CAPABILITIES)
+  customCapabilityMock.mockReset()
+  customCapabilityMock.mockImplementation(async (profile) => ({
+    profile,
+    supported: true,
+    reason: null,
+  }))
+
+  usePreferencesStore.setState({ ...INITIAL_PREFERENCES_STATE })
   useDocumentStore.setState({ doc: doc(), past: [], future: [] })
   useMediaStore.setState({
     descriptors: new Map(),
@@ -181,29 +252,43 @@ afterEach(() => {
 
 async function openDialog(): Promise<HTMLDialogElement> {
   fireEvent.click(screen.getByRole('button', { name: 'Export' }))
-  return await screen.findByRole('dialog', { name: 'Export video' }) as HTMLDialogElement
+  return await screen.findByRole('dialog', {
+    name: 'Export video',
+  }) as HTMLDialogElement
+}
+
+async function readyStartButton(): Promise<HTMLButtonElement> {
+  return await screen.findByRole('button', {
+    name: 'Start export',
+  }) as HTMLButtonElement
+}
+
+function profileRadio(label: string): HTMLInputElement {
+  return screen.getByRole('radio', {
+    name: new RegExp(`^${label}`),
+  }) as HTMLInputElement
 }
 
 describe('Export dialog configuration', () => {
-  test('shows the honest fixed profile, isolates shortcuts, and restores focus', async () => {
+  test('defaults to Compatibility, shows Auto resolution, isolates shortcuts, and restores focus', async () => {
     render(<Toolbar />)
     const trigger = screen.getByRole('button', { name: 'Export' })
     const dialog = await openDialog()
+    const start = await readyStartButton()
 
     expect(screen.getByText('1280 × 720')).toBeInTheDocument()
     expect(screen.getByText('Timeline resolution (fixed)')).toBeInTheDocument()
-    expect(screen.getByText('MP4 · H.264/AVC')).toBeInTheDocument()
-    expect(screen.getByText('Format (fixed)')).toBeInTheDocument()
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByText('MP4 · H.264/AVC · AAC · stereo')).toBeInTheDocument()
+    expect(profileRadio('Compatibility')).toBeChecked()
+    expect(profileRadio('Auto')).not.toBeChecked()
+    expect(screen.getByText('Available — selects Modern')).toBeInTheDocument()
 
     flushAnimationFrame()
-    expect(screen.getByRole('button', { name: 'Start export' })).toHaveFocus()
+    expect(profileRadio('Compatibility')).toHaveFocus()
 
     const escapedKey = vi.fn()
     window.addEventListener('keydown', escapedKey)
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Start export' }), {
-      key: 's',
-    })
+    fireEvent.keyDown(start, { key: 's' })
     expect(escapedKey).not.toHaveBeenCalled()
     window.removeEventListener('keydown', escapedKey)
 
@@ -215,14 +300,217 @@ describe('Export dialog configuration', () => {
     expect(trigger).toHaveFocus()
   })
 
+  test('shows an explicit unsupported reason without silently falling back', async () => {
+    const reason = 'AVC is disabled by this browser policy.'
+    presetCapabilitiesMock.mockResolvedValue(capabilitySnapshot({
+      autoPresetId: 'modern',
+      unsupported: { compatibility: reason },
+    }))
+    render(<Toolbar />)
+    await openDialog()
+
+    await screen.findByText(`${reason} No codec will be substituted.`)
+    expect(profileRadio('Compatibility')).toBeChecked()
+    expect(profileRadio('Compatibility')).toBeDisabled()
+    expect(profileRadio('Modern')).not.toBeChecked()
+    expect(screen.getByText('MP4 · H.264/AVC · AAC · stereo')).toBeInTheDocument()
+    expect(screen.queryByText('WebM · AV1 · Opus · stereo')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Profile unavailable' })).toBeDisabled()
+    flushAnimationFrame()
+    expect(screen.getByText(
+      `${reason} No codec will be substituted.`,
+    ).closest('[role="status"]')).toHaveFocus()
+    expect(startMock).not.toHaveBeenCalled()
+  })
+
+  test('visibly resolves Auto and passes that exact profile to export', async () => {
+    const modernProfile = exportPresetById('modern').profile
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+
+    fireEvent.click(profileRadio('Auto'))
+
+    expect(await screen.findByText(/Auto selected Modern\.$/)).toBeInTheDocument()
+    expect(profileRadio('Auto')).toBeChecked()
+    expect(screen.getByText('WEBM · AV1 · OPUS · stereo')).toBeInTheDocument()
+    fireEvent.click(await readyStartButton())
+
+    await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
+    expect(startMock).toHaveBeenCalledWith(
+      modernProfile,
+      { onProgress: expect.any(Function) },
+    )
+  })
+
+  test('checks an advanced edit as one exact custom profile before starting', async () => {
+    const expectedProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      videoBitrate: 12_000_000,
+    })
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+
+    fireEvent.change(screen.getByRole('spinbutton', {
+      name: 'Export video bitrate in megabits per second',
+    }), { target: { value: '12' } })
+
+    await waitFor(() => {
+      expect(customCapabilityMock).toHaveBeenCalledWith(expectedProfile)
+    })
+    expect(profileRadio('Custom')).toBeChecked()
+    expect(await screen.findByText(
+      'Ready to export exactly MP4 · H.264/AVC · AAC · stereo.',
+    )).toBeInTheDocument()
+
+    fireEvent.click(await readyStartButton())
+    await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
+    expect(startMock).toHaveBeenCalledWith(
+      expectedProfile,
+      { onProgress: expect.any(Function) },
+    )
+  })
+
+  test('checks and exports the exact audio-off custom profile', async () => {
+    const expectedProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      audioCodec: null,
+      audioChannelLayout: 'off',
+      audioBitrate: null,
+      audioBitrateMode: null,
+    })
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+
+    fireEvent.change(screen.getByRole('combobox', {
+      name: 'Export audio channel layout',
+    }), { target: { value: 'off' } })
+
+    await waitFor(() => {
+      expect(customCapabilityMock).toHaveBeenCalledWith(expectedProfile)
+    })
+    expect(screen.getByRole('combobox', {
+      name: 'Export audio codec',
+    })).toBeDisabled()
+    expect(screen.getByRole('spinbutton', {
+      name: 'Export audio bitrate in kilobits per second',
+    })).toBeDisabled()
+    expect(await screen.findByText(
+      'Ready to export exactly MP4 · H.264/AVC · No audio.',
+    )).toBeInTheDocument()
+
+    fireEvent.click(await readyStartButton())
+    await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
+    expect(startMock).toHaveBeenCalledWith(
+      expectedProfile,
+      { onProgress: expect.any(Function) },
+    )
+  })
+
+  test('keeps an invalid numeric draft accessible and disables Start', async () => {
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+    const bitrate = screen.getByRole('spinbutton', {
+      name: 'Export video bitrate in megabits per second',
+    })
+
+    fireEvent.change(bitrate, { target: { value: '0.05' } })
+
+    expect(bitrate).toHaveAttribute('aria-invalid', 'true')
+    expect(bitrate).toHaveAccessibleDescription('Enter 0.1–200 Mbps.')
+    expect(screen.getByText(
+      'Fix the invalid advanced value before exporting.',
+    )).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Profile unavailable' })).toBeDisabled()
+    expect(customCapabilityMock).not.toHaveBeenCalled()
+    expect(startMock).not.toHaveBeenCalled()
+  })
+
+  test('shows a capability load error and retries the check', async () => {
+    presetCapabilitiesMock
+      .mockRejectedValueOnce(new Error('Capability worker failed'))
+      .mockResolvedValueOnce(SUPPORTED_CAPABILITIES)
+    render(<Toolbar />)
+    await openDialog()
+
+    expect(await screen.findByText(
+      'Could not check export support: Capability worker failed',
+    )).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Profile unavailable' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Retry capability check',
+    }))
+
+    expect(await readyStartButton()).toBeEnabled()
+    expect(presetCapabilitiesMock).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText(/Could not check export support/)).not.toBeInTheDocument()
+  })
+
+  test('ignores a stale custom result after a newer edit resolves', async () => {
+    const first = deferred<{
+      profile: Readonly<ExportProfile>
+      supported: boolean
+      reason: string | null
+    }>()
+    const second = deferred<{
+      profile: Readonly<ExportProfile>
+      supported: boolean
+      reason: string | null
+    }>()
+    customCapabilityMock.mockImplementation((profile) => {
+      if (profile.videoBitrate === 10_000_000) return first.promise
+      if (profile.videoBitrate === 12_000_000) return second.promise
+      throw new Error(`Unexpected bitrate ${profile.videoBitrate}`)
+    })
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+    const bitrate = screen.getByRole('spinbutton', {
+      name: 'Export video bitrate in megabits per second',
+    })
+
+    fireEvent.change(bitrate, { target: { value: '10' } })
+    await waitFor(() => expect(customCapabilityMock).toHaveBeenCalledTimes(1))
+    fireEvent.change(bitrate, { target: { value: '12' } })
+    await waitFor(() => expect(customCapabilityMock).toHaveBeenCalledTimes(2))
+    const oldProfile = customCapabilityMock.mock.calls[0][0]
+    const currentProfile = customCapabilityMock.mock.calls[1][0]
+
+    await act(async () => {
+      second.resolve({
+        profile: currentProfile,
+        supported: true,
+        reason: null,
+      })
+      await second.promise
+    })
+    expect(await readyStartButton()).toBeEnabled()
+
+    await act(async () => {
+      first.resolve({
+        profile: oldProfile,
+        supported: false,
+        reason: 'Stale encoder rejection',
+      })
+      await first.promise
+    })
+    expect(screen.queryByText(/Stale encoder rejection/)).not.toBeInTheDocument()
+    expect(screen.getByText(
+      'Ready to export exactly MP4 · H.264/AVC · AAC · stereo.',
+    )).toBeInTheDocument()
+    expect(await readyStartButton()).toBeEnabled()
+  })
+
   test('explains an empty timeline and never starts the controller', async () => {
     useDocumentStore.setState({ doc: doc(false), past: [], future: [] })
     render(<Toolbar />)
     await openDialog()
 
     expect(screen.getByText(/add a clip to the timeline/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start export' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
+    expect(await readyStartButton()).toBeDisabled()
+    fireEvent.click(await readyStartButton())
     expect(startMock).not.toHaveBeenCalled()
   })
 
@@ -234,10 +522,52 @@ describe('Export dialog configuration', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Reconnect 1 offline source before exporting: source.mp4.',
     )
-    expect(
-      screen.getByRole('button', { name: 'Reconnect media to export' }),
-    ).toBeDisabled()
+    expect(screen.getByRole('button', {
+      name: 'Reconnect media to export',
+    })).toBeDisabled()
     expect(startMock).not.toHaveBeenCalled()
+  })
+
+  test('audio off does not require an offline audio-only source', async () => {
+    const voiceClip: Clip = {
+      ...clip(),
+      id: 'clip-audio',
+      assetId: 'asset-audio',
+      name: 'voice.wav',
+    }
+    const voiceAsset: MediaAsset = {
+      ...asset(),
+      id: 'asset-audio',
+      fileName: 'voice.wav',
+      mimeType: 'audio/wav',
+      objectUrl: 'blob:voice',
+      kind: 'audio',
+      frameRate: null,
+      width: null,
+      height: null,
+      decoderConfigB64: null,
+    }
+    useDocumentStore.setState({
+      doc: { ...doc(), tracks: [track([clip()]), audioTrack([voiceClip])] },
+      past: [],
+      future: [],
+    })
+    useMediaStore.getState().addAsset(voiceAsset)
+    useMediaStore.getState().disconnectAsset('asset-audio')
+    render(<Toolbar />)
+    await openDialog()
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Reconnect 1 offline source before exporting: voice.wav.',
+    )
+    fireEvent.change(screen.getByRole('combobox', {
+      name: 'Export audio channel layout',
+    }), { target: { value: 'off' } })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+    expect(await readyStartButton()).toBeEnabled()
   })
 })
 
@@ -251,9 +581,9 @@ describe('Export dialog lifecycle', () => {
     })
     render(<Toolbar />)
     await openDialog()
+    const start = await readyStartButton()
     flushAnimationFrame()
 
-    const start = screen.getByRole('button', { name: 'Start export' })
     act(() => {
       start.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       start.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -283,7 +613,7 @@ describe('Export dialog lifecycle', () => {
     act(() => callbacks?.onProgress?.(1))
     expect(screen.getByRole('progressbar')).toHaveValue(1)
     expect(screen.getByText('100%')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Download MP4' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Download/ })).not.toBeInTheDocument()
     expect(URL.createObjectURL).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -293,29 +623,36 @@ describe('Export dialog lifecycle', () => {
     expect(screen.getByText('Export cancelled')).toBeInTheDocument()
   })
 
-  test('creates one typed Blob URL, keeps it through download, and revokes on close', async () => {
+  test('creates a typed WebM download with a dynamic filename and revokes it on close', async () => {
+    const webProfile = exportPresetById('web').profile
     useDocumentStore.setState({
       doc: { ...doc(), name: 'CON.txt' },
       past: [],
       future: [],
     })
-    startMock.mockResolvedValue(RESULT)
+    startMock.mockResolvedValue(exportResult(webProfile))
     render(<Toolbar />)
     const trigger = screen.getByRole('button', { name: 'Export' })
     await openDialog()
-    flushAnimationFrame()
-    fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
+    await readyStartButton()
+    fireEvent.click(profileRadio('Web'))
+    fireEvent.click(await readyStartButton())
 
-    const download = await screen.findByRole('link', { name: 'Download MP4' })
+    const download = await screen.findByRole('link', { name: 'Download WebM' })
     await waitFor(() => expect(rafCallbacks.size).toBeGreaterThan(0))
     flushAnimationFrame()
     expect(download).toHaveFocus()
+    expect(screen.getByText('Your WebM is ready to download.')).toBeInTheDocument()
+    expect(startMock).toHaveBeenCalledWith(
+      webProfile,
+      { onProgress: expect.any(Function) },
+    )
     expect(URL.createObjectURL).toHaveBeenCalledOnce()
     const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob
     expect(blob).toBeInstanceOf(Blob)
-    expect(blob).toMatchObject({ size: 4, type: 'video/mp4' })
+    expect(blob).toMatchObject({ size: 4, type: 'video/webm' })
     expect(download).toHaveAttribute('href', 'blob:finished-export')
-    expect(download).toHaveAttribute('download', 'webcut-CON.txt.mp4')
+    expect(download).toHaveAttribute('download', 'webcut-CON.txt.webm')
 
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
@@ -331,8 +668,7 @@ describe('Export dialog lifecycle', () => {
     startMock.mockReturnValue(completion.promise)
     render(<Toolbar />)
     await openDialog()
-    flushAnimationFrame()
-    fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
+    fireEvent.click(await readyStartButton())
     await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
 
     const dialog = screen.getByRole('dialog')
@@ -342,7 +678,6 @@ describe('Export dialog lifecycle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel export' }))
     await waitFor(() => expect(cancelMock).toHaveBeenCalledOnce())
-    expect(screen.getByRole('status')).toHaveTextContent('Cancelling…')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancelling…' })).toBeDisabled()
 
@@ -354,7 +689,7 @@ describe('Export dialog lifecycle', () => {
     flushAnimationFrame()
     expect(screen.getByRole('button', { name: 'Back to settings' })).toHaveFocus()
     expect(URL.createObjectURL).not.toHaveBeenCalled()
-    expect(screen.queryByRole('link', { name: 'Download MP4' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Download/ })).not.toBeInTheDocument()
   })
 
   test('shows the pipeline error and a retry clears it', async () => {
@@ -363,8 +698,7 @@ describe('Export dialog lifecycle', () => {
       .mockResolvedValueOnce(undefined)
     render(<Toolbar />)
     await openDialog()
-    flushAnimationFrame()
-    fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
+    fireEvent.click(await readyStartButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'AVC encoding is not supported',
@@ -382,8 +716,7 @@ describe('Export dialog lifecycle', () => {
     startMock.mockReturnValue(completion.promise)
     const { unmount } = render(<Toolbar />)
     await openDialog()
-    flushAnimationFrame()
-    fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
+    fireEvent.click(await readyStartButton())
     await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
 
     unmount()
@@ -400,9 +733,8 @@ describe('Export dialog lifecycle', () => {
     startMock.mockReturnValue(completion.promise)
     render(<Toolbar />)
     await openDialog()
-    flushAnimationFrame()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
+    fireEvent.click(await readyStartButton())
     fireEvent.click(screen.getByRole('button', { name: 'Cancel export' }))
 
     expect(screen.getByText('Export cancelled')).toBeInTheDocument()
@@ -417,9 +749,8 @@ describe('Export dialog lifecycle', () => {
     startMock.mockReturnValue(completion.promise)
     render(<Toolbar />)
     await openDialog()
-    flushAnimationFrame()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
+    fireEvent.click(await readyStartButton())
     fireEvent.click(screen.getByRole('button', { name: 'Cancel export' }))
     fireEvent.click(screen.getByRole('button', { name: 'Back to settings' }))
     fireEvent.click(screen.getByRole('button', { name: 'Start export' }))
@@ -427,7 +758,7 @@ describe('Export dialog lifecycle', () => {
     await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
     fireEvent.click(screen.getByRole('button', { name: 'Cancel export' }))
     await waitFor(() => expect(cancelMock).toHaveBeenCalledOnce())
-    expect(screen.getByRole('status')).toHaveTextContent('Cancelling…')
+    expect(screen.getByRole('button', { name: 'Cancelling…' })).toBeDisabled()
 
     await act(async () => {
       completion.resolve(undefined)

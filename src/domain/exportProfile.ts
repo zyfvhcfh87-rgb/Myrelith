@@ -6,6 +6,8 @@
  * settings and are combined with one validated profile at the pipeline edge.
  */
 
+import type { TimelineDoc } from './schema'
+
 export type ExportPresetId = 'compatibility' | 'web' | 'modern' | 'hevc'
 export type ExportSelectionId = 'auto' | ExportPresetId
 export type ExportContainer = 'mp4' | 'webm'
@@ -386,6 +388,16 @@ export function exportPresetById(id: ExportPresetId): Readonly<ExportPreset> {
 /** The current MP4/AVC/AAC path, made explicit as the safe default. */
 export const DEFAULT_EXPORT_PROFILE: Readonly<ExportProfile> =
   exportPresetById(DEFAULT_EXPORT_PRESET_ID).profile
+
+/** Whether this document/profile pair would create an encoded audio track. */
+export function exportProfileIncludesAudio(
+  doc: TimelineDoc,
+  profile: ExportProfile,
+): boolean {
+  return profile.audioChannelLayout !== 'off' && doc.tracks.some(
+    (track) => track.kind === 'audio' && track.clips.length > 0,
+  )
+}
 
 /** Apply advanced-setting changes without weakening boundary validation. */
 export function updateExportProfile(

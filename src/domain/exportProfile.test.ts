@@ -4,6 +4,7 @@ import {
   DEFAULT_EXPORT_PRESET_ID,
   DEFAULT_EXPORT_PROFILE,
   EXPORT_PRESETS,
+  exportProfileIncludesAudio,
   exportPresetById,
   isAllowedExportCodecPair,
   MAX_EXPORT_AUDIO_BITRATE,
@@ -14,6 +15,7 @@ import {
   updateExportProfile,
   validateExportProfile,
 } from './exportProfile'
+import type { Clip, TimelineDoc, Track } from './schema'
 
 const compatibility = {
   container: 'mp4',
@@ -29,6 +31,52 @@ const compatibility = {
   fileExtension: 'mp4',
   destination: 'download',
 } as const
+
+function audioTimeline(hasClip: boolean): TimelineDoc {
+  const clips: Clip[] = hasClip
+    ? [{
+        id: 'audio-clip',
+        assetId: 'audio-asset',
+        name: 'Audio clip',
+        sourceMode: 'timed',
+        sourceRange: { startFrame: 0, durationFrames: 30 },
+        timelineRange: { startFrame: 0, durationFrames: 30 },
+        transform: {
+          x: 0,
+          y: 0,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          anchorX: 0.5,
+          anchorY: 0.5,
+        },
+        opacity: 1,
+        volume: 1,
+        effects: [],
+      }]
+    : []
+  const audioTrack: Track = {
+    id: 'A1',
+    kind: 'audio',
+    name: 'A1',
+    clips,
+    transitions: [],
+    hidden: false,
+    muted: true,
+    solo: false,
+    locked: false,
+  }
+  return {
+    schemaVersion: 3,
+    id: 'export-profile-audio-doc',
+    name: 'Audio profile fixture',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48_000,
+    tracks: [audioTrack],
+  }
+}
 
 describe('export profile catalog', () => {
   test('keeps the current MP4/AVC/AAC behavior as the immutable default', () => {
@@ -76,6 +124,22 @@ describe('export profile catalog', () => {
   test('looks up a known preset and rejects unknown runtime ids', () => {
     expect(exportPresetById('web').label).toBe('Web')
     expect(() => exportPresetById('mystery' as 'web')).toThrow(/Unknown export preset/)
+  })
+
+  test('detects exactly when the profile would write an audio track', () => {
+    const withAudio = audioTimeline(true)
+    const withoutAudioClip = audioTimeline(false)
+    const audioOff = updateExportProfile(DEFAULT_EXPORT_PROFILE, {
+      audioCodec: null,
+      audioChannelLayout: 'off',
+      audioBitrate: null,
+      audioBitrateMode: null,
+    })
+
+    expect(exportProfileIncludesAudio(withAudio, DEFAULT_EXPORT_PROFILE)).toBe(true)
+    expect(exportProfileIncludesAudio(withoutAudioClip, DEFAULT_EXPORT_PROFILE))
+      .toBe(false)
+    expect(exportProfileIncludesAudio(withAudio, audioOff)).toBe(false)
   })
 })
 
