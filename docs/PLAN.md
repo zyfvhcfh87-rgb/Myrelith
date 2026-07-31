@@ -1693,6 +1693,98 @@ gate stops progression; later checkboxes are never completed early.
   clean. GitHub publication remains a normal merge of `codex/feature`, with
   the branch retained and only Issue #17 eligible for closeout.
 
+## Post-MVP issue #16 — capability-aware export profiles (IN PROGRESS, 2026-07-31)
+
+Issue #16 is open at baseline commit `fd1d50e` and owns container, codecs,
+audio-off/mono/stereo layout, bitrate behavior, key-frame interval, MIME/file
+metadata, and buffered-versus-direct-file output. Issue #15 remains the sole
+authority for project dimensions, exact rational FPS, and audio sample rate;
+those values are read from one captured `TimelineDoc`, never duplicated in an
+export profile or dialog control. The existing MP4/AVC/AAC, stereo,
+8 Mbps/192 kbps buffered download remains the safe default throughout the
+work.
+
+### Frozen research and implementation boundaries
+
+- `domain/exportProfile.ts` is the browser-free allow-list and validation
+  boundary. `auto` is a selection policy, never a pipeline codec; it resolves
+  visibly to one concrete validated profile. Explicit selections are rejected
+  when unavailable and are never silently replaced.
+- Auto's documented order is Modern (WebM/AV1/Opus), Web
+  (WebM/VP9/Opus), then Compatibility (MP4/AVC/AAC). HEVC remains
+  explicit-only because both MP4 containment and the exact native encoder must
+  report support.
+- Mediabunny output formats provide containment through
+  `getSupportedVideoCodecs()` and `getSupportedAudioCodecs()`. Its
+  `canEncodeVideo()` and `canEncodeAudio()` helpers are useful UI hints, but
+  version 1.50.9 memoizes each exact configuration indefinitely. The
+  immediately-before-start authority will therefore be a disposable real
+  encode to `NullTarget` with the selected format, real dimensions/FPS, exact
+  channel count/sample rate/bitrates/modes, and real source classes. It fails
+  before media retention or decode and never falls back to another profile.
+- The buffered path retains `BufferTarget`. Direct-file output owns its picker
+  and writable stream in `app/`, acquires the handle first in the user click,
+  and adapts positional `StreamTarget` writes. Mediabunny may close its wrapper;
+  WebCut alone commits the underlying file on success or aborts it on cancel or
+  failure so a partial file is never reported as a successful export.
+- AAC tail trimming remains isolated. Mediabunny 1.50.9's WebM muxer writes
+  Opus packets as `SimpleBlock`, advertises zero `CodecDelay`, and has no
+  `DiscardPadding`; current 1.52.2 has the same limitation. Merely shortening
+  packet duration changes the declared segment duration but not decoded tail
+  padding. Opus-enabled profiles stay behind an explicit incomplete capability
+  reason until a small pinned, locally bundled, reviewed muxer fix (or an
+  upstream release with equivalent behavior) passes exact sample-count,
+  reopen, and Chrome playback tests.
+
+### Ordered implementation gates
+
+1. [x] Freeze the allow-listed pure profile catalog, current safe default,
+   Auto order, exact-key validation, numeric bounds, audio-off shape,
+   container/codec pairing, container metadata, and destination contract.
+2. [ ] Add cached capability hints plus the app-controller facade and fresh
+   disposable pre-start encode, including generation-safe cancellation and
+   changed-support/no-silent-fallback tests.
+3. [ ] Generalize buffered video output across the selected container/codec,
+   then add explicit audio off/mono/stereo. Keep AAC and Opus tail policy
+   separate and do not enable WebM audio before its exact-duration gate passes.
+4. [ ] Add recommended presets, visible Auto resolution, collapsible advanced
+   controls, unavailable reasons, a clearly labelled size estimate, dynamic
+   extension/MIME, and browser-local validation of the last selection.
+5. [ ] Add transactional direct-file streaming with picker-first activation,
+   positional-write backpressure, success commit, cancel/failure abort, and
+   honest partial-file reporting tests.
+6. [ ] Evaluate optional pinned local encoder fallbacks only for a selected
+   otherwise-unavailable codec. Keep them lazy, offline, and out of the initial
+   editor bundle; a documented no-go is valid evidence.
+7. [ ] Reopen every enabled profile, verify container/codecs/dimensions/FPS/
+   channels/sample rate/duration/MIME/extension, exercise native Chrome
+   playback plus cancellation/write failure/retry/memory gates, then update
+   README/ARCHITECTURE/HANDOFF and close only Issue #16 after merge.
+
+### Slice 1 evidence — authoritative profile model (2026-07-31)
+
+- [x] Four concrete recommended profiles now carry every #16-owned field while
+  excluding all #15-owned project settings. The immutable Compatibility
+  profile exactly preserves today's MP4/AVC/AAC, stereo, 8 Mbps/192 kbps,
+  variable-bitrate, two-second-key-frame, buffered-download behavior.
+- [x] Auto is represented separately from concrete pipeline profiles and has a
+  deterministic Modern → Web → Compatibility order. HEVC cannot be selected
+  by Auto. MIME type and file extension are canonical container metadata, not
+  independently trusted strings.
+- [x] The pure validator rejects unknown/missing fields, unsupported enum
+  values, invalid container/video/audio triples, partial audio-off shapes,
+  mismatched MIME/extensions, fractional or unbounded bitrates, and key-frame
+  intervals outside zero through ten seconds or fractional microseconds. It
+  returns a detached frozen profile; the TypeScript contract also discriminates
+  audio-off from enabled mono/stereo shapes, and advanced changes pass through
+  the same runtime boundary.
+- [x] Focused gate: 42/42 profile tests passed. Production TypeScript/Vite
+  build passed with only the pre-existing chunk-size advisory; oxlint passed.
+  Full gate: 1,483/1,483 tests across 78 files passed. Production
+  TypeScript/Vite build passed with only the pre-existing chunk-size advisory;
+  oxlint and `git diff --check` passed. This slice is browser-free and changes
+  no rendered/export behavior, so its browser gate is not applicable.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +
