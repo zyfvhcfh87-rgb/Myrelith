@@ -36,7 +36,7 @@
 
 import { FrameRingBuffer } from '../engine/frame-cache'
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
-import { visibleVideoLayersAtFrame } from '../domain/selectors'
+import { videoCompositionRequests } from '../domain/videoCompositionPlan'
 import {
   invalidateMediaDecoderRuntime,
   invalidateMediaDecoderSource,
@@ -105,7 +105,14 @@ const PLAYBACK_RESTART_GAP_US = 1_000_000
 export interface RenderCanvasLike {
   width: number
   height: number
-  getContext(contextId: '2d'): Composite2D | null
+  getContext(
+    contextId: '2d',
+    options?: CanvasRenderingContext2DSettings,
+  ): Composite2D | null
+}
+
+const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
+  colorSpace: 'srgb',
 }
 
 /** Everything the core needs from the outside world. */
@@ -348,7 +355,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
     if (!scratch) {
       scratch = env.createCanvas(doc.width, doc.height)
-      scratchCtx = scratch.getContext('2d')
+      scratchCtx = scratch.getContext('2d', SRGB_2D_CONTEXT)
       if (!scratchCtx) {
         env.post({ type: 'error', message: 'scratch canvas 2d context unavailable' })
       }
@@ -383,11 +390,11 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       if (!doc) throw new Error('transition surfaces requested before setDoc')
       if (!transitionLeg) {
         transitionLeg = env.createCanvas(doc.width, doc.height)
-        transitionLegCtx = transitionLeg.getContext('2d')
+        transitionLegCtx = transitionLeg.getContext('2d', SRGB_2D_CONTEXT)
       }
       if (!transitionGroup) {
         transitionGroup = env.createCanvas(doc.width, doc.height)
-        transitionGroupCtx = transitionGroup.getContext('2d')
+        transitionGroupCtx = transitionGroup.getContext('2d', SRGB_2D_CONTEXT)
       }
       if (!transitionLegCtx || !transitionGroupCtx) {
         throw new Error('transition canvas 2d context unavailable')
@@ -1696,6 +1703,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         })
         return
       }
+      if (msg.plan.frame !== msg.frame) {
+        throw new Error('composite plan frame does not match request frame')
+      }
       const startedAt = env.now()
 
       // Source table: exact (assetId, sourceFrame) keys, memoized so two
@@ -1735,7 +1745,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       try {
         result = await compositeFrame(
           doc,
-          msg.frame,
+          msg.plan,
           target,
           source,
           transitionSurfaceProvider,
@@ -1812,24 +1822,25 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         })
         return
       }
+      if (msg.plan.frame !== msg.frame) {
+        throw new Error('renderFrame plan frame does not match request frame')
+      }
 
       const startedAt = env.now()
       const renderDoc = doc
       const entriesByClip = new Map<ClipId, StreamingCompositeSourceEntry>()
       for (const entry of msg.sources) entriesByClip.set(entry.clipId, entry)
 
-      // FrameSource does not carry clipId yet. Rebuild its call order from the
-      // canonical selector and queue clip-keyed entries under the exact
-      // (assetId, sourceFrame) keys compositeFrame will request.
+      // Queue clip-keyed entries in the exact order carried by the plan.
       const queues = new Map<string, Array<StreamingCompositeSourceEntry | null>>()
-      for (const layer of visibleVideoLayersAtFrame(renderDoc, msg.frame)) {
-        const entry = entriesByClip.get(layer.clip.id)
-        const key = `${layer.clip.assetId}@${layer.sourceFrame}`
+      for (const request of videoCompositionRequests(msg.plan)) {
+        const entry = entriesByClip.get(request.clip.id)
+        const key = `${request.clip.assetId}@${request.sourceFrame}`
         const queue = queues.get(key) ?? []
         queue.push(
           entry
-          && entry.assetId === layer.clip.assetId
-          && entry.sourceFrame === layer.sourceFrame
+          && entry.assetId === request.clip.assetId
+          && entry.sourceFrame === request.sourceFrame
             ? entry
             : null,
         )
@@ -1876,7 +1887,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       try {
         result = await compositeFrame(
           renderDoc,
-          msg.frame,
+          msg.plan,
           scratchCtx,
           source,
           transitionSurfaceProvider,
@@ -1928,7 +1939,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     switch (msg.type) {
       case 'init': {
         visible = msg.canvas
-        visibleCtx = visible.getContext('2d')
+        visibleCtx = visible.getContext('2d', SRGB_2D_CONTEXT)
         if (!visibleCtx) {
           env.post({ type: 'error', message: 'OffscreenCanvas 2d context unavailable' })
         }
@@ -2062,7 +2073,7 @@ export async function createOrientedStreamingBitmap(
   const sourceWidth = decoded.rotation === 180 ? outputWidth : outputHeight
   const sourceHeight = decoded.rotation === 180 ? outputHeight : outputWidth
   const canvas = new OffscreenCanvas(outputWidth, outputHeight)
-  const context = canvas.getContext('2d')
+  const context = canvas.getContext('2d', SRGB_2D_CONTEXT)
   if (!context) throw new Error('orientation canvas 2d context unavailable')
 
   context.save()

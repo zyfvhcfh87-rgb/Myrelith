@@ -6,7 +6,7 @@
  * ToRenderWorker/FromRenderWorker protocol on the other. Owns everything
  * the render-protocol says the MAIN side owns:
  * - deciding which clip-keyed sources a composite needs, via the
- *   canonical domain visibleVideoLayersAtFrame plan over the SAME document
+ *   canonical grouped VideoCompositionPlan over the SAME document
  *   snapshot it last posted (setDoc stores it, satisfying the protocol's
  *   ordering contract);
  * - all µs math: doc frame → asset frame (rescaleFrames) → target/
@@ -25,9 +25,14 @@
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, ClipId, FrameRate, TimelineDoc } from '../domain/schema'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
-import { visibleVideoLayersAtFrame } from '../domain/selectors'
-import type { VisibleVideoLayer } from '../domain/selectors'
+import {
+  createVideoCompositionPlanner,
+  videoCompositionRequests,
+  type VideoCompositionPlan,
+  type VideoCompositionPlanner,
+} from '../domain/videoCompositionPlan'
 import { framesToSeconds, rescaleFrames } from '../domain/time'
 import type { ChunkPayload } from '../workers/decode-protocol'
 import type {
@@ -116,6 +121,8 @@ export class RenderWorkerBridge {
   /** The doc snapshot last posted via setDoc — composites are built from
    * THIS, never from a fresher store read (protocol ordering contract). */
   private doc: TimelineDoc | null = null
+  private sourceBounds: SourceBoundsCatalog = new Map()
+  private visualPlanner: VideoCompositionPlanner | null = null
   private readonly sources = new Map<AssetId, AssetSource>()
   /** Invalidates legacy chunk reads when any source is replaced or removed. */
   private sourceRevision = 0
@@ -159,7 +166,19 @@ export class RenderWorkerBridge {
   /** Post a new doc snapshot; subsequent composites are built from it. */
   setDoc(doc: TimelineDoc): void {
     this.doc = doc
+    this.visualPlanner = createVideoCompositionPlanner(doc, this.sourceBounds)
     this.post({ type: 'setDoc', doc }, [])
+  }
+
+  /** Replace durable media facts without invalidating worker decode lanes. */
+  setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void {
+    this.sourceBounds = new Map(catalog)
+    if (this.doc) {
+      this.visualPlanner = createVideoCompositionPlanner(
+        this.doc,
+        this.sourceBounds,
+      )
+    }
   }
 
   /**
@@ -292,16 +311,26 @@ export class RenderWorkerBridge {
     // Omitting mode is the deprecated keyframe-batch path. Once its caller
     // migrates, every render supplies explicit playback/seek intent.
     const protocol = mode === undefined ? 'legacy' : 'streaming'
-    const layers = visibleVideoLayersAtFrame(doc, frame)
-    for (const layer of layers) {
-      const source = this.sources.get(layer.clip.assetId)
+    const plan = this.visualPlanner?.planFrame(frame)
+    if (!plan) {
+      return Promise.resolve({
+        status: 'error',
+        drawnClipIds: [],
+        missingClipIds: [],
+        renderMs: 0,
+        message: 'visual planner is not configured',
+      })
+    }
+    const requests = videoCompositionRequests(plan)
+    for (const request of requests) {
+      const source = this.sources.get(request.clip.assetId)
       if (source && source.protocol !== protocol) {
         return Promise.resolve({
           status: 'error',
           drawnClipIds: [],
           missingClipIds: [],
           renderMs: 0,
-          message: `asset ${layer.clip.assetId} uses the ${source.protocol} render protocol`,
+          message: `asset ${request.clip.assetId} uses the ${source.protocol} render protocol`,
         })
       }
     }
@@ -310,13 +339,15 @@ export class RenderWorkerBridge {
     // cancellation nor disturb the last valid presentation.
     const requestId = this.nextRequestId++
     this.latestCallId = requestId
-    if (mode === undefined) return this.renderLegacyFrame(doc, layers, frame, requestId)
-    return this.renderStreamingFrame(doc, layers, frame, requestId, mode)
+    if (mode === undefined) {
+      return this.renderLegacyFrame(doc, plan, frame, requestId)
+    }
+    return this.renderStreamingFrame(doc, plan, frame, requestId, mode)
   }
 
   private async renderLegacyFrame(
     doc: TimelineDoc,
-    layers: VisibleVideoLayer[],
+    plan: VideoCompositionPlan,
     frame: number,
     requestId: number,
   ): Promise<RenderFrameResult> {
@@ -329,12 +360,12 @@ export class RenderWorkerBridge {
       string,
       { assetId: AssetId; sourceFrame: number; source: LegacyAssetSource }
     >()
-    for (const layer of layers) {
-      const clip = layer.clip
+    for (const request of videoCompositionRequests(plan)) {
+      const clip = request.clip
       const source = this.sources.get(clip.assetId)
       if (!source) continue
       if (source.protocol !== 'legacy') continue // prevalidated above
-      const sourceFrame = layer.sourceFrame
+      const sourceFrame = request.sourceFrame
       wants.set(`${clip.assetId}@${sourceFrame}`, {
         assetId: clip.assetId,
         sourceFrame,
@@ -387,7 +418,7 @@ export class RenderWorkerBridge {
         ),
       })
       this.post(
-        { type: 'composite', requestId, frame, sources: entries },
+        { type: 'composite', requestId, frame, plan, sources: entries },
         entries.flatMap((entry) => entry.chunks.map((chunk) => chunk.data)),
       )
     })
@@ -395,15 +426,15 @@ export class RenderWorkerBridge {
 
   private renderStreamingFrame(
     doc: TimelineDoc,
-    layers: VisibleVideoLayer[],
+    plan: VideoCompositionPlan,
     frame: number,
     requestId: number,
     mode: RenderMode,
   ): Promise<RenderFrameResult> {
     const entries: StreamingCompositeSourceEntry[] = []
     const requestSources = new Map<AssetId, AssetSource>()
-    for (const layer of layers) {
-      const clip = layer.clip
+    for (const request of videoCompositionRequests(plan)) {
+      const clip = request.clip
       const source = this.sources.get(clip.assetId)
       if (!source) continue
       if (source.protocol !== 'streaming') continue // prevalidated above
@@ -421,10 +452,10 @@ export class RenderWorkerBridge {
           kind: 'video',
           clipId: clip.id,
           assetId: clip.assetId,
-          sourceFrame: layer.sourceFrame,
+          sourceFrame: request.sourceFrame,
           targetTimestampUs: Math.round(
             framesToSeconds(
-              rescaleFrames(layer.sourceFrame, doc.frameRate, source.rate),
+              rescaleFrames(request.sourceFrame, doc.frameRate, source.rate),
               source.rate,
             ) * 1e6,
           ),
@@ -437,7 +468,14 @@ export class RenderWorkerBridge {
     this.settlePendingAsSuperseded()
     return new Promise((resolve) => {
       this.pending.set(requestId, { resolve, sources: requestSources })
-      this.post({ type: 'renderFrame', requestId, frame, mode, sources: entries }, [])
+      this.post({
+        type: 'renderFrame',
+        requestId,
+        frame,
+        plan,
+        mode,
+        sources: entries,
+      }, [])
     })
   }
 

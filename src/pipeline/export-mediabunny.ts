@@ -37,10 +37,13 @@ import {
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, AssetKind, TimelineDoc } from '../domain/schema'
+import { docDurationFrames } from '../domain/selectors'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import {
-  docDurationFrames,
-  visibleVideoLayersAtFrame,
-} from '../domain/selectors'
+  createVideoCompositionPlanner,
+  videoCompositionRequests,
+  type VideoCompositionPlan,
+} from '../domain/videoCompositionPlan'
 import { framesToSeconds } from '../domain/time'
 import type {
   ExportDeps,
@@ -69,6 +72,10 @@ import {
   StaticImageDecodeError,
   type StaticImageRenderSource,
 } from './static-image'
+
+const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
+  colorSpace: 'srgb',
+}
 
 /** Resolves one immutable session source and its local-fallback safety budget. */
 export interface ResolvedExportAsset {
@@ -158,23 +165,31 @@ interface VideoFrameRequest {
 interface VideoRequestSchedule {
   frameCount: number
   byAsset: Map<AssetId, number[]>
+  plans: VideoCompositionPlan[]
 }
 
-function videoRequestSchedule(doc: TimelineDoc): VideoRequestSchedule {
+function videoRequestSchedule(
+  doc: TimelineDoc,
+  sourceBounds: SourceBoundsCatalog,
+): VideoRequestSchedule {
   const frameCount = docDurationFrames(doc)
   if (!Number.isSafeInteger(frameCount) || frameCount < 0) {
     throw new RangeError('Cannot schedule an invalid export timeline')
   }
 
   const byAsset = new Map<AssetId, number[]>()
+  const plans: VideoCompositionPlan[] = []
+  const planner = createVideoCompositionPlanner(doc, sourceBounds)
   for (let frame = 0; frame < frameCount; frame++) {
-    for (const { clip, sourceFrame } of visibleVideoLayersAtFrame(doc, frame)) {
-      const assetRequests = byAsset.get(clip.assetId)
-      if (assetRequests) assetRequests.push(sourceFrame)
-      else byAsset.set(clip.assetId, [sourceFrame])
+    const plan = planner.planFrame(frame)
+    plans.push(plan)
+    for (const request of videoCompositionRequests(plan)) {
+      const assetRequests = byAsset.get(request.clip.assetId)
+      if (assetRequests) assetRequests.push(request.sourceFrame)
+      else byAsset.set(request.clip.assetId, [request.sourceFrame])
     }
   }
-  return { frameCount, byAsset }
+  return { frameCount, byAsset, plans }
 }
 
 /**
@@ -184,6 +199,7 @@ function videoRequestSchedule(doc: TimelineDoc): VideoRequestSchedule {
 export function createMediabunnyExportMediaSource(
   doc: TimelineDoc,
   resolveAsset: ExportAssetResolver,
+  sourceBounds: SourceBoundsCatalog,
 ): ExportMediaSource {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -192,7 +208,7 @@ export function createMediabunnyExportMediaSource(
   framesToSeconds(0, doc.frameRate)
   const sessions = new Map<AssetId, Promise<DecodedVisualAsset>>()
   const openInputs = new Set<Input>()
-  const requests = videoRequestSchedule(doc)
+  const requests = videoRequestSchedule(doc, sourceBounds)
   const imageAbort = new AbortController()
   let closed = false
   let closePromise: Promise<void> | null = null
@@ -363,19 +379,20 @@ export function createMediabunnyExportMediaSource(
     if (docFrame >= requests.frameCount) {
       throw new Error(`Export received an extra document frame ${docFrame}`)
     }
-    const frameRequests: VideoFrameRequest[] = visibleVideoLayersAtFrame(
-      doc,
-      docFrame,
-    ).map(({ clip, sourceFrame }) => ({
-      assetId: clip.assetId,
-      sourceFrame,
-    }))
+    const plan = requests.plans[docFrame]
+    if (!plan) throw new Error(`Export frame ${docFrame} has no visual plan`)
+    const frameRequests: VideoFrameRequest[] = videoCompositionRequests(plan)
+      .map((request) => ({
+        assetId: request.clip.assetId,
+        sourceFrame: request.sourceFrame,
+      }))
 
     const bitmaps = new Set<ImageBitmap>()
     let leaseClosed = false
     let nextFrameRequestIndex = 0
 
     return {
+      plan,
       getFrame: async (
         assetId: AssetId,
         sourceFrame: number,
@@ -1120,7 +1137,7 @@ export async function createMediabunnyExportSink(
   }
 
   const canvas = new OffscreenCanvas(doc.width, doc.height)
-  const context = canvas.getContext('2d')
+  const context = canvas.getContext('2d', SRGB_2D_CONTEXT)
   if (!context) {
     throw new Error('Could not create the export 2D context')
   }
@@ -1278,9 +1295,9 @@ export async function createMediabunnyExportSink(
       get: () => {
         if (transitionSurfaces) return transitionSurfaces
         const legCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const legContext = legCanvas.getContext('2d')
+        const legContext = legCanvas.getContext('2d', SRGB_2D_CONTEXT)
         const groupCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const groupContext = groupCanvas.getContext('2d')
+        const groupContext = groupCanvas.getContext('2d', SRGB_2D_CONTEXT)
         if (!legContext || !groupContext) {
           throw new Error('Could not create export transition 2D contexts')
         }

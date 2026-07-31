@@ -1543,6 +1543,36 @@ gate stops progression; later checkboxes are never completed early.
   applicable. Slice 3 owns worker/preview/export visual consumption and removal
   of the legacy timed-frame clamping path.
 
+### Slice 3 evidence — exact visual integration (2026-07-31)
+
+- [x] `videoCompositionPlan.ts` now emits an explicit paint-ordered union of
+  ordinary clip requests and grouped crossfade requests. Preview and export
+  build from the same immutable document/source-bounds facts; unavailable or
+  malformed transitions fall back deterministically to the ordinary hard cut.
+- [x] The grouped plan crosses the render bridge and worker protocol unchanged.
+  The worker queues the plan's exact clip-keyed requests and never reconstructs
+  transition groups from adjacency. Same-asset legs stay distinct while the
+  compositor still fetches each requested `(assetId, sourceFrame)` only once.
+- [x] Preview, worker, and export now use genuine handle frames from the shared
+  planner. The legacy timed endpoint-clamping selector path was removed. Still
+  legs alone repeat frame zero; invisible legs require no decode and cannot
+  turn an otherwise valid group into a missing-source failure.
+- [x] Issue #18's complete-leg isolation remains intact: transforms and clip
+  opacity render into each leg surface, premultiplied weighted legs combine
+  with `lighter`, and the group is composited over lower tracks once. Visible,
+  scratch, orientation, transition, and export 2D contexts explicitly request
+  sRGB and have direct assertions.
+- [x] Focused gate: 289/289 tests across planner, selectors, compositor pixels,
+  bridge/protocol, worker, preview, export source, and export controller. Added
+  coverage proves explicit carried groups, real handles, transformed and
+  transparent legs over lower layers, same-asset clip lanes, zero-weight legs,
+  exact preview/export request parity, and sRGB context options.
+- [x] Full gate: 1,417/1,417 tests across 76 files; production build passed
+  with only the pre-existing chunk-size advisory; oxlint and `git diff --check`
+  passed. Chromium smoke acceptance created a project, reached the editor,
+  rendered one preview canvas, exercised transport controls, found no blocking
+  dialog/overlay, and recorded no browser console warnings or errors.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

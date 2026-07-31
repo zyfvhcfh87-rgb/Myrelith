@@ -13,8 +13,8 @@ import {
   outputMediaAssetIds,
   trackOfClip,
   tracksInDisplayOrder,
-  visibleVideoLayersAtFrame,
 } from './selectors'
+import { videoCompositionPlanAtFrame } from './videoCompositionPlan'
 
 function makeClip(id: string, tlStart: number, duration: number, sourceStart = 0): Clip {
   return {
@@ -281,7 +281,7 @@ describe('clipSourceFrame', () => {
   })
 })
 
-describe('visibleVideoLayersAtFrame', () => {
+describe('videoCompositionPlanAtFrame', () => {
   const from = makeClip('from', 10, 10, 100)
   const to = makeClip('to', 20, 10, 200)
   const transition = {
@@ -296,15 +296,42 @@ describe('visibleVideoLayersAtFrame', () => {
     transitions: [transition],
   })
 
-  const summary = (doc: TimelineDoc, frame: number) =>
-    visibleVideoLayersAtFrame(doc, frame).map((layer) => ({
-      id: layer.clip.id,
-      sourceFrame: layer.sourceFrame,
-      opacity: layer.opacity,
-      weight: layer.transition?.weight ?? null,
-    }))
+  const summary = (doc: TimelineDoc, frame: number) => {
+    const catalog = new Map([
+      ['asset-1', {
+        video: {
+          status: 'exact' as const,
+          firstTimestampUs: 0,
+          endTimestampUs: 1_000_000_000,
+        },
+        audio: null,
+      }],
+    ])
+    return videoCompositionPlanAtFrame(doc, frame, catalog).items.flatMap<{
+      id: string
+      sourceFrame: number
+      opacity: number
+      weight: number | null
+    }>(
+      (item) => item.kind === 'clip'
+        ? [{
+            id: item.request.clip.id,
+            sourceFrame: item.request.sourceFrame,
+            opacity: item.request.opacity,
+            weight: null,
+          }]
+        : item.requests
+            .filter((request) => request.opacity > 0 && request.weight > 0)
+            .map((request) => ({
+              id: request.clip.id,
+              sourceFrame: request.sourceFrame,
+              opacity: request.opacity,
+              weight: request.weight,
+            })),
+    )
+  }
 
-  test('uses one centered frozen-endpoint render plan across the full boundary', () => {
+  test('uses one centered real-handle render plan across the full boundary', () => {
     const doc = makeDoc([transitionTrack])
 
     expect(summary(doc, 18)).toEqual([
@@ -312,14 +339,14 @@ describe('visibleVideoLayersAtFrame', () => {
     ])
     expect(summary(doc, 19)).toEqual([
       { id: 'from', sourceFrame: 109, opacity: 1, weight: 0.75 },
-      { id: 'to', sourceFrame: 200, opacity: 1, weight: 0.25 },
+      { id: 'to', sourceFrame: 199, opacity: 1, weight: 0.25 },
     ])
     expect(summary(doc, 20)).toEqual([
-      { id: 'from', sourceFrame: 109, opacity: 1, weight: 0.5 },
+      { id: 'from', sourceFrame: 110, opacity: 1, weight: 0.5 },
       { id: 'to', sourceFrame: 200, opacity: 1, weight: 0.5 },
     ])
     expect(summary(doc, 21)).toEqual([
-      { id: 'from', sourceFrame: 109, opacity: 1, weight: 0.25 },
+      { id: 'from', sourceFrame: 111, opacity: 1, weight: 0.25 },
       { id: 'to', sourceFrame: 201, opacity: 1, weight: 0.75 },
     ])
     expect(summary(doc, 22)).toEqual([
@@ -335,7 +362,7 @@ describe('visibleVideoLayersAtFrame', () => {
     ])
 
     expect(summary(doc, 20)).toEqual([
-      { id: 'from', sourceFrame: 109, opacity: 1, weight: 0.5 },
+      { id: 'from', sourceFrame: 110, opacity: 1, weight: 0.5 },
       { id: 'to', sourceFrame: 200, opacity: 1, weight: 0.5 },
     ])
   })
@@ -379,21 +406,10 @@ describe('visibleVideoLayersAtFrame', () => {
         transitions: [{ ...transition, durationFrames: 1 }],
       }),
     ])
-    const layers = visibleVideoLayersAtFrame(doc, 20)
-
-    expect(layers.map((layer) => layer.clip.id)).toEqual(['from', 'to'])
-    expect(layers[0].opacity).toBe(0.5)
-    expect(layers[0].transition).toMatchObject({
-      trackId: 'V1',
-      transitionId: 'transition',
-      weight: 0.5,
-    })
-    expect(layers[1].opacity).toBe(0.25)
-    expect(layers[1].transition).toMatchObject({
-      trackId: 'V1',
-      transitionId: 'transition',
-      weight: 0.5,
-    })
+    expect(summary(doc, 20)).toEqual([
+      { id: 'from', sourceFrame: 110, opacity: 0.5, weight: 0.5 },
+      { id: 'to', sourceFrame: 200, opacity: 0.25, weight: 0.5 },
+    ])
   })
 
   test('skips hidden, audio, text, and zero-opacity media in the canonical plan', () => {
@@ -413,7 +429,7 @@ describe('visibleVideoLayersAtFrame', () => {
       makeTrack('zero', 'video', [{ ...from, opacity: 0 }]),
     ])
 
-    expect(visibleVideoLayersAtFrame(doc, 15)).toEqual([])
+    expect(summary(doc, 15)).toEqual([])
   })
 
   test('malformed or ambiguous transitions deterministically fall back to the hard cut', () => {

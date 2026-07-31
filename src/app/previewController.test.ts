@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type {
   Clip,
   FrameRate,
@@ -39,6 +40,7 @@ class FakeBridge implements BridgeLike {
   ) => void) | null = null
   onAssetReady: ((assetId: string) => void) | null = null
   docs: TimelineDoc[] = []
+  catalogs: SourceBoundsCatalog[] = []
   opened: Array<{
     assetId: string
     blob: Blob
@@ -78,6 +80,10 @@ class FakeBridge implements BridgeLike {
 
   setDoc(doc: TimelineDoc): void {
     this.docs.push(doc)
+  }
+
+  setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void {
+    this.catalogs.push(new Map(catalog))
   }
 
   async openAsset(
@@ -350,6 +356,7 @@ describe('previewController', () => {
     const { deps, bridge, blob } = makeDeps()
     initPreview(canvasEl(), deps)
     expect(bridge.docs).toEqual([initialDoc])
+    expect(bridge.catalogs).toEqual([new Map()])
 
     const asset = seedAsset({
       id: 'clip',
@@ -379,6 +386,7 @@ describe('previewController', () => {
       }),
     }])
     expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(bridge.catalogs.at(-1)?.get(asset.id)).toEqual(asset.sourceBounds)
 
     await nextFrame()
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])

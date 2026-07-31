@@ -418,7 +418,7 @@ import {
   EXPORT_AUDIO_BITRATE,
   EXPORT_AUDIO_CODEC,
   createMediabunnyExportDeps,
-  createMediabunnyExportMediaSource,
+  createMediabunnyExportMediaSource as createRealExportMediaSource,
   createMediabunnyExportSink,
 } from './export-mediabunny'
 
@@ -575,6 +575,29 @@ function makeTransitionVideoDoc(): TimelineDoc {
   }
 }
 
+function testSourceBounds(doc: TimelineDoc) {
+  return new Map(
+    doc.tracks.flatMap((track) => track.clips.map((clip) => [
+      clip.assetId,
+      {
+        video: {
+          status: 'exact' as const,
+          firstTimestampUs: 0,
+          endTimestampUs: 1_000_000_000_000,
+        },
+        audio: null,
+      },
+    ] as const)),
+  )
+}
+
+function createMediabunnyExportMediaSource(
+  doc: TimelineDoc,
+  resolveAsset: Parameters<typeof createRealExportMediaSource>[1],
+) {
+  return createRealExportMediaSource(doc, resolveAsset, testSourceBounds(doc))
+}
+
 function makeStillDoc(durationFrames = 5): TimelineDoc {
   const doc = makeVideoDoc(
     [{ assetId: 'image-asset', sourceStart: 0 }],
@@ -669,7 +692,7 @@ class FakeOffscreenCanvas {
     fillRect: vi.fn(),
     drawImage: vi.fn(),
   }
-  readonly getContext = vi.fn((kind: string) =>
+  readonly getContext = vi.fn((kind: string, _options?: unknown) =>
     kind === '2d' ? this.context : null,
   )
 
@@ -962,7 +985,7 @@ describe('createMediabunnyExportMediaSource', () => {
         const lease = await media.openFrame(frame)
         const result = await compositeFrame(
           doc,
-          frame,
+          lease.plan,
           canvas.context,
           lease,
           transitionSurfaceProvider,
@@ -1216,7 +1239,7 @@ describe('createMediabunnyExportMediaSource', () => {
       const lease = await media.openFrame(frame)
       const result = await compositeFrame(
         doc,
-        frame,
+        lease.plan,
         ctx,
         lease,
         transitionSurfaceProvider,
@@ -1236,7 +1259,7 @@ describe('createMediabunnyExportMediaSource', () => {
     ])
     expect(mb.inputs).toHaveLength(1)
     expect(canvasSinkAt().canvasesAtTimestamps).toHaveBeenCalledWith(
-      [10, 11, 12, 20, 12, 20, 12, 21, 22].map(
+      [10, 11, 12, 19, 13, 20, 14, 21, 22].map(
         (frame) => (frame * 1_001) / 30_000,
       ),
     )
@@ -1641,7 +1664,10 @@ describe('createMediabunnyExportSink video behavior', () => {
     })
     expect(fakeCanvases).toHaveLength(1)
     expect(fakeCanvases[0]).toMatchObject({ width: 64, height: 48 })
-    expect(fakeCanvases[0].getContext).toHaveBeenCalledWith('2d')
+    expect(fakeCanvases[0].getContext).toHaveBeenCalledWith(
+      '2d',
+      { colorSpace: 'srgb' },
+    )
     expect(canvasSourceAt().canvas).toBe(fakeCanvases[0])
     expect(canvasSourceAt().encodingConfig).toEqual({
       codec: 'avc',
@@ -1663,6 +1689,14 @@ describe('createMediabunnyExportSink video behavior', () => {
     expect(fakeCanvases).toHaveLength(3)
     expect(transitionSurfaces.leg.canvas).toBe(fakeCanvases[1])
     expect(transitionSurfaces.group.canvas).toBe(fakeCanvases[2])
+    expect(fakeCanvases[1].getContext).toHaveBeenCalledWith(
+      '2d',
+      { colorSpace: 'srgb' },
+    )
+    expect(fakeCanvases[2].getContext).toHaveBeenCalledWith(
+      '2d',
+      { colorSpace: 'srgb' },
+    )
     expect(sink.transitionSurfaceProvider.get()).toBe(transitionSurfaces)
     expect(fakeCanvases).toHaveLength(3)
     const deps = createMediabunnyExportDeps(resolveAsset)

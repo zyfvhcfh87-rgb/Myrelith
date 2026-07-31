@@ -20,6 +20,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import type { Composite2D } from '../pipeline/render'
 import {
   StaticImageDecodeError,
@@ -67,6 +68,7 @@ const DECODE_BUDGET: LocalDecoderBudget = {
 /* ------------------------------------------------------------------ */
 
 const FRAME_US = 100_000
+let testPlanDoc: TimelineDoc | null = null
 const TOL_US = FRAME_US / 2
 
 /* ------------------------------------------------------------------ */
@@ -388,7 +390,10 @@ function makeSurface(surface: CtxOp['surface'], log: CtxOp[]): FakeSurface {
     set height(v) {
       raw.height = v
     },
-    getContext: () => ctx,
+    getContext: (contextId, options) => {
+      log.push({ surface, name: 'getContext', args: [contextId, options] })
+      return ctx
+    },
   }
   return { canvas, raw }
 }
@@ -423,6 +428,7 @@ interface Harness {
 }
 
 function makeHarness(opts: FakeOptions = {}): Harness {
+  testPlanDoc = null
   const posts: FromRenderWorker[] = []
   const frames: TrackedFrame[] = []
   const streamingFrames: TrackedStreamingFrame[] = []
@@ -765,7 +771,28 @@ const initMsg = (h: Harness): ToRenderWorker => ({
   canvas: h.visible.canvas as unknown as OffscreenCanvas,
 })
 
-const docMsg = (doc: TimelineDoc): ToRenderWorker => ({ type: 'setDoc', doc })
+function docMsg(doc: TimelineDoc): ToRenderWorker {
+  testPlanDoc = doc
+  return { type: 'setDoc', doc }
+}
+
+function testVisualPlan(frame: number) {
+  if (!testPlanDoc) return { frame, items: [] }
+  const bounds = new Map(
+    testPlanDoc.tracks.flatMap((track) => track.clips.map((clip) => [
+      clip.assetId,
+      {
+        video: {
+          status: 'exact' as const,
+          firstTimestampUs: 0,
+          endTimestampUs: 1_000_000_000_000,
+        },
+        audio: null,
+      },
+    ] as const)),
+  )
+  return videoCompositionPlanAtFrame(testPlanDoc, frame, bounds)
+}
 
 const cfgMsg = (assetId: string, setupId = 1): ToRenderWorker => ({
   type: 'configureAsset',
@@ -803,7 +830,13 @@ function compMsg(
   frame: number,
   sources: CompositeSourceEntry[],
 ): ToRenderWorker {
-  return { type: 'composite', requestId, frame, sources }
+  return {
+    type: 'composite',
+    requestId,
+    frame,
+    plan: testVisualPlan(frame),
+    sources,
+  }
 }
 
 function renderMsg(
@@ -812,7 +845,14 @@ function renderMsg(
   mode: RenderMode,
   sources: StreamingCompositeSourceEntry[],
 ): RenderFrameMessage {
-  return { type: 'renderFrame', requestId, frame, mode, sources }
+  return {
+    type: 'renderFrame',
+    requestId,
+    frame,
+    plan: testVisualPlan(frame),
+    mode,
+    sources,
+  }
 }
 
 async function setup(h: Harness, doc: TimelineDoc, assetIds: string[]): Promise<void> {
@@ -981,7 +1021,7 @@ describe('composite happy path', () => {
 
     expect(h.createdSurfaces()).toHaveLength(1)
     await h.core.handleMessage(
-      compMsg(1, 1, [entry('A', 0, gop(0, 1)), entry('B', 0, gop(0, 1))]),
+      compMsg(1, 1, [entry('A', 1, gop(0, 2)), entry('B', 0, gop(0, 1))]),
     )
 
     expect(doneFor(h, 1)).toMatchObject({
@@ -995,6 +1035,16 @@ describe('composite happy path', () => {
       { width: 320, height: 180 },
       { width: 320, height: 180 },
       { width: 320, height: 180 },
+    ])
+    expect(
+      h.ops
+        .filter((op) => op.name === 'getContext')
+        .map((op) => op.args),
+    ).toEqual([
+      ['2d', { colorSpace: 'srgb' }],
+      ['2d', { colorSpace: 'srgb' }],
+      ['2d', { colorSpace: 'srgb' }],
+      ['2d', { colorSpace: 'srgb' }],
     ])
     expect(
       h.ops.filter(
@@ -1018,7 +1068,7 @@ describe('composite happy path', () => {
     expect(h.blits()).toHaveLength(1)
 
     await h.core.handleMessage(
-      compMsg(2, 1, [entry('A', 0), entry('B', 0)]),
+      compMsg(2, 1, [entry('A', 1), entry('B', 0)]),
     )
     expect(doneFor(h, 2)).toMatchObject({
       status: 'drawn',
@@ -1040,6 +1090,63 @@ describe('composite happy path', () => {
       { width: 640, height: 360 },
       { width: 640, height: 360 },
     ])
+  })
+
+  test('uses the carried group even when the worker document has only a hard cut', async () => {
+    const from = makeClip('from', 'A', 0, 1)
+    const to = makeClip('to', 'B', 1, 1)
+    const transition = {
+      id: 'carried-dissolve',
+      type: 'crossfade' as const,
+      fromClipId: from.id,
+      toClipId: to.id,
+      durationFrames: 1,
+      audio: { enabled: false, curve: 'equal-power' as const },
+    }
+    const hardCutTrack = makeTrack('V1', [from, to])
+    const plannedDoc = makeDoc([{
+      ...hardCutTrack,
+      transitions: [transition],
+    }])
+    const carriedPlan = videoCompositionPlanAtFrame(
+      plannedDoc,
+      1,
+      new Map([
+        ['A', {
+          video: {
+            status: 'exact',
+            firstTimestampUs: 0,
+            endTimestampUs: 1_000_000,
+          } as const,
+          audio: null,
+        }],
+        ['B', {
+          video: {
+            status: 'exact',
+            firstTimestampUs: 0,
+            endTimestampUs: 1_000_000,
+          } as const,
+          audio: null,
+        }],
+      ]),
+    )
+    const h = makeHarness()
+    await setup(h, makeDoc([hardCutTrack]), ['A', 'B'])
+    const message = compMsg(1, 1, [
+      entry('A', 1, gop(0, 2)),
+      entry('B', 0, gop(0, 1)),
+    ])
+    if (message.type !== 'composite') throw new Error('unexpected message')
+    message.plan = carriedPlan
+
+    await h.core.handleMessage(message)
+
+    expect(doneFor(h, 1)).toMatchObject({
+      status: 'drawn',
+      drawnClipIds: ['from', 'to'],
+      missingClipIds: [],
+    })
+    expect(h.createdSurfaces()).toHaveLength(3)
   })
 
   test('a repeat composite is served from the caches: zero new decodes', async () => {

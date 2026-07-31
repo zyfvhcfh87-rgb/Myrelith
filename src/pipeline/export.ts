@@ -7,6 +7,7 @@
  */
 
 import type { TimelineDoc } from '../domain/schema'
+import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import { docDurationFrames } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
 import {
@@ -28,6 +29,8 @@ export interface ExportResult {
 }
 
 export interface ExportFrameLease extends FrameSource {
+  /** Exact shared plan used to schedule every decode in this lease. */
+  plan: VideoCompositionPlan
   close(): void | Promise<void>
 }
 
@@ -120,9 +123,12 @@ async function compositeAndCloseLease(
   }
 
   try {
+    if (lease.plan.frame !== frame) {
+      throw new Error('Export media lease returned a plan for the wrong frame')
+    }
     const result = await composite(
       doc,
-      frame,
+      lease.plan,
       sink.ctx,
       observedSource,
       sink.transitionSurfaceProvider,

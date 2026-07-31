@@ -20,13 +20,30 @@ import type {
   TransitionAudioCurve,
   TransitionId,
 } from './schema'
+import { cloneMediaSourceBounds } from './sourceBounds'
 import {
   microsecondsTimestampToFrameCeil,
   rangeEnd,
 } from './time'
 
 export type SourceBoundsCatalog = ReadonlyMap<AssetId, MediaSourceBounds>
+export interface SourceBoundsCatalogEntry {
+  id: AssetId
+  sourceBounds: MediaSourceBounds
+}
 export type CrossfadeLegRole = 'from' | 'to'
+
+/** Snapshot durable bounds so one planning run cannot observe later mutation. */
+export function createSourceBoundsCatalog(
+  entries: Iterable<SourceBoundsCatalogEntry>,
+): SourceBoundsCatalog {
+  return new Map(
+    [...entries].map((entry) => [
+      entry.id,
+      cloneMediaSourceBounds(entry.sourceBounds),
+    ]),
+  )
+}
 
 export type CrossfadeInvalidReason =
   | 'track-not-found'
@@ -116,11 +133,14 @@ export type CrossfadePlanResolution =
     }
   | { status: 'available'; plan: CrossfadePlan }
 
-export interface CrossfadeFrameRequest {
-  role: CrossfadeLegRole
+export interface VideoFrameRequest {
   clip: Clip
   sourceFrame: number
   opacity: number
+}
+
+export interface CrossfadeFrameRequest extends VideoFrameRequest {
+  role: CrossfadeLegRole
   weight: number
 }
 

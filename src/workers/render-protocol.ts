@@ -5,7 +5,7 @@
  * import (same rule as decode-protocol.ts).
  *
  * Division of labor: the MAIN side is the single computer of timestamps.
- * It runs domain.visibleVideoLayersAtFrame over the doc and sends exact
+ * It sends one explicit domain VideoCompositionPlan plus exact
  * source-frame + integer-µs targets. The worker owns Blob-backed demux/decode
  * sources and advances clip-keyed playback lanes. It never re-derives µs
  * targets, so the two sides cannot disagree about rounding.
@@ -28,6 +28,7 @@
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
+import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { ChunkPayload } from './decode-protocol'
 
@@ -52,7 +53,7 @@ export type RenderMode = 'playback' | 'seek'
 interface StreamingCompositeSourceEntryBase {
   clipId: ClipId
   assetId: AssetId
-  /** Document-rate source frame from domain.visibleVideoLayersAtFrame(). */
+  /** Document-rate source frame from the explicit composition plan. */
   sourceFrame: number
   /** Target presentation timestamp in the asset stream, integer µs. */
   targetTimestampUs: number
@@ -122,6 +123,8 @@ export interface RenderFrameMessage {
   requestId: number
   /** Integer document frame selected from the audio clock or scrub state. */
   frame: number
+  /** Exact grouped visual plan computed on the main thread for `frame`. */
+  plan: VideoCompositionPlan
   mode: RenderMode
   sources: StreamingCompositeSourceEntry[]
 }
@@ -138,7 +141,7 @@ export interface RenderFrameMessage {
  */
 export interface CompositeSourceEntry {
   assetId: AssetId
-  /** Document-rate source frame from domain.visibleVideoLayersAtFrame(). */
+  /** Document-rate source frame from the explicit composition plan. */
   sourceFrame: number
   /** Target presentation timestamp in the ASSET's stream, integer µs. */
   targetTimestampUs: number
@@ -203,6 +206,8 @@ export type ToRenderWorker =
       type: 'composite'
       requestId: number
       frame: number
+      /** Exact grouped visual plan computed on the main thread for `frame`. */
+      plan: VideoCompositionPlan
       sources: CompositeSourceEntry[]
     }
   | {

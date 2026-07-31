@@ -9,6 +9,7 @@
 
 import { describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import type {
   Composite2D,
   FrameSource,
@@ -173,7 +174,26 @@ function compositeFrame(
   source: FrameSource,
   provider = makeTransitionSurfaceProvider().provider,
 ) {
-  return compositeFrameCore(doc, frame, ctx, source, provider)
+  const catalog = new Map(
+    doc.tracks.flatMap((track) => track.clips.map((clip) => [
+      clip.assetId,
+      {
+        video: {
+          status: 'exact' as const,
+          firstTimestampUs: 0,
+          endTimestampUs: 1_000_000_000,
+        },
+        audio: null,
+      },
+    ] as const)),
+  )
+  return compositeFrameCore(
+    doc,
+    videoCompositionPlanAtFrame(doc, frame, catalog),
+    ctx,
+    source,
+    provider,
+  )
 }
 
 /** Frame table keyed "assetId@sourceFrame"; unknown keys resolve null. */
@@ -337,12 +357,12 @@ describe('compositeFrame — stacking order & concurrency', () => {
     const { ctx, ops } = makeCtx()
     const surfaces = makeTransitionSurfaceProvider()
     const { source, requests } = makeSource({
-      'A@9': outgoing.promise,
+      'A@10': outgoing.promise,
       'B@0': incoming.promise,
     })
 
     const composite = compositeFrame(doc, 10, ctx, source, surfaces.provider)
-    expect(requests).toEqual(['A@9', 'B@0'])
+    expect(requests).toEqual(['A@10', 'B@0'])
 
     outgoing.resolve(outgoingImage)
     incoming.resolve(incomingImage)
