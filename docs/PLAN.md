@@ -1695,7 +1695,7 @@ gate stops progression; later checkboxes are never completed early.
 
 ## Post-MVP issue #16 — capability-aware export profiles
 
-**IMPLEMENTATION COMPLETE (2026-08-01); closeout pending merge.**
+**COMPLETE (2026-08-01); PR #29 normally merged and Issue #16 closed.**
 
 Issue #16 started from baseline commit `fd1d50e` and owns container, codecs,
 audio-off/mono/stereo layout, bitrate behavior, key-frame interval, MIME/file
@@ -1764,7 +1764,7 @@ behavior.
    channels/sample rate/duration/MIME/extension, exercise native Chrome
    playback plus cancellation/write failure/retry/memory gates, then update
    README/ARCHITECTURE/HANDOFF.
-8. [ ] Publish by normal merge, then close only Issue #16.
+8. [x] Publish by normal merge, then close only Issue #16.
 
 ### Slice 1 evidence — authoritative profile model (2026-07-31)
 
@@ -2020,8 +2020,9 @@ behavior.
   `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities. The
   optional local encoder fallback decision remains a no-go; runtime-native
   support stays capability-gated with no codec substitution. Local
-  implementation is complete, while GitHub closeout remains pending the normal
-  merge.
+  implementation completed at reviewed head `ea5ccfb`; PR #29 was normally
+  merged as `edb02d0`, and Issue #16 was closed as completed after its checklist
+  and fallback no-go were reconciled.
 
 ## Test strategy per layer (unchanged from original)
 
