@@ -4,6 +4,8 @@ import {
   enumerateLocalMediaFolder,
   isLocalMediaPickerCancellation,
   LocalMediaFolderTraversalError,
+  MEDIA_FILE_INPUT_ACCEPT,
+  pickLocalMediaFiles,
   pickLocalMediaFolder,
   queryLocalMediaPermission,
   requestLocalMediaPermission,
@@ -50,6 +52,7 @@ function makeDirectory(
 }
 
 afterEach(() => {
+  Reflect.deleteProperty(window, 'showOpenFilePicker')
   Reflect.deleteProperty(window, 'showDirectoryPicker')
 })
 
@@ -130,13 +133,17 @@ describe('local media handle registry', () => {
 describe('local media folder picker', () => {
   test('recursively returns supported files in deterministic relative-path order', async () => {
     const unsupported = makeHandle('notes.txt')
+    const unsafeVector = makeHandle('art.svg')
+    const stillImage = makeHandle('poster.AVIF')
     const upperCaseVideo = makeHandle('TRAILER.MP4')
     const nestedAudio = makeHandle('voice.wav')
     const nestedVideo = makeHandle('clip.mov')
     const root = makeDirectory('media', [
       upperCaseVideo,
+      stillImage,
       makeDirectory('z-folder', [nestedAudio]),
       unsupported,
+      unsafeVector,
       makeDirectory('a-folder', [nestedVideo]),
     ])
 
@@ -145,14 +152,17 @@ describe('local media folder picker', () => {
     expect(selections.map((selection) => selection.relativePath)).toEqual([
       'TRAILER.MP4',
       'a-folder/clip.mov',
+      'poster.AVIF',
       'z-folder/voice.wav',
     ])
     expect(selections.map((selection) => selection.handle)).toEqual([
       upperCaseVideo,
       nestedVideo,
+      stillImage,
       nestedAudio,
     ])
     expect(unsupported.getFile).not.toHaveBeenCalled()
+    expect(unsafeVector.getFile).not.toHaveBeenCalled()
   })
 
   test('bounds total entries and media files instead of silently truncating', async () => {
@@ -215,5 +225,37 @@ describe('local media folder picker', () => {
     }
     expect(caught).toBe(cancellation)
     expect(isLocalMediaPickerCancellation(caught)).toBe(true)
+  })
+})
+
+describe('local media file picker', () => {
+  test('requests multiple timed-media and explicit raster-image formats', async () => {
+    const first = makeHandle('one.png')
+    const second = makeHandle('two.mp4')
+    const picker = vi.fn(async () => [first, second])
+    Object.defineProperty(window, 'showOpenFilePicker', {
+      configurable: true,
+      value: picker,
+    })
+
+    await expect(pickLocalMediaFiles(true)).resolves.toHaveLength(2)
+    expect(picker).toHaveBeenCalledWith({
+      id: 'webcut-media',
+      multiple: true,
+      excludeAcceptAllOption: false,
+      types: [{
+        description: 'Video, audio, and still images',
+        accept: {
+          'video/*': ['.mp4', '.mov', '.mkv', '.webm', '.m4v'],
+          'audio/*': ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'],
+          'image/png': ['.png'],
+          'image/jpeg': ['.jpg', '.jpeg'],
+          'image/webp': ['.webp'],
+          'image/avif': ['.avif'],
+        },
+      }],
+    })
+    expect(MEDIA_FILE_INPUT_ACCEPT).toContain('image/avif')
+    expect(MEDIA_FILE_INPUT_ACCEPT).not.toContain('image/svg')
   })
 })

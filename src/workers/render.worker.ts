@@ -2,9 +2,11 @@
  * workers/render.worker.ts — The compositing worker. Phase 4.1b.
  *
  * Runs pipeline/render.compositeFrame off the main thread. The streaming
- * path owns one Blob-backed source per asset and one sequential cursor per
- * visible clip; the deprecated path still accepts keyframe chunk batches
- * until the bridge migration lands. Both inherit the hard-won ownership
+ * path owns one Blob-backed video source per asset and one sequential cursor
+ * per visible clip. Static images use one separately retained worker-owned
+ * frame-zero source shared across all of their layers and requests. The
+ * deprecated path still accepts keyframe chunk batches until the bridge
+ * migration lands. All paths inherit the hard-won ownership
  * rules from the decode worker (Phase 2.2/2.5):
  * - every VideoFrame closes the moment its bitmap copy exists;
  * - caches hold decoder-independent ImageBitmaps, never VideoFrames;
@@ -40,8 +42,18 @@ import {
   invalidateMediaDecoderSource,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
-import type { Composite2D, FrameSource } from '../pipeline/render'
+import type {
+  Composite2D,
+  FrameSource,
+  RenderFrameSource,
+} from '../pipeline/render'
 import { compositeFrame } from '../pipeline/render'
+import {
+  decodeStaticImage,
+  StaticImageDecodeError,
+  type DecodedStaticImage,
+  type StaticImageRenderSource,
+} from '../pipeline/static-image'
 import type { ChunkPayload } from './decode-protocol'
 import type {
   BitmapLike,
@@ -106,6 +118,8 @@ export interface RenderWorkerEnv {
     sourceId: AssetId,
     budget: LocalDecoderBudget,
   ): Promise<WorkerVideoSource>
+  /** Decode and transfer one bounded frame-zero image source to this owner. */
+  decodeImage(blob: Blob, signal: AbortSignal): Promise<DecodedStaticImage>
   /** Forget session capability facts before an asset source changes. */
   invalidateDecoderSource(sourceId: AssetId): void
   /** Forget every realm-local capability fact when this worker closes. */
@@ -173,8 +187,30 @@ interface StreamingAssetState {
   epoch: number
 }
 
+/** One retained static source, shared read-only across every frame request. */
+interface StaticImageAssetState {
+  source: StaticImageRenderSource
+  loans: number
+  retired: boolean
+  closed: boolean
+  closePromise: Promise<void>
+  resolveClosed(): void
+  rejectClosed(error: unknown): void
+}
+
+interface PendingStaticImageOpen {
+  revision: number
+  controller: AbortController
+  done: Promise<void>
+}
+
 interface StreamingLoan {
   bitmap: BitmapLike
+  settle(): void
+}
+
+interface StaticImageLoan {
+  source: RenderFrameSource
   settle(): void
 }
 
@@ -208,6 +244,10 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   const assets = new Map<AssetId, AssetState>()
   /** Blob-backed streaming asset states. */
   const streamingAssets = new Map<AssetId, StreamingAssetState>()
+  /** Blob-backed static image states (one retained frame per asset). */
+  const staticImageAssets = new Map<AssetId, StaticImageAssetState>()
+  /** Abortable opens let replacement/release/close retire late decodes. */
+  const pendingStaticImageOpens = new Map<AssetId, PendingStaticImageOpen>()
   const assetRevisions = new Map<AssetId, number>()
   /** Only seek cursors are presentation-scoped and cancelled on supersession. */
   const activeSeekCursors = new Set<VideoFrameCursor>()
@@ -359,6 +399,77 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     if (!state) return
     streamingAssets.delete(assetId)
     await teardownStreamingAsset(state)
+  }
+
+  function createStaticImageAssetState(
+    source: StaticImageRenderSource,
+  ): StaticImageAssetState {
+    let resolveClosed: () => void = () => undefined
+    let rejectClosed: (error: unknown) => void = () => undefined
+    const closePromise = new Promise<void>((resolve, reject) => {
+      resolveClosed = resolve
+      rejectClosed = reject
+    })
+    return {
+      source,
+      loans: 0,
+      retired: false,
+      closed: false,
+      closePromise,
+      resolveClosed,
+      rejectClosed,
+    }
+  }
+
+  /** Close only after every composite that borrowed this source has settled. */
+  function maybeCloseStaticImage(state: StaticImageAssetState): void {
+    if (!state.retired || state.loans !== 0 || state.closed) return
+    state.closed = true
+    try {
+      state.source.close()
+      state.resolveClosed()
+    } catch (error) {
+      state.rejectClosed(error)
+    }
+  }
+
+  function retireStaticImage(state: StaticImageAssetState): Promise<void> {
+    state.retired = true
+    maybeCloseStaticImage(state)
+    return state.closePromise
+  }
+
+  async function removeStaticImageAsset(assetId: AssetId): Promise<void> {
+    const state = staticImageAssets.get(assetId)
+    if (!state) return
+    staticImageAssets.delete(assetId)
+    await retireStaticImage(state)
+  }
+
+  function borrowStaticImage(
+    assetId: AssetId,
+    state: StaticImageAssetState,
+  ): StaticImageLoan | null {
+    if (
+      state.retired
+      || state.closed
+      || staticImageAssets.get(assetId) !== state
+    ) return null
+    state.loans++
+    let settled = false
+    return {
+      source: state.source,
+      settle: () => {
+        if (settled) return
+        settled = true
+        state.loans--
+        maybeCloseStaticImage(state)
+      },
+    }
+  }
+
+  function abortPendingStaticImageOpen(assetId: AssetId): void {
+    pendingStaticImageOpens.get(assetId)?.controller.abort()
   }
 
   function collectClipDecodeIdentities(
@@ -518,8 +629,13 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   function applyPlaybackPolicy(
     msg: RenderFrameMessage,
   ): Promise<unknown[]> {
+    const videoSources = msg.sources.filter((entry) =>
+      streamingAssets.has(entry.assetId),
+    )
     const nextKeys = msg.mode === 'playback'
-      ? new Set(msg.sources.map((entry) => playbackLaneKey(entry.assetId, entry.clipId)))
+      ? new Set(videoSources.map((entry) =>
+          playbackLaneKey(entry.assetId, entry.clipId),
+        ))
       : new Set<string>()
     const retiredRevisions = new Map<string, number>()
     if (!sameLaneKeySet(desiredPlaybackLaneKeys, nextKeys)) {
@@ -930,6 +1046,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
     try {
       await removeStreamingAsset(msg.assetId)
+      await removeStaticImageAsset(msg.assetId)
     } catch (error) {
       if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
       throw error
@@ -1012,6 +1129,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     msg: Extract<ToRenderWorker, { type: 'configureAsset' }>,
   ): Promise<void> {
     const revision = nextAssetRevision(msg.assetId)
+    abortPendingStaticImageOpen(msg.assetId)
     const lifecycle = workerLifecycle
     try {
       await configureAssetAtRevision(msg, revision, lifecycle)
@@ -1035,6 +1153,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
     try {
       await removeStreamingAsset(msg.assetId)
+      await removeStaticImageAsset(msg.assetId)
     } catch (error) {
       if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
       throw error
@@ -1071,6 +1190,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     msg: Extract<ToRenderWorker, { type: 'openAsset' }>,
   ): Promise<void> {
     const revision = nextAssetRevision(msg.assetId)
+    abortPendingStaticImageOpen(msg.assetId)
     const lifecycle = workerLifecycle
     try {
       await openAssetAtRevision(msg, revision, lifecycle)
@@ -1079,8 +1199,124 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
   }
 
+  function staticImageFailure(error: unknown): {
+    trackKind: null
+    reason: 'resource-limit' | 'decode-failed'
+  } {
+    return {
+      trackKind: null,
+      reason:
+        error instanceof StaticImageDecodeError
+        && error.reason === 'resource-limit'
+          ? 'resource-limit'
+          : 'decode-failed',
+    }
+  }
+
+  async function closeStaleStaticImageSource(
+    assetId: AssetId,
+    source: StaticImageRenderSource,
+    lifecycle: number,
+  ): Promise<void> {
+    try {
+      source.close()
+    } catch (error) {
+      if (workerLifecycle === lifecycle) {
+        env.post({
+          type: 'error',
+          message:
+            `stale image cleanup failed for asset ${assetId}: `
+            + (error instanceof Error
+              ? `${error.name}: ${error.message}`
+              : String(error)),
+        })
+      }
+    }
+  }
+
+  async function openImageAtRevision(
+    msg: Extract<ToRenderWorker, { type: 'openImage' }>,
+    revision: number,
+    lifecycle: number,
+    signal: AbortSignal,
+  ): Promise<void> {
+    env.invalidateDecoderSource(msg.assetId)
+    supersede()
+
+    const legacy = assets.get(msg.assetId)
+    if (legacy) {
+      teardownAsset(legacy)
+      assets.delete(msg.assetId)
+    }
+    try {
+      await removeStreamingAsset(msg.assetId)
+      await removeStaticImageAsset(msg.assetId)
+    } catch (error) {
+      if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
+      throw error
+    }
+    if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
+
+    let decoded: DecodedStaticImage
+    try {
+      decoded = await env.decodeImage(msg.blob, signal)
+    } catch (error) {
+      if (
+        signal.aborted
+        || !assetRevisionIsCurrent(msg.assetId, revision, lifecycle)
+      ) return
+      env.invalidateDecoderSource(msg.assetId)
+      throw error
+    }
+
+    if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) {
+      await closeStaleStaticImageSource(
+        msg.assetId,
+        decoded.source,
+        lifecycle,
+      )
+      return
+    }
+
+    staticImageAssets.set(
+      msg.assetId,
+      createStaticImageAssetState(decoded.source),
+    )
+    env.post({ type: 'assetConfigured', assetId: msg.assetId })
+  }
+
+  async function handleOpenImage(
+    msg: Extract<ToRenderWorker, { type: 'openImage' }>,
+  ): Promise<void> {
+    const revision = nextAssetRevision(msg.assetId)
+    abortPendingStaticImageOpen(msg.assetId)
+    const lifecycle = workerLifecycle
+    const controller = new AbortController()
+    const operation: PendingStaticImageOpen = {
+      revision,
+      controller,
+      done: Promise.resolve(),
+    }
+    pendingStaticImageOpens.set(msg.assetId, operation)
+    operation.done = openImageAtRevision(
+      msg,
+      revision,
+      lifecycle,
+      controller.signal,
+    )
+    try {
+      await operation.done
+    } finally {
+      if (pendingStaticImageOpens.get(msg.assetId) === operation) {
+        pendingStaticImageOpens.delete(msg.assetId)
+      }
+      clearAssetRevision(msg.assetId, revision)
+    }
+  }
+
   async function handleReleaseAsset(assetId: AssetId): Promise<void> {
     const revision = nextAssetRevision(assetId)
+    abortPendingStaticImageOpen(assetId)
     const lifecycle = workerLifecycle
     try {
       env.invalidateDecoderSource(assetId)
@@ -1092,6 +1328,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       }
       try {
         await removeStreamingAsset(assetId)
+        await removeStaticImageAsset(assetId)
       } catch (error) {
         if (!assetRevisionIsCurrent(assetId, revision, lifecycle)) {
           // This cleanup belonged to a source that a newer open already
@@ -1269,17 +1506,32 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         queues.set(key, queue)
       }
 
-      const memo = new Map<ClipId, Promise<BitmapLike | null>>()
+      const memo = new Map<ClipId, Promise<RenderFrameSource | null>>()
+      const staticMemo = new Map<
+        AssetId,
+        Promise<RenderFrameSource | null>
+      >()
       const loans: StreamingLoan[] = []
+      const staticLoans: StaticImageLoan[] = []
       const source: FrameSource = {
         getFrame: (assetId, sourceFrame) => {
           const queue = queues.get(`${assetId}@${sourceFrame}`)
           const entry = queue?.shift()
           if (!entry) return Promise.resolve(null)
+          const staticState = staticImageAssets.get(entry.assetId)
+          if (staticState) {
+            const memoizedStatic = staticMemo.get(entry.assetId)
+            if (memoizedStatic) return memoizedStatic
+            const loan = borrowStaticImage(entry.assetId, staticState)
+            if (loan) staticLoans.push(loan)
+            const staticSource = Promise.resolve(loan?.source ?? null)
+            staticMemo.set(entry.assetId, staticSource)
+            return staticSource
+          }
           const memoized = memo.get(entry.clipId)
           if (memoized) return memoized
           const state = streamingAssets.get(entry.assetId)
-          const promise = !state
+          const promise: Promise<RenderFrameSource | null> = !state
             ? Promise.resolve(null)
             : msg.mode === 'playback'
               ? resolvePlaybackEntry(state, entry, loans, msg.requestId)
@@ -1294,6 +1546,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         result = await compositeFrame(renderDoc, msg.frame, scratchCtx, source)
       } finally {
         for (const loan of loans) loan.settle()
+        for (const loan of staticLoans) loan.settle()
       }
 
       if (generation !== myGen) {
@@ -1357,6 +1610,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       case 'openAsset':
         await handleOpenAsset(msg)
         break
+      case 'openImage':
+        await handleOpenImage(msg)
+        break
       case 'configureAsset':
         await handleConfigureAsset(msg)
         break
@@ -1374,14 +1630,22 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         env.invalidateDecoderRuntime()
         supersede()
         assetRevisions.clear()
+        const pendingImageOpens = [...pendingStaticImageOpens.values()]
+        for (const pending of pendingImageOpens) pending.controller.abort()
         desiredPlaybackLaneKeys.clear()
         playbackLaneRevisions.clear()
         for (const state of assets.values()) teardownAsset(state)
         assets.clear()
         const streaming = [...streamingAssets.values()]
         streamingAssets.clear()
+        const staticImages = [...staticImageAssets.values()]
+        staticImageAssets.clear()
         const results = await Promise.allSettled(
-          streaming.map((state) => teardownStreamingAsset(state)),
+          [
+            ...streaming.map((state) => teardownStreamingAsset(state)),
+            ...staticImages.map((state) => retireStaticImage(state)),
+            ...pendingImageOpens.map((pending) => pending.done),
+          ],
         )
         const errors = results
           .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
@@ -1409,14 +1673,19 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         assetId:
           msg.type === 'configureAsset'
           || msg.type === 'openAsset'
+          || msg.type === 'openImage'
           || msg.type === 'releaseAsset'
             ? msg.assetId
             : undefined,
         ...(msg.type === 'openAsset' && e instanceof WorkerVideoSourceOpenError
           ? { mediaFailure: e.failure }
-          : {}),
+          : msg.type === 'openImage'
+            ? { mediaFailure: staticImageFailure(e) }
+            : {}),
         message: `worker ${msg.type} failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`,
       })
+    } finally {
+      if (msg.type === 'close') env.post({ type: 'closed' })
     }
   }
 
@@ -1497,6 +1766,7 @@ if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
       blob,
       { sourceId, budget },
     ),
+    decodeImage: (blob, signal) => decodeStaticImage(blob, { signal }),
     invalidateDecoderSource: invalidateMediaDecoderSource,
     invalidateDecoderRuntime: invalidateMediaDecoderRuntime,
     createStreamingBitmap: createOrientedStreamingBitmap,

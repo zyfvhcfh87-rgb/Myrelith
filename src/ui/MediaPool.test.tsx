@@ -20,7 +20,7 @@ import {
   canRememberImportedMedia,
   chooseMediaForImport,
   forgetImportedMediaHandle,
-  importMedia,
+  importMediaFiles,
   removeMediaCompatibility,
   retryMediaCompatibility,
 } from '../app/mediaImportController'
@@ -47,6 +47,7 @@ import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
+import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
 import MediaPool from './MediaPool'
 
 vi.mock('../app/mediaImportController', () => ({
@@ -60,7 +61,10 @@ vi.mock('../app/mediaImportController', () => ({
     assetId: 'mock',
   })),
   forgetImportedMediaHandle: vi.fn(),
-  importMedia: vi.fn(async () => ({ status: 'imported', assetId: 'mock' })),
+  importMediaFiles: vi.fn(async () => ({
+    status: 'batch-complete',
+    results: [{ status: 'imported', assetId: 'mock' }],
+  })),
   removeMediaCompatibility: vi.fn(() => true),
   retryMediaCompatibility: vi.fn(async () => ({
     status: 'imported',
@@ -326,7 +330,7 @@ beforeEach(() => {
     activeProjectName: 'Test project',
     activeMediaRelink: INITIAL_ACTIVE_MEDIA_RELINK,
   })
-  vi.mocked(importMedia).mockClear()
+  vi.mocked(importMediaFiles).mockClear()
   vi.mocked(acceptPartialMediaImport).mockClear()
   vi.mocked(chooseMediaForImport).mockClear()
   vi.mocked(forgetImportedMediaHandle).mockClear()
@@ -345,16 +349,19 @@ beforeEach(() => {
 })
 
 describe('MediaPool presentation', () => {
-  test('renders the Media header and delegates the selected File to the import controller', () => {
+  test('delegates every selected fallback file to the bounded batch controller', () => {
     render(<MediaPool />)
 
     expect(screen.getByRole('heading', { name: 'Media' })).toBeInTheDocument()
     const input = screen.getByLabelText('Import media')
-    const file = new File(['video'], 'fresh.mp4', { type: 'video/mp4' })
-    fireEvent.change(input, { target: { files: [file] } })
+    const video = new File(['video'], 'fresh.mp4', { type: 'video/mp4' })
+    const image = new File(['image'], 'poster.png', { type: 'image/png' })
+    fireEvent.change(input, { target: { files: [video, image] } })
 
-    expect(importMedia).toHaveBeenCalledOnce()
-    expect(importMedia).toHaveBeenCalledWith(file)
+    expect(input).toHaveAttribute('multiple')
+    expect(input).toHaveAttribute('accept', expect.stringContaining('image/png'))
+    expect(importMediaFiles).toHaveBeenCalledOnce()
+    expect(importMediaFiles).toHaveBeenCalledWith([video, image])
     expect(useMediaStore.getState().assets.size).toBe(0)
   })
 
@@ -408,6 +415,82 @@ describe('MediaPool presentation', () => {
     expect(thumbnail).toHaveAttribute('data-state', 'ready')
     expect(thumbnail.getAttribute('style')).toContain('blob:filmstrip')
     expect(thumbnail).toHaveStyle({ backgroundSize: '400% auto' })
+  })
+
+  test('presents a verified animated still as one contained, draggable tile', () => {
+    const image = makeAsset({
+      id: 'image-1',
+      fileName: 'poster.webp',
+      mimeType: 'image/webp',
+      objectUrl: 'blob:image',
+      kind: 'image',
+      durationFrames: 150,
+      durationMicroseconds: 5_000_000,
+      frameRate: null,
+      width: 640,
+      height: 360,
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    })
+    seedAsset(image, {
+      filmstrip: {
+        url: 'blob:image-tile',
+        tiles: 1,
+        tileWidth: 320,
+        tileHeight: 180,
+      },
+      waveform: null,
+    })
+    seedCompatibility(makeCompatibility({
+      id: image.id,
+      fileName: image.fileName,
+      declaredMimeType: image.mimeType,
+      status: 'ready',
+      report: makeReport('ready', {
+        container: {
+          name: 'WEBP image',
+          mimeType: 'image/webp',
+          fullMimeType: 'image/webp',
+        },
+        durationMicroseconds: 5_000_000,
+        tracks: [],
+        image: {
+          format: 'webp',
+          mimeType: 'image/webp',
+          width: 640,
+          height: 360,
+          animated: true,
+          frameCount: 4,
+          firstFrameOnly: true,
+          decodePath: 'image-bitmap',
+        },
+        detail: 'Animated image detected; WebCut uses its first frame only.',
+      }),
+    }))
+    render(<MediaPool />)
+
+    const card = screen.getByTitle('poster.webp')
+    const thumbnail = screen.getByTestId('media-thumbnail-image-1')
+    expect(card).toHaveAttribute('draggable', 'true')
+    expect(screen.getByText(
+      '640×360 · 00:00:05:00 · First frame only',
+    )).toBeInTheDocument()
+    expect(screen.getByText('Still image')).toBeInTheDocument()
+    expect(screen.getByText(
+      'WEBP · 640×360 · ImageBitmap · First frame only',
+    )).toBeInTheDocument()
+    expect(thumbnail).toHaveStyle({
+      backgroundSize: 'contain',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+    })
+    const setData = vi.fn()
+    fireEvent.dragStart(card, {
+      dataTransfer: { setData, effectAllowed: 'none' },
+    })
+    expect(setData).toHaveBeenCalledWith(ASSET_DRAG_TYPE, 'image-1')
+    expect(setData).toHaveBeenCalledWith(assetKindDragType('image'), 'image')
   })
 
   test('shows completed audio metadata instead of an analysis placeholder', () => {
@@ -529,7 +612,7 @@ describe('MediaPool presentation', () => {
     expect(screen.getByRole('status', {
       name: 'beach.mp4 compatibility status',
     })).toHaveTextContent('Compatibility: Checking')
-    expect(screen.getByText('Reading container and track metadata…'))
+    expect(screen.getByText('Reading file bytes and media metadata…'))
       .toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove beach.mp4' }))

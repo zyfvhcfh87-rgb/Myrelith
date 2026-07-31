@@ -10,6 +10,7 @@
 import type {
   AssetKind,
   Clip,
+  ClipSourceMode,
   Effect,
   FrameRate,
   TextProps,
@@ -25,7 +26,7 @@ import {
 } from './projectLimits'
 
 export const PROJECT_FILE_FORMAT = 'webcut-project' as const
-export const CURRENT_PROJECT_FORMAT_VERSION = 2 as const
+export const CURRENT_PROJECT_FORMAT_VERSION = 3 as const
 export const CURRENT_TIMELINE_SCHEMA_VERSION = 1 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
@@ -73,14 +74,14 @@ export interface PortableAssetDescriptor {
   audioChannels: number | null
 }
 
-export interface ProjectFileV2 {
+export interface ProjectFileV3 {
   format: typeof PROJECT_FILE_FORMAT
   formatVersion: typeof CURRENT_PROJECT_FORMAT_VERSION
   document: TimelineDoc
   assets: PortableAssetDescriptor[]
 }
 
-export type ProjectFile = ProjectFileV2
+export type ProjectFile = ProjectFileV3
 
 export class ProjectFileError extends Error {
   constructor(message: string) {
@@ -428,7 +429,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   const clip = record(value, path)
   exactKeys(
     clip,
-    ['id', 'assetId', 'name', 'sourceRange', 'timelineRange', 'transform', 'opacity', 'volume', 'effects'],
+    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'timelineRange', 'transform', 'opacity', 'volume', 'effects'],
     ['text', 'linkGroupId'],
     path,
   )
@@ -439,25 +440,43 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   const asset = context.assetsById.get(clip.assetId)
   if (!asset) fail(`${path}.assetId`, 'references an unknown asset')
   stringValue(clip.name, `${path}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  if (clip.sourceMode !== 'timed' && clip.sourceMode !== 'still') {
+    fail(`${path}.sourceMode`, 'expected timed or still')
+  }
   validateRange(clip.sourceRange, `${path}.sourceRange`, 1)
   validateRange(clip.timelineRange, `${path}.timelineRange`, 1)
-  const sourceRange = clip.sourceRange as { durationFrames: number }
+  const sourceRange = clip.sourceRange as {
+    startFrame: number
+    durationFrames: number
+  }
   const timelineRange = clip.timelineRange as { durationFrames: number }
-  if (sourceRange.durationFrames !== timelineRange.durationFrames) {
+  const stillSource = clip.sourceMode === 'still'
+  if (
+    stillSource
+    && (sourceRange.startFrame !== 0 || sourceRange.durationFrames !== 1)
+  ) {
+    fail(`${path}.sourceRange`, 'still clips must use source frame 0 with duration 1')
+  }
+  if (!stillSource && sourceRange.durationFrames !== timelineRange.durationFrames) {
     fail(path, 'source and timeline durations must match')
+  }
+  if (clip.text === undefined && asset.kind === 'image' && !stillSource) {
+    fail(`${path}.sourceMode`, 'image clips must use still source mode')
+  }
+  if (stillSource && (asset.kind !== 'image' || clip.text !== undefined)) {
+    fail(`${path}.sourceMode`, 'still source mode requires an image media clip')
   }
   if (context.documentFrameRate === null) {
     fail('$.document.frameRate', 'must be validated before clips')
-  }
-  const source = clip.sourceRange as {
-    startFrame: number
-    durationFrames: number
   }
   const assetDurationFrames = microsecondsDurationToFrames(
     asset.durationMicroseconds,
     context.documentFrameRate,
   )
-  if (source.startFrame + source.durationFrames > assetDurationFrames) {
+  if (
+    !stillSource
+    && sourceRange.startFrame + sourceRange.durationFrames > assetDurationFrames
+  ) {
     fail(`${path}.sourceRange`, 'extends beyond the referenced asset duration')
   }
   validateTransform(clip.transform, `${path}.transform`)
@@ -704,9 +723,69 @@ export function validateProjectFile(value: unknown): ProjectFile {
 }
 
 /**
- * Upgrade a parsed historical value into the current format. Version 2 adds
- * the optional durable partial-track choice; existing v1 assets mean full
- * import and therefore need no per-asset field.
+ * Add explicit source mapping to every historical clip. Image media clips
+ * become canonical one-frame still sources while retaining their authored
+ * timeline duration; timed and text clips keep their existing source range.
+ */
+function migrateClipSourceModes(
+  documentValue: unknown,
+  assetsValue: unknown,
+): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(
+    assetsValue,
+    '$.assets',
+    PROJECT_FILE_LIMITS.maxAssets,
+  )
+  const assets = assetsValue
+  const imageAssetIds = new Set<string>()
+  for (let index = 0; index < assets.length; index++) {
+    const asset = record(assets[index], `$.assets[${index}]`)
+    if (typeof asset.id === 'string' && asset.kind === 'image') {
+      imageAssetIds.add(asset.id)
+    }
+  }
+
+  boundedArray(
+    document.tracks,
+    '$.document.tracks',
+    PROJECT_FILE_LIMITS.maxTracks,
+  )
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    boundedArray(
+      track.clips,
+      `$.document.tracks[${trackIndex}].clips`,
+      PROJECT_FILE_LIMITS.maxClips,
+    )
+    const clips = track.clips.map((clipValue, clipIndex) => {
+      const clip = record(
+        clipValue,
+        `$.document.tracks[${trackIndex}].clips[${clipIndex}]`,
+      )
+      const sourceMode: ClipSourceMode =
+        clip.text === undefined
+        && typeof clip.assetId === 'string'
+        && imageAssetIds.has(clip.assetId)
+          ? 'still'
+          : 'timed'
+      return {
+        ...clip,
+        sourceMode,
+        ...(sourceMode === 'still'
+          ? { sourceRange: { startFrame: 0, durationFrames: 1 } }
+          : {}),
+      }
+    })
+    return { ...track, clips }
+  })
+  return { ...document, tracks }
+}
+
+/**
+ * Upgrade a parsed historical value into the current format. Version 2 added
+ * the optional durable partial-track choice. Version 3 adds explicit
+ * timed/still clip source semantics.
  */
 export function migrateProjectFile(value: unknown): unknown {
   const project = record(value, '$')
@@ -719,7 +798,12 @@ export function migrateProjectFile(value: unknown): unknown {
   }
   switch (project.formatVersion) {
     case 1:
-      return { ...project, formatVersion: CURRENT_PROJECT_FORMAT_VERSION }
+    case 2:
+      return {
+        ...project,
+        formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
+        document: migrateClipSourceModes(project.document, project.assets),
+      }
     case CURRENT_PROJECT_FORMAT_VERSION:
       return project
     default:
@@ -754,6 +838,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           id: clip.id,
           assetId: clip.assetId,
           name: clip.name,
+          sourceMode: clip.sourceMode ?? 'timed',
           sourceRange: { ...clip.sourceRange },
           timelineRange: { ...clip.timelineRange },
           transform: { ...clip.transform },
@@ -808,11 +893,16 @@ export function createProjectFileSnapshot(
   document: TimelineDoc,
   descriptors: Iterable<PortableAssetDescriptor>,
 ): ProjectFile {
+  const assets = Array.from(descriptors)
+  const normalizedDocument = migrateClipSourceModes(
+    document,
+    assets,
+  ) as unknown as TimelineDoc
   const project: ProjectFile = {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-    document,
-    assets: Array.from(descriptors),
+    document: normalizedDocument,
+    assets,
   }
   validateProjectFile(project)
   return portableProjectSnapshot(project)

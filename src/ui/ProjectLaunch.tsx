@@ -19,6 +19,7 @@ import {
   forgetRecentProject,
   refreshProjectLibrary,
 } from '../app/projectLibraryController'
+import { MEDIA_FILE_INPUT_ACCEPT } from '../app/localMediaHandles'
 import {
   DEFAULT_PROJECT_SETTINGS,
   PROJECT_AUDIO_SAMPLE_RATE_PRESETS,
@@ -490,7 +491,7 @@ function ResumeProjectScreen() {
                       className="project-file-input"
                       aria-label="Reconnect project source media"
                       type="file"
-                      accept="video/*,audio/*,.mp4,.mov,.mkv,.webm"
+                      accept={MEDIA_FILE_INPUT_ACCEPT}
                       multiple
                       disabled={busy}
                       onChange={(event) => {

@@ -12,10 +12,11 @@ import {
   canRememberImportedMedia,
   chooseMediaForImport,
   forgetImportedMediaHandle,
-  importMedia,
+  importMediaFiles,
   removeMediaCompatibility,
   retryMediaCompatibility,
 } from '../app/mediaImportController'
+import { MEDIA_FILE_INPUT_ACCEPT } from '../app/localMediaHandles'
 import {
   canChooseActiveMediaFolder,
   chooseActiveAssetMedia,
@@ -51,6 +52,7 @@ import MediaRelinkDialog from './MediaRelinkDialog'
 function formatAssetMetadata(
   descriptor: PortableAssetDescriptor,
   projectRate: FrameRate,
+  compatibilityItem?: MediaCompatibilityItem,
 ): string {
   const duration = formatTimecode(
     microsecondsDurationToFrames(
@@ -77,7 +79,13 @@ function formatAssetMetadata(
       : ''
     return `${quality} · ${duration}${projection}`
   }
-  return `Image · ${duration}`
+  const dimensions = descriptor.width && descriptor.height
+    ? `${descriptor.width}×${descriptor.height}`
+    : 'Still image'
+  const animation = compatibilityItem?.report?.image?.firstFrameOnly
+    ? ' · First frame only'
+    : ''
+  return `${dimensions} · ${duration}${animation}`
 }
 
 function assetIsUsedOnTimeline(assetId: string): boolean {
@@ -210,7 +218,7 @@ function CompatibilityDiagnostics({
 
       {!report ? (
         <p className="media-compatibility-note">
-          Reading container and track metadata…
+          Reading file bytes and media metadata…
         </p>
       ) : (
         <>
@@ -229,6 +237,21 @@ function CompatibilityDiagnostics({
                 <dd>{formatTrack(track)}</dd>
               </div>
             ))}
+            {report.image ? (
+              <div>
+                <dt>Still image</dt>
+                <dd>
+                  {report.image.format.toUpperCase()}
+                  {' · '}
+                  {report.image.width}×{report.image.height}
+                  {' · '}
+                  {report.image.decodePath === 'image-decoder'
+                    ? 'ImageDecoder'
+                    : 'ImageBitmap'}
+                  {report.image.firstFrameOnly ? ' · First frame only' : ''}
+                </dd>
+              </div>
+            ) : null}
           </dl>
           {report.detail && runtimeFailures.length === 0 ? (
             <p
@@ -549,12 +572,13 @@ export default function MediaPool() {
                 className="media-import-input"
                 aria-label="Import media"
                 type="file"
-                accept="video/*,audio/*,.mp4,.mov,.mkv,.webm"
+                accept={MEDIA_FILE_INPUT_ACCEPT}
+                multiple
                 disabled={importBusy || relinkBusy}
                 onChange={(event) => {
-                  const file = event.target.files?.[0]
+                  const files = [...(event.target.files ?? [])]
                   event.target.value = ''
-                  if (file) void importMedia(file)
+                  if (files.length > 0) void importMediaFiles(files)
                 }}
               />
             </label>
@@ -565,7 +589,9 @@ export default function MediaPool() {
       <MediaRelinkStatus />
 
       {itemIds.length === 0 ? (
-        <p className="media-empty">no media yet — import a video or audio file</p>
+        <p className="media-empty">
+          no media yet — import video, audio, or a still image
+        </p>
       ) : (
         <ul className="media-list">
           {itemIds.map((id) => {
@@ -581,8 +607,16 @@ export default function MediaPool() {
             const thumbnailStyle = filmstrip
               ? {
                   backgroundImage: `url("${filmstrip.url}")`,
-                  // Scale the strip so its first tile fills the thumbnail.
-                  backgroundSize: `${filmstrip.tiles * 100}% auto`,
+                  ...(asset?.kind === 'image'
+                    ? {
+                        backgroundSize: 'contain',
+                        backgroundPosition: 'center',
+                        backgroundRepeat: 'no-repeat',
+                      }
+                    : {
+                        // Scale the strip so its first tile fills the thumbnail.
+                        backgroundSize: `${filmstrip.tiles * 100}% auto`,
+                      }),
                 }
               : undefined
             const draggable = Boolean(
@@ -638,8 +672,18 @@ export default function MediaPool() {
                       viewBox="0 0 24 24"
                       fill="none"
                     >
-                      <rect x="3" y="5" width="13" height="14" rx="2" />
-                      <path d="m16 10 5-3v10l-5-3" />
+                      {descriptor?.kind === 'image' ? (
+                        <>
+                          <rect x="3" y="4" width="18" height="16" rx="2" />
+                          <circle cx="9" cy="9" r="2" />
+                          <path d="m5 17 4-4 3 3 2-2 5 5" />
+                        </>
+                      ) : (
+                        <>
+                          <rect x="3" y="5" width="13" height="14" rx="2" />
+                          <path d="m16 10 5-3v10l-5-3" />
+                        </>
+                      )}
                     </svg>
                   ) : null}
                 </div>
@@ -648,7 +692,11 @@ export default function MediaPool() {
                   <span className="media-name">{fileName}</span>
                   <span className="media-meta">
                     {descriptor
-                      ? formatAssetMetadata(descriptor, documentFrameRate)
+                      ? formatAssetMetadata(
+                          descriptor,
+                          documentFrameRate,
+                          compatibilityItem,
+                        )
                       : compatibilityItem
                         ? formatSelectedFile(compatibilityItem)
                         : null}
@@ -673,7 +721,7 @@ export default function MediaPool() {
                             className="media-import-input"
                             aria-label={`Relink ${fileName}`}
                             type="file"
-                            accept="video/*,audio/*,.mp4,.mov,.mkv,.webm"
+                            accept={MEDIA_FILE_INPUT_ACCEPT}
                             disabled={importBusy || relinkBusy}
                             onChange={(event) => {
                               const file = event.target.files?.[0]

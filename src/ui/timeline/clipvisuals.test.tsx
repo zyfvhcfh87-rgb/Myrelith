@@ -137,6 +137,65 @@ describe('clip visuals', () => {
     expect(visual.querySelectorAll('.clip-filmstrip-tile')).toHaveLength(2)
   })
 
+  test('a still repeats its one visual tile across live timeline extensions', () => {
+    const still = {
+      ...makeClip('still', 0, 150),
+      sourceMode: 'still' as const,
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    }
+    useMediaStore.setState({
+      assets: new Map([[
+        asset.id,
+        {
+          ...asset,
+          fileName: 'poster.png',
+          mimeType: 'image/png',
+          kind: 'image',
+          frameRate: null,
+          hasAudio: false,
+          audioSampleRate: null,
+          audioChannels: null,
+        },
+      ]]),
+      visuals: new Map([[
+        asset.id,
+        {
+          filmstrip: {
+            url: 'blob:poster',
+            tiles: 1,
+            tileWidth: 78,
+            tileHeight: 44,
+          },
+          waveform: null,
+        },
+      ]]),
+    })
+
+    render(<ClipView clip={still} trackId="V1" trackKind="video" />)
+    const clip = screen.getByRole('button', {
+      name: 'still, still image clip',
+    })
+    expect(clip).toHaveAttribute('data-source-mode', 'still')
+    expect(clip).toHaveStyle({ width: '300px' })
+    expect(screen.getByTestId('clip-still-filmstrip-tile-0')).toHaveStyle({
+      left: '0px',
+      width: '300px',
+    })
+
+    act(() => {
+      useTransportStore.getState().setEditPreview({
+        clipId: 'still',
+        kind: 'trim-end',
+        deltaFrames: 150,
+      })
+    })
+    expect(clip).toHaveStyle({ width: '600px' })
+    expect(screen.getByTestId('clip-still-filmstrip-tile-0')).toHaveStyle({
+      left: '0px',
+      width: '600px',
+    })
+  })
+
   test('audio lanes map the full-source vector waveform by time', () => {
     render(<ClipView clip={makeClip('c2', 0, 100)} trackId="A1" trackKind="audio" />)
     const waveform = screen.getByTestId('clip-c2-visual')

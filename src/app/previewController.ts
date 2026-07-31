@@ -11,7 +11,7 @@
  * - this file is where stores and machinery are ALLOWED to meet.
  *
  * What it does: owns one render worker + bridge for the lifetime of the
- * canvas. Watches mediaStore and gives every analyzed video Blob to the
+ * canvas. Watches mediaStore and gives every analyzed video/image Blob to the
  * bridge once (one worker-owned source per asset),
  * releasing assets that disappear;
  * watches documentStore and posts each new doc snapshot; watches
@@ -62,6 +62,11 @@ export interface BridgeLike {
     budget: LocalDecoderBudget,
     runtimeToken: object,
   ): Promise<void>
+  openImage(
+    assetId: AssetId,
+    blob: Blob,
+    runtimeToken: object,
+  ): Promise<void>
   releaseAsset(assetId: AssetId): void
   renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult>
   dispose(): void
@@ -69,6 +74,7 @@ export interface BridgeLike {
   onAssetError: ((
     assetId: AssetId,
     runtimeToken: object,
+    trackKind: 'video' | null,
     message: string,
   ) => void) | null
   onAssetReady: ((assetId: AssetId) => void) | null
@@ -149,7 +155,7 @@ function scheduleRender(): void {
         offlineIds.push(id)
       }
     }
-    usePreviewStatusStore.getState().setOfflineVideoAssetIds(offlineIds)
+    usePreviewStatusStore.getState().setOfflineVisualAssetIds(offlineIds)
     void bridge
       .renderFrame(transport.playheadFrame, modeForTransport(transport))
       .then((result) => {
@@ -192,17 +198,21 @@ async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void>
       return
     }
     failureReason = 'decode-failed'
-    failureTrackKind = 'video'
-    if (!asset.frameRate) {
-      throw new Error(`"${asset.fileName}": missing frame rate`)
+    if (asset.kind === 'image') {
+      await bridge.openImage(asset.id, blob, guard)
+    } else {
+      failureTrackKind = 'video'
+      if (!asset.frameRate) {
+        throw new Error(`"${asset.fileName}": missing frame rate`)
+      }
+      await bridge.openAsset(
+        asset.id,
+        blob,
+        asset.frameRate,
+        mediaAssetDecoderBudget(asset, blob.size),
+        guard,
+      )
     }
-    await bridge.openAsset(
-      asset.id,
-      blob,
-      asset.frameRate,
-      mediaAssetDecoderBudget(asset, blob.size),
-      guard,
-    )
     if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) {
       return
     }
@@ -240,7 +250,7 @@ function syncAssets(deps: PreviewDeps): void {
   const assets = useMediaStore.getState().assets
 
   for (const asset of assets.values()) {
-    if (asset.kind !== 'video') continue // audio/images never reach the preview
+    if (asset.kind !== 'video' && asset.kind !== 'image') continue
     const current = state.assetStates.get(asset.id)
     if (current?.objectUrl === asset.objectUrl) continue
     if (current) {
@@ -284,12 +294,12 @@ export function initPreview(
   }
   bridge.onWorkerError = (message) =>
     console.warn('[previewController] worker error:', message)
-  bridge.onAssetError = (assetId, runtimeToken, message) => {
+  bridge.onAssetError = (assetId, runtimeToken, trackKind, message) => {
     const guard = runtimeToken as MediaRuntimeGuard
     if (guard.assetId !== assetId) return
     reportMediaRuntimeFailure(
       guard,
-      mediaRuntimeFailure('preview', 'video', message),
+      mediaRuntimeFailure('preview', trackKind, message),
     )
   }
   // A source came online: repaint so its clips fill in (retry policy).

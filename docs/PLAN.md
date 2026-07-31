@@ -968,6 +968,245 @@ have concrete code, test, and browser evidence.
 All 30 GitHub #12 implementation-checklist items now have matching code, test,
 and browser evidence for the normal-merge closeout.
 
+## Post-MVP issue #18 — Slice 1 ✅ DONE (2026-07-26) Static-image source foundation
+
+At this slice boundary, Issue #18 remains open. This pipeline-only slice
+establishes content-based inspection and first-frame decode ownership for
+raster-image sources; it does not make images importable or user-visible yet.
+
+- [x] Detect PNG, JPEG, WebP, and AVIF from a bounded source prefix instead of
+  trusting filenames or declared MIME types. Reject GIF, SVG, generic ISO BMFF,
+  unknown, malformed, and truncated input with stable typed failures; supported
+  bytes remain supported when their extension or declared MIME is spoofed.
+- [x] Publish frozen source-size, candidate-dimension, decoded-allocation, and
+  animation facts. Enforce immutable 256 MiB encoded, 4 MiB header-scan,
+  16,384 px edge, 67,108,864-pixel, and 256 MiB decoded-allocation ceilings
+  before browser decode. Validate PNG/APNG and WebP outer/first-frame geometry
+  so a small canvas cannot conceal a hostile nested frame.
+- [x] Keep inspection and decode atomic for the exact immutable Blob. Relabel
+  the Blob with the sniffed MIME, use orientation-aware `createImageBitmap` as
+  the primary path, and transfer frame zero directly from `ImageDecoder` when
+  the Blob path is unavailable. The fallback retains WebCodecs rotation/flip,
+  validates coded, visible, display, and native allocation bounds, and never
+  holds a second full-size bitmap beside the frame.
+- [x] Treat every AVIF `ispe` as a conservative predecode budget candidate,
+  not proof of the browser-selected primary item. Safe browser-decoded geometry
+  is authoritative after independent bounds checks, so valid clean-aperture,
+  rotation, auxiliary, derived-item, and selected-track behavior is not falsely
+  rejected.
+  Residual boundary: `ispe` cannot absolutely cap native AV1 decoder work;
+  sequence-header maximum frame dimensions and intermediate images may exceed
+  item extents before the browser returns a source we can inspect. The 256 MiB
+  ceiling therefore bounds WebCut's estimates and accepted returned allocation,
+  not every transient browser-decoder allocation. Future hardening should parse
+  sequence-header limits where practical and stress hostile inputs in an
+  isolated decoder context.
+- [x] Preserve first-frame-only animation disclosure without conflating encoded
+  PNG/WebP loop fields with WebCodecs repetition semantics. Abort wins promptly;
+  late bitmap/frame completions, decoder completion rejection, failures, and
+  successful caller ownership all have exact cleanup coverage.
+- [x] Add `npm run qa:issue18:fixtures` for a deterministic 15-file matrix
+  covering ordinary PNG/JPEG/WebP/AVIF, alpha, EXIF orientation, APNG/animated
+  WebP/AVIF sequence headers, spoofed MIME/extension, corrupt/truncated input,
+  oversized metadata, and explicitly unsupported SVG/GIF.
+- [x] Verification: 60/60 focused tests across two files; 1,269/1,269 total
+  tests across 68 files; fixture generation and validate-only replay,
+  production build, lint, audit, and diff checks green.
+- [x] Real Chrome 150 through local Vite passed 41 browser facts across all four
+  formats, alpha, actual EXIF-oriented pixels, APNG/WebP first-frame labels,
+  canonical MIME, typed hostile failures, both browser decode paths, and caller
+  close behavior. The console recorded 0 warnings and 0 errors.
+
+At the Slice 1 boundary, later slices still owned the Media Pool/import
+controller, durable domain/state representation, timeline duration and editing
+semantics, preview/compositor integration, export behavior, and user-visible
+error/retry/accessibility surfaces. Images were therefore not importable,
+previewable, placeable, or exportable at that boundary.
+
+## Post-MVP issue #18 — Slice 2 ✅ DONE (2026-07-28) Still-image import and durable source records
+
+Issue #18 remains open. This slice makes verified PNG, JPEG, WebP, and AVIF
+sources importable, durable, reconnectable, and visible in the Media Pool. It
+deliberately stops before timeline authoring: a still needs explicit clip/source
+semantics rather than inheriting the existing timed-video range contract.
+
+- [x] Route imports, Resume, manual Relink, and folder Relink through one shared
+  inspection boundary. It byte-inspects before the timed-media probe, never
+  lets recognized malformed/unsupported images fall through as video, and
+  performs a real browser decode before creating an object URL or durable
+  `MediaAsset`.
+- [x] Represent every accepted still as an image asset with orientation-aware
+  dimensions, no audio/native frame rate/decoder config, and an exact canonical
+  five-second default expressed as integer microseconds and project-rate frame
+  math. Reuse the existing portable image descriptor, so Save/Resume needs no
+  project-format bump; reconnection requires the exact saved dimensions.
+- [x] Accept PNG, JPEG, WebP, and AVIF in native pickers, fallback inputs, and
+  bounded folder scans. Import up to 100 selected files through one sequential
+  queue so only one decode owns peak memory at a time; cancellation stops the
+  remaining queue and competing import/retry actions cannot interleave.
+- [x] Generate exactly one bounded Media Pool tile per image: at most 320×180,
+  encoded as PNG at most 1 MiB, rendered with contained aspect ratio, and owned by
+  the existing media-store URL lifecycle. Source, bitmap/frame, canvas, abort,
+  late completion, replacement, and removal paths retain exact cleanup.
+- [x] Show dimensions, five-second duration, content-derived format, decode
+  path, and an explicit “First frame only” label for animated inputs. Surface
+  actionable Unsupported/Error/Retry states for SVG, GIF, corrupt, oversized,
+  and browser-undecodable sources. Keep image rows non-draggable in both the
+  rendered affordance and the live drag-start guard until Slice 3 establishes
+  correct still-clip semantics.
+- [x] Verification: 212/212 focused tests across 12 files; 1,291/1,291 total
+  tests across 71 files; deterministic 15-file fixture replay, production
+  build, lint, audit, and diff checks green.
+- [x] In-app Chrome 150 imported PNG, EXIF-oriented JPEG, animated WebP, and
+  AVIF in one real multi-file selection. All four reached Ready with correct
+  dimensions, five-second metadata, bounded ready thumbnails, and
+  `draggable=false`; the animated WebP disclosed first-frame-only behavior.
+  Corrupt PNG stayed Error through Retry, while SVG and GIF stayed Unsupported
+  with actionable explanations. The Media Pool remained usable and the console
+  recorded 0 warnings and 0 errors.
+
+## Post-MVP issue #18 — Slice 3 ✅ DONE (2026-07-28) Still-clip timeline semantics
+
+Issue #18 remains open. This slice makes verified image sources placeable and
+fully editable on video lanes with one explicit still-source contract. Preview
+and export decoding remain later slices, so timeline authoring is complete
+without claiming that the viewer or exported file can render a still yet.
+
+- [x] Add explicit `timed` versus `still` clip source modes. Every still keeps
+  the canonical half-open source range `[0, 1)` while its timeline range owns
+  the independent visible duration. New image clips start at the existing exact
+  five-second default; timed video/audio/text behavior remains unchanged.
+- [x] Bump the portable project format to version 3. Current files require an
+  explicit valid source mode and reject inconsistent image/timed/source-range
+  combinations. The bounded v1/v2 migration resolves image-media clips to
+  `still` plus `[0, 1)` and preserves timed media/text clips as `timed`.
+- [x] Map every active still frame, including both sides of a crossfade, to
+  source frame 0. Move, start/end trim, ripple trim, Razor, and Slide may change
+  timeline geometry but preserve the canonical still source range. Slip is an
+  intentional same-reference no-op for a still and for any linked group that
+  contains one; no preview, warning, history entry, or redo loss is produced.
+- [x] Enable Ready image rows at both drag guards and create image drops through
+  the normal one-entry `clipFromAsset`/`insertClip` path. Still-aware gesture
+  bounds expose unlimited trim headroom and zero Slip range while retaining
+  locked-track and fresh-document protections.
+- [x] Render one contained image tile repeatedly across the complete still
+  timeline interval, including split and extended clips. Expose “still image
+  clip” in the accessible name and explain directly that Slip is unavailable.
+- [x] Verification: 352/352 focused tests across 10 domain/state/UI files;
+  1,311/1,311 total tests across 71 files; deterministic 15-file fixture replay,
+  production build, lint, audit, and diff checks green.
+- [x] In-app Chrome 150 imported a real 2×2 PNG, exposed a draggable Ready row,
+  and rendered a five-second `data-source-mode="still"` clip with one repeated
+  tile. Razor produced exact adjacent 75/75-frame still halves; a 15-frame
+  crossfade attached between them; Slip preserved identical rendered clip
+  markup; and keyboard undo/redo restored both Razor and crossfade states
+  exactly. The console recorded 0 warnings and 0 errors. Browser automation
+  used removed QA-only chooser/insertion adapters because its native File
+  System Access and HTML drag bridges could not carry the local fixture; the
+  real import, clip factory, store action, edit, transition, and render paths
+  were exercised, while the actual data-transfer boundary is covered by the
+  focused UI component tests.
+
+## Post-MVP issue #18 — Slice 4 ✅ DONE (2026-07-28) Worker-owned still preview
+
+Issue #18 remains open. This slice makes verified image sources render through
+the existing shared preview/compositor path while preserving one explicit
+live-resource owner. Export integration remains a later slice and is not
+claimed here.
+
+- [x] Add an `openImage` render-worker message that carries one Blob per asset.
+  The bridge records a static source kind, maps every still entry to source
+  frame/timestamp zero, and waits for a `closed` cleanup acknowledgment before
+  terminating the worker.
+- [x] Decode and retain exactly one worker-owned `ImageBitmap` or `VideoFrame`
+  for each open image asset. Share that same decoded source across ordinary
+  clips, stacked layers, scrub/play requests, and both sides of a transition
+  without copying it into React/Zustand state.
+- [x] Give each retained source an explicit in-flight loan count. Replacement
+  and release remove the source from future requests immediately, then close it
+  exactly once after the final active composite settles.
+- [x] Guard concurrent opens with per-asset revisions and abort signals.
+  Superseded opens, release-during-decode, close-during-decode, late success,
+  decode/resource-limit failure, replacement, and worker shutdown cannot
+  install stale state or leak/double-close a decoded source.
+- [x] Extend the shared compositor's frame source to accept either
+  `ImageBitmap` or Canvas-drawable `VideoFrame`, using presentation dimensions
+  for the latter. Generalize Preview/controller offline language from video to
+  visual sources while preserving typed runtime-failure identity.
+- [x] Verification: 128/128 focused tests across the render worker, bridge,
+  preview controller/UI, and compositor files; 1,327/1,327 total tests across
+  71 files; deterministic 15-file fixture replay, production build, lint,
+  audit, and diff checks green.
+- [x] In-app Chromium imported and previewed a real 280×175 JPEG, retained it
+  through a complete five-second playback, and applied live position, scale,
+  rotation, and opacity. Razor produced two still clips; a 15-frame same-asset
+  crossfade played with transformed pixels intact. The console recorded 0
+  warnings and 0 errors. Browser automation used removed QA-only
+  chooser/insertion adapters because its native File System Access and HTML
+  drag bridges could not carry the local fixture; the production import, clip
+  factory, worker decode, preview, transform, transition, and playback paths
+  ran unchanged.
+
+## Post-MVP issue #18 — Slice 5 ✅ DONE (2026-07-31) Static-image export
+
+Issue #18 is implementation-complete locally at this slice boundary. GitHub
+remains open until this branch is published/merged and the issue checklist is
+closed against the merged evidence.
+
+- [x] Extend each immutable export asset resolution with its captured media
+  kind. The visual export adapter branches only after resolving that exact
+  Blob/kind snapshot: timed video keeps its existing Mediabunny
+  Input/CanvasSink path, images use the bounded content-inspecting
+  `decodeStaticImage` boundary, and non-visual audio fails closed if it reaches
+  the visual path.
+- [x] Decode each image asset exactly once for the whole export. Every
+  frame-local lease borrows the same retained frame-zero `ImageBitmap` or
+  `VideoFrame`; lease cleanup never closes it. The export media source is the
+  sole owner and closes it exactly once on success, failure, cancellation, or
+  repeated shutdown.
+- [x] Abort in-flight still decoding when export ownership closes. A successful
+  decode that races shutdown closes before it can publish, while
+  resource-limit failures retain typed `surface: export`, `trackKind: null`
+  identity for compatibility reporting.
+- [x] Keep transforms, alpha, opacity, stacking, and image↔video transition
+  selection on the existing shared `compositeFrame` /
+  `visibleVideoLayersAtFrame` path. Export adds no parallel visual math.
+- [x] Verification: 54/54 focused export adapter/controller tests and
+  1,331/1,331 total tests across 71 files; deterministic 15-file fixture replay,
+  production build, lint, audit, and diff checks green.
+- [x] In-app Chromium imported a real alpha PNG plus a generated H.264 MP4,
+  placed both on one video lane, exercised a still end-trim gesture, applied
+  position/scale/rotation/opacity, scrubbed and played a 15-frame image→video
+  crossfade, then exported and downloaded the result. `ffprobe` reported H.264,
+  1280×720, 30/1 fps, exactly 210 frames and 7.000 seconds. Extracted start,
+  transition, and video frames preserved the expected transform, opacity,
+  layering, and blend; re-importing that exact download reported Ready at
+  1280×720 / 00:00:07:00. There were no export, decoder, render-worker, or
+  browser errors; the sole warning was the expected domain rejection from an
+  intentionally attempted overlapping clip move. Removed QA-only
+  chooser/insertion adapters were needed because browser automation cannot
+  carry local files through the File System Access or HTML drag bridges.
+
+## Post-MVP issue #18 — Slice 6 ✅ COMPLETE (2026-07-31) Publication and closeout
+
+Issue #18 is complete at this boundary. The five implementation commits were
+reviewed as one delivery against all 38 GitHub checklist items, normally merged
+into `master`, and the issue was closed as completed. The ongoing
+`codex/feature` branch is retained.
+
+- [x] Review the complete Slice 1–5 diff against the import, domain, worker,
+  thumbnail/export, animated-image-policy, security, reliability, test, and
+  acceptance requirements. No implementation gap or unrelated file was found.
+- [x] Re-run the deterministic 15-file fixture validation, focused Issue #18
+  tests, all 1,331 repository tests, production build, lint, dependency audit,
+  and `git diff --check origin/master...HEAD`; every local gate passed. GitHub
+  exposes no required Actions/status check for this repository, so the complete
+  local bundle plus the recorded real-Chromium gates are the merge authority.
+- [x] Preserve the five coherent implementation commits with a normal merge;
+  do not squash or delete the working branch.
+- [x] Mark the GitHub implementation checklist 38/38, post the merged evidence,
+  and close only Issue #18 as `completed` after verifying the remote merge.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

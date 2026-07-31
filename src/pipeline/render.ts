@@ -39,13 +39,23 @@ import {
 } from '../domain/selectors'
 
 /**
+ * A compositor-ready browser image. VideoFrame is retained here because the
+ * bounded static-image decoder can transfer frame zero directly when a Blob
+ * createImageBitmap path is unavailable; Canvas2D renders both natively.
+ */
+export type RenderFrameSource = ImageBitmap | VideoFrame
+
+/**
  * Supplies decoded pixels for an asset's source frame; null when the frame
  * is not (yet) available. Cache misses should kick off decoding so a later
  * composite of the same frame succeeds — the CompositeResult tells the
  * caller whether a repaint will be needed.
  */
 export interface FrameSource {
-  getFrame(assetId: AssetId, sourceFrame: number): Promise<ImageBitmap | null>
+  getFrame(
+    assetId: AssetId,
+    sourceFrame: number,
+  ): Promise<RenderFrameSource | null>
 }
 
 /**
@@ -62,7 +72,7 @@ export interface Composite2D {
   rotate(angleRad: number): void
   scale(x: number, y: number): void
   fillRect(x: number, y: number, w: number, h: number): void
-  drawImage(image: ImageBitmap, dx: number, dy: number): void
+  drawImage(image: RenderFrameSource, dx: number, dy: number): void
 }
 
 /** What one composite accomplished, in bottom-to-top track order. */
@@ -153,16 +163,18 @@ function drawClip(
   ctx: Composite2D,
   doc: TimelineDoc,
   layer: VisibleVideoLayer,
-  image: ImageBitmap,
+  image: RenderFrameSource,
 ): void {
   const clip: Clip = layer.clip
   const t = clip.transform
+  const imageWidth = 'displayWidth' in image ? image.displayWidth : image.width
+  const imageHeight = 'displayHeight' in image ? image.displayHeight : image.height
   // Anchor point in image pixels.
-  const anchorX = t.anchorX * image.width
-  const anchorY = t.anchorY * image.height
+  const anchorX = t.anchorX * imageWidth
+  const anchorY = t.anchorY * imageHeight
   // Where the anchor lands on the canvas: centered default + x/y offset.
-  const canvasX = (doc.width - image.width) / 2 + anchorX + t.x
-  const canvasY = (doc.height - image.height) / 2 + anchorY + t.y
+  const canvasX = (doc.width - imageWidth) / 2 + anchorX + t.x
+  const canvasY = (doc.height - imageHeight) / 2 + anchorY + t.y
 
   ctx.save()
   try {

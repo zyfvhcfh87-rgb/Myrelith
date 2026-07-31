@@ -122,6 +122,23 @@ const linkedVideoAsset: MediaAsset = {
   fileName: 'linked-video.mp4',
 }
 
+const stillAsset: MediaAsset = {
+  ...connectedAsset,
+  id: 'asset-still',
+  fileName: 'poster.png',
+  mimeType: 'image/png',
+  kind: 'image',
+  durationFrames: 150,
+  durationMicroseconds: 5_000_000,
+  frameRate: null,
+  width: 640,
+  height: 360,
+  hasAudio: false,
+  audioSampleRate: null,
+  audioChannels: null,
+  decoderConfigB64: null,
+}
+
 const linkedVideoDescriptor: PortableAssetDescriptor = {
   ...connectedDescriptor,
   id: linkedVideoAsset.id,
@@ -151,6 +168,27 @@ function installOfflineBoundsFixture(): void {
   useMediaStore.setState({
     descriptors: new Map([[offlineDescriptor.id, offlineDescriptor]]),
     assets: new Map(),
+    visuals: new Map(),
+  })
+}
+
+function installStillFixture(): void {
+  const still = {
+    ...makeClip('still', 100, 150),
+    assetId: stillAsset.id,
+    name: stillAsset.fileName,
+    sourceMode: 'still' as const,
+    sourceRange: { startFrame: 0, durationFrames: 1 },
+  }
+  doc().setDoc({
+    ...makeDoc(),
+    id: 'doc-still-tools',
+    name: 'still tools fixture',
+    tracks: [makeTrack('V1', [still])],
+  })
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map([[stillAsset.id, stillAsset]]),
     visuals: new Map(),
   })
 }
@@ -592,6 +630,68 @@ describe('slip tool', () => {
 
     fireEvent.pointerUp(clip, { pointerId: 1, clientX: 60 })
     expect(clipById('clipA').sourceRange.startFrame).toBe(0)
+    expect(doc().past).toHaveLength(1)
+  })
+})
+
+describe('still-image timeline gestures', () => {
+  test('Slip selects and explains the still but starts no gesture or history entry', () => {
+    installStillFixture()
+    act(() => transport().setTool('slip'))
+    renderTrack()
+    const clip = screen.getByRole('button', {
+      name: 'poster.png, still image clip',
+    })
+    const before = doc().doc
+
+    expect(clip).toHaveAttribute('data-source-mode', 'still')
+    expect(clip).toHaveAttribute('title', expect.stringContaining('Slip is unavailable'))
+    fireEvent.pointerDown(clip, { pointerId: 30, clientX: 120 })
+    fireEvent.pointerMove(clip, { pointerId: 30, clientX: 220 })
+    fireEvent.pointerUp(clip, { pointerId: 30, clientX: 220 })
+
+    expect(transport().selectedClipId).toBe('still')
+    expect(transport().editPreview).toBeNull()
+    expect(doc().doc).toBe(before)
+    expect(doc().past).toHaveLength(0)
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('an end trim extends beyond nominal image duration while source stays one frame', async () => {
+    installStillFixture()
+    renderTrack()
+    const clip = screen.getByTestId('clip-still')
+
+    fireEvent.pointerDown(screen.getByTestId('clip-still-edge-end'), {
+      pointerId: 31,
+      clientX: 250,
+    })
+    fireEvent.pointerMove(clip, { pointerId: 31, clientX: 450 })
+    await waitFor(() => expect(transport().editPreview?.deltaFrames).toBe(200))
+    fireEvent.pointerUp(clip, { pointerId: 31, clientX: 450 })
+
+    expect(clipById('still')).toMatchObject({
+      timelineRange: { startFrame: 100, durationFrames: 350 },
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    })
+    expect(doc().past).toHaveLength(1)
+  })
+
+  test('razor partitions timeline geometry but both still halves retain frame 0', () => {
+    installStillFixture()
+    act(() => transport().setTool('razor'))
+    renderTrack()
+
+    fireEvent.pointerDown(screen.getByTestId('clip-still'), {
+      pointerId: 32,
+      clientX: 30,
+    })
+
+    const [left, right] = v1().clips
+    expect(left.timelineRange).toEqual({ startFrame: 100, durationFrames: 30 })
+    expect(right.timelineRange).toEqual({ startFrame: 130, durationFrames: 120 })
+    expect(left.sourceRange).toEqual({ startFrame: 0, durationFrames: 1 })
+    expect(right.sourceRange).toEqual({ startFrame: 0, durationFrames: 1 })
     expect(doc().past).toHaveLength(1)
   })
 })

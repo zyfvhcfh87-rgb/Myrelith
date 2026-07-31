@@ -145,6 +145,7 @@ function createAssetResolver(
       pending = Promise.resolve(fetchBlob(asset.objectUrl)).then((blob) => ({
         blob,
         budget: mediaAssetDecoderBudget(asset, blob.size),
+        kind: asset.kind,
       }))
     } catch (cause) {
       pending = Promise.reject(cause)

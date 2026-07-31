@@ -5,24 +5,35 @@
  * filmstrip + waveform images exactly once, in the background.
  *
  * Flow: asset appears → fetch its blob → run the generators for its kind
- * (video → filmstrip; anything non-image MAY carry audio → waveform; the
- * generators return null when the track type isn't there) → hand the
- * result to mediaStore.setAssetVisuals, which OWNS the object URLs from
- * that moment (including the asset-removed-mid-generation case, where it
+ * (video → filmstrip, image → one thumbnail tile, assets with audio →
+ * waveform; timed-media generators return null when the track isn't there) →
+ * hand the result to mediaStore.setAssetVisuals, which OWNS the object URLs
+ * from that moment (including the asset-removed-mid-generation case, where it
  * revokes the late result on the spot).
  *
- * Failures are logged and the asset stays visuals-less — eye candy is
- * optional, a corrupt file must not wedge the pool in a retry loop.
+ * Failures are logged and projected through the asset-scoped runtime
+ * compatibility seam; a corrupt file must not wedge the pool in a retry loop.
  * Dependency-injected like the other controllers so tests drive it with
  * fakes; `initMediaVisuals` is idempotent (StrictMode double-mount safe).
  */
 
 import type { AssetId, MediaAsset } from '../domain/schema'
+import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import {
   mediaAssetDecoderBudget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 import type { FilmstripResult, WaveformResult } from '../pipeline/visuals'
+import {
+  StaticImageDecodeError,
+} from '../pipeline/static-image'
+import {
+  StaticImageInspectionError,
+} from '../pipeline/static-image-inspection'
+import {
+  generateStaticImageThumbnail,
+  StaticImageThumbnailError,
+} from '../pipeline/static-image-thumbnail'
 import {
   MediaVisualDecodeError,
   MediaVisualSourceError,
@@ -46,12 +57,16 @@ export interface VisualsDeps {
     file: Blob,
     options: { sourceId?: string; budget: LocalDecoderBudget },
   ) => Promise<WaveformResult | null>
+  generateStaticImageThumbnail: (
+    file: Blob,
+  ) => Promise<FilmstripResult>
 }
 
 const realDeps: VisualsDeps = {
   fetchBlob: (url) => fetch(url).then((r) => r.blob()),
   generateFilmstrip,
   generateWaveform,
+  generateStaticImageThumbnail,
 }
 
 interface ControllerState {
@@ -80,7 +95,6 @@ async function process(
   deps: VisualsDeps,
   generation: number,
 ): Promise<void> {
-  if (asset.kind === 'image') return // images get neither strip nor waveform
   const guard = captureMediaRuntimeGuard(asset.id)
   if (!guard || guard.objectUrl !== asset.objectUrl) return
 
@@ -93,7 +107,7 @@ async function process(
     reportMediaRuntimeFailure(
       guard,
       mediaRuntimeFailure(
-        asset.kind === 'video' ? 'filmstrip' : 'waveform',
+        asset.kind === 'audio' ? 'waveform' : 'filmstrip',
         null,
         err,
         'resource-unavailable',
@@ -116,7 +130,9 @@ async function process(
   const [filmstripResult, waveformResult] = await Promise.allSettled([
     asset.kind === 'video'
       ? deps.generateFilmstrip(blob, decodeOptions)
-      : Promise.resolve(null),
+      : asset.kind === 'image'
+        ? deps.generateStaticImageThumbnail(blob)
+        : Promise.resolve(null),
     asset.hasAudio
       ? deps.generateWaveform(blob, decodeOptions)
       : Promise.resolve(null),
@@ -131,7 +147,7 @@ async function process(
   const failure = filmstripResult.status === 'rejected'
     ? {
         surface: 'filmstrip' as const,
-        trackKind: 'video' as const,
+        trackKind: asset.kind === 'image' ? null : 'video' as const,
         cause: filmstripResult.reason,
       }
     : waveformResult.status === 'rejected'
@@ -157,11 +173,7 @@ async function process(
           ? null
           : failure.trackKind,
         failure.cause,
-        failure.cause instanceof MediaVisualSourceError
-          ? 'resource-unavailable'
-          : failure.cause instanceof MediaVisualDecodeError
-            ? failure.cause.failure.reason
-            : 'decode-failed',
+        visualFailureReason(failure.cause),
       ),
     )
     return
@@ -178,6 +190,28 @@ async function process(
   }
   // The store takes URL ownership; disconnected late results are revoked.
   useMediaStore.getState().setAssetVisuals(asset.id, { filmstrip, waveform })
+}
+
+function visualFailureReason(
+  cause: unknown,
+): MediaRuntimeFailure['reason'] {
+  if (cause instanceof MediaVisualSourceError) return 'resource-unavailable'
+  if (cause instanceof MediaVisualDecodeError) return cause.failure.reason
+  if (cause instanceof StaticImageThumbnailError) {
+    return cause.reason === 'resource-limit'
+      ? 'resource-limit'
+      : 'decode-failed'
+  }
+  if (cause instanceof StaticImageInspectionError) {
+    if (cause.reason === 'resource-limit') return 'resource-limit'
+    return 'decode-failed'
+  }
+  if (cause instanceof StaticImageDecodeError) {
+    if (cause.reason === 'resource-limit') return 'resource-limit'
+    if (cause.reason === 'unsupported-runtime') return 'unsupported-codec'
+    return 'decode-failed'
+  }
+  return 'decode-failed'
 }
 
 function scan(deps: VisualsDeps): void {

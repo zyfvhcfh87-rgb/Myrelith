@@ -576,11 +576,6 @@ async function prepareProjectCandidate(
   if (source.expectedDocumentId && project.document.id !== source.expectedDocumentId) {
     throw new Error('The local project entry now points to a different project')
   }
-  if (project.assets.some((asset) => asset.kind === 'image')) {
-    throw new Error(
-      'This project contains image sources, which this WebCut build cannot reconnect yet',
-    )
-  }
   if (generation !== operationGeneration) return { status: 'cancelled' }
 
   const pending: PendingResume = {
@@ -880,6 +875,13 @@ function compatibilityReportMatchesDescriptor(
       return false
     }
     if (!ratesMatch(descriptor.nativeFrameRate, video.frameRate)) return false
+  }
+  if (descriptor.kind === 'image') {
+    if (
+      !report.image
+      || report.image.width !== descriptor.width
+      || report.image.height !== descriptor.height
+    ) return false
   }
   if (
     descriptor.partialTrackSelection !== 'video-only'

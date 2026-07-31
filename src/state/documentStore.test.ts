@@ -58,6 +58,27 @@ function makeDoc(): TimelineDoc {
   })
 }
 
+function makeStillDoc(): TimelineDoc {
+  return deepFreeze({
+    schemaVersion: 1,
+    id: 'doc-still-history',
+    name: 'Still history test',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [
+      makeTrack('V1', 'video', [{
+        ...makeClip('still', 0, 150),
+        assetId: 'image-1',
+        name: 'poster.png',
+        sourceMode: 'still',
+        sourceRange: { startFrame: 0, durationFrames: 1 },
+      }]),
+    ],
+  })
+}
+
 function crossfade(
   id: string,
   fromClipId: string,
@@ -138,6 +159,47 @@ describe('undo/redo round-trip', () => {
     getState().trimClip('clipA', 'end', -10)
     getState().undo()
     expect(getState().doc).toBe(initialDoc)
+  })
+
+  test('still extension and razor round-trip exact snapshots; Slip adds no history', () => {
+    const initial = makeStillDoc()
+    getState().setDoc(initial)
+
+    getState().trimClip('still', 'end', 150)
+    const extended = getState().doc
+    expect(extended.tracks[0].clips[0]).toMatchObject({
+      timelineRange: { startFrame: 0, durationFrames: 300 },
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    })
+
+    getState().splitClipAt('still', 100)
+    const split = getState().doc
+    expect(split.tracks[0].clips).toHaveLength(2)
+    expect(
+      split.tracks[0].clips.every(
+        (clip) =>
+          clip.sourceMode === 'still'
+          && clip.sourceRange.startFrame === 0
+          && clip.sourceRange.durationFrames === 1,
+      ),
+    ).toBe(true)
+    expect(getState().past).toHaveLength(2)
+
+    getState().undo()
+    expect(getState().doc).toBe(extended)
+    expect(getState().future).toEqual([split])
+
+    getState().slipClip('still', 50)
+    expect(getState().doc).toBe(extended)
+    expect(getState().past).toEqual([initial])
+    expect(getState().future).toEqual([split])
+    expect(warnSpy).not.toHaveBeenCalled()
+
+    getState().redo()
+    expect(getState().doc).toBe(split)
+    getState().undo()
+    getState().undo()
+    expect(getState().doc).toBe(initial)
   })
 })
 

@@ -6,10 +6,11 @@
  * INTEGER frame counts; seconds exist only at the encoder/decoder/audio-clock
  * boundary, converted via domain/time.ts.
  *
- * MVP simplification (documented so later phases can revisit): clips play at
- * speed 1.0 and assets are treated as conformed to the document frame rate,
- * so `sourceRange` is measured in document-rate frames from asset start and
- * `sourceRange.durationFrames === timelineRange.durationFrames` always holds.
+ * Timed clips play at speed 1.0 and assets are treated as conformed to the
+ * document frame rate, so `sourceRange` is measured in document-rate frames
+ * from asset start and its duration matches `timelineRange`. Still clips use
+ * the explicit one-frame source below while their timeline duration is
+ * independently editable.
  */
 
 /* ------------------------------------------------------------------ */
@@ -221,11 +222,15 @@ export interface TextProps {
 /* Timeline structure                                                   */
 /* ------------------------------------------------------------------ */
 
+/** How a media clip maps timeline frames onto its source. */
+export type ClipSourceMode = 'timed' | 'still'
+
 /**
  * One piece of media placed on a track. Invariants (enforced by
  * domain/operations.ts, assumed everywhere else):
  * - timelineRange.durationFrames >= 1
- * - sourceRange.durationFrames === timelineRange.durationFrames (speed 1.0)
+ * - timed sourceRange.durationFrames === timelineRange.durationFrames
+ * - still sourceRange is always exactly frame 0 with duration 1
  * - never overlaps another clip on the same track (half-open ranges)
  */
 export interface Clip {
@@ -236,8 +241,15 @@ export interface Clip {
   /** Display name, defaults to the asset's fileName. */
   name: string
   /**
-   * The portion of the source asset being played, in document-rate frames
-   * measured from asset start (see MVP note in the file header).
+   * Explicit timeline-to-source mapping. New and portable clips always carry
+   * this field. It remains optional in the in-memory type so historical
+   * timeline fixtures and pre-migration documents safely retain timed
+   * behavior until the project-file migration normalizes them.
+   */
+  sourceMode?: ClipSourceMode
+  /**
+   * Timed: the played source range in document-rate frames. Still: the
+   * canonical one-frame range `{ startFrame: 0, durationFrames: 1 }`.
    */
   sourceRange: TimeRange
   /** Where the clip sits on the timeline, in document-rate frames. */

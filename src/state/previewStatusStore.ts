@@ -4,9 +4,9 @@ import { create } from 'zustand'
 import type { AssetId } from '../domain/schema'
 
 export interface PreviewStatusState {
-  /** Durable offline sources needed by the currently displayed video frame. */
-  offlineVideoAssetIds: readonly AssetId[]
-  setOfflineVideoAssetIds(ids: readonly AssetId[]): void
+  /** Durable offline visual sources needed by the displayed timeline frame. */
+  offlineVisualAssetIds: readonly AssetId[]
+  setOfflineVisualAssetIds(ids: readonly AssetId[]): void
   resetPreviewStatus(): void
 }
 
@@ -18,16 +18,16 @@ function idsMatch(left: readonly AssetId[], right: readonly AssetId[]): boolean 
 }
 
 export const usePreviewStatusStore = create<PreviewStatusState>()((set) => ({
-  offlineVideoAssetIds: EMPTY_OFFLINE_IDS,
-  setOfflineVideoAssetIds: (ids) =>
+  offlineVisualAssetIds: EMPTY_OFFLINE_IDS,
+  setOfflineVisualAssetIds: (ids) =>
     set((state) => {
-      if (idsMatch(state.offlineVideoAssetIds, ids)) return state
-      return { offlineVideoAssetIds: [...ids] }
+      if (idsMatch(state.offlineVisualAssetIds, ids)) return state
+      return { offlineVisualAssetIds: [...ids] }
     }),
   resetPreviewStatus: () =>
     set((state) => (
-      state.offlineVideoAssetIds.length === 0
+      state.offlineVisualAssetIds.length === 0
         ? state
-        : { offlineVideoAssetIds: EMPTY_OFFLINE_IDS }
+        : { offlineVisualAssetIds: EMPTY_OFFLINE_IDS }
     )),
 }))

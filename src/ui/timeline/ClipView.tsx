@@ -78,6 +78,7 @@ function ClipView({
   timelineOriginFrame = 0,
   timelineWindowEndFrame = Number.MAX_SAFE_INTEGER,
 }: ClipViewProps) {
+  const isStillSource = clip.sourceMode === 'still'
   const zoom = useTransportStore((s) => s.zoom)
   const tool = useTransportStore((s) => s.tool)
   const isSelected = useTransportStore((s) =>
@@ -224,11 +225,12 @@ function ClipView({
   }
   const dragging = movePreviewDelta !== null || editPreview !== null
 
-  // Source in-point as currently DISPLAYED: slip and start-side trims
-  // shift the material under the clip, so the visual tracks the gesture
-  // live (the background is anchored to the clip's moving left edge).
+  // Source in-point as currently DISPLAYED: timed slip and start-side trims
+  // shift the material under the clip. A still always maps every timeline
+  // frame to its sole source frame.
   let sourceStartFrame = clip.sourceRange.startFrame
   if (
+    !isStillSource &&
     editPreview &&
     (editPreview.kind === 'slip' ||
       editPreview.kind === 'trim-start' ||
@@ -277,15 +279,21 @@ function ClipView({
 
   const displayedSourceStartFrame =
     sourceStartFrame + (displayedStartFrame - startFrame)
+  const visualDurationFrames = isStillSource
+    ? durationFrames
+    : assetDurationFrames
+  const displayedVisualStartFrame = isStillSource
+    ? displayedStartFrame - startFrame
+    : displayedSourceStartFrame
   const filmstrip = trackKind === 'video' ? visuals?.filmstrip : null
   const waveform = trackKind === 'audio' ? visuals?.waveform : null
   const filmstripBuckets = filmstrip
     ? visibleFilmstripBuckets(
-        assetDurationFrames,
+        visualDurationFrames,
         filmstrip.tiles,
         filmstrip.tileWidth,
         zoom,
-        displayedSourceStartFrame,
+        displayedVisualStartFrame,
         displayedDurationFrames,
       )
     : []
@@ -489,6 +497,14 @@ function ClipView({
         }
         return
       case 'slip':
+        {
+          const currentClip = findClip(useDocumentStore.getState().doc, clip.id)
+          if (!currentClip) return
+          if (currentClip.sourceMode === 'still') {
+            transport.setSelectedClip(clip.id)
+            return
+          }
+        }
         if (startGesture(e, 'slip')) transport.setSelectedClip(clip.id)
         return
       case 'slide':
@@ -541,6 +557,11 @@ function ClipView({
   const showStartEdge = showEdges && displayedStartFrame === startFrame
   const showEndEdge =
     showEdges && displayedEndFrame === startFrame + durationFrames
+  const accessibleKind = isStillSource ? 'still image' : trackKind
+  const interactionTitle =
+    tool === 'slip' && isStillSource
+      ? 'Still images always show their single source frame, so Slip is unavailable.'
+      : 'Select clip. Hold Ctrl or Command while clicking, or with Enter or Space, to add or remove it from the selection.'
 
   return (
     <div
@@ -548,13 +569,14 @@ function ClipView({
       className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isSelected && isPrimarySelection ? ' primary-selected' : ''}${isOffline ? ' offline' : ''}${hasVisibleSlice ? '' : ' virtual-gesture-host'}`}
       data-testid={`clip-${clip.id}`}
       data-offline={isOffline ? 'true' : 'false'}
+      data-source-mode={clip.sourceMode ?? 'timed'}
       data-primary-selected={isSelected && isPrimarySelection ? 'true' : 'false'}
       data-virtual-gesture-host={hasVisibleSlice ? 'false' : 'true'}
       role="button"
       tabIndex={0}
-      aria-label={`${clip.name}, ${trackKind} clip`}
+      aria-label={`${clip.name}, ${accessibleKind} clip`}
       aria-pressed={isSelected}
-      title="Select clip. Hold Ctrl or Command while clicking, or with Enter or Space, to add or remove it from the selection."
+      title={interactionTitle}
       style={{
         transform:
           previewTrackOffsetY === 0
@@ -605,7 +627,7 @@ function ClipView({
     >
       {hasVisibleSlice &&
         filmstrip &&
-        assetDurationFrames > 0 &&
+        visualDurationFrames > 0 &&
         filmstripBuckets.length > 0 && (
           <div
             className="clip-visual clip-filmstrip"
@@ -614,11 +636,11 @@ function ClipView({
           {filmstripBuckets.map((bucket) => {
             const visibleBucketStart = Math.max(
               bucket.startFrame,
-              displayedSourceStartFrame,
+              displayedVisualStartFrame,
             )
             const visibleBucketEnd = Math.min(
               bucket.endFrame,
-              displayedSourceStartFrame + displayedDurationFrames,
+              displayedVisualStartFrame + displayedDurationFrames,
             )
             const croppedHeadPx =
               (visibleBucketStart - bucket.startFrame) * zoom
@@ -631,7 +653,7 @@ function ClipView({
                 focusable="false"
                 style={{
                   left:
-                    (visibleBucketStart - displayedSourceStartFrame) * zoom,
+                    (visibleBucketStart - displayedVisualStartFrame) * zoom,
                   width: (visibleBucketEnd - visibleBucketStart) * zoom,
                 }}
               >

@@ -882,9 +882,15 @@ describe('portable project resume', () => {
     })
   })
 
-  test('image-source projects fail honestly before entering an unusable relink state', async () => {
+  test('image-source projects resume offline and reconnect through the shared inspection path', async () => {
     const image = makeAsset({
+      id: 'image-session-id',
+      fileName: 'poster.png',
+      mimeType: 'image/png',
+      objectUrl: 'blob:relinked-image',
       kind: 'image',
+      durationFrames: 150,
+      durationMicroseconds: 5_000_000,
       frameRate: null,
       width: 800,
       height: 600,
@@ -893,19 +899,75 @@ describe('portable project resume', () => {
       audioChannels: null,
       decoderConfigB64: null,
     })
+    const descriptor = descriptorFrom(image, { id: 'image-stable' })
     const serialized = serializeProjectFile(
-      makeProject([descriptorFrom(image)]),
+      makeProject([descriptor]),
     )
-    const deps = makeDeps({ readText: vi.fn(async () => serialized) })
+    const inspectMedia = vi.fn(async (): Promise<MediaProbeResult> => ({
+      status: 'ready',
+      asset: image,
+      compatibility: readyReport({
+        container: {
+          name: 'PNG image',
+          mimeType: 'image/png',
+          fullMimeType: 'image/png',
+        },
+        durationMicroseconds: 5_000_000,
+        tracks: [],
+        image: {
+          format: 'png',
+          mimeType: 'image/png',
+          width: 800,
+          height: 600,
+          animated: false,
+          frameCount: 1,
+          firstFrameOnly: false,
+          decodePath: 'image-bitmap',
+        },
+        detail: 'Still image bytes and browser decode verified.',
+      }),
+    }))
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      inspectMedia,
+    })
+    const projectFile = new File([serialized], 'image.webcut')
+    const sourceFile = new File(['12345678'], 'renamed-poster.png', {
+      type: 'image/png',
+      lastModified: 999,
+    })
 
     await expect(
-      openProjectFile(new File([serialized], 'image.webcut'), deps),
-    ).resolves.toMatchObject({
-      status: 'failed',
-      message: expect.stringContaining('cannot reconnect yet'),
+      openProjectFile(projectFile, deps),
+    ).resolves.toEqual({ status: 'ready' })
+    expect(useProjectSessionStore.getState().candidate?.assets).toEqual([{
+      id: 'image-stable',
+      fileName: 'poster.png',
+      kind: 'image',
+      status: 'missing',
+    }])
+
+    await expect(connectProjectMedia([sourceFile], deps)).resolves.toEqual({
+      status: 'ready',
     })
-    expect(useProjectSessionStore.getState().candidate).toBeNull()
-    expect(deps.inspectMedia).not.toHaveBeenCalled()
+    expect(inspectMedia).toHaveBeenCalledOnce()
+
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+    expect(useMediaStore.getState().assets.get('image-stable')).toMatchObject({
+      id: 'image-stable',
+      fileName: 'poster.png',
+      kind: 'image',
+      objectUrl: 'blob:relinked-image',
+      durationFrames: 150,
+      durationMicroseconds: 5_000_000,
+      frameRate: null,
+      width: 800,
+      height: 600,
+      hasAudio: false,
+      decoderConfigB64: null,
+    })
   })
 
   test('automatically reconnects a remembered source whose read grant persists', async () => {

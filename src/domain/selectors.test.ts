@@ -267,6 +267,17 @@ describe('clipSourceFrame', () => {
     expect(clipSourceFrame(clip, 110)).toBe(40)
     expect(clipSourceFrame(clip, 149)).toBe(79)
   })
+
+  test('every timeline frame of a still resolves to its sole source frame', () => {
+    const clip = {
+      ...makeClip('still', 100, 500),
+      sourceMode: 'still' as const,
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    }
+    expect(clipSourceFrame(clip, 100)).toBe(0)
+    expect(clipSourceFrame(clip, 350)).toBe(0)
+    expect(clipSourceFrame(clip, 599)).toBe(0)
+  })
 })
 
 describe('visibleVideoLayersAtFrame', () => {
@@ -323,6 +334,37 @@ describe('visibleVideoLayersAtFrame', () => {
     expect(summary(doc, 20)).toEqual([
       { id: 'from', sourceFrame: 109, opacity: 1 },
       { id: 'to', sourceFrame: 200, opacity: 0.5 },
+    ])
+  })
+
+  test('stills hold source frame 0 through both sides of a transition window', () => {
+    const stillFrom = {
+      ...from,
+      sourceMode: 'still' as const,
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    }
+    const stillTo = {
+      ...to,
+      sourceMode: 'still' as const,
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    }
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [stillFrom, stillTo], {
+        transitions: [transition],
+      }),
+    ])
+
+    expect(summary(doc, 19)).toEqual([
+      { id: 'from', sourceFrame: 0, opacity: 1 },
+      { id: 'to', sourceFrame: 0, opacity: 0.25 },
+    ])
+    expect(summary(doc, 20)).toEqual([
+      { id: 'from', sourceFrame: 0, opacity: 1 },
+      { id: 'to', sourceFrame: 0, opacity: 0.5 },
+    ])
+    expect(summary(doc, 21)).toEqual([
+      { id: 'from', sourceFrame: 0, opacity: 1 },
+      { id: 'to', sourceFrame: 0, opacity: 0.75 },
     ])
   })
 

@@ -10,7 +10,8 @@
  * - Invariants enforced here, assumed everywhere else:
  *   - clips on one track never overlap (half-open ranges),
  *   - clip duration >= 1 frame,
- *   - sourceRange.durationFrames === timelineRange.durationFrames (speed 1.0),
+ *   - timed source duration equals timeline duration (speed 1.0),
+ *   - still source range is exactly frame 0 with duration 1,
  *   - clips stay sorted by timelineRange.startFrame,
  *   - locked tracks reject all edits.
  *
@@ -382,9 +383,10 @@ export function removeTransition(
  * (insertClip does that); it only fills in the schema defaults (identity
  * transform, full opacity/volume, empty effect chain). Per the MVP
  * conformance note in schema.ts, asset.durationFrames is already measured
- * in document-rate frames. When `linkGroupId` is given (the A/V drop path,
- * pairing a video clip with its audio clip), it is stamped onto the clip;
- * omitted, the key is left absent, matching an ordinary unlinked clip.
+ * in document-rate frames. Still images receive a canonical one-frame source
+ * and an independently editable nominal timeline duration. When `linkGroupId`
+ * is given (the A/V drop path, pairing a video clip with its audio clip), it is
+ * stamped onto the clip; omitted, the key is left absent.
  */
 export function clipFromAsset(
   asset: MediaAsset,
@@ -395,7 +397,11 @@ export function clipFromAsset(
     id: newId('clip'),
     assetId: asset.id,
     name: asset.fileName,
-    sourceRange: { startFrame: 0, durationFrames: asset.durationFrames },
+    sourceMode: asset.kind === 'image' ? 'still' : 'timed',
+    sourceRange: {
+      startFrame: 0,
+      durationFrames: asset.kind === 'image' ? 1 : asset.durationFrames,
+    },
     timelineRange: { startFrame, durationFrames: asset.durationFrames },
     transform: {
       x: 0,
@@ -417,8 +423,8 @@ export function clipFromAsset(
  * Insert a new clip onto a track. The clip is defensively deep-copied so
  * later mutation of the caller's object cannot reach into the doc. Rejected
  * on unknown/locked track, duplicate clip id, non-integer or negative
- * frames, duration < 1, a sourceRange/timelineRange duration mismatch
- * (speed-1.0 invariant), or overlap with an existing clip.
+ * frames, duration < 1, invalid timed/still source geometry, or overlap with
+ * an existing clip.
  *
  * Asset-kind vs track-kind compatibility is NOT checked here: assets live in
  * state/mediaStore and domain/ cannot see them (same boundary as the
@@ -442,7 +448,27 @@ export function insertClip(
   if (!Number.isInteger(src.startFrame) || src.startFrame < 0) {
     return reject(doc, op, `source start must be an integer >= 0, got ${src.startFrame}`)
   }
-  if (src.durationFrames !== tl.durationFrames) {
+  if (
+    clip.sourceMode !== undefined
+    && clip.sourceMode !== 'timed'
+    && clip.sourceMode !== 'still'
+  ) {
+    return reject(doc, op, `unknown source mode ${String(clip.sourceMode)}`)
+  }
+  if (
+    clip.sourceMode === 'still'
+    && (src.startFrame !== 0 || src.durationFrames !== 1)
+  ) {
+    return reject(
+      doc,
+      op,
+      'still clips must use source frame 0 with duration 1',
+    )
+  }
+  if (
+    clip.sourceMode !== 'still'
+    && src.durationFrames !== tl.durationFrames
+  ) {
     return reject(
       doc,
       op,
@@ -478,9 +504,9 @@ export function insertClip(
 
 /**
  * Split a clip in two at a timeline frame strictly inside it. The left half
- * keeps the original clip id; the right half gets a new id, continues the
- * source material exactly where the left half stops, and deep-copies the
- * effect chain (with fresh effect-instance ids).
+ * keeps the original clip id; the right half gets a new id and deep-copies
+ * the effect chain (with fresh effect-instance ids). Timed halves partition
+ * the source exactly; both still halves retain canonical source frame 0.
  */
 export function splitClipAtFrame(
   doc: TimelineDoc,
@@ -506,21 +532,26 @@ export function splitClipAtFrame(
   }
 
   const offset = frame - tl.startFrame
+  const stillSource = clip.sourceMode === 'still'
   const left: Clip = {
     ...clip,
-    sourceRange: {
-      startFrame: clip.sourceRange.startFrame,
-      durationFrames: offset,
-    },
+    sourceRange: stillSource
+      ? { startFrame: 0, durationFrames: 1 }
+      : {
+          startFrame: clip.sourceRange.startFrame,
+          durationFrames: offset,
+        },
     timelineRange: { startFrame: tl.startFrame, durationFrames: offset },
   }
   const right: Clip = {
     ...clip,
     id: newId('clip'),
-    sourceRange: {
-      startFrame: clip.sourceRange.startFrame + offset,
-      durationFrames: tl.durationFrames - offset,
-    },
+    sourceRange: stillSource
+      ? { startFrame: 0, durationFrames: 1 }
+      : {
+          startFrame: clip.sourceRange.startFrame + offset,
+          durationFrames: tl.durationFrames - offset,
+        },
     timelineRange: { startFrame: frame, durationFrames: tl.durationFrames - offset },
     effects: clip.effects.map((e) => ({
       ...e,
@@ -550,10 +581,11 @@ export function splitClipAtFrame(
 
 /**
  * Move one edge of a clip by a signed frame delta ("move the edge right" is
- * positive). Trimming the start also advances the source in-point so the
- * remaining material still lines up. Rejected when the result would be
- * shorter than 1 frame, start before frame 0 (timeline or source), or
- * overlap a neighbor.
+ * positive). A timed start trim advances the source in-point so the remaining
+ * material still lines up. A still trim changes only timeline geometry, so
+ * either edge can extend without inventing source frames. Rejected when the
+ * result would be shorter than 1 frame, start before frame 0, or overlap a
+ * neighbor.
  */
 export function trimClip(
   doc: TimelineDoc,
@@ -572,6 +604,7 @@ export function trimClip(
   const { clip } = loc
   const tl = clip.timelineRange
   const src = clip.sourceRange
+  const stillSource = clip.sourceMode === 'still'
 
   let newTl: TimeRange
   let newSrc: TimeRange
@@ -580,13 +613,20 @@ export function trimClip(
       startFrame: tl.startFrame + deltaFrames,
       durationFrames: tl.durationFrames - deltaFrames,
     }
-    newSrc = {
-      startFrame: src.startFrame + deltaFrames,
-      durationFrames: src.durationFrames - deltaFrames,
-    }
+    newSrc = stillSource
+      ? src
+      : {
+          startFrame: src.startFrame + deltaFrames,
+          durationFrames: src.durationFrames - deltaFrames,
+        }
   } else {
     newTl = { startFrame: tl.startFrame, durationFrames: tl.durationFrames + deltaFrames }
-    newSrc = { startFrame: src.startFrame, durationFrames: src.durationFrames + deltaFrames }
+    newSrc = stillSource
+      ? src
+      : {
+          startFrame: src.startFrame,
+          durationFrames: src.durationFrames + deltaFrames,
+        }
   }
 
   if (newTl.durationFrames < 1) {
@@ -595,7 +635,7 @@ export function trimClip(
   if (newTl.startFrame < 0) {
     return reject(doc, op, 'clip cannot start before timeline frame 0')
   }
-  if (newSrc.startFrame < 0) {
+  if (!stillSource && newSrc.startFrame < 0) {
     return reject(doc, op, 'no source material before the asset start')
   }
   if (overlapsAny(loc.track.clips, newTl, clipId)) {
@@ -706,9 +746,11 @@ export function rippleDelete(doc: TimelineDoc, clipId: ClipId): TimelineDoc {
 }
 
 /**
- * Slip: shift WHICH source material a clip shows without moving the clip on
+ * Slip: shift WHICH source material a timed clip shows without moving it on
  * the timeline. Positive delta shows later material (source in-point moves
  * forward). timelineRange is untouched, so neighbors can never be affected.
+ * A still clip has no alternate source material, so slip is an intentional,
+ * silent same-reference no-op.
  * Rejected when the source in-point would go below 0 or the resulting source
  * range would leave JavaScript's safe-integer frame domain. Slipping past the
  * END of the asset is validated at the store/UI layer, like trimClip
@@ -725,6 +767,7 @@ export function slipClip(
   }
   const loc = locateClip(doc, clipId)
   if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.clip.sourceMode === 'still') return doc
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
 
   const src = loc.clip.sourceRange
@@ -792,17 +835,22 @@ export function slideClip(
     clips[clipIndex - 1] = {
       ...left,
       timelineRange: { ...left.timelineRange, durationFrames: newDur },
-      sourceRange: { ...left.sourceRange, durationFrames: newDur },
+      sourceRange: left.sourceMode === 'still'
+        ? left.sourceRange
+        : { ...left.sourceRange, durationFrames: newDur },
     }
   }
   if (right && right.timelineRange.startFrame === rangeEnd(tl)) {
     // Touching right neighbor: its head follows our tail.
     const newDur = right.timelineRange.durationFrames - deltaFrames
-    const newSrcStart = right.sourceRange.startFrame + deltaFrames
+    const rightIsStill = right.sourceMode === 'still'
+    const newSrcStart = rightIsStill
+      ? right.sourceRange.startFrame
+      : right.sourceRange.startFrame + deltaFrames
     if (newDur < 1) {
       return reject(doc, op, 'right neighbor cannot shrink below 1 frame')
     }
-    if (newSrcStart < 0) {
+    if (!rightIsStill && newSrcStart < 0) {
       return reject(doc, op, 'right neighbor has no source material before the asset start')
     }
     clips[clipIndex + 1] = {
@@ -811,7 +859,9 @@ export function slideClip(
         startFrame: right.timelineRange.startFrame + deltaFrames,
         durationFrames: newDur,
       },
-      sourceRange: { startFrame: newSrcStart, durationFrames: newDur },
+      sourceRange: rightIsStill
+        ? right.sourceRange
+        : { startFrame: newSrcStart, durationFrames: newDur },
     }
   }
   clips[clipIndex] = {
@@ -862,22 +912,27 @@ export function rippleTrim(
   const tl = clip.timelineRange
   const src = clip.sourceRange
   const oldEnd = rangeEnd(tl)
+  const stillSource = clip.sourceMode === 'still'
 
   let newClip: Clip
   let shiftBy: number
   if (edge === 'start') {
     const newDur = tl.durationFrames - deltaFrames
-    const newSrcStart = src.startFrame + deltaFrames
+    const newSrcStart = stillSource
+      ? src.startFrame
+      : src.startFrame + deltaFrames
     if (newDur < 1) {
       return reject(doc, op, 'clip duration cannot shrink below 1 frame')
     }
-    if (newSrcStart < 0) {
+    if (!stillSource && newSrcStart < 0) {
       return reject(doc, op, 'no source material before the asset start')
     }
     newClip = {
       ...clip,
       timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
-      sourceRange: { startFrame: newSrcStart, durationFrames: newDur },
+      sourceRange: stillSource
+        ? src
+        : { startFrame: newSrcStart, durationFrames: newDur },
     }
     shiftBy = -deltaFrames
   } else {
@@ -888,7 +943,9 @@ export function rippleTrim(
     newClip = {
       ...clip,
       timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
-      sourceRange: { startFrame: src.startFrame, durationFrames: newDur },
+      sourceRange: stillSource
+        ? src
+        : { startFrame: src.startFrame, durationFrames: newDur },
     }
     shiftBy = deltaFrames
   }

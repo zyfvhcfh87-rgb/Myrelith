@@ -225,6 +225,7 @@ describe('Track drop target', () => {
     expect(video).toHaveLength(1)
     expect(video[0].assetId).toBe('asset-9')
     expect(video[0].name).toBe('beach.mp4')
+    expect(video[0].sourceMode).toBe('timed')
     expect(video[0].timelineRange).toEqual({ startFrame: 240, durationFrames: 120 })
     expect(video[0].sourceRange).toEqual({ startFrame: 0, durationFrames: 120 })
 
@@ -244,6 +245,45 @@ describe('Track drop target', () => {
     doc().undo() // one undo removes BOTH halves
     expect(trackById('V1').clips).toHaveLength(0)
     expect(trackById('A1').clips).toHaveLength(0)
+  })
+
+  test('an image drop creates one still clip with independent timeline duration', () => {
+    const image = makeAsset({
+      id: 'image-1',
+      fileName: 'poster.png',
+      mimeType: 'image/png',
+      kind: 'image',
+      durationFrames: 150,
+      durationMicroseconds: 5_000_000,
+      frameRate: null,
+      width: 640,
+      height: 360,
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+      decoderConfigB64: null,
+    })
+    seedAsset(image)
+    render(<Track track={trackById('V1')} />)
+    const lane = screen.getByTestId('track-V1')
+    const dataTransfer = assetDragData(image)
+
+    fireEvent.dragOver(lane, { dataTransfer })
+    expect(lane).toHaveClass('drop-target')
+    fireEvent.drop(lane, { dataTransfer, clientX: 30 })
+
+    expect(trackById('V1').clips).toHaveLength(1)
+    expect(trackById('V1').clips[0]).toMatchObject({
+      assetId: 'image-1',
+      sourceMode: 'still',
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+      timelineRange: { startFrame: 30, durationFrames: 150 },
+    })
+    expect(trackById('A1').clips).toHaveLength(0)
+    expect(doc().past).toHaveLength(1)
+
+    doc().undo()
+    expect(trackById('V1').clips).toHaveLength(0)
   })
 
   test('a second A/V drop gets a DIFFERENT linkGroupId from the first', () => {

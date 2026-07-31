@@ -58,6 +58,17 @@ export type MediaImportResult =
   | { status: 'busy' }
   | { status: 'failed'; message: string; itemId?: string }
 
+export interface MediaImportBatchResult {
+  status: 'batch-complete'
+  results: readonly MediaImportResult[]
+}
+
+export type MediaImportSelectionResult =
+  | MediaImportResult
+  | MediaImportBatchResult
+
+export const MAX_MEDIA_IMPORT_BATCH_FILES = 100
+
 export interface MediaImportDeps {
   createAssetId(): string
   createRequestId(): string
@@ -137,7 +148,12 @@ interface RetainedImport {
   deps: MediaImportDeps
 }
 
+interface ActiveImportBatch {
+  cancelled: boolean
+}
+
 let activeImport: ActiveImport | null = null
+let activeBatch: ActiveImportBatch | null = null
 const retainedImports = new Map<string, RetainedImport>()
 
 function cloneRate(rate: FrameRate): FrameRate {
@@ -270,8 +286,15 @@ async function importSelectedMedia(
   existingItemId?: string,
   requestedPartialSelection?: PartialTrackImportSelection,
   cancelFallback: MediaCompatibilityItem | null = null,
+  batch: ActiveImportBatch | null = null,
 ): Promise<MediaImportResult> {
-  if (activeImport) return { status: 'busy' }
+  if (
+    activeImport
+    || (activeBatch !== null && activeBatch !== batch)
+    || batch?.cancelled
+  ) {
+    return { status: 'busy' }
+  }
 
   const itemId = existingItemId ?? deps.createAssetId()
   if (deps.hasAsset(itemId)) {
@@ -565,12 +588,76 @@ export function importMediaFromHandle(
   return importSelectedMedia(file, handle, deps)
 }
 
+async function importMediaSelections(
+  selections: readonly {
+    file: File
+    handle: LocalMediaFileHandle | null
+  }[],
+  deps: MediaImportDeps,
+): Promise<MediaImportSelectionResult> {
+  if (activeImport || activeBatch) return { status: 'busy' }
+  if (selections.length === 0) return { status: 'cancelled' }
+  if (selections.length > MAX_MEDIA_IMPORT_BATCH_FILES) {
+    const message =
+      `Choose at most ${MAX_MEDIA_IMPORT_BATCH_FILES} media files at once.`
+    useMediaImportStore.setState({
+      phase: 'error',
+      fileName: null,
+      prompt: null,
+      error: message,
+    })
+    return { status: 'failed', message }
+  }
+
+  const batch: ActiveImportBatch = {
+    cancelled: false,
+  }
+  activeBatch = batch
+  const results: MediaImportResult[] = []
+  try {
+    for (const selection of selections) {
+      if (activeBatch !== batch || batch.cancelled) {
+        results.push({ status: 'cancelled' })
+        break
+      }
+      const result = await importSelectedMedia(
+        selection.file,
+        selection.handle,
+        deps,
+        undefined,
+        undefined,
+        null,
+        batch,
+      )
+      results.push(result)
+      if (result.status === 'cancelled' || result.status === 'busy') {
+        batch.cancelled = true
+        break
+      }
+    }
+    return { status: 'batch-complete', results }
+  } finally {
+    if (activeBatch === batch) activeBatch = null
+  }
+}
+
+/** Sequential bounded batch path used by the multi-file fallback input. */
+export function importMediaFiles(
+  files: readonly File[],
+  deps: MediaImportDeps = realDeps,
+): Promise<MediaImportSelectionResult> {
+  return importMediaSelections(
+    files.map((file) => ({ file, handle: null })),
+    deps,
+  )
+}
+
 /** Re-run a settled compatibility check only after an explicit user action. */
 export function retryMediaCompatibility(
   itemId: string,
   deps?: MediaImportDeps,
 ): Promise<MediaImportResult> {
-  if (activeImport) return Promise.resolve({ status: 'busy' })
+  if (activeImport || activeBatch) return Promise.resolve({ status: 'busy' })
   const retained = retainedImports.get(itemId)
   if (!retained) {
     return Promise.resolve({
@@ -603,7 +690,7 @@ export function acceptPartialMediaImport(
   selection: PartialTrackImportSelection,
   deps?: MediaImportDeps,
 ): Promise<MediaImportResult> {
-  if (activeImport) return Promise.resolve({ status: 'busy' })
+  if (activeImport || activeBatch) return Promise.resolve({ status: 'busy' })
   const retained = retainedImports.get(itemId)
   if (!retained) {
     return Promise.resolve({
@@ -667,15 +754,14 @@ export function canRememberImportedMedia(): boolean {
   return supportsLocalMediaHandles()
 }
 
-/** Open the picker directly from the Import click, then run the one-analysis path. */
+/** Open the picker directly from the Import click, then run a bounded queue. */
 export async function chooseMediaForImport(
   deps: MediaImportDeps = realDeps,
-): Promise<MediaImportResult> {
-  if (activeImport) return { status: 'busy' }
+): Promise<MediaImportSelectionResult> {
+  if (activeImport || activeBatch) return { status: 'busy' }
   try {
-    const [selection] = await pickLocalMediaFiles(false)
-    if (!selection) return { status: 'cancelled' }
-    return importMediaFromHandle(selection.file, selection.handle, deps)
+    const selections = await pickLocalMediaFiles(true)
+    return importMediaSelections(selections, deps)
   } catch (cause) {
     if (isLocalMediaPickerCancellation(cause)) return { status: 'cancelled' }
     const detail = cause instanceof Error ? cause.message : String(cause)
@@ -741,6 +827,7 @@ export function dismissMediaImportError(): void {
 
 /** Test/teardown seam: invalidates late work without letting it touch UI state. */
 export function resetMediaImportController(): void {
+  if (activeBatch) activeBatch.cancelled = true
   const operation = activeImport
   if (operation) cancelOperation(operation, false)
   for (const [itemId, retained] of retainedImports) {
@@ -748,5 +835,6 @@ export function resetMediaImportController(): void {
   }
   retainedImports.clear()
   activeImport = null
+  activeBatch = null
   useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
 }

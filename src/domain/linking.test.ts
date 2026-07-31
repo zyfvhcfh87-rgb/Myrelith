@@ -857,6 +857,28 @@ describe('linkedSlipClip', () => {
     expect(clipIn(out, 'A1', 'aClip').sourceRange).toEqual({ startFrame: 15, durationFrames: 100 })
     expect(clipIn(out, 'A1', 'aClip').timelineRange).toEqual({ startFrame: 0, durationFrames: 100 })
   })
+
+  test('a group containing a still is a silent same-reference no-op from either member', () => {
+    const groupId = 'link_still'
+    const doc = deepFreeze({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V-still', 'video', [{
+          ...makeClip('still', 0, 100, 0, groupId),
+          assetId: 'image-1',
+          sourceMode: 'still',
+          sourceRange: { startFrame: 0, durationFrames: 1 },
+        }]),
+        makeTrack('A-still', 'audio', [
+          makeClip('timed-partner', 0, 100, 20, groupId),
+        ]),
+      ],
+    })
+
+    expect(linkedSlipClip(doc, 'still', 10)).toBe(doc)
+    expect(linkedSlipClip(doc, 'timed-partner', 10)).toBe(doc)
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
 })
 
 /* ------------------------------------------------------------------ */

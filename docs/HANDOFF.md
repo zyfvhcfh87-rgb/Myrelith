@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-25)
+## Status (2026-07-31)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -66,8 +66,14 @@ and the open list below.
 | Post-MVP #12 — original Slice 5 | ✅ done | app-level stale/deleted selection reconciliation; surviving-primary promotion, undo non-resurrection, track/project replacement, and history/serialization isolation; 82 focused + 1,173 total tests; in-app Chromium delete/undo/track-removal gate |
 | Post-MVP #12 — original Slice 6 | ✅ done | focusable pressed clip controls + focusable `aria-disabled` Inspector Link/Unlink with visible described reasons; exact-target race rejection, retained pair selection/primary, badges/highlighting, focus handoff; 100 focused + 1,184 total tests; targeted in-app Chromium accessibility gate |
 | Post-MVP #12 — original Slice 7 / closeout | ✅ complete | orphan-safe removal, group-wide bounds, and immutable pointerdown document guard; 359 focused + 1,209 total tests; Chrome 150 full import/re-link/move/undo/redo/playback gate with a clean console |
+| Post-MVP #18 — static images Slice 1 | ✅ done | byte-sniffed PNG/JPEG/WebP/AVIF + immutable source/decode budgets; exact one-source ownership; deterministic 15-file matrix; 60 focused + 1,269 total tests; Chrome 150 41-fact module gate |
+| Post-MVP #18 — static images Slice 2 | ✅ done | verified multi-file import + durable five-second image records + Resume/Relink + bounded one-tile visuals; 212 focused + 1,291 total tests; in-app Chrome import/error/retry gate |
+| Post-MVP #18 — static images Slice 3 | ✅ done | explicit still source mode + v3 migration; placeable/editable five-second clips, frame-0 selectors, Slip no-op, repeated timeline tiles; 352 focused + 1,311 total tests; in-app Chrome Razor/crossfade/undo gate |
+| Post-MVP #18 — static images Slice 4 | ✅ done | one worker-owned decoded still per asset; frame-0 reuse through scrub/play/compositing/transitions; exact replacement/release/cancel/close ownership; 128 focused + 1,327 total tests; in-app Chromium transform/crossfade gate |
+| Post-MVP #18 — static images Slice 5 | ✅ done | kind-aware export source; one retained still decode per asset; shared compositor image↔video transitions; 54 focused + 1,331 total tests; 210-frame Chromium MP4 export/re-import gate |
+| **Post-MVP #18 — Slice 6 / final closeout** | ✅ complete | 38/38 issue checklist items reviewed against code/tests/browser evidence; full local validation green; normally merged with `codex/feature` retained; Issue #18 closed completed |
 
-1,209 tests green across 66 files · `npm run build` passes with the known large-chunk warning
+1,331 tests green across 71 files · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · `npm audit --omit=dev` reports 0 vulnerabilities · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -462,6 +468,130 @@ storage is also separate opt-in media caching with quota/eviction UX and
 multi-tab recovery ownership; do not imply recovery or a portable `.webcut`
 contains source bytes today.
 
+Issue #18 Slice 1 establishes the static-image pipeline leaf. A bounded byte
+inspector recognizes PNG, JPEG, WebP, and AVIF without trusting extension or
+declared MIME, rejects unsupported/malformed sources before decode, and
+publishes frozen source-size, candidate-dimension, allocation, and animation
+facts. PNG/APNG and WebP first-frame/container geometry is checked so hostile
+nested dimensions cannot bypass the predecode budget. AVIF item extents remain
+conservative budget candidates because clean-aperture, rotation, derived items,
+and WebCodecs track selection can legitimately change displayed geometry.
+They do not absolutely cap native AV1 decoder work: sequence-header maximum
+frame dimensions and intermediate images may exceed `ispe` before the browser
+returns a source WebCut can inspect. The 256 MiB ceiling bounds WebCut's
+estimates and accepted returned allocation, not every transient browser-decoder
+allocation. Future hardening should parse sequence-header limits where practical
+and stress hostile inputs in an isolated decoder context.
+
+The atomic decode seam reinspects the exact Blob, canonicalizes its sniffed MIME,
+and transfers exactly one caller-owned `ImageBitmap` or `VideoFrame`. It
+revalidates coded, visible, display, and native allocation limits, preserves
+orientation and alpha, closes every intermediate/cancelled/late resource, and
+observes `ImageDecoder.completed` before closing an incomplete stream.
+
+The reproducible 15-file fixture matrix and 60 focused tests cover all supported
+formats, animation headers, alpha, EXIF orientation, spoofed naming/MIME,
+malformed/truncated input, nested-frame budget attacks, allocation and
+cancellation races, and unsupported SVG/GIF. All 1,269 tests across 68 files,
+fixture replay, build, lint, audit, and diff checks passed. Real Chrome 150
+through local Vite passed 41 browser facts for both decode paths, including
+actual oriented pixel probes and exact caller close behavior, with 0 warnings
+and 0 errors.
+
+Issue #18 Slice 2 wires that foundation into the shared import/reconnection
+boundary. Verified images now receive durable orientation-aware dimensions and
+an exact five-second default, survive Save/Resume/manual Relink/folder Relink,
+and appear in the Media Pool with a bounded one-tile thumbnail, format/decode
+diagnostics, animated-first-frame disclosure, and actionable error/retry states.
+Native and fallback pickers accept multiple files through a maximum-100,
+sequential queue so only one image decode owns peak memory at a time.
+
+The focused Slice 2 suite passed 212/212 tests across 12 files and the full
+suite passed 1,291/1,291 across 71 files. Fixture replay, build, lint, audit,
+and diff checks passed. In-app Chrome 150 imported PNG, EXIF-oriented JPEG,
+animated WebP, and AVIF together; all four showed correct metadata and ready
+thumbnails. Corrupt PNG remained Error through Retry, SVG/GIF remained
+Unsupported, every image row remained non-draggable, and the console recorded
+0 warnings and 0 errors.
+
+Issue #18 Slice 3 establishes the still-clip timeline contract. Clips now carry
+an explicit `timed` or `still` source mode; every still owns canonical source
+range `[0, 1)` while its independent timeline range starts at the existing
+exact five-second default. Portable project format v3 requires that contract,
+and bounded asset-aware migration converts legacy image-media clips without
+misclassifying timed video/audio or text clips.
+
+Selectors map every ordinary and transition frame of a still to source frame 0.
+Move, trim, ripple, Razor, and Slide preserve `[0, 1)` while editing timeline
+geometry. Slip is a silent same-reference no-op for a still or a linked group
+containing one, so it creates neither a gesture preview nor a history entry.
+Ready images are now draggable to video lanes, and one bounded image tile
+repeats across the complete still clip, including split and extended ranges.
+The accessible clip name identifies a still image, and its Slip title explains
+why the tool is unavailable.
+
+The focused Slice 3 suite passed 352/352 tests across 10 files and the full
+suite passed 1,311/1,311 across 71 files. Fixture replay, build, lint, audit,
+and diff checks passed. In-app Chrome 150 imported a real 2×2 PNG, showed the
+Ready row as draggable, rendered the exact five-second still tile, Razor-split
+it into adjacent 75/75-frame halves, added a 15-frame crossfade, preserved
+identical rendered markup through a Slip attempt, and restored Razor/crossfade
+states through keyboard undo/redo. The console recorded 0 warnings and 0
+errors. The browser runner needed removed QA-only chooser/insertion adapters
+because it cannot carry a local file through File System Access or synthesize
+this HTML drag; the actual import, clip factory, store, editing, transition,
+and rendering paths ran unchanged, and focused UI tests cover data transfer.
+
+Issue #18 Slice 4 connects that still contract to the shared preview compositor.
+The app sends each connected image Blob to the render worker once. The worker
+decodes and retains exactly one `ImageBitmap` or `VideoFrame` per asset, lends
+that same frame-zero source to every visible clip/layer, and keeps the live
+resource outside React/Zustand state. Per-source loans prevent replacement or
+release from closing a frame while a composite is drawing it. Revisions plus
+abort signals reject stale concurrent opens, while replacement, release,
+decode failure, cancellation, and acknowledged worker shutdown close every
+decoded source exactly once.
+
+The focused Slice 4 suite passed 128/128 tests across the render worker, bridge,
+preview controller/UI, and compositor files. The full suite passed
+1,327/1,327 across 71 files; deterministic fixture replay, production build,
+lint, audit, and diff checks passed. In-app Chromium imported a real 280×175
+JPEG, rendered it at frame zero, retained it through a complete five-second
+playback, applied position/scale/rotation/opacity live, Razor-split it, and
+played across a 15-frame same-asset crossfade with transformed pixels intact.
+The console recorded 0 warnings and 0 errors. The browser runner again needed
+removed QA-only chooser/insertion adapters because its native File System
+Access and HTML drag bridges cannot carry the local fixture; import,
+clip creation, worker decode, preview, transforms, transitions, and playback
+ran through the production paths.
+
+Issue #18 Slice 5 connects image assets to export without creating a second
+visual path. The captured resolver now includes each asset's kind. Timed videos
+keep one Mediabunny Input/CanvasSink iterator and per-frame bitmap leases;
+images pass through the bounded static-image inspector/decoder once and retain
+one frame-zero `ImageBitmap` or `VideoFrame` for the whole export. Frame leases
+borrow that source, while only terminal export-source cleanup closes it.
+Shutdown aborts pending image work, late success closes before publication, and
+resource-limit failures preserve typed export identity.
+
+The focused Slice 5 export adapter/controller suite passed 54/54 tests and the
+full suite passed 1,331/1,331 across 71 files. Deterministic fixture replay,
+production build, lint, audit, and diff checks passed. In-app Chromium imported
+an alpha PNG and generated H.264 video, exercised still trim/transform,
+scrubbed and played a 15-frame image→video crossfade, exported the mixed
+timeline, and re-imported that exact download as Ready. The result was
+1280×720 H.264 at 30/1 fps, exactly 210 frames / 7.000 seconds; extracted start,
+transition, and video frames matched the expected transform, opacity, layering,
+and blend. No export, decoder, render-worker, or browser errors appeared. The
+sole warning was the expected domain rejection from an intentionally attempted
+overlapping move. Removed QA-only chooser/insertion adapters bridged browser
+automation's File System Access and HTML drag limitations.
+
+**Next: publish/merge and close Issue #18.** Static images are now importable,
+placeable, timeline-editable, preview-renderable, and exportable on this local
+branch. GitHub Issue #18 remains open until the branch is published and its
+implementation checklist is closed against merged evidence.
+
 ## What works today (user-visible)
 
 Run `npm run dev` → project Home. Create a project with an explicit canvas,
@@ -476,9 +606,16 @@ Review the profile, then open it with ready or offline sources. In the editor,
 the first Save chooses a writable file; Save As chooses another; both turn on
 live save. The toolbar shows dirty/saving/saved/error state, reload is guarded
 only while dirty, and returning to Projects confirms before safely closing the
-active media session. Import video or audio in the Media Pool; files are
-analyzed before they appear.
-An FPS mismatch opens an explicit
+active media session. Import video, audio, or PNG/JPEG/WebP/AVIF still images
+in the Media Pool; files are byte-verified and analyzed before they appear.
+Still images receive orientation-aware dimensions, a five-second default, and
+one bounded thumbnail; Ready rows drag to video lanes as explicit still clips.
+Their timeline duration can be moved, trimmed, rippled, split, slid, and joined
+by transitions while the single source frame remains fixed; Slip explains that
+it is unavailable and performs no edit. Save/Resume/Relink preserves that
+  contract. The timeline tile repeats correctly; Preview and Export both reuse
+  the shared compositor, with one bounded retained still decode per asset and
+  exact terminal cleanup. An FPS mismatch opens an explicit
 Keep/Match/Cancel dialog, and every video asset gets its own decoder in the
 render worker. The Preview is the real timeline compositor (4.1): all visible
 video tracks draw bottom-to-top at the playhead with per-clip Transform
@@ -583,15 +720,20 @@ surface; it is not a second zoom and never enters document history.
 
 ## Map (key files, one line each)
 
-- `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates),
+- `src/domain/` — `schema.ts` (types, half-open TimeRange, rational rates,
+  and optional legacy-compatible `ClipSourceMode` with explicit `timed`/`still`
+  values in every new or persisted clip),
   `time.ts` (conversions incl. exact integer microseconds,
   `snapToStandardRate`, `formatTimecode`),
   `operations.ts` (pure edits; REJECT = same doc reference + console.warn;
+  Issue #18 Slice 3 keeps still source `[0, 1)` through clip creation,
+  trim/ripple/Razor/Slide and makes Slip a silent same-reference no-op;
   Slice 7 `removeTrack` atomically dissolves lone unlocked link survivors or
   rejects for a locked survivor; 5.1e-1 track-scoped
   `addCrossfade`/`setCrossfadeDuration`/
   `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
+  with all ordinary and transition still samples fixed at source frame 0,
   `resolveCrossfade` (canonical centered-window geometry),
   `visibleVideoLayersAtFrame` (THE preview/export visual plan),
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
@@ -602,12 +744,16 @@ surface; it is not a second zoom and never enters document history.
   group ids; Slice 2 exposes that operation through the canonical
   history-backed `documentStore.linkClips`; Slice 3 resolves the ephemeral UI
   pair through the same eligibility contract before dispatch; the store's
-  geometry actions call these wrappers too).
+  geometry actions call these wrappers too; linked Slip also preflights every
+  member so a group containing a still remains one silent no-op).
 - `src/domain/projectSettings.ts` — authoritative project presets, strict
   settings validation, and the pure empty-document factory.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
   migration entry point, strict untrusted-input validation, and bounded durable
-  asset metadata; excludes every session-owned field.
+  asset metadata; excludes every session-owned field. Issue #18 Slice 3 bumps
+  the format to v3, requires explicit mode/range consistency in current files,
+  and migrates v1/v2 image-media clips to `still` `[0, 1)` while retaining
+  timed media and text semantics.
 - `src/state/projectSessionStore.ts` — serializable launch/editor screen,
   active-project labels, operation phase, relink status, and separate
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
@@ -639,12 +785,29 @@ surface; it is not a second zoom and never enters document history.
   recovery IndexedDB records; `src/app/projectLibraryController.ts` keeps their
   handles/snapshots outside state. `src/ui/ProjectLaunch.tsx` is the Home, New
   Project, Resume, Recent, and explicit-Recovery UI facade.
+- `src/pipeline/static-image-inspection.ts` — Issue #18 Slice 1 bounded,
+  content-based PNG/JPEG/WebP/AVIF inspection. It owns immutable source,
+  candidate-dimension, decoded-allocation, and animation facts plus stable
+  unsupported, malformed, and resource-limit failures; it imports no UI or
+  state.
+- `src/pipeline/static-image.ts` — atomic browser/worker first-frame decode
+  seam. It reinspects the exact Blob, canonicalizes the sniffed MIME, transfers
+  one caller-owned `ImageBitmap` or `VideoFrame`, validates orientation-aware
+  geometry and native allocation, and owns prompt abort plus exact
+  decoder/frame/bitmap cleanup.
+- `src/domain/staticImage.ts` — Issue #18 Slice 2 canonical five-second still
+  duration and exact project-rate frame conversion.
+- `src/pipeline/static-image-thumbnail.ts` — one-tile image visual generator:
+  contained 320×180 maximum geometry, PNG output capped at 1 MiB, and exact
+  decoded-source/abort ownership.
 - `src/pipeline/render.ts` — `compositeFrame(doc, frame, ctx, source)`:
   THE compositing path (preview worker in 4.1b, export in 5 — same code).
-  Injected `Composite2D` ctx + `FrameSource`; concurrent fetch phase, then
-  synchronous draw; `{drawn, missing}` result; per-clip try/finally. Since
-  5.1d it paints the selector's ordered ordinary/crossfade layers rather than
-  re-deriving active clips.
+  Injected `Composite2D` ctx + `FrameSource`; Slice 4 accepts either
+  `ImageBitmap` or Canvas-drawable `VideoFrame` sources without copying them.
+  The concurrent fetch phase precedes synchronous draw; `{drawn, missing}`
+  result and per-clip try/finally preserve source loans. Since 5.1d it paints
+  the selector's ordered ordinary/crossfade layers rather than re-deriving
+  active clips.
 - `src/pipeline/export.ts` — Phase 5.1a CFR orchestrator:
   `exportTimeline` derives length with `docDurationFrames`, composites every
   integer frame through an injected `compositeFrame`, awaits sink
@@ -653,7 +816,9 @@ surface; it is not a second zoom and never enters document history.
   `return(undefined)`.
 - `src/app/exportController.ts` — Phase 5.2a composition root: snapshots the
   current document/settings/media, eagerly retains every referenced Blob, and
-  passes one cached asset resolver to both Mediabunny adapter trees. It is the
+  passes one cached Blob/budget/kind resolver to both Mediabunny adapter trees.
+  Slice 5 uses that captured kind to branch visual export without re-reading
+  mutable media state. It is the
   sole explicit generator pump, preserving the final `ExportResult` while
   making repeated/coincident cancellation one serialized `return(undefined)`.
   Only one run (including setup/cancel cleanup) may own the controller slot.
@@ -693,14 +858,24 @@ surface; it is not a second zoom and never enters document history.
   Files/handles and retained retry resources outside Zustand, publishes guarded
   session compatibility requests, commits complete Ready assets exactly once,
   guards project-change/cancellation races, and owns every uncommitted object
-  URL. `src/app/mediaInspection.ts` now exposes the same typed probe result to
-  import and project reconnection callers.
+  URL. Slice 2 adds a maximum-100 sequential multi-file queue with one active
+  decode and batch cancellation. `src/app/mediaInspection.ts` routes
+  byte-recognized images through real decode and five-second durable asset
+  construction before falling unknown bytes back to the timed-media probe; the
+  same result feeds import and project reconnection callers.
 - `src/ui/MediaImportDialog.tsx` — accessible analysis/error/FPS-decision UI;
   exact rates, explicit choices, disabled-Match explanation, Escape handling.
 - `src/ui/MediaPool.tsx` — descriptor rows plus session-only compatibility
   rows; named live statuses, wrapped container/every-track/runtime diagnostics,
   direct-import Retry/Remove versus descriptor-backed Relink actions, and
   Ready-only drag gating with a second live check at the timeline drop boundary.
+  Slice 2 adds multi-file fallback import, still dimensions/duration/first-frame
+  disclosure, and contained one-tile thumbnails. Slice 3 enables Ready image
+  rows through both drag guards now that the still-clip domain contract exists.
+- `src/ui/timeline/ClipView.tsx` + `gestureBounds.ts` — Slice 3 repeats one
+  bounded still tile across the complete timeline duration, exposes a clear
+  still-image accessible name/Slip explanation, gives still trims unbounded
+  source headroom, and constrains still Slip to exactly zero.
 - `src/ui/ExportDialog.tsx` — Phase 5.2b fixed-profile export UX: controller
   code loads only on Start; progress is frame-coalesced; cancellation and retry
   are explicit states; Blob URL/download ownership, filename safety, modal
@@ -727,8 +902,10 @@ surface; it is not a second zoom and never enters document history.
   shared future anchor. The last cursor releases its Input; EOF, abort, pause,
   seek, muted-plan changes, and terminal cleanup cannot reopen or retain it.
 - `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c/d production browser
-  adapters: asset Blob resolver → one Input/CanvasSink/timestamp iterator per
-  video asset → lease-owned ImageBitmap copies; active audio clips → lazy
+  adapters: asset Blob/kind resolver → one Input/CanvasSink/timestamp iterator
+  per video asset → lease-owned ImageBitmap copies, or one retained bounded
+  frame-zero source per image asset → borrowed by every frame lease and closed
+  exactly once with the export source; active audio clips → lazy
   AudioSampleSink cursors with streaming resampling + channel downmix;
   OffscreenCanvas/CanvasSource + AudioSampleSource → AVC/AAC-in-MP4
   BufferTarget. Both encoders are support-probed, writes honor backpressure,
@@ -742,21 +919,27 @@ surface; it is not a second zoom and never enters document history.
   actions preserve exact snapshot ids), `transportStore` (playhead/zoom/
   `dragPreview` — the scrub-vs-commit pattern), `mediaStore` (durable descriptor
   catalog + connected analyzed subset + visual URL ownership + exact duration
-  reconformance), `previewStatusStore` (idempotent visible-offline projection),
+  reconformance), `previewStatusStore` (idempotent visible visual-source
+  offline projection),
   and
   `mediaImportStore` (serializable dialog status only; no File/Blob handles).
 - `src/workers/decode-protocol.ts` — canonical worker message types.
 - `src/workers/render-protocol.ts` — render-worker message types (types only).
-  The primary path sends each asset Blob once, then lightweight entries with
-  clip lane, asset, integer source frame, exact µs timestamp, and playback/seek
-  mode. The deprecated chunk-batch messages remain only for migration tests.
-  `setDoc` must precede renders built from it.
-- `src/workers/render.worker.ts` — Blob-backed compositing worker: one source
-  per asset; sequential, clip-keyed lanes for playback; request-scoped cursors
-  for seeks; tiny timestamp cache; FrameSource → compositeFrame on a scratch
-  canvas; newest-only blit via double buffering. Superseded presentation never
-  cancels a healthy playback lane, while discontinuities and every terminal
-  path close frames/cursors/sources exactly.
+  The primary path sends each timed-video Blob once through `configureAsset`
+  or each static-image Blob once through `openImage`, then lightweight entries
+  with clip lane, asset, integer source frame, exact µs timestamp, and
+  playback/seek mode. `closed` acknowledges completed worker cleanup before
+  bridge termination. The deprecated chunk-batch messages remain only for
+  migration tests. `setDoc` must precede renders built from it.
+- `src/workers/render.worker.ts` — Blob-backed compositing worker: timed video
+  keeps one source per asset, sequential clip-keyed playback lanes,
+  request-scoped seek cursors, and a tiny timestamp cache. Slice 4 adds one
+  retained frame-zero static source per image asset, shared across clips and
+  transition layers with explicit in-flight loans. Open revisions and abort
+  signals reject superseded work; replacement, release, failure, cancellation,
+  and worker close retire and close the source exactly once. All sources feed
+  `compositeFrame` on a scratch canvas; newest-only blit uses double buffering.
+  Superseded presentation never cancels a healthy playback lane.
 - `src/workers/decode.worker.ts` — injectable core (`createDecodeWorkerCore`);
   closes every VideoFrame ASAP, caches ImageBitmap copies (12) instead
   (raw frames starve the hw decoder pool!), backpressure at queue≥8,
@@ -780,17 +963,22 @@ surface; it is not a second zoom and never enters document history.
 - `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,
   `verifyKeyPackets`, bounded overshoot, bytes copied for transfer).
 - `src/engine/render-bridge.ts` — main-thread half of the render worker: keeps
-  the posted doc and per-asset rates, hands each Blob to the worker once, then
-  maps canonical visual layers to clip-keyed source-frame/µs requests with an
-  explicit playback/seek mode. Request ids remain latest-wins for presentation;
-  `onAssetReady`/`onWorkerError` are the controller hooks. The old encoded-batch
-  overload is deprecated and not used by preview.
+  the posted doc and per-asset source kind/rate, hands each Blob to the worker
+  once, then maps canonical visual layers to clip-keyed source-frame/µs
+  requests with an explicit playback/seek mode. Static entries always carry
+  frame zero/timestamp zero and never create timed playback lanes. Request ids
+  remain latest-wins for presentation; `onAssetReady`/`onWorkerError` are the
+  controller hooks. Disposal waits for the worker's cleanup acknowledgment
+  before termination. The old encoded-batch overload is deprecated and not
+  used by preview.
 - `src/app/previewController.ts` — THE COMPOSITION ROOT: only place stores
   meet engine/pipeline; DI seams for tests; idempotent per canvas
-  (StrictMode). It fetches each already-analyzed asset Blob, hands it to the
-  worker once, releases removed assets, forwards doc snapshots, and sends
-  rAF-coalesced document frames with playback/seek mode; re-renders on doc
-  change + assetConfigured (=the whole missing-clip retry policy).
+  (StrictMode). It fetches each already-analyzed video or image Blob, hands it
+  to the worker once through the matching open path, releases removed assets,
+  forwards doc snapshots, and sends rAF-coalesced document frames with
+  playback/seek mode; re-renders on doc change + assetConfigured (=the whole
+  missing-clip retry policy). Typed runtime failures preserve video/image
+  identity without pretending images have timed-video tracks.
 - `src/app/transportController.ts` — second composition root (same
   pattern): primes issue #5 live audio from immutable document/media snapshots,
   resumes AudioContext inside the click gesture, gives PlaybackEngine the exact
@@ -839,7 +1027,9 @@ surface; it is not a second zoom and never enters document history.
   `timeline/ClipView.tsx` — Slice 6 offline UI: descriptor-driven media rows,
   per-source Relink, one folder scan, focus-trapped ambiguity confirmation,
   current-frame Preview guidance, and finite labeled offline clips. Offline
-  rows cannot be dragged; text clips remain intentionally extendable.
+  rows cannot be dragged; text clips remain intentionally extendable. Issue
+  #18 Slice 4 treats video and image descriptors as visual sources in Preview
+  guidance while keeping the canvas state-only and resource-free.
 - `src/ui/timeline/Track.tsx` + `TransitionSeam.tsx` (5.1e-3) — Track derives
   eligible touching video cuts from its committed snapshot; each seam marker
   subscribes only to zoom and opens a temporary Add/Apply/Remove duration
@@ -850,8 +1040,9 @@ surface; it is not a second zoom and never enters document history.
 
 1. Integer frames everywhere; seconds only at codec/clock boundaries.
 2. Every VideoFrame/AudioSample closed the moment its pixels/samples are
-   copied; ImageBitmaps in the ring buffer, closed on evict/clear. One owner
-   at all times.
+   copied, except an explicitly retained render source whose bounded owner
+   loans it without copying and closes it on replacement/release/shutdown.
+   ImageBitmaps in caches close on evict/clear. One owner at all times.
 3. Rejected domain ops return the SAME doc reference (callers detect via
    `===`; store pushes no history).
 4. Scrubbing/dragging writes transportStore only; pointerup commits ONE
@@ -931,6 +1122,11 @@ surface; it is not a second zoom and never enters document history.
 - `ffmpeg`/`ffprobe` are installed as of 2026-07-12. They generated and probed
   the 5.2b A/V fixture/result; keep the in-browser generator below when a test
   needs a same-origin `File` without touching disk.
+- `npm run qa:issue18:fixtures` regenerates Issue #18's ignored deterministic
+  15-file PNG/JPEG/WebP/AVIF, animation-header, orientation, spoofed, malformed,
+  truncated, oversized, SVG, and GIF matrix plus `manifest.json` under
+  `.tmp/issue-18-image-fixtures/`; add `-- --validate-only` to fail when fixture
+  bytes, hashes, structural facts, or expected outcomes drift.
 - `npm run qa:issue19:fixtures` regenerates Issue #19's ignored 13-file native,
   fallback, unknown, malformed, truncated, spoofed, empty, and random-byte
   matrix plus a hash/ffprobe manifest under `.tmp/issue-19-codec-fixtures/`;
@@ -1032,10 +1228,11 @@ surface; it is not a second zoom and never enters document history.
   still hard-cuts), and the
   source-over compensation is exact only for ordinary opaque full-frame
   footage; transformed/transparent dissolves need isolated compositing.
-  Images remain not previewable (video only). The minimal UI intentionally
-  surfaces currently eligible seams; a malformed serialized transition whose
-  endpoints are missing/gapped/text has no cleanup marker yet, although the
-  store's remove action can still delete it.
+  Static images now render through the same preview compositing/transition path,
+  but export integration remains open. The minimal UI intentionally surfaces
+  currently eligible seams; a malformed serialized transition whose endpoints
+  are missing/gapped/text has no cleanup marker yet, although the store's
+  remove action can still delete it.
 - Matching a source FPS intentionally stops being available once any clip is
   on the timeline. Supporting that later requires an explicit retime operation
   for clip ranges, source ranges, transitions, playhead, and undo history; it

@@ -19,9 +19,10 @@ import {
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
-import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import type { AssetKind, Clip, TimelineDoc, Track } from '../domain/schema'
 import { compositeFrame } from './render'
 import type { ExportSettings } from './export'
+import { StaticImageDecodeError } from './static-image'
 
 const DECODE_BUDGET: LocalDecoderBudget = {
   fileBytes: 64,
@@ -33,7 +34,10 @@ const DECODE_BUDGET: LocalDecoderBudget = {
   channels: 6,
 }
 
-const resolvedAsset = (blob: Blob) => ({ blob, budget: DECODE_BUDGET })
+const resolvedAsset = (
+  blob: Blob,
+  kind: AssetKind = 'video',
+) => ({ blob, budget: DECODE_BUDGET, kind })
 
 const localDecoders = vi.hoisted(() => ({
   proresRegistered: false,
@@ -45,6 +49,18 @@ const localDecoders = vi.hoisted(() => ({
 const decoderChecks = vi.hoisted(() => ({
   targets: [] as DecoderCheckTarget[],
 }))
+
+const staticImageDecode = vi.hoisted(() => ({
+  decode: vi.fn(),
+}))
+
+vi.mock('./static-image', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./static-image')>()
+  return {
+    ...actual,
+    decodeStaticImage: staticImageDecode.decode,
+  }
+})
 
 vi.mock('../codecs/mediaCodecFallbacks', async (importOriginal) => {
   const actual = await importOriginal<
@@ -549,6 +565,55 @@ function makeTransitionVideoDoc(): TimelineDoc {
   }
 }
 
+function makeStillDoc(durationFrames = 5): TimelineDoc {
+  const doc = makeVideoDoc(
+    [{ assetId: 'image-asset', sourceStart: 0 }],
+    durationFrames,
+  )
+  const clip = doc.tracks[0].clips[0]
+  return {
+    ...doc,
+    tracks: [{
+      ...doc.tracks[0],
+      clips: [{
+        ...clip,
+        sourceMode: 'still',
+        sourceRange: { startFrame: 0, durationFrames: 1 },
+      }],
+    }],
+  }
+}
+
+function makeImageToVideoTransitionDoc(): TimelineDoc {
+  const from = makeAudioClip('image-from', 'image-asset', 3)
+  from.sourceMode = 'still'
+  from.sourceRange = { startFrame: 0, durationFrames: 1 }
+  const to = makeAudioClip('video-to', 'video-asset', 3, {
+    timelineStart: 3,
+    sourceStart: 20,
+  })
+  return {
+    ...makeDoc(),
+    tracks: [{
+      id: 'V1',
+      kind: 'video',
+      name: 'V1',
+      clips: [from, to],
+      transitions: [{
+        id: 'image-video-dissolve',
+        type: 'crossfade',
+        fromClipId: from.id,
+        toClipId: to.id,
+        durationFrames: 3,
+      }],
+      hidden: false,
+      muted: false,
+      solo: false,
+      locked: false,
+    }],
+  }
+}
+
 interface FakeBitmap extends ImageBitmap {
   close: Mock<() => void>
 }
@@ -748,11 +813,189 @@ beforeEach(() => {
   fakeCanvases.length = 0
   fakeBitmaps.length = 0
   createBitmap.mockClear()
+  staticImageDecode.decode.mockReset()
   vi.stubGlobal('OffscreenCanvas', FakeOffscreenCanvas)
   vi.stubGlobal('createImageBitmap', createBitmap)
 })
 
 describe('createMediabunnyExportMediaSource', () => {
+  test('decodes one retained still and closes it only with the export source', async () => {
+    const doc = makeStillDoc()
+    const blob = new Blob(['still'])
+    const source = {
+      width: 800,
+      height: 600,
+      close: vi.fn(),
+    } as unknown as FakeBitmap
+    staticImageDecode.decode.mockResolvedValue({
+      source,
+      sourceKind: 'image-bitmap',
+      width: source.width,
+      height: source.height,
+      animation: { animated: false, frameCount: 1, loopCount: null },
+      decoderRepetitionCount: null,
+      decodePath: 'image-bitmap',
+    })
+    const resolveAsset = vi.fn(async () => resolvedAsset(blob, 'image'))
+    const media = createMediabunnyExportMediaSource(doc, resolveAsset)
+    const borrowed: Array<ImageBitmap | VideoFrame | null> = []
+
+    for (let frame = 0; frame < 5; frame++) {
+      const lease = await media.openFrame(frame)
+      borrowed.push(await lease.getFrame('image-asset', 0))
+      await lease.close()
+      expect(source.close).not.toHaveBeenCalled()
+    }
+    await media.close()
+    await media.close()
+
+    expect(borrowed).toEqual([source, source, source, source, source])
+    expect(resolveAsset).toHaveBeenCalledOnce()
+    expect(resolveAsset).toHaveBeenCalledWith('image-asset')
+    expect(staticImageDecode.decode).toHaveBeenCalledOnce()
+    expect(staticImageDecode.decode).toHaveBeenCalledWith(blob, {
+      signal: expect.any(AbortSignal),
+    })
+    expect(mb.inputs).toHaveLength(0)
+    expect(mb.canvasSinks).toHaveLength(0)
+    expect(createBitmap).not.toHaveBeenCalled()
+    expect(source.close).toHaveBeenCalledOnce()
+  })
+
+  test('composites an image-to-video crossfade with one still decode', async () => {
+    const doc = makeImageToVideoTransitionDoc()
+    const source = {
+      width: 320,
+      height: 180,
+      close: vi.fn(),
+    } as unknown as FakeBitmap
+    staticImageDecode.decode.mockResolvedValue({
+      source,
+      sourceKind: 'image-bitmap',
+      width: source.width,
+      height: source.height,
+      animation: { animated: false, frameCount: 1, loopCount: null },
+      decoderRepetitionCount: null,
+      decodePath: 'image-bitmap',
+    })
+    mb.inputTracks.push(videoTrack())
+    mb.canvasSinkHandlers.push(async () => wrappedCanvas())
+    const media = createMediabunnyExportMediaSource(
+      doc,
+      async (assetId) => resolvedAsset(
+        new Blob([assetId]),
+        assetId === 'image-asset' ? 'image' : 'video',
+      ),
+    )
+    const canvas = new FakeOffscreenCanvas(doc.width, doc.height)
+    const drawn: string[][] = []
+
+    for (let frame = 0; frame < 6; frame++) {
+      const lease = await media.openFrame(frame)
+      const result = await compositeFrame(doc, frame, canvas.context, lease)
+      drawn.push(result.drawn)
+      await lease.close()
+    }
+
+    expect(drawn).toEqual([
+      ['image-from'],
+      ['image-from'],
+      ['image-from', 'video-to'],
+      ['image-from', 'video-to'],
+      ['image-from', 'video-to'],
+      ['video-to'],
+    ])
+    expect(staticImageDecode.decode).toHaveBeenCalledOnce()
+    expect(mb.inputs).toHaveLength(1)
+    expect(createBitmap).toHaveBeenCalledTimes(4)
+    expect(
+      canvas.context.drawImage.mock.calls
+        .filter(([image]) => image === source),
+    ).toHaveLength(5)
+    expect(source.close).not.toHaveBeenCalled()
+    for (const bitmap of fakeBitmaps) {
+      expect(bitmap.close).toHaveBeenCalledOnce()
+    }
+
+    await media.close()
+    expect(source.close).toHaveBeenCalledOnce()
+    expect(canvasIteratorAt().return).toHaveBeenCalledOnce()
+    expect(inputAt().dispose).toHaveBeenCalledOnce()
+  })
+
+  test('preserves static-image resource-limit identity at the export boundary', async () => {
+    const decodeFailure = new StaticImageDecodeError('resource-limit', 'png')
+    staticImageDecode.decode.mockRejectedValue(decodeFailure)
+    const media = createMediabunnyExportMediaSource(
+      makeStillDoc(1),
+      async () => resolvedAsset(new Blob(['oversized']), 'image'),
+    )
+    const lease = await media.openFrame(0)
+
+    const failure = await lease.getFrame('image-asset', 0).catch((cause) => cause)
+
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'image-asset',
+      failure: {
+        surface: 'export',
+        trackKind: null,
+        reason: 'resource-limit',
+      },
+    })
+    expect(failure.cause).toBe(decodeFailure)
+    await lease.close()
+    await media.close()
+  })
+
+  test('closes a still that finishes decoding after source shutdown', async () => {
+    const decoded = deferred<{
+      source: FakeBitmap
+      sourceKind: 'image-bitmap'
+      width: number
+      height: number
+      animation: {
+        animated: false
+        frameCount: 1
+        loopCount: null
+      }
+      decoderRepetitionCount: null
+      decodePath: 'image-bitmap'
+    }>()
+    const source = {
+      width: 16,
+      height: 16,
+      close: vi.fn(),
+    } as unknown as FakeBitmap
+    staticImageDecode.decode.mockReturnValue(decoded.promise)
+    const media = createMediabunnyExportMediaSource(
+      makeStillDoc(1),
+      async () => resolvedAsset(new Blob(['late']), 'image'),
+    )
+    const lease = await media.openFrame(0)
+    const borrowed = lease.getFrame('image-asset', 0)
+    const rejected = borrowed.catch((cause) => cause)
+    await vi.waitFor(() => expect(staticImageDecode.decode).toHaveBeenCalledOnce())
+
+    const closed = media.close()
+    decoded.resolve({
+      source,
+      sourceKind: 'image-bitmap',
+      width: source.width,
+      height: source.height,
+      animation: { animated: false, frameCount: 1, loopCount: null },
+      decoderRepetitionCount: null,
+      decodePath: 'image-bitmap',
+    })
+
+    await expect(rejected).resolves.toMatchObject({
+      message: 'Export media source is closed',
+    })
+    await closed
+    await lease.close()
+    expect(source.close).toHaveBeenCalledOnce()
+  })
+
   test('uses the canonical crossfade plan for exact ordered decode timestamps', async () => {
     const doc = makeTransitionVideoDoc()
     mb.inputTracks.push(videoTrack())
@@ -966,6 +1209,7 @@ describe('createMediabunnyExportMediaSource', () => {
       makeVideoDoc([{ assetId: 'large-prores', sourceStart: 0 }], 1),
       async () => ({
         blob: new Blob(['prores']),
+        kind: 'video',
         budget: {
           ...DECODE_BUDGET,
           fileBytes: LOCAL_DECODER_LIMITS.maxFileBytes + 1,
@@ -1408,6 +1652,7 @@ describe('createMediabunnyExportSink audio behavior', () => {
       SETTINGS,
       async () => ({
         blob: new Blob(['eac3']),
+        kind: 'audio',
         budget: {
           ...DECODE_BUDGET,
           fileBytes: LOCAL_DECODER_LIMITS.maxFileBytes + 1,

@@ -82,11 +82,27 @@ export interface MediaTrackCompatibility {
   durationMicroseconds?: number
 }
 
+export interface MediaImageCompatibility {
+  /** Raster format detected from bytes, never filename or declared MIME. */
+  format: 'png' | 'jpeg' | 'webp' | 'avif'
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/avif'
+  /** Orientation-aware presentation dimensions returned by the browser. */
+  width: number
+  height: number
+  animated: boolean
+  frameCount: number | null
+  /** Animated sources are deliberately represented by their first frame. */
+  firstFrameOnly: boolean
+  decodePath: 'image-bitmap' | 'image-decoder'
+}
+
 export interface MediaCompatibilityReport {
   status: SettledMediaCompatibilityStatus
   container: MediaContainerCompatibility | null
   durationMicroseconds: number | null
   tracks: MediaTrackCompatibility[]
+  /** Present only for a successfully content-verified raster image. */
+  image?: MediaImageCompatibility
   /** File-level reason. Track-specific failures live on the track itself. */
   reason: MediaCompatibilityReason | null
   detail: string | null
@@ -332,6 +348,7 @@ export function withMediaRuntimeFailure(
     container: previous?.container ? { ...previous.container } : null,
     durationMicroseconds: previous?.durationMicroseconds ?? null,
     tracks,
+    ...(previous?.image ? { image: { ...previous.image } } : {}),
     reason: failure.reason,
     detail: `${mediaRuntimeSurfaceLabel(failure.surface)} failed: ${failure.detail}`,
     ...(previous?.partialImport

@@ -137,7 +137,7 @@ export default function MediaImportDialog() {
               <p id="media-import-description" role="status">
                 {phase === 'cancelling'
                   ? 'Finishing cleanup safely.'
-                  : `Reading container and track metadata for ${fileName ?? 'the selected file'}.`}
+                  : `Reading file bytes and media metadata for ${fileName ?? 'the selected file'}.`}
               </p>
             </div>
             <div className="media-import-dialog-actions">
