@@ -619,6 +619,18 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
   private iteratorDone = false
   private closePromise: Promise<void> | null = null
 
+  private incompleteSource(sample: number, detail: string): MediaAssetRuntimeError {
+    return exportAssetError(
+      this.request.assetId,
+      'audio',
+      'decode-failed',
+      new Error(
+        `Export audio clip "${this.request.clipId}" is missing exact sample `
+        + `${sample}: ${detail}`,
+      ),
+    )
+  }
+
   constructor(
     iterator: AsyncGenerator<AudioSample, void, unknown>,
     request: ExportAudioClipRequest,
@@ -730,10 +742,20 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
 
       while (true) {
         if (!this.current) {
-          if (this.iteratorDone) break
+          if (this.iteratorDone) {
+            if (this.request.requireComplete) {
+              throw this.incompleteSource(sourceSample, 'source ended early')
+            }
+            break
+          }
           this.current = await this.shiftChunk()
         }
-        if (!this.current) break
+        if (!this.current) {
+          if (this.request.requireComplete) {
+            throw this.incompleteSource(sourceSample, 'source ended early')
+          }
+          break
+        }
         if (sourceTime < pcmChunkEnd(this.current) - epsilon) break
         this.current = await this.shiftChunk()
       }
@@ -741,12 +763,20 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
       const chunk = this.current
       if (!chunk) {
         if (this.iteratorDone) {
+          if (this.request.requireComplete) {
+            throw this.incompleteSource(sourceSample, 'source ended early')
+          }
           this.nextSourceSample += sampleCount - outputIndex - 1
           break
         }
         continue
       }
-      if (sourceTime < chunk.timestampSec - epsilon) continue
+      if (sourceTime < chunk.timestampSec - epsilon) {
+        if (this.request.requireComplete) {
+          throw this.incompleteSource(sourceSample, 'decoded PCM has a gap')
+        }
+        continue
+      }
 
       const position = Math.max(
         0,
@@ -760,6 +790,12 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
       let nextChunk: DecodedPcmChunk | null = null
       if (lower + 1 >= chunk.frameCount && fraction > epsilon) {
         nextChunk = await this.peekChunk()
+        if (!nextChunk && this.request.requireComplete) {
+          throw this.incompleteSource(
+            sourceSample,
+            'the final decoded sample cannot be interpolated',
+          )
+        }
       }
 
       for (let channel = 0; channel < EXPORT_AUDIO_CHANNELS; channel++) {
@@ -769,6 +805,15 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
           second = this.sampleAt(chunk, channel, lower + 1)
         } else if (nextChunk) {
           const gap = Math.abs(nextChunk.timestampSec - pcmChunkEnd(chunk))
+          if (
+            this.request.requireComplete
+            && gap > 1.5 / chunk.sampleRate
+          ) {
+            throw this.incompleteSource(
+              sourceSample,
+              'decoded PCM has a discontinuity',
+            )
+          }
           second =
             gap <= 1.5 / chunk.sampleRate
               ? this.sampleAt(nextChunk, channel, 0)
@@ -1093,6 +1138,7 @@ export async function createMediabunnyExportSink(
   doc: TimelineDoc,
   settings: ExportSettings,
   resolveAsset: ExportAssetResolver,
+  sourceBounds: SourceBoundsCatalog = new Map(),
 ): Promise<ExportVideoSink> {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -1155,6 +1201,7 @@ export async function createMediabunnyExportSink(
       ? new TimelineAudioMixer(
           doc,
           createMediabunnyExportAudioSource(resolveAsset),
+          sourceBounds,
         )
       : null
     source = new CanvasSource(canvas, {
@@ -1323,6 +1370,7 @@ export async function createMediabunnyExportSink(
 /** Production dependencies for exportTimeline, closed over the Blob resolver. */
 export function createMediabunnyExportDeps(
   resolveAsset: ExportAssetResolver,
+  sourceBounds: SourceBoundsCatalog = new Map(),
 ): ExportDeps {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -1330,6 +1378,6 @@ export function createMediabunnyExportDeps(
   return {
     composite: compositeFrame,
     createVideoSink: (doc, settings) =>
-      createMediabunnyExportSink(doc, settings, resolveAsset),
+      createMediabunnyExportSink(doc, settings, resolveAsset, sourceBounds),
   }
 }

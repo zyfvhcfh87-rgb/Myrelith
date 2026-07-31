@@ -19,6 +19,7 @@ import {
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
+import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { AssetKind, Clip, TimelineDoc, Track } from '../domain/schema'
 import {
   compositeFrame,
@@ -30,6 +31,7 @@ import {
   type ExportVideoSink,
 } from './export'
 import { StaticImageDecodeError } from './static-image'
+import { audioSampleBoundary } from './export-audio'
 
 const DECODE_BUDGET: LocalDecoderBudget = {
   fileBytes: 64,
@@ -418,6 +420,7 @@ import {
   EXPORT_AUDIO_BITRATE,
   EXPORT_AUDIO_CODEC,
   createMediabunnyExportDeps,
+  createMediabunnyExportAudioSource,
   createMediabunnyExportMediaSource as createRealExportMediaSource,
   createMediabunnyExportSink,
 } from './export-mediabunny'
@@ -494,6 +497,7 @@ function makeAudioClip(
     timelineStart?: number
     sourceStart?: number
     volume?: number
+    linkGroupId?: string
   } = {},
 ): Clip {
   return {
@@ -521,6 +525,7 @@ function makeAudioClip(
     opacity: 1,
     volume: options.volume ?? 1,
     effects: [],
+    ...(options.linkGroupId ? { linkGroupId: options.linkGroupId } : {}),
   }
 }
 
@@ -544,6 +549,74 @@ function makeAudioTrack(
 
 function makeAudioDoc(tracks: Track[]): TimelineDoc {
   return { ...makeDoc(), tracks }
+}
+
+function makeAudioCrossfadeDoc(): {
+  doc: TimelineDoc
+  sourceBounds: SourceBoundsCatalog
+} {
+  const videoFrom = makeAudioClip('video-from', 'video-from-asset', 3, {
+    sourceStart: 10,
+    linkGroupId: 'from-link',
+  })
+  const videoTo = makeAudioClip('video-to', 'video-to-asset', 3, {
+    timelineStart: 3,
+    sourceStart: 20,
+    linkGroupId: 'to-link',
+  })
+  const audioFrom = makeAudioClip('audio-from', 'audio-from-asset', 3, {
+    sourceStart: 10,
+    linkGroupId: 'from-link',
+  })
+  const audioTo = makeAudioClip('audio-to', 'audio-to-asset', 3, {
+    timelineStart: 3,
+    sourceStart: 20,
+    linkGroupId: 'to-link',
+  })
+  const videoTrack: Track = {
+    id: 'V1',
+    kind: 'video',
+    name: 'V1',
+    clips: [videoFrom, videoTo],
+    transitions: [{
+      id: 'crossfade',
+      type: 'crossfade',
+      fromClipId: videoFrom.id,
+      toClipId: videoTo.id,
+      durationFrames: 3,
+      audio: { enabled: true, curve: 'equal-power' },
+    }],
+    hidden: false,
+    muted: false,
+    solo: false,
+    locked: false,
+  }
+  const doc = makeAudioDoc([
+    videoTrack,
+    makeAudioTrack('A1', audioFrom),
+    makeAudioTrack('A2', audioTo),
+  ])
+  const bounds = {
+    video: {
+      status: 'exact' as const,
+      firstTimestampUs: 0,
+      endTimestampUs: 10_000_000,
+    },
+    audio: {
+      status: 'exact' as const,
+      firstTimestampUs: 0,
+      endTimestampUs: 10_000_000,
+    },
+  }
+  return {
+    doc: { ...doc, schemaVersion: 3 },
+    sourceBounds: new Map([
+      ['video-from-asset', bounds],
+      ['video-to-asset', bounds],
+      ['audio-from-asset', bounds],
+      ['audio-to-asset', bounds],
+    ]),
+  }
 }
 
 function makeTransitionVideoDoc(): TimelineDoc {
@@ -1842,7 +1915,97 @@ describe('createMediabunnyExportSink video behavior', () => {
   })
 })
 
+describe('createMediabunnyExportAudioSource exact ranges', () => {
+  test('fails an exact crossfade handle instead of zero-filling early EOF', async () => {
+    const decoded = decodedAudioSample(
+      [new Float32Array(4).fill(0.25)],
+      48_000,
+    )
+    mb.audioTracks.push(audioTrack(true, 1))
+    mb.audioSinkSampleSequences.push([decoded])
+    const source = createMediabunnyExportAudioSource(
+      async () => resolvedAsset(new Blob(['short-audio'])),
+    )
+    const reader = await source.openClip({
+      clipId: 'exact-handle',
+      assetId: 'audio-asset',
+      startSample: 0,
+      endSample: 10,
+      sampleRate: 48_000,
+      channelCount: 2,
+      requireComplete: true,
+    })
+
+    const failure = await reader.read(10).catch((cause) => cause)
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'audio-asset',
+      failure: {
+        surface: 'export',
+        trackKind: 'audio',
+        reason: 'decode-failed',
+        detail: expect.stringContaining('source ended early'),
+      },
+    })
+
+    await reader.close()
+    await source.close()
+    expect(decoded.close).toHaveBeenCalledOnce()
+    expect(inputAt().dispose).toHaveBeenCalledOnce()
+  })
+})
+
 describe('createMediabunnyExportSink audio behavior', () => {
+  test('encodes the shared absolute equal-power crossfade plan', async () => {
+    const fixture = makeAudioCrossfadeDoc()
+    const decodedFrom = decodedAudioSample([
+      new Float32Array(48_000).fill(1),
+      new Float32Array(48_000),
+    ], 48_000)
+    const decodedTo = decodedAudioSample([
+      new Float32Array(48_000),
+      new Float32Array(48_000).fill(1),
+    ], 48_000)
+    mb.audioTracks.push(audioTrack(true, 2), audioTrack(true, 2))
+    mb.audioSinkSampleSequences.push([decodedFrom], [decodedTo])
+    const sink = await createMediabunnyExportSink(
+      fixture.doc,
+      SETTINGS,
+      async (assetId) => resolvedAsset(new Blob([assetId])),
+      fixture.sourceBounds,
+    )
+
+    const frameDuration = 1_001 / 30_000
+    for (let frame = 0; frame < 6; frame++) {
+      await sink.addFrame(frame * frameDuration, frameDuration)
+    }
+    await sink.finalize()
+
+    const encoded = mb.encodedAudioSamples as FakeAudioSampleRecord[]
+    const sampleAt = (sample: number): [number, number] => {
+      const block = encoded.find((candidate) => {
+        const start = Math.round(candidate.timestamp * candidate.sampleRate)
+        return sample >= start && sample < start + candidate.numberOfFrames
+      })
+      if (!block) throw new Error(`Missing encoded sample ${sample}`)
+      const start = Math.round(block.timestamp * block.sampleRate)
+      const offset = (sample - start) * 2
+      return [block.data[offset], block.data[offset + 1]]
+    }
+    const start = audioSampleBoundary(2, fixture.doc)
+    const end = audioSampleBoundary(5, fixture.doc)
+    const span = end - start
+    for (const offset of [0, Math.floor(span / 2), span - 1]) {
+      const progress = offset / span
+      const [left, right] = sampleAt(start + offset)
+      expect(left).toBeCloseTo(Math.cos(progress * Math.PI / 2), 5)
+      expect(right).toBeCloseTo(Math.sin(progress * Math.PI / 2), 5)
+    }
+    expect(mb.audioSinks).toHaveLength(2)
+    expect(decodedFrom.close).toHaveBeenCalledOnce()
+    expect(decodedTo.close).toHaveBeenCalledOnce()
+  })
+
   test('loads local E-AC-3 support before allocating the audio sink', async () => {
     const doc = makeAudioDoc([
       makeAudioTrack('A1', makeAudioClip('eac3-clip', 'eac3-asset', 1)),

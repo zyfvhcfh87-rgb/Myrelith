@@ -54,7 +54,10 @@ export interface ExportControllerDeps {
     resolveAsset: ExportAssetResolver,
     sourceBounds: SourceBoundsCatalog,
   ): ExportMediaSource
-  createPipelineDeps(resolveAsset: ExportAssetResolver): PipelineExportDeps
+  createPipelineDeps(
+    resolveAsset: ExportAssetResolver,
+    sourceBounds: SourceBoundsCatalog,
+  ): PipelineExportDeps
   runExport(
     doc: TimelineDoc,
     settings: ExportSettings,
@@ -358,7 +361,7 @@ export function startExport(
   let media: ExportMediaSource | null = null
   let generator: ExportRun
   try {
-    const pipelineDeps = deps.createPipelineDeps(resolveAsset)
+    const pipelineDeps = deps.createPipelineDeps(resolveAsset, sourceBounds)
     media = deps.createMediaSource(doc, resolveAsset, sourceBounds)
     generator = deps.runExport(doc, runSettings, media, pipelineDeps)
   } catch (cause) {

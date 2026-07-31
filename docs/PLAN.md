@@ -1638,6 +1638,31 @@ gate stops progression; later checkboxes are never completed early.
   the exact crossfade; Stop reached zero RMS and zero nodes. Console warnings
   and errors were both empty, and the temporary tone harness was removed.
 
+### Slice 6 evidence — exact export audio parity (2026-07-31)
+
+- [x] Export now consumes the same immutable `audioMixPlan.ts` contributor and
+  envelope facts as live playback. Virtual audio legs open their exact source
+  handle ranges, overlap independently even when they share an asset, retain
+  signed NTSC sample phase, and apply clip volume plus the absolute linear or
+  equal-power envelope before one final channel clamp.
+- [x] The controller passes one probed source-bounds catalog to both video and
+  audio export paths. Crossfade handle readers are marked exact and fail with a
+  typed media error on early EOF, PCM gaps/discontinuities, or an unavailable
+  interpolation sample instead of freezing or zero-filling missing material.
+- [x] Focused gate: 109/109 tests across shared audio planning, the block mixer,
+  Mediabunny adapters, export controller, and export scheduler. Coverage spans
+  one-frame and odd/even windows, multi-block absolute gains, both curves,
+  per-leg volume, NTSC signed phase, same-asset readers, short-source failure,
+  exact catalog identity, and a complete mocked sink encode path.
+- [x] Full gate: 1,441/1,441 tests across 77 files; production build passed
+  with only the pre-existing chunk-size advisory; oxlint and `git diff --check`
+  passed. In-app Chromium decoded distinct 440 Hz left and 880 Hz right WAV
+  tones, exported AVC/AAC MP4, reopened it, and decoded 48 kHz audio. Measured
+  right/left ratios at 25/50/75% were 0.333/1.001/2.996 for linear and
+  0.415/0.999/2.413 for equal power, matching the expected envelopes through
+  encoding. Both outputs were exactly 2 seconds; console warnings and errors
+  were empty, and the temporary export harness was removed.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

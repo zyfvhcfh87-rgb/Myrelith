@@ -88,6 +88,23 @@ export function createTimelineAudioMixPlan(
   const sourceTimelinePhases = new Map<ClipId, number>()
   for (const track of audible) {
     for (const clip of track.clips) {
+      const timelineEndFrame = rangeEnd(clip.timelineRange)
+      const sourceEndFrame = rangeEnd(clip.sourceRange)
+      if (
+        !Number.isSafeInteger(clip.timelineRange.startFrame)
+        || clip.timelineRange.startFrame < 0
+        || !Number.isSafeInteger(timelineEndFrame)
+        || timelineEndFrame <= clip.timelineRange.startFrame
+        || !Number.isSafeInteger(clip.sourceRange.startFrame)
+        || clip.sourceRange.startFrame < 0
+        || !Number.isSafeInteger(sourceEndFrame)
+        || sourceEndFrame <= clip.sourceRange.startFrame
+      ) {
+        throw new RangeError(`Audio clip "${clip.id}" has an invalid range`)
+      }
+      if (!Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2) {
+        throw new RangeError(`Audio clip "${clip.id}" has an invalid volume`)
+      }
       if (clip.volume <= 0) continue
       sourceTimelinePhases.set(
         clip.id,
@@ -98,9 +115,9 @@ export function createTimelineAudioMixPlan(
         trackId: track.id,
         assetId: clip.assetId,
         timelineStartFrame: clip.timelineRange.startFrame,
-        timelineEndFrame: rangeEnd(clip.timelineRange),
+        timelineEndFrame,
         sourceStartFrame: clip.sourceRange.startFrame,
-        sourceEndFrame: rangeEnd(clip.sourceRange),
+        sourceEndFrame,
         volume: clip.volume,
         envelopes: [],
       })
