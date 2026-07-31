@@ -984,15 +984,17 @@ premature closeout and remains open.
 | 5 — Media Pool and timeline visuals | ✅ complete | Historical local Slices 2–3. |
 | 6 — worker preview | ✅ complete | Historical local Slice 4 bundle plus referenced-only image opening, discriminated video/image entries, one resident still per asset, exact loan/setup identities, a 256 MiB aggregate reserved-and-retained worker-realm budget, bounded close-ack timeout, and repeated seek/play/reopen coverage. |
 | 7 — correct transition compositor | ✅ complete | The selector exposes intrinsic opacity and transition weights separately. The shared preview/export renderer builds each transformed leg normally, adds the finished premultiplied legs with `(1-p)` / `p` inside one isolated group, and source-overs that group onto lower tracks exactly once. |
-| 8 — export | ⚠️ **implementation present / acceptance next** | Historical local Slice 5 bundle exists and now consumes the corrected shared compositor. Decode-once/reuse, frame-zero, cancellation/error cleanup, output reopen, and sampled-pixel export acceptance remain the next gate. |
-| 9 — acceptance and closeout | ⏳ open | Run the complete Issue #18 matrix and update evidence only after Slices 7–8 pass. |
+| 8 — export | ✅ complete | Historical local Slice 5 supplies the implementation; original Slice 8 adds typed-error preservation, complete still/video adapter and lifecycle coverage, and real Chromium encode → reopen gates against both the exact pre-encode canvas and the production worker-rendered Preview. |
+| 9 — acceptance and closeout | ⏳ open | Run the complete Issue #18 workflow/input matrix and update final evidence only after it passes. |
 
-The corrective source suite passes 1,380/1,380 tests across 74 files. The
-deterministic 15-file fixture replay, production build, lint, dependency audit,
-and diff checks pass. In-app Chromium also passed a real PNG import → 75-frame
-still placement → repeated seek/play → delete/release → undo/reopen cycle with
-zero browser warnings or errors. This is original Slice 6 evidence, not the
-original Slice 9 acceptance gate.
+The corrective source suite passes 1,385/1,385 tests across 74 files. The
+deterministic 15-file fixture replay, production build, lint,
+`npm audit --omit=dev`,
+and diff checks pass. Original Slice 8 additionally passed a real 60-frame AVC
+encode → exact-buffer reopen → full decode, with 30 pre-encode/output patches
+and a second 30-patch comparison between the production worker-rendered Preview
+and reopened output across ordinary and crossfade frames. This is not the original
+Slice 9 acceptance/closeout gate; Issue #18 remains open.
 
 ## Post-MVP issue #18 — Historical local Slice 1 bundle ✅ DONE (2026-07-26) Static-image source foundation
 
@@ -1178,9 +1180,9 @@ claimed here.
 ## Post-MVP issue #18 — Historical local Slice 5 bundle ✅ DONE (2026-07-31) Static-image export
 
 This bundle provides the original Slice 8 export implementation. Original
-Slice 7 has now replaced the transition compositor and passed its pixel matrix;
-decode-once/frame-zero, cleanup, output-reopen, and sampled preview/export
-acceptance are the next gate.
+Slice 7 later replaced the transition compositor and passed its pixel matrix;
+the original Slice 8 section below records the completed decode-once/frame-zero,
+cleanup, exact-output reopen, and sampled pre-encode/output acceptance gate.
 
 - [x] Extend each immutable export asset resolution with its captured media
   kind. The visual export adapter branches only after resolving that exact
@@ -1286,10 +1288,55 @@ the encoded-output and final acceptance gates remain original Slices 8–9.
   Inspector; browser diagnostics recorded 0 warnings and 0 errors. The
   temporary QA exposure was removed before final verification.
 
-**Next: original Slice 8 — export acceptance.** Prove decode-once/reuse and
-frame-zero behavior, cancellation/error cleanup, transform/opacity/layer
-parity, output reopen, and sampled pixels against preview. Original Slice 9
-remains the complete Issue #18 matrix and closeout gate.
+## Post-MVP issue #18 — Original Slice 8 ✅ DONE (2026-07-31) Export acceptance
+
+Issue #18 remains open. This slice closes the encoded-output boundary; original
+Slice 9 still owns the complete workflow/input matrix and final closeout.
+
+- [x] Preserve the exact visual-source rejection through export. Preview's
+  shared compositor intentionally turns a failed source request into `missing`
+  so a later repaint can recover; the finite export run now observes that
+  failure and rethrows the original typed `MediaAssetRuntimeError` before the
+  generic missing-media fallback. Lease, sink, and media-source cleanup retain
+  their existing primary-error ordering.
+- [x] Exercise the production visual adapter through image→video,
+  video→image, and same-asset image→image transitions. Each unique still is
+  decoded once, every still request remains frame zero, timed requests retain
+  their canonical order, frame-local video copies close, and the retained still
+  closes exactly once with the whole export source.
+- [x] Join that real retained-image source to early generator return and
+  encoder failure. Both paths cancel the sink, abort any late still decode, and
+  close the retained source once while preserving the operational failure.
+- [x] Verification: 89/89 focused tests across the export orchestrator,
+  Mediabunny adapter, controller, and pixel-golden files; 1,385/1,385 total
+  tests across 74 files; deterministic 15-file fixture replay, production
+  build, lint, `npm audit --omit=dev`, and diff checks green.
+- [x] In-app Chromium 150 exported a deterministic 320×180, 30 fps, 60-frame
+  timeline through the production controller, media source, shared compositor,
+  and AVC sink. The timeline combined an opaque lower still, a scaled/rotated
+  semi-transparent RGBA still, a transformed video, and a seven-frame
+  still→video crossfade. Mediabunny 1.50.9 reopened the exact 12,304-byte MP4,
+  reported AVC, 320×180, timestamp zero, 2.000 seconds, and decoded all 60
+  frames. Six 7×7 regions on each of frames 10, 27, 30, 33, and 45 compared the exact
+  pre-encode production canvas with reopened output: maximum patch-mean channel delta
+  1.510 (limit 12), maximum patch RGB MAE 1.000 (limit 10), and selected-region
+  RMSE 0.680 (limit 15). Decoded alpha stayed `[255,255]`; transformed still,
+  lower-layer, opacity, outgoing/overlap/incoming transition, and ordinary
+  video probes were all non-degenerate. Browser diagnostics recorded 0
+  warnings and 0 errors.
+- [x] A stricter direct parity pass mounted the normal editor and waited for the
+  production Preview worker to report each requested frame drawn with no missing
+  clips. Same-screen captures compared that transferred Preview canvas with the
+  reopened-output canvas at the same six 7×7 regions on frames 10, 27, 30, 33,
+  and 45: maximum patch-mean channel delta 3.143 (limit 12), maximum patch RGB
+  MAE 2.347 (limit 10), and selected-region RMSE 1.693 (limit 15). Across all
+  five complete 320×180 frame pairs, RGB MAE was 1.781 and RMSE 2.934. Browser
+  diagnostics again recorded 0 warnings and 0 errors; the temporary seed,
+  observation hook, captures, and server logs were removed.
+
+**Next: original Slice 9 — acceptance and closeout.** Run the complete Issue
+#18 Chrome workflow and input matrix, then update the remote checklist and
+close the issue only if the full gate passes.
 
 ## Test strategy per layer (unchanged from original)
 

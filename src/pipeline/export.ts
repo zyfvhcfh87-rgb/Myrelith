@@ -103,15 +103,35 @@ async function compositeAndCloseLease(
 ): Promise<void> {
   let failed = false
   let failure: unknown
+  let sourceFailed = false
+  let sourceFailure: unknown
+  const observedSource: FrameSource = {
+    getFrame: async (assetId, sourceFrame) => {
+      try {
+        return await lease.getFrame(assetId, sourceFrame)
+      } catch (cause) {
+        if (!sourceFailed) {
+          sourceFailed = true
+          sourceFailure = cause
+        }
+        throw cause
+      }
+    },
+  }
 
   try {
     const result = await composite(
       doc,
       frame,
       sink.ctx,
-      lease,
+      observedSource,
       sink.transitionSurfaceProvider,
     )
+    // Preview intentionally softens source failures into `missing` so a later
+    // repaint can recover. Export has no retry boundary: preserve the exact
+    // adapter error (including typed asset identity) instead of replacing it
+    // with the generic missing-media fallback below.
+    if (sourceFailed) throw sourceFailure
     if (result.missing.length > 0) {
       throw new Error(
         'Missing source media for clips: ' + result.missing.join(', '),
