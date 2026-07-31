@@ -1721,7 +1721,9 @@ work.
   immediately-before-start authority will therefore be a disposable real
   encode to `NullTarget` with the selected format, real dimensions/FPS, exact
   channel count/sample rate/bitrates/modes, and real source classes. It fails
-  before media retention or decode and never falls back to another profile.
+  before decoder/encoder setup and never falls back to another profile. The
+  captured object-URL Blob lease is acquired before the first await so editor
+  changes cannot revoke the source snapshot while that probe is pending.
 - The buffered path retains `BufferTarget`. Direct-file output owns its picker
   and writable stream in `app/`, acquires the handle first in the user click,
   and adapts positional `StreamTarget` writes. Mediabunny may close its wrapper;
@@ -1741,7 +1743,7 @@ work.
 1. [x] Freeze the allow-listed pure profile catalog, current safe default,
    Auto order, exact-key validation, numeric bounds, audio-off shape,
    container/codec pairing, container metadata, and destination contract.
-2. [ ] Add cached capability hints plus the app-controller facade and fresh
+2. [x] Add cached capability hints plus the app-controller facade and fresh
    disposable pre-start encode, including generation-safe cancellation and
    changed-support/no-silent-fallback tests.
 3. [ ] Generalize buffered video output across the selected container/codec,
@@ -1784,6 +1786,44 @@ work.
   TypeScript/Vite build passed with only the pre-existing chunk-size advisory;
   oxlint and `git diff --check` passed. This slice is browser-free and changes
   no rendered/export behavior, so its browser gate is not applicable.
+
+### Slice 2 evidence — capability discovery and fresh preflight (2026-07-31)
+
+- [x] The pipeline capability core now validates the concrete profile and
+  captured project settings, checks the selected Mediabunny format's exact
+  container metadata and codec containment, and forwards dimensions,
+  bitrates, bitrate modes, channel count, and sample rate to responsive
+  `canEncode*` hints. Audio-off and projects with no audio clips do not probe
+  or allocate an audio encoder.
+- [x] The app facade probes only the documented catalog, exposes Auto's exact
+  resolved preset, preserves explicit unsupported selections without fallback,
+  and performs an authoritative fresh check immediately before export. The
+  fresh adapter creates the selected output format, an actual-size sRGB canvas,
+  real encoder sources, exact rational track FPS, one video frame, and one
+  audio quantum through `NullTarget`, bypassing Mediabunny's memoized helpers.
+- [x] The export controller reserves its singleton slot synchronously while
+  preflight is pending. It starts one cached Blob lease before the first await,
+  so removing media during the probe cannot revoke the captured source URL;
+  decoders, media sources, encoder output, and the export generator remain
+  delayed until support is confirmed. Cancellation aborts or safely outlives
+  an abort-ignoring probe. Setup re-entry and competing write ownership close
+  borrowed media exactly once while preserving the primary error.
+- [x] Capability truth is additionally bounded by one shared production-sink
+  matrix. A successful native HEVC, mono, or WebM probe cannot be advertised
+  until that same exact path is wired into the real export sink; Slice 3 will
+  widen this matrix together with the implementation and its adapter tests.
+- [x] The exact-duration policy keeps Opus audio profiles visibly unavailable
+  while the installed WebM muxer lacks end-padding metadata, but still permits
+  capability probing for WebM video when the concrete export has no audio.
+  Disabling audio also excludes audio-only sources from offline/partial-source
+  gates and Blob retention without changing the historical default path.
+- [x] Focused gate: 206/206 tests across profile/selectors, capability core,
+  real Mediabunny adapter, app facade, pipeline, sink, export controller, and
+  dialog passed. Full gate: 1,527/1,527 tests across 81 files passed.
+  Production TypeScript/Vite build passed with only the pre-existing
+  chunk-size advisory; oxlint and `git diff --check` passed. Browser acceptance
+  is deferred to the first rendered profile UI and enabled alternate output;
+  this slice changes no visible controls and preserves the current export.
 
 ## Test strategy per layer (unchanged from original)
 

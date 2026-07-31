@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { DEFAULT_EXPORT_PROFILE } from '../domain/exportProfile'
 import { docDurationFrames, outputMediaAssetIds } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -21,11 +22,7 @@ import { useMediaStore } from '../state/mediaStore'
 type ExportControllerModule = typeof import('../app/exportController')
 type ExportSettings = Parameters<ExportControllerModule['startExport']>[0]
 
-const MVP_EXPORT_SETTINGS: ExportSettings = {
-  format: 'mp4',
-  videoCodec: 'avc',
-  videoBitrate: 8_000_000,
-}
+const MVP_EXPORT_SETTINGS: ExportSettings = DEFAULT_EXPORT_PROFILE
 
 let controllerPromise: Promise<ExportControllerModule> | null = null
 

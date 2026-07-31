@@ -7,6 +7,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  DEFAULT_EXPORT_PROFILE,
+  updateExportProfile,
+} from '../domain/exportProfile'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { MediaAsset, TimelineDoc } from '../domain/schema'
@@ -26,11 +30,7 @@ import {
   type ExportSettings,
 } from './exportController'
 
-const SETTINGS: ExportSettings = {
-  format: 'mp4',
-  videoCodec: 'avc',
-  videoBitrate: 8_000_000,
-}
+const SETTINGS: ExportSettings = DEFAULT_EXPORT_PROFILE
 
 const RESULT: ExportResult = {
   buffer: new Uint8Array([1, 2, 3]).buffer,
@@ -169,6 +169,7 @@ function observeRun(run: ExportRun): {
 
 interface Harness {
   deps: ExportControllerDeps
+  preflightProfile: ReturnType<typeof vi.fn>
   fetchBlob: ReturnType<typeof vi.fn>
   createMediaSource: ReturnType<typeof vi.fn>
   createPipelineDeps: ReturnType<typeof vi.fn>
@@ -187,6 +188,7 @@ function makeHarness(
     close: vi.fn(async () => undefined),
   }
   const pipelineDeps = {} as PipelineExportDeps
+  const preflightProfile = vi.fn(async () => undefined)
   const fetchBlob = vi.fn(async () => new Blob(['source']))
   const createMediaSource = vi.fn(
     (
@@ -210,6 +212,7 @@ function makeHarness(
     ) => createRun(),
   )
   const deps: ExportControllerDeps = {
+    preflightProfile,
     fetchBlob,
     createMediaSource,
     createPipelineDeps,
@@ -217,6 +220,7 @@ function makeHarness(
   }
   return {
     deps,
+    preflightProfile,
     fetchBlob,
     createMediaSource,
     createPipelineDeps,
@@ -287,6 +291,62 @@ describe('exportController wiring and completion', () => {
     expect(h.runExport).not.toHaveBeenCalled()
   })
 
+  test('audio-off ignores partial audio sources without retaining them', async () => {
+    const videoOnly: MediaAsset = {
+      ...ASSET,
+      partialTrackSelection: 'video-only',
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+    }
+    useDocumentStore.setState({
+      doc: docWithSourceClipOn('audio'),
+      past: [],
+      future: [],
+    })
+    useMediaStore.setState({
+      assets: new Map([[videoOnly.id, videoOnly]]),
+    })
+    const h = makeHarness()
+    const audioOff = updateExportProfile(SETTINGS, {
+      audioCodec: null,
+      audioChannelLayout: 'off',
+      audioBitrate: null,
+      audioBitrateMode: null,
+    })
+
+    await expect(startExport(audioOff, {}, h.deps)).resolves.toBe(RESULT)
+
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.runExport).toHaveBeenCalledWith(
+      expect.any(Object),
+      audioOff,
+      h.media,
+      h.pipelineDeps,
+    )
+  })
+
+  test('audio-off does not require reconnecting an otherwise contributing audio source', async () => {
+    useDocumentStore.setState({
+      doc: docWithSourceClipOn('audio'),
+      past: [],
+      future: [],
+    })
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    const h = makeHarness()
+    const audioOff = updateExportProfile(SETTINGS, {
+      audioCodec: null,
+      audioChannelLayout: 'off',
+      audioBitrate: null,
+      audioBitrateMode: null,
+    })
+
+    await expect(startExport(audioOff, {}, h.deps)).resolves.toBe(RESULT)
+
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.runExport).toHaveBeenCalledOnce()
+  })
+
   test('rejects a video clip from an audio-only import before fetching', async () => {
     const audioOnly: MediaAsset = {
       ...ASSET,
@@ -344,9 +404,12 @@ describe('exportController wiring and completion', () => {
       h.deps,
     )
 
-    // Blob retention begins synchronously, before later editor changes can
-    // revoke the captured asset URL. Settings are snapshotted too.
-    expect(h.fetchBlob).toHaveBeenCalledWith(ASSET.objectUrl)
+    // The fresh preflight owns the first async phase. Once it passes, Blob
+    // retention begins before later editor changes can revoke the captured
+    // asset URL. Settings were snapshotted before either phase.
+    await vi.waitFor(() => {
+      expect(h.fetchBlob).toHaveBeenCalledWith(ASSET.objectUrl)
+    })
     mutableSettings.videoBitrate = 1
     useDocumentStore.setState({ doc: { ...DOC, name: 'Edited later' } })
     useMediaStore.getState().removeAsset(ASSET.id)
@@ -394,6 +457,55 @@ describe('exportController wiring and completion', () => {
     expect(h.runExport.mock.calls[0][1]).not.toBe(mutableSettings)
   })
 
+  test('leases captured Blobs before awaiting preflight but delays codec resources', async () => {
+    const gate = deferred<void>()
+    const h = makeHarness()
+    h.preflightProfile.mockImplementationOnce(async () => gate.promise)
+    const mutableSettings = { ...SETTINGS }
+
+    const completion = startExport(mutableSettings, {}, h.deps)
+    await vi.waitFor(() => expect(h.preflightProfile).toHaveBeenCalledOnce())
+
+    const [capturedDoc, capturedSettings, signal] = h.preflightProfile.mock.calls[0]
+    expect(capturedDoc).toBe(DOC)
+    expect(capturedSettings).toEqual(SETTINGS)
+    expect(capturedSettings).not.toBe(mutableSettings)
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(signal.aborted).toBe(false)
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
+    expect(h.fetchBlob).toHaveBeenCalledWith(ASSET.objectUrl)
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+
+    mutableSettings.videoBitrate = 100_000
+    useMediaStore.getState().removeAsset(ASSET.id)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(ASSET.objectUrl)
+    gate.resolve()
+    await expect(completion).resolves.toBe(RESULT)
+    expect(h.runExport).toHaveBeenCalledWith(
+      DOC,
+      SETTINGS,
+      h.media,
+      h.pipelineDeps,
+    )
+  })
+
+  test('reserves the singleton slot while preflight is pending', async () => {
+    const gate = deferred<void>()
+    const first = makeHarness()
+    first.preflightProfile.mockImplementationOnce(async () => gate.promise)
+
+    const completion = startExport(SETTINGS, {}, first.deps)
+    await vi.waitFor(() => expect(first.preflightProfile).toHaveBeenCalledOnce())
+    await expect(startExport(SETTINGS, {}, makeHarness().deps)).rejects.toThrow(
+      /already in progress/i,
+    )
+
+    gate.resolve()
+    await expect(completion).resolves.toBe(RESULT)
+  })
+
   test('the captured resolver reports missing assets and preserves fetch failures', async () => {
     const fetchFailure = new Error('object URL expired')
     const h = makeHarness()
@@ -423,11 +535,9 @@ describe('exportController wiring and completion', () => {
 })
 
 describe('exportController cancellation', () => {
-  test('starts iteration before immediate cancellation and suppresses unobserved progress', async () => {
-    const initialGate = deferred<void>()
+  test('reserves the run before immediate cancellation and creates no resources', async () => {
     const observed = observeRun(
       (async function* (): ExportRun {
-        await initialGate.promise
         yield 0
         return RESULT
       })(),
@@ -440,17 +550,100 @@ describe('exportController cancellation', () => {
       { onProgress: (value) => progress.push(value) },
       h.deps,
     )
-    expect(observed.next).toHaveBeenCalledOnce()
 
     const cancellation = cancelExport()
     expect(observed.returnRun).not.toHaveBeenCalled()
-    initialGate.resolve()
 
     await expect(completion).resolves.toBeUndefined()
     await expect(cancellation).resolves.toBeUndefined()
     expect(progress).toEqual([])
-    expect(observed.returnRun).toHaveBeenCalledOnce()
-    expect(observed.returnRun).toHaveBeenCalledWith(undefined)
+    expect(observed.next).not.toHaveBeenCalled()
+    expect(observed.returnRun).not.toHaveBeenCalled()
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('aborts a pending preflight, creates no codec resources, and allows retry', async () => {
+    const h = makeHarness()
+    h.preflightProfile.mockImplementationOnce(async (_doc, _settings, signal) => {
+      await new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+
+    const completion = startExport(SETTINGS, {}, h.deps)
+    await vi.waitFor(() => expect(h.preflightProfile).toHaveBeenCalledOnce())
+    const signal = h.preflightProfile.mock.calls[0][2] as AbortSignal
+    const cancellation = cancelExport()
+
+    await expect(completion).resolves.toBeUndefined()
+    await expect(cancellation).resolves.toBeUndefined()
+    expect(signal.aborted).toBe(true)
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+
+    const retry = makeHarness()
+    await expect(startExport(SETTINGS, {}, retry.deps)).resolves.toBe(RESULT)
+  })
+
+  test('waits for an abort-ignoring preflight, then suppresses all setup', async () => {
+    const gate = deferred<void>()
+    const h = makeHarness()
+    h.preflightProfile.mockImplementationOnce(async () => gate.promise)
+    const completion = startExport(SETTINGS, {}, h.deps)
+    await vi.waitFor(() => expect(h.preflightProfile).toHaveBeenCalledOnce())
+
+    let cancelSettled = false
+    const cancellation = cancelExport().finally(() => {
+      cancelSettled = true
+    })
+    await Promise.resolve()
+    expect(cancelSettled).toBe(false)
+
+    gate.resolve()
+    await expect(completion).resolves.toBeUndefined()
+    await expect(cancellation).resolves.toBeUndefined()
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('preserves a real preflight error over simultaneous cancellation', async () => {
+    const gate = deferred<void>()
+    const failure = new Error('fresh encoder check failed')
+    const h = makeHarness()
+    h.preflightProfile.mockImplementationOnce(async () => {
+      await gate.promise
+      throw failure
+    })
+    const completion = startExport(SETTINGS, {}, h.deps)
+    await vi.waitFor(() => expect(h.preflightProfile).toHaveBeenCalledOnce())
+    const cancellation = cancelExport()
+    const completionCheck = expect(completion).rejects.toBe(failure)
+    const cancellationCheck = expect(cancellation).rejects.toBe(failure)
+
+    gate.resolve()
+    await Promise.all([completionCheck, cancellationCheck])
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('closes newly owned media once when setup synchronously re-enters cancel', async () => {
+    const h = makeHarness()
+    h.createMediaSource.mockImplementationOnce(() => {
+      void cancelExport()
+      return h.media
+    })
+
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBeUndefined()
+
+    expect(h.media.close).toHaveBeenCalledOnce()
+    expect(h.runExport).not.toHaveBeenCalled()
   })
 
   test('waits for an in-flight frame boundary, returns once, and is idempotent', async () => {
@@ -727,8 +920,13 @@ describe('exportController failures and ownership', () => {
     })
 
     const completion = startExport(SETTINGS, {}, h.deps)
-    const completionCheck = expect(completion).rejects.toBe(setupFailure)
-    expect(h.media.close).toHaveBeenCalledOnce()
+    const completionCheck = completion.then(
+      () => {
+        throw new Error('setup failure unexpectedly resolved')
+      },
+      (cause) => expect(cause).toBe(setupFailure),
+    )
+    await vi.waitFor(() => expect(h.media.close).toHaveBeenCalledOnce())
     await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
       /already in progress/i,
     )

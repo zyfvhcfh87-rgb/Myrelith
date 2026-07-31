@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
+import { DEFAULT_EXPORT_PROFILE } from '../domain/exportProfile'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type {
   Clip,
@@ -31,11 +32,7 @@ import type {
 } from './export'
 import { exportTimeline } from './export'
 
-const SETTINGS: ExportSettings = {
-  format: 'mp4',
-  videoCodec: 'avc',
-  videoBitrate: 8_000_000,
-}
+const SETTINGS: ExportSettings = DEFAULT_EXPORT_PROFILE
 
 const RESULT: ExportResult = {
   buffer: Uint8Array.from([1, 2, 3]).buffer,
@@ -360,7 +357,7 @@ describe('exportTimeline validation', () => {
       const generator = exportTimeline(makeDoc(1), settings, h.media, h.deps)
 
       await expect(generator.next()).rejects.toThrow(
-        'videoBitrate must be a positive safe integer',
+        'Export video bitrate',
       )
       expect(h.createVideoSink).not.toHaveBeenCalled()
       expect(h.openFrame).not.toHaveBeenCalled()
@@ -370,7 +367,7 @@ describe('exportTimeline validation', () => {
 
   test('rejects unsupported runtime format and codec values', async () => {
     const invalidSettings = [
-      { ...SETTINGS, format: 'webm' } as unknown as ExportSettings,
+      { ...SETTINGS, container: 'webm' } as unknown as ExportSettings,
       { ...SETTINGS, videoCodec: 'vp9' } as unknown as ExportSettings,
     ]
 
@@ -378,7 +375,7 @@ describe('exportTimeline validation', () => {
       const h = makeHarness()
       const generator = exportTimeline(makeDoc(1), settings, h.media, h.deps)
 
-      await expect(generator.next()).rejects.toThrow('Unsupported export')
+      await expect(generator.next()).rejects.toThrow('Unsupported export codec pair')
       expect(h.createVideoSink).not.toHaveBeenCalled()
       expect(h.closeMedia).toHaveBeenCalledOnce()
     }

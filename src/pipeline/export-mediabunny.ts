@@ -23,8 +23,6 @@ import {
   Input,
   Mp4OutputFormat,
   Output,
-  canEncodeAudio,
-  canEncodeVideo,
 } from 'mediabunny'
 import {
   MediaAssetRuntimeError,
@@ -62,6 +60,7 @@ import {
   type ExportAudioMediaSource,
   type MixedAudioBlock,
 } from './export-audio'
+import { mediabunnyExportImplementationUnavailableReason } from './export-mediabunny-profile'
 import {
   compositeFrame,
   type Composite2D,
@@ -1062,10 +1061,13 @@ export function createMediabunnyExportAudioSource(
 function assertVideoSinkInputs(
   doc: TimelineDoc,
   settings: ExportSettings,
+  includeAudio: boolean,
 ): number {
-  if (settings.format !== 'mp4' || settings.videoCodec !== 'avc') {
-    throw new TypeError('Mediabunny video export supports MP4/AVC only')
-  }
+  const implementationReason = mediabunnyExportImplementationUnavailableReason(
+    settings,
+    includeAudio,
+  )
+  if (implementationReason !== null) throw new TypeError(implementationReason)
   if (
     !Number.isSafeInteger(settings.videoBitrate) ||
     settings.videoBitrate <= 0
@@ -1084,9 +1086,6 @@ function assertVideoSinkInputs(
   framesToSeconds(1, doc.frameRate)
   return doc.frameRate.num / doc.frameRate.den
 }
-
-export const EXPORT_AUDIO_CODEC = 'aac'
-export const EXPORT_AUDIO_BITRATE = 192_000
 
 async function cancelSetup(
   output: Output,
@@ -1143,41 +1142,17 @@ export async function createMediabunnyExportSink(
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
   }
-  const frameRate = assertVideoSinkInputs(doc, settings)
-  const hasAudio = doc.tracks.some(
+  const includeAudio = settings.audioChannelLayout !== 'off' && doc.tracks.some(
     (track) => track.kind === 'audio' && track.clips.length > 0,
   )
+  const frameRate = assertVideoSinkInputs(doc, settings, includeAudio)
+  const audioSettings = includeAudio ? settings : null
+  const hasAudio = audioSettings !== null
   const expectedFrames = docDurationFrames(doc)
   const expectedAudioSamples = hasAudio
     ? audioSampleBoundary(expectedFrames, doc)
     : 0
 
-  const [videoSupported, audioSupported] = await Promise.all([
-    canEncodeVideo('avc', {
-      width: doc.width,
-      height: doc.height,
-      bitrate: settings.videoBitrate,
-    }),
-    hasAudio
-      ? canEncodeAudio(EXPORT_AUDIO_CODEC, {
-          numberOfChannels: EXPORT_AUDIO_CHANNELS,
-          sampleRate: doc.audioSampleRate,
-          bitrate: EXPORT_AUDIO_BITRATE,
-        })
-      : Promise.resolve(true),
-  ])
-  if (!videoSupported) {
-    throw new Error(
-      `AVC encoding is not supported for ${doc.width}x${doc.height} ` +
-        `at ${settings.videoBitrate} bps`,
-    )
-  }
-  if (!audioSupported) {
-    throw new Error(
-      `AAC encoding is not supported for stereo ${doc.audioSampleRate} Hz ` +
-        `at ${EXPORT_AUDIO_BITRATE} bps`,
-    )
-  }
   if (typeof OffscreenCanvas === 'undefined') {
     throw new Error('OffscreenCanvas is not supported in this browser')
   }
@@ -1207,12 +1182,15 @@ export async function createMediabunnyExportSink(
     source = new CanvasSource(canvas, {
       codec: 'avc',
       bitrate: settings.videoBitrate,
+      bitrateMode: settings.videoBitrateMode,
+      keyFrameInterval: settings.keyFrameIntervalMicroseconds / 1_000_000,
     })
     output.addVideoTrack(source, { frameRate })
     if (hasAudio) {
       audioSource = new AudioSampleSource({
-        codec: EXPORT_AUDIO_CODEC,
-        bitrate: EXPORT_AUDIO_BITRATE,
+        codec: audioSettings!.audioCodec,
+        bitrate: audioSettings!.audioBitrate,
+        bitrateMode: audioSettings!.audioBitrateMode,
         onEncodedPacket: (packet) => {
           trimAacPaddingPacket(
             packet,

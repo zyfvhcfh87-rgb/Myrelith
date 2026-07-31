@@ -5,6 +5,7 @@ import {
   DEFAULT_EXPORT_PROFILE,
   EXPORT_PRESETS,
   exportPresetById,
+  isAllowedExportCodecPair,
   MAX_EXPORT_AUDIO_BITRATE,
   MAX_EXPORT_VIDEO_BITRATE,
   MAX_KEY_FRAME_INTERVAL_MICROSECONDS,
@@ -61,6 +62,15 @@ describe('export profile catalog', () => {
     ])
     expect(AUTO_EXPORT_PRESET_ORDER).not.toContain('hevc')
     expect(Object.isFrozen(AUTO_EXPORT_PRESET_ORDER)).toBe(true)
+  })
+
+  test('exposes the same pure codec-pair relation for advanced controls', () => {
+    expect(isAllowedExportCodecPair('mp4', 'avc', 'aac')).toBe(true)
+    expect(isAllowedExportCodecPair('webm', 'vp9', 'opus')).toBe(true)
+    expect(isAllowedExportCodecPair('webm', 'av1', null)).toBe(true)
+    expect(isAllowedExportCodecPair('mp4', 'hevc', null)).toBe(true)
+    expect(isAllowedExportCodecPair('mp4', 'vp9', 'aac')).toBe(false)
+    expect(isAllowedExportCodecPair('webm', 'vp9', 'aac')).toBe(false)
   })
 
   test('looks up a known preset and rejects unknown runtime ids', () => {

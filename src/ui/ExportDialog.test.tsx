@@ -21,6 +21,7 @@ import {
   type ExportCallbacks,
   type ExportResult,
 } from '../app/exportController'
+import { DEFAULT_EXPORT_PROFILE } from '../domain/exportProfile'
 import type { Clip, MediaAsset, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -259,11 +260,7 @@ describe('Export dialog lifecycle', () => {
     flushAnimationFrame()
     expect(screen.getByRole('button', { name: 'Cancel export' })).toHaveFocus()
     expect(startMock).toHaveBeenCalledWith(
-      {
-        format: 'mp4',
-        videoCodec: 'avc',
-        videoBitrate: 8_000_000,
-      },
+      DEFAULT_EXPORT_PROFILE,
       { onProgress: expect.any(Function) },
     )
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true')

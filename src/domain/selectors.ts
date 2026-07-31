@@ -98,8 +98,11 @@ export function audibleTracks(doc: TimelineDoc): Track[] {
   return audio.filter((t) => !t.muted && (!anySolo || t.solo))
 }
 
-/** Media sources that can contribute pixels or samples to a full export. */
-export function outputMediaAssetIds(doc: TimelineDoc): Set<AssetId> {
+/** Media sources that can contribute pixels or optionally samples to export. */
+export function outputMediaAssetIds(
+  doc: TimelineDoc,
+  includeAudio = true,
+): Set<AssetId> {
   const ids = new Set<AssetId>()
   for (const track of doc.tracks) {
     if (track.kind !== 'video' || track.hidden) continue
@@ -107,9 +110,11 @@ export function outputMediaAssetIds(doc: TimelineDoc): Set<AssetId> {
       if (!clip.text && clip.opacity > 0) ids.add(clip.assetId)
     }
   }
-  for (const track of audibleTracks(doc)) {
-    for (const clip of track.clips) {
-      if (!clip.text && clip.volume > 0) ids.add(clip.assetId)
+  if (includeAudio) {
+    for (const track of audibleTracks(doc)) {
+      for (const clip of track.clips) {
+        if (!clip.text && clip.volume > 0) ids.add(clip.assetId)
+      }
     }
   }
   return ids

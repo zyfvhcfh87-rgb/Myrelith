@@ -131,7 +131,8 @@ function assertBoundedSafeInteger(
   }
 }
 
-function supportsCodecPair(
+/** Pure allow-list query for advanced controls and runtime containment checks. */
+export function isAllowedExportCodecPair(
   container: ExportContainer,
   videoCodec: ExportVideoCodec,
   audioCodec: ExportAudioCodec | null,
@@ -236,7 +237,7 @@ export function validateExportProfile(value: unknown): Readonly<ExportProfile> {
     }
   }
 
-  if (!supportsCodecPair(container, videoCodec, audio.audioCodec)) {
+  if (!isAllowedExportCodecPair(container, videoCodec, audio.audioCodec)) {
     const audioLabel = audio.audioCodec ?? 'no audio'
     throw new RangeError(
       `Unsupported export codec pair: ${container}/${videoCodec}/${audioLabel}`,

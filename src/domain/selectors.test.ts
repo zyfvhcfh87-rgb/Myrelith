@@ -251,6 +251,9 @@ describe('outputMediaAssetIds', () => {
       'video-visible',
       'audio-solo',
     ])
+    expect([...outputMediaAssetIds(doc, false)]).toEqual([
+      'video-visible',
+    ])
   })
 })
 

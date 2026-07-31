@@ -18,6 +18,10 @@ import {
   type DecoderCheckTarget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
+import {
+  DEFAULT_EXPORT_PROFILE,
+  updateExportProfile,
+} from '../domain/exportProfile'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { AssetKind, Clip, TimelineDoc, Track } from '../domain/schema'
@@ -417,8 +421,6 @@ vi.mock('mediabunny', () => {
 })
 
 import {
-  EXPORT_AUDIO_BITRATE,
-  EXPORT_AUDIO_CODEC,
   createMediabunnyExportDeps,
   createMediabunnyExportAudioSource,
   createMediabunnyExportMediaSource as createRealExportMediaSource,
@@ -426,8 +428,7 @@ import {
 } from './export-mediabunny'
 
 const SETTINGS: ExportSettings = {
-  format: 'mp4',
-  videoCodec: 'avc',
+  ...DEFAULT_EXPORT_PROFILE,
   videoBitrate: 250_000,
 }
 
@@ -1721,7 +1722,7 @@ describe('createMediabunnyExportMediaSource', () => {
 })
 
 describe('createMediabunnyExportSink video behavior', () => {
-  test('probes AVC and wires an exact-rate MP4 canvas track without audio for a video-only document', async () => {
+  test('wires an exact-rate MP4 canvas track without audio for a video-only document', async () => {
     const doc = makeDoc()
     const resolveAsset = vi.fn(async () => resolvedAsset(new Blob(['unused'])))
     const sink = await createMediabunnyExportSink(
@@ -1730,11 +1731,7 @@ describe('createMediabunnyExportSink video behavior', () => {
       resolveAsset,
     )
 
-    expect(mb.canEncodeVideo).toHaveBeenCalledWith('avc', {
-      width: 64,
-      height: 48,
-      bitrate: 250_000,
-    })
+    expect(mb.canEncodeVideo).not.toHaveBeenCalled()
     expect(fakeCanvases).toHaveLength(1)
     expect(fakeCanvases[0]).toMatchObject({ width: 64, height: 48 })
     expect(fakeCanvases[0].getContext).toHaveBeenCalledWith(
@@ -1745,6 +1742,8 @@ describe('createMediabunnyExportSink video behavior', () => {
     expect(canvasSourceAt().encodingConfig).toEqual({
       codec: 'avc',
       bitrate: 250_000,
+      bitrateMode: 'variable',
+      keyFrameInterval: 2,
     })
     expect(outputAt().options).toEqual({
       format: mb.formats[0],
@@ -1815,19 +1814,19 @@ describe('createMediabunnyExportSink video behavior', () => {
     expect(outputAt().cancel).not.toHaveBeenCalled()
   })
 
-  test('rejects unsupported AVC before allocating output resources', async () => {
+  test('does not reuse a stale cached capability result after fresh preflight', async () => {
     mb.canEncodeVideo.mockResolvedValue(false)
 
-    await expect(
-      createMediabunnyExportSink(
-        makeDoc(),
-        SETTINGS,
-        async () => resolvedAsset(new Blob(['unused'])),
-      ),
-    ).rejects.toThrow('AVC encoding is not supported for 64x48')
+    const sink = await createMediabunnyExportSink(
+      makeDoc(),
+      SETTINGS,
+      async () => resolvedAsset(new Blob(['unused'])),
+    )
 
-    expect(fakeCanvases).toHaveLength(0)
-    expect(mb.outputs).toHaveLength(0)
+    expect(mb.canEncodeVideo).not.toHaveBeenCalled()
+    expect(fakeCanvases).toHaveLength(1)
+    expect(mb.outputs).toHaveLength(1)
+    await sink.cancel()
   })
 
   test('cancels a started output exactly once without normal-closing the source', async () => {
@@ -1956,6 +1955,28 @@ describe('createMediabunnyExportAudioSource exact ranges', () => {
 })
 
 describe('createMediabunnyExportSink audio behavior', () => {
+  test('explicit audio-off skips the mixer and output track even with audio clips', async () => {
+    const doc = makeAudioDoc([
+      makeAudioTrack('A1', makeAudioClip('muted-export', 'audio-asset', 1)),
+    ])
+    const audioOff = updateExportProfile(SETTINGS, {
+      audioCodec: null,
+      audioChannelLayout: 'off',
+      audioBitrate: null,
+      audioBitrateMode: null,
+    })
+    const resolveAsset = vi.fn(async () => resolvedAsset(new Blob(['audio'])))
+
+    const sink = await createMediabunnyExportSink(doc, audioOff, resolveAsset)
+    await sink.addFrame(0, 1_001 / 30_000)
+    await sink.finalize()
+
+    expect(resolveAsset).not.toHaveBeenCalled()
+    expect(mb.audioSources).toHaveLength(0)
+    expect(mb.audioSinks).toHaveLength(0)
+    expect(outputAt().addAudioTrack).not.toHaveBeenCalled()
+  })
+
   test('encodes the shared absolute equal-power crossfade plan', async () => {
     const fixture = makeAudioCrossfadeDoc()
     const decodedFrom = decodedAudioSample([
@@ -2113,14 +2134,11 @@ describe('createMediabunnyExportSink audio behavior', () => {
       resolveAsset,
     )
 
-    expect(mb.canEncodeAudio).toHaveBeenCalledWith(EXPORT_AUDIO_CODEC, {
-      numberOfChannels: 2,
-      sampleRate: 48_000,
-      bitrate: EXPORT_AUDIO_BITRATE,
-    })
+    expect(mb.canEncodeAudio).not.toHaveBeenCalled()
     expect(audioSourceAt().encodingConfig).toEqual({
-      codec: EXPORT_AUDIO_CODEC,
-      bitrate: EXPORT_AUDIO_BITRATE,
+      codec: SETTINGS.audioCodec,
+      bitrate: SETTINGS.audioBitrate,
+      bitrateMode: SETTINGS.audioBitrateMode,
       onEncodedPacket: expect.any(Function),
     })
     const encodingConfig = audioSourceAt().encodingConfig as {

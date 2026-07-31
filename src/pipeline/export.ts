@@ -6,6 +6,10 @@
  * progress, and exact-once cleanup for per-frame and whole-export resources.
  */
 
+import {
+  validateExportProfile,
+  type ExportProfile,
+} from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import { docDurationFrames } from '../domain/selectors'
@@ -17,11 +21,7 @@ import {
   type TransitionSurfaceProvider,
 } from './render'
 
-export interface ExportSettings {
-  format: 'mp4'
-  videoCodec: 'avc'
-  videoBitrate: number
-}
+export type ExportSettings = ExportProfile
 
 export interface ExportResult {
   buffer: ArrayBuffer
@@ -56,24 +56,8 @@ export interface ExportDeps {
   ): Promise<ExportVideoSink>
 }
 
-function assertSettings(settings: ExportSettings): void {
-  if (typeof settings !== 'object' || settings === null) {
-    throw new TypeError('Export settings must be an object')
-  }
-  if (settings.format !== 'mp4') {
-    throw new TypeError('Unsupported export format: ' + settings.format)
-  }
-  if (settings.videoCodec !== 'avc') {
-    throw new TypeError(
-      'Unsupported export video codec: ' + settings.videoCodec,
-    )
-  }
-  if (
-    !Number.isSafeInteger(settings.videoBitrate) ||
-    settings.videoBitrate <= 0
-  ) {
-    throw new TypeError('videoBitrate must be a positive safe integer')
-  }
+function assertSettings(settings: ExportSettings): Readonly<ExportSettings> {
+  return validateExportProfile(settings)
 }
 
 function exportFrameCount(doc: TimelineDoc): number {
@@ -208,7 +192,7 @@ export async function* exportTimeline(
   }
 
   try {
-    assertSettings(settings)
+    const validatedSettings = assertSettings(settings)
     const frameCount = exportFrameCount(doc)
     const frameDurationSec = assertBoundaryTime(
       framesToSeconds(1, doc.frameRate),
@@ -216,7 +200,7 @@ export async function* exportTimeline(
     )
     yield 0
 
-    sink = await deps.createVideoSink(doc, settings)
+    sink = await deps.createVideoSink(doc, validatedSettings)
     for (let frame = 0; frame < frameCount; frame++) {
       const lease = await media.openFrame(frame)
       await compositeAndCloseLease(
