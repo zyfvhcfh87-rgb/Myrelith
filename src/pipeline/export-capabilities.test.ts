@@ -10,7 +10,6 @@ import {
   checkExportProfileSupport,
   exportAudioChannelCount,
   exportProfileIncludesAudio,
-  OPUS_EXACT_DURATION_UNAVAILABLE_REASON,
   verifyExportProfileSupportFresh,
   type ExportCapabilityProbe,
   type ExportFormatCapabilities,
@@ -310,18 +309,23 @@ describe('checkExportProfileSupport', () => {
     expect(exportAudioChannelCount(mono)).toBe(1)
   })
 
-  test('keeps Opus audio disabled until exact muxer tail metadata exists', async () => {
+  test('probes WebM Opus audio after exact muxer tail metadata is available', async () => {
     const web = exportPresetById('web').profile
     const harness = makeProbe(web)
 
     const result = await checkExportProfileSupport(makeDoc(), web, harness.probe)
 
-    expect(result).toMatchObject({
-      supported: false,
-      reason: OPUS_EXACT_DURATION_UNAVAILABLE_REASON,
-    })
-    expect(harness.canEncodeVideo).not.toHaveBeenCalled()
-    expect(harness.canEncodeAudio).not.toHaveBeenCalled()
+    expect(result.supported).toBe(true)
+    expect(harness.canEncodeVideo).toHaveBeenCalledWith('vp9', expect.any(Object))
+    expect(harness.canEncodeAudio).toHaveBeenCalledWith(
+      'opus',
+      expect.objectContaining({
+        bitrate: web.audioBitrate,
+        bitrateMode: web.audioBitrateMode,
+        numberOfChannels: 2,
+        sampleRate: 48_000,
+      }),
+    )
   })
 
   test('allows WebM video probing when the exact project needs no audio track', async () => {

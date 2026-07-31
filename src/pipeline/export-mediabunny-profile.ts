@@ -24,11 +24,7 @@ export function mediabunnyExportImplementationUnavailableReason(
   profile: Readonly<ExportProfile>,
   includeAudio: boolean,
 ): string | null {
-  if (includeAudio && profile.audioCodec === 'opus') {
-    return (
-      `WebCut's WebM/Opus audio adapter is unavailable until exact ` +
-      `Opus end-padding metadata can be written.`
-    )
-  }
+  void profile
+  void includeAudio
   return null
 }

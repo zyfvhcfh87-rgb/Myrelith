@@ -70,10 +70,6 @@ export interface ExportCapabilityResult {
   readonly reason: string | null
 }
 
-export const OPUS_EXACT_DURATION_UNAVAILABLE_REASON =
-  'WebM/Opus audio export is temporarily unavailable because the installed ' +
-  'media muxer cannot write exact Opus end-padding metadata.'
-
 function unsupported(
   profile: Readonly<ExportProfile>,
   reason: string,
@@ -175,9 +171,6 @@ function inspectStaticCapability(
   }
 
   const includeAudio = exportProfileIncludesAudio(doc, profile)
-  if (includeAudio && profile.audioCodec === 'opus') {
-    return unsupported(profile, OPUS_EXACT_DURATION_UNAVAILABLE_REASON)
-  }
   const implementationReason = probe.getImplementationUnavailableReason(
     profile,
     includeAudio,

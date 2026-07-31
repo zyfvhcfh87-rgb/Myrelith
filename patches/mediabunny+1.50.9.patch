@@ -1,0 +1,974 @@
+diff --git a/node_modules/mediabunny/dist/modules/src/matroska/ebml.d.ts b/node_modules/mediabunny/dist/modules/src/matroska/ebml.d.ts
+index f83541c..1392aef 100644
+--- a/node_modules/mediabunny/dist/modules/src/matroska/ebml.d.ts
++++ b/node_modules/mediabunny/dist/modules/src/matroska/ebml.d.ts
+@@ -95,6 +95,7 @@ export declare enum EBMLId {
+     BlockAddID = 238,
+     BlockDuration = 155,
+     ReferenceBlock = 251,
++    DiscardPadding = 30114,
+     Cluster = 524531317,
+     Timestamp = 231,
+     Cues = 475249515,
+diff --git a/node_modules/mediabunny/dist/modules/src/matroska/ebml.js b/node_modules/mediabunny/dist/modules/src/matroska/ebml.js
+index 42eeea9..e3ac83a 100644
+--- a/node_modules/mediabunny/dist/modules/src/matroska/ebml.js
++++ b/node_modules/mediabunny/dist/modules/src/matroska/ebml.js
+@@ -93,6 +93,7 @@ export var EBMLId;
+     EBMLId[EBMLId["BlockAddID"] = 238] = "BlockAddID";
+     EBMLId[EBMLId["BlockDuration"] = 155] = "BlockDuration";
+     EBMLId[EBMLId["ReferenceBlock"] = 251] = "ReferenceBlock";
++    EBMLId[EBMLId["DiscardPadding"] = 30114] = "DiscardPadding";
+     EBMLId[EBMLId["Cluster"] = 524531317] = "Cluster";
+     EBMLId[EBMLId["Timestamp"] = 231] = "Timestamp";
+     EBMLId[EBMLId["Cues"] = 475249515] = "Cues";
+diff --git a/node_modules/mediabunny/dist/modules/src/matroska/matroska-demuxer.js b/node_modules/mediabunny/dist/modules/src/matroska/matroska-demuxer.js
+index 3956d4a..c266715 100644
+--- a/node_modules/mediabunny/dist/modules/src/matroska/matroska-demuxer.js
++++ b/node_modules/mediabunny/dist/modules/src/matroska/matroska-demuxer.js
+@@ -5,14 +5,14 @@
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  */
+-import { extractAv1CodecInfoFromPacket, extractAvcDecoderConfigurationRecord, extractHevcDecoderConfigurationRecord, extractVp9CodecInfoFromPacket, } from '../codec-data.js';
++import { extractAv1CodecInfoFromPacket, extractAvcDecoderConfigurationRecord, extractHevcDecoderConfigurationRecord, extractVp9CodecInfoFromPacket, parseOpusTocByte, } from '../codec-data.js';
+ import { extractAudioCodecString, extractVideoCodecString, OPUS_SAMPLE_RATE, PRORES_FOURCCS, } from '../codec.js';
+ import { Demuxer } from '../demuxer.js';
+ import { Logging } from '../logging.js';
+ import { AttachedFile, DEFAULT_TRACK_DISPOSITION } from '../metadata.js';
+ import { assert, binarySearchLessOrEqual, COLOR_PRIMARIES_MAP_INVERSE, findLastIndex, isIso639Dash2LanguageCode, last, MATRIX_COEFFICIENTS_MAP_INVERSE, normalizeRotation, roundIfAlmostInteger, textDecoder, toDataView, TRANSFER_CHARACTERISTICS_MAP_INVERSE, UNDETERMINED_LANGUAGE, } from '../misc.js';
+ import { EncodedPacket, PLACEHOLDER_DATA } from '../packet.js';
+-import { assertDefinedSize, CODEC_STRING_MAP, EBMLId, LEVEL_0_AND_1_EBML_IDS, LEVEL_1_EBML_IDS, MAX_HEADER_SIZE, MIN_HEADER_SIZE, readAsciiString, readUnicodeString, readElementHeader, readElementId, readFloat, readUnsignedInt, readVarInt, resync, searchForNextElementId, readUnsignedBigInt, } from './ebml.js';
++import { assertDefinedSize, CODEC_STRING_MAP, EBMLId, LEVEL_0_AND_1_EBML_IDS, LEVEL_1_EBML_IDS, MAX_HEADER_SIZE, MIN_HEADER_SIZE, readAsciiString, readUnicodeString, readElementHeader, readElementId, readFloat, readSignedInt, readUnsignedInt, readVarInt, resync, searchForNextElementId, readUnsignedBigInt, } from './ebml.js';
+ import { buildMatroskaMimeType } from './matroska-misc.js';
+ import { FileSlice, readBytes, readI16Be, readU8 } from '../reader.js';
+ var BlockLacing;
+@@ -375,7 +375,8 @@ export class MatroskaDemuxer extends Demuxer {
+             let hasLacedBlocks = false;
+             for (let i = 0; i < trackData.blocks.length; i++) {
+                 const block = trackData.blocks[i];
+-                block.timestamp += cluster.timestamp;
++                block.timestamp += cluster.timestamp
++                    - track.codecDelayNs * segment.timestampFactor / 1e9;
+                 hasLacedBlocks ||= block.lacing !== BlockLacing.None;
+             }
+             trackData.presentationTimestamps = trackData.blocks
+@@ -393,7 +394,11 @@ export class MatroskaDemuxer extends Demuxer {
+                     currentBlock.duration = nextEntry.timestamp - currentBlock.timestamp;
+                 }
+                 else if (currentBlock.duration === 0) {
+-                    if (track.defaultDuration != null) {
++                    if (track.info?.type === 'audio' && track.info.codec === 'opus') {
++                        currentBlock.duration = parseOpusTocByte(currentBlock.data).durationInSamples
++                            * segment.timestampFactor / OPUS_SAMPLE_RATE;
++                    }
++                    else if (track.defaultDuration != null) {
+                         if (currentBlock.lacing === BlockLacing.None) {
+                             currentBlock.duration = track.defaultDuration;
+                         }
+@@ -408,11 +413,21 @@ export class MatroskaDemuxer extends Demuxer {
+                 // one frame of the lace. We do this after determining block timestamps so we can properly distribute
+                 // the block's duration across the laced frames.
+                 this.expandLacedBlocks(trackData.blocks, track);
+-                // Recompute since blocks have changed
+-                trackData.presentationTimestamps = trackData.blocks
+-                    .map((block, i) => ({ timestamp: block.timestamp, blockIndex: i }))
+-                    .sort((a, b) => a.timestamp - b.timestamp);
+             }
++            for (const block of trackData.blocks) {
++                const discardPadding = block.discardPaddingNs * segment.timestampFactor / 1e9;
++                if (discardPadding > 0) {
++                    block.duration = Math.max(0, block.duration - discardPadding);
++                }
++                else if (discardPadding < 0) {
++                    const startPadding = -discardPadding;
++                    block.timestamp += startPadding;
++                    block.duration = Math.max(0, block.duration - startPadding);
++                }
++            }
++            trackData.presentationTimestamps = trackData.blocks
++                .map((block, i) => ({ timestamp: block.timestamp, blockIndex: i }))
++                .sort((a, b) => a.timestamp - b.timestamp);
+             const firstBlock = trackData.blocks[trackData.presentationTimestamps[0].blockIndex];
+             const lastBlock = trackData.blocks[last(trackData.presentationTimestamps).blockIndex];
+             trackData.startTimestamp = firstBlock.timestamp;
+@@ -537,6 +552,10 @@ export class MatroskaDemuxer extends Demuxer {
+                 blocks.splice(blockIndex + i, 0, {
+                     timestamp: frameTimestamp,
+                     duration: frameDuration,
++                    discardPaddingNs: ((i === frameCount - 1 && originalBlock.discardPaddingNs > 0)
++                        || (i === 0 && originalBlock.discardPaddingNs < 0))
++                        ? originalBlock.discardPaddingNs
++                        : 0,
+                     isKeyFrame: originalBlock.isKeyFrame,
+                     data: frameData,
+                     lacing: BlockLacing.None,
+@@ -683,6 +702,7 @@ export class MatroskaDemuxer extends Demuxer {
+                         codecPrivate: null,
+                         defaultDuration: null,
+                         defaultDurationNs: null,
++                        codecDelayNs: 0,
+                         name: null,
+                         languageCode: 'eng', // The default in Matroska
+                         hasLanguageBcp47: false,
+@@ -968,6 +988,14 @@ export class MatroskaDemuxer extends Demuxer {
+                 }
+                 ;
+                 break;
++            case EBMLId.CodecDelay:
++                {
++                    if (!this.currentTrack)
++                        break;
++                    this.currentTrack.codecDelayNs = readUnsignedInt(slice, size);
++                }
++                ;
++                break;
+             case EBMLId.Name:
+                 {
+                     if (!this.currentTrack)
+@@ -1251,6 +1279,7 @@ export class MatroskaDemuxer extends Demuxer {
+                     trackData.blocks.push({
+                         timestamp: relativeTimestamp, // We'll add the cluster's timestamp to this later
+                         duration: 0, // Will set later
++                        discardPaddingNs: 0,
+                         isKeyFrame,
+                         data: blockData,
+                         lacing,
+@@ -1288,6 +1317,7 @@ export class MatroskaDemuxer extends Demuxer {
+                     this.currentBlock = {
+                         timestamp: relativeTimestamp, // We'll add the cluster's timestamp to this later
+                         duration: 0, // Will set later
++                        discardPaddingNs: 0,
+                         isKeyFrame: true,
+                         data: blockData,
+                         lacing,
+@@ -1355,6 +1385,14 @@ export class MatroskaDemuxer extends Demuxer {
+                 }
+                 ;
+                 break;
++            case EBMLId.DiscardPadding:
++                {
++                    if (!this.currentBlock)
++                        break;
++                    this.currentBlock.discardPaddingNs = readSignedInt(slice, size);
++                }
++                ;
++                break;
+             case EBMLId.Tag:
+                 {
+                     this.currentTagTargetIsMovie = true;
+@@ -1762,7 +1800,9 @@ class MatroskaTrackBacking {
+         return this.internalTrack.languageCode;
+     }
+     getTimeResolution() {
+-        return this.internalTrack.segment.timestampFactor;
++        return this.internalTrack.info?.codec === 'opus'
++            ? 1e9
++            : this.internalTrack.segment.timestampFactor;
+     }
+     isRelativeToUnixEpoch() {
+         return false;
+@@ -1789,7 +1829,7 @@ class MatroskaTrackBacking {
+         }
+         let endTimestamp = segment.duration / segment.timestampFactor;
+         const firstPacket = await this.getFirstPacket({ metadataOnly: true });
+-        endTimestamp += firstPacket?.timestamp ?? 0;
++        endTimestamp += (firstPacket?.timestamp ?? 0) + this.internalTrack.codecDelayNs / 1e9;
+         return endTimestamp;
+     }
+     async getLiveRefreshInterval() {
+diff --git a/node_modules/mediabunny/dist/modules/src/matroska/matroska-muxer.js b/node_modules/mediabunny/dist/modules/src/matroska/matroska-muxer.js
+index 005afde..a055873 100644
+--- a/node_modules/mediabunny/dist/modules/src/matroska/matroska-muxer.js
++++ b/node_modules/mediabunny/dist/modules/src/matroska/matroska-muxer.js
+@@ -6,7 +6,7 @@
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  */
+ import { Bitstream } from '../../shared/bitstream.js';
+-import { COLOR_PRIMARIES_MAP, MATRIX_COEFFICIENTS_MAP, TRANSFER_CHARACTERISTICS_MAP, UNDETERMINED_LANGUAGE, assert, assertNever, colorSpaceIsComplete, imageMimeTypeToExtension, keyValueIterator, normalizeRotation, promiseWithResolvers, simplifyRational, textEncoder, toUint8Array, uint8ArraysAreEqual, writeBits, roundToDivisor, } from '../misc.js';
++import { COLOR_PRIMARIES_MAP, MATRIX_COEFFICIENTS_MAP, TRANSFER_CHARACTERISTICS_MAP, UNDETERMINED_LANGUAGE, assert, assertNever, colorSpaceIsComplete, imageMimeTypeToExtension, keyValueIterator, normalizeRotation, promiseWithResolvers, simplifyRational, textDecoder, textEncoder, toUint8Array, uint8ArraysAreEqual, writeBits, roundToDivisor, } from '../misc.js';
+ import { CODEC_STRING_MAP, EBMLFloat32, EBMLFloat64, EBMLId, EBMLSignedInt, EBMLUnicodeString, EBMLWriter, } from './ebml.js';
+ import { buildMatroskaMimeType } from './matroska-misc.js';
+ import { WebMOutputFormat } from '../output-format.js';
+@@ -16,7 +16,7 @@ import { OPUS_SAMPLE_RATE, PCM_AUDIO_CODECS, generateAv1CodecConfigurationFromCo
+ import { MAX_ADTS_FRAME_HEADER_SIZE, MIN_ADTS_FRAME_HEADER_SIZE, readAdtsFrameHeader } from '../adts/adts-reader.js';
+ import { FileSlice } from '../reader.js';
+ import { Muxer } from '../muxer.js';
+-import { parseOpusIdentificationHeader } from '../codec-data.js';
++import { parseOpusIdentificationHeader, parseOpusTocByte } from '../codec-data.js';
+ import { AttachedFile } from '../metadata.js';
+ const MIN_CLUSTER_TIMESTAMP_MS = -(2 ** 15);
+ const MAX_CLUSTER_TIMESTAMP_MS = 2 ** 15 - 1;
+@@ -46,7 +46,7 @@ export class MatroskaMuxer extends Muxer {
+         this.currentClusterMaxMsTimestamp = null;
+         this.trackDatasInCurrentCluster = new Map();
+         this.startTimestamp = Infinity;
+-        this.endTimestamp = -Infinity;
++        this.trackEndTimestamps = new Map();
+         this.format = format;
+     }
+     async start() {
+@@ -69,7 +69,7 @@ export class MatroskaMuxer extends Muxer {
+                 { id: EBMLId.EBMLMaxIDLength, data: 4 },
+                 { id: EBMLId.EBMLMaxSizeLength, data: 8 },
+                 { id: EBMLId.DocType, data: this.format instanceof WebMOutputFormat ? 'webm' : 'matroska' },
+-                { id: EBMLId.DocTypeVersion, data: 2 },
++                { id: EBMLId.DocTypeVersion, data: 4 },
+                 { id: EBMLId.DocTypeReadVersion, data: 2 },
+             ] };
+         this.ebmlWriter.writeEBML(ebmlHeader);
+@@ -166,17 +166,9 @@ export class MatroskaMuxer extends Muxer {
+         for (const trackData of this.trackDatas) {
+             const codecId = CODEC_STRING_MAP[trackData.track.source._codec];
+             assert(codecId);
+-            let seekPreRollNs = 0;
+-            if (trackData.type === 'audio' && trackData.track.source._codec === 'opus') {
+-                seekPreRollNs = 1e6 * 80; // In "Matroska ticks" (nanoseconds)
+-                const description = trackData.info.decoderConfig.description;
+-                if (description) {
+-                    const bytes = toUint8Array(description);
+-                    const header = parseOpusIdentificationHeader(bytes);
+-                    // Use the preSkip value from the header
+-                    seekPreRollNs = Math.round(1e9 * (header.preSkip / OPUS_SAMPLE_RATE));
+-                }
+-            }
++            const isOpus = trackData.type === 'audio' && trackData.track.source._codec === 'opus';
++            const codecDelayNs = isOpus ? trackData.info.opusCodecDelayNs : 0;
++            const seekPreRollNs = isOpus ? 80000000 : 0;
+             tracksElement.data.push({ id: EBMLId.TrackEntry, data: [
+                     { id: EBMLId.TrackNumber, data: trackData.track.id },
+                     { id: EBMLId.TrackUID, data: trackData.track.id },
+@@ -205,7 +197,7 @@ export class MatroskaMuxer extends Muxer {
+                     trackData.codecPrivate
+                         ? { id: EBMLId.CodecPrivate, data: toUint8Array(trackData.codecPrivate) }
+                         : null,
+-                    { id: EBMLId.CodecDelay, data: 0 },
++                    { id: EBMLId.CodecDelay, data: codecDelayNs },
+                     { id: EBMLId.SeekPreRoll, data: seekPreRollNs },
+                     trackData.track.metadata.name !== undefined
+                         ? { id: EBMLId.Name, data: new EBMLUnicodeString(trackData.track.metadata.name) }
+@@ -635,6 +627,8 @@ export class MatroskaMuxer extends Muxer {
+         assert(meta.decoderConfig);
+         const decoderConfig = { ...meta.decoderConfig };
+         let requiresAdtsStripping = false;
++        let opusCodecDelayNs = null;
++        let presentationSampleRate = meta.decoderConfig.sampleRate;
+         if (track.source._codec === 'aac' && !decoderConfig.description) {
+             // Matroska stores raw AAC with AudioSpecificConfig in CodecPrivate, not ADTS-wrapped data.
+             // Parse the first packet to extract the AudioSpecificConfig.
+@@ -657,13 +651,37 @@ export class MatroskaMuxer extends Muxer {
+             });
+             requiresAdtsStripping = true;
+         }
++        if (track.source._codec === 'opus') {
++            if (!decoderConfig.description) {
++                throw new Error('Opus in Matroska requires an OpusHead decoder description.');
++            }
++            const description = new Uint8Array(toUint8Array(decoderConfig.description));
++            if (description.byteLength < 19
++                || textDecoder.decode(description.subarray(0, 8)) !== 'OpusHead'
++                || description[8] !== 1) {
++                throw new Error('Invalid OpusHead decoder description.');
++            }
++            const header = parseOpusIdentificationHeader(description);
++            if (header.outputChannelCount !== decoderConfig.numberOfChannels) {
++                throw new Error('OpusHead channel count does not match the decoder configuration.');
++            }
++            presentationSampleRate = (track.source._exactEncodedPresentationEnd?.sampleRate
++                ?? header.inputSampleRate) || decoderConfig.sampleRate;
++            if (!Number.isSafeInteger(presentationSampleRate) || presentationSampleRate < 8000 || presentationSampleRate > 192000) {
++                throw new Error('Invalid Opus presentation sample rate.');
++            }
++            new DataView(description.buffer).setUint32(12, presentationSampleRate, true);
++            decoderConfig.description = description;
++            opusCodecDelayNs = Math.round(1e9 * (header.preSkip / OPUS_SAMPLE_RATE));
++        }
+         const newTrackData = {
+             track,
+             type: 'audio',
+             info: {
+                 numberOfChannels: meta.decoderConfig.numberOfChannels,
+-                sampleRate: meta.decoderConfig.sampleRate,
++                sampleRate: presentationSampleRate,
+                 decoderConfig,
++                opusCodecDelayNs,
+                 requiresAdtsStripping,
+             },
+             chunkQueue: [],
+@@ -756,7 +774,10 @@ export class MatroskaMuxer extends Muxer {
+             }
+             const isKeyFrame = packet.type === 'key';
+             this.validateTimestamp(trackData.track, packet.timestamp, isKeyFrame);
+-            const audioChunk = this.createInternalChunk(packetData, packet.timestamp, packet.duration, packet.type);
++            const encodedDuration = track.source._codec === 'opus'
++                ? parseOpusTocByte(packetData).durationInSamples / OPUS_SAMPLE_RATE
++                : packet.duration;
++            const audioChunk = this.createInternalChunk(packetData, packet.timestamp, packet.duration, packet.type, null, encodedDuration);
+             trackData.chunkQueue.push(audioChunk);
+             await this.interleaveChunks();
+         }
+@@ -807,8 +828,18 @@ export class MatroskaMuxer extends Muxer {
+             if (!trackWithMinTimestamp) {
+                 break;
+             }
++            const mustHoldFinalOpusPacket = !isFinalCall
++                && trackWithMinTimestamp.type === 'audio'
++                && trackWithMinTimestamp.track.source._codec === 'opus'
++                && !trackWithMinTimestamp.closed
++                && trackWithMinTimestamp.chunkQueue.length === 1;
++            if (mustHoldFinalOpusPacket) {
++                break;
++            }
+             const chunk = trackWithMinTimestamp.chunkQueue.shift();
+-            this.writeBlock(trackWithMinTimestamp, chunk);
++            const isFinalChunk = trackWithMinTimestamp.closed
++                && trackWithMinTimestamp.chunkQueue.length === 0;
++            this.writeBlock(trackWithMinTimestamp, chunk, isFinalChunk);
+         }
+         if (!isFinalCall) {
+             await this.writer.flush();
+@@ -854,18 +885,19 @@ export class MatroskaMuxer extends Muxer {
+         writeBits(chunk.data, bitstream.pos, bitstream.pos + 3, colorSpaceID);
+     }
+     /** Converts a read-only external chunk into an internal one for easier use. */
+-    createInternalChunk(data, timestamp, duration, type, additions = null) {
++    createInternalChunk(data, timestamp, duration, type, additions = null, encodedDuration = duration) {
+         const internalChunk = {
+             data,
+             type,
+             timestamp,
+             duration,
++            encodedDuration,
+             additions,
+         };
+         return internalChunk;
+     }
+     /** Writes a block containing media data to the file. */
+-    writeBlock(trackData, chunk) {
++    writeBlock(trackData, chunk, isFinalChunk) {
+         // Due to the interlacing algorithm, this code will be run once we've seen one chunk from every media track.
+         if (!this.segment) {
+             this.createSegment();
+@@ -916,8 +948,31 @@ export class MatroskaMuxer extends Muxer {
+         view.setUint8(0, 0x80 | trackData.track.id);
+         view.setInt16(1, relativeTimestamp, false);
+         const msDuration = Math.round(1000 * chunk.duration);
++        let discardPaddingNs = 0;
++        if (isFinalChunk
++            && trackData.type === 'audio'
++            && trackData.track.source._codec === 'opus') {
++            const exactEnd = trackData.track.source._exactEncodedPresentationEnd;
++            if (exactEnd) {
++                if (!Number.isSafeInteger(exactEnd.sampleIndex)
++                    || exactEnd.sampleIndex < 0
++                    || !Number.isSafeInteger(exactEnd.sampleRate)
++                    || exactEnd.sampleRate <= 0) {
++                    throw new Error('Invalid exact Opus presentation end.');
++                }
++                const exactEndTimestamp = exactEnd.sampleIndex / exactEnd.sampleRate;
++                const encodedEndTimestamp = msTimestamp / 1000 + chunk.encodedDuration;
++                discardPaddingNs = Math.round(1e9 * (encodedEndTimestamp
++                    - trackData.info.opusCodecDelayNs / 1e9
++                    - exactEndTimestamp));
++                const encodedDurationNs = Math.round(1e9 * chunk.encodedDuration);
++                if (discardPaddingNs < 0 || discardPaddingNs > encodedDurationNs) {
++                    throw new Error('Opus encoder output cannot represent the exact submitted PCM duration.');
++                }
++            }
++        }
+         // Subtitle cues need an explicit BlockDuration (a SimpleBlock has none)
+-        const needsBlockGroup = !!chunk.additions || trackData.type === 'subtitle';
++        const needsBlockGroup = !!chunk.additions || trackData.type === 'subtitle' || discardPaddingNs > 0;
+         if (!needsBlockGroup) {
+             // No additions, we can write out a SimpleBlock
+             view.setUint8(3, Number(chunk.type === 'key') << 7); // Flags (keyframe flag only present for SimpleBlock)
+@@ -939,6 +994,9 @@ export class MatroskaMuxer extends Muxer {
+                             data: new EBMLSignedInt(trackData.lastWrittenMsTimestamp - msTimestamp),
+                         }
+                         : null,
++                    discardPaddingNs > 0
++                        ? { id: EBMLId.DiscardPadding, data: new EBMLSignedInt(discardPaddingNs) }
++                        : null,
+                     chunk.additions
+                         ? { id: EBMLId.BlockAdditions, data: [
+                                 { id: EBMLId.BlockMore, data: [
+@@ -952,7 +1010,7 @@ export class MatroskaMuxer extends Muxer {
+             this.ebmlWriter.writeEBML(blockGroup);
+         }
+         this.startTimestamp = Math.min(this.startTimestamp, msTimestamp);
+-        this.endTimestamp = Math.max(this.endTimestamp, msTimestamp + msDuration);
++        this.trackEndTimestamps.set(trackData, Math.max(this.trackEndTimestamps.get(trackData) ?? -Infinity, msTimestamp + msDuration));
+         trackData.lastWrittenMsTimestamp = msTimestamp;
+         if (!this.trackDatasInCurrentCluster.has(trackData)) {
+             this.trackDatasInCurrentCluster.set(trackData, {
+@@ -1058,9 +1116,24 @@ export class MatroskaMuxer extends Muxer {
+             this.writer.seek(this.ebmlWriter.offsets.get(this.segment) + 4);
+             this.ebmlWriter.writeVarInt(segmentSize, SEGMENT_SIZE_BYTES);
+             // Write the duration of the media to the Segment
++            for (const trackData of this.trackDatas) {
++                if (trackData.type !== 'audio' || trackData.track.source._codec !== 'opus')
++                    continue;
++                const exactEnd = trackData.track.source._exactEncodedPresentationEnd;
++                if (exactEnd) {
++                    this.trackEndTimestamps.set(trackData, 1000 * exactEnd.sampleIndex / exactEnd.sampleRate);
++                }
++                else {
++                    const codedEnd = this.trackEndTimestamps.get(trackData);
++                    if (codedEnd !== undefined) {
++                        this.trackEndTimestamps.set(trackData, codedEnd - trackData.info.opusCodecDelayNs / 1e6);
++                    }
++                }
++            }
++            const endTimestamp = Math.max(-Infinity, ...this.trackEndTimestamps.values());
+             const duration = this.startTimestamp === Infinity
+                 ? 0
+-                : this.endTimestamp - this.startTimestamp;
++                : endTimestamp - this.startTimestamp;
+             this.segmentDuration.data = new EBMLFloat64(duration);
+             this.writer.seek(this.ebmlWriter.offsets.get(this.segmentDuration));
+             this.ebmlWriter.writeEBML(this.segmentDuration);
+diff --git a/node_modules/mediabunny/dist/modules/src/media-source.d.ts b/node_modules/mediabunny/dist/modules/src/media-source.d.ts
+index a7934f4..4813199 100644
+--- a/node_modules/mediabunny/dist/modules/src/media-source.d.ts
++++ b/node_modules/mediabunny/dist/modules/src/media-source.d.ts
+@@ -168,6 +168,11 @@ export declare class MediaStreamVideoTrackSource extends VideoSource {
+  * @public
+  */
+ export declare abstract class AudioSource extends MediaSource {
++    /** Exact end of the PCM timeline submitted through an encoding source. @internal */
++    _exactEncodedPresentationEnd: {
++        sampleIndex: number;
++        sampleRate: number;
++    } | null;
+     /** Internal constructor. */
+     constructor(codec: AudioCodec);
+ }
+diff --git a/node_modules/mediabunny/dist/modules/src/media-source.js b/node_modules/mediabunny/dist/modules/src/media-source.js
+index 0a3ce31..c3717a5 100644
+--- a/node_modules/mediabunny/dist/modules/src/media-source.js
++++ b/node_modules/mediabunny/dist/modules/src/media-source.js
+@@ -1305,6 +1305,8 @@ export class AudioSource extends MediaSource {
+         super();
+         /** @internal */
+         this._connectedTrack = null;
++        /** Exact end of the PCM timeline submitted through an encoding source. @internal */
++        this._exactEncodedPresentationEnd = null;
+         if (!AUDIO_CODECS.includes(codec)) {
+             throw new TypeError(`Invalid audio codec '${codec}'. Must be one of: ${AUDIO_CODECS.join(', ')}.`);
+         }
+@@ -1511,6 +1513,11 @@ class AudioEncoderWrapper {
+                     }
+                     this.lastEndSampleIndex += audioSample.numberOfFrames;
+                 }
++				assert(this.lastEndSampleIndex !== null);
++				this.source._exactEncodedPresentationEnd = {
++					sampleIndex: this.lastEndSampleIndex,
++					sampleRate: audioSample.sampleRate,
++				};
+             }
+             this.encodingConfig.onEncodedSample?.(audioSample);
+             if (this.customEncoder) {
+diff --git a/node_modules/mediabunny/src/matroska/ebml.ts b/node_modules/mediabunny/src/matroska/ebml.ts
+index 08a07c7..9700f9d 100644
+--- a/node_modules/mediabunny/src/matroska/ebml.ts
++++ b/node_modules/mediabunny/src/matroska/ebml.ts
+@@ -121,6 +121,7 @@ export enum EBMLId {
+ 	BlockAddID = 0xee,
+ 	BlockDuration = 0x9b,
+ 	ReferenceBlock = 0xfb,
++	DiscardPadding = 0x75a2,
+ 	Cluster = 0x1f43b675,
+ 	Timestamp = 0xe7,
+ 	Cues = 0x1c53bb6b,
+diff --git a/node_modules/mediabunny/src/matroska/matroska-demuxer.ts b/node_modules/mediabunny/src/matroska/matroska-demuxer.ts
+index 26d538b..43da00e 100644
+--- a/node_modules/mediabunny/src/matroska/matroska-demuxer.ts
++++ b/node_modules/mediabunny/src/matroska/matroska-demuxer.ts
+@@ -12,6 +12,7 @@ import {
+ 	extractAvcDecoderConfigurationRecord,
+ 	extractHevcDecoderConfigurationRecord,
+ 	extractVp9CodecInfoFromPacket,
++	parseOpusTocByte,
+ } from '../codec-data';
+ import {
+ 	AacCodecInfo,
+@@ -64,6 +65,7 @@ import {
+ 	readElementHeader,
+ 	readElementId,
+ 	readFloat,
++	readSignedInt,
+ 	readUnsignedInt,
+ 	readVarInt,
+ 	resync,
+@@ -138,6 +140,7 @@ enum BlockLacing {
+ type ClusterBlock = {
+ 	timestamp: number;
+ 	duration: number;
++	discardPaddingNs: number;
+ 	isKeyFrame: boolean;
+ 	data: Uint8Array;
+ 	lacing: BlockLacing;
+@@ -198,6 +201,7 @@ type InternalTrack = {
+ 	codecPrivate: Uint8Array | null;
+ 	defaultDuration: number | null;
+ 	defaultDurationNs: number | null;
++	codecDelayNs: number;
+ 	name: string | null;
+ 	languageCode: string;
+ 	hasLanguageBcp47: boolean;
+@@ -663,7 +667,8 @@ export class MatroskaDemuxer extends Demuxer {
+ 
+ 			for (let i = 0; i < trackData.blocks.length; i++) {
+ 				const block = trackData.blocks[i]!;
+-				block.timestamp += cluster.timestamp;
++				block.timestamp += cluster.timestamp
++					- track.codecDelayNs * segment.timestampFactor / 1e9;
+ 
+ 				hasLacedBlocks ||= block.lacing !== BlockLacing.None;
+ 			}
+@@ -685,7 +690,10 @@ export class MatroskaDemuxer extends Demuxer {
+ 					const nextEntry = trackData.presentationTimestamps[i + 1]!;
+ 					currentBlock.duration = nextEntry.timestamp - currentBlock.timestamp;
+ 				} else if (currentBlock.duration === 0) {
+-					if (track.defaultDuration != null) {
++					if (track.info?.type === 'audio' && track.info.codec === 'opus') {
++						currentBlock.duration = parseOpusTocByte(currentBlock.data).durationInSamples
++							* segment.timestampFactor / OPUS_SAMPLE_RATE;
++					} else if (track.defaultDuration != null) {
+ 						if (currentBlock.lacing === BlockLacing.None) {
+ 							currentBlock.duration = track.defaultDuration;
+ 						} else {
+@@ -701,12 +709,23 @@ export class MatroskaDemuxer extends Demuxer {
+ 				// the block's duration across the laced frames.
+ 				this.expandLacedBlocks(trackData.blocks, track);
+ 
+-				// Recompute since blocks have changed
+-				trackData.presentationTimestamps = trackData.blocks
+-					.map((block, i) => ({ timestamp: block.timestamp, blockIndex: i }))
+-					.sort((a, b) => a.timestamp - b.timestamp);
+ 			}
+ 
++			for (const block of trackData.blocks) {
++				const discardPadding = block.discardPaddingNs * segment.timestampFactor / 1e9;
++				if (discardPadding > 0) {
++					block.duration = Math.max(0, block.duration - discardPadding);
++				} else if (discardPadding < 0) {
++					const startPadding = -discardPadding;
++					block.timestamp += startPadding;
++					block.duration = Math.max(0, block.duration - startPadding);
++				}
++			}
++
++			trackData.presentationTimestamps = trackData.blocks
++				.map((block, i) => ({ timestamp: block.timestamp, blockIndex: i }))
++				.sort((a, b) => a.timestamp - b.timestamp);
++
+ 			const firstBlock = trackData.blocks[trackData.presentationTimestamps[0]!.blockIndex]!;
+ 			const lastBlock = trackData.blocks[last(trackData.presentationTimestamps)!.blockIndex]!;
+ 
+@@ -862,6 +881,12 @@ export class MatroskaDemuxer extends Demuxer {
+ 				blocks.splice(blockIndex + i, 0, {
+ 					timestamp: frameTimestamp,
+ 					duration: frameDuration,
++					discardPaddingNs: (
++						(i === frameCount - 1 && originalBlock.discardPaddingNs > 0)
++						|| (i === 0 && originalBlock.discardPaddingNs < 0)
++					)
++						? originalBlock.discardPaddingNs
++						: 0,
+ 					isKeyFrame: originalBlock.isKeyFrame,
+ 					data: frameData,
+ 					lacing: BlockLacing.None,
+@@ -1009,6 +1034,7 @@ export class MatroskaDemuxer extends Demuxer {
+ 					codecPrivate: null,
+ 					defaultDuration: null,
+ 					defaultDurationNs: null,
++					codecDelayNs: 0,
+ 					name: null,
+ 					languageCode: 'eng', // The default in Matroska
+ 					hasLanguageBcp47: false,
+@@ -1266,6 +1292,12 @@ export class MatroskaDemuxer extends Demuxer {
+ 				this.currentTrack.defaultDurationNs = readUnsignedInt(slice, size);
+ 			}; break;
+ 
++			case EBMLId.CodecDelay: {
++				if (!this.currentTrack) break;
++
++				this.currentTrack.codecDelayNs = readUnsignedInt(slice, size);
++			}; break;
++
+ 			case EBMLId.Name: {
+ 				if (!this.currentTrack) break;
+ 
+@@ -1501,6 +1533,7 @@ export class MatroskaDemuxer extends Demuxer {
+ 				trackData.blocks.push({
+ 					timestamp: relativeTimestamp, // We'll add the cluster's timestamp to this later
+ 					duration: 0, // Will set later
++					discardPaddingNs: 0,
+ 					isKeyFrame,
+ 					data: blockData,
+ 					lacing,
+@@ -1538,6 +1571,7 @@ export class MatroskaDemuxer extends Demuxer {
+ 				this.currentBlock = {
+ 					timestamp: relativeTimestamp, // We'll add the cluster's timestamp to this later
+ 					duration: 0, // Will set later
++					discardPaddingNs: 0,
+ 					isKeyFrame: true,
+ 					data: blockData,
+ 					lacing,
+@@ -1594,6 +1628,12 @@ export class MatroskaDemuxer extends Demuxer {
+ 				// This is in line with FFmpeg's behavior.
+ 			}; break;
+ 
++			case EBMLId.DiscardPadding: {
++				if (!this.currentBlock) break;
++
++				this.currentBlock.discardPaddingNs = readSignedInt(slice, size);
++			}; break;
++
+ 			case EBMLId.Tag: {
+ 				this.currentTagTargetIsMovie = true;
+ 				this.readContiguousElements(slice.slice(dataStartPos, size));
+@@ -1969,7 +2009,9 @@ abstract class MatroskaTrackBacking implements InputTrackBacking {
+ 	}
+ 
+ 	getTimeResolution() {
+-		return this.internalTrack.segment.timestampFactor;
++		return this.internalTrack.info?.codec === 'opus'
++			? 1e9
++			: this.internalTrack.segment.timestampFactor;
+ 	}
+ 
+ 	isRelativeToUnixEpoch() {
+@@ -2005,7 +2047,7 @@ abstract class MatroskaTrackBacking implements InputTrackBacking {
+ 		let endTimestamp = segment.duration / segment.timestampFactor;
+ 
+ 		const firstPacket = await this.getFirstPacket({ metadataOnly: true });
+-		endTimestamp += firstPacket?.timestamp ?? 0;
++		endTimestamp += (firstPacket?.timestamp ?? 0) + this.internalTrack.codecDelayNs / 1e9;
+ 
+ 		return endTimestamp;
+ 	}
+diff --git a/node_modules/mediabunny/src/matroska/matroska-muxer.ts b/node_modules/mediabunny/src/matroska/matroska-muxer.ts
+index c15ec98..8c48f04 100644
+--- a/node_modules/mediabunny/src/matroska/matroska-muxer.ts
++++ b/node_modules/mediabunny/src/matroska/matroska-muxer.ts
+@@ -21,6 +21,7 @@ import {
+ 	promiseWithResolvers,
+ 	Rational,
+ 	simplifyRational,
++	textDecoder,
+ 	textEncoder,
+ 	toUint8Array,
+ 	uint8ArraysAreEqual,
+@@ -67,7 +68,7 @@ import { FileSlice } from '../reader';
+ import { Muxer } from '../muxer';
+ import { Writer } from '../writer';
+ import { EncodedPacket } from '../packet';
+-import { parseOpusIdentificationHeader } from '../codec-data';
++import { parseOpusIdentificationHeader, parseOpusTocByte } from '../codec-data';
+ import { AttachedFile } from '../metadata';
+ 
+ const MIN_CLUSTER_TIMESTAMP_MS = -(2 ** 15);
+@@ -81,6 +82,7 @@ type InternalMediaChunk = {
+ 	type: 'key' | 'delta';
+ 	timestamp: number;
+ 	duration: number;
++	encodedDuration: number;
+ 	additions: Uint8Array | null;
+ };
+ 
+@@ -106,6 +108,7 @@ type MatroskaTrackData = {
+ 		numberOfChannels: number;
+ 		sampleRate: number;
+ 		decoderConfig: AudioDecoderConfig;
++		opusCodecDelayNs: number | null;
+ 		/**
+ 		 * The "ADTS stripping" involves removing the ADTS header from each AAC packet. SOBMFF stores raw AAC data, not
+ 		 * ADTS-wrapped data.
+@@ -155,7 +158,7 @@ export class MatroskaMuxer extends Muxer {
+ 	}>();
+ 
+ 	private startTimestamp = Infinity;
+-	private endTimestamp = -Infinity;
++	private trackEndTimestamps = new Map<MatroskaTrackData, number>();
+ 
+ 	constructor(output: Output, format: MkvOutputFormat) {
+ 		super(output);
+@@ -190,7 +193,7 @@ export class MatroskaMuxer extends Muxer {
+ 			{ id: EBMLId.EBMLMaxIDLength, data: 4 },
+ 			{ id: EBMLId.EBMLMaxSizeLength, data: 8 },
+ 			{ id: EBMLId.DocType, data: this.format instanceof WebMOutputFormat ? 'webm' : 'matroska' },
+-			{ id: EBMLId.DocTypeVersion, data: 2 },
++			{ id: EBMLId.DocTypeVersion, data: 4 },
+ 			{ id: EBMLId.DocTypeReadVersion, data: 2 },
+ 		] };
+ 		this.ebmlWriter.writeEBML(ebmlHeader);
+@@ -296,19 +299,9 @@ export class MatroskaMuxer extends Muxer {
+ 			const codecId = CODEC_STRING_MAP[trackData.track.source._codec];
+ 			assert(codecId);
+ 
+-			let seekPreRollNs = 0;
+-			if (trackData.type === 'audio' && trackData.track.source._codec === 'opus') {
+-				seekPreRollNs = 1e6 * 80; // In "Matroska ticks" (nanoseconds)
+-
+-				const description = trackData.info.decoderConfig.description;
+-				if (description) {
+-					const bytes = toUint8Array(description);
+-					const header = parseOpusIdentificationHeader(bytes);
+-
+-					// Use the preSkip value from the header
+-					seekPreRollNs = Math.round(1e9 * (header.preSkip / OPUS_SAMPLE_RATE));
+-				}
+-			}
++			const isOpus = trackData.type === 'audio' && trackData.track.source._codec === 'opus';
++			const codecDelayNs = isOpus ? trackData.info.opusCodecDelayNs! : 0;
++			const seekPreRollNs = isOpus ? 80_000_000 : 0;
+ 
+ 			tracksElement.data.push({ id: EBMLId.TrackEntry, data: [
+ 				{ id: EBMLId.TrackNumber, data: trackData.track.id },
+@@ -338,7 +331,7 @@ export class MatroskaMuxer extends Muxer {
+ 				trackData.codecPrivate
+ 					? { id: EBMLId.CodecPrivate, data: toUint8Array(trackData.codecPrivate) }
+ 					: null,
+-				{ id: EBMLId.CodecDelay, data: 0 },
++				{ id: EBMLId.CodecDelay, data: codecDelayNs },
+ 				{ id: EBMLId.SeekPreRoll, data: seekPreRollNs },
+ 				trackData.track.metadata.name !== undefined
+ 					? { id: EBMLId.Name, data: new EBMLUnicodeString(trackData.track.metadata.name) }
+@@ -804,6 +797,8 @@ export class MatroskaMuxer extends Muxer {
+ 
+ 		const decoderConfig = { ...meta.decoderConfig };
+ 		let requiresAdtsStripping = false;
++		let opusCodecDelayNs: number | null = null;
++		let presentationSampleRate = meta.decoderConfig.sampleRate;
+ 
+ 		if (track.source._codec === 'aac' && !decoderConfig.description) {
+ 			// Matroska stores raw AAC with AudioSpecificConfig in CodecPrivate, not ADTS-wrapped data.
+@@ -833,13 +828,44 @@ export class MatroskaMuxer extends Muxer {
+ 			requiresAdtsStripping = true;
+ 		}
+ 
++		if (track.source._codec === 'opus') {
++			if (!decoderConfig.description) {
++				throw new Error('Opus in Matroska requires an OpusHead decoder description.');
++			}
++
++			const description = new Uint8Array(toUint8Array(decoderConfig.description));
++			if (
++				description.byteLength < 19
++				|| textDecoder.decode(description.subarray(0, 8)) !== 'OpusHead'
++				|| description[8] !== 1
++			) {
++				throw new Error('Invalid OpusHead decoder description.');
++			}
++
++			const header = parseOpusIdentificationHeader(description);
++			if (header.outputChannelCount !== decoderConfig.numberOfChannels) {
++				throw new Error('OpusHead channel count does not match the decoder configuration.');
++			}
++			presentationSampleRate = (
++				track.source._exactEncodedPresentationEnd?.sampleRate
++				?? header.inputSampleRate
++			) || decoderConfig.sampleRate;
++			if (!Number.isSafeInteger(presentationSampleRate) || presentationSampleRate < 8000 || presentationSampleRate > 192_000) {
++				throw new Error('Invalid Opus presentation sample rate.');
++			}
++			new DataView(description.buffer).setUint32(12, presentationSampleRate, true);
++			decoderConfig.description = description;
++			opusCodecDelayNs = Math.round(1e9 * (header.preSkip / OPUS_SAMPLE_RATE));
++		}
++
+ 		const newTrackData: MatroskaAudioTrackData = {
+ 			track,
+ 			type: 'audio',
+ 			info: {
+ 				numberOfChannels: meta.decoderConfig.numberOfChannels,
+-				sampleRate: meta.decoderConfig.sampleRate,
++				sampleRate: presentationSampleRate,
+ 				decoderConfig,
++				opusCodecDelayNs,
+ 				requiresAdtsStripping,
+ 			},
+ 			chunkQueue: [],
+@@ -956,7 +982,17 @@ export class MatroskaMuxer extends Muxer {
+ 			const isKeyFrame = packet.type === 'key';
+ 			this.validateTimestamp(trackData.track, packet.timestamp, isKeyFrame);
+ 
+-			const audioChunk = this.createInternalChunk(packetData, packet.timestamp, packet.duration, packet.type);
++			const encodedDuration = track.source._codec === 'opus'
++				? parseOpusTocByte(packetData).durationInSamples / OPUS_SAMPLE_RATE
++				: packet.duration;
++			const audioChunk = this.createInternalChunk(
++				packetData,
++				packet.timestamp,
++				packet.duration,
++				packet.type,
++				null,
++				encodedDuration,
++			);
+ 			trackData.chunkQueue.push(audioChunk);
+ 			await this.interleaveChunks();
+ 		} finally {
+@@ -1027,8 +1063,19 @@ export class MatroskaMuxer extends Muxer {
+ 				break;
+ 			}
+ 
++			const mustHoldFinalOpusPacket = !isFinalCall
++				&& trackWithMinTimestamp.type === 'audio'
++				&& trackWithMinTimestamp.track.source._codec === 'opus'
++				&& !trackWithMinTimestamp.closed
++				&& trackWithMinTimestamp.chunkQueue.length === 1;
++			if (mustHoldFinalOpusPacket) {
++				break;
++			}
++
+ 			const chunk = trackWithMinTimestamp.chunkQueue.shift()!;
+-			this.writeBlock(trackWithMinTimestamp, chunk);
++			const isFinalChunk = trackWithMinTimestamp.closed
++				&& trackWithMinTimestamp.chunkQueue.length === 0;
++			this.writeBlock(trackWithMinTimestamp, chunk, isFinalChunk);
+ 		}
+ 
+ 		if (!isFinalCall) {
+@@ -1091,12 +1138,14 @@ export class MatroskaMuxer extends Muxer {
+ 		duration: number,
+ 		type: 'key' | 'delta',
+ 		additions: Uint8Array | null = null,
++		encodedDuration = duration,
+ 	) {
+ 		const internalChunk: InternalMediaChunk = {
+ 			data,
+ 			type,
+ 			timestamp,
+ 			duration,
++			encodedDuration,
+ 			additions,
+ 		};
+ 
+@@ -1104,7 +1153,7 @@ export class MatroskaMuxer extends Muxer {
+ 	}
+ 
+ 	/** Writes a block containing media data to the file. */
+-	private writeBlock(trackData: MatroskaTrackData, chunk: InternalMediaChunk) {
++	private writeBlock(trackData: MatroskaTrackData, chunk: InternalMediaChunk, isFinalChunk: boolean) {
+ 		// Due to the interlacing algorithm, this code will be run once we've seen one chunk from every media track.
+ 		if (!this.segment) {
+ 			this.createSegment();
+@@ -1167,9 +1216,41 @@ export class MatroskaMuxer extends Muxer {
+ 		view.setInt16(1, relativeTimestamp, false);
+ 
+ 		const msDuration = Math.round(1000 * chunk.duration);
++		let discardPaddingNs = 0;
++		if (
++			isFinalChunk
++			&& trackData.type === 'audio'
++			&& trackData.track.source._codec === 'opus'
++		) {
++			const exactEnd = trackData.track.source._exactEncodedPresentationEnd;
++			if (exactEnd) {
++				if (
++					!Number.isSafeInteger(exactEnd.sampleIndex)
++					|| exactEnd.sampleIndex < 0
++					|| !Number.isSafeInteger(exactEnd.sampleRate)
++					|| exactEnd.sampleRate <= 0
++				) {
++					throw new Error('Invalid exact Opus presentation end.');
++				}
++
++				const exactEndTimestamp = exactEnd.sampleIndex / exactEnd.sampleRate;
++				const encodedEndTimestamp = msTimestamp / 1000 + chunk.encodedDuration;
++				discardPaddingNs = Math.round(
++					1e9 * (
++						encodedEndTimestamp
++						- trackData.info.opusCodecDelayNs! / 1e9
++						- exactEndTimestamp
++					),
++				);
++				const encodedDurationNs = Math.round(1e9 * chunk.encodedDuration);
++				if (discardPaddingNs < 0 || discardPaddingNs > encodedDurationNs) {
++					throw new Error('Opus encoder output cannot represent the exact submitted PCM duration.');
++				}
++			}
++		}
+ 
+ 		// Subtitle cues need an explicit BlockDuration (a SimpleBlock has none)
+-		const needsBlockGroup = !!chunk.additions || trackData.type === 'subtitle';
++		const needsBlockGroup = !!chunk.additions || trackData.type === 'subtitle' || discardPaddingNs > 0;
+ 
+ 		if (!needsBlockGroup) {
+ 			// No additions, we can write out a SimpleBlock
+@@ -1192,6 +1273,9 @@ export class MatroskaMuxer extends Muxer {
+ 							data: new EBMLSignedInt(trackData.lastWrittenMsTimestamp! - msTimestamp),
+ 						}
+ 					: null,
++				discardPaddingNs > 0
++					? { id: EBMLId.DiscardPadding, data: new EBMLSignedInt(discardPaddingNs) }
++					: null,
+ 				chunk.additions
+ 					? { id: EBMLId.BlockAdditions, data: [
+ 							{ id: EBMLId.BlockMore, data: [
+@@ -1206,7 +1290,10 @@ export class MatroskaMuxer extends Muxer {
+ 		}
+ 
+ 		this.startTimestamp = Math.min(this.startTimestamp, msTimestamp);
+-		this.endTimestamp = Math.max(this.endTimestamp, msTimestamp + msDuration);
++		this.trackEndTimestamps.set(
++			trackData,
++			Math.max(this.trackEndTimestamps.get(trackData) ?? -Infinity, msTimestamp + msDuration),
++		);
+ 		trackData.lastWrittenMsTimestamp = msTimestamp;
+ 
+ 		if (!this.trackDatasInCurrentCluster.has(trackData)) {
+@@ -1341,9 +1428,24 @@ export class MatroskaMuxer extends Muxer {
+ 			this.ebmlWriter.writeVarInt(segmentSize, SEGMENT_SIZE_BYTES);
+ 
+ 			// Write the duration of the media to the Segment
++			for (const trackData of this.trackDatas) {
++				if (trackData.type !== 'audio' || trackData.track.source._codec !== 'opus') continue;
++
++				const exactEnd = trackData.track.source._exactEncodedPresentationEnd;
++				if (exactEnd) {
++					this.trackEndTimestamps.set(trackData, 1000 * exactEnd.sampleIndex / exactEnd.sampleRate);
++				} else {
++					const codedEnd = this.trackEndTimestamps.get(trackData);
++					if (codedEnd !== undefined) {
++						this.trackEndTimestamps.set(trackData, codedEnd - trackData.info.opusCodecDelayNs! / 1e6);
++					}
++				}
++			}
++
++			const endTimestamp = Math.max(-Infinity, ...this.trackEndTimestamps.values());
+ 			const duration = this.startTimestamp === Infinity
+ 				? 0
+-				: this.endTimestamp - this.startTimestamp;
++				: endTimestamp - this.startTimestamp;
+ 			this.segmentDuration!.data = new EBMLFloat64(duration);
+ 			this.writer.seek(this.ebmlWriter.offsets.get(this.segmentDuration!)!);
+ 			this.ebmlWriter.writeEBML(this.segmentDuration);
+diff --git a/node_modules/mediabunny/src/media-source.ts b/node_modules/mediabunny/src/media-source.ts
+index 59167d2..c7dcc2b 100644
+--- a/node_modules/mediabunny/src/media-source.ts
++++ b/node_modules/mediabunny/src/media-source.ts
+@@ -1678,6 +1678,8 @@ export abstract class AudioSource extends MediaSource {
+ 	override _connectedTrack: OutputAudioTrack | null = null;
+ 	/** @internal */
+ 	override readonly _codec: AudioCodec;
++	/** Exact end of the PCM timeline submitted through an encoding source. @internal */
++	_exactEncodedPresentationEnd: { sampleIndex: number; sampleRate: number } | null = null;
+ 
+ 	/** Internal constructor. */
+ 	constructor(codec: AudioCodec) {
+@@ -1928,6 +1930,12 @@ class AudioEncoderWrapper {
+ 
+ 					this.lastEndSampleIndex += audioSample.numberOfFrames;
+ 				}
++
++				assert(this.lastEndSampleIndex !== null);
++				this.source._exactEncodedPresentationEnd = {
++					sampleIndex: this.lastEndSampleIndex,
++					sampleRate: audioSample.sampleRate,
++				};
+ 			}
+ 
+ 			this.encodingConfig.onEncodedSample?.(audioSample);

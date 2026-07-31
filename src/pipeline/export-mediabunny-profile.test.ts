@@ -29,7 +29,7 @@ describe('Mediabunny buffered export profile adapter', () => {
     expect(webm.getSupportedAudioCodecs()).toContain('opus')
   })
 
-  test('allows both destinations but keeps exact Opus audio gated', () => {
+  test('allows both destinations and exact Opus audio', () => {
     expect(mediabunnyExportImplementationUnavailableReason(
       exportPresetById('hevc').profile,
       true,
@@ -41,7 +41,7 @@ describe('Mediabunny buffered export profile adapter', () => {
     expect(mediabunnyExportImplementationUnavailableReason(
       exportPresetById('web').profile,
       true,
-    )).toMatch(/exact Opus end-padding metadata/)
+    )).toBeNull()
     expect(mediabunnyExportImplementationUnavailableReason(
       updateExportProfile(DEFAULT_EXPORT_PROFILE, { destination: 'file' }),
       true,

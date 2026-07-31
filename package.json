@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "qa:issue18:fixtures": "node scripts/issue18/generate-fixtures.mjs",
     "qa:issue19:fixtures": "node scripts/generate-issue-19-fixtures.mjs",
+    "postinstall": "patch-package",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview"
@@ -32,8 +33,12 @@
     "@vitejs/plugin-react": "^6.0.3",
     "jsdom": "^29.1.1",
     "oxlint": "^1.71.0",
+    "patch-package": "8.0.1",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vitest": "^4.1.9"
+  },
+  "overrides": {
+    "postcss": "8.5.25"
   }
 }

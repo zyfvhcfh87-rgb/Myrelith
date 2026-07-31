@@ -2194,20 +2194,29 @@ describe('createMediabunnyExportSink selected profiles', () => {
     expect(close).not.toHaveBeenCalled()
   })
 
-  test('rejects exact-duration Opus before allocating an output', async () => {
+  test('configures exact-duration Opus through the patched WebM adapter', async () => {
     const audioDoc = makeAudioDoc([
       makeAudioTrack('A1', makeAudioClip('opus-clip', 'opus-asset', 1)),
     ])
-    await expect(createMediabunnyExportSink(
+    const profile = exportPresetById('web').profile
+    const sink = await createMediabunnyExportSink(
       audioDoc,
-      exportPresetById('web').profile,
+      profile,
       async () => resolvedAsset(new Blob(['unused'])),
-    )).rejects.toThrow(/exact Opus end-padding metadata/)
+    )
 
-    expect(fakeCanvases).toHaveLength(0)
-    expect(mb.targets).toHaveLength(0)
+    expect(mb.formats.at(-1)).toMatchObject({ kind: 'webm' })
+    expect(audioSourceAt().encodingConfig).toEqual({
+      codec: 'opus',
+      bitrate: profile.audioBitrate,
+      bitrateMode: profile.audioBitrateMode,
+    })
+    expect(fakeCanvases).toHaveLength(1)
+    expect(mb.targets).toHaveLength(1)
     expect(mb.streamTargets).toHaveLength(0)
-    expect(mb.outputs).toHaveLength(0)
+    expect(outputAt().addAudioTrack).toHaveBeenCalledWith(audioSourceAt())
+
+    await sink.cancel()
   })
 })
 

@@ -365,7 +365,7 @@ describe('Mediabunny capability adapter', () => {
     expect(mediabunnyExportCapabilityProbe.getImplementationUnavailableReason(
       web,
       true,
-    )).toMatch(/exact Opus end-padding metadata/)
+    )).toBeNull()
 
     await expect(checkExportProfileSupport(
       makeDoc(),
@@ -491,6 +491,23 @@ describe('runFreshMediabunnyExportProbe', () => {
       1_024,
       577,
     ])
+  })
+
+  test('probes exact WebM/Opus through the selected profile fields', async () => {
+    const web = exportPresetById('web').profile
+
+    await runFreshMediabunnyExportProbe(makeDoc(), web, true)
+
+    expect(mb.formats).toEqual([expect.objectContaining({ kind: 'webm' })])
+    expect(mb.canvasSources[0].config).toMatchObject({ codec: 'vp9' })
+    expect(mb.audioSources[0].config).toEqual({
+      codec: 'opus',
+      bitrate: web.audioBitrate,
+      bitrateMode: web.audioBitrateMode,
+    })
+    expect(mb.outputs[0].addAudioTrack).toHaveBeenCalledWith(mb.audioSources[0])
+    expect(mb.outputs[0].finalize).toHaveBeenCalledTimes(1)
+    expect(mb.outputs[0].cancel).not.toHaveBeenCalled()
   })
 
   test('uses the exact shorter timeline sample count and mixer chunking', async () => {

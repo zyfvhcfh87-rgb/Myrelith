@@ -1729,14 +1729,14 @@ work.
   and adapts positional `StreamTarget` writes. Mediabunny may close its wrapper;
   WebCut alone commits the underlying file on success or aborts it on cancel or
   failure so a partial file is never reported as a successful export.
-- AAC tail trimming remains isolated. Mediabunny 1.50.9's WebM muxer writes
-  Opus packets as `SimpleBlock`, advertises zero `CodecDelay`, and has no
-  `DiscardPadding`; current 1.52.2 has the same limitation. Merely shortening
-  packet duration changes the declared segment duration but not decoded tail
-  padding. Opus-enabled profiles stay behind an explicit incomplete capability
-  reason until a small pinned, locally bundled, reviewed muxer fix (or an
-  upstream release with equivalent behavior) passes exact sample-count,
-  reopen, and Chrome playback tests.
+- AAC tail trimming remains isolated. Mediabunny 1.50.9 is patched locally and
+  reproducibly for WebM/Opus: the encoder source records the exact post-
+  transform PCM end, the Matroska muxer writes the required `CodecDelay`,
+  80 ms `SeekPreRoll`, final-block `DiscardPadding`, version-4 header, and exact
+  presentation duration, and the demuxer applies the same timing metadata on
+  reopen. The patch is exact-version pinned, reapplied by `postinstall`, keeps
+  the package's reviewed TypeScript/MPL source beside the shipped ESM edits,
+  and fails closed on malformed or unrepresentable timing.
 
 ### Ordered implementation gates
 
@@ -1755,7 +1755,7 @@ work.
 5. [x] Add transactional direct-file streaming with picker-first activation,
    positional-write backpressure, success commit, cancel/failure abort, and
    honest partial-file reporting tests.
-6. [ ] Evaluate optional pinned local encoder fallbacks only for a selected
+6. [x] Evaluate optional pinned local encoder fallbacks only for a selected
    otherwise-unavailable codec. Keep them lazy, offline, and out of the initial
    editor bundle; a documented no-go is valid evidence.
 7. [ ] Reopen every enabled profile, verify container/codecs/dimensions/FPS/
@@ -1948,6 +1948,41 @@ work.
   0.100 seconds with no audio track; the native video element loaded and played
   it successfully. The picker observed active user activation, browser warning
   and error logs were both zero, and the temporary QA module was removed.
+
+### Slice 6 evidence - exact WebM/Opus timing and fallback decision (2026-07-31)
+
+- [x] A pinned `mediabunny@1.50.9` patch now carries the exact post-transform
+  PCM end from each encoding audio source and holds only the final open Opus
+  packet. It writes the OpusHead pre-skip as `CodecDelay`, keeps
+  `SeekPreRoll` at 80 ms, emits positive nanosecond `DiscardPadding` only on
+  the final `BlockGroup`, advertises Matroska/WebM version 4 with read version
+  2, and replaces coded tail time with exact presentation time. Packet duration
+  comes from the Opus TOC and impossible padding fails closed.
+- [x] The matching demux patch subtracts `CodecDelay` from packet timestamps,
+  applies signed `DiscardPadding`, derives otherwise-implicit final Opus packet
+  duration from its TOC, and preserves nanosecond timing on reopen. OpusHead is
+  cloned before repair; its original-input sample rate and Matroska
+  `SamplingFrequency` stay equal for 44.1, 48, and 96 kHz inputs even when
+  Chromium reports its internal 48 kHz encode clock. The caller's header is
+  never mutated.
+- [x] Independent EBML contract tests cover 1, 648, 649, and 960 submitted
+  samples, zero versus near-full final padding, exact `CodecDelay` and
+  `SeekPreRoll`, final-block placement, sub-millisecond serialized timestamps,
+  audio/video maximum duration, round-trip computed and metadata duration to
+  the format's 0.5 ns bound, and 44.1/96 kHz metadata repair.
+- [x] Optional local encoder fallbacks are a documented no-go for this issue.
+  The closest AAC extension does not preserve the selected bitrate-mode
+  semantics and adds FFmpeg LGPL/source/relink plus patent review. Opus, VP9,
+  AV1, AVC, and HEVC candidates are immature, stale, multi-megabyte,
+  whole-file-shaped, or carry disproportionate worker, licensing, cancellation,
+  and packet-adapter work. Runtime-native support remains honestly capability-
+  gated with no codec substitution.
+- [x] `patch-package@8.0.1` is exact-pinned; a clean `npm ci` reapplied the
+  patch successfully and npm reported zero vulnerabilities. Focused profile,
+  preflight, writer, and Opus contract gates passed 75/75 tests. Production
+  TypeScript/Vite build passed with only the existing chunk-size advisory, and
+  oxlint passed. Real Chromium A/V playback and the final cross-profile matrix
+  remain Gate 7 work.
 
 ## Test strategy per layer (unchanged from original)
 
