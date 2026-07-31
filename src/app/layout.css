@@ -2438,14 +2438,14 @@
 
 .export-input-with-unit > small {
   min-width: 42px;
-  color: #778391;
-  font-size: 8px;
+  color: #909baa;
+  font-size: 10px;
 }
 
 .export-field-message {
-  min-height: 11px;
-  color: #687482;
-  font-size: 8px;
+  min-height: 13px;
+  color: #909baa;
+  font-size: 10px;
   line-height: 1.3;
 }
 

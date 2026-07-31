@@ -180,9 +180,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   exact-version Mediabunny patch writes and reopens Opus `CodecDelay`, 80 ms
   `SeekPreRoll`, final `DiscardPadding`, source-rate metadata, and exact
   duration; malformed or unrepresentable timing fails closed.
-- Only a validated export selection may persist. Capability results, project
-  format facts, file handles, and output bytes never enter project or Zustand
-  state.
+- Only a validated export selection may persist in its dedicated local
+  preference. Capability results, file handles, and output bytes never enter
+  project or Zustand state. Project dimensions, FPS, and sample rate remain
+  authoritative `TimelineDoc` facts and are not duplicated into that export
+  preference.
 
 ## Store action contracts
 

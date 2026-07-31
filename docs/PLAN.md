@@ -1894,8 +1894,9 @@ behavior.
   only the last profile proven valid on this browser: a preset/Auto id or one
   validated custom profile. Capability results, reasons, Auto's resolution,
   and project-owned dimensions/FPS/sample rate are never persisted. Malformed
-  or unavailable saved choices fall back safely without disturbing the still-
-  image preference.
+  saved data falls back safely without disturbing the still-image preference.
+  A saved choice that becomes unavailable remains selected and blocks Start
+  with its exact reason; it is never silently substituted.
 - [x] Capability and custom-profile responses are generation-safe across edits
   and document changes. Dialog lifecycle, focus, cancellation, progress,
   dynamic MP4/WebM Blob metadata, URL revocation, retry, invalid drafts, stale

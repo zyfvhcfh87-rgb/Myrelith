@@ -6,8 +6,9 @@
  * later decode can never mutate pixels still being composited. Static-image
  * decoding owns one retained first-frame source per asset for the whole export
  * session. Audio decode keeps one sequential cursor per active clip; encoding
- * owns one MP4 Output and awaits video plus exact-sample AAC writes for every
- * document frame.
+ * owns one selected MP4/WebM Output and awaits exact-profile video plus
+ * optional exact-sample AAC/Opus writes for every document frame. Its target
+ * is either buffered memory or the transactional direct-file stream.
  */
 
 import {
