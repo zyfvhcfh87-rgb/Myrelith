@@ -1,11 +1,13 @@
 /**
  * pipeline/export-mediabunny.ts — browser adapters for bounded A/V export.
  *
- * Decoding owns one Mediabunny Input/CanvasSink per asset. CanvasSink's
+ * Video decoding owns one Mediabunny Input/CanvasSink per asset. CanvasSink's
  * pooled canvas is copied immediately into a lease-owned ImageBitmap so a
- * later decode can never mutate pixels still being composited. Audio decode
- * keeps one sequential cursor per active clip; encoding owns one MP4 Output
- * and awaits video plus exact-sample AAC writes for every document frame.
+ * later decode can never mutate pixels still being composited. Static-image
+ * decoding owns one retained first-frame source per asset for the whole export
+ * session. Audio decode keeps one sequential cursor per active clip; encoding
+ * owns one MP4 Output and awaits video plus exact-sample AAC writes for every
+ * document frame.
  */
 
 import {
@@ -34,7 +36,7 @@ import {
   refineVideoDecoderBudget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
-import type { AssetId, TimelineDoc } from '../domain/schema'
+import type { AssetId, AssetKind, TimelineDoc } from '../domain/schema'
 import {
   docDurationFrames,
   visibleVideoLayersAtFrame,
@@ -58,18 +60,25 @@ import {
   type MixedAudioBlock,
 } from './export-audio'
 import { compositeFrame, type Composite2D } from './render'
+import {
+  decodeStaticImage,
+  StaticImageDecodeError,
+  type StaticImageRenderSource,
+} from './static-image'
 
 /** Resolves one immutable session source and its local-fallback safety budget. */
 export interface ResolvedExportAsset {
   blob: Blob
   budget: LocalDecoderBudget
+  kind: AssetKind
 }
 
 export type ExportAssetResolver = (
   assetId: AssetId,
 ) => ResolvedExportAsset | Promise<ResolvedExportAsset>
 
-interface DecodedAsset {
+interface DecodedVideoAsset {
+  kind: 'video'
   input: Input
   sink: CanvasSink
   sourceFrames: readonly number[]
@@ -78,6 +87,15 @@ interface DecodedAsset {
   /** Same-asset decodes serialize so the one-canvas pool is never reused early. */
   decodeTail: Promise<void>
 }
+
+interface DecodedImageAsset {
+  kind: 'image'
+  source: StaticImageRenderSource
+  sourceFrames: readonly number[]
+  nextRequestIndex: number
+}
+
+type DecodedVisualAsset = DecodedVideoAsset | DecodedImageAsset
 
 function runtimeFailureDetail(cause: unknown): string {
   const detail = cause instanceof Error ? cause.message : String(cause)
@@ -168,21 +186,18 @@ export function createMediabunnyExportMediaSource(
   }
   // Validate the rational once, while retaining independent per-frame math.
   framesToSeconds(0, doc.frameRate)
-  if (typeof createImageBitmap !== 'function') {
-    throw new Error('ImageBitmap creation is not supported in this browser')
-  }
-
-  const sessions = new Map<AssetId, Promise<DecodedAsset>>()
+  const sessions = new Map<AssetId, Promise<DecodedVisualAsset>>()
   const openInputs = new Set<Input>()
   const requests = videoRequestSchedule(doc)
+  const imageAbort = new AbortController()
   let closed = false
   let closePromise: Promise<void> | null = null
 
-  const openAsset = (assetId: AssetId): Promise<DecodedAsset> => {
+  const openAsset = (assetId: AssetId): Promise<DecodedVisualAsset> => {
     const cached = sessions.get(assetId)
     if (cached) return cached
 
-    const pending = (async (): Promise<DecodedAsset> => {
+    const pending = (async (): Promise<DecodedVisualAsset> => {
       if (closed) throw new Error('Export media source is closed')
       const sourceFrames = requests.byAsset.get(assetId)
       if (!sourceFrames || sourceFrames.length === 0) {
@@ -201,6 +216,43 @@ export function createMediabunnyExportMediaSource(
       }
       const { blob } = resolved
       if (closed) throw new Error('Export media source is closed')
+
+      if (resolved.kind === 'image') {
+        let decoded: Awaited<ReturnType<typeof decodeStaticImage>>
+        try {
+          decoded = await decodeStaticImage(blob, { signal: imageAbort.signal })
+        } catch (cause) {
+          throw exportAssetError(
+            assetId,
+            null,
+            cause instanceof StaticImageDecodeError
+              && cause.reason === 'resource-limit'
+              ? 'resource-limit'
+              : 'decode-failed',
+            cause,
+          )
+        }
+        if (closed) {
+          decoded.source.close()
+          throw new Error('Export media source is closed')
+        }
+        return {
+          kind: 'image',
+          source: decoded.source,
+          sourceFrames,
+          nextRequestIndex: 0,
+        }
+      }
+      if (resolved.kind !== 'video') {
+        throw exportAssetError(
+          assetId,
+          'video',
+          'decode-failed',
+          new Error(
+            `Export asset "${assetId}" is not a visual video or image source`,
+          ),
+        )
+      }
 
       let input: Input
       try {
@@ -278,6 +330,7 @@ export function createMediabunnyExportMediaSource(
           throw exportAssetError(assetId, 'video', 'decode-failed', cause)
         }
         return {
+          kind: 'video',
           input,
           sink,
           sourceFrames,
@@ -322,7 +375,7 @@ export function createMediabunnyExportMediaSource(
       getFrame: async (
         assetId: AssetId,
         sourceFrame: number,
-      ): Promise<ImageBitmap | null> => {
+      ): Promise<StaticImageRenderSource | null> => {
         assertFrame(sourceFrame, 'Source frame')
         if (closed || leaseClosed) {
           throw new Error('Export frame lease is closed')
@@ -358,6 +411,16 @@ export function createMediabunnyExportMediaSource(
           )
         }
         asset.nextRequestIndex++
+
+        if (asset.kind === 'image') return asset.source
+        if (typeof createImageBitmap !== 'function') {
+          throw exportAssetError(
+            assetId,
+            'video',
+            'decode-failed',
+            new Error('ImageBitmap creation is not supported in this browser'),
+          )
+        }
 
         const decode = async (): Promise<ImageBitmap | null> => {
           if (closed || leaseClosed) {
@@ -425,21 +488,32 @@ export function createMediabunnyExportMediaSource(
   const close = (): Promise<void> => {
     if (closePromise) return closePromise
     closed = true
+    imageAbort.abort()
     closePromise = (async () => {
       const settled = await Promise.allSettled(sessions.values())
       await Promise.all(
         settled.flatMap((entry) =>
-          entry.status === 'fulfilled' ? [entry.value.decodeTail] : [],
+          entry.status === 'fulfilled' && entry.value.kind === 'video'
+            ? [entry.value.decodeTail]
+            : [],
         ),
       )
 
       let failure: unknown
       for (const entry of settled) {
         if (entry.status !== 'fulfilled') continue
-        try {
-          await entry.value.canvases.return()
-        } catch (cause) {
-          failure ??= cause
+        if (entry.value.kind === 'image') {
+          try {
+            entry.value.source.close()
+          } catch (cause) {
+            failure ??= cause
+          }
+        } else {
+          try {
+            await entry.value.canvases.return()
+          } catch (cause) {
+            failure ??= cause
+          }
         }
       }
       for (const input of openInputs) {

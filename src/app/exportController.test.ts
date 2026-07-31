@@ -348,6 +348,7 @@ describe('exportController wiring and completion', () => {
     expect(firstBlob).toBe(secondBlob)
     await expect(firstBlob).resolves.toEqual({
       blob: expect.any(Blob),
+      kind: ASSET.kind,
       budget: {
         fileBytes: ASSET.size,
         durationMicroseconds: ASSET.durationMicroseconds,

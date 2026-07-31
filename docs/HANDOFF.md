@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-07-28)
+## Status (2026-07-31)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -70,8 +70,9 @@ and the open list below.
 | Post-MVP #18 — static images Slice 2 | ✅ done | verified multi-file import + durable five-second image records + Resume/Relink + bounded one-tile visuals; 212 focused + 1,291 total tests; in-app Chrome import/error/retry gate |
 | Post-MVP #18 — static images Slice 3 | ✅ done | explicit still source mode + v3 migration; placeable/editable five-second clips, frame-0 selectors, Slip no-op, repeated timeline tiles; 352 focused + 1,311 total tests; in-app Chrome Razor/crossfade/undo gate |
 | Post-MVP #18 — static images Slice 4 | ✅ done | one worker-owned decoded still per asset; frame-0 reuse through scrub/play/compositing/transitions; exact replacement/release/cancel/close ownership; 128 focused + 1,327 total tests; in-app Chromium transform/crossfade gate |
+| Post-MVP #18 — static images Slice 5 | ✅ done locally | kind-aware export source; one retained still decode per asset; shared compositor image↔video transitions; 54 focused + 1,331 total tests; 210-frame Chromium MP4 export/re-import gate |
 
-1,327 tests green across 71 files · `npm run build` passes with the known large-chunk warning
+1,331 tests green across 71 files · `npm run build` passes with the known large-chunk warning
 (three generated chunks exceed 500 kB) ·
 `npm run lint` clean · `npm audit --omit=dev` reports 0 vulnerabilities · every phase
 committed separately (see `git log --oneline`). The user completed the
@@ -563,9 +564,32 @@ Access and HTML drag bridges cannot carry the local fixture; import,
 clip creation, worker decode, preview, transforms, transitions, and playback
 ran through the production paths.
 
-**Next: Issue #18 remains open.** Static images are now importable, placeable,
-timeline-editable, and preview-renderable. Export integration remains the next
-boundary; do not describe still images as exportable yet.
+Issue #18 Slice 5 connects image assets to export without creating a second
+visual path. The captured resolver now includes each asset's kind. Timed videos
+keep one Mediabunny Input/CanvasSink iterator and per-frame bitmap leases;
+images pass through the bounded static-image inspector/decoder once and retain
+one frame-zero `ImageBitmap` or `VideoFrame` for the whole export. Frame leases
+borrow that source, while only terminal export-source cleanup closes it.
+Shutdown aborts pending image work, late success closes before publication, and
+resource-limit failures preserve typed export identity.
+
+The focused Slice 5 export adapter/controller suite passed 54/54 tests and the
+full suite passed 1,331/1,331 across 71 files. Deterministic fixture replay,
+production build, lint, audit, and diff checks passed. In-app Chromium imported
+an alpha PNG and generated H.264 video, exercised still trim/transform,
+scrubbed and played a 15-frame image→video crossfade, exported the mixed
+timeline, and re-imported that exact download as Ready. The result was
+1280×720 H.264 at 30/1 fps, exactly 210 frames / 7.000 seconds; extracted start,
+transition, and video frames matched the expected transform, opacity, layering,
+and blend. No export, decoder, render-worker, or browser errors appeared. The
+sole warning was the expected domain rejection from an intentionally attempted
+overlapping move. Removed QA-only chooser/insertion adapters bridged browser
+automation's File System Access and HTML drag limitations.
+
+**Next: publish/merge and close Issue #18.** Static images are now importable,
+placeable, timeline-editable, preview-renderable, and exportable on this local
+branch. GitHub Issue #18 remains open until the branch is published and its
+implementation checklist is closed against merged evidence.
 
 ## What works today (user-visible)
 
@@ -588,8 +612,9 @@ one bounded thumbnail; Ready rows drag to video lanes as explicit still clips.
 Their timeline duration can be moved, trimmed, rippled, split, slid, and joined
 by transitions while the single source frame remains fixed; Slip explains that
 it is unavailable and performs no edit. Save/Resume/Relink preserves that
-contract. The timeline tile repeats correctly, but Preview and export still do
-not decode image sources. An FPS mismatch opens an explicit
+  contract. The timeline tile repeats correctly; Preview and Export both reuse
+  the shared compositor, with one bounded retained still decode per asset and
+  exact terminal cleanup. An FPS mismatch opens an explicit
 Keep/Match/Cancel dialog, and every video asset gets its own decoder in the
 render worker. The Preview is the real timeline compositor (4.1): all visible
 video tracks draw bottom-to-top at the playhead with per-clip Transform
@@ -790,7 +815,9 @@ surface; it is not a second zoom and never enters document history.
   `return(undefined)`.
 - `src/app/exportController.ts` — Phase 5.2a composition root: snapshots the
   current document/settings/media, eagerly retains every referenced Blob, and
-  passes one cached asset resolver to both Mediabunny adapter trees. It is the
+  passes one cached Blob/budget/kind resolver to both Mediabunny adapter trees.
+  Slice 5 uses that captured kind to branch visual export without re-reading
+  mutable media state. It is the
   sole explicit generator pump, preserving the final `ExportResult` while
   making repeated/coincident cancellation one serialized `return(undefined)`.
   Only one run (including setup/cancel cleanup) may own the controller slot.
@@ -874,8 +901,10 @@ surface; it is not a second zoom and never enters document history.
   shared future anchor. The last cursor releases its Input; EOF, abort, pause,
   seek, muted-plan changes, and terminal cleanup cannot reopen or retain it.
 - `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c/d production browser
-  adapters: asset Blob resolver → one Input/CanvasSink/timestamp iterator per
-  video asset → lease-owned ImageBitmap copies; active audio clips → lazy
+  adapters: asset Blob/kind resolver → one Input/CanvasSink/timestamp iterator
+  per video asset → lease-owned ImageBitmap copies, or one retained bounded
+  frame-zero source per image asset → borrowed by every frame lease and closed
+  exactly once with the export source; active audio clips → lazy
   AudioSampleSink cursors with streaming resampling + channel downmix;
   OffscreenCanvas/CanvasSource + AudioSampleSource → AVC/AAC-in-MP4
   BufferTarget. Both encoders are support-probed, writes honor backpressure,
@@ -1124,14 +1153,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #18 remains open after Slice 4. Content inspection, immutable budgets,
-  first-frame decode ownership, multi-file import, durable five-second image
-  records, Save/Resume/Relink, bounded Media Pool thumbnails, diagnostics,
-  explicit still source/timeline semantics, project v3 migration, image
-  drag/drop, editing, transitions, exact undo/redo, timeline visuals, and
-  worker-owned preview/compositor decoding are complete. Describe still images
-  as importable, placeable, timeline-editable, and preview-renderable. Export
-  decoding remains unwired, so do not describe them as exportable.
+- Issue #18 is implementation-complete locally after Slice 5. Content
+  inspection, immutable budgets, first-frame ownership, import,
+  Save/Resume/Relink, thumbnails/diagnostics, explicit still timeline semantics,
+  editing/transitions/undo, preview, and kind-aware export are complete. One
+  retained still feeds every exported frame and image↔video transition through
+  the shared compositor, then closes exactly once. GitHub remains open until
+  this branch is published/merged and the issue checklist is closed against
+  merged evidence.
 - Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
   Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
   explicit partial-track consent, capability caching/revalidation, prompt

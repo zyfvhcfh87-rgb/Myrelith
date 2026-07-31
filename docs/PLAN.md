@@ -1147,6 +1147,46 @@ claimed here.
   factory, worker decode, preview, transform, transition, and playback paths
   ran unchanged.
 
+## Post-MVP issue #18 — Slice 5 ✅ DONE (2026-07-31) Static-image export
+
+Issue #18 is implementation-complete locally at this slice boundary. GitHub
+remains open until this branch is published/merged and the issue checklist is
+closed against the merged evidence.
+
+- [x] Extend each immutable export asset resolution with its captured media
+  kind. The visual export adapter branches only after resolving that exact
+  Blob/kind snapshot: timed video keeps its existing Mediabunny
+  Input/CanvasSink path, images use the bounded content-inspecting
+  `decodeStaticImage` boundary, and non-visual audio fails closed if it reaches
+  the visual path.
+- [x] Decode each image asset exactly once for the whole export. Every
+  frame-local lease borrows the same retained frame-zero `ImageBitmap` or
+  `VideoFrame`; lease cleanup never closes it. The export media source is the
+  sole owner and closes it exactly once on success, failure, cancellation, or
+  repeated shutdown.
+- [x] Abort in-flight still decoding when export ownership closes. A successful
+  decode that races shutdown closes before it can publish, while
+  resource-limit failures retain typed `surface: export`, `trackKind: null`
+  identity for compatibility reporting.
+- [x] Keep transforms, alpha, opacity, stacking, and image↔video transition
+  selection on the existing shared `compositeFrame` /
+  `visibleVideoLayersAtFrame` path. Export adds no parallel visual math.
+- [x] Verification: 54/54 focused export adapter/controller tests and
+  1,331/1,331 total tests across 71 files; deterministic 15-file fixture replay,
+  production build, lint, audit, and diff checks green.
+- [x] In-app Chromium imported a real alpha PNG plus a generated H.264 MP4,
+  placed both on one video lane, exercised a still end-trim gesture, applied
+  position/scale/rotation/opacity, scrubbed and played a 15-frame image→video
+  crossfade, then exported and downloaded the result. `ffprobe` reported H.264,
+  1280×720, 30/1 fps, exactly 210 frames and 7.000 seconds. Extracted start,
+  transition, and video frames preserved the expected transform, opacity,
+  layering, and blend; re-importing that exact download reported Ready at
+  1280×720 / 00:00:07:00. There were no export, decoder, render-worker, or
+  browser errors; the sole warning was the expected domain rejection from an
+  intentionally attempted overlapping clip move. Removed QA-only
+  chooser/insertion adapters were needed because browser automation cannot
+  carry local files through the File System Access or HTML drag bridges.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +
