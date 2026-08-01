@@ -2072,7 +2072,7 @@ selected size tier and recomputes the exact paired resolution.
 
 ## Post-MVP issue #32 — four default video and audio tracks
 
-**IMPLEMENTATION AND ACCEPTANCE COMPLETE (2026-08-01).**
+**COMPLETE AND CLOSED (2026-08-01).**
 
 Issue #32 changes only the fresh-document factory. New projects begin with four
 video tracks and four audio tracks; opening, recovering, or migrating an
@@ -2099,6 +2099,8 @@ project and timeline schemas are unchanged.
   28 named and enabled per-track controls, avoided page-level horizontal
   overflow, reached `A4` and both add controls, added `V5`/`A5`, and logged zero
   warnings or errors.
+- [x] Reviewed head `b131436` was normally merged through PR #37 as `daf3a6e`;
+  GitHub closed only Issue #32 as completed.
 
 ## Test strategy per layer (unchanged from original)
 

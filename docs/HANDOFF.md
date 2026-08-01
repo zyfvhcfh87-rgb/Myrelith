@@ -78,7 +78,7 @@ and the open list below.
 | **Post-MVP #17 — exact audio-aware crossfades** | ✅ complete | canonical grouped visual/audio plans, real per-stream handles, atomic accessible settings, exact live/export envelopes, 1,441 tests, and full-app Chromium transparent-layer/tone/export-reopen acceptance |
 | **Post-MVP #16 — capability-aware export profiles** | ✅ complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; PR #29 normally merged and Issue #16 closed |
 | **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
-| **Post-MVP #32 — four default tracks per kind** | ✅ implementation complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px scroll/accessibility/add-track gate with a clean console |
+| **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -1385,7 +1385,8 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- Issue #32 implementation and acceptance are complete. The sole fresh-project
+- Issue #32 is complete. PR #37 was reviewed at `b131436`, normally merged as
+  `daf3a6e`, and GitHub closed the issue as completed. The sole fresh-project
   factory now creates persisted `V1`–`V4` followed by `A1`–`A4`; the timeline
   displays the video stack as `V4` through `V1`, then audio `A1` through `A4`.
   Resume, recovery, migration, and project-file schemas are unchanged, and the
