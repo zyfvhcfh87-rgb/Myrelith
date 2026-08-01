@@ -78,6 +78,7 @@ and the open list below.
 | **Post-MVP #17 — exact audio-aware crossfades** | ✅ complete | canonical grouped visual/audio plans, real per-stream handles, atomic accessible settings, exact live/export envelopes, 1,441 tests, and full-app Chromium transparent-layer/tone/export-reopen acceptance |
 | **Post-MVP #16 — capability-aware export profiles** | ✅ complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; PR #29 normally merged and Issue #16 closed |
 | **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
+| **Post-MVP #32 — four default tracks per kind** | ✅ implementation complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px scroll/accessibility/add-track gate with a clean console |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -908,7 +909,9 @@ surface; it is not a second zoom and never enters document history.
   equal-power gain evaluation; ordinary mute/solo/hard-cut behavior remains
   the fallback.
 - `src/domain/projectSettings.ts` — authoritative project presets, strict
-  settings validation, and the pure empty-document factory.
+  settings validation, and the pure empty-document factory. Fresh documents
+  own four independent video tracks followed by four independent audio tracks;
+  persisted documents are never padded to that creation-time default.
 - `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
   migration entry point, strict untrusted-input validation, and bounded durable
   asset metadata; excludes every session-owned field. Issue #17 advances the
@@ -1382,6 +1385,15 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
+- Issue #32 implementation and acceptance are complete. The sole fresh-project
+  factory now creates persisted `V1`–`V4` followed by `A1`–`A4`; the timeline
+  displays the video stack as `V4` through `V1`, then audio `A1` through `A4`.
+  Resume, recovery, migration, and project-file schemas are unchanged, and the
+  next manual additions remain `V5` and `A5`. The 157-test focused gate,
+  1,661-test full gate, build, oxlint, audit, and diff checks passed. At
+  1280 × 720, in-app Chromium kept all eight header/lane pairs aligned inside
+  the timeline's vertical scroller, exposed 28 named track controls without
+  page overflow, added `V5`/`A5`, and reported zero console warnings or errors.
 - Issue #31 implementation and acceptance are complete. The creation screen
   now offers Horizontal 16:9, Vertical 9:16, Square 1:1, and Social portrait
   4:5 at exact 720/1080/1440/2160 tiers while preserving the chosen tier when

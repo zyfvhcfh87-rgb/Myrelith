@@ -2070,6 +2070,36 @@ selected size tier and recomputes the exact paired resolution.
   the 720px launcher without horizontal overflow; and logged zero warnings or
   errors.
 
+## Post-MVP issue #32 — four default video and audio tracks
+
+**IMPLEMENTATION AND ACCEPTANCE COMPLETE (2026-08-01).**
+
+Issue #32 changes only the fresh-document factory. New projects begin with four
+video tracks and four audio tracks; opening, recovering, or migrating an
+existing project preserves its saved track count, order, and identities. The
+project and timeline schemas are unchanged.
+
+### Completed gates
+
+- [x] The pure creation authority emits independently owned empty tracks in
+  persisted order `V1`, `V2`, `V3`, `V4`, `A1`, `A2`, `A3`, `A4`, with no
+  shared clip or transition arrays across tracks or factory calls.
+- [x] New-project activation consumes that exact document. Existing persistence
+  and import tests now derive their expectations from the factory shape instead
+  of assuming two initial tracks; saved documents are not padded or rewritten.
+- [x] The timeline renders the video stack as `V4` through `V1`, followed by
+  `A1` through `A4`. Its existing add-track contract continues naturally at
+  `V5` and `A5`.
+- [x] Focused automation passed 157/157 tests across six files. Full automation
+  passed 1,661/1,661 tests across 86 files; production build and oxlint passed,
+  npm reported zero high-severity production vulnerabilities, and diff checking
+  was clean. The build retained only the existing Vite chunk-size advisory.
+- [x] At 1280 × 720, in-app Chromium rendered all eight exact header/lane pairs
+  with matching 56px geometry inside the timeline's vertical scroller, exposed
+  28 named and enabled per-track controls, avoided page-level horizontal
+  overflow, reached `A4` and both add controls, added `V5`/`A5`, and logged zero
+  warnings or errors.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

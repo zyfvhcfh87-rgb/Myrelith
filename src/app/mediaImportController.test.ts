@@ -585,6 +585,7 @@ describe('mediaImportController', () => {
 
   test('Match changes an empty project and re-conforms all unused media', async () => {
     const fixture = makeFixture()
+    const startingTracks = fixture.currentDocument().tracks
     fixture.assets.set('existing', makeAsset({
       id: 'existing',
       objectUrl: 'blob:existing',
@@ -597,6 +598,10 @@ describe('mediaImportController', () => {
     await expect(result).resolves.toMatchObject({ status: 'imported' })
 
     expect(fixture.currentDocument().frameRate).toEqual(F60)
+    expect(fixture.currentDocument().tracks).toBe(startingTracks)
+    expect(fixture.currentDocument().tracks.map((track) => track.id)).toEqual([
+      'V1', 'V2', 'V3', 'V4', 'A1', 'A2', 'A3', 'A4',
+    ])
     expect(fixture.replaceDocument).toHaveBeenCalledOnce()
     expect(fixture.reconformAssets).toHaveBeenCalledWith(F60)
     expect(fixture.assets.get('existing')?.durationFrames).toBe(120)
@@ -628,10 +633,9 @@ describe('mediaImportController', () => {
     )
     const edited: TimelineDoc = {
       ...empty,
-      tracks: [
-        { ...empty.tracks[0], clips: [makeClip()] },
-        empty.tracks[1],
-      ],
+      tracks: empty.tracks.map((track) => track.id === 'V1'
+        ? { ...track, clips: [makeClip()] }
+        : track),
     }
     const fixture = makeFixture(makeAsset(), edited)
     const result = importMedia(file(), fixture.deps)

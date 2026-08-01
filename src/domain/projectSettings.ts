@@ -330,7 +330,9 @@ function validateNonEmptyText(
   return trimmed
 }
 
-function emptyTrack(id: 'V1' | 'A1', kind: Track['kind']): Track {
+const INITIAL_TRACKS_PER_KIND = 4
+
+function emptyTrack(id: string, kind: Track['kind']): Track {
   return {
     id,
     kind,
@@ -342,6 +344,13 @@ function emptyTrack(id: 'V1' | 'A1', kind: Track['kind']): Track {
     solo: false,
     locked: false,
   }
+}
+
+function emptyTracks(prefix: 'V' | 'A', kind: Track['kind']): Track[] {
+  return Array.from(
+    { length: INITIAL_TRACKS_PER_KIND },
+    (_, index) => emptyTrack(`${prefix}${index + 1}`, kind),
+  )
 }
 
 /**
@@ -365,8 +374,10 @@ export function createTimelineDoc(
     MAX_DOCUMENT_ID_CHARACTERS,
   )
   const validated = validateProjectSettings(settings)
-  const videoTrack = emptyTrack('V1', 'video')
-  const audioTrack = emptyTrack('A1', 'audio')
+  const tracks = [
+    ...emptyTracks('V', 'video'),
+    ...emptyTracks('A', 'audio'),
+  ]
   const doc: TimelineDoc = {
     schemaVersion: 3,
     id,
@@ -375,16 +386,15 @@ export function createTimelineDoc(
     width: validated.width,
     height: validated.height,
     audioSampleRate: validated.audioSampleRate,
-    tracks: [videoTrack, audioTrack],
+    tracks,
   }
 
   Object.freeze(doc.frameRate)
-  Object.freeze(videoTrack.clips)
-  Object.freeze(videoTrack.transitions)
-  Object.freeze(videoTrack)
-  Object.freeze(audioTrack.clips)
-  Object.freeze(audioTrack.transitions)
-  Object.freeze(audioTrack)
+  for (const track of tracks) {
+    Object.freeze(track.clips)
+    Object.freeze(track.transitions)
+    Object.freeze(track)
+  }
   Object.freeze(doc.tracks)
   return Object.freeze(doc)
 }

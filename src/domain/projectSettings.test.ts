@@ -21,6 +21,33 @@ import {
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
 
+function expectedEmptyTrack(id: string, kind: 'video' | 'audio') {
+  return {
+    id,
+    kind,
+    name: id,
+    clips: [],
+    transitions: [],
+    hidden: false,
+    muted: false,
+    solo: false,
+    locked: false,
+  }
+}
+
+function expectedInitialTracks() {
+  return [
+    expectedEmptyTrack('V1', 'video'),
+    expectedEmptyTrack('V2', 'video'),
+    expectedEmptyTrack('V3', 'video'),
+    expectedEmptyTrack('V4', 'video'),
+    expectedEmptyTrack('A1', 'audio'),
+    expectedEmptyTrack('A2', 'audio'),
+    expectedEmptyTrack('A3', 'audio'),
+    expectedEmptyTrack('A4', 'audio'),
+  ]
+}
+
 describe('project setting presets', () => {
   test('expose the complete authoritative allow-lists in display order', () => {
     expect(PROJECT_ASPECT_RATIO_PRESETS.map((preset) => ({
@@ -275,35 +302,15 @@ describe('createTimelineDoc', () => {
       width: 2160,
       height: 3840,
       audioSampleRate: 96_000,
-      tracks: [
-        {
-          id: 'V1',
-          kind: 'video',
-          name: 'V1',
-          clips: [],
-          transitions: [],
-          hidden: false,
-          muted: false,
-          solo: false,
-          locked: false,
-        },
-        {
-          id: 'A1',
-          kind: 'audio',
-          name: 'A1',
-          clips: [],
-          transitions: [],
-          hidden: false,
-          muted: false,
-          solo: false,
-          locked: false,
-        },
-      ],
+      tracks: expectedInitialTracks(),
     })
     expect(Object.isFrozen(doc)).toBe(true)
     expect(Object.isFrozen(doc.frameRate)).toBe(true)
     expect(Object.isFrozen(doc.tracks)).toBe(true)
     expect(doc.tracks.every(Object.isFrozen)).toBe(true)
+    expect(doc.tracks.every((track) => (
+      Object.isFrozen(track.clips) && Object.isFrozen(track.transitions)
+    ))).toBe(true)
   })
 
   test('never shares mutable document structures between calls or settings', () => {
@@ -320,8 +327,18 @@ describe('createTimelineDoc', () => {
     expect(first.frameRate).not.toBe(second.frameRate)
     expect(first.frameRate).not.toBe(settings.frameRate)
     expect(first.tracks).not.toBe(second.tracks)
-    expect(first.tracks[0]).not.toBe(second.tracks[0])
-    expect(first.tracks[0].clips).not.toBe(second.tracks[0].clips)
+    expect(first.tracks).toHaveLength(8)
+    expect(new Set(first.tracks.map((track) => track.id)).size).toBe(8)
+    for (let index = 0; index < first.tracks.length; index++) {
+      expect(first.tracks[index]).not.toBe(second.tracks[index])
+      expect(first.tracks[index].clips).not.toBe(second.tracks[index].clips)
+      expect(first.tracks[index].transitions)
+        .not.toBe(second.tracks[index].transitions)
+      expect(first.tracks[index].clips)
+        .not.toBe(first.tracks[index].transitions)
+    }
+    expect(new Set(first.tracks.map((track) => track.clips)).size).toBe(8)
+    expect(new Set(first.tracks.map((track) => track.transitions)).size).toBe(8)
 
     settings.frameRate.num = 60
     expect(first.frameRate).toEqual({ num: 30, den: 1 })
@@ -343,30 +360,7 @@ describe('createTimelineDoc', () => {
       width: 1920,
       height: 1080,
       audioSampleRate: 48_000,
-      tracks: [
-        {
-          id: 'V1',
-          kind: 'video',
-          name: 'V1',
-          clips: [],
-          transitions: [],
-          hidden: false,
-          muted: false,
-          solo: false,
-          locked: false,
-        },
-        {
-          id: 'A1',
-          kind: 'audio',
-          name: 'A1',
-          clips: [],
-          transitions: [],
-          hidden: false,
-          muted: false,
-          solo: false,
-          locked: false,
-        },
-      ],
+      tracks: expectedInitialTracks(),
     }))
   })
 

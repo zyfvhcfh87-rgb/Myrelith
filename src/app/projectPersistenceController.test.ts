@@ -280,6 +280,7 @@ describe('project persistence', () => {
     await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
     expect(appendRecoverySnapshot).toHaveBeenCalledOnce()
     useDocumentStore.getState().addTrack('video')
+    const expectedTracks = useDocumentStore.getState().doc.tracks
     await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
     expect(appendRecoverySnapshot).toHaveBeenCalledOnce()
 
@@ -290,7 +291,7 @@ describe('project persistence', () => {
     expect(appendRecoverySnapshot).toHaveBeenCalledTimes(2)
     const newest = appendRecoverySnapshot.mock.calls[1][0]
     expect(parseProjectFile(newest.serializedProject).document.tracks)
-      .toHaveLength(3)
+      .toEqual(expectedTracks)
   })
 
   test('a late recovery completion cannot update a replacement session', async () => {
@@ -417,12 +418,14 @@ describe('project persistence', () => {
     controller.startSession({ fileName: null, persisted: false })
     await controller.saveAs()
     useDocumentStore.getState().addTrack('video')
+    const expectedTracks = useDocumentStore.getState().doc.tracks
 
     await expect(controller.save()).resolves.toMatchObject({ status: 'saved' })
 
     expect(deps.pickSaveFile).toHaveBeenCalledOnce()
     expect(handle.createWritable).toHaveBeenCalledTimes(2)
-    expect(parseProjectFile(handle.writes[1]).document.tracks).toHaveLength(3)
+    expect(parseProjectFile(handle.writes[1]).document.tracks)
+      .toEqual(expectedTracks)
   })
 
   test('picker cancellation preserves dirty state and resumes prior live save', async () => {
@@ -517,12 +520,14 @@ describe('project persistence', () => {
     useDocumentStore.getState().addTrack('video')
     await vi.advanceTimersByTimeAsync(500)
     useDocumentStore.getState().addTrack('audio')
+    const expectedTracks = useDocumentStore.getState().doc.tracks
     await vi.advanceTimersByTimeAsync(LIVE_SAVE_DELAY_MS - 1)
     expect(handle.createWritable).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(1)
 
     expect(handle.createWritable).toHaveBeenCalledTimes(2)
-    expect(parseProjectFile(handle.writes[1]).document.tracks).toHaveLength(4)
+    expect(parseProjectFile(handle.writes[1]).document.tracks)
+      .toEqual(expectedTracks)
     expect(useProjectSessionStore.getState().hasUnsavedChanges).toBe(false)
   })
 
@@ -605,13 +610,15 @@ describe('project persistence', () => {
     const firstSave = controller.saveAs()
     await vi.waitFor(() => expect(writes).toHaveLength(1))
     useDocumentStore.getState().addTrack('video')
+    const expectedTracks = useDocumentStore.getState().doc.tracks
     firstClose.resolve()
     await expect(firstSave).resolves.toMatchObject({ status: 'saved' })
     expect(useProjectSessionStore.getState().hasUnsavedChanges).toBe(true)
 
     await vi.advanceTimersByTimeAsync(LIVE_SAVE_DELAY_MS)
     expect(writes).toHaveLength(2)
-    expect(parseProjectFile(writes[1]).document.tracks).toHaveLength(3)
+    expect(parseProjectFile(writes[1]).document.tracks)
+      .toEqual(expectedTracks)
     expect(useProjectSessionStore.getState().hasUnsavedChanges).toBe(false)
   })
 
