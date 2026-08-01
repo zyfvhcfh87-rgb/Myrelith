@@ -1699,10 +1699,11 @@ gate stops progression; later checkboxes are never completed early.
 
 Issue #16 started from baseline commit `fd1d50e` and owns container, codecs,
 audio-off/mono/stereo layout, bitrate behavior, key-frame interval, MIME/file
-metadata, and buffered-versus-direct-file output. Issue #15 remains the sole
-authority for project dimensions, exact rational FPS, and audio sample rate;
-those values are read from one captured `TimelineDoc`, never duplicated in an
-export profile or dialog control. Compatibility remains the safe default and
+metadata, and buffered-versus-direct-file output. Issue #31 owns the reviewed
+creation-time dimension catalog; Issue #15 remains the authority for exact
+rational FPS and audio sample rate. Those values are read from one captured
+`TimelineDoc`, never duplicated in an export profile or dialog control.
+Compatibility remains the safe default and
 preserves the original MP4/AVC/AAC, stereo, 8 Mbps/192 kbps buffered-download
 behavior.
 
@@ -1769,7 +1770,7 @@ behavior.
 ### Slice 1 evidence — authoritative profile model (2026-07-31)
 
 - [x] Four concrete recommended profiles now carry every #16-owned field while
-  excluding all #15-owned project settings. The immutable Compatibility
+  excluding all project-owned settings. The immutable Compatibility
   profile exactly preserves today's MP4/AVC/AAC, stereo, 8 Mbps/192 kbps,
   variable-bitrate, two-second-key-frame, buffered-download behavior.
 - [x] Auto is represented separately from concrete pipeline profiles and has a
@@ -2023,6 +2024,51 @@ behavior.
   implementation completed at reviewed head `ea5ccfb`; PR #29 was normally
   merged as `edb02d0`, and Issue #16 was closed as completed after its checklist
   and fallback no-go were reconciled.
+
+## Post-MVP issue #31 — project aspect ratios
+
+**IMPLEMENTATION AND ACCEPTANCE COMPLETE (2026-08-01).**
+
+Issue #31 extends project creation without creating a second persisted source
+of truth. `TimelineDoc.width` and `TimelineDoc.height` remain authoritative
+through preview, render, save/resume, and export; aspect-ratio labels are derived
+from those exact integers. Active-project resizing, custom ratios, media
+fit/fill policy, and per-export resizing remain outside this issue.
+
+### Frozen creation matrix
+
+| Family | 720 tier | 1080 tier | 1440 tier | 2160 tier |
+|---|---:|---:|---:|---:|
+| Horizontal 16:9 | 1280 × 720 | 1920 × 1080 | 2560 × 1440 | 3840 × 2160 |
+| Vertical 9:16 | 720 × 1280 | 1080 × 1920 | 1440 × 2560 | 2160 × 3840 |
+| Square 1:1 | 720 × 720 | 1080 × 1080 | 1440 × 1440 | 2160 × 2160 |
+| Social portrait 4:5 | 720 × 900 | 1080 × 1350 | 1440 × 1800 | 2160 × 2700 |
+
+The default remains Horizontal 1920 × 1080. Changing the family preserves the
+selected size tier and recomputes the exact paired resolution.
+
+### Completed gates
+
+- [x] Added one immutable pure-domain catalog and helpers for all 16 exact
+  pairs, deterministic family lookup, exact-ratio derivation, display labels,
+  uniqueness/even-integer checks, and the current 3840 × 2160 pixel envelope.
+- [x] Kept project schema/format unchanged. Every vertical, square, and social
+  creation size round-trips through `.webcut`, and invalid/custom dimensions
+  still fail the existing project-settings boundary.
+- [x] Added accessible Aspect ratio and dependent Resolution controls. Resume
+  cards and Export identify the derived family plus exact fixed dimensions.
+- [x] Covered portrait/square/social worker scratch surfaces and the maximum
+  portrait allocation, plus capability hints and fresh Mediabunny preflight
+  using actual-size canvases and exact dimensions.
+- [x] Focused gate passed 183/183 tests across six files. Full automation passed
+  1,659/1,659 tests across 86 files; production build and oxlint passed, npm
+  reported zero high-severity production vulnerabilities, and diff checking was
+  clean. The build retained only the existing Vite chunk-size advisory.
+- [x] In-app Chromium preserved the 1440 tier across all four families; created
+  exact 1920 × 1080, 2160 × 3840, 1080 × 1080, and 1080 × 1350 monitor canvases;
+  displayed `Vertical 9:16 · 2160 × 3840` as the fixed Export resolution; fit
+  the 720px launcher without horizontal overflow; and logged zero warnings or
+  errors.
 
 ## Test strategy per layer (unchanged from original)
 

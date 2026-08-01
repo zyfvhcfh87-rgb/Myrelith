@@ -77,6 +77,7 @@ and the open list below.
 | **Post-MVP #18 — original Slice 9 acceptance/closeout** | ✅ complete | 693 focused + 1,385 total tests; 18-file hostile/orientation matrix; Chrome multi-import, edit, recovery/relink, layered crossfade, and export gate; Issue #18 closeout evidence complete |
 | **Post-MVP #17 — exact audio-aware crossfades** | ✅ complete | canonical grouped visual/audio plans, real per-stream handles, atomic accessible settings, exact live/export envelopes, 1,441 tests, and full-app Chromium transparent-layer/tone/export-reopen acceptance |
 | **Post-MVP #16 — capability-aware export profiles** | ✅ complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; PR #29 normally merged and Issue #16 closed |
+| **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -1065,8 +1066,9 @@ surface; it is not a second zoom and never enters document history.
   the dialog closes.
 - `src/domain/exportProfile.ts` — pure allow-list, validation, canonical
   container metadata, Compatibility/Web/Modern/HEVC catalog, and deterministic
-  Modern → Web → Compatibility Auto policy. Issue #15-owned project dimensions,
-  rational FPS, and sample rate are deliberately absent.
+  Modern → Web → Compatibility Auto policy. Issue #31-owned reviewed project
+  dimensions plus Issue #15-owned rational FPS and sample rate are deliberately
+  absent.
 - `src/pipeline/export-capabilities.ts` +
   `export-mediabunny-capabilities.ts` + `export-mediabunny-profile.ts` — exact
   container/codec checks, cached hints, and disposable fresh native encoder
@@ -1380,6 +1382,16 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
+- Issue #31 implementation and acceptance are complete. The creation screen
+  now offers Horizontal 16:9, Vertical 9:16, Square 1:1, and Social portrait
+  4:5 at exact 720/1080/1440/2160 tiers while preserving the chosen tier when
+  the family changes. Only width/height enter `TimelineDoc`; no project-file
+  migration or duplicate aspect-ratio field was introduced. Resume and Export
+  derive their labels from those exact dimensions. The 183-test focused gate,
+  1,659-test full gate, build, oxlint, audit, and diff checks passed. In-app
+  Chromium created all four monitor shapes, verified the 2160 × 3840 portrait
+  render canvas and fixed Export label, kept the 720px setup screen within its
+  viewport, and reported zero console warnings or errors.
 - Issue #16 completed at 1,632/1,632 tests across 86 files. PR #29 was reviewed
   at `ea5ccfb`, normally merged as `edb02d0`, and the issue was closed with its
   checklist and fallback no-go reconciled. Auto resolves in the
@@ -1392,7 +1404,8 @@ surface; it is not a second zoom and never enters document history.
   researched and rejected for this slice because they failed required semantic,
   maturity, size/integration, lifecycle, or licensing/provenance boundaries.
   `npm audit --omit=dev --audit-level=high` reported 0 vulnerabilities. Issue
-  #15 remains the sole owner of project dimensions, FPS, and sample rate.
+  #31 owns the reviewed creation-time dimension catalog; Issue #15 remains the
+  authority for project FPS and sample rate.
 - Issue #19 closed 2026-07-20 as implementation-complete at 46/49. Import,
   Resume/Relink, runtime feedback, bounded ProRes and AC-3/E-AC-3 fallbacks,
   explicit partial-track consent, capability caching/revalidation, prompt

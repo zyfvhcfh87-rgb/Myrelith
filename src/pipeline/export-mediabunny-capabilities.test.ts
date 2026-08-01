@@ -221,17 +221,21 @@ import { checkExportProfileSupport } from './export-capabilities'
 function makeDoc({
   durationFrames = 30,
   frameRate = { num: 30_000, den: 1_001 },
+  width = 64,
+  height = 48,
 }: {
   durationFrames?: number
   frameRate?: TimelineDoc['frameRate']
+  width?: number
+  height?: number
 } = {}): TimelineDoc {
   return {
     schemaVersion: 3,
     id: 'fresh-probe-doc',
     name: 'Fresh probe',
     frameRate,
-    width: 64,
-    height: 48,
+    width,
+    height,
     audioSampleRate: 48_000,
     tracks: durationFrames === 0
       ? []
@@ -380,6 +384,24 @@ describe('Mediabunny capability adapter', () => {
     expect(mb.canEncodeVideo).toHaveBeenCalledTimes(2)
     expect(mb.canEncodeAudio).not.toHaveBeenCalled()
   })
+
+  test.each([
+    ['vertical 9:16', 1080, 1920],
+    ['square 1:1', 1080, 1080],
+    ['social portrait 4:5', 1080, 1350],
+    ['maximum portrait', 2160, 3840],
+  ])('probes the exact %s canvas dimensions', async (_label, width, height) => {
+    await expect(checkExportProfileSupport(
+      makeDoc({ width, height }),
+      DEFAULT_EXPORT_PROFILE,
+      mediabunnyExportCapabilityProbe,
+    )).resolves.toMatchObject({ supported: true, reason: null })
+
+    expect(mb.canEncodeVideo).toHaveBeenCalledWith('avc', expect.objectContaining({
+      width,
+      height,
+    }))
+  })
 })
 
 describe('runFreshMediabunnyExportProbe', () => {
@@ -458,6 +480,24 @@ describe('runFreshMediabunnyExportProbe', () => {
     expect(mb.outputs[0].start).toHaveBeenCalledTimes(1)
     expect(mb.outputs[0].finalize).toHaveBeenCalledTimes(1)
     expect(mb.outputs[0].cancel).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    ['vertical 9:16', 1080, 1920],
+    ['square 1:1', 1080, 1080],
+    ['social portrait 4:5', 1080, 1350],
+    ['maximum portrait', 2160, 3840],
+  ])('allocates the exact %s preflight canvas', async (_label, width, height) => {
+    await runFreshMediabunnyExportProbe(
+      makeDoc({ width, height }),
+      DEFAULT_EXPORT_PROFILE,
+      false,
+    )
+
+    expect(canvases).toHaveLength(1)
+    expect(canvases[0]).toMatchObject({ width, height })
+    expect(canvases[0].context.fillRect)
+      .toHaveBeenCalledWith(0, 0, width, height)
   })
 
   test('creates exact mono samples and selected encoding modes', async () => {
