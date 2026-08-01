@@ -23,5 +23,12 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // The architecture guard uses the compiler parser directly. Keep the
+    // compiler external so Vite does not transform its large CommonJS bundle.
+    server: {
+      deps: {
+        external: ['typescript'],
+      },
+    },
   },
 })

@@ -4,7 +4,7 @@
  * do real layout); this guards wiring, not pixels.
  */
 
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
 import App from './App'
 import type { Clip, TimelineDoc } from '../domain/schema'
@@ -13,10 +13,26 @@ import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
+import { useTransportStore } from '../state/transportStore'
 import {
-  INITIAL_TRANSPORT_STATE,
-  useTransportStore,
-} from '../state/transportStore'
+  resetDocumentStoreForTest,
+  resetTransportStoreForTest,
+} from '../test/storeFixtures'
+
+vi.mock('../app/projectLibraryController', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../app/projectLibraryController')
+  >()
+  return {
+    ...actual,
+    refreshProjectLibrary: vi.fn(async () => undefined),
+  }
+})
+
+vi.mock('../app/previewController', () => ({
+  disposePreview: vi.fn(),
+  initPreview: vi.fn(),
+}))
 
 function makeClip(id: string, startFrame: number): Clip {
   return {
@@ -43,7 +59,7 @@ function makeClip(id: string, startFrame: number): Clip {
 
 function makeDocument(): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'doc-app-selection',
     name: 'App selection fixture',
     frameRate: { num: 30, den: 1 },
@@ -67,9 +83,10 @@ function makeDocument(): TimelineDoc {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks()
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
-  useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
-  useDocumentStore.setState({ doc: makeDocument(), past: [], future: [] })
+  resetTransportStoreForTest()
+  resetDocumentStoreForTest(makeDocument())
 })
 
 describe('App shell', () => {

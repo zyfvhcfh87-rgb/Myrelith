@@ -24,7 +24,7 @@
     "qa:issue18:fixtures": "node scripts/issue18/generate-fixtures.mjs",
     "qa:issue19:fixtures": "node scripts/generate-issue-19-fixtures.mjs",
     "postinstall": "patch-package",
-    "test": "vitest run",
+    "test": "node scripts/run-vitest.mjs",
     "test:watch": "vitest",
     "preview": "vite preview"
   },

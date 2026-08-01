@@ -14,6 +14,10 @@ import type { Clip, MediaAsset } from '../../domain/schema'
 import type { AssetVisuals } from '../../state/mediaStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
+import {
+  resetMediaStoreForTest,
+  resetTransportStoreForTest,
+} from '../../test/storeFixtures'
 import ClipView from './ClipView'
 import { visibleFilmstripBuckets } from './clipVisualPlan'
 import { MAX_TIMELINE_SURFACE_PX } from './timelineViewport'
@@ -79,22 +83,12 @@ const visuals: AssetVisuals = {
 }
 
 beforeEach(() => {
-  useTransportStore.setState({
-    playheadFrame: 0,
-    isPlaying: false,
-    isScrubbing: false,
+  resetTransportStoreForTest({
     zoom: 2,
     zoomMode: 'custom',
     customZoom: 2,
-    timelineOriginFrame: 0,
-    inOut: null,
-    dragPreview: null,
-    tool: 'select',
-    selectedClipId: null,
-    selectedClipIds: [],
-    editPreview: null,
   })
-  useMediaStore.setState({
+  resetMediaStoreForTest({
     descriptors: new Map([[descriptor.id, descriptor]]),
     assets: new Map([[asset.id, asset]]),
     visuals: new Map([[asset.id, visuals]]),
@@ -276,9 +270,11 @@ describe('clip visuals', () => {
     )
     expect(screen.queryByTestId('clip-c3-visual')).not.toBeInTheDocument()
 
-    useMediaStore.setState({
-      assets: new Map([[asset.id, { ...asset, durationFrames: 0 }]]),
-      visuals: new Map([[asset.id, visuals]]),
+    act(() => {
+      useMediaStore.setState({
+        assets: new Map([[asset.id, { ...asset, durationFrames: 0 }]]),
+        visuals: new Map([[asset.id, visuals]]),
+      })
     })
     rerender(<ClipView clip={makeClip('c3', 0, 100)} trackId="V1" trackKind="video" />)
     expect(screen.queryByTestId('clip-c3-visual')).not.toBeInTheDocument()

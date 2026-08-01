@@ -739,17 +739,19 @@ describe('MediaPool presentation', () => {
     const card = screen.getByTitle('beach.mp4')
     const setData = vi.fn()
 
-    useMediaStore.setState({
-      compatibility: new Map([[
-        'asset-9',
-        makeCompatibility({
-          status: 'unsupported',
-          report: makeReport('unsupported', {
-            reason: 'unsupported-codec',
-            detail: 'Decoder support changed before the drag began.',
+    act(() => {
+      useMediaStore.setState({
+        compatibility: new Map([[
+          'asset-9',
+          makeCompatibility({
+            status: 'unsupported',
+            report: makeReport('unsupported', {
+              reason: 'unsupported-codec',
+              detail: 'Decoder support changed before the drag began.',
+            }),
           }),
-        }),
-      ]]),
+        ]]),
+      })
     })
     fireEvent.dragStart(card, {
       dataTransfer: { setData, effectAllowed: 'none' },

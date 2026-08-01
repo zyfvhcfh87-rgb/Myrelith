@@ -6,7 +6,7 @@
  * to the exact stored transition snapshot.
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type {
   Clip,
@@ -17,7 +17,10 @@ import type {
 import type { PortableAssetDescriptor } from '../../domain/projectFile'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
-import { useTransportStore } from '../../state/transportStore'
+import {
+  resetMediaStoreForTest,
+  resetTransportStoreForTest,
+} from '../../test/storeFixtures'
 import Timeline from './Timeline'
 
 function makeClip(id: string, startFrame: number, durationFrames: number): Clip {
@@ -127,7 +130,7 @@ function makeTrack(
 function makeDoc(options: { seeded?: boolean; lockedSeeded?: boolean } = {}): TimelineDoc {
   const { seeded = false, lockedSeeded = false } = options
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'transition-ui-doc',
     name: 'Transition UI fixture',
     frameRate: { num: 30, den: 1 },
@@ -166,7 +169,7 @@ function makeDoc(options: { seeded?: boolean; lockedSeeded?: boolean } = {}): Ti
  * D15 [33,48) (overlap), while D4 [38,42) merely touches and is valid. */
 function makeNeighboringTransitionDoc(): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'transition-neighbor-doc',
     name: 'Neighboring transition fixture',
     frameRate: { num: 30, den: 1 },
@@ -222,19 +225,8 @@ let warnSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  useTransportStore.setState({
-    playheadFrame: 0,
-    isPlaying: false,
-    isScrubbing: false,
-    zoom: 1,
-    inOut: null,
-    dragPreview: null,
-    editPreview: null,
-    tool: 'select',
-    selectedClipId: null,
-    selectedClipIds: [],
-  })
-  useMediaStore.setState({
+  resetTransportStoreForTest()
+  resetMediaStoreForTest({
     descriptors: new Map(
       ['A', 'B', 'C', 'gap', 'title', 'X', 'Y', 'M', 'N'].map(
         (id): [string, PortableAssetDescriptor] => [
@@ -251,12 +243,10 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  useMediaStore.setState({
-    descriptors: new Map(),
-    assets: new Map(),
-    visuals: new Map(),
-    compatibility: new Map(),
-  })
+  // Unmount subscribers before clearing shared media state. One media reset
+  // otherwise fans out into an act warning for every rendered clip and seam.
+  cleanup()
+  resetMediaStoreForTest()
   warnSpy.mockRestore()
 })
 

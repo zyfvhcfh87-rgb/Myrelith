@@ -23,7 +23,7 @@ import { useScrubScheduler } from './useScrubScheduler'
 /** Empty 30fps doc, optionally with one clip to pin the doc duration. */
 function makeDoc(durationFrames = 0): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'doc-ruler',
     name: 'ruler fixture',
     frameRate: { num: 30, den: 1 },
