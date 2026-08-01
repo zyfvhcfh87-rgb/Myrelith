@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from './schema'
+import { PROJECT_ASPECT_RATIO_PRESETS } from './projectSettings'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
@@ -199,6 +200,30 @@ describe('portable project file', () => {
     expect(parsed.document.tracks[0].transitions).toEqual(
       original.document.tracks[0].transitions,
     )
+  })
+
+  test.each(
+    PROJECT_ASPECT_RATIO_PRESETS
+      .filter((aspectRatio) => aspectRatio.id !== 'horizontal-16-9')
+      .flatMap((aspectRatio) => aspectRatio.resolutions.map((resolution) => ({
+        aspectRatio: aspectRatio.ratioLabel,
+        width: resolution.width,
+        height: resolution.height,
+      }))),
+  )('round-trips a $aspectRatio $width × $height canvas without migration', ({
+    width,
+    height,
+  }) => {
+    const project = makeProject()
+    project.document.width = width
+    project.document.height = height
+
+    const parsed = parseProjectFile(serializeProjectFile(project))
+
+    expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.width).toBe(width)
+    expect(parsed.document.height).toBe(height)
   })
 
   test('migrates v1 projects to the current format without inventing a partial-track choice', () => {

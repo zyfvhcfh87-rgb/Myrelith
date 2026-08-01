@@ -131,8 +131,11 @@ describe('ProjectLaunch', () => {
     fireEvent.change(screen.getByLabelText('Project name'), {
       target: { value: 'Fast cut' },
     })
+    fireEvent.change(screen.getByLabelText('Aspect ratio'), {
+      target: { value: 'vertical-9-16' },
+    })
     fireEvent.change(screen.getByLabelText('Resolution'), {
-      target: { value: '1280x720' },
+      target: { value: '720' },
     })
     fireEvent.change(screen.getByLabelText('Frame rate'), {
       target: { value: '60/1' },
@@ -143,11 +146,46 @@ describe('ProjectLaunch', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
 
     expect(controller.createNewProject).toHaveBeenCalledWith('Fast cut', {
-      width: 1280,
-      height: 720,
+      width: 720,
+      height: 1280,
       frameRate: { num: 60, den: 1 },
       audioSampleRate: 96_000,
     })
+  })
+
+  test('offers every requested ratio and preserves the size tier between them', () => {
+    useProjectSessionStore.setState({ screen: 'new-project' })
+    render(<ProjectLaunch />)
+
+    const aspectRatio = screen.getByLabelText('Aspect ratio')
+    const resolution = screen.getByLabelText('Resolution')
+    expect(aspectRatio).toHaveValue('horizontal-16-9')
+    expect(resolution).toHaveValue('1080')
+    expect(screen.getByRole('option', { name: 'Horizontal (16:9)' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Vertical (9:16)' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Square (1:1)' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Social portrait (4:5)' }))
+      .toBeInTheDocument()
+
+    fireEvent.change(resolution, { target: { value: '1440' } })
+    fireEvent.change(aspectRatio, { target: { value: 'square-1-1' } })
+    expect(resolution).toHaveValue('1440')
+    expect(screen.getByRole('option', { name: '1440 × 1440' }))
+      .toBeInTheDocument()
+
+    fireEvent.change(aspectRatio, { target: { value: 'social-4-5' } })
+    expect(resolution).toHaveValue('1440')
+    expect(screen.getByRole('option', { name: '1440 × 1800' }))
+      .toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
+
+    expect(controller.createNewProject).toHaveBeenCalledWith(
+      'Untitled project',
+      expect.objectContaining({ width: 1440, height: 1800 }),
+    )
   })
 
   test('resume delegates project selection and source reconnection', () => {
@@ -182,6 +220,8 @@ describe('ProjectLaunch', () => {
 
     expect(controller.openProjectFile).toHaveBeenCalledWith(project)
     expect(controller.connectProjectMedia).toHaveBeenCalledWith([source])
+    expect(screen.getByText('Horizontal 16:9 · 1920 × 1080'))
+      .toBeInTheDocument()
     const openOffline = screen.getByRole('button', {
       name: 'Open with 1 offline',
     })
@@ -211,6 +251,26 @@ describe('ProjectLaunch', () => {
     expect(open).toBeEnabled()
     fireEvent.click(open)
     expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+  })
+
+  test('derives the saved project canvas label from exact dimensions', () => {
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      candidate: {
+        origin: 'file',
+        projectFileName: 'portrait.webcut',
+        projectName: 'Portrait cut',
+        width: 1080,
+        height: 1920,
+        frameRate: { num: 30, den: 1 },
+        audioSampleRate: 48_000,
+        assets: [],
+      },
+    })
+    render(<ProjectLaunch />)
+
+    expect(screen.getByText('Vertical 9:16 · 1080 × 1920'))
+      .toBeInTheDocument()
   })
 
   test('names durable partial-track choices on the Resume screen', () => {

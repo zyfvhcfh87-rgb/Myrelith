@@ -19,6 +19,7 @@ import {
   type ExportProfile,
   type ExportSelectionId,
 } from '../domain/exportProfile'
+import { formatProjectCanvas } from '../domain/projectSettings'
 import {
   getExportFilePickerAvailability,
   requestExportFileDestination,
@@ -756,7 +757,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             <div className="export-profile-row">
               <dt>Resolution</dt>
               <dd>
-                <strong>{doc.width} × {doc.height}</strong>
+                <strong>{formatProjectCanvas(doc.width, doc.height)}</strong>
                 <span>Timeline resolution (fixed)</span>
               </dd>
             </div>

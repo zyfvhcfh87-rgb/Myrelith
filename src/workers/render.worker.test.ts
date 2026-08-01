@@ -1081,15 +1081,22 @@ describe('composite happy path', () => {
       ),
     ).toHaveLength(2)
 
-    await h.core.handleMessage({
-      type: 'setDoc',
-      doc: { ...doc, width: 640, height: 360 },
-    })
-    expect(h.createdSurfaces().map((surface) => surface.raw)).toEqual([
-      { width: 640, height: 360 },
-      { width: 640, height: 360 },
-      { width: 640, height: 360 },
-    ])
+    for (const dimensions of [
+      { width: 1080, height: 1920 },
+      { width: 1080, height: 1080 },
+      { width: 1080, height: 1350 },
+      { width: 2160, height: 3840 },
+    ]) {
+      await h.core.handleMessage({
+        type: 'setDoc',
+        doc: { ...doc, ...dimensions },
+      })
+      expect(h.createdSurfaces().map((surface) => surface.raw)).toEqual([
+        dimensions,
+        dimensions,
+        dimensions,
+      ])
+    }
   })
 
   test('uses the carried group even when the worker document has only a hard cut', async () => {

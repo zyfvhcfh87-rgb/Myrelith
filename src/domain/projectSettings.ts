@@ -17,6 +17,27 @@ export interface ProjectResolution {
   readonly height: number
 }
 
+export type ProjectAspectRatioId =
+  | 'horizontal-16-9'
+  | 'vertical-9-16'
+  | 'square-1-1'
+  | 'social-4-5'
+
+export type ProjectResolutionTier = 720 | 1080 | 1440 | 2160
+
+export interface ProjectResolutionPreset extends ProjectResolution {
+  readonly tier: ProjectResolutionTier
+}
+
+export interface ProjectAspectRatioPreset {
+  readonly id: ProjectAspectRatioId
+  readonly label: string
+  readonly ratioLabel: string
+  readonly ratioWidth: number
+  readonly ratioHeight: number
+  readonly resolutions: readonly Readonly<ProjectResolutionPreset>[]
+}
+
 export interface ProjectSettings extends ProjectResolution {
   readonly frameRate: Readonly<FrameRate>
   readonly audioSampleRate: number
@@ -29,17 +50,115 @@ function freezeResolution(
   return Object.freeze({ width, height })
 }
 
+function freezeResolutionPreset(
+  tier: ProjectResolutionTier,
+  width: number,
+  height: number,
+): Readonly<ProjectResolutionPreset> {
+  return Object.freeze({ tier, width, height })
+}
+
+function freezeAspectRatioPreset(
+  id: ProjectAspectRatioId,
+  label: string,
+  ratioLabel: string,
+  ratioWidth: number,
+  ratioHeight: number,
+  dimensions: readonly (
+    readonly [ProjectResolutionTier, number, number]
+  )[],
+): Readonly<ProjectAspectRatioPreset> {
+  return Object.freeze({
+    id,
+    label,
+    ratioLabel,
+    ratioWidth,
+    ratioHeight,
+    resolutions: Object.freeze(dimensions.map(
+      ([tier, width, height]) => freezeResolutionPreset(tier, width, height),
+    )),
+  })
+}
+
 function freezeFrameRate(num: number, den: number): Readonly<FrameRate> {
   return Object.freeze({ num, den })
 }
 
-/** Resolution choices supported by project creation and export. */
-export const PROJECT_RESOLUTION_PRESETS = Object.freeze([
-  freezeResolution(1280, 720),
-  freezeResolution(1920, 1080),
-  freezeResolution(2560, 1440),
-  freezeResolution(3840, 2160),
+export const PROJECT_RESOLUTION_TIERS = Object.freeze([
+  720,
+  1080,
+  1440,
+  2160,
+] as const)
+
+/** Reviewed canvas families and exact creation sizes, in UI display order. */
+export const PROJECT_ASPECT_RATIO_PRESETS = Object.freeze([
+  freezeAspectRatioPreset(
+    'horizontal-16-9',
+    'Horizontal',
+    '16:9',
+    16,
+    9,
+    [
+      [720, 1280, 720],
+      [1080, 1920, 1080],
+      [1440, 2560, 1440],
+      [2160, 3840, 2160],
+    ],
+  ),
+  freezeAspectRatioPreset(
+    'vertical-9-16',
+    'Vertical',
+    '9:16',
+    9,
+    16,
+    [
+      [720, 720, 1280],
+      [1080, 1080, 1920],
+      [1440, 1440, 2560],
+      [2160, 2160, 3840],
+    ],
+  ),
+  freezeAspectRatioPreset(
+    'square-1-1',
+    'Square',
+    '1:1',
+    1,
+    1,
+    [
+      [720, 720, 720],
+      [1080, 1080, 1080],
+      [1440, 1440, 1440],
+      [2160, 2160, 2160],
+    ],
+  ),
+  freezeAspectRatioPreset(
+    'social-4-5',
+    'Social portrait',
+    '4:5',
+    4,
+    5,
+    [
+      [720, 720, 900],
+      [1080, 1080, 1350],
+      [1440, 1440, 1800],
+      [2160, 2160, 2700],
+    ],
+  ),
 ])
+
+/** Exact dimension allow-list accepted at project creation. */
+export const PROJECT_RESOLUTION_PRESETS = Object.freeze(
+  PROJECT_ASPECT_RATIO_PRESETS.flatMap((aspectRatio) => (
+    aspectRatio.resolutions.map(
+      ({ width, height }) => freezeResolution(width, height),
+    )
+  )),
+)
+
+export const DEFAULT_PROJECT_ASPECT_RATIO_ID: ProjectAspectRatioId =
+  'horizontal-16-9'
+export const DEFAULT_PROJECT_RESOLUTION_TIER: ProjectResolutionTier = 1080
 
 /**
  * Canonical project rates. Fractional broadcast rates stay exact rationals;
@@ -70,6 +189,55 @@ export const DEFAULT_PROJECT_SETTINGS: Readonly<ProjectSettings> = Object.freeze
   frameRate: freezeFrameRate(30, 1),
   audioSampleRate: 48_000,
 })
+
+/** Look up one reviewed aspect-ratio family without accepting unknown ids. */
+export function projectAspectRatioPresetById(
+  id: string,
+): Readonly<ProjectAspectRatioPreset> | null {
+  return PROJECT_ASPECT_RATIO_PRESETS.find((preset) => preset.id === id) ?? null
+}
+
+/** Resolve a reviewed aspect-ratio/tier pair to its exact canvas dimensions. */
+export function projectResolutionPresetFor(
+  aspectRatioId: string,
+  tier: number,
+): Readonly<ProjectResolutionPreset> | null {
+  return projectAspectRatioPresetById(aspectRatioId)?.resolutions.find(
+    (preset) => preset.tier === tier,
+  ) ?? null
+}
+
+/**
+ * Classify exact square-pixel dimensions by ratio without persisting a second
+ * aspect-ratio fact. BigInt cross multiplication keeps the comparison exact.
+ */
+export function projectAspectRatioForDimensions(
+  width: number,
+  height: number,
+): Readonly<ProjectAspectRatioPreset> | null {
+  if (
+    !Number.isSafeInteger(width)
+    || !Number.isSafeInteger(height)
+    || width <= 0
+    || height <= 0
+  ) return null
+
+  const exactWidth = BigInt(width)
+  const exactHeight = BigInt(height)
+  return PROJECT_ASPECT_RATIO_PRESETS.find((preset) => (
+    exactWidth * BigInt(preset.ratioHeight)
+      === exactHeight * BigInt(preset.ratioWidth)
+  )) ?? null
+}
+
+/** Human-readable derived ratio plus the exact authoritative dimensions. */
+export function formatProjectCanvas(width: number, height: number): string {
+  const aspectRatio = projectAspectRatioForDimensions(width, height)
+  const label = aspectRatio
+    ? `${aspectRatio.label} ${aspectRatio.ratioLabel}`
+    : 'Custom'
+  return `${label} · ${width} × ${height}`
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

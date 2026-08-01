@@ -21,10 +21,15 @@ import {
 } from '../app/projectLibraryController'
 import { MEDIA_FILE_INPUT_ACCEPT } from '../app/localMediaHandles'
 import {
+  DEFAULT_PROJECT_ASPECT_RATIO_ID,
+  DEFAULT_PROJECT_RESOLUTION_TIER,
   DEFAULT_PROJECT_SETTINGS,
+  formatProjectCanvas,
+  projectAspectRatioPresetById,
+  projectResolutionPresetFor,
+  PROJECT_ASPECT_RATIO_PRESETS,
   PROJECT_AUDIO_SAMPLE_RATE_PRESETS,
   PROJECT_FRAME_RATE_PRESETS,
-  PROJECT_RESOLUTION_PRESETS,
   type ProjectSettings,
 } from '../domain/projectSettings'
 import { MAX_PROJECT_NAME_CHARACTERS } from '../domain/projectLimits'
@@ -251,8 +256,11 @@ function NewProjectScreen() {
   const error = useProjectSessionStore((state) => state.error)
   const busy = isBusy(phase)
   const [name, setName] = useState('Untitled project')
-  const [resolution, setResolution] = useState(
-    `${DEFAULT_PROJECT_SETTINGS.width}x${DEFAULT_PROJECT_SETTINGS.height}`,
+  const [aspectRatioId, setAspectRatioId] = useState(
+    DEFAULT_PROJECT_ASPECT_RATIO_ID,
+  )
+  const [resolutionTier, setResolutionTier] = useState(
+    DEFAULT_PROJECT_RESOLUTION_TIER,
   )
   const [frameRate, setFrameRate] = useState(
     rateKey(DEFAULT_PROJECT_SETTINGS.frameRate),
@@ -260,19 +268,22 @@ function NewProjectScreen() {
   const [audioSampleRate, setAudioSampleRate] = useState(
     String(DEFAULT_PROJECT_SETTINGS.audioSampleRate),
   )
+  const selectedAspectRatio = projectAspectRatioPresetById(aspectRatioId)
+  const selectedResolution = projectResolutionPresetFor(
+    aspectRatioId,
+    resolutionTier,
+  )
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
-    const selectedResolution = PROJECT_RESOLUTION_PRESETS.find(
-      (preset) => `${preset.width}x${preset.height}` === resolution,
-    )
     const selectedRate = PROJECT_FRAME_RATE_PRESETS.find(
       (preset) => rateKey(preset) === frameRate,
     )
     const selectedAudioRate = Number(audioSampleRate)
     if (!selectedResolution || !selectedRate) return
     const settings: ProjectSettings = {
-      ...selectedResolution,
+      width: selectedResolution.width,
+      height: selectedResolution.height,
       frameRate: { ...selectedRate },
       audioSampleRate: selectedAudioRate,
     }
@@ -299,16 +310,38 @@ function NewProjectScreen() {
           />
         </label>
         <label className="project-field">
+          <span>Aspect ratio</span>
+          <select
+            value={aspectRatioId}
+            disabled={busy}
+            onChange={(event) => {
+              const aspectRatio = projectAspectRatioPresetById(event.target.value)
+              if (aspectRatio) setAspectRatioId(aspectRatio.id)
+            }}
+          >
+            {PROJECT_ASPECT_RATIO_PRESETS.map((aspectRatio) => (
+              <option key={aspectRatio.id} value={aspectRatio.id}>
+                {aspectRatio.label} ({aspectRatio.ratioLabel})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="project-field">
           <span>Resolution</span>
           <select
-            value={resolution}
+            value={resolutionTier}
             disabled={busy}
-            onChange={(event) => setResolution(event.target.value)}
+            onChange={(event) => {
+              const tier = Number(event.target.value)
+              if (projectResolutionPresetFor(aspectRatioId, tier)) {
+                setResolutionTier(tier as typeof resolutionTier)
+              }
+            }}
           >
-            {PROJECT_RESOLUTION_PRESETS.map((preset) => (
+            {selectedAspectRatio?.resolutions.map((preset) => (
               <option
-                key={`${preset.width}x${preset.height}`}
-                value={`${preset.width}x${preset.height}`}
+                key={preset.tier}
+                value={preset.tier}
               >
                 {preset.width} × {preset.height}
               </option>
@@ -329,7 +362,7 @@ function NewProjectScreen() {
             ))}
           </select>
         </label>
-        <label className="project-field project-field-wide">
+        <label className="project-field">
           <span>Audio quality</span>
           <select
             value={audioSampleRate}
@@ -449,7 +482,7 @@ function ResumeProjectScreen() {
             <dl className="project-profile">
               <div>
                 <dt>Canvas</dt>
-                <dd>{candidate.width} × {candidate.height}</dd>
+                <dd>{formatProjectCanvas(candidate.width, candidate.height)}</dd>
               </div>
               <div>
                 <dt>Frame rate</dt>

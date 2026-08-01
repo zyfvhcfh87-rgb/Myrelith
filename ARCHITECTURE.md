@@ -137,6 +137,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   track dissolves the group id on each lone unlocked survivor in the same
   document mutation; if a required survivor is on a locked track, the entire
   removal rejects by returning the original document reference.
+- `domain/projectSettings.ts` is the pure creation-time authority for reviewed
+  canvas sizes. It exposes Horizontal 16:9, Vertical 9:16, Square 1:1, and
+  Social portrait 4:5 at the 720, 1080, 1440, and 2160 tiers. Every selectable
+  pair is an exact allow-listed integer width/height within the current 4K
+  pixel envelope; the default remains Horizontal 1920 × 1080.
+- Aspect-ratio identity is derived from exact `TimelineDoc.width` and
+  `TimelineDoc.height` and is never persisted as another source of truth.
+  Portable projects and export profiles retain their existing schemas; resume,
+  preview, render, and export consume the document dimensions unchanged.
 
 ## Crossfade planning, composition, and audio
 

@@ -337,7 +337,7 @@ describe('Export dialog configuration', () => {
     const dialog = await openDialog()
     const start = await readyStartButton()
 
-    expect(screen.getByText('1280 × 720')).toBeInTheDocument()
+    expect(screen.getByText('Horizontal 16:9 · 1280 × 720')).toBeInTheDocument()
     expect(screen.getByText('Timeline resolution (fixed)')).toBeInTheDocument()
     expect(screen.getByText('MP4 · H.264/AVC · AAC · stereo')).toBeInTheDocument()
     expect(profileRadio('Compatibility')).toBeChecked()
@@ -359,6 +359,20 @@ describe('Export dialog configuration', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     flushAnimationFrame()
     expect(trigger).toHaveFocus()
+  })
+
+  test('derives a portrait ratio label from the fixed timeline dimensions', async () => {
+    useDocumentStore.setState({
+      doc: { ...doc(), width: 1080, height: 1920 },
+      past: [],
+      future: [],
+    })
+    render(<Toolbar />)
+    await openDialog()
+
+    expect(screen.getByText('Vertical 9:16 · 1080 × 1920'))
+      .toBeInTheDocument()
+    expect(screen.getByText('Timeline resolution (fixed)')).toBeInTheDocument()
   })
 
   test('shows an explicit unsupported reason without silently falling back', async () => {
