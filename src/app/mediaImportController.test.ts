@@ -628,10 +628,9 @@ describe('mediaImportController', () => {
     )
     const edited: TimelineDoc = {
       ...empty,
-      tracks: [
-        { ...empty.tracks[0], clips: [makeClip()] },
-        empty.tracks[1],
-      ],
+      tracks: empty.tracks.map((track) => track.id === 'V1'
+        ? { ...track, clips: [makeClip()] }
+        : track),
     }
     const fixture = makeFixture(makeAsset(), edited)
     const result = importMedia(file(), fixture.deps)

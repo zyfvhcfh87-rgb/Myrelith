@@ -10,6 +10,10 @@
 
 import { beforeEach, describe, expect, test } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import {
+  createTimelineDoc,
+  DEFAULT_PROJECT_SETTINGS,
+} from '../../domain/projectSettings'
 import type { Clip, TimelineDoc, Track as TrackData } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import Timeline from './Timeline'
@@ -60,6 +64,34 @@ beforeEach(() => {
 })
 
 describe('header gutter', () => {
+  test('a fresh project renders four video and four audio lanes in display order', () => {
+    getState().setDoc(createTimelineDoc(
+      'Fresh tracks',
+      DEFAULT_PROJECT_SETTINGS,
+      'doc-fresh-tracks',
+    ))
+    render(<Timeline />)
+
+    const headerIds = screen
+      .getAllByTestId(/^track-header-/)
+      .map((element) => element.dataset.testid)
+    expect(headerIds).toEqual([
+      'track-header-V4',
+      'track-header-V3',
+      'track-header-V2',
+      'track-header-V1',
+      'track-header-A1',
+      'track-header-A2',
+      'track-header-A3',
+      'track-header-A4',
+    ])
+
+    const laneIds = screen
+      .getAllByTestId(/^track-(V|A)\d/)
+      .map((element) => element.dataset.testid)
+    expect(laneIds).toEqual(headerIds.map((id) => id?.replace('-header', '')))
+  })
+
   test('headers AND lanes render in display order: V2 over V1, audio below', () => {
     render(<Timeline />)
     const headerIds = screen
@@ -134,6 +166,25 @@ describe('toggle wiring', () => {
 })
 
 describe('add-track buttons', () => {
+  test('a fresh four-by-four stack continues with V5 and A5', () => {
+    getState().setDoc(createTimelineDoc(
+      'Fresh tracks',
+      DEFAULT_PROJECT_SETTINGS,
+      'doc-fresh-tracks',
+    ))
+    render(<Timeline />)
+
+    fireEvent.click(screen.getByLabelText('add video track'))
+    fireEvent.click(screen.getByLabelText('add audio track'))
+
+    expect(getState().doc.tracks.map((track) => track.id)).toEqual([
+      'V1', 'V2', 'V3', 'V4', 'V5',
+      'A1', 'A2', 'A3', 'A4', 'A5',
+    ])
+    expect(screen.getByTestId('track-header-V5')).toBeInTheDocument()
+    expect(screen.getByTestId('track-header-A5')).toBeInTheDocument()
+  })
+
   test('+ Video inserts above the video stack (display top) as one undo entry', () => {
     render(<Timeline />)
     fireEvent.click(screen.getByLabelText('add video track'))

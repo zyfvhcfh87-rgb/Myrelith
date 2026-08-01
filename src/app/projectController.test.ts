@@ -350,6 +350,23 @@ function makeProject(
   }
 }
 
+function makeLegacyTwoTrackProject(name: string): ProjectFile {
+  const project = makeProject([], name)
+  const tracks = project.document.tracks.filter(
+    (track) => track.id === 'V1' || track.id === 'A1',
+  )
+  if (tracks.length !== 2) {
+    throw new Error('The fresh-project fixture must contain V1 and A1')
+  }
+  return {
+    ...project,
+    document: {
+      ...project.document,
+      tracks,
+    },
+  }
+}
+
 function makeDeps(
   overrides: Partial<ProjectControllerDeps> = {},
 ): ProjectControllerDeps {
@@ -546,6 +563,11 @@ describe('new-project activation', () => {
       frameRate: { num: 60, den: 1 },
       audioSampleRate: 96_000,
     })
+    expect(useDocumentStore.getState().doc.tracks.map((track) => track.id))
+      .toEqual(['V1', 'V2', 'V3', 'V4', 'A1', 'A2', 'A3', 'A4'])
+    expect(useDocumentStore.getState().doc.tracks.every((track) => (
+      track.clips.length === 0 && track.transitions.length === 0
+    ))).toBe(true)
     expect(useDocumentStore.getState().past).toEqual([])
     expect(useMediaStore.getState().assets.size).toBe(0)
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:old-source')
@@ -785,7 +807,8 @@ describe('portable project resume', () => {
 
   test('valid projects without media wait for explicit confirmation', async () => {
     const current = useDocumentStore.getState().doc
-    const serialized = serializeProjectFile(makeProject([], 'Empty saved work'))
+    const savedProject = makeLegacyTwoTrackProject('Empty saved work')
+    const serialized = serializeProjectFile(savedProject)
     const deps = makeDeps({ readText: vi.fn(async () => serialized) })
     const file = new File([serialized], 'empty.webcut')
 
@@ -799,7 +822,7 @@ describe('portable project resume', () => {
     await expect(activateResumedProject(deps)).resolves.toEqual({
       status: 'activated',
     })
-    expect(useDocumentStore.getState().doc.name).toBe('Empty saved work')
+    expect(useDocumentStore.getState().doc).toEqual(savedProject.document)
     expect(useProjectSessionStore.getState()).toMatchObject({
       screen: 'editor',
       activeProjectFileName: 'empty.webcut',
@@ -879,7 +902,8 @@ describe('portable project resume', () => {
   })
 
   test('recovery falls back to a valid generation and activates as unsaved', async () => {
-    const serialized = serializeProjectFile(makeProject([], 'Recovered project'))
+    const savedProject = makeLegacyTwoTrackProject('Recovered project')
+    const serialized = serializeProjectFile(savedProject)
     const record: RecoveryJournalRecord = {
       version: LOCAL_PROJECT_RECORD_VERSION,
       journalId: 'journal-recovery',
@@ -911,6 +935,7 @@ describe('portable project resume', () => {
     await expect(activateResumedProject(deps)).resolves.toEqual({
       status: 'activated',
     })
+    expect(useDocumentStore.getState().doc).toEqual(savedProject.document)
     expect(deps.startProjectPersistence).toHaveBeenCalledWith({
       fileName: 'Recovered.webcut',
       persisted: false,

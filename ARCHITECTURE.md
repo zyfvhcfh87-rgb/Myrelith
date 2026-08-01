@@ -142,6 +142,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   Social portrait 4:5 at the 720, 1080, 1440, and 2160 tiers. Every selectable
   pair is an exact allow-listed integer width/height within the current 4K
   pixel envelope; the default remains Horizontal 1920 × 1080.
+- The same creation-time authority gives every fresh document exactly four
+  empty video tracks (`V1`–`V4`) followed by four empty audio tracks
+  (`A1`–`A4`). Each track and its clip/transition arrays are independently
+  owned. Resume, recovery, migration, and file loading preserve the saved track
+  count, order, and identities; the default is not a minimum-track invariant.
 - Aspect-ratio identity is derived from exact `TimelineDoc.width` and
   `TimelineDoc.height` and is never persisted as another source of truth.
   Portable projects and export profiles retain their existing schemas; resume,
