@@ -79,7 +79,7 @@ and the open list below.
 | **Post-MVP #16 — capability-aware export profiles** | ✅ complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; PR #29 normally merged and Issue #16 closed |
 | **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
 | **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
-| **Public preview foundation** | 🚧 release closeout | MIT license, privacy and third-party notices, community health files, public legal pages, CI, and a GHCR container workflow; tagged prerelease and Cloudflare verification remain the final gates |
+| **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -1386,10 +1386,19 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
-- The public-preview foundation is now implemented in the repository: WebCut
-  has an MIT license, privacy notice, third-party/source notices, community and
-  security policies, versioned changelog, CI, public `/privacy/` and
-  `/licenses/` pages, and a non-root static container workflow. This permits an
+- The public-preview foundation is complete. PR #39 was reviewed at `a0f385a`,
+  passed Linux CI, and normally merged as `256887b`. The
+  `v0.1.0-alpha.1` prerelease points to that exact merge, includes the verified
+  1,124,158-byte static build and checksum, and published the private
+  `ghcr.io/zyfvhcfh87-rgb/webcut:0.1.0-alpha.1` multi-architecture image at
+  digest `sha256:837cc8ea8d2b5b206283580b5806053cf861886c26d03668abab27f58646ec8b`.
+  Cloudflare production deployment `c85ceeb0-0913-44ec-8ea4-db79c815dd31`
+  serves the exact merge through `webcut-d27.pages.dev`; the live launcher and
+  legal routes were re-read after deployment. GitHub detects MIT and now shows
+  the description, homepage, topics, community resources, release, and package.
+  WebCut has an MIT license, privacy notice, third-party/source notices,
+  community and security policies, versioned changelog, CI, public `/privacy/`
+  and `/licenses/` pages, and a non-root static container workflow. This permits an
   explicitly experimental alpha release; it does **not** certify patent
   clearance, production readiness, representative low-memory behavior, or all
   downstream redistribution obligations. Keep the AC-3/E-AC-3 FFmpeg and codec
