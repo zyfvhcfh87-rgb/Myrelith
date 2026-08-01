@@ -352,12 +352,15 @@ function makeProject(
 
 function makeLegacyTwoTrackProject(name: string): ProjectFile {
   const project = makeProject([], name)
-  const tracks = project.document.tracks.filter(
-    (track) => track.id === 'V1' || track.id === 'A1',
-  )
-  if (tracks.length !== 2) {
+  const videoTrack = project.document.tracks.find((track) => track.id === 'V1')
+  const audioTrack = project.document.tracks.find((track) => track.id === 'A1')
+  if (!videoTrack || !audioTrack) {
     throw new Error('The fresh-project fixture must contain V1 and A1')
   }
+  const tracks = [
+    { ...audioTrack, id: 'A9', name: 'Archived audio' },
+    { ...videoTrack, id: 'V7', name: 'Archived video' },
+  ]
   return {
     ...project,
     document: {
