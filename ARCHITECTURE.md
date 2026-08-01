@@ -359,7 +359,8 @@ src/
   pipeline/    demux, legacy chunk decode, render, export
   codecs/      realm-local lazy decoder registration and resource policy
   ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector
-  ui/timeline/ Timeline, Track, ClipView, Ruler, Playhead
+  ui/timeline/ Timeline, Track, ClipView gesture root + presentation plan/layer,
+               Ruler, Playhead
   app/         App, project/persistence/controllers, layout.css
   dev/         temporary scratch harnesses — may import anything, never shipped
 ```

@@ -20,7 +20,8 @@
  * Render isolation: subscriptions are primitives or own-clip slices
  * (null for every other clip), so dragging/selecting clip A never
  * re-renders clip B. `tool` re-renders all clips only when the tool
- * switches (rare, user-initiated).
+ * switches (rare, user-initiated). Render-only geometry/source mapping lives
+ * in clipVisualPlan; ClipVisualLayer owns the decorative generated-media JSX.
  */
 
 import { memo, useEffect, useRef } from 'react'
@@ -34,13 +35,13 @@ import { microsecondsDurationToFrames } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
-import { visibleFilmstripBuckets } from './clipVisualPlan'
+import { planClipPresentation } from './clipVisualPlan'
+import ClipVisualLayer from './ClipVisualLayer'
 import {
   linkedGestureBounds,
   type GestureMode,
 } from './gestureBounds'
 import { useScrubScheduler } from './useScrubScheduler'
-import { frameToTimelineLocalPx } from './timelineViewport'
 
 interface ClipViewProps {
   clip: Clip
@@ -78,7 +79,6 @@ function ClipView({
   timelineOriginFrame = 0,
   timelineWindowEndFrame = Number.MAX_SAFE_INTEGER,
 }: ClipViewProps) {
-  const isStillSource = clip.sourceMode === 'still'
   const zoom = useTransportStore((s) => s.zoom)
   const tool = useTransportStore((s) => s.tool)
   const isSelected = useTransportStore((s) =>
@@ -194,109 +194,32 @@ function ClipView({
 
   /* ---------------- geometry (committed + live preview) ------------- */
 
-  const tl = clip.timelineRange
-  // A linked gesture shares one signed delta, never the gesture owner's
-  // absolute start. Every member therefore ghosts from its own committed
-  // position even when manually linked clips have unequal timeline offsets.
-  let startFrame = tl.startFrame + (movePreviewDelta ?? 0)
-  let durationFrames = tl.durationFrames
-  let badge: string | null = null
-  if (editPreview) {
-    const d = editPreview.deltaFrames
-    badge = `${editPreview.kind} ${d >= 0 ? '+' : ''}${d}`
-    switch (editPreview.kind) {
-      case 'trim-start':
-        startFrame = tl.startFrame + d
-        durationFrames = tl.durationFrames - d
-        break
-      case 'ripple-start': // head stays put; material is cut/restored
-        durationFrames = tl.durationFrames - d
-        break
-      case 'trim-end':
-      case 'ripple-end':
-        durationFrames = tl.durationFrames + d
-        break
-      case 'slide':
-        startFrame = tl.startFrame + d
-        break
-      case 'slip': // position and length are fixed by definition
-        break
-    }
-  }
-  const dragging = movePreviewDelta !== null || editPreview !== null
-
-  // Source in-point as currently DISPLAYED: timed slip and start-side trims
-  // shift the material under the clip. A still always maps every timeline
-  // frame to its sole source frame.
-  let sourceStartFrame = clip.sourceRange.startFrame
-  if (
-    !isStillSource &&
-    editPreview &&
-    (editPreview.kind === 'slip' ||
-      editPreview.kind === 'trim-start' ||
-      editPreview.kind === 'ripple-start')
-  ) {
-    sourceStartFrame += editPreview.deltaFrames
-  }
-
-  // Intersect the live clip geometry with the bounded physical surface. A
-  // single multi-hour clip must never emit an 80Mpx DOM width by itself.
-  const clippedStartFrame = Math.max(startFrame, timelineOriginFrame)
-  const clippedEndFrame = Math.min(
-    startFrame + durationFrames,
+  const presentation = planClipPresentation({
+    clip,
+    trackKind,
+    zoom,
+    tool,
+    movePreviewDelta,
+    editPreview,
+    ownsLiveGesture,
+    timelineOriginFrame,
     timelineWindowEndFrame,
-  )
-  const hasVisibleSlice = clippedEndFrame > clippedStartFrame
-  if (!hasVisibleSlice && !ownsLiveGesture) return null
+    assetDurationFrames,
+    visuals,
+  })
+  if (!presentation) return null
 
-  // Keep the same root DOM node alive at the nearest surface edge while its
-  // pointer capture is active. The invisible 1px host cannot enlarge the
-  // bounded surface, but it can still receive pointerup/cancel and commit or
-  // clear the gesture normally.
-  const displayedStartFrame = hasVisibleSlice
-    ? clippedStartFrame
-    : Math.min(
-        timelineWindowEndFrame,
-        Math.max(timelineOriginFrame, startFrame),
-      )
-  const displayedEndFrame = hasVisibleSlice
-    ? clippedEndFrame
-    : displayedStartFrame
-  const displayedDurationFrames = displayedEndFrame - displayedStartFrame
-  const surfaceWidthPx = Math.max(
-    1,
-    (timelineWindowEndFrame - timelineOriginFrame) * zoom,
-  )
-  const localStartPx = hasVisibleSlice
-    ? frameToTimelineLocalPx(
-        displayedStartFrame,
-        timelineOriginFrame,
-        zoom,
-      )
-    : startFrame + durationFrames <= timelineOriginFrame
-      ? 0
-      : Math.max(0, surfaceWidthPx - 1)
-
-  const displayedSourceStartFrame =
-    sourceStartFrame + (displayedStartFrame - startFrame)
-  const visualDurationFrames = isStillSource
-    ? durationFrames
-    : assetDurationFrames
-  const displayedVisualStartFrame = isStillSource
-    ? displayedStartFrame - startFrame
-    : displayedSourceStartFrame
-  const filmstrip = trackKind === 'video' ? visuals?.filmstrip : null
-  const waveform = trackKind === 'audio' ? visuals?.waveform : null
-  const filmstripBuckets = filmstrip
-    ? visibleFilmstripBuckets(
-        visualDurationFrames,
-        filmstrip.tiles,
-        filmstrip.tileWidth,
-        zoom,
-        displayedVisualStartFrame,
-        displayedDurationFrames,
-      )
-    : []
+  const {
+    dragging,
+    badge,
+    hasVisibleSlice,
+    displayedDurationFrames,
+    localStartPx,
+    showStartEdge,
+    showEndEdge,
+    accessibleKind,
+    interactionTitle,
+  } = presentation
 
   /* ---------------- gesture plumbing -------------------------------- */
 
@@ -553,16 +476,6 @@ function ClipView({
     }
   }
 
-  const showEdges = hasVisibleSlice && (tool === 'select' || tool === 'trim')
-  const showStartEdge = showEdges && displayedStartFrame === startFrame
-  const showEndEdge =
-    showEdges && displayedEndFrame === startFrame + durationFrames
-  const accessibleKind = isStillSource ? 'still image' : trackKind
-  const interactionTitle =
-    tool === 'slip' && isStillSource
-      ? 'Still images always show their single source frame, so Slip is unavailable.'
-      : 'Select clip. Hold Ctrl or Command while clicking, or with Enter or Space, to add or remove it from the selection.'
-
   return (
     <div
       ref={rootRef}
@@ -625,83 +538,7 @@ function ClipView({
         if (session.current) endGesture()
       }}
     >
-      {hasVisibleSlice &&
-        filmstrip &&
-        visualDurationFrames > 0 &&
-        filmstripBuckets.length > 0 && (
-          <div
-            className="clip-visual clip-filmstrip"
-            data-testid={`clip-${clip.id}-visual`}
-          >
-          {filmstripBuckets.map((bucket) => {
-            const visibleBucketStart = Math.max(
-              bucket.startFrame,
-              displayedVisualStartFrame,
-            )
-            const visibleBucketEnd = Math.min(
-              bucket.endFrame,
-              displayedVisualStartFrame + displayedDurationFrames,
-            )
-            const croppedHeadPx =
-              (visibleBucketStart - bucket.startFrame) * zoom
-            return (
-              <svg
-                key={bucket.index}
-                className="clip-filmstrip-tile"
-                data-testid={`clip-${clip.id}-filmstrip-tile-${bucket.index}`}
-                aria-hidden="true"
-                focusable="false"
-                style={{
-                  left:
-                    (visibleBucketStart - displayedVisualStartFrame) * zoom,
-                  width: (visibleBucketEnd - visibleBucketStart) * zoom,
-                }}
-              >
-                <defs>
-                  <pattern
-                    id={`${clip.id}-filmstrip-pattern-${bucket.index}`}
-                    patternUnits="userSpaceOnUse"
-                    x={-(croppedHeadPx % filmstrip.tileWidth)}
-                    width={filmstrip.tileWidth}
-                    height={filmstrip.tileHeight}
-                  >
-                    <image
-                      href={filmstrip.url}
-                      x={-bucket.spriteIndex * filmstrip.tileWidth}
-                      width={filmstrip.tiles * filmstrip.tileWidth}
-                      height={filmstrip.tileHeight}
-                    />
-                  </pattern>
-                </defs>
-                <rect
-                  width="100%"
-                  height="100%"
-                  fill={`url(#${clip.id}-filmstrip-pattern-${bucket.index})`}
-                />
-              </svg>
-            )
-            })}
-          </div>
-        )}
-      {hasVisibleSlice && waveform && assetDurationFrames > 0 && (
-        <svg
-          className="clip-visual clip-waveform"
-          data-testid={`clip-${clip.id}-visual`}
-          aria-hidden="true"
-          focusable="false"
-          preserveAspectRatio="none"
-          viewBox={`${displayedSourceStartFrame / assetDurationFrames} 0 ${displayedDurationFrames / assetDurationFrames} 1`}
-        >
-          <image
-            href={waveform.url}
-            x="0"
-            y="0"
-            width="1"
-            height="1"
-            preserveAspectRatio="none"
-          />
-        </svg>
-      )}
+      <ClipVisualLayer clipId={clip.id} visual={presentation.visual} />
       {(showStartEdge || showEndEdge) && (
         <>
           {showStartEdge && (

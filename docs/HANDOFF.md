@@ -858,9 +858,11 @@ playback consume that selector rather than re-deriving flags. Clip visuals
 (4.3.7): every imported asset gets a FILMSTRIP (video frames, one
 tile per ~2s, cap 48) and a WAVEFORM image generated once in the
 background (app/mediaVisualsController → pipeline/visuals via
-mediabunny sinks); both images span the asset's FULL duration. ClipView
-maps filmstrip time through fixed-aspect SVG patterns in integer-frame buckets
-and waveform time through a normalized source-time SVG viewBox. A long clip is
+mediabunny sinks); both images span the asset's FULL duration.
+`timeline/clipVisualPlan.ts` maps filmstrip time through fixed-aspect SVG
+patterns in integer-frame buckets and waveform time through a normalized
+source-time SVG viewBox; `ClipVisualLayer.tsx` renders that prepared visual
+plan without owning stores or gestures. A long clip is
 sliced to the current bounded timeline window while both visual types retain
 their exact source offset, so trim/razor/zoom/rebasing need zero decode work and
 slip/start-trim previews shift the material live without stretching, bitmap
@@ -1231,6 +1233,10 @@ surface; it is not a second zoom and never enters document history.
   intersection across the gesture owner and linked partner, using one fresh
   document/media snapshot for timeline, source, duration, and headroom
   bounds in both connected and offline sessions.
+- `src/ui/timeline/clipVisualPlan.ts` + `ClipVisualLayer.tsx` — pure live
+  display/window/source-time planning plus the stateless generated-media JSX.
+  They own no pointer session or document mutation; ordinary and rebased
+  timeline slices share the same prepared filmstrip/waveform geometry.
 - `src/ui/timeline/ClipView.tsx` — the 4.2 gesture heart: one session ref
   routes body/edge pointerdowns by the CURRENT tool (getState(), not the
   render closure!); previews via transportStore.editPreview, one commit
@@ -1242,6 +1248,11 @@ surface; it is not a second zoom and never enters document history.
   accessible name, and highlights every live linked-preview participant. Long clips
   render only their intersection with the bounded window; filmstrip buckets
   and the normalized waveform viewBox remain aligned to the original source.
+  The Stage 3 presentation extraction gate passed 93 focused tests across 6
+  files, all 1,682 tests across 89 files, the checked-in Chromium persistence
+  smoke, build, lint, audit, and diff checks. Real Chromium additionally
+  matched video/audio geometry at ordinary origin zero and a rebased
+  1,000,000-frame origin with zero console warnings or errors.
   `ui/Toolbar.tsx` = tool buttons; `app/useEditShortcuts.ts` = A/B/T/Y/U,
   S split-at-playhead, Delete ripple-delete (selection kept on reject).
 - `src/ui/timeline/Timeline.tsx` + `TrackHeader.tsx` (4.3.5) — two
