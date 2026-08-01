@@ -1,7 +1,7 @@
 /**
- * pipeline/decode.ts — Chunk orchestration: "I want the frame at time T" →
- * the exact list of encoded chunks the decoder must eat, keyframe first.
- * Phase 2.4 (consumed by engine/worker-bridge).
+ * pipeline/decode.ts — Retired chunk orchestration retained for the tested
+ * DecodeWorkerBridge compatibility path: "I want the frame at time T" → the
+ * exact list of encoded chunks the decoder must eat, keyframe first.
  *
  * Correctness notes, because this is where seeks go subtly wrong:
  * - Packets are walked in DECODE order (storage order). With B-frames,
@@ -54,6 +54,7 @@ export interface PacketSinkLike {
  */
 const MAX_OVERSHOOT_SEC = 0.25
 
+/** @deprecated Runtime-dead compatibility source for DecodeWorkerBridge. */
 export class VideoChunkSource {
   private readonly sink: PacketSinkLike
   /** Used when a container reports zero-duration packets. */
@@ -108,7 +109,10 @@ export class VideoChunkSource {
   }
 }
 
-/** Real wiring: a chunk source reading from a demuxed Mediabunny track. */
+/**
+ * Real wiring: a chunk source reading from a demuxed Mediabunny track.
+ * @deprecated Runtime-dead compatibility factory for DecodeWorkerBridge.
+ */
 export function createChunkSource(
   track: InputVideoTrack,
   rate: FrameRate,

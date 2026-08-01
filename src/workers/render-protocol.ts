@@ -10,10 +10,10 @@
  * sources and advances clip-keyed playback lanes. It never re-derives µs
  * targets, so the two sides cannot disagree about rounding.
  *
- * Streaming migration: `openAsset` / `renderFrame` are the replacement
- * contract. The deprecated `configureAsset` / `composite` chunk contract
- * remains temporarily so the worker can migrate before the bridge starts
- * sending the new messages. Do not combine the two shapes: a Blob is
+ * `openAsset` / `renderFrame` are the current contract. The deprecated
+ * `configureAsset` / `composite` chunk messages are imported from the named
+ * render-legacy-protocol compatibility boundary. Do not combine the two
+ * shapes: a Blob is
  * structured-cloned once, while encoded chunk buffers belong only to the
  * legacy path.
  *
@@ -30,7 +30,16 @@ import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
-import type { ChunkPayload } from './decode-protocol'
+import type {
+  LegacyCompositeMessage,
+  LegacyConfigureAssetMessage,
+} from './render-legacy-protocol'
+
+export type {
+  CompositeSourceEntry,
+  LegacyCompositeMessage,
+  LegacyConfigureAssetMessage,
+} from './render-legacy-protocol'
 
 /**
  * `playback` reuses a clip's sequential lane across render request IDs.
@@ -129,32 +138,6 @@ export interface RenderFrameMessage {
   sources: StreamingCompositeSourceEntry[]
 }
 
-/**
- * Everything the worker needs to produce pixels for ONE (asset, sourceFrame)
- * pair used by the composite. `sourceFrame` is in DOCUMENT-rate frames (the
- * value compositeFrame's FrameSource asks for — exact integer key);
- * `targetTimestampUs`/`toleranceUs` are in the asset's native timebase,
- * precomputed by the bridge.
- *
- * @deprecated Temporary keyframe-batch contract. Use
- * {@link StreamingCompositeSourceEntry} through {@link RenderFrameMessage}.
- */
-export interface CompositeSourceEntry {
-  assetId: AssetId
-  /** Document-rate source frame from the explicit composition plan. */
-  sourceFrame: number
-  /** Target presentation timestamp in the ASSET's stream, integer µs. */
-  targetTimestampUs: number
-  /** Half a frame duration at the asset's rate, integer µs. */
-  toleranceUs: number
-  /**
-   * Keyframe-first decode batch covering the target. May be empty when the
-   * bridge could not supply chunks — the worker then serves the entry from
-   * its cache or reports the clip missing. Buffers are TRANSFERRED.
-   */
-  chunks: ChunkPayload[]
-}
-
 /** Messages the main thread sends to the render worker. */
 export type ToRenderWorker =
   | {
@@ -173,43 +156,14 @@ export type ToRenderWorker =
     }
   | OpenAssetMessage
   | OpenImageMessage
-  | {
-      /**
-       * Create (or replace) the decoder + frame cache for one asset. A
-       * replacement closes the old decoder and clears the old cache — the
-       * cached frames belong to the old stream.
-       *
-       * @deprecated Legacy WebCodecs chunk path. Use `openAsset`.
-       */
-      type: 'configureAsset'
-      assetId: AssetId
-      /** Bridge-issued identity echoed by the worker's setup reply. */
-      setupId: number
-      config: VideoDecoderConfig
-    }
+  | LegacyConfigureAssetMessage
   | {
       /** Drop an asset's source, child cursors, decoder state, and frame cache. */
       type: 'releaseAsset'
       assetId: AssetId
     }
   | RenderFrameMessage
-  | {
-      /**
-       * Composite document frame `frame` onto the canvas using `sources`
-       * for pixels. Latest-wins: a newer composite (or setDoc/
-       * configureAsset) supersedes an in-flight one, which then resolves
-       * 'superseded' without blitting. Every composite gets EXACTLY ONE
-       * compositeDone (or error) reply, matched by requestId.
-       *
-       * @deprecated Legacy keyframe-batch path. Use `renderFrame`.
-       */
-      type: 'composite'
-      requestId: number
-      frame: number
-      /** Exact grouped visual plan computed on the main thread for `frame`. */
-      plan: VideoCompositionPlan
-      sources: CompositeSourceEntry[]
-    }
+  | LegacyCompositeMessage
   | {
       /** Tear down all sources, child cursors, decoders, and caches. */
       type: 'close'

@@ -136,9 +136,22 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
   const runtimeAreas = new Set(['engine', 'pipeline', 'workers'])
   const stateForbidden = new Set(['ui', 'engine', 'pipeline', 'workers'])
   const uiForbidden = new Set(['engine', 'pipeline', 'workers'])
-  const workerProtocols = new Set([
+  const workerTypeModules = new Set([
+    'workers/decode-types.ts',
     'workers/decode-protocol.ts',
+    'workers/render-legacy-protocol.ts',
     'workers/render-protocol.ts',
+  ])
+  const currentRenderClosure = new Set([
+    'engine/render-bridge.ts',
+    'engine/render-legacy-bridge.ts',
+    'workers/render-legacy.ts',
+    'workers/render.worker.ts',
+  ])
+  const retiredDecodeImplementations = new Set([
+    'engine/worker-bridge.ts',
+    'pipeline/decode.ts',
+    'workers/decode.worker.ts',
   ])
 
   for (const edge of edges) {
@@ -182,16 +195,15 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
       violations.push(`${edgeLabel(edge)} breaks the codecs leaf boundary`)
     }
 
-    if (workerProtocols.has(toName) && !edge.typeOnly) {
-      violations.push(`${edgeLabel(edge)} must import the worker protocol as type-only`)
+    if (workerTypeModules.has(toName) && !edge.typeOnly) {
+      violations.push(`${edgeLabel(edge)} must import worker contracts as type-only`)
     }
 
     if (
-      fromName === 'workers/render.worker.ts'
-      && toName === 'workers/decode.worker.ts'
-      && !edge.typeOnly
+      currentRenderClosure.has(fromName)
+      && retiredDecodeImplementations.has(toName)
     ) {
-      violations.push(`${edgeLabel(edge)} would register the decode worker at runtime`)
+      violations.push(`${edgeLabel(edge)} bypasses the legacy compatibility boundary`)
     }
 
     if (
@@ -199,7 +211,7 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
       && runtimeAreas.has(toArea)
       && fromArea !== toArea
     ) {
-      const sanctioned = workerProtocols.has(toName) && edge.typeOnly
+      const sanctioned = workerTypeModules.has(toName) && edge.typeOnly
         || (
           fromArea === 'workers'
           && toName === 'engine/frame-cache.ts'

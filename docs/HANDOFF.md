@@ -1135,7 +1135,9 @@ surface; it is not a second zoom and never enters document history.
   offline projection),
   and
   `mediaImportStore` (serializable dialog status only; no File/Blob handles).
-- `src/workers/decode-protocol.ts` — canonical worker message types.
+- `src/workers/decode-types.ts` — neutral structural types shared by current
+  rendering and the retained decode compatibility path. The deprecated
+  `decode-protocol.ts` keeps the old chunk-worker message contract.
 - `src/workers/render-protocol.ts` — render-worker message types (types only).
   The primary path sends each timed-video Blob once through `configureAsset`
   or each static-image Blob once through `openImage`, then lightweight entries
@@ -1143,8 +1145,8 @@ surface; it is not a second zoom and never enters document history.
   integer source frame, exact µs timestamp, and playback/seek mode; image
   entries carry literal frame/timestamp zero. `closed` acknowledges completed
   worker cleanup before bounded-timeout bridge termination. The deprecated
-  chunk-batch messages remain only for migration tests. `setDoc` must precede
-  renders built from it.
+  chunk-batch messages are defined in `render-legacy-protocol.ts` and remain
+  only for migration tests. `setDoc` must precede renders built from it.
 - `src/workers/render.worker.ts` — Blob-backed compositing worker: timed video
   keeps one source per asset, sequential clip-keyed playback lanes,
   request-scoped seek cursors, and a tiny timestamp cache. Original Slice 6 adds one
@@ -1161,6 +1163,11 @@ surface; it is not a second zoom and never enters document history.
   Original Slice 7 adds one lazy worker-owned leg/group surface pair, reused
   and cleared for transition frames and resized with the document canvas.
   Superseded presentation never cancels a healthy playback lane.
+- `src/workers/render-legacy.ts` and `src/engine/render-legacy-bridge.ts` —
+  compatibility delegates isolating the obsolete chunk-batch renderer. The
+  current render worker and bridge preserve the old public methods/messages by
+  delegation; current streaming code does not import the retired decode
+  worker, bridge, or chunk-source implementations.
 - `src/workers/decode.worker.ts` — injectable core (`createDecodeWorkerCore`);
   closes every VideoFrame ASAP, caches ImageBitmap copies (12) instead
   (raw frames starve the hw decoder pool!), backpressure at queue≥8,
@@ -1504,9 +1511,15 @@ surface; it is not a second zoom and never enters document history.
   checklist items now have matching code, test, and browser evidence for the
   normal-merge closeout.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
-  (the render worker replaced the single-asset path). Kept because their
-  tests document the decoder semantics and render.worker imports their
-  structural types. Remove or repurpose only as an explicit post-MVP cleanup.
+  (the render worker replaced the single-asset path). Their structural types
+  now live in neutral `decode-types.ts`, while the obsolete chunk-batch render
+  behavior is isolated behind named compatibility delegates. The retired
+  modules and old exports remain because their tests document decoder
+  semantics; deletion is a separate post-MVP cleanup. The Stage 2 isolation
+  gate passed 186 focused tests across 8 files, all 1,672 tests across 88
+  files, build, lint, audit, and diff checks. Real Chromium also passed H.264
+  scrub, recovery/relink, same-asset-ID source replacement, and acknowledged
+  worker shutdown with zero console warnings or errors.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.
