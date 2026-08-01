@@ -2104,7 +2104,7 @@ project and timeline schemas are unchanged.
 
 ## Public preview foundation — v0.1.0-alpha.1
 
-**IMPLEMENTED; RELEASE CLOSEOUT IN PROGRESS (2026-08-01).**
+**COMPLETE AND RELEASED (2026-08-01).**
 
 This slice makes the existing hosted app understandable and responsibly
 releasable as an experimental preview without overstating legal or product
@@ -2128,9 +2128,17 @@ maturity.
   chunk advisory remains. Playwright verified the built launcher at 1440×900
   and 390×844 plus both legal routes: exact headings/links, keyboard focus,
   zero horizontal overflow, zero cookies, and no console warning/page error.
-- [ ] Normally merge the reviewed exact head, create the alpha release/tag,
-  publish the GHCR package, update repository About/topics/homepage, and verify
-  the exact Cloudflare deployment.
+- [x] PR #39 passed Linux CI at reviewed head `a0f385a` and was normally merged
+  as `256887b` while retaining `codex/feature`. `v0.1.0-alpha.1` targets that
+  merge and contains the 1,124,158-byte verified web archive plus SHA-256 file.
+  The tag workflow published private AMD64/ARM64 GHCR tag
+  `0.1.0-alpha.1` at digest
+  `sha256:837cc8ea8d2b5b206283580b5806053cf861886c26d03668abab27f58646ec8b`
+  with SBOM/provenance, and merged-master CI passed independently. GitHub
+  detects MIT and exposes the new About text, live homepage, seven topics,
+  community resources, release, and package. Cloudflare production deployment
+  `c85ceeb0-0913-44ec-8ea4-db79c815dd31` serves exact commit `256887b`; its live
+  launcher and `/privacy/` and `/licenses/` routes were re-read successfully.
 
 The alpha label is binding. This work is not a production-readiness,
 representative low-memory, GDPR, FFmpeg/LGPL, or codec-patent certification.
