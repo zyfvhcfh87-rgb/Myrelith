@@ -86,6 +86,20 @@ function LaunchFrame({
       >
         {children}
       </section>
+      <footer className="project-launch-footer">
+        <span>Your media stays on this device.</span>
+        <nav aria-label="Project information">
+          <a href="/privacy/">Privacy</a>
+          <a href="/licenses/">Licenses</a>
+          <a
+            href="https://github.com/zyfvhcfh87-rgb/WebCut"
+            rel="noreferrer"
+            target="_blank"
+          >
+            GitHub
+          </a>
+        </nav>
+      </footer>
     </main>
   )
 }

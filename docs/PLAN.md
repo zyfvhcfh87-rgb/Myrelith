@@ -2102,6 +2102,40 @@ project and timeline schemas are unchanged.
 - [x] Reviewed head `b131436` was normally merged through PR #37 as `daf3a6e`;
   GitHub closed only Issue #32 as completed.
 
+## Public preview foundation — v0.1.0-alpha.1
+
+**IMPLEMENTED; RELEASE CLOSEOUT IN PROGRESS (2026-08-01).**
+
+This slice makes the existing hosted app understandable and responsibly
+releasable as an experimental preview without overstating legal or product
+maturity.
+
+- [x] License WebCut's own source under MIT and record exact runtime dependency
+  licenses/source links, including the FFmpeg-derived AC-3/E-AC-3 boundary.
+- [x] Publish an implementation-matched privacy notice: app media stays local;
+  preferences, opaque file handles, and bounded recovery snapshots remain in
+  the browser; Cloudflare processes ordinary delivery/security request data;
+  cookies and Cloudflare Web Analytics are not used.
+- [x] Add public in-app Privacy and Licenses links plus standalone static pages
+  that remain reachable even when the source repository is private.
+- [x] Add a clearer README, changelog, citation metadata, contribution/support/
+  security/conduct files, and structured issue and pull-request templates.
+- [x] Add read-only CI and a version-tagged, multi-platform, SBOM/provenance
+  GHCR workflow for a non-root static WebCut container.
+- [x] Focused launcher coverage passed 13/13 and the complete suite passed
+  1,661/1,661 across 86 files. Production build, oxlint, the high-severity
+  production audit, and diff checking passed; only the known large lazy codec
+  chunk advisory remains. Playwright verified the built launcher at 1440×900
+  and 390×844 plus both legal routes: exact headings/links, keyboard focus,
+  zero horizontal overflow, zero cookies, and no console warning/page error.
+- [ ] Normally merge the reviewed exact head, create the alpha release/tag,
+  publish the GHCR package, update repository About/topics/homepage, and verify
+  the exact Cloudflare deployment.
+
+The alpha label is binding. This work is not a production-readiness,
+representative low-memory, GDPR, FFmpeg/LGPL, or codec-patent certification.
+Downstream distributors must review their own obligations.
+
 ## Test strategy per layer (unchanged from original)
 
 domain/, state/: Vitest. pipeline/, workers/: injectable-core unit tests +

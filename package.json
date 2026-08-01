@@ -1,7 +1,21 @@
 {
   "name": "webcut",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.1",
+  "description": "Private-by-design, browser-native non-linear video editor powered by WebCodecs.",
+  "license": "MIT",
+  "author": "Aryel",
+  "homepage": "https://webcut-d27.pages.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zyfvhcfh87-rgb/WebCut.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zyfvhcfh87-rgb/WebCut/issues"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

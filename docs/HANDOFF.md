@@ -79,6 +79,7 @@ and the open list below.
 | **Post-MVP #16 — capability-aware export profiles** | ✅ complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; PR #29 normally merged and Issue #16 closed |
 | **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
 | **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
+| **Public preview foundation** | 🚧 release closeout | MIT license, privacy and third-party notices, community health files, public legal pages, CI, and a GHCR container workflow; tagged prerelease and Cloudflare verification remain the final gates |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -1385,6 +1386,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
+- The public-preview foundation is now implemented in the repository: WebCut
+  has an MIT license, privacy notice, third-party/source notices, community and
+  security policies, versioned changelog, CI, public `/privacy/` and
+  `/licenses/` pages, and a non-root static container workflow. This permits an
+  explicitly experimental alpha release; it does **not** certify patent
+  clearance, production readiness, representative low-memory behavior, or all
+  downstream redistribution obligations. Keep the AC-3/E-AC-3 FFmpeg and codec
+  caveat visible in every release until a dedicated legal review resolves it.
 - Issue #32 is complete. PR #37 was reviewed at `b131436`, normally merged as
   `daf3a6e`, and GitHub closed the issue as completed. The sole fresh-project
   factory now creates persisted `V1`–`V4` followed by `A1`–`A4`; the timeline
@@ -1425,8 +1434,9 @@ surface; it is not a second zoom and never enters document history.
   cancellation, exact disposal, the real codec/damage matrix, and Chrome/Edge
   gates are complete. The three unchecked proxy implementation children are
   intentionally rejected by the measured no-go decision; do not imply an
-  in-app converter exists. Public-distribution licensing/notices and
-  representative low-memory certification remain separate release work.
+  in-app converter exists. The project license and public notices were added
+  for the alpha preview; representative low-memory certification and dedicated
+  FFmpeg/codec patent review remain separate release work.
 - Slices 4–6 now cover portable Save/Save As,
   permission-aware automatic source reconnection, removable Recent shortcuts,
   open-offline sessions, individual/folder relinking, live save after a writable

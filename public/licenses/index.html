@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d0f12" />
+    <meta name="description" content="WebCut license and third-party software notices." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/legal.css" />
+    <title>Licenses — WebCut</title>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/">← Back to WebCut</a>
+      <p class="eyebrow">Open-source software</p>
+      <h1>Licenses</h1>
+      <p class="lede">
+        WebCut's own source is available under the permissive MIT License.
+        Bundled dependencies keep their original licenses.
+      </p>
+
+      <div class="callout">
+        MIT lets you use, copy, modify, and distribute WebCut while preserving
+        the copyright and permission notice. The software comes without warranty.
+      </div>
+
+      <h2>Runtime components</h2>
+      <ul>
+        <li>Mediabunny, its AC-3 and ProRes extensions, and Turbores — MPL-2.0.</li>
+        <li>React, React DOM, Immer, and Zustand — MIT.</li>
+      </ul>
+      <p>
+        Exact versions and integrity hashes are locked in
+        <code>package-lock.json</code>. Source links and redistribution notes are
+        listed in the repository's <code>THIRD_PARTY_NOTICES.md</code>.
+      </p>
+
+      <h2>FFmpeg-derived AC-3/E-AC-3 module</h2>
+      <p>
+        The optional local AC-3/E-AC-3 decoder extension contains a WebAssembly
+        module built from a minimal FFmpeg configuration. FFmpeg is licensed
+        under LGPL-2.1-or-later unless optional parts change that license.
+        Review <a href="https://ffmpeg.org/legal.html">FFmpeg's legal page</a>,
+        <a href="https://ffmpeg.org/download.html#get-sources">source downloads</a>,
+        and the exact packaged sources before redistributing WebCut.
+      </p>
+      <p>
+        Codec patent rights are separate from copyright licenses and vary by
+        jurisdiction and use. This experimental prerelease is not a
+        patent-clearance or legal-compliance certification.
+      </p>
+
+      <footer>
+        Copyright © 2026 Aryel · <a href="/privacy/">Privacy</a>
+      </footer>
+    </main>
+  </body>
+</html>
