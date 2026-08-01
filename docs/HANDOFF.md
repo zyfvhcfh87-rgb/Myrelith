@@ -1379,6 +1379,9 @@ surface; it is not a second zoom and never enters document history.
   and tests green-light broken frame math.
 - Preview server: `npm run dev` uses :5173 by default; Vite also reads `PORT`
   (vite.config) so external launch profiles can assign an isolated port.
+- `npm run test:browser` starts an isolated Vite server on :41732 and runs the
+  real-Chromium crash/reopen IndexedDB recovery gate. On a fresh checkout, run
+  `npx playwright install chromium` once before the gate.
 - HMR of worker files fully reloads the page (in-page state like
   `__testFile` dies); module-map caches stale plain-URL imports —
   cache-bust probes with `?probe=N` (this double-instances mediabunny →
