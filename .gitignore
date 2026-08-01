@@ -33,3 +33,4 @@ coverage
 .tmp/
 .npm-cache/
 .playwright-cli/
+output/

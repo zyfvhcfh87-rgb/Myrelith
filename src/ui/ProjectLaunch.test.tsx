@@ -56,6 +56,12 @@ describe('ProjectLaunch', () => {
     expect(controller.showNewProject).toHaveBeenCalledOnce()
     expect(controller.showResumeProject).toHaveBeenCalledOnce()
     expect(libraryController.refreshProjectLibrary).toHaveBeenCalledOnce()
+    expect(screen.getByRole('link', { name: 'Privacy' }))
+      .toHaveAttribute('href', '/privacy/')
+    expect(screen.getByRole('link', { name: 'Licenses' }))
+      .toHaveAttribute('href', '/licenses/')
+    expect(screen.getByText('Your media stays on this device.'))
+      .toBeInTheDocument()
   })
 
   test('home offers recovery and recent entries with removable shortcuts', () => {

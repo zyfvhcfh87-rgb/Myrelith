@@ -15,12 +15,47 @@
 
 .project-launch {
   min-height: 100dvh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
   padding: clamp(18px, 5vw, 64px);
   overflow: auto;
   color: #e8edf5;
   background: #0d0f12;
+}
+
+.project-launch-footer {
+  width: min(980px, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 8px;
+  color: #737e8d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.project-launch-footer nav {
+  display: flex;
+  gap: 16px;
+}
+
+.project-launch-footer a {
+  color: #9eabc0;
+  text-underline-offset: 3px;
+}
+
+.project-launch-footer a:hover {
+  color: #d9e7fa;
+}
+
+.project-launch-footer a:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid #8bbcff;
+  outline-offset: 3px;
 }
 
 .project-launch-frame {
@@ -673,7 +708,7 @@
 
 @media (max-width: 700px) {
   .project-launch {
-    display: block;
+    justify-content: flex-start;
     padding: 12px;
   }
 
@@ -722,6 +757,13 @@
 
   .project-relink-heading {
     flex-direction: column;
+  }
+
+  .project-launch-footer {
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 8px;
+    text-align: center;
   }
 }
 

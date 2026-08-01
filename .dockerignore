@@ -1,0 +1,10 @@
+.git
+.github
+.npm-cache
+.playwright-cli
+.tmp
+coverage
+dist
+node_modules
+output
+*.log

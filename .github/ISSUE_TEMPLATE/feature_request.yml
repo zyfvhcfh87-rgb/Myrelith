@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose one focused improvement to WebCut.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Editing problem
+      description: What are you trying to accomplish, and what blocks you today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the result, not only a specific implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: local-first
+    attributes:
+      label: Local-first boundary
+      options:
+        - label: This can preserve WebCut's browser-local media and explicit capability behavior.
