@@ -22,8 +22,9 @@ sending the source files to an application server.
 
 - **Local-first:** media decoding, preview, editing, and export happen in your
   browser. There are no accounts, ads, cookies, or in-app analytics.
-- **A real editing model:** multi-track editing, linked A/V, trim/ripple/slip/
-  slide/razor tools, transitions, transforms, opacity, and clip volume.
+- **A real editing model:** multi-track editing, editable titles/captions,
+  linked A/V, trim/ripple/slip/slide/razor tools, transitions, transforms,
+  opacity, and clip volume.
 - **Portable projects:** `.webcut` files contain the edit, not bundled source
   media. Chrome can remember browser-managed file permissions and reconnect
   sources when allowed.
@@ -40,7 +41,7 @@ sending the source files to an application server.
 | Projects | 16:9, 9:16, 1:1, and 4:5 canvases from 720p to 4K; exact common frame and audio rates; Save, Save As, Resume, Recent, and recovery |
 | Media | Video, audio, PNG, JPEG, WebP, and AVIF; byte-level container inspection; thumbnails, filmstrips, and waveforms |
 | Timeline | Four video and four audio tracks by default; select, razor, trim, ripple trim, slip, slide, linked editing, track controls, and undo/redo |
-| Effects | Position, scale, rotation, opacity, volume, visual crossfades, and synchronized audio fades when valid handles exist |
+| Effects | Editable text overlays, position, scale, rotation, opacity, volume, visual crossfades, and synchronized audio fades when valid handles exist |
 | Export | Auto, Compatibility MP4/AVC/AAC, Web WebM/VP9/Opus, Modern WebM/AV1/Opus, and explicit HEVC; buffered download or direct-to-file save |
 
 ## Try it

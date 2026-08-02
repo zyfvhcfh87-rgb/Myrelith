@@ -394,7 +394,11 @@ export function linkedSlipClip(
   // linked gesture. Keep it an intentional, warning-free no-op instead of
   // letting applyToGroup misclassify the still member's same-reference return
   // as an atomicity failure.
-  if (groupMembers(doc, clipId).some((member) => member.sourceMode === 'still')) {
+  if (
+    groupMembers(doc, clipId).some(
+      (member) => member.sourceMode === 'still' || member.text !== undefined,
+    )
+  ) {
     return doc
   }
   return applyToGroup(doc, clipId, 'linkedSlipClip', (d, id) => slipClip(d, id, deltaFrames))

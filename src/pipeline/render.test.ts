@@ -9,6 +9,7 @@
 
 import { describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import { defaultTextProps } from '../domain/textOverlay'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import type {
   Composite2D,
@@ -65,7 +66,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -125,6 +126,16 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
       fill = v
       log.push({ name: 'fillStyle', args: [v] })
     },
+    strokeStyle: '#000000',
+    font: '10px sans-serif',
+    textAlign: 'start',
+    textBaseline: 'alphabetic',
+    lineWidth: 1,
+    lineJoin: 'miter',
+    shadowColor: '#00000000',
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
     save: () => {
       depth++
       log.push({ name: 'save', args: [] })
@@ -138,6 +149,12 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
     scale: (x, y) => log.push({ name: 'scale', args: [x, y] }),
     clearRect: (x, y, w, h) => log.push({ name: 'clearRect', args: [x, y, w, h] }),
     fillRect: (x, y, w, h) => log.push({ name: 'fillRect', args: [x, y, w, h] }),
+    beginPath: () => log.push({ name: 'beginPath', args: [] }),
+    rect: (x, y, w, h) => log.push({ name: 'rect', args: [x, y, w, h] }),
+    clip: () => log.push({ name: 'clip', args: [] }),
+    measureText: (text) => ({ width: text.length * 20 }),
+    fillText: (text, x, y) => log.push({ name: 'fillText', args: [text, x, y] }),
+    strokeText: (text, x, y) => log.push({ name: 'strokeText', args: [text, x, y] }),
     drawImage: (image, dx, dy) => {
       if (opts.throwOn === image) {
         throw new DOMException('bitmap was closed', 'InvalidStateError')
@@ -251,7 +268,7 @@ describe('compositeFrame — background & selection', () => {
     expect(log[4].args).toEqual([0, 0, 1920, 1080])
   })
 
-  test('skips audio tracks, hidden video tracks, gaps, and text clips', async () => {
+  test('draws text without media requests while skipping audio, hidden tracks, and gaps', async () => {
     const doc = makeDoc([
       makeTrack('A1', 'audio', [makeClip('audio-clip', 0, 100)]),
       makeTrack('V1', 'video', [makeClip('hidden-clip', 0, 100)], { hidden: true }),
@@ -259,6 +276,7 @@ describe('compositeFrame — background & selection', () => {
       makeTrack('V3', 'video', [
         makeClip('text-clip', 0, 100, {
           text: {
+            ...defaultTextProps(1920, 1080),
             content: 'hi',
             fontFamily: 'sans-serif',
             fontSizePx: 40,
@@ -276,7 +294,8 @@ describe('compositeFrame — background & selection', () => {
 
     expect(requests).toEqual([]) // nothing even asked for pixels
     expect(ops('drawImage')).toHaveLength(0)
-    expect(result).toEqual({ drawn: [], missing: [] })
+    expect(ops('fillText')).toHaveLength(1)
+    expect(result).toEqual({ drawn: ['text-clip'], missing: [] })
   })
 
   test('active-clip boundaries are half-open at the compositor too', async () => {

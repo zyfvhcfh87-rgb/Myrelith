@@ -318,10 +318,16 @@ export function planClipPresentation({
       : Math.max(0, surfaceWidthPx - 1)
 
   const showEdges = hasVisibleSlice && (tool === 'select' || tool === 'trim')
-  const accessibleKind = isStillSource ? 'still image' : trackKind
+  const accessibleKind = clip.text !== undefined
+    ? 'text overlay'
+    : isStillSource
+      ? 'still image'
+      : trackKind
   const interactionTitle =
-    tool === 'slip' && isStillSource
-      ? 'Still images always show their single source frame, so Slip is unavailable.'
+    tool === 'slip' && (isStillSource || clip.text !== undefined)
+      ? clip.text !== undefined
+        ? 'Text overlays have no source media, so Slip is unavailable.'
+        : 'Still images always show their single source frame, so Slip is unavailable.'
       : 'Select clip. Hold Ctrl or Command while clicking, or with Enter or Space, to add or remove it from the selection.'
 
   return {

@@ -95,7 +95,7 @@ function makeTrack(
 
 function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'doc',
     name: 'Playback audio test',
     frameRate: F10,
@@ -165,7 +165,7 @@ function crossfadePlaybackFixture(
   videoTrack.transitions = [transition]
   return {
     doc: {
-      schemaVersion: 3,
+      schemaVersion: 4,
       id: 'crossfade-playback',
       name: 'Crossfade playback',
       frameRate: F10,

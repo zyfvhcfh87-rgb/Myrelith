@@ -164,7 +164,9 @@ function formatAssetMetadata(
 
 function assetIsUsedOnTimeline(assetId: string): boolean {
   return useDocumentStore.getState().doc.tracks.some((track) => (
-    track.clips.some((clip) => clip.assetId === assetId)
+    track.clips.some(
+      (clip) => clip.text === undefined && clip.assetId === assetId,
+    )
   ))
 }
 

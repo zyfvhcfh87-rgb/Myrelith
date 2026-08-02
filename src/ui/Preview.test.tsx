@@ -4,6 +4,8 @@ import type { PortableAssetDescriptor } from '../domain/projectFile'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import Preview from './Preview'
+import { createTextClip } from '../domain/operations'
+import { useDocumentStore } from '../state/documentStore'
 
 const previewController = vi.hoisted(() => ({
   initPreview: vi.fn(),
@@ -89,5 +91,22 @@ describe('Preview', () => {
     expect(status).toHaveTextContent(
       'Reconnect title-card.png in the Media panel.',
     )
+  })
+
+  test('does not report offline visual sources for a text-only project', () => {
+    useMediaStore.setState({
+      descriptors: new Map(),
+      assets: new Map(),
+      visuals: new Map(),
+    })
+    const state = useDocumentStore.getState()
+    const track = state.doc.tracks.find((candidate) => candidate.kind === 'video')
+    expect(track).toBeDefined()
+    state.insertClip(track!.id, createTextClip(state.doc, 0, 30, 'Title only'))
+
+    render(<Preview />)
+
+    expect(screen.queryByText(/visual sources are offline/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/import a video or still image/i)).not.toBeInTheDocument()
   })
 })

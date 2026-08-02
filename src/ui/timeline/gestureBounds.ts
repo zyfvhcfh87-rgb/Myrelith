@@ -31,10 +31,11 @@ export function gestureBoundsForClip(
   const timeline = clip.timelineRange
   const source = clip.sourceRange
   const stillSource = clip.sourceMode === 'still'
+  const textSource = clip.text !== undefined
   // Text clips have no media descriptor and intentionally remain extendable.
   // A still repeats its single source frame for any legal timeline duration.
   // Unknown timed sources fail closed at their current source end.
-  const headroom = clip.text || stillSource
+  const headroom = textSource || stillSource
     ? Number.POSITIVE_INFINITY
     : Math.max(0, assetDurationFrames - rangeEnd(source))
 
@@ -47,14 +48,14 @@ export function gestureBoundsForClip(
       }
     case 'trim-start':
       return {
-        minDelta: stillSource
+        minDelta: stillSource || textSource
           ? -timeline.startFrame
           : Math.max(-timeline.startFrame, -source.startFrame),
         maxDelta: timeline.durationFrames - 1,
       }
     case 'ripple-start':
       return {
-        minDelta: stillSource
+        minDelta: stillSource || textSource
           ? Number.NEGATIVE_INFINITY
           : -source.startFrame,
         maxDelta: timeline.durationFrames - 1,
@@ -66,7 +67,7 @@ export function gestureBoundsForClip(
         maxDelta: headroom,
       }
     case 'slip':
-      if (stillSource) return { minDelta: 0, maxDelta: 0 }
+      if (stillSource || textSource) return { minDelta: 0, maxDelta: 0 }
       return {
         minDelta: -source.startFrame,
         maxDelta: headroom,

@@ -32,6 +32,7 @@ import type {
   TrackKind,
   Transition,
   TransitionId,
+  TextProps,
   Transform,
 } from './schema'
 import {
@@ -44,6 +45,12 @@ import {
   type SourceBoundsCatalog,
 } from './crossfadePlan'
 import { rangeEnd, rangeOverlap } from './time'
+import {
+  defaultTextProps,
+  proceduralTextAssetId,
+  textOverlayName,
+  textPropsValidationError,
+} from './textOverlay'
 
 /** Which clip edge a trim moves. */
 export type TrimEdge = 'start' | 'end'
@@ -591,6 +598,46 @@ export function clipFromAsset(
   }
 }
 
+/** Build one bounded procedural text clip at an explicit timeline range. */
+export function createTextClip(
+  doc: TimelineDoc,
+  startFrame: number,
+  durationFrames: number,
+  content = 'Your text',
+): Clip {
+  if (!Number.isSafeInteger(startFrame) || startFrame < 0) {
+    throw new RangeError('Text overlay start frame must be a safe integer at or after 0.')
+  }
+  if (!Number.isSafeInteger(durationFrames) || durationFrames < 1) {
+    throw new RangeError('Text overlay duration must be a positive safe integer.')
+  }
+  const id = newId('text')
+  const text = defaultTextProps(doc.width, doc.height, content)
+  const error = textPropsValidationError(text)
+  if (error) throw new RangeError(error)
+  return {
+    id,
+    assetId: proceduralTextAssetId(id),
+    name: textOverlayName(content),
+    sourceMode: 'timed',
+    sourceRange: { startFrame: 0, durationFrames },
+    timelineRange: { startFrame, durationFrames },
+    transform: {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    },
+    opacity: 1,
+    volume: 1,
+    effects: [],
+    text,
+  }
+}
+
 /**
  * Insert a new clip onto a track. The clip is defensively deep-copied so
  * later mutation of the caller's object cannot reach into the doc. Rejected
@@ -643,11 +690,27 @@ export function insertClip(
       `sourceRange duration ${src.durationFrames} != timelineRange duration ${tl.durationFrames} (clips play at speed 1.0)`,
     )
   }
+  if (clip.text !== undefined) {
+    if (clip.assetId !== proceduralTextAssetId(clip.id)) {
+      return reject(doc, op, 'text clips must use their reserved procedural asset id')
+    }
+    if (clip.sourceMode !== 'timed') {
+      return reject(doc, op, 'text clips must use procedural timed source mode')
+    }
+    if (src.startFrame !== 0) {
+      return reject(doc, op, 'text clips must use procedural source start 0')
+    }
+    const textError = textPropsValidationError(clip.text)
+    if (textError) return reject(doc, op, textError)
+  }
 
   const trackIndex = doc.tracks.findIndex((t) => t.id === trackId)
   if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
   const track = doc.tracks[trackIndex]
   if (track.locked) return reject(doc, op, `track ${track.id} is locked`)
+  if (clip.text !== undefined && track.kind !== 'video') {
+    return reject(doc, op, 'text clips can only be placed on video tracks')
+  }
 
   if (locateClip(doc, clip.id)) {
     return reject(doc, op, `clip id ${clip.id} already exists in the document`)
@@ -662,7 +725,7 @@ export function insertClip(
     timelineRange: { ...tl },
     transform: { ...clip.transform },
     effects: clip.effects.map((e) => ({ ...e, params: { ...e.params } })),
-    ...(clip.text ? { text: { ...clip.text } } : {}),
+    ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
   }
 
   const clips = [...track.clips, copy].sort(byStart)
@@ -701,10 +764,13 @@ export function splitClipAtFrame(
 
   const offset = frame - tl.startFrame
   const stillSource = clip.sourceMode === 'still'
+  const textSource = clip.text !== undefined
   const left: Clip = {
     ...clip,
     sourceRange: stillSource
       ? { startFrame: 0, durationFrames: 1 }
+      : textSource
+        ? { startFrame: 0, durationFrames: offset }
       : {
           startFrame: clip.sourceRange.startFrame,
           durationFrames: offset,
@@ -716,6 +782,8 @@ export function splitClipAtFrame(
     id: newId('clip'),
     sourceRange: stillSource
       ? { startFrame: 0, durationFrames: 1 }
+      : textSource
+        ? { startFrame: 0, durationFrames: tl.durationFrames - offset }
       : {
           startFrame: clip.sourceRange.startFrame + offset,
           durationFrames: tl.durationFrames - offset,
@@ -726,7 +794,7 @@ export function splitClipAtFrame(
       id: newId('fx'),
       params: { ...e.params },
     })),
-    ...(clip.text ? { text: { ...clip.text } } : {}),
+    ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
   }
 
   const clips = loc.track.clips.slice()
@@ -773,6 +841,7 @@ export function trimClip(
   const tl = clip.timelineRange
   const src = clip.sourceRange
   const stillSource = clip.sourceMode === 'still'
+  const textSource = clip.text !== undefined
 
   let newTl: TimeRange
   let newSrc: TimeRange
@@ -783,6 +852,8 @@ export function trimClip(
     }
     newSrc = stillSource
       ? src
+      : textSource
+        ? { startFrame: 0, durationFrames: newTl.durationFrames }
       : {
           startFrame: src.startFrame + deltaFrames,
           durationFrames: src.durationFrames - deltaFrames,
@@ -791,6 +862,8 @@ export function trimClip(
     newTl = { startFrame: tl.startFrame, durationFrames: tl.durationFrames + deltaFrames }
     newSrc = stillSource
       ? src
+      : textSource
+        ? { startFrame: 0, durationFrames: newTl.durationFrames }
       : {
           startFrame: src.startFrame,
           durationFrames: src.durationFrames + deltaFrames,
@@ -803,7 +876,7 @@ export function trimClip(
   if (newTl.startFrame < 0) {
     return reject(doc, op, 'clip cannot start before timeline frame 0')
   }
-  if (!stillSource && newSrc.startFrame < 0) {
+  if (!stillSource && !textSource && newSrc.startFrame < 0) {
     return reject(doc, op, 'no source material before the asset start')
   }
   if (overlapsAny(loc.track.clips, newTl, clipId)) {
@@ -935,7 +1008,7 @@ export function slipClip(
   }
   const loc = locateClip(doc, clipId)
   if (!loc) return reject(doc, op, `clip ${clipId} not found`)
-  if (loc.clip.sourceMode === 'still') return doc
+  if (loc.clip.sourceMode === 'still' || loc.clip.text !== undefined) return doc
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
 
   const src = loc.clip.sourceRange
@@ -1000,11 +1073,14 @@ export function slideClip(
     if (newDur < 1) {
       return reject(doc, op, 'left neighbor cannot shrink below 1 frame')
     }
+    const leftIsText = left.text !== undefined
     clips[clipIndex - 1] = {
       ...left,
       timelineRange: { ...left.timelineRange, durationFrames: newDur },
       sourceRange: left.sourceMode === 'still'
         ? left.sourceRange
+        : leftIsText
+          ? { startFrame: 0, durationFrames: newDur }
         : { ...left.sourceRange, durationFrames: newDur },
     }
   }
@@ -1012,13 +1088,14 @@ export function slideClip(
     // Touching right neighbor: its head follows our tail.
     const newDur = right.timelineRange.durationFrames - deltaFrames
     const rightIsStill = right.sourceMode === 'still'
-    const newSrcStart = rightIsStill
+    const rightIsText = right.text !== undefined
+    const newSrcStart = rightIsStill || rightIsText
       ? right.sourceRange.startFrame
       : right.sourceRange.startFrame + deltaFrames
     if (newDur < 1) {
       return reject(doc, op, 'right neighbor cannot shrink below 1 frame')
     }
-    if (!rightIsStill && newSrcStart < 0) {
+    if (!rightIsStill && !rightIsText && newSrcStart < 0) {
       return reject(doc, op, 'right neighbor has no source material before the asset start')
     }
     clips[clipIndex + 1] = {
@@ -1029,6 +1106,8 @@ export function slideClip(
       },
       sourceRange: rightIsStill
         ? right.sourceRange
+        : rightIsText
+          ? { startFrame: 0, durationFrames: newDur }
         : { startFrame: newSrcStart, durationFrames: newDur },
     }
   }
@@ -1081,18 +1160,19 @@ export function rippleTrim(
   const src = clip.sourceRange
   const oldEnd = rangeEnd(tl)
   const stillSource = clip.sourceMode === 'still'
+  const textSource = clip.text !== undefined
 
   let newClip: Clip
   let shiftBy: number
   if (edge === 'start') {
     const newDur = tl.durationFrames - deltaFrames
-    const newSrcStart = stillSource
+    const newSrcStart = stillSource || textSource
       ? src.startFrame
       : src.startFrame + deltaFrames
     if (newDur < 1) {
       return reject(doc, op, 'clip duration cannot shrink below 1 frame')
     }
-    if (!stillSource && newSrcStart < 0) {
+    if (!stillSource && !textSource && newSrcStart < 0) {
       return reject(doc, op, 'no source material before the asset start')
     }
     newClip = {
@@ -1100,6 +1180,8 @@ export function rippleTrim(
       timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
       sourceRange: stillSource
         ? src
+        : textSource
+          ? { startFrame: 0, durationFrames: newDur }
         : { startFrame: newSrcStart, durationFrames: newDur },
     }
     shiftBy = -deltaFrames
@@ -1113,6 +1195,8 @@ export function rippleTrim(
       timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
       sourceRange: stillSource
         ? src
+        : textSource
+          ? { startFrame: 0, durationFrames: newDur }
         : { startFrame: src.startFrame, durationFrames: newDur },
     }
     shiftBy = deltaFrames
@@ -1182,6 +1266,73 @@ export function updateClipTransform(
     opacity: hasOpacity
       ? Math.min(1, Math.max(0, patch.opacity as number))
       : loc.clip.opacity,
+  }
+  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
+/** Complete editable surface for one procedural text payload. */
+export type TextPropsPatch = Partial<TextProps>
+
+const TEXT_PROP_KEYS = new Set<keyof TextProps>([
+  'content',
+  'fontFamily',
+  'fontSizePx',
+  'color',
+  'align',
+  'bold',
+  'italic',
+  'boxWidthPx',
+  'boxHeightPx',
+  'paddingPx',
+  'backgroundEnabled',
+  'backgroundColor',
+  'outlineEnabled',
+  'outlineColor',
+  'outlineWidthPx',
+  'shadowEnabled',
+  'shadowColor',
+  'shadowBlurPx',
+  'shadowOffsetXPx',
+  'shadowOffsetYPx',
+])
+
+/**
+ * Merge one text edit and reject unsupported values without substitution.
+ * Geometry/timing remain untouched; one successful call is one history entry.
+ */
+export function updateTextClip(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  patch: TextPropsPatch,
+): TimelineDoc {
+  const op = 'updateTextClip'
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+  if (loc.clip.text === undefined) {
+    return reject(doc, op, `clip ${clipId} is not a text overlay`)
+  }
+  const keys = Object.keys(patch) as Array<keyof TextProps>
+  if (keys.length === 0) return reject(doc, op, 'empty patch — nothing to change')
+  for (const key of keys) {
+    if (!TEXT_PROP_KEYS.has(key)) {
+      return reject(doc, op, `unknown text property ${String(key)}`)
+    }
+  }
+  const text: TextProps = { ...loc.clip.text, ...patch }
+  const error = textPropsValidationError(text)
+  if (error) return reject(doc, op, error)
+  if (keys.every((key) => Object.is(text[key], loc.clip.text?.[key]))) {
+    return doc
+  }
+
+  const clips = loc.track.clips.slice()
+  clips[loc.clipIndex] = {
+    ...loc.clip,
+    name: patch.content === undefined
+      ? loc.clip.name
+      : textOverlayName(text.content),
+    text,
   }
   return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
 }

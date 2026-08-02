@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from './schema'
 import { PROJECT_ASPECT_RATIO_PRESETS } from './projectSettings'
+import { defaultTextProps, proceduralTextAssetId } from './textOverlay'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
@@ -126,10 +127,17 @@ function makeDocument(): TimelineDoc {
     },
   ]
   const second = mediaClip('clip-b', 'video-z', 10, 15, 10)
-  const title = mediaClip('clip-title', 'image-a', 24, 0, 20)
+  const title = mediaClip(
+    'clip-title',
+    proceduralTextAssetId('clip-title'),
+    24,
+    0,
+    20,
+  )
   title.text = {
+    ...defaultTextProps(1920, 1080),
     content: 'A portable title',
-    fontFamily: 'Inter',
+    fontFamily: 'system-ui',
     fontSizePx: 72,
     color: '#f5f5f5',
     align: 'center',
@@ -252,7 +260,7 @@ describe('portable project file', () => {
         .every((clip) => clip.sourceMode === 'timed'),
     ).toBe(true)
     expect(parsed.document.tracks[0].clips[2]).toMatchObject({
-      assetId: 'image-a',
+      assetId: expect.stringMatching(/^__webcut_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
       text: { content: 'A portable title' },
@@ -290,6 +298,62 @@ describe('portable project file', () => {
     })
   })
 
+  test('migrates dormant schema-3 text into a procedural bounded overlay', () => {
+    const legacy = clone(makeProject()) as unknown as {
+      document: TimelineDoc
+    }
+    legacy.document.schemaVersion = 3
+    const title = legacy.document.tracks[0].clips[2]
+    title.assetId = 'image-a'
+    title.text = {
+      content: 'Legacy title',
+      fontFamily: 'system-ui',
+      fontSizePx: 72,
+      color: '#f5f5f5',
+      align: 'center',
+      bold: true,
+      italic: false,
+    } as typeof title.text
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+    const migrated = parsed.document.tracks[0].clips[2]
+    expect(migrated).toMatchObject({
+      assetId: expect.stringMatching(/^__webcut_text__:/),
+      sourceMode: 'timed',
+      sourceRange: { startFrame: 0, durationFrames: 20 },
+      text: {
+        content: 'Legacy title',
+        fontFamily: 'system-ui',
+        boxWidthPx: 1248,
+        boxHeightPx: 238,
+        outlineEnabled: true,
+        shadowEnabled: true,
+      },
+    })
+  })
+
+  test('rejects an unsupported legacy text font instead of substituting it', () => {
+    const legacy = clone(makeProject()) as unknown as {
+      document: TimelineDoc
+    }
+    legacy.document.schemaVersion = 3
+    const title = legacy.document.tracks[0].clips[2]
+    title.assetId = 'image-a'
+    title.text = {
+      content: 'Legacy title',
+      fontFamily: 'Inter' as 'sans-serif',
+      fontSizePx: 72,
+      color: '#f5f5f5',
+      align: 'center',
+      bold: true,
+      italic: false,
+    } as typeof title.text
+
+    expect(() => parseProjectFile(JSON.stringify(legacy))).toThrow(
+      /supported generic font family/,
+    )
+  })
+
   test('migrates a v2 image clip to one still source frame without changing its timeline', () => {
     const legacy = clone(makeProject()) as unknown as {
       formatVersion: number
@@ -299,6 +363,7 @@ describe('portable project file', () => {
     legacy.document.schemaVersion = 1
     const title = legacy.document.tracks[0].clips[2]
     delete title.text
+    title.assetId = 'image-a'
     for (const track of legacy.document.tracks) {
       for (const clip of track.clips) removeSourceMode(clip)
     }
@@ -322,6 +387,7 @@ describe('portable project file', () => {
     legacy.document.schemaVersion = 1
     const video = legacy.document.tracks[0].clips[0]
     const imageBackedText = legacy.document.tracks[0].clips[2]
+    imageBackedText.assetId = 'image-a'
     video.sourceMode = 'still'
     imageBackedText.sourceMode = 'still'
 
@@ -335,7 +401,7 @@ describe('portable project file', () => {
       sourceRange: { startFrame: 5, durationFrames: 10 },
     })
     expect(parsed.document.tracks[0].clips[2]).toMatchObject({
-      assetId: 'image-a',
+      assetId: expect.stringMatching(/^__webcut_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
       text: { content: 'A portable title' },
@@ -349,12 +415,13 @@ describe('portable project file', () => {
     if (!imageDescriptor) throw new Error('missing image fixture')
     imageDescriptor.durationMicroseconds = 100_000
     const imageBackedText = legacy.document.tracks[0].clips[2]
+    imageBackedText.assetId = 'image-a'
     removeSourceMode(imageBackedText)
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
     expect(parsed.document.tracks[0].clips[2]).toMatchObject({
-      assetId: 'image-a',
+      assetId: expect.stringMatching(/^__webcut_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
       timelineRange: { startFrame: 24, durationFrames: 20 },
@@ -366,6 +433,7 @@ describe('portable project file', () => {
     const project = makeProject()
     const title = project.document.tracks[0].clips[2]
     delete title.text
+    title.assetId = 'image-a'
     title.sourceMode = 'still'
     title.sourceRange = { startFrame: 0, durationFrames: 1 }
 
@@ -690,7 +758,8 @@ describe('portable project file', () => {
       PROJECT_FILE_LIMITS.maxTotalTextCharacters / PROJECT_FILE_LIMITS.maxTextCharacters,
     ) + 1
     const textClips = Array.from({ length: textClipCount }, (_value, index) => {
-      const clip = mediaClip(`bulk-text-${index}`, 'image-a', index, 0, 1)
+      const id = `bulk-text-${index}`
+      const clip = mediaClip(id, proceduralTextAssetId(id), index, 0, 1)
       clip.text = sharedText
       return clip
     })
@@ -707,6 +776,7 @@ describe('portable project file', () => {
       content: 'x'.repeat(PROJECT_FILE_LIMITS.maxTextCharacters),
     }
     delete project.document.tracks[0].clips[2].text
+    project.document.tracks[0].clips[2].assetId = 'image-a'
     project.document.tracks[0].clips[2].sourceMode = 'still'
     project.document.tracks[0].clips[2].sourceRange = {
       startFrame: 0,
@@ -716,7 +786,8 @@ describe('portable project file', () => {
       PROJECT_FILE_LIMITS.maxTotalTextCharacters / PROJECT_FILE_LIMITS.maxTextCharacters,
     )
     const textClips = Array.from({ length: textClipCount }, (_value, index) => {
-      const clip = mediaClip(`budget-text-${index}`, 'image-a', index, 0, 1)
+      const id = `budget-text-${index}`
+      const clip = mediaClip(id, proceduralTextAssetId(id), index, 0, 1)
       clip.text = sharedText
       return clip
     })
@@ -820,6 +891,7 @@ describe('portable project file', () => {
     const timedImage = makeProject()
     const imageClip = timedImage.document.tracks[0].clips[2]
     delete imageClip.text
+    imageClip.assetId = 'image-a'
     expect(() => validateProjectFile(timedImage)).toThrow(
       /image clips must use still source mode/,
     )
@@ -827,6 +899,7 @@ describe('portable project file', () => {
     const malformedStill = makeProject()
     const still = malformedStill.document.tracks[0].clips[2]
     delete still.text
+    still.assetId = 'image-a'
     still.sourceMode = 'still'
     still.sourceRange = { startFrame: 0, durationFrames: 2 }
     expect(() => validateProjectFile(malformedStill)).toThrow(
@@ -844,16 +917,18 @@ describe('portable project file', () => {
     expect(() => validateProjectFile(project)).toThrow(/beyond the referenced asset duration/)
   })
 
-  test('allows procedural text beyond its backing asset while preserving timed equality', () => {
+  test('allows media-free procedural text while preserving timed equality', () => {
     const project = makeProject()
-    const imageDescriptor = project.assets.find((asset) => asset.id === 'image-a')
-    if (!imageDescriptor) throw new Error('missing image fixture')
-    imageDescriptor.durationMicroseconds = 100_000
-
     expect(() => validateProjectFile(project)).not.toThrow()
 
     project.document.tracks[0].clips[2].sourceRange.durationFrames = 19
     expect(() => validateProjectFile(project)).toThrow(/durations must match/)
+  })
+
+  test('rejects text clips that reuse a real media asset id', () => {
+    const project = makeProject()
+    project.document.tracks[0].clips[2].assetId = 'image-a'
+    expect(() => validateProjectFile(project)).toThrow(/reserved procedural asset id/)
   })
 
   test('accepts one-frame clips for positive sub-frame media', () => {

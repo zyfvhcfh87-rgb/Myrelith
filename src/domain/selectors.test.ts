@@ -15,6 +15,7 @@ import {
   tracksInDisplayOrder,
 } from './selectors'
 import { videoCompositionPlanAtFrame } from './videoCompositionPlan'
+import { defaultTextProps } from './textOverlay'
 
 function makeClip(id: string, tlStart: number, duration: number, sourceStart = 0): Clip {
   return {
@@ -53,7 +54,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -218,8 +219,9 @@ describe('outputMediaAssetIds', () => {
       ...makeClip('title', 20, 10),
       assetId: 'text-asset',
       text: {
+        ...defaultTextProps(1920, 1080),
         content: 'Title',
-        fontFamily: 'sans-serif',
+        fontFamily: 'sans-serif' as const,
         fontSizePx: 48,
         color: '#fff',
         align: 'center' as const,
@@ -323,6 +325,13 @@ describe('videoCompositionPlanAtFrame', () => {
             opacity: item.request.opacity,
             weight: null,
           }]
+        : item.kind === 'text'
+          ? [{
+              id: item.clip.id,
+              sourceFrame: 0,
+              opacity: item.opacity,
+              weight: null,
+            }]
         : item.requests
             .filter((request) => request.opacity > 0 && request.weight > 0)
             .map((request) => ({
@@ -415,10 +424,11 @@ describe('videoCompositionPlanAtFrame', () => {
     ])
   })
 
-  test('skips hidden, audio, text, and zero-opacity media in the canonical plan', () => {
+  test('plans text procedurally while skipping hidden, audio, and zero-opacity media', () => {
     const text = {
+      ...defaultTextProps(1920, 1080),
       content: 'title',
-      fontFamily: 'sans-serif',
+      fontFamily: 'sans-serif' as const,
       fontSizePx: 40,
       color: '#fff',
       align: 'center' as const,
@@ -432,7 +442,9 @@ describe('videoCompositionPlanAtFrame', () => {
       makeTrack('zero', 'video', [{ ...from, opacity: 0 }]),
     ])
 
-    expect(summary(doc, 15)).toEqual([])
+    expect(summary(doc, 15)).toEqual([
+      { id: 'from', sourceFrame: 0, opacity: 1, weight: null },
+    ])
   })
 
   test('malformed or ambiguous transitions deterministically fall back to the hard cut', () => {

@@ -31,6 +31,7 @@ import type {
 import type {
   ClipTransformPatch,
   CrossfadeSettings,
+  TextPropsPatch,
   TrackFlagsPatch,
   TrimEdge,
 } from '../domain/operations'
@@ -49,6 +50,7 @@ import {
   setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
   updateClipTransform,
+  updateTextClip,
 } from '../domain/operations'
 import {
   linkClips as linkClipsInDocument,
@@ -195,6 +197,8 @@ export interface DocumentState {
    * independently editable even when linked to an audio half.
    */
   updateClipTransform: (clipId: ClipId, patch: ClipTransformPatch) => void
+  /** Update one text payload atomically; invalid/unchanged patches add no history. */
+  updateTextClip: (clipId: ClipId, patch: TextPropsPatch) => void
   /**
    * Set a clip's audio volume (Inspector for audio clips). Domain-clamped
    * to [0, MAX_CLIP_VOLUME]; an unchanged value pushes no history entry.
@@ -394,6 +398,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   updateClipTransform: (clipId, patch) =>
     set((state) => commit(state, updateClipTransform(state.doc, clipId, patch))),
+
+  updateTextClip: (clipId, patch) =>
+    set((state) => commit(state, updateTextClip(state.doc, clipId, patch))),
 
   setClipVolume: (clipId, volume) =>
     set((state) => commit(state, setClipVolume(state.doc, clipId, volume))),

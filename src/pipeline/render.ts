@@ -34,6 +34,8 @@
  */
 
 import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
+import { wrapTextLines } from '../domain/textLayout'
+import { textPropsValidationError } from '../domain/textOverlay'
 import {
   videoCompositionRequests,
   type VideoCompositionPlan,
@@ -72,6 +74,16 @@ export interface Composite2D {
   globalAlpha: number
   globalCompositeOperation: GlobalCompositeOperation
   fillStyle: string | CanvasGradient | CanvasPattern
+  strokeStyle?: string | CanvasGradient | CanvasPattern
+  font?: string
+  textAlign?: CanvasTextAlign
+  textBaseline?: CanvasTextBaseline
+  lineWidth?: number
+  lineJoin?: CanvasLineJoin
+  shadowColor?: string
+  shadowBlur?: number
+  shadowOffsetX?: number
+  shadowOffsetY?: number
   save(): void
   restore(): void
   translate(x: number, y: number): void
@@ -80,6 +92,40 @@ export interface Composite2D {
   clearRect(x: number, y: number, w: number, h: number): void
   fillRect(x: number, y: number, w: number, h: number): void
   drawImage(image: CanvasImageSource, dx: number, dy: number): void
+  beginPath?(): void
+  rect?(x: number, y: number, w: number, h: number): void
+  clip?(): void
+  measureText?(text: string): Pick<TextMetrics, 'width'>
+  fillText?(text: string, x: number, y: number): void
+  strokeText?(text: string, x: number, y: number): void
+}
+
+type TextComposite2D = Composite2D & Required<Pick<Composite2D,
+  | 'strokeStyle'
+  | 'font'
+  | 'textAlign'
+  | 'textBaseline'
+  | 'lineWidth'
+  | 'lineJoin'
+  | 'shadowColor'
+  | 'shadowBlur'
+  | 'shadowOffsetX'
+  | 'shadowOffsetY'
+  | 'beginPath'
+  | 'rect'
+  | 'clip'
+  | 'measureText'
+  | 'fillText'
+  | 'strokeText'
+>>
+
+function supportsTextDrawing(ctx: Composite2D): ctx is TextComposite2D {
+  return typeof ctx.beginPath === 'function'
+    && typeof ctx.rect === 'function'
+    && typeof ctx.clip === 'function'
+    && typeof ctx.measureText === 'function'
+    && typeof ctx.fillText === 'function'
+    && typeof ctx.strokeText === 'function'
 }
 
 /** One transparent, output-sized scratch surface owned by the caller. */
@@ -178,6 +224,20 @@ export async function compositeFrame(
         continue
       }
 
+      if (item.kind === 'text') {
+        try {
+          drawTextClip(ctx, doc, item.clip, item.opacity)
+          drawn.push(item.clip.id)
+        } catch (e) {
+          console.warn(
+            `[render] drawing text clip "${item.clip.id}" failed:`,
+            e instanceof Error ? e.message : e,
+          )
+          missing.push(item.clip.id)
+        }
+        continue
+      }
+
       const request = item.request
       const clip = request.clip
       const image = imagesByRequest.get(request) ?? null
@@ -202,6 +262,124 @@ export async function compositeFrame(
   }
 
   return { drawn, missing }
+}
+
+const MAX_CACHED_TEXT_LAYOUTS_PER_CONTEXT = 64
+const MAX_RENDERED_TEXT_LINES = 512
+const textLayoutCaches = new WeakMap<object, Map<string, readonly string[]>>()
+
+function textLines(
+  ctx: TextComposite2D,
+  clip: Clip,
+): readonly string[] {
+  const text = clip.text
+  if (!text) return []
+  const lineHeight = Math.ceil(text.fontSizePx * 1.2)
+  const innerWidth = text.boxWidthPx - text.paddingPx * 2
+  const innerHeight = text.boxHeightPx - text.paddingPx * 2
+  const maxLines = Math.max(
+    1,
+    Math.min(MAX_RENDERED_TEXT_LINES, Math.floor(innerHeight / lineHeight)),
+  )
+  const key = [
+    text.content,
+    text.fontFamily,
+    text.fontSizePx,
+    text.bold,
+    text.italic,
+    innerWidth,
+    maxLines,
+  ].join('\u0000')
+  let cache = textLayoutCaches.get(ctx as object)
+  if (!cache) {
+    cache = new Map()
+    textLayoutCaches.set(ctx as object, cache)
+  }
+  const cached = cache.get(key)
+  if (cached) return cached
+  const lines = wrapTextLines(
+    text.content,
+    innerWidth,
+    maxLines,
+    (value) => ctx.measureText(value).width,
+  )
+  cache.set(key, lines)
+  if (cache.size > MAX_CACHED_TEXT_LAYOUTS_PER_CONTEXT) {
+    const oldest = cache.keys().next().value as string | undefined
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+  return lines
+}
+
+/** Paint one procedural overlay with the same transform model as media. */
+function drawTextClip(
+  ctx: Composite2D,
+  doc: TimelineDoc,
+  clip: Clip,
+  opacity: number,
+): void {
+  if (!supportsTextDrawing(ctx)) {
+    throw new TypeError('The compositor context does not support text drawing.')
+  }
+  const text = clip.text
+  if (!text) throw new TypeError('Text composition item has no text payload.')
+  const validationError = textPropsValidationError(text)
+  if (validationError) throw new RangeError(validationError)
+
+  const transform = clip.transform
+  const anchorX = transform.anchorX * text.boxWidthPx
+  const anchorY = transform.anchorY * text.boxHeightPx
+  const canvasX = (doc.width - text.boxWidthPx) / 2 + anchorX + transform.x
+  const canvasY = (doc.height - text.boxHeightPx) / 2 + anchorY + transform.y
+  const lineHeight = Math.ceil(text.fontSizePx * 1.2)
+  const x = text.align === 'left'
+    ? text.paddingPx
+    : text.align === 'right'
+      ? text.boxWidthPx - text.paddingPx
+      : text.boxWidthPx / 2
+
+  ctx.save()
+  try {
+    ctx.globalAlpha = opacity
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.translate(canvasX, canvasY)
+    ctx.rotate((transform.rotation * Math.PI) / 180)
+    ctx.scale(transform.scaleX, transform.scaleY)
+    ctx.translate(-anchorX, -anchorY)
+    if (text.backgroundEnabled) {
+      ctx.fillStyle = text.backgroundColor
+      ctx.fillRect(0, 0, text.boxWidthPx, text.boxHeightPx)
+    }
+
+    ctx.beginPath()
+    ctx.rect(0, 0, text.boxWidthPx, text.boxHeightPx)
+    ctx.clip()
+    ctx.font = `${text.italic ? 'italic' : 'normal'} ${text.bold ? '700' : '400'} ${text.fontSizePx}px ${text.fontFamily}`
+    ctx.textAlign = text.align
+    ctx.textBaseline = 'top'
+    ctx.lineJoin = 'round'
+    const lines = textLines(ctx, clip)
+    for (let index = 0; index < lines.length; index++) {
+      const y = text.paddingPx + index * lineHeight
+      if (text.outlineEnabled && text.outlineWidthPx > 0) {
+        ctx.shadowColor = '#00000000'
+        ctx.shadowBlur = 0
+        ctx.shadowOffsetX = 0
+        ctx.shadowOffsetY = 0
+        ctx.strokeStyle = text.outlineColor
+        ctx.lineWidth = text.outlineWidthPx
+        ctx.strokeText(lines[index], x, y)
+      }
+      ctx.fillStyle = text.color
+      ctx.shadowColor = text.shadowEnabled ? text.shadowColor : '#00000000'
+      ctx.shadowBlur = text.shadowEnabled ? text.shadowBlurPx : 0
+      ctx.shadowOffsetX = text.shadowEnabled ? text.shadowOffsetXPx : 0
+      ctx.shadowOffsetY = text.shadowEnabled ? text.shadowOffsetYPx : 0
+      ctx.fillText(lines[index], x, y)
+    }
+  } finally {
+    ctx.restore()
+  }
 }
 
 function idsNotIn(left: ClipId[], right: ClipId[]): ClipId[] {

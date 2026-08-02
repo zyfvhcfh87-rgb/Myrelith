@@ -24,13 +24,22 @@ import type {
 import { microsecondsDurationToFrames } from './time'
 import { cloneMediaSourceBounds } from './sourceBounds'
 import {
+  defaultTextProps,
+  isProceduralTextAssetId,
+  isSupportedTextColor,
+  isSupportedTextFontFamily,
+  TEXT_OVERLAY_LIMITS,
+  textPropsValidationError,
+  proceduralTextAssetId,
+} from './textOverlay'
+import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
 
 export const PROJECT_FILE_FORMAT = 'webcut-project' as const
 export const CURRENT_PROJECT_FORMAT_VERSION = 4 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 3 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 4 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -49,7 +58,7 @@ export const PROJECT_FILE_LIMITS = {
   maxNameCharacters: MAX_PROJECT_NAME_CHARACTERS,
   maxFileNameCharacters: 4_096,
   maxMimeTypeCharacters: 256,
-  maxTextCharacters: 1_000_000,
+  maxTextCharacters: TEXT_OVERLAY_LIMITS.maxCharacters,
   maxEffectStringCharacters: 65_536,
   maxDimension: 65_535,
   maxAudioSampleRate: 768_000,
@@ -278,6 +287,9 @@ function validateAsset(value: unknown, path: string): asserts value is PortableA
     path,
   )
   stringValue(asset.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (isProceduralTextAssetId(asset.id)) {
+    fail(`${path}.id`, 'procedural text ids cannot be media asset ids')
+  }
   stringValue(asset.fileName, `${path}.fileName`, PROJECT_FILE_LIMITS.maxFileNameCharacters)
   stringValue(asset.mimeType, `${path}.mimeType`, PROJECT_FILE_LIMITS.maxMimeTypeCharacters, true)
   safeInteger(asset.size, `${path}.size`, 0)
@@ -461,19 +473,100 @@ function validateText(value: unknown, path: string): asserts value is TextProps 
   const text = record(value, path)
   exactKeys(
     text,
-    ['content', 'fontFamily', 'fontSizePx', 'color', 'align', 'bold', 'italic'],
+    [
+      'content',
+      'fontFamily',
+      'fontSizePx',
+      'color',
+      'align',
+      'bold',
+      'italic',
+      'boxWidthPx',
+      'boxHeightPx',
+      'paddingPx',
+      'backgroundEnabled',
+      'backgroundColor',
+      'outlineEnabled',
+      'outlineColor',
+      'outlineWidthPx',
+      'shadowEnabled',
+      'shadowColor',
+      'shadowBlurPx',
+      'shadowOffsetXPx',
+      'shadowOffsetYPx',
+    ],
     [],
     path,
   )
   stringValue(text.content, `${path}.content`, PROJECT_FILE_LIMITS.maxTextCharacters, true)
-  stringValue(text.fontFamily, `${path}.fontFamily`, PROJECT_FILE_LIMITS.maxNameCharacters)
-  finiteNumber(text.fontSizePx, `${path}.fontSizePx`, 0.01, PROJECT_FILE_LIMITS.maxFiniteMagnitude)
-  stringValue(text.color, `${path}.color`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  if (!isSupportedTextFontFamily(text.fontFamily)) {
+    fail(`${path}.fontFamily`, 'expected a supported generic font family')
+  }
+  finiteNumber(
+    text.fontSizePx,
+    `${path}.fontSizePx`,
+    TEXT_OVERLAY_LIMITS.minFontSizePx,
+    TEXT_OVERLAY_LIMITS.maxFontSizePx,
+  )
+  if (!isSupportedTextColor(text.color)) {
+    fail(`${path}.color`, 'expected a hexadecimal CSS color')
+  }
   if (text.align !== 'left' && text.align !== 'center' && text.align !== 'right') {
     fail(`${path}.align`, 'expected left, center, or right')
   }
   booleanValue(text.bold, `${path}.bold`)
   booleanValue(text.italic, `${path}.italic`)
+  finiteNumber(
+    text.boxWidthPx,
+    `${path}.boxWidthPx`,
+    TEXT_OVERLAY_LIMITS.minBoxSizePx,
+    TEXT_OVERLAY_LIMITS.maxBoxSizePx,
+  )
+  finiteNumber(
+    text.boxHeightPx,
+    `${path}.boxHeightPx`,
+    TEXT_OVERLAY_LIMITS.minBoxSizePx,
+    TEXT_OVERLAY_LIMITS.maxBoxSizePx,
+  )
+  finiteNumber(text.paddingPx, `${path}.paddingPx`, 0, TEXT_OVERLAY_LIMITS.maxPaddingPx)
+  booleanValue(text.backgroundEnabled, `${path}.backgroundEnabled`)
+  if (!isSupportedTextColor(text.backgroundColor)) {
+    fail(`${path}.backgroundColor`, 'expected a hexadecimal CSS color')
+  }
+  booleanValue(text.outlineEnabled, `${path}.outlineEnabled`)
+  if (!isSupportedTextColor(text.outlineColor)) {
+    fail(`${path}.outlineColor`, 'expected a hexadecimal CSS color')
+  }
+  finiteNumber(
+    text.outlineWidthPx,
+    `${path}.outlineWidthPx`,
+    0,
+    TEXT_OVERLAY_LIMITS.maxOutlineWidthPx,
+  )
+  booleanValue(text.shadowEnabled, `${path}.shadowEnabled`)
+  if (!isSupportedTextColor(text.shadowColor)) {
+    fail(`${path}.shadowColor`, 'expected a hexadecimal CSS color')
+  }
+  finiteNumber(
+    text.shadowBlurPx,
+    `${path}.shadowBlurPx`,
+    0,
+    TEXT_OVERLAY_LIMITS.maxShadowBlurPx,
+  )
+  finiteNumber(
+    text.shadowOffsetXPx,
+    `${path}.shadowOffsetXPx`,
+    -TEXT_OVERLAY_LIMITS.maxShadowOffsetPx,
+    TEXT_OVERLAY_LIMITS.maxShadowOffsetPx,
+  )
+  finiteNumber(
+    text.shadowOffsetYPx,
+    `${path}.shadowOffsetYPx`,
+    -TEXT_OVERLAY_LIMITS.maxShadowOffsetPx,
+    TEXT_OVERLAY_LIMITS.maxShadowOffsetPx,
+  )
+  const error = textPropsValidationError(text as unknown as TextProps)
+  if (error) fail(path, error)
 }
 
 interface ValidationContext {
@@ -504,8 +597,18 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   if (context.clipIds.has(clip.id)) fail(`${path}.id`, 'duplicate clip id')
   context.clipIds.add(clip.id)
   stringValue(clip.assetId, `${path}.assetId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (
+    clip.text !== undefined
+    && clip.assetId !== proceduralTextAssetId(clip.id)
+  ) {
+    fail(`${path}.assetId`, 'text clips must use their reserved procedural asset id')
+  }
   const asset = context.assetsById.get(clip.assetId)
-  if (!asset) fail(`${path}.assetId`, 'references an unknown asset')
+  const proceduralText = clip.text !== undefined
+    && isProceduralTextAssetId(clip.assetId)
+  if (!asset && !proceduralText) {
+    fail(`${path}.assetId`, 'references an unknown asset')
+  }
   stringValue(clip.name, `${path}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
   if (clip.sourceMode !== 'timed' && clip.sourceMode !== 'still') {
     fail(`${path}.sourceMode`, 'expected timed or still')
@@ -527,19 +630,27 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   if (!stillSource && sourceRange.durationFrames !== timelineRange.durationFrames) {
     fail(path, 'source and timeline durations must match')
   }
-  if (clip.text === undefined && asset.kind === 'image' && !stillSource) {
+  if (clip.text !== undefined) {
+    if (stillSource) fail(`${path}.sourceMode`, 'text clips must use timed source mode')
+    if (sourceRange.startFrame !== 0) {
+      fail(`${path}.sourceRange.startFrame`, 'text clips must use procedural source start 0')
+    }
+  }
+  if (clip.text === undefined && asset?.kind === 'image' && !stillSource) {
     fail(`${path}.sourceMode`, 'image clips must use still source mode')
   }
-  if (stillSource && (asset.kind !== 'image' || clip.text !== undefined)) {
+  if (stillSource && (asset?.kind !== 'image' || clip.text !== undefined)) {
     fail(`${path}.sourceMode`, 'still source mode requires an image media clip')
   }
   if (context.documentFrameRate === null) {
     fail('$.document.frameRate', 'must be validated before clips')
   }
-  const assetDurationFrames = microsecondsDurationToFrames(
-    asset.durationMicroseconds,
-    context.documentFrameRate,
-  )
+  const assetDurationFrames = asset
+    ? microsecondsDurationToFrames(
+        asset.durationMicroseconds,
+        context.documentFrameRate,
+      )
+    : 0
   if (
     !stillSource
     && clip.text === undefined
@@ -580,8 +691,8 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   }
   if (trackKind === 'audio') {
     if (clip.text !== undefined) fail(path, 'text clips cannot be placed on audio tracks')
-    if (!asset.hasAudio) fail(`${path}.assetId`, 'audio-track clip references an asset without audio')
-  } else if (clip.text === undefined && asset.kind === 'audio') {
+    if (!asset?.hasAudio) fail(`${path}.assetId`, 'audio-track clip references an asset without audio')
+  } else if (clip.text === undefined && asset?.kind === 'audio') {
     fail(`${path}.assetId`, 'video-track clip references an audio-only asset')
   }
 }
@@ -887,6 +998,55 @@ function migrateTransitionAudio(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 3, tracks }
 }
 
+/** Upgrade dormant schema-3 text payloads into bounded procedural overlays. */
+function migrateTextOverlays(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const width = typeof document.width === 'number' && Number.isFinite(document.width)
+    ? document.width
+    : 1_920
+  const height = typeof document.height === 'number' && Number.isFinite(document.height)
+    ? document.height
+    : 1_080
+  const defaults = defaultTextProps(width, height)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    boundedArray(
+      track.clips,
+      `$.document.tracks[${trackIndex}].clips`,
+      PROJECT_FILE_LIMITS.maxClips,
+    )
+    const clips = track.clips.map((clipValue, clipIndex) => {
+      const clipPath = `$.document.tracks[${trackIndex}].clips[${clipIndex}]`
+      const clip = record(clipValue, clipPath)
+      if (clip.text === undefined) return clip
+      const legacy = record(clip.text, `${clipPath}.text`)
+      const timelineRange = record(clip.timelineRange, `${clipPath}.timelineRange`)
+      return {
+        ...clip,
+        assetId: proceduralTextAssetId(String(clip.id)),
+        sourceMode: 'timed',
+        sourceRange: {
+          startFrame: 0,
+          durationFrames: timelineRange.durationFrames,
+        },
+        text: {
+          ...defaults,
+          content: legacy.content,
+          fontFamily: legacy.fontFamily,
+          fontSizePx: legacy.fontSizePx,
+          color: legacy.color,
+          align: legacy.align,
+          bold: legacy.bold,
+          italic: legacy.italic,
+        },
+      }
+    })
+    return { ...track, clips }
+  })
+  return { ...document, schemaVersion: 4, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -912,6 +1072,9 @@ function migrateTimelineDocument(
   if (migrated.schemaVersion === 2) {
     migrated = migrateTransitionAudio(migrated)
   }
+  if (migrated.schemaVersion === 3) {
+    migrated = migrateTextOverlays(migrated)
+  }
   return migrated
 }
 
@@ -933,7 +1096,8 @@ function migrateLegacyAssetBounds(assetsValue: unknown): JsonRecord[] {
 
 /**
  * Upgrade a parsed historical value into the current format. Outer version 4
- * adds durable stream bounds; nested schema 3 adds transition audio settings.
+ * adds durable stream bounds; nested schema 3 adds transition audio settings,
+ * and schema 4 adds bounded procedural text-overlay styling and geometry.
  */
 export function migrateProjectFile(value: unknown): unknown {
   const project = record(value, '$')

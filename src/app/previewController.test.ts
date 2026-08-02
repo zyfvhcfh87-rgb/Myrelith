@@ -15,6 +15,7 @@ import type {
   TimelineDoc,
   Track,
 } from '../domain/schema'
+import { defaultTextProps } from '../domain/textOverlay'
 import {
   RenderAssetOpenError,
   type RenderFrameResult,
@@ -26,7 +27,11 @@ import { useTransportStore } from '../state/transportStore'
 import type { RenderMode } from '../workers/render-protocol'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
 import type { BridgeLike, PreviewDeps } from './previewController'
-import { disposePreview, initPreview } from './previewController'
+import {
+  disposePreview,
+  documentWithTextOverlayPreview,
+  initPreview,
+} from './previewController'
 
 const F60: FrameRate = { num: 60, den: 1 }
 
@@ -281,8 +286,9 @@ function makeImageBackedTextDoc(assetId: string): TimelineDoc {
   const textClip: Clip = {
     ...makeClip('text-clip', assetId),
     text: {
+      ...defaultTextProps(initialDoc.width, initialDoc.height),
       content: 'A title',
-      fontFamily: 'Arial',
+      fontFamily: 'sans-serif',
       fontSizePx: 48,
       color: '#ffffff',
       align: 'center',
@@ -337,6 +343,7 @@ beforeEach(() => {
     zoom: 1,
     inOut: null,
     dragPreview: null,
+    textOverlayPreview: null,
   })
   useMediaStore.setState({
     descriptors: new Map(),
@@ -352,6 +359,25 @@ afterEach(() => {
 })
 
 describe('previewController', () => {
+  test('projects an ephemeral text geometry draft without mutating the document', () => {
+    const doc = makeImageBackedTextDoc('legacy-image')
+    const original = doc.tracks[0].clips[0]
+    const preview = documentWithTextOverlayPreview(doc, {
+      clipId: original.id,
+      transform: { ...original.transform, x: 125 },
+      text: { ...original.text!, boxWidthPx: 640 },
+    })
+
+    expect(preview).not.toBe(doc)
+    expect(preview.tracks[0].clips[0]).toMatchObject({
+      transform: { x: 125 },
+      text: { boxWidthPx: 640 },
+    })
+    expect(original.transform.x).toBe(0)
+    expect(original.text?.boxWidthPx).not.toBe(640)
+    expect(documentWithTextOverlayPreview(doc, null)).toBe(doc)
+  })
+
   test('keeps an unreferenced analyzed video warm without re-demuxing', async () => {
     const { deps, bridge, blob } = makeDeps()
     initPreview(canvasEl(), deps)

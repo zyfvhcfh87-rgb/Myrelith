@@ -17,7 +17,18 @@ export interface OrdinaryVideoPlanItem {
   request: VideoFrameRequest
 }
 
-export type VideoCompositionItem = OrdinaryVideoPlanItem | CrossfadeFrameGroup
+export interface TextOverlayPlanItem {
+  kind: 'text'
+  trackId: TrackId
+  frame: number
+  clip: Clip
+  opacity: number
+}
+
+export type VideoCompositionItem =
+  | OrdinaryVideoPlanItem
+  | TextOverlayPlanItem
+  | CrossfadeFrameGroup
 
 /** One transferable, paint-ordered plan for one exact document frame. */
 export interface VideoCompositionPlan {
@@ -37,13 +48,21 @@ function clipOpacity(clip: Clip): number {
 function ordinaryItem(
   track: Track,
   frame: number,
-): OrdinaryVideoPlanItem | null {
+): OrdinaryVideoPlanItem | TextOverlayPlanItem | null {
   for (const clip of track.clips) {
     if (clip.timelineRange.startFrame > frame) break
     if (!rangeContains(clip.timelineRange, frame)) continue
-    if (clip.text !== undefined) return null
     const opacity = clipOpacity(clip)
     if (opacity <= 0) return null
+    if (clip.text !== undefined) {
+      return {
+        kind: 'text',
+        trackId: track.id,
+        frame,
+        clip,
+        opacity,
+      }
+    }
     return {
       kind: 'clip',
       trackId: track.id,
@@ -139,6 +158,7 @@ export function videoCompositionRequests(
       requests.push(item.request)
       continue
     }
+    if (item.kind === 'text') continue
     for (const request of item.requests) {
       if (request.opacity > 0 && request.weight > 0) requests.push(request)
     }
