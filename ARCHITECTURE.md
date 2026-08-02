@@ -205,6 +205,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   project or Zustand state. Project dimensions, FPS, and sample rate remain
   authoritative `TimelineDoc` facts and are not duplicated into that export
   preference.
+- `ui/ExportDialog.tsx` exclusively owns export view state, lazy controller
+  loading, capability generations, cancellation, focus scheduling, and result
+  URL lifetime. `ui/ExportDialogSections.tsx` is stateless presentation;
+  `ExportProfilePicker.tsx` owns only profile-editing drafts. Presentation must
+  not acquire an export resource or bypass the app-layer facades.
+- `app/layout.css` is the ordered stylesheet manifest. Its `styles/` imports
+  retain the original global cascade order while grouping rules by feature;
+  changing that import order is a behavior change and requires visual cascade
+  validation.
 
 ## Store action contracts
 
@@ -391,10 +400,12 @@ src/
   workers/     protocols/types, current render worker, isolated legacy delegates
   pipeline/    demux, legacy chunk decode, render, export
   codecs/      realm-local lazy decoder registration and resource policy
-  ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector
+  ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector,
+               ExportDialog lifecycle owner + stateless export sections
   ui/timeline/ Timeline, Track, ClipView presentation root,
                useClipGestureSession pointer owner, presentation plan/layer,
                Ruler, Playhead
-  app/         App, project/persistence/controllers, layout.css
+  app/         App, project/persistence/controllers, ordered layout.css manifest
+  app/styles/  feature-owned editor styles in binding cascade order
   dev/         temporary scratch harnesses — may import anything, never shipped
 ```

@@ -83,6 +83,7 @@ and the open list below.
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
 | **Refactor Stage 7 — Mediabunny export adapter owners** | ✅ complete | stable facade split into visual/audio/sink resource owners plus one shared fake harness; 156 focused + 1,725 total tests; headed Chromium buffered/direct A/V reopen + native playback, exact 9,600-sample presentation, commit/cancel/write-failure cleanup, clean console |
+| **Refactor Stage 8 — export presentation + feature CSS** | ✅ complete | export lifecycle stays in one owner behind stateless sections; the ordered ten-file CSS manifest produces byte-identical CSS; 91 focused + 1,725 total tests; checked-in recovery smoke plus headed 390/720/1280/1440px focus/keyboard/overflow QA, clean console |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -1085,13 +1086,18 @@ surface; it is not a second zoom and never enters document history.
   bounded still tile across the complete timeline duration, exposes a clear
   still-image accessible name/Slip explanation, gives still trims unbounded
   source headroom, and constrains still Slip to exactly zero.
-- `src/ui/ExportDialog.tsx` + `ExportProfilePicker.tsx` +
-  `exportProfileUi.ts` — preset-first capability-aware export UX:
-  generation-safe capability feedback, validated advanced drafts and size
-  estimates, download/direct-file result ownership, retry/cancellation, and
-  modal accessibility. Controller and capability code load behind their app
-  facades; `Toolbar.tsx` only owns trigger/open state and restores focus when
+- `src/ui/ExportDialog.tsx` + `ExportDialogSections.tsx` +
+  `ExportProfilePicker.tsx` + `exportProfileUi.ts` — preset-first
+  capability-aware export UX. `ExportDialog` is the sole lifecycle owner for
+  generation-safe checks, lazy controller loading, retry/cancellation, focus,
+  and download/direct-file results; the sections render those facts without
+  state or resources, while the picker owns validated advanced drafts and size
+  inputs. `Toolbar.tsx` only owns trigger/open state and restores focus when
   the dialog closes.
+- `src/app/layout.css` + `src/app/styles/` — ordered style manifest plus
+  feature-owned project-launch, shell, timeline/transport, preview, media-pool,
+  toolbar, export, responsive, inspector, and placeholder rules. The manifest
+  preserves the previous cascade exactly; its import order is binding.
 - `src/domain/exportProfile.ts` — pure allow-list, validation, canonical
   container metadata, Compatibility/Web/Modern/HEVC catalog, and deterministic
   Modern → Web → Compatibility Auto policy. Issue #31-owned reviewed project
