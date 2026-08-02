@@ -253,11 +253,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   ({clipId, kind, deltaFrames,
   linkGroupId?} | null — same live-preview contract for trim/ripple/
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
-  ghost a linked gesture live. At pointerdown, `ui/timeline/gestureBounds.ts`
-  uses one fresh document/media snapshot to intersect every participating
-  linked member's legal signed-delta interval, so no owner can preview beyond
-  a partner's timeline, source, duration, and headroom bounds. The
-  gesture session retains that exact pointer-down document reference and group
+  ghost a linked gesture live. `ui/timeline/useClipGestureSession.ts` is the
+  single owner of clip pointer/keyboard routing, pointer capture, cancellation,
+  rAF-coalesced previews, and the one pointerup document dispatch. At
+  pointerdown it delegates to pure `ui/timeline/gestureBounds.ts`, using one
+  fresh document/media snapshot to intersect every participating linked
+  member's legal signed-delta interval, so no owner can preview beyond a
+  partner's timeline, source, duration, and headroom bounds. The gesture
+  session retains that exact pointer-down document reference and group
   identity; if the committed document changes before pointerup, the preview is
   cleared and no stale commit is dispatched. Normal pointer or unmodified
   keyboard selection replaces both selection fields; Ctrl/Cmd pointer or
@@ -359,7 +362,8 @@ src/
   pipeline/    demux, legacy chunk decode, render, export
   codecs/      realm-local lazy decoder registration and resource policy
   ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector
-  ui/timeline/ Timeline, Track, ClipView gesture root + presentation plan/layer,
+  ui/timeline/ Timeline, Track, ClipView presentation root,
+               useClipGestureSession pointer owner, presentation plan/layer,
                Ruler, Playhead
   app/         App, project/persistence/controllers, layout.css
   dev/         temporary scratch harnesses — may import anything, never shipped

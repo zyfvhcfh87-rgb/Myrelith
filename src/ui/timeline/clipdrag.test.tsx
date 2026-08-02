@@ -207,6 +207,74 @@ describe('drag: scrub-preview then commit', () => {
     expect(clipA().timelineRange.startFrame).toBe(100)
   })
 
+  test('capture failure still permits move events and one pointerup commit', async () => {
+    render(<Track track={doc().doc.tracks[0]} />)
+    const el = screen.getByTestId('clip-clipA')
+    const captureSpy = vi
+      .spyOn(el, 'setPointerCapture')
+      .mockImplementation(() => {
+        throw new DOMException('inactive pointer')
+      })
+
+    try {
+      fireEvent.pointerDown(el, { pointerId: 2, clientX: 500 })
+      fireEvent.pointerMove(el, { pointerId: 2, clientX: 560 })
+      await waitFor(() =>
+        expect(transport().dragPreview?.deltaFrames).toBe(60),
+      )
+      fireEvent.pointerUp(el, { pointerId: 2, clientX: 560 })
+
+      expect(clipA().timelineRange.startFrame).toBe(160)
+      expect(doc().past).toHaveLength(1)
+      expect(transport().dragPreview).toBeNull()
+    } finally {
+      captureSpy.mockRestore()
+    }
+  })
+
+  test('pointerleave after capture failure cancels without wedging a preview', async () => {
+    render(<Track track={doc().doc.tracks[0]} />)
+    const el = screen.getByTestId('clip-clipA')
+    const captureSpy = vi
+      .spyOn(el, 'setPointerCapture')
+      .mockImplementation(() => {
+        throw new DOMException('inactive pointer')
+      })
+
+    try {
+      fireEvent.pointerDown(el, { pointerId: 3, clientX: 500 })
+      fireEvent.pointerMove(el, { pointerId: 3, clientX: 560 })
+      await waitFor(() =>
+        expect(transport().dragPreview?.deltaFrames).toBe(60),
+      )
+      fireEvent.pointerLeave(el, { pointerId: 3, clientX: 560 })
+      fireEvent.pointerUp(el, { pointerId: 3, clientX: 560 })
+
+      expect(transport().dragPreview).toBeNull()
+      expect(doc().past).toHaveLength(0)
+      expect(clipA().timelineRange.startFrame).toBe(100)
+    } finally {
+      captureSpy.mockRestore()
+    }
+  })
+
+  test('lost pointer capture cancels the live session without committing', async () => {
+    render(<Track track={doc().doc.tracks[0]} />)
+    const el = screen.getByTestId('clip-clipA')
+
+    fireEvent.pointerDown(el, { pointerId: 4, clientX: 500 })
+    fireEvent.pointerMove(el, { pointerId: 4, clientX: 560 })
+    await waitFor(() =>
+      expect(transport().dragPreview?.deltaFrames).toBe(60),
+    )
+    fireEvent.lostPointerCapture(el, { pointerId: 4 })
+    fireEvent.pointerUp(el, { pointerId: 4, clientX: 560 })
+
+    expect(transport().dragPreview).toBeNull()
+    expect(doc().past).toHaveLength(0)
+    expect(clipA().timelineRange.startFrame).toBe(100)
+  })
+
   test('a drag crossing the virtual window keeps its capture host through commit', async () => {
     const view = render(
       <Track

@@ -1237,22 +1237,32 @@ surface; it is not a second zoom and never enters document history.
   display/window/source-time planning plus the stateless generated-media JSX.
   They own no pointer session or document mutation; ordinary and rebased
   timeline slices share the same prepared filmstrip/waveform geometry.
-- `src/ui/timeline/ClipView.tsx` — the 4.2 gesture heart: one session ref
-  routes body/edge pointerdowns by the CURRENT tool (getState(), not the
-  render closure!); previews via transportStore.editPreview, one commit
-  per gesture; slip clamps live against mediaStore asset bounds. Slice 7 keeps
-  the immutable pointerdown document reference in that session, clears its
-  preview if the document changes, and skips any stale pointerup commit.
-  Slice 6 keeps the clip root a stable pressed button, preserves independent
-  focus/selected/primary visuals, hides decorative link badges from its
-  accessible name, and highlights every live linked-preview participant. Long clips
-  render only their intersection with the bounded window; filmstrip buckets
-  and the normalized waveform viewBox remain aligned to the original source.
+- `src/ui/timeline/useClipGestureSession.ts` — the 4.2 gesture heart: one
+  session ref routes body/edge pointerdowns by the CURRENT tool (getState(),
+  not the render closure!), owns pointer capture and every cancellation path,
+  publishes rAF-coalesced transport previews, and dispatches at most one
+  document action per gesture. It retains the immutable pointerdown document
+  reference, clears its preview if that reference changes, and skips stale
+  pointerup commits. Slip clamps live against mediaStore asset bounds;
+  owner-only cross-track metadata leaves linked partners on their own lanes.
+- `src/ui/timeline/ClipView.tsx` — store-backed clip presentation and the stable
+  pressed-button interaction root. It preserves independent focus/selected/
+  primary visuals, hides decorative link badges from its accessible name, and
+  highlights every live linked-preview participant. Long clips render only
+  their intersection with the bounded window; filmstrip buckets and the
+  normalized waveform viewBox remain aligned to the original source.
   The Stage 3 presentation extraction gate passed 93 focused tests across 6
   files, all 1,682 tests across 89 files, the checked-in Chromium persistence
   smoke, build, lint, audit, and diff checks. Real Chromium additionally
   matched video/audio geometry at ordinary origin zero and a rebased
   1,000,000-frame origin with zero console warnings or errors.
+  The Stage 4 gesture-session extraction gate passed 108 focused tests across
+  7 files, all 1,685 tests across 89 files, the checked-in Chromium persistence
+  smoke, production build, lint, audit, and diff checks. Headed Chromium also
+  passed modifier-edge selection, unequal-offset linked preview/commit,
+  stale-document cancellation, forced pointer-capture failure, owner-only
+  cross-track movement, and exact one-entry history with zero console warnings
+  or errors.
   `ui/Toolbar.tsx` = tool buttons; `app/useEditShortcuts.ts` = A/B/T/Y/U,
   S split-at-playhead, Delete ripple-delete (selection kept on reject).
 - `src/ui/timeline/Timeline.tsx` + `TrackHeader.tsx` (4.3.5) — two
