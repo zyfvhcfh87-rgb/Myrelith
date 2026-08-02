@@ -81,6 +81,7 @@ and the open list below.
 | **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
+| **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -1055,8 +1056,13 @@ surface; it is not a second zoom and never enters document history.
   revalidate exact configurations. Bounded generations/revisions reject stale
   writes, while source/runtime/fallback/page lifecycle changes invalidate facts.
   No cache state crosses into Zustand or portable project files.
-- `src/app/mediaImportController.ts` — import composition root: owns selected
-  Files/handles and retained retry resources outside Zustand, publishes guarded
+- `src/app/mediaImportDecisions.ts` — store-free import policy: creates exact
+  Keep/Match prompts, reapplies confirmed partial-track choices after re-probe,
+  and validates the active document/rate before resolving the commit rate. It
+  owns no browser resource or mutation.
+- `src/app/mediaImportController.ts` — import composition root and unchanged
+  public facade: owns selected Files/handles and retained retry resources
+  outside Zustand, publishes guarded
   session compatibility requests, commits complete Ready assets exactly once,
   guards project-change/cancellation races, and owns every uncommitted object
   URL. Slice 2 adds a maximum-100 sequential multi-file queue with one active

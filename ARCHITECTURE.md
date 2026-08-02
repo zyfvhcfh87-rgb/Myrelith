@@ -328,6 +328,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   several complete generations, is offered explicitly, and never stores media
   bytes. Intentional project exit or a revision-current successful `.webcut`
   save removes the active journal before session resources are released.
+- Media import policy — `src/app/mediaImportDecisions.ts` is the store-free
+  authority for FPS-prompt eligibility, partial-track choice reapplication,
+  active-document/rate validation, and Keep/Match rate resolution. It accepts
+  only serializable document, asset, report, and rate facts; it never owns a
+  File, handle, object URL, abort signal, store, or browser capability.
+  `src/app/mediaImportController.ts` remains the public composition facade and
+  the sole import resource/mutation owner. It publishes guarded compatibility
+  generations, retains retry Files/handles outside Zustand, revalidates the
+  active document before commit, transfers a Ready URL only through the media
+  store, and revokes every analyzed-but-uncommitted URL in its outer `finally`.
+  Cancellation, a rejected decision, project replacement, and failed retry
+  must not bypass that exact cleanup owner.
 - Local media reconnection — `src/app/localMediaHandles.ts` stores opaque
   `FileSystemFileHandle` capabilities in an origin-local IndexedDB sidecar,
   keyed by stable document + asset ids. Paths and handles never enter domain

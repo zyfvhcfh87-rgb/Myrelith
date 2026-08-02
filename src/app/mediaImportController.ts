@@ -7,16 +7,12 @@
  * successful commit; every other terminal path revokes it here.
  */
 
-import { isProjectFrameRatePreset } from '../domain/projectSettings'
 import type {
   MediaCompatibilityItem,
   MediaCompatibilityReport,
   MediaCompatibilityStatus,
 } from '../domain/mediaCompatibility'
-import {
-  partialTrackImportOption,
-  reapplyPartialTrackImport,
-} from '../domain/mediaCompatibility'
+import { partialTrackImportOption } from '../domain/mediaCompatibility'
 import type {
   FrameRate,
   MediaAsset,
@@ -25,7 +21,6 @@ import type {
 } from '../domain/schema'
 import {
   microsecondsDurationToFrames,
-  rateEquals,
 } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
 import {
@@ -43,13 +38,18 @@ import {
   type LocalMediaFileHandle,
 } from './localMediaHandles'
 import { compatibilityItemForAsset } from './mediaCompatibilityController'
+import {
+  createMediaImportPrompt,
+  requiresMediaImportRateDecision,
+  resolveMediaImportCommitRate,
+  resolvePartialTrackImportDecision,
+  validateMediaImportCommitDocument,
+  type MediaImportDecision,
+} from './mediaImportDecisions'
 import { inspectMediaFileCompatibility } from './mediaInspection'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 
-export type MediaImportDecision =
-  | 'keep-project-rate'
-  | 'match-source-rate'
-  | 'cancel'
+export type { MediaImportDecision } from './mediaImportDecisions'
 
 export type MediaImportResult =
   | { status: 'imported'; assetId: string }
@@ -159,36 +159,6 @@ let activeImport: ActiveImport | null = null
 let activeBatch: ActiveImportBatch | null = null
 const retainedImports = new Map<string, RetainedImport>()
 
-function cloneRate(rate: FrameRate): FrameRate {
-  return { num: rate.num, den: rate.den }
-}
-
-function timelineHasClips(document: TimelineDoc): boolean {
-  return document.tracks.some((track) => track.clips.length > 0)
-}
-
-function promptFor(
-  fileName: string,
-  document: TimelineDoc,
-  sourceRate: FrameRate,
-): MediaImportPrompt {
-  let matchUnavailableReason: string | null = null
-  if (!isProjectFrameRatePreset(sourceRate)) {
-    matchUnavailableReason =
-      'This source rate is not one of the supported project presets.'
-  } else if (timelineHasClips(document)) {
-    matchUnavailableReason =
-      'Matching is unavailable after clips have been added to the timeline.'
-  }
-  return {
-    fileName,
-    projectRate: cloneRate(document.frameRate),
-    sourceRate: cloneRate(sourceRate),
-    canMatchSource: matchUnavailableReason === null,
-    matchUnavailableReason,
-  }
-}
-
 function errorMessage(fileName: string, cause: unknown): string {
   const detail = cause instanceof Error ? cause.message : String(cause)
   return `Could not import "${fileName}": ${detail}`
@@ -256,14 +226,6 @@ function cancelOperation(
   settleCancelledCompatibility(operation, preserveFallback)
   operation.resolveDecision?.('cancel')
   operation.resolveDecision = null
-}
-
-function documentStillMatches(
-  document: TimelineDoc,
-  documentId: string,
-  rate: FrameRate,
-): boolean {
-  return document.id === documentId && rateEquals(document.frameRate, rate)
 }
 
 async function rememberCommittedMediaHandle(
@@ -363,37 +325,31 @@ async function importSelectedMedia(
       throw new Error('the active project changed while the file was being analyzed')
     }
 
-    const partialAcceptance = requestedPartialSelection && inspection.asset
-      ? reapplyPartialTrackImport(
-          inspection.asset,
-          inspection.compatibility,
-          requestedPartialSelection,
-        )
-      : null
-    if (requestedPartialSelection && partialAcceptance === null) {
-      const fallbackStatus = inspection.status === 'ready'
-        ? cancelFallback?.status ?? 'limited'
-        : inspection.status
-      const fallbackReport = inspection.status === 'ready'
-        ? cancelFallback?.report ?? inspection.compatibility
-        : inspection.compatibility
+    const partialDecision = resolvePartialTrackImportDecision(
+      inspection,
+      requestedPartialSelection,
+      cancelFallback,
+    )
+    if (partialDecision.kind === 'unavailable') {
       if (!deps.setCompatibility(
         itemId,
         requestId,
-        fallbackStatus,
-        fallbackReport,
+        partialDecision.fallbackStatus,
+        partialDecision.fallbackReport,
       )) return { status: 'cancelled' }
       setUi({ ...INITIAL_MEDIA_IMPORT_STATE })
       return {
         status: 'failed',
-        message: `The confirmed ${requestedPartialSelection} choice is no longer available after rechecking the file. Review the updated compatibility details.`,
+        message: partialDecision.message,
         itemId,
       }
     }
-    const acceptedAsset = partialAcceptance?.asset
-      ?? (inspection.status === 'ready' ? inspection.asset : null)
-    const acceptedCompatibility = partialAcceptance?.compatibility
-      ?? (inspection.status === 'ready' ? inspection.compatibility : null)
+    const acceptedAsset = partialDecision.kind === 'accepted'
+      ? partialDecision.asset
+      : (inspection.status === 'ready' ? inspection.asset : null)
+    const acceptedCompatibility = partialDecision.kind === 'accepted'
+      ? partialDecision.compatibility
+      : (inspection.status === 'ready' ? inspection.compatibility : null)
 
     if (!acceptedAsset || !acceptedCompatibility) {
       if (!deps.setCompatibility(
@@ -435,11 +391,15 @@ async function importSelectedMedia(
 
     let decision: MediaImportDecision = 'keep-project-rate'
     let prompt: MediaImportPrompt | null = null
-    if (
-      readyAsset.frameRate
-      && !rateEquals(readyAsset.frameRate, decisionDocument.frameRate)
-    ) {
-      prompt = promptFor(file.name, decisionDocument, readyAsset.frameRate)
+    if (requiresMediaImportRateDecision(
+      decisionDocument.frameRate,
+      readyAsset.frameRate,
+    )) {
+      prompt = createMediaImportPrompt(
+        file.name,
+        decisionDocument,
+        readyAsset.frameRate,
+      )
       setUi({
         phase: 'awaiting-decision',
         fileName: file.name,
@@ -463,11 +423,12 @@ async function importSelectedMedia(
 
     const commitDocument = deps.getDocument()
     const expectedRate = prompt?.projectRate ?? decisionDocument.frameRate
-    if (!documentStillMatches(
+    const commitValidation = validateMediaImportCommitDocument(
       commitDocument,
       decisionDocument.id,
       expectedRate,
-    )) {
+    )
+    if (commitValidation.kind === 'stale-project-settings') {
       throw new Error('the project settings changed while the import decision was open')
     }
 
@@ -475,24 +436,16 @@ async function importSelectedMedia(
       throw new Error(`asset id ${itemId} is already in use`)
     }
 
-    let finalRate = commitDocument.frameRate
-    if (decision === 'match-source-rate') {
-      if (!readyAsset.frameRate) {
-        throw new Error('this source has no video frame rate to match')
-      }
-      const latestPrompt = promptFor(
-        file.name,
-        commitDocument,
-        readyAsset.frameRate,
-      )
-      if (!latestPrompt.canMatchSource) {
-        throw new Error(
-          latestPrompt.matchUnavailableReason
-            ?? 'the source frame rate cannot be used for this project',
-        )
-      }
-      finalRate = readyAsset.frameRate
+    const rateDecision = resolveMediaImportCommitRate(
+      file.name,
+      commitDocument,
+      readyAsset.frameRate,
+      decision,
+    )
+    if (rateDecision.kind === 'rejected') {
+      throw new Error(rateDecision.message)
     }
+    const finalRate = rateDecision.finalRate
 
     const committedAsset: MediaAsset = {
       ...readyAsset,
@@ -517,7 +470,7 @@ async function importSelectedMedia(
     if (decision === 'match-source-rate') {
       deps.replaceDocument({
         ...commitDocument,
-        frameRate: cloneRate(finalRate),
+        frameRate: { num: finalRate.num, den: finalRate.den },
       })
       deps.reconformAssets(finalRate)
     }
