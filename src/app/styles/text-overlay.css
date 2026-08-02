@@ -1,0 +1,134 @@
+.text-overlay-dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 0;
+  color: #dbe4ee;
+  background: #17191d;
+  border: 1px solid #48515e;
+  border-radius: 10px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 65%);
+}
+
+.text-overlay-dialog::backdrop {
+  background: rgb(4 6 9 / 72%);
+}
+
+.text-overlay-dialog-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.text-overlay-dialog header,
+.text-overlay-dialog footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.text-overlay-dialog h2 {
+  margin: 0;
+  color: #f3f7fb;
+  font-size: 18px;
+}
+
+.text-overlay-dialog p {
+  margin: 4px 0 0;
+  color: #929eac;
+  font-size: 11px;
+}
+
+.text-overlay-dialog-close {
+  width: 30px;
+  height: 30px;
+  color: #aeb7c2;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 20px;
+}
+
+.text-overlay-dialog-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr;
+  gap: 10px;
+}
+
+.text-overlay-dialog-field {
+  display: grid;
+  gap: 5px;
+  color: #aab4c0;
+  font-size: 11px;
+}
+
+.text-overlay-dialog-field textarea,
+.text-overlay-dialog-field input,
+.text-overlay-dialog-field select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 8px;
+  color: #edf3f9;
+  background: #101216;
+  border: 1px solid #3d4652;
+  border-radius: 5px;
+  font: inherit;
+}
+
+.text-overlay-dialog-content textarea {
+  resize: vertical;
+  min-height: 84px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.text-overlay-dialog button:focus-visible,
+.text-overlay-dialog textarea:focus-visible,
+.text-overlay-dialog input:focus-visible,
+.text-overlay-dialog select:focus-visible {
+  outline: 2px solid #82bfff;
+  outline-offset: 2px;
+}
+
+.text-overlay-dialog-status {
+  min-height: 16px;
+  color: #8e9aa7;
+  font-size: 11px;
+}
+
+.text-overlay-dialog-status[role='alert'] {
+  color: #ff9b9b;
+}
+
+.text-overlay-dialog footer {
+  justify-content: flex-end;
+}
+
+.text-overlay-dialog-cancel,
+.text-overlay-dialog-submit {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 5px;
+  font-weight: 650;
+}
+
+.text-overlay-dialog-cancel {
+  color: #b6c0cb;
+  background: #252a31;
+  border: 1px solid #414953;
+}
+
+.text-overlay-dialog-submit {
+  color: #fff;
+  background: #3974ad;
+  border: 1px solid #5895cd;
+}
+
+.text-overlay-dialog-submit:disabled {
+  opacity: 0.45;
+}
+
+@media (max-width: 620px) {
+  .text-overlay-dialog-grid {
+    grid-template-columns: 1fr;
+  }
+}

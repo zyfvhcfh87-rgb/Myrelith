@@ -52,7 +52,10 @@ import {
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
-import { useTransportStore } from '../state/transportStore'
+import {
+  useTransportStore,
+  type TextOverlayPreview,
+} from '../state/transportStore'
 import type { RenderMode } from '../workers/render-protocol'
 import {
   captureMediaRuntimeGuard,
@@ -142,6 +145,49 @@ function currentSourceBoundsCatalog(): SourceBoundsCatalog {
   return createSourceBoundsCatalog(
     useMediaStore.getState().descriptors.values(),
   )
+}
+
+/** Apply a transport-owned draft without touching document history. */
+export function documentWithTextOverlayPreview(
+  doc: TimelineDoc,
+  preview: TextOverlayPreview | null,
+): TimelineDoc {
+  if (!preview) return doc
+  for (let trackIndex = 0; trackIndex < doc.tracks.length; trackIndex++) {
+    const track = doc.tracks[trackIndex]
+    const clipIndex = track.clips.findIndex((clip) => clip.id === preview.clipId)
+    if (clipIndex < 0) continue
+    const clip = track.clips[clipIndex]
+    if (!clip.text) return doc
+    const clips = track.clips.slice()
+    clips[clipIndex] = {
+      ...clip,
+      transform: preview.transform
+        ? { ...preview.transform }
+        : clip.transform,
+      text: preview.text ? { ...preview.text } : clip.text,
+    }
+    const tracks = doc.tracks.slice()
+    tracks[trackIndex] = { ...track, clips }
+    return { ...doc, tracks }
+  }
+  return doc
+}
+
+function currentPreviewDocument(): TimelineDoc {
+  return documentWithTextOverlayPreview(
+    useDocumentStore.getState().doc,
+    useTransportStore.getState().textOverlayPreview,
+  )
+}
+
+function syncPreviewDocument(bridge: BridgeLike): void {
+  const doc = currentPreviewDocument()
+  state.visualPlanner = createVideoCompositionPlanner(
+    doc,
+    currentSourceBoundsCatalog(),
+  )
+  bridge.setDoc(doc)
 }
 
 function scheduleRender(): void {
@@ -343,7 +389,7 @@ export function initPreview(
   state.canvas = canvas
   state.bridge = bridge
 
-  const initialDoc = useDocumentStore.getState().doc
+  const initialDoc = currentPreviewDocument()
   const initialBounds = currentSourceBoundsCatalog()
   state.visualPlanner = createVideoCompositionPlanner(initialDoc, initialBounds)
   bridge.setSourceBoundsCatalog(initialBounds)
@@ -352,19 +398,19 @@ export function initPreview(
   state.unsubscribes.push(
     useDocumentStore.subscribe((s, prev) => {
       if (s.doc !== prev.doc) {
-        state.visualPlanner = createVideoCompositionPlanner(
-          s.doc,
-          currentSourceBoundsCatalog(),
-        )
-        bridge.setDoc(s.doc)
+        syncPreviewDocument(bridge)
         syncAssets(deps)
         scheduleRender()
       }
     }),
     useTransportStore.subscribe((s, prev) => {
+      if (s.textOverlayPreview !== prev.textOverlayPreview) {
+        syncPreviewDocument(bridge)
+      }
       if (
         s.playheadFrame !== prev.playheadFrame
         || modeForTransport(s) !== modeForTransport(prev)
+        || s.textOverlayPreview !== prev.textOverlayPreview
       ) scheduleRender()
     }),
     useMediaStore.subscribe(() => {

@@ -226,12 +226,21 @@ export interface TransitionAudioSettings {
   curve: TransitionAudioCurve
 }
 
-/** Styling and content for a text clip (a clip whose `text` field is set). */
+/** Generic families supported identically by worker preview and export. */
+export type TextFontFamily =
+  | 'sans-serif'
+  | 'serif'
+  | 'monospace'
+  | 'cursive'
+  | 'fantasy'
+  | 'system-ui'
+
+/** Styling, content, and bounded canvas geometry for a text clip. */
 export interface TextProps {
   /** The string rendered on screen. */
   content: string
-  /** CSS font-family name. */
-  fontFamily: string
+  /** Explicit supported generic CSS font family. */
+  fontFamily: TextFontFamily
   /** Font size in canvas pixels (at scale 1). */
   fontSizePx: number
   /** Fill color as a CSS color string, e.g. '#ffffff'. */
@@ -242,6 +251,32 @@ export interface TextProps {
   bold: boolean
   /** Italic style on/off. */
   italic: boolean
+  /** Untransformed text-box width in composition pixels. */
+  boxWidthPx: number
+  /** Untransformed text-box height in composition pixels. */
+  boxHeightPx: number
+  /** Inner padding shared by background, wrapping, and clipping. */
+  paddingPx: number
+  /** Paint a solid box behind the text. */
+  backgroundEnabled: boolean
+  /** Hex background color. */
+  backgroundColor: string
+  /** Stroke glyph outlines before filling them. */
+  outlineEnabled: boolean
+  /** Hex outline color. */
+  outlineColor: string
+  /** Glyph outline width in composition pixels. */
+  outlineWidthPx: number
+  /** Paint one Canvas2D shadow behind the filled glyphs. */
+  shadowEnabled: boolean
+  /** Hex shadow color. */
+  shadowColor: string
+  /** Canvas2D shadow blur in composition pixels. */
+  shadowBlurPx: number
+  /** Horizontal shadow offset in composition pixels. */
+  shadowOffsetXPx: number
+  /** Vertical shadow offset in composition pixels. */
+  shadowOffsetYPx: number
 }
 
 /* ------------------------------------------------------------------ */
@@ -262,7 +297,10 @@ export type ClipSourceMode = 'timed' | 'still'
 export interface Clip {
   /** Unique clip id. */
   id: ClipId
-  /** The media asset this clip plays. */
+  /**
+   * The media asset this clip plays. Procedural text clips use a reserved
+   * text id and require no entry in the media catalog.
+   */
   assetId: AssetId
   /** Display name, defaults to the asset's fileName. */
   name: string
@@ -348,7 +386,7 @@ export interface Track {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 3. */
+  /** Schema version for forward-compatible project files. Currently 4. */
   schemaVersion: number
   /** Unique document id. */
   id: string

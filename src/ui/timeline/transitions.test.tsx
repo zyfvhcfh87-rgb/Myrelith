@@ -14,6 +14,7 @@ import type {
   Track as TrackData,
   Transition,
 } from '../../domain/schema'
+import { defaultTextProps } from '../../domain/textOverlay'
 import type { PortableAssetDescriptor } from '../../domain/projectFile'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
@@ -50,6 +51,7 @@ function makeTextClip(id: string, startFrame: number, durationFrames: number): C
   return {
     ...makeClip(id, startFrame, durationFrames),
     text: {
+      ...defaultTextProps(1920, 1080),
       content: 'Title',
       fontFamily: 'sans-serif',
       fontSizePx: 48,
@@ -130,7 +132,7 @@ function makeTrack(
 function makeDoc(options: { seeded?: boolean; lockedSeeded?: boolean } = {}): TimelineDoc {
   const { seeded = false, lockedSeeded = false } = options
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'transition-ui-doc',
     name: 'Transition UI fixture',
     frameRate: { num: 30, den: 1 },
@@ -169,7 +171,7 @@ function makeDoc(options: { seeded?: boolean; lockedSeeded?: boolean } = {}): Ti
  * D15 [33,48) (overlap), while D4 [38,42) merely touches and is valid. */
 function makeNeighboringTransitionDoc(): TimelineDoc {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'transition-neighbor-doc',
     name: 'Neighboring transition fixture',
     frameRate: { num: 30, den: 1 },

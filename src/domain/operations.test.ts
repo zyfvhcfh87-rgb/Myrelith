@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, Effect, MediaAsset, TimelineDoc, Track, Transition } from './schema'
+import { defaultTextProps } from './textOverlay'
 import {
   addCrossfade,
   addCrossfadeWithSourceBounds,
@@ -83,7 +84,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -118,7 +119,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -874,7 +875,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },
@@ -1003,6 +1004,7 @@ describe('crossfade authoring', () => {
     const textClip: Clip = {
       ...makeClip('text', 40, 10),
       text: {
+        ...defaultTextProps(1920, 1080),
         content: 'Title',
         fontFamily: 'sans-serif',
         fontSizePx: 48,

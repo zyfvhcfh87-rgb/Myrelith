@@ -197,7 +197,9 @@ function retainReferencedBlobs(
   const assetIds = new Set<AssetId>()
   for (const track of doc.tracks) {
     if (track.kind === 'audio' && !includeAudio) continue
-    for (const clip of track.clips) assetIds.add(clip.assetId)
+    for (const clip of track.clips) {
+      if (clip.text === undefined) assetIds.add(clip.assetId)
+    }
   }
 
   for (const assetId of assetIds) {

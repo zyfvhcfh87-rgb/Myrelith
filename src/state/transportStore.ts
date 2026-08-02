@@ -11,7 +11,13 @@
  */
 
 import { create } from 'zustand'
-import type { ClipId, TimeRange, TrackId } from '../domain/schema'
+import type {
+  ClipId,
+  TextProps,
+  TimeRange,
+  TrackId,
+  Transform,
+} from '../domain/schema'
 
 /**
  * Live position of a clip mid-drag — the "scrubbing" half of the
@@ -68,6 +74,13 @@ export interface EditPreview {
   linkGroupId?: string
 }
 
+/** Live preview-only geometry for direct manipulation in the program monitor. */
+export interface TextOverlayPreview {
+  clipId: ClipId
+  transform?: Transform
+  text?: TextProps
+}
+
 export interface TransportState {
   /** Current playhead position, integer frames at the document rate. */
   playheadFrame: number
@@ -101,6 +114,8 @@ export interface TransportState {
   selectedClipId: ClipId | null
   /** Trim/ripple/slip/slide gesture preview, or null when none is live. */
   editPreview: EditPreview | null
+  /** Uncommitted text move/resize shown by the shared preview compositor. */
+  textOverlayPreview: TextOverlayPreview | null
 
   /** Move the playhead. Does NOTHING else — no side effects, no coupling. */
   setPlayheadFrame: (frame: number) => void
@@ -142,6 +157,8 @@ export interface TransportState {
    * integer (negative allowed — deltas are signed).
    */
   setEditPreview: (preview: EditPreview | null) => void
+  /** Update or clear one preview-only text manipulation. */
+  setTextOverlayPreview: (preview: TextOverlayPreview | null) => void
   /** Clear every session-owned playback/navigation value for a new project. */
   resetTransport: () => void
 }
@@ -162,6 +179,7 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
   selectedClipId: null,
   editPreview: null,
+  textOverlayPreview: null,
 })
 
 // A queued range-input frame must not resurrect pre-reset zoom state. Keep
@@ -287,6 +305,20 @@ export const useTransportStore = create<TransportState>()((set) => ({
     set({
       editPreview: preview
         ? { ...preview, deltaFrames: Math.round(preview.deltaFrames) }
+        : null,
+    }),
+  setTextOverlayPreview: (textOverlayPreview) =>
+    set({
+      textOverlayPreview: textOverlayPreview
+        ? {
+            ...textOverlayPreview,
+            ...(textOverlayPreview.transform
+              ? { transform: { ...textOverlayPreview.transform } }
+              : {}),
+            ...(textOverlayPreview.text
+              ? { text: { ...textOverlayPreview.text } }
+              : {}),
+          }
         : null,
     }),
   resetTransport: () => {

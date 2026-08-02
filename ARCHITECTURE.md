@@ -112,6 +112,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   0, while `timelineRange.durationFrames` is independently editable. Trim,
   ripple, razor, and slide change timeline geometry without inventing source
   frames; Slip is an intentional no-op.
+- Text overlays are procedural timed video clips. They use a reserved
+  `__webcut_text__:` asset id, carry their full supported appearance in
+  `Clip.text`, and require no `MediaAsset`, durable descriptor, Blob, file
+  handle, decoder, or relink state. Their source range is always
+  `[0, timeline duration)`; trim, ripple, split, move, slide, and linked edits
+  preserve that identity, while Slip is an intentional no-op. Unsupported
+  font/color/geometry values fail validation instead of being substituted.
 - Clips on one track are sorted by `timelineRange.startFrame` and pairwise
   non-overlapping; `operations.ts` rejects violations.
 - `TimelineDoc.tracks[0]` composites first (bottom layer).
@@ -158,11 +165,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   reasons. Preview, live playback, and export receive the same immutable
   document plus source-bounds facts and do not reconstruct seam geometry.
 - `domain/videoCompositionPlan.ts` carries ordinary paint items and grouped
-  crossfade items through the preview bridge, worker protocol, and export. The
-  compositor renders each complete transformed/effected/opacity-adjusted leg
+  crossfade items plus procedural text items through the preview bridge,
+  worker protocol, and export. Text layout is one bounded shared Canvas2D path
+  for preview and export; it never emits a media request. The compositor
+  renders each complete transformed/effected/opacity-adjusted leg
   to a reusable transparent surface, combines premultiplied weighted pixels in
   declared Canvas2D sRGB, then composites the isolated group over lower tracks
-  exactly once. Surfaces and borrowed frames retain explicit bounded owners.
+  exactly once. Scratch surfaces, cached text layouts, and borrowed frames
+  retain explicit bounded owners.
 - `domain/audioMixPlan.ts` is the shared live/export audible-contributor and
   envelope contract. Valid linked fades open real virtual handle ranges and
   apply clip volume with an absolute linear or equal-power envelope. Web Audio

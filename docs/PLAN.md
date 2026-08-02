@@ -2102,6 +2102,42 @@ project and timeline schemas are unchanged.
 - [x] Reviewed head `b131436` was normally merged through PR #37 as `daf3a6e`;
   GitHub closed only Issue #32 as completed.
 
+## Post-MVP issue #33 — editable text overlays
+
+**IMPLEMENTATION COMPLETE (2026-08-03).**
+
+Text overlays are procedural timed video clips: they own no imported media or
+decoder, keep source semantics fixed to `[0, duration)`, and persist strictly
+validated content, geometry, and supported presentation in timeline schema 4.
+Preview and export consume the same composition item, bounded wrapping logic,
+and Canvas2D painting path so supported appearance and timing stay aligned.
+
+### Completed gates
+
+- [x] Creators can add, select, edit, move, resize, link/unlink, and delete text
+  overlays. The inspector covers content, portable font family, size,
+  weight/style, text and background colors, alignment, opacity, and outline;
+  direct Program Monitor controls work by pointer, touch, and keyboard.
+- [x] Move, trim, ripple, split, slide, and linked edits preserve text timing;
+  Slip is an explicit no-op because procedural text has no hidden source range.
+  Live geometry drafts remain ephemeral and commit one document mutation on
+  release.
+- [x] `.webcut` save/load advances the nested timeline schema to 4, migrates
+  older documents conservatively, reserves procedural asset ids, and rejects
+  unsupported or malformed text settings instead of substituting them.
+- [x] The shared composition planner requests no media for text-only projects;
+  preview, seeking, and export render the same wrapping, box, outline,
+  alignment, opacity, and geometry rules with bounded surfaces and cleanup.
+- [x] Focused automation passed 304/304 tests across 13 files. Full automation
+  passed 1,747/1,747 tests across 99 files; production build and oxlint passed,
+  npm reported zero high-severity production vulnerabilities, and diff checking
+  was clean. The build retained only the existing Vite chunk-size advisory.
+- [x] In-app Chromium created and edited multiline text with no upload, moved
+  and resized it through keyboard-accessible Program Monitor controls, clearly
+  rejected an overlapping insertion, completed an actual text-only MP4 export,
+  and remained usable at 1280×720 and 720×800. No unexpected console errors or
+  framework overlays appeared.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**

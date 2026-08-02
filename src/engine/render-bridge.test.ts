@@ -15,6 +15,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, FrameRate, TimelineDoc, Track } from '../domain/schema'
+import { defaultTextProps } from '../domain/textOverlay'
 import type { ChunkPayload } from '../workers/decode-protocol'
 import type { FromRenderWorker, ToRenderWorker } from '../workers/render-protocol'
 import { RenderAssetOpenError, RenderWorkerBridge } from './render-bridge'
@@ -155,7 +156,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], overrides: Pa
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'doc',
     name: 'doc',
     frameRate: R30,
@@ -372,8 +373,9 @@ describe('renderFrame entry building', () => {
 
   test('mirrors the compositor skip rules and never fetches for them', async () => {
     const text = {
+      ...defaultTextProps(1920, 1080),
       content: 'hi',
-      fontFamily: 'sans-serif',
+      fontFamily: 'sans-serif' as const,
       fontSizePx: 40,
       color: '#fff',
       align: 'center' as const,

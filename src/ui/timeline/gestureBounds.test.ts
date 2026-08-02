@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../../domain/schema'
+import { defaultTextProps } from '../../domain/textOverlay'
 import {
   gestureBoundsForClip,
   linkedGestureBounds,
@@ -56,7 +57,7 @@ function linkedDoc(
   audio = clip('audio', 'audio-asset', 35, 40, 2, 'link_bounds'),
 ): TimelineDoc {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'gesture-bounds',
     name: 'Gesture bounds',
     frameRate: { num: 30, den: 1 },
@@ -95,8 +96,9 @@ describe('gestureBoundsForClip', () => {
     const member = {
       ...clip('text', 'text', 5, 20, 0),
       text: {
+        ...defaultTextProps(1920, 1080),
         content: 'Hello',
-        fontFamily: 'sans-serif',
+        fontFamily: 'sans-serif' as const,
         fontSizePx: 48,
         color: '#ffffff',
         align: 'center' as const,

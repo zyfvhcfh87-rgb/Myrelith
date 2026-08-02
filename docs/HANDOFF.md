@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-08-02)
+## Status (2026-08-03)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -79,6 +79,7 @@ and the open list below.
 | **Post-MVP #16 — capability-aware export profiles** | ✅ complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; PR #29 normally merged and Issue #16 closed |
 | **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
 | **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
+| **Post-MVP #33 — editable text overlays** | ✅ implementation complete | procedural timed text clips; accessible add/edit/move/resize/delete; shared preview/export Canvas2D renderer; schema 3→4 migration; 304 focused + 1,747 total tests; real 1280/720px Chromium text-only export gate |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -764,6 +765,16 @@ Still images receive orientation-aware dimensions, the persisted **Default
 still-image duration** for future imports, and one bounded thumbnail; Ready rows
 drag to video lanes as explicit still clips. Changing the preference does not
 retime existing assets, and Resume/Relink restores each saved image duration.
+Use **Add text** to create a timed title, caption, lower-third, label, or
+callout without importing media. The inspector edits its content, portable
+font family, size, weight/style, colors, alignment, opacity, and outline or
+background treatment. Selected text can be moved or resized directly in the
+Program Monitor with pointer, touch, or keyboard controls; those edits commit
+once on release while preview and export share the same bounded Canvas2D text
+layout and painting path. Text clips move, trim, ripple, split, slide, link,
+unlink, and delete like other timeline clips; Slip is an explained no-op
+because procedural text has no hidden source range. Save/load preserves the
+exact timing, geometry, and supported style or rejects the document clearly.
 Their timeline duration can be moved, trimmed, rippled, split, slid, and joined
 by transitions while the single source frame remains fixed; Slip explains that
 it is unavailable and performs no edit. Save/Resume/Relink preserves that
@@ -910,7 +921,14 @@ surface; it is not a second zoom and never enters document history.
 - `src/domain/crossfadePlan.ts` + `videoCompositionPlan.ts` — Issue #17 pure
   authorities for exact per-stream handles, centered grouped seams, linked
   audio availability, clip-keyed frame requests, and the shared preview/export
-  paint plan. Invalid/malformed groups fall back deterministically.
+  paint plan. `videoCompositionPlan.ts` also emits Issue #33 procedural text
+  items without source-media requests. Invalid/malformed groups fall back
+  deterministically.
+- `src/domain/textOverlay.ts` + `textLayout.ts` — Issue #33's strict text
+  defaults/validation and bounded, deterministic wrapping authority shared by
+  preview and export. Text uses reserved procedural asset ids and a portable
+  generic-font allowlist, so unsupported choices are rejected rather than
+  silently substituted.
 - `src/domain/audioMixPlan.ts` — shared live/export audible contributors,
   virtual real-handle ranges, absolute envelopes, and bounded linear or
   equal-power gain evaluation; ordinary mute/solo/hard-cut behavior remains
@@ -923,9 +941,10 @@ surface; it is not a second zoom and never enters document history.
   migration entry point, strict untrusted-input validation, and bounded durable
   asset metadata; excludes every session-owned field. Issue #17 advances the
   outer project format to 4 and nested timeline schema to 3 for independent
-  video/audio timestamp bounds and transition audio intent. Older snapshots
-  migrate conservatively; Issue #18's image-media migration still produces
-  `still` `[0, 1)` without changing timed media or text semantics.
+  video/audio timestamp bounds and transition audio intent; Issue #33 advances
+  the nested timeline schema to 4 for strict procedural text overlays. Older
+  snapshots migrate conservatively; Issue #18's image-media migration still
+  produces `still` `[0, 1)` without changing timed media or text semantics.
 - `src/state/projectSessionStore.ts` — serializable launch/editor screen,
   active-project labels, operation phase, relink status, and separate
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
@@ -937,7 +956,8 @@ surface; it is not a second zoom and never enters document history.
   pruning, plus signed `dragPreview.deltaFrames` shared by every linked move
   participant,
   authoritative timeline `zoom`, `zoomMode`, remembered `customZoom`, and the
-  translation-only `timelineOriginFrame`; selection, preset/custom zoom, and
+  translation-only `timelineOriginFrame`, plus Issue #33's uncommitted Program
+  Monitor text-geometry preview; selection, preset/custom zoom, and
   origin setters never enter document undo/redo history.
 - `src/app/selectionReconciliationController.ts` — original Issue #12 Slice 5
   composition seam: observes document-reference changes, supplies the current
@@ -946,7 +966,12 @@ surface; it is not a second zoom and never enters document history.
 - `src/ui/Inspector.tsx` — original Issue #12 Slice 6 shared Link/Unlink command
   group: focusable `aria-disabled` controls, visible described availability,
   exact rendered-intent/latest-state race checks, live rejection announcements,
-  retained primary selection, and post-Unlink focus handoff.
+  retained primary selection, and post-Unlink focus handoff. Issue #33 adds the
+  validated text-content and presentation editor plus one-step deletion.
+- `src/ui/TextOverlayDialog.tsx` + `TextOverlayControls.tsx` — Issue #33's
+  accessible add flow and Program Monitor move/resize surface. Pointer/touch
+  gestures preview ephemerally and commit once; keyboard controls use 1px or
+  Shift+10px steps with explicit accessible names and instructions.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
   candidates off-store, restores granted local handles, requests remembered
   permission only from the Open click, generation-cancels late work, and
@@ -1442,6 +1467,20 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items (beyond PLAN.md phases)
 
+- Issue #33 implementation and acceptance are complete. Text overlays are
+  procedural timed clips with strict schema validation, generic browser font
+  families, bounded wrapping, background/outline/shadow styling, and one shared
+  Canvas2D path for preview and export. Add, select, edit, move, resize, delete,
+  timeline geometry edits, undo/redo, save/load, schema 3→4 migration, and
+  source-free export are covered. The 304-test focused gate, 1,747-test full
+  gate, production build, oxlint, production audit, and diff checks passed.
+  In-app Chromium created and edited a multiline text-only project without
+  importing media, committed keyboard move/resize in exact 10 px steps,
+  rejected an overlapping V1 range with a visible error, completed a real
+  1920×1080 MP4 export, retained usable selected controls at 720×800, and had
+  no unexpected console or page errors. Automatic speech-to-text, SRT/VTT,
+  animated templates, motion graphics, and per-character effects remain out of
+  scope.
 - The public-preview foundation is complete. PR #39 was reviewed at `a0f385a`,
   passed Linux CI, and normally merged as `256887b`. The
   `v0.1.0-alpha.1` prerelease points to that exact merge, includes the verified

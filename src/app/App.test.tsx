@@ -59,7 +59,7 @@ function makeClip(id: string, startFrame: number): Clip {
 
 function makeDocument(): TimelineDoc {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'doc-app-selection',
     name: 'App selection fixture',
     frameRate: { num: 30, den: 1 },

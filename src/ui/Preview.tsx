@@ -10,11 +10,17 @@
 
 import { useEffect, useRef } from 'react'
 import { initPreview } from '../app/previewController'
+import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
+import TextOverlayControls from './TextOverlayControls'
 
 export default function Preview() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const hasTextOverlay = useDocumentStore((state) =>
+    state.doc.tracks.some((track) => track.clips.some((clip) => clip.text !== undefined)),
+  )
   const hasLoadedVisual = useMediaStore((s) => {
     for (const asset of s.assets.values()) {
       if (asset.kind === 'video' && asset.frameRate) return true
@@ -44,12 +50,13 @@ export default function Preview() {
   }, [])
 
   return (
-    <div className="preview-panel">
+    <div className="preview-panel" ref={panelRef}>
       <canvas
         ref={canvasRef}
         className="preview-canvas"
         data-testid="preview-canvas"
       />
+      <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
       {offlineVisualAssetIds.length > 0 ? (
         <div className="preview-hint preview-hint-offline" role="status">
           <strong>Source offline</strong>
@@ -57,11 +64,11 @@ export default function Preview() {
             Reconnect {offlineFileNames || 'this source'} in the Media panel.
           </span>
         </div>
-      ) : !hasVisualDescriptor ? (
+      ) : !hasVisualDescriptor && !hasTextOverlay ? (
         <div className="preview-hint">
           import a video or still image in the Media Pool to preview it here
         </div>
-      ) : !hasLoadedVisual ? (
+      ) : hasVisualDescriptor && !hasLoadedVisual ? (
         <div className="preview-hint preview-hint-offline" role="status">
           Visual sources are offline. Reconnect them in the Media panel.
         </div>
