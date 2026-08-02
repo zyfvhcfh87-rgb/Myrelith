@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-08-01)
+## Status (2026-08-02)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -82,6 +82,7 @@ and the open list below.
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
+| **Refactor Stage 7 — Mediabunny export adapter owners** | ✅ complete | stable facade split into visual/audio/sink resource owners plus one shared fake harness; 156 focused + 1,725 total tests; headed Chromium buffered/direct A/V reopen + native playback, exact 9,600-sample presentation, commit/cancel/write-failure cleanup, clean console |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -1129,24 +1130,21 @@ surface; it is not a second zoom and never enters document history.
   129-point equal-power curves against the shared future anchor. The last
   cursor releases its Input; EOF, abort, pause, seek, plan edits, and terminal
   cleanup cannot reopen or retain it.
-- `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c/d production browser
-  adapters: asset Blob/kind resolver → one Input/CanvasSink/timestamp iterator
-  per video asset → lease-owned ImageBitmap copies, or one retained bounded
-  frame-zero source per image asset → borrowed by every frame lease and closed
-  exactly once with the export source; planned audio contributors → lazy
-  AudioSampleSink cursors with streaming resampling + channel downmix. Exact
-  crossfade-handle readers reject EOF, PCM gaps/discontinuity, or unavailable
-  interpolation rather than synthesizing samples;
-  OffscreenCanvas/CanvasSource + AudioSampleSource feed the exact validated MP4
-  or WebM format with AVC/HEVC/VP9/AV1 and optional AAC/Opus. Output uses either
-  `BufferTarget` or the transactional direct `StreamTarget`; the pinned
-  Mediabunny patch preserves exact WebM/Opus presentation length and reopen
-  metadata. Encoders are support-probed, writes honor backpressure, every media
-  sample closes, and terminal cleanup is exact-once. The video
-  iterator schedule and each frame-local request derive from the canonical
-  visual plan; frame leases fail closed on omitted, extra, or reordered
-  requests. Issue #17 replaces the frozen-endpoint transition schedule with
-  genuine handle requests while preserving independent same-asset clip lanes;
+- `src/pipeline/export-mediabunny.ts` — stable Phase 5.1b/c/d composition
+  facade. `export-mediabunny-visual-source.ts` owns the asset Blob/kind
+  resolver → Input/CanvasSink/timestamp-iterator path, retained bounded
+  frame-zero image sources, lease-owned ImageBitmap copies, canonical
+  visual-plan request order, and exact source cleanup.
+  `export-mediabunny-audio-source.ts` owns lazy AudioSampleSink cursors,
+  streaming resampling/channel downmix, and exact crossfade-handle readers that
+  reject EOF, PCM gaps/discontinuity, or unavailable interpolation rather than
+  synthesizing samples. `export-mediabunny-sink.ts` owns
+  OffscreenCanvas/CanvasSource + AudioSampleSource encoding, exact validated
+  MP4/WebM muxing, buffered `BufferTarget` and transactional direct
+  `StreamTarget` delivery, backpressure, and terminal cleanup. Shared resolver
+  and typed error facts live in `export-mediabunny-common.ts`; the facade keeps
+  existing imports stable and owns no live resource. The pinned Mediabunny
+  patch preserves exact WebM/Opus presentation length and reopen metadata;
   original Issue #18 Slice 8 independently passed encode/reopen/decode and
   sampled-pixel acceptance against the currently installed 1.50.9.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap

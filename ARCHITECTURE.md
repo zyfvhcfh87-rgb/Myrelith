@@ -183,6 +183,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   the exact disposable preflight before allocating an output writer or
   encoder. An explicit unavailable profile fails with its reason; no profile
   or codec substitution and no local encoder fallback are permitted.
+- `pipeline/export-mediabunny.ts` is the stable composition facade for the
+  real browser adapters. `export-mediabunny-visual-source.ts` exclusively owns
+  timed-video/static-image decode sessions and frame leases;
+  `export-mediabunny-audio-source.ts` exclusively owns sequential decoded PCM
+  readers; and `export-mediabunny-sink.ts` exclusively owns encoder/muxer
+  resources plus buffered/direct-file output transactions. Shared asset
+  resolver/error types live in `export-mediabunny-common.ts`; resource
+  lifecycles remain inside their owner module and never move into the facade.
 - Buffered output owns a `BufferTarget` result. Direct-file output begins with
   a user-gesture picker in `app/`, passes only a one-shot opaque capability,
   and uses `StreamTarget` with at most 1 MiB of awaited positioned writes.
