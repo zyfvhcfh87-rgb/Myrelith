@@ -1,0 +1,64 @@
+.app-shell {
+  display: grid;
+  grid-template-areas:
+    'toolbar toolbar toolbar'
+    'media-pool preview inspector'
+    'media-pool transport inspector'
+    'timeline timeline timeline';
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  grid-template-rows: 48px minmax(0, 1fr) 40px 320px;
+  height: 100dvh;
+  background: #141414;
+  color: #e8e8e8;
+}
+
+.app-shell[data-closing='true'] {
+  cursor: wait;
+}
+
+.app-shell[data-closing='true'] > :not(.area-toolbar) {
+  opacity: 0.72;
+  transition: opacity 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell[data-closing='true'] > :not(.area-toolbar) {
+    transition: none;
+  }
+}
+
+.area-toolbar {
+  grid-area: toolbar;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+
+.area-media-pool {
+  grid-area: media-pool;
+  border-right: 1px solid #2a2a2a;
+  overflow-y: auto;
+}
+
+.area-preview {
+  grid-area: preview;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #0d0d0d;
+}
+
+.area-inspector {
+  grid-area: inspector;
+  border-left: 1px solid #2a2a2a;
+  overflow-y: auto;
+}
+
+.area-transport {
+  grid-area: transport;
+  border-top: 1px solid #2a2a2a;
+  background: #181818;
+  position: relative; /* anchors the docked tool group */
+}

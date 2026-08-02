@@ -16,20 +16,16 @@ import {
   createTimelineDoc,
   type ProjectSettings,
 } from '../domain/projectSettings'
-import {
-  reapplyPartialTrackImport,
-  type MediaCompatibilityItem,
-  type MediaCompatibilityReport,
-  type MediaCompatibilityStatus,
+import type {
+  MediaCompatibilityItem,
+  MediaCompatibilityReport,
+  MediaCompatibilityStatus,
 } from '../domain/mediaCompatibility'
 import type {
   FrameRate,
   MediaAsset,
-  MediaSourceBounds,
   TimelineDoc,
 } from '../domain/schema'
-import { mediaSourceBoundsAcceptAnalyzed } from '../domain/sourceBounds'
-import { microsecondsDurationToFrames, rateEquals } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import {
@@ -45,6 +41,19 @@ import {
   checkingCompatibilityItem,
 } from './mediaCompatibilityController'
 import { inspectMediaFileCompatibility } from './mediaInspection'
+import {
+  createActiveMediaRelinkCoordinator,
+  type ActiveMediaRelinkTransactionResult,
+} from './activeMediaRelinkCoordinator'
+import {
+  inspectionCandidateForDescriptor,
+  matchingDescriptorCandidates,
+  narrowedFolderCandidateIds,
+  relinkedAsset,
+  selectDescriptor,
+  selectDescriptorByCompatibilityReport,
+  selectDescriptorByFileIdentity,
+} from './projectMediaMatching'
 import {
   isMediaProbeCancellation,
   type MediaProbeResult,
@@ -794,238 +803,6 @@ export async function openRecoveryProject(
   return { status: 'failed', message }
 }
 
-function ratesMatch(
-  descriptor: FrameRate | null,
-  analyzed: FrameRate | null,
-): boolean {
-  if (descriptor === null || analyzed === null) return descriptor === analyzed
-  return rateEquals(descriptor, analyzed)
-}
-
-function descriptorMatches(
-  descriptor: PortableAssetDescriptor,
-  analyzed: MediaAsset,
-): boolean {
-  return descriptor.size === analyzed.size
-    && descriptor.kind === analyzed.kind
-    && descriptor.partialTrackSelection === analyzed.partialTrackSelection
-    && (descriptor.kind === 'image'
-      || descriptor.durationMicroseconds === analyzed.durationMicroseconds)
-    && mediaSourceBoundsAcceptAnalyzed(
-      descriptor.sourceBounds,
-      analyzed.sourceBounds,
-    )
-    && ratesMatch(descriptor.nativeFrameRate, analyzed.frameRate)
-    && descriptor.width === analyzed.width
-    && descriptor.height === analyzed.height
-    && descriptor.hasAudio === analyzed.hasAudio
-    && descriptor.audioSampleRate === analyzed.audioSampleRate
-    && descriptor.audioChannels === analyzed.audioChannels
-}
-
-interface DescriptorInspectionCandidate {
-  asset: MediaAsset
-  compatibility: MediaCompatibilityReport
-}
-
-/** Reapply a saved partial-track choice without asking or restoring omissions. */
-function inspectionCandidateForDescriptor(
-  descriptor: PortableAssetDescriptor,
-  inspection: MediaProbeResult,
-): DescriptorInspectionCandidate | null {
-  if (!inspection.asset) return null
-  const candidate = descriptor.partialTrackSelection
-    ? reapplyPartialTrackImport(
-        inspection.asset,
-        inspection.compatibility,
-        descriptor.partialTrackSelection,
-      )
-    : inspection.status === 'ready'
-      ? {
-          asset: inspection.asset,
-          compatibility: inspection.compatibility,
-        }
-      : null
-  if (!candidate || !descriptorMatches(descriptor, candidate.asset)) return null
-  return candidate
-}
-
-function compatibilityReportMatchesDescriptor(
-  descriptor: PortableAssetDescriptor,
-  file: File,
-  report: MediaCompatibilityReport,
-): boolean {
-  const video = report.tracks.find((track) => track.kind === 'video' && track.primary)
-    ?? report.tracks.find((track) => track.kind === 'video')
-  const audio = report.tracks.find((track) => track.kind === 'audio' && track.primary)
-    ?? report.tracks.find((track) => track.kind === 'audio')
-  const effectiveDuration = descriptor.partialTrackSelection === 'video-only'
-    ? video?.durationMicroseconds ?? report.durationMicroseconds
-    : descriptor.partialTrackSelection === 'audio-only'
-      ? audio?.durationMicroseconds ?? report.durationMicroseconds
-      : report.durationMicroseconds
-  const analyzedBounds: MediaSourceBounds = descriptor.kind === 'image'
-    ? { video: null, audio: null }
-    : {
-        video: descriptor.partialTrackSelection === 'audio-only'
-          ? null
-          : video?.sourceBounds ?? null,
-        audio: descriptor.partialTrackSelection === 'video-only'
-          ? null
-          : audio?.sourceBounds ?? null,
-      }
-  if (
-    file.size !== descriptor.size
-    || (descriptor.kind !== 'image'
-      && effectiveDuration !== descriptor.durationMicroseconds)
-    || !mediaSourceBoundsAcceptAnalyzed(descriptor.sourceBounds, analyzedBounds)
-  ) return false
-  if (descriptor.partialTrackSelection === 'video-only') {
-    if (!video || !audio) return false
-  } else if (descriptor.partialTrackSelection === 'audio-only') {
-    if (!audio || !video) return false
-  } else {
-    if ((descriptor.kind === 'video') !== Boolean(video)) return false
-    if ((descriptor.kind === 'audio') !== (!video && Boolean(audio))) return false
-  }
-  if (descriptor.kind === 'video') {
-    if (!video) return false
-    if (video.width !== descriptor.width || video.height !== descriptor.height) {
-      return false
-    }
-    if (!ratesMatch(descriptor.nativeFrameRate, video.frameRate)) return false
-  }
-  if (descriptor.kind === 'image') {
-    if (
-      !report.image
-      || report.image.width !== descriptor.width
-      || report.image.height !== descriptor.height
-    ) return false
-  }
-  if (
-    descriptor.partialTrackSelection !== 'video-only'
-    && descriptor.hasAudio !== Boolean(audio)
-  ) return false
-  if (descriptor.hasAudio) {
-    if (!audio) return false
-    if (
-      audio.sampleRate !== descriptor.audioSampleRate
-      || audio.channels !== descriptor.audioChannels
-    ) return false
-  }
-  return true
-}
-
-function matchingDescriptorCandidates(
-  pending: PendingResume,
-  inspection: MediaProbeResult,
-): Array<{
-  descriptor: PortableAssetDescriptor
-  candidate: DescriptorInspectionCandidate
-}> {
-  return pending.project.assets.flatMap((descriptor) => {
-    if (pending.assets.has(descriptor.id)) return []
-    const candidate = inspectionCandidateForDescriptor(descriptor, inspection)
-    return candidate ? [{ descriptor, candidate }] : []
-  })
-}
-
-function selectDescriptor(
-  pending: PendingResume,
-  file: File,
-  inspection: MediaProbeResult,
-): { descriptor: PortableAssetDescriptor; candidate: DescriptorInspectionCandidate } {
-  const matches = matchingDescriptorCandidates(pending, inspection)
-  if (matches.length === 0) {
-    throw new Error(`"${file.name}" does not match any missing project source`)
-  }
-  if (matches.length === 1) return matches[0]
-
-  const nameMatches = matches.filter(
-    (match) => match.descriptor.fileName === file.name,
-  )
-  if (nameMatches.length === 1) return nameMatches[0]
-  const timestampMatches = (nameMatches.length > 0 ? nameMatches : matches)
-    .filter((match) => match.descriptor.lastModified === file.lastModified)
-  if (timestampMatches.length === 1) return timestampMatches[0]
-  throw new Error(
-    `"${file.name}" matches more than one missing source; reconnect those files individually`,
-  )
-}
-
-function selectDescriptorByFileIdentity(
-  pending: PendingResume,
-  file: File,
-): PortableAssetDescriptor | null {
-  const available = pending.project.assets.filter(
-    (descriptor) => !pending.assets.has(descriptor.id),
-  )
-  const exact = available.filter((descriptor) =>
-    descriptor.fileName === file.name
-    && descriptor.size === file.size
-    && descriptor.lastModified === file.lastModified
-    && (!file.type || descriptor.mimeType === file.type),
-  )
-  return exact.length === 1 ? exact[0] : null
-}
-
-function selectDescriptorByCompatibilityReport(
-  pending: PendingResume,
-  file: File,
-  report: MediaCompatibilityReport,
-): PortableAssetDescriptor | null {
-  const matches = pending.project.assets.filter(
-    (descriptor) =>
-      !pending.assets.has(descriptor.id)
-      && compatibilityReportMatchesDescriptor(descriptor, file, report),
-  )
-  if (matches.length === 0) return null
-  if (matches.length === 1) return matches[0]
-
-  const nameMatches = matches.filter(
-    (descriptor) => descriptor.fileName === file.name,
-  )
-  if (nameMatches.length === 1) return nameMatches[0]
-  const timestampMatches = (nameMatches.length > 0 ? nameMatches : matches)
-    .filter((descriptor) => descriptor.lastModified === file.lastModified)
-  return timestampMatches.length === 1 ? timestampMatches[0] : null
-}
-
-function relinkedAsset(
-  descriptor: PortableAssetDescriptor,
-  analyzed: MediaAsset,
-  documentRate: FrameRate,
-): MediaAsset {
-  return {
-    ...analyzed,
-    id: descriptor.id,
-    fileName: descriptor.fileName,
-    mimeType: descriptor.mimeType,
-    size: descriptor.size,
-    lastModified: descriptor.lastModified,
-    kind: descriptor.kind,
-    ...(descriptor.partialTrackSelection === undefined
-      ? {}
-      : { partialTrackSelection: descriptor.partialTrackSelection }),
-    durationFrames: microsecondsDurationToFrames(
-      descriptor.durationMicroseconds,
-      documentRate,
-    ),
-    durationMicroseconds: descriptor.durationMicroseconds,
-    frameRate: descriptor.nativeFrameRate
-      ? { ...descriptor.nativeFrameRate }
-      : null,
-    width: descriptor.width,
-    height: descriptor.height,
-    hasAudio: descriptor.hasAudio,
-    audioSampleRate: descriptor.audioSampleRate,
-    audioChannels: descriptor.audioChannels,
-    decoderConfigB64: descriptor.kind === 'video'
-      ? analyzed.decoderConfigB64
-      : null,
-  }
-}
-
 function activeRelinkIsCurrent(work: ActiveMediaRelinkWork): boolean {
   const session = useProjectSessionStore.getState()
   return activeMediaRelinkWork === work
@@ -1090,22 +867,13 @@ function narrowedFolderCandidates(
   file: File,
   inspection: MediaProbeResult,
 ): Set<string> {
-  let matches = currentOfflineDescriptors().filter((descriptor) => (
-    inspectionCandidateForDescriptor(descriptor, inspection) !== null
-  ))
-  const nameMatches = matches.filter(
-    (descriptor) => descriptor.fileName === file.name,
+  const media = useMediaStore.getState()
+  return narrowedFolderCandidateIds(
+    [...media.descriptors.values()],
+    media.assets,
+    file,
+    inspection,
   )
-  if (nameMatches.length > 0) matches = nameMatches
-  const timestampMatches = matches.filter(
-    (descriptor) => descriptor.lastModified === file.lastModified,
-  )
-  if (timestampMatches.length > 0) matches = timestampMatches
-  const mimeMatches = matches.filter(
-    (descriptor) => descriptor.mimeType === file.type,
-  )
-  if (mimeMatches.length > 0) matches = mimeMatches
-  return new Set(matches.map((descriptor) => descriptor.id))
 }
 
 function pruneStagedFolderMedia(work: ActiveMediaRelinkWork): void {
@@ -1126,6 +894,92 @@ function pruneStagedFolderMedia(work: ActiveMediaRelinkWork): void {
   work.staged = retained
 }
 
+async function runActiveMediaRelinkTransaction(
+  work: ActiveMediaRelinkWork,
+  selection: {
+    kind: 'individual' | 'folder'
+    assetId: string
+    file: File
+    handle: LocalMediaFileHandle | null
+    displayPath: string
+  },
+  deps: Pick<
+    ProjectControllerDeps,
+    | 'createCompatibilityRequestId'
+    | 'inspectMedia'
+    | 'rememberMediaHandle'
+    | 'revokeObjectURL'
+  >,
+  ownership: {
+    claimForCommit(descriptor: PortableAssetDescriptor): boolean
+    releaseSelection(): void
+  },
+): Promise<ActiveMediaRelinkTransactionResult> {
+  const coordinator = createActiveMediaRelinkCoordinator({
+    createCompatibilityRequestId: deps.createCompatibilityRequestId,
+    createCheckingItem: checkingItemForDescriptor,
+    createFailureReport: compatibilityFailureReport,
+    inspectMedia: deps.inspectMedia,
+    rememberMediaHandle: deps.rememberMediaHandle,
+    revokeObjectURL: deps.revokeObjectURL,
+    isProbeCancellation: isMediaProbeCancellation,
+    isCurrent: () => activeRelinkIsCurrent(work),
+    claimForCommit: ownership.claimForCommit,
+    releaseSelection: ownership.releaseSelection,
+    store: {
+      getDescriptor: (assetId) => (
+        useMediaStore.getState().descriptors.get(assetId) ?? null
+      ),
+      hasConnectedAsset: (assetId) => (
+        useMediaStore.getState().assets.has(assetId)
+      ),
+      startCompatibility: (item) => (
+        useMediaStore.getState().startCompatibility(item)
+      ),
+      setCompatibility: (assetId, requestId, status, report) => (
+        useMediaStore.getState().setCompatibility(
+          assetId,
+          requestId,
+          status,
+          report,
+        )
+      ),
+      rollbackCompatibility: rollbackDescriptorCompatibility,
+      connectAsset: (asset, compatibility) => (
+        useMediaStore.getState().connectAsset(asset, compatibility)
+      ),
+    },
+    progress: {
+      checkingStarted: (assetId, requestId) => {
+        work.checkingRequests.set(assetId, requestId)
+      },
+      checkingFinished: (assetId) => {
+        work.checkingRequests.delete(assetId)
+      },
+      connected: () => {
+        work.connectedCount++
+      },
+      skipped: (message) => {
+        work.skippedCount++
+        if (message) work.errors.push(message)
+      },
+      warning: (message) => {
+        work.errors.push(message)
+      },
+      publishConnected: () => {
+        if (selection.kind === 'folder') {
+          publishActiveMediaRelink(work, 'scanning')
+        }
+      },
+    },
+  })
+  return coordinator.connect(selection, {
+    documentId: work.documentId,
+    documentRate: work.documentRate,
+    signal: work.abortController.signal,
+  })
+}
+
 async function connectStagedFolderMedia(
   work: ActiveMediaRelinkWork,
   staged: StagedFolderMedia,
@@ -1141,149 +995,40 @@ async function connectStagedFolderMedia(
   if (!activeRelinkIsCurrent(work)) return false
   if (!staged.candidateIds.has(assetId)) return false
 
-  let analyzed: MediaAsset | null = null
-  let requestId: string | null = null
-  try {
-    const initialDescriptor = useMediaStore.getState().descriptors.get(assetId)
-    if (!initialDescriptor || useMediaStore.getState().assets.has(assetId)) {
-      return false
-    }
-    requestId = deps.createCompatibilityRequestId()
-    if (!useMediaStore.getState().startCompatibility(
-      checkingItemForDescriptor(initialDescriptor, requestId),
-    )) {
-      work.skippedCount++
-      work.errors.push(`Could not start rechecking "${initialDescriptor.fileName}".`)
-      return false
-    }
-    work.checkingRequests.set(assetId, requestId)
-    // The scan retained only lightweight File/handle metadata. Re-inspecting
-    // an accepted match bounds live object URLs even for very large folders.
-    const inspection = await deps.inspectMedia(
-      staged.file,
-      work.documentRate,
-      assetId,
-      work.abortController.signal,
-    )
-    if (inspection.asset) analyzed = inspection.asset
-    if (!activeRelinkIsCurrent(work)) {
-      if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
-      return false
-    }
-    const index = work.staged.indexOf(staged)
-    const media = useMediaStore.getState()
-    const descriptor = media.descriptors.get(assetId)
-    const candidate = descriptor
-      ? inspectionCandidateForDescriptor(descriptor, inspection)
-      : null
-    if (!candidate) {
-      if (analyzed) {
-        deps.revokeObjectURL(analyzed.objectUrl)
-        analyzed = null
-      }
-      if (index >= 0) work.staged.splice(index, 1)
-      work.checkingRequests.delete(assetId)
-      if (
-        descriptor
-        && inspection.status !== 'ready'
-        && compatibilityReportMatchesDescriptor(
-          descriptor,
-          staged.file,
-          inspection.compatibility,
-        )
-      ) {
-        media.setCompatibility(
-          assetId,
-          requestId,
-          inspection.status,
-          inspection.compatibility,
-        )
-      } else {
-        rollbackDescriptorCompatibility(assetId, requestId)
-      }
-      work.skippedCount++
-      work.errors.push(
-        inspection.compatibility.detail
-          ?? `"${staged.relativePath}" is not compatible in this browser.`,
-      )
-      return false
-    }
-    if (
-      index < 0
-      || !descriptor
-      || media.assets.has(assetId)
-    ) {
-      deps.revokeObjectURL(candidate.asset.objectUrl)
-      analyzed = null
-      work.checkingRequests.delete(assetId)
-      rollbackDescriptorCompatibility(assetId, requestId)
-      if (index >= 0) work.staged.splice(index, 1)
-      work.skippedCount++
-      work.errors.push(`Could not safely reconnect "${staged.relativePath}".`)
-      return false
-    }
-
-    // Remove controller ownership before the store takes the URL. Cancellation
-    // during the later IndexedDB write must never revoke a store-owned source.
-    work.staged.splice(index, 1)
-    const connected = relinkedAsset(
-      descriptor,
-      candidate.asset,
-      work.documentRate,
-    )
-    const readyItem = compatibilityItemForAsset(
-      connected,
-      requestId,
-      'ready',
-      candidate.compatibility,
-    )
-    if (!useMediaStore.getState().connectAsset(connected, readyItem)) {
-      deps.revokeObjectURL(candidate.asset.objectUrl)
-      analyzed = null
-      work.checkingRequests.delete(assetId)
-      rollbackDescriptorCompatibility(assetId, requestId)
-      work.skippedCount++
-      work.errors.push(`Could not reconnect "${descriptor.fileName}".`)
-      return false
-    }
-    analyzed = null // mediaStore now owns the accepted connection URL
-    work.checkingRequests.delete(assetId)
-    work.connectedCount++
-    publishActiveMediaRelink(work, 'scanning')
-
-    try {
-      await deps.rememberMediaHandle(work.documentId, descriptor.id, staged.handle)
-    } catch (cause) {
-      if (activeRelinkIsCurrent(work)) {
-        work.errors.push(
-          `Reconnected "${descriptor.fileName}", but could not remember it: ${messageFrom(cause)}`,
-        )
-      }
-    }
-    return activeRelinkIsCurrent(work)
-  } catch (cause) {
-    if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
-    if (!activeRelinkIsCurrent(work)) return false
-    if (requestId) {
-      work.checkingRequests.delete(assetId)
-      const report = compatibilityFailureReport(staged.file.name, cause)
-      useMediaStore.getState().setCompatibility(
-        assetId,
-        requestId,
-        'error',
-        report,
-      )
-    }
+  const releaseSelection = (): void => {
     const index = work.staged.indexOf(staged)
     if (index >= 0) work.staged.splice(index, 1)
-    work.skippedCount++
-    if (!isMediaProbeCancellation(cause)) {
-      work.errors.push(
-        `Could not reconnect "${staged.relativePath}": ${messageFrom(cause)}`,
-      )
-    }
-    return false
   }
+  const result = await runActiveMediaRelinkTransaction(
+    work,
+    {
+      kind: 'folder',
+      assetId,
+      file: staged.file,
+      handle: staged.handle,
+      displayPath: staged.relativePath,
+    },
+    deps,
+    {
+      claimForCommit: (descriptor) => {
+        if (!activeRelinkIsCurrent(work)) return false
+        const index = work.staged.indexOf(staged)
+        const media = useMediaStore.getState()
+        if (
+          index < 0
+          || !staged.candidateIds.has(descriptor.id)
+          || media.descriptors.get(descriptor.id) !== descriptor
+          || media.assets.has(descriptor.id)
+        ) return false
+
+        // Remove controller ownership before the store takes the URL.
+        work.staged.splice(index, 1)
+        return true
+      },
+      releaseSelection,
+    },
+  )
+  return result.status === 'connected'
 }
 
 async function connectUniqueFolderMatches(
@@ -1633,7 +1378,8 @@ async function connectProjectMediaSelections(
         return { status: 'cancelled' }
       }
       const descriptorMatchesInspection = matchingDescriptorCandidates(
-        pending,
+        pending.project.assets,
+        pending.assets,
         inspection,
       ).length > 0
       if (!descriptorMatchesInspection) {
@@ -1645,7 +1391,8 @@ async function connectProjectMediaSelections(
           throw new Error(`"${file.name}" does not match any missing project source`)
         }
         const descriptor = selectDescriptorByCompatibilityReport(
-          pending,
+          pending.project.assets,
+          pending.assets,
           file,
           inspection.compatibility,
         )
@@ -1687,7 +1434,8 @@ async function connectProjectMediaSelections(
         continue
       }
       const { descriptor, candidate } = selectDescriptor(
-        pending,
+        pending.project.assets,
+        pending.assets,
         file,
         inspection,
       )
@@ -1729,7 +1477,11 @@ async function connectProjectMediaSelections(
         return { status: 'cancelled' }
       }
       if (!isMediaProbeCancellation(cause)) {
-        const descriptor = selectDescriptorByFileIdentity(pending, file)
+        const descriptor = selectDescriptorByFileIdentity(
+          pending.project.assets,
+          pending.assets,
+          file,
+        )
         if (descriptor) {
           pending.compatibility.set(
             descriptor.id,
@@ -1844,150 +1596,33 @@ async function connectActiveAssetSelection(
   if (!work) {
     return { status: 'failed', message: 'Open a project before reconnecting media.' }
   }
-  let analyzed: MediaAsset | null = null
-  const requestId = deps.createCompatibilityRequestId()
-  if (!useMediaStore.getState().startCompatibility(
-    checkingItemForDescriptor(descriptor, requestId),
-  )) {
-    const message = `Could not start rechecking "${descriptor.fileName}".`
-    work.errors.push(message)
-    work.skippedCount++
-    finishActiveMediaRelink(work)
-    return { status: 'failed', message }
-  }
-  work.checkingRequests.set(assetId, requestId)
-  try {
-    const inspection = await deps.inspectMedia(
-      selection.file,
-      work.documentRate,
+  const result = await runActiveMediaRelinkTransaction(
+    work,
+    {
+      kind: 'individual',
       assetId,
-      work.abortController.signal,
-    )
-    if (inspection.asset) analyzed = inspection.asset
-    if (!activeRelinkIsCurrent(work)) {
-      if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
-      return { status: 'cancelled' }
-    }
-    const candidate = inspectionCandidateForDescriptor(descriptor, inspection)
-    if (!candidate) {
-      if (analyzed) {
-        deps.revokeObjectURL(analyzed.objectUrl)
-        analyzed = null
-      }
-      work.checkingRequests.delete(assetId)
-      if (
-        inspection.status === 'ready'
-        || !compatibilityReportMatchesDescriptor(
-          descriptor,
-          selection.file,
-          inspection.compatibility,
-        )
-      ) {
-        rollbackDescriptorCompatibility(assetId, requestId)
-        const message = `"${selection.file.name}" could not be verified as "${descriptor.fileName}".`
-        work.skippedCount++
-        work.errors.push(message)
-        finishActiveMediaRelink(work)
-        return { status: 'failed', message }
-      }
-      useMediaStore.getState().setCompatibility(
-        assetId,
-        requestId,
-        inspection.status,
-        inspection.compatibility,
-      )
-      const message = inspection.compatibility.detail
-        ?? `"${selection.file.name}" is not compatible in this browser.`
-      work.skippedCount++
-      work.errors.push(message)
-      finishActiveMediaRelink(work)
-      return { status: 'failed', message }
-    }
-    const current = useMediaStore.getState()
-    const currentDescriptor = current.descriptors.get(assetId)
-    if (!currentDescriptor || current.assets.has(assetId)) {
-      deps.revokeObjectURL(candidate.asset.objectUrl)
-      work.checkingRequests.delete(assetId)
-      rollbackDescriptorCompatibility(assetId, requestId)
-      work.skippedCount++
-      finishActiveMediaRelink(work)
-      return { status: 'cancelled' }
-    }
-    const currentCandidate = inspectionCandidateForDescriptor(
-      currentDescriptor,
-      inspection,
-    )
-    if (!currentCandidate) {
-      const message = `"${selection.file.name}" does not match "${currentDescriptor.fileName}".`
-      deps.revokeObjectURL(candidate.asset.objectUrl)
-      analyzed = null
-      work.checkingRequests.delete(assetId)
-      rollbackDescriptorCompatibility(assetId, requestId)
-      work.skippedCount++
-      work.errors.push(message)
-      finishActiveMediaRelink(work)
-      return { status: 'failed', message }
-    }
-
-    const connected = relinkedAsset(
-      currentDescriptor,
-      currentCandidate.asset,
-      work.documentRate,
-    )
-    const readyItem = compatibilityItemForAsset(
-      connected,
-      requestId,
-      'ready',
-      currentCandidate.compatibility,
-    )
-    if (!useMediaStore.getState().connectAsset(connected, readyItem)) {
-      const message = `Could not reconnect "${currentDescriptor.fileName}".`
-      deps.revokeObjectURL(currentCandidate.asset.objectUrl)
-      analyzed = null
-      work.checkingRequests.delete(assetId)
-      rollbackDescriptorCompatibility(assetId, requestId)
-      work.skippedCount++
-      work.errors.push(message)
-      finishActiveMediaRelink(work)
-      return { status: 'failed', message }
-    }
-    analyzed = null // mediaStore now owns the URL
-    work.checkingRequests.delete(assetId)
-    work.connectedCount++
-    if (selection.handle) {
-      try {
-        await deps.rememberMediaHandle(
-          work.documentId,
-          currentDescriptor.id,
-          selection.handle,
-        )
-      } catch (cause) {
-        if (activeRelinkIsCurrent(work)) {
-          work.errors.push(
-            `Reconnected "${currentDescriptor.fileName}", but could not remember it: ${messageFrom(cause)}`,
-          )
-        }
-      }
-    }
-    if (!activeRelinkIsCurrent(work)) return { status: 'cancelled' }
-    finishActiveMediaRelink(work)
-    return { status: 'ready' }
-  } catch (cause) {
-    if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
-    if (!activeRelinkIsCurrent(work)) return { status: 'cancelled' }
-    work.checkingRequests.delete(assetId)
-    const report = compatibilityFailureReport(selection.file.name, cause)
-    useMediaStore.getState().setCompatibility(
-      assetId,
-      requestId,
-      'error',
-      report,
-    )
-    const message = `Could not reconnect "${descriptor.fileName}": ${messageFrom(cause)}`
-    work.errors.push(message)
-    work.skippedCount++
-    finishActiveMediaRelink(work)
-    return { status: 'failed', message }
+      file: selection.file,
+      handle: selection.handle,
+      displayPath: selection.file.name,
+    },
+    deps,
+    {
+      claimForCommit: (currentDescriptor) => {
+        if (!activeRelinkIsCurrent(work)) return false
+        const current = useMediaStore.getState()
+        return current.descriptors.get(assetId) === currentDescriptor
+          && !current.assets.has(assetId)
+      },
+      releaseSelection: () => {},
+    },
+  )
+  if (activeRelinkIsCurrent(work)) finishActiveMediaRelink(work)
+  if (result.status === 'connected') return { status: 'ready' }
+  if (result.status === 'cancelled') return result
+  return {
+    status: 'failed',
+    message: result.message
+      ?? `Could not reconnect "${descriptor.fileName}".`,
   }
 }
 

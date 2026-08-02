@@ -29,17 +29,15 @@ non-negotiable rules. Re-read it at the start of every coding session.
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
 - Sanctioned exceptions between those three (and nothing more):
-  - anyone may import `workers/decode-protocol.ts` and
+  - anyone may import `workers/decode-types.ts`,
+    `workers/decode-protocol.ts`, `workers/render-legacy-protocol.ts`, and
     `workers/render-protocol.ts` (types only, no runtime),
   - `workers/` may import `engine/frame-cache.ts` (pure class, no deps),
   - `workers/render.worker.ts` may import `pipeline/render.ts` (the pure
     compositing core: imports domain/ only, no browser I/O — the worker is
     its runtime host, as `export.ts` is the finite export host),
     `pipeline/static-image.ts` (the bounded browser/worker-safe still-image
-    inspection + decode boundary), and the STRUCTURAL TYPES exported by
-    `workers/decode.worker.ts` via
-    `import type` (erased at build time — a runtime import would register
-    the decode worker's message listener inside the render worker),
+    inspection + decode boundary),
   - `engine/worker-bridge.ts` references the worker FILE via
     `new Worker(new URL(...))` — a URL, not a module import; the pipeline
     chunk source reaches the bridge by injection, never by import.
@@ -185,6 +183,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   the exact disposable preflight before allocating an output writer or
   encoder. An explicit unavailable profile fails with its reason; no profile
   or codec substitution and no local encoder fallback are permitted.
+- `pipeline/export-mediabunny.ts` is the stable composition facade for the
+  real browser adapters. `export-mediabunny-visual-source.ts` exclusively owns
+  timed-video/static-image decode sessions and frame leases;
+  `export-mediabunny-audio-source.ts` exclusively owns sequential decoded PCM
+  readers; and `export-mediabunny-sink.ts` exclusively owns encoder/muxer
+  resources plus buffered/direct-file output transactions. Shared asset
+  resolver/error types live in `export-mediabunny-common.ts`; resource
+  lifecycles remain inside their owner module and never move into the facade.
 - Buffered output owns a `BufferTarget` result. Direct-file output begins with
   a user-gesture picker in `app/`, passes only a one-shot opaque capability,
   and uses `StreamTarget` with at most 1 MiB of awaited positioned writes.
@@ -199,6 +205,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   project or Zustand state. Project dimensions, FPS, and sample rate remain
   authoritative `TimelineDoc` facts and are not duplicated into that export
   preference.
+- `ui/ExportDialog.tsx` exclusively owns export view state, lazy controller
+  loading, capability generations, cancellation, focus scheduling, and result
+  URL lifetime. `ui/ExportDialogSections.tsx` is stateless presentation;
+  `ExportProfilePicker.tsx` owns only profile-editing drafts. Presentation must
+  not acquire an export resource or bypass the app-layer facades.
+- `app/layout.css` is the ordered stylesheet manifest. Its `styles/` imports
+  retain the original global cascade order while grouping rules by feature;
+  changing that import order is a behavior change and requires visual cascade
+  validation.
 
 ## Store action contracts
 
@@ -255,11 +270,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   ({clipId, kind, deltaFrames,
   linkGroupId?} | null — same live-preview contract for trim/ripple/
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
-  ghost a linked gesture live. At pointerdown, `ui/timeline/gestureBounds.ts`
-  uses one fresh document/media snapshot to intersect every participating
-  linked member's legal signed-delta interval, so no owner can preview beyond
-  a partner's timeline, source, duration, and headroom bounds. The
-  gesture session retains that exact pointer-down document reference and group
+  ghost a linked gesture live. `ui/timeline/useClipGestureSession.ts` is the
+  single owner of clip pointer/keyboard routing, pointer capture, cancellation,
+  rAF-coalesced previews, and the one pointerup document dispatch. At
+  pointerdown it delegates to pure `ui/timeline/gestureBounds.ts`, using one
+  fresh document/media snapshot to intersect every participating linked
+  member's legal signed-delta interval, so no owner can preview beyond a
+  partner's timeline, source, duration, and headroom bounds. The gesture
+  session retains that exact pointer-down document reference and group
   identity; if the committed document changes before pointerup, the preview is
   cleared and no stale commit is dispatched. Normal pointer or unmodified
   keyboard selection replaces both selection fields; Ctrl/Cmd pointer or
@@ -327,6 +345,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   several complete generations, is offered explicitly, and never stores media
   bytes. Intentional project exit or a revision-current successful `.webcut`
   save removes the active journal before session resources are released.
+- Media import policy — `src/app/mediaImportDecisions.ts` is the store-free
+  authority for FPS-prompt eligibility, partial-track choice reapplication,
+  active-document/rate validation, and Keep/Match rate resolution. It accepts
+  only serializable document, asset, report, and rate facts; it never owns a
+  File, handle, object URL, abort signal, store, or browser capability.
+  `src/app/mediaImportController.ts` remains the public composition facade and
+  the sole import resource/mutation owner. It publishes guarded compatibility
+  generations, retains retry Files/handles outside Zustand, revalidates the
+  active document before commit, transfers a Ready URL only through the media
+  store, and revokes every analyzed-but-uncommitted URL in its outer `finally`.
+  Cancellation, a rejected decision, project replacement, and failed retry
+  must not bypass that exact cleanup owner.
 - Local media reconnection — `src/app/localMediaHandles.ts` stores opaque
   `FileSystemFileHandle` capabilities in an origin-local IndexedDB sidecar,
   keyed by stable document + asset ids. Paths and handles never enter domain
@@ -339,11 +369,22 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   Accepted sources keep the original asset id and are re-analyzed before
   transfer into `MediaState`; relative folder paths are display-only, and
   Files, handles, and object URLs remain controller-local.
-- Worker messages — `src/workers/decode-protocol.ts` (canonical):
+  `src/app/projectMediaMatching.ts` is the store-free authority for descriptor
+  comparison, saved partial-track reapplication, deterministic ambiguity
+  narrowing, and stable asset reconstruction. Active individual Relink and
+  accepted folder matches share the dependency-injected transaction in
+  `src/app/activeMediaRelinkCoordinator.ts`; `projectController.ts` remains the
+  public facade and owns project generations plus staged folder selections.
+  The transaction must revalidate that exact controller-local selection before
+  `MediaState` takes its object URL. Remembering its handle happens only after
+  that transfer, so cancellation or project replacement must never revoke a
+  store-owned source.
+- Legacy worker messages — `src/workers/decode-protocol.ts` (compatibility):
   `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
-  (`configured`/`frameReady`/`error`). Types-only file; BOTH the worker and
-  `engine/worker-bridge.ts` import it (that is the one sanctioned
-  cross-import between those layers — it carries zero runtime code).
+  (`configured`/`frameReady`/`error`). Shared structural types live in
+  `decode-types.ts`; both files carry zero runtime code. The retired worker and
+  `engine/worker-bridge.ts` retain these contracts without being imported by
+  the current render path.
   Timestamps are integer microseconds; frame-number conversion happens on
   the bridge side. Seeks are latest-wins: only the newest seek is guaranteed
   a `frameReady`; superseded seeks are resolved by the bridge, and a
@@ -355,12 +396,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 src/
   domain/      time, schema, operations, selectors      (pure TS)
   state/       document, transport, media, project-session/library stores
-  engine/      playback-engine, worker-bridge, frame-cache
-  workers/     decode.worker, render.worker
-  pipeline/    demux, decode, render, export
+  engine/      playback-engine, render bridge, isolated legacy bridge, frame-cache
+  workers/     protocols/types, current render worker, isolated legacy delegates
+  pipeline/    demux, legacy chunk decode, render, export
   codecs/      realm-local lazy decoder registration and resource policy
-  ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector
-  ui/timeline/ Timeline, Track, ClipView, Ruler, Playhead
-  app/         App, project/persistence/controllers, layout.css
+  ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector,
+               ExportDialog lifecycle owner + stateless export sections
+  ui/timeline/ Timeline, Track, ClipView presentation root,
+               useClipGestureSession pointer owner, presentation plan/layer,
+               Ruler, Playhead
+  app/         App, project/persistence/controllers, ordered layout.css manifest
+  app/styles/  feature-owned editor styles in binding cascade order
   dev/         temporary scratch harnesses — may import anything, never shipped
 ```

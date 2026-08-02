@@ -276,7 +276,7 @@ function deferred<T>() {
 /** One 120-frame clip at 30fps → duration 120, last frame 119. */
 function makeDoc(durationFrames = 120): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'doc-transport',
     name: 'transport fixture',
     frameRate: { num: 30, den: 1 },
@@ -993,6 +993,12 @@ describe('live audio integration', () => {
     expect(fake.startAudio).toHaveBeenCalledTimes(1)
     expect(useMediaStore.getState().assets.get(online.id)).toBe(online)
     expect(transport().isPlaying).toBe(true)
+    await vi.waitFor(() => {
+      expect(warning).toHaveBeenCalledWith(
+        '[transportController] audio clip "offline" source open failed:',
+        'offline source',
+      )
+    })
     warning.mockRestore()
   })
 
@@ -1042,6 +1048,7 @@ describe('live audio integration', () => {
   })
 
   test('a late audio warning cannot downgrade a newer source generation', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     useDocumentStore.getState().setDoc(makeAudibleDoc())
     const original = makeAsset()
     seedReadyAsset(original, 'compat-old')
@@ -1090,6 +1097,11 @@ describe('live audio integration', () => {
     expect(useMediaStore.getState().compatibility.get(original.id))
       .toBe(replacementCompatibility)
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+    expect(warning).toHaveBeenCalledWith(
+      '[transportController] audio clip "clipA" source open failed:',
+      'late old-source failure',
+    )
+    warning.mockRestore()
   })
 
   test('a rejected AudioContext resume stops silent playback cleanly', async () => {

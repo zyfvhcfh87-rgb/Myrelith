@@ -24,7 +24,8 @@
     "qa:issue18:fixtures": "node scripts/issue18/generate-fixtures.mjs",
     "qa:issue19:fixtures": "node scripts/generate-issue-19-fixtures.mjs",
     "postinstall": "patch-package",
-    "test": "vitest run",
+    "test": "node scripts/run-vitest.mjs",
+    "test:browser": "playwright test",
     "test:watch": "vitest",
     "preview": "vite preview"
   },
@@ -38,6 +39,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

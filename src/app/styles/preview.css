@@ -1,0 +1,46 @@
+/* Preview panel (Phase 3.4) */
+
+.preview-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  background: #000;
+}
+
+.preview-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.preview-hint-offline {
+  flex-direction: column;
+  gap: 5px;
+  padding: 24px;
+  color: #e1c58e;
+  text-align: center;
+  background: rgb(12 10 7 / 58%);
+}
+
+.preview-hint-offline strong {
+  font-size: 14px;
+}
+
+.preview-hint-offline span {
+  max-width: 420px;
+  color: #b8ad99;
+  font-size: 11px;
+}

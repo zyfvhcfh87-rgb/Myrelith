@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   saveActiveProject,
@@ -57,7 +57,7 @@ describe('Toolbar project persistence', () => {
     expect(screen.getByRole('dialog', { name: 'Export project' })).toBeInTheDocument()
   })
 
-  test('guards dirty work before returning to Projects', () => {
+  test('guards dirty work before returning to Projects', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
       .mockReturnValueOnce(true)
     render(<Toolbar />)
@@ -67,9 +67,12 @@ describe('Toolbar project persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Projects' }))
     expect(leaveActiveProject).toHaveBeenCalledOnce()
     expect(confirm).toHaveBeenCalledTimes(2)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Projects' })).toBeEnabled()
+    })
   })
 
-  test('clean projects leave directly and explain the first Save grants write access', () => {
+  test('clean projects leave directly and explain the first Save grants write access', async () => {
     useProjectSessionStore.setState({
       activeProjectFileName: 'Opened.webcut',
       hasUnsavedChanges: false,
@@ -83,6 +86,9 @@ describe('Toolbar project persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Projects' }))
     expect(confirm).not.toHaveBeenCalled()
     expect(leaveActiveProject).toHaveBeenCalledOnce()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Projects' })).toBeEnabled()
+    })
   })
 
   test('disables replacement and save controls during a write, then reports live save', () => {

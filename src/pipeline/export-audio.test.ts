@@ -93,7 +93,7 @@ function makeDoc(
   audioSampleRate = 48_000,
 ): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'doc',
     name: 'Audio export test',
     frameRate,

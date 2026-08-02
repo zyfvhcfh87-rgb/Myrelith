@@ -1,6 +1,6 @@
 /**
- * engine/worker-bridge.ts — Main-thread facade over the decode worker.
- * Phase 2.4.
+ * engine/worker-bridge.ts — Retired main-thread decode-worker facade retained
+ * as a tested compatibility module. Current preview uses RenderWorkerBridge.
  *
  * Speaks frames on one side (renderFrameAt(frame)) and the typed
  * ToDecodeWorker/FromDecodeWorker protocol on the other. Owns:
@@ -24,6 +24,9 @@ import type {
   FromDecodeWorker,
   ToDecodeWorker,
 } from '../workers/decode-protocol'
+import type { ChunkProvider, WorkerLike } from './worker-types'
+
+export type { ChunkProvider, WorkerLike } from './worker-types'
 
 /** What a render request came to: exactly one of these, exactly once. */
 export type RenderStatus = 'drawn' | 'missed' | 'superseded' | 'error'
@@ -38,30 +41,13 @@ export interface RenderResult {
   message?: string
 }
 
-/** Structural Worker so tests can fake the other side of the wire. */
-export interface WorkerLike {
-  postMessage(message: unknown, transfer: Transferable[]): void
-  addEventListener(
-    type: 'message',
-    listener: (event: MessageEvent) => void,
-  ): void
-  terminate?(): void
-}
-
-/** pipeline/decode.VideoChunkSource satisfies this structurally. */
-export interface ChunkProvider {
-  chunksForTimestamp(
-    targetSec: number,
-    toleranceSec: number,
-  ): Promise<ChunkPayload[]>
-}
-
 /** What the bridge decodes from: a rate + a chunk provider, per asset. */
 interface BridgeSource {
   rate: FrameRate
   chunkProvider: ChunkProvider
 }
 
+/** @deprecated Runtime-dead compatibility facade; use RenderWorkerBridge. */
 export class DecodeWorkerBridge {
   private readonly worker: WorkerLike
   private source: BridgeSource | null = null
@@ -224,6 +210,7 @@ export class DecodeWorkerBridge {
 /**
  * Real wiring: spawn the decode worker as a Vite module worker. Kept out of
  * the class so tests construct DecodeWorkerBridge with a fake.
+ * @deprecated Runtime-dead compatibility factory; use createRenderWorker.
  */
 export function createDecodeWorker(): Worker {
   return new Worker(new URL('../workers/decode.worker.ts', import.meta.url), {

@@ -13,8 +13,8 @@
  *   tolerance microseconds (frame↔seconds only at this boundary, rule 2);
  * - handing each asset Blob to the worker once, then posting lightweight
  *   frame requests with explicit playback/seek intent;
- * - temporarily supporting the old transferred-chunk path while its final
- *   previewController caller migrates;
+ * - preserving the old transferred-chunk overload through the isolated
+ *   render-legacy-bridge compatibility delegate;
  * - request-id bookkeeping with latest-wins supersession, mirroring the
  *   worker's own (a newer renderFrame settles older in-flight ones as
  *   'superseded'; the worker answers every request regardless).
@@ -34,15 +34,18 @@ import {
   type VideoCompositionPlanner,
 } from '../domain/videoCompositionPlan'
 import { framesToSeconds, rescaleFrames } from '../domain/time'
-import type { ChunkPayload } from '../workers/decode-protocol'
 import type {
-  CompositeSourceEntry,
   FromRenderWorker,
   RenderMode,
   StreamingCompositeSourceEntry,
   ToRenderWorker,
 } from '../workers/render-protocol'
-import type { ChunkProvider, WorkerLike } from './worker-bridge'
+import {
+  buildLegacyRenderRequest,
+  createLegacyRenderAssetSource,
+  type LegacyRenderAssetSource,
+} from './render-legacy-bridge'
+import type { ChunkProvider, WorkerLike } from './worker-types'
 
 /** What one renderFrame call came to: exactly one of these, exactly once. */
 export interface RenderFrameResult {
@@ -65,14 +68,6 @@ const SUPERSEDED: RenderFrameResult = {
 }
 
 const WORKER_CLOSE_ACK_TIMEOUT_MS = 1_000
-
-/** Temporary keyframe-batch source retained while previewController migrates. */
-interface LegacyAssetSource {
-  protocol: 'legacy'
-  rate: FrameRate
-  chunkProvider: ChunkProvider
-  runtimeToken: object
-}
 
 export interface RenderAssetOpenFailure {
   trackKind: 'video' | null
@@ -106,7 +101,7 @@ interface StreamingImageAssetSource {
 }
 
 type AssetSource =
-  | LegacyAssetSource
+  | LegacyRenderAssetSource
   | StreamingVideoAssetSource
   | StreamingImageAssetSource
 
@@ -200,12 +195,7 @@ export class RenderWorkerBridge {
     }
     const setupId = this.takeSetupId()
     this.sourceRevision++
-    this.sources.set(assetId, {
-      protocol: 'legacy',
-      rate,
-      chunkProvider,
-      runtimeToken: {},
-    })
+    this.sources.set(assetId, createLegacyRenderAssetSource(rate, chunkProvider))
     return new Promise((resolve, reject) => {
       this.pendingConfigures.set(assetId, { setupId, resolve, reject })
       this.post({ type: 'configureAsset', assetId, setupId, config }, [])
@@ -352,75 +342,32 @@ export class RenderWorkerBridge {
     requestId: number,
   ): Promise<RenderFrameResult> {
     const revision = this.sourceRevision
-
-    // Which (asset, sourceFrame) pairs does this composite need? The domain
-    // render plan is the same ordered truth compositeFrame consumes;
-    // dedupe only the decode work, exactly like the worker's source table.
-    const wants = new Map<
-      string,
-      { assetId: AssetId; sourceFrame: number; source: LegacyAssetSource }
-    >()
-    for (const request of videoCompositionRequests(plan)) {
-      const clip = request.clip
-      const source = this.sources.get(clip.assetId)
-      if (!source) continue
-      if (source.protocol !== 'legacy') continue // prevalidated above
-      const sourceFrame = request.sourceFrame
-      wants.set(`${clip.assetId}@${sourceFrame}`, {
-        assetId: clip.assetId,
-        sourceFrame,
-        source,
-      })
-    }
-
-    // Fetch every batch concurrently; a provider failure degrades to an
-    // empty batch (the worker may still hold the frame in cache).
-    const entries: CompositeSourceEntry[] = await Promise.all(
-      [...wants.values()].map(async ({ assetId, sourceFrame, source }) => {
-        const assetFrame = rescaleFrames(sourceFrame, doc.frameRate, source.rate)
-        const targetSec = framesToSeconds(assetFrame, source.rate)
-        const toleranceSec = source.rate.den / source.rate.num / 2
-        let chunks: ChunkPayload[] = []
-        try {
-          chunks = await source.chunkProvider.chunksForTimestamp(targetSec, toleranceSec)
-        } catch (e) {
-          console.warn(
-            `[render-bridge] chunk fetch failed for asset ${assetId}:`,
-            e instanceof Error ? e.message : e,
-          )
-        }
-        return {
-          assetId,
-          sourceFrame,
-          targetTimestampUs: Math.round(targetSec * 1e6),
-          toleranceUs: Math.round(toleranceSec * 1e6),
-          chunks,
-        }
-      }),
-    )
-
-    // A newer call started — or the doc was swapped — while we were
-    // reading chunks: don't even post.
-    if (
-      this.latestCallId !== requestId
-      || this.doc !== doc
-      || this.sourceRevision !== revision
-      || this.disposed
-    ) return SUPERSEDED
+    const request = await buildLegacyRenderRequest({
+      doc,
+      plan,
+      frame,
+      requestId,
+      sourceForAsset: (assetId) => {
+        const source = this.sources.get(assetId)
+        return source?.protocol === 'legacy' ? source : undefined
+      },
+      isCurrent: () => (
+        this.latestCallId === requestId
+        && this.doc === doc
+        && this.sourceRevision === revision
+        && !this.disposed
+      ),
+    })
+    if (!request) return SUPERSEDED
 
     this.settlePendingAsSuperseded()
 
     return new Promise((resolve) => {
       this.pending.set(requestId, {
         resolve,
-        sources: new Map(
-          [...wants.values()].map(({ assetId, source }) => [assetId, source]),
-        ),
+        sources: request.sources,
       })
-      this.post(
-        { type: 'composite', requestId, frame, plan, sources: entries },
-        entries.flatMap((entry) => entry.chunks.map((chunk) => chunk.data)),
-      )
+      this.post(request.message, request.transfer)
     })
   }
 

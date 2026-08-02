@@ -19,7 +19,6 @@ import {
   type ExportProfile,
   type ExportSelectionId,
 } from '../domain/exportProfile'
-import { formatProjectCanvas } from '../domain/projectSettings'
 import {
   getExportFilePickerAvailability,
   requestExportFileDestination,
@@ -30,13 +29,19 @@ import { docDurationFrames, outputMediaAssetIds } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreferencesStore } from '../state/preferencesStore'
-import ExportProfilePicker, {
-  type ExportPresetAvailability,
-} from './ExportProfilePicker'
+import type { ExportPresetAvailability } from './ExportProfilePicker'
+import {
+  ExportConfiguration,
+  ExportDialogActions,
+  ExportDialogHeader,
+  ExportPhaseContent,
+  type DownloadReady,
+  type ExportPhase,
+  type SavedFileReady,
+} from './ExportDialogSections'
 import {
   estimateExportBytes,
   exportFileName,
-  exportProfileSummary,
   formatEstimatedFileSize,
   profileForSelectionFallback,
   type ExportUiSelectionId,
@@ -102,27 +107,6 @@ function loadExportCapabilities(): Promise<ExportCapabilitiesModule> {
       throw cause
     })
   return capabilitiesPromise
-}
-
-type ExportPhase =
-  | 'configure'
-  | 'choosing-file'
-  | 'running'
-  | 'cancelling'
-  | 'download'
-  | 'saved'
-  | 'cancelled'
-
-interface DownloadReady {
-  url: string
-  fileName: string
-  formatLabel: string
-  linkLabel: string
-}
-
-interface SavedFileReady {
-  fileName: string
-  formatLabel: string
 }
 
 interface ExportDialogProps {
@@ -731,307 +715,73 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       onKeyDown={(event) => event.stopPropagation()}
     >
       <div className="export-dialog-card">
-        <header className="export-dialog-header">
-          <div>
-            <span className="export-eyebrow">Deliver</span>
-            <h2 id={titleId}>Export video</h2>
-          </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            className="export-close"
-            aria-label="Close export dialog"
-            disabled={busy}
-            onClick={closeDialog}
-          >
-            ×
-          </button>
-        </header>
+        <ExportDialogHeader
+          titleId={titleId}
+          busy={busy}
+          closeButtonRef={closeButtonRef}
+          onClose={closeDialog}
+        />
 
         <div className="export-dialog-body">
-          <p id={descriptionId} className="export-description">
-            Export the full timeline using its current project settings.
-          </p>
-
-          <dl className="export-profile">
-            <div className="export-profile-row">
-              <dt>Resolution</dt>
-              <dd>
-                <strong>{formatProjectCanvas(doc.width, doc.height)}</strong>
-                <span>Timeline resolution (fixed)</span>
-              </dd>
-            </div>
-            <div className="export-profile-row">
-              <dt>Selected output</dt>
-              <dd>
-                <strong>{exportProfileSummary(displayProfile)}</strong>
-                <span>
-                  {displayProfile.mimeType} · .{displayProfile.fileExtension}
-                </span>
-              </dd>
-            </div>
-            <div className="export-profile-row">
-              <dt>Estimated size</dt>
-              <dd>
-                <strong>About {estimatedSize}</strong>
-                <span>
-                  Bitrate-based estimate; variable bitrate and container
-                  overhead can change the final size.
-                </span>
-              </dd>
-            </div>
-          </dl>
-
-          <ExportProfilePicker
+          <ExportConfiguration
+            descriptionId={descriptionId}
+            doc={doc}
+            displayProfile={displayProfile}
+            estimatedSize={estimatedSize}
             selectionId={selectionId}
-            profile={displayProfile}
-            availability={presetAvailability}
+            presetAvailability={presetAvailability}
             selectedSupported={selectedSupported}
             selectedReason={selectedReason}
-            fileDestinationAvailability={filePickerAvailability}
-            disabled={phase !== 'configure'}
-            selectedInputRef={selectedProfileRef}
+            filePickerAvailability={filePickerAvailability}
+            phase={phase}
+            selectedProfileRef={selectedProfileRef}
+            capabilityStatusRef={capabilityStatusRef}
+            capabilityLoading={capabilityLoading}
+            capabilityError={capabilityError}
+            autoPresetId={capabilitySnapshot?.autoPresetId}
+            advancedDraftsValid={advancedDraftsValid}
+            hasContent={hasContent}
+            offlineExportMessage={offlineExportMessage}
+            filePickerMessage={filePickerMessage}
+            error={error}
             onSelect={selectRecommendedProfile}
             onChangeProfile={selectCustomProfile}
             onDraftValidityChange={setAdvancedDraftsValid}
+            onRetryCapabilities={() => refreshCapabilities(doc)}
           />
 
-          <div
-            ref={capabilityStatusRef}
-            className={`export-capability-status${
-              selectedSupported === false ? ' is-unavailable' : ''
-            }`}
-            role="status"
-            aria-live="polite"
-            tabIndex={-1}
-          >
-            {capabilityLoading && selectionId !== 'custom' ? (
-              <span>Checking export support for this project…</span>
-            ) : selectionId !== 'custom'
-              && capabilityError
-              && capabilitySnapshot === null ? (
-              <>
-                <span>Could not check export support: {capabilityError}</span>
-                <button
-                  type="button"
-                  className="export-inline-retry"
-                  onClick={() => refreshCapabilities(doc)}
-                >
-                  Retry capability check
-                </button>
-              </>
-            ) : !advancedDraftsValid ? (
-              <span>Fix the invalid advanced value before exporting.</span>
-            ) : selectedSupported === null ? (
-              <span>Checking this exact custom profile…</span>
-            ) : selectedSupported ? (
-              <span>
-                Ready to export exactly {exportProfileSummary(displayProfile)}.
-                {selectionId === 'auto' && capabilitySnapshot?.autoPresetId
-                  ? ` Auto selected ${EXPORT_PRESETS.find(
-                      (preset) => preset.id === capabilitySnapshot.autoPresetId,
-                    )?.label ?? capabilitySnapshot.autoPresetId}.`
-                  : ''}
-              </span>
-            ) : (
-              <span>
-                {selectedReason ?? 'The selected profile is unavailable.'}
-                {' '}No codec will be substituted.
-              </span>
-            )}
-          </div>
-
-          {!hasContent && phase === 'configure' && (
-            <p className="export-empty">Add a clip to the timeline before exporting.</p>
-          )}
-
-          {offlineExportMessage && phase === 'configure' && (
-            <p className="export-error" role="alert">
-              {offlineExportMessage}
-            </p>
-          )}
-
-          {filePickerMessage && phase === 'configure' && (
-            <p className="export-file-message" role="status">
-              {filePickerMessage}
-            </p>
-          )}
-
-          {error && (
-            <p className="export-error" role="alert">
-              {error}
-            </p>
-          )}
-
-          {phase === 'choosing-file' && (
-            <section className="export-progress-panel">
-              <span
-                ref={phaseStatusRef}
-                role="status"
-                aria-live="polite"
-                tabIndex={-1}
-              >
-                Choose the export file in your browser…
-              </span>
-              <p>WebCut will begin encoding after you approve the destination.</p>
-            </section>
-          )}
-
-          {(phase === 'running' || phase === 'cancelling') && (
-            <section className="export-progress-panel" aria-labelledby={progressId}>
-              <div className="export-progress-heading">
-                <span
-                  ref={phaseStatusRef}
-                  id={progressId}
-                  role="status"
-                  aria-live="polite"
-                  tabIndex={-1}
-                >
-                  {phase === 'cancelling' ? 'Cancelling…' : 'Encoding timeline…'}
-                </span>
-                <strong>{percent}%</strong>
-              </div>
-              <progress aria-label="Export progress" max={1} value={progress} />
-              <p>Keep this tab open until encoding and cleanup finish.</p>
-            </section>
-          )}
-
-          {phase === 'download' && download && (
-            <section className="export-result" role="status" aria-live="polite">
-              <span className="export-result-mark" aria-hidden="true">✓</span>
-              <div>
-                <strong>Export ready</strong>
-                <span>Your {download.formatLabel} is ready to download.</span>
-              </div>
-            </section>
-          )}
-
-          {phase === 'saved' && savedFile && (
-            <section className="export-result" role="status" aria-live="polite">
-              <span className="export-result-mark" aria-hidden="true">✓</span>
-              <div>
-                <strong>Export saved</strong>
-                <span>
-                  Your {savedFile.formatLabel} was written directly to{' '}
-                  {savedFile.fileName}.
-                </span>
-              </div>
-            </section>
-          )}
-
-          {phase === 'cancelled' && (
-            <section className="export-cancelled" role="status" aria-live="polite">
-              <strong>Export cancelled</strong>
-              <span>
-                {runDestinationRef.current === 'file'
-                  ? 'No video was completed; the selected file may remain empty.'
-                  : 'No download file was created.'}
-              </span>
-            </section>
-          )}
+          <ExportPhaseContent
+            phase={phase}
+            phaseStatusRef={phaseStatusRef}
+            progressId={progressId}
+            progress={progress}
+            percent={percent}
+            download={download}
+            savedFile={savedFile}
+            runDestination={runDestinationRef.current}
+          />
         </div>
 
-        <footer className="export-dialog-actions">
-          {phase === 'configure' && (
-            <>
-              <button type="button" className="export-secondary" onClick={closeDialog}>
-                Close
-              </button>
-              <button
-                ref={startButtonRef}
-                type="button"
-                className="export-primary"
-                disabled={!canStart}
-                onClick={() => void beginExport()}
-              >
-                {offlineExportMessage
-                  ? 'Reconnect media to export'
-                  : capabilityLoading || selectedSupported === null
-                    ? 'Checking export support…'
-                    : selectedSupported === false || !advancedDraftsValid
-                      ? 'Profile unavailable'
-                      : error ? 'Retry export'
-                        : displayProfile.destination === 'file'
-                          ? 'Choose file and export'
-                          : 'Start export'}
-              </button>
-            </>
-          )}
-
-          {phase === 'running' && (
-            <button
-              ref={cancelButtonRef}
-              type="button"
-              className="export-danger"
-              onClick={requestCancel}
-            >
-              Cancel export
-            </button>
-          )}
-
-          {phase === 'choosing-file' && (
-            <button type="button" className="export-primary" disabled>
-              Waiting for file selection…
-            </button>
-          )}
-
-          {phase === 'cancelling' && (
-            <button type="button" className="export-danger" disabled>
-              Cancelling…
-            </button>
-          )}
-
-          {phase === 'download' && download && (
-            <>
-              <button type="button" className="export-secondary" onClick={closeDialog}>
-                Close
-              </button>
-              <button type="button" className="export-secondary" onClick={resetToConfigure}>
-                Export another
-              </button>
-              <a
-                ref={downloadLinkRef}
-                className="export-primary export-download"
-                href={download.url}
-                download={download.fileName}
-              >
-                {download.linkLabel}
-              </a>
-            </>
-          )}
-
-          {phase === 'saved' && savedFile && (
-            <>
-              <button type="button" className="export-secondary" onClick={closeDialog}>
-                Close
-              </button>
-              <button
-                ref={backButtonRef}
-                type="button"
-                className="export-primary"
-                onClick={resetToConfigure}
-              >
-                Export another
-              </button>
-            </>
-          )}
-
-          {phase === 'cancelled' && (
-            <>
-              <button type="button" className="export-secondary" onClick={closeDialog}>
-                Close
-              </button>
-              <button
-                ref={backButtonRef}
-                type="button"
-                className="export-primary"
-                onClick={resetToConfigure}
-              >
-                Back to settings
-              </button>
-            </>
-          )}
-        </footer>
+        <ExportDialogActions
+          phase={phase}
+          startButtonRef={startButtonRef}
+          cancelButtonRef={cancelButtonRef}
+          downloadLinkRef={downloadLinkRef}
+          backButtonRef={backButtonRef}
+          canStart={canStart}
+          offlineExportMessage={offlineExportMessage}
+          capabilityLoading={capabilityLoading}
+          selectedSupported={selectedSupported}
+          advancedDraftsValid={advancedDraftsValid}
+          error={error}
+          displayProfile={displayProfile}
+          download={download}
+          savedFile={savedFile}
+          onClose={closeDialog}
+          onStart={() => void beginExport()}
+          onCancel={requestCancel}
+          onReset={resetToConfigure}
+        />
       </div>
     </dialog>
   )

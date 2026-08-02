@@ -9,11 +9,15 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { initSelectionReconciliation } from '../app/selectionReconciliationController'
+import {
+  resetDocumentStoreForTest,
+  resetTransportStoreForTest,
+} from '../test/storeFixtures'
 import Inspector from './Inspector'
 import Timeline from './timeline/Timeline'
 
@@ -38,7 +42,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -86,20 +90,13 @@ let warnSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  useTransportStore.setState({
-    playheadFrame: 0,
-    isPlaying: false,
-    isScrubbing: false,
-    zoom: 1,
-    inOut: null,
-    dragPreview: null,
-    tool: 'select',
-    selectedClipIds: [],
-    selectedClipId: null,
-    editPreview: null,
-  })
-  doc().setDoc(makeDoc())
+  resetTransportStoreForTest()
+  resetDocumentStoreForTest(makeDoc())
   warnSpy.mockClear()
+})
+
+afterEach(() => {
+  warnSpy.mockRestore()
 })
 
 describe('Inspector', () => {
@@ -108,7 +105,7 @@ describe('Inspector', () => {
     expect(screen.getByText('select a clip to edit it')).toBeInTheDocument()
 
     fireEvent.pointerDown(document.body) // no-op; just anchor the rerender
-    transport().setSelectedClip('clipA')
+    act(() => transport().setSelectedClip('clipA'))
     rerender(<Inspector />)
 
     expect(screen.getByText('clipA.mp4')).toBeInTheDocument()
@@ -211,15 +208,15 @@ describe('Inspector', () => {
     fireEvent.keyDown(x, { key: 'Enter' })
     expect(x).toHaveValue(40)
 
-    doc().undo()
+    act(() => doc().undo())
     rerender(<Inspector />)
     expect(screen.getByTestId('inspector-x')).toHaveValue(0)
 
-    transport().setSelectedClip('clipB')
+    act(() => transport().setSelectedClip('clipB'))
     rerender(<Inspector />)
     expect(screen.getByText('clipB.mp4')).toBeInTheDocument()
 
-    transport().setSelectedClip('gone')
+    act(() => transport().setSelectedClip('gone'))
     rerender(<Inspector />)
     expect(screen.getByText('select a clip to edit it')).toBeInTheDocument()
   })
@@ -269,7 +266,7 @@ describe('audio clips (clip audio upgrade)', () => {
     fireEvent.keyDown(volume, { key: 'Enter' })
     expect(clipD().volume).toBe(0.2)
 
-    doc().undo()
+    act(() => doc().undo())
     rerender(<Inspector />)
     expect(screen.getByTestId('inspector-volume')).toHaveValue(1)
   })
@@ -293,32 +290,32 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
     expect(doc().past).toBe(initialPast)
     expect(warnSpy).not.toHaveBeenCalled()
 
-    transport().setSelectedClip('clipA')
+    act(() => transport().setSelectedClip('clipA'))
     rerender(<Inspector />)
     expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
     expect(linkButton()).toHaveAccessibleDescription(
       'Select one more clip with Ctrl/Cmd-click, or focus it and press Ctrl/Cmd+Enter.',
     )
 
-    setMultiSelection(['clipA', 'clipB'], 'clipB')
+    act(() => setMultiSelection(['clipA', 'clipB'], 'clipB'))
     rerender(<Inspector />)
     expect(linkButton()).toHaveAccessibleDescription(
       'Select one video clip and one audio clip; clips on the same kind of track cannot be linked.',
     )
 
-    setMultiSelection(['clipA', 'clipB', 'clipD'], 'clipD')
+    act(() => setMultiSelection(['clipA', 'clipB', 'clipD'], 'clipD'))
     rerender(<Inspector />)
     expect(linkButton()).toHaveAccessibleDescription(
       'Select exactly two clips: one video and one audio.',
     )
 
-    setMultiSelection(['clipA', 'deleted-clip'], 'clipA')
+    act(() => setMultiSelection(['clipA', 'deleted-clip'], 'clipA'))
     rerender(<Inspector />)
     expect(linkButton()).toHaveAccessibleDescription(
       'A selected clip is no longer available. Reselect the video and audio clips.',
     )
 
-    setMultiSelection(['deleted-clip'], 'deleted-clip')
+    act(() => setMultiSelection(['deleted-clip'], 'deleted-clip'))
     rerender(<Inspector />)
     expect(linkButton()).toHaveAccessibleDescription(
       'A selected clip is no longer available. Reselect the video and audio clips.',
@@ -339,7 +336,7 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
     linkButton().focus()
     expect(linkButton()).toHaveFocus()
 
-    setMultiSelection(['clipA', 'clipD'], 'clipD')
+    act(() => setMultiSelection(['clipA', 'clipD'], 'clipD'))
     rerender(<Inspector />)
     expect(linkButton()).toHaveAttribute('aria-disabled', 'false')
   })
@@ -402,8 +399,10 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
       'Unlock the selected video track before linking.',
     )
 
-    doc().setDoc(makeLinkedFixture())
-    setMultiSelection(['clipV', 'clipLinkedA'], 'clipV')
+    act(() => {
+      doc().setDoc(makeLinkedFixture())
+      setMultiSelection(['clipV', 'clipLinkedA'], 'clipV')
+    })
     rerender(<Inspector />)
     expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
     expect(linkButton()).toHaveAccessibleDescription(
@@ -428,15 +427,17 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
     )
 
     const linked = makeLinkedFixture()
-    doc().setDoc({
-      ...linked,
-      tracks: linked.tracks.map((track) =>
-        track.id === 'V1'
-          ? { ...track, clips: [...track.clips, makeClip('clipA', 60, 40)] }
-          : track,
-      ),
+    act(() => {
+      doc().setDoc({
+        ...linked,
+        tracks: linked.tracks.map((track) =>
+          track.id === 'V1'
+            ? { ...track, clips: [...track.clips, makeClip('clipA', 60, 40)] }
+            : track,
+        ),
+      })
+      setMultiSelection(['clipA', 'clipLinkedA'], 'clipLinkedA')
     })
-    setMultiSelection(['clipA', 'clipLinkedA'], 'clipLinkedA')
     rerender(<Inspector />)
     expect(linkButton()).toHaveAttribute('aria-disabled', 'true')
     expect(linkButton()).toHaveAccessibleDescription(

@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-08-01)
+## Status (2026-08-02)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -80,6 +80,10 @@ and the open list below.
 | **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
 | **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
+| **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
+| **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
+| **Refactor Stage 7 — Mediabunny export adapter owners** | ✅ complete | stable facade split into visual/audio/sink resource owners plus one shared fake harness; 156 focused + 1,725 total tests; headed Chromium buffered/direct A/V reopen + native playback, exact 9,600-sample presentation, commit/cancel/write-failure cleanup, clean console |
+| **Refactor Stage 8 — export presentation + feature CSS** | ✅ complete | export lifecycle stays in one owner behind stateless sections; the ordered ten-file CSS manifest produces byte-identical CSS; 91 focused + 1,725 total tests; checked-in recovery smoke plus headed 390/720/1280/1440px focus/keyboard/overflow QA, clean console |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -858,9 +862,11 @@ playback consume that selector rather than re-deriving flags. Clip visuals
 (4.3.7): every imported asset gets a FILMSTRIP (video frames, one
 tile per ~2s, cap 48) and a WAVEFORM image generated once in the
 background (app/mediaVisualsController → pipeline/visuals via
-mediabunny sinks); both images span the asset's FULL duration. ClipView
-maps filmstrip time through fixed-aspect SVG patterns in integer-frame buckets
-and waveform time through a normalized source-time SVG viewBox. A long clip is
+mediabunny sinks); both images span the asset's FULL duration.
+`timeline/clipVisualPlan.ts` maps filmstrip time through fixed-aspect SVG
+patterns in integer-frame buckets and waveform time through a normalized
+source-time SVG viewBox; `ClipVisualLayer.tsx` renders that prepared visual
+plan without owning stores or gestures. A long clip is
 sliced to the current bounded timeline window while both visual types retain
 their exact source offset, so trim/razor/zoom/rebasing need zero decode work and
 slip/start-trim previews shift the material live without stretching, bitmap
@@ -943,9 +949,16 @@ surface; it is not a second zoom and never enters document history.
   retained primary selection, and post-Unlink focus handoff.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
   candidates off-store, restores granted local handles, requests remembered
-  permission only from the Open click, matches relinked media exactly,
-  generation-cancels late work, and performs the awaited outgoing-session
-  teardown before committing a complete new document/media session.
+  permission only from the Open click, generation-cancels late work, and
+  performs the awaited outgoing-session teardown before committing a complete
+  new document/media session. Its public facade is unchanged.
+  `src/app/projectMediaMatching.ts` owns store-free descriptor/report matching,
+  saved partial-track reapplication, deterministic file/folder tie-breaks, and
+  stable connected-asset reconstruction. `src/app/activeMediaRelinkCoordinator.ts`
+  owns the dependency-injected inspect/revalidate/URL-transfer/report/remember/
+  rollback transaction shared by individual Relink and accepted folder matches;
+  the controller supplies the active generation, store port, staged-selection
+  claim, and serializable progress projection.
   `src/app/localMediaHandles.ts` owns picker types plus the origin-local media
   handle registry. `src/app/localProjectStorage.ts` owns bounded Recent and
   recovery IndexedDB records; `src/app/projectLibraryController.ts` keeps their
@@ -1021,6 +1034,13 @@ surface; it is not a second zoom and never enters document history.
   remembered/manual Resume and accepted Relink, preserving the previous settled
   report through a guarded failed/cancelled attempt. Confirmed handles are
   remembered for later automatic Resume.
+  The Stage 5 extraction gate passed 146 focused tests across 7 files and all
+  1,704 tests across 91 files, plus build, lint, audit, diff, and the checked-in
+  Chromium recovery smoke. Headed Chromium used a real generated PNG and the
+  public controller facade to verify offline activation, individual Relink plus
+  handle persistence, remembered prompt-to-grant restore, explicit folder
+  ambiguity, cancellation, and project replacement with exactly one late URL
+  revocation; the console reported zero warnings and zero errors.
 - `src/domain/mediaCompatibility.ts` +
   `src/pipeline/mediaCompatibilityProbe.ts` — serializable compatibility facts
   and the content-based, metadata-only native probe. The probe checks every A/V
@@ -1038,8 +1058,13 @@ surface; it is not a second zoom and never enters document history.
   revalidate exact configurations. Bounded generations/revisions reject stale
   writes, while source/runtime/fallback/page lifecycle changes invalidate facts.
   No cache state crosses into Zustand or portable project files.
-- `src/app/mediaImportController.ts` — import composition root: owns selected
-  Files/handles and retained retry resources outside Zustand, publishes guarded
+- `src/app/mediaImportDecisions.ts` — store-free import policy: creates exact
+  Keep/Match prompts, reapplies confirmed partial-track choices after re-probe,
+  and validates the active document/rate before resolving the commit rate. It
+  owns no browser resource or mutation.
+- `src/app/mediaImportController.ts` — import composition root and unchanged
+  public facade: owns selected Files/handles and retained retry resources
+  outside Zustand, publishes guarded
   session compatibility requests, commits complete Ready assets exactly once,
   guards project-change/cancellation races, and owns every uncommitted object
   URL. Slice 2 adds a maximum-100 sequential multi-file queue with one active
@@ -1061,13 +1086,18 @@ surface; it is not a second zoom and never enters document history.
   bounded still tile across the complete timeline duration, exposes a clear
   still-image accessible name/Slip explanation, gives still trims unbounded
   source headroom, and constrains still Slip to exactly zero.
-- `src/ui/ExportDialog.tsx` + `ExportProfilePicker.tsx` +
-  `exportProfileUi.ts` — preset-first capability-aware export UX:
-  generation-safe capability feedback, validated advanced drafts and size
-  estimates, download/direct-file result ownership, retry/cancellation, and
-  modal accessibility. Controller and capability code load behind their app
-  facades; `Toolbar.tsx` only owns trigger/open state and restores focus when
+- `src/ui/ExportDialog.tsx` + `ExportDialogSections.tsx` +
+  `ExportProfilePicker.tsx` + `exportProfileUi.ts` — preset-first
+  capability-aware export UX. `ExportDialog` is the sole lifecycle owner for
+  generation-safe checks, lazy controller loading, retry/cancellation, focus,
+  and download/direct-file results; the sections render those facts without
+  state or resources, while the picker owns validated advanced drafts and size
+  inputs. `Toolbar.tsx` only owns trigger/open state and restores focus when
   the dialog closes.
+- `src/app/layout.css` + `src/app/styles/` — ordered style manifest plus
+  feature-owned project-launch, shell, timeline/transport, preview, media-pool,
+  toolbar, export, responsive, inspector, and placeholder rules. The manifest
+  preserves the previous cascade exactly; its import order is binding.
 - `src/domain/exportProfile.ts` — pure allow-list, validation, canonical
   container metadata, Compatibility/Web/Modern/HEVC catalog, and deterministic
   Modern → Web → Compatibility Auto policy. Issue #31-owned reviewed project
@@ -1106,24 +1136,21 @@ surface; it is not a second zoom and never enters document history.
   129-point equal-power curves against the shared future anchor. The last
   cursor releases its Input; EOF, abort, pause, seek, plan edits, and terminal
   cleanup cannot reopen or retain it.
-- `src/pipeline/export-mediabunny.ts` — Phase 5.1b/c/d production browser
-  adapters: asset Blob/kind resolver → one Input/CanvasSink/timestamp iterator
-  per video asset → lease-owned ImageBitmap copies, or one retained bounded
-  frame-zero source per image asset → borrowed by every frame lease and closed
-  exactly once with the export source; planned audio contributors → lazy
-  AudioSampleSink cursors with streaming resampling + channel downmix. Exact
-  crossfade-handle readers reject EOF, PCM gaps/discontinuity, or unavailable
-  interpolation rather than synthesizing samples;
-  OffscreenCanvas/CanvasSource + AudioSampleSource feed the exact validated MP4
-  or WebM format with AVC/HEVC/VP9/AV1 and optional AAC/Opus. Output uses either
-  `BufferTarget` or the transactional direct `StreamTarget`; the pinned
-  Mediabunny patch preserves exact WebM/Opus presentation length and reopen
-  metadata. Encoders are support-probed, writes honor backpressure, every media
-  sample closes, and terminal cleanup is exact-once. The video
-  iterator schedule and each frame-local request derive from the canonical
-  visual plan; frame leases fail closed on omitted, extra, or reordered
-  requests. Issue #17 replaces the frozen-endpoint transition schedule with
-  genuine handle requests while preserving independent same-asset clip lanes;
+- `src/pipeline/export-mediabunny.ts` — stable Phase 5.1b/c/d composition
+  facade. `export-mediabunny-visual-source.ts` owns the asset Blob/kind
+  resolver → Input/CanvasSink/timestamp-iterator path, retained bounded
+  frame-zero image sources, lease-owned ImageBitmap copies, canonical
+  visual-plan request order, and exact source cleanup.
+  `export-mediabunny-audio-source.ts` owns lazy AudioSampleSink cursors,
+  streaming resampling/channel downmix, and exact crossfade-handle readers that
+  reject EOF, PCM gaps/discontinuity, or unavailable interpolation rather than
+  synthesizing samples. `export-mediabunny-sink.ts` owns
+  OffscreenCanvas/CanvasSource + AudioSampleSource encoding, exact validated
+  MP4/WebM muxing, buffered `BufferTarget` and transactional direct
+  `StreamTarget` delivery, backpressure, and terminal cleanup. Shared resolver
+  and typed error facts live in `export-mediabunny-common.ts`; the facade keeps
+  existing imports stable and owns no live resource. The pinned Mediabunny
+  patch preserves exact WebM/Opus presentation length and reopen metadata;
   original Issue #18 Slice 8 independently passed encode/reopen/decode and
   sampled-pixel acceptance against the currently installed 1.50.9.
 - `src/state/` — `documentStore` (doc + past/future undo snapshots, cap
@@ -1135,7 +1162,9 @@ surface; it is not a second zoom and never enters document history.
   offline projection),
   and
   `mediaImportStore` (serializable dialog status only; no File/Blob handles).
-- `src/workers/decode-protocol.ts` — canonical worker message types.
+- `src/workers/decode-types.ts` — neutral structural types shared by current
+  rendering and the retained decode compatibility path. The deprecated
+  `decode-protocol.ts` keeps the old chunk-worker message contract.
 - `src/workers/render-protocol.ts` — render-worker message types (types only).
   The primary path sends each timed-video Blob once through `configureAsset`
   or each static-image Blob once through `openImage`, then lightweight entries
@@ -1143,8 +1172,8 @@ surface; it is not a second zoom and never enters document history.
   integer source frame, exact µs timestamp, and playback/seek mode; image
   entries carry literal frame/timestamp zero. `closed` acknowledges completed
   worker cleanup before bounded-timeout bridge termination. The deprecated
-  chunk-batch messages remain only for migration tests. `setDoc` must precede
-  renders built from it.
+  chunk-batch messages are defined in `render-legacy-protocol.ts` and remain
+  only for migration tests. `setDoc` must precede renders built from it.
 - `src/workers/render.worker.ts` — Blob-backed compositing worker: timed video
   keeps one source per asset, sequential clip-keyed playback lanes,
   request-scoped seek cursors, and a tiny timestamp cache. Original Slice 6 adds one
@@ -1161,6 +1190,11 @@ surface; it is not a second zoom and never enters document history.
   Original Slice 7 adds one lazy worker-owned leg/group surface pair, reused
   and cleared for transition frames and resized with the document canvas.
   Superseded presentation never cancels a healthy playback lane.
+- `src/workers/render-legacy.ts` and `src/engine/render-legacy-bridge.ts` —
+  compatibility delegates isolating the obsolete chunk-batch renderer. The
+  current render worker and bridge preserve the old public methods/messages by
+  delegation; current streaming code does not import the retired decode
+  worker, bridge, or chunk-source implementations.
 - `src/workers/decode.worker.ts` — injectable core (`createDecodeWorkerCore`);
   closes every VideoFrame ASAP, caches ImageBitmap copies (12) instead
   (raw frames starve the hw decoder pool!), backpressure at queue≥8,
@@ -1224,17 +1258,36 @@ surface; it is not a second zoom and never enters document history.
   intersection across the gesture owner and linked partner, using one fresh
   document/media snapshot for timeline, source, duration, and headroom
   bounds in both connected and offline sessions.
-- `src/ui/timeline/ClipView.tsx` — the 4.2 gesture heart: one session ref
-  routes body/edge pointerdowns by the CURRENT tool (getState(), not the
-  render closure!); previews via transportStore.editPreview, one commit
-  per gesture; slip clamps live against mediaStore asset bounds. Slice 7 keeps
-  the immutable pointerdown document reference in that session, clears its
-  preview if the document changes, and skips any stale pointerup commit.
-  Slice 6 keeps the clip root a stable pressed button, preserves independent
-  focus/selected/primary visuals, hides decorative link badges from its
-  accessible name, and highlights every live linked-preview participant. Long clips
-  render only their intersection with the bounded window; filmstrip buckets
-  and the normalized waveform viewBox remain aligned to the original source.
+- `src/ui/timeline/clipVisualPlan.ts` + `ClipVisualLayer.tsx` — pure live
+  display/window/source-time planning plus the stateless generated-media JSX.
+  They own no pointer session or document mutation; ordinary and rebased
+  timeline slices share the same prepared filmstrip/waveform geometry.
+- `src/ui/timeline/useClipGestureSession.ts` — the 4.2 gesture heart: one
+  session ref routes body/edge pointerdowns by the CURRENT tool (getState(),
+  not the render closure!), owns pointer capture and every cancellation path,
+  publishes rAF-coalesced transport previews, and dispatches at most one
+  document action per gesture. It retains the immutable pointerdown document
+  reference, clears its preview if that reference changes, and skips stale
+  pointerup commits. Slip clamps live against mediaStore asset bounds;
+  owner-only cross-track metadata leaves linked partners on their own lanes.
+- `src/ui/timeline/ClipView.tsx` — store-backed clip presentation and the stable
+  pressed-button interaction root. It preserves independent focus/selected/
+  primary visuals, hides decorative link badges from its accessible name, and
+  highlights every live linked-preview participant. Long clips render only
+  their intersection with the bounded window; filmstrip buckets and the
+  normalized waveform viewBox remain aligned to the original source.
+  The Stage 3 presentation extraction gate passed 93 focused tests across 6
+  files, all 1,682 tests across 89 files, the checked-in Chromium persistence
+  smoke, build, lint, audit, and diff checks. Real Chromium additionally
+  matched video/audio geometry at ordinary origin zero and a rebased
+  1,000,000-frame origin with zero console warnings or errors.
+  The Stage 4 gesture-session extraction gate passed 108 focused tests across
+  7 files, all 1,685 tests across 89 files, the checked-in Chromium persistence
+  smoke, production build, lint, audit, and diff checks. Headed Chromium also
+  passed modifier-edge selection, unequal-offset linked preview/commit,
+  stale-document cancellation, forced pointer-capture failure, owner-only
+  cross-track movement, and exact one-entry history with zero console warnings
+  or errors.
   `ui/Toolbar.tsx` = tool buttons; `app/useEditShortcuts.ts` = A/B/T/Y/U,
   S split-at-playhead, Delete ripple-delete (selection kept on reject).
 - `src/ui/timeline/Timeline.tsx` + `TrackHeader.tsx` (4.3.5) — two
@@ -1379,6 +1432,9 @@ surface; it is not a second zoom and never enters document history.
   and tests green-light broken frame math.
 - Preview server: `npm run dev` uses :5173 by default; Vite also reads `PORT`
   (vite.config) so external launch profiles can assign an isolated port.
+- `npm run test:browser` starts an isolated Vite server on :41732 and runs the
+  real-Chromium crash/reopen IndexedDB recovery gate. On a fresh checkout, run
+  `npx playwright install chromium` once before the gate.
 - HMR of worker files fully reloads the page (in-page state like
   `__testFile` dies); module-map caches stale plain-URL imports —
   cache-bust probes with `?probe=N` (this double-instances mediabunny →
@@ -1501,9 +1557,15 @@ surface; it is not a second zoom and never enters document history.
   checklist items now have matching code, test, and browser evidence for the
   normal-merge closeout.
 - `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
-  (the render worker replaced the single-asset path). Kept because their
-  tests document the decoder semantics and render.worker imports their
-  structural types. Remove or repurpose only as an explicit post-MVP cleanup.
+  (the render worker replaced the single-asset path). Their structural types
+  now live in neutral `decode-types.ts`, while the obsolete chunk-batch render
+  behavior is isolated behind named compatibility delegates. The retired
+  modules and old exports remain because their tests document decoder
+  semantics; deletion is a separate post-MVP cleanup. The Stage 2 isolation
+  gate passed 186 focused tests across 8 files, all 1,672 tests across 88
+  files, build, lint, audit, and diff checks. Real Chromium also passed H.264
+  scrub, recovery/relink, same-asset-ID source replacement, and acknowledged
+  worker shutdown with zero console warnings or errors.
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.

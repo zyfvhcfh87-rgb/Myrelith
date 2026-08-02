@@ -1,6 +1,7 @@
 /**
- * workers/decode.worker.ts — The decode worker. Phase 2.2 — the most
- * memory-critical module in the project (spec Bottlenecks #1 and #3).
+ * workers/decode.worker.ts — Retired single-asset decode worker retained as a
+ * tested compatibility module. The current preview streams through
+ * render.worker.ts; this Phase 2.2 implementation is not runtime-reachable.
  *
  * Non-negotiables implemented here:
  * - EVERY decoded VideoFrame is closed as soon as its pixels are used —
@@ -21,7 +22,7 @@
  * Layering note: importing engine/frame-cache from workers/ is sanctioned
  * by ARCHITECTURE.md — it is a pure, React-free class with no other deps.
  *
- * The logic lives in createDecodeWorkerCore() with injected browser deps so
+ * The compatibility logic lives in createDecodeWorkerCore() with injected browser deps so
  * Vitest can drive it with fakes (decode.worker.test.ts proves the close /
  * backpressure / supersede behavior). The real wiring at the bottom only
  * runs inside an actual worker scope.
@@ -29,56 +30,31 @@
 
 import { FrameRingBuffer } from '../engine/frame-cache'
 import type {
+  BitmapLike,
+  Canvas2DLike,
+  CanvasLike,
   ChunkPayload,
+  DecodableFrame,
+  VideoDecoderLike,
+} from './decode-types'
+import type {
   FromDecodeWorker,
   ToDecodeWorker,
 } from './decode-protocol'
+
+export type {
+  BitmapLike,
+  Canvas2DLike,
+  CanvasLike,
+  DecodableFrame,
+  VideoDecoderLike,
+} from './decode-types'
 
 /** Plan-mandated high-water mark for decoder queue backpressure. */
 const QUEUE_HIGH_WATER = 8
 
 /** Plan-mandated ring buffer capacity (frame-cache default is also 12). */
 const CACHE_CAPACITY = 12
-
-/* ------------------------------------------------------------------ */
-/* Structural types for injectable browser deps                         */
-/* ------------------------------------------------------------------ */
-
-/** The slice of VideoFrame the worker touches (real VideoFrame satisfies it). */
-export interface DecodableFrame {
-  timestamp: number
-  displayWidth: number
-  displayHeight: number
-  close(): void
-}
-
-/** The slice of ImageBitmap the worker caches (real ImageBitmap satisfies it). */
-export interface BitmapLike {
-  width: number
-  height: number
-  close(): void
-}
-
-/** The slice of VideoDecoder the worker drives. */
-export interface VideoDecoderLike {
-  decodeQueueSize: number
-  ondequeue: (() => void) | null
-  configure(config: VideoDecoderConfig): void
-  decode(chunk: unknown): void
-  flush(): Promise<void>
-  reset(): void
-  close(): void
-}
-
-export interface Canvas2DLike {
-  drawImage(image: unknown, dx: number, dy: number, dw: number, dh: number): void
-}
-
-export interface CanvasLike {
-  width: number
-  height: number
-  getContext(contextId: '2d'): Canvas2DLike | null
-}
 
 /** Everything the core needs from the outside world. */
 export interface DecodeWorkerEnv {
@@ -106,6 +82,7 @@ interface SeekTarget {
   drew: boolean
 }
 
+/** @deprecated Runtime-dead compatibility core; current preview streams. */
 export function createDecodeWorkerCore(env: DecodeWorkerEnv): {
   handleMessage(msg: ToDecodeWorker): Promise<void>
 } {

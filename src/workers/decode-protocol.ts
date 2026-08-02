@@ -1,7 +1,7 @@
 /**
- * workers/decode-protocol.ts — The canonical ToWorker/FromWorker message
- * contract between engine/worker-bridge.ts and workers/decode.worker.ts
- * (referenced by ARCHITECTURE.md). Types only: safe for BOTH sides to
+ * workers/decode-protocol.ts — The retained compatibility message contract
+ * between engine/worker-bridge.ts and workers/decode.worker.ts. Types only:
+ * safe for BOTH sides to
  * import — it carries zero runtime code, so importing it can never drag
  * worker side effects into the main thread or vice versa.
  *
@@ -10,17 +10,9 @@
  * domain/time.ts; the worker never sees frame numbers.
  */
 
-/** One demuxed encoded chunk, ready to rebuild as an EncodedVideoChunk. */
-export interface ChunkPayload {
-  /** 'key' chunks start a decodable group; the first chunk of a seek MUST be one. */
-  type: 'key' | 'delta'
-  /** Presentation timestamp in integer microseconds. */
-  timestampUs: number
-  /** Frame duration in integer microseconds. */
-  durationUs: number
-  /** Encoded bytes. Transfer this buffer in postMessage — do not copy. */
-  data: ArrayBuffer
-}
+import type { ChunkPayload } from './decode-types'
+
+export type { ChunkPayload } from './decode-types'
 
 /** Messages the main thread sends to the decode worker. */
 export type ToDecodeWorker =

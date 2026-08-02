@@ -40,7 +40,7 @@ function makeTrack(id: string, kind: TrackData['kind'], clips: Clip[] = []): Tra
 /** V1 (2 clips), V2 (empty), A1 (1 clip) — doc order = compositing order. */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'doc-headers',
     name: 'header fixture',
     frameRate: { num: 30, den: 1 },
@@ -203,7 +203,7 @@ describe('add-track buttons', () => {
     ])
 
     expect(getState().past).toHaveLength(1)
-    getState().undo()
+    act(() => getState().undo())
     expect(getState().doc.tracks.map((t) => t.id)).toEqual(['V1', 'V2', 'A1'])
   })
 

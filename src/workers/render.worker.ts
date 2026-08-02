@@ -5,9 +5,9 @@
  * path owns one Blob-backed video source per asset and one sequential cursor
  * per visible clip. Static images use one separately retained worker-owned
  * frame-zero source shared across all of their layers and requests. The
- * deprecated path still accepts keyframe chunk batches until the bridge
- * migration lands. All paths inherit the hard-won ownership
- * rules from the decode worker (Phase 2.2/2.5):
+ * deprecated keyframe-batch path is isolated behind render-legacy.ts and
+ * remains only for named compatibility APIs. Both paths retain the hard-won
+ * ownership rules from the original decode worker (Phase 2.2/2.5):
  * - every VideoFrame closes the moment its bitmap copy exists;
  * - caches hold decoder-independent ImageBitmaps, never VideoFrames;
  * - backpressure: decodeQueueSize < QUEUE_HIGH_WATER, park on dequeue;
@@ -28,7 +28,7 @@
  *   it mid-draw; after the composite it is re-put (or closed, if the
  *   asset was reconfigured meanwhile — epoch mismatch).
  *
- * Layering: workers/ → domain/, engine/frame-cache, decode-protocol
+ * Layering: workers/ → domain/, engine/frame-cache, decode-types
  * (types), pipeline/render (sanctioned: pure compositing core, imports
  * domain/ only). Logic lives in createRenderWorkerCore() with injected
  * browser deps; the real wiring at the bottom only runs in a worker scope.
@@ -60,15 +60,16 @@ import {
   type StaticImageDecodedByteReserver,
   type StaticImageRenderSource,
 } from '../pipeline/static-image'
-import type { ChunkPayload } from './decode-protocol'
 import type {
   BitmapLike,
-  DecodableFrame,
   VideoDecoderLike,
-} from './decode.worker'
+} from './decode-types'
+import {
+  createLegacyRenderWorkerCompatibility,
+  type LegacyRenderWorkerCompatibility,
+  type LegacyRenderWorkerEnv,
+} from './render-legacy'
 import type {
-  CompositeSourceEntry,
-  FromRenderWorker,
   RenderFrameMessage,
   StreamingCompositeSourceEntry,
   StreamingVideoSourceEntry,
@@ -83,12 +84,6 @@ import type {
   VideoFrameCursor,
   WorkerVideoSource,
 } from './video-source'
-
-/** Same high-water mark as the decode worker (plan-mandated). */
-const QUEUE_HIGH_WATER = 8
-
-/** Ring-buffer capacity PER ASSET (each asset caches independently). */
-const CACHE_CAPACITY = 12
 
 /** A larger forward gap is a discontinuity, not useful sequential catch-up. */
 const PLAYBACK_RESTART_GAP_US = 1_000_000
@@ -116,16 +111,7 @@ const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
 }
 
 /** Everything the core needs from the outside world. */
-export interface RenderWorkerEnv {
-  post(msg: FromRenderWorker): void
-  createDecoder(init: {
-    output: (frame: DecodableFrame) => void
-    error: (e: { message: string }) => void
-  }): VideoDecoderLike
-  isConfigSupported(config: VideoDecoderConfig): Promise<{ supported?: boolean }>
-  createChunk(payload: ChunkPayload): unknown
-  /** GPU-copy a frame into a decoder-independent bitmap (createImageBitmap). */
-  createBitmap(frame: DecodableFrame): Promise<BitmapLike>
+export interface RenderWorkerEnv extends LegacyRenderWorkerEnv {
   /** Open one worker-owned Mediabunny source for a structured-cloned Blob. */
   openVideoSource(
     blob: Blob,
@@ -146,40 +132,11 @@ export interface RenderWorkerEnv {
   createStreamingBitmap(frame: DecodedVideoFrame): Promise<BitmapLike>
   /** Create the scratch compositing surface (new OffscreenCanvas). */
   createCanvas(width: number, height: number): RenderCanvasLike
-  now(): number
 }
 
 /* ------------------------------------------------------------------ */
 /* Core                                                                 */
 /* ------------------------------------------------------------------ */
-
-/** One asset's decode machinery. Created by configureAsset. */
-interface AssetState {
-  config: VideoDecoderConfig
-  decoder: VideoDecoderLike | null
-  /** Decoded frames as ImageBitmaps, keyed by asset timestamp µs. */
-  cache: FrameRingBuffer<BitmapLike>
-  /** Feed loops parked on backpressure; woken by dequeue and supersession. */
-  waiters: Set<() => void>
-  /** Serializes decode batches: same-asset entries run one after another. */
-  chain: Promise<void>
-  /** Bumped when the asset is reconfigured/released: outstanding loans
-   * must close their bitmap instead of re-putting it into a new cache. */
-  epoch: number
-  /** Decoder faulted (or torn down): entries resolve null until reconfigured. */
-  dead: boolean
-  /** createImageBitmap jobs of the CURRENT batch (one batch at a time per
-   * asset, thanks to `chain`); awaited before the post-flush cache probe. */
-  batchJobs: Array<Promise<void>>
-}
-
-/** A bitmap on loan from its cache to the in-flight composite. */
-interface Loan {
-  state: AssetState
-  epoch: number
-  key: number
-  bitmap: BitmapLike
-}
 
 interface OwnedStreamingFrame {
   timestampUs: number
@@ -271,8 +228,8 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   let workerLifecycle = 0
   /** Worker-global tokens prevent ABA when per-key revision entries retire. */
   let revisionToken = 0
-  /** Deprecated chunk-backed asset states. */
-  const assets = new Map<AssetId, AssetState>()
+  /** Deprecated chunk-backed state lives behind one compatibility delegate. */
+  let legacyCompatibility: LegacyRenderWorkerCompatibility | null = null
   /** Blob-backed streaming asset states. */
   const streamingAssets = new Map<AssetId, StreamingAssetState>()
   /** Blob-backed static image states (one retained frame per asset). */
@@ -291,16 +248,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   /** Latest playback request's active clip lanes; updated at message arrival. */
   let desiredPlaybackLaneKeys = new Set<string>()
   const playbackLaneRevisions = new Map<string, number>()
-
-  function wake(state: AssetState): void {
-    const waiters = [...state.waiters]
-    state.waiters.clear()
-    for (const wakeOne of waiters) wakeOne()
-  }
-
-  function waitForWake(state: AssetState): Promise<void> {
-    return new Promise((resolve) => state.waiters.add(resolve))
-  }
 
   function nextRevisionToken(): number {
     revisionToken++
@@ -341,7 +288,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   /** Invalidate presentation work without cancelling persistent playback lanes. */
   function supersede(): number {
     generation++
-    for (const state of assets.values()) wake(state)
+    legacyCompatibility?.wakeAll()
     cancelActiveSeeks()
     return generation
   }
@@ -412,27 +359,34 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     },
   }
 
-  /** Cached timestamp within tolerance of the target, or null. */
-  function findCachedKey(
-    cache: FrameRingBuffer<BitmapLike>,
-    targetTimestampUs: number,
-    toleranceUs: number,
-  ): number | null {
-    for (const key of cache.keys()) {
-      if (Math.abs(key - targetTimestampUs) <= toleranceUs) return key
-    }
-    return null
-  }
-
-  /** Tear one asset's machinery down (release/replace/close paths). */
-  function teardownAsset(state: AssetState): void {
-    state.epoch++ // outstanding loans now close instead of re-putting
-    state.dead = true
-    state.decoder?.close()
-    state.decoder = null
-    state.cache.clear()
-    wake(state)
-  }
+  legacyCompatibility = createLegacyRenderWorkerCompatibility(env, {
+    supersede,
+    generationIsCurrent: (candidate) => generation === candidate,
+    isReady: () => Boolean(visibleCtx && scratch && scratchCtx && doc),
+    createCache: (capacity) => new FrameRingBuffer<BitmapLike>(capacity),
+    enqueueComposite: (run) => {
+      compositeChain = compositeChain.then(run)
+      return compositeChain
+    },
+    composite: (plan, source) => {
+      if (!doc || !scratchCtx) {
+        throw new Error('legacy composite invoked before init/setDoc')
+      }
+      return compositeFrame(
+        doc,
+        plan,
+        scratchCtx,
+        source as FrameSource,
+        transitionSurfaceProvider,
+      )
+    },
+    present: () => {
+      if (!visibleCtx || !scratch) {
+        throw new Error('legacy presentation invoked before init/setDoc')
+      }
+      visibleCtx.drawImage(scratch as unknown as ImageBitmap, 0, 0)
+    },
+  })
 
   function closeOwnedStreamingFrame(frame: OwnedStreamingFrame | null): void {
     frame?.bitmap.close()
@@ -1214,92 +1168,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
   }
 
-  /**
-   * Produce the bitmap for one composite source entry. Runs on the asset's
-   * chain (never concurrently with another batch for the same asset).
-   * Order: cache probe → decode the provided batch → probe again. A found
-   * bitmap is take()n out of the cache and recorded as a loan.
-   */
-  async function resolveEntry(
-    state: AssetState,
-    entry: CompositeSourceEntry,
-    myGen: number,
-    loans: Loan[],
-    requestId: number,
-  ): Promise<BitmapLike | null> {
-    if (generation !== myGen) return null
-    if (state.dead) return null
-    const decoder = state.decoder
-    if (!decoder) return null
-
-    const cachedKey = findCachedKey(state.cache, entry.targetTimestampUs, entry.toleranceUs)
-    if (cachedKey !== null) {
-      const bitmap = state.cache.take(cachedKey) as BitmapLike
-      loans.push({ state, epoch: state.epoch, key: cachedKey, bitmap })
-      return bitmap
-    }
-
-    if (entry.chunks.length === 0) return null // cold cache, no chunks: miss
-    if (entry.chunks[0].type !== 'key') {
-      env.post({
-        type: 'error',
-        requestId,
-        assetId: entry.assetId,
-        message: 'composite batch must start with a keyframe chunk',
-      })
-      return null
-    }
-
-    try {
-      // reset() unconfigures (spec) — reconfigure before decoding.
-      decoder.reset()
-      decoder.configure(state.config)
-
-      for (const chunk of entry.chunks) {
-        while (decoder.decodeQueueSize >= QUEUE_HIGH_WATER) {
-          // Check BEFORE parking: a supersession that fired while this loop
-          // was feeding (not parked) already spent its wake — parking after
-          // it would wait for a dequeue that a stale batch may never get.
-          if (generation !== myGen || state.dead) return null
-          await waitForWake(state)
-          if (generation !== myGen || state.dead) return null
-        }
-        if (generation !== myGen || state.dead) return null
-        decoder.decode(env.createChunk(chunk))
-      }
-      try {
-        await decoder.flush()
-      } catch {
-        // flush() rejects when superseded mid-flush or on decoder trouble;
-        // the generation check and final probe below decide what remains.
-      }
-    } catch (e) {
-      if (
-        generation === myGen
-        && !state.dead
-        && assets.get(entry.assetId) === state
-      ) {
-        env.post({
-          type: 'error',
-          requestId,
-          assetId: entry.assetId,
-          message: `decode failed: ${e instanceof Error ? e.message : String(e)}`,
-        })
-      }
-      return null
-    }
-
-    // Outputs are emitted by now; wait for their bitmap copies to land.
-    await Promise.allSettled(state.batchJobs.splice(0))
-    if (generation !== myGen) return null
-
-    const key = findCachedKey(state.cache, entry.targetTimestampUs, entry.toleranceUs)
-    if (key === null) return null // target not in the batch / tolerance
-    const bitmap = state.cache.take(key) as BitmapLike
-    loans.push({ state, epoch: state.epoch, key, bitmap })
-    return bitmap
-  }
-
+  /** Install one deprecated chunk decoder after current sources retire. */
   async function configureAssetAtRevision(
     msg: Extract<ToRenderWorker, { type: 'configureAsset' }>,
     revision: number,
@@ -1307,11 +1176,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   ): Promise<void> {
     env.invalidateDecoderSource(msg.assetId)
     supersede() // in-flight composites may reference the machinery we replace
-    const existing = assets.get(msg.assetId)
-    if (existing) {
-      teardownAsset(existing)
-      assets.delete(msg.assetId)
-    }
+    legacyCompatibility?.releaseAsset(msg.assetId)
     try {
       await removeStreamingAsset(msg.assetId)
       await removeStaticImageAsset(msg.assetId)
@@ -1320,82 +1185,13 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       throw error
     }
     if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
-
-    let support: { supported?: boolean }
-    try {
-      support = await env.isConfigSupported(msg.config)
-    } catch (error) {
-      if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
-      throw error
+    if (!legacyCompatibility) {
+      throw new Error('legacy render compatibility is unavailable')
     }
-    if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
-    if (!support.supported) {
-      env.post({
-        type: 'error',
-        assetId: msg.assetId,
-        setupId: msg.setupId,
-        message: `codec not supported by this browser: ${msg.config.codec}`,
-      })
-      return
-    }
-
-    const state: AssetState = {
-      config: msg.config,
-      decoder: null,
-      cache: new FrameRingBuffer<BitmapLike>(CACHE_CAPACITY),
-      waiters: new Set(),
-      chain: Promise.resolve(),
-      epoch: 0,
-      dead: false,
-      batchJobs: [],
-    }
-    state.decoder = env.createDecoder({
-      // The cache path from the decode worker: GPU-copy to a bitmap, then
-      // close the VideoFrame at the first possible moment — it owns a
-      // hardware decoder output buffer (the Phase 2.5 crawl bug).
-      output: (frame) => {
-        const timestampUs = frame.timestamp
-        const epoch = state.epoch
-        const job = env
-          .createBitmap(frame)
-          .then((bitmap) => {
-            if (
-              state.dead
-              || state.epoch !== epoch
-              || assets.get(msg.assetId) !== state
-            ) {
-              bitmap.close()
-              return
-            }
-            try {
-              state.cache.put(timestampUs, bitmap)
-            } catch {
-              bitmap.close() // cache refused it (aliased key): do not leak
-            }
-          })
-          .catch(() => undefined) // bitmap creation failed: nothing to cache
-          .finally(() => frame.close())
-        state.batchJobs.push(job)
-      },
-      error: (e) => {
-        if (state.dead || assets.get(msg.assetId) !== state) return
-        state.dead = true
-        wake(state)
-        env.post({
-          type: 'error',
-          assetId: msg.assetId,
-          message: `decoder: ${e.message}`,
-        })
-      },
-    })
-    state.decoder.ondequeue = () => wake(state)
-    state.decoder.configure(msg.config)
-    assets.set(msg.assetId, state)
-    env.post({
-      type: 'assetConfigured',
-      assetId: msg.assetId,
-      setupId: msg.setupId,
-    })
+    await legacyCompatibility.configureAsset(
+      msg,
+      () => assetRevisionIsCurrent(msg.assetId, revision, lifecycle),
+    )
   }
 
   async function handleConfigureAsset(
@@ -1419,11 +1215,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     env.invalidateDecoderSource(msg.assetId)
     supersede()
 
-    const legacy = assets.get(msg.assetId)
-    if (legacy) {
-      teardownAsset(legacy)
-      assets.delete(msg.assetId)
-    }
+    legacyCompatibility?.releaseAsset(msg.assetId)
     try {
       await removeStreamingAsset(msg.assetId)
       await removeStaticImageAsset(msg.assetId)
@@ -1523,11 +1315,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     env.invalidateDecoderSource(msg.assetId)
     supersede()
 
-    const legacy = assets.get(msg.assetId)
-    if (legacy) {
-      teardownAsset(legacy)
-      assets.delete(msg.assetId)
-    }
+    legacyCompatibility?.releaseAsset(msg.assetId)
     try {
       await removeStreamingAsset(msg.assetId)
       await removeStaticImageAsset(msg.assetId)
@@ -1652,11 +1440,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     try {
       env.invalidateDecoderSource(assetId)
       supersede()
-      const state = assets.get(assetId)
-      if (state) {
-        teardownAsset(state)
-        assets.delete(assetId)
-      }
+      legacyCompatibility?.releaseAsset(assetId)
       try {
         await removeStreamingAsset(assetId)
         await removeStaticImageAsset(assetId)
@@ -1687,111 +1471,12 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   function handleComposite(
     msg: Extract<ToRenderWorker, { type: 'composite' }>,
   ): Promise<void> {
-    // Supersede AT ARRIVAL: older in-flight/queued composites unwind now.
-    const myGen = supersede()
-
-    const run = async (): Promise<void> => {
-      if (generation !== myGen) {
-        postSuperseded(msg.requestId)
-        return
-      }
-      if (!visibleCtx || !scratch || !scratchCtx || !doc) {
-        env.post({
-          type: 'error',
-          requestId: msg.requestId,
-          message: 'composite before init/setDoc',
-        })
-        return
-      }
-      if (msg.plan.frame !== msg.frame) {
-        throw new Error('composite plan frame does not match request frame')
-      }
-      const startedAt = env.now()
-
-      // Source table: exact (assetId, sourceFrame) keys, memoized so two
-      // clips sharing an entry share one decode and ONE loan.
-      const table = new Map<string, CompositeSourceEntry>()
-      for (const entry of msg.sources) {
-        table.set(`${entry.assetId}@${entry.sourceFrame}`, entry)
-      }
-      const memo = new Map<string, Promise<BitmapLike | null>>()
-      const loans: Loan[] = []
-      const source: FrameSource = {
-        getFrame: (assetId, sourceFrame) => {
-          const key = `${assetId}@${sourceFrame}`
-          const memoized = memo.get(key)
-          if (memoized) return memoized
-          const entry = table.get(key)
-          const state = entry ? assets.get(entry.assetId) : undefined
-          let promise: Promise<BitmapLike | null>
-          if (!entry || !state) {
-            promise = Promise.resolve(null)
-          } else {
-            promise = state.chain.then(() =>
-              resolveEntry(state, entry, myGen, loans, msg.requestId),
-            )
-            state.chain = promise.then(
-              () => undefined,
-              () => undefined,
-            )
-          }
-          memo.set(key, promise)
-          return promise
-        },
-      }
-
-      const target = scratchCtx
-      let result
-      try {
-        result = await compositeFrame(
-          doc,
-          msg.plan,
-          target,
-          source,
-          transitionSurfaceProvider,
-        )
-      } finally {
-        // Return every loan: ownership back to the cache — unless the
-        // asset was reconfigured/released meanwhile (epoch mismatch), in
-        // which case the bitmap belongs to a dead stream and closes here.
-        for (const loan of loans) {
-          if (loan.state.epoch === loan.epoch) {
-            loan.state.cache.put(loan.key, loan.bitmap)
-          } else {
-            loan.bitmap.close()
-          }
-        }
-      }
-
-      if (generation !== myGen) {
-        postSuperseded(msg.requestId)
-        return
-      }
-      // Atomic present: the only write the visible canvas ever sees.
-      // (At runtime `scratch` is an OffscreenCanvas — a valid drawImage
-      // source; the structural Composite2D signature says ImageBitmap.)
-      visibleCtx.drawImage(scratch as unknown as ImageBitmap, 0, 0)
-      env.post({
-        type: 'compositeDone',
-        requestId: msg.requestId,
-        status: 'drawn',
-        drawnClipIds: result.drawn,
-        missingClipIds: result.missing,
-        renderMs: env.now() - startedAt,
-      })
+    if (!legacyCompatibility) {
+      return Promise.reject(
+        new Error('legacy render compatibility is unavailable'),
+      )
     }
-
-    // Strictly sequential; a failure posts an error and keeps the chain.
-    compositeChain = compositeChain.then(() =>
-      run().catch((e) => {
-        env.post({
-          type: 'error',
-          requestId: msg.requestId,
-          message: `composite failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`,
-        })
-      }),
-    )
-    return compositeChain
+    return legacyCompatibility.handleComposite(msg)
   }
 
   function handleRenderFrame(msg: RenderFrameMessage): Promise<void> {
@@ -1982,8 +1667,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         for (const pending of pendingImageOpens) pending.controller.abort()
         desiredPlaybackLaneKeys.clear()
         playbackLaneRevisions.clear()
-        for (const state of assets.values()) teardownAsset(state)
-        assets.clear()
+        legacyCompatibility?.close()
         const streaming = [...streamingAssets.values()]
         streamingAssets.clear()
         const staticImages = [...staticImageAssets.entries()]

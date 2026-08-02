@@ -95,7 +95,7 @@ function makeTrack(
 
 function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: 'doc',
     name: 'Playback audio test',
     frameRate: F10,
