@@ -340,6 +340,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   Accepted sources keep the original asset id and are re-analyzed before
   transfer into `MediaState`; relative folder paths are display-only, and
   Files, handles, and object URLs remain controller-local.
+  `src/app/projectMediaMatching.ts` is the store-free authority for descriptor
+  comparison, saved partial-track reapplication, deterministic ambiguity
+  narrowing, and stable asset reconstruction. Active individual Relink and
+  accepted folder matches share the dependency-injected transaction in
+  `src/app/activeMediaRelinkCoordinator.ts`; `projectController.ts` remains the
+  public facade and owns project generations plus staged folder selections.
+  The transaction must revalidate that exact controller-local selection before
+  `MediaState` takes its object URL. Remembering its handle happens only after
+  that transfer, so cancellation or project replacement must never revoke a
+  store-owned source.
 - Legacy worker messages — `src/workers/decode-protocol.ts` (compatibility):
   `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
   (`configured`/`frameReady`/`error`). Shared structural types live in
