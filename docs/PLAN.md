@@ -2104,7 +2104,7 @@ project and timeline schemas are unchanged.
 
 ## Post-MVP issue #33 — editable text overlays
 
-**IMPLEMENTATION COMPLETE (2026-08-03).**
+**COMPLETE AND CLOSED (2026-08-03).**
 
 Text overlays are procedural timed video clips: they own no imported media or
 decoder, keep source semantics fixed to `[0, duration)`, and persist strictly
@@ -2137,6 +2137,9 @@ and Canvas2D painting path so supported appearance and timing stay aligned.
   rejected an overlapping insertion, completed an actual text-only MP4 export,
   and remained usable at 1280×720 and 720×800. No unexpected console errors or
   framework overlays appeared.
+- [x] Reviewed head `05731fb` passed GitHub CI and was normally merged through
+  PR #47 as `eba39b6`; the feature branch was retained and GitHub closed only
+  Issue #33 as completed.
 
 ## Public preview foundation — v0.1.0-alpha.1
 
