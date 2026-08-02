@@ -1,0 +1,125 @@
+/* Phase 4.3 Inspector: transform/opacity fields for the selected clip. */
+.inspector-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.inspector-title {
+  font-weight: 600;
+  color: #cfe2f5;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.inspector-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inspector-field-label {
+  font-size: 10px;
+  color: #9aa3ad;
+}
+
+.inspector-field input {
+  background: #1d1d21;
+  border: 1px solid #3a3a41;
+  border-radius: 4px;
+  color: #ddd;
+  font-size: 12px;
+  padding: 3px 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.inspector-field input:focus {
+  outline: none;
+  border-color: #6b93c4;
+}
+
+.inspector-note {
+  font-size: 10px;
+  color: #8a94a0;
+}
+
+/* Issue 12 Slice 6: discoverable A/V Link/Unlink command group plus
+   persistent, programmatically associated availability/rejection copy. */
+.inspector-linking {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+}
+
+.inspector-link {
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d9ecff;
+  background: #244668;
+  border: 1px solid #3f719f;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.inspector-link:hover:not([aria-disabled='true']) {
+  color: #fff;
+  background: #2d5780;
+}
+
+.inspector-link:focus-visible,
+.inspector-unlink:focus-visible {
+  outline: 2px solid #8dc9ff;
+  outline-offset: 2px;
+}
+
+.inspector-link[aria-disabled='true'] {
+  color: #747d86;
+  background: #202327;
+  border-color: #34393f;
+  cursor: not-allowed;
+}
+
+.inspector-link-status {
+  color: #8f9ba7;
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+/* Manual A/V unlink (Phase 4.3.8) — mirrors the .track-toggle chip look. */
+.inspector-unlink {
+  align-self: flex-start;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #9aa3ad;
+  background: #232323;
+  border: 1px solid #333;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.inspector-unlink:hover:not([aria-disabled='true']) {
+  background: #2d2d2d;
+  color: #ddd;
+}
+
+.inspector-unlink[aria-disabled='true'] {
+  color: #747d86;
+  border-color: #34393f;
+  cursor: not-allowed;
+  opacity: 0.72;
+}

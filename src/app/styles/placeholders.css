@@ -1,0 +1,27 @@
+/* Phase 3.1 placeholder styling — dies as real panels replace it. */
+.panel-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  height: 100%;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.area-toolbar .panel-placeholder {
+  flex-direction: row;
+  gap: 12px;
+  padding: 0;
+}
+
+.placeholder-title {
+  font-weight: 600;
+  color: #bbb;
+}
+
+.placeholder-note {
+  font-size: 12px;
+  color: #666;
+}
