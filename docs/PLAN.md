@@ -2143,7 +2143,7 @@ and Canvas2D painting path so supported appearance and timing stay aligned.
 
 ## Post-MVP issue #34 — full clip Inspector
 
-**IMPLEMENTATION AND ACCEPTANCE COMPLETE (publication pending, 2026-08-03).**
+**COMPLETE AND PUBLISHED (2026-08-03).**
 
 The Inspector becomes the single contextual authoring surface for static clip
 video and audio properties. Existing transform, opacity, and gain fields stay
@@ -2247,6 +2247,10 @@ all values in a fresh tab; rendered the exact MP4/H.264/AAC Browser-download
 selection and captured its completed MP4; kept both dual picker surfaces usable
 without horizontal overflow at 720 px; and emitted no console warnings or
 errors.
+
+PR #49 passed GitHub CI at reviewed head `2746016`, was normally merged as
+`571fff6`, and retained `codex/feature`. The final documentation reconciliation
+completed before GitHub closed only Issue #34 as completed.
 
 ## Public preview foundation — v0.1.0-alpha.1
 
