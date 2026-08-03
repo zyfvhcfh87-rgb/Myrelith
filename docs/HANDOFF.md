@@ -81,6 +81,7 @@ and the open list below.
 | **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
 | **Post-MVP #33 — editable text overlays** | ✅ complete | procedural timed text clips; accessible add/edit/move/resize/delete; shared preview/export Canvas2D renderer; schema 3→4 migration; 304 focused + 1,747 total tests; real 1280/720px Chromium text-only export gate; PR #47 normally merged and Issue #33 closed |
 | **Post-MVP #34 — full clip Inspector** | ✅ complete | schema-5 visual/audio editing, shared preview/export rendering, contextual Inspector, direct Program Monitor manipulation, and explicit remembered/quick file paths; 1,784 tests plus real-media reopen/playback/export and 720px Chromium acceptance; PR #49 normally merged as `571fff6` and Issue #34 closed |
+| **Post-MVP #35 — preview direct manipulation** | ✅ complete | Issue #34's complete Program Monitor controls plus four explicit corner-scale handles; 82 focused + 1,785 total tests; rotated/cropped/anchored/flipped real-media Chrome gate at 1280×720 and 720×800; PR #51 normally merged as `4f9eaaa` |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -1474,6 +1475,22 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
+- Issue #35 is complete. Issue #34 had already delivered selected visual bounds,
+  pointer move/scale/rotate/crop/anchor/flip gestures, immediate Inspector drafts,
+  keyboard alternatives, one pointer-up document mutation, undo/redo,
+  persistence, and shared preview/export rendering. The remaining Issue #35 gap
+  was the single farthest-corner scale target: the Program Monitor now renders
+  four explicitly named corner handles, resolves each cropped anchor-relative
+  vector from the fresh pointer-down document, and safely preserves a freeform
+  axis whose corner coincides with the anchor. The 82-test Inspector/preview
+  gate and all 1,785 tests across 101 files pass; build, oxlint, production
+  audit, and diff checks are clean. Real Chrome physically dragged all four
+  corners on rotated, cropped, off-center-anchor, horizontally flipped
+  320×180 media; every drag updated Inspector before release and created one
+  history entry on release. At 720×800 all four fixed-size targets remained at
+  least 28 px, independently hit-testable, and inside a page with no horizontal
+  overflow or console warnings/errors. PR #51 passed CI at reviewed head
+  `13ae345`, was normally merged as `4f9eaaa`, and retained `codex/feature`.
 - Issue #34 is complete. Its frozen contract and six implementation slices live
   in PLAN.md and on the GitHub issue. The first slice owns nested timeline
   schema 5, visual/audio settings, schema-4 migration, strict validation,
