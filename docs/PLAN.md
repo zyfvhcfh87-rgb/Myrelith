@@ -2252,6 +2252,44 @@ PR #49 passed GitHub CI at reviewed head `2746016`, was normally merged as
 `571fff6`, and retained `codex/feature`. The final documentation reconciliation
 completed before GitHub closed only Issue #34 as completed.
 
+## Post-MVP issue #35 — preview direct manipulation completion
+
+**COMPLETE AND PUBLISHED (2026-08-03).**
+
+Issue #34 delivered the direct Program Monitor manipulation system and satisfied
+Issue #35's selection, move, rotate, crop, anchor, flip, Inspector-sync,
+keyboard, history, persistence, and preview/export requirements. Issue #35's
+remaining acceptance gap was the resize control: only one automatically chosen
+farthest-corner handle was rendered.
+
+### Completed gates
+
+- [x] Replace the one farthest-corner target with four explicit top-left,
+  top-right, bottom-left, and bottom-right scale handles. Each has a distinct
+  accessible name, matching diagonal cursor, fixed-size focus target, and the
+  existing keyboard scale alternative.
+- [x] Resolve the selected corner's crop- and anchor-relative vector from the
+  fresh pointer-down document snapshot. Rotation and flips continue through the
+  existing inverse local-delta math; locked scale remains proportional, while a
+  freeform axis whose handle coincides with the anchor remains finite and
+  unchanged.
+- [x] Preserve the established gesture contract: pointer movement publishes an
+  ephemeral Inspector/preview draft, document/history stay unchanged until
+  release, and pointer-up commits one atomic visual edit. No overlay control is
+  part of the shared preview/export composition plan.
+- [x] The focused Inspector/preview gate passes 82/82 tests and the complete
+  suite passes 1,785/1,785 tests across 101 files. Production build, oxlint,
+  high-severity production audit, and diff checks are clean; the build retains
+  only the existing Vite chunk-size advisory.
+- [x] Real Chrome physically dragged all four handles on a rotated, cropped,
+  off-center-anchor, horizontally flipped 320×180 clip. Each handle was the top
+  hit target, updated Inspector live, and committed one history entry. At
+  720×800 all four targets remained at least 28 px, visible, independently
+  clickable, and inside a zero-overflow page with no warnings or errors.
+- [x] Reviewed head `13ae345` passed GitHub CI and was normally merged through
+  PR #51 as `4f9eaaa`; the feature branch was retained. The matching completion
+  scope is limited to Issue #35.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**
