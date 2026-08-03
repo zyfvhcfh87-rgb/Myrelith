@@ -2180,13 +2180,16 @@ in child issues #43–#46 remain separate work.
   and atomic undoable visual/audio patch actions. The focused foundation gate
   passes 218/218 tests; the complete suite passes 1,761/1,761 tests across 100
   files, and build, oxlint, production audit, and diff checks are clean.
-- [ ] **2 — shared visual rendering.** Teach the shared Canvas2D compositor to
+- [x] **2 — shared visual rendering.** Teach the shared Canvas2D compositor to
   apply normalized source crop and explicit flips with the existing transform,
   anchor, rotation, opacity, z-order, transition, still, text, preview, and
-  export contracts.
-- [ ] **3 — shared audio rendering.** Extend the canonical audio mix plan with
+  export contracts. Source-rectangle and pixel-golden tests pin crop position,
+  natural scale, explicit flips, and procedural text clipping.
+- [x] **3 — shared audio rendering.** Extend the canonical audio mix plan with
   enable, balance, and frame fades; apply the exact same gain evaluation in
   live Web Audio playback and offline export, including transition overlap.
+  Disabled clips are silent, stereo balance attenuates channels without
+  synthesizing stereo, and overlapping fades multiply deterministically.
 - [ ] **4 — contextual Inspector UI.** Replace the minimal panel with grouped,
   resettable Video and Audio sections, immediate selected-clip updates, and
   both halves for a linked A/V selection. Numeric inputs and sliders must have
@@ -2205,6 +2208,10 @@ in child issues #43–#46 remain separate work.
 
 The matching live GitHub issue contains the same dependency-aware checklist so
 implementation and review can be evaluated against one contract.
+
+Slices 2–3 pass 117 focused tests. The complete suite passes 1,768/1,768 tests
+across 100 files; production build, oxlint, production audit, and diff checks
+are clean. The build retains only the existing Vite chunk-size advisory.
 
 ## Public preview foundation — v0.1.0-alpha.1
 

@@ -108,6 +108,14 @@ export interface ScheduledPlaybackAudio {
   duration: number
   volume: number
   envelope: PlaybackAudioEnvelope | null
+  /** Effective audible bounds, including a valid linked crossfade handle. */
+  clipTimelineStartTime?: number
+  clipTimelineEndTime?: number
+  fadeInEndTime?: number
+  fadeOutStartTime?: number
+  balance?: number
+  leftGain?: number
+  rightGain?: number
 }
 
 export interface PlaybackAudioEnvelope {
@@ -187,6 +195,11 @@ interface AudioClipPlan {
   sourceStartTime: number
   sourceEndTime: number
   volume: number
+  balance: number
+  leftGain: number
+  rightGain: number
+  fadeInEndTime: number
+  fadeOutStartTime: number
   envelopes: PlaybackAudioEnvelope[]
 }
 
@@ -212,6 +225,14 @@ function preparedEventsForOverlap(
     plan.timelineStartTime + (overlapStart - plan.sourceStartTime)
   const timelineEnd = timelineStart + (overlapEnd - overlapStart)
   const boundaries = new Set([timelineStart, timelineEnd])
+  if (
+    plan.fadeInEndTime > timelineStart + TIME_EPSILON
+    && plan.fadeInEndTime < timelineEnd - TIME_EPSILON
+  ) boundaries.add(plan.fadeInEndTime)
+  if (
+    plan.fadeOutStartTime > timelineStart + TIME_EPSILON
+    && plan.fadeOutStartTime < timelineEnd - TIME_EPSILON
+  ) boundaries.add(plan.fadeOutStartTime)
   for (const envelope of plan.envelopes) {
     if (
       envelope.startTime > timelineStart + TIME_EPSILON
@@ -245,6 +266,13 @@ function preparedEventsForOverlap(
       duration,
       volume: plan.volume,
       envelope,
+      clipTimelineStartTime: plan.timelineStartTime,
+      clipTimelineEndTime: plan.timelineEndTime,
+      fadeInEndTime: plan.fadeInEndTime,
+      fadeOutStartTime: plan.fadeOutStartTime,
+      balance: plan.balance,
+      leftGain: plan.leftGain,
+      rightGain: plan.rightGain,
     })
   }
   return events
@@ -294,6 +322,17 @@ function buildAudioClipPlans(
     sourceStartTime: framesToSeconds(plan.sourceStartFrame, doc.frameRate),
     sourceEndTime: framesToSeconds(plan.sourceEndFrame, doc.frameRate),
     volume: plan.volume,
+    balance: plan.balance,
+    leftGain: plan.leftGain,
+    rightGain: plan.rightGain,
+    fadeInEndTime: framesToSeconds(
+      plan.timelineStartFrame + plan.fadeInFrames,
+      doc.frameRate,
+    ),
+    fadeOutStartTime: framesToSeconds(
+      plan.timelineEndFrame - plan.fadeOutFrames,
+      doc.frameRate,
+    ),
     envelopes: plan.envelopes.map((envelope) => ({
       startTime: framesToSeconds(envelope.startFrame, doc.frameRate),
       endTime: framesToSeconds(envelope.endFrame, doc.frameRate),
@@ -329,6 +368,7 @@ export function audioPlaybackPlanKey(
           sourceRange: clip.sourceRange,
           timelineRange: clip.timelineRange,
           volume: clip.volume,
+          audio: clip.audio ?? null,
           linkGroupId: clip.linkGroupId ?? null,
         })),
         transitions: track.transitions.map((transition) => ({
@@ -613,6 +653,7 @@ export function createMediabunnyPlaybackAudioSource(
 interface ActiveOutputNode {
   source: AudioBufferSourceNode
   gain: GainNode
+  balanceNodes: AudioNode[]
 }
 
 /** Bounded deterministic curve for one equal-power event segment. */
@@ -645,6 +686,51 @@ function scheduleNodeGain(
   request: ScheduledPlaybackAudio,
 ): void {
   const envelope = request.envelope
+  const clipStart = request.clipTimelineStartTime
+  const clipEnd = request.clipTimelineEndTime
+  const fadeInEnd = request.fadeInEndTime
+  const fadeOutStart = request.fadeOutStartTime
+  const hasFade = clipStart !== undefined
+    && clipEnd !== undefined
+    && fadeInEnd !== undefined
+    && fadeOutStart !== undefined
+    && (fadeInEnd > clipStart + TIME_EPSILON || fadeOutStart < clipEnd - TIME_EPSILON)
+  if (hasFade) {
+    const values = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+    const envelopeDuration = envelope
+      ? envelope.endTime - envelope.startTime
+      : 0
+    if (envelope && (!Number.isFinite(envelopeDuration) || envelopeDuration <= 0)) {
+      throw new RangeError('Playback audio envelope has an invalid duration')
+    }
+    for (let index = 0; index < values.length; index++) {
+      const timelineTime = request.timelineStartTime
+        + request.duration * index / (values.length - 1)
+      let shaped = request.volume
+      if (fadeInEnd > clipStart) {
+        shaped *= Math.min(1, Math.max(
+          0,
+          (timelineTime - clipStart) / (fadeInEnd - clipStart),
+        ))
+      }
+      if (fadeOutStart < clipEnd) {
+        shaped *= Math.min(1, Math.max(
+          0,
+          (clipEnd - timelineTime) / (clipEnd - fadeOutStart),
+        ))
+      }
+      if (envelope) {
+        shaped *= crossfadeAudioGain(
+          envelope.curve,
+          envelope.role,
+          (timelineTime - envelope.startTime) / envelopeDuration,
+        )
+      }
+      values[index] = shaped
+    }
+    gain.setValueCurveAtTime(values, request.when, request.duration)
+    return
+  }
   if (!envelope) {
     gain.value = request.volume
     return
@@ -716,7 +802,11 @@ export function createWebAudioPlaybackOutput(
     try {
       record.source.disconnect()
     } finally {
-      record.gain.disconnect()
+      try {
+        record.gain.disconnect()
+      } finally {
+        for (const node of record.balanceNodes) node.disconnect()
+      }
     }
     if (stopped && nodes.size === 0) disconnectGraph()
   }
@@ -728,9 +818,30 @@ export function createWebAudioPlaybackOutput(
     source.buffer = request.buffer
     scheduleNodeGain(gain.gain, request)
     source.connect(gain)
-    gain.connect(master)
+    const balanceNodes: AudioNode[] = []
+    if (
+      request.balance !== undefined
+      && request.balance !== 0
+      && request.buffer.numberOfChannels >= 2
+    ) {
+      const splitter = context.createChannelSplitter(2)
+      const left = context.createGain()
+      const right = context.createGain()
+      const merger = context.createChannelMerger(2)
+      left.gain.value = request.leftGain ?? 1
+      right.gain.value = request.rightGain ?? 1
+      gain.connect(splitter)
+      splitter.connect(left, 0)
+      splitter.connect(right, 1)
+      left.connect(merger, 0, 0)
+      right.connect(merger, 0, 1)
+      merger.connect(master)
+      balanceNodes.push(splitter, left, right, merger)
+    } else {
+      gain.connect(master)
+    }
 
-    const record = { source, gain }
+    const record = { source, gain, balanceNodes }
     nodes.add(record)
     source.onended = () => cleanupNode(record)
     try {

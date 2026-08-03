@@ -44,6 +44,7 @@ import type {
   CrossfadeFrameRequest,
   VideoFrameRequest,
 } from '../domain/crossfadePlan'
+import { clipVisualSettings } from '../domain/clipInspector'
 
 /**
  * A compositor-ready browser image. VideoFrame is retained here because the
@@ -91,7 +92,17 @@ export interface Composite2D {
   scale(x: number, y: number): void
   clearRect(x: number, y: number, w: number, h: number): void
   fillRect(x: number, y: number, w: number, h: number): void
-  drawImage(image: CanvasImageSource, dx: number, dy: number): void
+  drawImage(
+    image: CanvasImageSource,
+    sxOrDx: number,
+    syOrDy: number,
+    sWidth?: number,
+    sHeight?: number,
+    dx?: number,
+    dy?: number,
+    dWidth?: number,
+    dHeight?: number,
+  ): void
   beginPath?(): void
   rect?(x: number, y: number, w: number, h: number): void
   clip?(): void
@@ -327,6 +338,7 @@ function drawTextClip(
   if (validationError) throw new RangeError(validationError)
 
   const transform = clip.transform
+  const visual = clipVisualSettings(clip)
   const anchorX = transform.anchorX * text.boxWidthPx
   const anchorY = transform.anchorY * text.boxHeightPx
   const canvasX = (doc.width - text.boxWidthPx) / 2 + anchorX + transform.x
@@ -344,15 +356,22 @@ function drawTextClip(
     ctx.globalCompositeOperation = 'source-over'
     ctx.translate(canvasX, canvasY)
     ctx.rotate((transform.rotation * Math.PI) / 180)
-    ctx.scale(transform.scaleX, transform.scaleY)
+    ctx.scale(
+      transform.scaleX * (visual.flipHorizontal ? -1 : 1),
+      transform.scaleY * (visual.flipVertical ? -1 : 1),
+    )
     ctx.translate(-anchorX, -anchorY)
     if (text.backgroundEnabled) {
       ctx.fillStyle = text.backgroundColor
       ctx.fillRect(0, 0, text.boxWidthPx, text.boxHeightPx)
     }
 
+    const cropX = visual.crop.left * text.boxWidthPx
+    const cropY = visual.crop.top * text.boxHeightPx
+    const cropWidth = text.boxWidthPx * (1 - visual.crop.left - visual.crop.right)
+    const cropHeight = text.boxHeightPx * (1 - visual.crop.top - visual.crop.bottom)
     ctx.beginPath()
-    ctx.rect(0, 0, text.boxWidthPx, text.boxHeightPx)
+    ctx.rect(cropX, cropY, cropWidth, cropHeight)
     ctx.clip()
     ctx.font = `${text.italic ? 'italic' : 'normal'} ${text.bold ? '700' : '400'} ${text.fontSizePx}px ${text.fontFamily}`
     ctx.textAlign = text.align
@@ -488,6 +507,7 @@ function drawClip(
 ): void {
   const clip: Clip = request.clip
   const t = clip.transform
+  const visual = clipVisualSettings(clip)
   const imageWidth = 'displayWidth' in image ? image.displayWidth : image.width
   const imageHeight = 'displayHeight' in image ? image.displayHeight : image.height
   // Anchor point in image pixels.
@@ -503,8 +523,30 @@ function drawClip(
     ctx.globalCompositeOperation = 'source-over'
     ctx.translate(canvasX, canvasY)
     ctx.rotate((t.rotation * Math.PI) / 180)
-    ctx.scale(t.scaleX, t.scaleY)
-    ctx.drawImage(image, -anchorX, -anchorY)
+    ctx.scale(
+      t.scaleX * (visual.flipHorizontal ? -1 : 1),
+      t.scaleY * (visual.flipVertical ? -1 : 1),
+    )
+    const crop = visual.crop
+    if (crop.left === 0 && crop.right === 0 && crop.top === 0 && crop.bottom === 0) {
+      ctx.drawImage(image, -anchorX, -anchorY)
+    } else {
+      const sourceX = crop.left * imageWidth
+      const sourceY = crop.top * imageHeight
+      const sourceWidth = imageWidth * (1 - crop.left - crop.right)
+      const sourceHeight = imageHeight * (1 - crop.top - crop.bottom)
+      ctx.drawImage(
+        image,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        -anchorX + sourceX,
+        -anchorY + sourceY,
+        sourceWidth,
+        sourceHeight,
+      )
+    }
   } finally {
     ctx.restore()
   }

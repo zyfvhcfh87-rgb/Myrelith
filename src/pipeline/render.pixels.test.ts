@@ -166,7 +166,28 @@ class PixelCanvas {
           (offset) => this.blend(offset, source),
         )
       },
-      drawImage: (image, dx, dy) => this.draw(image, dx, dy),
+      drawImage: (image, ...args) => {
+        if (args.length === 2) {
+          this.draw(image, 0, 0, undefined, undefined, args[0], args[1])
+          return
+        }
+        if (args.length === 8) {
+          const values = args as [number, number, number, number, number, number, number, number]
+          this.draw(
+            image,
+            values[0],
+            values[1],
+            values[2],
+            values[3],
+            values[4],
+            values[5],
+            values[6],
+            values[7],
+          )
+          return
+        }
+        throw new Error(`Unsupported pixel-test drawImage arity: ${args.length + 1}`)
+      },
     }
   }
 
@@ -193,24 +214,52 @@ class PixelCanvas {
     }
   }
 
-  private draw(image: CanvasImageSource, dx: number, dy: number): void {
+  private draw(
+    image: CanvasImageSource,
+    sourceX: number,
+    sourceY: number,
+    sourceWidth: number | undefined,
+    sourceHeight: number | undefined,
+    dx: number,
+    dy: number,
+    destinationWidth?: number,
+    destinationHeight?: number,
+  ): void {
     const source = image as unknown as PixelCanvas | RasterSource
+    const sampledWidth = sourceWidth ?? source.width
+    const sampledHeight = sourceHeight ?? source.height
+    const drawnWidth = destinationWidth ?? sampledWidth
+    const drawnHeight = destinationHeight ?? sampledHeight
     const inv = inverse(this.state.transform)
     for (let py = 0; py < this.height; py++) {
       for (let px = 0; px < this.width; px++) {
         const [localX, localY] = transformPoint(inv, px + 0.5, py + 0.5)
-        const sourceX = Math.floor(localX - dx + 1e-10)
-        const sourceY = Math.floor(localY - dy + 1e-10)
         if (
-          sourceX < 0
-          || sourceX >= source.width
-          || sourceY < 0
-          || sourceY >= source.height
+          localX < dx
+          || localX >= dx + drawnWidth
+          || localY < dy
+          || localY >= dy + drawnHeight
+        ) continue
+        const sampledX = Math.floor(
+          sourceX + ((localX - dx) / drawnWidth) * sampledWidth + 1e-10,
+        )
+        const sampledY = Math.floor(
+          sourceY + ((localY - dy) / drawnHeight) * sampledHeight + 1e-10,
+        )
+        if (
+          sampledX < sourceX
+          || sampledX >= sourceX + sampledWidth
+          || sampledX < 0
+          || sampledX >= source.width
+          || sampledY < sourceY
+          || sampledY >= sourceY + sampledHeight
+          || sampledY < 0
+          || sampledY >= source.height
         ) {
           continue
         }
 
-        const sourceOffset = (sourceY * source.width + sourceX) * 4
+        const sourceOffset = (sampledY * source.width + sampledX) * 4
         let pixel: Pixel
         if (source instanceof PixelCanvas) {
           pixel = [
@@ -295,6 +344,19 @@ function solid(
     bytes.set(rgba, offset)
   }
   return { width, height, rgba: bytes } as unknown as ImageBitmap
+}
+
+function horizontalColors(
+  colors: Array<[number, number, number, number]>,
+  height: number,
+): RenderFrameSource {
+  const bytes = new Uint8ClampedArray(colors.length * height * 4)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < colors.length; x++) {
+      bytes.set(colors[x], (y * colors.length + x) * 4)
+    }
+  }
+  return { width: colors.length, height, rgba: bytes } as unknown as ImageBitmap
 }
 
 function makeClip(
@@ -533,6 +595,46 @@ describe('compositeFrame pixel goldens', () => {
     expect(rendered.output.rgbaAt(1, 2)).toEqual([0, 128, 128, 255])
     expect(rendered.output.rgbaAt(2, 3)).toEqual([128, 128, 0, 255])
     expect(rendered.output.rgbaAt(3, 2)).toEqual([0, 128, 128, 255])
+  })
+
+  test('normalized crop preserves source position and explicit flips mirror it', async () => {
+    const source = horizontalColors([
+      [255, 0, 0, 255],
+      [0, 255, 0, 255],
+      [0, 0, 255, 255],
+      [255, 255, 0, 255],
+    ], 2)
+    const visual = {
+      crop: { left: 0.25, right: 0.25, top: 0, bottom: 0 },
+      flipHorizontal: false,
+      flipVertical: false,
+      scaleLocked: true,
+    }
+    const ordinary = await render(
+      makeDoc([makeTrack('V1', [makeClip('crop', 'colors', 0, 1, { visual })])], 4, 2),
+      0,
+      { colors: source },
+    )
+    expect([0, 1, 2, 3].map((x) => ordinary.output.rgbaAt(x, 0))).toEqual([
+      [0, 0, 0, 255],
+      [0, 255, 0, 255],
+      [0, 0, 255, 255],
+      [0, 0, 0, 255],
+    ])
+
+    const flipped = await render(
+      makeDoc([makeTrack('V1', [makeClip('flip', 'colors', 0, 1, {
+        visual: { ...visual, flipHorizontal: true },
+      })])], 4, 2),
+      0,
+      { colors: source },
+    )
+    expect([0, 1, 2, 3].map((x) => flipped.output.rgbaAt(x, 0))).toEqual([
+      [0, 0, 0, 255],
+      [0, 0, 255, 255],
+      [0, 255, 0, 255],
+      [0, 0, 0, 255],
+    ])
   })
 
   test.each([

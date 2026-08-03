@@ -15,6 +15,11 @@ import {
 } from './crossfadePlan'
 import { audibleTracks } from './selectors'
 import { rangeEnd } from './time'
+import {
+  clipAudioSettings,
+  clipAudioSettingsValidationError,
+  stereoBalanceGains,
+} from './clipInspector'
 
 export interface TimelineAudioEnvelope {
   transitionId: TransitionId
@@ -33,6 +38,11 @@ export interface TimelineAudioClipPlan {
   sourceStartFrame: number
   sourceEndFrame: number
   volume: number
+  balance: number
+  leftGain: number
+  rightGain: number
+  fadeInFrames: number
+  fadeOutFrames: number
   envelopes: TimelineAudioEnvelope[]
 }
 
@@ -105,7 +115,16 @@ export function createTimelineAudioMixPlan(
       if (!Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2) {
         throw new RangeError(`Audio clip "${clip.id}" has an invalid volume`)
       }
-      if (clip.volume <= 0) continue
+      const audio = clipAudioSettings(clip)
+      const audioError = clipAudioSettingsValidationError(
+        audio,
+        clip.timelineRange.durationFrames,
+      )
+      if (audioError) {
+        throw new RangeError(`Audio clip "${clip.id}" ${audioError}`)
+      }
+      if (clip.volume <= 0 || !audio.enabled) continue
+      const [leftGain, rightGain] = stereoBalanceGains(audio.balance)
       sourceTimelinePhases.set(
         clip.id,
         clip.sourceRange.startFrame - clip.timelineRange.startFrame,
@@ -119,6 +138,11 @@ export function createTimelineAudioMixPlan(
         sourceStartFrame: clip.sourceRange.startFrame,
         sourceEndFrame,
         volume: clip.volume,
+        balance: audio.balance,
+        leftGain,
+        rightGain,
+        fadeInFrames: audio.fadeInFrames,
+        fadeOutFrames: audio.fadeOutFrames,
         envelopes: [],
       })
     }

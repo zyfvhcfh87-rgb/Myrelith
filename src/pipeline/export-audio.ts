@@ -135,6 +135,10 @@ interface SampleAudioEnvelope extends TimelineAudioEnvelope {
 }
 
 interface SampleAudioClipPlan extends TimelineAudioClipPlan {
+  timelineStartSample: number
+  timelineEndSample: number
+  fadeInEndSample: number
+  fadeOutStartSample: number
   sampleEnvelopes: SampleAudioEnvelope[]
 }
 
@@ -197,6 +201,16 @@ export class TimelineAudioMixer {
     this.mixPlans = createTimelineAudioMixPlan(doc, catalog).clips.map(
       (plan) => ({
         ...plan,
+        timelineStartSample: audioSampleBoundary(plan.timelineStartFrame, doc),
+        timelineEndSample: audioSampleBoundary(plan.timelineEndFrame, doc),
+        fadeInEndSample: audioSampleBoundary(
+          plan.timelineStartFrame + plan.fadeInFrames,
+          doc,
+        ),
+        fadeOutStartSample: audioSampleBoundary(
+          plan.timelineEndFrame - plan.fadeOutFrames,
+          doc,
+        ),
         sampleEnvelopes: plan.envelopes.map((envelope) => ({
           ...envelope,
           startSample: audioSampleBoundary(envelope.startFrame, doc),
@@ -276,16 +290,33 @@ export class TimelineAudioMixer {
   }
 
   private gainAtSample(plan: SampleAudioClipPlan, sample: number): number {
+    let gain = plan.volume
+    if (plan.fadeInFrames > 0) {
+      const duration = plan.fadeInEndSample - plan.timelineStartSample
+      if (duration <= 0) throw new RangeError('Audio fade-in sample window must be non-empty')
+      gain *= Math.min(1, Math.max(
+        0,
+        (sample - plan.timelineStartSample) / duration,
+      ))
+    }
+    if (plan.fadeOutFrames > 0) {
+      const duration = plan.timelineEndSample - plan.fadeOutStartSample
+      if (duration <= 0) throw new RangeError('Audio fade-out sample window must be non-empty')
+      gain *= Math.min(1, Math.max(
+        0,
+        (plan.timelineEndSample - sample) / duration,
+      ))
+    }
     const envelope = plan.sampleEnvelopes.find((candidate) =>
       sample >= candidate.startSample && sample < candidate.endSample,
     )
-    if (!envelope) return plan.volume
+    if (!envelope) return gain
     const duration = envelope.endSample - envelope.startSample
     if (duration <= 0) {
       throw new RangeError('Audio crossfade sample window must be non-empty')
     }
     const progress = (sample - envelope.startSample) / duration
-    return plan.volume * crossfadeAudioGain(
+    return gain * crossfadeAudioGain(
       envelope.curve,
       envelope.role,
       progress,
@@ -354,8 +385,8 @@ export class TimelineAudioMixer {
             throw new Error('Decoded audio contains a non-finite sample')
           }
           const gain = this.gainAtSample(input.plan, blockStart + i)
-          left[i] += l * gain
-          right[i] += r * gain
+          left[i] += l * gain * input.plan.leftGain
+          right[i] += r * gain * input.plan.rightGain
         }
       }
       for (let i = 0; i < sampleCount; i++) {

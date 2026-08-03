@@ -1471,11 +1471,15 @@ surface; it is not a second zoom and never enters document history.
 - Issue #34 is active. Its frozen contract and six implementation slices live
   in PLAN.md and on the GitHub issue. The first slice owns nested timeline
   schema 5, visual/audio settings, schema-4 migration, strict validation,
-  geometry-safe fade clamping, and one-entry document actions; shared visual
-  rendering, shared audio rendering, the contextual Inspector, Program Monitor
-  gestures, and full browser/export acceptance remain gated follow-up work.
+  geometry-safe fade clamping, and one-entry document actions. Shared visual
+  rendering now applies natural-scale normalized crop and explicit flips;
+  shared live/offline audio now applies enable, stereo balance, frame fades,
+  and transition envelopes from the same document facts. The contextual
+  Inspector, Program Monitor gestures, and full browser/export acceptance
+  remain gated follow-up work.
   Slice 1 passes 218 focused and 1,761 total tests plus build, oxlint, production
-  audit, and clean-diff gates.
+  audit, and clean-diff gates. Slices 2–3 pass 117 focused and 1,768 total tests
+  plus build, oxlint, production audit, and clean-diff gates.
 - Issue #33 implementation and acceptance are complete. Text overlays are
   procedural timed clips with strict schema validation, generic browser font
   families, bounded wrapping, background/outline/shadow styling, and one shared
