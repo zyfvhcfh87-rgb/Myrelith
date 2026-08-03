@@ -13,6 +13,7 @@
 import { create } from 'zustand'
 import type {
   ClipId,
+  ClipVisualSettings,
   TextProps,
   TimeRange,
   TrackId,
@@ -81,6 +82,13 @@ export interface TextOverlayPreview {
   text?: TextProps
 }
 
+/** Live preview-only geometry for a media clip direct-manipulation gesture. */
+export interface ClipVisualPreview {
+  clipId: ClipId
+  transform: Transform
+  visual: ClipVisualSettings
+}
+
 export interface TransportState {
   /** Current playhead position, integer frames at the document rate. */
   playheadFrame: number
@@ -116,6 +124,8 @@ export interface TransportState {
   editPreview: EditPreview | null
   /** Uncommitted text move/resize shown by the shared preview compositor. */
   textOverlayPreview: TextOverlayPreview | null
+  /** Uncommitted media geometry shown by the shared preview compositor. */
+  clipVisualPreview: ClipVisualPreview | null
 
   /** Move the playhead. Does NOTHING else — no side effects, no coupling. */
   setPlayheadFrame: (frame: number) => void
@@ -159,6 +169,8 @@ export interface TransportState {
   setEditPreview: (preview: EditPreview | null) => void
   /** Update or clear one preview-only text manipulation. */
   setTextOverlayPreview: (preview: TextOverlayPreview | null) => void
+  /** Update or clear one preview-only media manipulation. */
+  setClipVisualPreview: (preview: ClipVisualPreview | null) => void
   /** Clear every session-owned playback/navigation value for a new project. */
   resetTransport: () => void
 }
@@ -180,6 +192,7 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   selectedClipId: null,
   editPreview: null,
   textOverlayPreview: null,
+  clipVisualPreview: null,
 })
 
 // A queued range-input frame must not resurrect pre-reset zoom state. Keep
@@ -318,6 +331,19 @@ export const useTransportStore = create<TransportState>()((set) => ({
             ...(textOverlayPreview.text
               ? { text: { ...textOverlayPreview.text } }
               : {}),
+          }
+        : null,
+    }),
+  setClipVisualPreview: (clipVisualPreview) =>
+    set({
+      clipVisualPreview: clipVisualPreview
+        ? {
+            ...clipVisualPreview,
+            transform: { ...clipVisualPreview.transform },
+            visual: {
+              ...clipVisualPreview.visual,
+              crop: { ...clipVisualPreview.visual.crop },
+            },
           }
         : null,
     }),

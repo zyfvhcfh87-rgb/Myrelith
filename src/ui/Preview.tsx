@@ -14,6 +14,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import TextOverlayControls from './TextOverlayControls'
+import VisualOverlayControls from './VisualOverlayControls'
 
 export default function Preview() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -56,6 +57,7 @@ export default function Preview() {
         className="preview-canvas"
         data-testid="preview-canvas"
       />
+      <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
       <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
       {offlineVisualAssetIds.length > 0 ? (
         <div className="preview-hint preview-hint-offline" role="status">

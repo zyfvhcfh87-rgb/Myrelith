@@ -80,7 +80,7 @@ and the open list below.
 | **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
 | **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
 | **Post-MVP #33 — editable text overlays** | ✅ complete | procedural timed text clips; accessible add/edit/move/resize/delete; shared preview/export Canvas2D renderer; schema 3→4 migration; 304 focused + 1,747 total tests; real 1280/720px Chromium text-only export gate; PR #47 normally merged and Issue #33 closed |
-| **Post-MVP #34 — full clip Inspector** | 🟡 Slice 1 done | schema-5 visual/audio settings, conservative migration, strict validation, geometry-safe fades, and atomic store actions; 218 focused + 1,761 total tests; build/lint/audit/diff clean |
+| **Post-MVP #34 — full clip Inspector** | 🟡 Slices 1–5 done | schema-5 visual/audio editing plus shared preview/export rendering, contextual accessible Inspector, and direct Program Monitor manipulation; 1,782 total tests; browser/build/lint/audit/diff clean |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -957,9 +957,9 @@ surface; it is not a second zoom and never enters document history.
   pruning, plus signed `dragPreview.deltaFrames` shared by every linked move
   participant,
   authoritative timeline `zoom`, `zoomMode`, remembered `customZoom`, and the
-  translation-only `timelineOriginFrame`, plus Issue #33's uncommitted Program
-  Monitor text-geometry preview; selection, preset/custom zoom, and
-  origin setters never enter document undo/redo history.
+  translation-only `timelineOriginFrame`, plus uncommitted Program Monitor
+  text-geometry and Issue #34 clip-visual previews; selection, gesture drafts,
+  preset/custom zoom, and origin setters never enter document undo/redo history.
 - `src/app/selectionReconciliationController.ts` — original Issue #12 Slice 5
   composition seam: observes document-reference changes, supplies the current
   clip-id set to transport, and keeps selection consistent without either store
@@ -968,11 +968,17 @@ surface; it is not a second zoom and never enters document history.
   group: focusable `aria-disabled` controls, visible described availability,
   exact rendered-intent/latest-state race checks, live rejection announcements,
   retained primary selection, and post-Unlink focus handoff. Issue #33 adds the
-  validated text-content and presentation editor plus one-step deletion.
+  validated text-content and presentation editor plus one-step deletion. Issue
+  #34 adds contextual Video/Audio sections and mirrors ephemeral visual drafts
+  without entering document history.
 - `src/ui/TextOverlayDialog.tsx` + `TextOverlayControls.tsx` — Issue #33's
   accessible add flow and Program Monitor move/resize surface. Pointer/touch
   gestures preview ephemerally and commit once; keyboard controls use 1px or
   Shift+10px steps with explicit accessible names and instructions.
+- `src/ui/VisualOverlayControls.tsx` — Issue #34's accessible Program Monitor
+  move, scale, rotate, crop, anchor, and flip surface. Pointer/touch gestures use
+  fresh bounds, rAF-coalesced drafts, stale-document rejection, and one commit
+  on release; keyboard controls cover every operation.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
   candidates off-store, restores granted local handles, requests remembered
   permission only from the Open click, generation-cancels late work, and
@@ -1477,14 +1483,20 @@ surface; it is not a second zoom and never enters document history.
   and transition envelopes from the same document facts. The contextual
   Inspector now exposes grouped resettable Video and Audio sections, linked
   A/V context, immediate sliders/toggles, bounded keyboard controls, and honest
-  locked/disabled states. Program Monitor gestures and full browser/export
-  acceptance remain gated follow-up work.
+  locked/disabled states. Program Monitor manipulation now covers move, scale,
+  rotate, crop, anchor, and flip with ephemeral synchronized previews, keyboard
+  alternatives, locked-state rejection, and one history entry per completed
+  gesture. Only full acceptance and closeout remain gated follow-up work.
   Slice 1 passes 218 focused and 1,761 total tests plus build, oxlint, production
   audit, and clean-diff gates. Slices 2–3 pass 117 focused and 1,768 total tests
   plus build, oxlint, production audit, and clean-diff gates. Slice 4 passes
   212 focused and 1,771 total tests plus build, oxlint, production audit, and
   clean-diff gates; in-app Chromium passed the video-control, focus, immediate
   preview/reset, 1280×720, 720×800, overflow, and clean-console checks.
+  Slice 5 passes 87 focused and 1,782 total tests plus build, oxlint, production
+  audit, and clean-diff gates; in-app Chromium passed pointer and keyboard
+  manipulation, one-step undo, fixed-size control targets at 100× scale,
+  responsive overflow, accessibility, and clean-console checks.
 - Issue #33 implementation and acceptance are complete. Text overlays are
   procedural timed clips with strict schema validation, generic browser font
   families, bounded wrapping, background/outline/shadow styling, and one shared

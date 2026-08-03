@@ -29,6 +29,7 @@ interface Gesture {
   kind: 'move' | 'resize'
   startClientX: number
   startClientY: number
+  viewport: Viewport
   transform: Transform
   text: TextProps
   latest: TextOverlayPreview
@@ -36,6 +37,22 @@ interface Gesture {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
+}
+
+function measureViewport(
+  canvas: HTMLCanvasElement | null,
+  panel: HTMLDivElement | null,
+): Viewport | null {
+  if (!canvas || !panel) return null
+  const canvasRect = canvas.getBoundingClientRect()
+  const panelRect = panel.getBoundingClientRect()
+  if (canvasRect.width <= 0 || canvasRect.height <= 0) return null
+  return {
+    left: canvasRect.left - panelRect.left,
+    top: canvasRect.top - panelRect.top,
+    width: canvasRect.width,
+    height: canvasRect.height,
+  }
 }
 
 function overlayAtFrame(doc: TimelineDoc, frame: number): Array<{ clip: Clip; locked: boolean }> {
@@ -75,14 +92,7 @@ export default function TextOverlayControls({
     const panel = panelRef.current
     if (!canvas || !panel) return
     const measure = (): void => {
-      const canvasRect = canvas.getBoundingClientRect()
-      const panelRect = panel.getBoundingClientRect()
-      setViewport({
-        left: canvasRect.left - panelRect.left,
-        top: canvasRect.top - panelRect.top,
-        width: canvasRect.width,
-        height: canvasRect.height,
-      })
+      setViewport(measureViewport(canvas, panel))
     }
     measure()
     const observer = typeof ResizeObserver === 'function'
@@ -128,7 +138,9 @@ export default function TextOverlayControls({
     locked: boolean,
   ): void => {
     useTransportStore.getState().setSelectedClip(clip.id)
-    if (locked || !clip.text || !viewport || viewport.width <= 0 || viewport.height <= 0) return
+    const measured = measureViewport(canvasRef.current, panelRef.current)
+    if (locked || !clip.text || !measured) return
+    setViewport(measured)
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     const latest: TextOverlayPreview = {
@@ -142,6 +154,7 @@ export default function TextOverlayControls({
       kind,
       startClientX: event.clientX,
       startClientY: event.clientY,
+      viewport: measured,
       transform: { ...clip.transform },
       text: { ...clip.text },
       latest,
@@ -151,9 +164,11 @@ export default function TextOverlayControls({
 
   const moveGesture = (event: PointerEvent<HTMLButtonElement>): void => {
     const gesture = gestureRef.current
-    if (!gesture || !viewport || viewport.width <= 0 || viewport.height <= 0) return
-    const dx = (event.clientX - gesture.startClientX) * doc.width / viewport.width
-    const dy = (event.clientY - gesture.startClientY) * doc.height / viewport.height
+    if (!gesture) return
+    const dx = (event.clientX - gesture.startClientX)
+      * gesture.document.width / gesture.viewport.width
+    const dy = (event.clientY - gesture.startClientY)
+      * gesture.document.height / gesture.viewport.height
     let preview: TextOverlayPreview
     if (gesture.kind === 'move') {
       preview = {

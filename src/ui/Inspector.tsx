@@ -870,6 +870,7 @@ function LinkSelectionControls() {
 
 export default function Inspector() {
   const selectedClipId = useTransportStore((s) => s.selectedClipId)
+  const visualPreview = useTransportStore((s) => s.clipVisualPreview)
   const timelineDoc = useDocumentStore((s) => s.doc)
   const clip = selectedClipId ? findClip(timelineDoc, selectedClipId) : null
 
@@ -896,6 +897,13 @@ export default function Inspector() {
   const audioLocked = audioClip === null
     ? false
     : (trackOfClip(timelineDoc, audioClip.id)?.locked ?? true)
+  const displayedVideoClip = videoClip && visualPreview?.clipId === videoClip.id
+    ? {
+        ...videoClip,
+        transform: visualPreview.transform,
+        visual: visualPreview.visual,
+      }
+    : videoClip
 
   return (
     <div className="inspector-panel" data-testid="inspector-panel">
@@ -908,8 +916,8 @@ export default function Inspector() {
           locked={videoLocked}
         />
       )}
-      {videoClip && (
-        <VideoInspectorSections clip={videoClip} locked={videoLocked} />
+      {displayedVideoClip && (
+        <VideoInspectorSections clip={displayedVideoClip} locked={videoLocked} />
       )}
       {audioClip && (
         <AudioInspectorSection clip={audioClip} locked={audioLocked} />

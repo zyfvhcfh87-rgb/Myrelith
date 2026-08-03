@@ -11,6 +11,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import { defaultClipVisualSettings } from '../domain/clipInspector'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { initSelectionReconciliation } from '../app/selectionReconciliationController'
@@ -112,6 +113,29 @@ describe('Inspector', () => {
     expect(screen.getByTestId('inspector-x')).toHaveValue(0)
     expect(screen.getByTestId('inspector-scale-x')).toHaveValue(1)
     expect(screen.getByTestId('inspector-opacity')).toHaveValue(1)
+  })
+
+  test('mirrors the ephemeral canvas geometry without committing document history', () => {
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    act(() => transport().setClipVisualPreview({
+      clipId: 'clipA',
+      transform: { ...clipA().transform, x: 88, rotation: 12 },
+      visual: {
+        ...defaultClipVisualSettings(),
+        crop: { left: 0.25, right: 0, top: 0, bottom: 0 },
+      },
+    }))
+
+    expect(screen.getByTestId('inspector-x')).toHaveValue(88)
+    expect(screen.getByTestId('inspector-rotation')).toHaveValue(12)
+    expect(screen.getByTestId('inspector-crop-left')).toHaveValue(25)
+    expect(clipA().transform.x).toBe(0)
+    expect(doc().past).toHaveLength(0)
+
+    act(() => transport().setClipVisualPreview(null))
+    expect(screen.getByTestId('inspector-x')).toHaveValue(0)
   })
 
   test('edits and resets the complete static video surface', () => {

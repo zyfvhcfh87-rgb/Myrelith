@@ -16,6 +16,7 @@ import type {
   Track,
 } from '../domain/schema'
 import { defaultTextProps } from '../domain/textOverlay'
+import { defaultClipVisualSettings } from '../domain/clipInspector'
 import {
   RenderAssetOpenError,
   type RenderFrameResult,
@@ -29,6 +30,7 @@ import { resetMediaCompatibilityController } from './mediaCompatibilityControlle
 import type { BridgeLike, PreviewDeps } from './previewController'
 import {
   disposePreview,
+  documentWithClipVisualPreview,
   documentWithTextOverlayPreview,
   initPreview,
 } from './previewController'
@@ -344,6 +346,7 @@ beforeEach(() => {
     inOut: null,
     dragPreview: null,
     textOverlayPreview: null,
+    clipVisualPreview: null,
   })
   useMediaStore.setState({
     descriptors: new Map(),
@@ -376,6 +379,55 @@ describe('previewController', () => {
     expect(original.transform.x).toBe(0)
     expect(original.text?.boxWidthPx).not.toBe(640)
     expect(documentWithTextOverlayPreview(doc, null)).toBe(doc)
+  })
+
+  test('projects an ephemeral media geometry draft without mutating the document', () => {
+    const doc = makeVideoDoc(['visual-asset'])
+    const original = doc.tracks[0].clips[0]
+    const preview = documentWithClipVisualPreview(doc, {
+      clipId: original.id,
+      transform: { ...original.transform, x: 125, rotation: 20 },
+      visual: {
+        ...defaultClipVisualSettings(),
+        crop: { left: 0.1, right: 0, top: 0, bottom: 0 },
+        flipHorizontal: true,
+      },
+    })
+
+    expect(preview).not.toBe(doc)
+    expect(preview.tracks[0].clips[0]).toMatchObject({
+      transform: { x: 125, rotation: 20 },
+      visual: { crop: { left: 0.1 }, flipHorizontal: true },
+    })
+    expect(original.transform).toMatchObject({ x: 0, rotation: 0 })
+    expect(original.visual).toBeUndefined()
+    expect(documentWithClipVisualPreview(doc, null)).toBe(doc)
+  })
+
+  test('forwards visual drafts to the live compositor and restores the committed document', () => {
+    const { deps, bridge } = makeDeps()
+    const doc = makeVideoDoc(['visual-live'])
+    useDocumentStore.getState().setDoc(doc)
+    initPreview(canvasEl(), deps)
+    const clip = doc.tracks[0].clips[0]
+
+    useTransportStore.getState().setClipVisualPreview({
+      clipId: clip.id,
+      transform: { ...clip.transform, x: 222 },
+      visual: {
+        ...defaultClipVisualSettings(),
+        crop: { left: 0, right: 0.2, top: 0, bottom: 0 },
+      },
+    })
+
+    expect(bridge.docs.at(-1)?.tracks[0].clips[0]).toMatchObject({
+      transform: { x: 222 },
+      visual: { crop: { right: 0.2 } },
+    })
+    expect(useDocumentStore.getState().doc).toBe(doc)
+
+    useTransportStore.getState().setClipVisualPreview(null)
+    expect(bridge.docs.at(-1)).toBe(doc)
   })
 
   test('keeps an unreferenced analyzed video warm without re-demuxing', async () => {

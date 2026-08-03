@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import { createTextClip, insertClip } from '../domain/operations'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
 import { findClip } from '../domain/selectors'
+import { clipVisualSettings } from '../domain/clipInspector'
 import { useDocumentStore } from './documentStore'
 import { INITIAL_TRANSPORT_STATE, useTransportStore } from './transportStore'
 
@@ -48,5 +49,31 @@ describe('text overlay stores', () => {
 
     useTransportStore.getState().resetTransport()
     expect(useTransportStore.getState().textOverlayPreview).toBeNull()
+  })
+
+  test('visual preview geometry stays ephemeral, deeply copied, and resettable', () => {
+    const clip = useDocumentStore.getState().doc.tracks[0].clips[0]
+    const transform = { ...clip.transform, rotation: 35 }
+    const visual = {
+      ...clipVisualSettings(clip),
+      crop: { ...clipVisualSettings(clip).crop, left: 0.2 },
+    }
+    useTransportStore.getState().setClipVisualPreview({
+      clipId: clip.id,
+      transform,
+      visual,
+    })
+    transform.rotation = 90
+    visual.crop.left = 0.8
+
+    expect(useTransportStore.getState().clipVisualPreview).toMatchObject({
+      transform: { rotation: 35 },
+      visual: { crop: { left: 0.2 } },
+    })
+    expect(findClip(useDocumentStore.getState().doc, clip.id)?.transform.rotation).toBe(0)
+    expect(useDocumentStore.getState().past).toEqual([])
+
+    useTransportStore.getState().resetTransport()
+    expect(useTransportStore.getState().clipVisualPreview).toBeNull()
   })
 })

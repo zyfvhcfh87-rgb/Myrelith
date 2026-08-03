@@ -2196,7 +2196,7 @@ in child issues #43–#46 remain separate work.
   accessible names, visible focus, bounded keyboard behavior, and honest
   disabled states. Native sliders also have explicit Arrow, Home/End, and Page
   key semantics; connected mono sources expose balance as unavailable.
-- [ ] **5 — direct manipulation.** Generalize the Program Monitor overlay for
+- [x] **5 — direct manipulation.** Generalize the Program Monitor overlay for
   video move/scale/rotate/crop/anchor/flip workflows while retaining text
   controls, fresh pointer-down bounds, touch behavior, keyboard alternatives,
   and one commit per completed gesture.
@@ -2220,6 +2220,14 @@ are clean. In-app Chromium confirmed immediate preview/reset behavior, visible
 focus, a contained Inspector scroller, no page overflow at 1280×720 or 720×800,
 and zero console warnings or errors. The build retains only the existing Vite
 chunk-size advisory.
+
+Slice 5 passes 87 focused tests and the complete suite passes 1,782/1,782 tests
+across 101 files; production build, oxlint, production audit, and diff checks
+are clean. In-app Chromium confirmed move, scale, rotate, crop, anchor, and flip
+controls for an offline durable visual descriptor; synchronized Inspector
+drafts; fixed-size targets at 100× scale; one exact pointer-up history entry;
+keyboard alternatives; and no page overflow or console errors at 1280×720 or
+720×800. The build retains only the existing Vite chunk-size advisory.
 
 ## Public preview foundation — v0.1.0-alpha.1
 
