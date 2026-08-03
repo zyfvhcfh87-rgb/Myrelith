@@ -101,8 +101,34 @@
   ) translate(-50%, -50%);
 }
 
-.visual-overlay-scale-handle {
+.visual-overlay-scale-top-left {
+  left: 0;
+  top: 0;
+}
+
+.visual-overlay-scale-top-right {
+  left: 100%;
+  top: 0;
+}
+
+.visual-overlay-scale-bottom-left {
+  left: 0;
+  top: 100%;
+}
+
+.visual-overlay-scale-bottom-right {
+  left: 100%;
+  top: 100%;
+}
+
+.visual-overlay-scale-top-left,
+.visual-overlay-scale-bottom-right {
   cursor: nwse-resize;
+}
+
+.visual-overlay-scale-top-right,
+.visual-overlay-scale-bottom-left {
+  cursor: nesw-resize;
 }
 
 .visual-overlay-rotate-handle {
