@@ -105,7 +105,11 @@ describe('VisualOverlayControls', () => {
     fireEvent.click(body)
 
     expect(body).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: /scale visual clip/i })).toBeVisible()
+    const scaleHandles = screen.getAllByRole('button', { name: /scale visual clip from .* corner/i })
+    expect(scaleHandles).toHaveLength(4)
+    for (const corner of ['top left', 'top right', 'bottom left', 'bottom right']) {
+      expect(screen.getByRole('button', { name: new RegExp(`scale visual clip from ${corner} corner`, 'i') })).toBeVisible()
+    }
     expect(screen.getByRole('button', { name: /rotate visual clip/i })).toBeVisible()
     expect(screen.getByRole('button', { name: /move anchor/i })).toBeVisible()
     expect(screen.getAllByRole('button', { name: /crop .* edge/i })).toHaveLength(4)
@@ -154,7 +158,7 @@ describe('VisualOverlayControls', () => {
 
   test('pointer scale, rotate, crop, and anchor each produce one atomic edit', async () => {
     render(<Harness />)
-    const scale = await screen.findByRole('button', { name: /scale visual clip/i })
+    const scale = await screen.findByRole('button', { name: /scale visual clip from bottom right corner/i })
     const rotate = screen.getByRole('button', { name: /rotate visual clip/i })
     const cropLeft = screen.getByRole('button', { name: /crop left edge/i })
     const anchor = screen.getByRole('button', { name: /move anchor/i })
@@ -183,10 +187,42 @@ describe('VisualOverlayControls', () => {
     expect(useDocumentStore.getState().past).toHaveLength(4)
   })
 
+  test('each corner handle scales outward from its own corner', async () => {
+    render(<Harness />)
+    const corners = [
+      { name: 'top left', x: -64, y: -36 },
+      { name: 'top right', x: 64, y: -36 },
+      { name: 'bottom left', x: -64, y: 36 },
+      { name: 'bottom right', x: 64, y: 36 },
+    ]
+
+    for (const [index, corner] of corners.entries()) {
+      const handle = await screen.findByRole('button', {
+        name: new RegExp(`scale visual clip from ${corner.name} corner`, 'i'),
+      })
+      const pointerId = 20 + index
+      fireEvent.pointerDown(handle, { pointerId, clientX: 0, clientY: 0 })
+      fireEvent.pointerMove(handle, {
+        pointerId,
+        clientX: corner.x,
+        clientY: corner.y,
+      })
+      fireEvent.pointerUp(handle, {
+        pointerId,
+        clientX: corner.x,
+        clientY: corner.y,
+      })
+    }
+
+    expect(selectedClip().transform.scaleX).toBeCloseTo(2.6)
+    expect(selectedClip().transform.scaleY).toBeCloseTo(2.6)
+    expect(useDocumentStore.getState().past).toHaveLength(4)
+  })
+
   test('keyboard alternatives adjust move, scale, rotation, crop, anchor, and flips', async () => {
     render(<Harness />)
     const body = await screen.findByRole('button', { name: /selected visual clip/i })
-    const scale = screen.getByRole('button', { name: /scale visual clip/i })
+    const scale = screen.getByRole('button', { name: /scale visual clip from bottom right corner/i })
     const rotate = screen.getByRole('button', { name: /rotate visual clip/i })
     const cropLeft = screen.getByRole('button', { name: /crop left edge/i })
     const anchor = screen.getByRole('button', { name: /move anchor/i })

@@ -39,7 +39,13 @@ interface Viewport {
 }
 
 type CropEdge = keyof CropInsets
-type GestureKind = 'move' | 'scale' | 'rotate' | 'anchor' | `crop-${CropEdge}`
+type ScaleCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+type GestureKind =
+  | 'move'
+  | 'rotate'
+  | 'anchor'
+  | `scale-${ScaleCorner}`
+  | `crop-${CropEdge}`
 
 interface Gesture {
   clipId: string
@@ -66,6 +72,12 @@ interface ActiveVisualClip {
 }
 
 const MIN_EDITABLE_SCALE = 0.01
+const SCALE_CORNERS: readonly ScaleCorner[] = [
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+]
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
@@ -132,11 +144,12 @@ function previewFromClip(clip: Clip): ClipVisualPreview {
   }
 }
 
-function chooseScaleVector(
+function scaleVectorForCorner(
   transform: Transform,
   visual: ClipVisualSettings,
   width: number,
   height: number,
+  corner: ScaleCorner,
 ): { x: number; y: number } {
   const left = visual.crop.left * width
   const right = (1 - visual.crop.right) * width
@@ -145,12 +158,8 @@ function chooseScaleVector(
   const anchorX = transform.anchorX * width
   const anchorY = transform.anchorY * height
   return {
-    x: Math.abs(right - anchorX) >= Math.abs(left - anchorX)
-      ? right - anchorX
-      : left - anchorX,
-    y: Math.abs(bottom - anchorY) >= Math.abs(top - anchorY)
-      ? bottom - anchorY
-      : top - anchorY,
+    x: (corner.endsWith('left') ? left : right) - anchorX,
+    y: (corner.startsWith('top') ? top : bottom) - anchorY,
   }
 }
 
@@ -250,7 +259,7 @@ function previewForGesture(
     const delta = documentDelta(gesture, event)
     transform.x += delta.x
     transform.y += delta.y
-  } else if (gesture.kind === 'scale') {
+  } else if (gesture.kind.startsWith('scale-')) {
     const delta = localDelta(gesture, event, false)
     if (visual.scaleLocked) {
       const vector = gesture.scaleVector
@@ -263,12 +272,16 @@ function previewForGesture(
       transform.scaleY = scale
     } else {
       transform.scaleX = clamp(
-        transform.scaleX + delta.x / gesture.scaleVector.x,
+        transform.scaleX + (gesture.scaleVector.x === 0
+          ? 0
+          : delta.x / gesture.scaleVector.x),
         MIN_EDITABLE_SCALE,
         MAX_CLIP_SCALE,
       )
       transform.scaleY = clamp(
-        transform.scaleY + delta.y / gesture.scaleVector.y,
+        transform.scaleY + (gesture.scaleVector.y === 0
+          ? 0
+          : delta.y / gesture.scaleVector.y),
         MIN_EDITABLE_SCALE,
         MAX_CLIP_SCALE,
       )
@@ -414,6 +427,9 @@ export default function VisualOverlayControls({
     event.currentTarget.setPointerCapture(event.pointerId)
     const visual = clipVisualSettings(clip)
     const latest = previewFromClip(clip)
+    const scaleCorner = kind.startsWith('scale-')
+      ? kind.slice(6) as ScaleCorner
+      : null
     gestureRef.current = {
       clipId,
       document: latestDoc,
@@ -424,12 +440,15 @@ export default function VisualOverlayControls({
       viewport: measured,
       sourceWidth: descriptor.width,
       sourceHeight: descriptor.height,
-      scaleVector: chooseScaleVector(
-        clip.transform,
-        visual,
-        descriptor.width,
-        descriptor.height,
-      ),
+      scaleVector: scaleCorner
+        ? scaleVectorForCorner(
+            clip.transform,
+            visual,
+            descriptor.width,
+            descriptor.height,
+            scaleCorner,
+          )
+        : { x: 0, y: 0 },
       transform: { ...clip.transform },
       visual: { ...visual, crop: { ...visual.crop } },
       latest,
@@ -655,16 +674,6 @@ export default function VisualOverlayControls({
         const localTop = sourceTop - transform.anchorY * item.sourceHeight
         const transformOriginX = -localLeft / visibleWidth
         const transformOriginY = -localTop / visibleHeight
-        const scaleVector = chooseScaleVector(
-          transform,
-          visual,
-          item.sourceWidth,
-          item.sourceHeight,
-        )
-        const scaleHandleX = (scaleVector.x + transform.anchorX * item.sourceWidth - sourceLeft)
-          / visibleWidth
-        const scaleHandleY = (scaleVector.y + transform.anchorY * item.sourceHeight - sourceTop)
-          / visibleHeight
         const style = {
           left: viewport.left + (doc.width / 2 + transform.x + localLeft) * scaleX,
           top: viewport.top + (doc.height / 2 + transform.y + localTop) * scaleY,
@@ -725,16 +734,18 @@ export default function VisualOverlayControls({
             />
             {selected && (
               <>
-                <button
-                  type="button"
-                  className="visual-overlay-handle visual-overlay-scale-handle"
-                  style={{ left: `${scaleHandleX * 100}%`, top: `${scaleHandleY * 100}%` }}
-                  aria-label={`Scale visual clip: ${committedClip.name}`}
-                  aria-disabled={item.locked}
-                  aria-describedby="visual-overlay-control-help"
-                  onKeyDown={(event) => keyboardScale(event, committedClip.id)}
-                  {...pointerHandlers('scale')}
-                />
+                {SCALE_CORNERS.map((corner) => (
+                  <button
+                    key={corner}
+                    type="button"
+                    className={`visual-overlay-handle visual-overlay-scale-handle visual-overlay-scale-${corner}`}
+                    aria-label={`Scale visual clip from ${corner.replace('-', ' ')} corner: ${committedClip.name}`}
+                    aria-disabled={item.locked}
+                    aria-describedby="visual-overlay-control-help"
+                    onKeyDown={(event) => keyboardScale(event, committedClip.id)}
+                    {...pointerHandlers(`scale-${corner}`)}
+                  />
+                ))}
                 <button
                   type="button"
                   className="visual-overlay-handle visual-overlay-rotate-handle"
