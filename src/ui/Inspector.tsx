@@ -437,7 +437,9 @@ function VideoInspectorSections({ clip, locked }: { clip: Clip; locked: boolean 
 function AudioInspectorSection({ clip, locked }: { clip: Clip; locked: boolean }) {
   const audio = clipAudioSettings(clip)
   const channels = useMediaStore((state) =>
-    state.assets.get(clip.assetId)?.audioChannels ?? null,
+    state.assets.get(clip.assetId)?.audioChannels
+      ?? state.descriptors.get(clip.assetId)?.audioChannels
+      ?? null,
   )
   const balanceApplicable = channels !== 1
   const controlsDisabled = locked || !audio.enabled
@@ -466,7 +468,7 @@ function AudioInspectorSection({ clip, locked }: { clip: Clip; locked: boolean }
         <span className="inspector-note">
           {balanceApplicable
             ? 'Balance attenuates the opposite source channel; fades use project frames.'
-            : 'This connected source is mono, so stereo balance is unavailable.'}
+            : 'This source is mono, so stereo balance is unavailable.'}
         </span>
       </InspectorSection>
     </div>

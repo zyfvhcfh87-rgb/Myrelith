@@ -10,9 +10,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 import { initSelectionReconciliation } from '../app/selectionReconciliationController'
 import {
@@ -93,6 +95,7 @@ beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   resetTransportStoreForTest()
   resetDocumentStoreForTest(makeDoc())
+  useMediaStore.getState().clearAssets()
   warnSpy.mockClear()
 })
 
@@ -255,6 +258,38 @@ describe('Inspector', () => {
         fadeOutFrames: 0,
       },
     })
+  })
+
+  test('keeps balance disabled for an offline mono source descriptor', () => {
+    const descriptor: PortableAssetDescriptor = {
+      id: 'asset-1',
+      fileName: 'source.mp4',
+      mimeType: 'video/mp4',
+      size: 1_024,
+      lastModified: 0,
+      kind: 'video',
+      durationMicroseconds: 3_000_000,
+      sourceBounds: {
+        video: { status: 'unknown' },
+        audio: { status: 'unknown' },
+      },
+      nativeFrameRate: { num: 30, den: 1 },
+      width: 1_920,
+      height: 1_080,
+      hasAudio: true,
+      audioSampleRate: 48_000,
+      audioChannels: 1,
+    }
+    useMediaStore.setState({
+      descriptors: new Map([[descriptor.id, descriptor]]),
+    })
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+
+    expect(screen.getByTestId('inspector-balance')).toBeDisabled()
+    expect(screen.getByText(
+      'This source is mono, so stereo balance is unavailable.',
+    )).toBeInTheDocument()
   })
 
   test('shows both video and audio surfaces for either member of a linked pair', () => {

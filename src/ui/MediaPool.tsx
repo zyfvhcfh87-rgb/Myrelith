@@ -635,31 +635,40 @@ export default function MediaPool() {
               <button
                 className="media-import"
                 type="button"
+                title="Choose media and remember access for future sessions"
                 disabled={importBusy || relinkBusy}
                 onClick={() => void chooseMediaForImport()}
               >
                 <span aria-hidden="true">+</span>
-                <span>Import</span>
+                <span>Import &amp; remember</span>
               </button>
-            ) : (
-              <label className="media-import">
-                <span aria-hidden="true">+</span>
-                <span>Import</span>
-                <input
-                  className="media-import-input"
-                  aria-label="Import media"
-                  type="file"
-                  accept={MEDIA_FILE_INPUT_ACCEPT}
-                  multiple
-                  disabled={importBusy || relinkBusy}
-                  onChange={(event) => {
-                    const files = [...(event.target.files ?? [])]
-                    event.target.value = ''
-                    if (files.length > 0) void importMediaFiles(files)
-                  }}
-                />
-              </label>
-            )}
+            ) : null}
+            <label
+              className={handlePickerAvailable
+                ? 'media-import media-import-quick'
+                : 'media-import'}
+              title={handlePickerAvailable
+                ? 'Choose media for this session without remembering access'
+                : undefined}
+            >
+              <span aria-hidden="true">+</span>
+              <span>{handlePickerAvailable ? 'Quick import' : 'Import'}</span>
+              <input
+                className="media-import-input"
+                aria-label={handlePickerAvailable
+                  ? 'Quick import media'
+                  : 'Import media'}
+                type="file"
+                accept={MEDIA_FILE_INPUT_ACCEPT}
+                multiple
+                disabled={importBusy || relinkBusy}
+                onChange={(event) => {
+                  const files = [...(event.target.files ?? [])]
+                  event.target.value = ''
+                  if (files.length > 0) void importMediaFiles(files)
+                }}
+              />
+            </label>
           </div>
         </div>
         <StillImageDurationPreference />
@@ -787,31 +796,40 @@ export default function MediaPool() {
                         <button
                           className="media-source-relink"
                           type="button"
-                          aria-label={`Relink ${fileName}`}
+                          aria-label={`Relink & remember ${fileName}`}
+                          title="Reconnect this source and remember access for future sessions"
                           disabled={importBusy || relinkBusy}
                           onClick={() => void chooseActiveAssetMedia(id)}
                         >
-                          Relink
+                          Relink &amp; remember
                         </button>
-                      ) : (
-                        <label className="media-source-relink">
-                          Relink
-                          <input
-                            className="media-import-input"
-                            aria-label={`Relink ${fileName}`}
-                            type="file"
-                            accept={MEDIA_FILE_INPUT_ACCEPT}
-                            disabled={importBusy || relinkBusy}
-                            onChange={(event) => {
-                              const file = event.target.files?.[0]
-                              event.target.value = ''
-                              if (file) {
-                                void connectActiveAssetMedia(id, file)
-                              }
-                            }}
-                          />
-                        </label>
-                      )}
+                      ) : null}
+                      <label
+                        className={handlePickerAvailable
+                          ? 'media-source-relink media-source-relink-quick'
+                          : 'media-source-relink'}
+                        title={handlePickerAvailable
+                          ? 'Reconnect this source for this session without remembering access'
+                          : undefined}
+                      >
+                        {handlePickerAvailable ? 'Quick relink' : 'Relink'}
+                        <input
+                          className="media-import-input"
+                          aria-label={handlePickerAvailable
+                            ? `Quick relink ${fileName}`
+                            : `Relink ${fileName}`}
+                          type="file"
+                          accept={MEDIA_FILE_INPUT_ACCEPT}
+                          disabled={importBusy || relinkBusy}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0]
+                            event.target.value = ''
+                            if (file) {
+                              void connectActiveAssetMedia(id, file)
+                            }
+                          }}
+                        />
+                      </label>
                     </div>
                   ) : null}
                 </div>

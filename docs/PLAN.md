@@ -2143,7 +2143,7 @@ and Canvas2D painting path so supported appearance and timing stay aligned.
 
 ## Post-MVP issue #34 — full clip Inspector
 
-**IN PROGRESS (started 2026-08-03).**
+**IMPLEMENTATION AND ACCEPTANCE COMPLETE (publication pending, 2026-08-03).**
 
 The Inspector becomes the single contextual authoring surface for static clip
 video and audio properties. Existing transform, opacity, and gain fields stay
@@ -2200,7 +2200,7 @@ in child issues #43–#46 remain separate work.
   video move/scale/rotate/crop/anchor/flip workflows while retaining text
   controls, fresh pointer-down bounds, touch behavior, keyboard alternatives,
   and one commit per completed gesture.
-- [ ] **6 — acceptance and closeout.** Cover domain mutations, migration,
+- [x] **6 — acceptance and closeout.** Cover domain mutations, migration,
   selection switching, UI reset/keyboard behavior, shared preview/export
   pixels and audio samples, save/reopen, linked A/V display, responsive layout,
   real playback, and reopened export output. Run focused and full automation,
@@ -2228,6 +2228,25 @@ controls for an offline durable visual descriptor; synchronized Inspector
 drafts; fixed-size targets at 100× scale; one exact pointer-up history entry;
 keyboard alternatives; and no page overflow or console errors at 1280×720 or
 720×800. The build retains only the existing Vite chunk-size advisory.
+
+Slice 6 adds explicit reusable-handle and ordinary-input choices for project
+open, media import, and offline relink. Remembered access remains an explicit
+user choice; Quick open/import/relink does not silently persist a handle or
+copy source bytes. Offline mono Inspector state now reads the durable asset
+descriptor so Balance remains honestly unavailable across recovery.
+
+The final focused gate passes 117/117 tests and the complete suite passes
+1,784/1,784 tests across 101 files. Production build, oxlint, production audit,
+and diff checks are clean; the build retains only the existing Vite chunk-size
+advisory. In-app Chromium quick-opened a validated portable project with linked
+video/audio clips, opened it offline, failed closed on a descriptor mismatch,
+then quick-relinked the real 2-second AVC/AAC fixture with one connected and
+zero skipped. It committed transform, locked scale, rotation, anchor, flip,
+opacity, crop, mono volume, and fade edits; played real decoded media; recovered
+all values in a fresh tab; rendered the exact MP4/H.264/AAC Browser-download
+selection and captured its completed MP4; kept both dual picker surfaces usable
+without horizontal overflow at 720 px; and emitted no console warnings or
+errors.
 
 ## Public preview foundation — v0.1.0-alpha.1
 

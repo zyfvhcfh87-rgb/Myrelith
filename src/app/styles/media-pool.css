@@ -86,6 +86,7 @@
 .media-pool-actions {
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
@@ -141,9 +142,23 @@
     border-color 120ms ease;
 }
 
-.media-import:hover:not(:disabled) {
+.media-import:hover:not(:disabled):not(:has(.media-import-input:disabled)) {
   background: #3a68a7;
   border-color: #5a8bc9;
+}
+
+.media-import-quick {
+  padding: 0 9px;
+  color: #cbd3de;
+  font-size: 10px;
+  background: #24282e;
+  border-color: #414851;
+}
+
+.media-import-quick:hover:not(:has(.media-import-input:disabled)) {
+  color: #f0f4f9;
+  background: #2e343c;
+  border-color: #59636f;
 }
 
 .media-import:focus-within {
@@ -612,6 +627,7 @@
 
 .media-offline-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   margin-top: 7px;
@@ -641,9 +657,21 @@
   cursor: pointer;
 }
 
-.media-source-relink:hover:not(:disabled) {
+.media-source-relink:hover:not(:disabled):not(:has(input:disabled)) {
   color: #e8f1fd;
   background: #303947;
+  border-color: #56687b;
+}
+
+.media-source-relink-quick {
+  color: #aeb9c7;
+  background: transparent;
+  border-color: #38414b;
+}
+
+.media-source-relink-quick:hover:not(:has(input:disabled)) {
+  color: #e8f1fd;
+  background: #2a313a;
   border-color: #56687b;
 }
 

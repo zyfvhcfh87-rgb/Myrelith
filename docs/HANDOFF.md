@@ -80,7 +80,7 @@ and the open list below.
 | **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
 | **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
 | **Post-MVP #33 — editable text overlays** | ✅ complete | procedural timed text clips; accessible add/edit/move/resize/delete; shared preview/export Canvas2D renderer; schema 3→4 migration; 304 focused + 1,747 total tests; real 1280/720px Chromium text-only export gate; PR #47 normally merged and Issue #33 closed |
-| **Post-MVP #34 — full clip Inspector** | 🟡 Slices 1–5 done | schema-5 visual/audio editing plus shared preview/export rendering, contextual accessible Inspector, and direct Program Monitor manipulation; 1,782 total tests; browser/build/lint/audit/diff clean |
+| **Post-MVP #34 — full clip Inspector** | 🟡 acceptance complete | schema-5 visual/audio editing, shared preview/export rendering, contextual Inspector, direct Program Monitor manipulation, and explicit remembered/quick file paths; 1,784 tests plus real-media reopen/playback/export and 720px Chromium acceptance; publication pending |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -1486,7 +1486,7 @@ surface; it is not a second zoom and never enters document history.
   locked/disabled states. Program Monitor manipulation now covers move, scale,
   rotate, crop, anchor, and flip with ephemeral synchronized previews, keyboard
   alternatives, locked-state rejection, and one history entry per completed
-  gesture. Only full acceptance and closeout remain gated follow-up work.
+  gesture. Slice 6 acceptance is complete; only publication closeout remains.
   Slice 1 passes 218 focused and 1,761 total tests plus build, oxlint, production
   audit, and clean-diff gates. Slices 2–3 pass 117 focused and 1,768 total tests
   plus build, oxlint, production audit, and clean-diff gates. Slice 4 passes
@@ -1497,6 +1497,21 @@ surface; it is not a second zoom and never enters document history.
   audit, and clean-diff gates; in-app Chromium passed pointer and keyboard
   manipulation, one-step undo, fixed-size control targets at 100× scale,
   responsive overflow, accessibility, and clean-console checks.
+  Slice 6 adds explicit **Import & remember / Quick import**, **Relink &
+  remember / Quick relink**, and **Choose & remember / Quick open** paths. The
+  handle paths keep reusable browser permissions; the ordinary file inputs are
+  always available without a proprietary picker or silent fallback. In-app
+  Chromium quick-opened a validated portable project, opened its linked A/V
+  clips offline, failed closed on an over-specific source-bounds fixture, then
+  quick-relinked the real 2-second AVC/AAC fixture with one connected and zero
+  skipped. It edited transform, scale lock, rotation, anchor, flip, opacity,
+  crop, mono volume, and fades; played decoded media; recovered every value in
+  a fresh tab; rendered the exact MP4/H.264/AAC selection; exposed and captured
+  the completed MP4 download; kept offline mono Balance disabled from durable
+  descriptor metadata; fit both picker surfaces at 720 px without horizontal
+  overflow; and produced no console warnings or errors. The final focused gate
+  passes 117 tests, the full suite passes 1,784 tests across 101 files, and
+  build, oxlint, production audit, and clean-diff gates are green.
 - Issue #33 implementation and acceptance are complete. Text overlays are
   procedural timed clips with strict schema validation, generic browser font
   families, bounded wrapping, background/outline/shadow styling, and one shared
