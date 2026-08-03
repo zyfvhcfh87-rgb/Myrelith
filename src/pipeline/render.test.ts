@@ -66,7 +66,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },

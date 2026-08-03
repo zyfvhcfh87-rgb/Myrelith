@@ -44,7 +44,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
 /** V1: clipA [0,300), clipB [400,100). A1: clipD [0,300). V2 empty. */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-1',
     name: 'Store test doc',
     frameRate: { num: 30, den: 1 },
@@ -61,7 +61,7 @@ function makeDoc(): TimelineDoc {
 
 function makeStillDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-still-history',
     name: 'Still history test',
     frameRate: { num: 30, den: 1 },
@@ -102,7 +102,7 @@ function makeTransitionDoc(
   v1Locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-transitions',
     name: 'Transition store test',
     frameRate: { num: 30, den: 1 },
@@ -634,6 +634,57 @@ describe('Phase 4.2 editing actions', () => {
     expect(warnSpy).toHaveBeenCalled()
   })
 
+  test('Issue #34 visual edits are one undoable entry and idempotent edits push none', () => {
+    const before = getState().doc
+    getState().updateClipVisual('clipA', {
+      transform: { x: 48, scaleX: 1.25 },
+      opacity: 0.7,
+      visual: { crop: { left: 0.1 }, flipVertical: true },
+    })
+    const edited = getState().doc.tracks[0].clips[0]
+    expect(edited.transform).toMatchObject({ x: 48, scaleX: 1.25, scaleY: 1.25 })
+    expect(edited.opacity).toBe(0.7)
+    expect(edited.visual).toMatchObject({
+      crop: { left: 0.1, right: 0, top: 0, bottom: 0 },
+      flipVertical: true,
+      scaleLocked: true,
+    })
+    expect(getState().past).toEqual([before])
+
+    getState().updateClipVisual('clipA', { opacity: 0.7 })
+    expect(getState().past).toHaveLength(1)
+
+    getState().undo()
+    expect(getState().doc).toBe(before)
+  })
+
+  test('Issue #34 audio edits are one undoable entry and invalid edits preserve redo', () => {
+    getState().updateClipAudio('clipD', {
+      volume: 0.5,
+      audio: { enabled: false, balance: -0.25, fadeInFrames: 20, fadeOutFrames: 30 },
+    })
+    const edited = getState().doc.tracks[2].clips[0]
+    expect(edited.volume).toBe(0.5)
+    expect(edited.audio).toEqual({
+      enabled: false,
+      balance: -0.25,
+      fadeInFrames: 20,
+      fadeOutFrames: 30,
+    })
+    expect(getState().past).toHaveLength(1)
+
+    const redoTarget = getState().doc
+    getState().undo()
+    const beforeRejected = getState()
+    getState().updateClipAudio('clipD', { audio: { fadeOutFrames: 301 } })
+    expect(getState().doc).toBe(beforeRejected.doc)
+    expect(getState().past).toBe(beforeRejected.past)
+    expect(getState().future).toBe(beforeRejected.future)
+
+    getState().redo()
+    expect(getState().doc).toBe(redoTarget)
+  })
+
   test('slideClip moves over gaps and rejects collisions without history', () => {
     getState().slideClip('clipB', -50) // gap [300,400) absorbs it
     expect(getState().doc.tracks[0].clips[1].timelineRange.startFrame).toBe(350)
@@ -888,7 +939,7 @@ function makeManualLinkStoreDoc(): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-manual-link-store',
     name: 'Manual link store test',
     frameRate: { num: 30, den: 1 },
@@ -1094,7 +1145,7 @@ const PAIR2 = 'link_pair2'
  */
 function makeLinkedDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-linked',
     name: 'Linked test doc',
     frameRate: { num: 30, den: 1 },
@@ -1214,7 +1265,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * well outside it. */
   function makeTwoPairsDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'doc-split-pairs',
       name: 'Split pairs test doc',
       frameRate: { num: 30, den: 1 },
@@ -1234,7 +1285,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * under the playhead. */
   function makeMixedDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'doc-split-mixed',
       name: 'Split mixed test doc',
       frameRate: { num: 30, den: 1 },

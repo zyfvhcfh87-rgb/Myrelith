@@ -29,7 +29,9 @@ import type {
   TransitionId,
 } from '../domain/schema'
 import type {
+  ClipAudioPatch,
   ClipTransformPatch,
+  ClipVisualPatch,
   CrossfadeSettings,
   TextPropsPatch,
   TrackFlagsPatch,
@@ -49,7 +51,9 @@ import {
   setCrossfadeDuration,
   setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
+  updateClipAudio,
   updateClipTransform,
+  updateClipVisual,
   updateTextClip,
 } from '../domain/operations'
 import {
@@ -197,6 +201,8 @@ export interface DocumentState {
    * independently editable even when linked to an audio half.
    */
   updateClipTransform: (clipId: ClipId, patch: ClipTransformPatch) => void
+  /** Atomically edit/reset the complete static visual Inspector surface. */
+  updateClipVisual: (clipId: ClipId, patch: ClipVisualPatch) => void
   /** Update one text payload atomically; invalid/unchanged patches add no history. */
   updateTextClip: (clipId: ClipId, patch: TextPropsPatch) => void
   /**
@@ -206,6 +212,8 @@ export interface DocumentState {
    * independently editable even when linked to a video half.
    */
   setClipVolume: (clipId: ClipId, volume: number) => void
+  /** Atomically edit/reset the complete static audio Inspector surface. */
+  updateClipAudio: (clipId: ClipId, patch: ClipAudioPatch) => void
   /**
    * Add a new empty V#/A# track (timeline header "+ track" buttons). One
    * history entry — an added track is undoable like any other edit.
@@ -399,11 +407,17 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   updateClipTransform: (clipId, patch) =>
     set((state) => commit(state, updateClipTransform(state.doc, clipId, patch))),
 
+  updateClipVisual: (clipId, patch) =>
+    set((state) => commit(state, updateClipVisual(state.doc, clipId, patch))),
+
   updateTextClip: (clipId, patch) =>
     set((state) => commit(state, updateTextClip(state.doc, clipId, patch))),
 
   setClipVolume: (clipId, volume) =>
     set((state) => commit(state, setClipVolume(state.doc, clipId, volume))),
+
+  updateClipAudio: (clipId, patch) =>
+    set((state) => commit(state, updateClipAudio(state.doc, clipId, patch))),
 
   addTrack: (kind) => set((state) => commit(state, addTrack(state.doc, kind))),
 

@@ -12,6 +12,10 @@ import { Profiler } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import {
+  defaultClipAudioSettings,
+  defaultClipVisualSettings,
+} from '../../domain/clipInspector'
+import {
   createProjectFileSnapshot,
   serializeProjectFile,
   type PortableAssetDescriptor,
@@ -39,6 +43,8 @@ function makeClip(id: string, tlStart: number, duration: number, srcStart = 0): 
     transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 },
     opacity: 1,
     volume: 1,
+    visual: defaultClipVisualSettings(),
+    audio: defaultClipAudioSettings(),
     effects: [],
   }
 }
@@ -60,7 +66,7 @@ function makeTrack(id: string, clips: Clip[]): TrackData {
 /** V1: clipA [100,50) src@20 · clipB [150,80) touching A · clipC [280,40). */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-tools',
     name: 'tools fixture',
     frameRate: { num: 30, den: 1 },
@@ -552,7 +558,7 @@ describe('razor tool', () => {
   test('razor-splitting a linked pair: left halves keep the original group, right halves share ONE new group', () => {
     // V1 'vid' and A1 'aud', same range [100,50), both in 'link_orig'.
     doc().setDoc({
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'doc-tools-linked',
       name: 'tools linked fixture',
       frameRate: { num: 30, den: 1 },

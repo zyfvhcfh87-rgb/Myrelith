@@ -10,6 +10,8 @@
 import type {
   AssetKind,
   Clip,
+  ClipAudioSettings,
+  ClipVisualSettings,
   ClipSourceMode,
   Effect,
   FrameRate,
@@ -21,6 +23,15 @@ import type {
   Transform,
   PartialTrackImportSelection,
 } from './schema'
+import {
+  clipAudioSettings,
+  clipAudioSettingsValidationError,
+  clipVisualSettings,
+  clipVisualSettingsValidationError,
+  MAX_CLIP_SCALE,
+  MIN_CLIP_SCALE,
+  migrateLegacyClipInspectorSettings,
+} from './clipInspector'
 import { microsecondsDurationToFrames } from './time'
 import { cloneMediaSourceBounds } from './sourceBounds'
 import {
@@ -39,7 +50,7 @@ import {
 
 export const PROJECT_FILE_FORMAT = 'webcut-project' as const
 export const CURRENT_PROJECT_FORMAT_VERSION = 4 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 4 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 5 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -402,11 +413,59 @@ function validateTransform(value: unknown, path: string): asserts value is Trans
   const magnitude = PROJECT_FILE_LIMITS.maxFiniteMagnitude
   finiteNumber(transform.x, `${path}.x`, -magnitude, magnitude)
   finiteNumber(transform.y, `${path}.y`, -magnitude, magnitude)
-  finiteNumber(transform.scaleX, `${path}.scaleX`, -magnitude, magnitude)
-  finiteNumber(transform.scaleY, `${path}.scaleY`, -magnitude, magnitude)
+  finiteNumber(transform.scaleX, `${path}.scaleX`, MIN_CLIP_SCALE, MAX_CLIP_SCALE)
+  finiteNumber(transform.scaleY, `${path}.scaleY`, MIN_CLIP_SCALE, MAX_CLIP_SCALE)
   finiteNumber(transform.rotation, `${path}.rotation`, -magnitude, magnitude)
   finiteNumber(transform.anchorX, `${path}.anchorX`, 0, 1)
   finiteNumber(transform.anchorY, `${path}.anchorY`, 0, 1)
+}
+
+function validateClipVisual(
+  value: unknown,
+  path: string,
+): asserts value is ClipVisualSettings {
+  const visual = record(value, path)
+  exactKeys(
+    visual,
+    ['crop', 'flipHorizontal', 'flipVertical', 'scaleLocked'],
+    [],
+    path,
+  )
+  const crop = record(visual.crop, `${path}.crop`)
+  exactKeys(crop, ['left', 'right', 'top', 'bottom'], [], `${path}.crop`)
+  for (const edge of ['left', 'right', 'top', 'bottom'] as const) {
+    finiteNumber(crop[edge], `${path}.crop.${edge}`, 0, 0.99)
+  }
+  booleanValue(visual.flipHorizontal, `${path}.flipHorizontal`)
+  booleanValue(visual.flipVertical, `${path}.flipVertical`)
+  booleanValue(visual.scaleLocked, `${path}.scaleLocked`)
+  const error = clipVisualSettingsValidationError(
+    visual as unknown as ClipVisualSettings,
+  )
+  if (error) fail(path, error)
+}
+
+function validateClipAudio(
+  value: unknown,
+  path: string,
+  clipDurationFrames: number,
+): asserts value is ClipAudioSettings {
+  const audio = record(value, path)
+  exactKeys(
+    audio,
+    ['enabled', 'balance', 'fadeInFrames', 'fadeOutFrames'],
+    [],
+    path,
+  )
+  booleanValue(audio.enabled, `${path}.enabled`)
+  finiteNumber(audio.balance, `${path}.balance`, -1, 1)
+  safeInteger(audio.fadeInFrames, `${path}.fadeInFrames`, 0, clipDurationFrames)
+  safeInteger(audio.fadeOutFrames, `${path}.fadeOutFrames`, 0, clipDurationFrames)
+  const error = clipAudioSettingsValidationError(
+    audio as unknown as ClipAudioSettings,
+    clipDurationFrames,
+  )
+  if (error) fail(path, error)
 }
 
 function validateEffect(
@@ -589,7 +648,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   const clip = record(value, path)
   exactKeys(
     clip,
-    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'timelineRange', 'transform', 'opacity', 'volume', 'effects'],
+    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'timelineRange', 'transform', 'opacity', 'volume', 'visual', 'audio', 'effects'],
     ['text', 'linkGroupId'],
     path,
   )
@@ -661,6 +720,12 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   validateTransform(clip.transform, `${path}.transform`)
   finiteNumber(clip.opacity, `${path}.opacity`, 0, 1)
   finiteNumber(clip.volume, `${path}.volume`, 0, 2)
+  validateClipVisual(clip.visual, `${path}.visual`)
+  validateClipAudio(
+    clip.audio,
+    `${path}.audio`,
+    timelineRange.durationFrames,
+  )
   boundedArray(clip.effects, `${path}.effects`, PROJECT_FILE_LIMITS.maxEffectsPerClip)
   context.effectCount += clip.effects.length
   if (context.effectCount > PROJECT_FILE_LIMITS.maxTotalEffects) {
@@ -1047,6 +1112,36 @@ function migrateTextOverlays(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 4, tracks }
 }
 
+/** Upgrade schema-4 clips to the complete static Inspector document model. */
+function migrateClipInspector(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    boundedArray(
+      track.clips,
+      `$.document.tracks[${trackIndex}].clips`,
+      PROJECT_FILE_LIMITS.maxClips,
+    )
+    const clips = track.clips.map((clipValue, clipIndex) => {
+      const clipPath = `$.document.tracks[${trackIndex}].clips[${clipIndex}]`
+      const clip = record(clipValue, clipPath)
+      const transform = record(clip.transform, `${clipPath}.transform`)
+      const migrated = migrateLegacyClipInspectorSettings(
+        transform as unknown as Transform,
+      )
+      return {
+        ...clip,
+        transform: migrated.transform,
+        visual: migrated.visual,
+        audio: migrated.audio,
+      }
+    })
+    return { ...track, clips }
+  })
+  return { ...document, schemaVersion: 5, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1074,6 +1169,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 3) {
     migrated = migrateTextOverlays(migrated)
+  }
+  if (migrated.schemaVersion === 4) {
+    migrated = migrateClipInspector(migrated)
   }
   return migrated
 }
@@ -1163,6 +1261,11 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           transform: { ...clip.transform },
           opacity: clip.opacity,
           volume: clip.volume,
+          visual: {
+            ...clipVisualSettings(clip),
+            crop: { ...clipVisualSettings(clip).crop },
+          },
+          audio: { ...clipAudioSettings(clip) },
           effects: clip.effects.map((effect) => ({
             id: effect.id,
             type: effect.type,

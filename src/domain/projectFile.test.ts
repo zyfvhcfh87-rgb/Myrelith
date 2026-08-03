@@ -3,6 +3,10 @@ import type { Clip, TimelineDoc, Track } from './schema'
 import { PROJECT_ASPECT_RATIO_PRESETS } from './projectSettings'
 import { defaultTextProps, proceduralTextAssetId } from './textOverlay'
 import {
+  defaultClipAudioSettings,
+  defaultClipVisualSettings,
+} from './clipInspector'
+import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
@@ -53,6 +57,18 @@ function mediaClip(
     },
     opacity: 0.8,
     volume: 1.25,
+    visual: {
+      ...defaultClipVisualSettings(),
+      crop: { left: 0.1, right: 0.05, top: 0.02, bottom: 0.03 },
+      flipHorizontal: true,
+      scaleLocked: false,
+    },
+    audio: {
+      ...defaultClipAudioSettings(),
+      balance: -0.25,
+      fadeInFrames: Math.min(2, duration),
+      fadeOutFrames: Math.min(3, duration),
+    },
     effects: [],
   }
 }
@@ -265,6 +281,37 @@ describe('portable project file', () => {
       sourceRange: { startFrame: 0, durationFrames: 20 },
       text: { content: 'A portable title' },
     })
+  })
+
+  test('migrates schema-4 clip Inspector defaults and preserves legacy scale signs as flips', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 4
+    const first = legacy.document.tracks[0].clips[0]
+    first.transform.scaleX = -1.5
+    first.transform.scaleY = 0.75
+    for (const track of legacy.document.tracks) {
+      for (const clip of track.clips) {
+        delete clip.visual
+        delete clip.audio
+      }
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+    const migrated = parsed.document.tracks[0].clips[0]
+
+    expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(migrated.transform).toMatchObject({ scaleX: 1.5, scaleY: 0.75 })
+    expect(migrated.visual).toEqual({
+      crop: { left: 0, right: 0, top: 0, bottom: 0 },
+      flipHorizontal: true,
+      flipVertical: false,
+      scaleLocked: false,
+    })
+    expect(migrated.audio).toEqual(defaultClipAudioSettings())
+    expect(parsed.document.tracks.flatMap((track) => track.clips).every(
+      (clip) => clip.visual !== undefined && clip.audio !== undefined,
+    )).toBe(true)
   })
 
   test('migrates v3 bounds and transition audio conservatively', () => {
@@ -944,6 +991,10 @@ describe('portable project file', () => {
         if (clip.assetId !== 'video-z') continue
         clip.sourceRange = { startFrame: 0, durationFrames: 1 }
         clip.timelineRange.durationFrames = 1
+        if (clip.audio) {
+          clip.audio.fadeInFrames = Math.min(clip.audio.fadeInFrames, 1)
+          clip.audio.fadeOutFrames = Math.min(clip.audio.fadeOutFrames, 1)
+        }
       }
     }
 

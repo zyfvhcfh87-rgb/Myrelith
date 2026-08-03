@@ -67,7 +67,7 @@ function audioTimeline(hasClip: boolean): TimelineDoc {
     locked: false,
   }
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'export-profile-audio-doc',
     name: 'Audio profile fixture',
     frameRate: { num: 30, den: 1 },

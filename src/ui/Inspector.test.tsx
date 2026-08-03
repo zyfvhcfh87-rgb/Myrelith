@@ -42,7 +42,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -188,7 +188,7 @@ describe('Inspector', () => {
     expect(doc().past).toHaveLength(0)
   })
 
-  test('typed opacity is clamped by the domain op before entering the doc', () => {
+  test('typed opacity is clamped without adding history when the value stays unchanged', () => {
     transport().setSelectedClip('clipA')
     render(<Inspector />)
     const opacity = screen.getByTestId('inspector-opacity')
@@ -196,7 +196,7 @@ describe('Inspector', () => {
     fireEvent.change(opacity, { target: { value: '5' } })
     fireEvent.keyDown(opacity, { key: 'Enter' })
     expect(clipA().opacity).toBe(1) // clamped
-    expect(doc().past).toHaveLength(1)
+    expect(doc().past).toHaveLength(0)
   })
 
   test('fields resync on undo and when switching clips', () => {

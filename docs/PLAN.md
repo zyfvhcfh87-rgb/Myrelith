@@ -2141,6 +2141,71 @@ and Canvas2D painting path so supported appearance and timing stay aligned.
   PR #47 as `eba39b6`; the feature branch was retained and GitHub closed only
   Issue #33 as completed.
 
+## Post-MVP issue #34 — full clip Inspector
+
+**IN PROGRESS (started 2026-08-03).**
+
+The Inspector becomes the single contextual authoring surface for static clip
+video and audio properties. Existing transform, opacity, and gain fields stay
+document-owned; schema 5 adds explicit crop, flip, scale-lock, audio-enable,
+stereo-balance, and integer-frame fade state. Preview and export must consume
+the same pure visual and audio plans. Keyframes and the advanced effects listed
+in child issues #43–#46 remain separate work.
+
+### Frozen semantics
+
+- Crop edges are normalized source fractions. Opposing edges may total at most
+  `0.99`; the remaining source rectangle keeps its natural scale and position
+  instead of stretching back to the uncropped size.
+- Scale is non-negative and bounded. New UI-authored values stay above zero;
+  schema-4 zero-scale clips remain invisible, while negative legacy scale is
+  migrated to its absolute value plus an explicit horizontal/vertical flip.
+- Enabling the aspect lock makes X authoritative for unequal scales. While
+  locked, editing either scale writes the same value to both axes.
+- Stereo balance is `[-1, 1]` with deterministic channel attenuation: center is
+  `[1, 1]`, full left is `[1, 0]`, and full right is `[0, 1]`. It does not
+  synthesize stereo for sources that do not provide it.
+- Fade durations are safe integer project frames, may overlap, and multiply
+  with clip gain and transition envelopes. Geometry edits clamp a fade that is
+  longer than the resulting clip rather than leaving an invalid document.
+- Program Monitor pointer movement may use ephemeral preview state, but release
+  commits exactly one document/history mutation. Unsupported render or audio
+  behavior fails explicitly; no Inspector choice is silently substituted.
+
+### Authoritative implementation slices
+
+- [x] **1 — document contract.** Advanced only the nested timeline schema from
+  4 to 5; keep outer project format 4. Add defaults, strict validation,
+  conservative migration, durable round-trip coverage, geometry-safe fades,
+  and atomic undoable visual/audio patch actions. The focused foundation gate
+  passes 218/218 tests; the complete suite passes 1,761/1,761 tests across 100
+  files, and build, oxlint, production audit, and diff checks are clean.
+- [ ] **2 — shared visual rendering.** Teach the shared Canvas2D compositor to
+  apply normalized source crop and explicit flips with the existing transform,
+  anchor, rotation, opacity, z-order, transition, still, text, preview, and
+  export contracts.
+- [ ] **3 — shared audio rendering.** Extend the canonical audio mix plan with
+  enable, balance, and frame fades; apply the exact same gain evaluation in
+  live Web Audio playback and offline export, including transition overlap.
+- [ ] **4 — contextual Inspector UI.** Replace the minimal panel with grouped,
+  resettable Video and Audio sections, immediate selected-clip updates, and
+  both halves for a linked A/V selection. Numeric inputs and sliders must have
+  accessible names, visible focus, bounded keyboard behavior, and honest
+  disabled states.
+- [ ] **5 — direct manipulation.** Generalize the Program Monitor overlay for
+  video move/scale/rotate/crop/anchor/flip workflows while retaining text
+  controls, fresh pointer-down bounds, touch behavior, keyboard alternatives,
+  and one commit per completed gesture.
+- [ ] **6 — acceptance and closeout.** Cover domain mutations, migration,
+  selection switching, UI reset/keyboard behavior, shared preview/export
+  pixels and audio samples, save/reopen, linked A/V display, responsive layout,
+  real playback, and reopened export output. Run focused and full automation,
+  build, oxlint, production audit, diff checks, and in-app Chromium QA before
+  publication or issue closure.
+
+The matching live GitHub issue contains the same dependency-aware checklist so
+implementation and review can be evaluated against one contract.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**
