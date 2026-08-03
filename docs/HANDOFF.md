@@ -1475,11 +1475,16 @@ surface; it is not a second zoom and never enters document history.
   rendering now applies natural-scale normalized crop and explicit flips;
   shared live/offline audio now applies enable, stereo balance, frame fades,
   and transition envelopes from the same document facts. The contextual
-  Inspector, Program Monitor gestures, and full browser/export acceptance
-  remain gated follow-up work.
+  Inspector now exposes grouped resettable Video and Audio sections, linked
+  A/V context, immediate sliders/toggles, bounded keyboard controls, and honest
+  locked/disabled states. Program Monitor gestures and full browser/export
+  acceptance remain gated follow-up work.
   Slice 1 passes 218 focused and 1,761 total tests plus build, oxlint, production
   audit, and clean-diff gates. Slices 2–3 pass 117 focused and 1,768 total tests
-  plus build, oxlint, production audit, and clean-diff gates.
+  plus build, oxlint, production audit, and clean-diff gates. Slice 4 passes
+  212 focused and 1,771 total tests plus build, oxlint, production audit, and
+  clean-diff gates; in-app Chromium passed the video-control, focus, immediate
+  preview/reset, 1280×720, 720×800, overflow, and clean-console checks.
 - Issue #33 implementation and acceptance are complete. Text overlays are
   procedural timed clips with strict schema validation, generic browser font
   families, bounded wrapping, background/outline/shadow styling, and one shared

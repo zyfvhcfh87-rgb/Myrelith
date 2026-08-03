@@ -1,29 +1,33 @@
 /**
- * ui/Inspector.tsx — Transform + opacity editing for the selected clip.
- * Phase 4.3.
+ * ui/Inspector.tsx — Issue #34's contextual static clip authoring surface.
  *
- * Commit model (plan-mandated): fields hold a local DRAFT while typing and
- * commit on blur/Enter — never per keystroke — via ONE
- * documentStore.updateClipTransform call per change (= one undo entry).
- * Escape reverts the draft; junk/empty input reverts on commit; a
- * no-change commit is skipped entirely so blurring an untouched field
- * never pollutes history. Out-of-range opacity is clamped by the domain
- * op (the doc can never hold invalid values, whatever gets typed).
- *
- * Subscriptions: selectedClipId (primitive) + the selected clip resolved
- * through domain findClip — structural sharing keeps its reference stable
- * across unrelated edits, so the Inspector re-renders only when ITS clip
- * changes. It never reads playheadFrame (invariant 6 stays intact).
+ * Number fields keep a local draft and commit once on blur/Enter; Escape and
+ * invalid input revert without polluting history. Sliders and toggles commit
+ * immediately, with explicit bounded keyboard behavior. Each reset remains
+ * one atomic document-store mutation. Linked A/V selections resolve both
+ * document-owned halves without reading playhead or runtime pipeline state.
  * Layering: ui/ → state/ + domain selectors only.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  clipAudioSettings,
+  clipVisualSettings,
+  DEFAULT_CLIP_AUDIO_SETTINGS,
+  DEFAULT_CLIP_VISUAL_SETTINGS,
+  MAX_CLIP_SCALE,
+  MAX_CROP_SUM,
+} from '../domain/clipInspector'
 import {
   getLinkClipsEligibility,
   linkedPartners,
   type LinkClipsRejectionReason,
 } from '../domain/linking'
-import type { ClipTransformPatch, TextPropsPatch } from '../domain/operations'
+import type {
+  ClipAudioPatch,
+  ClipVisualPatch,
+  TextPropsPatch,
+} from '../domain/operations'
 import type {
   Clip,
   ClipId,
@@ -37,6 +41,7 @@ import {
   textPropsValidationError,
 } from '../domain/textOverlay'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 
 interface NumberFieldProps {
@@ -48,6 +53,7 @@ interface NumberFieldProps {
   min?: number
   max?: number
   disabled?: boolean
+  clamp?: boolean
 }
 
 function NumberField({
@@ -59,6 +65,7 @@ function NumberField({
   min,
   max,
   disabled = false,
+  clamp = false,
 }: NumberFieldProps) {
   const [draft, setDraft] = useState(String(value))
   // Re-sync whenever the committed value changes under us (undo/redo, a
@@ -74,8 +81,15 @@ function NumberField({
       setDraft(String(value)) // junk: revert, commit nothing
       return
     }
-    if (parsed === value) return // unchanged: no history entry
-    onCommit(parsed)
+    const candidate = clamp
+      ? Math.min(max ?? Infinity, Math.max(min ?? -Infinity, parsed))
+      : parsed
+    if (candidate === value) {
+      setDraft(String(value))
+      return
+    }
+    setDraft(String(candidate))
+    onCommit(candidate)
   }
 
   return (
@@ -101,6 +115,82 @@ function NumberField({
         }}
       />
     </label>
+  )
+}
+
+interface RangeNumberFieldProps extends Omit<NumberFieldProps, 'onCommit'> {
+  onCommit: (value: number) => void
+}
+
+/** Slider commits immediately; its paired number field keeps one typed commit. */
+function RangeNumberField(props: RangeNumberFieldProps) {
+  const { label, value, min, max, step, testId, disabled = false, onCommit } = props
+  const commitKey = (key: string): boolean => {
+    const minimum = min ?? 0
+    const maximum = max ?? 100
+    let next: number
+    if (key === 'Home') next = minimum
+    else if (key === 'End') next = maximum
+    else if (key === 'ArrowLeft' || key === 'ArrowDown') next = value - step
+    else if (key === 'ArrowRight' || key === 'ArrowUp') next = value + step
+    else if (key === 'PageDown') next = value - step * 10
+    else if (key === 'PageUp') next = value + step * 10
+    else return false
+    const decimals = String(step).split('.')[1]?.length ?? 0
+    const bounded = Math.min(maximum, Math.max(minimum, next))
+    onCommit(Number(bounded.toFixed(decimals)))
+    return true
+  }
+  return (
+    <div className="inspector-range-field">
+      <input
+        type="range"
+        aria-label={`${label} slider`}
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        data-testid={`${testId}-slider`}
+        onChange={(event) => onCommit(Number(event.target.value))}
+        onKeyDown={(event) => {
+          if (commitKey(event.key)) event.preventDefault()
+        }}
+      />
+      <NumberField {...props} clamp />
+    </div>
+  )
+}
+
+function InspectorSection({
+  title,
+  resetLabel,
+  disabled,
+  onReset,
+  children,
+}: {
+  title: string
+  resetLabel: string
+  disabled: boolean
+  onReset(): void
+  children: ReactNode
+}) {
+  return (
+    <section className="inspector-section" aria-label={title}>
+      <div className="inspector-section-bar">
+        <h3>{title}</h3>
+        <button
+          type="button"
+          className="inspector-reset"
+          disabled={disabled}
+          aria-label={resetLabel}
+          onClick={onReset}
+        >
+          Reset
+        </button>
+      </div>
+      {children}
+    </section>
   )
 }
 
@@ -241,6 +331,145 @@ function TextOverlayFields({ clip, locked }: { clip: Clip; locked: boolean }) {
         Delete text overlay
       </button>
     </section>
+  )
+}
+
+function ToggleField({
+  label,
+  checked,
+  disabled,
+  testId,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  disabled: boolean
+  testId: string
+  onChange(checked: boolean): void
+}) {
+  return (
+    <label className="inspector-toggle inspector-toggle-control">
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        data-testid={testId}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>{label}</span>
+    </label>
+  )
+}
+
+function VideoInspectorSections({ clip, locked }: { clip: Clip; locked: boolean }) {
+  const visual = clipVisualSettings(clip)
+  const transform = clip.transform
+  const patch = (next: ClipVisualPatch): void =>
+    useDocumentStore.getState().updateClipVisual(clip.id, next)
+  const cropPercent = (value: number): number => Math.round(value * 10_000) / 100
+  const cropFraction = (value: number): number => Math.round(value * 100) / 10_000
+
+  return (
+    <div className="inspector-section-stack" key={`video:${clip.id}`}>
+      <div className="inspector-context-label">Video · {clip.name}</div>
+      <InspectorSection
+        title="Transform"
+        resetLabel="Reset video transform"
+        disabled={locked}
+        onReset={() => patch({
+          transform: {
+            x: 0,
+            y: 0,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0,
+            anchorX: 0.5,
+            anchorY: 0.5,
+          },
+          visual: {
+            scaleLocked: DEFAULT_CLIP_VISUAL_SETTINGS.scaleLocked,
+            flipHorizontal: DEFAULT_CLIP_VISUAL_SETTINGS.flipHorizontal,
+            flipVertical: DEFAULT_CLIP_VISUAL_SETTINGS.flipVertical,
+          },
+        })}
+      >
+        <div className="inspector-grid">
+          <NumberField label="Position X" value={transform.x} step={1} testId="inspector-x" disabled={locked} onCommit={(x) => patch({ transform: { x } })} />
+          <NumberField label="Position Y" value={transform.y} step={1} testId="inspector-y" disabled={locked} onCommit={(y) => patch({ transform: { y } })} />
+          <NumberField label="Scale X" value={transform.scaleX} step={0.05} min={0.01} max={MAX_CLIP_SCALE} testId="inspector-scale-x" disabled={locked} clamp onCommit={(scaleX) => patch({ transform: { scaleX } })} />
+          <NumberField label="Scale Y" value={transform.scaleY} step={0.05} min={0.01} max={MAX_CLIP_SCALE} testId="inspector-scale-y" disabled={locked} clamp onCommit={(scaleY) => patch({ transform: { scaleY } })} />
+          <ToggleField label="Lock scale ratio" checked={visual.scaleLocked} disabled={locked} testId="inspector-scale-lock" onChange={(scaleLocked) => patch({ visual: { scaleLocked } })} />
+          <NumberField label="Rotation °" value={transform.rotation} step={1} testId="inspector-rotation" disabled={locked} onCommit={(rotation) => patch({ transform: { rotation } })} />
+          <RangeNumberField label="Anchor X (%)" value={transform.anchorX * 100} step={1} min={0} max={100} testId="inspector-anchor-x" disabled={locked} onCommit={(anchorX) => patch({ transform: { anchorX: anchorX / 100 } })} />
+          <RangeNumberField label="Anchor Y (%)" value={transform.anchorY * 100} step={1} min={0} max={100} testId="inspector-anchor-y" disabled={locked} onCommit={(anchorY) => patch({ transform: { anchorY: anchorY / 100 } })} />
+          <ToggleField label="Flip horizontally" checked={visual.flipHorizontal} disabled={locked} testId="inspector-flip-horizontal" onChange={(flipHorizontal) => patch({ visual: { flipHorizontal } })} />
+          <ToggleField label="Flip vertically" checked={visual.flipVertical} disabled={locked} testId="inspector-flip-vertical" onChange={(flipVertical) => patch({ visual: { flipVertical } })} />
+        </div>
+      </InspectorSection>
+
+      <InspectorSection
+        title="Opacity"
+        resetLabel="Reset video opacity"
+        disabled={locked}
+        onReset={() => patch({ opacity: 1 })}
+      >
+        <RangeNumberField label="Opacity" value={clip.opacity} step={0.01} min={0} max={1} testId="inspector-opacity" disabled={locked} onCommit={(opacity) => patch({ opacity })} />
+      </InspectorSection>
+
+      <InspectorSection
+        title="Crop"
+        resetLabel="Reset video crop"
+        disabled={locked}
+        onReset={() => patch({ visual: { crop: { ...DEFAULT_CLIP_VISUAL_SETTINGS.crop } } })}
+      >
+        <div className="inspector-grid inspector-crop-grid">
+          <RangeNumberField label="Crop left (%)" value={cropPercent(visual.crop.left)} step={0.1} min={0} max={cropPercent(MAX_CROP_SUM - visual.crop.right)} testId="inspector-crop-left" disabled={locked} onCommit={(left) => patch({ visual: { crop: { left: cropFraction(left) } } })} />
+          <RangeNumberField label="Crop right (%)" value={cropPercent(visual.crop.right)} step={0.1} min={0} max={cropPercent(MAX_CROP_SUM - visual.crop.left)} testId="inspector-crop-right" disabled={locked} onCommit={(right) => patch({ visual: { crop: { right: cropFraction(right) } } })} />
+          <RangeNumberField label="Crop top (%)" value={cropPercent(visual.crop.top)} step={0.1} min={0} max={cropPercent(MAX_CROP_SUM - visual.crop.bottom)} testId="inspector-crop-top" disabled={locked} onCommit={(top) => patch({ visual: { crop: { top: cropFraction(top) } } })} />
+          <RangeNumberField label="Crop bottom (%)" value={cropPercent(visual.crop.bottom)} step={0.1} min={0} max={cropPercent(MAX_CROP_SUM - visual.crop.top)} testId="inspector-crop-bottom" disabled={locked} onCommit={(bottom) => patch({ visual: { crop: { bottom: cropFraction(bottom) } } })} />
+        </div>
+        <span className="inspector-note">Crop removes source edges without stretching the remainder.</span>
+      </InspectorSection>
+    </div>
+  )
+}
+
+function AudioInspectorSection({ clip, locked }: { clip: Clip; locked: boolean }) {
+  const audio = clipAudioSettings(clip)
+  const channels = useMediaStore((state) =>
+    state.assets.get(clip.assetId)?.audioChannels ?? null,
+  )
+  const balanceApplicable = channels !== 1
+  const controlsDisabled = locked || !audio.enabled
+  const patch = (next: ClipAudioPatch): void =>
+    useDocumentStore.getState().updateClipAudio(clip.id, next)
+
+  return (
+    <div className="inspector-section-stack" key={`audio:${clip.id}`}>
+      <div className="inspector-context-label">Audio · {clip.name}</div>
+      <InspectorSection
+        title="Audio"
+        resetLabel="Reset audio settings"
+        disabled={locked}
+        onReset={() => patch({
+          volume: 1,
+          audio: { ...DEFAULT_CLIP_AUDIO_SETTINGS },
+        })}
+      >
+        <div className="inspector-grid">
+          <ToggleField label="Audio enabled" checked={audio.enabled} disabled={locked} testId="inspector-audio-enabled" onChange={(enabled) => patch({ audio: { enabled } })} />
+          <RangeNumberField label="Volume" value={clip.volume} step={0.01} min={0} max={2} testId="inspector-volume" disabled={controlsDisabled} onCommit={(volume) => patch({ volume })} />
+          <RangeNumberField label="Balance" value={audio.balance} step={0.01} min={-1} max={1} testId="inspector-balance" disabled={controlsDisabled || !balanceApplicable} onCommit={(balance) => patch({ audio: { balance } })} />
+          <NumberField label="Fade in (frames)" value={audio.fadeInFrames} step={1} min={0} max={clip.timelineRange.durationFrames} testId="inspector-fade-in" disabled={controlsDisabled} clamp onCommit={(fadeInFrames) => patch({ audio: { fadeInFrames } })} />
+          <NumberField label="Fade out (frames)" value={audio.fadeOutFrames} step={1} min={0} max={clip.timelineRange.durationFrames} testId="inspector-fade-out" disabled={controlsDisabled} clamp onCommit={(fadeOutFrames) => patch({ audio: { fadeOutFrames } })} />
+        </div>
+        <span className="inspector-note">
+          {balanceApplicable
+            ? 'Balance attenuates the opposite source channel; fades use project frames.'
+            : 'This connected source is mono, so stereo balance is unavailable.'}
+        </span>
+      </InspectorSection>
+    </div>
   )
 }
 
@@ -641,17 +870,8 @@ function LinkSelectionControls() {
 
 export default function Inspector() {
   const selectedClipId = useTransportStore((s) => s.selectedClipId)
-  const clip = useDocumentStore((s) =>
-    selectedClipId ? findClip(s.doc, selectedClipId) : null,
-  )
-  // Lane kind decides the field set: audio clips edit VOLUME, video clips
-  // the visual transform. A primitive slice, so unrelated edits skip us.
-  const laneKind = useDocumentStore((s) =>
-    selectedClipId ? (trackOfClip(s.doc, selectedClipId)?.kind ?? null) : null,
-  )
-  const trackLocked = useDocumentStore((s) =>
-    selectedClipId ? (trackOfClip(s.doc, selectedClipId)?.locked ?? false) : false,
-  )
+  const timelineDoc = useDocumentStore((s) => s.doc)
+  const clip = selectedClipId ? findClip(timelineDoc, selectedClipId) : null
 
   if (!clip) {
     return (
@@ -663,88 +883,37 @@ export default function Inspector() {
     )
   }
 
-  if (laneKind === 'audio') {
-    return (
-      <div className="inspector-panel" data-testid="inspector-panel">
-        <div className="inspector-title">{clip.name}</div>
-        <LinkSelectionControls />
-        <div className="inspector-grid" key={`${clip.id}:${laneKind}`}>
-          <NumberField
-            label="Volume"
-            value={clip.volume}
-            step={0.05}
-            testId="inspector-volume"
-            onCommit={(volume) =>
-              useDocumentStore.getState().setClipVolume(clip.id, volume)
-            }
-          />
-        </div>
-        <span className="inspector-note">0 = silent · 1 = original · 2 = max</span>
-      </div>
-    )
+  let videoClip: Clip | null = null
+  let audioClip: Clip | null = null
+  for (const member of [clip, ...linkedPartners(timelineDoc, clip.id)]) {
+    const kind = trackOfClip(timelineDoc, member.id)?.kind
+    if (kind === 'video' && videoClip === null) videoClip = member
+    if (kind === 'audio' && audioClip === null) audioClip = member
   }
-
-  const patch = (p: ClipTransformPatch): void =>
-    useDocumentStore.getState().updateClipTransform(clip.id, p)
-  const t = clip.transform
+  const videoLocked = videoClip === null
+    ? false
+    : (trackOfClip(timelineDoc, videoClip.id)?.locked ?? true)
+  const audioLocked = audioClip === null
+    ? false
+    : (trackOfClip(timelineDoc, audioClip.id)?.locked ?? true)
 
   return (
     <div className="inspector-panel" data-testid="inspector-panel">
       <div className="inspector-title">{clip.name}</div>
       <LinkSelectionControls />
-      {clip.text && <TextOverlayFields key={`text:${clip.id}`} clip={clip} locked={trackLocked} />}
-      {/* Switching clips remounts only the draft fields. The shared command
-          section stays mounted so a raced action can announce its result. */}
-      <div className="inspector-grid" key={`${clip.id}:${laneKind}`}>
-        <NumberField
-          label="Position X"
-          value={t.x}
-          step={1}
-          testId="inspector-x"
-          onCommit={(x) => patch({ transform: { x } })}
-          disabled={trackLocked}
+      {videoClip?.text && (
+        <TextOverlayFields
+          key={`text:${videoClip.id}`}
+          clip={videoClip}
+          locked={videoLocked}
         />
-        <NumberField
-          label="Position Y"
-          value={t.y}
-          step={1}
-          testId="inspector-y"
-          onCommit={(y) => patch({ transform: { y } })}
-          disabled={trackLocked}
-        />
-        <NumberField
-          label="Scale X"
-          value={t.scaleX}
-          step={0.1}
-          testId="inspector-scale-x"
-          onCommit={(scaleX) => patch({ transform: { scaleX } })}
-          disabled={trackLocked}
-        />
-        <NumberField
-          label="Scale Y"
-          value={t.scaleY}
-          step={0.1}
-          testId="inspector-scale-y"
-          onCommit={(scaleY) => patch({ transform: { scaleY } })}
-          disabled={trackLocked}
-        />
-        <NumberField
-          label="Rotation °"
-          value={t.rotation}
-          step={1}
-          testId="inspector-rotation"
-          onCommit={(rotation) => patch({ transform: { rotation } })}
-          disabled={trackLocked}
-        />
-        <NumberField
-          label="Opacity"
-          value={clip.opacity}
-          step={0.05}
-          testId="inspector-opacity"
-          onCommit={(opacity) => patch({ opacity })}
-          disabled={trackLocked}
-        />
-      </div>
+      )}
+      {videoClip && (
+        <VideoInspectorSections clip={videoClip} locked={videoLocked} />
+      )}
+      {audioClip && (
+        <AudioInspectorSection clip={audioClip} locked={audioLocked} />
+      )}
     </div>
   )
 }

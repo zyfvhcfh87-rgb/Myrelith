@@ -2190,11 +2190,12 @@ in child issues #43–#46 remain separate work.
   live Web Audio playback and offline export, including transition overlap.
   Disabled clips are silent, stereo balance attenuates channels without
   synthesizing stereo, and overlapping fades multiply deterministically.
-- [ ] **4 — contextual Inspector UI.** Replace the minimal panel with grouped,
+- [x] **4 — contextual Inspector UI.** Replace the minimal panel with grouped,
   resettable Video and Audio sections, immediate selected-clip updates, and
   both halves for a linked A/V selection. Numeric inputs and sliders must have
   accessible names, visible focus, bounded keyboard behavior, and honest
-  disabled states.
+  disabled states. Native sliders also have explicit Arrow, Home/End, and Page
+  key semantics; connected mono sources expose balance as unavailable.
 - [ ] **5 — direct manipulation.** Generalize the Program Monitor overlay for
   video move/scale/rotate/crop/anchor/flip workflows while retaining text
   controls, fresh pointer-down bounds, touch behavior, keyboard alternatives,
@@ -2212,6 +2213,13 @@ implementation and review can be evaluated against one contract.
 Slices 2–3 pass 117 focused tests. The complete suite passes 1,768/1,768 tests
 across 100 files; production build, oxlint, production audit, and diff checks
 are clean. The build retains only the existing Vite chunk-size advisory.
+
+Slice 4 passes 212 focused tests and the complete suite passes 1,771/1,771 tests
+across 100 files; production build, oxlint, production audit, and diff checks
+are clean. In-app Chromium confirmed immediate preview/reset behavior, visible
+focus, a contained Inspector scroller, no page overflow at 1280×720 or 720×800,
+and zero console warnings or errors. The build retains only the existing Vite
+chunk-size advisory.
 
 ## Public preview foundation — v0.1.0-alpha.1
 

@@ -114,6 +114,138 @@ describe('Inspector', () => {
     expect(screen.getByTestId('inspector-opacity')).toHaveValue(1)
   })
 
+  test('edits and resets the complete static video surface', () => {
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    fireEvent.change(screen.getByTestId('inspector-scale-x'), {
+      target: { value: '2' },
+    })
+    fireEvent.keyDown(screen.getByTestId('inspector-scale-x'), { key: 'Enter' })
+    expect(clipA().transform.scaleX).toBe(2)
+    expect(clipA().transform.scaleY).toBe(2)
+
+    fireEvent.click(screen.getByTestId('inspector-scale-lock'))
+    fireEvent.change(screen.getByTestId('inspector-scale-y'), {
+      target: { value: '3' },
+    })
+    fireEvent.keyDown(screen.getByTestId('inspector-scale-y'), { key: 'Enter' })
+    expect(clipA().transform.scaleX).toBe(2)
+    expect(clipA().transform.scaleY).toBe(3)
+
+    fireEvent.change(screen.getByTestId('inspector-anchor-x-slider'), {
+      target: { value: '25' },
+    })
+    fireEvent.click(screen.getByTestId('inspector-flip-horizontal'))
+    const opacitySlider = screen.getByTestId('inspector-opacity-slider')
+    fireEvent.change(opacitySlider, {
+      target: { value: '0.4' },
+    })
+    fireEvent.keyDown(opacitySlider, { key: 'ArrowRight' })
+    expect(clipA().opacity).toBe(0.41)
+    fireEvent.keyDown(opacitySlider, { key: 'Home' })
+    expect(clipA().opacity).toBe(0)
+    fireEvent.keyDown(opacitySlider, { key: 'End' })
+    expect(clipA().opacity).toBe(1)
+    fireEvent.change(opacitySlider, { target: { value: '0.4' } })
+    fireEvent.change(screen.getByTestId('inspector-crop-left-slider'), {
+      target: { value: '33' },
+    })
+
+    expect(clipA()).toMatchObject({
+      transform: { anchorX: 0.25 },
+      opacity: 0.4,
+      visual: {
+        crop: { left: 0.33 },
+        flipHorizontal: true,
+        scaleLocked: false,
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset video transform' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reset video opacity' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reset video crop' }))
+    expect(clipA()).toMatchObject({
+      transform: {
+        x: 0,
+        y: 0,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      },
+      opacity: 1,
+      visual: {
+        crop: { left: 0, right: 0, top: 0, bottom: 0 },
+        flipHorizontal: false,
+        flipVertical: false,
+        scaleLocked: true,
+      },
+    })
+  })
+
+  test('edits, disables, and resets the complete audio surface', () => {
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+
+    fireEvent.change(screen.getByTestId('inspector-volume-slider'), {
+      target: { value: '1.5' },
+    })
+    fireEvent.change(screen.getByTestId('inspector-balance-slider'), {
+      target: { value: '0.35' },
+    })
+    fireEvent.change(screen.getByTestId('inspector-fade-in'), {
+      target: { value: '12' },
+    })
+    fireEvent.keyDown(screen.getByTestId('inspector-fade-in'), { key: 'Enter' })
+    fireEvent.change(screen.getByTestId('inspector-fade-out'), {
+      target: { value: '15' },
+    })
+    fireEvent.keyDown(screen.getByTestId('inspector-fade-out'), { key: 'Enter' })
+
+    const audioClip = () => doc().doc.tracks[1].clips[0]
+    expect(audioClip()).toMatchObject({
+      volume: 1.5,
+      audio: {
+        enabled: true,
+        balance: 0.35,
+        fadeInFrames: 12,
+        fadeOutFrames: 15,
+      },
+    })
+
+    fireEvent.click(screen.getByTestId('inspector-audio-enabled'))
+    expect(audioClip().audio?.enabled).toBe(false)
+    expect(screen.getByTestId('inspector-volume')).toBeDisabled()
+    expect(screen.getByTestId('inspector-balance-slider')).toBeDisabled()
+    expect(screen.getByTestId('inspector-fade-in')).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset audio settings' }))
+    expect(audioClip()).toMatchObject({
+      volume: 1,
+      audio: {
+        enabled: true,
+        balance: 0,
+        fadeInFrames: 0,
+        fadeOutFrames: 0,
+      },
+    })
+  })
+
+  test('shows both video and audio surfaces for either member of a linked pair', () => {
+    resetDocumentStoreForTest(makeLinkedFixture())
+    transport().setSelectedClip('clipLinkedA')
+    render(<Inspector />)
+
+    expect(screen.getByText('Video · clipV.mp4')).toBeInTheDocument()
+    expect(screen.getByText('Audio · clipLinkedA.mp4')).toBeInTheDocument()
+    expect(screen.getByTestId('inspector-x')).toBeEnabled()
+    expect(screen.getByTestId('inspector-volume')).toBeEnabled()
+    expect(screen.getByTestId('inspector-crop-top-slider')).toBeEnabled()
+    expect(screen.getByTestId('inspector-fade-out')).toBeEnabled()
+  })
+
   test('follows the promoted primary when the selected clip is deleted', () => {
     const dispose = initSelectionReconciliation()
     try {
