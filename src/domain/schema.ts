@@ -182,6 +182,42 @@ export interface Transform {
   anchorY: number
 }
 
+/** Non-destructive source-edge crop, normalized against the full source. */
+export interface CropInsets {
+  /** Fraction removed from the source's left edge, from 0 (none) to < 1. */
+  left: number
+  /** Fraction removed from the source's right edge, from 0 (none) to < 1. */
+  right: number
+  /** Fraction removed from the source's top edge, from 0 (none) to < 1. */
+  top: number
+  /** Fraction removed from the source's bottom edge, from 0 (none) to < 1. */
+  bottom: number
+}
+
+/** Static visual Inspector settings shared by preview and export. */
+export interface ClipVisualSettings {
+  /** Source crop; opposing edges must always leave a non-empty rectangle. */
+  crop: CropInsets
+  /** Mirror the cropped source around the authored anchor. */
+  flipHorizontal: boolean
+  /** Mirror the cropped source around the authored anchor. */
+  flipVertical: boolean
+  /** Inspector editing constraint; when enabled, scale X and Y stay equal. */
+  scaleLocked: boolean
+}
+
+/** Static audio Inspector settings shared by playback and export. */
+export interface ClipAudioSettings {
+  /** False excludes this clip from the audible contributor plan. */
+  enabled: boolean
+  /** Stereo balance from -1 (left) through 0 (center) to 1 (right). */
+  balance: number
+  /** Linear fade-in duration in document-rate integer frames. */
+  fadeInFrames: number
+  /** Linear fade-out duration in document-rate integer frames. */
+  fadeOutFrames: number
+}
+
 /** Allowed value types for a single effect parameter. */
 export type EffectParamValue = number | string | boolean
 
@@ -323,6 +359,18 @@ export interface Clip {
   opacity: number
   /** Linear audio gain, 0..1 (1 = unity). Ignored for silent assets. */
   volume: number
+  /**
+   * Static visual Inspector settings. Current persisted documents always
+   * include this object; optional typing keeps pure helpers tolerant of
+   * historical/in-memory fixtures until they cross the migration boundary.
+   */
+  visual?: ClipVisualSettings
+  /**
+   * Static audio Inspector settings. Current persisted documents always
+   * include this object; optional typing preserves the same legacy tolerance
+   * as `visual` without weakening project-file validation.
+   */
+  audio?: ClipAudioSettings
   /** Effect chain, applied in array order before compositing. */
   effects: Effect[]
   /** Present only on text clips; such clips render text instead of media. */
@@ -386,7 +434,7 @@ export interface Track {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 4. */
+  /** Schema version for forward-compatible project files. Currently 5. */
   schemaVersion: number
   /** Unique document id. */
   id: string

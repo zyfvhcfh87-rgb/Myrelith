@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
+  defaultClipAudioSettings,
+  defaultClipVisualSettings,
+} from '../domain/clipInspector'
+import {
   createProjectFileSnapshot,
   serializeProjectFile,
   type PortableAssetDescriptor,
@@ -31,6 +35,8 @@ function makeClip(id: string, startFrame: number, durationFrames: number): Clip 
     },
     opacity: 1,
     volume: 1,
+    visual: defaultClipVisualSettings(),
+    audio: defaultClipAudioSettings(),
     effects: [],
   }
 }
@@ -58,7 +64,7 @@ function makeAudioTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-selection-reconciliation',
     name: 'Selection reconciliation',
     frameRate: { num: 30, den: 1 },

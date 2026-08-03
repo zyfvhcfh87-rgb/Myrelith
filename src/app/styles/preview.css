@@ -26,6 +26,233 @@
   background: #000;
 }
 
+.visual-overlay-controls {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.visual-overlay-control {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.visual-overlay-control-body {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  touch-action: none;
+  background: transparent;
+  border: 0;
+  cursor: move;
+  pointer-events: auto;
+}
+
+.visual-overlay-control[data-selected='true'] .visual-overlay-control-body {
+  box-shadow:
+    inset 0 0 0 var(--visual-border-width) #ffb65f,
+    0 0 0 var(--visual-shadow-width) rgb(38 22 5 / 82%);
+}
+
+.visual-overlay-control[data-locked='true'] .visual-overlay-control-body {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.visual-overlay-control-body:focus-visible {
+  outline: 0;
+  box-shadow:
+    inset 0 0 0 var(--visual-border-width) #ffb65f,
+    0 0 0 var(--visual-focus-width) #fff;
+}
+
+.visual-overlay-handle:focus-visible,
+.visual-overlay-crop-handle:focus-visible,
+.visual-overlay-toolbar button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.visual-overlay-handle,
+.visual-overlay-crop-handle {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  padding: 0;
+  touch-action: none;
+  background: #ffb65f;
+  border: 4px solid rgb(34 21 8 / 88%);
+  pointer-events: auto;
+  transform-origin: 0 0;
+}
+
+.visual-overlay-handle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  transform: scale(
+    var(--visual-counter-scale-x),
+    var(--visual-counter-scale-y)
+  ) translate(-50%, -50%);
+}
+
+.visual-overlay-scale-handle {
+  cursor: nwse-resize;
+}
+
+.visual-overlay-rotate-handle {
+  left: 50%;
+  top: var(--visual-rotate-offset);
+  background: #ffe0b8;
+  cursor: grab;
+}
+
+.visual-overlay-rotate-handle::after {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  width: 1px;
+  height: 17px;
+  background: #ffb65f;
+  content: '';
+}
+
+.visual-overlay-anchor-handle {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: crosshair;
+}
+
+.visual-overlay-anchor-handle::before,
+.visual-overlay-anchor-handle::after {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #fff;
+  content: '';
+  transform: translate(-50%, -50%);
+}
+
+.visual-overlay-anchor-handle::before {
+  width: 16px;
+  height: 2px;
+}
+
+.visual-overlay-anchor-handle::after {
+  width: 2px;
+  height: 16px;
+}
+
+.visual-overlay-crop-handle {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 0;
+}
+
+.visual-overlay-crop-handle::after {
+  position: absolute;
+  background: #ffde9e;
+  border-radius: 2px;
+  content: '';
+}
+
+.visual-overlay-crop-left,
+.visual-overlay-crop-right {
+  top: 50%;
+  transform: scale(
+    var(--visual-counter-scale-x),
+    var(--visual-counter-scale-y)
+  ) translate(-50%, -50%);
+  cursor: ew-resize;
+}
+
+.visual-overlay-crop-left {
+  left: 0;
+}
+
+.visual-overlay-crop-right {
+  left: 100%;
+}
+
+.visual-overlay-crop-left::after,
+.visual-overlay-crop-right::after {
+  inset: 3px 10px;
+}
+
+.visual-overlay-crop-top,
+.visual-overlay-crop-bottom {
+  left: 50%;
+  transform: scale(
+    var(--visual-counter-scale-x),
+    var(--visual-counter-scale-y)
+  ) translate(-50%, -50%);
+  cursor: ns-resize;
+}
+
+.visual-overlay-crop-top {
+  top: 0;
+}
+
+.visual-overlay-crop-bottom {
+  top: 100%;
+}
+
+.visual-overlay-crop-top::after,
+.visual-overlay-crop-bottom::after {
+  inset: 10px 3px;
+}
+
+.visual-overlay-control[data-locked='true'] .visual-overlay-handle,
+.visual-overlay-control[data-locked='true'] .visual-overlay-crop-handle {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.visual-overlay-toolbar {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgb(13 18 25 / 86%);
+  border: 1px solid #ffb65f;
+  border-radius: 5px;
+  pointer-events: auto;
+}
+
+.visual-overlay-toolbar button {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  color: #f4f7fb;
+  font-size: 11px;
+  font-weight: 700;
+  background: #27313d;
+  border: 1px solid #4b5968;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.visual-overlay-toolbar button[aria-pressed='true'] {
+  color: #241505;
+  background: #ffb65f;
+  border-color: #ffd39b;
+}
+
+.visual-overlay-toolbar button[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .text-overlay-controls {
   position: absolute;
   inset: 0;

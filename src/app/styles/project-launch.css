@@ -449,6 +449,21 @@
   cursor: pointer;
 }
 
+.project-file-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.project-file-choice-remembered {
+  background: #1c2b40;
+  border-style: solid;
+  border-color: #466d9f;
+}
+
+.project-file-choice-quick {
+  min-height: 78px;
+}
+
 .project-file-choice:hover:not(.is-disabled) {
   background: #22272e;
   border-color: #6d7b8d;

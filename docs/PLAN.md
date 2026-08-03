@@ -2141,6 +2141,113 @@ and Canvas2D painting path so supported appearance and timing stay aligned.
   PR #47 as `eba39b6`; the feature branch was retained and GitHub closed only
   Issue #33 as completed.
 
+## Post-MVP issue #34 — full clip Inspector
+
+**IMPLEMENTATION AND ACCEPTANCE COMPLETE (publication pending, 2026-08-03).**
+
+The Inspector becomes the single contextual authoring surface for static clip
+video and audio properties. Existing transform, opacity, and gain fields stay
+document-owned; schema 5 adds explicit crop, flip, scale-lock, audio-enable,
+stereo-balance, and integer-frame fade state. Preview and export must consume
+the same pure visual and audio plans. Keyframes and the advanced effects listed
+in child issues #43–#46 remain separate work.
+
+### Frozen semantics
+
+- Crop edges are normalized source fractions. Opposing edges may total at most
+  `0.99`; the remaining source rectangle keeps its natural scale and position
+  instead of stretching back to the uncropped size.
+- Scale is non-negative and bounded. New UI-authored values stay above zero;
+  schema-4 zero-scale clips remain invisible, while negative legacy scale is
+  migrated to its absolute value plus an explicit horizontal/vertical flip.
+- Enabling the aspect lock makes X authoritative for unequal scales. While
+  locked, editing either scale writes the same value to both axes.
+- Stereo balance is `[-1, 1]` with deterministic channel attenuation: center is
+  `[1, 1]`, full left is `[1, 0]`, and full right is `[0, 1]`. It does not
+  synthesize stereo for sources that do not provide it.
+- Fade durations are safe integer project frames, may overlap, and multiply
+  with clip gain and transition envelopes. Geometry edits clamp a fade that is
+  longer than the resulting clip rather than leaving an invalid document.
+- Program Monitor pointer movement may use ephemeral preview state, but release
+  commits exactly one document/history mutation. Unsupported render or audio
+  behavior fails explicitly; no Inspector choice is silently substituted.
+
+### Authoritative implementation slices
+
+- [x] **1 — document contract.** Advanced only the nested timeline schema from
+  4 to 5; keep outer project format 4. Add defaults, strict validation,
+  conservative migration, durable round-trip coverage, geometry-safe fades,
+  and atomic undoable visual/audio patch actions. The focused foundation gate
+  passes 218/218 tests; the complete suite passes 1,761/1,761 tests across 100
+  files, and build, oxlint, production audit, and diff checks are clean.
+- [x] **2 — shared visual rendering.** Teach the shared Canvas2D compositor to
+  apply normalized source crop and explicit flips with the existing transform,
+  anchor, rotation, opacity, z-order, transition, still, text, preview, and
+  export contracts. Source-rectangle and pixel-golden tests pin crop position,
+  natural scale, explicit flips, and procedural text clipping.
+- [x] **3 — shared audio rendering.** Extend the canonical audio mix plan with
+  enable, balance, and frame fades; apply the exact same gain evaluation in
+  live Web Audio playback and offline export, including transition overlap.
+  Disabled clips are silent, stereo balance attenuates channels without
+  synthesizing stereo, and overlapping fades multiply deterministically.
+- [x] **4 — contextual Inspector UI.** Replace the minimal panel with grouped,
+  resettable Video and Audio sections, immediate selected-clip updates, and
+  both halves for a linked A/V selection. Numeric inputs and sliders must have
+  accessible names, visible focus, bounded keyboard behavior, and honest
+  disabled states. Native sliders also have explicit Arrow, Home/End, and Page
+  key semantics; connected mono sources expose balance as unavailable.
+- [x] **5 — direct manipulation.** Generalize the Program Monitor overlay for
+  video move/scale/rotate/crop/anchor/flip workflows while retaining text
+  controls, fresh pointer-down bounds, touch behavior, keyboard alternatives,
+  and one commit per completed gesture.
+- [x] **6 — acceptance and closeout.** Cover domain mutations, migration,
+  selection switching, UI reset/keyboard behavior, shared preview/export
+  pixels and audio samples, save/reopen, linked A/V display, responsive layout,
+  real playback, and reopened export output. Run focused and full automation,
+  build, oxlint, production audit, diff checks, and in-app Chromium QA before
+  publication or issue closure.
+
+The matching live GitHub issue contains the same dependency-aware checklist so
+implementation and review can be evaluated against one contract.
+
+Slices 2–3 pass 117 focused tests. The complete suite passes 1,768/1,768 tests
+across 100 files; production build, oxlint, production audit, and diff checks
+are clean. The build retains only the existing Vite chunk-size advisory.
+
+Slice 4 passes 212 focused tests and the complete suite passes 1,771/1,771 tests
+across 100 files; production build, oxlint, production audit, and diff checks
+are clean. In-app Chromium confirmed immediate preview/reset behavior, visible
+focus, a contained Inspector scroller, no page overflow at 1280×720 or 720×800,
+and zero console warnings or errors. The build retains only the existing Vite
+chunk-size advisory.
+
+Slice 5 passes 87 focused tests and the complete suite passes 1,782/1,782 tests
+across 101 files; production build, oxlint, production audit, and diff checks
+are clean. In-app Chromium confirmed move, scale, rotate, crop, anchor, and flip
+controls for an offline durable visual descriptor; synchronized Inspector
+drafts; fixed-size targets at 100× scale; one exact pointer-up history entry;
+keyboard alternatives; and no page overflow or console errors at 1280×720 or
+720×800. The build retains only the existing Vite chunk-size advisory.
+
+Slice 6 adds explicit reusable-handle and ordinary-input choices for project
+open, media import, and offline relink. Remembered access remains an explicit
+user choice; Quick open/import/relink does not silently persist a handle or
+copy source bytes. Offline mono Inspector state now reads the durable asset
+descriptor so Balance remains honestly unavailable across recovery.
+
+The final focused gate passes 117/117 tests and the complete suite passes
+1,784/1,784 tests across 101 files. Production build, oxlint, production audit,
+and diff checks are clean; the build retains only the existing Vite chunk-size
+advisory. In-app Chromium quick-opened a validated portable project with linked
+video/audio clips, opened it offline, failed closed on a descriptor mismatch,
+then quick-relinked the real 2-second AVC/AAC fixture with one connected and
+zero skipped. It committed transform, locked scale, rotation, anchor, flip,
+opacity, crop, mono volume, and fade edits; played real decoded media; recovered
+all values in a fresh tab; rendered the exact MP4/H.264/AAC Browser-download
+selection and captured its completed MP4; kept both dual picker surfaces usable
+without horizontal overflow at 720 px; and emitted no console warnings or
+errors.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**

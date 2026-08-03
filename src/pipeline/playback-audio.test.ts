@@ -46,6 +46,7 @@ function makeClip(
     sourceStart?: number
     volume?: number
     linkGroupId?: string
+    audio?: Clip['audio']
   } = {},
 ): Clip {
   return {
@@ -70,6 +71,7 @@ function makeClip(
     opacity: 1,
     volume: options.volume ?? 1,
     effects: [],
+    ...(options.audio ? { audio: options.audio } : {}),
     ...(options.linkGroupId ? { linkGroupId: options.linkGroupId } : {}),
   }
 }
@@ -95,7 +97,7 @@ function makeTrack(
 
 function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc',
     name: 'Playback audio test',
     frameRate: F10,
@@ -165,7 +167,7 @@ function crossfadePlaybackFixture(
   videoTrack.transitions = [transition]
   return {
     doc: {
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'crossfade-playback',
       name: 'Crossfade playback',
       frameRate: F10,
@@ -408,16 +410,25 @@ interface FakeSourceNode {
   stop: ReturnType<typeof vi.fn>
 }
 
+interface FakeChannelNode {
+  connect: ReturnType<typeof vi.fn>
+  disconnect: ReturnType<typeof vi.fn>
+}
+
 function makeWebAudioHarness(state: AudioContextState): {
   context: AudioContext
   gains: FakeGainNode[]
   sources: FakeSourceNode[]
+  splitters: FakeChannelNode[]
+  mergers: FakeChannelNode[]
   analyser: {
     disconnect: ReturnType<typeof vi.fn>
   }
 } {
   const gains: FakeGainNode[] = []
   const sources: FakeSourceNode[] = []
+  const splitters: FakeChannelNode[] = []
+  const mergers: FakeChannelNode[] = []
   const makeGain = (): FakeGainNode => ({
     gain: {
       value: 1,
@@ -445,6 +456,16 @@ function makeWebAudioHarness(state: AudioContextState): {
       return gain
     }),
     createAnalyser: vi.fn(() => analyser),
+    createChannelSplitter: vi.fn(() => {
+      const splitter = { connect: vi.fn(), disconnect: vi.fn() }
+      splitters.push(splitter)
+      return splitter
+    }),
+    createChannelMerger: vi.fn(() => {
+      const merger = { connect: vi.fn(), disconnect: vi.fn() }
+      mergers.push(merger)
+      return merger
+    }),
     createBufferSource: vi.fn(() => {
       const source: FakeSourceNode = {
         buffer: null,
@@ -458,7 +479,7 @@ function makeWebAudioHarness(state: AudioContextState): {
       return source
     }),
   } as unknown as AudioContext
-  return { context, gains, sources, analyser }
+  return { context, gains, sources, splitters, mergers, analyser }
 }
 
 describe('startTimelineAudioPlayback scheduling', () => {
@@ -511,6 +532,73 @@ describe('startTimelineAudioPlayback scheduling', () => {
     expect(scheduledMid.offset).toBeCloseTo(0.5)
     expect(scheduledMid.duration).toBeCloseTo(0.5)
     expect(scheduledMid.volume).toBe(0.25)
+
+    await session.stop()
+  })
+
+  test('splits authored fade boundaries and carries balance to the output', async () => {
+    const doc = makeDoc([
+      makeTrack('A1', 'audio', [
+        makeClip('shaped', 0, 10, {
+          audio: {
+            enabled: true,
+            balance: -0.25,
+            fadeInFrames: 2,
+            fadeOutFrames: 2,
+          },
+        }),
+      ]),
+    ], 10)
+    const h = makePlaybackHarness({ lookaheadSeconds: 0.5 })
+    h.media.enqueue(
+      'asset-shaped',
+      makeCursor([decodedBuffer('shaped', 0, 1)]).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.output.scheduled).toHaveLength(2)
+    expect(h.output.scheduled.map((event) => ({
+      start: event.timelineStartTime,
+      duration: event.duration,
+      clipStart: event.clipTimelineStartTime,
+      clipEnd: event.clipTimelineEndTime,
+      fadeInEnd: event.fadeInEndTime,
+      fadeOutStart: event.fadeOutStartTime,
+      balance: event.balance,
+      leftGain: event.leftGain,
+      rightGain: event.rightGain,
+    }))).toEqual([
+      {
+        start: 0,
+        duration: 0.2,
+        clipStart: 0,
+        clipEnd: 1,
+        fadeInEnd: 0.2,
+        fadeOutStart: 0.8,
+        balance: -0.25,
+        leftGain: 1,
+        rightGain: 0.75,
+      },
+      {
+        start: 0.2,
+        duration: 0.3,
+        clipStart: 0,
+        clipEnd: 1,
+        fadeInEnd: 0.2,
+        fadeOutStart: 0.8,
+        balance: -0.25,
+        leftGain: 1,
+        rightGain: 0.75,
+      },
+    ])
 
     await session.stop()
   })
@@ -658,7 +746,7 @@ describe('startTimelineAudioPlayback scheduling', () => {
     await session.stop()
   })
 
-  test('fingerprints transition, link, curve, bounds, volume, mute, and solo facts', () => {
+  test('fingerprints transition, link, curve, bounds, volume, audio, mute, and solo facts', () => {
     const fixture = crossfadePlaybackFixture('linear')
     const baseline = audioPlaybackPlanKey(fixture.doc, fixture.catalog)
     const variants: TimelineDoc[] = []
@@ -670,6 +758,14 @@ describe('startTimelineAudioPlayback scheduling', () => {
     mutate((doc) => { doc.tracks[0].transitions[0].audio.curve = 'equal-power' })
     mutate((doc) => { delete doc.tracks[1].clips[0].linkGroupId })
     mutate((doc) => { doc.tracks[1].clips[0].volume = 0.5 })
+    mutate((doc) => {
+      doc.tracks[1].clips[0].audio = {
+        enabled: true,
+        balance: 0.25,
+        fadeInFrames: 2,
+        fadeOutFrames: 3,
+      }
+    })
     mutate((doc) => { doc.tracks[1].muted = true })
     mutate((doc) => { doc.tracks[1].solo = true })
     for (const variant of variants) {
@@ -687,7 +783,7 @@ describe('startTimelineAudioPlayback scheduling', () => {
     expect(audioPlaybackPlanKey(fixture.doc, changedBounds)).not.toBe(baseline)
   })
 
-  test('uses canonical solo and mute selection and skips zero volume', async () => {
+  test('uses canonical selection and skips muted, disabled, and zero-volume clips', async () => {
     const doc = makeDoc([
       makeTrack('A-normal', 'audio', [
         makeClip('normal', 0, 10, { assetId: 'asset-normal' }),
@@ -716,6 +812,22 @@ describe('startTimelineAudioPlayback scheduling', () => {
           makeClip('live', 0, 10, {
             assetId: 'asset-live',
             volume: 0.4,
+          }),
+        ],
+        { solo: true },
+      ),
+      makeTrack(
+        'A-disabled-solo',
+        'audio',
+        [
+          makeClip('disabled', 0, 10, {
+            assetId: 'asset-disabled',
+            audio: {
+              enabled: false,
+              balance: 0,
+              fadeInFrames: 0,
+              fadeOutFrames: 0,
+            },
           }),
         ],
         { solo: true },
@@ -1306,6 +1418,65 @@ describe('createWebAudioPlaybackOutput ownership', () => {
     expect(createEqualPowerPlaybackCurve('from', 0, 1, 0.8)).toEqual(curve)
 
     output.stop()
+  })
+
+  test('multiplies overlapping fades and routes stereo balance explicitly', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const buffer = { duration: 1, numberOfChannels: 2 } as AudioBuffer
+
+    output.schedule({
+      clipId: 'faded-balanced',
+      buffer,
+      timelineStartTime: 0,
+      when: 10,
+      offset: 0,
+      duration: 1,
+      volume: 0.8,
+      envelope: null,
+      clipTimelineStartTime: 0,
+      clipTimelineEndTime: 1,
+      fadeInEndTime: 0.75,
+      fadeOutStartTime: 0.25,
+      balance: 0.5,
+      leftGain: 0.5,
+      rightGain: 1,
+    })
+
+    const envelopeGain = h.gains[1]
+    const curveCall = envelopeGain.gain.setValueCurveAtTime.mock.calls[0]
+    const curve = curveCall?.[0] as Float32Array
+    expect(curveCall?.[1]).toBe(10)
+    expect(curveCall?.[2]).toBe(1)
+    expect(curve).toHaveLength(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+    expect(curve[0]).toBe(0)
+    expect(curve[32]).toBeCloseTo(0.8 / 3)
+    expect(curve[64]).toBeCloseTo(0.8 * 4 / 9)
+    expect(curve[96]).toBeCloseTo(0.8 / 3)
+    expect(curve.at(-1)).toBe(0)
+
+    expect(h.splitters).toHaveLength(1)
+    expect(h.mergers).toHaveLength(1)
+    expect(envelopeGain.connect).toHaveBeenCalledWith(h.splitters[0])
+    expect(h.splitters[0].connect).toHaveBeenNthCalledWith(
+      1,
+      h.gains[2],
+      0,
+    )
+    expect(h.splitters[0].connect).toHaveBeenNthCalledWith(
+      2,
+      h.gains[3],
+      1,
+    )
+    expect(h.gains[2].gain.value).toBe(0.5)
+    expect(h.gains[3].gain.value).toBe(1)
+    expect(h.gains[2].connect).toHaveBeenCalledWith(h.mergers[0], 0, 0)
+    expect(h.gains[3].connect).toHaveBeenCalledWith(h.mergers[0], 0, 1)
+
+    h.sources[0].onended?.()
+    output.stop()
+    expect(h.splitters[0].disconnect).toHaveBeenCalledOnce()
+    expect(h.mergers[0].disconnect).toHaveBeenCalledOnce()
   })
 
   test('ramps in once and synchronously cleans a suspended context', () => {

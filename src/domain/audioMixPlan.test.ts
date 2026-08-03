@@ -118,7 +118,7 @@ function fixture(options: {
   }
   return {
     doc: {
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'audio-plan-doc',
       name: 'Audio plan',
       frameRate: { num: 30, den: 1 },
@@ -156,6 +156,11 @@ describe('timeline audio mix plan', () => {
         sourceStartFrame: 30,
         sourceEndFrame: 43,
         volume: 1,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        fadeInFrames: 0,
+        fadeOutFrames: 0,
         envelopes: [{
           transitionId: 'crossfade',
           startFrame: 18,
@@ -173,6 +178,11 @@ describe('timeline audio mix plan', () => {
         sourceStartFrame: 48,
         sourceEndFrame: 60,
         volume: 1,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        fadeInFrames: 0,
+        fadeOutFrames: 0,
         envelopes: [{
           transitionId: 'crossfade',
           startFrame: 18,
@@ -224,6 +234,33 @@ describe('timeline audio mix plan', () => {
         timelineEndFrame: 23,
         volume: 0.35,
         envelopes: [expect.objectContaining({ role: 'from' })],
+      }),
+    ])
+  })
+
+  test('excludes disabled clips and plans deterministic balance plus authored fades', () => {
+    const input = fixture()
+    input.doc.tracks[1].clips[0].audio = {
+      enabled: true,
+      balance: -0.25,
+      fadeInFrames: 3,
+      fadeOutFrames: 4,
+    }
+    input.doc.tracks[2].clips[0].audio = {
+      enabled: false,
+      balance: 0,
+      fadeInFrames: 0,
+      fadeOutFrames: 0,
+    }
+
+    expect(createTimelineAudioMixPlan(input.doc, input.catalog).clips).toEqual([
+      expect.objectContaining({
+        clipId: 'audio-from',
+        balance: -0.25,
+        leftGain: 1,
+        rightGain: 0.75,
+        fadeInFrames: 3,
+        fadeOutFrames: 4,
       }),
     ])
   })

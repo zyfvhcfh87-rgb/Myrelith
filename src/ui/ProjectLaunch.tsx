@@ -432,6 +432,10 @@ function ResumeProjectScreen() {
   const missingCount = candidate?.assets.filter(
     (asset) => asset.status === 'missing',
   ).length ?? 0
+  const reusableChoiceTarget = candidate ? 'another project file' : '.webcut'
+  const ordinaryProjectChoice = projectHandlePickerAvailable
+    ? `Quick open ${reusableChoiceTarget}`
+    : candidate ? 'Choose another project file' : 'Choose a .webcut file'
 
   return (
     <LaunchFrame>
@@ -448,24 +452,43 @@ function ResumeProjectScreen() {
       </div>
 
       <div className="project-resume-body">
-        {projectHandlePickerAvailable ? (
-          <button
-            className={`project-file-choice${busy ? ' is-disabled' : ''}`}
-            aria-label="Choose a WebCut project file"
-            type="button"
-            disabled={busy}
-            onClick={() => void chooseProjectFile()}
+        <div
+          className="project-file-actions"
+          role="group"
+          aria-label="Project file choices"
+        >
+          {projectHandlePickerAvailable ? (
+            <button
+              className={`project-file-choice project-file-choice-remembered${
+                busy ? ' is-disabled' : ''
+              }`}
+              aria-label="Choose & remember a WebCut project file"
+              type="button"
+              disabled={busy}
+              onClick={() => void chooseProjectFile()}
+            >
+              <strong>Choose &amp; remember {reusableChoiceTarget}</strong>
+              <span>
+                Add the validated project to Recent for direct reopening.
+              </span>
+            </button>
+          ) : null}
+          <label
+            className={`project-file-choice${projectHandlePickerAvailable
+              ? ' project-file-choice-quick'
+              : ''}${busy ? ' is-disabled' : ''}`}
           >
-            <strong>{candidate ? 'Choose another project file' : 'Choose a .webcut file'}</strong>
-            <span>Only a validated portable WebCut project will continue.</span>
-          </button>
-        ) : (
-          <label className={`project-file-choice${busy ? ' is-disabled' : ''}`}>
-            <strong>{candidate ? 'Choose another project file' : 'Choose a .webcut file'}</strong>
-            <span>Only a validated portable WebCut project will continue.</span>
+            <strong>{ordinaryProjectChoice}</strong>
+            <span>
+              {projectHandlePickerAvailable
+                ? 'Open once without remembering a browser file handle.'
+                : 'Only a validated portable WebCut project will continue.'}
+            </span>
             <input
               className="project-file-input"
-              aria-label="Choose a WebCut project file"
+              aria-label={projectHandlePickerAvailable
+                ? 'Quick open a WebCut project file'
+                : 'Choose a WebCut project file'}
               type="file"
               accept=".webcut"
               disabled={busy}
@@ -476,7 +499,7 @@ function ResumeProjectScreen() {
               }}
             />
           </label>
-        )}
+        </div>
 
         {candidate && (
           <section className="project-candidate" aria-label="Project summary">

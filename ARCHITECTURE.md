@@ -280,7 +280,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   ({clipId, kind, deltaFrames,
   linkGroupId?} | null — same live-preview contract for trim/ripple/
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
-  ghost a linked gesture live. `ui/timeline/useClipGestureSession.ts` is the
+  ghost a linked gesture live. `textOverlayPreview` and `clipVisualPreview`
+  hold rAF-coalesced Program Monitor drafts for procedural text geometry and
+  visual-media transform/settings respectively. `app/previewController.ts`
+  projects those drafts into the immutable document snapshot sent to the
+  shared preview renderer; neither enters document history until the gesture
+  owner dispatches its single pointerup mutation.
+  `ui/timeline/useClipGestureSession.ts` is the
   single owner of clip pointer/keyboard routing, pointer capture, cancellation,
   rAF-coalesced previews, and the one pointerup document dispatch. At
   pointerdown it delegates to pure `ui/timeline/gestureBounds.ts`, using one

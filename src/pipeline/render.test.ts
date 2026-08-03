@@ -66,7 +66,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -155,11 +155,11 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
     measureText: (text) => ({ width: text.length * 20 }),
     fillText: (text, x, y) => log.push({ name: 'fillText', args: [text, x, y] }),
     strokeText: (text, x, y) => log.push({ name: 'strokeText', args: [text, x, y] }),
-    drawImage: (image, dx, dy) => {
+    drawImage: (image, ...args) => {
       if (opts.throwOn === image) {
         throw new DOMException('bitmap was closed', 'InvalidStateError')
       }
-      log.push({ name: 'drawImage', args: [image, dx, dy] })
+      log.push({ name: 'drawImage', args: [image, ...args] })
     },
   }
   const ops = (name: string) => log.filter((op) => op.name === name)
@@ -512,6 +512,63 @@ describe('compositeFrame — transform & opacity', () => {
       .map((op) => op.name)
       .filter((n) => n === 'translate' || n === 'rotate' || n === 'scale')
     expect(order).toEqual(['translate', 'rotate', 'scale'])
+  })
+
+  test('crop uses intrinsic source pixels without stretching and flips around the anchor', async () => {
+    const clip = makeClip('cropped', 0, 10, {
+      assetId: 'A',
+      transform: {
+        x: 0,
+        y: 0,
+        scaleX: 2,
+        scaleY: 0.5,
+        rotation: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      },
+      visual: {
+        crop: { left: 0.1, right: 0.15, top: 0.2, bottom: 0.2 },
+        flipHorizontal: true,
+        flipVertical: false,
+        scaleLocked: false,
+      },
+    })
+    const bitmap = fakeBitmap(800, 600)
+    const { ctx, ops } = makeCtx()
+    const { source } = makeSource({ 'A@0': bitmap })
+
+    await compositeFrame(makeDoc([makeTrack('V1', 'video', [clip])]), 0, ctx, source)
+
+    expect(ops('translate')[0].args).toEqual([960, 540])
+    expect(ops('scale')[0].args).toEqual([-2, 0.5])
+    const drawArgs = ops('drawImage')[0].args
+    expect(drawArgs.slice(0, 4)).toEqual([bitmap, 80, 120, 600])
+    expect(drawArgs[4]).toBeCloseTo(360, 10)
+    expect(drawArgs.slice(5, 8)).toEqual([-320, -180, 600])
+    expect(drawArgs[8]).toBeCloseTo(360, 10)
+  })
+
+  test('text crop and flips use the same normalized visual contract without media', async () => {
+    const text = defaultTextProps(1920, 1080)
+    text.boxWidthPx = 1000
+    text.boxHeightPx = 400
+    const clip = makeClip('cropped-text', 0, 10, {
+      text,
+      visual: {
+        crop: { left: 0.1, right: 0.2, top: 0.25, bottom: 0.15 },
+        flipHorizontal: false,
+        flipVertical: true,
+        scaleLocked: true,
+      },
+    })
+    const { ctx, ops } = makeCtx()
+    const { source, requests } = makeSource()
+
+    await compositeFrame(makeDoc([makeTrack('V1', 'video', [clip])]), 0, ctx, source)
+
+    expect(requests).toEqual([])
+    expect(ops('scale')[0].args).toEqual([1, -1])
+    expect(ops('rect')[0].args).toEqual([100, 100, 700, 240])
   })
 
   test('per-clip opacity is set (clamped to 1) inside save/restore', async () => {

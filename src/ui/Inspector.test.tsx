@@ -10,8 +10,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import { defaultClipVisualSettings } from '../domain/clipInspector'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 import { initSelectionReconciliation } from '../app/selectionReconciliationController'
 import {
@@ -42,7 +45,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -92,6 +95,7 @@ beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   resetTransportStoreForTest()
   resetDocumentStoreForTest(makeDoc())
+  useMediaStore.getState().clearAssets()
   warnSpy.mockClear()
 })
 
@@ -112,6 +116,193 @@ describe('Inspector', () => {
     expect(screen.getByTestId('inspector-x')).toHaveValue(0)
     expect(screen.getByTestId('inspector-scale-x')).toHaveValue(1)
     expect(screen.getByTestId('inspector-opacity')).toHaveValue(1)
+  })
+
+  test('mirrors the ephemeral canvas geometry without committing document history', () => {
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    act(() => transport().setClipVisualPreview({
+      clipId: 'clipA',
+      transform: { ...clipA().transform, x: 88, rotation: 12 },
+      visual: {
+        ...defaultClipVisualSettings(),
+        crop: { left: 0.25, right: 0, top: 0, bottom: 0 },
+      },
+    }))
+
+    expect(screen.getByTestId('inspector-x')).toHaveValue(88)
+    expect(screen.getByTestId('inspector-rotation')).toHaveValue(12)
+    expect(screen.getByTestId('inspector-crop-left')).toHaveValue(25)
+    expect(clipA().transform.x).toBe(0)
+    expect(doc().past).toHaveLength(0)
+
+    act(() => transport().setClipVisualPreview(null))
+    expect(screen.getByTestId('inspector-x')).toHaveValue(0)
+  })
+
+  test('edits and resets the complete static video surface', () => {
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    fireEvent.change(screen.getByTestId('inspector-scale-x'), {
+      target: { value: '2' },
+    })
+    fireEvent.keyDown(screen.getByTestId('inspector-scale-x'), { key: 'Enter' })
+    expect(clipA().transform.scaleX).toBe(2)
+    expect(clipA().transform.scaleY).toBe(2)
+
+    fireEvent.click(screen.getByTestId('inspector-scale-lock'))
+    fireEvent.change(screen.getByTestId('inspector-scale-y'), {
+      target: { value: '3' },
+    })
+    fireEvent.keyDown(screen.getByTestId('inspector-scale-y'), { key: 'Enter' })
+    expect(clipA().transform.scaleX).toBe(2)
+    expect(clipA().transform.scaleY).toBe(3)
+
+    fireEvent.change(screen.getByTestId('inspector-anchor-x-slider'), {
+      target: { value: '25' },
+    })
+    fireEvent.click(screen.getByTestId('inspector-flip-horizontal'))
+    const opacitySlider = screen.getByTestId('inspector-opacity-slider')
+    fireEvent.change(opacitySlider, {
+      target: { value: '0.4' },
+    })
+    fireEvent.keyDown(opacitySlider, { key: 'ArrowRight' })
+    expect(clipA().opacity).toBe(0.41)
+    fireEvent.keyDown(opacitySlider, { key: 'Home' })
+    expect(clipA().opacity).toBe(0)
+    fireEvent.keyDown(opacitySlider, { key: 'End' })
+    expect(clipA().opacity).toBe(1)
+    fireEvent.change(opacitySlider, { target: { value: '0.4' } })
+    fireEvent.change(screen.getByTestId('inspector-crop-left-slider'), {
+      target: { value: '33' },
+    })
+
+    expect(clipA()).toMatchObject({
+      transform: { anchorX: 0.25 },
+      opacity: 0.4,
+      visual: {
+        crop: { left: 0.33 },
+        flipHorizontal: true,
+        scaleLocked: false,
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset video transform' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reset video opacity' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reset video crop' }))
+    expect(clipA()).toMatchObject({
+      transform: {
+        x: 0,
+        y: 0,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      },
+      opacity: 1,
+      visual: {
+        crop: { left: 0, right: 0, top: 0, bottom: 0 },
+        flipHorizontal: false,
+        flipVertical: false,
+        scaleLocked: true,
+      },
+    })
+  })
+
+  test('edits, disables, and resets the complete audio surface', () => {
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+
+    fireEvent.change(screen.getByTestId('inspector-volume-slider'), {
+      target: { value: '1.5' },
+    })
+    fireEvent.change(screen.getByTestId('inspector-balance-slider'), {
+      target: { value: '0.35' },
+    })
+    fireEvent.change(screen.getByTestId('inspector-fade-in'), {
+      target: { value: '12' },
+    })
+    fireEvent.keyDown(screen.getByTestId('inspector-fade-in'), { key: 'Enter' })
+    fireEvent.change(screen.getByTestId('inspector-fade-out'), {
+      target: { value: '15' },
+    })
+    fireEvent.keyDown(screen.getByTestId('inspector-fade-out'), { key: 'Enter' })
+
+    const audioClip = () => doc().doc.tracks[1].clips[0]
+    expect(audioClip()).toMatchObject({
+      volume: 1.5,
+      audio: {
+        enabled: true,
+        balance: 0.35,
+        fadeInFrames: 12,
+        fadeOutFrames: 15,
+      },
+    })
+
+    fireEvent.click(screen.getByTestId('inspector-audio-enabled'))
+    expect(audioClip().audio?.enabled).toBe(false)
+    expect(screen.getByTestId('inspector-volume')).toBeDisabled()
+    expect(screen.getByTestId('inspector-balance-slider')).toBeDisabled()
+    expect(screen.getByTestId('inspector-fade-in')).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset audio settings' }))
+    expect(audioClip()).toMatchObject({
+      volume: 1,
+      audio: {
+        enabled: true,
+        balance: 0,
+        fadeInFrames: 0,
+        fadeOutFrames: 0,
+      },
+    })
+  })
+
+  test('keeps balance disabled for an offline mono source descriptor', () => {
+    const descriptor: PortableAssetDescriptor = {
+      id: 'asset-1',
+      fileName: 'source.mp4',
+      mimeType: 'video/mp4',
+      size: 1_024,
+      lastModified: 0,
+      kind: 'video',
+      durationMicroseconds: 3_000_000,
+      sourceBounds: {
+        video: { status: 'unknown' },
+        audio: { status: 'unknown' },
+      },
+      nativeFrameRate: { num: 30, den: 1 },
+      width: 1_920,
+      height: 1_080,
+      hasAudio: true,
+      audioSampleRate: 48_000,
+      audioChannels: 1,
+    }
+    useMediaStore.setState({
+      descriptors: new Map([[descriptor.id, descriptor]]),
+    })
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+
+    expect(screen.getByTestId('inspector-balance')).toBeDisabled()
+    expect(screen.getByText(
+      'This source is mono, so stereo balance is unavailable.',
+    )).toBeInTheDocument()
+  })
+
+  test('shows both video and audio surfaces for either member of a linked pair', () => {
+    resetDocumentStoreForTest(makeLinkedFixture())
+    transport().setSelectedClip('clipLinkedA')
+    render(<Inspector />)
+
+    expect(screen.getByText('Video · clipV.mp4')).toBeInTheDocument()
+    expect(screen.getByText('Audio · clipLinkedA.mp4')).toBeInTheDocument()
+    expect(screen.getByTestId('inspector-x')).toBeEnabled()
+    expect(screen.getByTestId('inspector-volume')).toBeEnabled()
+    expect(screen.getByTestId('inspector-crop-top-slider')).toBeEnabled()
+    expect(screen.getByTestId('inspector-fade-out')).toBeEnabled()
   })
 
   test('follows the promoted primary when the selected clip is deleted', () => {
@@ -188,7 +379,7 @@ describe('Inspector', () => {
     expect(doc().past).toHaveLength(0)
   })
 
-  test('typed opacity is clamped by the domain op before entering the doc', () => {
+  test('typed opacity is clamped without adding history when the value stays unchanged', () => {
     transport().setSelectedClip('clipA')
     render(<Inspector />)
     const opacity = screen.getByTestId('inspector-opacity')
@@ -196,7 +387,7 @@ describe('Inspector', () => {
     fireEvent.change(opacity, { target: { value: '5' } })
     fireEvent.keyDown(opacity, { key: 'Enter' })
     expect(clipA().opacity).toBe(1) // clamped
-    expect(doc().past).toHaveLength(1)
+    expect(doc().past).toHaveLength(0)
   })
 
   test('fields resync on undo and when switching clips', () => {

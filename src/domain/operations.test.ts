@@ -33,7 +33,9 @@ import {
   slipClip,
   splitClipAtFrame,
   trimClip,
+  updateClipAudio,
   updateClipTransform,
+  updateClipVisual,
 } from './operations'
 import { rangeEnd } from './time'
 
@@ -84,7 +86,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -119,7 +121,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -875,7 +877,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },
@@ -1440,6 +1442,117 @@ describe('updateClipTransform', () => {
     expect(updateClipTransform(doc, 'nope', { opacity: 1 })).toBe(doc)
     expect(updateClipTransform(doc, 'clipE', { opacity: 1 })).toBe(doc)
     expect(warnSpy).toHaveBeenCalledTimes(3)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Issue #34 clip Inspector mutations                                  */
+/* ------------------------------------------------------------------ */
+
+describe('updateClipVisual', () => {
+  test('commits transform, opacity, crop, flips, and scale lock atomically', () => {
+    const doc = makeDoc()
+    const out = updateClipVisual(doc, 'clipA', {
+      transform: { x: 32, scaleX: 1.5 },
+      opacity: 0.65,
+      visual: {
+        crop: { left: 0.1, top: 0.2 },
+        flipHorizontal: true,
+      },
+    })
+    const clip = clipIn(out, 'V1', 'clipA')
+
+    expect(clip.transform).toMatchObject({ x: 32, scaleX: 1.5, scaleY: 1.5 })
+    expect(clip.opacity).toBe(0.65)
+    expect(clip.visual).toEqual({
+      crop: { left: 0.1, right: 0, top: 0.2, bottom: 0 },
+      flipHorizontal: true,
+      flipVertical: false,
+      scaleLocked: true,
+    })
+    expect(out.tracks[1]).toBe(doc.tracks[1])
+  })
+
+  test('locking unequal scales makes X authoritative, then either scale edits both', () => {
+    const doc = updateClipVisual(makeDoc(), 'clipA', {
+      transform: { scaleX: 2, scaleY: 3 },
+      visual: { scaleLocked: false },
+    })
+    const locked = updateClipVisual(doc, 'clipA', { visual: { scaleLocked: true } })
+    expect(clipIn(locked, 'V1', 'clipA').transform).toMatchObject({ scaleX: 2, scaleY: 2 })
+
+    const resized = updateClipVisual(locked, 'clipA', { transform: { scaleY: 4 } })
+    expect(clipIn(resized, 'V1', 'clipA').transform).toMatchObject({ scaleX: 4, scaleY: 4 })
+  })
+
+  test('rejects invalid crop, scale, anchors, unknown nested fields, and locked tracks', () => {
+    const doc = makeDoc()
+    expect(updateClipVisual(doc, 'clipA', { visual: { crop: { left: 0.6, right: 0.5 } } })).toBe(doc)
+    expect(updateClipVisual(doc, 'clipA', { transform: { scaleX: -1 } })).toBe(doc)
+    expect(updateClipVisual(doc, 'clipA', { transform: { anchorY: 1.1 } })).toBe(doc)
+    expect(updateClipVisual(doc, 'clipA', {
+      visual: { crop: { diagonal: 0.2 } as never },
+    })).toBe(doc)
+    expect(updateClipVisual(doc, 'clipE', { opacity: 0.5 })).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(5)
+  })
+
+  test('an idempotent patch is a same-reference no-op', () => {
+    const doc = makeDoc()
+    expect(updateClipVisual(doc, 'clipA', {
+      transform: { x: 0 },
+      opacity: 1,
+      visual: { flipHorizontal: false },
+    })).toBe(doc)
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('updateClipAudio', () => {
+  test('commits gain, enabled state, balance, and frame fades atomically', () => {
+    const doc = makeDoc()
+    const out = updateClipAudio(doc, 'clipD', {
+      volume: 0.75,
+      audio: { enabled: false, balance: 0.4, fadeInFrames: 12, fadeOutFrames: 18 },
+    })
+    const clip = clipIn(out, 'A1', 'clipD')
+
+    expect(clip.volume).toBe(0.75)
+    expect(clip.audio).toEqual({
+      enabled: false,
+      balance: 0.4,
+      fadeInFrames: 12,
+      fadeOutFrames: 18,
+    })
+    expect(out.tracks[0]).toBe(doc.tracks[0])
+  })
+
+  test('rejects invalid balance or fades and preserves idempotent history inputs', () => {
+    const doc = makeDoc()
+    expect(updateClipAudio(doc, 'clipD', { audio: { balance: 1.1 } })).toBe(doc)
+    expect(updateClipAudio(doc, 'clipD', { audio: { fadeInFrames: 81 } })).toBe(doc)
+    expect(updateClipAudio(doc, 'clipD', { audio: { fadeOutFrames: 0.5 } })).toBe(doc)
+    expect(updateClipAudio(doc, 'clipE', { audio: { enabled: false } })).toBe(doc)
+    expect(warnSpy).toHaveBeenCalledTimes(4)
+
+    const unchanged = updateClipAudio(doc, 'clipD', {
+      volume: 1,
+      audio: { enabled: true, balance: 0, fadeInFrames: 0, fadeOutFrames: 0 },
+    })
+    expect(unchanged).toBe(doc)
+  })
+
+  test('duration edits clamp authored fades on both sides of a split', () => {
+    const authored = updateClipAudio(makeDoc(), 'clipA', {
+      audio: { fadeInFrames: 90, fadeOutFrames: 80 },
+    })
+    const out = splitClipAtFrame(authored, 'clipA', 40)
+    const [left, right] = out.tracks[0].clips
+
+    expect(left.timelineRange.durationFrames).toBe(40)
+    expect(left.audio).toMatchObject({ fadeInFrames: 40, fadeOutFrames: 40 })
+    expect(right.timelineRange.durationFrames).toBe(60)
+    expect(right.audio).toMatchObject({ fadeInFrames: 60, fadeOutFrames: 60 })
   })
 })
 

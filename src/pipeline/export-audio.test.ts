@@ -40,6 +40,7 @@ function makeClip(
     volume?: number
     assetId?: string
     linkGroupId?: string
+    audio?: Clip['audio']
   } = {},
 ): Clip {
   return {
@@ -63,6 +64,7 @@ function makeClip(
     },
     opacity: 1,
     volume: options.volume ?? 1,
+    ...(options.audio === undefined ? {} : { audio: options.audio }),
     effects: [],
     ...(options.linkGroupId ? { linkGroupId: options.linkGroupId } : {}),
   }
@@ -93,7 +95,7 @@ function makeDoc(
   audioSampleRate = 48_000,
 ): TimelineDoc {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc',
     name: 'Audio export test',
     frameRate,
@@ -242,7 +244,7 @@ function crossfadeFixture(options: {
         options.frameRate ?? { num: 1, den: 1 },
         options.audioSampleRate ?? 4_096,
       ),
-      schemaVersion: 4,
+      schemaVersion: 5,
     },
     catalog: new Map(
       [...new Set(assetIds)].map((assetId) => [assetId, exactBounds()]),
@@ -534,6 +536,37 @@ describe('TimelineAudioMixer selection and mapping', () => {
       expect(block.channels[1][0]).toBe(1)
       expect(block.channels[1].at(-1)).toBe(1)
     }
+    await mixer.close()
+  })
+
+  test('multiplies frame fades and stereo balance on the absolute sample grid', async () => {
+    const clip = makeClip('shaped', 0, 2, {
+      audio: {
+        enabled: true,
+        balance: 0.5,
+        fadeInFrames: 1,
+        fadeOutFrames: 1,
+      },
+    })
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], { num: 1, den: 1 }, 4)
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const observed: number[][][] = []
+
+    await mixer.writeFrame(0, async (block) => {
+      observed.push(captureBlock(block).channels)
+    })
+    await mixer.writeFrame(1, async (block) => {
+      observed.push(captureBlock(block).channels)
+    })
+
+    expect(observed[0][0]).toEqual([0, 0.125, 0.25, 0.375])
+    expect(observed[0][1]).toEqual([0, 0.25, 0.5, 0.75])
+    expect(observed[1][0]).toEqual([0.5, 0.375, 0.25, 0.125])
+    expect(observed[1][1]).toEqual([1, 0.75, 0.5, 0.25])
     await mixer.close()
   })
 

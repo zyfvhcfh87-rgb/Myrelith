@@ -402,14 +402,34 @@ describe('MediaPool presentation', () => {
     expect(useMediaStore.getState().assets.size).toBe(0)
   })
 
-  test('supporting browsers import through the reusable-handle picker', () => {
+  test('supporting browsers offer remembered and quick import paths', () => {
     vi.mocked(canRememberImportedMedia).mockReturnValue(true)
     render(<MediaPool />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Import' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Import & remember' }))
 
     expect(chooseMediaForImport).toHaveBeenCalledOnce()
-    expect(screen.queryByLabelText('Import media')).not.toBeInTheDocument()
+    const quickInput = screen.getByLabelText('Quick import media')
+    const file = new File(['video'], 'fresh.mp4', { type: 'video/mp4' })
+    fireEvent.change(quickInput, { target: { files: [file] } })
+
+    expect(quickInput).toHaveAttribute('multiple')
+    expect(importMediaFiles).toHaveBeenCalledWith([file])
+  })
+
+  test('disables every import path while another import is active', () => {
+    vi.mocked(canRememberImportedMedia).mockReturnValue(true)
+    useMediaImportStore.setState({
+      ...INITIAL_MEDIA_IMPORT_STATE,
+      phase: 'analyzing',
+      fileName: 'busy.mp4',
+    })
+    render(<MediaPool />)
+
+    expect(screen.getByRole('button', {
+      name: 'Import & remember',
+    })).toBeDisabled()
+    expect(screen.getByLabelText('Quick import media')).toBeDisabled()
   })
 
   test('shows a placeholder while preserving ready metadata and drag state', () => {
@@ -624,8 +644,16 @@ describe('MediaPool presentation', () => {
     })
     expect(setData).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Relink beach.mp4' }))
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Relink & remember beach.mp4',
+    }))
     expect(chooseActiveAssetMedia).toHaveBeenCalledWith('asset-9')
+
+    const file = new File(['source'], 'beach.mp4', { type: 'video/mp4' })
+    fireEvent.change(screen.getByLabelText('Quick relink beach.mp4'), {
+      target: { files: [file] },
+    })
+    expect(connectActiveAssetMedia).toHaveBeenCalledWith('asset-9', file)
   })
 
   test('falls back to an ordinary per-source file input', () => {
@@ -991,7 +1019,9 @@ describe('MediaPool presentation', () => {
     expect(screen.queryByRole('button', {
       name: 'Retry compatibility check for beach.mp4',
     })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Relink beach.mp4' }))
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Relink & remember beach.mp4',
+    }))
     expect(chooseActiveAssetMedia).toHaveBeenCalledWith('asset-9')
   })
 

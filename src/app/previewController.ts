@@ -54,6 +54,7 @@ import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import {
   useTransportStore,
+  type ClipVisualPreview,
   type TextOverlayPreview,
 } from '../state/transportStore'
 import type { RenderMode } from '../workers/render-protocol'
@@ -174,10 +175,40 @@ export function documentWithTextOverlayPreview(
   return doc
 }
 
+/** Apply a media geometry draft without touching the durable document. */
+export function documentWithClipVisualPreview(
+  doc: TimelineDoc,
+  preview: ClipVisualPreview | null,
+): TimelineDoc {
+  if (!preview) return doc
+  for (let trackIndex = 0; trackIndex < doc.tracks.length; trackIndex++) {
+    const track = doc.tracks[trackIndex]
+    const clipIndex = track.clips.findIndex((clip) => clip.id === preview.clipId)
+    if (clipIndex < 0) continue
+    const clips = track.clips.slice()
+    clips[clipIndex] = {
+      ...track.clips[clipIndex],
+      transform: { ...preview.transform },
+      visual: {
+        ...preview.visual,
+        crop: { ...preview.visual.crop },
+      },
+    }
+    const tracks = doc.tracks.slice()
+    tracks[trackIndex] = { ...track, clips }
+    return { ...doc, tracks }
+  }
+  return doc
+}
+
 function currentPreviewDocument(): TimelineDoc {
-  return documentWithTextOverlayPreview(
-    useDocumentStore.getState().doc,
-    useTransportStore.getState().textOverlayPreview,
+  const transport = useTransportStore.getState()
+  return documentWithClipVisualPreview(
+    documentWithTextOverlayPreview(
+      useDocumentStore.getState().doc,
+      transport.textOverlayPreview,
+    ),
+    transport.clipVisualPreview,
   )
 }
 
@@ -404,19 +435,23 @@ export function initPreview(
       }
     }),
     useTransportStore.subscribe((s, prev) => {
-      if (s.textOverlayPreview !== prev.textOverlayPreview) {
+      if (
+        s.textOverlayPreview !== prev.textOverlayPreview
+        || s.clipVisualPreview !== prev.clipVisualPreview
+      ) {
         syncPreviewDocument(bridge)
       }
       if (
         s.playheadFrame !== prev.playheadFrame
         || modeForTransport(s) !== modeForTransport(prev)
         || s.textOverlayPreview !== prev.textOverlayPreview
+        || s.clipVisualPreview !== prev.clipVisualPreview
       ) scheduleRender()
     }),
     useMediaStore.subscribe(() => {
       const bounds = currentSourceBoundsCatalog()
       state.visualPlanner = createVideoCompositionPlanner(
-        useDocumentStore.getState().doc,
+        currentPreviewDocument(),
         bounds,
       )
       bridge.setSourceBoundsCatalog(bounds)

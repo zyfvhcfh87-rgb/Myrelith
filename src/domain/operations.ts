@@ -22,7 +22,10 @@
 
 import type {
   Clip,
+  ClipAudioSettings,
   ClipId,
+  ClipVisualSettings,
+  CropInsets,
   Effect,
   MediaAsset,
   TimeRange,
@@ -35,6 +38,15 @@ import type {
   TextProps,
   Transform,
 } from './schema'
+import {
+  clipAudioSettings,
+  clipAudioSettingsValidationError,
+  clipVisualSettings,
+  clipVisualSettingsValidationError,
+  defaultClipAudioSettings,
+  defaultClipVisualSettings,
+  transformScaleValidationError,
+} from './clipInspector'
 import {
   crossfadeWindowsOverlap,
   resolveCrossfade,
@@ -88,6 +100,21 @@ function locateClip(doc: TimelineDoc, clipId: ClipId): ClipLocation | null {
     }
   }
   return null
+}
+
+/** Keep authored fades valid when a geometry edit shortens a clip. */
+function withClampedAudioFades(clip: Clip): Clip {
+  if (!clip.audio) return clip
+  const maximum = clip.timelineRange.durationFrames
+  const fadeInFrames = Math.min(clip.audio.fadeInFrames, maximum)
+  const fadeOutFrames = Math.min(clip.audio.fadeOutFrames, maximum)
+  return fadeInFrames === clip.audio.fadeInFrames
+    && fadeOutFrames === clip.audio.fadeOutFrames
+    ? clip
+    : {
+        ...clip,
+        audio: { ...clip.audio, fadeInFrames, fadeOutFrames },
+      }
 }
 
 /** Every occurrence on one owning track, so corrupt duplicate ids stay ambiguous. */
@@ -593,6 +620,8 @@ export function clipFromAsset(
     },
     opacity: 1,
     volume: 1,
+    visual: defaultClipVisualSettings(),
+    audio: defaultClipAudioSettings(),
     effects: [],
     ...(linkGroupId ? { linkGroupId } : {}),
   }
@@ -633,6 +662,8 @@ export function createTextClip(
     },
     opacity: 1,
     volume: 1,
+    visual: defaultClipVisualSettings(),
+    audio: defaultClipAudioSettings(),
     effects: [],
     text,
   }
@@ -703,6 +734,17 @@ export function insertClip(
     const textError = textPropsValidationError(clip.text)
     if (textError) return reject(doc, op, textError)
   }
+  const scaleError = transformScaleValidationError(clip.transform)
+  if (scaleError) return reject(doc, op, scaleError)
+  const visualError = clipVisualSettingsValidationError(
+    clipVisualSettings(clip),
+  )
+  if (visualError) return reject(doc, op, visualError)
+  const audioError = clipAudioSettingsValidationError(
+    clipAudioSettings(clip),
+    tl.durationFrames,
+  )
+  if (audioError) return reject(doc, op, audioError)
 
   const trackIndex = doc.tracks.findIndex((t) => t.id === trackId)
   if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
@@ -724,6 +766,11 @@ export function insertClip(
     sourceRange: { ...src },
     timelineRange: { ...tl },
     transform: { ...clip.transform },
+    visual: {
+      ...clipVisualSettings(clip),
+      crop: { ...clipVisualSettings(clip).crop },
+    },
+    audio: { ...clipAudioSettings(clip) },
     effects: clip.effects.map((e) => ({ ...e, params: { ...e.params } })),
     ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
   }
@@ -765,7 +812,7 @@ export function splitClipAtFrame(
   const offset = frame - tl.startFrame
   const stillSource = clip.sourceMode === 'still'
   const textSource = clip.text !== undefined
-  const left: Clip = {
+  const left: Clip = withClampedAudioFades({
     ...clip,
     sourceRange: stillSource
       ? { startFrame: 0, durationFrames: 1 }
@@ -776,8 +823,8 @@ export function splitClipAtFrame(
           durationFrames: offset,
         },
     timelineRange: { startFrame: tl.startFrame, durationFrames: offset },
-  }
-  const right: Clip = {
+  })
+  const right: Clip = withClampedAudioFades({
     ...clip,
     id: newId('clip'),
     sourceRange: stillSource
@@ -795,7 +842,7 @@ export function splitClipAtFrame(
       params: { ...e.params },
     })),
     ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
-  }
+  })
 
   const clips = loc.track.clips.slice()
   clips.splice(loc.clipIndex, 1, left, right)
@@ -884,7 +931,11 @@ export function trimClip(
   }
 
   const clips = loc.track.clips.slice()
-  clips[loc.clipIndex] = { ...clip, timelineRange: newTl, sourceRange: newSrc }
+  clips[loc.clipIndex] = withClampedAudioFades({
+    ...clip,
+    timelineRange: newTl,
+    sourceRange: newSrc,
+  })
   clips.sort(byStart)
   const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
   return withTrack(doc, loc.trackIndex, nextTrack)
@@ -1074,7 +1125,7 @@ export function slideClip(
       return reject(doc, op, 'left neighbor cannot shrink below 1 frame')
     }
     const leftIsText = left.text !== undefined
-    clips[clipIndex - 1] = {
+    clips[clipIndex - 1] = withClampedAudioFades({
       ...left,
       timelineRange: { ...left.timelineRange, durationFrames: newDur },
       sourceRange: left.sourceMode === 'still'
@@ -1082,7 +1133,7 @@ export function slideClip(
         : leftIsText
           ? { startFrame: 0, durationFrames: newDur }
         : { ...left.sourceRange, durationFrames: newDur },
-    }
+    })
   }
   if (right && right.timelineRange.startFrame === rangeEnd(tl)) {
     // Touching right neighbor: its head follows our tail.
@@ -1098,7 +1149,7 @@ export function slideClip(
     if (!rightIsStill && !rightIsText && newSrcStart < 0) {
       return reject(doc, op, 'right neighbor has no source material before the asset start')
     }
-    clips[clipIndex + 1] = {
+    clips[clipIndex + 1] = withClampedAudioFades({
       ...right,
       timelineRange: {
         startFrame: right.timelineRange.startFrame + deltaFrames,
@@ -1109,7 +1160,7 @@ export function slideClip(
         : rightIsText
           ? { startFrame: 0, durationFrames: newDur }
         : { startFrame: newSrcStart, durationFrames: newDur },
-    }
+    })
   }
   clips[clipIndex] = {
     ...clip,
@@ -1175,7 +1226,7 @@ export function rippleTrim(
     if (!stillSource && !textSource && newSrcStart < 0) {
       return reject(doc, op, 'no source material before the asset start')
     }
-    newClip = {
+    newClip = withClampedAudioFades({
       ...clip,
       timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
       sourceRange: stillSource
@@ -1183,14 +1234,14 @@ export function rippleTrim(
         : textSource
           ? { startFrame: 0, durationFrames: newDur }
         : { startFrame: newSrcStart, durationFrames: newDur },
-    }
+    })
     shiftBy = -deltaFrames
   } else {
     const newDur = tl.durationFrames + deltaFrames
     if (newDur < 1) {
       return reject(doc, op, 'clip duration cannot shrink below 1 frame')
     }
-    newClip = {
+    newClip = withClampedAudioFades({
       ...clip,
       timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
       sourceRange: stillSource
@@ -1198,7 +1249,7 @@ export function rippleTrim(
         : textSource
           ? { startFrame: 0, durationFrames: newDur }
         : { startFrame: src.startFrame, durationFrames: newDur },
-    }
+    })
     shiftBy = deltaFrames
   }
 
@@ -1240,33 +1291,239 @@ export function updateClipTransform(
   clipId: ClipId,
   patch: ClipTransformPatch,
 ): TimelineDoc {
-  const op = 'updateClipTransform'
+  return updateClipVisual(doc, clipId, patch)
+}
+
+export interface ClipVisualSettingsPatch {
+  crop?: Partial<CropInsets>
+  flipHorizontal?: boolean
+  flipVertical?: boolean
+  scaleLocked?: boolean
+}
+
+/** Complete static video/text Inspector mutation surface. */
+export interface ClipVisualPatch extends ClipTransformPatch {
+  visual?: ClipVisualSettingsPatch
+}
+
+const TRANSFORM_KEYS = new Set<keyof Transform>([
+  'x',
+  'y',
+  'scaleX',
+  'scaleY',
+  'rotation',
+  'anchorX',
+  'anchorY',
+])
+
+const VISUAL_SETTING_KEYS = new Set<keyof ClipVisualSettings>([
+  'crop',
+  'flipHorizontal',
+  'flipVertical',
+  'scaleLocked',
+])
+
+const CROP_KEYS = new Set<keyof CropInsets>([
+  'left',
+  'right',
+  'top',
+  'bottom',
+])
+
+function sameCrop(left: CropInsets, right: CropInsets): boolean {
+  return left.left === right.left
+    && left.right === right.right
+    && left.top === right.top
+    && left.bottom === right.bottom
+}
+
+function sameVisual(
+  left: ClipVisualSettings,
+  right: ClipVisualSettings,
+): boolean {
+  return sameCrop(left.crop, right.crop)
+    && left.flipHorizontal === right.flipHorizontal
+    && left.flipVertical === right.flipVertical
+    && left.scaleLocked === right.scaleLocked
+}
+
+/**
+ * Atomically edit transform, opacity, crop, flips, and scale-lock state.
+ * When locking previously independent scales, X is authoritative. While the
+ * lock remains enabled, an edit to either scale updates both axes.
+ */
+export function updateClipVisual(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  patch: ClipVisualPatch,
+): TimelineDoc {
+  const op = 'updateClipVisual'
   const loc = locateClip(doc, clipId)
   if (!loc) return reject(doc, op, `clip ${clipId} not found`)
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
 
   const transformPatch = patch.transform ?? {}
-  for (const [key, value] of Object.entries(transformPatch)) {
+  const transformKeys = Object.keys(transformPatch) as Array<keyof Transform>
+  for (const key of transformKeys) {
+    if (!TRANSFORM_KEYS.has(key)) {
+      return reject(doc, op, `unknown transform property ${String(key)}`)
+    }
+    const value = transformPatch[key]
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       return reject(doc, op, `transform.${key} must be a finite number, got ${value}`)
+    }
+  }
+
+  const visualPatch = patch.visual ?? {}
+  const visualKeys = Object.keys(visualPatch) as Array<keyof ClipVisualSettings>
+  for (const key of visualKeys) {
+    if (!VISUAL_SETTING_KEYS.has(key)) {
+      return reject(doc, op, `unknown visual property ${String(key)}`)
+    }
+  }
+  if (visualPatch.crop !== undefined) {
+    const cropKeys = Object.keys(visualPatch.crop) as Array<keyof CropInsets>
+    for (const key of cropKeys) {
+      if (!CROP_KEYS.has(key)) {
+        return reject(doc, op, `unknown crop property ${String(key)}`)
+      }
     }
   }
   const hasOpacity = patch.opacity !== undefined
   if (hasOpacity && !Number.isFinite(patch.opacity)) {
     return reject(doc, op, `opacity must be a finite number, got ${patch.opacity}`)
   }
-  if (Object.keys(transformPatch).length === 0 && !hasOpacity) {
+  if (transformKeys.length === 0 && visualKeys.length === 0 && !hasOpacity) {
     return reject(doc, op, 'empty patch — nothing to change')
   }
+
+  const currentVisual = clipVisualSettings(loc.clip)
+  const nextVisual: ClipVisualSettings = {
+    ...currentVisual,
+    ...visualPatch,
+    crop: {
+      ...currentVisual.crop,
+      ...(visualPatch.crop ?? {}),
+    },
+  }
+  const visualError = clipVisualSettingsValidationError(nextVisual)
+  if (visualError) return reject(doc, op, visualError)
+
+  const nextTransform: Transform = {
+    ...loc.clip.transform,
+    ...transformPatch,
+  }
+  if (nextVisual.scaleLocked) {
+    const scaleX = transformPatch.scaleX
+    const scaleY = transformPatch.scaleY
+    if (scaleX !== undefined && scaleY !== undefined && scaleX !== scaleY) {
+      return reject(doc, op, 'locked scale X and Y must match')
+    }
+    if (scaleX !== undefined || scaleY !== undefined) {
+      const scale = (scaleX ?? scaleY) as number
+      nextTransform.scaleX = scale
+      nextTransform.scaleY = scale
+    } else if (!currentVisual.scaleLocked && visualPatch.scaleLocked === true) {
+      nextTransform.scaleY = nextTransform.scaleX
+    }
+  }
+  const scaleError = transformScaleValidationError(nextTransform)
+  if (scaleError) return reject(doc, op, scaleError)
+  if (
+    nextTransform.anchorX < 0
+    || nextTransform.anchorX > 1
+    || nextTransform.anchorY < 0
+    || nextTransform.anchorY > 1
+  ) {
+    return reject(doc, op, 'anchor values must be from 0 to 1')
+  }
+
+  const opacity = hasOpacity
+    ? Math.min(1, Math.max(0, patch.opacity as number))
+    : loc.clip.opacity
+  const transformUnchanged = [...TRANSFORM_KEYS].every(
+    (key) => nextTransform[key] === loc.clip.transform[key],
+  )
+  if (
+    transformUnchanged
+    && opacity === loc.clip.opacity
+    && sameVisual(nextVisual, currentVisual)
+  ) return doc
 
   const clips = loc.track.clips.slice()
   clips[loc.clipIndex] = {
     ...loc.clip,
-    transform: { ...loc.clip.transform, ...transformPatch },
-    opacity: hasOpacity
-      ? Math.min(1, Math.max(0, patch.opacity as number))
-      : loc.clip.opacity,
+    transform: nextTransform,
+    opacity,
+    visual: nextVisual,
   }
+  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
+export type ClipAudioSettingsPatch = Partial<ClipAudioSettings>
+
+export interface ClipAudioPatch {
+  volume?: number
+  audio?: ClipAudioSettingsPatch
+}
+
+const AUDIO_SETTING_KEYS = new Set<keyof ClipAudioSettings>([
+  'enabled',
+  'balance',
+  'fadeInFrames',
+  'fadeOutFrames',
+])
+
+function sameAudio(
+  left: ClipAudioSettings,
+  right: ClipAudioSettings,
+): boolean {
+  return left.enabled === right.enabled
+    && left.balance === right.balance
+    && left.fadeInFrames === right.fadeInFrames
+    && left.fadeOutFrames === right.fadeOutFrames
+}
+
+/** Atomically edit volume, enabled state, balance, and authored fades. */
+export function updateClipAudio(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  patch: ClipAudioPatch,
+): TimelineDoc {
+  const op = 'updateClipAudio'
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+
+  const audioPatch = patch.audio ?? {}
+  const audioKeys = Object.keys(audioPatch) as Array<keyof ClipAudioSettings>
+  for (const key of audioKeys) {
+    if (!AUDIO_SETTING_KEYS.has(key)) {
+      return reject(doc, op, `unknown audio property ${String(key)}`)
+    }
+  }
+  const hasVolume = patch.volume !== undefined
+  if (hasVolume && !Number.isFinite(patch.volume)) {
+    return reject(doc, op, `volume must be a finite number, got ${patch.volume}`)
+  }
+  if (!hasVolume && audioKeys.length === 0) {
+    return reject(doc, op, 'empty patch — nothing to change')
+  }
+
+  const currentAudio = clipAudioSettings(loc.clip)
+  const audio: ClipAudioSettings = { ...currentAudio, ...audioPatch }
+  const audioError = clipAudioSettingsValidationError(
+    audio,
+    loc.clip.timelineRange.durationFrames,
+  )
+  if (audioError) return reject(doc, op, audioError)
+  const volume = hasVolume
+    ? Math.min(MAX_CLIP_VOLUME, Math.max(0, patch.volume as number))
+    : loc.clip.volume
+  if (volume === loc.clip.volume && sameAudio(audio, currentAudio)) return doc
+
+  const clips = loc.track.clips.slice()
+  clips[loc.clipIndex] = { ...loc.clip, volume, audio }
   return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
 }
 

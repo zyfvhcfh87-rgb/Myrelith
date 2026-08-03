@@ -393,18 +393,20 @@ describe('ProjectLaunch', () => {
       .not.toBeInTheDocument()
   })
 
-  test('supporting browsers choose .webcut through a reusable project handle', () => {
+  test('supporting browsers offer remembered and quick project-open paths', () => {
     controller.canRememberProjectFiles.mockReturnValue(true)
     useProjectSessionStore.setState({ screen: 'resume' })
     render(<ProjectLaunch />)
 
     fireEvent.click(screen.getByRole('button', {
-      name: 'Choose a WebCut project file',
+      name: 'Choose & remember a WebCut project file',
     }))
 
     expect(controller.chooseProjectFile).toHaveBeenCalledOnce()
-    expect(screen.queryByLabelText('Choose a WebCut project file', {
-      selector: 'input',
-    })).not.toBeInTheDocument()
+    const project = new File(['{}'], 'quick-open.webcut')
+    fireEvent.change(screen.getByLabelText('Quick open a WebCut project file'), {
+      target: { files: [project] },
+    })
+    expect(controller.openProjectFile).toHaveBeenCalledWith(project)
   })
 })
