@@ -343,6 +343,26 @@
   pointer-events: none;
 }
 
+.clip-keyframe-markers {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.clip-keyframe-marker {
+  position: absolute;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  margin-left: -4px;
+  background: #ffe087;
+  border: 1px solid #4e3c12;
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 20%);
+}
+
 /* ---------------- Phase 5.1e transition authoring ---------------- */
 
 /* Anchored at the exact cut frame. Only the tiny marker is persistent; its

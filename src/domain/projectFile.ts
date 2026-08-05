@@ -10,6 +10,9 @@
 import type {
   AssetKind,
   Clip,
+  ClipAnimation,
+  ClipAnimationEasing,
+  ClipAnimationProperty,
   ClipAudioSettings,
   ClipVisualSettings,
   ClipSourceMode,
@@ -23,6 +26,16 @@ import type {
   Transform,
   PartialTrackImportSelection,
 } from './schema'
+import {
+  ANIMATABLE_CLIP_PROPERTIES,
+  clipAnimation,
+  clipAnimationValidationError,
+  cloneClipAnimation,
+  defaultClipAnimation,
+  MAX_ANIMATED_FINITE_MAGNITUDE,
+  MAX_KEYFRAME_FRAME,
+  MAX_KEYFRAMES_PER_TRACK,
+} from './clipAnimation'
 import {
   clipAudioSettings,
   clipAudioSettingsValidationError,
@@ -50,7 +63,7 @@ import {
 
 export const PROJECT_FILE_FORMAT = 'webcut-project' as const
 export const CURRENT_PROJECT_FORMAT_VERSION = 4 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 5 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 6 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -64,6 +77,7 @@ export const PROJECT_FILE_LIMITS = {
   maxTotalEffectParams: 50_000,
   maxTotalEffectStringCharacters: 10_000_000,
   maxTransitions: 100_000,
+  maxTotalKeyframes: 100_000,
   maxTotalTextCharacters: 10_000_000,
   maxIdCharacters: MAX_DOCUMENT_ID_CHARACTERS,
   maxNameCharacters: MAX_PROJECT_NAME_CHARACTERS,
@@ -468,6 +482,90 @@ function validateClipAudio(
   if (error) fail(path, error)
 }
 
+function validateAnimationEasing(
+  value: unknown,
+  path: string,
+): asserts value is ClipAnimationEasing {
+  const easing = record(value, path)
+  if (easing.type === 'linear' || easing.type === 'hold') {
+    exactKeys(easing, ['type'], [], path)
+    return
+  }
+  if (easing.type !== 'cubic-bezier') {
+    fail(`${path}.type`, 'expected hold, linear, or cubic-bezier')
+  }
+  exactKeys(easing, ['type', 'x1', 'y1', 'x2', 'y2'], [], path)
+  for (const key of ['x1', 'y1', 'x2', 'y2'] as const) {
+    finiteNumber(easing[key], `${path}.${key}`, 0, 1)
+  }
+}
+
+function validateClipAnimation(
+  value: unknown,
+  path: string,
+  context: ValidationContext,
+): asserts value is ClipAnimation {
+  const animation = record(value, path)
+  exactKeys(animation, ['tracks'], [], path)
+  boundedArray(
+    animation.tracks,
+    `${path}.tracks`,
+    ANIMATABLE_CLIP_PROPERTIES.length,
+  )
+  const properties = new Set<ClipAnimationProperty>()
+  for (let trackIndex = 0; trackIndex < animation.tracks.length; trackIndex++) {
+    const trackPath = `${path}.tracks[${trackIndex}]`
+    const track = record(animation.tracks[trackIndex], trackPath)
+    exactKeys(track, ['property', 'keyframes'], [], trackPath)
+    if (
+      typeof track.property !== 'string'
+      || !ANIMATABLE_CLIP_PROPERTIES.includes(
+        track.property as ClipAnimationProperty,
+      )
+    ) {
+      fail(`${trackPath}.property`, 'unsupported animated property')
+    }
+    const property = track.property as ClipAnimationProperty
+    if (properties.has(property)) fail(`${trackPath}.property`, 'duplicate animation track')
+    properties.add(property)
+    boundedArray(track.keyframes, `${trackPath}.keyframes`, MAX_KEYFRAMES_PER_TRACK)
+    if (track.keyframes.length === 0) fail(`${trackPath}.keyframes`, 'must not be empty')
+    context.keyframeCount += track.keyframes.length
+    if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
+      fail(
+        '$.document.tracks',
+        `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`,
+      )
+    }
+    let previousFrame: number | null = null
+    for (let keyframeIndex = 0; keyframeIndex < track.keyframes.length; keyframeIndex++) {
+      const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
+      const keyframe = record(track.keyframes[keyframeIndex], keyframePath)
+      exactKeys(keyframe, ['frame', 'value', 'easing'], [], keyframePath)
+      safeInteger(
+        keyframe.frame,
+        `${keyframePath}.frame`,
+        -MAX_KEYFRAME_FRAME,
+        MAX_KEYFRAME_FRAME,
+      )
+      if (previousFrame !== null && keyframe.frame <= previousFrame) {
+        fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
+      }
+      const minimum = property === 'opacity' ? 0
+        : property === 'scale-x' || property === 'scale-y' ? MIN_CLIP_SCALE
+          : -MAX_ANIMATED_FINITE_MAGNITUDE
+      const maximum = property === 'opacity' ? 1
+        : property === 'scale-x' || property === 'scale-y' ? MAX_CLIP_SCALE
+          : MAX_ANIMATED_FINITE_MAGNITUDE
+      finiteNumber(keyframe.value, `${keyframePath}.value`, minimum, maximum)
+      validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
+      previousFrame = keyframe.frame
+    }
+  }
+  const error = clipAnimationValidationError(animation as unknown as ClipAnimation)
+  if (error) fail(path, error)
+}
+
 function validateEffect(
   value: unknown,
   path: string,
@@ -642,6 +740,7 @@ interface ValidationContext {
   effectStringCharacterCount: number
   textCharacterCount: number
   transitionCount: number
+  keyframeCount: number
 }
 
 function validateClip(value: unknown, path: string, trackKind: Track['kind'], context: ValidationContext): asserts value is Clip {
@@ -649,7 +748,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   exactKeys(
     clip,
     ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'timelineRange', 'transform', 'opacity', 'volume', 'visual', 'audio', 'effects'],
-    ['text', 'linkGroupId'],
+    ['animation', 'text', 'linkGroupId'],
     path,
   )
   stringValue(clip.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
@@ -726,6 +825,14 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
     `${path}.audio`,
     timelineRange.durationFrames,
   )
+  const animation = clip.animation ?? defaultClipAnimation()
+  validateClipAnimation(animation, `${path}.animation`, context)
+  if (
+    animation.tracks.length > 0
+    && (trackKind !== 'video' || clip.text !== undefined)
+  ) {
+    fail(`${path}.animation`, 'keyframes are supported only on visual media clips')
+  }
   boundedArray(clip.effects, `${path}.effects`, PROJECT_FILE_LIMITS.maxEffectsPerClip)
   context.effectCount += clip.effects.length
   if (context.effectCount > PROJECT_FILE_LIMITS.maxTotalEffects) {
@@ -964,6 +1071,7 @@ export function validateProjectFile(value: unknown): ProjectFile {
     effectStringCharacterCount: 0,
     textCharacterCount: 0,
     transitionCount: 0,
+    keyframeCount: 0,
   }
   validateDocument(project.document, context)
   for (const [linkGroupId, count] of context.linkGroupCounts) {
@@ -1142,6 +1250,31 @@ function migrateClipInspector(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 5, tracks }
 }
 
+/** Upgrade schema-5 clips with a canonical empty animation container. */
+function migrateClipAnimation(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    boundedArray(
+      track.clips,
+      `$.document.tracks[${trackIndex}].clips`,
+      PROJECT_FILE_LIMITS.maxClips,
+    )
+    return {
+      ...track,
+      clips: track.clips.map((clipValue, clipIndex) => ({
+        ...record(
+          clipValue,
+          `$.document.tracks[${trackIndex}].clips[${clipIndex}]`,
+        ),
+        animation: defaultClipAnimation(),
+      })),
+    }
+  })
+  return { ...document, schemaVersion: 6, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1172,6 +1305,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 4) {
     migrated = migrateClipInspector(migrated)
+  }
+  if (migrated.schemaVersion === 5) {
+    migrated = migrateClipAnimation(migrated)
   }
   return migrated
 }
@@ -1266,6 +1402,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
             crop: { ...clipVisualSettings(clip).crop },
           },
           audio: { ...clipAudioSettings(clip) },
+          animation: cloneClipAnimation(clipAnimation(clip)),
           effects: clip.effects.map((effect) => ({
             id: effect.id,
             type: effect.type,

@@ -119,6 +119,17 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `[0, timeline duration)`; trim, ripple, split, move, slide, and linked edits
   preserve that identity, while Slip is an intentional no-op. Unsupported
   font/color/geometry values fail validation instead of being substituted.
+- Visual media clips may carry `Clip.animation`, a canonical list of scalar
+  tracks for position X/Y, scale X/Y, rotation, and opacity. Keyframe times are
+  exact clip-local integer frames, sorted strictly with no duplicates; an edit
+  at an existing time replaces it. Boundaries hold the nearest value. Each
+  left keyframe owns the outgoing `hold`, `linear`, or bounded CSS-style cubic
+  Bézier easing into the next keyframe. `domain/clipAnimation.ts` is the one
+  pure, bounded validator/evaluator/editor authority. Static clip fields remain
+  the fallback and are unchanged when a property animation is reset. Text,
+  audio, crop, flips, effects, and text styling are intentionally outside this
+  first property set. Timeline schema 6 adds the durable contract; schema-5
+  migration installs an empty animation without changing appearance.
 - Clips on one track are sorted by `timelineRange.startFrame` and pairwise
   non-overlapping; `operations.ts` rejects violations.
 - `TimelineDoc.tracks[0]` composites first (bottom layer).
@@ -166,7 +177,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   document plus source-bounds facts and do not reconstruct seam geometry.
 - `domain/videoCompositionPlan.ts` carries ordinary paint items and grouped
   crossfade items plus procedural text items through the preview bridge,
-  worker protocol, and export. Text layout is one bounded shared Canvas2D path
+  worker protocol, and export. It resolves clip animation at the requested
+  timeline frame before emitting every ordinary or crossfade leg, so scrub,
+  playback, and export cannot choose different interpolation paths. Text layout
+  is one bounded shared Canvas2D path
   for preview and export; it never emits a media request. The compositor
   renders each complete transformed/effected/opacity-adjusted leg
   to a reusable transparent surface, combines premultiplied weighted pixels in
@@ -245,6 +259,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `setCrossfadeSettings(trackId, transitionId, settings, catalog)`,
   `removeTransition(trackId, transitionId)`,
   `setClipVolume(clipId, volume)` (clamped [0,2]),
+  `updateClipVisualAtFrame(clipId, timelineFrame, patch)` (static properties
+  update their base fields; properties with a curve replace/add one keyframe at
+  that playhead), `setClipKeyframe`, `moveClipKeyframe`,
+  `removeClipKeyframe`, `resetClipAnimationTrack` (each successful call is one
+  history entry; rejected/idempotent calls are none),
   `linkClips(videoClipId, audioClipId)` (one history entry; delegates to the
   pure domain contract, so rejection preserves the entire state and redo
   branch by reference; undo/redo restore the exact generated group id),

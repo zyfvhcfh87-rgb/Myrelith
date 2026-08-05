@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-08-03)
+## Status (2026-08-05)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -82,6 +82,7 @@ and the open list below.
 | **Post-MVP #33 — editable text overlays** | ✅ complete | procedural timed text clips; accessible add/edit/move/resize/delete; shared preview/export Canvas2D renderer; schema 3→4 migration; 304 focused + 1,747 total tests; real 1280/720px Chromium text-only export gate; PR #47 normally merged and Issue #33 closed |
 | **Post-MVP #34 — full clip Inspector** | ✅ complete | schema-5 visual/audio editing, shared preview/export rendering, contextual Inspector, direct Program Monitor manipulation, and explicit remembered/quick file paths; 1,784 tests plus real-media reopen/playback/export and 720px Chromium acceptance; PR #49 normally merged as `571fff6` and Issue #34 closed |
 | **Post-MVP #35 — preview direct manipulation** | ✅ complete | Issue #34's complete Program Monitor controls plus four explicit corner-scale handles; 82 focused + 1,785 total tests; rotated/cropped/anchored/flipped real-media Chrome gate at 1280×720 and 720×800; PR #51 normally merged as `4f9eaaa` |
+| **Post-MVP #43 — keyframing and animation curves** | ✅ complete | schema-6 scalar curves for position/scale/rotation/opacity; one pure scrub/playback/export evaluator; accessible Inspector curves + timeline markers; 1,804 tests; real-media playback/export and 720px Chromium gate, clean console |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -907,6 +908,9 @@ surface; it is not a second zoom and never enters document history.
   rejects for a locked survivor; Issue #17 adds exact-bounds-aware atomic
   `addCrossfadeWithSourceBounds`/`setCrossfadeSettingsWithSourceBounds`/
   `removeTransition`, plus pre/post-valid seam reconciliation across geometry),
+  `clipAnimation.ts` (Issue #43's canonical bounded track validation, immutable
+  keyframe edits, and deterministic hold/linear/cubic-Bézier evaluation for the
+  six supported scalar visual properties),
   `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
   with all ordinary and transition still samples fixed at source frame 0,
   `resolveCrossfade` (compatibility facade over the canonical planner),
@@ -924,8 +928,9 @@ surface; it is not a second zoom and never enters document history.
   authorities for exact per-stream handles, centered grouped seams, linked
   audio availability, clip-keyed frame requests, and the shared preview/export
   paint plan. `videoCompositionPlan.ts` also emits Issue #33 procedural text
-  items without source-media requests. Invalid/malformed groups fall back
-  deterministically.
+  items without source-media requests and resolves Issue #43 curves at the
+  requested timeline frame before ordinary/crossfade requests. Invalid or
+  malformed groups and curves fall back deterministically.
 - `src/domain/textOverlay.ts` + `textLayout.ts` — Issue #33's strict text
   defaults/validation and bounded, deterministic wrapping authority shared by
   preview and export. Text uses reserved procedural asset ids and a portable
@@ -944,7 +949,9 @@ surface; it is not a second zoom and never enters document history.
   asset metadata; excludes every session-owned field. Issue #17 advances the
   outer project format to 4 and nested timeline schema to 3 for independent
   video/audio timestamp bounds and transition audio intent; Issue #33 advances
-  the nested timeline schema to 4 for strict procedural text overlays. Older
+  the nested timeline schema to 4 for strict procedural text overlays; Issue
+  #34 advances it to 5 for clip visual/audio settings; Issue #43 advances it to
+  6 for canonical scalar animation tracks. Older
   snapshots migrate conservatively; Issue #18's image-media migration still
   produces `still` `[0, 1)` without changing timed media or text semantics.
 - `src/state/projectSessionStore.ts` — serializable launch/editor screen,
@@ -971,7 +978,9 @@ surface; it is not a second zoom and never enters document history.
   retained primary selection, and post-Unlink focus handoff. Issue #33 adds the
   validated text-content and presentation editor plus one-step deletion. Issue
   #34 adds contextual Video/Audio sections and mirrors ephemeral visual drafts
-  without entering document history.
+  without entering document history. Issue #43 adds a keyboard- and
+  screen-reader-operable property/keyframe/curve editor synchronized with the
+  playhead and the same history-backed document actions.
 - `src/ui/TextOverlayDialog.tsx` + `TextOverlayControls.tsx` — Issue #33's
   accessible add flow and Program Monitor move/resize surface. Pointer/touch
   gestures preview ephemerally and commit once; keyboard controls use 1px or
@@ -979,7 +988,9 @@ surface; it is not a second zoom and never enters document history.
 - `src/ui/VisualOverlayControls.tsx` — Issue #34's accessible Program Monitor
   move, scale, rotate, crop, anchor, and flip surface. Pointer/touch gestures use
   fresh bounds, rAF-coalesced drafts, stale-document rejection, and one commit
-  on release; keyboard controls cover every operation.
+  on release; keyboard controls cover every operation. Issue #43 resolves
+  animated values at the playhead and routes edits on animated properties to
+  exact playhead keyframes while keeping static property behavior unchanged.
 - `src/app/projectController.ts` — Slice 3 session composition root: validates
   candidates off-store, restores granted local handles, requests remembered
   permission only from the Open click, generation-cancels late work, and
@@ -1475,6 +1486,21 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
+- Issue #43 is implementation-complete. Nested timeline schema 6 persists
+  exact clip-local scalar curves for Position X/Y, Scale X/Y, Rotation, and
+  Opacity; schema-5 projects migrate to empty curves without changing static
+  appearance. One bounded pure evaluator owns hold, linear, and custom cubic
+  Bézier behavior for Inspector, Program Monitor, scrub, playback, crossfades,
+  and export. The accessible Inspector adds/selects/moves/edits/copies/removes/
+  resets keys while timeline diamonds stay bounded. The full suite passes
+  1,805/1,805 tests across 105 files; build, oxlint, and diff checks pass with
+  only the known Vite chunk-size advisory. In-app Chromium reopened and
+  quick-relinked real 320×180 H.264 media, proved keyed X=0/X=300 monitor and
+  Inspector sync, custom Bézier editing, copy/move/remove/reset with exact undo,
+  live playback interpolation, three timeline diamonds, and a completed
+  120-frame MP4 export. At 720×800 the page had zero horizontal overflow and
+  the curve controls remained contained; the final console had zero warnings
+  or errors. Publication/Issue closure is intentionally not implied.
 - Issue #35 is complete. Issue #34 had already delivered selected visual bounds,
   pointer move/scale/rotate/crop/anchor/flip gestures, immediate Inspector drafts,
   keyboard alternatives, one pointer-up document mutation, undo/redo,

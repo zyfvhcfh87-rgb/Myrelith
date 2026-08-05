@@ -156,6 +156,34 @@ describe('VisualOverlayControls', () => {
     expect(useTransportStore.getState().clipVisualPreview).toBeNull()
   })
 
+  test('pointer move keys only the animated position properties', async () => {
+    const clip = selectedClip()
+    const linear = { type: 'linear' } as const
+    useDocumentStore.getState().setClipKeyframe(clip.id, 'position-x', {
+      frame: 0,
+      value: 0,
+      easing: linear,
+    })
+    useDocumentStore.getState().setClipKeyframe(clip.id, 'rotation', {
+      frame: 0,
+      value: 0,
+      easing: linear,
+    })
+    useDocumentStore.setState({ past: [], future: [] })
+    useTransportStore.getState().setPlayheadFrame(1)
+    render(<Harness />)
+    const body = await screen.findByRole('button', { name: /selected visual clip/i })
+
+    fireEvent.pointerDown(body, { pointerId: 6, clientX: 200, clientY: 150 })
+    fireEvent.pointerMove(body, { pointerId: 6, clientX: 300, clientY: 200 })
+    fireEvent.pointerUp(body, { pointerId: 6, clientX: 300, clientY: 200 })
+
+    const animation = selectedClip().animation
+    expect(animation?.tracks.find(({ property }) => property === 'position-x')?.keyframes.map(({ frame }) => frame)).toEqual([0, 1])
+    expect(animation?.tracks.find(({ property }) => property === 'rotation')?.keyframes.map(({ frame }) => frame)).toEqual([0])
+    expect(useDocumentStore.getState().past).toHaveLength(1)
+  })
+
   test('pointer scale, rotate, crop, and anchor each produce one atomic edit', async () => {
     render(<Harness />)
     const scale = await screen.findByRole('button', { name: /scale visual clip from bottom right corner/i })

@@ -30,6 +30,7 @@
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
+import { updateClipVisualAtFrame } from '../domain/operations'
 import {
   createSourceBoundsCatalog,
   type SourceBoundsCatalog,
@@ -179,26 +180,16 @@ export function documentWithTextOverlayPreview(
 export function documentWithClipVisualPreview(
   doc: TimelineDoc,
   preview: ClipVisualPreview | null,
+  timelineFrame = 0,
 ): TimelineDoc {
   if (!preview) return doc
-  for (let trackIndex = 0; trackIndex < doc.tracks.length; trackIndex++) {
-    const track = doc.tracks[trackIndex]
-    const clipIndex = track.clips.findIndex((clip) => clip.id === preview.clipId)
-    if (clipIndex < 0) continue
-    const clips = track.clips.slice()
-    clips[clipIndex] = {
-      ...track.clips[clipIndex],
-      transform: { ...preview.transform },
-      visual: {
-        ...preview.visual,
-        crop: { ...preview.visual.crop },
-      },
-    }
-    const tracks = doc.tracks.slice()
-    tracks[trackIndex] = { ...track, clips }
-    return { ...doc, tracks }
-  }
-  return doc
+  return updateClipVisualAtFrame(doc, preview.clipId, timelineFrame, {
+    transform: { ...preview.transform },
+    visual: {
+      ...preview.visual,
+      crop: { ...preview.visual.crop },
+    },
+  })
 }
 
 function currentPreviewDocument(): TimelineDoc {
@@ -209,6 +200,7 @@ function currentPreviewDocument(): TimelineDoc {
       transport.textOverlayPreview,
     ),
     transport.clipVisualPreview,
+    transport.playheadFrame,
   )
 }
 

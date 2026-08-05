@@ -137,6 +137,38 @@ describe('clip visuals', () => {
     expect(visual.querySelectorAll('.clip-filmstrip-tile')).toHaveLength(2)
   })
 
+  test('shows unique, in-range keyframe markers at exact clip-frame positions', () => {
+    const animated = makeClip('animated', 25, 100, 60)
+    animated.animation = {
+      tracks: [
+        {
+          property: 'position-x',
+          keyframes: [
+            { frame: -1, value: 0, easing: { type: 'linear' } },
+            { frame: 0, value: 10, easing: { type: 'linear' } },
+            { frame: 25, value: 20, easing: { type: 'linear' } },
+          ],
+        },
+        {
+          property: 'opacity',
+          keyframes: [
+            { frame: 25, value: 1, easing: { type: 'linear' } },
+            { frame: 99, value: 0, easing: { type: 'linear' } },
+            { frame: 100, value: 1, easing: { type: 'linear' } },
+          ],
+        },
+      ],
+    }
+
+    const { container } = render(
+      <ClipView clip={animated} trackId="V1" trackKind="video" />,
+    )
+    const markers = [...container.querySelectorAll<HTMLElement>('.clip-keyframe-marker')]
+
+    expect(markers).toHaveLength(3)
+    expect(markers.map((marker) => marker.style.left)).toEqual(['0px', '50px', '198px'])
+  })
+
   test('a still repeats its one visual tile across live timeline extensions', () => {
     const still = {
       ...makeClip('still', 0, 150),

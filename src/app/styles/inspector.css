@@ -288,3 +288,135 @@
   cursor: not-allowed;
   opacity: 0.72;
 }
+
+/* Issue #43: accessible keyframes plus a bounded visual curve preview. */
+.animation-editor {
+  min-width: 0;
+}
+
+.animation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.animation-toolbar button,
+.animation-keyframe-list button,
+.animation-bezier-grid > button {
+  padding: 4px 7px;
+  color: #bfd6eb;
+  background: #202832;
+  border: 1px solid #3a4a5b;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.animation-toolbar button:hover:not(:disabled),
+.animation-keyframe-list button:hover:not(:disabled),
+.animation-bezier-grid > button:hover:not(:disabled) {
+  background: #293746;
+}
+
+.animation-toolbar button:focus-visible,
+.animation-keyframe-list button:focus-visible,
+.animation-bezier-grid > button:focus-visible,
+.animation-number-field input:focus-visible,
+.animation-number-field select:focus-visible {
+  outline: 2px solid #8dc9ff;
+  outline-offset: 2px;
+}
+
+.animation-toolbar button:disabled,
+.animation-bezier-grid > button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.animation-curve {
+  height: 100px;
+  overflow: hidden;
+  background: #10151b;
+  border: 1px solid #34404d;
+  border-radius: 5px;
+}
+
+.animation-curve svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.animation-curve-grid {
+  fill: none;
+  stroke: #26313d;
+  stroke-width: 1;
+}
+
+.animation-curve-line {
+  fill: none;
+  stroke: #7fc6ff;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.animation-keyframe-list {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  margin: 0;
+  padding: 2px 1px 4px;
+  list-style: none;
+}
+
+.animation-keyframe-list li,
+.animation-keyframe-list button {
+  flex: 0 0 auto;
+}
+
+.animation-keyframe-list button[aria-pressed='true'] {
+  color: #fff;
+  background: #315f87;
+  border-color: #6da7dc;
+}
+
+.animation-keyframe-fields,
+.animation-bezier-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.animation-number-field {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: #9aa3ad;
+  font-size: 10px;
+}
+
+.animation-number-field input,
+.animation-number-field select {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  padding: 4px 6px;
+  color: #ddd;
+  background: #1d1d21;
+  border: 1px solid #3a3a41;
+  border-radius: 4px;
+}
+
+.animation-keyframe-fields > .animation-toolbar,
+.animation-keyframe-fields > .animation-bezier-grid,
+.animation-bezier-grid > button {
+  grid-column: 1 / -1;
+}
+
+.animation-empty,
+.animation-status {
+  margin: 0;
+  color: #8f9ba7;
+  font-size: 10px;
+  line-height: 1.35;
+}
