@@ -161,3 +161,72 @@
   font-size: 14px;
   color: #e8e8e8;
 }
+
+/* Soft Studio transport strip. */
+.transport-tools,
+.timeline-zoom-controls {
+  gap: 5px;
+}
+
+.tool-button,
+.timeline-zoom-button,
+.transport-button {
+  color: #9eafc3;
+  background: #162334;
+  border-color: #31445b;
+  border-radius: 6px;
+}
+
+.tool-button {
+  min-width: 30px;
+  min-height: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 6px;
+}
+
+.tool-button-add-text {
+  margin-left: 3px;
+}
+
+.tool-button-add-text:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.tool-button:hover,
+.timeline-zoom-button:hover:not(:disabled),
+.transport-button:hover {
+  color: #edf3fa;
+  background: #1d2e43;
+  border-color: #4b6482;
+}
+
+.tool-button.active,
+.timeline-zoom-button.active {
+  color: #fff;
+  background: #385e93;
+  border-color: #6590c5;
+}
+
+.transport-bar {
+  gap: 7px;
+}
+
+.transport-button {
+  height: 30px;
+}
+
+.transport-play {
+  min-width: 46px;
+  color: #f6f8fb;
+}
+
+.timeline-zoom-slider::-webkit-slider-runnable-track {
+  background: #32465d;
+}
+
+.timeline-zoom-slider::-webkit-slider-thumb {
+  background: #93b3da;
+  border-color: #bfd1e6;
+}

@@ -9,6 +9,7 @@
  * dumb facade caller ARCHITECTURE.md sanctions.
  */
 
+import { CaretLeft, CaretRight, Pause, Play } from '@phosphor-icons/react'
 import { useTransportStore } from '../state/transportStore'
 import { stepFrame, togglePlayback } from '../app/transportController'
 
@@ -23,7 +24,7 @@ export default function TransportBar() {
         title="one frame back"
         onClick={() => stepFrame(-1)}
       >
-        ◁
+        <CaretLeft aria-hidden="true" size={16} weight="fill" />
       </button>
       <button
         className="transport-button transport-play"
@@ -31,7 +32,9 @@ export default function TransportBar() {
         title={isPlaying ? 'pause' : 'play'}
         onClick={togglePlayback}
       >
-        {isPlaying ? '❚❚' : '▶'}
+        {isPlaying
+          ? <Pause aria-hidden="true" size={16} weight="fill" />
+          : <Play aria-hidden="true" size={16} weight="fill" />}
       </button>
       <button
         className="transport-button"
@@ -39,7 +42,7 @@ export default function TransportBar() {
         title="one frame forward"
         onClick={() => stepFrame(1)}
       >
-        ▷
+        <CaretRight aria-hidden="true" size={16} weight="fill" />
       </button>
     </div>
   )

@@ -1,5 +1,13 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
+  ArrowRight,
+  CheckCircle,
+  DotsThreeVertical,
+  FolderOpen,
+  PlusCircle,
+  ShieldCheck,
+} from '@phosphor-icons/react'
+import {
   activateResumedProject,
   canRememberProjectFiles,
   canRememberProjectMedia,
@@ -75,19 +83,25 @@ function confirmRecoveryDiscard(projectName: string): boolean {
 function LaunchFrame({
   children,
   home = false,
+  setup = false,
 }: {
   children: ReactNode
   home?: boolean
+  setup?: boolean
 }) {
+  const frameClassName = [
+    'project-launch-frame',
+    home ? 'project-launch-frame-home' : '',
+    setup ? 'project-launch-frame-setup' : '',
+  ].filter(Boolean).join(' ')
+
   return (
     <main className="project-launch">
-      <section
-        className={`project-launch-frame${home ? ' project-launch-frame-home' : ''}`}
-      >
+      <section className={frameClassName}>
         {children}
       </section>
       <footer className="project-launch-footer">
-        <span>Your media stays on this device.</span>
+        <span>Private by design. Portable by default.</span>
         <nav aria-label="Project information">
           <a href="/privacy/">Privacy</a>
           <a href="/licenses/">Licenses</a>
@@ -126,43 +140,99 @@ function HomeScreen() {
 
   return (
     <LaunchFrame home>
-      <div className="project-launch-heading project-launch-heading-home">
-        <span className="project-launch-eyebrow">Browser video editor</span>
-        <h1>WebCut</h1>
-        <p>Start fresh or reconnect a portable project file.</p>
-      </div>
-      <div className="project-launch-actions" aria-label="Project actions">
-        <button
-          className="project-launch-card project-launch-card-primary"
-          type="button"
-          onClick={showNewProject}
-        >
-          <strong>Create a new project</strong>
-          <span>Choose the canvas, frame rate, and audio quality.</span>
-        </button>
-        <button
-          className="project-launch-card"
-          type="button"
-          onClick={showResumeProject}
-        >
-          <strong>Resume previous work</strong>
-          <span>Open a .webcut file and restore its source media.</span>
-        </button>
-      </div>
+      <header className="project-launch-home-nav">
+        <div className="project-launch-brand">
+          <strong>WebCut</strong>
+          <span>Browser video editor</span>
+        </div>
+        <div className="project-launch-trust">
+          <ShieldCheck aria-hidden="true" size={21} weight="regular" />
+          <span>Your media stays on this device.</span>
+        </div>
+      </header>
+
+      <section className="project-launch-hero" aria-labelledby="project-home-title">
+        <div className="project-launch-hero-copy">
+          <h1 id="project-home-title">
+            <span>Your footage.</span>
+            <span>Your space.</span>
+            <span>Your cut.</span>
+          </h1>
+          <p>Edit locally in your browser—no upload, no account, no rush.</p>
+          <div className="project-launch-actions" aria-label="Project actions">
+            <button
+              className="project-launch-card project-launch-card-primary"
+              type="button"
+              onClick={showNewProject}
+            >
+              <PlusCircle aria-hidden="true" size={28} weight="regular" />
+              <strong>Start a new project</strong>
+              <ArrowRight
+                className="project-launch-card-arrow"
+                aria-hidden="true"
+                size={21}
+                weight="bold"
+              />
+            </button>
+            <button
+              className="project-launch-card"
+              type="button"
+              onClick={showResumeProject}
+            >
+              <FolderOpen aria-hidden="true" size={27} weight="regular" />
+              <strong>Open a project</strong>
+            </button>
+          </div>
+          <ul className="project-launch-capabilities" aria-label="WebCut capabilities">
+            <li>Portable .webcut projects</li>
+            <li>Any canvas ratio</li>
+            <li>Multitrack editing</li>
+          </ul>
+        </div>
+
+        <figure className="project-launch-story">
+          <img
+            className="project-launch-story-main"
+            src="/landing/coast-main.webp"
+            alt="A traveler looking over a rugged coast at dusk"
+          />
+          <img
+            className="project-launch-story-cliffs"
+            src="/landing/coast-cliffs.webp"
+            alt=""
+          />
+          <img
+            className="project-launch-story-path"
+            src="/landing/coast-path.webp"
+            alt=""
+          />
+          <figcaption>From first frame to final cut.</figcaption>
+        </figure>
+      </section>
+
       <section className="project-library" aria-labelledby="project-library-title">
         <header className="project-library-header">
           <div>
-            <span className="project-launch-eyebrow">Stored in this browser</span>
-            <h2 id="project-library-title">Your projects</h2>
+            <h2 id="project-library-title">Back to your projects</h2>
+            <p>Pick up where you left off.</p>
           </div>
-          <button
-            className="project-library-refresh"
-            type="button"
-            disabled={libraryPhase === 'loading'}
-            onClick={() => void refreshProjectLibrary()}
-          >
-            Refresh
-          </button>
+          <div className="project-library-header-actions">
+            {recoveries.length > 0 && (
+              <a className="project-library-recovery-link" href="#recovery-copies">
+                <span>Recovery copies</span>
+                <small>Local unsaved work</small>
+                <ArrowRight aria-hidden="true" size={17} weight="bold" />
+              </a>
+            )}
+            <button
+              className="project-library-refresh"
+              type="button"
+              disabled={libraryPhase === 'loading'}
+              onClick={() => void refreshProjectLibrary()}
+            >
+              Refresh
+            </button>
+          </div>
         </header>
 
         {libraryPhase === 'loading' && (
@@ -176,67 +246,36 @@ function HomeScreen() {
           </p>
         )}
 
-        {recoveries.length > 0 && (
-          <div className="project-library-group">
-            <div className="project-library-group-heading">
-              <h3>Recovery copies</h3>
-              <span>Unsaved safety copies — never opened automatically</span>
-            </div>
-            <ul className="project-library-list">
-              {recoveries.map((recovery) => (
-                <li key={recovery.journalId} data-kind="recovery">
-                  <button
-                    className="project-library-open"
-                    type="button"
-                    aria-label={`Recover ${recovery.projectName}`}
-                    onClick={() => void openRecoveryProject(recovery.journalId)}
-                  >
-                    <strong>{recovery.projectName}</strong>
-                    <span>
-                      {recovery.projectFileName ?? 'Not saved to a .webcut yet'}
-                    </span>
-                    <time dateTime={new Date(recovery.updatedAt).toISOString()}>
-                      Updated {formatLocalTime(recovery.updatedAt)} · {recovery.generationCount} safety {recovery.generationCount === 1 ? 'copy' : 'copies'}
-                    </time>
-                  </button>
-                  <button
-                    className="project-library-remove"
-                    type="button"
-                    aria-label={`Discard recovery for ${recovery.projectName}`}
-                    onClick={() => {
-                      if (confirmRecoveryDiscard(recovery.projectName)) {
-                        void discardRecoveryJournal(recovery.journalId)
-                      }
-                    }}
-                  >
-                    Discard
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
         {recentProjects.length > 0 && (
           <div className="project-library-group">
-            <div className="project-library-group-heading">
-              <h3>Recent projects</h3>
-              <span>Shortcuts to files you already chose</span>
-            </div>
             <ul className="project-library-list">
-              {recentProjects.map((project) => (
+              {recentProjects.map((project, index) => (
                 <li key={project.documentId} data-kind="recent">
+                  <img
+                    className="project-library-thumbnail"
+                    src={index % 2 === 0
+                      ? '/landing/project-coast.webp'
+                      : '/landing/project-city.webp'}
+                    alt=""
+                  />
                   <button
                     className="project-library-open"
                     type="button"
                     aria-label={`Open ${project.projectName}`}
                     onClick={() => void openRecentProject(project.documentId)}
                   >
-                    <strong>{project.projectName}</strong>
-                    <span>{project.fileName}</span>
+                    <span className="project-library-copy">
+                      <strong>{project.projectName}</strong>
+                      <span>{project.fileName}</span>
+                    </span>
                     <time dateTime={new Date(project.lastOpenedAt).toISOString()}>
-                      Last used {formatLocalTime(project.lastOpenedAt)} · {project.permission === 'granted' ? 'Ready' : project.permission === 'denied' ? 'Access blocked' : 'Permission may be needed'}
+                      <small>Last edited</small>
+                      {formatLocalTime(project.lastOpenedAt)}
                     </time>
+                    <span className="project-library-open-action">
+                      Open
+                      <ArrowRight aria-hidden="true" size={17} weight="bold" />
+                    </span>
                   </button>
                   <button
                     className="project-library-remove"
@@ -245,7 +284,63 @@ function HomeScreen() {
                     title="Remove this shortcut only — the .webcut file stays on disk"
                     onClick={() => void forgetRecentProject(project.documentId)}
                   >
-                    Remove
+                    <DotsThreeVertical aria-hidden="true" size={20} weight="bold" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {recoveries.length > 0 && (
+          <div className="project-library-group" id="recovery-copies">
+            <div className="project-library-group-heading">
+              <h3>Recovery copies</h3>
+              <span>Unsaved safety copies—never opened automatically</span>
+            </div>
+            <ul className="project-library-list">
+              {recoveries.map((recovery, index) => (
+                <li key={recovery.journalId} data-kind="recovery">
+                  <img
+                    className="project-library-thumbnail"
+                    src={index % 2 === 0
+                      ? '/landing/coast-path.webp'
+                      : '/landing/coast-cliffs.webp'}
+                    alt=""
+                  />
+                  <button
+                    className="project-library-open"
+                    type="button"
+                    aria-label={`Recover ${recovery.projectName}`}
+                    onClick={() => void openRecoveryProject(recovery.journalId)}
+                  >
+                    <span className="project-library-copy">
+                      <strong>{recovery.projectName}</strong>
+                      <span>
+                        {recovery.projectFileName ?? 'Not saved to a .webcut yet'}
+                      </span>
+                    </span>
+                    <time dateTime={new Date(recovery.updatedAt).toISOString()}>
+                      <small>{recovery.generationCount} safety {recovery.generationCount === 1 ? 'copy' : 'copies'}</small>
+                      Updated {formatLocalTime(recovery.updatedAt)}
+                    </time>
+                    <span className="project-library-open-action project-library-recover-action">
+                      Recover
+                      <ArrowRight aria-hidden="true" size={17} weight="bold" />
+                    </span>
+                  </button>
+                  <button
+                    className="project-library-remove"
+                    type="button"
+                    aria-label={`Discard recovery for ${recovery.projectName}`}
+                    title="Permanently discard this local recovery copy"
+                    onClick={() => {
+                      if (confirmRecoveryDiscard(recovery.projectName)) {
+                        void discardRecoveryJournal(recovery.journalId)
+                      }
+                    }}
+                  >
+                    <DotsThreeVertical aria-hidden="true" size={20} weight="bold" />
                   </button>
                 </li>
               ))}
@@ -305,13 +400,77 @@ function NewProjectScreen() {
   }
 
   return (
-    <LaunchFrame>
-      <div className="project-launch-heading">
-        <span className="project-launch-eyebrow">New project</span>
-        <h1>Set up your canvas</h1>
-        <p>These settings stay exact throughout editing and export.</p>
-      </div>
-      <form className="project-form" onSubmit={submit}>
+    <LaunchFrame setup>
+      <header className="project-launch-home-nav project-setup-nav">
+        <div className="project-launch-brand">
+          <strong>WebCut</strong>
+          <span>Browser video editor</span>
+        </div>
+        <div className="project-launch-trust">
+          <ShieldCheck aria-hidden="true" size={21} weight="regular" />
+          <span>Your media stays on this device.</span>
+        </div>
+      </header>
+
+      <div className="project-setup-layout">
+        <div className="project-setup-intro">
+          <h1>
+            <span>Set up</span>
+            <span>your <em>canvas</em></span>
+          </h1>
+          <p>Choose the shape your story needs.</p>
+        </div>
+
+        <form className="project-form project-form-setup" onSubmit={submit}>
+          <fieldset className="project-ratio-fieldset" disabled={busy}>
+            <legend>Choose your canvas shape</legend>
+            <div className="project-ratio-grid">
+              {PROJECT_ASPECT_RATIO_PRESETS.map((aspectRatio) => {
+                const selected = aspectRatio.id === aspectRatioId
+                return (
+                  <label
+                    className={`project-ratio-card${selected ? ' is-selected' : ''}`}
+                    key={aspectRatio.id}
+                  >
+                    <input
+                      type="radio"
+                      name="aspect-ratio"
+                      value={aspectRatio.id}
+                      checked={selected}
+                      onChange={() => setAspectRatioId(aspectRatio.id)}
+                    />
+                    <span
+                      className="project-ratio-preview"
+                      data-ratio={aspectRatio.id}
+                    >
+                      {aspectRatio.id === DEFAULT_PROJECT_ASPECT_RATIO_ID ? (
+                        <img src="/landing/coast-main.webp" alt="" />
+                      ) : (
+                        <span
+                          className="project-ratio-shape"
+                          style={{
+                            aspectRatio: `${aspectRatio.ratioWidth} / ${aspectRatio.ratioHeight}`,
+                          }}
+                        />
+                      )}
+                      {selected && (
+                        <CheckCircle
+                          className="project-ratio-check"
+                          aria-hidden="true"
+                          size={27}
+                          weight="fill"
+                        />
+                      )}
+                    </span>
+                    <strong>
+                      {aspectRatio.label} <span>{aspectRatio.ratioLabel}</span>
+                    </strong>
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
+
         <label className="project-field project-field-wide">
           <span>Project name</span>
           <input
@@ -323,24 +482,7 @@ function NewProjectScreen() {
             onChange={(event) => setName(event.target.value)}
           />
         </label>
-        <label className="project-field">
-          <span>Aspect ratio</span>
-          <select
-            value={aspectRatioId}
-            disabled={busy}
-            onChange={(event) => {
-              const aspectRatio = projectAspectRatioPresetById(event.target.value)
-              if (aspectRatio) setAspectRatioId(aspectRatio.id)
-            }}
-          >
-            {PROJECT_ASPECT_RATIO_PRESETS.map((aspectRatio) => (
-              <option key={aspectRatio.id} value={aspectRatio.id}>
-                {aspectRatio.label} ({aspectRatio.ratioLabel})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="project-field">
+        <label className="project-field project-field-resolution">
           <span>Resolution</span>
           <select
             value={resolutionTier}
@@ -362,7 +504,7 @@ function NewProjectScreen() {
             ))}
           </select>
         </label>
-        <label className="project-field">
+        <label className="project-field project-field-frame-rate">
           <span>Frame rate</span>
           <select
             value={frameRate}
@@ -376,7 +518,7 @@ function NewProjectScreen() {
             ))}
           </select>
         </label>
-        <label className="project-field">
+        <label className="project-field project-field-wide project-field-audio">
           <span>Audio quality</span>
           <select
             value={audioSampleRate}
@@ -411,9 +553,11 @@ function NewProjectScreen() {
             disabled={busy}
           >
             Create project
+            <ArrowRight aria-hidden="true" size={18} weight="bold" />
           </button>
         </div>
-      </form>
+        </form>
+      </div>
     </LaunchFrame>
   )
 }

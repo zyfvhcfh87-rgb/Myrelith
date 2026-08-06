@@ -420,3 +420,158 @@
   font-size: 10px;
   line-height: 1.35;
 }
+
+/* Soft Studio contextual Inspector. */
+.inspector-panel {
+  gap: 12px;
+  padding: 16px;
+  color: #dce6f2;
+}
+
+.inspector-title,
+.inspector-empty-title {
+  color: #edf2f8;
+  font-size: 15px;
+  font-weight: 720;
+}
+
+.inspector-clip-summary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.inspector-clip-icon {
+  width: 48px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: #8ea5c1;
+  background: #162536;
+  border: 1px solid #33485f;
+  border-radius: 6px;
+}
+
+.inspector-clip-summary > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.inspector-clip-summary strong {
+  overflow: hidden;
+  color: #e8eef7;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-clip-summary small {
+  color: #768aa2;
+  font-size: 9px;
+}
+
+.inspector-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #2d4057;
+  border-radius: 7px 7px 0 0;
+}
+
+.inspector-tabs button {
+  min-height: 32px;
+  padding: 0 4px;
+  color: #7f92aa;
+  font-size: 10px;
+  background: #132132;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.inspector-tabs button + button {
+  border-left: 1px solid #2d4057;
+}
+
+.inspector-tabs button.active {
+  color: #ecf3fb;
+  background: #18283b;
+  border-bottom-color: #5e91f4;
+}
+
+.inspector-tabs button:focus-visible {
+  outline: 2px solid #83adff;
+  outline-offset: 2px;
+}
+
+.inspector-context-label {
+  display: none;
+}
+
+.inspector-section-stack,
+.inspector-section-stack > div:not([hidden]) {
+  display: grid;
+  gap: 10px;
+}
+
+.inspector-section {
+  gap: 10px;
+  padding: 11px;
+  background: #132132;
+  border-color: #2e425a;
+  border-radius: 8px;
+}
+
+.inspector-section-bar h3,
+.inspector-section-heading {
+  color: #e6eef8;
+}
+
+.inspector-reset {
+  color: #91a6bf;
+  background: #18283a;
+  border-color: #354c66;
+}
+
+.inspector-field input,
+.inspector-field textarea,
+.inspector-field select,
+.animation-number-field input,
+.animation-number-field select {
+  color: #e2e9f3;
+  background: #101b29;
+  border-color: #34465c;
+}
+
+.inspector-field-label,
+.inspector-toggle,
+.inspector-note,
+.inspector-link-status {
+  color: #8295ad;
+}
+
+.inspector-linking {
+  gap: 5px;
+  padding: 9px;
+  background: #111e2d;
+  border: 1px solid #2c4056;
+  border-radius: 7px;
+}
+
+.inspector-link {
+  width: 100%;
+  color: #b8cae0;
+  background: #192a3e;
+  border-color: #354f6e;
+}
+
+.inspector-unlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9fb1c6;
+  background: #182636;
+  border-color: #34475d;
+}

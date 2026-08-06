@@ -17,6 +17,13 @@ import {
 } from 'react'
 import type { FormEvent } from 'react'
 import { flushSync } from 'react-dom'
+import {
+  ArrowsOutLineHorizontal,
+  MagnifyingGlassPlus,
+  Minus,
+  Plus,
+  SlidersHorizontal,
+} from '@phosphor-icons/react'
 import { docDurationFrames } from '../../domain/selectors'
 import { useDocumentStore } from '../../state/documentStore'
 import {
@@ -40,34 +47,6 @@ import {
 } from './timelineViewport'
 
 type ScrollAnchor = 'start' | 'playhead'
-
-function FullExtentIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-      <path d="M3.5 4.5v11M16.5 4.5v11M6 10h8M6 10l2-2M6 10l2 2M14 10l-2-2M14 10l-2 2" />
-    </svg>
-  )
-}
-
-function DetailZoomIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-      <circle cx="8.5" cy="8.5" r="4.5" />
-      <path d="m12 12 4 4M8.5 6v5M6 8.5h5" />
-    </svg>
-  )
-}
-
-function CustomZoomIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-      <path d="M3 5h14M3 10h14M3 15h14" />
-      <circle cx="7" cy="5" r="1.5" />
-      <circle cx="13" cy="10" r="1.5" />
-      <circle cx="9" cy="15" r="1.5" />
-    </svg>
-  )
-}
 
 function sameGeometry(
   left: TimelineZoomGeometry,
@@ -321,7 +300,7 @@ export default function TimelineZoomControls() {
         aria-pressed={zoomMode === 'full'}
         onClick={() => applyPreset('full')}
       >
-        <FullExtentIcon />
+        <ArrowsOutLineHorizontal aria-hidden="true" size={16} weight="bold" />
       </button>
       <button
         type="button"
@@ -331,7 +310,7 @@ export default function TimelineZoomControls() {
         aria-pressed={zoomMode === 'detail'}
         onClick={() => applyPreset('detail')}
       >
-        <DetailZoomIcon />
+        <MagnifyingGlassPlus aria-hidden="true" size={16} weight="bold" />
       </button>
       <button
         type="button"
@@ -341,7 +320,7 @@ export default function TimelineZoomControls() {
         aria-pressed={zoomMode === 'custom'}
         onClick={restoreCustom}
       >
-        <CustomZoomIcon />
+        <SlidersHorizontal aria-hidden="true" size={16} weight="bold" />
       </button>
       <button
         type="button"
@@ -351,7 +330,7 @@ export default function TimelineZoomControls() {
         disabled={atMinimum}
         onClick={() => stepCustom(-1)}
       >
-        −
+        <Minus aria-hidden="true" size={15} weight="bold" />
       </button>
       <input
         className="timeline-zoom-slider"
@@ -371,7 +350,7 @@ export default function TimelineZoomControls() {
         disabled={atMaximum}
         onClick={() => stepCustom(1)}
       >
-        +
+        <Plus aria-hidden="true" size={15} weight="bold" />
       </button>
     </div>
   )

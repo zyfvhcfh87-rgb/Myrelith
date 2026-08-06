@@ -50,8 +50,8 @@ describe('ProjectLaunch', () => {
   test('home exposes the two explicit entry points', () => {
     render(<ProjectLaunch />)
 
-    fireEvent.click(screen.getByRole('button', { name: /create a new project/i }))
-    fireEvent.click(screen.getByRole('button', { name: /resume previous work/i }))
+    fireEvent.click(screen.getByRole('button', { name: /start a new project/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open a project/i }))
 
     expect(controller.showNewProject).toHaveBeenCalledOnce()
     expect(controller.showResumeProject).toHaveBeenCalledOnce()
@@ -61,6 +61,8 @@ describe('ProjectLaunch', () => {
     expect(screen.getByRole('link', { name: 'Licenses' }))
       .toHaveAttribute('href', '/licenses/')
     expect(screen.getByText('Your media stays on this device.'))
+      .toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /your footage/i }))
       .toBeInTheDocument()
   })
 
@@ -137,9 +139,7 @@ describe('ProjectLaunch', () => {
     fireEvent.change(screen.getByLabelText('Project name'), {
       target: { value: 'Fast cut' },
     })
-    fireEvent.change(screen.getByLabelText('Aspect ratio'), {
-      target: { value: 'vertical-9-16' },
-    })
+    fireEvent.click(screen.getByRole('radio', { name: 'Vertical 9:16' }))
     fireEvent.change(screen.getByLabelText('Resolution'), {
       target: { value: '720' },
     })
@@ -163,26 +163,24 @@ describe('ProjectLaunch', () => {
     useProjectSessionStore.setState({ screen: 'new-project' })
     render(<ProjectLaunch />)
 
-    const aspectRatio = screen.getByLabelText('Aspect ratio')
     const resolution = screen.getByLabelText('Resolution')
-    expect(aspectRatio).toHaveValue('horizontal-16-9')
+    expect(screen.getByRole('radio', { name: 'Horizontal 16:9' }))
+      .toBeChecked()
     expect(resolution).toHaveValue('1080')
-    expect(screen.getByRole('option', { name: 'Horizontal (16:9)' }))
+    expect(screen.getByRole('radio', { name: 'Vertical 9:16' }))
       .toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Vertical (9:16)' }))
+    expect(screen.getByRole('radio', { name: 'Square 1:1' }))
       .toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Square (1:1)' }))
-      .toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Social portrait (4:5)' }))
+    expect(screen.getByRole('radio', { name: 'Social portrait 4:5' }))
       .toBeInTheDocument()
 
     fireEvent.change(resolution, { target: { value: '1440' } })
-    fireEvent.change(aspectRatio, { target: { value: 'square-1-1' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Square 1:1' }))
     expect(resolution).toHaveValue('1440')
     expect(screen.getByRole('option', { name: '1440 × 1440' }))
       .toBeInTheDocument()
 
-    fireEvent.change(aspectRatio, { target: { value: 'social-4-5' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Social portrait 4:5' }))
     expect(resolution).toHaveValue('1440')
     expect(screen.getByRole('option', { name: '1440 × 1800' }))
       .toBeInTheDocument()

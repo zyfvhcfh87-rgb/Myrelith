@@ -11,7 +11,6 @@ import {
 import { leaveActiveProject } from '../app/projectController'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import ExportDialog from './ExportDialog'
-import TextOverlayDialog from './TextOverlayDialog'
 
 function saveStatus(
   phase: 'idle' | 'saving' | 'error',
@@ -45,11 +44,9 @@ function recoveryStatus(
 
 export default function Toolbar() {
   const [exportOpen, setExportOpen] = useState(false)
-  const [textOpen, setTextOpen] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [leaveError, setLeaveError] = useState<string | null>(null)
   const exportButtonRef = useRef<HTMLButtonElement | null>(null)
-  const textButtonRef = useRef<HTMLButtonElement | null>(null)
   const projectName = useProjectSessionStore((state) => state.activeProjectName)
   const projectFile = useProjectSessionStore(
     (state) => state.activeProjectFileName,
@@ -74,11 +71,6 @@ export default function Toolbar() {
   const closeExport = (): void => {
     setExportOpen(false)
     requestAnimationFrame(() => exportButtonRef.current?.focus())
-  }
-
-  const closeText = (): void => {
-    setTextOpen(false)
-    requestAnimationFrame(() => textButtonRef.current?.focus())
   }
 
   const openProjects = async (): Promise<void> => {
@@ -132,17 +124,6 @@ export default function Toolbar() {
       <span className="placeholder-note">S splits at playhead · Del ripple-deletes</span>
       <div className="toolbar-actions">
         <button
-          ref={textButtonRef}
-          type="button"
-          className="toolbar-button toolbar-add-text"
-          aria-haspopup="dialog"
-          aria-expanded={textOpen}
-          disabled={closing}
-          onClick={() => setTextOpen(true)}
-        >
-          Add text
-        </button>
-        <button
           type="button"
           className="toolbar-button toolbar-projects"
           disabled={busy}
@@ -181,7 +162,6 @@ export default function Toolbar() {
         </button>
       </div>
       {exportOpen && <ExportDialog onClose={closeExport} />}
-      {textOpen && <TextOverlayDialog onClose={closeText} />}
     </div>
   )
 }
