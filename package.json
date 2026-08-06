@@ -18,6 +18,8 @@
   },
   "type": "module",
   "scripts": {
+    "benchmark": "node scripts/performance/run-benchmark.mjs",
+    "benchmark:smoke": "node scripts/performance/run-benchmark.mjs --smoke",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",

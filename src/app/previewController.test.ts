@@ -33,6 +33,7 @@ import {
   documentWithClipVisualPreview,
   documentWithTextOverlayPreview,
   initPreview,
+  subscribePreviewRenderDiagnostics,
 } from './previewController'
 
 const F60: FrameRate = { num: 60, den: 1 }
@@ -137,6 +138,8 @@ function makeDeps() {
     transferCanvas: () => ({}) as OffscreenCanvas,
     init: vi.fn(),
     fetchBlob: vi.fn(async () => blob),
+    now: vi.fn(() => performance.now()),
+    afterPresentationBoundary: vi.fn(async () => performance.now()),
   }
   return { deps, bridge, blob }
 }
@@ -1165,6 +1168,47 @@ describe('previewController', () => {
     expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
     expect(useMediaStore.getState().compatibility.has(asset.id)).toBe(false)
     warn.mockRestore()
+  })
+
+  test('publishes passive render timing only after the matching presentation boundary', async () => {
+    const { deps } = makeDeps()
+    const presentation = deferred<number>()
+    vi.mocked(deps.now).mockReturnValue(10)
+    vi.mocked(deps.afterPresentationBoundary).mockReturnValue(
+      presentation.promise,
+    )
+    const diagnostics: Array<{
+      frame: number
+      mode: RenderMode
+      requestedAt: number
+      presentedAt: number
+      result: RenderFrameResult
+    }> = []
+    const unsubscribe = subscribePreviewRenderDiagnostics((diagnostic) => {
+      diagnostics.push(diagnostic)
+    })
+    try {
+      initPreview(canvasEl(), deps)
+      await nextFrame()
+      await flush()
+
+      expect(deps.afterPresentationBoundary).toHaveBeenCalledTimes(1)
+      expect(diagnostics).toHaveLength(0)
+
+      presentation.resolve(25)
+      await flush()
+
+      expect(diagnostics).toHaveLength(1)
+      expect(diagnostics[0]).toMatchObject({
+        frame: 0,
+        mode: 'seek',
+        requestedAt: 10,
+        presentedAt: 25,
+        result: { status: 'drawn', renderMs: 1 },
+      })
+    } finally {
+      unsubscribe()
+    }
   })
 
   test('dispose unsubscribes and disposes the bridge', async () => {

@@ -153,6 +153,11 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     'pipeline/decode.ts',
     'workers/decode.worker.ts',
   ])
+  const benchmarkDevImportAllowances = new Map<string, ReadonlySet<string>>([
+    ['dev/performance/fixture.ts', new Set(['domain'])],
+    ['dev/performance/runtime.ts', new Set(['app', 'domain', 'state'])],
+    ['dev/performance/PerformanceBenchmarkApp.tsx', new Set(['ui'])],
+  ])
 
   for (const edge of edges) {
     const fromArea = area(edge.from)
@@ -167,6 +172,25 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     const toArea = area(edge.to)
     const fromName = moduleName(edge.from)
     const toName = moduleName(edge.to)
+
+    if (fromArea === 'dev' && toArea !== 'dev') {
+      const allowedAreas = benchmarkDevImportAllowances.get(fromName)
+      if (!allowedAreas?.has(toArea)) {
+        violations.push(
+          `${edgeLabel(edge)} is outside the narrow benchmark-only dev exception`,
+        )
+      }
+    }
+    if (
+      toArea === 'dev'
+      && fromArea !== 'dev'
+      && !(
+        fromName === 'main.tsx'
+        && toName === 'dev/performance/PerformanceBenchmarkApp.tsx'
+      )
+    ) {
+      violations.push(`${edgeLabel(edge)} imports a dev module outside the gated entry route`)
+    }
 
     if (fromArea === 'domain' && toArea !== 'domain') {
       violations.push(`${edgeLabel(edge)} crosses domain's pure-TS boundary`)
@@ -284,6 +308,17 @@ describe('architecture guard', () => {
 
   test('keeps the production runtime import graph acyclic', () => {
     expect(runtimeCycles(edges)).toEqual([])
+  })
+
+  test('limits benchmark-only composition imports to the documented dev files', () => {
+    const privilegedImporters = new Set(edges
+      .filter((edge) => edge.to && area(edge.from) === 'dev')
+      .filter((edge) => new Set(['app', 'state', 'ui']).has(area(edge.to!)))
+      .map((edge) => moduleName(edge.from)))
+    expect(privilegedImporters).toEqual(new Set([
+      'dev/performance/PerformanceBenchmarkApp.tsx',
+      'dev/performance/runtime.ts',
+    ]))
   })
 
   test('keeps ordinary test documents on the current timeline schema', () => {

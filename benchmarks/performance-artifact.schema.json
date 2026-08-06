@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://webcut.local/schemas/performance-artifact-v1.json",
+  "title": "WebCut performance evidence artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "harnessVersion",
+    "capturedAt",
+    "metadata",
+    "fixture",
+    "options",
+    "metrics",
+    "proposedGates",
+    "warnings",
+    "consoleProblems",
+    "resources"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "harnessVersion": { "const": "issue-54-v2" },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "browser"],
+      "properties": {
+        "host": { "$ref": "#/$defs/host" },
+        "browser": { "$ref": "#/$defs/browser" }
+      }
+    },
+    "fixture": { "$ref": "#/$defs/fixture" },
+    "options": { "$ref": "#/$defs/options" },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "launcher-interactive-ms",
+        "editor-first-usable-frame-ms",
+        "scrub-input-to-present-ms",
+        "frame-render-ms",
+        "dropped-frames",
+        "audio-underruns",
+        "import-readiness-ms",
+        "memory-plateau-mib",
+        "memory-growth-kib-per-batch",
+        "export-real-time-ratio"
+      ],
+      "properties": {
+        "launcher-interactive-ms": { "$ref": "#/$defs/metric" },
+        "editor-first-usable-frame-ms": { "$ref": "#/$defs/metric" },
+        "scrub-input-to-present-ms": { "$ref": "#/$defs/metric" },
+        "frame-render-ms": { "$ref": "#/$defs/metric" },
+        "dropped-frames": { "$ref": "#/$defs/metric" },
+        "audio-underruns": { "$ref": "#/$defs/metric" },
+        "import-readiness-ms": { "$ref": "#/$defs/metric" },
+        "memory-plateau-mib": { "$ref": "#/$defs/metric" },
+        "memory-growth-kib-per-batch": { "$ref": "#/$defs/metric" },
+        "export-real-time-ratio": { "$ref": "#/$defs/metric" }
+      }
+    },
+    "proposedGates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/proposedGate" }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "consoleProblems": { "type": "array", "items": { "type": "string" } },
+    "resources": { "$ref": "#/$defs/resources" }
+  },
+  "$defs": {
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "commit",
+        "dirty",
+        "dirtyFingerprint",
+        "nodeVersion",
+        "platform",
+        "architecture",
+        "osRelease",
+        "cpuModel",
+        "logicalProcessors",
+        "totalMemoryGiB",
+        "browserChannel",
+        "browserVersion",
+        "command"
+      ],
+      "properties": {
+        "branch": { "type": ["string", "null"], "minLength": 1 },
+        "commit": { "type": ["string", "null"], "minLength": 1 },
+        "dirty": { "type": ["boolean", "null"] },
+        "dirtyFingerprint": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "nodeVersion": { "type": ["string", "null"], "minLength": 1 },
+        "platform": { "type": "string", "minLength": 1 },
+        "architecture": { "type": ["string", "null"], "minLength": 1 },
+        "osRelease": { "type": ["string", "null"], "minLength": 1 },
+        "cpuModel": { "type": ["string", "null"], "minLength": 1 },
+        "logicalProcessors": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "totalMemoryGiB": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0
+        },
+        "browserChannel": { "type": "string", "minLength": 1 },
+        "browserVersion": { "type": "string", "minLength": 1 },
+        "command": { "type": "string", "minLength": 1 }
+      }
+    },
+    "browser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userAgent",
+        "platform",
+        "language",
+        "logicalProcessors",
+        "deviceMemoryGiB",
+        "viewportWidth",
+        "viewportHeight",
+        "devicePixelRatio",
+        "crossOriginIsolated",
+        "webCodecs",
+        "offscreenCanvas"
+      ],
+      "properties": {
+        "userAgent": { "type": "string", "minLength": 1 },
+        "platform": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 1 },
+        "logicalProcessors": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "deviceMemoryGiB": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0
+        },
+        "viewportWidth": { "type": "integer", "minimum": 1 },
+        "viewportHeight": { "type": "integer", "minimum": 1 },
+        "devicePixelRatio": { "type": "number", "exclusiveMinimum": 0 },
+        "crossOriginIsolated": { "type": "boolean" },
+        "webCodecs": { "type": "boolean" },
+        "offscreenCanvas": { "type": "boolean" }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "fingerprint",
+        "assetCount",
+        "assetKinds",
+        "representative4kAssetCount",
+        "trackCount",
+        "videoTrackCount",
+        "audioTrackCount",
+        "clipCount",
+        "transitionCount",
+        "textClipCount",
+        "durationFrames",
+        "durationSeconds",
+        "width",
+        "height",
+        "frameRate"
+      ],
+      "properties": {
+        "version": { "type": "string", "minLength": 1 },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "assetCount": { "type": "integer", "minimum": 1 },
+        "assetKinds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["video", "audio", "image"],
+          "properties": {
+            "video": { "type": "integer", "minimum": 0 },
+            "audio": { "type": "integer", "minimum": 0 },
+            "image": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "representative4kAssetCount": { "type": "integer", "minimum": 0 },
+        "trackCount": { "type": "integer", "minimum": 1 },
+        "videoTrackCount": { "type": "integer", "minimum": 0 },
+        "audioTrackCount": { "type": "integer", "minimum": 0 },
+        "clipCount": { "type": "integer", "minimum": 0 },
+        "transitionCount": { "type": "integer", "minimum": 0 },
+        "textClipCount": { "type": "integer", "minimum": 0 },
+        "durationFrames": { "type": "integer", "minimum": 1 },
+        "durationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "frameRate": { "type": "string", "pattern": "^[0-9]+/[0-9]+$" }
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sampleCount",
+        "playbackRuns",
+        "playbackDurationMs",
+        "memoryBatches",
+        "scrubsPerMemoryBatch",
+        "exportFrames",
+        "skipExport"
+      ],
+      "properties": {
+        "sampleCount": { "type": "integer", "minimum": 1 },
+        "playbackRuns": { "type": "integer", "minimum": 1 },
+        "playbackDurationMs": { "type": "integer", "minimum": 1 },
+        "memoryBatches": { "type": "integer", "minimum": 1 },
+        "scrubsPerMemoryBatch": { "type": "integer", "minimum": 1 },
+        "exportFrames": { "type": "integer", "minimum": 1 },
+        "skipExport": { "type": "boolean" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "minimum",
+        "maximum",
+        "mean",
+        "median",
+        "p75",
+        "p95",
+        "variance",
+        "standardDeviation"
+      ],
+      "properties": {
+        "count": { "type": "integer", "minimum": 1 },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "mean": { "type": "number" },
+        "median": { "type": "number" },
+        "p75": { "type": "number" },
+        "p95": { "type": "number" },
+        "variance": { "type": "number", "minimum": 0 },
+        "standardDeviation": { "type": "number", "minimum": 0 }
+      }
+    },
+    "metric": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "unit", "samples", "summary", "definition"],
+          "properties": {
+            "status": { "const": "measured" },
+            "unit": { "enum": ["ms", "count", "MiB", "KiB/batch", "ratio"] },
+            "samples": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "number" }
+            },
+            "summary": { "$ref": "#/$defs/summary" },
+            "definition": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "unit",
+            "samples",
+            "summary",
+            "definition",
+            "reason"
+          ],
+          "properties": {
+            "status": { "const": "unavailable" },
+            "unit": { "enum": ["ms", "count", "MiB", "KiB/batch", "ratio"] },
+            "samples": { "type": "array", "maxItems": 0 },
+            "summary": { "type": "null" },
+            "definition": { "type": "string", "minLength": 1 },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "proposedGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "statistic",
+        "operator",
+        "threshold",
+        "rationale",
+        "disposition",
+        "evaluation"
+      ],
+      "properties": {
+        "metric": {
+          "enum": [
+            "launcher-interactive-ms",
+            "editor-first-usable-frame-ms",
+            "scrub-input-to-present-ms",
+            "frame-render-ms",
+            "dropped-frames",
+            "audio-underruns",
+            "import-readiness-ms",
+            "memory-plateau-mib",
+            "memory-growth-kib-per-batch",
+            "export-real-time-ratio"
+          ]
+        },
+        "statistic": { "enum": ["median", "p75", "p95", "maximum"] },
+        "operator": { "const": "<=" },
+        "threshold": { "type": "number" },
+        "rationale": { "type": "string", "minLength": 1 },
+        "disposition": { "const": "proposal" },
+        "evaluation": { "enum": ["pass", "fail", "unavailable"] }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "benchmarkObjectUrlsCreated",
+        "benchmarkObjectUrlsRevoked",
+        "importedObjectUrlsRevoked",
+        "previewDisposed",
+        "transportDisposed",
+        "exportDisposed",
+        "documentStoreRestored",
+        "mediaStoreRestored",
+        "transportStoreRestored",
+        "projectSessionUnchanged",
+        "storesRestored"
+      ],
+      "properties": {
+        "benchmarkObjectUrlsCreated": { "type": "integer", "minimum": 0 },
+        "benchmarkObjectUrlsRevoked": { "type": "integer", "minimum": 0 },
+        "importedObjectUrlsRevoked": { "type": "integer", "minimum": 0 },
+        "previewDisposed": { "type": "boolean" },
+        "transportDisposed": { "type": "boolean" },
+        "exportDisposed": { "type": "boolean" },
+        "documentStoreRestored": { "type": "boolean" },
+        "mediaStoreRestored": { "type": "boolean" },
+        "transportStoreRestored": { "type": "boolean" },
+        "projectSessionUnchanged": { "type": "boolean" },
+        "storesRestored": { "type": "boolean" }
+      }
+    }
+  }
+}

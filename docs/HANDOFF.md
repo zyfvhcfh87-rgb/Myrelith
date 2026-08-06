@@ -1728,6 +1728,55 @@ surface; it is not a second zoom and never enters document history.
   for clip ranges, source ranges, transitions, playhead, and undo history; it
   must not be smuggled into import-time rounding.
 
+## Post-MVP issue #54 - performance evidence foundation
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07; not committed or published).**
+
+- The opt-in production benchmark route owns a deterministic, validator-clean
+  100-asset / 8-track / 30-minute fixture with 320 clips, 39 crossfades,
+  20 procedural text clips, and 25 representative 4K descriptors. Bounded live
+  sources include one generated 4K AVC/MP4, six 4K still connections, and four
+  audio connections.
+- The production runner records launcher/editor readiness, scrub and render
+  latency, dropped frames, audio underruns, import readiness, heap plateau and
+  growth, and export real-time ratio. JSON and Markdown include raw samples,
+  median/p75/p95, variance, exact source/fixture SHA-256 fingerprints, browser,
+  runtime, device, warnings, and independently checked cleanup/restoration.
+  Input-to-present diagnostics publish only after a test-injected browser
+  paint/compositor boundary following the matching completed worker draw.
+- Fixture identity includes the portable project, connected source/scrub plan,
+  and stable generation settings/sample plan; browser-dependent encoded bytes
+  are excluded so identical logical runs retain one canonical identity. The
+  pre-run canonical-state check recomputes that identity. Fixed media supports
+  continuous trials through 2,000 ms playback
+  and 31 export frames; both CLI and runtime reject longer requests before
+  measurement instead of entering the encoded held tail.
+- `npm run benchmark` builds an explicitly enabled production bundle and writes
+  ignored JSON/Markdown/screenshot artifacts under `.tmp/benchmarks/`. Proposed
+  gates remain advisory until repeated representative-device baselines ratify
+  them. The exact workflow and gate definitions live in `docs/PERFORMANCE.md`.
+- The default production build contains zero matches for the benchmark path,
+  title, fixture version, or component name. The explicitly enabled build emits
+  dedicated `PerformanceBenchmarkApp` JS/CSS chunks and serves only the exact
+  route. The architecture guard permits only the exact benchmark runtime to
+  compose app/state and the exact benchmark component to reuse UI; no blanket
+  `src/dev` composition-root exception remains.
+- Canonical `npm test` now runs both 1,841/1,841 Vitest cases across 110 files
+  and all 6 Node runner cases without recursion. Focused benchmark coverage,
+  production build/typecheck, oxlint, and production dependency audit all pass
+  with 0 vulnerabilities. Fresh smoke and full Chromium runs captured their
+  artifacts, reported 0 dropped frames and 0 audio underruns, revoked 11/11
+  fixture URLs (plus 2/2 and 7/7 imported URLs respectively), restored every
+  isolated store, and logged no browser warning/error. The full run retained
+  frame-render p95 and export-ratio p75 misses as advisory trend evidence, not
+  enforcement failures.
+  Both fresh runs shared canonical fixture fingerprint
+  `sha256:07f2bd5bd724e5b6b7c07e2fbd26a5b67b7c3c80bba87f8f0d8fdce2bcb904f7`.
+- In-app Chrome independently rendered the ready fixture at 1248x1248 with no
+  framework overlay, warning/error log, or horizontal page overflow. Zoom In
+  changed the real slider from 0.725 to 0.748. The automated production run's
+  1440x900 screenshot rendered the completed human-readable summary.
+
 ## Working agreements (the user's explicit preferences)
 
 - Changes may span every module needed for one complete fix. Keep dependency

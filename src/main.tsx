@@ -2,11 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './app/App.tsx'
+import { PERFORMANCE_BENCHMARK_PATH } from './app/benchmarkRoute'
 
-// Dev-only: expose stores for console inspection (the Phase 3 gate checks
-// the document JSON live) and for browser-driven verification. Stripped
-// from production builds.
-if (import.meta.env.DEV) {
+function exposeDevelopmentStores(): void {
+  if (!import.meta.env.DEV) return
   void Promise.all([
     import('./state/documentStore'),
     import('./state/transportStore'),
@@ -28,8 +27,32 @@ if (import.meta.env.DEV) {
   })
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+async function renderApplication(): Promise<void> {
+  const root = createRoot(document.getElementById('root')!)
+  // Keep the environment expression adjacent to the dynamic import so the
+  // default production build can remove the entire benchmark chunk.
+  if (
+    (
+      import.meta.env.DEV
+      || import.meta.env.VITE_WEBCUT_PERFORMANCE_HARNESS === '1'
+    )
+    && window.location.pathname === PERFORMANCE_BENCHMARK_PATH
+  ) {
+    const { default: PerformanceBenchmarkApp } = await import(
+      './dev/performance/PerformanceBenchmarkApp'
+    )
+    // The harness owns singleton browser resources. Avoid StrictMode's
+    // intentional dev remount so one evidence run has one exact owner.
+    root.render(<PerformanceBenchmarkApp />)
+    return
+  }
+
+  exposeDevelopmentStores()
+  root.render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}
+
+void renderApplication()
