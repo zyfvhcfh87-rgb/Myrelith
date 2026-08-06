@@ -218,6 +218,39 @@ export interface ClipAudioSettings {
   fadeOutFrames: number
 }
 
+/** First supported scalar properties for deterministic clip animation. */
+export type ClipAnimationProperty =
+  | 'position-x'
+  | 'position-y'
+  | 'scale-x'
+  | 'scale-y'
+  | 'rotation'
+  | 'opacity'
+
+/** Outgoing interpolation from one keyframe to the next. */
+export type ClipAnimationEasing =
+  | { type: 'hold' }
+  | { type: 'linear' }
+  | { type: 'cubic-bezier'; x1: number; y1: number; x2: number; y2: number }
+
+/** One exact clip-local integer-frame value. */
+export interface ClipAnimationKeyframe {
+  frame: number
+  value: number
+  easing: ClipAnimationEasing
+}
+
+export interface ClipAnimationTrack {
+  property: ClipAnimationProperty
+  /** Strictly increasing, unique clip-local frames. */
+  keyframes: ClipAnimationKeyframe[]
+}
+
+export interface ClipAnimation {
+  /** At most one track for each supported property. */
+  tracks: ClipAnimationTrack[]
+}
+
 /** Allowed value types for a single effect parameter. */
 export type EffectParamValue = number | string | boolean
 
@@ -371,6 +404,11 @@ export interface Clip {
    * as `visual` without weakening project-file validation.
    */
   audio?: ClipAudioSettings
+  /**
+   * Optional in memory so historical test fixtures remain tolerant. Current
+   * project files carry the canonical empty object when no property animates.
+   */
+  animation?: ClipAnimation
   /** Effect chain, applied in array order before compositing. */
   effects: Effect[]
   /** Present only on text clips; such clips render text instead of media. */
@@ -434,7 +472,7 @@ export interface Track {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 5. */
+  /** Schema version for forward-compatible project files. Currently 6. */
   schemaVersion: number
   /** Unique document id. */
   id: string

@@ -6,6 +6,7 @@ import {
   defaultClipAudioSettings,
   defaultClipVisualSettings,
 } from './clipInspector'
+import { defaultClipAnimation } from './clipAnimation'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
@@ -69,6 +70,7 @@ function mediaClip(
       fadeInFrames: Math.min(2, duration),
       fadeOutFrames: Math.min(3, duration),
     },
+    animation: defaultClipAnimation(),
     effects: [],
   }
 }
@@ -224,6 +226,82 @@ describe('portable project file', () => {
     expect(parsed.document.tracks[0].transitions).toEqual(
       original.document.tracks[0].transitions,
     )
+  })
+
+  test('round-trips keyframes and custom easing without changing order or precision', () => {
+    const original = makeProject()
+    original.document.tracks[0].clips[0].animation = {
+      tracks: [
+        {
+          property: 'position-x',
+          keyframes: [
+            { frame: -5, value: -125.25, easing: { type: 'hold' } },
+            {
+              frame: 12,
+              value: 240.75,
+              easing: {
+                type: 'cubic-bezier',
+                x1: 0.42,
+                y1: 0,
+                x2: 0.58,
+                y2: 1,
+              },
+            },
+          ],
+        },
+        {
+          property: 'opacity',
+          keyframes: [{ frame: 0, value: 0.625, easing: { type: 'linear' } }],
+        },
+      ],
+    }
+
+    const parsed = parseProjectFile(serializeProjectFile(original))
+
+    expect(parsed.document.tracks[0].clips[0].animation)
+      .toEqual(original.document.tracks[0].clips[0].animation)
+  })
+
+  test('migrates schema-5 clips to canonical empty animation tracks', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 5
+    for (const item of legacy.document.tracks.flatMap((track) => track.clips)) {
+      Reflect.deleteProperty(item, 'animation')
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.tracks.flatMap((track) => track.clips)
+      .every((item) => JSON.stringify(item.animation) === '{"tracks":[]}'))
+      .toBe(true)
+  })
+
+  test('rejects non-canonical duplicate times and invalid easing control points', () => {
+    const duplicate = makeProject()
+    duplicate.document.tracks[0].clips[0].animation = {
+      tracks: [{
+        property: 'position-x',
+        keyframes: [
+          { frame: 3, value: 10, easing: { type: 'linear' } },
+          { frame: 3, value: 20, easing: { type: 'linear' } },
+        ],
+      }],
+    }
+    const badEasing = makeProject()
+    badEasing.document.tracks[0].clips[0].animation = {
+      tracks: [{
+        property: 'position-x',
+        keyframes: [{
+          frame: 0,
+          value: 0,
+          easing: { type: 'cubic-bezier', x1: -0.1, y1: 0, x2: 1, y2: 1 },
+        }],
+      }],
+    }
+
+    expect(() => validateProjectFile(duplicate)).toThrow(/strictly increasing/)
+    expect(() => validateProjectFile(badEasing)).toThrow(/from 0 to 1/)
   })
 
   test.each(

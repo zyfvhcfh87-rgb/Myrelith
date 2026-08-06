@@ -9,6 +9,7 @@ import {
   type VideoFrameRequest,
 } from './crossfadePlan'
 import { rangeContains } from './time'
+import { resolveClipAnimationAtFrame } from './clipAnimation'
 
 export interface OrdinaryVideoPlanItem {
   kind: 'clip'
@@ -52,14 +53,15 @@ function ordinaryItem(
   for (const clip of track.clips) {
     if (clip.timelineRange.startFrame > frame) break
     if (!rangeContains(clip.timelineRange, frame)) continue
-    const opacity = clipOpacity(clip)
+    const resolvedClip = resolveClipAnimationAtFrame(clip, frame)
+    const opacity = clipOpacity(resolvedClip)
     if (opacity <= 0) return null
-    if (clip.text !== undefined) {
+    if (resolvedClip.text !== undefined) {
       return {
         kind: 'text',
         trackId: track.id,
         frame,
-        clip,
+        clip: resolvedClip,
         opacity,
       }
     }
@@ -68,16 +70,34 @@ function ordinaryItem(
       trackId: track.id,
       frame,
       request: {
-        clip,
-        sourceFrame: clip.sourceMode === 'still'
+        clip: resolvedClip,
+        sourceFrame: resolvedClip.sourceMode === 'still'
           ? 0
-          : clip.sourceRange.startFrame
-            + (frame - clip.timelineRange.startFrame),
+          : resolvedClip.sourceRange.startFrame
+            + (frame - resolvedClip.timelineRange.startFrame),
         opacity,
       },
     }
   }
   return null
+}
+
+function resolveCrossfadeGroupAnimation(
+  group: CrossfadeFrameGroup,
+): CrossfadeFrameGroup {
+  const resolveRequest = (
+    request: CrossfadeFrameGroup['requests'][number],
+  ): CrossfadeFrameGroup['requests'][number] => {
+    const clip = resolveClipAnimationAtFrame(request.clip, group.frame)
+    return { ...request, clip, opacity: clipOpacity(clip) }
+  }
+  return {
+    ...group,
+    requests: [
+      resolveRequest(group.requests[0]),
+      resolveRequest(group.requests[1]),
+    ],
+  }
 }
 
 /**
@@ -125,7 +145,8 @@ export function createVideoCompositionPlanner(
           (plan) => frame >= plan.startFrame && frame < plan.endFrame,
         )
         if (active.length === 1) {
-          const group = active[0].groupAt(frame)
+          const rawGroup = active[0].groupAt(frame)
+          const group = rawGroup ? resolveCrossfadeGroupAnimation(rawGroup) : null
           if (group) {
             items.push(group)
             continue

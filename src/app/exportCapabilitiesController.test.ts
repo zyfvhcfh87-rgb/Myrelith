@@ -15,7 +15,7 @@ import {
 } from './exportCapabilitiesController'
 
 const DOC: TimelineDoc = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   id: 'capability-controller-doc',
   name: 'Capability controller',
   frameRate: { num: 30, den: 1 },

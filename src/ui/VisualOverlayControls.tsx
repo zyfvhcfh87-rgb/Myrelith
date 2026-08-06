@@ -12,6 +12,8 @@ import {
   MAX_CROP_SUM,
   clipVisualSettings,
 } from '../domain/clipInspector'
+import { resolveClipAnimationAtFrame } from '../domain/clipAnimation'
+import type { ClipVisualPatch } from '../domain/operations'
 import { findClip, trackOfClip } from '../domain/selectors'
 import type {
   Clip,
@@ -50,6 +52,7 @@ type GestureKind =
 interface Gesture {
   clipId: string
   document: TimelineDoc
+  timelineFrame: number
   kind: GestureKind
   startClientX: number
   startClientY: number
@@ -110,21 +113,24 @@ function activeVisualClips(
   for (const track of doc.tracks) {
     if (track.kind !== 'video' || track.hidden) continue
     for (const clip of track.clips) {
-      const descriptor = descriptors.get(clip.assetId)
       if (
         clip.text
-        || clip.opacity <= 0
         || frame < clip.timelineRange.startFrame
         || frame >= rangeEnd(clip.timelineRange)
-        || !descriptor
+      ) continue
+      const descriptor = descriptors.get(clip.assetId)
+      if (
+        !descriptor
         || (descriptor.kind !== 'video' && descriptor.kind !== 'image')
         || descriptor.width === null
         || descriptor.height === null
         || descriptor.width <= 0
         || descriptor.height <= 0
       ) continue
+      const resolvedClip = resolveClipAnimationAtFrame(clip, frame)
+      if (resolvedClip.opacity <= 0) continue
       clips.push({
-        clip,
+        clip: resolvedClip,
         descriptor,
         locked: track.locked,
         sourceWidth: descriptor.width,
@@ -335,7 +341,47 @@ function currentEditableClip(clipId: string): Clip | null {
   const doc = useDocumentStore.getState().doc
   const track = trackOfClip(doc, clipId)
   if (!track || track.locked) return null
-  return findClip(doc, clipId)
+  const clip = findClip(doc, clipId)
+  return clip
+    ? resolveClipAnimationAtFrame(
+        clip,
+        useTransportStore.getState().playheadFrame,
+      )
+    : null
+}
+
+function updateVisualAtPlayhead(clipId: string, patch: ClipVisualPatch): void {
+  const frame = useTransportStore.getState().playheadFrame
+  useDocumentStore.getState().updateClipVisualAtFrame(clipId, frame, patch)
+}
+
+function gestureCommitPatch(gesture: Gesture): ClipVisualPatch {
+  const { transform, visual } = gesture.latest
+  if (gesture.kind === 'move') {
+    return { transform: { x: transform.x, y: transform.y } }
+  }
+  if (gesture.kind.startsWith('scale-')) {
+    return {
+      transform: {
+        scaleX: transform.scaleX,
+        scaleY: transform.scaleY,
+      },
+    }
+  }
+  if (gesture.kind === 'rotate') {
+    return { transform: { rotation: transform.rotation } }
+  }
+  if (gesture.kind === 'anchor') {
+    return {
+      transform: {
+        x: transform.x,
+        y: transform.y,
+        anchorX: transform.anchorX,
+        anchorY: transform.anchorY,
+      },
+    }
+  }
+  return { visual: { crop: { ...visual.crop } } }
 }
 
 export default function VisualOverlayControls({
@@ -406,7 +452,11 @@ export default function VisualOverlayControls({
   ): void => {
     useTransportStore.getState().setSelectedClip(clipId)
     const latestDoc = useDocumentStore.getState().doc
-    const clip = findClip(latestDoc, clipId)
+    const durableClip = findClip(latestDoc, clipId)
+    const timelineFrame = useTransportStore.getState().playheadFrame
+    const clip = durableClip
+      ? resolveClipAnimationAtFrame(durableClip, timelineFrame)
+      : null
     const track = trackOfClip(latestDoc, clipId)
     const descriptor = clip ? useMediaStore.getState().descriptors.get(clip.assetId) : null
     const measured = measureViewport(canvasRef.current, panelRef.current)
@@ -433,6 +483,7 @@ export default function VisualOverlayControls({
     gestureRef.current = {
       clipId,
       document: latestDoc,
+      timelineFrame,
       kind,
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -477,10 +528,11 @@ export default function VisualOverlayControls({
     gestureRef.current = null
     pendingPreviewRef.current = null
     if (commit && useDocumentStore.getState().doc === gesture.document) {
-      useDocumentStore.getState().updateClipVisual(gesture.clipId, {
-        transform: gesture.latest.transform,
-        visual: gesture.latest.visual,
-      })
+      useDocumentStore.getState().updateClipVisualAtFrame(
+        gesture.clipId,
+        gesture.timelineFrame,
+        gestureCommitPatch(gesture),
+      )
     }
     useTransportStore.getState().setClipVisualPreview(null)
   }
@@ -499,7 +551,7 @@ export default function VisualOverlayControls({
       + (event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0)
     if (x === clip.transform.x && y === clip.transform.y) return
     event.preventDefault()
-    useDocumentStore.getState().updateClipVisual(clipId, { transform: { x, y } })
+    updateVisualAtPlayhead(clipId, { transform: { x, y } })
   }
 
   const keyboardScale = (
@@ -523,11 +575,11 @@ export default function VisualOverlayControls({
         MIN_EDITABLE_SCALE,
         MAX_CLIP_SCALE,
       )
-      useDocumentStore.getState().updateClipVisual(clipId, {
+      updateVisualAtPlayhead(clipId, {
         transform: { scaleX: scale, scaleY: scale },
       })
     } else {
-      useDocumentStore.getState().updateClipVisual(clipId, {
+      updateVisualAtPlayhead(clipId, {
         transform: {
           scaleX: clamp(clip.transform.scaleX + horizontal, MIN_EDITABLE_SCALE, MAX_CLIP_SCALE),
           scaleY: clamp(clip.transform.scaleY + vertical, MIN_EDITABLE_SCALE, MAX_CLIP_SCALE),
@@ -545,7 +597,7 @@ export default function VisualOverlayControls({
     if (!clip) return
     event.preventDefault()
     const amount = event.shiftKey ? 15 : 1
-    useDocumentStore.getState().updateClipVisual(clipId, {
+    updateVisualAtPlayhead(clipId, {
       transform: {
         rotation: clip.transform.rotation
           + (event.key === 'ArrowLeft' ? -amount : amount),
@@ -582,7 +634,7 @@ export default function VisualOverlayControls({
       clip.transform,
       visual,
     )
-    useDocumentStore.getState().updateClipVisual(clip.id, {
+    updateVisualAtPlayhead(clip.id, {
       transform: {
         anchorX,
         anchorY,
@@ -609,7 +661,7 @@ export default function VisualOverlayControls({
     if (edge === 'bottom') delta = event.key === 'ArrowUp' ? amount : event.key === 'ArrowDown' ? -amount : 0
     if (delta === 0) return
     event.preventDefault()
-    useDocumentStore.getState().updateClipVisual(clipId, {
+    updateVisualAtPlayhead(clipId, {
       visual: { crop: cropWithEdge(visual.crop, edge, delta) },
     })
   }
@@ -618,7 +670,7 @@ export default function VisualOverlayControls({
     const clip = currentEditableClip(clipId)
     if (!clip) return
     const visual = clipVisualSettings(clip)
-    useDocumentStore.getState().updateClipVisual(clipId, {
+    updateVisualAtPlayhead(clipId, {
       visual: axis === 'horizontal'
         ? { flipHorizontal: !visual.flipHorizontal }
         : { flipVertical: !visual.flipVertical },

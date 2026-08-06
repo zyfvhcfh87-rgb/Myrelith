@@ -21,6 +21,8 @@
 import { create } from 'zustand'
 import type {
   Clip,
+  ClipAnimationKeyframe,
+  ClipAnimationProperty,
   ClipId,
   Effect,
   TimelineDoc,
@@ -54,6 +56,11 @@ import {
   updateClipAudio,
   updateClipTransform,
   updateClipVisual,
+  updateClipVisualAtFrame,
+  setClipKeyframe,
+  moveClipKeyframe,
+  removeClipKeyframe,
+  resetClipAnimationTrack,
   updateTextClip,
 } from '../domain/operations'
 import {
@@ -203,6 +210,33 @@ export interface DocumentState {
   updateClipTransform: (clipId: ClipId, patch: ClipTransformPatch) => void
   /** Atomically edit/reset the complete static visual Inspector surface. */
   updateClipVisual: (clipId: ClipId, patch: ClipVisualPatch) => void
+  /** Edit static fields or upsert active animation tracks at one playhead frame. */
+  updateClipVisualAtFrame: (
+    clipId: ClipId,
+    timelineFrame: number,
+    patch: ClipVisualPatch,
+  ) => void
+  /** Add/replace, move, remove, or reset one property keyframe track. */
+  setClipKeyframe: (
+    clipId: ClipId,
+    property: ClipAnimationProperty,
+    keyframe: ClipAnimationKeyframe,
+  ) => void
+  moveClipKeyframe: (
+    clipId: ClipId,
+    property: ClipAnimationProperty,
+    fromFrame: number,
+    toFrame: number,
+  ) => void
+  removeClipKeyframe: (
+    clipId: ClipId,
+    property: ClipAnimationProperty,
+    frame: number,
+  ) => void
+  resetClipAnimationTrack: (
+    clipId: ClipId,
+    property: ClipAnimationProperty,
+  ) => void
   /** Update one text payload atomically; invalid/unchanged patches add no history. */
   updateTextClip: (clipId: ClipId, patch: TextPropsPatch) => void
   /**
@@ -409,6 +443,36 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   updateClipVisual: (clipId, patch) =>
     set((state) => commit(state, updateClipVisual(state.doc, clipId, patch))),
+
+  updateClipVisualAtFrame: (clipId, timelineFrame, patch) =>
+    set((state) => commit(
+      state,
+      updateClipVisualAtFrame(state.doc, clipId, timelineFrame, patch),
+    )),
+
+  setClipKeyframe: (clipId, property, keyframe) =>
+    set((state) => commit(
+      state,
+      setClipKeyframe(state.doc, clipId, property, keyframe),
+    )),
+
+  moveClipKeyframe: (clipId, property, fromFrame, toFrame) =>
+    set((state) => commit(
+      state,
+      moveClipKeyframe(state.doc, clipId, property, fromFrame, toFrame),
+    )),
+
+  removeClipKeyframe: (clipId, property, frame) =>
+    set((state) => commit(
+      state,
+      removeClipKeyframe(state.doc, clipId, property, frame),
+    )),
+
+  resetClipAnimationTrack: (clipId, property) =>
+    set((state) => commit(
+      state,
+      resetClipAnimationTrack(state.doc, clipId, property),
+    )),
 
   updateTextClip: (clipId, patch) =>
     set((state) => commit(state, updateTextClip(state.doc, clipId, patch))),

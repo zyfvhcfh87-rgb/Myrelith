@@ -27,6 +27,7 @@
 
 import { memo } from 'react'
 import type { Clip, TrackId, TrackKind } from '../../domain/schema'
+import { clipAnimation } from '../../domain/clipAnimation'
 import { microsecondsDurationToFrames } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
@@ -157,6 +158,20 @@ function ClipView({
     accessibleKind,
     interactionTitle,
   } = presentation
+  const allMarkerFrames = Array.from(new Set(
+    clipAnimation(clip).tracks.flatMap((track) =>
+      track.keyframes.map((keyframe) => clip.timelineRange.startFrame + keyframe.frame),
+    ),
+  ))
+    .filter((frame) =>
+      frame >= clip.timelineRange.startFrame
+      && frame < clip.timelineRange.startFrame + clip.timelineRange.durationFrames
+      && frame >= presentation.displayedStartFrame
+      && frame < presentation.displayedEndFrame,
+    )
+    .sort((left, right) => left - right)
+  const markerStride = Math.max(1, Math.ceil(allMarkerFrames.length / 128))
+  const markerFrames = allMarkerFrames.filter((_, index) => index % markerStride === 0)
 
   return (
     <div
@@ -188,6 +203,19 @@ function ClipView({
       onLostPointerCapture={onLostPointerCapture}
     >
       <ClipVisualLayer clipId={clip.id} visual={presentation.visual} />
+      {hasVisibleSlice && markerFrames.length > 0 && (
+        <span className="clip-keyframe-markers" aria-hidden="true">
+          {markerFrames.map((frame) => (
+            <span
+              key={frame}
+              className="clip-keyframe-marker"
+              style={{
+                left: (frame - presentation.displayedStartFrame) * zoom,
+              }}
+            />
+          ))}
+        </span>
+      )}
       {(showStartEdge || showEndEdge) && (
         <>
           {showStartEdge && (

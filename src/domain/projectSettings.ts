@@ -379,7 +379,7 @@ export function createTimelineDoc(
     ...emptyTracks('A', 'audio'),
   ]
   const doc: TimelineDoc = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     id,
     name: projectName,
     frameRate: { ...validated.frameRate },

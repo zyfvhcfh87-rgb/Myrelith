@@ -2290,6 +2290,50 @@ farthest-corner handle was rendered.
   PR #51 as `4f9eaaa`; the feature branch was retained. The matching completion
   scope is limited to Issue #35.
 
+## Post-MVP issue #43 — keyframing and animation curves
+
+**COMPLETE (2026-08-05).**
+
+The first deliberately small property set is visual-media Position X/Y, Scale
+X/Y, Rotation, and Opacity. Crop, flips, audio, text styling, effects,
+tracking, procedural animation, and blanket animation of every Inspector field
+remain out of scope.
+
+- [x] Add a strict serializable track/keyframe/easing model under nested
+  timeline schema 6. Schema-5 migration installs empty curves without changing
+  a static project; outer project format remains 4. Validation caps project and
+  per-track keyframe counts, finite values, frame magnitudes, and easing control
+  points.
+- [x] Freeze deterministic semantics in one pure evaluator: clip-local integer
+  frames, nearest-value boundary holds, exact-time selection, left-key outgoing
+  hold/linear/CSS-style cubic-Bézier interpolation, duplicate-time replacement,
+  and static fallback for invalid in-memory data.
+- [x] Add immutable add/replace, move, copy, remove, and reset operations with
+  one history entry per successful edit. A moved source replaces an existing
+  target-time key. Split and head-trim shift local keyframe origins so the
+  global curve is visually unchanged.
+- [x] Route Inspector and Program Monitor changes through the playhead: static
+  properties retain their existing base-field behavior, while an already
+  animated property adds/replaces the exact playhead keyframe. Gesture previews
+  stay ephemeral and release still commits once.
+- [x] Resolve the same pure curve in the canonical video composition planner
+  before ordinary and crossfade requests, giving scrubbing, playback, and export
+  one path with no per-frame document/store mutation.
+- [x] Add accessible Inspector property selection, keyframe list/navigation,
+  frame/value inputs, copy/remove/reset commands, named curve presets, custom
+  cubic-Bézier controls, live announcements, and bounded timeline diamonds.
+- [x] Unit/integration coverage pins evaluator boundaries/easing, invalid and
+  duplicate data, operations, split/trim geometry, store undo/redo, schema-5
+  migration and save/load, composition parity, accessible UI workflows, and
+  marker placement. The complete suite passes 1,805/1,805 tests across 105
+  files.
+- [x] Production build, oxlint, and diff checks pass; the build retains only
+  the known Vite chunk-size advisory. In-app Chromium reopened and quick-
+  relinked real 320×180 H.264 media, proved exact keyed monitor/Inspector sync,
+  custom easing, copy/move/remove/reset with undo, interpolated playback, three
+  timeline diamonds, and a completed 120-frame MP4 export. The 720×800 layout
+  had zero horizontal overflow and the final console had zero warnings/errors.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**

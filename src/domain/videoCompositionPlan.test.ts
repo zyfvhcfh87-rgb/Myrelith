@@ -80,7 +80,7 @@ function track(
 
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },
@@ -215,5 +215,64 @@ describe('video composition plan', () => {
     expect(videoCompositionRequests(planner.planFrame(10)).map(
       (request) => `${request.clip.id}@${request.sourceFrame}`,
     )).toEqual(['from@30', 'to@60'])
+  })
+
+  test('resolves the same keyframed clip values for ordinary and crossfade requests', () => {
+    const ordinary = clip('ordinary', 'ordinary-asset', 0, 0)
+    ordinary.animation = {
+      tracks: [
+        {
+          property: 'position-x',
+          keyframes: [
+            { frame: 0, value: 0, easing: { type: 'linear' } },
+            { frame: 10, value: 100, easing: { type: 'linear' } },
+          ],
+        },
+        {
+          property: 'opacity',
+          keyframes: [
+            { frame: 0, value: 1, easing: { type: 'linear' } },
+            { frame: 10, value: 0, easing: { type: 'linear' } },
+          ],
+        },
+      ],
+    }
+    const ordinaryRequest = videoCompositionRequests(
+      createVideoCompositionPlanner(doc([track('V1', [ordinary])]), new Map())
+        .planFrame(5),
+    )[0]
+
+    expect(ordinaryRequest.clip.transform.x).toBe(50)
+    expect(ordinaryRequest.opacity).toBe(0.5)
+
+    const from = clip('from', 'shared', 0, 20)
+    const to = clip('to', 'shared', 10, 60)
+    from.animation = {
+      tracks: [{
+        property: 'rotation',
+        keyframes: [
+          { frame: 10, value: 10, easing: { type: 'linear' } },
+          { frame: 12, value: 30, easing: { type: 'linear' } },
+        ],
+      }],
+    }
+    to.animation = {
+      tracks: [{
+        property: 'position-y',
+        keyframes: [
+          { frame: 0, value: -20, easing: { type: 'linear' } },
+          { frame: 2, value: 20, easing: { type: 'linear' } },
+        ],
+      }],
+    }
+    const requests = videoCompositionRequests(
+      createVideoCompositionPlanner(
+        doc([track('V1', [from, to], [crossfade(from.id, to.id)])]),
+        catalog([['shared', exact()]]),
+      ).planFrame(11),
+    )
+
+    expect(requests[0].clip.transform.rotation).toBe(20)
+    expect(requests[1].clip.transform.y).toBe(0)
   })
 })

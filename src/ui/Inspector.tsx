@@ -5,7 +5,8 @@
  * invalid input revert without polluting history. Sliders and toggles commit
  * immediately, with explicit bounded keyboard behavior. Each reset remains
  * one atomic document-store mutation. Linked A/V selections resolve both
- * document-owned halves without reading playhead or runtime pipeline state.
+ * document-owned halves. Issue #43 resolves supported visual properties at
+ * the integer playhead through the shared pure animation path.
  * Layering: ui/ → state/ + domain selectors only.
  */
 
@@ -18,6 +19,7 @@ import {
   MAX_CLIP_SCALE,
   MAX_CROP_SUM,
 } from '../domain/clipInspector'
+import { resolveClipAnimationAtFrame } from '../domain/clipAnimation'
 import {
   getLinkClipsEligibility,
   linkedPartners,
@@ -43,6 +45,7 @@ import {
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
+import AnimationCurveEditor from './AnimationCurveEditor'
 
 interface NumberFieldProps {
   label: string
@@ -361,11 +364,23 @@ function ToggleField({
   )
 }
 
-function VideoInspectorSections({ clip, locked }: { clip: Clip; locked: boolean }) {
+function VideoInspectorSections({
+  clip,
+  locked,
+  playheadFrame,
+}: {
+  clip: Clip
+  locked: boolean
+  playheadFrame: number
+}) {
   const visual = clipVisualSettings(clip)
   const transform = clip.transform
   const patch = (next: ClipVisualPatch): void =>
-    useDocumentStore.getState().updateClipVisual(clip.id, next)
+    useDocumentStore.getState().updateClipVisualAtFrame(
+      clip.id,
+      playheadFrame,
+      next,
+    )
   const cropPercent = (value: number): number => Math.round(value * 10_000) / 100
   const cropFraction = (value: number): number => Math.round(value * 100) / 10_000
 
@@ -873,6 +888,7 @@ function LinkSelectionControls() {
 export default function Inspector() {
   const selectedClipId = useTransportStore((s) => s.selectedClipId)
   const visualPreview = useTransportStore((s) => s.clipVisualPreview)
+  const playheadFrame = useTransportStore((s) => s.playheadFrame)
   const timelineDoc = useDocumentStore((s) => s.doc)
   const clip = selectedClipId ? findClip(timelineDoc, selectedClipId) : null
 
@@ -899,13 +915,16 @@ export default function Inspector() {
   const audioLocked = audioClip === null
     ? false
     : (trackOfClip(timelineDoc, audioClip.id)?.locked ?? true)
-  const displayedVideoClip = videoClip && visualPreview?.clipId === videoClip.id
+  const resolvedVideoClip = videoClip
+    ? resolveClipAnimationAtFrame(videoClip, playheadFrame)
+    : null
+  const displayedVideoClip = resolvedVideoClip && visualPreview?.clipId === resolvedVideoClip.id
     ? {
-        ...videoClip,
+        ...resolvedVideoClip,
         transform: visualPreview.transform,
         visual: visualPreview.visual,
       }
-    : videoClip
+    : resolvedVideoClip
 
   return (
     <div className="inspector-panel" data-testid="inspector-panel">
@@ -919,7 +938,18 @@ export default function Inspector() {
         />
       )}
       {displayedVideoClip && (
-        <VideoInspectorSections clip={displayedVideoClip} locked={videoLocked} />
+        <VideoInspectorSections
+          clip={displayedVideoClip}
+          locked={videoLocked}
+          playheadFrame={playheadFrame}
+        />
+      )}
+      {videoClip && !videoClip.text && (
+        <AnimationCurveEditor
+          clip={videoClip}
+          locked={videoLocked}
+          playheadFrame={playheadFrame}
+        />
       )}
       {audioClip && (
         <AudioInspectorSection clip={audioClip} locked={audioLocked} />

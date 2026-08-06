@@ -22,6 +22,9 @@
 
 import type {
   Clip,
+  ClipAnimationEasing,
+  ClipAnimationKeyframe,
+  ClipAnimationProperty,
   ClipAudioSettings,
   ClipId,
   ClipVisualSettings,
@@ -38,6 +41,20 @@ import type {
   TextProps,
   Transform,
 } from './schema'
+import {
+  clipAnimation,
+  clipAnimationValidationError,
+  cloneClipAnimation,
+  defaultClipAnimation,
+  shiftClipAnimation,
+  animationPropertyValueError,
+  isClipPropertyAnimated,
+  LINEAR_ANIMATION_EASING,
+  moveAnimationKeyframe,
+  removeAnimationKeyframe,
+  removeAnimationTrack,
+  upsertAnimationKeyframe,
+} from './clipAnimation'
 import {
   clipAudioSettings,
   clipAudioSettingsValidationError,
@@ -622,6 +639,7 @@ export function clipFromAsset(
     volume: 1,
     visual: defaultClipVisualSettings(),
     audio: defaultClipAudioSettings(),
+    animation: defaultClipAnimation(),
     effects: [],
     ...(linkGroupId ? { linkGroupId } : {}),
   }
@@ -664,6 +682,7 @@ export function createTextClip(
     volume: 1,
     visual: defaultClipVisualSettings(),
     audio: defaultClipAudioSettings(),
+    animation: defaultClipAnimation(),
     effects: [],
     text,
   }
@@ -745,6 +764,9 @@ export function insertClip(
     tl.durationFrames,
   )
   if (audioError) return reject(doc, op, audioError)
+  const animation = clipAnimation(clip)
+  const animationError = clipAnimationValidationError(animation)
+  if (animationError) return reject(doc, op, animationError)
 
   const trackIndex = doc.tracks.findIndex((t) => t.id === trackId)
   if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
@@ -752,6 +774,12 @@ export function insertClip(
   if (track.locked) return reject(doc, op, `track ${track.id} is locked`)
   if (clip.text !== undefined && track.kind !== 'video') {
     return reject(doc, op, 'text clips can only be placed on video tracks')
+  }
+  if (
+    animation.tracks.length > 0
+    && (track.kind !== 'video' || clip.text !== undefined)
+  ) {
+    return reject(doc, op, 'keyframes are supported only on visual media clips')
   }
 
   if (locateClip(doc, clip.id)) {
@@ -771,6 +799,7 @@ export function insertClip(
       crop: { ...clipVisualSettings(clip).crop },
     },
     audio: { ...clipAudioSettings(clip) },
+    animation: cloneClipAnimation(animation),
     effects: clip.effects.map((e) => ({ ...e, params: { ...e.params } })),
     ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
   }
@@ -812,6 +841,8 @@ export function splitClipAtFrame(
   const offset = frame - tl.startFrame
   const stillSource = clip.sourceMode === 'still'
   const textSource = clip.text !== undefined
+  const rightAnimation = shiftClipAnimation(clipAnimation(clip), -offset)
+  if (!rightAnimation) return reject(doc, op, 'split would exceed keyframe frame bounds')
   const left: Clip = withClampedAudioFades({
     ...clip,
     sourceRange: stillSource
@@ -836,6 +867,7 @@ export function splitClipAtFrame(
           durationFrames: tl.durationFrames - offset,
         },
     timelineRange: { startFrame: frame, durationFrames: tl.durationFrames - offset },
+    animation: rightAnimation,
     effects: clip.effects.map((e) => ({
       ...e,
       id: newId('fx'),
@@ -930,11 +962,17 @@ export function trimClip(
     return reject(doc, op, 'trim would overlap a neighboring clip')
   }
 
+  const nextAnimation = edge === 'start'
+    ? shiftClipAnimation(clipAnimation(clip), -deltaFrames)
+    : cloneClipAnimation(clipAnimation(clip))
+  if (!nextAnimation) return reject(doc, op, 'trim would exceed keyframe frame bounds')
+
   const clips = loc.track.clips.slice()
   clips[loc.clipIndex] = withClampedAudioFades({
     ...clip,
     timelineRange: newTl,
     sourceRange: newSrc,
+    animation: nextAnimation,
   })
   clips.sort(byStart)
   const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
@@ -1149,6 +1187,10 @@ export function slideClip(
     if (!rightIsStill && !rightIsText && newSrcStart < 0) {
       return reject(doc, op, 'right neighbor has no source material before the asset start')
     }
+    const rightAnimation = shiftClipAnimation(clipAnimation(right), -deltaFrames)
+    if (!rightAnimation) {
+      return reject(doc, op, 'slide would exceed right-neighbor keyframe frame bounds')
+    }
     clips[clipIndex + 1] = withClampedAudioFades({
       ...right,
       timelineRange: {
@@ -1160,6 +1202,7 @@ export function slideClip(
         : rightIsText
           ? { startFrame: 0, durationFrames: newDur }
         : { startFrame: newSrcStart, durationFrames: newDur },
+      animation: rightAnimation,
     })
   }
   clips[clipIndex] = {
@@ -1458,6 +1501,257 @@ export function updateClipVisual(
     visual: nextVisual,
   }
   return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
+const TRANSFORM_ANIMATION_PROPERTIES: Partial<
+  Record<keyof Transform, ClipAnimationProperty>
+> = {
+  x: 'position-x',
+  y: 'position-y',
+  scaleX: 'scale-x',
+  scaleY: 'scale-y',
+  rotation: 'rotation',
+}
+
+function sameAnimationEasing(
+  left: ClipAnimationEasing,
+  right: ClipAnimationEasing,
+): boolean {
+  if (left.type !== right.type) return false
+  return left.type !== 'cubic-bezier'
+    || (
+      right.type === 'cubic-bezier'
+      && left.x1 === right.x1
+      && left.y1 === right.y1
+      && left.x2 === right.x2
+      && left.y2 === right.y2
+    )
+}
+
+function animationEditLocation(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  operation: string,
+): ClipLocation | null {
+  const loc = locateClip(doc, clipId)
+  if (!loc) {
+    reject(doc, operation, `clip ${clipId} not found`)
+    return null
+  }
+  if (loc.track.locked) {
+    reject(doc, operation, `track ${loc.track.id} is locked`)
+    return null
+  }
+  if (loc.track.kind !== 'video' || loc.clip.text !== undefined) {
+    reject(doc, operation, 'keyframes are supported only on visual media clips')
+    return null
+  }
+  return loc
+}
+
+function replaceClipAnimation(
+  doc: TimelineDoc,
+  loc: ClipLocation,
+  animation: NonNullable<Clip['animation']>,
+): TimelineDoc {
+  const clips = loc.track.clips.slice()
+  clips[loc.clipIndex] = { ...loc.clip, animation }
+  return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
+/** Add or replace one exact property/time keyframe. Duplicate time is replace. */
+export function setClipKeyframe(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  property: ClipAnimationProperty,
+  keyframe: ClipAnimationKeyframe,
+): TimelineDoc {
+  const op = 'setClipKeyframe'
+  const loc = animationEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  const current = clipAnimation(loc.clip)
+  const existing = current.tracks
+    .find((track) => track.property === property)
+    ?.keyframes.find((item) => item.frame === keyframe.frame)
+  if (
+    existing
+    && existing.value === keyframe.value
+    && sameAnimationEasing(existing.easing, keyframe.easing)
+  ) return doc
+  const animation = upsertAnimationKeyframe(current, property, keyframe)
+  if (!animation) return reject(doc, op, 'invalid or over-budget keyframe')
+  return replaceClipAnimation(doc, loc, animation)
+}
+
+/** Move one keyframe; its source replaces any key already at the target time. */
+export function moveClipKeyframe(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  property: ClipAnimationProperty,
+  fromFrame: number,
+  toFrame: number,
+): TimelineDoc {
+  const op = 'moveClipKeyframe'
+  const loc = animationEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  const animation = moveAnimationKeyframe(
+    clipAnimation(loc.clip),
+    property,
+    fromFrame,
+    toFrame,
+  )
+  if (!animation) return reject(doc, op, 'source keyframe is missing or target frame is invalid')
+  if (animation === clipAnimation(loc.clip)) return doc
+  return replaceClipAnimation(doc, loc, animation)
+}
+
+export function removeClipKeyframe(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  property: ClipAnimationProperty,
+  frame: number,
+): TimelineDoc {
+  const op = 'removeClipKeyframe'
+  const loc = animationEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  const animation = removeAnimationKeyframe(clipAnimation(loc.clip), property, frame)
+  if (!animation) return reject(doc, op, 'keyframe not found')
+  return replaceClipAnimation(doc, loc, animation)
+}
+
+/** Remove one property track while retaining its underlying static value. */
+export function resetClipAnimationTrack(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  property: ClipAnimationProperty,
+): TimelineDoc {
+  const op = 'resetClipAnimationTrack'
+  const loc = animationEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  const animation = removeAnimationTrack(clipAnimation(loc.clip), property)
+  if (!animation) return doc
+  return replaceClipAnimation(doc, loc, animation)
+}
+
+function staticVisualPatchDiffers(
+  clip: Clip,
+  patch: ClipVisualPatch,
+): boolean {
+  for (const [key, value] of Object.entries(patch.transform ?? {}) as Array<
+    [keyof Transform, number]
+  >) {
+    if (clip.transform[key] !== value) return true
+  }
+  if (patch.opacity !== undefined && clip.opacity !== patch.opacity) return true
+  if (patch.visual) {
+    const current = clipVisualSettings(clip)
+    const next = {
+      ...current,
+      ...patch.visual,
+      crop: { ...current.crop, ...(patch.visual.crop ?? {}) },
+    }
+    if (!sameVisual(current, next)) return true
+  }
+  return false
+}
+
+/**
+ * Apply Inspector/Program Monitor edits at one timeline frame. Static
+ * properties keep using their durable fields; already-animated properties
+ * receive a keyframe at the playhead without mutating the document per frame.
+ */
+export function updateClipVisualAtFrame(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  timelineFrame: number,
+  patch: ClipVisualPatch,
+): TimelineDoc {
+  const op = 'updateClipVisualAtFrame'
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+  if (!Number.isSafeInteger(timelineFrame)) {
+    return reject(doc, op, `timeline frame must be a safe integer, got ${timelineFrame}`)
+  }
+
+  const normalizedTransform = { ...(patch.transform ?? {}) }
+  const currentVisual = clipVisualSettings(loc.clip)
+  const scaleLocked = patch.visual?.scaleLocked ?? currentVisual.scaleLocked
+  if (
+    scaleLocked
+    && (normalizedTransform.scaleX !== undefined || normalizedTransform.scaleY !== undefined)
+  ) {
+    if (
+      normalizedTransform.scaleX !== undefined
+      && normalizedTransform.scaleY !== undefined
+      && normalizedTransform.scaleX !== normalizedTransform.scaleY
+    ) return reject(doc, op, 'locked scale X and Y must match')
+    const scale = normalizedTransform.scaleX ?? normalizedTransform.scaleY
+    normalizedTransform.scaleX = scale
+    normalizedTransform.scaleY = scale
+  }
+
+  const animatedValues = new Map<ClipAnimationProperty, number>()
+  const staticTransform: Partial<Transform> = {}
+  for (const [key, value] of Object.entries(normalizedTransform) as Array<
+    [keyof Transform, number]
+  >) {
+    const property = TRANSFORM_ANIMATION_PROPERTIES[key]
+    if (property && isClipPropertyAnimated(loc.clip, property)) {
+      const valueError = animationPropertyValueError(property, value)
+      if (valueError) return reject(doc, op, valueError)
+      animatedValues.set(property, value)
+    } else {
+      staticTransform[key] = value
+    }
+  }
+  let staticOpacity = patch.opacity
+  if (patch.opacity !== undefined && isClipPropertyAnimated(loc.clip, 'opacity')) {
+    const valueError = animationPropertyValueError('opacity', patch.opacity)
+    if (valueError) return reject(doc, op, valueError)
+    animatedValues.set('opacity', patch.opacity)
+    staticOpacity = undefined
+  }
+
+  const localFrame = timelineFrame - loc.clip.timelineRange.startFrame
+  if (
+    animatedValues.size > 0
+    && (
+      localFrame < 0
+      || localFrame >= loc.clip.timelineRange.durationFrames
+    )
+  ) return reject(doc, op, 'playhead must be inside the clip to edit animated values')
+
+  const staticPatch: ClipVisualPatch = {
+    ...(Object.keys(staticTransform).length === 0 ? {} : { transform: staticTransform }),
+    ...(staticOpacity === undefined ? {} : { opacity: staticOpacity }),
+    ...(patch.visual === undefined ? {} : { visual: patch.visual }),
+  }
+  const hasStaticPatch = Object.keys(staticPatch).length > 0
+  let working = doc
+  if (hasStaticPatch) {
+    const next = updateClipVisual(doc, clipId, staticPatch)
+    if (next === doc && staticVisualPatchDiffers(loc.clip, staticPatch)) return doc
+    working = next
+  }
+  if (animatedValues.size === 0) return working
+
+  const workingLoc = locateClip(working, clipId)
+  if (!workingLoc) return doc
+  let animation = clipAnimation(workingLoc.clip)
+  for (const [property, value] of animatedValues) {
+    const existing = animation.tracks
+      .find((track) => track.property === property)
+      ?.keyframes.find((keyframe) => keyframe.frame === localFrame)
+    const next = upsertAnimationKeyframe(animation, property, {
+      frame: localFrame,
+      value,
+      easing: existing?.easing ?? LINEAR_ANIMATION_EASING,
+    })
+    if (!next) return reject(doc, op, 'animated edit exceeds keyframe limits')
+    animation = next
+  }
+  return replaceClipAnimation(working, workingLoc, animation)
 }
 
 export type ClipAudioSettingsPatch = Partial<ClipAudioSettings>
