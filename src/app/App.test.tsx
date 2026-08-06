@@ -5,7 +5,7 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import App from './App'
 import type { Clip, TimelineDoc } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
@@ -93,9 +93,11 @@ describe('App shell', () => {
   test('opens on the project home instead of mounting editor controllers', () => {
     const { container } = render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'WebCut' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create a new project/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /resume previous work/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', {
+      name: /your footage.*your space.*your cut/i,
+    })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /start a new project/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /open a project/i })).toBeInTheDocument()
     expect(container.querySelector('.app-shell')).toBeNull()
   })
 
@@ -127,6 +129,18 @@ describe('App shell', () => {
     expect(
       shell?.querySelector('.area-transport > .timeline-zoom-controls'),
     ).not.toBeNull()
+  })
+
+  test('keeps Add text with the timeline tools instead of the project actions', () => {
+    useProjectSessionStore.setState({ screen: 'editor' })
+    const { container } = render(<App />)
+
+    const addText = screen.getByRole('button', { name: 'Add text' })
+    expect(addText.closest('.transport-tools')).not.toBeNull()
+    expect(container.querySelector('.toolbar-actions')?.contains(addText)).toBe(false)
+
+    fireEvent.click(addText)
+    expect(screen.getByRole('heading', { name: 'Add text overlay' })).toBeInTheDocument()
   })
 
   test('owns and releases document-to-selection reconciliation', () => {

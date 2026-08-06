@@ -724,3 +724,118 @@
 .tool-slide .clip-view {
   cursor: ew-resize;
 }
+
+/* Soft Studio timeline surface. Geometry remains frame-driven. */
+.timeline-headers {
+  flex-basis: 178px;
+  width: 178px;
+  background: #101c2a;
+  border-right-color: #31465f;
+}
+
+.timeline-headers-corner,
+.timeline-ruler {
+  background: #101b29;
+  border-bottom-color: #2b3d52;
+}
+
+.track-header,
+.timeline-track {
+  height: 44px;
+  flex-basis: 44px;
+  border-bottom-color: #223348;
+}
+
+.track-header {
+  gap: 6px;
+  padding: 0 7px;
+}
+
+.track-header-audio,
+.track-audio {
+  background: #112219;
+}
+
+.track-badge {
+  min-width: 24px;
+  color: #d9e7f8;
+  background: #315a8c;
+  border-color: #4275ac;
+}
+
+.track-badge-audio {
+  color: #def0e3;
+  background: #34704d;
+  border-color: #438b60;
+}
+
+.track-header-kind {
+  color: #d9e3ef;
+  font-size: 10px;
+}
+
+.track-header-count {
+  color: #71839a;
+  font-size: 8px;
+}
+
+.track-toggle {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: #8292a6;
+  background: #162334;
+  border-color: #304258;
+  filter: none;
+}
+
+.track-toggle:hover {
+  color: #eef4fb;
+  background: #1d2e43;
+}
+
+.timeline-track {
+  background: #101a27;
+}
+
+.timeline-track.track-locked {
+  background-image: none;
+  box-shadow: inset 3px 0 0 #5f7085;
+}
+
+.ruler-tick {
+  background: #31445a;
+}
+
+.ruler-label {
+  color: #8799b0;
+  font-size: 9px;
+}
+
+.clip-view,
+.track-audio .clip-view {
+  top: 4px;
+  bottom: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  box-shadow: 0 2px 7px rgb(0 0 0 / 18%);
+}
+
+.clip-view {
+  color: #e1ebf7;
+  background: #314e72;
+  border-color: #4e75a1;
+}
+
+.track-audio .clip-view {
+  color: #e0efe2;
+  background: #365c42;
+  border-color: #527c5d;
+}
+
+.clip-view.offline,
+.track-audio .clip-view.offline {
+  color: #dfcda8;
+  background: #302a21;
+}

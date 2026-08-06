@@ -10,7 +10,14 @@
  * Layering: ui/ → state/ + domain selectors only.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
+import { FileAudio, FileVideo, LinkBreak } from '@phosphor-icons/react'
 import {
   clipAudioSettings,
   clipVisualSettings,
@@ -368,10 +375,12 @@ function VideoInspectorSections({
   clip,
   locked,
   playheadFrame,
+  activeTab,
 }: {
   clip: Clip
   locked: boolean
   playheadFrame: number
+  activeTab: 'transform' | 'crop' | 'animation'
 }) {
   const visual = clipVisualSettings(clip)
   const transform = clip.transform
@@ -387,7 +396,13 @@ function VideoInspectorSections({
   return (
     <div className="inspector-section-stack" key={`video:${clip.id}`}>
       <div className="inspector-context-label">Video · {clip.name}</div>
-      <InspectorSection
+      <div
+        id="inspector-transform-panel"
+        role="tabpanel"
+        aria-labelledby="inspector-transform-tab"
+        hidden={activeTab !== 'transform'}
+      >
+        <InspectorSection
         title="Transform"
         resetLabel="Reset video transform"
         disabled={locked}
@@ -420,18 +435,25 @@ function VideoInspectorSections({
           <ToggleField label="Flip horizontally" checked={visual.flipHorizontal} disabled={locked} testId="inspector-flip-horizontal" onChange={(flipHorizontal) => patch({ visual: { flipHorizontal } })} />
           <ToggleField label="Flip vertically" checked={visual.flipVertical} disabled={locked} testId="inspector-flip-vertical" onChange={(flipVertical) => patch({ visual: { flipVertical } })} />
         </div>
-      </InspectorSection>
+        </InspectorSection>
 
-      <InspectorSection
+        <InspectorSection
         title="Opacity"
         resetLabel="Reset video opacity"
         disabled={locked}
         onReset={() => patch({ opacity: 1 })}
       >
         <RangeNumberField label="Opacity" value={clip.opacity} step={0.01} min={0} max={1} testId="inspector-opacity" disabled={locked} onCommit={(opacity) => patch({ opacity })} />
-      </InspectorSection>
+        </InspectorSection>
+      </div>
 
-      <InspectorSection
+      <div
+        id="inspector-crop-panel"
+        role="tabpanel"
+        aria-labelledby="inspector-crop-tab"
+        hidden={activeTab !== 'crop'}
+      >
+        <InspectorSection
         title="Crop"
         resetLabel="Reset video crop"
         disabled={locked}
@@ -444,7 +466,8 @@ function VideoInspectorSections({
           <RangeNumberField label="Crop bottom (%)" value={cropPercent(visual.crop.bottom)} step={0.1} min={0} max={cropPercent(MAX_CROP_SUM - visual.crop.top)} testId="inspector-crop-bottom" disabled={locked} onCommit={(bottom) => patch({ visual: { crop: { bottom: cropFraction(bottom) } } })} />
         </div>
         <span className="inspector-note">Crop removes source edges without stretching the remainder.</span>
-      </InspectorSection>
+        </InspectorSection>
+      </div>
     </div>
   )
 }
@@ -859,7 +882,7 @@ function LinkSelectionControls() {
             aria-describedby="inspector-unlink-status"
             onClick={unlinkSelectedClip}
           >
-            <span aria-hidden="true">🔗 </span>
+            <LinkBreak aria-hidden="true" size={15} weight="bold" />
             Unlink audio/video
           </button>
           <span
@@ -891,12 +914,33 @@ export default function Inspector() {
   const playheadFrame = useTransportStore((s) => s.playheadFrame)
   const timelineDoc = useDocumentStore((s) => s.doc)
   const clip = selectedClipId ? findClip(timelineDoc, selectedClipId) : null
+  const [activeVideoTab, setActiveVideoTab] = useState<
+    'transform' | 'crop' | 'animation'
+  >('transform')
+  const videoTabs = ['transform', 'crop', 'animation'] as const
+
+  const handleVideoTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
+    const currentIndex = videoTabs.indexOf(activeVideoTab)
+    let nextIndex = currentIndex
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % videoTabs.length
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + videoTabs.length) % videoTabs.length
+    else if (event.key === 'Home') nextIndex = 0
+    else if (event.key === 'End') nextIndex = videoTabs.length - 1
+    else return
+
+    event.preventDefault()
+    const nextTab = videoTabs[nextIndex]
+    setActiveVideoTab(nextTab)
+    const buttons = event.currentTarget.parentElement
+      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+    buttons?.[nextIndex]?.focus()
+  }
 
   if (!clip) {
     return (
       <div className="panel-placeholder">
-        <span className="placeholder-title">Inspector</span>
-        <LinkSelectionControls />
+        <span className="placeholder-title inspector-empty-title">Inspector</span>
+        <LinkSelectionControls key="linking-controls" />
         <span className="placeholder-note">select a clip to edit it</span>
       </div>
     )
@@ -928,8 +972,39 @@ export default function Inspector() {
 
   return (
     <div className="inspector-panel" data-testid="inspector-panel">
-      <div className="inspector-title">{clip.name}</div>
-      <LinkSelectionControls />
+      <div className="inspector-title">Inspector</div>
+      <div className="inspector-clip-summary">
+        <span className="inspector-clip-icon" aria-hidden="true">
+          {videoClip
+            ? <FileVideo size={24} weight="regular" />
+            : <FileAudio size={24} weight="regular" />}
+        </span>
+        <span>
+          <strong>{clip.name}</strong>
+          <small>{videoClip ? 'Video clip' : 'Audio clip'}</small>
+        </span>
+      </div>
+      {videoClip && (
+        <div className="inspector-tabs" role="tablist" aria-label="Video inspector sections">
+          {videoTabs.map((tab) => (
+            <button
+              key={tab}
+              id={`inspector-${tab}-tab`}
+              type="button"
+              role="tab"
+              aria-selected={activeVideoTab === tab}
+              aria-controls={`inspector-${tab}-panel`}
+              tabIndex={activeVideoTab === tab ? 0 : -1}
+              className={activeVideoTab === tab ? 'active' : ''}
+              onClick={() => setActiveVideoTab(tab)}
+              onKeyDown={handleVideoTabKeyDown}
+            >
+              {tab[0].toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+      )}
+      <LinkSelectionControls key="linking-controls" />
       {videoClip?.text && (
         <TextOverlayFields
           key={`text:${videoClip.id}`}
@@ -942,14 +1017,26 @@ export default function Inspector() {
           clip={displayedVideoClip}
           locked={videoLocked}
           playheadFrame={playheadFrame}
+          activeTab={activeVideoTab}
         />
       )}
-      {videoClip && !videoClip.text && (
-        <AnimationCurveEditor
-          clip={videoClip}
-          locked={videoLocked}
-          playheadFrame={playheadFrame}
-        />
+      {videoClip && (
+        <div
+          id="inspector-animation-panel"
+          role="tabpanel"
+          aria-labelledby="inspector-animation-tab"
+          hidden={activeVideoTab !== 'animation'}
+        >
+          {videoClip.text
+            ? <span className="inspector-note">Animation controls are not available for text overlays yet.</span>
+            : (
+                <AnimationCurveEditor
+                  clip={videoClip}
+                  locked={videoLocked}
+                  playheadFrame={playheadFrame}
+                />
+              )}
+        </div>
       )}
       {audioClip && (
         <AudioInspectorSection clip={audioClip} locked={audioLocked} />

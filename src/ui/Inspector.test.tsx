@@ -191,6 +191,7 @@ describe('Inspector', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset video transform' }))
     fireEvent.click(screen.getByRole('button', { name: 'Reset video opacity' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Crop' }))
     fireEvent.click(screen.getByRole('button', { name: 'Reset video crop' }))
     expect(clipA()).toMatchObject({
       transform: {

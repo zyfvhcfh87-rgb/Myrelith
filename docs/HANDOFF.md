@@ -1486,6 +1486,19 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
+- The Soft Studio visual overhaul is implementation-complete. The launcher now
+  presents the real create/open/recovery flows through a warmer local-first
+  hierarchy; project creation exposes the existing reviewed canvas presets as
+  visual choices; and the editor keeps its real Media Pool, Program Monitor,
+  contextual Inspector, transport, and timeline contracts inside one calmer
+  navy system. Add Text moved from project actions to an accessible compact T
+  beside the timeline tools. Generated photography ships as optimized WebP
+  assets rather than fabricated editor content. The full suite passes
+  1,806/1,806 tests across 105 files; build, oxlint, high-severity production
+  audit, and diff checks pass with only the known Vite chunk-size advisory.
+  In-app Chromium verified launcher, setup, editor, Inspector tabs, media/text
+  interactions, Add Text focus restoration, exact reference viewports, narrow
+  layouts without horizontal overflow, and zero console warnings/errors.
 - Issue #43 is implementation-complete. Nested timeline schema 6 persists
   exact clip-local scalar curves for Position X/Y, Scale X/Y, Rotation, and
   Opacity; schema-5 projects migrate to empty curves without changing static

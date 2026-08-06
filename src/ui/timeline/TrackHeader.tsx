@@ -20,6 +20,7 @@
  */
 
 import { memo, useState } from 'react'
+import { Eye, LockSimple, X } from '@phosphor-icons/react'
 import type { Track as TrackData } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import type { TrackFlagsPatch } from '../../domain/operations'
@@ -88,7 +89,7 @@ function TrackHeader({ track }: TrackHeaderProps) {
             aria-pressed={track.hidden}
             onClick={() => setFlags({ hidden: !track.hidden })}
           >
-            👁
+            <Eye aria-hidden="true" size={14} weight="bold" />
           </button>
         ) : (
           <>
@@ -122,7 +123,7 @@ function TrackHeader({ track }: TrackHeaderProps) {
           aria-pressed={track.locked}
           onClick={() => setFlags({ locked: !track.locked })}
         >
-          🔒
+          <LockSimple aria-hidden="true" size={14} weight="bold" />
         </button>
         <button
           type="button"
@@ -136,7 +137,7 @@ function TrackHeader({ track }: TrackHeaderProps) {
           disabled={track.locked}
           onClick={() => useDocumentStore.getState().removeTrack(track.id)}
         >
-          ×
+          <X aria-hidden="true" size={14} weight="bold" />
         </button>
       </div>
     </div>

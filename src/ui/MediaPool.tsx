@@ -8,6 +8,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import {
+  FileVideo,
+  ImageSquare,
+  Plus,
+  UploadSimple,
+  Waveform,
+  X,
+} from '@phosphor-icons/react'
+import {
   acceptPartialMediaImport,
   canRememberImportedMedia,
   chooseMediaForImport,
@@ -639,7 +647,7 @@ export default function MediaPool() {
                 disabled={importBusy || relinkBusy}
                 onClick={() => void chooseMediaForImport()}
               >
-                <span aria-hidden="true">+</span>
+                <UploadSimple aria-hidden="true" size={16} weight="bold" />
                 <span>Import &amp; remember</span>
               </button>
             ) : null}
@@ -651,7 +659,7 @@ export default function MediaPool() {
                 ? 'Choose media for this session without remembering access'
                 : undefined}
             >
-              <span aria-hidden="true">+</span>
+              <Plus aria-hidden="true" size={15} weight="bold" />
               <span>{handlePickerAvailable ? 'Quick import' : 'Import'}</span>
               <input
                 className="media-import-input"
@@ -754,26 +762,13 @@ export default function MediaPool() {
                   style={thumbnailStyle}
                   aria-hidden="true"
                 >
-                  {!filmstrip ? (
-                    <svg
-                      className="media-thumbnail-icon"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                    >
-                      {descriptor?.kind === 'image' ? (
-                        <>
-                          <rect x="3" y="4" width="18" height="16" rx="2" />
-                          <circle cx="9" cy="9" r="2" />
-                          <path d="m5 17 4-4 3 3 2-2 5 5" />
-                        </>
-                      ) : (
-                        <>
-                          <rect x="3" y="5" width="13" height="14" rx="2" />
-                          <path d="m16 10 5-3v10l-5-3" />
-                        </>
-                      )}
-                    </svg>
-                  ) : null}
+                  {!filmstrip
+                    ? descriptor?.kind === 'image'
+                      ? <ImageSquare className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
+                      : descriptor?.kind === 'audio'
+                        ? <Waveform className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
+                        : <FileVideo className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
+                    : null}
                 </div>
 
                 <div className="media-details">
@@ -855,7 +850,7 @@ export default function MediaPool() {
                     removeAsset(id)
                   }}
                 >
-                  ×
+                  <X aria-hidden="true" size={14} weight="bold" />
                 </button>
                 {compatibilityItem ? (
                   <CompatibilityDiagnostics
@@ -876,6 +871,11 @@ export default function MediaPool() {
             )
           })}
         </ul>
+      )}
+      {itemIds.length > 0 && (
+        <div className="media-count">
+          {itemIds.length} {itemIds.length === 1 ? 'item' : 'items'}
+        </div>
       )}
       <MediaImportDialog />
       <MediaRelinkDialog />

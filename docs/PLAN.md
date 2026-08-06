@@ -2334,6 +2334,29 @@ remain out of scope.
   timeline diamonds, and a completed 120-frame MP4 export. The 720×800 layout
   had zero horizontal overflow and the final console had zero warnings/errors.
 
+## Soft Studio product experience overhaul
+
+**IMPLEMENTATION COMPLETE (2026-08-06).**
+
+- [x] Replace the sparse launcher with a warmer local-first hierarchy while
+  retaining real create/open/recovery controllers and dynamic project data.
+- [x] Present the reviewed Horizontal, Vertical, Square, and Social portrait
+  creation presets as accessible visual radio choices without duplicating the
+  project-settings authority.
+- [x] Restyle the editor shell, Media Pool, Program Monitor, contextual
+  Inspector, transport, and timeline around the selected calm navy direction
+  while keeping every control connected to existing behavior.
+- [x] Keep Transform, Crop, and Animation as keyboard-navigable Inspector tabs;
+  move Add Text into the timeline tool group as a compact accessible T control
+  with the existing dialog and focus restoration.
+- [x] Ship five generated photographic assets as optimized WebP files and keep
+  concept-only media/timeline content out of the real editor.
+- [x] Pass 1,806/1,806 tests across 105 files, production build, oxlint,
+  high-severity production audit, and diff checks. In-app Chromium verified
+  the primary launcher/setup/editor interactions, exact comparison viewports,
+  responsive no-overflow layouts, Inspector keyboard behavior, Add Text focus
+  restoration, and zero console warnings/errors.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**
