@@ -171,6 +171,8 @@ interface ControllerState {
   rafPending: boolean
   /** Invalidates callbacks queued for a disposed/replaced bridge. */
   renderGeneration: number
+  /** Invalidates presentation evidence when a newer render is dispatched. */
+  presentationGeneration: number
 }
 
 const state: ControllerState = {
@@ -181,6 +183,7 @@ const state: ControllerState = {
   unsubscribes: [],
   rafPending: false,
   renderGeneration: 0,
+  presentationGeneration: 0,
 }
 
 function modeForTransport(transport: {
@@ -292,10 +295,11 @@ function scheduleRender(deps: PreviewDeps): void {
     const mode = modeForTransport(transport)
     const diagnosticsEnabled = renderDiagnosticListeners.size > 0
     const requestedAt = diagnosticsEnabled ? deps.now() : 0
+    const presentationGeneration = ++state.presentationGeneration
     void bridge
       .renderFrame(frame, mode)
       .then((result) => {
-        if (diagnosticsEnabled) {
+        if (diagnosticsEnabled && result.status !== 'superseded') {
           // Presentation evidence is deliberately passive: ordinary preview
           // completion/error handling below is not held behind browser paint.
           void deps.afterPresentationBoundary().then((presentedAt) => {
@@ -303,6 +307,7 @@ function scheduleRender(deps: PreviewDeps): void {
               renderDiagnosticListeners.size === 0
               || state.renderGeneration !== generation
               || state.bridge !== bridge
+              || state.presentationGeneration !== presentationGeneration
             ) return
             publishRenderDiagnostic({
               frame,
@@ -531,6 +536,7 @@ export function initPreview(
 /** Tear everything down (tests / real app teardown, not StrictMode churn). */
 export function disposePreview(): void {
   state.renderGeneration++
+  state.presentationGeneration++
   for (const unsubscribe of state.unsubscribes) unsubscribe()
   state.unsubscribes = []
   state.bridge?.dispose()

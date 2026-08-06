@@ -1,15 +1,24 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createHash } from 'node:crypto'
 import {
   assertSourceIdentityUnchanged,
   buildBenchmarkApp,
   collectColdSamples,
+  dirtyFingerprint,
   finalizeBrowserEvidence,
   MAX_CONTINUOUS_EXPORT_FRAMES,
   MAX_CONTINUOUS_PLAYBACK_DURATION_MS,
   parseArguments,
   runTypeScriptGate,
 } from './run-benchmark.mjs'
+import { execFileSync } from 'node:child_process'
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 test('cold samples each use and close a fresh BrowserContext', async () => {
@@ -60,6 +69,49 @@ test('source identity rejects end-of-run drift', () => {
     }),
     /Source changed during the benchmark/,
   )
+})
+
+test('dirty fingerprint streams a tracked diff larger than one MiB', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'webcut-benchmark-fingerprint-'))
+  try {
+    execFileSync('git', ['init', '--quiet'], { cwd: root })
+    execFileSync('git', ['config', 'user.name', 'WebCut test'], { cwd: root })
+    execFileSync('git', ['config', 'user.email', 'test@webcut.invalid'], { cwd: root })
+    execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: root })
+    const trackedPath = join(root, 'large-diff.txt')
+    writeFileSync(trackedPath, 'before\n'.repeat(200_000))
+    execFileSync('git', ['add', 'large-diff.txt'], { cwd: root })
+    execFileSync('git', ['commit', '--quiet', '-m', 'fixture'], { cwd: root })
+    const commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: root,
+      encoding: 'utf8',
+    }).trim()
+
+    writeFileSync(trackedPath, 'after\n'.repeat(200_000))
+    const diff = execFileSync('git', ['diff', '--binary', 'HEAD'], {
+      cwd: root,
+      maxBuffer: 8 * 1024 * 1024,
+    })
+    assert.ok(diff.length > 1024 * 1024)
+    const status = execFileSync(
+      'git',
+      ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      { cwd: root },
+    )
+    const expectedFingerprint = `sha256:${createHash('sha256')
+      .update(commit)
+      .update('\0')
+      .update(status)
+      .update('\0')
+      .update(diff)
+      .digest('hex')}`
+
+    const fingerprint = await dirtyFingerprint(root, commit)
+    assert.equal(fingerprint.dirty, true)
+    assert.equal(fingerprint.fingerprint, expectedFingerprint)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('benchmark build runs the repository TypeScript gate before Vite', async () => {
@@ -113,6 +165,9 @@ test('runner rejects durations beyond the continuously encoded source plan', () 
     ]).options.exportFrames,
     MAX_CONTINUOUS_EXPORT_FRAMES,
   )
+  assert.equal(parseArguments([]).options.memoryBatches, 7)
+  assert.equal(parseArguments(['--memory-batches', '9']).options.memoryBatches, 9)
+  assert.equal(parseArguments(['--smoke']).options.memoryBatches, 2)
 })
 
 test('final browser evidence includes problems raised during screenshot, settling, and result formatting', async () => {

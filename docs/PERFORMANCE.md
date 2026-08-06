@@ -84,12 +84,19 @@ fixture, measurement, cleanup, and artifact flow:
 
 ```powershell
 npm ci
+npx playwright install chromium
 npm run benchmark:smoke
 ```
 
+On a minimal Linux or CI host, install Chromium and its system dependencies
+with `npx playwright install --with-deps chromium` instead (the dependency step
+may require elevated package-manager permissions).
+
 The smoke run uses two scrub/import samples, one 350 ms playback trial, two
-memory batches, and records export as explicitly skipped. Run the baseline
-profile with:
+memory batches, and records export as explicitly skipped. Every requested
+post-warmup memory batch emits one heap plateau sample, so `N` batches produce
+exactly `N` plateau samples and `N - 1` consecutive growth deltas. Run the
+baseline profile with:
 
 ```powershell
 npm run benchmark

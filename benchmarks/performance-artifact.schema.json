@@ -218,7 +218,11 @@
         "sampleCount": { "type": "integer", "minimum": 1 },
         "playbackRuns": { "type": "integer", "minimum": 1 },
         "playbackDurationMs": { "type": "integer", "minimum": 1 },
-        "memoryBatches": { "type": "integer", "minimum": 1 },
+        "memoryBatches": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Post-warmup scrub batches and emitted heap plateau samples."
+        },
         "scrubsPerMemoryBatch": { "type": "integer", "minimum": 1 },
         "exportFrames": { "type": "integer", "minimum": 1 },
         "skipExport": { "type": "boolean" }

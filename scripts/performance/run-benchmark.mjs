@@ -1,6 +1,6 @@
 import { chromium } from '@playwright/test'
 import { createHash } from 'node:crypto'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -129,15 +129,42 @@ function gitBuffer(root, args) {
   return execFileSync('git', args, { cwd: root })
 }
 
-function dirtyFingerprint(root, commit) {
+function hashGitOutput(root, args, hash) {
+  return new Promise((resolveHash, rejectHash) => {
+    const child = spawn('git', args, {
+      cwd: root,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stderr = ''
+    const maximumStderrCharacters = 64 * 1024
+    child.stdout.on('data', (chunk) => hash.update(chunk))
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length >= maximumStderrCharacters) return
+      stderr += chunk.slice(0, maximumStderrCharacters - stderr.length)
+    })
+    child.once('error', rejectHash)
+    child.once('close', (code, signal) => {
+      if (code === 0) {
+        resolveHash()
+        return
+      }
+      rejectHash(new Error(
+        `git ${args.join(' ')} failed${signal ? ` with signal ${signal}` : ` with exit code ${code}`}`
+          + (stderr ? `: ${stderr.trim()}` : ''),
+      ))
+    })
+  })
+}
+
+export async function dirtyFingerprint(root, commit) {
   const status = gitBuffer(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all'])
-  const diff = gitBuffer(root, ['diff', '--binary', 'HEAD'])
   const hash = createHash('sha256')
   hash.update(commit)
   hash.update('\0')
   hash.update(status)
   hash.update('\0')
-  hash.update(diff)
+  await hashGitOutput(root, ['diff', '--binary', 'HEAD'], hash)
   for (const record of status.toString('utf8').split('\0')) {
     if (!record.startsWith('?? ')) continue
     const relativePath = record.slice(3)
@@ -152,12 +179,12 @@ function dirtyFingerprint(root, commit) {
   }
 }
 
-function sourceIdentity(root) {
+async function sourceIdentity(root) {
   const commit = gitText(root, ['rev-parse', 'HEAD'])
   return {
     commit,
     branch: gitText(root, ['branch', '--show-current']) || '<detached>',
-    ...dirtyFingerprint(root, commit),
+    ...await dirtyFingerprint(root, commit),
   }
 }
 
@@ -305,7 +332,7 @@ async function main() {
   }
 
   const root = cwd()
-  const initialSource = sourceIdentity(root)
+  const initialSource = await sourceIdentity(root)
   const artifactDirectory = outputDirectory(root, options.output)
   const priorHarnessFlag = env.VITE_WEBCUT_PERFORMANCE_HARNESS
   env.VITE_WEBCUT_PERFORMANCE_HARNESS = '1'
@@ -425,7 +452,7 @@ async function main() {
     await page.close()
     await context.close()
 
-    assertSourceIdentityUnchanged(initialSource, sourceIdentity(root))
+    assertSourceIdentityUnchanged(initialSource, await sourceIdentity(root))
     mkdirSync(artifactDirectory, { recursive: true })
     writeFileSync(
       join(artifactDirectory, 'performance.json'),

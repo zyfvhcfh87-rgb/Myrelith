@@ -20,6 +20,7 @@ import {
   droppedFramesForPlaybackTrial,
   expectedTerminalFrameForPlaybackTrial,
   exportRealTimeRatioMetric,
+  finishPlaybackCaptureBeforeSettling,
   observeStartedPlayback,
   normalizedRunOptions,
   missingExpectedFixtureDrawnClipIds,
@@ -247,6 +248,23 @@ describe('performance playback evidence', () => {
     expect(capture.retainedCount()).toBe(0)
   })
 
+  test('closes capture before pause and settling can report late frames', async () => {
+    const capture = new PlaybackDiagnosticCapture(4)
+    capture.record(renderDiagnostic(0))
+
+    const captured = await finishPlaybackCaptureBeforeSettling(
+      capture,
+      () => capture.record(renderDiagnostic(1)),
+      async () => {
+        await Promise.resolve()
+        capture.record(renderDiagnostic(2))
+      },
+    )
+
+    expect(captured).toEqual({ frames: [0], overflowed: false })
+    expect(capture.retainedCount()).toBe(0)
+  })
+
   test('counts only frames that drew every expected connected fixture contributor', () => {
     const fixture = createPerformanceFixture()
     const expectedClipIds = expectedFixtureDrawnClipIds(fixture, 0)
@@ -415,6 +433,13 @@ describe('performance memory evidence', () => {
     expect(summarizeMemorySamples([60, 61.5])).toEqual({
       plateauMiB: [60, 61.5],
       growthKiB: [1_536],
+    })
+  })
+
+  test('preserves every requested post-warmup sample and growth delta', () => {
+    expect(summarizeMemorySamples([60, 61, 62, 63, 64, 65, 66])).toEqual({
+      plateauMiB: [60, 61, 62, 63, 64, 65, 66],
+      growthKiB: [1_024, 1_024, 1_024, 1_024, 1_024, 1_024],
     })
   })
 })

@@ -1211,6 +1211,43 @@ describe('previewController', () => {
     }
   })
 
+  test('does not publish a draw superseded before its presentation boundary', async () => {
+    const { deps } = makeDeps()
+    const firstPresentation = deferred<number>()
+    const secondPresentation = deferred<number>()
+    vi.mocked(deps.afterPresentationBoundary)
+      .mockReturnValueOnce(firstPresentation.promise)
+      .mockReturnValueOnce(secondPresentation.promise)
+    const diagnostics: Array<{ frame: number; presentedAt: number }> = []
+    const unsubscribe = subscribePreviewRenderDiagnostics((diagnostic) => {
+      diagnostics.push({
+        frame: diagnostic.frame,
+        presentedAt: diagnostic.presentedAt,
+      })
+    })
+    try {
+      initPreview(canvasEl(), deps)
+      await nextFrame()
+      await flush()
+
+      useTransportStore.getState().setPlayheadFrame(1)
+      await nextFrame()
+      await flush()
+
+      expect(deps.afterPresentationBoundary).toHaveBeenCalledTimes(2)
+
+      firstPresentation.resolve(20)
+      await flush()
+      expect(diagnostics).toEqual([])
+
+      secondPresentation.resolve(30)
+      await flush()
+      expect(diagnostics).toEqual([{ frame: 1, presentedAt: 30 }])
+    } finally {
+      unsubscribe()
+    }
+  })
+
   test('dispose unsubscribes and disposes the bridge', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)

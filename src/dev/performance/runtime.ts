@@ -350,6 +350,18 @@ export class PlaybackDiagnosticCapture {
   }
 }
 
+/** Snapshot the timed trial before pause/paint work can report late frames. */
+export async function finishPlaybackCaptureBeforeSettling(
+  capture: PlaybackDiagnosticCapture,
+  pausePlayback: () => void,
+  settleAfterPause: () => Promise<void>,
+): Promise<FinishedPlaybackDiagnosticCapture> {
+  const captured = capture.finish()
+  pausePlayback()
+  await settleAfterPause()
+  return captured
+}
+
 /** The inclusive clock-derived terminal frame for a timed playback trial. */
 export function expectedTerminalFrameForPlaybackTrial(
   expectedStartFrame: number,
@@ -423,12 +435,12 @@ export function aggregatePlaybackAudioUnderruns(
   }
 }
 
-/** Keep real plateau values while refusing to infer growth from one point. */
+/** Preserve every requested plateau value while refusing growth from one point. */
 export function summarizeMemorySamples(samples: readonly number[]): {
   readonly plateauMiB: number[]
   readonly growthKiB: number[] | null
 } {
-  const plateauMiB = samples.slice(-Math.min(5, samples.length))
+  const plateauMiB = [...samples]
   if (plateauMiB.length < 2) return { plateauMiB, growthKiB: null }
   return {
     plateauMiB,
@@ -1414,12 +1426,13 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
         )
       } catch (cause) {
         playbackFailure = cause
-      } finally {
-        pause()
-        await afterTwoAnimationFrames()
-        if (this.playbackCapture === capture) this.playbackCapture = null
       }
-      const captured = capture.finish()
+      if (this.playbackCapture === capture) this.playbackCapture = null
+      const captured = await finishPlaybackCaptureBeforeSettling(
+        capture,
+        pause,
+        afterTwoAnimationFrames,
+      )
       if (playbackFailure) {
         playbackUnavailableReasons.push(
           `Playback trial ${run + 1} unavailable: ${errorMessage(playbackFailure)}.`,

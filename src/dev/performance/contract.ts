@@ -108,6 +108,7 @@ export interface PerformanceRunOptions {
   readonly sampleCount: number
   readonly playbackRuns: number
   readonly playbackDurationMs: number
+  /** Post-warmup scrub batches; each batch emits one heap plateau sample. */
   readonly memoryBatches: number
   readonly scrubsPerMemoryBatch: number
   readonly exportFrames: number
