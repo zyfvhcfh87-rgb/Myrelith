@@ -84,7 +84,7 @@ and the open list below.
 | **Post-MVP #35 — preview direct manipulation** | ✅ complete | Issue #34's complete Program Monitor controls plus four explicit corner-scale handles; 82 focused + 1,785 total tests; rotated/cropped/anchored/flipped real-media Chrome gate at 1280×720 and 720×800; PR #51 normally merged as `4f9eaaa` |
 | **Post-MVP #43 — keyframing and animation curves** | ✅ complete | schema-6 scalar curves for position/scale/rotation/opacity; one pure scrub/playback/export evaluator; accessible Inspector curves + timeline markers; 1,804 tests; real-media playback/export and 720px Chromium gate, clean console |
 | **Post-MVP #54 — performance evidence foundation** | ✅ complete | deterministic production harness and source-bound artifacts merged on `9920491`; canonical fixture, cold-launch/render/import/memory/export metrics, cleanup proof, and advisory gates |
-| **Post-MVP #56 — bounded media-analysis scheduling** | ✅ implementation complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-3 benchmark evidence; 1,860 tests + real six-file and full 100-asset Chromium gates |
+| **Post-MVP #56 — bounded media-analysis scheduling** | ✅ implementation complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-4 benchmark evidence; 1,860 tests + real six-file and full 100-asset Chromium gates |
 | **Post-MVP #57 — runtime and document-memory telemetry** | ✅ complete | schema-3 local telemetry with explainable document/history estimates, bounded worker/audio health evidence, cache-drain checks, optional lab APIs, and measured overhead; PR #82 normally merged as `f7eedab` |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
@@ -1813,7 +1813,7 @@ surface; it is not a second zoom and never enters document history.
   stale generations cannot mutate stores, a failed sibling releases the other
   result before compatibility disconnects the source, and one failed asset does
   not block later work.
-- Performance artifact schema 3 adds deterministic
+- Performance artifact schema 4 adds deterministic
   `issue-56-100-assets-v1` evidence. The fixture-kind plan models 145 legacy
   launch-all decoder slots; both smoke and full production Chromium runs peaked
   at two active jobs/two decoders, drained a queue of 100 to zero, completed

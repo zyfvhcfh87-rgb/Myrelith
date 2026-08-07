@@ -2417,7 +2417,7 @@ remain out of scope.
   exact on-screen Timeline range, then background media; update queued jobs as
   selection, document, viewport, or connection state changes, with aging to
   prevent starvation.
-- [x] Extend the Issue #54 artifact to schema 3 with a deterministic 100-asset
+- [x] Extend the Issue #54 artifact to schema 4 with a deterministic 100-asset
   scheduler scenario. Record modeled legacy demand, queue/wait/active-resource
   facts, cancellation/completion/failure, progress, priority order,
   cooperative-yield strategy, and event-loop delay.
