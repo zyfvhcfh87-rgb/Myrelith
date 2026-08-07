@@ -1,4 +1,4 @@
-export const PERFORMANCE_ARTIFACT_SCHEMA_VERSION = 3 as const
+export const PERFORMANCE_ARTIFACT_SCHEMA_VERSION = 4 as const
 export const PERFORMANCE_HARNESS_VERSION = 'issues-56-57-v1' as const
 
 export type PerformanceMetricId =

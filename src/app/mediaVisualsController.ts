@@ -88,6 +88,7 @@ interface AssetJobRecord {
   readonly objectUrl: string
   readonly generation: number
   selfDisconnecting: boolean
+  status: 'queued' | 'running' | 'settled'
 }
 
 interface ControllerState {
@@ -177,8 +178,10 @@ function currentPriority(assetId: AssetId): MediaJobPriority {
 function reprioritizeQueuedJobs(): void {
   const scheduler = state.scheduler
   if (!scheduler) return
-  for (const id of state.jobs.keys()) {
-    scheduler.reprioritize(id, currentPriority(id))
+  for (const [id, record] of state.jobs) {
+    if (record.status === 'queued') {
+      scheduler.reprioritize(id, currentPriority(id))
+    }
   }
 }
 
@@ -370,6 +373,7 @@ function scan(deps: VisualsDeps): void {
       objectUrl: asset.objectUrl,
       generation: ++state.nextGeneration,
       selfDisconnecting: false,
+      status: 'queued',
     }
     state.jobs.set(id, record)
     scheduler.enqueue({
@@ -378,9 +382,11 @@ function scan(deps: VisualsDeps): void {
       priority: currentPriority(id),
       resources: { decoderSlots: visualTaskCount(asset) },
       run: async (context) => {
+        record.status = 'running'
         try {
           await process(asset, record, deps, context)
         } finally {
+          record.status = 'settled'
           const current = useMediaStore.getState().assets.get(id)
           if (
             current?.objectUrl !== record.objectUrl

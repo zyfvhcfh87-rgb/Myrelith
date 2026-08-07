@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://webcut.local/schemas/performance-artifact-v3.json",
+  "$id": "https://webcut.local/schemas/performance-artifact-v4.json",
   "title": "WebCut performance evidence artifact",
   "type": "object",
   "additionalProperties": false,
@@ -21,7 +21,7 @@
     "resources"
   ],
   "properties": {
-    "schemaVersion": { "const": 3 },
+    "schemaVersion": { "const": 4 },
     "harnessVersion": { "const": "issues-56-57-v1" },
     "capturedAt": { "type": "string", "format": "date-time" },
     "metadata": {

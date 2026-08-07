@@ -11,6 +11,7 @@ import {
   MediaVisualSourceError,
 } from '../pipeline/visuals'
 import { StaticImageThumbnailError } from '../pipeline/static-image-thumbnail'
+import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
 import type { VisualsDeps } from './mediaVisualsController'
@@ -19,6 +20,7 @@ import {
   getMediaVisualSchedulerSnapshot,
   initMediaVisuals,
   mediaVisualPriorityForAsset,
+  setMediaVisualTimelineViewport,
   waitForMediaVisualsIdle,
 } from './mediaVisualsController'
 
@@ -549,6 +551,31 @@ describe('mediaVisualsController', () => {
       cancelledCount: 1,
       failedCount: 0,
     })
+  })
+
+  test('does not rescan completed assets when timeline priority changes', async () => {
+    const originalDocument = useDocumentStore.getState().doc
+    initMediaVisuals(fakeDeps(), { scheduler: { yieldControl: async () => {} } })
+    addAsset('completed.mp4', 'video/mp4')
+    await waitForMediaVisualsIdle()
+
+    let trackReads = 0
+    const instrumentedDocument = { ...originalDocument }
+    Object.defineProperty(instrumentedDocument, 'tracks', {
+      enumerable: true,
+      get: () => {
+        trackReads += 1
+        return originalDocument.tracks
+      },
+    })
+    try {
+      useDocumentStore.setState({ doc: instrumentedDocument })
+      setMediaVisualTimelineViewport({ startFrame: 10, endFrame: 20 })
+
+      expect(trackReads).toBe(0)
+    } finally {
+      useDocumentStore.setState({ doc: originalDocument })
+    }
   })
 
   test('derives selected, visible, and background priority from current timeline facts', () => {
