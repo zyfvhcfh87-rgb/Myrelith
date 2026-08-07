@@ -9,6 +9,10 @@
 
 import { describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import {
+  resolvePresentationProfile,
+  type PresentationProfile,
+} from '../domain/presentationProfile'
 import { defaultTextProps } from '../domain/textOverlay'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import type {
@@ -190,6 +194,7 @@ function compositeFrame(
   ctx: Composite2D,
   source: FrameSource,
   provider = makeTransitionSurfaceProvider().provider,
+  presentation?: PresentationProfile,
 ) {
   const catalog = new Map(
     doc.tracks.flatMap((track) => track.clips.map((clip) => [
@@ -210,6 +215,7 @@ function compositeFrame(
     ctx,
     source,
     provider,
+    presentation,
   )
 }
 
@@ -247,6 +253,44 @@ function deferred<T>() {
 /* ------------------------------------------------------------------ */
 
 describe('compositeFrame — background & selection', () => {
+  test('presentation scaling wraps project-space geometry without changing it', async () => {
+    const bitmap = fakeBitmap(640, 360)
+    const clip = makeClip('scaled-preview', 0, 30, {
+      transform: {
+        x: 120,
+        y: -45,
+        scaleX: 1.5,
+        scaleY: 0.75,
+        rotation: 15,
+        anchorX: 0.25,
+        anchorY: 0.5,
+      },
+    })
+    const doc = makeDoc([makeTrack('V1', 'video', [clip])])
+    const { ctx, ops } = makeCtx()
+    const profile = resolvePresentationProfile(doc, {
+      qualityMode: 'quarter',
+      reason: 'playing',
+      viewport: null,
+    })
+
+    await compositeFrame(
+      doc,
+      0,
+      ctx,
+      makeSource({ 'asset-1@0': bitmap }).source,
+      undefined,
+      profile,
+    )
+
+    expect(ops('scale').map((op) => op.args)).toEqual([
+      [0.25, 0.25],
+      [1.5, 0.75],
+    ])
+    expect(ops('translate')[0].args).toEqual([920, 495])
+    expect(ops('drawImage')[0].args.slice(1)).toEqual([-160, -180])
+  })
+
   test('empty doc: opaque black background, nothing else', async () => {
     const { ctx, log, depth } = makeCtx()
     const { source, requests } = makeSource()

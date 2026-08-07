@@ -12,10 +12,11 @@
  * and the render worker passes its real OffscreenCanvas 2D context.
  *
  * Contracts (callers rely on these; keep them true):
- * - The canvas must already be doc.width × doc.height with an IDENTITY
- *   transform and default state; compositeFrame restores whatever state it
- *   changes (per-clip save/restore, try/finally — a bad bitmap cannot
- *   poison the transform stack for the next composite).
+ * - The canvas must already match the requested presentation output size with
+ *   an IDENTITY transform and default state. Authored geometry remains in
+ *   project space; this compositor applies the presentation scale and restores
+ *   whatever state it changes (per-clip save/restore, try/finally — a bad
+ *   bitmap cannot poison the transform stack for the next composite).
  * - Ownership: compositeFrame never closes images. The FrameSource owns
  *   frame lifetime/caching (single-owner rule); returned images must stay
  *   valid until compositeFrame's returned promise settles — it draws
@@ -34,6 +35,7 @@
  */
 
 import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
+import type { PresentationProfile } from '../domain/presentationProfile'
 import { wrapTextLines } from '../domain/textLayout'
 import { textPropsValidationError } from '../domain/textOverlay'
 import {
@@ -186,6 +188,7 @@ export async function compositeFrame(
   ctx: Composite2D,
   source: FrameSource,
   transitionSurfaceProvider: TransitionSurfaceProvider,
+  presentation?: PresentationProfile,
 ): Promise<CompositeResult> {
   // Phase 1 — collect what needs pixels, bottom-to-top.
   const requests = videoCompositionRequests(plan)
@@ -213,9 +216,16 @@ export async function compositeFrame(
   // Phase 3 — draw synchronously (no yields: images stay valid throughout).
   const drawn: ClipId[] = []
   const missing: ClipId[] = []
+  const presentationScale = {
+    x: presentation?.scale ?? 1,
+    y: presentation?.scale ?? 1,
+  }
 
   ctx.save()
   try {
+    if (presentationScale.x !== 1 || presentationScale.y !== 1) {
+      ctx.scale(presentationScale.x, presentationScale.y)
+    }
     ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
     ctx.fillStyle = '#000000'
@@ -231,6 +241,7 @@ export async function compositeFrame(
           imagesByRequest,
           drawn,
           missing,
+          presentationScale,
         )
         continue
       }
@@ -419,12 +430,17 @@ function compositeTransitionGroup(
   imagesByRequest: ReadonlyMap<VideoFrameRequest, RenderFrameSource | null>,
   drawn: ClipId[],
   missing: ClipId[],
+  presentationScale: { readonly x: number; readonly y: number },
 ): void {
   const ready: ClipId[] = []
+  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
+  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
 
   try {
     const surfaces = surfaceProvider.get()
-    clearSurface(surfaces.group.ctx, doc)
+    inPresentationSpace(surfaces.group.ctx, presentationScale, () => {
+      clearSurface(surfaces.group.ctx, doc)
+    })
 
     for (const request of requests) {
       if (request.opacity <= 0 || request.weight <= 0) continue
@@ -435,17 +451,26 @@ function compositeTransitionGroup(
       }
 
       try {
-        clearSurface(surfaces.leg.ctx, doc)
-        drawClip(surfaces.leg.ctx, doc, request, image)
+        inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
+          clearSurface(surfaces.leg.ctx, doc)
+          drawClip(surfaces.leg.ctx, doc, request, image)
+        })
 
-        surfaces.group.ctx.save()
-        try {
+        inPresentationSpace(surfaces.group.ctx, presentationScale, () => {
           surfaces.group.ctx.globalAlpha = request.weight
           surfaces.group.ctx.globalCompositeOperation = 'lighter'
-          surfaces.group.ctx.drawImage(surfaces.leg.canvas, 0, 0)
-        } finally {
-          surfaces.group.ctx.restore()
-        }
+          surfaces.group.ctx.drawImage(
+            surfaces.leg.canvas,
+            0,
+            0,
+            surfaceWidth,
+            surfaceHeight,
+            0,
+            0,
+            doc.width,
+            doc.height,
+          )
+        })
         ready.push(request.clip.id)
       } catch (e) {
         console.warn(
@@ -462,7 +487,17 @@ function compositeTransitionGroup(
     try {
       destination.globalAlpha = 1
       destination.globalCompositeOperation = 'source-over'
-      destination.drawImage(surfaces.group.canvas, 0, 0)
+      destination.drawImage(
+        surfaces.group.canvas,
+        0,
+        0,
+        surfaceWidth,
+        surfaceHeight,
+        0,
+        0,
+        doc.width,
+        doc.height,
+      )
     } finally {
       destination.restore()
     }
@@ -478,6 +513,20 @@ function compositeTransitionGroup(
         .filter((request) => request.opacity > 0 && request.weight > 0)
         .map((request) => request.clip.id),
     ))
+  }
+}
+
+function inPresentationSpace(
+  ctx: Composite2D,
+  scale: { readonly x: number; readonly y: number },
+  draw: () => void,
+): void {
+  ctx.save()
+  try {
+    if (scale.x !== 1 || scale.y !== 1) ctx.scale(scale.x, scale.y)
+    draw()
+  } finally {
+    ctx.restore()
   }
 }
 

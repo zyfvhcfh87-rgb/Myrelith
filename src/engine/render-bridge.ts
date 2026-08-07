@@ -24,6 +24,7 @@
  */
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
+import type { PresentationProfile } from '../domain/presentationProfile'
 import type { AssetId, ClipId, FrameRate, TimelineDoc } from '../domain/schema'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
@@ -172,6 +173,13 @@ export class RenderWorkerBridge {
     this.doc = doc
     this.visualPlanner = createVideoCompositionPlanner(doc, this.sourceBounds)
     this.post({ type: 'setDoc', doc }, [])
+  }
+
+  /** Resize preview-only worker surfaces; authored geometry stays unchanged. */
+  setPresentationProfile(profile: PresentationProfile): void {
+    if (this.disposed) return
+    this.settlePendingAsSuperseded()
+    this.post({ type: 'setPresentationProfile', profile }, [])
   }
 
   /** Replace durable media facts without invalidating worker decode lanes. */

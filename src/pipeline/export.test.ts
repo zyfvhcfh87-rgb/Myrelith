@@ -12,6 +12,7 @@ import {
   updateExportProfile,
 } from '../domain/exportProfile'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
+import type { PresentationProfile } from '../domain/presentationProfile'
 import type {
   Clip,
   FrameRate,
@@ -177,6 +178,7 @@ function makeHarness(options: HarnessOptions = {}) {
       _ctx: Composite2D,
       _source: FrameSource,
       _transitionSurfaceProvider: TransitionSurfaceProvider,
+      _presentation?: PresentationProfile,
     ): Promise<CompositeResult> => {
       events.push('composite:' + plan.frame)
       return (
@@ -352,6 +354,12 @@ describe('exportTimeline CFR scheduling', () => {
     expect(h.composite.mock.calls.every(
       (call) => call[4] === h.sink.transitionSurfaceProvider,
     )).toBe(true)
+    expect(h.composite.mock.calls.every((call) => (
+      call[5]?.reason === 'export'
+      && call[5].resolvedQuality === 'full'
+      && call[5].outputWidth === doc.width
+      && call[5].outputHeight === doc.height
+    ))).toBe(true)
     expect(h.addFrame.mock.calls).toEqual([
       [0, 1 / 30],
       [1 / 30, 1 / 30],
