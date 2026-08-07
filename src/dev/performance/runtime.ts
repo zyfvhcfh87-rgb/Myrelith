@@ -10,7 +10,9 @@ import {
 } from '../../app/exportController'
 import { inspectMediaFileCompatibility } from '../../app/mediaInspection'
 import {
+  capturePreviewRuntimeTelemetry,
   disposePreview,
+  setPreviewRuntimeTelemetryEnabled,
   subscribePreviewRenderDiagnostics,
   type PreviewRenderDiagnostic,
 } from '../../app/previewController'
@@ -21,6 +23,7 @@ import {
   play,
 } from '../../app/transportController'
 import { defaultClipAnimation } from '../../domain/clipAnimation'
+import { estimateDocumentMemory } from '../../domain/documentMemory'
 import {
   defaultClipAudioSettings,
   defaultClipVisualSettings,
@@ -59,7 +62,14 @@ import {
   type PerformanceMetricId,
   type PerformanceResourceEvidence,
   type PerformanceRunOptions,
+  type RuntimeHealthSample,
+  type RuntimeTelemetryEvidence,
+  type TelemetryOverheadEvidence,
+  type UserAgentSpecificMemoryEvidence,
+  type LongAnimationFrameEvidence,
 } from './contract'
+import { measureMediaAnalysisScheduler } from './mediaAnalysisBenchmark'
+import { MediaJobScheduler } from '../../app/mediaJobScheduler'
 import {
   PERFORMANCE_FIXTURE_HEIGHT,
   PERFORMANCE_FIXTURE_RATE,
@@ -81,6 +91,8 @@ const PLAYBACK_STARTUP_TIMEOUT_MS = 30_000
 const MAX_PLAYBACK_DIAGNOSTICS_PER_TRIAL = 10_000
 const AUDIO_UNDERRUN_TOLERANCE_SECONDS = 0.005
 const MEMORY_SETTLE_MS = 50
+const MAX_LONG_ANIMATION_FRAME_ENTRIES = 500
+const PERFORMANCE_HISTORY_EDIT_PAIRS = 3
 const MEBIBYTE = 1024 * 1024
 const KIBIBYTE = 1024
 const CHROMIUM_MEMORY_SOURCE =
@@ -171,6 +183,121 @@ interface PerformanceMemoryWindow extends Window {
   __webcutSampleChromiumProcessMemory?: (
     request: { readonly batchIndex: number },
   ) => Promise<ProcessMemoryBindingResult>
+}
+
+interface UserAgentSpecificMemoryResult {
+  readonly bytes: number
+  readonly breakdown?: readonly unknown[]
+}
+
+interface LabMemoryPerformance extends Performance {
+  measureUserAgentSpecificMemory?: () => Promise<UserAgentSpecificMemoryResult>
+}
+
+interface LongAnimationFrameCapture {
+  finish(): LongAnimationFrameEvidence
+}
+
+function startLongAnimationFrameCapture(): LongAnimationFrameCapture {
+  const supported = typeof PerformanceObserver !== 'undefined'
+    && PerformanceObserver.supportedEntryTypes?.includes('long-animation-frame')
+  if (!supported) {
+    return {
+      finish: () => ({
+        status: 'unavailable',
+        reason: 'PerformanceObserver long-animation-frame entries are unavailable.',
+        entryCount: 0,
+        overflowed: false,
+        durationMs: [],
+      }),
+    }
+  }
+  const durationMs: number[] = []
+  let entryCount = 0
+  let overflowed = false
+  let observer: PerformanceObserver
+  try {
+    observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        entryCount++
+        if (durationMs.length < MAX_LONG_ANIMATION_FRAME_ENTRIES) {
+          durationMs.push(entry.duration)
+        } else {
+          overflowed = true
+        }
+      }
+    })
+    observer.observe({ type: 'long-animation-frame', buffered: true })
+  } catch (cause) {
+    return {
+      finish: () => ({
+        status: 'unavailable',
+        reason: `Long-animation-frame observation failed: ${errorMessage(cause)}`,
+        entryCount: 0,
+        overflowed: false,
+        durationMs: [],
+      }),
+    }
+  }
+  let finished: LongAnimationFrameEvidence | null = null
+  return {
+    finish: () => {
+      if (finished) return finished
+      observer.takeRecords().forEach((entry) => {
+        entryCount++
+        if (durationMs.length < MAX_LONG_ANIMATION_FRAME_ENTRIES) {
+          durationMs.push(entry.duration)
+        } else {
+          overflowed = true
+        }
+      })
+      observer.disconnect()
+      finished = {
+        status: 'measured',
+        reason: null,
+        entryCount,
+        overflowed,
+        durationMs,
+      }
+      return finished
+    },
+  }
+}
+
+async function measureUserAgentSpecificMemory(): Promise<
+  UserAgentSpecificMemoryEvidence
+> {
+  const method = (performance as LabMemoryPerformance)
+    .measureUserAgentSpecificMemory
+  if (typeof method !== 'function') {
+    return {
+      status: 'unavailable',
+      reason: 'performance.measureUserAgentSpecificMemory is unavailable.',
+      bytes: null,
+      breakdownCount: null,
+    }
+  }
+  try {
+    const result = await method.call(performance)
+    if (!Number.isFinite(result.bytes) || result.bytes < 0) {
+      throw new TypeError('measureUserAgentSpecificMemory returned invalid bytes')
+    }
+    return {
+      status: 'measured',
+      reason: null,
+      bytes: result.bytes,
+      breakdownCount: Array.isArray(result.breakdown)
+        ? result.breakdown.length
+        : 0,
+    }
+  } catch (cause) {
+    return {
+      status: 'unavailable',
+      reason: `performance.measureUserAgentSpecificMemory failed: ${errorMessage(cause)}`,
+      bytes: null,
+      breakdownCount: null,
+    }
+  }
 }
 
 interface StoredState {
@@ -1382,6 +1509,7 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
   private readonly unsubscribeDiagnostics: () => void
   private importedObjectUrlsRevoked = 0
   private playbackCapture: PlaybackDiagnosticCapture | null = null
+  private longAnimationFrameCapture: LongAnimationFrameCapture | null = null
   private runPromise: Promise<PerformanceHarnessRunResult> | null = null
   private cleanupPromise: Promise<PerformanceResourceEvidence> | null = null
 
@@ -1503,6 +1631,62 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       useTransportStore.getState().setIsScrubbing(false)
     }
     return { inputToPresent, render }
+  }
+
+  private async measureTelemetryOverhead(
+    sampleCount: number,
+  ): Promise<TelemetryOverheadEvidence> {
+    const controlDurationsMs: number[] = []
+    const instrumentedDurationsMs: number[] = []
+    const frames = Array.from({ length: Math.max(7, sampleCount) }, (_, index) => (
+      this.fixtureData.scrubFrames[index % this.fixtureData.scrubFrames.length]
+    ))
+    useTransportStore.getState().setIsScrubbing(true)
+    try {
+      if (!setPreviewRuntimeTelemetryEnabled(false)) {
+        return {
+          controlDurationsMs: [],
+          instrumentedDurationsMs: [],
+          overheadPercentSamples: [],
+        }
+      }
+      // Warm both paths before measuring. The four-block ABBA order then
+      // balances cache/order effects across identical scrub-frame sequences.
+      await this.scrub(frames[0])
+      setPreviewRuntimeTelemetryEnabled(true)
+      await this.scrub(frames[1])
+      const runBlock = async (enabled: boolean): Promise<number> => {
+        setPreviewRuntimeTelemetryEnabled(enabled)
+        const startedAt = performance.now()
+        for (const frame of frames) await this.scrub(frame)
+        return performance.now() - startedAt
+      }
+      for (const enabled of [false, true, true, false]) {
+        const duration = await runBlock(enabled)
+        if (enabled) instrumentedDurationsMs.push(duration)
+        else controlDurationsMs.push(duration)
+      }
+      setPreviewRuntimeTelemetryEnabled(true)
+    } finally {
+      useTransportStore.getState().setIsScrubbing(false)
+    }
+    const controlTotal = controlDurationsMs.reduce(
+      (sum, duration) => sum + duration,
+      0,
+    )
+    const instrumentedTotal = instrumentedDurationsMs.reduce(
+      (sum, duration) => sum + duration,
+      0,
+    )
+    return {
+      controlDurationsMs,
+      instrumentedDurationsMs,
+      overheadPercentSamples: [
+        (instrumentedTotal - controlTotal)
+        / Math.max(controlTotal, 0.001)
+        * 100,
+      ],
+    }
   }
 
   private async measureImportReadiness(sampleCount: number): Promise<number[]> {
@@ -1633,29 +1817,59 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
   private async measureMemory(
     options: PerformanceRunOptions,
     platform: string,
-  ): Promise<ChromiumProcessMemoryEvidence> {
+  ): Promise<{
+    readonly memoryEvidence: ChromiumProcessMemoryEvidence
+    readonly healthSamples: readonly RuntimeHealthSample[]
+  }> {
     const sampleMemory = (window as PerformanceMemoryWindow)
       .__webcutSampleChromiumProcessMemory
-    useTransportStore.getState().setIsScrubbing(true)
+    const healthSamples: RuntimeHealthSample[] = []
     try {
       let scrubIndex = 0
-      return await collectChromiumProcessMemoryEvidence(
+      const memoryEvidence = await collectChromiumProcessMemoryEvidence(
         options,
-        async () => {
-        for (let index = 0; index < options.scrubsPerMemoryBatch; index++) {
-          const frame = this.fixtureData.scrubFrames[
-            scrubIndex++ % this.fixtureData.scrubFrames.length
-          ]
-          await this.scrub(frame)
-        }
-        ;(globalThis as GlobalWithGc).gc?.()
-        await afterTwoAnimationFrames()
-        await sleep(MEMORY_SETTLE_MS)
+        async (batchIndex) => {
+          useTransportStore.getState().setIsScrubbing(true)
+          await this.scrub(0)
+          useTransportStore.getState().setIsScrubbing(false)
+          await observeStartedPlayback(options.playbackDurationMs, {
+            startPlayback: play,
+            now: () => performance.now(),
+            sleep,
+            getAudioDiagnostics: getAudioPlaybackDiagnostics,
+            getPlayheadFrame: () => useTransportStore.getState().playheadFrame,
+          })
+          healthSamples.push({
+            cycleIndex: batchIndex,
+            phase: 'playback',
+            worker: await capturePreviewRuntimeTelemetry(),
+            audio: getAudioPlaybackDiagnostics(),
+          })
+          pause()
+          useTransportStore.getState().setIsScrubbing(true)
+          for (let index = 0; index < options.scrubsPerMemoryBatch; index++) {
+            const frame = this.fixtureData.scrubFrames[
+              scrubIndex++ % this.fixtureData.scrubFrames.length
+            ]
+            await this.scrub(frame)
+          }
+          useTransportStore.getState().setIsScrubbing(false)
+          ;(globalThis as GlobalWithGc).gc?.()
+          await afterTwoAnimationFrames()
+          await sleep(MEMORY_SETTLE_MS)
+          healthSamples.push({
+            cycleIndex: batchIndex,
+            phase: 'drained',
+            worker: await capturePreviewRuntimeTelemetry(),
+            audio: getAudioPlaybackDiagnostics(),
+          })
         },
         sampleMemory,
         platform,
       )
+      return { memoryEvidence, healthSamples }
     } finally {
+      pause()
       useTransportStore.getState().setIsScrubbing(false)
     }
   }
@@ -1663,7 +1877,7 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
   private async measureExport(
     options: PerformanceRunOptions,
   ): Promise<number[]> {
-    const originalDocument = useDocumentStore.getState().doc
+    const originalDocument = useDocumentStore.getState()
     const document = createPerformanceExportDocument(
       this.fixtureData,
       options.exportFrames,
@@ -1691,7 +1905,11 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
         }
       }
     } finally {
-      useDocumentStore.getState().setDoc(originalDocument)
+      useDocumentStore.setState({
+        doc: originalDocument.doc,
+        past: originalDocument.past,
+        future: originalDocument.future,
+      })
       await disposeExport()
     }
     return samples
@@ -1721,11 +1939,18 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       runtimeMediaIdentity(this.sources),
       this.fingerprintFixture,
     )
+    this.longAnimationFrameCapture = startLongAnimationFrameCapture()
     const warnings: string[] = [
       'Stress media catalog entries without generated local sources remain intentionally offline; scrubs target connected 4K stills plus procedural text, while playback and export use bounded connected 4K A/V sources.',
       'Proposed gates are advisory until repeated baselines ratify them across supported device profiles.',
     ]
     const metrics = {} as Record<PerformanceMetricId, PerformanceMetric>
+    const canonicalDocument = useDocumentStore.getState()
+    const documentMemory = estimateDocumentMemory(
+      canonicalDocument.doc,
+      canonicalDocument.past,
+      canonicalDocument.future,
+    )
     const launcherSamples = request.launcherInteractiveSamples ?? []
     metrics['launcher-interactive-ms'] = launcherSamples.length > 0
       ? measuredMetric(
@@ -1748,6 +1973,22 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       'Benchmark editor mount start to the browser presentation boundary after the first frame drew every expected connected fixture contributor.',
       firstFrameSamples,
     )
+
+    const telemetryOverhead = await this.measureTelemetryOverhead(
+      options.sampleCount,
+    )
+    metrics['telemetry-overhead-percent'] =
+      telemetryOverhead.overheadPercentSamples.length > 0
+        ? measuredMetric(
+            'percent',
+            'Balanced ABBA aggregate input-to-present scrub overhead with local worker telemetry enabled versus identical control-frame sequences with telemetry disabled.',
+            telemetryOverhead.overheadPercentSamples,
+          )
+        : unavailableMetric(
+            'percent',
+            'Balanced ABBA aggregate input-to-present scrub overhead with local worker telemetry enabled versus identical control-frame sequences with telemetry disabled.',
+            'The live preview worker did not expose opt-in runtime telemetry.',
+          )
 
     const scrubs = await this.measureScrubs(options.sampleCount)
     metrics['scrub-input-to-present-ms'] = measuredMetric(
@@ -1809,7 +2050,8 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       warnings.push(`Import readiness unavailable: ${reason}`)
     }
 
-    const memoryEvidence = await this.measureMemory(options, request.host.platform)
+    const memoryRun = await this.measureMemory(options, request.host.platform)
+    const { memoryEvidence } = memoryRun
     if (memoryEvidence.status === 'measured') {
       const memory = summarizeMemorySamples(
         memoryEvidence.samples.map((sample) => sample.totalBytes / MEBIBYTE),
@@ -1861,6 +2103,67 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       (measureOptions) => this.measureExport(measureOptions),
     )
 
+    const mediaAnalysisScheduler = await measureMediaAnalysisScheduler({
+      createScheduler: (now) => new MediaJobScheduler({ now }),
+    })
+    const drainedSamples = memoryRun.healthSamples.filter(
+      (sample) => sample.phase === 'drained',
+    )
+    const checkedDrains = drainedSamples.filter(
+      (sample) => sample.worker !== null,
+    )
+    const failedDrain = checkedDrains.find((sample) => {
+      const worker = sample.worker
+      return worker !== null && (
+        worker.active.videoDecoders !== 0
+        || worker.active.pendingBitmapCopies !== 0
+        || worker.active.pendingStaticImageOpens !== 0
+        || worker.queues.renderDepth !== 0
+        || worker.queues.decodeDepth !== 0
+        || worker.derivedCaches.streamingFrameBitmaps !== 0
+      )
+    })
+    const cacheDrain = (
+      checkedDrains.length === 0
+      || checkedDrains.length !== drainedSamples.length
+    )
+      ? {
+          status: 'unavailable' as const,
+          reason: 'Worker runtime telemetry was not available after every cache drain.',
+          checkedSamples: checkedDrains.length,
+        }
+      : failedDrain
+        ? {
+            status: 'fail' as const,
+            reason: `Worker runtime resources remained live after health cycle ${failedDrain.cycleIndex}.`,
+            checkedSamples: checkedDrains.length,
+          }
+        : {
+            status: 'pass' as const,
+            reason: null,
+            checkedSamples: checkedDrains.length,
+          }
+    if (cacheDrain.status !== 'pass') {
+      warnings.push(cacheDrain.reason ?? 'Runtime cache drain evidence unavailable.')
+    }
+    const userAgentSpecificMemory = await measureUserAgentSpecificMemory()
+    if (userAgentSpecificMemory.status === 'unavailable') {
+      warnings.push(userAgentSpecificMemory.reason ?? 'User-agent memory unavailable.')
+    }
+    const longAnimationFrames = this.longAnimationFrameCapture.finish()
+    this.longAnimationFrameCapture = null
+    if (longAnimationFrames.status === 'unavailable') {
+      warnings.push(longAnimationFrames.reason ?? 'Long-animation-frame telemetry unavailable.')
+    }
+    const telemetry: RuntimeTelemetryEvidence = {
+      documentMemory,
+      overhead: telemetryOverhead,
+      healthSamples: memoryRun.healthSamples,
+      cacheDrain,
+      longAnimationFrames,
+      userAgentSpecificMemory,
+    }
+
     const resources = await this.cleanup()
     const artifact: PerformanceArtifact = {
       schemaVersion: PERFORMANCE_ARTIFACT_SCHEMA_VERSION,
@@ -1876,6 +2179,8 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       metrics,
       proposedGates: evaluateProposedGates(metrics),
       memoryEvidence,
+      mediaAnalysisScheduler,
+      telemetry,
       warnings,
       consoleProblems: [...(request.consoleProblems ?? [])],
       resources,
@@ -1893,6 +2198,9 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
   }
 
   private async cleanupOnce(): Promise<PerformanceResourceEvidence> {
+    this.longAnimationFrameCapture?.finish()
+    this.longAnimationFrameCapture = null
+    setPreviewRuntimeTelemetryEnabled(false)
     for (const waiter of this.waiters) {
       clearTimeout(waiter.timeout)
       waiter.reject(new Error('Performance harness cleaned up'))
@@ -1978,6 +2286,20 @@ export async function preparePerformanceHarness(
   }
   useTransportStore.getState().resetTransport()
   useDocumentStore.getState().setDoc(fixture.project.document)
+  const historyTrack = fixture.project.document.tracks[0]
+  if (!historyTrack) throw new Error('Performance fixture has no history track')
+  for (let index = 0; index < PERFORMANCE_HISTORY_EDIT_PAIRS; index++) {
+    useDocumentStore.getState().setTrackFlags(historyTrack.id, { hidden: true })
+    useDocumentStore.getState().setTrackFlags(historyTrack.id, { hidden: false })
+  }
+  const documentWithHistory = useDocumentStore.getState()
+  if (
+    documentWithHistory.past.length !== PERFORMANCE_HISTORY_EDIT_PAIRS * 2
+    || JSON.stringify(documentWithHistory.doc)
+      !== JSON.stringify(fixture.project.document)
+  ) {
+    throw new Error('Performance document history fixture is not deterministic')
+  }
   return new PerformanceHarnessSession(
     fixture,
     fixtureFingerprint,

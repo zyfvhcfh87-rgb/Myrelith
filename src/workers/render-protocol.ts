@@ -50,6 +50,48 @@ export type {
 export type RenderMode = 'playback' | 'seek'
 
 /**
+ * Opt-in, point-in-time worker health evidence for the local performance lab.
+ * Byte fields are explicitly classified so callers never confuse document,
+ * decoded-media, and derived-cache costs. Streaming bitmap bytes are a
+ * width x height x 4 estimate; retained still-image bytes use the worker's
+ * exact decoded-byte ledger.
+ */
+export interface RenderWorkerRuntimeTelemetrySnapshot {
+  readonly enabled: boolean
+  readonly active: {
+    readonly videoSources: number
+    readonly videoDecoders: number
+    readonly pendingBitmapCopies: number
+    readonly pendingStaticImageOpens: number
+  }
+  readonly queues: {
+    readonly renderDepth: number
+    readonly renderMaxDepth: number
+    readonly decodeDepth: number
+    readonly decodeMaxDepth: number
+  }
+  readonly caches: {
+    readonly hits: number
+    readonly misses: number
+  }
+  readonly decodedMedia: {
+    readonly retainedStaticImages: number
+    readonly retainedStaticImageBytes: number
+  }
+  readonly derivedCaches: {
+    readonly streamingFrameBitmaps: number
+    readonly estimatedStreamingFrameBytes: number
+    readonly scratchSurfaceBytes: number
+    readonly transitionSurfaceBytes: number
+  }
+  readonly closes: {
+    readonly decodedVideoFrames: number
+    readonly streamingBitmaps: number
+    readonly staticImageSources: number
+  }
+}
+
+/**
  * One clip-keyed source request for the streaming render path. There are no
  * encoded chunks: the worker pulls from its Blob-backed source instead.
  *
@@ -165,6 +207,16 @@ export type ToRenderWorker =
   | RenderFrameMessage
   | LegacyCompositeMessage
   | {
+      /** Enable/reset or disable the otherwise-dormant local counters. */
+      type: 'setRuntimeTelemetry'
+      enabled: boolean
+    }
+  | {
+      /** Capture gauges and opt-in counters without changing render state. */
+      type: 'requestRuntimeTelemetry'
+      requestId: number
+    }
+  | {
       /** Tear down all sources, child cursors, decoders, and caches. */
       type: 'close'
     }
@@ -177,6 +229,11 @@ export type FromRenderWorker =
       assetId: AssetId
       /** Exact identity from configureAsset/openAsset/openImage. */
       setupId: number
+    }
+  | {
+      type: 'runtimeTelemetry'
+      requestId: number
+      snapshot: RenderWorkerRuntimeTelemetrySnapshot
     }
   | {
       /** A render finished (exactly one per renderFrame/legacy composite). */

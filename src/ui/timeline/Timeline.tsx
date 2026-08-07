@@ -41,6 +41,7 @@ import {
   measureTimelineLaneWidth,
   planTimelineEdgeRebase,
 } from './timelineViewport'
+import { setMediaVisualTimelineViewport } from '../../app/mediaVisualsController'
 
 export default function Timeline() {
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -81,6 +82,16 @@ export default function Timeline() {
     if (!(scroller instanceof HTMLElement)) return
 
     let resetRevision = getTransportResetRevision()
+    const publishVisibleRange = () => {
+      const transport = useTransportStore.getState()
+      const laneWidth = measureTimelineLaneWidth(scroller)
+      const startFrame = transport.timelineOriginFrame
+        + scroller.scrollLeft / transport.zoom
+      setMediaVisualTimelineViewport({
+        startFrame,
+        endFrame: startFrame + laneWidth / transport.zoom,
+      })
+    }
     const onScroll = () => {
       const transport = useTransportStore.getState()
       const liveDoc = useDocumentStore.getState().doc
@@ -99,22 +110,37 @@ export default function Timeline() {
         measureTimelineLaneWidth(scroller),
         scroller.scrollLeft,
       )
-      if (!plan) return
-
-      scroller.scrollLeft = plan.scrollLeft
-      flushSync(() => transport.setTimelineOriginFrame(plan.originFrame))
+      if (plan) {
+        scroller.scrollLeft = plan.scrollLeft
+        flushSync(() => transport.setTimelineOriginFrame(plan.originFrame))
+      }
+      publishVisibleRange()
     }
 
-    const unsubscribe = useTransportStore.subscribe(() => {
+    const unsubscribe = useTransportStore.subscribe((current, previous) => {
       const nextRevision = getTransportResetRevision()
-      if (nextRevision === resetRevision) return
-      resetRevision = nextRevision
-      scroller.scrollLeft = 0
+      const resetChanged = nextRevision !== resetRevision
+      if (resetChanged) {
+        resetRevision = nextRevision
+        scroller.scrollLeft = 0
+      }
+      if (
+        resetChanged
+        || current.zoom !== previous.zoom
+        || current.timelineOriginFrame !== previous.timelineOriginFrame
+      ) publishVisibleRange()
     })
+    const resizeObserver = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(publishVisibleRange)
+      : null
+    resizeObserver?.observe(scroller)
     scroller.addEventListener('scroll', onScroll, { passive: true })
+    publishVisibleRange()
     return () => {
       unsubscribe()
+      resizeObserver?.disconnect()
       scroller.removeEventListener('scroll', onScroll)
+      setMediaVisualTimelineViewport(null)
     }
   }, [])
 

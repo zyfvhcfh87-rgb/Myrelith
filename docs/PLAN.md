@@ -2423,6 +2423,60 @@ remain out of scope.
   focus restoration, forced-503 reload recovery with unchanged project truth,
   720x800 overflow, and a clean ordinary success-path console.
 
+## Post-MVP issue #56 - bounded media-analysis scheduling
+
+**COMPLETE AND PUBLISHED (2026-08-07; PR #84).**
+
+- [x] Add one app-layer `MediaJobScheduler` with explicit two-job/two-decoder
+  resource budgets, FIFO-stable priority, aging, cooperative yield, generation,
+  progress, cancellation, typed failure, and bounded diagnostics.
+- [x] Route filmstrip, still-thumbnail, and waveform creation through the
+  scheduler. Abort removal/replacement/supersession/disposal, dispose every
+  Mediabunny Input exactly once, revoke late/stale URLs, and keep stores free of
+  live resources or queue state.
+- [x] Prioritize the primary selected clip's asset, then assets intersecting the
+  exact on-screen Timeline range, then background media; update queued jobs as
+  selection, document, viewport, or connection state changes, with aging to
+  prevent starvation.
+- [x] Extend the Issue #54 artifact to schema 4 with a deterministic 100-asset
+  scheduler scenario. Record modeled legacy demand, queue/wait/active-resource
+  facts, cancellation/completion/failure, progress, priority order,
+  cooperative-yield strategy, and event-loop delay.
+- [x] Pass 1,867/1,867 Vitest tests across 113 files plus all 16 Node runner
+  cases, production build/typecheck, oxlint, zero-vulnerability production
+  audit, diff checks, smoke/full production Chromium benchmarks, and real
+  in-app Browser bulk-import/responsiveness/clean-console QA.
+- [x] Resolve all review feedback, pass exact-head CI and a final Codex review
+  with no major issues at `902078f`, and normally merge PR #84 as `b431623`;
+  Issue #56 closed automatically.
+
+## Post-MVP issue #57 - runtime and document-memory telemetry
+
+**COMPLETE AND PUBLISHED (2026-08-07; PR #82).**
+
+- [x] Add an explainable browser-free estimator that separates the authored
+  document, undo/redo history, and structural sharing without claiming to
+  measure JavaScript heap or decoded media.
+- [x] Seed deterministic real history in the isolated stress fixture and keep
+  current-document fingerprinting, reset, export, and cleanup exact.
+- [x] Add opt-in render-worker snapshots for active decoders/sources, queue
+  depth, cache hits/misses, classified retained bytes, and resource closes;
+  add active cursor/pending-buffer facts to audio diagnostics.
+- [x] Extend every process-memory batch into a bounded playback/scrub/drain
+  health cycle and record live/drained snapshots plus an explicit cache-drain
+  result.
+- [x] Measure telemetry overhead against paired disabled controls, keep the
+  proposal advisory, bound long-animation-frame capture, and capability-check
+  `measureUserAgentSpecificMemory()` as optional lab evidence.
+- [x] Advance the artifact to strict schema 3 / `issue-57-v1`, document all
+  cost classifications and exclusions, and introduce no absolute byte cap.
+- [x] Pass 190 focused tests, all 1,852 Vitest cases across 111 files plus 16
+  Node runner cases, build/typecheck, oxlint, production audit, diff checks,
+  schema validation, and a fresh production Chromium smoke run with two clean
+  cache drains, exact restoration/URL cleanup, and no console problems.
+- [x] Reviewed head `a857455` passed CI and was normally merged through PR #82
+  as `f7eedab`; Issue #57 closed automatically.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**
