@@ -1,9 +1,10 @@
 # Performance evidence harness
 
-Issue #54 establishes the repeatable evidence format. Issue #57 adds opt-in,
-local runtime and document-memory telemetry to that same harness. It records
-trends; it does not declare WebCut fast or enforce release or memory budgets
-from one machine or one run.
+Issue #54 establishes the repeatable evidence format. Issues #56 and #57 add
+deterministic media-analysis scheduler evidence plus opt-in local runtime and
+document-memory telemetry to that same harness. It records trends; it does not
+declare WebCut fast or enforce release or memory budgets from one machine or
+one run.
 
 ## Production route gate
 
@@ -61,6 +62,19 @@ frames per export sample without entering its held tail. The CLI and in-page
 runtime reject larger requests before measurement; they never label held-tail
 decode as continuous evidence.
 
+### Media-analysis scheduler scenario
+
+Scenario `issue-56-100-assets-v1` exercises the production scheduler through a
+narrow injected adapter. It submits the fixture's same 100-kind distribution:
+45 A/V jobs reserving two decoder slots, 25 audio jobs reserving one, and 30
+still jobs reserving one. A legacy launch-all model would demand 145 decoder
+slots at once. The bounded scenario adds one active cancellation probe and one
+temporary capacity blocker, then records queue depth, wait distributions,
+active jobs/decoders, completion/cancellation/failure counts, progress,
+cooperative-yield strategy, event-loop delay, and selected/visible ordering.
+The scenario times scheduler behavior; it does not pretend its synthetic job
+bodies are real file decode latency.
+
 ## Metrics
 
 Each measured metric keeps its raw samples plus count, minimum, maximum, mean,
@@ -82,9 +96,13 @@ they are never replaced with zero.
 | `telemetry-overhead-percent` | Balanced ABBA aggregate scrub input-to-present overhead across identical frame sequences with worker telemetry enabled versus disabled. |
 | `export-real-time-ratio` | Elapsed export time divided by the bounded 4K segment duration. |
 
+The schema-4 `mediaAnalysisScheduler` object is separate from these product
+metrics. It preserves exact queue/resource facts and a modeled 145-slot legacy
+comparison without inventing a before-run measurement from the current tree.
+
 ## Local runtime and document-memory evidence
 
-The v3 artifact separates authored document bytes, undo/redo snapshots,
+The v4 artifact separates authored document bytes, undo/redo snapshots,
 decoded media, and derived caches instead of presenting one misleading heap
 number. `documentMemory` records exact serialized UTF-8 sizes plus an
 explainable retained-graph comparison model. The model counts fixed object,
@@ -255,3 +273,7 @@ aggregate is false. Playback diagnostics retain only a bounded list of frame
 numbers during an active trial and are cleared before process-memory batches. URL
 cleanup evidence counts only owned revoke calls that actually complete, so a
 failed ownership cleanup cannot report a tautological pass.
+
+The synthetic media-analysis scenario owns and disposes its scheduler inside
+the benchmark runtime. Its work never enters project stores, persistence, or
+the real media pool.

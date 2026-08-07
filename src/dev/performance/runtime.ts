@@ -68,6 +68,8 @@ import {
   type UserAgentSpecificMemoryEvidence,
   type LongAnimationFrameEvidence,
 } from './contract'
+import { measureMediaAnalysisScheduler } from './mediaAnalysisBenchmark'
+import { MediaJobScheduler } from '../../app/mediaJobScheduler'
 import {
   PERFORMANCE_FIXTURE_HEIGHT,
   PERFORMANCE_FIXTURE_RATE,
@@ -2101,6 +2103,9 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       (measureOptions) => this.measureExport(measureOptions),
     )
 
+    const mediaAnalysisScheduler = await measureMediaAnalysisScheduler({
+      createScheduler: (now) => new MediaJobScheduler({ now }),
+    })
     const drainedSamples = memoryRun.healthSamples.filter(
       (sample) => sample.phase === 'drained',
     )
@@ -2174,6 +2179,7 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       metrics,
       proposedGates: evaluateProposedGates(metrics),
       memoryEvidence,
+      mediaAnalysisScheduler,
       telemetry,
       warnings,
       consoleProblems: [...(request.consoleProblems ?? [])],
