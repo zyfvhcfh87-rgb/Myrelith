@@ -2385,13 +2385,16 @@ remain out of scope.
   it only for the exact path in development or an explicitly flagged production
   build. Architecture tests enforce the one benchmark runtime composition
   exception and the one benchmark UI reuse exception.
+- [x] Build and preview the enabled bundle from the same unique OS-temporary
+  output directory, then recursively remove it on success/failure so the
+  benchmark cannot replace or serve an existing ordinary `dist/`.
 - [x] Refuse active project state, avoid persistence controllers, dispose every
   preview/audio/export owner, revoke generated/import URLs, and restore exact
   document/history, media, transport, and project-session state.
 - [x] Reject playback beyond 2,000 ms and export beyond 31 frames before
   measurement so fixed generated video is never advertised as continuous after
   it enters the held tail.
-- [x] Pass focused Vitest coverage plus all 14 Node runner cases, canonical
+- [x] Pass focused Vitest coverage plus all 16 Node runner cases, canonical
   `npm test` with 1,847/1,847 Vitest cases across 110 files plus those runner
   cases, production build/typecheck, oxlint, a 0-vulnerability production
   audit, and fresh smoke/full Chromium measurements. Both runs restored every

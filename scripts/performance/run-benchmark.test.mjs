@@ -6,6 +6,7 @@ import {
   buildBenchmarkApp,
   chromiumDeviceMetadata,
   collectColdSamples,
+  createTemporaryBenchmarkOutput,
   dirtyFingerprint,
   finalizeBrowserEvidence,
   hashUntrackedPath,
@@ -15,16 +16,20 @@ import {
   runTypeScriptGate,
   sampleChromiumProcessMemory,
   sampleHostProcessMemory,
+  startBenchmarkPreview,
 } from './run-benchmark.mjs'
 import { execFileSync } from 'node:child_process'
 import {
   createReadStream,
+  existsSync,
   mkdtempSync,
+  mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 
 function initializeRepository(root) {
   execFileSync('git', ['init', '--quiet'], { cwd: root })
@@ -382,16 +387,98 @@ test('Chromium process memory is unavailable instead of partial without renderer
 
 test('benchmark build runs the repository TypeScript gate before Vite', async () => {
   const calls = []
-  await buildBenchmarkApp('C:\\repo', {
+  await buildBenchmarkApp('C:\\repo', 'C:\\temp\\webcut-benchmark-build', {
     runTypeScriptGate(root) {
       calls.push(`tsc:${root}`)
     },
-    async buildVite({ root }) {
-      calls.push(`vite:${root}`)
+    async buildVite({ root, build }) {
+      calls.push(`vite:${root}:${build.outDir}:${build.emptyOutDir}`)
     },
   })
 
-  assert.deepEqual(calls, ['tsc:C:\\repo', 'vite:C:\\repo'])
+  assert.deepEqual(calls, [
+    'tsc:C:\\repo',
+    'vite:C:\\repo:C:\\temp\\webcut-benchmark-build:true',
+  ])
+})
+
+test('successful benchmark build and preview preserve dist and remove the temporary output', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'webcut-benchmark-success-'))
+  const distDirectory = join(root, 'dist')
+  const sentinelPath = join(distDirectory, 'deployable-sentinel.txt')
+  let temporaryOutputDirectory
+  let previewOutputDirectory
+  try {
+    mkdirSync(distDirectory)
+    writeFileSync(sentinelPath, 'ordinary production build\n')
+
+    const benchmarkOutput = await createTemporaryBenchmarkOutput()
+    try {
+      await buildBenchmarkApp(root, benchmarkOutput.outputDirectory, {
+        runTypeScriptGate() {},
+        async buildVite(config) {
+          temporaryOutputDirectory = config.build.outDir
+          assert.equal(isAbsolute(temporaryOutputDirectory), true)
+          assert.notEqual(temporaryOutputDirectory, distDirectory)
+          assert.equal(config.build.emptyOutDir, true)
+          writeFileSync(join(temporaryOutputDirectory, 'index.html'), 'benchmark build\n')
+        },
+      })
+      assert.equal(benchmarkOutput.outputDirectory, temporaryOutputDirectory)
+      assert.equal(readFileSync(sentinelPath, 'utf8'), 'ordinary production build\n')
+      await startBenchmarkPreview(root, benchmarkOutput.outputDirectory, 41_854, async (config) => {
+        previewOutputDirectory = config.build.outDir
+        assert.equal(config.root, root)
+        assert.deepEqual(config.preview, {
+          host: '127.0.0.1',
+          port: 41_854,
+          strictPort: true,
+        })
+        return { close() {} }
+      })
+    } finally {
+      await benchmarkOutput.cleanup()
+    }
+
+    assert.equal(readFileSync(sentinelPath, 'utf8'), 'ordinary production build\n')
+    assert.equal(previewOutputDirectory, temporaryOutputDirectory)
+    assert.equal(existsSync(temporaryOutputDirectory), false)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('failed benchmark build preserves dist and removes the partial temporary output', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'webcut-benchmark-failure-'))
+  const distDirectory = join(root, 'dist')
+  const sentinelPath = join(distDirectory, 'deployable-sentinel.txt')
+  let temporaryOutputDirectory
+  try {
+    mkdirSync(distDirectory)
+    writeFileSync(sentinelPath, 'ordinary production build\n')
+
+    const benchmarkOutput = await createTemporaryBenchmarkOutput()
+    try {
+      await assert.rejects(
+        buildBenchmarkApp(root, benchmarkOutput.outputDirectory, {
+          runTypeScriptGate() {},
+          async buildVite(config) {
+            temporaryOutputDirectory = config.build.outDir
+            writeFileSync(join(temporaryOutputDirectory, 'partial.txt'), 'partial build\n')
+            throw new Error('fixture benchmark build failure')
+          },
+        }),
+        /fixture benchmark build failure/,
+      )
+    } finally {
+      await benchmarkOutput.cleanup()
+    }
+
+    assert.equal(readFileSync(sentinelPath, 'utf8'), 'ordinary production build\n')
+    assert.equal(existsSync(temporaryOutputDirectory), false)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('TypeScript gate uses the repository compiler in build mode', () => {

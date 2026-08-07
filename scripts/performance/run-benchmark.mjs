@@ -6,12 +6,19 @@ import {
   mkdirSync,
   writeFileSync,
 } from 'node:fs'
-import { lstat, readFile, readlink } from 'node:fs/promises'
+import {
+  lstat,
+  mkdtemp,
+  readFile,
+  readlink,
+  rm,
+} from 'node:fs/promises'
 import {
   arch,
   cpus,
   platform,
   release,
+  tmpdir,
   totalmem,
 } from 'node:os'
 import { basename, isAbsolute, join, resolve } from 'node:path'
@@ -728,11 +735,51 @@ export function runTypeScriptGate(root, execute = execFileSync) {
   )
 }
 
-export async function buildBenchmarkApp(root, deps = {}) {
+export async function buildBenchmarkApp(root, outputDirectory, deps = {}) {
   const runGate = deps.runTypeScriptGate ?? runTypeScriptGate
   const buildVite = deps.buildVite ?? build
   runGate(root)
-  await buildVite({ root })
+  await buildVite({
+    root,
+    build: {
+      outDir: resolve(outputDirectory),
+      emptyOutDir: true,
+    },
+  })
+}
+
+export async function createTemporaryBenchmarkOutput(deps = {}) {
+  const createTemporaryDirectory = deps.createTemporaryDirectory ?? mkdtemp
+  const removeTemporaryDirectory = deps.removeTemporaryDirectory ?? rm
+  const outputDirectory = resolve(await createTemporaryDirectory(
+    join(tmpdir(), 'webcut-benchmark-build-'),
+  ))
+  let cleaned = false
+  const cleanup = async () => {
+    if (cleaned) return
+    await removeTemporaryDirectory(outputDirectory, { recursive: true, force: true })
+    cleaned = true
+  }
+  return { outputDirectory, cleanup }
+}
+
+export function startBenchmarkPreview(
+  root,
+  outputDirectory,
+  port,
+  startPreview = preview,
+) {
+  return startPreview({
+    root,
+    build: {
+      outDir: resolve(outputDirectory),
+    },
+    preview: {
+      host: '127.0.0.1',
+      port,
+      strictPort: true,
+    },
+  })
 }
 
 async function launcherInteractiveSample(page, baseUrl) {
@@ -791,16 +838,15 @@ async function main() {
   let server
   let browser
   let browserSystemSession
+  let benchmarkOutput
   try {
-    await buildBenchmarkApp(root)
-    server = await preview({
+    benchmarkOutput = await createTemporaryBenchmarkOutput()
+    await buildBenchmarkApp(root, benchmarkOutput.outputDirectory)
+    server = await startBenchmarkPreview(
       root,
-      preview: {
-        host: '127.0.0.1',
-        port: options.port,
-        strictPort: true,
-      },
-    })
+      benchmarkOutput.outputDirectory,
+      options.port,
+    )
     const baseUrl = `http://127.0.0.1:${options.port}`
     browser = await chromium.launch({
       channel: options.channel,
@@ -824,7 +870,7 @@ async function main() {
       browser,
       options.coldSamples,
       async (page) => {
-      attachProblemCollector(page, consoleProblems)
+        attachProblemCollector(page, consoleProblems)
         return launcherInteractiveSample(page, baseUrl)
       },
     )
@@ -949,11 +995,18 @@ async function main() {
       )
     }
   } finally {
-    if (browserSystemSession) await browserSystemSession.detach().catch(() => {})
-    if (browser) await browser.close()
-    if (server) await server.close()
-    if (priorHarnessFlag === undefined) delete env.VITE_WEBCUT_PERFORMANCE_HARNESS
-    else env.VITE_WEBCUT_PERFORMANCE_HARNESS = priorHarnessFlag
+    try {
+      if (browserSystemSession) await browserSystemSession.detach().catch(() => {})
+      if (browser) await browser.close()
+      if (server) await server.close()
+    } finally {
+      try {
+        if (benchmarkOutput) await benchmarkOutput.cleanup()
+      } finally {
+        if (priorHarnessFlag === undefined) delete env.VITE_WEBCUT_PERFORMANCE_HARNESS
+        else env.VITE_WEBCUT_PERFORMANCE_HARNESS = priorHarnessFlag
+      }
+    }
   }
 }
 

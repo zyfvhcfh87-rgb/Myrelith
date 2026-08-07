@@ -16,9 +16,12 @@ The harness route is `/__webcut/performance`.
 - Every other path continues to render the product UI.
 
 The benchmark command sets the flag only inside its Node process, creates an
-enabled production build, serves that build on an isolated loopback port, and
-restores the caller's environment afterward. Do not set the flag in a public
-deployment.
+enabled production build in a unique OS-temporary output directory, and makes
+Vite preview serve that exact directory on an isolated loopback port. Its
+`finally` cleanup recursively removes the temporary build after preview stops
+or any build/run failure, then restores the caller's environment. An existing
+ordinary `dist/` is never read, emptied, served, or replaced. Do not set the
+flag in a public deployment.
 
 ## Stress fixture contract
 
@@ -131,17 +134,22 @@ restoration, or generated-URL cleanup checks fail.
 For a manual production-route check in PowerShell:
 
 ```powershell
+$benchmarkOutDir = Join-Path ([IO.Path]::GetTempPath()) ("webcut-benchmark-manual-{0}" -f [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $benchmarkOutDir | Out-Null
 $env:VITE_WEBCUT_PERFORMANCE_HARNESS = '1'
-npm run build
-node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 41854 --strictPort
+try {
+  npx tsc -b
+  node node_modules/vite/bin/vite.js build --outDir $benchmarkOutDir --emptyOutDir
+  node node_modules/vite/bin/vite.js preview --outDir $benchmarkOutDir --host 127.0.0.1 --port 41854 --strictPort
+} finally {
+  Remove-Item Env:VITE_WEBCUT_PERFORMANCE_HARNESS -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $benchmarkOutDir -Recurse -Force -ErrorAction SilentlyContinue
+}
 ```
 
-Open `http://127.0.0.1:41854/__webcut/performance`. Remove the environment
-flag before making an ordinary production build:
-
-```powershell
-Remove-Item Env:VITE_WEBCUT_PERFORMANCE_HARNESS
-```
+Open `http://127.0.0.1:41854/__webcut/performance`. Stop preview with Ctrl+C;
+the `finally` block clears the flag and removes only that unique temporary
+build. Normal `dist/` remains untouched.
 
 ## Source and device identity
 

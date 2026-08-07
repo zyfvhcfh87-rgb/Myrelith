@@ -1754,7 +1754,9 @@ surface; it is not a second zoom and never enters document history.
   continuous trials through 2,000 ms playback
   and 31 export frames; both CLI and runtime reject longer requests before
   measurement instead of entering the encoded held tail.
-- `npm run benchmark` builds an explicitly enabled production bundle and writes
+- `npm run benchmark` builds an explicitly enabled production bundle in one
+  unique OS-temporary directory, previews that exact directory, and recursively
+  removes it on success/failure without touching ordinary `dist/`. It writes
   ignored JSON/Markdown/screenshot artifacts under `.tmp/benchmarks/`. Proposed
   gates remain advisory until repeated representative-device baselines ratify
   them. The exact workflow and gate definitions live in `docs/PERFORMANCE.md`.
@@ -1765,7 +1767,7 @@ surface; it is not a second zoom and never enters document history.
   compose app/state and the exact benchmark component to reuse UI; no blanket
   `src/dev` composition-root exception remains.
 - Canonical `npm test` now runs both 1,847/1,847 Vitest cases across 110 files
-  and all 14 Node runner cases without recursion. Focused benchmark coverage,
+  and all 16 Node runner cases without recursion. Focused benchmark coverage,
   production build/typecheck, oxlint, and production dependency audit all pass
   with 0 vulnerabilities. Fresh smoke and full Chromium runs captured their
   artifacts, reported 0 dropped frames and 0 audio underruns, revoked 11/11
