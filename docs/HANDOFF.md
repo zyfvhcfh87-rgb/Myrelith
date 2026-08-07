@@ -1818,7 +1818,7 @@ surface; it is not a second zoom and never enters document history.
   launch-all decoder slots; both smoke and full production Chromium runs peaked
   at two active jobs/two decoders, drained a queue of 100 to zero, completed
   101 jobs, cancelled one, failed zero, observed progress, and started selected
-  and visible work before background. Schema 3 keeps the scheduler wait and
+  and visible work before background. Schema 4 keeps the scheduler wait and
   event-loop-delay distributions for comparison without proposing a product
   threshold from one machine.
 - Full Chromium cleanup revoked 11/11 fixture and 7/7 imported URLs, restored
