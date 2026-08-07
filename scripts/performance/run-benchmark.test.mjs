@@ -222,20 +222,22 @@ test('dirty fingerprint streams multiple untracked regular files larger than one
 })
 
 test('untracked symlinks, directories, and special files have explicit deterministic identities', async () => {
+  const repositoryRoot = join(tmpdir(), 'webcut-benchmark-repository')
+  const symlinkTarget = join('..', 'outside', 'target.txt')
   const symlinkHash = createHash('sha256')
-  await hashUntrackedPath('C:\\repo', 'link.txt', symlinkHash, {
+  await hashUntrackedPath(repositoryRoot, 'link.txt', symlinkHash, {
     async lstat() {
       return fakeStats('symlink')
     },
     async readlink() {
-      return '..\\outside\\target.txt'
+      return symlinkTarget
     },
   })
   const expectedSymlink = createHash('sha256')
     .update('\0untracked\0')
     .update('link.txt')
     .update('\0symlink\0')
-    .update('..\\outside\\target.txt')
+    .update(symlinkTarget)
     .digest('hex')
   assert.equal(symlinkHash.digest('hex'), expectedSymlink)
 
@@ -245,7 +247,7 @@ test('untracked symlinks, directories, and special files have explicit determini
     ['unknown', 'special-mode-140000'],
   ]) {
     const hash = createHash('sha256')
-    await hashUntrackedPath('C:\\repo', `entry-${type}`, hash, {
+    await hashUntrackedPath(repositoryRoot, `entry-${type}`, hash, {
       async lstat() {
         return fakeStats(type, 0o140000)
       },
@@ -386,20 +388,36 @@ test('Chromium process memory is unavailable instead of partial without renderer
 })
 
 test('benchmark build runs the repository TypeScript gate before Vite', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'webcut-benchmark-build-order-'))
+  const outputDirectory = join(root, 'benchmark-output')
   const calls = []
-  await buildBenchmarkApp('C:\\repo', 'C:\\temp\\webcut-benchmark-build', {
-    runTypeScriptGate(root) {
-      calls.push(`tsc:${root}`)
-    },
-    async buildVite({ root, build }) {
-      calls.push(`vite:${root}:${build.outDir}:${build.emptyOutDir}`)
-    },
-  })
+  try {
+    await buildBenchmarkApp(root, outputDirectory, {
+      runTypeScriptGate(repositoryRoot) {
+        calls.push({ step: 'tsc', root: repositoryRoot })
+      },
+      async buildVite({ root: repositoryRoot, build }) {
+        calls.push({
+          step: 'vite',
+          root: repositoryRoot,
+          outputDirectory: build.outDir,
+          emptyOutDir: build.emptyOutDir,
+        })
+      },
+    })
 
-  assert.deepEqual(calls, [
-    'tsc:C:\\repo',
-    'vite:C:\\repo:C:\\temp\\webcut-benchmark-build:true',
-  ])
+    assert.deepEqual(calls, [
+      { step: 'tsc', root },
+      {
+        step: 'vite',
+        root,
+        outputDirectory,
+        emptyOutDir: true,
+      },
+    ])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('successful benchmark build and preview preserve dist and remove the temporary output', async () => {
@@ -482,15 +500,16 @@ test('failed benchmark build preserves dist and removes the partial temporary ou
 })
 
 test('TypeScript gate uses the repository compiler in build mode', () => {
+  const root = join(tmpdir(), 'webcut-benchmark-repository')
   let invocation
-  runTypeScriptGate('C:\\repo', (file, args, options) => {
+  runTypeScriptGate(root, (file, args, options) => {
     invocation = { file, args, options }
   })
 
   assert.deepEqual(invocation, {
     file: process.execPath,
-    args: [join('C:\\repo', 'node_modules', 'typescript', 'bin', 'tsc'), '-b'],
-    options: { cwd: 'C:\\repo', stdio: 'inherit' },
+    args: [join(root, 'node_modules', 'typescript', 'bin', 'tsc'), '-b'],
+    options: { cwd: root, stdio: 'inherit' },
   })
 })
 
