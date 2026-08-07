@@ -67,6 +67,9 @@ export interface MediaVisualTimelineViewport {
   readonly endFrame: number
 }
 
+const MAX_MEDIA_POOL_VISIBLE_ASSETS = 128
+const EMPTY_VISIBLE_ASSETS: ReadonlySet<AssetId> = new Set()
+
 export interface MediaVisualsControllerOptions {
   readonly scheduler?: MediaJobSchedulerOptions
 }
@@ -98,6 +101,7 @@ interface ControllerState {
   unsubscribeDocument: (() => void) | null
   unsubscribeTransport: (() => void) | null
   viewport: MediaVisualTimelineViewport | null
+  poolVisibleAssetIds: ReadonlySet<AssetId>
   nextGeneration: number
 }
 
@@ -108,6 +112,7 @@ const state: ControllerState = {
   unsubscribeDocument: null,
   unsubscribeTransport: null,
   viewport: null,
+  poolVisibleAssetIds: EMPTY_VISIBLE_ASSETS,
   nextGeneration: 0,
 }
 
@@ -148,9 +153,11 @@ export function mediaVisualPriorityForAsset(
   document: TimelineDoc,
   selectedClipId: string | null,
   viewport: MediaVisualTimelineViewport | null,
+  poolVisibleAssetIds: ReadonlySet<AssetId> = EMPTY_VISIBLE_ASSETS,
 ): MediaJobPriority {
   const selected = selectedClipId ? findClip(document, selectedClipId) : null
   if (selected?.assetId === assetId) return 'selected'
+  if (poolVisibleAssetIds.has(assetId)) return 'visible'
   if (!viewport || viewport.endFrame <= viewport.startFrame) return 'background'
 
   for (const track of document.tracks) {
@@ -175,6 +182,7 @@ function mediaVisualPriorityContext(
   document: TimelineDoc,
   selectedClipId: string | null,
   viewport: MediaVisualTimelineViewport | null,
+  poolVisibleAssetIds: ReadonlySet<AssetId>,
 ): MediaVisualPriorityContext {
   let selectedAssetId: AssetId | null = null
   const visibleAssetIds = new Set<AssetId>()
@@ -193,6 +201,7 @@ function mediaVisualPriorityContext(
       ) visibleAssetIds.add(clip.assetId)
     }
   }
+  for (const assetId of poolVisibleAssetIds) visibleAssetIds.add(assetId)
   return { selectedAssetId, visibleAssetIds }
 }
 
@@ -211,6 +220,7 @@ function currentPriority(assetId: AssetId): MediaJobPriority {
     useDocumentStore.getState().doc,
     useTransportStore.getState().selectedClipId,
     state.viewport,
+    state.poolVisibleAssetIds,
   )
 }
 
@@ -226,6 +236,7 @@ function reprioritizeQueuedJobs(): void {
     useDocumentStore.getState().doc,
     useTransportStore.getState().selectedClipId,
     state.viewport,
+    state.poolVisibleAssetIds,
   )
   for (const id of queuedIds) {
     scheduler.reprioritize(id, priorityFromContext(id, context))
@@ -487,6 +498,23 @@ export function setMediaVisualTimelineViewport(
   reprioritizeQueuedJobs()
 }
 
+/** Exact on-screen Media Pool assets, published without persistence. */
+export function setMediaVisualPoolViewport(assetIds: readonly AssetId[]): void {
+  const normalized = new Set<AssetId>()
+  for (const assetId of assetIds) {
+    if (normalized.size >= MAX_MEDIA_POOL_VISIBLE_ASSETS) break
+    if (typeof assetId === 'string' && assetId.length > 0) {
+      normalized.add(assetId)
+    }
+  }
+  if (
+    normalized.size === state.poolVisibleAssetIds.size
+    && [...normalized].every((assetId) => state.poolVisibleAssetIds.has(assetId))
+  ) return
+  state.poolVisibleAssetIds = normalized
+  reprioritizeQueuedJobs()
+}
+
 export function getMediaVisualSchedulerSnapshot(): MediaJobSchedulerSnapshot | null {
   return state.scheduler?.snapshot() ?? null
 }
@@ -513,4 +541,5 @@ export function disposeMediaVisuals(): void {
   state.scheduler = null
   state.jobs.clear()
   state.viewport = null
+  state.poolVisibleAssetIds = EMPTY_VISIBLE_ASSETS
 }

@@ -20,6 +20,7 @@ import {
   getMediaVisualSchedulerSnapshot,
   initMediaVisuals,
   mediaVisualPriorityForAsset,
+  setMediaVisualPoolViewport,
   setMediaVisualTimelineViewport,
   waitForMediaVisualsIdle,
 } from './mediaVisualsController'
@@ -640,5 +641,30 @@ describe('mediaVisualsController', () => {
       null,
       { startFrame: 150, endFrame: 200 },
     )).toBe('background')
+    expect(mediaVisualPriorityForAsset(
+      'pool-asset',
+      document,
+      null,
+      null,
+      new Set(['pool-asset']),
+    )).toBe('visible')
+    expect(mediaVisualPriorityForAsset(
+      'selected-asset',
+      document,
+      'selected-clip',
+      viewport,
+      new Set(['selected-asset']),
+    )).toBe('selected')
+  })
+
+  test('publishes visible Media Pool rows without rescanning completed assets', async () => {
+    initMediaVisuals(fakeDeps(), { scheduler: { yieldControl: async () => {} } })
+    const asset = addAsset('pool-visible.mp4', 'video/mp4')
+    await waitForMediaVisualsIdle()
+    const completed = getMediaVisualSchedulerSnapshot()
+
+    setMediaVisualPoolViewport([asset.id, asset.id])
+
+    expect(getMediaVisualSchedulerSnapshot()).toEqual(completed)
   })
 })

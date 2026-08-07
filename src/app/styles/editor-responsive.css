@@ -213,7 +213,7 @@
   }
 
   .media-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--media-pool-columns, 2), minmax(0, 1fr));
   }
 
   .media-item {
@@ -245,7 +245,7 @@
   }
 
   .media-list {
-    gap: 8px 6px;
+    gap: 12px 6px;
     padding: 9px;
   }
 }
@@ -265,7 +265,19 @@
   }
 
   .media-list {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(var(--media-pool-columns, 1), minmax(0, 1fr));
+  }
+
+  .media-pool-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .media-pool-filter-status {
+    justify-self: start;
+  }
+
+  .media-pool-clear-filters {
+    width: 100%;
   }
 
   .media-pool-header-main {

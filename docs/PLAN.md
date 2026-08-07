@@ -2487,6 +2487,37 @@ remain out of scope.
 - [x] Reviewed head `a857455` passed CI and was normally merged through PR #82
   as `f7eedab`; Issue #57 closed automatically.
 
+## Post-MVP issue #60 - virtualize and search the Media Pool
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+
+- [x] Add a browser-free stable index with deterministic token search and exact
+  type/status facets; preserve insertion order and never mutate project state.
+- [x] Virtualize the mixed-height Media Pool grid over its existing scroll owner
+  with measured rows, bounded overscan, responsive one/two/three-column packing,
+  stable asset keys, spacer geometry, and no offscreen visual subscriptions.
+- [x] Add listbox keyboard navigation, retained selection/focus, exact ARIA set
+  position/size, and boundary-safe drag, remove, compatibility, import, and
+  individual relink controls.
+- [x] Publish only visible Media Pool asset ids through the existing app facade;
+  selected timeline work remains highest priority and visible pool/timeline work
+  shares the scheduler's existing `visible` class ahead of background jobs.
+- [x] Prove the 500-item bound, deterministic filters, End navigation, cross-row
+  drag/relink payloads, measured expanded rows, scheduler priority, and no
+  offscreen visual rerender in focused tests.
+- [x] Pass all 1,885 Vitest tests across 117 files plus 16 Node runner cases,
+  build/typecheck, oxlint, zero-vulnerability production audit, and diff checks.
+  No separate accessibility-audit command exists in this repository.
+- [x] In real Chromium, import 500 PNGs in five supported 100-file batches;
+  verify 12–15 mounted cards on desktop, 8 at 1,180px, 3 after the 800px
+  one-column layout settles, exact 136 ms search, End at positions 500/501,
+  deterministic empty/type/status states, 500-source offline recovery with the
+  relink control present at the far boundary, and no console warning/error.
+  Single-file relink handoff is component-tested because the in-app browser's
+  chooser hook did not attach to that virtualized input during manual QA.
+- [ ] Publication, pull request review, and Issue #60 closure remain separate
+  work; this local implementation does not imply any of them.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**
