@@ -462,6 +462,25 @@ describe('mediaVisualsController', () => {
       maxActiveDecoderCount: 2,
     })
 
+    const originalDocument = useDocumentStore.getState().doc
+    let trackReads = 0
+    const instrumentedDocument = { ...originalDocument }
+    Object.defineProperty(instrumentedDocument, 'tracks', {
+      enumerable: true,
+      get: () => {
+        trackReads += 1
+        return originalDocument.tracks
+      },
+    })
+    try {
+      useDocumentStore.setState({ doc: instrumentedDocument })
+      trackReads = 0
+      setMediaVisualTimelineViewport({ startFrame: 10, endFrame: 20 })
+      expect(trackReads).toBe(1)
+    } finally {
+      useDocumentStore.setState({ doc: originalDocument })
+    }
+
     releaseStrip(strip)
     releaseWave(wave)
     const evidence = await waitForMediaVisualsIdle()

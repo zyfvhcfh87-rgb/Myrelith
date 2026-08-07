@@ -166,6 +166,45 @@ export function mediaVisualPriorityForAsset(
   return 'background'
 }
 
+interface MediaVisualPriorityContext {
+  readonly selectedAssetId: AssetId | null
+  readonly visibleAssetIds: ReadonlySet<AssetId>
+}
+
+function mediaVisualPriorityContext(
+  document: TimelineDoc,
+  selectedClipId: string | null,
+  viewport: MediaVisualTimelineViewport | null,
+): MediaVisualPriorityContext {
+  let selectedAssetId: AssetId | null = null
+  const visibleAssetIds = new Set<AssetId>()
+  const hasViewport = viewport !== null && viewport.endFrame > viewport.startFrame
+
+  for (const track of document.tracks) {
+    for (const clip of track.clips) {
+      if (selectedClipId !== null && clip.id === selectedClipId) {
+        selectedAssetId = clip.assetId
+      }
+      if (
+        hasViewport
+        && clip.timelineRange.startFrame < viewport.endFrame
+        && clip.timelineRange.startFrame + clip.timelineRange.durationFrames
+          > viewport.startFrame
+      ) visibleAssetIds.add(clip.assetId)
+    }
+  }
+  return { selectedAssetId, visibleAssetIds }
+}
+
+function priorityFromContext(
+  assetId: AssetId,
+  context: MediaVisualPriorityContext,
+): MediaJobPriority {
+  if (context.selectedAssetId === assetId) return 'selected'
+  if (context.visibleAssetIds.has(assetId)) return 'visible'
+  return 'background'
+}
+
 function currentPriority(assetId: AssetId): MediaJobPriority {
   return mediaVisualPriorityForAsset(
     assetId,
@@ -178,10 +217,18 @@ function currentPriority(assetId: AssetId): MediaJobPriority {
 function reprioritizeQueuedJobs(): void {
   const scheduler = state.scheduler
   if (!scheduler) return
-  for (const [id, record] of state.jobs) {
-    if (record.status === 'queued') {
-      scheduler.reprioritize(id, currentPriority(id))
-    }
+  const queuedIds = [...state.jobs]
+    .filter(([, record]) => record.status === 'queued')
+    .map(([id]) => id)
+  if (queuedIds.length === 0) return
+
+  const context = mediaVisualPriorityContext(
+    useDocumentStore.getState().doc,
+    useTransportStore.getState().selectedClipId,
+    state.viewport,
+  )
+  for (const id of queuedIds) {
+    scheduler.reprioritize(id, priorityFromContext(id, context))
   }
 }
 
