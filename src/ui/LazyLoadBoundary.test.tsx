@@ -8,6 +8,12 @@ function Surface({ fail }: { fail: boolean }) {
   return <div>Loaded surface</div>
 }
 
+const pendingSurface = new Promise<never>(() => {})
+
+function PendingSurface(): never {
+  throw pendingSurface
+}
+
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
@@ -48,9 +54,48 @@ describe('LazyLoadBoundary', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Export tools could not load',
     )
+    const closeButton = screen.getByRole('button', { name: 'Close' })
+    const shortcut = vi.fn()
+    window.addEventListener('keydown', shortcut)
+    expect(closeButton).toHaveFocus()
+    fireEvent.keyDown(closeButton, { key: 's' })
+    expect(shortcut).not.toHaveBeenCalled()
+    window.removeEventListener('keydown', shortcut)
     fireEvent.click(screen.getByRole('button', { name: 'Reload WebCut' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(closeButton)
     expect(reload).toHaveBeenCalledOnce()
     expect(close).toHaveBeenCalledOnce()
+  })
+
+  test('moves focus into a loading dialog and contains editor shortcuts', () => {
+    const shortcut = vi.fn()
+    window.addEventListener('keydown', shortcut)
+    const view = render(<button type="button">Editor toolbar</button>)
+    const toolbarButton = screen.getByRole('button', { name: 'Editor toolbar' })
+    toolbarButton.focus()
+    expect(toolbarButton).toHaveFocus()
+
+    view.rerender(
+      <>
+        <button type="button">Editor toolbar</button>
+        <LazySurfaceBoundary
+          variant="dialog"
+          loadingLabel="Loading export toolsâ€¦"
+          failureTitle="Export tools could not load"
+        >
+          <PendingSurface />
+        </LazySurfaceBoundary>
+      </>,
+    )
+
+    const dialog = screen.getByRole('dialog', {
+      name: 'Loading export toolsâ€¦',
+    })
+    expect(dialog).toHaveFocus()
+    expect(fireEvent.keyDown(dialog, { key: 'Tab' })).toBe(false)
+    expect(dialog).toHaveFocus()
+    fireEvent.keyDown(dialog, { key: 'Delete' })
+    expect(shortcut).not.toHaveBeenCalled()
+    window.removeEventListener('keydown', shortcut)
   })
 })

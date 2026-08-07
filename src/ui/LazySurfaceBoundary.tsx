@@ -1,4 +1,10 @@
-import { Suspense, type ReactNode } from 'react'
+import {
+  Suspense,
+  useEffect,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react'
 import LazyLoadBoundary from './LazyLoadBoundary'
 
 export interface LazySurfaceBoundaryProps {
@@ -13,10 +19,46 @@ export interface LazySurfaceBoundaryProps {
 interface SurfaceStateProps {
   variant: 'dialog' | 'inline'
   role: 'alert' | 'status'
+  label: string
   children: ReactNode
 }
 
-function SurfaceState({ variant, role, children }: SurfaceStateProps) {
+function SurfaceState({ variant, role, label, children }: SurfaceStateProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (variant !== 'dialog') return
+    const dialog = dialogRef.current
+    if (dialog && !dialog.contains(document.activeElement)) dialog.focus()
+  }, [variant])
+
+  const containDialogKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    event.stopPropagation()
+    if (event.key !== 'Tab') return
+
+    const dialog = event.currentTarget
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    )
+    if (focusable.length === 0) {
+      event.preventDefault()
+      dialog.focus()
+      return
+    }
+
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
   const content = (
     <section
       className={`lazy-surface-state lazy-surface-state-${variant}`}
@@ -28,7 +70,19 @@ function SurfaceState({ variant, role, children }: SurfaceStateProps) {
     </section>
   )
   return variant === 'dialog'
-    ? <div className="lazy-surface-backdrop">{content}</div>
+    ? (
+        <div
+          ref={dialogRef}
+          className="lazy-surface-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label={label}
+          tabIndex={-1}
+          onKeyDown={containDialogKey}
+        >
+          {content}
+        </div>
+      )
     : content
 }
 
@@ -41,7 +95,7 @@ export default function LazySurfaceBoundary({
   onReload = () => window.location.reload(),
 }: LazySurfaceBoundaryProps) {
   const failure = (
-    <SurfaceState variant={variant} role="alert">
+    <SurfaceState variant={variant} role="alert" label={failureTitle}>
       <h2>{failureTitle}</h2>
       <p>
         The requested tools could not be downloaded. Check your connection or
@@ -63,7 +117,7 @@ export default function LazySurfaceBoundary({
     <LazyLoadBoundary fallback={failure}>
       <Suspense
         fallback={(
-          <SurfaceState variant={variant} role="status">
+          <SurfaceState variant={variant} role="status" label={loadingLabel}>
             <span className="lazy-load-spinner" aria-hidden="true" />
             <span>{loadingLabel}</span>
           </SurfaceState>

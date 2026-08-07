@@ -2418,8 +2418,9 @@ remain out of scope.
   click so the transient File System Access activation window is preserved;
   clear pending preload busy state when leaving Resume for another flow.
 - [x] Lazy-load Export, Add Text, and Animation on first use, preserve dialog
-  focus restoration and mounted animation state, and keep project exit able to
-  dispose an already-loaded export without pulling export code forward.
+  focus restoration and mounted animation state, make loading/error dialog
+  fallbacks own focus and contain editor shortcuts, and keep project exit able
+  to dispose an already-loaded export without pulling export code forward.
 - [x] Add error-boundary behavior tests and a static-import-closure architecture
   guard for the launcher, editor, and three secondary features.
 - [x] Reduce ordinary initial gzip JS+CSS from 307.43 kB to 246.92 kB (-19.7%)
@@ -2428,7 +2429,7 @@ remain out of scope.
 - [x] Verify production Chromium request timing, Create, first-use Export/Text,
   focus restoration, forced-503 reload recovery with unchanged project truth,
   720x800 overflow, and a clean ordinary success-path console.
-- [x] Integrate published PRs #82 and #84, then pass 1,876/1,876 Vitest cases
+- [x] Integrate published PRs #82 and #84, then pass 1,877/1,877 Vitest cases
   across 116 files plus all 16 Node runner cases, build/typecheck, oxlint,
   zero-vulnerability production audit, and diff checks.
 
