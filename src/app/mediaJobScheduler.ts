@@ -137,6 +137,7 @@ const PRIORITY_VALUE: Readonly<Record<MediaJobPriority, number>> = Object.freeze
 
 const MAX_WAIT_SAMPLES = 1_024
 const MAX_FAILURE_RECORDS = 32
+const MAX_DIAGNOSTIC_DETAIL_CHARACTERS = 2_048
 
 function positiveInteger(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -153,7 +154,9 @@ function finitePositive(value: number, label: string): number {
 }
 
 function errorDetail(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  if (detail.length <= MAX_DIAGNOSTIC_DETAIL_CHARACTERS) return detail
+  return `${detail.slice(0, MAX_DIAGNOSTIC_DETAIL_CHARACTERS - 1)}…`
 }
 
 function failureRecord(

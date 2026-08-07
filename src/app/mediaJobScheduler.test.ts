@@ -290,6 +290,24 @@ describe('MediaJobScheduler', () => {
     })
   })
 
+  test('bounds retained failure details before snapshots clone them', async () => {
+    const scheduler = new MediaJobScheduler({
+      budget: { maxConcurrentJobs: 1, maxDecoderSlots: 1 },
+      yieldControl: async () => {},
+    })
+    enqueue(scheduler, 'oversized-failure', 'selected', 1, async () => {
+      throw new Error('x'.repeat(4_096))
+    })
+
+    const evidence = await scheduler.whenIdle()
+    expect(evidence.lastFailures).toHaveLength(1)
+    expect(evidence.lastFailures[0]?.detail).toHaveLength(2_048)
+    expect(evidence.lastFailures[0]?.detail).toMatch(/…$/)
+    expect(scheduler.snapshot().lastFailures[0]?.detail).toBe(
+      evidence.lastFailures[0]?.detail,
+    )
+  })
+
   test('cooperatively yields before launching a bulk batch', async () => {
     const releaseYield = deferred()
     const run = vi.fn(async () => {})

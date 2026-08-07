@@ -70,6 +70,7 @@ import {
   type LegacyRenderWorkerEnv,
 } from './render-legacy'
 import type {
+  RenderWorkerRuntimeTelemetrySnapshot,
   RenderFrameMessage,
   StreamingCompositeSourceEntry,
   StreamingVideoSourceEntry,
@@ -248,6 +249,124 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   /** Latest playback request's active clip lanes; updated at message arrival. */
   let desiredPlaybackLaneKeys = new Set<string>()
   const playbackLaneRevisions = new Map<string, number>()
+  let runtimeTelemetryEnabled = false
+  let renderQueueDepth = 0
+  let renderQueueMaxDepth = 0
+  let decodeQueueDepth = 0
+  let decodeQueueMaxDepth = 0
+  let cacheHits = 0
+  let cacheMisses = 0
+  let decodedVideoFrameCloses = 0
+  let streamingBitmapCloses = 0
+  let staticImageSourceCloses = 0
+
+  function setRuntimeTelemetry(enabled: boolean): void {
+    runtimeTelemetryEnabled = enabled
+    renderQueueDepth = 0
+    renderQueueMaxDepth = 0
+    decodeQueueDepth = 0
+    decodeQueueMaxDepth = 0
+    cacheHits = 0
+    cacheMisses = 0
+    decodedVideoFrameCloses = 0
+    streamingBitmapCloses = 0
+    staticImageSourceCloses = 0
+  }
+
+  function enterRenderQueue(): void {
+    if (!runtimeTelemetryEnabled) return
+    renderQueueDepth++
+    renderQueueMaxDepth = Math.max(renderQueueMaxDepth, renderQueueDepth)
+  }
+
+  function leaveRenderQueue(): void {
+    if (!runtimeTelemetryEnabled) return
+    renderQueueDepth = Math.max(0, renderQueueDepth - 1)
+  }
+
+  async function trackedDecode<T>(run: () => Promise<T>): Promise<T> {
+    if (!runtimeTelemetryEnabled) return run()
+    decodeQueueDepth++
+    decodeQueueMaxDepth = Math.max(decodeQueueMaxDepth, decodeQueueDepth)
+    try {
+      return await run()
+    } finally {
+      decodeQueueDepth--
+    }
+  }
+
+  function countCacheHit(): void {
+    if (runtimeTelemetryEnabled) cacheHits++
+  }
+
+  function countCacheMiss(): void {
+    if (runtimeTelemetryEnabled) cacheMisses++
+  }
+
+  function closeStreamingBitmap(bitmap: BitmapLike | null): void {
+    if (!bitmap) return
+    bitmap.close()
+    if (runtimeTelemetryEnabled) streamingBitmapCloses++
+  }
+
+  function closeStaticImageSource(source: StaticImageRenderSource): void {
+    source.close()
+    if (runtimeTelemetryEnabled) staticImageSourceCloses++
+  }
+
+  function runtimeTelemetrySnapshot(): RenderWorkerRuntimeTelemetrySnapshot {
+    let videoDecoders = activeSeekCursors.size
+    let pendingBitmapCopies = 0
+    let streamingFrameBitmaps = 0
+    let estimatedStreamingFrameBytes = 0
+    for (const state of streamingAssets.values()) {
+      videoDecoders += state.lanes.size
+      pendingBitmapCopies += state.pendingCopies.size
+      for (const lane of state.lanes.values()) {
+        for (const frame of [lane.current, lane.lookahead]) {
+          if (!frame) continue
+          streamingFrameBitmaps++
+          estimatedStreamingFrameBytes += frame.bitmap.width * frame.bitmap.height * 4
+        }
+      }
+    }
+    const scratchSurfaceBytes = scratch ? scratch.width * scratch.height * 4 : 0
+    const transitionSurfaceBytes = (
+      (transitionLeg ? transitionLeg.width * transitionLeg.height * 4 : 0)
+      + (transitionGroup ? transitionGroup.width * transitionGroup.height * 4 : 0)
+    )
+    return {
+      enabled: runtimeTelemetryEnabled,
+      active: {
+        videoSources: streamingAssets.size,
+        videoDecoders,
+        pendingBitmapCopies,
+        pendingStaticImageOpens: pendingStaticImageOpens.size,
+      },
+      queues: {
+        renderDepth: renderQueueDepth,
+        renderMaxDepth: renderQueueMaxDepth,
+        decodeDepth: decodeQueueDepth,
+        decodeMaxDepth: decodeQueueMaxDepth,
+      },
+      caches: { hits: cacheHits, misses: cacheMisses },
+      decodedMedia: {
+        retainedStaticImages: staticImageAssets.size,
+        retainedStaticImageBytes: residentStaticImageBytes,
+      },
+      derivedCaches: {
+        streamingFrameBitmaps,
+        estimatedStreamingFrameBytes,
+        scratchSurfaceBytes,
+        transitionSurfaceBytes,
+      },
+      closes: {
+        decodedVideoFrames: decodedVideoFrameCloses,
+        streamingBitmaps: streamingBitmapCloses,
+        staticImageSources: staticImageSourceCloses,
+      },
+    }
+  }
 
   function nextRevisionToken(): number {
     revisionToken++
@@ -389,7 +508,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   })
 
   function closeOwnedStreamingFrame(frame: OwnedStreamingFrame | null): void {
-    frame?.bitmap.close()
+    closeStreamingBitmap(frame?.bitmap ?? null)
   }
 
   async function disposePlaybackLane(lane: PlaybackLaneState): Promise<void> {
@@ -529,7 +648,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   ): never {
     let cleanupError: unknown
     try {
-      decoded.source.close()
+      closeStaticImageSource(decoded.source)
     } catch (error) {
       cleanupError = error
     }
@@ -613,7 +732,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     state.closed = true
     let closeError: unknown
     try {
-      state.source.close()
+      closeStaticImageSource(state.source)
     } catch (error) {
       closeError = error
     }
@@ -797,7 +916,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           bitmap: await env.createStreamingBitmap(decoded),
         }
       } finally {
-        decoded.frame.close()
+        closeDecodedFrame(decoded)
       }
     })()
     state.pendingCopies.add(job)
@@ -809,7 +928,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   }
 
   function closeDecodedFrame(frame: DecodedVideoFrame | null): void {
-    frame?.frame.close()
+    if (!frame) return
+    frame.frame.close()
+    if (runtimeTelemetryEnabled) decodedVideoFrameCloses++
   }
 
   function playbackLaneKey(assetId: AssetId, clipId: ClipId): string {
@@ -965,6 +1086,15 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         return null
       }
       lane ??= createPlaybackLane(state, entry)
+      if (
+        lane.current
+        && lane.current.timestampUs <= entry.targetTimestampUs
+        && (
+          lane.lookahead === null
+          || lane.lookahead.timestampUs > entry.targetTimestampUs
+        )
+      ) countCacheHit()
+      else countCacheMiss()
 
       let candidate: DecodedVideoFrame | null = null
       let pendingFuture: DecodedVideoFrame | null = null
@@ -983,7 +1113,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           }
           if (lane.ended) break
 
-          const decoded = await lane.cursor.next()
+          const decoded = await trackedDecode(() => lane.cursor.next())
           if (
             !playbackLaneIsCurrent(entry, state, lane)
             || !playbackPolicyAllows(entry, policyRevision)
@@ -1015,7 +1145,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
               !playbackLaneIsCurrent(entry, state, lane)
               || !playbackPolicyAllows(entry, policyRevision)
             ) {
-              current.bitmap.close()
+              closeStreamingBitmap(current.bitmap)
               closeDecodedFrame(pendingFuture)
               pendingFuture = null
               return null
@@ -1031,7 +1161,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
             !playbackLaneIsCurrent(entry, state, lane)
             || !playbackPolicyAllows(entry, policyRevision)
           ) {
-            future.bitmap.close()
+            closeStreamingBitmap(future.bitmap)
             return null
           }
           lane.lookahead = future
@@ -1046,7 +1176,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
             !playbackLaneIsCurrent(entry, state, lane)
             || !playbackPolicyAllows(entry, policyRevision)
           ) {
-            current.bitmap.close()
+            closeStreamingBitmap(current.bitmap)
             return null
           }
           closeOwnedStreamingFrame(lane.current)
@@ -1085,7 +1215,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           ) {
             lane.current = current
           } else {
-            current.bitmap.close()
+            closeStreamingBitmap(current.bitmap)
           }
         },
       })
@@ -1129,7 +1259,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
       cursor = state.source.openSeekLane(entry.targetTimestampUs)
       activeSeekCursors.add(cursor)
-      const decoded = await cursor.next()
+      countCacheMiss()
+      const activeCursor = cursor
+      const decoded = await trackedDecode(() => activeCursor.next())
       if (!decoded) return null
       if (generation !== myGen || !streamingStateIsCurrent(entry.assetId, state)) {
         closeDecodedFrame(decoded)
@@ -1137,13 +1269,13 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       }
       const frame = await copyDecodedFrame(state, decoded)
       if (generation !== myGen || !streamingStateIsCurrent(entry.assetId, state)) {
-        frame.bitmap.close()
+        closeStreamingBitmap(frame.bitmap)
         return null
       }
 
       loans.push({
         bitmap: frame.bitmap,
-        settle: () => frame.bitmap.close(),
+        settle: () => closeStreamingBitmap(frame.bitmap),
       })
       return frame.bitmap
     } catch (error) {
@@ -1546,18 +1678,30 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           if (!entry) return Promise.resolve(null)
           if (entry.kind === 'image') {
             const staticState = staticImageAssets.get(entry.assetId)
-            if (!staticState) return Promise.resolve(null)
+            if (!staticState) {
+              countCacheMiss()
+              return Promise.resolve(null)
+            }
             const memoizedStatic = staticMemo.get(entry.assetId)
-            if (memoizedStatic) return memoizedStatic
+            if (memoizedStatic) {
+              countCacheHit()
+              return memoizedStatic
+            }
             const loan = borrowStaticImage(entry.assetId, staticState)
+            if (loan) countCacheHit()
+            else countCacheMiss()
             if (loan) staticLoans.push(loan)
             const staticSource = Promise.resolve(loan?.source ?? null)
             staticMemo.set(entry.assetId, staticSource)
             return staticSource
           }
           const memoized = memo.get(entry.clipId)
-          if (memoized) return memoized
+          if (memoized) {
+            countCacheHit()
+            return memoized
+          }
           const state = streamingAssets.get(entry.assetId)
+          if (!state) countCacheMiss()
           const promise: Promise<RenderFrameSource | null> = !state
             ? Promise.resolve(null)
             : msg.mode === 'playback'
@@ -1597,6 +1741,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       })
     }
 
+    enterRenderQueue()
     compositeChain = compositeChain.then(() =>
       run().catch((error) => {
         env.post({
@@ -1604,7 +1749,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           requestId: msg.requestId,
           message: `renderFrame failed: ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`,
         })
-      }),
+      }).finally(leaveRenderQueue),
     )
     return compositeChain
   }
@@ -1657,6 +1802,16 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         break
       case 'composite':
         await handleComposite(msg)
+        break
+      case 'setRuntimeTelemetry':
+        setRuntimeTelemetry(msg.enabled)
+        break
+      case 'requestRuntimeTelemetry':
+        env.post({
+          type: 'runtimeTelemetry',
+          requestId: msg.requestId,
+          snapshot: runtimeTelemetrySnapshot(),
+        })
         break
       case 'close': {
         workerLifecycle++

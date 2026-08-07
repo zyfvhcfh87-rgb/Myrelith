@@ -1,5 +1,5 @@
 export const PERFORMANCE_ARTIFACT_SCHEMA_VERSION = 3 as const
-export const PERFORMANCE_HARNESS_VERSION = 'issue-56-v1' as const
+export const PERFORMANCE_HARNESS_VERSION = 'issues-56-57-v1' as const
 
 export type PerformanceMetricId =
   | 'launcher-interactive-ms'
@@ -11,6 +11,7 @@ export type PerformanceMetricId =
   | 'import-readiness-ms'
   | 'memory-plateau-mib'
   | 'memory-growth-kib-per-batch'
+  | 'telemetry-overhead-percent'
   | 'export-real-time-ratio'
 
 export type PerformanceMetricUnit =
@@ -18,6 +19,7 @@ export type PerformanceMetricUnit =
   | 'count'
   | 'MiB'
   | 'KiB/batch'
+  | 'percent'
   | 'ratio'
 
 export interface DistributionSummary {
@@ -177,6 +179,126 @@ export interface ChromiumProcessMemoryEvidence {
   readonly samples: readonly ChromiumProcessMemoryBatchSample[]
 }
 
+/** Serialized evidence shapes stay owned by dev/performance's artifact seam. */
+export interface ArtifactRetainedDocumentGraphEstimate {
+  readonly estimatedBytes: number
+  readonly objectCount: number
+  readonly arrayCount: number
+  readonly propertySlotCount: number
+  readonly arraySlotCount: number
+  readonly stringCount: number
+  readonly stringCodeUnitCount: number
+  readonly numberRootCount: number
+}
+
+export interface ArtifactDocumentMemoryEstimate {
+  readonly estimator: 'json-retained-graph-v1'
+  readonly assumptions: readonly string[]
+  readonly authoredDocument: {
+    readonly serializedUtf8Bytes: number
+    readonly retainedGraph: ArtifactRetainedDocumentGraphEstimate
+  }
+  readonly history: {
+    readonly pastDepth: number
+    readonly futureDepth: number
+    readonly snapshotCount: number
+    readonly serializedUtf8Bytes: number
+    readonly estimatedAdditionalRetainedBytes: number
+    readonly estimatedStructuralSharingSavingsBytes: number
+  }
+  readonly totals: {
+    readonly serializedUtf8Bytes: number
+    readonly estimatedRetainedBytes: number
+  }
+}
+
+export interface ArtifactWorkerRuntimeTelemetrySnapshot {
+  readonly enabled: boolean
+  readonly active: {
+    readonly videoSources: number
+    readonly videoDecoders: number
+    readonly pendingBitmapCopies: number
+    readonly pendingStaticImageOpens: number
+  }
+  readonly queues: {
+    readonly renderDepth: number
+    readonly renderMaxDepth: number
+    readonly decodeDepth: number
+    readonly decodeMaxDepth: number
+  }
+  readonly caches: { readonly hits: number; readonly misses: number }
+  readonly decodedMedia: {
+    readonly retainedStaticImages: number
+    readonly retainedStaticImageBytes: number
+  }
+  readonly derivedCaches: {
+    readonly streamingFrameBitmaps: number
+    readonly estimatedStreamingFrameBytes: number
+    readonly scratchSurfaceBytes: number
+    readonly transitionSurfaceBytes: number
+  }
+  readonly closes: {
+    readonly decodedVideoFrames: number
+    readonly streamingBitmaps: number
+    readonly staticImageSources: number
+  }
+}
+
+export interface ArtifactAudioRuntimeTelemetrySnapshot {
+  readonly contextTime: number
+  readonly activeNodeCount: number
+  readonly rms: number
+  readonly activeDecoderCount: number
+  readonly pendingBufferCount: number
+  readonly anchorTime: number
+  readonly fromFrame: number
+  readonly scheduledThroughTimelineTime: number
+  readonly scheduledThroughContextTime: number
+}
+
+export interface RuntimeHealthSample {
+  readonly cycleIndex: number
+  readonly phase: 'playback' | 'drained'
+  readonly worker: ArtifactWorkerRuntimeTelemetrySnapshot | null
+  readonly audio: ArtifactAudioRuntimeTelemetrySnapshot | null
+}
+
+export interface TelemetryOverheadEvidence {
+  readonly controlDurationsMs: readonly number[]
+  readonly instrumentedDurationsMs: readonly number[]
+  readonly overheadPercentSamples: readonly number[]
+}
+
+export interface LongAnimationFrameEvidence {
+  readonly status: 'measured' | 'unavailable'
+  readonly reason: string | null
+  readonly entryCount: number
+  readonly overflowed: boolean
+  readonly durationMs: readonly number[]
+}
+
+export interface UserAgentSpecificMemoryEvidence {
+  readonly status: 'measured' | 'unavailable'
+  readonly reason: string | null
+  readonly bytes: number | null
+  readonly breakdownCount: number | null
+}
+
+export interface CacheDrainEvidence {
+  readonly status: 'pass' | 'fail' | 'unavailable'
+  readonly reason: string | null
+  readonly checkedSamples: number
+}
+
+export interface RuntimeTelemetryEvidence {
+  readonly documentMemory: ArtifactDocumentMemoryEstimate
+  readonly overhead: TelemetryOverheadEvidence
+  readonly healthSamples: readonly RuntimeHealthSample[]
+  readonly cacheDrain: CacheDrainEvidence
+  readonly longAnimationFrames: LongAnimationFrameEvidence
+  readonly userAgentSpecificMemory: UserAgentSpecificMemoryEvidence
+}
+
 export interface PerformanceRunOptions {
   readonly sampleCount: number
   readonly playbackRuns: number
@@ -266,6 +388,7 @@ export interface PerformanceArtifact {
   readonly proposedGates: readonly ProposedPerformanceGate[]
   readonly memoryEvidence: ChromiumProcessMemoryEvidence
   readonly mediaAnalysisScheduler: MediaAnalysisSchedulerEvidence
+  readonly telemetry: RuntimeTelemetryEvidence
   readonly warnings: readonly string[]
   readonly consoleProblems: readonly string[]
   readonly resources: PerformanceResourceEvidence
@@ -411,6 +534,12 @@ const GATE_PROPOSALS: readonly GateProposal[] = Object.freeze([
     rationale: 'Treat sustained post-warmup Chromium process-memory growth as a leak investigation trigger.',
   },
   {
+    metric: 'telemetry-overhead-percent',
+    statistic: 'p95',
+    threshold: 10,
+    rationale: 'Keep opt-in local telemetry below a bounded share of its paired scrub control.',
+  },
+  {
     metric: 'export-real-time-ratio',
     statistic: 'p75',
     threshold: 1,
@@ -485,6 +614,8 @@ export function performanceArtifactMarkdown(artifact: PerformanceArtifact): stri
   const memoryProvenance = memoryEvidence.status === 'measured'
     ? `${memoryEvidence.primaryMetric} via ${memoryEvidence.hostSampler}; ${memoryEvidence.samples.length} complete CDP process-table samples`
     : `unavailable (${memoryEvidence.reason})`
+  const telemetry = artifact.telemetry
+  const documentMemory = telemetry.documentMemory
 
   return [
     '# WebCut performance evidence',
@@ -499,6 +630,8 @@ export function performanceArtifactMarkdown(artifact: PerformanceArtifact): stri
     `Device: ${host.platform} ${host.osRelease ?? 'unknown'}/${host.architecture ?? 'unknown'}, ${host.cpuModel ?? 'unknown CPU'}, ${host.logicalProcessors ?? 'unknown'} logical processors, ${host.totalMemoryGiB ?? 'unknown'} GiB host memory (${artifact.metadata.browser.deviceMemoryGiB ?? 'unknown'} GiB browser-reported)`,
     `GPU: ${gpuValue(gpu.renderer)}; vendor: ${gpuValue(gpu.vendor)}; driver: ${gpuValue(gpu.driverVendor)} ${gpuValue(gpu.driverVersion)}; acceleration: ${acceleration}; source: ${gpu.source}`,
     `Memory provenance: ${memoryProvenance}. Scope: ${memoryEvidence.scope}`,
+    `Document/history estimate: ${documentMemory.authoredDocument.serializedUtf8Bytes} authored UTF-8 bytes; ${documentMemory.history.pastDepth}/${documentMemory.history.futureDepth} undo/redo snapshots; ${documentMemory.totals.estimatedRetainedBytes} explainable retained-graph bytes (${documentMemory.estimator}, not a heap measurement).`,
+    `Runtime telemetry: ${telemetry.healthSamples.length} phase samples; cache drain ${telemetry.cacheDrain.status}; long animation frames ${telemetry.longAnimationFrames.status}; measureUserAgentSpecificMemory ${telemetry.userAgentSpecificMemory.status}.`,
     '',
     '## Fixture',
     '',

@@ -83,7 +83,9 @@ and the open list below.
 | **Post-MVP #34 — full clip Inspector** | ✅ complete | schema-5 visual/audio editing, shared preview/export rendering, contextual Inspector, direct Program Monitor manipulation, and explicit remembered/quick file paths; 1,784 tests plus real-media reopen/playback/export and 720px Chromium acceptance; PR #49 normally merged as `571fff6` and Issue #34 closed |
 | **Post-MVP #35 — preview direct manipulation** | ✅ complete | Issue #34's complete Program Monitor controls plus four explicit corner-scale handles; 82 focused + 1,785 total tests; rotated/cropped/anchored/flipped real-media Chrome gate at 1280×720 and 720×800; PR #51 normally merged as `4f9eaaa` |
 | **Post-MVP #43 — keyframing and animation curves** | ✅ complete | schema-6 scalar curves for position/scale/rotation/opacity; one pure scrub/playback/export evaluator; accessible Inspector curves + timeline markers; 1,804 tests; real-media playback/export and 720px Chromium gate, clean console |
+| **Post-MVP #54 — performance evidence foundation** | ✅ complete | deterministic production harness and source-bound artifacts merged on `9920491`; canonical fixture, cold-launch/render/import/memory/export metrics, cleanup proof, and advisory gates |
 | **Post-MVP #56 — bounded media-analysis scheduling** | ✅ implementation complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-3 benchmark evidence; 1,860 tests + real six-file and full 100-asset Chromium gates |
+| **Post-MVP #57 — runtime and document-memory telemetry** | ✅ complete | schema-3 local telemetry with explainable document/history estimates, bounded worker/audio health evidence, cache-drain checks, optional lab APIs, and measured overhead; PR #82 normally merged as `f7eedab` |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -1794,7 +1796,7 @@ surface; it is not a second zoom and never enters document history.
 
 ## Post-MVP issue #56 - bounded media-analysis scheduler
 
-**IMPLEMENTATION COMPLETE (2026-08-07); delivery remains a draft PR.**
+**IMPLEMENTATION COMPLETE (2026-08-07); delivery tracked by PR #84.**
 
 - `MediaJobScheduler` owns a bounded priority queue with a default maximum of
   two active asset jobs and two reserved decoder slots. Jobs expose generation,
@@ -1829,6 +1831,45 @@ surface; it is not a second zoom and never enters document history.
   vulnerabilities, `git diff --check`, smoke/full production benchmarks, and
   in-app Browser QA. Six real H.264/AAC files all reached Ready with filmstrips;
   Zoom In remained responsive (0.719→0.741) and the console stayed clean.
+
+## Post-MVP issue #57 - runtime and document-memory telemetry
+
+**COMPLETE AND PUBLISHED (2026-08-07; PR #82).**
+
+- The issue #54 harness now emits schema 3 / `issue-57-v1` evidence. A pure
+  domain estimator separates authored UTF-8 size, undo/redo serialization,
+  additional shared retained-graph cost, and structural-sharing savings. Its
+  fixed assumptions and exclusions are embedded in every artifact; it is not
+  presented as browser heap usage.
+- The isolated fixture builds six deterministic undo snapshots while ending
+  on the exact authored document and preserving the existing fixture
+  fingerprint. Export temporarily replaces and then restores the complete
+  document/history state, not only the current document.
+- Render-worker telemetry is dormant by default and enabled/reset only by the
+  benchmark. Typed bridge snapshots classify live sources/decoders, queue
+  depth/max depth, cache hits/misses, retained still bytes, streaming bitmap
+  and canvas cache estimates, and VideoFrame/ImageBitmap/static-source close
+  counts. Audio diagnostics add active decoder cursors and pending buffers.
+- Each process-memory batch is now a bounded long-health cycle: playback,
+  live worker/audio capture, scrub pressure, pause/drain, GC/paint settling,
+  drained capture, then the unchanged complete CDP process-table sample.
+  Drained worker samples fail their explicit cache-drain check if any decoder,
+  pending copy/open, render/decode queue, or streaming bitmap remains.
+- A balanced ABBA control/instrumented scrub metric measures aggregate
+  telemetry overhead across identical frame sequences with an advisory 10%
+  proposal. Long-animation-frame observation is bounded at
+  500 entries. `measureUserAgentSpecificMemory()` remains optional lab-only
+  evidence; absence or rejection becomes `unavailable` without degrading the
+  editor or benchmark. No memory byte cap was introduced.
+- Focused coverage passed 190 tests. The complete gate passed 1,852/1,852
+  Vitest cases across 111 files plus all 16 Node runner cases, production
+  build/typecheck, oxlint, diff checking, and the production audit with 0
+  vulnerabilities. A fresh Chromium smoke artifact validated against schema 3
+  with two complete private-byte process samples, two passing drains, measured
+  long-animation-frame entries, explicit unavailable lab-memory evidence,
+  11/11 generated URLs revoked, all isolated stores restored, and no console
+  warning or error. Reviewed head `a857455` passed CI and was normally merged
+  through PR #82 as `f7eedab`; Issue #57 closed automatically.
 
 ## Working agreements (the user's explicit preferences)
 

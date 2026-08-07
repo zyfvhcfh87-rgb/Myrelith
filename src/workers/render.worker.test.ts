@@ -771,6 +771,37 @@ const initMsg = (h: Harness): ToRenderWorker => ({
   canvas: h.visible.canvas as unknown as OffscreenCanvas,
 })
 
+describe('render worker runtime telemetry', () => {
+  test('stays dormant until enabled and reports classified surface gauges', async () => {
+    const h = makeHarness()
+    const doc = makeDoc([])
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(doc))
+
+    await h.core.handleMessage({ type: 'requestRuntimeTelemetry', requestId: 1 })
+    const disabled = h.posts.at(-1)
+    expect(disabled?.type).toBe('runtimeTelemetry')
+    if (disabled?.type !== 'runtimeTelemetry') throw new Error('missing snapshot')
+    expect(disabled.snapshot.enabled).toBe(false)
+
+    await h.core.handleMessage({ type: 'setRuntimeTelemetry', enabled: true })
+    await h.core.handleMessage({ type: 'requestRuntimeTelemetry', requestId: 2 })
+    const enabled = h.posts.at(-1)
+    expect(enabled?.type).toBe('runtimeTelemetry')
+    if (enabled?.type !== 'runtimeTelemetry') throw new Error('missing snapshot')
+    expect(enabled.snapshot).toMatchObject({
+      enabled: true,
+      active: { videoSources: 0, videoDecoders: 0 },
+      queues: { renderDepth: 0, decodeDepth: 0 },
+      decodedMedia: { retainedStaticImageBytes: 0 },
+      derivedCaches: {
+        scratchSurfaceBytes: doc.width * doc.height * 4,
+        transitionSurfaceBytes: 0,
+      },
+    })
+  })
+})
+
 function docMsg(doc: TimelineDoc): ToRenderWorker {
   testPlanDoc = doc
   return { type: 'setDoc', doc }

@@ -2404,7 +2404,7 @@ remain out of scope.
 
 ## Post-MVP issue #56 - bounded media-analysis scheduling
 
-**IMPLEMENTATION COMPLETE (2026-08-07); delivery remains a draft PR.**
+**IMPLEMENTATION COMPLETE (2026-08-07); delivery tracked by PR #84.**
 
 - [x] Add one app-layer `MediaJobScheduler` with explicit two-job/two-decoder
   resource budgets, FIFO-stable priority, aging, cooperative yield, generation,
@@ -2425,6 +2425,33 @@ remain out of scope.
   cases, production build/typecheck, oxlint, zero-vulnerability production
   audit, diff checks, smoke/full production Chromium benchmarks, and real
   in-app Browser bulk-import/responsiveness/clean-console QA.
+
+## Post-MVP issue #57 - runtime and document-memory telemetry
+
+**COMPLETE AND PUBLISHED (2026-08-07; PR #82).**
+
+- [x] Add an explainable browser-free estimator that separates the authored
+  document, undo/redo history, and structural sharing without claiming to
+  measure JavaScript heap or decoded media.
+- [x] Seed deterministic real history in the isolated stress fixture and keep
+  current-document fingerprinting, reset, export, and cleanup exact.
+- [x] Add opt-in render-worker snapshots for active decoders/sources, queue
+  depth, cache hits/misses, classified retained bytes, and resource closes;
+  add active cursor/pending-buffer facts to audio diagnostics.
+- [x] Extend every process-memory batch into a bounded playback/scrub/drain
+  health cycle and record live/drained snapshots plus an explicit cache-drain
+  result.
+- [x] Measure telemetry overhead against paired disabled controls, keep the
+  proposal advisory, bound long-animation-frame capture, and capability-check
+  `measureUserAgentSpecificMemory()` as optional lab evidence.
+- [x] Advance the artifact to strict schema 3 / `issue-57-v1`, document all
+  cost classifications and exclusions, and introduce no absolute byte cap.
+- [x] Pass 190 focused tests, all 1,852 Vitest cases across 111 files plus 16
+  Node runner cases, build/typecheck, oxlint, production audit, diff checks,
+  schema validation, and a fresh production Chromium smoke run with two clean
+  cache drains, exact restoration/URL cleanup, and no console problems.
+- [x] Reviewed head `a857455` passed CI and was normally merged through PR #82
+  as `f7eedab`; Issue #57 closed automatically.
 
 ## Public preview foundation — v0.1.0-alpha.1
 
