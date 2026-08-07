@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
   PERFORMANCE_ARTIFACT_SCHEMA_VERSION,
+  PERFORMANCE_HARNESS_VERSION,
   evaluateProposedGates,
   measuredMetric,
   performanceArtifactMarkdown,
@@ -82,7 +83,7 @@ describe('performance evidence contract', () => {
     ].map((id) => [id, metric])) as PerformanceArtifact['metrics']
     const artifact = {
       schemaVersion: PERFORMANCE_ARTIFACT_SCHEMA_VERSION,
-      harnessVersion: 'issue-54-v3',
+      harnessVersion: PERFORMANCE_HARNESS_VERSION,
       capturedAt: '2026-08-06T00:00:00.000Z',
       metadata: {
         host: {
@@ -201,6 +202,30 @@ describe('performance evidence contract', () => {
           ],
         }],
       },
+      mediaAnalysisScheduler: {
+        scenarioVersion: 'issue-56-100-assets-v1',
+        scenarioAssetCount: 100,
+        modeledLegacyLaunchAllDecoderCount: 145,
+        budget: { maxConcurrentJobs: 2, maxDecoderSlots: 2 },
+        aging: { intervalMs: 2_000, step: 1 },
+        yieldStrategy: 'scheduler.yield',
+        finalQueueDepth: 0,
+        maxQueueDepth: 100,
+        finalActiveJobCount: 0,
+        maxActiveJobCount: 2,
+        finalActiveDecoderCount: 0,
+        maxActiveDecoderCount: 2,
+        enqueuedCount: 102,
+        completedCount: 101,
+        cancelledCount: 1,
+        failedCount: 0,
+        waitTimeMs: summarizeDistribution([1, 2, 3]),
+        eventLoopDelayMs: summarizeDistribution([1, 2, 3]),
+        progressObserved: true,
+        selectedStartedBeforeBackground: true,
+        visibleStartedBeforeBackground: true,
+        startOrderPreview: ['selected-099', 'visible-091', 'background-000'],
+      },
       warnings: [],
       consoleProblems: [],
       resources: {
@@ -225,6 +250,8 @@ describe('performance evidence contract', () => {
     expect(report).toContain(`Fixture fingerprint: sha256:${'a'.repeat(64)}`)
     expect(report).toContain('GPU: ANGLE (Test GPU)')
     expect(report).toContain('Memory provenance: private-bytes via powershell:Get-Process')
+    expect(report).toContain('modeled legacy launch-all decoder demand: 145')
+    expect(report).toContain('Completed/cancelled/failed: 101/1/0')
     expect(report).toContain('Created/revoked benchmark URLs: 10/10')
 
     const manualReport = performanceArtifactMarkdown({

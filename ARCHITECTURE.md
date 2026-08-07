@@ -357,6 +357,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   small serializable facts with no live resources. Files, handles, Inputs, and
   abort controllers stay app-layer; a Ready object URL transfers only to the
   existing asset/visual owners, never into compatibility state.
+  `src/app/mediaJobScheduler.ts` is the app-layer owner for disposable media
+  analysis queue state. `mediaVisualsController` submits one generation-safe
+  job per connected asset with a conservative two-job/two-decoder default
+  budget; selected-clip media outranks exact on-screen timeline media, which
+  outranks background media, while aging prevents starvation. Timeline UI may
+  publish its transient visible frame range only through the app facade.
+  Removal, replacement, project teardown, or supersession aborts queued/active
+  work; each pipeline owner must close its Input/decoder and revoke any URL
+  that did not transfer to `mediaStore`. Scheduler snapshots are bounded,
+  serializable diagnostics only—never document truth or live resources.
 - `ProjectSessionState` — `src/state/projectSessionStore.ts`: serializable
   launch/editor screen, operation phase, active-project labels, resume and
   active-editor relink summaries (including ambiguity choices), and the

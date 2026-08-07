@@ -1,8 +1,9 @@
 # Performance evidence harness
 
 Issue #54 establishes a repeatable evidence format for later optimization
-work. It records trends; it does not declare WebCut fast or enforce release
-budgets from one machine or one run.
+work. Issue #56 extends that artifact with deterministic media-analysis
+scheduler evidence. It records trends; it does not declare WebCut fast or
+enforce release budgets from one machine or one run.
 
 ## Production route gate
 
@@ -60,6 +61,19 @@ frames per export sample without entering its held tail. The CLI and in-page
 runtime reject larger requests before measurement; they never label held-tail
 decode as continuous evidence.
 
+### Media-analysis scheduler scenario
+
+Scenario `issue-56-100-assets-v1` exercises the production scheduler through a
+narrow injected adapter. It submits the fixture's same 100-kind distribution:
+45 A/V jobs reserving two decoder slots, 25 audio jobs reserving one, and 30
+still jobs reserving one. A legacy launch-all model would demand 145 decoder
+slots at once. The bounded scenario adds one active cancellation probe and one
+temporary capacity blocker, then records queue depth, wait distributions,
+active jobs/decoders, completion/cancellation/failure counts, progress,
+cooperative-yield strategy, event-loop delay, and selected/visible ordering.
+The scenario times scheduler behavior; it does not pretend its synthetic job
+bodies are real file decode latency.
+
 ## Metrics
 
 Each measured metric keeps its raw samples plus count, minimum, maximum, mean,
@@ -79,6 +93,10 @@ they are never replaced with zero.
 | `memory-plateau-mib` | Aggregate host OS private bytes, or RSS where private bytes are unsupported, for every live Chromium process returned by CDP `SystemInfo.getProcessInfo` at each post-warmup batch boundary. |
 | `memory-growth-kib-per-batch` | Signed change between consecutive complete process-scope plateau samples using one unchanged host metric and sampler. |
 | `export-real-time-ratio` | Elapsed export time divided by the bounded 4K segment duration. |
+
+The schema-3 `mediaAnalysisScheduler` object is separate from these product
+metrics. It preserves exact queue/resource facts and a modeled 145-slot legacy
+comparison without inventing a before-run measurement from the current tree.
 
 ## Reproduce
 
@@ -123,7 +141,7 @@ Each successful run writes one directory under `.tmp/benchmarks/` unless
 `--output` is supplied:
 
 - `performance.json` - machine-readable artifact conforming to
-  version 2 of `benchmarks/performance-artifact.schema.json`;
+  version 3 of `benchmarks/performance-artifact.schema.json`;
 - `summary.md` - human-readable metric, provenance, gate, warning, and cleanup
   summary;
 - `benchmark.png` - completed in-browser summary at 1440x900.
@@ -223,3 +241,7 @@ aggregate is false. Playback diagnostics retain only a bounded list of frame
 numbers during an active trial and are cleared before process-memory batches. URL
 cleanup evidence counts only owned revoke calls that actually complete, so a
 failed ownership cleanup cannot report a tautological pass.
+
+The synthetic media-analysis scenario owns and disposes its scheduler inside
+the benchmark runtime. Its work never enters project stores, persistence, or
+the real media pool.

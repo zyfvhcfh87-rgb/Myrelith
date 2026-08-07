@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-08-05)
+## Status (2026-08-07)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -83,6 +83,7 @@ and the open list below.
 | **Post-MVP #34 — full clip Inspector** | ✅ complete | schema-5 visual/audio editing, shared preview/export rendering, contextual Inspector, direct Program Monitor manipulation, and explicit remembered/quick file paths; 1,784 tests plus real-media reopen/playback/export and 720px Chromium acceptance; PR #49 normally merged as `571fff6` and Issue #34 closed |
 | **Post-MVP #35 — preview direct manipulation** | ✅ complete | Issue #34's complete Program Monitor controls plus four explicit corner-scale handles; 82 focused + 1,785 total tests; rotated/cropped/anchored/flipped real-media Chrome gate at 1280×720 and 720×800; PR #51 normally merged as `4f9eaaa` |
 | **Post-MVP #43 — keyframing and animation curves** | ✅ complete | schema-6 scalar curves for position/scale/rotation/opacity; one pure scrub/playback/export evaluator; accessible Inspector curves + timeline markers; 1,804 tests; real-media playback/export and 720px Chromium gate, clean console |
+| **Post-MVP #56 — bounded media-analysis scheduling** | ✅ implementation complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-3 benchmark evidence; 1,860 tests + real six-file and full 100-asset Chromium gates |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -1255,10 +1256,13 @@ surface; it is not a second zoom and never enters document history.
   the fly — full PCM never held); images span the asset's FULL duration
   (integer-frame filmstrip buckets + vector waveform mapping). Pure math
   unit-tested; shells browser-only.
-  Wired by `src/app/mediaVisualsController.ts` (3rd composition root):
-  one generation per asset, no retries, mediaStore owns the result URLs;
-  project-generation guards revoke stale results even when a new project
-  reuses the same durable asset id.
+  Wired by `src/app/mediaVisualsController.ts` (3rd composition root) through
+  `src/app/mediaJobScheduler.ts`: at most two asset jobs/two decoder slots,
+  selected-clip then exact visible-range then background priority with aging,
+  one generation per asset, typed failure containment, progress diagnostics,
+  and cooperative cancellation. `mediaStore` owns only transferred result
+  URLs; removed/replaced/stale generations close Inputs and revoke late URLs
+  even when a new project reuses the same durable asset id.
 - `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,
   `verifyKeyPackets`, bounded overshoot, bytes copied for transfer).
 - `src/engine/render-bridge.ts` — main-thread half of the render worker: keeps
@@ -1342,6 +1346,9 @@ surface; it is not a second zoom and never enters document history.
   "+ Video"/"+ Audio" (addTrack). Tracks render in domain
   tracksInDisplayOrder (videos reversed = top composite layer first,
   then audios) — doc order stays compositing order.
+  Timeline also publishes its exact transient on-screen frame range through
+  the media-visuals app facade so queued analysis can be reprioritized without
+  persisting viewport state or crossing directly into pipeline code.
 - `src/ui/MediaPool.tsx` + `MediaRelinkDialog.tsx` + `Preview.tsx` +
   `timeline/ClipView.tsx` — Slice 6 offline UI: descriptor-driven media rows,
   per-source Relink, one folder scan, focus-trapped ambiguity confirmation,
@@ -1784,6 +1791,44 @@ surface; it is not a second zoom and never enters document history.
   framework overlay, warning/error log, or horizontal page overflow. Zoom In
   changed the real slider from 0.725 to 0.748. The automated production run's
   1440x900 screenshot rendered the completed human-readable summary.
+
+## Post-MVP issue #56 - bounded media-analysis scheduler
+
+**IMPLEMENTATION COMPLETE (2026-08-07); delivery remains a draft PR.**
+
+- `MediaJobScheduler` owns a bounded priority queue with a default maximum of
+  two active asset jobs and two reserved decoder slots. Jobs expose generation,
+  progress, queue wait, active decoder, completion, cancellation, and typed
+  failure facts through bounded serializable snapshots. Native
+  `scheduler.yield()` is used when available, with a zero-delay timer fallback.
+- `mediaVisualsController` now schedules every filmstrip, still thumbnail, and
+  waveform job instead of launching the complete pool at once. The primary
+  selected clip's asset outranks assets intersecting Timeline's exact visible
+  half-open frame range, which outrank background assets; queue aging prevents
+  starvation and reprioritization preserves generation/FIFO identity.
+- Removal, replacement, supersession, and disposal abort queued or active work.
+  Mediabunny Inputs are disposed exactly once, late generated URLs are revoked,
+  stale generations cannot mutate stores, a failed sibling releases the other
+  result before compatibility disconnects the source, and one failed asset does
+  not block later work.
+- Performance artifact schema 3 adds deterministic
+  `issue-56-100-assets-v1` evidence. The fixture-kind plan models 145 legacy
+  launch-all decoder slots; both smoke and full production Chromium runs peaked
+  at two active jobs/two decoders, drained a queue of 100 to zero, completed
+  101 jobs, cancelled one, failed zero, observed progress, and started selected
+  and visible work before background. Schema 3 keeps the scheduler wait and
+  event-loop-delay distributions for comparison without proposing a product
+  threshold from one machine.
+- Full Chromium cleanup revoked 11/11 fixture and 7/7 imported URLs, restored
+  every isolated store, disposed preview/transport/export, and captured no
+  browser warning/error. Product performance proposal outcomes varied between
+  consecutive full runs, as expected for advisory single-device trend data;
+  they remain visible in each artifact and are not scheduler enforcement gates.
+- Validation passed 1,860/1,860 Vitest tests across 112 files plus all 16 Node
+  runner cases, production build/typecheck, oxlint, production audit with zero
+  vulnerabilities, `git diff --check`, smoke/full production benchmarks, and
+  in-app Browser QA. Six real H.264/AAC files all reached Ready with filmstrips;
+  Zoom In remained responsive (0.719→0.741) and the console stayed clean.
 
 ## Working agreements (the user's explicit preferences)
 

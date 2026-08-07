@@ -178,6 +178,7 @@ beforeEach(() => {
   harness.ensureDecoderSupport.mockReset()
   vi.stubGlobal('OffscreenCanvas', FakeOffscreenCanvas)
   URL.createObjectURL = vi.fn(() => 'blob:visual') as typeof URL.createObjectURL
+  URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
 })
 
 describe('Mediabunny visual fallback wiring', () => {
@@ -401,5 +402,46 @@ describe('Mediabunny visual fallback wiring', () => {
     expect(harness.audioSinks).toEqual([{ track }])
     expect(harness.durationTrackSets).toEqual([[track]])
     expect(harness.inputs[0].dispose).toHaveBeenCalledOnce()
+  })
+
+  test('abort disposes the active input once and prevents a late visual URL', async () => {
+    const track = {
+      getCodec: vi.fn(async () => 'avc'),
+      getDecoderConfig: vi.fn(async () => ({
+        codec: 'avc1.640028',
+        codedWidth: 1920,
+        codedHeight: 1080,
+      })),
+      getDisplayWidth: vi.fn(async () => 1920),
+      getDisplayHeight: vi.fn(async () => 1080),
+      canDecode: vi.fn(async () => true),
+    }
+    harness.videoTrack = track
+    let releaseSupport: (result: DecoderCheckResult) => void = () => {}
+    const supportGate = new Promise<DecoderCheckResult>((resolve) => {
+      releaseSupport = resolve
+    })
+    harness.ensureDecoderSupport.mockReturnValue(supportGate)
+    const controller = new AbortController()
+
+    const pending = generateFilmstrip(
+      new Blob(['cancel-me']),
+      { ...decodeOptions('asset-cancelled'), signal: controller.signal },
+    )
+    await vi.waitFor(() => expect(harness.ensureDecoderSupport).toHaveBeenCalledOnce())
+    controller.abort('removed')
+    expect(harness.inputs[0].dispose).toHaveBeenCalledOnce()
+    releaseSupport({
+      decodable: true,
+      path: 'native',
+      attemptedFallback: null,
+      failure: null,
+    })
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(harness.inputs[0].dispose).toHaveBeenCalledOnce()
+    expect(harness.canvasSinks).toHaveLength(0)
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
   })
 })

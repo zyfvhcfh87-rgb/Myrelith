@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { MediaAsset } from '../domain/schema'
+import type { MediaAsset, TimelineDoc } from '../domain/schema'
 import {
   MediaVisualDecodeError,
   MediaVisualSourceError,
@@ -14,7 +14,13 @@ import { StaticImageThumbnailError } from '../pipeline/static-image-thumbnail'
 import { useMediaStore } from '../state/mediaStore'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
 import type { VisualsDeps } from './mediaVisualsController'
-import { disposeMediaVisuals, initMediaVisuals } from './mediaVisualsController'
+import {
+  disposeMediaVisuals,
+  getMediaVisualSchedulerSnapshot,
+  initMediaVisuals,
+  mediaVisualPriorityForAsset,
+  waitForMediaVisualsIdle,
+} from './mediaVisualsController'
 
 let urlCounter = 0
 let warnSpy: ReturnType<typeof vi.spyOn>
@@ -118,6 +124,7 @@ describe('mediaVisualsController', () => {
       expect.any(Blob),
       {
         sourceId: a.id,
+        signal: expect.any(AbortSignal),
         budget: {
           fileBytes: 1,
           durationMicroseconds: 2_000_000,
@@ -165,6 +172,7 @@ describe('mediaVisualsController', () => {
     expect(deps.generateStaticImageThumbnail).toHaveBeenCalledOnce()
     expect(deps.generateStaticImageThumbnail).toHaveBeenCalledWith(
       expect.any(Blob),
+      { signal: expect.any(AbortSignal) },
     )
     expect(deps.fetchBlob).toHaveBeenCalledTimes(2)
     expect(useMediaStore.getState().visuals.get(audio.id)).toEqual({
@@ -426,5 +434,165 @@ describe('mediaVisualsController', () => {
     addAsset('a.mp4', 'video/mp4')
     await flush()
     expect(deps.generateFilmstrip).toHaveBeenCalledTimes(1)
+  })
+
+  test('bounds bulk A/V analysis to the two-decoder budget and exposes queue evidence', async () => {
+    let releaseStrip: (result: typeof strip) => void = () => {}
+    let releaseWave: (result: typeof wave) => void = () => {}
+    const stripGate = new Promise<typeof strip>((resolve) => (releaseStrip = resolve))
+    const waveGate = new Promise<typeof wave>((resolve) => (releaseWave = resolve))
+    const deps = fakeDeps({
+      generateFilmstrip: vi.fn(() => stripGate),
+      generateWaveform: vi.fn(() => waveGate),
+    })
+    initMediaVisuals(deps, { scheduler: { yieldControl: async () => {} } })
+    addAsset('bulk-a.mp4', 'video/mp4')
+    addAsset('bulk-b.mp4', 'video/mp4')
+    addAsset('bulk-c.mp4', 'video/mp4')
+    await flush()
+
+    expect(deps.fetchBlob).toHaveBeenCalledTimes(1)
+    expect(getMediaVisualSchedulerSnapshot()).toMatchObject({
+      queueDepth: 2,
+      activeJobCount: 1,
+      activeDecoderCount: 2,
+      maxQueueDepth: 3,
+      maxActiveDecoderCount: 2,
+    })
+
+    releaseStrip(strip)
+    releaseWave(wave)
+    const evidence = await waitForMediaVisualsIdle()
+    expect(evidence).toMatchObject({
+      queueDepth: 0,
+      activeJobCount: 0,
+      activeDecoderCount: 0,
+      enqueuedCount: 3,
+      completedCount: 3,
+      cancelledCount: 0,
+      failedCount: 0,
+      maxActiveDecoderCount: 2,
+    })
+    expect(evidence?.waitTimesMs).toHaveLength(3)
+    expect(useMediaStore.getState().visuals.size).toBe(3)
+  })
+
+  test('removal aborts active analysis and revokes every late sibling URL', async () => {
+    let releaseStrip: (result: typeof strip) => void = () => {}
+    let releaseWave: (result: typeof wave) => void = () => {}
+    const stripGate = new Promise<typeof strip>((resolve) => (releaseStrip = resolve))
+    const waveGate = new Promise<typeof wave>((resolve) => (releaseWave = resolve))
+    const deps = fakeDeps({
+      generateFilmstrip: vi.fn(() => stripGate),
+      generateWaveform: vi.fn(() => waveGate),
+    })
+    initMediaVisuals(deps, { scheduler: { yieldControl: async () => {} } })
+    const asset = addAsset('remove-active.mp4', 'video/mp4')
+    await flush()
+    expect(getMediaVisualSchedulerSnapshot()?.activeDecoderCount).toBe(2)
+
+    useMediaStore.getState().removeAsset(asset.id)
+    const idle = waitForMediaVisualsIdle()
+    releaseStrip(strip)
+    releaseWave(wave)
+    const evidence = await idle
+
+    expect(evidence).toMatchObject({
+      completedCount: 0,
+      cancelledCount: 1,
+      failedCount: 0,
+      activeDecoderCount: 0,
+    })
+    expect(useMediaStore.getState().visuals.has(asset.id)).toBe(false)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(strip.url)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(wave.url)
+  })
+
+  test('replacement cancels the old generation without deleting the new record', async () => {
+    let oldAborted = false
+    const deps = fakeDeps({
+      fetchBlob: vi.fn((url: string, signal: AbortSignal) => {
+        if (url !== 'blob:old.mp4') return Promise.resolve(new Blob(['new']))
+        return new Promise<Blob>((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            oldAborted = true
+            const error = new Error('old source cancelled')
+            error.name = 'AbortError'
+            reject(error)
+          }, { once: true })
+        })
+      }),
+    })
+    initMediaVisuals(deps, { scheduler: { yieldControl: async () => {} } })
+    const old = addAsset('old.mp4', 'video/mp4')
+    await flush()
+
+    const replacement: MediaAsset = {
+      ...old,
+      fileName: 'new.mp4',
+      objectUrl: 'blob:new.mp4',
+    }
+    useMediaStore.setState((current) => ({
+      assets: new Map(current.assets).set(old.id, replacement),
+    }))
+    const evidence = await waitForMediaVisualsIdle()
+
+    expect(oldAborted).toBe(true)
+    expect(deps.fetchBlob).toHaveBeenCalledWith('blob:new.mp4', expect.any(AbortSignal))
+    expect(useMediaStore.getState().visuals.get(old.id)).toEqual({
+      filmstrip: strip,
+      waveform: wave,
+    })
+    expect(evidence).toMatchObject({
+      enqueuedCount: 2,
+      completedCount: 1,
+      cancelledCount: 1,
+      failedCount: 0,
+    })
+  })
+
+  test('derives selected, visible, and background priority from current timeline facts', () => {
+    const document = {
+      tracks: [{
+        clips: [
+          {
+            id: 'visible-clip',
+            assetId: 'visible-asset',
+            timelineRange: { startFrame: 100, durationFrames: 50 },
+          },
+          {
+            id: 'selected-clip',
+            assetId: 'selected-asset',
+            timelineRange: { startFrame: 1_000, durationFrames: 50 },
+          },
+        ],
+      }],
+    } as unknown as TimelineDoc
+    const viewport = { startFrame: 120, endFrame: 140 }
+
+    expect(mediaVisualPriorityForAsset(
+      'selected-asset',
+      document,
+      'selected-clip',
+      viewport,
+    )).toBe('selected')
+    expect(mediaVisualPriorityForAsset(
+      'visible-asset',
+      document,
+      'selected-clip',
+      viewport,
+    )).toBe('visible')
+    expect(mediaVisualPriorityForAsset(
+      'background-asset',
+      document,
+      'selected-clip',
+      viewport,
+    )).toBe('background')
+    expect(mediaVisualPriorityForAsset(
+      'visible-asset',
+      document,
+      null,
+      { startFrame: 150, endFrame: 200 },
+    )).toBe('background')
   })
 })

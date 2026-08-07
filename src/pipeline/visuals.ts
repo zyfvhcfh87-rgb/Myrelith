@@ -188,6 +188,36 @@ export class MediaVisualDecodeError extends Error {
 export interface MediaVisualDecodeOptions {
   sourceId?: string
   budget: LocalDecoderBudget
+  signal?: AbortSignal
+}
+
+function mediaVisualAbortError(): Error {
+  const error = new Error('Media visual generation was cancelled')
+  error.name = 'AbortError'
+  return error
+}
+
+function throwIfVisualAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw mediaVisualAbortError()
+}
+
+function ownVisualInput(input: Input, signal?: AbortSignal): () => void {
+  let disposed = false
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    try {
+      input.dispose()
+    } catch {
+      // Cancellation/cleanup cannot hide the primary decode result.
+    }
+  }
+  signal?.addEventListener('abort', dispose, { once: true })
+  if (signal?.aborted) dispose()
+  return () => {
+    signal?.removeEventListener('abort', dispose)
+    dispose()
+  }
 }
 
 function createVisualInput(file: Blob): Input {
@@ -210,9 +240,13 @@ export async function generateFilmstrip(
   file: Blob,
   options: MediaVisualDecodeOptions,
 ): Promise<FilmstripResult | null> {
+  throwIfVisualAborted(options.signal)
   const input = createVisualInput(file)
+  const releaseInput = ownVisualInput(input, options.signal)
   try {
+    throwIfVisualAborted(options.signal)
     const track = await input.getPrimaryVideoTrack()
+    throwIfVisualAborted(options.signal)
     if (!track) return null
     const [codec, configuration, displayWidth, displayHeight] = await Promise.all([
       track.getCodec(),
@@ -234,8 +268,10 @@ export async function generateFilmstrip(
         configuration,
       ),
     })
+    throwIfVisualAborted(options.signal)
     if (!support.decodable) throw new MediaVisualDecodeError(support.failure)
     const durationSec = await input.computeDuration([track])
+    throwIfVisualAborted(options.signal)
     const timestamps = filmstripTimestamps(durationSec)
     if (timestamps.length === 0) return null
     const tileWidth = filmstripTileWidth(
@@ -268,6 +304,7 @@ export async function generateFilmstrip(
     let ctx: OffscreenCanvasRenderingContext2D | null = null
     let index = 0
     for await (const wrapped of sink.canvasesAtTimestamps(timestamps)) {
+      throwIfVisualAborted(options.signal)
       if (wrapped) {
         if (!strip) {
           strip = new OffscreenCanvas(stripWidth, TILE_HEIGHT)
@@ -281,18 +318,23 @@ export async function generateFilmstrip(
     if (!strip) return null
 
     const blob = await strip.convertToBlob({ type: 'image/jpeg', quality: 0.75 })
+    throwIfVisualAborted(options.signal)
+    const url = URL.createObjectURL(blob)
+    if (options.signal?.aborted) {
+      URL.revokeObjectURL(url)
+      throw mediaVisualAbortError()
+    }
     return {
-      url: URL.createObjectURL(blob),
+      url,
       tiles: timestamps.length,
       tileWidth,
       tileHeight: TILE_HEIGHT,
     }
+  } catch (cause) {
+    if (options.signal?.aborted) throw mediaVisualAbortError()
+    throw cause
   } finally {
-    try {
-      input.dispose()
-    } catch {
-      // Cleanup must not hide a decode failure or invalidate a finished URL.
-    }
+    releaseInput()
   }
 }
 
@@ -306,9 +348,13 @@ export async function generateWaveform(
   file: Blob,
   options: MediaVisualDecodeOptions,
 ): Promise<WaveformResult | null> {
+  throwIfVisualAborted(options.signal)
   const input = createVisualInput(file)
+  const releaseInput = ownVisualInput(input, options.signal)
   try {
+    throwIfVisualAborted(options.signal)
     const track = await input.getPrimaryAudioTrack()
+    throwIfVisualAborted(options.signal)
     if (!track) return null
     const [codec, configuration] = await Promise.all([
       track.getCodec(),
@@ -328,14 +374,17 @@ export async function generateWaveform(
         configuration,
       ),
     })
+    throwIfVisualAborted(options.signal)
     if (!support.decodable) throw new MediaVisualDecodeError(support.failure)
     const durationSec = await input.computeDuration([track])
+    throwIfVisualAborted(options.signal)
     const width = waveformWidth(durationSec)
     if (width === 0) return null
 
     const peaks = new Float32Array(width)
     const sink = new AudioBufferSink(track)
     for await (const { buffer, timestamp } of sink.buffers()) {
+      throwIfVisualAborted(options.signal)
       for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
         accumulatePeaks(
           peaks,
@@ -350,12 +399,17 @@ export async function generateWaveform(
     const path = waveformPath(peaks, WAVEFORM_HEIGHT)
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${WAVEFORM_HEIGHT}" preserveAspectRatio="none"><path d="${path}" fill="${WAVEFORM_COLOR}"/></svg>`
     const blob = new Blob([svg], { type: 'image/svg+xml' })
-    return { url: URL.createObjectURL(blob), width, height: WAVEFORM_HEIGHT }
-  } finally {
-    try {
-      input.dispose()
-    } catch {
-      // Cleanup must not hide a decode failure or invalidate a finished URL.
+    throwIfVisualAborted(options.signal)
+    const url = URL.createObjectURL(blob)
+    if (options.signal?.aborted) {
+      URL.revokeObjectURL(url)
+      throw mediaVisualAbortError()
     }
+    return { url, width, height: WAVEFORM_HEIGHT }
+  } catch (cause) {
+    if (options.signal?.aborted) throw mediaVisualAbortError()
+    throw cause
+  } finally {
+    releaseInput()
   }
 }

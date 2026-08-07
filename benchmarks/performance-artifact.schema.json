@@ -14,13 +14,14 @@
     "metrics",
     "proposedGates",
     "memoryEvidence",
+    "mediaAnalysisScheduler",
     "warnings",
     "consoleProblems",
     "resources"
   ],
   "properties": {
-    "schemaVersion": { "const": 2 },
-    "harnessVersion": { "const": "issue-54-v3" },
+    "schemaVersion": { "const": 3 },
+    "harnessVersion": { "const": "issue-56-v1" },
     "capturedAt": { "type": "string", "format": "date-time" },
     "metadata": {
       "type": "object",
@@ -67,6 +68,7 @@
       "items": { "$ref": "#/$defs/proposedGate" }
     },
     "memoryEvidence": { "$ref": "#/$defs/memoryEvidence" },
+    "mediaAnalysisScheduler": { "$ref": "#/$defs/mediaAnalysisScheduler" },
     "warnings": { "type": "array", "items": { "type": "string" } },
     "consoleProblems": { "type": "array", "items": { "type": "string" } },
     "resources": { "$ref": "#/$defs/resources" }
@@ -501,6 +503,83 @@
           }
         }
       ]
+    },
+    "mediaAnalysisScheduler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenarioVersion",
+        "scenarioAssetCount",
+        "modeledLegacyLaunchAllDecoderCount",
+        "budget",
+        "aging",
+        "yieldStrategy",
+        "finalQueueDepth",
+        "maxQueueDepth",
+        "finalActiveJobCount",
+        "maxActiveJobCount",
+        "finalActiveDecoderCount",
+        "maxActiveDecoderCount",
+        "enqueuedCount",
+        "completedCount",
+        "cancelledCount",
+        "failedCount",
+        "waitTimeMs",
+        "eventLoopDelayMs",
+        "progressObserved",
+        "selectedStartedBeforeBackground",
+        "visibleStartedBeforeBackground",
+        "startOrderPreview"
+      ],
+      "properties": {
+        "scenarioVersion": { "type": "string", "minLength": 1 },
+        "scenarioAssetCount": { "type": "integer", "minimum": 1 },
+        "modeledLegacyLaunchAllDecoderCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maxConcurrentJobs", "maxDecoderSlots"],
+          "properties": {
+            "maxConcurrentJobs": { "type": "integer", "minimum": 1 },
+            "maxDecoderSlots": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "aging": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["intervalMs", "step"],
+          "properties": {
+            "intervalMs": { "type": "number", "exclusiveMinimum": 0 },
+            "step": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "yieldStrategy": {
+          "enum": ["scheduler.yield", "set-timeout", "injected"]
+        },
+        "finalQueueDepth": { "type": "integer", "minimum": 0 },
+        "maxQueueDepth": { "type": "integer", "minimum": 0 },
+        "finalActiveJobCount": { "type": "integer", "minimum": 0 },
+        "maxActiveJobCount": { "type": "integer", "minimum": 0 },
+        "finalActiveDecoderCount": { "type": "integer", "minimum": 0 },
+        "maxActiveDecoderCount": { "type": "integer", "minimum": 0 },
+        "enqueuedCount": { "type": "integer", "minimum": 0 },
+        "completedCount": { "type": "integer", "minimum": 0 },
+        "cancelledCount": { "type": "integer", "minimum": 0 },
+        "failedCount": { "type": "integer", "minimum": 0 },
+        "waitTimeMs": { "$ref": "#/$defs/summary" },
+        "eventLoopDelayMs": { "$ref": "#/$defs/summary" },
+        "progressObserved": { "type": "boolean" },
+        "selectedStartedBeforeBackground": { "type": "boolean" },
+        "visibleStartedBeforeBackground": { "type": "boolean" },
+        "startOrderPreview": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
     },
     "proposedGate": {
       "type": "object",

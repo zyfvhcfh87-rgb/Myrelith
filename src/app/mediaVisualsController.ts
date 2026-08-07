@@ -1,38 +1,27 @@
 /**
- * app/mediaVisualsController.ts — third composition root (same pattern as
- * previewController/transportController): the ONLY place mediaStore meets
- * pipeline/visuals. Watches the media pool and generates each asset's
- * filmstrip + waveform images exactly once, in the background.
- *
- * Flow: asset appears → fetch its blob → run the generators for its kind
- * (video → filmstrip, image → one thumbnail tile, assets with audio →
- * waveform; timed-media generators return null when the track isn't there) →
- * hand the result to mediaStore.setAssetVisuals, which OWNS the object URLs
- * from that moment (including the asset-removed-mid-generation case, where it
- * revokes the late result on the spot).
- *
- * Failures are logged and projected through the asset-scoped runtime
- * compatibility seam; a corrupt file must not wedge the pool in a retry loop.
- * Dependency-injected like the other controllers so tests drive it with
- * fakes; `initMediaVisuals` is idempotent (StrictMode double-mount safe).
+ * The composition-root bridge from connected media to disposable timeline
+ * visuals. Analysis is generation-safe, cancelable, priority-aware, and
+ * bounded by MediaJobScheduler; the store remains the exact URL owner after a
+ * successful transfer.
  */
 
-import type { AssetId, MediaAsset } from '../domain/schema'
+import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
+import { findClip } from '../domain/selectors'
 import {
   mediaAssetDecoderBudget,
-  type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
-import type { FilmstripResult, WaveformResult } from '../pipeline/visuals'
-import {
-  StaticImageDecodeError,
-} from '../pipeline/static-image'
-import {
-  StaticImageInspectionError,
-} from '../pipeline/static-image-inspection'
+import type {
+  FilmstripResult,
+  MediaVisualDecodeOptions,
+  WaveformResult,
+} from '../pipeline/visuals'
+import { StaticImageDecodeError } from '../pipeline/static-image'
+import { StaticImageInspectionError } from '../pipeline/static-image-inspection'
 import {
   generateStaticImageThumbnail,
   StaticImageThumbnailError,
+  type StaticImageThumbnailOptions,
 } from '../pipeline/static-image-thumbnail'
 import {
   MediaVisualDecodeError,
@@ -40,7 +29,17 @@ import {
   generateFilmstrip,
   generateWaveform,
 } from '../pipeline/visuals'
+import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useTransportStore } from '../state/transportStore'
+import {
+  MediaJobExecutionError,
+  MediaJobScheduler,
+  type MediaJobContext,
+  type MediaJobPriority,
+  type MediaJobSchedulerOptions,
+  type MediaJobSchedulerSnapshot,
+} from './mediaJobScheduler'
 import {
   captureMediaRuntimeGuard,
   mediaRuntimeFailure,
@@ -48,38 +47,82 @@ import {
 } from './mediaCompatibilityController'
 
 export interface VisualsDeps {
-  fetchBlob: (url: string) => Promise<Blob>
+  fetchBlob: (url: string, signal: AbortSignal) => Promise<Blob>
   generateFilmstrip: (
     file: Blob,
-    options: { sourceId?: string; budget: LocalDecoderBudget },
+    options: MediaVisualDecodeOptions,
   ) => Promise<FilmstripResult | null>
   generateWaveform: (
     file: Blob,
-    options: { sourceId?: string; budget: LocalDecoderBudget },
+    options: MediaVisualDecodeOptions,
   ) => Promise<WaveformResult | null>
   generateStaticImageThumbnail: (
     file: Blob,
+    options?: StaticImageThumbnailOptions,
   ) => Promise<FilmstripResult>
 }
 
+export interface MediaVisualTimelineViewport {
+  readonly startFrame: number
+  readonly endFrame: number
+}
+
+export interface MediaVisualsControllerOptions {
+  readonly scheduler?: MediaJobSchedulerOptions
+}
+
 const realDeps: VisualsDeps = {
-  fetchBlob: (url) => fetch(url).then((r) => r.blob()),
+  fetchBlob: async (url, signal) => {
+    const response = await fetch(url, { signal })
+    if (!response.ok) {
+      throw new Error(`Media source returned HTTP ${response.status}`)
+    }
+    return response.blob()
+  },
   generateFilmstrip,
   generateWaveform,
   generateStaticImageThumbnail,
 }
 
+interface AssetJobRecord {
+  readonly objectUrl: string
+  readonly generation: number
+  selfDisconnecting: boolean
+}
+
 interface ControllerState {
-  /** Assets already picked up (in flight, done, or failed — no retries). */
-  started: Set<AssetId>
-  unsubscribe: (() => void) | null
-  generation: number
+  readonly jobs: Map<AssetId, AssetJobRecord>
+  scheduler: MediaJobScheduler | null
+  unsubscribeMedia: (() => void) | null
+  unsubscribeDocument: (() => void) | null
+  unsubscribeTransport: (() => void) | null
+  viewport: MediaVisualTimelineViewport | null
+  nextGeneration: number
 }
 
 const state: ControllerState = {
-  started: new Set(),
-  unsubscribe: null,
-  generation: 0,
+  jobs: new Map(),
+  scheduler: null,
+  unsubscribeMedia: null,
+  unsubscribeDocument: null,
+  unsubscribeTransport: null,
+  viewport: null,
+  nextGeneration: 0,
+}
+
+function abortError(): Error {
+  const error = new Error('Media visual generation was cancelled')
+  error.name = 'AbortError'
+  return error
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw abortError()
+}
+
+function isCancellation(cause: unknown, signal: AbortSignal): boolean {
+  return signal.aborted
+    || (cause instanceof Error && cause.name === 'AbortError')
 }
 
 function revokeGenerated(
@@ -90,106 +133,53 @@ function revokeGenerated(
   if (waveform) URL.revokeObjectURL(waveform.url)
 }
 
-async function process(
-  asset: MediaAsset,
-  deps: VisualsDeps,
-  generation: number,
-): Promise<void> {
-  const guard = captureMediaRuntimeGuard(asset.id)
-  if (!guard || guard.objectUrl !== asset.objectUrl) return
+function visualTaskCount(asset: MediaAsset): number {
+  return Number(asset.kind === 'video' || asset.kind === 'image')
+    + Number(asset.hasAudio)
+}
 
-  let blob: Blob
-  try {
-    blob = await deps.fetchBlob(asset.objectUrl)
-  } catch (err) {
-    if (generation !== state.generation) return
-    console.warn(`[mediaVisuals] generation failed for "${asset.fileName}"`, err)
-    reportMediaRuntimeFailure(
-      guard,
-      mediaRuntimeFailure(
-        asset.kind === 'audio' ? 'waveform' : 'filmstrip',
-        null,
-        err,
-        'resource-unavailable',
-      ),
-    )
-    return
+function connectedAssetStillMatches(asset: MediaAsset): boolean {
+  return useMediaStore.getState().assets.get(asset.id)?.objectUrl === asset.objectUrl
+}
+
+export function mediaVisualPriorityForAsset(
+  assetId: AssetId,
+  document: TimelineDoc,
+  selectedClipId: string | null,
+  viewport: MediaVisualTimelineViewport | null,
+): MediaJobPriority {
+  const selected = selectedClipId ? findClip(document, selectedClipId) : null
+  if (selected?.assetId === assetId) return 'selected'
+  if (!viewport || viewport.endFrame <= viewport.startFrame) return 'background'
+
+  for (const track of document.tracks) {
+    for (const clip of track.clips) {
+      if (
+        clip.assetId === assetId
+        && clip.timelineRange.startFrame < viewport.endFrame
+        && clip.timelineRange.startFrame + clip.timelineRange.durationFrames
+          > viewport.startFrame
+      ) return 'visible'
+    }
   }
+  return 'background'
+}
 
-  const current = useMediaStore.getState().assets.get(asset.id)
-  if (
-    generation !== state.generation
-    || current?.objectUrl !== asset.objectUrl
-  ) return
+function currentPriority(assetId: AssetId): MediaJobPriority {
+  return mediaVisualPriorityForAsset(
+    assetId,
+    useDocumentStore.getState().doc,
+    useTransportStore.getState().selectedClipId,
+    state.viewport,
+  )
+}
 
-  const decodeOptions = {
-    sourceId: asset.id,
-    budget: mediaAssetDecoderBudget(asset, blob.size),
+function reprioritizeQueuedJobs(): void {
+  const scheduler = state.scheduler
+  if (!scheduler) return
+  for (const id of state.jobs.keys()) {
+    scheduler.reprioritize(id, currentPriority(id))
   }
-
-  const [filmstripResult, waveformResult] = await Promise.allSettled([
-    asset.kind === 'video'
-      ? deps.generateFilmstrip(blob, decodeOptions)
-      : asset.kind === 'image'
-        ? deps.generateStaticImageThumbnail(blob)
-        : Promise.resolve(null),
-    asset.hasAudio
-      ? deps.generateWaveform(blob, decodeOptions)
-      : Promise.resolve(null),
-  ])
-  const filmstrip = filmstripResult.status === 'fulfilled'
-    ? filmstripResult.value
-    : null
-  const waveform = waveformResult.status === 'fulfilled'
-    ? waveformResult.value
-    : null
-
-  const failure = filmstripResult.status === 'rejected'
-    ? {
-        surface: 'filmstrip' as const,
-        trackKind: asset.kind === 'image' ? null : 'video' as const,
-        cause: filmstripResult.reason,
-      }
-    : waveformResult.status === 'rejected'
-      ? {
-          surface: 'waveform' as const,
-          trackKind: 'audio' as const,
-          cause: waveformResult.reason,
-        }
-      : null
-  if (failure) {
-    // allSettled preserves a successful sibling long enough to release it.
-    revokeGenerated(filmstrip, waveform)
-    if (generation !== state.generation) return
-    console.warn(
-      `[mediaVisuals] generation failed for "${asset.fileName}"`,
-      failure.cause,
-    )
-    reportMediaRuntimeFailure(
-      guard,
-      mediaRuntimeFailure(
-        failure.surface,
-        failure.cause instanceof MediaVisualSourceError
-          ? null
-          : failure.trackKind,
-        failure.cause,
-        visualFailureReason(failure.cause),
-      ),
-    )
-    return
-  }
-
-  if (!filmstrip && !waveform) return
-  const latest = useMediaStore.getState().assets.get(asset.id)
-  if (
-    generation !== state.generation
-    || latest?.objectUrl !== asset.objectUrl
-  ) {
-    revokeGenerated(filmstrip, waveform)
-    return
-  }
-  // The store takes URL ownership; disconnected late results are revoked.
-  useMediaStore.getState().setAssetVisuals(asset.id, { filmstrip, waveform })
 }
 
 function visualFailureReason(
@@ -214,32 +204,260 @@ function visualFailureReason(
   return 'decode-failed'
 }
 
-function scan(deps: VisualsDeps): void {
-  const assets = useMediaStore.getState().assets
-  // Forget removed assets (their stored visuals died with removeAsset).
-  for (const id of state.started) {
-    if (!assets.has(id)) state.started.delete(id)
+function jobFailure(
+  reason: MediaRuntimeFailure['reason'],
+  cause: unknown,
+): MediaJobExecutionError {
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  return new MediaJobExecutionError(reason, detail, cause)
+}
+
+function reportFailureAndThrow(
+  record: AssetJobRecord,
+  guard: NonNullable<ReturnType<typeof captureMediaRuntimeGuard>>,
+  asset: MediaAsset,
+  failure: MediaRuntimeFailure,
+  cause: unknown,
+): never {
+  record.selfDisconnecting = true
+  console.warn(`[mediaVisuals] generation failed for "${asset.fileName}"`, cause)
+  reportMediaRuntimeFailure(guard, failure)
+  throw jobFailure(failure.reason, cause)
+}
+
+async function process(
+  asset: MediaAsset,
+  record: AssetJobRecord,
+  deps: VisualsDeps,
+  context: MediaJobContext,
+): Promise<void> {
+  const { signal } = context
+  const guard = captureMediaRuntimeGuard(asset.id)
+  if (!guard || guard.objectUrl !== asset.objectUrl) return
+  context.reportProgress(0.05)
+
+  let blob: Blob
+  try {
+    blob = await deps.fetchBlob(asset.objectUrl, signal)
+  } catch (cause) {
+    if (isCancellation(cause, signal)) throw abortError()
+    if (!connectedAssetStillMatches(asset)) return
+    reportFailureAndThrow(
+      record,
+      guard,
+      asset,
+      mediaRuntimeFailure(
+        asset.kind === 'audio' ? 'waveform' : 'filmstrip',
+        null,
+        cause,
+        'resource-unavailable',
+      ),
+      cause,
+    )
   }
-  for (const [id, asset] of assets) {
-    if (state.started.has(id)) continue
-    state.started.add(id)
-    void process(asset, deps, state.generation)
+  throwIfAborted(signal)
+  if (!connectedAssetStillMatches(asset)) return
+  context.reportProgress(0.15)
+
+  const decodeOptions: MediaVisualDecodeOptions = {
+    sourceId: asset.id,
+    budget: mediaAssetDecoderBudget(asset, blob.size),
+    signal,
+  }
+  const tasks = visualTaskCount(asset)
+  let activeDecoders = tasks
+  let settledTasks = 0
+  context.setActiveDecoderCount(activeDecoders)
+  const track = async <T>(pending: Promise<T>): Promise<T> => {
+    try {
+      return await pending
+    } finally {
+      settledTasks++
+      activeDecoders--
+      context.setActiveDecoderCount(activeDecoders)
+      context.reportProgress(0.15 + 0.75 * settledTasks / Math.max(1, tasks))
+    }
+  }
+
+  let filmstripResult: PromiseSettledResult<FilmstripResult | null>
+  let waveformResult: PromiseSettledResult<WaveformResult | null>
+  try {
+    ;[filmstripResult, waveformResult] = await Promise.allSettled([
+      asset.kind === 'video'
+        ? track(deps.generateFilmstrip(blob, decodeOptions))
+        : asset.kind === 'image'
+          ? track(deps.generateStaticImageThumbnail(blob, { signal }))
+          : Promise.resolve(null),
+      asset.hasAudio
+        ? track(deps.generateWaveform(blob, decodeOptions))
+        : Promise.resolve(null),
+    ])
+  } finally {
+    context.setActiveDecoderCount(0)
+  }
+
+  const filmstrip = filmstripResult.status === 'fulfilled'
+    ? filmstripResult.value
+    : null
+  const waveform = waveformResult.status === 'fulfilled'
+    ? waveformResult.value
+    : null
+  if (signal.aborted) {
+    revokeGenerated(filmstrip, waveform)
+    throw abortError()
+  }
+
+  const failure = filmstripResult.status === 'rejected'
+    ? {
+        surface: 'filmstrip' as const,
+        trackKind: asset.kind === 'image' ? null : 'video' as const,
+        cause: filmstripResult.reason,
+      }
+    : waveformResult.status === 'rejected'
+      ? {
+          surface: 'waveform' as const,
+          trackKind: 'audio' as const,
+          cause: waveformResult.reason,
+        }
+      : null
+  if (failure) {
+    // Compatibility owns the complete connected source. A confirmed runtime
+    // failure disconnects it, so a successful sibling URL must be released.
+    revokeGenerated(filmstrip, waveform)
+    if (isCancellation(failure.cause, signal)) throw abortError()
+    if (!connectedAssetStillMatches(asset)) return
+    reportFailureAndThrow(
+      record,
+      guard,
+      asset,
+      mediaRuntimeFailure(
+        failure.surface,
+        failure.cause instanceof MediaVisualSourceError
+          ? null
+          : failure.trackKind,
+        failure.cause,
+        visualFailureReason(failure.cause),
+      ),
+      failure.cause,
+    )
+  }
+
+  if (!filmstrip && !waveform) return
+  if (!connectedAssetStillMatches(asset)) {
+    revokeGenerated(filmstrip, waveform)
+    return
+  }
+  context.reportProgress(0.98)
+  // The store takes URL ownership; disconnected late results are revoked.
+  useMediaStore.getState().setAssetVisuals(asset.id, { filmstrip, waveform })
+}
+
+function scan(deps: VisualsDeps): void {
+  const scheduler = state.scheduler
+  if (!scheduler) return
+  const media = useMediaStore.getState()
+
+  for (const [id, record] of state.jobs) {
+    const current = media.assets.get(id)
+    if (current?.objectUrl === record.objectUrl) continue
+    if (!record.selfDisconnecting) scheduler.cancel(id, current ? 'replaced' : 'removed')
+    state.jobs.delete(id)
+  }
+
+  for (const [id, asset] of media.assets) {
+    if (state.jobs.has(id) || media.visuals.has(id)) continue
+    const record: AssetJobRecord = {
+      objectUrl: asset.objectUrl,
+      generation: ++state.nextGeneration,
+      selfDisconnecting: false,
+    }
+    state.jobs.set(id, record)
+    scheduler.enqueue({
+      id,
+      generation: record.generation,
+      priority: currentPriority(id),
+      resources: { decoderSlots: visualTaskCount(asset) },
+      run: async (context) => {
+        try {
+          await process(asset, record, deps, context)
+        } finally {
+          const current = useMediaStore.getState().assets.get(id)
+          if (
+            current?.objectUrl !== record.objectUrl
+            && state.jobs.get(id) === record
+          ) state.jobs.delete(id)
+        }
+      },
+    })
   }
 }
 
-/** Start watching the media pool. Idempotent; returns immediately. */
-export function initMediaVisuals(deps: VisualsDeps = realDeps): void {
-  if (state.unsubscribe) return
-  state.unsubscribe = useMediaStore.subscribe((s, prev) => {
-    if (s.assets !== prev.assets) scan(deps)
+/** Start watching connected media. Idempotent and StrictMode-safe. */
+export function initMediaVisuals(
+  deps: VisualsDeps = realDeps,
+  options: MediaVisualsControllerOptions = {},
+): void {
+  if (state.scheduler) return
+  state.scheduler = new MediaJobScheduler(options.scheduler)
+  state.unsubscribeMedia = useMediaStore.subscribe((current, previous) => {
+    if (current.assets !== previous.assets || current.visuals !== previous.visuals) {
+      scan(deps)
+    }
+  })
+  state.unsubscribeDocument = useDocumentStore.subscribe((current, previous) => {
+    if (current.doc !== previous.doc) reprioritizeQueuedJobs()
+  })
+  state.unsubscribeTransport = useTransportStore.subscribe((current, previous) => {
+    if (current.selectedClipId !== previous.selectedClipId) {
+      reprioritizeQueuedJobs()
+    }
   })
   scan(deps)
 }
 
-/** Tear down (tests). In-flight generations resolve into the store guard. */
+/** Exact on-screen timeline range, published by Timeline without persistence. */
+export function setMediaVisualTimelineViewport(
+  viewport: MediaVisualTimelineViewport | null,
+): void {
+  const normalized = viewport && Number.isFinite(viewport.startFrame)
+    && Number.isFinite(viewport.endFrame)
+    ? {
+        startFrame: Math.max(0, Math.floor(viewport.startFrame)),
+        endFrame: Math.max(0, Math.ceil(viewport.endFrame)),
+      }
+    : null
+  if (
+    state.viewport?.startFrame === normalized?.startFrame
+    && state.viewport?.endFrame === normalized?.endFrame
+  ) return
+  state.viewport = normalized
+  reprioritizeQueuedJobs()
+}
+
+export function getMediaVisualSchedulerSnapshot(): MediaJobSchedulerSnapshot | null {
+  return state.scheduler?.snapshot() ?? null
+}
+
+export function waitForMediaVisualsIdle(): Promise<MediaJobSchedulerSnapshot | null> {
+  return state.scheduler?.whenIdle() ?? Promise.resolve(null)
+}
+
+export function subscribeMediaVisualScheduler(
+  listener: (snapshot: MediaJobSchedulerSnapshot) => void,
+): () => void {
+  return state.scheduler?.subscribe(listener) ?? (() => {})
+}
+
+/** Tear down tests/HMR and abort every queued or active generation. */
 export function disposeMediaVisuals(): void {
-  state.generation++
-  state.unsubscribe?.()
-  state.unsubscribe = null
-  state.started.clear()
+  state.unsubscribeMedia?.()
+  state.unsubscribeDocument?.()
+  state.unsubscribeTransport?.()
+  state.unsubscribeMedia = null
+  state.unsubscribeDocument = null
+  state.unsubscribeTransport = null
+  state.scheduler?.dispose()
+  state.scheduler = null
+  state.jobs.clear()
+  state.viewport = null
 }

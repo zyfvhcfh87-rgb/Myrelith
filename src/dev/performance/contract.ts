@@ -1,5 +1,5 @@
-export const PERFORMANCE_ARTIFACT_SCHEMA_VERSION = 2 as const
-export const PERFORMANCE_HARNESS_VERSION = 'issue-54-v3' as const
+export const PERFORMANCE_ARTIFACT_SCHEMA_VERSION = 3 as const
+export const PERFORMANCE_HARNESS_VERSION = 'issue-56-v1' as const
 
 export type PerformanceMetricId =
   | 'launcher-interactive-ms'
@@ -202,6 +202,38 @@ export interface PerformanceResourceEvidence {
   readonly storesRestored: boolean
 }
 
+export interface MediaAnalysisSchedulerEvidence {
+  readonly scenarioVersion: string
+  readonly scenarioAssetCount: number
+  /** Modeled peak decoder demand for the same plan under legacy launch-all. */
+  readonly modeledLegacyLaunchAllDecoderCount: number
+  readonly budget: {
+    readonly maxConcurrentJobs: number
+    readonly maxDecoderSlots: number
+  }
+  readonly aging: {
+    readonly intervalMs: number
+    readonly step: number
+  }
+  readonly yieldStrategy: 'scheduler.yield' | 'set-timeout' | 'injected'
+  readonly finalQueueDepth: number
+  readonly maxQueueDepth: number
+  readonly finalActiveJobCount: number
+  readonly maxActiveJobCount: number
+  readonly finalActiveDecoderCount: number
+  readonly maxActiveDecoderCount: number
+  readonly enqueuedCount: number
+  readonly completedCount: number
+  readonly cancelledCount: number
+  readonly failedCount: number
+  readonly waitTimeMs: DistributionSummary
+  readonly eventLoopDelayMs: DistributionSummary
+  readonly progressObserved: boolean
+  readonly selectedStartedBeforeBackground: boolean
+  readonly visibleStartedBeforeBackground: boolean
+  readonly startOrderPreview: readonly string[]
+}
+
 export type ProposedGateStatistic =
   | 'median'
   | 'p75'
@@ -233,6 +265,7 @@ export interface PerformanceArtifact {
   readonly metrics: Readonly<Record<PerformanceMetricId, PerformanceMetric>>
   readonly proposedGates: readonly ProposedPerformanceGate[]
   readonly memoryEvidence: ChromiumProcessMemoryEvidence
+  readonly mediaAnalysisScheduler: MediaAnalysisSchedulerEvidence
   readonly warnings: readonly string[]
   readonly consoleProblems: readonly string[]
   readonly resources: PerformanceResourceEvidence
@@ -448,6 +481,7 @@ export function performanceArtifactMarkdown(artifact: PerformanceArtifact): stri
     ? gpu.acceleration.mode
     : `unavailable (${gpu.acceleration.reason})`
   const memoryEvidence = artifact.memoryEvidence
+  const mediaAnalysis = artifact.mediaAnalysisScheduler
   const memoryProvenance = memoryEvidence.status === 'measured'
     ? `${memoryEvidence.primaryMetric} via ${memoryEvidence.hostSampler}; ${memoryEvidence.samples.length} complete CDP process-table samples`
     : `unavailable (${memoryEvidence.reason})`
@@ -483,6 +517,13 @@ export function performanceArtifactMarkdown(artifact: PerformanceArtifact): stri
     '| Statistic | Proposal | This run | Rationale |',
     '|---|---:|---|---|',
     ...gateRows,
+    '',
+    '## Media analysis scheduler',
+    '',
+    `Scenario: ${mediaAnalysis.scenarioVersion}; ${mediaAnalysis.scenarioAssetCount} assets; modeled legacy launch-all decoder demand: ${mediaAnalysis.modeledLegacyLaunchAllDecoderCount}.`,
+    `Observed budget/peak: ${mediaAnalysis.budget.maxConcurrentJobs} assets and ${mediaAnalysis.budget.maxDecoderSlots} decoder slots; ${mediaAnalysis.maxActiveJobCount} active assets and ${mediaAnalysis.maxActiveDecoderCount} active decoders. Queue peak/final: ${mediaAnalysis.maxQueueDepth}/${mediaAnalysis.finalQueueDepth}.`,
+    `Completed/cancelled/failed: ${mediaAnalysis.completedCount}/${mediaAnalysis.cancelledCount}/${mediaAnalysis.failedCount}. Wait p50/p75/p95: ${decimal(mediaAnalysis.waitTimeMs.median)}/${decimal(mediaAnalysis.waitTimeMs.p75)}/${decimal(mediaAnalysis.waitTimeMs.p95)} ms. Event-loop delay p95: ${decimal(mediaAnalysis.eventLoopDelayMs.p95)} ms. Yield: ${mediaAnalysis.yieldStrategy}.`,
+    `Priority proof: selected before background=${mediaAnalysis.selectedStartedBeforeBackground}; visible before background=${mediaAnalysis.visibleStartedBeforeBackground}; progress observed=${mediaAnalysis.progressObserved}.`,
     '',
     '## Warnings',
     '',

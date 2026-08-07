@@ -60,6 +60,8 @@ import {
   type PerformanceResourceEvidence,
   type PerformanceRunOptions,
 } from './contract'
+import { measureMediaAnalysisScheduler } from './mediaAnalysisBenchmark'
+import { MediaJobScheduler } from '../../app/mediaJobScheduler'
 import {
   PERFORMANCE_FIXTURE_HEIGHT,
   PERFORMANCE_FIXTURE_RATE,
@@ -1861,6 +1863,9 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       (measureOptions) => this.measureExport(measureOptions),
     )
 
+    const mediaAnalysisScheduler = await measureMediaAnalysisScheduler({
+      createScheduler: (now) => new MediaJobScheduler({ now }),
+    })
     const resources = await this.cleanup()
     const artifact: PerformanceArtifact = {
       schemaVersion: PERFORMANCE_ARTIFACT_SCHEMA_VERSION,
@@ -1876,6 +1881,7 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       metrics,
       proposedGates: evaluateProposedGates(metrics),
       memoryEvidence,
+      mediaAnalysisScheduler,
       warnings,
       consoleProblems: [...(request.consoleProblems ?? [])],
       resources,

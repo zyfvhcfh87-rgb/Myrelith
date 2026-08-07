@@ -160,7 +160,7 @@ export default function PerformanceBenchmarkApp() {
       ) : null}
       {status === 'running' ? (
         <div className="performance-loading" role="status">
-          Running scrub, playback, import, process-memory, and export workloads…
+          Running scrub, playback, import, media-scheduler, process-memory, and export workloads…
         </div>
       ) : null}
       {result ? (
