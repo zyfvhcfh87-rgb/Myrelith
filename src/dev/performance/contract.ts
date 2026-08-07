@@ -1,5 +1,5 @@
-export const PERFORMANCE_ARTIFACT_SCHEMA_VERSION = 1 as const
-export const PERFORMANCE_HARNESS_VERSION = 'issue-54-v2' as const
+export const PERFORMANCE_ARTIFACT_SCHEMA_VERSION = 2 as const
+export const PERFORMANCE_HARNESS_VERSION = 'issue-54-v3' as const
 
 export type PerformanceMetricId =
   | 'launcher-interactive-ms'
@@ -104,11 +104,84 @@ export interface BrowserPerformanceMetadata {
   readonly offscreenCanvas: boolean
 }
 
+export interface AvailableGpuIdentity {
+  readonly status: 'available'
+  readonly value: string
+}
+
+export interface UnavailableGpuIdentity {
+  readonly status: 'unavailable'
+  readonly reason: string
+}
+
+export type GpuIdentity = AvailableGpuIdentity | UnavailableGpuIdentity
+
+export interface AvailableGpuAccelerationIdentity {
+  readonly status: 'available'
+  readonly mode: 'hardware' | 'software' | 'mixed'
+  readonly basis: readonly string[]
+}
+
+export type GpuAccelerationIdentity =
+  | AvailableGpuAccelerationIdentity
+  | UnavailableGpuIdentity
+
+export interface ChromiumGpuDevice {
+  readonly vendorId: number
+  readonly deviceId: number
+  readonly subSysId: number | null
+  readonly revision: number | null
+  readonly vendorString: string | null
+  readonly deviceString: string | null
+  readonly driverVendor: string | null
+  readonly driverVersion: string | null
+}
+
+export interface ChromiumPerformanceMetadata {
+  readonly source: 'cdp:SystemInfo.getInfo'
+  readonly renderer: GpuIdentity
+  readonly vendor: GpuIdentity
+  readonly driverVendor: GpuIdentity
+  readonly driverVersion: GpuIdentity
+  readonly acceleration: GpuAccelerationIdentity
+  readonly devices: readonly ChromiumGpuDevice[]
+  readonly featureStatus: Readonly<Record<string, string>>
+}
+
+export interface ChromiumProcessMemoryEntry {
+  readonly pid: number
+  readonly type: string
+  readonly cpuTimeSeconds: number
+  readonly rssBytes: number | null
+  readonly privateBytes: number | null
+  readonly metricBytes: number
+}
+
+export interface ChromiumProcessMemoryBatchSample {
+  readonly batchIndex: number
+  readonly source: 'cdp:SystemInfo.getProcessInfo+host-os-process'
+  readonly hostSampler: string
+  readonly primaryMetric: 'private-bytes' | 'rss-bytes'
+  readonly totalBytes: number
+  readonly processes: readonly ChromiumProcessMemoryEntry[]
+}
+
+export interface ChromiumProcessMemoryEvidence {
+  readonly status: 'measured' | 'unavailable'
+  readonly source: 'cdp:SystemInfo.getProcessInfo+host-os-process'
+  readonly scope: string
+  readonly platform: string
+  readonly hostSampler: string | null
+  readonly primaryMetric: 'private-bytes' | 'rss-bytes' | null
+  readonly reason: string | null
+  readonly samples: readonly ChromiumProcessMemoryBatchSample[]
+}
+
 export interface PerformanceRunOptions {
   readonly sampleCount: number
   readonly playbackRuns: number
   readonly playbackDurationMs: number
-  /** Post-warmup scrub batches; each batch emits one heap plateau sample. */
+  /** Post-warmup scrub batches; each batch requests one host process sample. */
   readonly memoryBatches: number
   readonly scrubsPerMemoryBatch: number
   readonly exportFrames: number
@@ -153,11 +226,13 @@ export interface PerformanceArtifact {
   readonly metadata: {
     readonly host: HostPerformanceMetadata
     readonly browser: BrowserPerformanceMetadata
+    readonly chromium: ChromiumPerformanceMetadata
   }
   readonly fixture: PerformanceFixtureSummary
   readonly options: PerformanceRunOptions
   readonly metrics: Readonly<Record<PerformanceMetricId, PerformanceMetric>>
   readonly proposedGates: readonly ProposedPerformanceGate[]
+  readonly memoryEvidence: ChromiumProcessMemoryEvidence
   readonly warnings: readonly string[]
   readonly consoleProblems: readonly string[]
   readonly resources: PerformanceResourceEvidence
@@ -300,7 +375,7 @@ const GATE_PROPOSALS: readonly GateProposal[] = Object.freeze([
     metric: 'memory-growth-kib-per-batch',
     statistic: 'p95',
     threshold: 1_024,
-    rationale: 'Treat sustained post-warmup heap growth as a leak investigation trigger.',
+    rationale: 'Treat sustained post-warmup Chromium process-memory growth as a leak investigation trigger.',
   },
   {
     metric: 'export-real-time-ratio',
@@ -365,18 +440,31 @@ export function performanceArtifactMarkdown(artifact: PerformanceArtifact): stri
   const dirtyState = host.dirty === null
     ? 'not captured'
     : host.dirty ? 'dirty' : 'clean'
+  const gpu = artifact.metadata.chromium
+  const gpuValue = (identity: GpuIdentity): string => identity.status === 'available'
+    ? identity.value
+    : `unavailable (${identity.reason})`
+  const acceleration = gpu.acceleration.status === 'available'
+    ? gpu.acceleration.mode
+    : `unavailable (${gpu.acceleration.reason})`
+  const memoryEvidence = artifact.memoryEvidence
+  const memoryProvenance = memoryEvidence.status === 'measured'
+    ? `${memoryEvidence.primaryMetric} via ${memoryEvidence.hostSampler}; ${memoryEvidence.samples.length} complete CDP process-table samples`
+    : `unavailable (${memoryEvidence.reason})`
 
   return [
     '# WebCut performance evidence',
     '',
     `Captured: ${artifact.capturedAt}`,
-    `Harness: ${artifact.harnessVersion}`,
+    `Harness: ${artifact.harnessVersion}; schema: ${artifact.schemaVersion}`,
     `Fixture: ${artifact.fixture.version}`,
     `Fixture fingerprint: ${artifact.fixture.fingerprint}`,
     `Source: ${host.branch ?? 'not captured'} @ ${host.commit ?? 'not captured'}`,
     `Dirty fingerprint: ${host.dirtyFingerprint ?? 'not captured'} (${dirtyState})`,
     `Runtime: ${host.browserChannel} ${host.browserVersion}; ${artifact.metadata.browser.userAgent}`,
     `Device: ${host.platform} ${host.osRelease ?? 'unknown'}/${host.architecture ?? 'unknown'}, ${host.cpuModel ?? 'unknown CPU'}, ${host.logicalProcessors ?? 'unknown'} logical processors, ${host.totalMemoryGiB ?? 'unknown'} GiB host memory (${artifact.metadata.browser.deviceMemoryGiB ?? 'unknown'} GiB browser-reported)`,
+    `GPU: ${gpuValue(gpu.renderer)}; vendor: ${gpuValue(gpu.vendor)}; driver: ${gpuValue(gpu.driverVendor)} ${gpuValue(gpu.driverVersion)}; acceleration: ${acceleration}; source: ${gpu.source}`,
+    `Memory provenance: ${memoryProvenance}. Scope: ${memoryEvidence.scope}`,
     '',
     '## Fixture',
     '',

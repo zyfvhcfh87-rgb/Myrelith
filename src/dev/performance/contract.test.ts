@@ -82,7 +82,7 @@ describe('performance evidence contract', () => {
     ].map((id) => [id, metric])) as PerformanceArtifact['metrics']
     const artifact = {
       schemaVersion: PERFORMANCE_ARTIFACT_SCHEMA_VERSION,
-      harnessVersion: 'issue-54-v2',
+      harnessVersion: 'issue-54-v3',
       capturedAt: '2026-08-06T00:00:00.000Z',
       metadata: {
         host: {
@@ -114,6 +114,29 @@ describe('performance evidence contract', () => {
           webCodecs: true,
           offscreenCanvas: true,
         },
+        chromium: {
+          source: 'cdp:SystemInfo.getInfo',
+          renderer: { status: 'available', value: 'ANGLE (Test GPU)' },
+          vendor: { status: 'available', value: 'Test Vendor' },
+          driverVendor: { status: 'available', value: 'Test Driver Vendor' },
+          driverVersion: { status: 'available', value: '1.2.3' },
+          acceleration: {
+            status: 'available',
+            mode: 'hardware',
+            basis: ['gpu_compositing=enabled'],
+          },
+          devices: [{
+            vendorId: 1,
+            deviceId: 2,
+            subSysId: null,
+            revision: null,
+            vendorString: 'Test Vendor',
+            deviceString: 'Test GPU',
+            driverVendor: 'Test Driver Vendor',
+            driverVersion: '1.2.3',
+          }],
+          featureStatus: { gpu_compositing: 'enabled' },
+        },
       },
       fixture: {
         version: 'fixture-v1',
@@ -144,6 +167,40 @@ describe('performance evidence contract', () => {
       },
       metrics,
       proposedGates: evaluateProposedGates(metrics),
+      memoryEvidence: {
+        status: 'measured',
+        source: 'cdp:SystemInfo.getProcessInfo+host-os-process',
+        scope: 'All CDP-reported Chromium processes.',
+        platform: 'win32',
+        hostSampler: 'powershell:Get-Process',
+        primaryMetric: 'private-bytes',
+        reason: null,
+        samples: [{
+          batchIndex: 1,
+          source: 'cdp:SystemInfo.getProcessInfo+host-os-process',
+          hostSampler: 'powershell:Get-Process',
+          primaryMetric: 'private-bytes',
+          totalBytes: 300,
+          processes: [
+            {
+              pid: 10,
+              type: 'renderer',
+              cpuTimeSeconds: 1,
+              rssBytes: 200,
+              privateBytes: 100,
+              metricBytes: 100,
+            },
+            {
+              pid: 11,
+              type: 'GPU',
+              cpuTimeSeconds: 2,
+              rssBytes: 300,
+              privateBytes: 200,
+              metricBytes: 200,
+            },
+          ],
+        }],
+      },
       warnings: [],
       consoleProblems: [],
       resources: {
@@ -166,6 +223,8 @@ describe('performance evidence contract', () => {
     expect(report).toContain('Median | p75 | p95 | Variance')
     expect(report).toContain('one run is never a product claim')
     expect(report).toContain(`Fixture fingerprint: sha256:${'a'.repeat(64)}`)
+    expect(report).toContain('GPU: ANGLE (Test GPU)')
+    expect(report).toContain('Memory provenance: private-bytes via powershell:Get-Process')
     expect(report).toContain('Created/revoked benchmark URLs: 10/10')
 
     const manualReport = performanceArtifactMarkdown({

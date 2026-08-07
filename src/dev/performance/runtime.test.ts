@@ -14,6 +14,7 @@ import {
   PERFORMANCE_FIXTURE_MEDIA_GENERATION_SETTINGS,
   aggregatePlaybackAudioUnderruns,
   captureCanonicalPerformanceRunState,
+  collectChromiumProcessMemoryEvidence,
   createPerformanceExportDocument,
   createSynthetic4kVideoSamplePlan,
   diagnosticDrawsExpectedFixtureClips,
@@ -441,6 +442,113 @@ describe('performance memory evidence', () => {
       plateauMiB: [60, 61, 62, 63, 64, 65, 66],
       growthKiB: [1_024, 1_024, 1_024, 1_024, 1_024, 1_024],
     })
+  })
+
+  test('requests complete host samples exactly at memory-batch boundaries', async () => {
+    const events: string[] = []
+    const evidence = await collectChromiumProcessMemoryEvidence(
+      { memoryBatches: 2 },
+      async (batchIndex) => {
+        events.push(`work:${batchIndex}`)
+      },
+      async ({ batchIndex }) => {
+        events.push(`sample:${batchIndex}`)
+        return {
+          status: 'measured',
+          sample: {
+            batchIndex,
+            source: 'cdp:SystemInfo.getProcessInfo+host-os-process',
+            hostSampler: 'test:private',
+            primaryMetric: 'private-bytes',
+            totalBytes: batchIndex * 300,
+            processes: [
+              {
+                pid: 10,
+                type: 'renderer',
+                cpuTimeSeconds: 1,
+                rssBytes: batchIndex * 200,
+                privateBytes: batchIndex * 100,
+                metricBytes: batchIndex * 100,
+              },
+              {
+                pid: 11,
+                type: 'GPU',
+                cpuTimeSeconds: 2,
+                rssBytes: batchIndex * 300,
+                privateBytes: batchIndex * 200,
+                metricBytes: batchIndex * 200,
+              },
+            ],
+          },
+        }
+      },
+      'win32',
+    )
+
+    expect(events).toEqual(['work:1', 'sample:1', 'work:2', 'sample:2'])
+    expect(evidence).toMatchObject({
+      status: 'measured',
+      platform: 'win32',
+      hostSampler: 'test:private',
+      primaryMetric: 'private-bytes',
+    })
+    expect(evidence.samples.map((sample) => sample.totalBytes)).toEqual([300, 600])
+  })
+
+  test('keeps the workload but marks process memory unavailable without a host binding', async () => {
+    const batches: number[] = []
+    const evidence = await collectChromiumProcessMemoryEvidence(
+      { memoryBatches: 2 },
+      async (batchIndex) => {
+        batches.push(batchIndex)
+      },
+      undefined,
+      'Win32',
+    )
+
+    expect(batches).toEqual([1, 2])
+    expect(evidence).toMatchObject({
+      status: 'unavailable',
+      hostSampler: null,
+      primaryMetric: null,
+      samples: [],
+    })
+    expect(evidence.reason).toMatch(/command-line Chromium host/i)
+  })
+
+  test('rejects partial process totals instead of publishing a measured plateau', async () => {
+    let sampleCalls = 0
+    const evidence = await collectChromiumProcessMemoryEvidence(
+      { memoryBatches: 2 },
+      async () => {},
+      async ({ batchIndex }) => {
+        sampleCalls++
+        return {
+        status: 'measured',
+        sample: {
+          batchIndex,
+          source: 'cdp:SystemInfo.getProcessInfo+host-os-process',
+          hostSampler: 'test:rss',
+          primaryMetric: 'rss-bytes',
+          totalBytes: 100,
+          processes: [{
+            pid: 10,
+            type: 'renderer',
+            cpuTimeSeconds: 1,
+            rssBytes: 100,
+            privateBytes: null,
+            metricBytes: 100,
+          }],
+        },
+        }
+      },
+      'test',
+    )
+
+    expect(sampleCalls).toBe(2)
+    expect(evidence.status).toBe('unavailable')
+    expect(evidence.samples).toEqual([])
+    expect(evidence.reason).toMatch(/renderer and GPU/)
   })
 })
 

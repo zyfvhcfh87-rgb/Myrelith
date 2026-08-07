@@ -1738,10 +1738,13 @@ surface; it is not a second zoom and never enters document history.
   sources include one generated 4K AVC/MP4, six 4K still connections, and four
   audio connections.
 - The production runner records launcher/editor readiness, scrub and render
-  latency, dropped frames, audio underruns, import readiness, heap plateau and
-  growth, and export real-time ratio. JSON and Markdown include raw samples,
-  median/p75/p95, variance, exact source/fixture SHA-256 fingerprints, browser,
-  runtime, device, warnings, and independently checked cleanup/restoration.
+  latency, dropped frames, audio underruns, import readiness, complete
+  CDP-scoped Chromium process-memory plateau/growth, and export real-time ratio.
+  JSON and Markdown include per-process raw memory rows and host provenance,
+  median/p75/p95, variance, exact source/fixture SHA-256 fingerprints, CDP GPU
+  renderer/vendor/driver plus acceleration identity, browser, runtime, device,
+  warnings, and independently checked cleanup/restoration. Missing renderer,
+  GPU, CDP, or full PID coverage makes memory unavailable rather than partial.
   Input-to-present diagnostics publish only after a test-injected browser
   paint/compositor boundary following the matching completed worker draw.
 - Fixture identity includes the portable project, connected source/scrub plan,
@@ -1761,8 +1764,8 @@ surface; it is not a second zoom and never enters document history.
   route. The architecture guard permits only the exact benchmark runtime to
   compose app/state and the exact benchmark component to reuse UI; no blanket
   `src/dev` composition-root exception remains.
-- Canonical `npm test` now runs both 1,841/1,841 Vitest cases across 110 files
-  and all 6 Node runner cases without recursion. Focused benchmark coverage,
+- Canonical `npm test` now runs both 1,847/1,847 Vitest cases across 110 files
+  and all 14 Node runner cases without recursion. Focused benchmark coverage,
   production build/typecheck, oxlint, and production dependency audit all pass
   with 0 vulnerabilities. Fresh smoke and full Chromium runs captured their
   artifacts, reported 0 dropped frames and 0 audio underruns, revoked 11/11
@@ -1772,6 +1775,9 @@ surface; it is not a second zoom and never enters document history.
   enforcement failures.
   Both fresh runs shared canonical fixture fingerprint
   `sha256:07f2bd5bd724e5b6b7c07e2fbd26a5b67b7c3c80bba87f8f0d8fdce2bcb904f7`.
+  Smoke/full process-memory evidence contained 2/7 complete CDP process-table
+  samples respectively, using Windows private bytes from
+  `powershell:Get-Process`; both artifacts validated against schema 2.
 - In-app Chrome independently rendered the ready fixture at 1248x1248 with no
   framework overlay, warning/error log, or horizontal page overflow. Zoom In
   changed the real slider from 0.725 to 0.748. The automated production run's

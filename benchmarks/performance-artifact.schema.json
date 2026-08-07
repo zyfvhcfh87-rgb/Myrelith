@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://webcut.local/schemas/performance-artifact-v1.json",
+  "$id": "https://webcut.local/schemas/performance-artifact-v2.json",
   "title": "WebCut performance evidence artifact",
   "type": "object",
   "additionalProperties": false,
@@ -13,21 +13,23 @@
     "options",
     "metrics",
     "proposedGates",
+    "memoryEvidence",
     "warnings",
     "consoleProblems",
     "resources"
   ],
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "harnessVersion": { "const": "issue-54-v2" },
+    "schemaVersion": { "const": 2 },
+    "harnessVersion": { "const": "issue-54-v3" },
     "capturedAt": { "type": "string", "format": "date-time" },
     "metadata": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["host", "browser"],
+      "required": ["host", "browser", "chromium"],
       "properties": {
         "host": { "$ref": "#/$defs/host" },
-        "browser": { "$ref": "#/$defs/browser" }
+        "browser": { "$ref": "#/$defs/browser" },
+        "chromium": { "$ref": "#/$defs/chromium" }
       }
     },
     "fixture": { "$ref": "#/$defs/fixture" },
@@ -64,6 +66,7 @@
       "type": "array",
       "items": { "$ref": "#/$defs/proposedGate" }
     },
+    "memoryEvidence": { "$ref": "#/$defs/memoryEvidence" },
     "warnings": { "type": "array", "items": { "type": "string" } },
     "consoleProblems": { "type": "array", "items": { "type": "string" } },
     "resources": { "$ref": "#/$defs/resources" }
@@ -150,6 +153,109 @@
         "offscreenCanvas": { "type": "boolean" }
       }
     },
+    "gpuIdentity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "value"],
+          "properties": {
+            "status": { "const": "available" },
+            "value": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": { "const": "unavailable" },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "gpuAcceleration": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "mode", "basis"],
+          "properties": {
+            "status": { "const": "available" },
+            "mode": { "enum": ["hardware", "software", "mixed"] },
+            "basis": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": { "const": "unavailable" },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "gpuDevice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vendorId",
+        "deviceId",
+        "subSysId",
+        "revision",
+        "vendorString",
+        "deviceString",
+        "driverVendor",
+        "driverVersion"
+      ],
+      "properties": {
+        "vendorId": { "type": "integer", "minimum": 0 },
+        "deviceId": { "type": "integer", "minimum": 0 },
+        "subSysId": { "type": ["integer", "null"], "minimum": 0 },
+        "revision": { "type": ["integer", "null"], "minimum": 0 },
+        "vendorString": { "type": ["string", "null"], "minLength": 1 },
+        "deviceString": { "type": ["string", "null"], "minLength": 1 },
+        "driverVendor": { "type": ["string", "null"], "minLength": 1 },
+        "driverVersion": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "chromium": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "renderer",
+        "vendor",
+        "driverVendor",
+        "driverVersion",
+        "acceleration",
+        "devices",
+        "featureStatus"
+      ],
+      "properties": {
+        "source": { "const": "cdp:SystemInfo.getInfo" },
+        "renderer": { "$ref": "#/$defs/gpuIdentity" },
+        "vendor": { "$ref": "#/$defs/gpuIdentity" },
+        "driverVendor": { "$ref": "#/$defs/gpuIdentity" },
+        "driverVersion": { "$ref": "#/$defs/gpuIdentity" },
+        "acceleration": { "$ref": "#/$defs/gpuAcceleration" },
+        "devices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gpuDevice" }
+        },
+        "featureStatus": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
     "fixture": {
       "type": "object",
       "additionalProperties": false,
@@ -221,7 +327,7 @@
         "memoryBatches": {
           "type": "integer",
           "minimum": 1,
-          "description": "Post-warmup scrub batches and emitted heap plateau samples."
+          "description": "Post-warmup scrub batches and requested host Chromium process-memory samples."
         },
         "scrubsPerMemoryBatch": { "type": "integer", "minimum": 1 },
         "exportFrames": { "type": "integer", "minimum": 1 },
@@ -290,6 +396,108 @@
             "summary": { "type": "null" },
             "definition": { "type": "string", "minLength": 1 },
             "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "processMemoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pid",
+        "type",
+        "cpuTimeSeconds",
+        "rssBytes",
+        "privateBytes",
+        "metricBytes"
+      ],
+      "properties": {
+        "pid": { "type": "integer", "minimum": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "cpuTimeSeconds": { "type": "number", "minimum": 0 },
+        "rssBytes": { "type": ["integer", "null"], "minimum": 0 },
+        "privateBytes": { "type": ["integer", "null"], "minimum": 0 },
+        "metricBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "processMemoryBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batchIndex",
+        "source",
+        "hostSampler",
+        "primaryMetric",
+        "totalBytes",
+        "processes"
+      ],
+      "properties": {
+        "batchIndex": { "type": "integer", "minimum": 1 },
+        "source": {
+          "const": "cdp:SystemInfo.getProcessInfo+host-os-process"
+        },
+        "hostSampler": { "type": "string", "minLength": 1 },
+        "primaryMetric": { "enum": ["private-bytes", "rss-bytes"] },
+        "totalBytes": { "type": "integer", "minimum": 0 },
+        "processes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/processMemoryEntry" }
+        }
+      }
+    },
+    "memoryEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "source",
+        "scope",
+        "platform",
+        "hostSampler",
+        "primaryMetric",
+        "reason",
+        "samples"
+      ],
+      "properties": {
+        "status": { "enum": ["measured", "unavailable"] },
+        "source": {
+          "const": "cdp:SystemInfo.getProcessInfo+host-os-process"
+        },
+        "scope": { "type": "string", "minLength": 1 },
+        "platform": { "type": "string", "minLength": 1 },
+        "hostSampler": { "type": ["string", "null"], "minLength": 1 },
+        "primaryMetric": {
+          "type": ["string", "null"],
+          "enum": ["private-bytes", "rss-bytes", null]
+        },
+        "reason": { "type": ["string", "null"], "minLength": 1 },
+        "samples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/processMemoryBatch" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "measured" } } },
+          "then": {
+            "properties": {
+              "hostSampler": { "type": "string", "minLength": 1 },
+              "primaryMetric": { "enum": ["private-bytes", "rss-bytes"] },
+              "reason": { "type": "null" },
+              "samples": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "unavailable" } } },
+          "then": {
+            "properties": {
+              "hostSampler": { "type": "null" },
+              "primaryMetric": { "type": "null" },
+              "reason": { "type": "string", "minLength": 1 },
+              "samples": { "maxItems": 0 }
+            }
           }
         }
       ]

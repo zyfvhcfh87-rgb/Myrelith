@@ -2365,13 +2365,16 @@ remain out of scope.
   assets, eight tracks, a 30-minute 4K timeline, 320 clips, 39 transitions,
   20 text clips, and bounded connected 4K video/still plus audio sources.
 - [x] Measure launcher/editor readiness, scrub input-to-present, worker frame
-  rendering, dropped frames, audio underruns, import readiness, heap plateau/
-  growth, and export real-time ratio with raw samples and distribution summaries.
+  rendering, dropped frames, audio underruns, import readiness, complete
+  CDP-scoped Chromium process-memory plateau/growth, and export real-time ratio
+  with raw samples, provenance, and distribution summaries. Renderer/GPU/host
+  process coverage failures record the memory metric as unavailable.
   Input-to-present ends at a browser presentation boundary after the matching
   worker draw, exposed through a testable dependency seam.
 - [x] Emit schema-defined JSON, a human-readable Markdown summary, and a
   Chromium screenshot. Bind every result to exact branch/commit/dirty and
-  fixture SHA-256 fingerprints plus runtime/browser/device metadata. Fixture
+  fixture SHA-256 fingerprints plus runtime/browser/device metadata, including
+  CDP GPU renderer/vendor/driver and acceleration identity. Fixture
   identity includes the portable project, connected source/scrub plan, and
   stable generation settings/sample plan while excluding browser-dependent
   output bytes; canonical-state verification recomputes it.
@@ -2388,11 +2391,13 @@ remain out of scope.
 - [x] Reject playback beyond 2,000 ms and export beyond 31 frames before
   measurement so fixed generated video is never advertised as continuous after
   it enters the held tail.
-- [x] Pass focused Vitest coverage plus all 6 Node runner cases, canonical
-  `npm test` with 1,841/1,841 Vitest cases across 110 files plus those runner
+- [x] Pass focused Vitest coverage plus all 14 Node runner cases, canonical
+  `npm test` with 1,847/1,847 Vitest cases across 110 files plus those runner
   cases, production build/typecheck, oxlint, a 0-vulnerability production
   audit, and fresh smoke/full Chromium measurements. Both runs restored every
-  isolated store and URL owner with no browser console problem.
+  isolated store and URL owner with no browser console problem. Smoke/full
+  captured 2/7 complete Windows private-memory process-table samples and both
+  artifacts validated against schema 2.
 
 ## Public preview foundation — v0.1.0-alpha.1
 

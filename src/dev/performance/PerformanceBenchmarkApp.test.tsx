@@ -13,6 +13,7 @@ const runtime = vi.hoisted(() => ({
 
 vi.mock('./runtime', () => ({
   DEFAULT_PERFORMANCE_RUN_OPTIONS: {},
+  manualChromiumMetadata: () => ({}),
   manualHostMetadata: () => ({}),
   preparePerformanceHarness: runtime.preparePerformanceHarness,
 }))

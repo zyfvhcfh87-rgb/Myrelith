@@ -73,8 +73,8 @@ they are never replaced with zero.
 | `dropped-frames` | Missing integer frames from the expected playback start through monotonically presented frames that drew every expected connected fixture contributor in one trial. Timing begins only after the playback clock starts; a startup timeout or empty/partial trial is unavailable, never zero. |
 | `audio-underruns` | 25 ms observations where scheduled audio trails the `AudioContext` clock by more than 5 ms. |
 | `import-readiness-ms` | Content inspection and bounded first-frame decode of the generated 4K PNG through Ready. |
-| `memory-plateau-mib` | Chromium used-JS-heap samples after post-warmup scrub batches. |
-| `memory-growth-kib-per-batch` | Signed change between consecutive plateau samples. |
+| `memory-plateau-mib` | Aggregate host OS private bytes, or RSS where private bytes are unsupported, for every live Chromium process returned by CDP `SystemInfo.getProcessInfo` at each post-warmup batch boundary. |
+| `memory-growth-kib-per-batch` | Signed change between consecutive complete process-scope plateau samples using one unchanged host metric and sampler. |
 | `export-real-time-ratio` | Elapsed export time divided by the bounded 4K segment duration. |
 
 ## Reproduce
@@ -93,10 +93,15 @@ with `npx playwright install --with-deps chromium` instead (the dependency step
 may require elevated package-manager permissions).
 
 The smoke run uses two scrub/import samples, one 350 ms playback trial, two
-memory batches, and records export as explicitly skipped. Every requested
-post-warmup memory batch emits one heap plateau sample, so `N` batches produce
-exactly `N` plateau samples and `N - 1` consecutive growth deltas. Run the
-baseline profile with:
+memory batches, and records export as explicitly skipped. At each batch
+boundary the page awaits a CLI-injected Playwright binding; the runner obtains
+the current Chromium PID/type table from browser-level CDP and samples those
+exact PIDs through the host OS. `N` complete batches produce exactly `N`
+plateau samples and `N - 1` consecutive growth deltas. If CDP is unavailable,
+renderer or GPU coverage is absent, any reported PID cannot be sampled, or the
+host metric changes between batches, both memory metrics are `unavailable`
+with the reason. A partial process total is never published. Run the baseline
+profile with:
 
 ```powershell
 npm run benchmark
@@ -115,7 +120,7 @@ Each successful run writes one directory under `.tmp/benchmarks/` unless
 `--output` is supplied:
 
 - `performance.json` - machine-readable artifact conforming to
-  `benchmarks/performance-artifact.schema.json`;
+  version 2 of `benchmarks/performance-artifact.schema.json`;
 - `summary.md` - human-readable metric, provenance, gate, warning, and cleanup
   summary;
 - `benchmark.png` - completed in-browser summary at 1440x900.
@@ -142,18 +147,36 @@ Remove-Item Env:VITE_WEBCUT_PERFORMANCE_HARNESS
 
 Every CLI artifact records the branch, exact commit, dirty state, and a dirty
 SHA-256 fingerprint over the commit, porcelain status, binary tracked diff,
-untracked paths, and untracked bytes. It also records Node, OS/platform,
-architecture, CPU model/count, host memory, Chromium channel/version, user
-agent, viewport, device pixel ratio, browser-reported memory, WebCodecs,
-OffscreenCanvas, and cross-origin-isolation facts. Launcher and editor cold
-samples each use a fresh BrowserContext so their HTTP caches and browser
-storage are independent. The runner recomputes the complete source identity
-after measurement and refuses to write artifacts if the checkout drifted.
+untracked paths, explicit file kinds, and content. Untracked regular files are
+hashed incrementally with streams; symlinks hash their link target without
+following it; directories, missing paths, and special-file kinds receive
+deterministic type markers. It also records Node, OS/platform, architecture,
+CPU model/count, host memory, Chromium channel/version, user agent, viewport,
+device pixel ratio, browser-reported memory, WebCodecs, OffscreenCanvas, and
+cross-origin-isolation facts.
 
-Compare trends only when the fixture fingerprint, browser channel, and device
-profile match. Keep the raw JSON artifacts. Prefer at least five independent
-runs before discussing variance, and establish representative-device ranges
-before turning any proposal into a required gate.
+Browser-level CDP `SystemInfo.getInfo` supplies the GPU renderer and vendor,
+driver vendor/version, normalized device rows, raw feature status, and the
+hardware/software/mixed acceleration identity derived from the renderer and
+relevant feature states. Every identity field is independently marked
+`unavailable` with a reason if the selected Chromium channel does not expose
+it. `memoryEvidence` records the CDP + host provenance, primary metric, scope,
+and every per-process raw batch row. The aggregate includes browser, renderer
+(including DedicatedWorker/native allocations charged there), GPU, and utility
+processes in the CDP table. Device VRAM and memory not charged to a Chromium
+process remain explicitly out of scope; this is not a claim of total system or
+GPU memory.
+
+Launcher and editor cold samples each use a fresh BrowserContext so their HTTP
+caches and browser storage are independent. The runner recomputes the complete
+source identity after measurement and refuses to write artifacts if the
+checkout drifted.
+
+Compare trends only when the fixture fingerprint, browser channel, GPU and
+device profile, memory primary metric, and host sampler match. Keep the raw
+JSON artifacts. Prefer at least five independent runs before discussing
+variance, and establish representative-device ranges before turning any
+proposal into a required gate.
 
 ## Proposed gates (advisory only)
 
@@ -166,12 +189,15 @@ before turning any proposal into a required gate.
 | dropped frames median | <= 0 | Sustain short representative playback without presentation gaps. |
 | audio underruns maximum | <= 0 | Keep scheduled audio ahead of the audio clock. |
 | import readiness p95 | <= 2,000 ms | Bound 4K still inspection and first-frame readiness. |
-| memory growth p95 | <= 1,024 KiB/batch | Flag sustained post-warmup growth for leak investigation. |
+| memory growth p95 | <= 1,024 KiB/batch | Flag sustained post-warmup complete Chromium process-memory growth for leak investigation. |
 | export ratio p75 | <= 1 | Target real-time-or-faster bounded 4K export. |
 
 These rows always use `disposition: "proposal"`. A failed proposal makes the
 trend visible but does not fail the command. `memory-plateau-mib` is recorded
 without a proposed absolute threshold because supported device capacity varies.
+The manual in-page button cannot access browser-level CDP or host OS process
+memory, so it records GPU/process-memory evidence as unavailable and directs
+reviewable evidence collection to the CLI.
 
 ## Mutation and resource boundaries
 
@@ -186,6 +212,6 @@ owned object URL), and restores the exact document/history, media maps,
 transport values/actions, and untouched project-session reference. The JSON
 artifact records each restoration fact separately and the CLI fails if their
 aggregate is false. Playback diagnostics retain only a bounded list of frame
-numbers during an active trial and are cleared before memory batches. URL
+numbers during an active trial and are cleared before process-memory batches. URL
 cleanup evidence counts only owned revoke calls that actually complete, so a
 failed ownership cleanup cannot report a tautological pass.

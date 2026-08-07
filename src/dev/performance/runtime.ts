@@ -49,6 +49,9 @@ import {
   performanceArtifactMarkdown,
   unavailableMetric,
   type BrowserPerformanceMetadata,
+  type ChromiumPerformanceMetadata,
+  type ChromiumProcessMemoryBatchSample,
+  type ChromiumProcessMemoryEvidence,
   type HostPerformanceMetadata,
   type PerformanceArtifact,
   type PerformanceFixtureSummary,
@@ -80,6 +83,10 @@ const AUDIO_UNDERRUN_TOLERANCE_SECONDS = 0.005
 const MEMORY_SETTLE_MS = 50
 const MEBIBYTE = 1024 * 1024
 const KIBIBYTE = 1024
+const CHROMIUM_MEMORY_SOURCE =
+  'cdp:SystemInfo.getProcessInfo+host-os-process' as const
+const CHROMIUM_MEMORY_SCOPE =
+  'Aggregate host OS memory for every live Chromium process returned by SystemInfo.getProcessInfo at each batch boundary, including browser, renderer processes hosting the page and DedicatedWorkers, GPU, and utility processes. Native ImageBitmap/VideoFrame/render-cache allocations charged to those processes are in scope; device VRAM and memory not charged to a Chromium process are out of scope.'
 
 export const DEFAULT_PERFORMANCE_RUN_OPTIONS: Readonly<PerformanceRunOptions> =
   Object.freeze({
@@ -122,6 +129,7 @@ const SYNTHETIC_VIDEO_SEQUENTIAL_FRAME_COUNT =
 
 export interface PerformanceHarnessRunRequest {
   readonly host: HostPerformanceMetadata
+  readonly chromium: ChromiumPerformanceMetadata
   readonly options?: Partial<PerformanceRunOptions>
   readonly launcherInteractiveSamples?: readonly number[]
   readonly editorFirstUsableFrameSamples?: readonly number[]
@@ -141,16 +149,28 @@ export interface PerformanceHarnessApi {
   cleanup(): Promise<PerformanceResourceEvidence>
 }
 
-interface ChromePerformanceMemory {
-  readonly usedJSHeapSize: number
-}
-
-interface PerformanceWithMemory extends Performance {
-  readonly memory?: ChromePerformanceMemory
-}
-
 interface GlobalWithGc {
   gc?: () => void
+}
+
+interface ProcessMemorySampleResult {
+  readonly status: 'measured'
+  readonly sample: ChromiumProcessMemoryBatchSample
+}
+
+interface ProcessMemoryUnavailableResult {
+  readonly status: 'unavailable'
+  readonly reason: string
+}
+
+type ProcessMemoryBindingResult =
+  | ProcessMemorySampleResult
+  | ProcessMemoryUnavailableResult
+
+interface PerformanceMemoryWindow extends Window {
+  __webcutSampleChromiumProcessMemory?: (
+    request: { readonly batchIndex: number },
+  ) => Promise<ProcessMemoryBindingResult>
 }
 
 interface StoredState {
@@ -447,6 +467,132 @@ export function summarizeMemorySamples(samples: readonly number[]): {
     growthKiB: plateauMiB.slice(1).map(
       (sample, index) => (sample - plateauMiB[index]) * MEBIBYTE / KIBIBYTE,
     ),
+  }
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 0
+}
+
+function validatedProcessMemorySample(
+  value: unknown,
+  expectedBatchIndex: number,
+): ChromiumProcessMemoryBatchSample {
+  if (!value || typeof value !== 'object') {
+    throw new TypeError('The host memory binding returned no batch sample')
+  }
+  const sample = value as ChromiumProcessMemoryBatchSample
+  if (sample.batchIndex !== expectedBatchIndex) {
+    throw new Error(
+      `The host memory binding returned batch ${sample.batchIndex} for boundary ${expectedBatchIndex}`,
+    )
+  }
+  if (sample.source !== CHROMIUM_MEMORY_SOURCE) {
+    throw new Error('The host memory binding returned an unsupported provenance source')
+  }
+  if (!sample.hostSampler || typeof sample.hostSampler !== 'string') {
+    throw new Error('The host memory binding omitted its OS sampler provenance')
+  }
+  if (sample.primaryMetric !== 'private-bytes' && sample.primaryMetric !== 'rss-bytes') {
+    throw new Error('The host memory binding returned an unsupported primary metric')
+  }
+  if (!isNonNegativeSafeInteger(sample.totalBytes)) {
+    throw new Error('The host memory binding returned an invalid aggregate byte count')
+  }
+  if (!Array.isArray(sample.processes) || sample.processes.length === 0) {
+    throw new Error('The host memory binding returned an empty Chromium process table')
+  }
+  const processIds = new Set<number>()
+  let totalBytes = 0
+  let sawRenderer = false
+  let sawGpu = false
+  for (const process of sample.processes) {
+    if (
+      !isNonNegativeSafeInteger(process.pid)
+      || process.pid === 0
+      || processIds.has(process.pid)
+      || typeof process.type !== 'string'
+      || !process.type
+      || !Number.isFinite(process.cpuTimeSeconds)
+      || process.cpuTimeSeconds < 0
+      || !isNonNegativeSafeInteger(process.metricBytes)
+      || (process.rssBytes !== null && !isNonNegativeSafeInteger(process.rssBytes))
+      || (process.privateBytes !== null && !isNonNegativeSafeInteger(process.privateBytes))
+    ) throw new Error('The host memory binding returned an invalid process entry')
+    processIds.add(process.pid)
+    sawRenderer ||= /renderer/i.test(process.type)
+    sawGpu ||= /gpu/i.test(process.type)
+    totalBytes += process.metricBytes
+  }
+  if (!sawRenderer || !sawGpu) {
+    throw new Error('The host memory binding did not cover both renderer and GPU processes')
+  }
+  if (totalBytes !== sample.totalBytes) {
+    throw new Error('The host memory binding aggregate does not match its process rows')
+  }
+  return sample
+}
+
+export async function collectChromiumProcessMemoryEvidence(
+  options: Pick<PerformanceRunOptions, 'memoryBatches'>,
+  runBatchWork: (batchIndex: number) => Promise<void>,
+  sampleMemory: PerformanceMemoryWindow['__webcutSampleChromiumProcessMemory'],
+  platform: string,
+): Promise<ChromiumProcessMemoryEvidence> {
+  const samples: ChromiumProcessMemoryBatchSample[] = []
+  let unavailableReason = sampleMemory
+    ? null
+    : 'The command-line Chromium host process-memory binding is unavailable.'
+  for (let batchIndex = 1; batchIndex <= options.memoryBatches; batchIndex++) {
+    await runBatchWork(batchIndex)
+    if (!sampleMemory) continue
+    try {
+      const result = await sampleMemory({ batchIndex })
+      if (result.status === 'unavailable') {
+        unavailableReason ??= result.reason
+        continue
+      }
+      const sample = validatedProcessMemorySample(result.sample, batchIndex)
+      const first = samples[0]
+      if (
+        first
+        && (
+          first.hostSampler !== sample.hostSampler
+          || first.primaryMetric !== sample.primaryMetric
+        )
+      ) {
+        unavailableReason ??=
+          'Host process-memory provenance changed between batch boundaries.'
+        continue
+      }
+      samples.push(sample)
+    } catch (cause) {
+      unavailableReason ??=
+        `Host process-memory sampling failed: ${errorMessage(cause)}`
+    }
+  }
+  if (unavailableReason || samples.length !== options.memoryBatches) {
+    return {
+      status: 'unavailable',
+      source: CHROMIUM_MEMORY_SOURCE,
+      scope: CHROMIUM_MEMORY_SCOPE,
+      platform,
+      hostSampler: null,
+      primaryMetric: null,
+      reason: unavailableReason
+        ?? `Expected ${options.memoryBatches} complete process-memory samples but received ${samples.length}.`,
+      samples: [],
+    }
+  }
+  return {
+    status: 'measured',
+    source: CHROMIUM_MEMORY_SOURCE,
+    scope: CHROMIUM_MEMORY_SCOPE,
+    platform,
+    hostSampler: samples[0].hostSampler,
+    primaryMetric: samples[0].primaryMetric,
+    reason: null,
+    samples,
   }
 }
 
@@ -1486,17 +1632,16 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
 
   private async measureMemory(
     options: PerformanceRunOptions,
-  ): Promise<{
-    readonly plateauMiB: number[]
-    readonly growthKiB: number[] | null
-  } | null> {
-    const browserPerformance = performance as PerformanceWithMemory
-    if (!browserPerformance.memory) return null
-    const samples: number[] = []
+    platform: string,
+  ): Promise<ChromiumProcessMemoryEvidence> {
+    const sampleMemory = (window as PerformanceMemoryWindow)
+      .__webcutSampleChromiumProcessMemory
     useTransportStore.getState().setIsScrubbing(true)
     try {
       let scrubIndex = 0
-      for (let batch = 0; batch < options.memoryBatches; batch++) {
+      return await collectChromiumProcessMemoryEvidence(
+        options,
+        async () => {
         for (let index = 0; index < options.scrubsPerMemoryBatch; index++) {
           const frame = this.fixtureData.scrubFrames[
             scrubIndex++ % this.fixtureData.scrubFrames.length
@@ -1506,12 +1651,13 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
         ;(globalThis as GlobalWithGc).gc?.()
         await afterTwoAnimationFrames()
         await sleep(MEMORY_SETTLE_MS)
-        samples.push(browserPerformance.memory.usedJSHeapSize / MEBIBYTE)
-      }
+        },
+        sampleMemory,
+        platform,
+      )
     } finally {
       useTransportStore.getState().setIsScrubbing(false)
     }
-    return summarizeMemorySamples(samples)
   }
 
   private async measureExport(
@@ -1663,39 +1809,48 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       warnings.push(`Import readiness unavailable: ${reason}`)
     }
 
-    const memory = await this.measureMemory(options)
-    if (memory) {
+    const memoryEvidence = await this.measureMemory(options, request.host.platform)
+    if (memoryEvidence.status === 'measured') {
+      const memory = summarizeMemorySamples(
+        memoryEvidence.samples.map((sample) => sample.totalBytes / MEBIBYTE),
+      )
+      const memoryKind = memoryEvidence.primaryMetric === 'private-bytes'
+        ? 'private bytes'
+        : 'resident-set bytes'
+      const plateauDefinition =
+        `Aggregate host OS ${memoryKind} for the complete CDP-reported Chromium process table at each post-warmup scrub-batch boundary.`
       metrics['memory-plateau-mib'] = measuredMetric(
         'MiB',
-        'Precise Chromium used-JS-heap samples after post-warmup scrub batches and optional exposed garbage collection.',
+        plateauDefinition,
         memory.plateauMiB,
       )
       if (memory.growthKiB !== null) {
         metrics['memory-growth-kib-per-batch'] = measuredMetric(
           'KiB/batch',
-          'Signed change between consecutive post-warmup used-JS-heap plateau samples.',
+          `Signed change between consecutive ${memoryKind} plateau samples over the same complete CDP process scope.`,
           memory.growthKiB,
         )
       } else {
         const reason =
-          'Memory growth requires at least two heap plateau samples; one sample cannot establish change.'
+          'Memory growth requires at least two complete process-memory plateau samples; one sample cannot establish change.'
         metrics['memory-growth-kib-per-batch'] = unavailableMetric(
           'KiB/batch',
-          'Signed change between consecutive post-warmup used-JS-heap plateau samples.',
+          `Signed change between consecutive ${memoryKind} plateau samples over the same complete CDP process scope.`,
           reason,
         )
         warnings.push(reason)
       }
     } else {
-      const reason = 'Chromium precise performance.memory data is unavailable.'
+      const reason = memoryEvidence.reason
+        ?? 'Complete Chromium process-memory evidence is unavailable.'
       metrics['memory-plateau-mib'] = unavailableMetric(
         'MiB',
-        'Precise Chromium used-JS-heap samples after post-warmup scrub batches and optional exposed garbage collection.',
+        'Aggregate host OS process memory for the complete CDP-reported Chromium process table at each post-warmup scrub-batch boundary.',
         reason,
       )
       metrics['memory-growth-kib-per-batch'] = unavailableMetric(
         'KiB/batch',
-        'Signed change between consecutive post-warmup used-JS-heap plateau samples.',
+        'Signed change between consecutive complete CDP-scoped Chromium process-memory plateau samples.',
         reason,
       )
       warnings.push(reason)
@@ -1711,11 +1866,16 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       schemaVersion: PERFORMANCE_ARTIFACT_SCHEMA_VERSION,
       harnessVersion: PERFORMANCE_HARNESS_VERSION,
       capturedAt: new Date().toISOString(),
-      metadata: { host: request.host, browser: browserMetadata() },
+      metadata: {
+        host: request.host,
+        browser: browserMetadata(),
+        chromium: request.chromium,
+      },
       fixture: this.fixture,
       options,
       metrics,
       proposedGates: evaluateProposedGates(metrics),
+      memoryEvidence,
       warnings,
       consoleProblems: [...(request.consoleProblems ?? [])],
       resources,
@@ -1843,5 +2003,20 @@ export function manualHostMetadata(): HostPerformanceMetadata {
     browserChannel: 'interactive Chromium',
     browserVersion: navigator.userAgent,
     command: 'node scripts/performance/run-benchmark.mjs',
+  }
+}
+
+export function manualChromiumMetadata(): ChromiumPerformanceMetadata {
+  const reason =
+    'Manual in-page runs cannot access browser-level Chromium SystemInfo.getInfo; use the command-line runner for GPU identity.'
+  return {
+    source: 'cdp:SystemInfo.getInfo',
+    renderer: { status: 'unavailable', reason },
+    vendor: { status: 'unavailable', reason },
+    driverVendor: { status: 'unavailable', reason },
+    driverVersion: { status: 'unavailable', reason },
+    acceleration: { status: 'unavailable', reason },
+    devices: [],
+    featureStatus: {},
   }
 }

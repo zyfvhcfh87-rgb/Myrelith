@@ -5,6 +5,7 @@ import Timeline from '../../ui/timeline/Timeline'
 import TimelineZoomControls from '../../ui/timeline/TimelineZoomControls'
 import {
   DEFAULT_PERFORMANCE_RUN_OPTIONS,
+  manualChromiumMetadata,
   manualHostMetadata,
   preparePerformanceHarness,
   type PerformanceHarnessApi,
@@ -102,6 +103,7 @@ export default function PerformanceBenchmarkApp() {
     try {
       await api.run({
         host: manualHostMetadata(),
+        chromium: manualChromiumMetadata(),
         options: DEFAULT_PERFORMANCE_RUN_OPTIONS,
       })
     } catch {
@@ -158,7 +160,7 @@ export default function PerformanceBenchmarkApp() {
       ) : null}
       {status === 'running' ? (
         <div className="performance-loading" role="status">
-          Running scrub, playback, import, memory, and export workloads…
+          Running scrub, playback, import, process-memory, and export workloads…
         </div>
       ) : null}
       {result ? (
