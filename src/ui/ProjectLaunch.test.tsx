@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
@@ -419,6 +419,49 @@ describe('ProjectLaunch', () => {
     expect(useProjectSessionStore.getState().screen).toBe('resume')
     expect(screen.getByRole('button', { name: 'Allow media & open' }))
       .toBeDisabled()
+  })
+
+  test('clears pending resume preloading before starting a new project', async () => {
+    let finishEditorLoad: ((value: { default: () => null }) => void) | null = null
+    editorModule.loadEditorShell.mockImplementationOnce(() => new Promise(
+      (resolve) => {
+        finishEditorLoad = resolve
+      },
+    ))
+    controller.returnToProjectHome.mockImplementationOnce(() => {
+      useProjectSessionStore.setState({ screen: 'home' })
+    })
+    controller.showNewProject.mockImplementationOnce(() => {
+      useProjectSessionStore.setState({ screen: 'new-project' })
+    })
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      candidate: {
+        origin: 'file',
+        projectFileName: 'remembered.webcut',
+        projectName: 'Remembered work',
+        width: 1920,
+        height: 1080,
+        frameRate: { num: 30, den: 1 },
+        audioSampleRate: 48_000,
+        assets: [],
+      },
+    })
+    render(<ProjectLaunch />)
+
+    await waitFor(() => expect(editorModule.loadEditorShell).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Start a new project',
+    }))
+
+    expect(await screen.findByRole('button', { name: 'Create project' }))
+      .toBeEnabled()
+
+    await act(async () => {
+      finishEditorLoad?.({ default: () => null })
+      await Promise.resolve()
+    })
   })
 
   test('keeps project truth unchanged and offers reload when the editor chunk fails', async () => {

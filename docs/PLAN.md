@@ -2415,7 +2415,8 @@ remain out of scope.
   editor flash.
 - [x] Preload remembered-project recovery before its final action becomes
   available, then invoke permission activation synchronously within the user's
-  click so the transient File System Access activation window is preserved.
+  click so the transient File System Access activation window is preserved;
+  clear pending preload busy state when leaving Resume for another flow.
 - [x] Lazy-load Export, Add Text, and Animation on first use, preserve dialog
   focus restoration and mounted animation state, and keep project exit able to
   dispose an already-loaded export without pulling export code forward.
@@ -2427,7 +2428,7 @@ remain out of scope.
 - [x] Verify production Chromium request timing, Create, first-use Export/Text,
   focus restoration, forced-503 reload recovery with unchanged project truth,
   720x800 overflow, and a clean ordinary success-path console.
-- [x] Integrate published PRs #82 and #84, then pass 1,875/1,875 Vitest cases
+- [x] Integrate published PRs #82 and #84, then pass 1,876/1,876 Vitest cases
   across 116 files plus all 16 Node runner cases, build/typecheck, oxlint,
   zero-vulnerability production audit, and diff checks.
 

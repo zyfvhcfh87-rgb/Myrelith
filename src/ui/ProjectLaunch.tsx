@@ -872,6 +872,7 @@ export default function ProjectLaunch() {
     )
     return () => {
       active = false
+      setEditorLoading(false)
     }
   }, [editorLoadError, editorReady, hasResumeCandidate, screen])
 

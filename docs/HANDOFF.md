@@ -1809,7 +1809,9 @@ surface; it is not a second zoom and never enters document history.
   available and keeps the final action disabled until the editor is ready. The
   permission activation itself still begins synchronously inside the user's
   click, preserving the transient File System Access activation window; preload
-  failure leaves both the launcher and resume candidate unchanged.
+  failure leaves both the launcher and resume candidate unchanged. Leaving the
+  Resume screen while preload is pending clears its busy state before another
+  launcher flow begins.
 - The ordered CSS cascade is split without reordering: `launcher.css` eagerly
   loads the launcher plus recovery states, while `layout.css` begins at the
   editor shell. Architecture tests walk static runtime imports and fail if the
@@ -1838,7 +1840,7 @@ surface; it is not a second zoom and never enters document history.
   recovered to a clean launcher. The 720x800 editor had no horizontal overflow
   and the ordinary success path logged zero warnings/errors.
 - After integrating published PRs #82 and #84, the complete gate passes
-  1,875/1,875 Vitest cases across 116 files plus all
+  1,876/1,876 Vitest cases across 116 files plus all
   16 Node benchmark-runner cases, TypeScript/production build, warning-free
   oxlint, production dependency audit with 0 vulnerabilities, diff checks,
   two exact-source three-sample benchmark runs, and the production Chromium
