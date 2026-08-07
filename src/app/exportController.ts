@@ -39,6 +39,7 @@ import {
 } from './mediaCompatibilityController'
 import { preflightExportProfile } from './exportCapabilitiesController'
 import type { ExportFileDestinationCapability } from './exportFilePicker'
+import { registerLoadedExportDisposer } from './exportLifecycle'
 
 export type { ExportResult, ExportSettings } from '../pipeline/export'
 
@@ -526,3 +527,5 @@ export async function cancelExport(): Promise<void> {
 export function disposeExport(): Promise<void> {
   return cancelExport()
 }
+
+registerLoadedExportDisposer(disposeExport)

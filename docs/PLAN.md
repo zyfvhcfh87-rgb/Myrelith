@@ -2359,7 +2359,7 @@ remain out of scope.
 
 ## Post-MVP issue #54 - performance benchmark harness
 
-**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+**COMPLETE AND PUBLISHED (2026-08-07; PR #81).**
 
 - [x] Add a deterministic portable stress fixture with exactly 100 mixed-media
   assets, eight tracks, a 30-minute 4K timeline, 320 clips, 39 transitions,
@@ -2401,10 +2401,41 @@ remain out of scope.
   isolated store and URL owner with no browser console problem. Smoke/full
   captured 2/7 complete Windows private-memory process-table samples and both
   artifacts validated against schema 2.
+- [x] Reviewed head `f873818` was normally merged through PR #81 as `9920491`;
+  Issue #54 closed automatically.
+
+## Post-MVP issue #55 - launcher and editor bundle split
+
+**IMPLEMENTATION COMPLETE (2026-08-07); DELIVERY TRACKED BY PR #83.**
+
+- [x] Move the editor composition, lifecycles, shortcuts, and CSS behind one
+  shared `EditorShell` dynamic import while keeping ProjectLaunch eager.
+- [x] Preload the editor before Create/Open/Recover activates project truth;
+  show accessible loading and honest reload recovery without an incomplete
+  editor flash.
+- [x] Preload remembered-project recovery before its final action becomes
+  available, then invoke permission activation synchronously within the user's
+  click so the transient File System Access activation window is preserved;
+  clear pending preload busy state when leaving Resume for another flow.
+- [x] Lazy-load Export, Add Text, and Animation on first use, preserve dialog
+  focus restoration and mounted animation state, make loading/error dialog
+  fallbacks own focus and contain editor shortcuts, and keep project exit able
+  to dispose an already-loaded export without pulling export code forward.
+- [x] Add error-boundary behavior tests and a static-import-closure architecture
+  guard for the launcher, editor, and three secondary features.
+- [x] Reduce ordinary initial gzip JS+CSS from 307.43 kB to 246.92 kB (-19.7%)
+  and three-sample cold-launch median/p95 from 163.5/238.4 ms to
+  146.1/211.5 ms (-10.6%/-11.3%) on the same source-bound harness host.
+- [x] Verify production Chromium request timing, Create, first-use Export/Text,
+  focus restoration, forced-503 reload recovery with unchanged project truth,
+  720x800 overflow, and a clean ordinary success-path console.
+- [x] Integrate published PRs #82 and #84, then pass 1,877/1,877 Vitest cases
+  across 116 files plus all 16 Node runner cases, build/typecheck, oxlint,
+  zero-vulnerability production audit, and diff checks.
 
 ## Post-MVP issue #56 - bounded media-analysis scheduling
 
-**IMPLEMENTATION COMPLETE (2026-08-07); delivery tracked by PR #84.**
+**COMPLETE AND PUBLISHED (2026-08-07; PR #84).**
 
 - [x] Add one app-layer `MediaJobScheduler` with explicit two-job/two-decoder
   resource budgets, FIFO-stable priority, aging, cooperative yield, generation,
@@ -2421,10 +2452,13 @@ remain out of scope.
   scheduler scenario. Record modeled legacy demand, queue/wait/active-resource
   facts, cancellation/completion/failure, progress, priority order,
   cooperative-yield strategy, and event-loop delay.
-- [x] Pass 1,860/1,860 Vitest tests across 112 files plus all 16 Node runner
+- [x] Pass 1,867/1,867 Vitest tests across 113 files plus all 16 Node runner
   cases, production build/typecheck, oxlint, zero-vulnerability production
   audit, diff checks, smoke/full production Chromium benchmarks, and real
   in-app Browser bulk-import/responsiveness/clean-console QA.
+- [x] Resolve all review feedback, pass exact-head CI and a final Codex review
+  with no major issues at `902078f`, and normally merge PR #84 as `b431623`;
+  Issue #56 closed automatically.
 
 ## Post-MVP issue #57 - runtime and document-memory telemetry
 

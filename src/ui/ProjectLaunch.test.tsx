@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
@@ -28,6 +28,12 @@ const controller = vi.hoisted(() => ({
 
 vi.mock('../app/projectController', () => controller)
 
+const editorModule = vi.hoisted(() => ({
+  loadEditorShell: vi.fn(async () => ({ default: () => null })),
+}))
+
+vi.mock('../app/editorModuleLoader', () => editorModule)
+
 const libraryController = vi.hoisted(() => ({
   discardRecoveryJournal: vi.fn(async () => true),
   forgetRecentProject: vi.fn(async () => true),
@@ -42,8 +48,10 @@ beforeEach(() => {
   useProjectLibraryStore.setState({ ...INITIAL_PROJECT_LIBRARY_STATE })
   for (const mock of Object.values(controller)) mock.mockClear()
   for (const mock of Object.values(libraryController)) mock.mockClear()
+  editorModule.loadEditorShell.mockClear()
   controller.canRememberProjectFiles.mockReturnValue(false)
   controller.canRememberProjectMedia.mockReturnValue(false)
+  editorModule.loadEditorShell.mockResolvedValue({ default: () => null })
 })
 
 describe('ProjectLaunch', () => {
@@ -132,7 +140,7 @@ describe('ProjectLaunch', () => {
     expect(libraryController.discardRecoveryJournal).not.toHaveBeenCalled()
   })
 
-  test('new-project form passes the chosen exact profile to the controller', () => {
+  test('new-project form passes the chosen exact profile to the controller', async () => {
     useProjectSessionStore.setState({ screen: 'new-project' })
     render(<ProjectLaunch />)
 
@@ -151,15 +159,17 @@ describe('ProjectLaunch', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
 
-    expect(controller.createNewProject).toHaveBeenCalledWith('Fast cut', {
-      width: 720,
-      height: 1280,
-      frameRate: { num: 60, den: 1 },
-      audioSampleRate: 96_000,
+    await waitFor(() => {
+      expect(controller.createNewProject).toHaveBeenCalledWith('Fast cut', {
+        width: 720,
+        height: 1280,
+        frameRate: { num: 60, den: 1 },
+        audioSampleRate: 96_000,
+      })
     })
   })
 
-  test('offers every requested ratio and preserves the size tier between them', () => {
+  test('offers every requested ratio and preserves the size tier between them', async () => {
     useProjectSessionStore.setState({ screen: 'new-project' })
     render(<ProjectLaunch />)
 
@@ -186,13 +196,15 @@ describe('ProjectLaunch', () => {
       .toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
 
-    expect(controller.createNewProject).toHaveBeenCalledWith(
-      'Untitled project',
-      expect.objectContaining({ width: 1440, height: 1800 }),
-    )
+    await waitFor(() => {
+      expect(controller.createNewProject).toHaveBeenCalledWith(
+        'Untitled project',
+        expect.objectContaining({ width: 1440, height: 1800 }),
+      )
+    })
   })
 
-  test('resume delegates project selection and source reconnection', () => {
+  test('resume delegates project selection and source reconnection', async () => {
     useProjectSessionStore.setState({
       screen: 'resume',
       candidate: {
@@ -229,13 +241,15 @@ describe('ProjectLaunch', () => {
     const openOffline = screen.getByRole('button', {
       name: 'Open with 1 offline',
     })
-    expect(openOffline).toBeEnabled()
+    await waitFor(() => expect(openOffline).toBeEnabled())
     expect(screen.getByText(/will open offline/i)).toBeInTheDocument()
     fireEvent.click(openOffline)
-    expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+    await waitFor(() => {
+      expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+    })
   })
 
-  test('validated zero-media projects can be opened immediately', () => {
+  test('validated zero-media projects can be opened immediately', async () => {
     useProjectSessionStore.setState({
       screen: 'resume',
       candidate: {
@@ -252,9 +266,11 @@ describe('ProjectLaunch', () => {
     render(<ProjectLaunch />)
 
     const open = screen.getByRole('button', { name: 'Open project' })
-    expect(open).toBeEnabled()
+    await waitFor(() => expect(open).toBeEnabled())
     fireEvent.click(open)
-    expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+    await waitFor(() => {
+      expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+    })
   })
 
   test('derives the saved project canvas label from exact dimensions', () => {
@@ -312,7 +328,7 @@ describe('ProjectLaunch', () => {
     expect(screen.getByText('audio only')).toBeInTheDocument()
   })
 
-  test('recovery is explicit and never described as a saved project', () => {
+  test('recovery is explicit and never described as a saved project', async () => {
     useProjectSessionStore.setState({
       screen: 'resume',
       candidate: {
@@ -331,11 +347,19 @@ describe('ProjectLaunch', () => {
     expect(screen.getByRole('heading', { name: 'Review recovered work' }))
       .toBeInTheDocument()
     const recover = screen.getByRole('button', { name: 'Recover project' })
+    await waitFor(() => expect(recover).toBeEnabled())
     fireEvent.click(recover)
-    expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+    await waitFor(() => {
+      expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+    })
   })
 
-  test('remembered media needs only the Open click to grant access', () => {
+  test('remembered media needs only the Open click to grant access', async () => {
+    let openClickActive = false
+    controller.activateResumedProject.mockImplementationOnce(async () => {
+      expect(openClickActive).toBe(true)
+      return { status: 'activated' }
+    })
     useProjectSessionStore.setState({
       screen: 'resume',
       candidate: {
@@ -358,9 +382,102 @@ describe('ProjectLaunch', () => {
 
     expect(screen.getByText('Remembered')).toBeInTheDocument()
     const open = screen.getByRole('button', { name: 'Allow media & open' })
-    expect(open).toBeEnabled()
+    await waitFor(() => expect(open).toBeEnabled())
+    expect(editorModule.loadEditorShell).toHaveBeenCalledOnce()
+    openClickActive = true
     fireEvent.click(open)
+    openClickActive = false
     expect(controller.activateResumedProject).toHaveBeenCalledOnce()
+  })
+
+  test('keeps a resume candidate unchanged when editor preloading fails', async () => {
+    editorModule.loadEditorShell.mockRejectedValueOnce(new Error('offline'))
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      candidate: {
+        origin: 'file',
+        projectFileName: 'remembered.webcut',
+        projectName: 'Remembered work',
+        width: 1920,
+        height: 1080,
+        frameRate: { num: 30, den: 1 },
+        audioSampleRate: 48_000,
+        assets: [{
+          id: 'asset-1',
+          fileName: 'source.mp4',
+          kind: 'video',
+          status: 'remembered',
+        }],
+      },
+    })
+    render(<ProjectLaunch />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your project has not been changed',
+    )
+    expect(controller.activateResumedProject).not.toHaveBeenCalled()
+    expect(useProjectSessionStore.getState().screen).toBe('resume')
+    expect(screen.getByRole('button', { name: 'Allow media & open' }))
+      .toBeDisabled()
+  })
+
+  test('clears pending resume preloading before starting a new project', async () => {
+    let finishEditorLoad: ((value: { default: () => null }) => void) | null = null
+    editorModule.loadEditorShell.mockImplementationOnce(() => new Promise(
+      (resolve) => {
+        finishEditorLoad = resolve
+      },
+    ))
+    controller.returnToProjectHome.mockImplementationOnce(() => {
+      useProjectSessionStore.setState({ screen: 'home' })
+    })
+    controller.showNewProject.mockImplementationOnce(() => {
+      useProjectSessionStore.setState({ screen: 'new-project' })
+    })
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      candidate: {
+        origin: 'file',
+        projectFileName: 'remembered.webcut',
+        projectName: 'Remembered work',
+        width: 1920,
+        height: 1080,
+        frameRate: { num: 30, den: 1 },
+        audioSampleRate: 48_000,
+        assets: [],
+      },
+    })
+    render(<ProjectLaunch />)
+
+    await waitFor(() => expect(editorModule.loadEditorShell).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Start a new project',
+    }))
+
+    expect(await screen.findByRole('button', { name: 'Create project' }))
+      .toBeEnabled()
+
+    await act(async () => {
+      finishEditorLoad?.({ default: () => null })
+      await Promise.resolve()
+    })
+  })
+
+  test('keeps project truth unchanged and offers reload when the editor chunk fails', async () => {
+    editorModule.loadEditorShell.mockRejectedValueOnce(new Error('offline'))
+    useProjectSessionStore.setState({ screen: 'new-project' })
+    render(<ProjectLaunch />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your project has not been changed',
+    )
+    expect(controller.createNewProject).not.toHaveBeenCalled()
+    expect(useProjectSessionStore.getState().screen).toBe('new-project')
+    expect(screen.getByRole('button', { name: 'Reload WebCut' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Create project' })).toBeDisabled()
   })
 
   test('supporting browsers reconnect through the reusable-handle picker', () => {

@@ -3,14 +3,16 @@
  * The heavy export workflow mounts only while its dialog is open.
  */
 
-import { useRef, useState } from 'react'
+import { lazy, useRef, useState } from 'react'
 import {
   saveActiveProject,
   saveActiveProjectAs,
 } from '../app/projectPersistenceController'
 import { leaveActiveProject } from '../app/projectController'
 import { useProjectSessionStore } from '../state/projectSessionStore'
-import ExportDialog from './ExportDialog'
+import LazySurfaceBoundary from './LazySurfaceBoundary'
+
+const ExportDialog = lazy(() => import('./ExportDialog'))
 
 function saveStatus(
   phase: 'idle' | 'saving' | 'error',
@@ -161,7 +163,16 @@ export default function Toolbar() {
           Export
         </button>
       </div>
-      {exportOpen && <ExportDialog onClose={closeExport} />}
+      {exportOpen && (
+        <LazySurfaceBoundary
+          variant="dialog"
+          loadingLabel="Loading export tools…"
+          failureTitle="Export tools could not load"
+          onClose={closeExport}
+        >
+          <ExportDialog onClose={closeExport} />
+        </LazySurfaceBoundary>
+      )}
     </div>
   )
 }

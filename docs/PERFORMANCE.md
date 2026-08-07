@@ -6,6 +6,60 @@ document-memory telemetry to that same harness. It records trends; it does not
 declare WebCut fast or enforce release or memory budgets from one machine or
 one run.
 
+## Issue #55 bundle-split evidence
+
+Issue #55 uses this harness plus the ordinary production build graph to prove
+the launcher/editor boundary. The comparison is against clean commit
+`9920491f46f815812fc69ec45c3ee5531c1dc3af` on the same Windows host,
+Chromium 151 runtime, hardware-accelerated RX 6600, and canonical fixture
+fingerprint
+`sha256:07f2bd5bd724e5b6b7c07e2fbd26a5b67b7c3c80bba87f8f0d8fdce2bcb904f7`.
+Generated evidence is ignored at `.tmp/benchmarks/issue55-before-full` and
+`.tmp/benchmarks/issue55-after-full`.
+
+The ordinary production launcher graph changed as follows. The after value
+includes both initial JavaScript files (`index` plus the shared
+`documentStore` chunk); deferred editor and feature chunks are excluded.
+
+| Initial transfer | Before | After | Change |
+|---|---:|---:|---:|
+| JavaScript, raw | 1,088.92 kB | 890.86 kB | -18.2% |
+| JavaScript, gzip | 290.93 kB | 241.60 kB | -17.0% |
+| CSS, raw | 83.71 kB | 22.54 kB | -73.1% |
+| CSS, gzip | 16.50 kB | 5.32 kB | -67.8% |
+| JavaScript + CSS, gzip | 307.43 kB | 246.92 kB | -19.7% |
+
+The ordinary after-build defers `EditorShell` (167.31 kB raw / 43.11 kB
+gzip) and its CSS (63.06 / 12.54 kB), then keeps `ExportDialog` (27.83 / 8.32
+kB), `TextOverlayDialog` (3.72 / 1.48 kB), and
+`AnimationCurveEditor` (7.05 / 2.59 kB) behind their first interactions.
+Hashed file names are intentionally omitted because each source change gives
+them a new identity.
+
+Both cold-load artifacts use three samples. They are source-bound, sequential
+runs rather than an interleaved lab experiment, so the result is evidence for
+this host and not a general product claim.
+
+| Cold-load metric | Before | After | Change |
+|---|---:|---:|---:|
+| Launcher interactive median | 163.5 ms | 146.1 ms | -10.6% |
+| Launcher interactive p95 | 238.4 ms | 211.5 ms | -11.3% |
+| Editor first usable median | 463.8 ms | 481.9 ms | +3.9% |
+| Editor first usable p95 | 601.3 ms | 489.6 ms | -18.6% |
+
+Production Chromium network QA additionally confirmed that initial launcher
+requests contain no editor, export, text-overlay, or animation chunk. Creating
+a project fetches only the editor JS/CSS and worker/runtime; Export and Add
+Text fetch their own chunks on first use and restore focus when closed. A
+forced 503 for the editor chunk leaves the creation form and project truth
+unchanged, exposes a reload action, and recovers to a clean launcher after the
+route is restored. The 720x800 editor had no horizontal overflow and the
+ordinary success path logged no browser warnings or errors.
+
+The full artifacts retain the harness's advisory stress-gate misses. Those are
+recorded trend data for unrelated render/memory/export work, not regressions
+introduced by the launcher split and not release enforcement.
+
 ## Production route gate
 
 The harness route is `/__webcut/performance`.

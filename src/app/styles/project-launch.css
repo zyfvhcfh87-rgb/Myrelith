@@ -1467,3 +1467,141 @@
     transition: none;
   }
 }
+
+/* Shared lazy-module loading and recovery states. Kept in the eager launcher
+   sheet so editor chunk failures remain styled before editor CSS arrives. */
+.lazy-editor-state {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 32px;
+  color: #e8edf5;
+  text-align: center;
+  background: #0b1420;
+}
+
+.lazy-editor-state h1,
+.lazy-surface-state h2 {
+  margin: 0;
+}
+
+.lazy-editor-state p {
+  max-width: 52ch;
+  margin: 0 0 8px;
+  color: #9aabc0;
+  line-height: 1.6;
+}
+
+.lazy-load-spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid rgb(139 188 255 / 25%);
+  border-top-color: #8bbcff;
+  border-radius: 999px;
+  animation: lazy-load-spin 700ms linear infinite;
+}
+
+.lazy-surface-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(5 10 17 / 72%);
+}
+
+.lazy-surface-state {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  color: #dce6f4;
+  text-align: center;
+}
+
+.lazy-surface-state-dialog {
+  width: min(420px, 100%);
+  padding: 28px;
+  background: #162131;
+  border: 1px solid #38506d;
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
+}
+
+.lazy-surface-state-inline {
+  min-height: 120px;
+  align-content: center;
+  padding: 18px;
+  color: #9aabc0;
+}
+
+.lazy-surface-state p {
+  max-width: 42ch;
+  margin: 0;
+  color: #9aabc0;
+  line-height: 1.5;
+}
+
+.lazy-surface-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.lazy-surface-actions button {
+  min-height: 38px;
+  padding: 8px 14px;
+  color: #e8edf5;
+  background: #20354f;
+  border: 1px solid #4f7198;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.lazy-surface-actions button:focus-visible {
+  outline: 2px solid #8bbcff;
+  outline-offset: 3px;
+}
+
+.project-editor-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.project-editor-load-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-editor-load-actions button {
+  flex: none;
+  min-height: 34px;
+  padding: 6px 11px;
+  color: #ffe7e4;
+  background: #552f33;
+  border: 1px solid #a5575d;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.project-editor-load-actions button:focus-visible {
+  outline: 2px solid #ffc1bc;
+  outline-offset: 3px;
+}
+
+@keyframes lazy-load-spin {
+  to { transform: rotate(1turn); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lazy-load-spinner {
+    animation: none;
+  }
+}

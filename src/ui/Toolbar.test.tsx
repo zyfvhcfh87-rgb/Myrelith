@@ -37,7 +37,7 @@ beforeEach(() => {
 })
 
 describe('Toolbar project persistence', () => {
-  test('shows project state and routes Save, Save As, and Export', () => {
+  test('shows project state and routes Save, Save As, and Export', async () => {
     render(<Toolbar />)
 
     expect(screen.getByText('Toolbar edit')).toBeInTheDocument()
@@ -54,7 +54,8 @@ describe('Toolbar project persistence', () => {
     expect(saveActiveProjectAs).toHaveBeenCalledOnce()
 
     fireEvent.click(screen.getByRole('button', { name: 'Export' }))
-    expect(screen.getByRole('dialog', { name: 'Export project' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Export project' }))
+      .toBeInTheDocument()
   })
 
   test('guards dirty work before returning to Projects', async () => {

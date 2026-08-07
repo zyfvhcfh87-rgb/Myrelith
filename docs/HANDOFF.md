@@ -84,14 +84,14 @@ and the open list below.
 | **Post-MVP #35 — preview direct manipulation** | ✅ complete | Issue #34's complete Program Monitor controls plus four explicit corner-scale handles; 82 focused + 1,785 total tests; rotated/cropped/anchored/flipped real-media Chrome gate at 1280×720 and 720×800; PR #51 normally merged as `4f9eaaa` |
 | **Post-MVP #43 — keyframing and animation curves** | ✅ complete | schema-6 scalar curves for position/scale/rotation/opacity; one pure scrub/playback/export evaluator; accessible Inspector curves + timeline markers; 1,804 tests; real-media playback/export and 720px Chromium gate, clean console |
 | **Post-MVP #54 — performance evidence foundation** | ✅ complete | deterministic production harness and source-bound artifacts merged on `9920491`; canonical fixture, cold-launch/render/import/memory/export metrics, cleanup proof, and advisory gates |
-| **Post-MVP #56 — bounded media-analysis scheduling** | ✅ implementation complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-4 benchmark evidence; 1,860 tests + real six-file and full 100-asset Chromium gates |
+| **Post-MVP #55 — launcher/editor bundle split** | ✅ implementation complete | editor JS/CSS and Export/Text/Animation first-use chunks are absent from the initial launcher graph; initial gzip JS+CSS -19.7%; three-sample launcher median -10.6% and p95 -11.3%; production Chromium network/failure/focus gate clean; delivery tracked by PR #83 |
+| **Post-MVP #56 — bounded media-analysis scheduling** | ✅ complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-4 benchmark evidence; reviewed head `902078f` normally merged through PR #84 as `b431623` |
 | **Post-MVP #57 — runtime and document-memory telemetry** | ✅ complete | schema-3 local telemetry with explainable document/history estimates, bounded worker/audio health evidence, cache-drain checks, optional lab APIs, and measured overhead; PR #82 normally merged as `f7eedab` |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
 | **Refactor Stage 7 — Mediabunny export adapter owners** | ✅ complete | stable facade split into visual/audio/sink resource owners plus one shared fake harness; 156 focused + 1,725 total tests; headed Chromium buffered/direct A/V reopen + native playback, exact 9,600-sample presentation, commit/cancel/write-failure cleanup, clean console |
 | **Refactor Stage 8 — export presentation + feature CSS** | ✅ complete | export lifecycle stays in one owner behind stateless sections; the ordered ten-file CSS manifest produces byte-identical CSS; 91 focused + 1,725 total tests; checked-in recovery smoke plus headed 390/720/1280/1440px focus/keyboard/overflow QA, clean console |
-
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
 completed. The production dialog reports Compatibility, Web, Modern, and HEVC
@@ -1739,7 +1739,7 @@ surface; it is not a second zoom and never enters document history.
 
 ## Post-MVP issue #54 - performance evidence foundation
 
-**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07; not committed or published).**
+**COMPLETE AND PUBLISHED (2026-08-07; PR #81).**
 
 - The opt-in production benchmark route owns a deterministic, validator-clean
   100-asset / 8-track / 30-minute fixture with 320 clips, 39 crossfades,
@@ -1793,10 +1793,63 @@ surface; it is not a second zoom and never enters document history.
   framework overlay, warning/error log, or horizontal page overflow. Zoom In
   changed the real slider from 0.725 to 0.748. The automated production run's
   1440x900 screenshot rendered the completed human-readable summary.
+- Reviewed head `f873818` was normally merged through PR #81 as `9920491`;
+  Issue #54 closed automatically.
+
+## Post-MVP issue #55 - launcher and editor bundle split
+
+**IMPLEMENTATION COMPLETE (2026-08-07); DELIVERY TRACKED BY PR #83.**
+
+- `App.tsx` now owns only the eager launcher path and accessible editor
+  loading/failure states. `EditorShell.tsx` owns the lazy editor composition,
+  shortcuts, runtime lifecycles, and editor CSS. New/open/recovery preloads the
+  shared editor module before controller activation, so a missing chunk cannot
+  mutate project truth or flash an incomplete editor.
+- Remembered-project recovery starts that preload as soon as its candidate is
+  available and keeps the final action disabled until the editor is ready. The
+  permission activation itself still begins synchronously inside the user's
+  click, preserving the transient File System Access activation window; preload
+  failure leaves both the launcher and resume candidate unchanged. Leaving the
+  Resume screen while preload is pending clears its busy state before another
+  launcher flow begins.
+- The ordered CSS cascade is split without reordering: `launcher.css` eagerly
+  loads the launcher plus recovery states, while `layout.css` begins at the
+  editor shell. Architecture tests walk static runtime imports and fail if the
+  launcher regains EditorShell/Toolbar/Inspector or if EditorShell eagerly
+  regains ExportDialog/TextOverlayDialog/AnimationCurveEditor.
+- Export, Add Text, and animation curves use shared accessible Suspense/error
+  boundaries whose dialog fallbacks own focus and contain editor shortcuts.
+  Animation remains mounted after first use so tab switches do not discard its
+  local edit state. Export registers its disposer through a tiny loaded-module
+  lifecycle seam, letting project replacement stop a real export without
+  importing the controller on every editor entry.
+- The ordinary initial production graph moved from 1,088.92 kB raw / 290.93
+  kB gzip JavaScript plus 83.71 / 16.50 kB CSS to 890.86 / 241.60 kB
+  JavaScript plus 22.54 / 5.32 kB CSS. Initial gzip JS+CSS is 19.7% smaller.
+  EditorShell, its CSS, Export, Text, and Animation are separate deferred
+  chunks; the existing large-chunk warning remains advisory.
+- Exact-source three-sample artifacts under ignored `.tmp/benchmarks/` record
+  launcher median 163.5 -> 146.1 ms (-10.6%) and p95 238.4 -> 211.5 ms
+  (-11.3%) on the same Chromium 151 / RX 6600 host and canonical fixture.
+  The harness's unrelated stress render/memory/export proposals remain
+  advisory and retain their honest misses. `docs/PERFORMANCE.md` holds the
+  comparison and interpretation.
+- Production Chromium proved the launcher request graph excludes editor and
+  secondary chunks; Create then loads the editor only; Export and Add Text load
+  on first use and restore trigger focus. A forced editor-chunk 503 left the
+  setup form/project truth untouched, exposed the truthful Reload action, and
+  recovered to a clean launcher. The 720x800 editor had no horizontal overflow
+  and the ordinary success path logged zero warnings/errors.
+- After integrating published PRs #82 and #84, the complete gate passes
+  1,877/1,877 Vitest cases across 116 files plus all
+  16 Node benchmark-runner cases, TypeScript/production build, warning-free
+  oxlint, production dependency audit with 0 vulnerabilities, diff checks,
+  two exact-source three-sample benchmark runs, and the production Chromium
+  acceptance/failure matrix above.
 
 ## Post-MVP issue #56 - bounded media-analysis scheduler
 
-**IMPLEMENTATION COMPLETE (2026-08-07); delivery tracked by PR #84.**
+**COMPLETE AND PUBLISHED (2026-08-07; PR #84).**
 
 - `MediaJobScheduler` owns a bounded priority queue with a default maximum of
   two active asset jobs and two reserved decoder slots. Jobs expose generation,
@@ -1826,11 +1879,14 @@ surface; it is not a second zoom and never enters document history.
   browser warning/error. Product performance proposal outcomes varied between
   consecutive full runs, as expected for advisory single-device trend data;
   they remain visible in each artifact and are not scheduler enforcement gates.
-- Validation passed 1,860/1,860 Vitest tests across 112 files plus all 16 Node
+- Validation passed 1,867/1,867 Vitest tests across 113 files plus all 16 Node
   runner cases, production build/typecheck, oxlint, production audit with zero
   vulnerabilities, `git diff --check`, smoke/full production benchmarks, and
   in-app Browser QA. Six real H.264/AAC files all reached Ready with filmstrips;
   Zoom In remained responsive (0.719→0.741) and the console stayed clean.
+- All review feedback was resolved. Exact head `902078f` passed CI, the full
+  gate, and a final Codex review with no major issues, then was normally merged
+  through PR #84 as `b431623`; Issue #56 closed automatically.
 
 ## Post-MVP issue #57 - runtime and document-memory telemetry
 

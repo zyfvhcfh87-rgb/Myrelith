@@ -1,184 +1,55 @@
-/**
- * app/App.test.tsx — Phase 3.1: the shell mounts and every grid area
- * renders its panel. Layout geometry is verified visually (jsdom does not
- * do real layout); this guards wiring, not pixels.
- */
-
-import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import App from './App'
-import type { Clip, TimelineDoc } from '../domain/schema'
-import { useDocumentStore } from '../state/documentStore'
-import {
-  INITIAL_PROJECT_SESSION_STATE,
-  useProjectSessionStore,
-} from '../state/projectSessionStore'
-import { useTransportStore } from '../state/transportStore'
-import {
-  resetDocumentStoreForTest,
-  resetTransportStoreForTest,
-} from '../test/storeFixtures'
-
-vi.mock('../app/projectLibraryController', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('../app/projectLibraryController')
-  >()
-  return {
-    ...actual,
-    refreshProjectLibrary: vi.fn(async () => undefined),
-  }
-})
-
-vi.mock('../app/previewController', () => ({
-  disposePreview: vi.fn(),
-  initPreview: vi.fn(),
-}))
-
-function makeClip(id: string, startFrame: number): Clip {
-  return {
-    id,
-    assetId: 'asset-app-selection',
-    name: id,
-    sourceMode: 'timed',
-    sourceRange: { startFrame: 0, durationFrames: 30 },
-    timelineRange: { startFrame, durationFrames: 30 },
-    transform: {
-      x: 0,
-      y: 0,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-      anchorX: 0.5,
-      anchorY: 0.5,
-    },
-    opacity: 1,
-    volume: 1,
-    effects: [],
-  }
-}
-
-function makeDocument(): TimelineDoc {
-  return {
-    schemaVersion: 6,
-    id: 'doc-app-selection',
-    name: 'App selection fixture',
-    frameRate: { num: 30, den: 1 },
-    width: 1920,
-    height: 1080,
-    audioSampleRate: 48_000,
-    tracks: [
-      {
-        id: 'V1',
-        kind: 'video',
-        name: 'V1',
-        clips: [makeClip('clipA', 0), makeClip('clipB', 60)],
-        transitions: [],
-        hidden: false,
-        muted: false,
-        solo: false,
-        locked: false,
-      },
-    ],
-  }
-}
+import { lazy, type ComponentType } from 'react'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { EditorSurface } from './App'
+import type { EditorShellProps } from './EditorShell'
 
 beforeEach(() => {
-  vi.clearAllMocks()
-  useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
-  resetTransportStoreForTest()
-  resetDocumentStoreForTest(makeDocument())
+  vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
-describe('App shell', () => {
-  test('opens on the project home instead of mounting editor controllers', () => {
-    const { container } = render(<App />)
+describe('editor lazy boundary', () => {
+  test('shows a small accessible wait state until the editor module resolves', async () => {
+    let resolveEditor!: (module: {
+      default: ComponentType<EditorShellProps>
+    }) => void
+    const DeferredEditor = lazy(() => new Promise<{
+      default: ComponentType<EditorShellProps>
+    }>((resolve) => {
+      resolveEditor = resolve
+    }))
 
-    expect(screen.getByRole('heading', {
-      name: /your footage.*your space.*your cut/i,
-    })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /start a new project/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /open a project/i })).toBeInTheDocument()
-    expect(container.querySelector('.app-shell')).toBeNull()
-  })
+    render(<EditorSurface closing={false} editor={DeferredEditor} />)
 
-  test('renders all five panel areas', () => {
-    useProjectSessionStore.setState({ screen: 'editor' })
-    const { container } = render(<App />)
-
-    expect(screen.getByText('WebCut')).toBeInTheDocument()
-    // Real panels (3.2–3.4), not placeholders:
-    expect(container.querySelector('.media-pool')).not.toBeNull()
-    expect(screen.getByTestId('preview-canvas')).toBeInTheDocument()
-    expect(screen.getByText('Inspector')).toBeInTheDocument() // Phase 4
-    expect(screen.getByTestId('timeline-root')).toBeInTheDocument()
-    expect(
-      screen.getByRole('group', { name: 'Timeline zoom controls' }),
-    ).toBeInTheDocument()
-
-    const shell = container.querySelector('.app-shell')
-    expect(shell).not.toBeNull()
-    for (const area of [
-      'area-toolbar',
-      'area-media-pool',
-      'area-preview',
-      'area-inspector',
-      'area-timeline',
-    ]) {
-      expect(shell?.querySelector(`.${area}`)).not.toBeNull()
-    }
-    expect(
-      shell?.querySelector('.area-transport > .timeline-zoom-controls'),
-    ).not.toBeNull()
-  })
-
-  test('keeps Add text with the timeline tools instead of the project actions', () => {
-    useProjectSessionStore.setState({ screen: 'editor' })
-    const { container } = render(<App />)
-
-    const addText = screen.getByRole('button', { name: 'Add text' })
-    expect(addText.closest('.transport-tools')).not.toBeNull()
-    expect(container.querySelector('.toolbar-actions')?.contains(addText)).toBe(false)
-
-    fireEvent.click(addText)
-    expect(screen.getByRole('heading', { name: 'Add text overlay' })).toBeInTheDocument()
-  })
-
-  test('owns and releases document-to-selection reconciliation', () => {
-    useProjectSessionStore.setState({ screen: 'editor' })
-    useTransportStore.getState().setSelectedClip('clipA')
-    useTransportStore.getState().toggleClipSelection('clipB')
-    const { unmount } = render(<App />)
-
-    act(() => useDocumentStore.getState().rippleDelete('clipB'))
-
-    expect(useTransportStore.getState()).toMatchObject({
-      selectedClipIds: ['clipA'],
-      selectedClipId: 'clipA',
+    expect(screen.getByRole('status')).toHaveTextContent('Opening your studio')
+    await act(async () => {
+      resolveEditor({
+        default: ({ closing }) => (
+          <div data-testid="editor-ready">{closing ? 'closing' : 'ready'}</div>
+        ),
+      })
+      await Promise.resolve()
     })
-
-    unmount()
-    act(() => useDocumentStore.getState().removeTrack('V1'))
-    expect(useTransportStore.getState()).toMatchObject({
-      selectedClipIds: ['clipA'],
-      selectedClipId: 'clipA',
-    })
+    expect(await screen.findByTestId('editor-ready')).toHaveTextContent('ready')
   })
 
-  test('makes every editing surface inert while the project is closing', () => {
-    useProjectSessionStore.setState({ screen: 'editor', phase: 'closing' })
-    const { container } = render(<App />)
-
-    const shell = container.querySelector('.app-shell')
-    expect(shell).toHaveAttribute('aria-busy', 'true')
-    for (const area of [
-      'area-media-pool',
-      'area-preview',
-      'area-inspector',
-      'area-transport',
-      'area-timeline',
-    ]) {
-      expect(shell?.querySelector(`.${area}`)).toHaveAttribute('inert')
+  test('offers an actionable reload when the editor module fails', () => {
+    const reload = vi.fn()
+    const BrokenEditor = () => {
+      throw new Error('stale chunk')
     }
-    expect(shell?.querySelector('.area-toolbar')).not.toHaveAttribute('inert')
+    render(
+      <EditorSurface
+        closing={false}
+        editor={BrokenEditor}
+        onReload={reload}
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'We couldn’t load the editing tools',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Reload WebCut' }))
+    expect(reload).toHaveBeenCalledOnce()
   })
 })
