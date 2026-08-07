@@ -1,15 +1,16 @@
 /** Pure, explicit visual composition planning for preview and export. */
 
-import type { Clip, TimelineDoc, Track, TrackId } from './schema'
+import type { Clip, TimelineDoc, TrackId } from './schema'
 import {
   crossfadeFrameGroupAt,
   resolveCrossfadePlan,
+  type CrossfadePlan,
   type CrossfadeFrameGroup,
   type SourceBoundsCatalog,
   type VideoFrameRequest,
 } from './crossfadePlan'
-import { rangeContains } from './time'
 import { resolveClipAnimationAtFrame } from './clipAnimation'
+import { createFrameIndex, type FrameIndex } from './frameIndex'
 
 export interface OrdinaryVideoPlanItem {
   kind: 'clip'
@@ -47,39 +48,36 @@ function clipOpacity(clip: Clip): number {
 }
 
 function ordinaryItem(
-  track: Track,
+  trackId: TrackId,
+  clip: Clip | null,
   frame: number,
 ): OrdinaryVideoPlanItem | TextOverlayPlanItem | null {
-  for (const clip of track.clips) {
-    if (clip.timelineRange.startFrame > frame) break
-    if (!rangeContains(clip.timelineRange, frame)) continue
-    const resolvedClip = resolveClipAnimationAtFrame(clip, frame)
-    const opacity = clipOpacity(resolvedClip)
-    if (opacity <= 0) return null
-    if (resolvedClip.text !== undefined) {
-      return {
-        kind: 'text',
-        trackId: track.id,
-        frame,
-        clip: resolvedClip,
-        opacity,
-      }
-    }
+  if (!clip) return null
+  const resolvedClip = resolveClipAnimationAtFrame(clip, frame)
+  const opacity = clipOpacity(resolvedClip)
+  if (opacity <= 0) return null
+  if (resolvedClip.text !== undefined) {
     return {
-      kind: 'clip',
-      trackId: track.id,
+      kind: 'text',
+      trackId,
       frame,
-      request: {
-        clip: resolvedClip,
-        sourceFrame: resolvedClip.sourceMode === 'still'
-          ? 0
-          : resolvedClip.sourceRange.startFrame
-            + (frame - resolvedClip.timelineRange.startFrame),
-        opacity,
-      },
+      clip: resolvedClip,
+      opacity,
     }
   }
-  return null
+  return {
+    kind: 'clip',
+    trackId,
+    frame,
+    request: {
+      clip: resolvedClip,
+      sourceFrame: resolvedClip.sourceMode === 'still'
+        ? 0
+        : resolvedClip.sourceRange.startFrame
+          + (frame - resolvedClip.timelineRange.startFrame),
+      opacity,
+    },
+  }
 }
 
 function resolveCrossfadeGroupAnimation(
@@ -109,15 +107,15 @@ export function createVideoCompositionPlanner(
   doc: TimelineDoc,
   catalog: SourceBoundsCatalog,
 ): VideoCompositionPlanner {
-  const plans = new Map<TrackId, Array<{
-    startFrame: number
-    endFrame: number
-    groupAt(frame: number): CrossfadeFrameGroup | null
-  }>>()
+  const tracks: Array<{
+    readonly id: TrackId
+    readonly clips: FrameIndex<Clip>
+    readonly transitions: FrameIndex<CrossfadePlan>
+  }> = []
 
   for (const track of doc.tracks) {
     if (track.kind !== 'video' || track.hidden) continue
-    const trackPlans = []
+    const trackPlans: CrossfadePlan[] = []
     for (const transition of track.transitions) {
       const resolution = resolveCrossfadePlan(
         doc,
@@ -126,33 +124,41 @@ export function createVideoCompositionPlanner(
         catalog,
       )
       if (resolution.status !== 'available') continue
-      const plan = resolution.plan
-      trackPlans.push({
+      trackPlans.push(resolution.plan)
+    }
+    const sortedTrackPlans = trackPlans.toSorted((left, right) =>
+      left.startFrame - right.startFrame
+      || left.endFrame - right.endFrame
+      || left.transition.id.localeCompare(right.transition.id),
+    )
+    tracks.push({
+      id: track.id,
+      clips: createFrameIndex(track.clips, (clip) => ({
+        startFrame: clip.timelineRange.startFrame,
+        endFrame:
+          clip.timelineRange.startFrame + clip.timelineRange.durationFrames,
+      })),
+      transitions: createFrameIndex(sortedTrackPlans, (plan) => ({
         startFrame: plan.startFrame,
         endFrame: plan.endFrame,
-        groupAt: (frame: number) => crossfadeFrameGroupAt(plan, frame),
-      })
-    }
-    if (trackPlans.length > 0) plans.set(track.id, trackPlans)
+      })),
+    })
   }
 
   return {
     planFrame(frame: number): VideoCompositionPlan {
       const items: VideoCompositionItem[] = []
-      for (const track of doc.tracks) {
-        if (track.kind !== 'video' || track.hidden) continue
-        const active = (plans.get(track.id) ?? []).filter(
-          (plan) => frame >= plan.startFrame && frame < plan.endFrame,
-        )
-        if (active.length === 1) {
-          const rawGroup = active[0].groupAt(frame)
+      for (const track of tracks) {
+        const activeTransition = track.transitions.activeAt(frame)
+        if (activeTransition) {
+          const rawGroup = crossfadeFrameGroupAt(activeTransition, frame)
           const group = rawGroup ? resolveCrossfadeGroupAnimation(rawGroup) : null
           if (group) {
             items.push(group)
             continue
           }
         }
-        const ordinary = ordinaryItem(track, frame)
+        const ordinary = ordinaryItem(track.id, track.clips.activeAt(frame), frame)
         if (ordinary) items.push(ordinary)
       }
       return { frame, items }

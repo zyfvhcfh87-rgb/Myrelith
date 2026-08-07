@@ -88,6 +88,7 @@ and the open list below.
 | **Post-MVP #56 — bounded media-analysis scheduling** | ✅ complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-4 benchmark evidence; reviewed head `902078f` normally merged through PR #84 as `b431623` |
 | **Post-MVP #57 — runtime and document-memory telemetry** | ✅ complete | schema-3 local telemetry with explainable document/history estimates, bounded worker/audio health evidence, cache-drain checks, optional lab APIs, and measured overhead; PR #82 normally merged as `f7eedab` |
 | **Post-MVP #60 — virtualized/searchable Media Pool** | ✅ implementation complete | variable-height grid virtualization, deterministic text/type/status filters, retained keyboard selection and drag/relink identity, visible-row scheduler priority, bounded 500-source Chromium QA; local branch only |
+| **Post-MVP #59 — indexed frame planning** | ✅ implementation complete | immutable per-track clip/transition indices; exact ordinary/text/crossfade/animation parity; schema-5 sparse/dense Chromium evidence measured 94.26%/94.81% p95 improvement |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -935,6 +936,11 @@ surface; it is not a second zoom and never enters document history.
   items without source-media requests and resolves Issue #43 curves at the
   requested timeline frame before ordinary/crossfade requests. Invalid or
   malformed groups and curves fall back deterministically.
+- `src/domain/frameIndex.ts` — Issue #59's immutable half-open point index.
+  Canonical disjoint ranges use binary search; malformed or overlapping input
+  preserves the historical first-match behavior. The retained video planner
+  builds one clip and transition index per visible track and reuses them for
+  every requested frame.
 - `src/domain/textOverlay.ts` + `textLayout.ts` — Issue #33's strict text
   defaults/validation and bounded, deterministic wrapping authority shared by
   preview and export. Text uses reserved procedural asset ids and a portable
@@ -1965,6 +1971,33 @@ surface; it is not a second zoom and never enters document history.
   11/11 generated URLs revoked, all isolated stores restored, and no console
   warning or error. Reviewed head `a857455` passed CI and was normally merged
   through PR #82 as `f7eedab`; Issue #57 closed automatically.
+
+## Post-MVP issue #59 - indexed frame planning
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+
+- Added a browser-free, immutable half-open frame index. Sorted disjoint clip
+  and transition ranges use binary search; invalid or overlapping authored
+  ranges deliberately preserve the old first-match scan semantics.
+- `createVideoCompositionPlanner()` now snapshots one clip and transition
+  index per visible track. Repeated frame requests reuse those indices, while
+  rebuilding a planner after an authored document change naturally rebuilds
+  them. Ordinary clips, procedural text, animation curves, and crossfade paint
+  order retain exact legacy output.
+- Advanced the performance artifact to schema 5 / `issue-59-v1`. It records
+  dense and sparse distributions for the legacy and indexed planners, checks
+  exact JSON parity before timing, and includes explicit transition-boundary
+  frames in every scenario.
+- A production Chromium run against validation snapshot `69b7bad` measured
+  dense p95 at 0.04492 ms legacy versus 0.00258 ms indexed (94.26% faster),
+  and sparse p95 at 0.05871 ms versus 0.00305 ms (94.81% faster). Both
+  scenarios matched all 256 parity frames, including 36 boundary frames, and
+  the run restored stores and revoked every generated URL.
+- The complete isolated gate passed 1,884/1,884 Vitest cases across 118 files,
+  all 16 Node runner cases, production build/typecheck, oxlint, diff checking,
+  and a production audit with 0 vulnerabilities. In-app Chromium creation,
+  procedural-text preview, stepping, playback/pause, and console QA also
+  passed cleanly.
 
 ## Working agreements (the user's explicit preferences)
 

@@ -2518,6 +2518,27 @@ remain out of scope.
 - [ ] Publication, pull request review, and Issue #60 closure remain separate
   work; this local implementation does not imply any of them.
 
+## Post-MVP issue #59 - indexed frame planning
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+
+- [x] Add an immutable browser-free point index for half-open clip and
+  transition ranges, with binary search for canonical disjoint input and the
+  historical first-match fallback for malformed overlaps.
+- [x] Build one clip and transition index per visible track when the retained
+  video composition planner is created, then reuse it across frame requests.
+- [x] Preserve exact ordinary, procedural-text, animation-curve, crossfade,
+  paint-order, and boundary semantics against an embedded legacy planner.
+- [x] Advance performance evidence to schema 5 / `issue-59-v1` with dense and
+  sparse distributions, exact 256-frame parity per scenario, and 36 explicit
+  transition-boundary frames.
+- [x] Measure production Chromium p95 improvement: 94.26% dense and 94.81%
+  sparse on validation snapshot `69b7bad`, with exact cleanup and no console
+  problems.
+- [x] Pass all 1,884 Vitest cases across 118 files, all 16 Node runner cases,
+  build/typecheck, oxlint, production audit, diff checks, and in-app Chromium
+  creation/text-preview/step/play/pause QA.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**
