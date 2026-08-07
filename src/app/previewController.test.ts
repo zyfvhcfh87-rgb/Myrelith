@@ -9,6 +9,10 @@ import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type {
+  PresentationProfile,
+  PresentationViewport,
+} from '../domain/presentationProfile'
+import type {
   Clip,
   FrameRate,
   MediaAsset,
@@ -24,6 +28,7 @@ import {
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
+import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useTransportStore } from '../state/transportStore'
 import type { RenderMode } from '../workers/render-protocol'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
@@ -33,6 +38,7 @@ import {
   documentWithClipVisualPreview,
   documentWithTextOverlayPreview,
   initPreview,
+  setPreviewViewport,
   subscribePreviewRenderDiagnostics,
 } from './previewController'
 
@@ -49,6 +55,7 @@ class FakeBridge implements BridgeLike {
   onAssetReady: ((assetId: string) => void) | null = null
   docs: TimelineDoc[] = []
   catalogs: SourceBoundsCatalog[] = []
+  profiles: PresentationProfile[] = []
   opened: Array<{
     assetId: string
     blob: Blob
@@ -88,6 +95,10 @@ class FakeBridge implements BridgeLike {
 
   setDoc(doc: TimelineDoc): void {
     this.docs.push(doc)
+  }
+
+  setPresentationProfile(profile: PresentationProfile): void {
+    this.profiles.push(profile)
   }
 
   setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void {
@@ -358,6 +369,7 @@ beforeEach(() => {
     compatibility: new Map(),
   })
   usePreviewStatusStore.getState().resetPreviewStatus()
+  usePreviewQualityStore.setState({ qualityMode: 'auto' })
 })
 
 afterEach(() => {
@@ -728,6 +740,97 @@ describe('previewController', () => {
     transport.setPlayheadFrame(3)
     await nextFrame()
     expect(bridge.rendered).toEqual([{ frame: 3, mode: 'playback' }])
+  })
+
+  test('Auto lowers a 4K playback surface for the display and returns to Full paused', () => {
+    const { deps, bridge } = makeDeps()
+    const document4k = { ...initialDoc, width: 3840, height: 2160 }
+    useDocumentStore.getState().setDoc(document4k)
+    initPreview(canvasEl(), deps)
+
+    const viewport: PresentationViewport = {
+      widthCssPx: 800,
+      heightCssPx: 450,
+      devicePixelRatio: 1,
+    }
+    setPreviewViewport(viewport)
+    useTransportStore.getState().setIsPlaying(true)
+    expect(bridge.profiles.at(-1)).toMatchObject({
+      qualityMode: 'auto',
+      resolvedQuality: 'quarter',
+      outputWidth: 960,
+      outputHeight: 540,
+      reason: 'playing',
+    })
+
+    useTransportStore.getState().setIsPlaying(false)
+    expect(bridge.profiles.at(-1)).toMatchObject({
+      qualityMode: 'auto',
+      resolvedQuality: 'full',
+      outputWidth: 3840,
+      outputHeight: 2160,
+      reason: 'paused',
+    })
+  })
+
+  test('display DPR changes supersede Auto playback resolution', () => {
+    const { deps, bridge } = makeDeps()
+    useDocumentStore.getState().setDoc({ ...initialDoc, width: 3840, height: 2160 })
+    initPreview(canvasEl(), deps)
+    useTransportStore.getState().setIsPlaying(true)
+
+    setPreviewViewport({
+      widthCssPx: 800,
+      heightCssPx: 450,
+      devicePixelRatio: 1,
+    })
+    expect(bridge.profiles.at(-1)?.resolvedQuality).toBe('quarter')
+
+    setPreviewViewport({
+      widthCssPx: 800,
+      heightCssPx: 450,
+      devicePixelRatio: 2,
+    })
+    expect(bridge.profiles.at(-1)).toMatchObject({
+      resolvedQuality: 'half',
+      outputWidth: 1920,
+      outputHeight: 1080,
+    })
+  })
+
+  test('reason-only transport changes keep the current worker surfaces', () => {
+    const { deps, bridge } = makeDeps()
+    useDocumentStore.getState().setDoc({ ...initialDoc, width: 3840, height: 2160 })
+    initPreview(canvasEl(), deps)
+    setPreviewViewport({
+      widthCssPx: 800,
+      heightCssPx: 450,
+      devicePixelRatio: 1,
+    })
+    const transport = useTransportStore.getState()
+    transport.setIsPlaying(true)
+    const profileCount = bridge.profiles.length
+
+    transport.setIsScrubbing(true)
+    transport.setIsScrubbing(false)
+
+    expect(bridge.profiles).toHaveLength(profileCount)
+    expect(bridge.profiles.at(-1)?.resolvedQuality).toBe('quarter')
+  })
+
+  test('manual Quarter remains fixed while paused', () => {
+    const { deps, bridge } = makeDeps()
+    useDocumentStore.getState().setDoc({ ...initialDoc, width: 3840, height: 2160 })
+    initPreview(canvasEl(), deps)
+
+    usePreviewQualityStore.getState().setQualityMode('quarter')
+    expect(bridge.profiles.at(-1)).toMatchObject({
+      qualityMode: 'quarter',
+      resolvedQuality: 'quarter',
+      outputWidth: 960,
+      outputHeight: 540,
+      reason: 'paused',
+    })
   })
 
   test('playback yields to seek during scrub and resumes afterward', async () => {

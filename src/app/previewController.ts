@@ -29,6 +29,13 @@
  */
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
+import {
+  presentationSurfacesMatch,
+  resolvePresentationProfile,
+  type PresentationProfile,
+  type PresentationReason,
+  type PresentationViewport,
+} from '../domain/presentationProfile'
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
 import { updateClipVisualAtFrame } from '../domain/operations'
 import {
@@ -53,6 +60,7 @@ import {
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
+import { usePreviewQualityStore } from '../state/previewQualityStore'
 import {
   useTransportStore,
   type ClipVisualPreview,
@@ -72,6 +80,7 @@ import {
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
   setDoc(doc: TimelineDoc): void
+  setPresentationProfile(profile: PresentationProfile): void
   setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void
   openAsset(
     assetId: AssetId,
@@ -182,6 +191,9 @@ const realDeps: PreviewDeps = {
 interface ControllerState {
   canvas: HTMLCanvasElement | null
   bridge: BridgeLike | null
+  deps: PreviewDeps | null
+  viewport: PresentationViewport | null
+  presentationProfile: PresentationProfile | null
   visualPlanner: VideoCompositionPlanner | null
   /** Per-asset pipeline status. Absent = not started (or failed: retried
    * on the next mediaStore change). Removal releases the worker source. */
@@ -200,6 +212,9 @@ interface ControllerState {
 const state: ControllerState = {
   canvas: null,
   bridge: null,
+  deps: null,
+  viewport: null,
+  presentationProfile: null,
   visualPlanner: null,
   assetStates: new Map(),
   unsubscribes: [],
@@ -213,6 +228,57 @@ function modeForTransport(transport: {
   isScrubbing: boolean
 }): RenderMode {
   return transport.isPlaying && !transport.isScrubbing ? 'playback' : 'seek'
+}
+
+function presentationReasonForTransport(transport: {
+  isPlaying: boolean
+  isScrubbing: boolean
+}): PresentationReason {
+  if (transport.isScrubbing) return 'scrubbing'
+  return transport.isPlaying ? 'playing' : 'paused'
+}
+
+function syncPresentationProfile(
+  bridge: BridgeLike,
+  doc = currentPreviewDocument(),
+): void {
+  const profile = resolvePresentationProfile(doc, {
+    qualityMode: usePreviewQualityStore.getState().qualityMode,
+    reason: presentationReasonForTransport(useTransportStore.getState()),
+    viewport: state.viewport,
+  })
+  const surfacesMatch = presentationSurfacesMatch(state.presentationProfile, profile)
+  state.presentationProfile = profile
+  if (surfacesMatch) return
+  bridge.setPresentationProfile(profile)
+}
+
+/** Publish the exact displayed monitor size without putting DOM facts in state. */
+export function setPreviewViewport(viewport: PresentationViewport | null): void {
+  const normalized = viewport
+    && Number.isFinite(viewport.widthCssPx)
+    && viewport.widthCssPx > 0
+    && Number.isFinite(viewport.heightCssPx)
+    && viewport.heightCssPx > 0
+    && Number.isFinite(viewport.devicePixelRatio)
+    && viewport.devicePixelRatio > 0
+    ? {
+        widthCssPx: viewport.widthCssPx,
+        heightCssPx: viewport.heightCssPx,
+        devicePixelRatio: viewport.devicePixelRatio,
+      }
+    : null
+  const current = state.viewport
+  if (
+    current?.widthCssPx === normalized?.widthCssPx
+    && current?.heightCssPx === normalized?.heightCssPx
+    && current?.devicePixelRatio === normalized?.devicePixelRatio
+  ) return
+  state.viewport = normalized
+  if (state.bridge && state.deps) {
+    syncPresentationProfile(state.bridge)
+    scheduleRender(state.deps)
+  }
 }
 
 function currentSourceBoundsCatalog(): SourceBoundsCatalog {
@@ -283,6 +349,7 @@ function syncPreviewDocument(bridge: BridgeLike): void {
     currentSourceBoundsCatalog(),
   )
   bridge.setDoc(doc)
+  syncPresentationProfile(bridge, doc)
 }
 
 function scheduleRender(deps: PreviewDeps): void {
@@ -509,12 +576,14 @@ export function initPreview(
     scheduleRender(deps)
   state.canvas = canvas
   state.bridge = bridge
+  state.deps = deps
 
   const initialDoc = currentPreviewDocument()
   const initialBounds = currentSourceBoundsCatalog()
   state.visualPlanner = createVideoCompositionPlanner(initialDoc, initialBounds)
   bridge.setSourceBoundsCatalog(initialBounds)
   bridge.setDoc(initialDoc)
+  syncPresentationProfile(bridge, initialDoc)
 
   state.unsubscribes.push(
     useDocumentStore.subscribe((s, prev) => {
@@ -530,6 +599,11 @@ export function initPreview(
         || s.clipVisualPreview !== prev.clipVisualPreview
       ) {
         syncPreviewDocument(bridge)
+      }
+      if (
+        presentationReasonForTransport(s) !== presentationReasonForTransport(prev)
+      ) {
+        syncPresentationProfile(bridge)
       }
       if (
         s.playheadFrame !== prev.playheadFrame
@@ -548,6 +622,11 @@ export function initPreview(
       syncAssets(deps)
       scheduleRender(deps)
     }),
+    usePreviewQualityStore.subscribe((s, prev) => {
+      if (s.qualityMode === prev.qualityMode) return
+      syncPresentationProfile(bridge)
+      scheduleRender(deps)
+    }),
   )
   // Assets may already be waiting (import before mount, HMR, tests) and an
   // empty timeline still paints its background.
@@ -563,6 +642,9 @@ export function disposePreview(): void {
   state.unsubscribes = []
   state.bridge?.dispose()
   state.bridge = null
+  state.deps = null
+  state.viewport = null
+  state.presentationProfile = null
   state.visualPlanner = null
   state.canvas = null
   state.assetStates = new Map()

@@ -2539,6 +2539,32 @@ remain out of scope.
   build/typecheck, oxlint, production audit, diff checks, and in-app Chromium
   creation/text-preview/step/play/pause QA.
 
+## Post-MVP issue #58 - adaptive preview resolution
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+
+- [x] Add a browser-free `PresentationProfile` contract with output size,
+  uniform scale, device-pixel policy, and explainable resolution reason.
+- [x] Resolve session-only Auto/Full/Half/Quarter intent in the app layer from
+  project dimensions, measured monitor CSS pixels/DPR, and transport state.
+- [x] Pass profiles through the render bridge and supersede stale in-flight
+  work when the document, transport mode, viewport, or quality changes.
+- [x] Resize and reuse visible, scratch, transition-leg, and transition-group
+  worker surfaces while preserving project-space transforms, crop, text,
+  still-image, transition, and keyframe geometry.
+- [x] Keep paused Auto and export explicitly Full; export remains fixed to the
+  project dimensions regardless of the Program Monitor selection.
+- [x] Add the compact accessible quality selector and preserve the monitor's
+  CSS geometry while its disposable backing resolution changes.
+- [x] Cover domain/store/controller/bridge/worker/compositor/export behavior
+  with focused tests and verify 4K Auto playback plus the 720 × 800 control in
+  real Chromium with a clean console.
+- [x] Compare matched clean full-harness snapshots: retain zero dropped frames
+  and audio underruns; lower Chromium process-memory plateau by 6.4% median and
+  7.5% p95; record the small 3.6% frame-render p95 improvement and explain that
+  full-resolution source decode still dominates latency. Keep export
+  effectively unchanged and make no claim from the noisy growth-rate p95.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**

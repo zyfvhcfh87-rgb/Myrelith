@@ -30,6 +30,7 @@ import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
+import type { PresentationProfile } from '../domain/presentationProfile'
 import type {
   LegacyCompositeMessage,
   LegacyConfigureAssetMessage,
@@ -189,12 +190,20 @@ export type ToRenderWorker =
     }
   | {
       /**
-       * Replace the timeline snapshot used by subsequent composites (also
-       * sizes the canvases to doc.width × doc.height). Supersedes any
-       * in-flight composite — it was rendering a stale doc.
+       * Replace the timeline snapshot used by subsequent composites. The
+       * active presentation profile owns disposable preview-surface sizing.
+       * Supersedes any in-flight composite — it was rendering a stale doc.
        */
       type: 'setDoc'
       doc: TimelineDoc
+    }
+  | {
+      /**
+       * Resize disposable preview surfaces without changing project-space
+       * geometry. A newer profile supersedes any in-flight presentation.
+       */
+      type: 'setPresentationProfile'
+      profile: PresentationProfile
     }
   | OpenAssetMessage
   | OpenImageMessage

@@ -20,6 +20,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import { resolvePresentationProfile } from '../domain/presentationProfile'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import type { Composite2D } from '../pipeline/render'
 import {
@@ -1112,6 +1113,38 @@ describe('composite happy path', () => {
       ),
     ).toHaveLength(2)
 
+    await h.core.handleMessage({
+      type: 'setPresentationProfile',
+      profile: resolvePresentationProfile(doc, {
+        qualityMode: 'half',
+        reason: 'playing',
+        viewport: null,
+      }),
+    })
+    expect(h.visible.raw).toEqual({ width: 160, height: 90 })
+    expect(h.createdSurfaces()).toEqual(firstSurfaces)
+    expect(h.createdSurfaces().map((surface) => surface.raw)).toEqual([
+      { width: 160, height: 90 },
+      { width: 160, height: 90 },
+      { width: 160, height: 90 },
+    ])
+
+    await h.core.handleMessage({
+      type: 'setPresentationProfile',
+      profile: resolvePresentationProfile(doc, {
+        qualityMode: 'quarter',
+        reason: 'playing',
+        viewport: null,
+      }),
+    })
+    expect(h.visible.raw).toEqual({ width: 80, height: 45 })
+    expect(h.createdSurfaces()).toEqual(firstSurfaces)
+    expect(h.createdSurfaces().map((surface) => surface.raw)).toEqual([
+      { width: 80, height: 45 },
+      { width: 80, height: 45 },
+      { width: 80, height: 45 },
+    ])
+
     for (const dimensions of [
       { width: 1080, height: 1920 },
       { width: 1080, height: 1080 },
@@ -1396,6 +1429,30 @@ describe('failure containment', () => {
 
     await microtasks()
     expect(h.frames.every((f) => f.closed)).toBe(true)
+  })
+
+  test('a presentation-profile change supersedes an in-flight frame before blit', async () => {
+    const h = makeHarness()
+    const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 20)])])
+    await setup(h, doc, ['A'])
+
+    const inflight = h.core.handleMessage(
+      compMsg(1, 11, [entry('A', 11, gop(0, 12))]),
+    )
+    await microtasks()
+    await h.core.handleMessage({
+      type: 'setPresentationProfile',
+      profile: resolvePresentationProfile(doc, {
+        qualityMode: 'quarter',
+        reason: 'playing',
+        viewport: null,
+      }),
+    })
+    await inflight
+
+    expect(doneFor(h, 1)).toMatchObject({ status: 'superseded' })
+    expect(h.blits()).toHaveLength(0)
+    expect(h.visible.raw).toEqual({ width: 80, height: 45 })
   })
 
   test('composite before init/setDoc posts an error tied to the request', async () => {

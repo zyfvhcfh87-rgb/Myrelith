@@ -16,6 +16,7 @@ import EditorShell from './EditorShell'
 vi.mock('../app/previewController', () => ({
   disposePreview: vi.fn(),
   initPreview: vi.fn(),
+  setPreviewViewport: vi.fn(),
 }))
 
 function makeClip(id: string, startFrame: number): Clip {

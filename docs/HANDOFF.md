@@ -89,6 +89,7 @@ and the open list below.
 | **Post-MVP #57 — runtime and document-memory telemetry** | ✅ complete | schema-3 local telemetry with explainable document/history estimates, bounded worker/audio health evidence, cache-drain checks, optional lab APIs, and measured overhead; PR #82 normally merged as `f7eedab` |
 | **Post-MVP #60 — virtualized/searchable Media Pool** | ✅ implementation complete | variable-height grid virtualization, deterministic text/type/status filters, retained keyboard selection and drag/relink identity, visible-row scheduler priority, bounded 500-source Chromium QA; local branch only |
 | **Post-MVP #59 — indexed frame planning** | ✅ implementation complete | immutable per-track clip/transition indices; exact ordinary/text/crossfade/animation parity; schema-5 sparse/dense Chromium evidence measured 94.26%/94.81% p95 improvement |
+| **Post-MVP #58 — adaptive preview resolution** | ✅ implementation complete | session-only Auto/Full/Half/Quarter monitor quality; project-space compositor scaling across ordinary/text/transition frames; reusable scaled worker surfaces; explicit full-resolution export; full 4K harness memory plateau -6.4% median/-7.5% p95; real Chromium 4K/720px gates |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -1998,6 +1999,45 @@ surface; it is not a second zoom and never enters document history.
   and a production audit with 0 vulnerabilities. In-app Chromium creation,
   procedural-text preview, stepping, playback/pause, and console QA also
   passed cleanly.
+
+## Post-MVP issue #58 - adaptive preview resolution
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+
+- A pure `PresentationProfile` resolves Auto/Full/Half/Quarter into output
+  dimensions, one uniform presentation scale, device-pixel policy, and an
+  explainable playback/scrub/paused/export reason. Auto keeps paused frames at
+  Full and selects the smallest playback bucket that covers the measured
+  monitor pixels; missing viewport evidence conservatively resolves to Full.
+- The quality preference is session-only. The compact accessible Program
+  Monitor selector and viewport observer send presentation intent through the
+  app controller and render bridge; document geometry and project files remain
+  unchanged.
+- The worker resizes and reuses its visible, scratch, transition-leg, and
+  transition-group surfaces. A profile change supersedes stale work. The shared
+  compositor applies one outer project-space scale, so transforms, crops, text,
+  animation, stills, and transition geometry retain the same authored meaning.
+- Export supplies an explicit Full profile and remains fixed to the project
+  dimensions regardless of the live preview selection.
+- Focused coverage exercises profile resolution, store behavior, controller
+  transport/DPR changes, bridge supersession, worker surface reuse, scaled
+  ordinary/text/transition composition, and explicit full-resolution export.
+  Real Chromium verified a 3840 × 2160 project at 3840 × 2160 when Auto-paused,
+  960 × 540 while playing, and back to 3840 × 2160 on pause without changing
+  the 449 × 249 CSS monitor box; the selector stayed usable at 720 × 800 and
+  the export dialog remained fixed at 3840 × 2160 with a clean console.
+- Matched clean full-harness snapshots (`df9ceef` before, staged Issue #58 tree
+  after) retained 0 dropped frames and 0 audio underruns. Seven complete CDP
+  process-table samples lowered the memory-plateau median from 2045.7 to
+  1914.0 MiB (-6.4%) and p95 from 2151.8 to 1989.8 MiB (-7.5%). Frame-render
+  p95 moved 41.57→40.06 ms (-3.6%) and scrub input-to-present p95
+  49.67→49.29 ms (-0.8%): decoding full-resolution source frames still
+  dominates those latency samples, so the result is memory-first rather than a
+  large decode-speed claim. Export stayed effectively unchanged (median
+  real-time ratio 7.301→7.332). The growth-rate p95 was noisy because one
+  allocation spike was followed by a reclamation; no leak improvement is
+  claimed from that derived metric. Both artifacts cleaned 11/11 URLs, restored
+  every isolated store/controller, and captured no console warnings or errors.
 
 ## Working agreements (the user's explicit preferences)
 

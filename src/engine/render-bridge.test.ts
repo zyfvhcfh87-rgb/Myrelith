@@ -15,6 +15,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, FrameRate, TimelineDoc, Track } from '../domain/schema'
+import { resolvePresentationProfile } from '../domain/presentationProfile'
 import { defaultTextProps } from '../domain/textOverlay'
 import type { ChunkPayload } from '../workers/decode-protocol'
 import type {
@@ -1186,6 +1187,25 @@ describe('latest-wins', () => {
       renderMs: 1,
     })
     await expect(second).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('a presentation profile posts without transfer and supersedes pending presentation', async () => {
+    const doc = makeDoc([])
+    const { worker, bridge } = makeBridge(doc)
+    const rendering = bridge.renderFrame(0, 'seek')
+    const profile = resolvePresentationProfile(doc, {
+      qualityMode: 'quarter',
+      reason: 'scrubbing',
+      viewport: null,
+    })
+
+    bridge.setPresentationProfile(profile)
+
+    await expect(rendering).resolves.toMatchObject({ status: 'superseded' })
+    expect(worker.posted.at(-1)).toEqual({
+      msg: { type: 'setPresentationProfile', profile },
+      transfer: [],
+    })
   })
 })
 

@@ -3,22 +3,29 @@
  *
  * A dumb canvas: pixels are painted by the decode worker (the canvas is
  * transferred on first mount), scrubbing is driven by app/previewController
- * reacting to transportStore. This component only (1) hands the canvas to
- * the controller once and (2) shows a hint until a visual asset is loaded.
- * It never imports engine/pipeline/workers (the controller is the facade).
+ * reacting to transportStore. This component hands the canvas and measured
+ * monitor viewport to the controller, exposes the session-only quality mode,
+ * and shows a hint until a visual asset is loaded. It never imports
+ * engine/pipeline/workers (the controller is the facade).
  */
 
 import { useEffect, useRef } from 'react'
-import { initPreview } from '../app/previewController'
+import { initPreview, setPreviewViewport } from '../app/previewController'
+import type { PresentationQualityMode } from '../domain/presentationProfile'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
+import { usePreviewQualityStore } from '../state/previewQualityStore'
 import TextOverlayControls from './TextOverlayControls'
 import VisualOverlayControls from './VisualOverlayControls'
 
 export default function Preview() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const docWidth = useDocumentStore((state) => state.doc.width)
+  const docHeight = useDocumentStore((state) => state.doc.height)
+  const qualityMode = usePreviewQualityStore((state) => state.qualityMode)
+  const setQualityMode = usePreviewQualityStore((state) => state.setQualityMode)
   const hasTextOverlay = useDocumentStore((state) =>
     state.doc.tracks.some((track) => track.clips.some((clip) => clip.text !== undefined)),
   )
@@ -50,8 +57,67 @@ export default function Preview() {
     if (canvasRef.current) initPreview(canvasRef.current)
   }, [])
 
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const panel = panelRef.current
+    if (!canvas || !panel) return
+
+    const publish = () => {
+      const styles = getComputedStyle(panel)
+      const availableWidth = panel.clientWidth
+        - Number.parseFloat(styles.paddingLeft || '0')
+        - Number.parseFloat(styles.paddingRight || '0')
+      const availableHeight = panel.clientHeight
+        - Number.parseFloat(styles.paddingTop || '0')
+        - Number.parseFloat(styles.paddingBottom || '0')
+      if (availableWidth <= 0 || availableHeight <= 0) {
+        setPreviewViewport(null)
+        return
+      }
+      const displayScale = Math.min(
+        availableWidth / docWidth,
+        availableHeight / docHeight,
+      )
+      const widthCssPx = Math.max(1, Math.floor(docWidth * displayScale))
+      const heightCssPx = Math.max(1, Math.floor(docHeight * displayScale))
+      canvas.style.width = `${widthCssPx}px`
+      canvas.style.height = `${heightCssPx}px`
+      setPreviewViewport({
+        widthCssPx,
+        heightCssPx,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      })
+    }
+
+    publish()
+    const observer = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(publish)
+      : null
+    observer?.observe(panel)
+    window.addEventListener('resize', publish)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', publish)
+    }
+  }, [docHeight, docWidth])
+
   return (
     <div className="preview-panel" ref={panelRef}>
+      <label className="preview-quality-control">
+        <span>Quality</span>
+        <select
+          aria-label="Preview quality"
+          value={qualityMode}
+          onChange={(event) => {
+            setQualityMode(event.currentTarget.value as PresentationQualityMode)
+          }}
+        >
+          <option value="auto">Auto</option>
+          <option value="full">Full</option>
+          <option value="half">Half</option>
+          <option value="quarter">Quarter</option>
+        </select>
+      </label>
       <canvas
         ref={canvasRef}
         className="preview-canvas"

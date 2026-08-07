@@ -36,6 +36,11 @@
 
 import { FrameRingBuffer } from '../engine/frame-cache'
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
+import {
+  fullResolutionPresentationProfile,
+  presentationProfileMatchesDocument,
+  type PresentationProfile,
+} from '../domain/presentationProfile'
 import { videoCompositionRequests } from '../domain/videoCompositionPlan'
 import {
   invalidateMediaDecoderRuntime,
@@ -220,6 +225,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   let transitionGroup: RenderCanvasLike | null = null
   let transitionGroupCtx: Composite2D | null = null
   let doc: TimelineDoc | null = null
+  let presentationProfile: PresentationProfile | null = null
   /** Bumped by every composite/setDoc/configureAsset/releaseAsset/close;
    * stale composites and parked feed loops check it and unwind. */
   let generation = 0
@@ -412,54 +418,67 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     return generation
   }
 
-  /** Size every canvas to the doc; a resize wipes it before the next paint. */
+  function currentPresentationProfile(): PresentationProfile | null {
+    if (!doc) return null
+    if (
+      presentationProfile
+      && presentationProfileMatchesDocument(presentationProfile, doc)
+    ) return presentationProfile
+    presentationProfile = fullResolutionPresentationProfile(doc, 'paused')
+    return presentationProfile
+  }
+
+  /** Size every disposable canvas to the active presentation profile. */
   function syncCanvases(): void {
-    if (!visible || !doc) return
-    if (visible.width !== doc.width || visible.height !== doc.height) {
-      visible.width = doc.width
-      visible.height = doc.height
+    const profile = currentPresentationProfile()
+    if (!visible || !profile) return
+    const { outputWidth, outputHeight } = profile
+    if (visible.width !== outputWidth || visible.height !== outputHeight) {
+      visible.width = outputWidth
+      visible.height = outputHeight
     }
     if (!scratch) {
-      scratch = env.createCanvas(doc.width, doc.height)
+      scratch = env.createCanvas(outputWidth, outputHeight)
       scratchCtx = scratch.getContext('2d', SRGB_2D_CONTEXT)
       if (!scratchCtx) {
         env.post({ type: 'error', message: 'scratch canvas 2d context unavailable' })
       }
-    } else if (scratch.width !== doc.width || scratch.height !== doc.height) {
-      scratch.width = doc.width
-      scratch.height = doc.height
+    } else if (scratch.width !== outputWidth || scratch.height !== outputHeight) {
+      scratch.width = outputWidth
+      scratch.height = outputHeight
     }
     if (
       transitionLeg
       && (
-        transitionLeg.width !== doc.width
-        || transitionLeg.height !== doc.height
+        transitionLeg.width !== outputWidth
+        || transitionLeg.height !== outputHeight
       )
     ) {
-      transitionLeg.width = doc.width
-      transitionLeg.height = doc.height
+      transitionLeg.width = outputWidth
+      transitionLeg.height = outputHeight
     }
     if (
       transitionGroup
       && (
-        transitionGroup.width !== doc.width
-        || transitionGroup.height !== doc.height
+        transitionGroup.width !== outputWidth
+        || transitionGroup.height !== outputHeight
       )
     ) {
-      transitionGroup.width = doc.width
-      transitionGroup.height = doc.height
+      transitionGroup.width = outputWidth
+      transitionGroup.height = outputHeight
     }
   }
 
   const transitionSurfaceProvider: TransitionSurfaceProvider = {
     get: (): TransitionSurfaces => {
-      if (!doc) throw new Error('transition surfaces requested before setDoc')
+      const profile = currentPresentationProfile()
+      if (!profile) throw new Error('transition surfaces requested before setDoc')
       if (!transitionLeg) {
-        transitionLeg = env.createCanvas(doc.width, doc.height)
+        transitionLeg = env.createCanvas(profile.outputWidth, profile.outputHeight)
         transitionLegCtx = transitionLeg.getContext('2d', SRGB_2D_CONTEXT)
       }
       if (!transitionGroup) {
-        transitionGroup = env.createCanvas(doc.width, doc.height)
+        transitionGroup = env.createCanvas(profile.outputWidth, profile.outputHeight)
         transitionGroupCtx = transitionGroup.getContext('2d', SRGB_2D_CONTEXT)
       }
       if (!transitionLegCtx || !transitionGroupCtx) {
@@ -497,6 +516,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         scratchCtx,
         source as FrameSource,
         transitionSurfaceProvider,
+        currentPresentationProfile() ?? undefined,
       )
     },
     present: () => {
@@ -1720,6 +1740,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           scratchCtx,
           source,
           transitionSurfaceProvider,
+          currentPresentationProfile() ?? undefined,
         )
       } finally {
         for (const loan of loans) loan.settle()
@@ -1783,6 +1804,12 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         doc = msg.doc
         syncCanvases()
         await prunePlaybackLanes(previousDoc, msg.doc)
+        break
+      }
+      case 'setPresentationProfile': {
+        supersede()
+        presentationProfile = msg.profile
+        syncCanvases()
         break
       }
       case 'openAsset':

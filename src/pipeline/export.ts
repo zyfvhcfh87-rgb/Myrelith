@@ -13,6 +13,7 @@ import {
   type ExportProfile,
 } from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
+import { fullResolutionPresentationProfile } from '../domain/presentationProfile'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import { docDurationFrames } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
@@ -184,6 +185,7 @@ async function compositeAndCloseLease(
       sink.ctx,
       observedSource,
       sink.transitionSurfaceProvider,
+      fullResolutionPresentationProfile(doc, 'export'),
     )
     // Preview intentionally softens source failures into `missing` so a later
     // repaint can recover. Export has no retry boundary: preserve the exact

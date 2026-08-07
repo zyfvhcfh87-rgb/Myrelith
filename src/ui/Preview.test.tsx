@@ -1,14 +1,17 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
+import { usePreviewQualityStore } from '../state/previewQualityStore'
 import Preview from './Preview'
 import { createTextClip } from '../domain/operations'
 import { useDocumentStore } from '../state/documentStore'
 
 const previewController = vi.hoisted(() => ({
   initPreview: vi.fn(),
+  setPreviewViewport: vi.fn(),
 }))
 
 vi.mock('../app/previewController', () => previewController)
@@ -52,15 +55,31 @@ const offlineImage: PortableAssetDescriptor = {
 
 beforeEach(() => {
   previewController.initPreview.mockClear()
+  previewController.setPreviewViewport.mockClear()
   useMediaStore.setState({
     descriptors: new Map([[offlineVideo.id, offlineVideo]]),
     assets: new Map(),
     visuals: new Map(),
   })
   usePreviewStatusStore.getState().resetPreviewStatus()
+  usePreviewQualityStore.setState({ qualityMode: 'auto' })
 })
 
 describe('Preview', () => {
+  test('offers an accessible Auto, Full, Half, and Quarter quality control', async () => {
+    const user = userEvent.setup()
+    render(<Preview />)
+
+    const quality = screen.getByRole('combobox', { name: 'Preview quality' })
+    expect(quality).toHaveValue('auto')
+    expect(screen.getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['Auto', 'Full', 'Half', 'Quarter'])
+
+    await user.selectOptions(quality, 'quarter')
+    expect(usePreviewQualityStore.getState().qualityMode).toBe('quarter')
+    expect(quality).toHaveValue('quarter')
+  })
+
   test('offers reconnection instead of import when every visual is offline', () => {
     render(<Preview />)
 

@@ -387,6 +387,43 @@
   box-shadow: 0 16px 38px rgb(0 0 0 / 24%);
 }
 
+.preview-quality-control {
+  position: absolute;
+  z-index: 5;
+  top: 6px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #91a0b2;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.preview-quality-control select {
+  min-width: 76px;
+  height: 24px;
+  padding: 0 22px 0 8px;
+  border: 1px solid #34465d;
+  border-radius: 7px;
+  color: #dce6f1;
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  background: #172538;
+}
+
+.preview-quality-control select:hover {
+  border-color: #536b87;
+}
+
+.preview-quality-control select:focus-visible {
+  outline: 2px solid #79aee8;
+  outline-offset: 2px;
+}
+
 .preview-hint {
   color: #65778e;
 }
