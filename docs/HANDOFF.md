@@ -84,7 +84,7 @@ and the open list below.
 | **Post-MVP #35 — preview direct manipulation** | ✅ complete | Issue #34's complete Program Monitor controls plus four explicit corner-scale handles; 82 focused + 1,785 total tests; rotated/cropped/anchored/flipped real-media Chrome gate at 1280×720 and 720×800; PR #51 normally merged as `4f9eaaa` |
 | **Post-MVP #43 — keyframing and animation curves** | ✅ complete | schema-6 scalar curves for position/scale/rotation/opacity; one pure scrub/playback/export evaluator; accessible Inspector curves + timeline markers; 1,804 tests; real-media playback/export and 720px Chromium gate, clean console |
 | **Post-MVP #54 — performance evidence foundation** | ✅ complete | deterministic production harness and source-bound artifacts merged on `9920491`; canonical fixture, cold-launch/render/import/memory/export metrics, cleanup proof, and advisory gates |
-| **Post-MVP #55 — launcher/editor bundle split** | ✅ implementation complete | editor JS/CSS and Export/Text/Animation first-use chunks are absent from the initial launcher graph; initial gzip JS+CSS -19.7%; three-sample launcher median -10.6% and p95 -11.3%; production Chromium network/failure/focus gate clean |
+| **Post-MVP #55 — launcher/editor bundle split** | ✅ implementation complete | editor JS/CSS and Export/Text/Animation first-use chunks are absent from the initial launcher graph; initial gzip JS+CSS -19.7%; three-sample launcher median -10.6% and p95 -11.3%; production Chromium network/failure/focus gate clean; delivery tracked by PR #83 |
 | **Post-MVP #56 — bounded media-analysis scheduling** | ✅ complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-4 benchmark evidence; reviewed head `902078f` normally merged through PR #84 as `b431623` |
 | **Post-MVP #57 — runtime and document-memory telemetry** | ✅ complete | schema-3 local telemetry with explainable document/history estimates, bounded worker/audio health evidence, cache-drain checks, optional lab APIs, and measured overhead; PR #82 normally merged as `f7eedab` |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
@@ -1796,13 +1796,18 @@ surface; it is not a second zoom and never enters document history.
 
 ## Post-MVP issue #55 - launcher and editor bundle split
 
-**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+**IMPLEMENTATION COMPLETE (2026-08-07); DELIVERY TRACKED BY PR #83.**
 
 - `App.tsx` now owns only the eager launcher path and accessible editor
   loading/failure states. `EditorShell.tsx` owns the lazy editor composition,
   shortcuts, runtime lifecycles, and editor CSS. New/open/recovery preloads the
   shared editor module before controller activation, so a missing chunk cannot
   mutate project truth or flash an incomplete editor.
+- Remembered-project recovery starts that preload as soon as its candidate is
+  available and keeps the final action disabled until the editor is ready. The
+  permission activation itself still begins synchronously inside the user's
+  click, preserving the transient File System Access activation window; preload
+  failure leaves both the launcher and resume candidate unchanged.
 - The ordered CSS cascade is split without reordering: `launcher.css` eagerly
   loads the launcher plus recovery states, while `layout.css` begins at the
   editor shell. Architecture tests walk static runtime imports and fail if the
@@ -1830,7 +1835,8 @@ surface; it is not a second zoom and never enters document history.
   setup form/project truth untouched, exposed the truthful Reload action, and
   recovered to a clean launcher. The 720x800 editor had no horizontal overflow
   and the ordinary success path logged zero warnings/errors.
-- The complete gate passes 1,854/1,854 Vitest cases across 113 files plus all
+- After integrating published PRs #82 and #84, the complete gate passes
+  1,875/1,875 Vitest cases across 116 files plus all
   16 Node benchmark-runner cases, TypeScript/production build, warning-free
   oxlint, production dependency audit with 0 vulnerabilities, diff checks,
   two exact-source three-sample benchmark runs, and the production Chromium

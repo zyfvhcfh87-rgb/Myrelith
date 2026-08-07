@@ -2359,7 +2359,7 @@ remain out of scope.
 
 ## Post-MVP issue #54 - performance benchmark harness
 
-**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+**IMPLEMENTATION COMPLETE (2026-08-07); DELIVERY TRACKED BY PR #83.**
 
 - [x] Add a deterministic portable stress fixture with exactly 100 mixed-media
   assets, eight tracks, a 30-minute 4K timeline, 320 clips, 39 transitions,
@@ -2411,6 +2411,9 @@ remain out of scope.
 - [x] Preload the editor before Create/Open/Recover activates project truth;
   show accessible loading and honest reload recovery without an incomplete
   editor flash.
+- [x] Preload remembered-project recovery before its final action becomes
+  available, then invoke permission activation synchronously within the user's
+  click so the transient File System Access activation window is preserved.
 - [x] Lazy-load Export, Add Text, and Animation on first use, preserve dialog
   focus restoration and mounted animation state, and keep project exit able to
   dispose an already-loaded export without pulling export code forward.
@@ -2422,6 +2425,9 @@ remain out of scope.
 - [x] Verify production Chromium request timing, Create, first-use Export/Text,
   focus restoration, forced-503 reload recovery with unchanged project truth,
   720x800 overflow, and a clean ordinary success-path console.
+- [x] Integrate published PRs #82 and #84, then pass 1,875/1,875 Vitest cases
+  across 116 files plus all 16 Node runner cases, build/typecheck, oxlint,
+  zero-vulnerability production audit, and diff checks.
 
 ## Post-MVP issue #56 - bounded media-analysis scheduling
 
