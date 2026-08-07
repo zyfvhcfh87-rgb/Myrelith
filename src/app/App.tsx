@@ -1,88 +1,93 @@
 /**
- * app/App.tsx — The editor shell. Phase 3.1.
+ * app/App.tsx — Launcher/editor boundary.
  *
- * Pure layout: a CSS grid (layout.css) with one named area per panel.
- * Every panel is its own component from ui/; the shell holds no editing or
- * playhead subscriptions. It receives only the project-closing barrier, so
- * ordinary scrubbing still re-renders Playhead/Preview only.
- * (useUndoRedoShortcuts only attaches a window listener — no subscription,
- * no state, no re-renders.)
+ * The launcher and its CSS are the eager product path. Editor panels, runtime
+ * lifecycles, and editor CSS live behind one shared dynamic import.
  */
 
-import { useEffect } from 'react'
-import './layout.css'
-import Toolbar from '../ui/Toolbar'
-import ToolButtons from '../ui/ToolButtons'
-import MediaPool from '../ui/MediaPool'
-import Preview from '../ui/Preview'
-import Inspector from '../ui/Inspector'
-import TransportBar from '../ui/TransportBar'
-import Timeline from '../ui/timeline/Timeline'
-import TimelineZoomControls from '../ui/timeline/TimelineZoomControls'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  type ComponentType,
+} from 'react'
+import './launcher.css'
 import ProjectLaunch from '../ui/ProjectLaunch'
+import LazyLoadBoundary from '../ui/LazyLoadBoundary'
 import { useProjectSessionStore } from '../state/projectSessionStore'
-import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
-import { useEditShortcuts } from './useEditShortcuts'
-import { initMediaVisuals } from './mediaVisualsController'
-import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
-import { initSelectionReconciliation } from './selectionReconciliationController'
 import { initPreferencesPersistence } from './preferencesController'
+import { loadEditorShell } from './editorModuleLoader'
+import type { EditorShellProps } from './EditorShell'
 
-interface EditorShellProps {
-  closing: boolean
+const LazyEditorShell = lazy(loadEditorShell)
+
+function EditorLoadingState() {
+  return (
+    <main
+      className="lazy-editor-state"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span className="lazy-load-spinner" aria-hidden="true" />
+      <h1>Opening your studio…</h1>
+      <p>Your project is ready. WebCut is loading the editing tools.</p>
+    </main>
+  )
 }
 
-function EditorShell({ closing }: EditorShellProps) {
-  useUndoRedoShortcuts()
-  useEditShortcuts()
-  // Filmstrip/waveform generation for imported assets — idempotent init,
-  // no media-store subscriptions in the shell (render-inertness preserved).
-  useEffect(() => {
-    initMediaVisuals()
-  }, [])
+interface EditorLoadFailureProps {
+  onReload(): void
+}
+
+function EditorLoadFailure({ onReload }: EditorLoadFailureProps) {
   return (
-    <div
-      className="app-shell"
-      data-closing={closing ? 'true' : undefined}
-      aria-busy={closing}
-    >
-      <header className="area-toolbar">
-        <Toolbar />
-      </header>
-      <aside className="area-media-pool" inert={closing}>
-        <MediaPool />
-      </aside>
-      <main className="area-preview" inert={closing}>
-        <Preview />
-      </main>
-      <aside className="area-inspector" inert={closing}>
-        <Inspector />
-      </aside>
-      <section className="area-transport" inert={closing}>
-        <ToolButtons />
-        <TransportBar />
-        <TimelineZoomControls />
-      </section>
-      {/* data-timeline-scroll: the Ruler virtualizes its ticks against
-          this scroll container (see ui/timeline/Ruler.tsx). */}
-      <section
-        className="area-timeline"
-        data-timeline-scroll
-        inert={closing}
+    <main className="lazy-editor-state lazy-editor-error" role="alert">
+      <span className="project-launch-eyebrow">Editor loading paused</span>
+      <h1>We couldn’t load the editing tools.</h1>
+      <p>
+        Your browser may be offline or holding an older WebCut file. Reload to
+        fetch the current editor, then reopen your local project or recovery copy.
+      </p>
+      <button
+        type="button"
+        className="project-button project-button-primary"
+        autoFocus
+        onClick={onReload}
       >
-        <Timeline />
-      </section>
-    </div>
+        Reload WebCut
+      </button>
+    </main>
+  )
+}
+
+export interface EditorSurfaceProps {
+  closing: boolean
+  editor?: ComponentType<EditorShellProps>
+  onReload?: () => void
+}
+
+export function EditorSurface({
+  closing,
+  editor: Editor = LazyEditorShell,
+  onReload = () => window.location.reload(),
+}: EditorSurfaceProps) {
+  return (
+    <LazyLoadBoundary fallback={<EditorLoadFailure onReload={onReload} />}>
+      <Suspense fallback={<EditorLoadingState />}>
+        <Editor closing={closing} />
+      </Suspense>
+    </LazyLoadBoundary>
   )
 }
 
 export default function App() {
   useEffect(() => initPreferencesPersistence(), [])
-  useEffect(() => initMediaCapabilityLifecycle(), [])
-  useEffect(() => initSelectionReconciliation(), [])
   const editorActive = useProjectSessionStore(
     (state) => state.screen === 'editor',
   )
   const closing = useProjectSessionStore((state) => state.phase === 'closing')
-  return editorActive ? <EditorShell closing={closing} /> : <ProjectLaunch />
+  return editorActive
+    ? <EditorSurface closing={closing} />
+    : <ProjectLaunch />
 }

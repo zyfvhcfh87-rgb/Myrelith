@@ -84,6 +84,7 @@ import {
   type LocalMediaPermission,
   type LocalMediaSelection,
 } from './localMediaHandles'
+import { disposeLoadedExport } from './exportLifecycle'
 import {
   isLocalProjectPickerCancellation,
   pickLocalProjectFile,
@@ -160,10 +161,7 @@ const realDeps: ProjectControllerDeps = {
   now: () => Date.now(),
   readText: (file) => file.text(),
   inspectMedia: inspectMediaFileCompatibility,
-  disposeExport: async () => {
-    const { disposeExport } = await import('./exportController')
-    await disposeExport()
-  },
+  disposeExport: disposeLoadedExport,
   disposeTransport,
   disposePreview,
   disposeMediaVisuals,

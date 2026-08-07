@@ -28,6 +28,7 @@ import {
   refreshProjectLibrary,
 } from '../app/projectLibraryController'
 import { MEDIA_FILE_INPUT_ACCEPT } from '../app/localMediaHandles'
+import { loadEditorShell } from '../app/editorModuleLoader'
 import {
   DEFAULT_PROJECT_ASPECT_RATIO_ID,
   DEFAULT_PROJECT_RESOLUTION_TIER,
@@ -360,10 +361,35 @@ function HomeScreen() {
   )
 }
 
-function NewProjectScreen() {
+interface EditorEntryProps {
+  editorLoading: boolean
+  editorLoadError: string | null
+  onEnterEditor(action: () => Promise<unknown>): void
+}
+
+function EditorLoadNotice({
+  message,
+}: {
+  message: string
+}) {
+  return (
+    <div className="project-launch-error project-editor-load-error" role="alert">
+      <span>{message}</span>
+      <div className="project-editor-load-actions">
+        <button type="button" onClick={() => window.location.reload()}>Reload WebCut</button>
+      </div>
+    </div>
+  )
+}
+
+function NewProjectScreen({
+  editorLoading,
+  editorLoadError,
+  onEnterEditor,
+}: EditorEntryProps) {
   const phase = useProjectSessionStore((state) => state.phase)
   const error = useProjectSessionStore((state) => state.error)
-  const busy = isBusy(phase)
+  const busy = isBusy(phase) || editorLoading
   const [name, setName] = useState('Untitled project')
   const [aspectRatioId, setAspectRatioId] = useState(
     DEFAULT_PROJECT_ASPECT_RATIO_ID,
@@ -396,7 +422,7 @@ function NewProjectScreen() {
       frameRate: { ...selectedRate },
       audioSampleRate: selectedAudioRate,
     }
-    void createNewProject(name, settings)
+    onEnterEditor(() => createNewProject(name, settings))
   }
 
   return (
@@ -533,6 +559,16 @@ function NewProjectScreen() {
           </select>
         </label>
         {error && <p className="project-launch-error" role="alert">{error}</p>}
+        {editorLoadError && (
+          <EditorLoadNotice
+            message={editorLoadError}
+          />
+        )}
+        {editorLoading && (
+          <p className="project-launch-status" role="status">
+            Loading the editing tools…
+          </p>
+        )}
         {phase === 'activating' && (
           <p className="project-launch-status" role="status">
             Preparing your project…
@@ -550,9 +586,9 @@ function NewProjectScreen() {
           <button
             className="project-button project-button-primary"
             type="submit"
-            disabled={busy}
+            disabled={busy || editorLoadError !== null}
           >
-            Create project
+            {editorLoading ? 'Loading editor…' : 'Create project'}
             <ArrowRight aria-hidden="true" size={18} weight="bold" />
           </button>
         </div>
@@ -562,11 +598,15 @@ function NewProjectScreen() {
   )
 }
 
-function ResumeProjectScreen() {
+function ResumeProjectScreen({
+  editorLoading,
+  editorLoadError,
+  onEnterEditor,
+}: EditorEntryProps) {
   const phase = useProjectSessionStore((state) => state.phase)
   const candidate = useProjectSessionStore((state) => state.candidate)
   const error = useProjectSessionStore((state) => state.error)
-  const busy = isBusy(phase)
+  const busy = isBusy(phase) || editorLoading
   const mediaHandlePickerAvailable = canRememberProjectMedia()
   const projectHandlePickerAvailable = canRememberProjectFiles()
   const recovering = candidate?.origin === 'recovery'
@@ -748,6 +788,16 @@ function ResumeProjectScreen() {
         )}
 
         {error && <p className="project-launch-error" role="alert">{error}</p>}
+        {editorLoadError && (
+          <EditorLoadNotice
+            message={editorLoadError}
+          />
+        )}
+        {editorLoading && (
+          <p className="project-launch-status" role="status">
+            Loading the editing tools…
+          </p>
+        )}
         {phase !== 'idle' && phase !== 'error' && (
           <p className="project-launch-status" role="status">
             {phase === 'reading-project' && 'Checking the project file…'}
@@ -768,8 +818,8 @@ function ResumeProjectScreen() {
           <button
             className="project-button project-button-primary"
             type="button"
-            disabled={busy || !candidate}
-            onClick={() => void activateResumedProject()}
+            disabled={busy || !candidate || editorLoadError !== null}
+            onClick={() => onEnterEditor(() => activateResumedProject())}
           >
             {needsPermission
               ? recovering ? 'Allow media & recover' : 'Allow media & open'
@@ -787,7 +837,32 @@ function ResumeProjectScreen() {
 
 export default function ProjectLaunch() {
   const screen = useProjectSessionStore((state) => state.screen)
-  if (screen === 'new-project') return <NewProjectScreen />
-  if (screen === 'resume') return <ResumeProjectScreen />
+  const [editorLoading, setEditorLoading] = useState(false)
+  const [editorLoadError, setEditorLoadError] = useState<string | null>(null)
+
+  const enterEditor = (action: () => Promise<unknown>): void => {
+    setEditorLoading(true)
+    setEditorLoadError(null)
+    void loadEditorShell().then(
+      () => {
+        setEditorLoading(false)
+        void action()
+      },
+      () => {
+        setEditorLoading(false)
+        setEditorLoadError(
+          'The editing tools could not load. Your project has not been changed.',
+        )
+      },
+    )
+  }
+
+  const entryProps: EditorEntryProps = {
+    editorLoading,
+    editorLoadError,
+    onEnterEditor: enterEditor,
+  }
+  if (screen === 'new-project') return <NewProjectScreen {...entryProps} />
+  if (screen === 'resume') return <ResumeProjectScreen {...entryProps} />
   return <HomeScreen />
 }

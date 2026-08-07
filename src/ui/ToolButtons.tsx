@@ -6,7 +6,7 @@
  * scrubbing or playback.
  */
 
-import { useRef, useState } from 'react'
+import { lazy, useRef, useState } from 'react'
 import {
   ArrowsHorizontal,
   ArrowsInLineHorizontal,
@@ -18,7 +18,9 @@ import {
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import type { TimelineTool } from '../state/transportStore'
 import { useTransportStore } from '../state/transportStore'
-import TextOverlayDialog from './TextOverlayDialog'
+import LazySurfaceBoundary from './LazySurfaceBoundary'
+
+const TextOverlayDialog = lazy(() => import('./TextOverlayDialog'))
 
 const TOOLS = [
   { id: 'select', icon: CursorClick, label: 'Select — move clips, drag edges to trim (A)' },
@@ -73,7 +75,16 @@ export default function ToolButtons() {
           <TextT aria-hidden="true" size={17} weight="bold" />
         </button>
       </div>
-      {textOpen && <TextOverlayDialog onClose={closeText} />}
+      {textOpen && (
+        <LazySurfaceBoundary
+          variant="dialog"
+          loadingLabel="Loading text tools…"
+          failureTitle="Text tools could not load"
+          onClose={closeText}
+        >
+          <TextOverlayDialog onClose={closeText} />
+        </LazySurfaceBoundary>
+      )}
     </>
   )
 }

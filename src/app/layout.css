@@ -1,11 +1,10 @@
 /*
- * app/layout.css ? ordered stylesheet manifest for the editor shell.
+ * Ordered stylesheet manifest for the lazy editor shell.
  *
- * Imports intentionally follow the original global cascade order. Feature
- * styles stay independently owned without changing specificity or priority.
+ * launcher.css loads project-launch.css first. The imports below retain the
+ * remaining original cascade order without changing specificity.
  */
 
-@import './styles/project-launch.css';
 @import './styles/editor-shell.css';
 @import './styles/timeline-transport.css';
 @import './styles/preview.css';

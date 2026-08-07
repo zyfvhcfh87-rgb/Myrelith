@@ -241,10 +241,20 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   URL lifetime. `ui/ExportDialogSections.tsx` is stateless presentation;
   `ExportProfilePicker.tsx` owns only profile-editing drafts. Presentation must
   not acquire an export resource or bypass the app-layer facades.
-- `app/layout.css` is the ordered stylesheet manifest. Its `styles/` imports
-  retain the original global cascade order while grouping rules by feature;
-  changing that import order is a behavior change and requires visual cascade
-  validation.
+- `app/App.tsx` is the eager launcher composition root. It must reach the
+  editor only through `app/editorModuleLoader.ts`; project creation/open/recovery
+  preloads that boundary before changing session truth. `app/EditorShell.tsx`
+  owns editor-only panels, shortcuts, runtime lifecycles, and styles. Export,
+  text-overlay, and animation surfaces remain first-use dynamic imports.
+- `app/exportLifecycle.ts` is the lightweight project-replacement seam for the
+  lazy export controller. It may call a disposer only after that controller has
+  registered itself; project exit must never import export code just to learn
+  that no export was started.
+- `app/launcher.css` eagerly imports launcher and lazy-state rules;
+  `app/layout.css` is the lazy editor stylesheet manifest. Together their
+  `styles/` imports retain the original global cascade order. Changing either
+  boundary or import order is a behavior change and requires production visual
+  and network validation.
 
 ## Store action contracts
 
@@ -447,7 +457,8 @@ src/
   ui/timeline/ Timeline, Track, ClipView presentation root,
                useClipGestureSession pointer owner, presentation plan/layer,
                Ruler, Playhead
-  app/         App, project/persistence/controllers, ordered layout.css manifest
-  app/styles/  feature-owned editor styles in binding cascade order
+  app/         eager App launcher, lazy EditorShell, module/lifecycle seams,
+               project/persistence/controllers, split CSS manifests
+  app/styles/  launcher then editor feature styles in binding cascade order
   dev/         explicitly guarded, build-gated benchmark UI/runtime only
 ```

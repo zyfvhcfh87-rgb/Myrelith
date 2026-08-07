@@ -1,0 +1,3 @@
+/* Eager launcher-only stylesheet. Editor CSS stays with EditorShell. */
+
+@import './styles/project-launch.css';

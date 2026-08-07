@@ -11,6 +11,7 @@
  */
 
 import {
+  lazy,
   useEffect,
   useRef,
   useState,
@@ -52,7 +53,9 @@ import {
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
-import AnimationCurveEditor from './AnimationCurveEditor'
+import LazySurfaceBoundary from './LazySurfaceBoundary'
+
+const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
 
 interface NumberFieldProps {
   label: string
@@ -917,7 +920,12 @@ export default function Inspector() {
   const [activeVideoTab, setActiveVideoTab] = useState<
     'transform' | 'crop' | 'animation'
   >('transform')
+  const [animationSurfaceOpened, setAnimationSurfaceOpened] = useState(false)
   const videoTabs = ['transform', 'crop', 'animation'] as const
+
+  useEffect(() => {
+    if (activeVideoTab === 'animation') setAnimationSurfaceOpened(true)
+  }, [activeVideoTab])
 
   const handleVideoTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
     const currentIndex = videoTabs.indexOf(activeVideoTab)
@@ -1029,12 +1037,17 @@ export default function Inspector() {
         >
           {videoClip.text
             ? <span className="inspector-note">Animation controls are not available for text overlays yet.</span>
-            : (
-                <AnimationCurveEditor
-                  clip={videoClip}
-                  locked={videoLocked}
-                  playheadFrame={playheadFrame}
-                />
+            : animationSurfaceOpened && (
+                <LazySurfaceBoundary
+                  loadingLabel="Loading animation curves…"
+                  failureTitle="Animation curves could not load"
+                >
+                  <AnimationCurveEditor
+                    clip={videoClip}
+                    locked={videoLocked}
+                    playheadFrame={playheadFrame}
+                  />
+                </LazySurfaceBoundary>
               )}
         </div>
       )}

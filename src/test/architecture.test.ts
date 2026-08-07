@@ -12,6 +12,7 @@ interface ImportEdge {
   to: string | null
   specifier: string
   typeOnly: boolean
+  dynamic: boolean
   line: number
 }
 
@@ -80,6 +81,7 @@ function importsFor(
   const addEdge = (
     specifier: string,
     typeOnly: boolean,
+    dynamic: boolean,
     node: ts.Node,
   ): void => {
     const { line } = source.getLineAndCharacterOfPosition(node.getStart(source))
@@ -88,6 +90,7 @@ function importsFor(
       to: resolveRelativeModule(path, specifier, knownModules),
       specifier,
       typeOnly,
+      dynamic,
       line: line + 1,
     })
   }
@@ -100,6 +103,7 @@ function importsFor(
       addEdge(
         node.moduleSpecifier.text,
         importDeclarationIsTypeOnly(node),
+        false,
         node,
       )
     } else if (
@@ -107,14 +111,14 @@ function importsFor(
       && node.moduleSpecifier
       && ts.isStringLiteral(node.moduleSpecifier)
     ) {
-      addEdge(node.moduleSpecifier.text, node.isTypeOnly, node)
+      addEdge(node.moduleSpecifier.text, node.isTypeOnly, false, node)
     } else if (
       ts.isCallExpression(node)
       && node.expression.kind === ts.SyntaxKind.ImportKeyword
       && node.arguments.length === 1
       && ts.isStringLiteral(node.arguments[0])
     ) {
-      addEdge(node.arguments[0].text, false, node)
+      addEdge(node.arguments[0].text, false, true, node)
     }
     ts.forEachChild(node, visit)
   }
@@ -296,6 +300,28 @@ function runtimeCycles(edges: readonly ImportEdge[]): string[] {
   return [...cycles].sort()
 }
 
+function eagerRuntimeClosure(
+  entryNames: readonly string[],
+  edges: readonly ImportEdge[],
+): Set<string> {
+  const adjacency = new Map<string, string[]>()
+  for (const edge of edges) {
+    if (!edge.to || edge.typeOnly || edge.dynamic) continue
+    const targets = adjacency.get(edge.from) ?? []
+    targets.push(edge.to)
+    adjacency.set(edge.from, targets)
+  }
+  const visited = new Set<string>()
+  const pending = entryNames.map((name) => resolve(SOURCE_ROOT, name))
+  while (pending.length > 0) {
+    const module = pending.pop()!
+    if (visited.has(module)) continue
+    visited.add(module)
+    pending.push(...(adjacency.get(module) ?? []))
+  }
+  return new Set([...visited].map(moduleName))
+}
+
 describe('architecture guard', () => {
   const files = sourceFiles()
   const productionFiles = files.filter((path) => !isTestModule(path))
@@ -308,6 +334,20 @@ describe('architecture guard', () => {
 
   test('keeps the production runtime import graph acyclic', () => {
     expect(runtimeCycles(edges)).toEqual([])
+  })
+
+  test('keeps editor and secondary surfaces outside their eager entry graphs', () => {
+    const launcherClosure = eagerRuntimeClosure(['main.tsx'], edges)
+    expect(launcherClosure).toContain('app/App.tsx')
+    expect(launcherClosure).toContain('ui/ProjectLaunch.tsx')
+    expect(launcherClosure).not.toContain('app/EditorShell.tsx')
+    expect(launcherClosure).not.toContain('ui/Toolbar.tsx')
+    expect(launcherClosure).not.toContain('ui/Inspector.tsx')
+
+    const editorClosure = eagerRuntimeClosure(['app/EditorShell.tsx'], edges)
+    expect(editorClosure).not.toContain('ui/ExportDialog.tsx')
+    expect(editorClosure).not.toContain('ui/TextOverlayDialog.tsx')
+    expect(editorClosure).not.toContain('ui/AnimationCurveEditor.tsx')
   })
 
   test('limits benchmark-only composition imports to the documented dev files', () => {

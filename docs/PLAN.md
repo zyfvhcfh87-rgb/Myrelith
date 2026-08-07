@@ -2402,6 +2402,27 @@ remain out of scope.
   captured 2/7 complete Windows private-memory process-table samples and both
   artifacts validated against schema 2.
 
+## Post-MVP issue #55 - launcher and editor bundle split
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+
+- [x] Move the editor composition, lifecycles, shortcuts, and CSS behind one
+  shared `EditorShell` dynamic import while keeping ProjectLaunch eager.
+- [x] Preload the editor before Create/Open/Recover activates project truth;
+  show accessible loading and honest reload recovery without an incomplete
+  editor flash.
+- [x] Lazy-load Export, Add Text, and Animation on first use, preserve dialog
+  focus restoration and mounted animation state, and keep project exit able to
+  dispose an already-loaded export without pulling export code forward.
+- [x] Add error-boundary behavior tests and a static-import-closure architecture
+  guard for the launcher, editor, and three secondary features.
+- [x] Reduce ordinary initial gzip JS+CSS from 307.43 kB to 246.92 kB (-19.7%)
+  and three-sample cold-launch median/p95 from 163.5/238.4 ms to
+  146.1/211.5 ms (-10.6%/-11.3%) on the same source-bound harness host.
+- [x] Verify production Chromium request timing, Create, first-use Export/Text,
+  focus restoration, forced-503 reload recovery with unchanged project truth,
+  720x800 overflow, and a clean ordinary success-path console.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**

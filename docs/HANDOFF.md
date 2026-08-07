@@ -5,7 +5,7 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Status (2026-08-05)
+## Status (2026-08-07)
 
 | Phase | State | Proof |
 |---|---|---|
@@ -88,6 +88,8 @@ and the open list below.
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
 | **Refactor Stage 7 — Mediabunny export adapter owners** | ✅ complete | stable facade split into visual/audio/sink resource owners plus one shared fake harness; 156 focused + 1,725 total tests; headed Chromium buffered/direct A/V reopen + native playback, exact 9,600-sample presentation, commit/cancel/write-failure cleanup, clean console |
 | **Refactor Stage 8 — export presentation + feature CSS** | ✅ complete | export lifecycle stays in one owner behind stateless sections; the ordered ten-file CSS manifest produces byte-identical CSS; 91 focused + 1,725 total tests; checked-in recovery smoke plus headed 390/720/1280/1440px focus/keyboard/overflow QA, clean console |
+| **Post-MVP #54 — performance evidence foundation** | ✅ complete | deterministic production harness and source-bound artifacts merged on `9920491`; canonical fixture, cold-launch/render/import/memory/export metrics, cleanup proof, and advisory gates |
+| **Post-MVP #55 — launcher/editor bundle split** | ✅ implementation complete | editor JS/CSS and Export/Text/Animation first-use chunks are absent from the initial launcher graph; initial gzip JS+CSS -19.7%; three-sample launcher median -10.6% and p95 -11.3%; production Chromium network/failure/focus gate clean |
 
 Issue #16 is complete. PR #29 was normally merged as `edb02d0`, its complete
 checklist and validation evidence were recorded, and the issue was closed as
@@ -1784,6 +1786,48 @@ surface; it is not a second zoom and never enters document history.
   framework overlay, warning/error log, or horizontal page overflow. Zoom In
   changed the real slider from 0.725 to 0.748. The automated production run's
   1440x900 screenshot rendered the completed human-readable summary.
+
+## Post-MVP issue #55 - launcher and editor bundle split
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+
+- `App.tsx` now owns only the eager launcher path and accessible editor
+  loading/failure states. `EditorShell.tsx` owns the lazy editor composition,
+  shortcuts, runtime lifecycles, and editor CSS. New/open/recovery preloads the
+  shared editor module before controller activation, so a missing chunk cannot
+  mutate project truth or flash an incomplete editor.
+- The ordered CSS cascade is split without reordering: `launcher.css` eagerly
+  loads the launcher plus recovery states, while `layout.css` begins at the
+  editor shell. Architecture tests walk static runtime imports and fail if the
+  launcher regains EditorShell/Toolbar/Inspector or if EditorShell eagerly
+  regains ExportDialog/TextOverlayDialog/AnimationCurveEditor.
+- Export, Add Text, and animation curves use shared accessible Suspense/error
+  boundaries. Animation remains mounted after first use so tab switches do not
+  discard its local edit state. Export registers its disposer through a tiny
+  loaded-module lifecycle seam, letting project replacement stop a real export
+  without importing the controller on every editor entry.
+- The ordinary initial production graph moved from 1,088.92 kB raw / 290.93
+  kB gzip JavaScript plus 83.71 / 16.50 kB CSS to 890.86 / 241.60 kB
+  JavaScript plus 22.54 / 5.32 kB CSS. Initial gzip JS+CSS is 19.7% smaller.
+  EditorShell, its CSS, Export, Text, and Animation are separate deferred
+  chunks; the existing large-chunk warning remains advisory.
+- Exact-source three-sample artifacts under ignored `.tmp/benchmarks/` record
+  launcher median 163.5 -> 146.1 ms (-10.6%) and p95 238.4 -> 211.5 ms
+  (-11.3%) on the same Chromium 151 / RX 6600 host and canonical fixture.
+  The harness's unrelated stress render/memory/export proposals remain
+  advisory and retain their honest misses. `docs/PERFORMANCE.md` holds the
+  comparison and interpretation.
+- Production Chromium proved the launcher request graph excludes editor and
+  secondary chunks; Create then loads the editor only; Export and Add Text load
+  on first use and restore trigger focus. A forced editor-chunk 503 left the
+  setup form/project truth untouched, exposed the truthful Reload action, and
+  recovered to a clean launcher. The 720x800 editor had no horizontal overflow
+  and the ordinary success path logged zero warnings/errors.
+- The complete gate passes 1,854/1,854 Vitest cases across 113 files plus all
+  16 Node benchmark-runner cases, TypeScript/production build, warning-free
+  oxlint, production dependency audit with 0 vulnerabilities, diff checks,
+  two exact-source three-sample benchmark runs, and the production Chromium
+  acceptance/failure matrix above.
 
 ## Working agreements (the user's explicit preferences)
 
