@@ -363,6 +363,7 @@ function HomeScreen() {
 
 interface EditorEntryProps {
   editorLoading: boolean
+  editorReady: boolean
   editorLoadError: string | null
   onEnterEditor(action: () => Promise<unknown>): void
 }
@@ -600,13 +601,14 @@ function NewProjectScreen({
 
 function ResumeProjectScreen({
   editorLoading,
+  editorReady,
   editorLoadError,
   onEnterEditor,
 }: EditorEntryProps) {
   const phase = useProjectSessionStore((state) => state.phase)
   const candidate = useProjectSessionStore((state) => state.candidate)
   const error = useProjectSessionStore((state) => state.error)
-  const busy = isBusy(phase) || editorLoading
+  const busy = isBusy(phase)
   const mediaHandlePickerAvailable = canRememberProjectMedia()
   const projectHandlePickerAvailable = canRememberProjectFiles()
   const recovering = candidate?.origin === 'recovery'
@@ -818,7 +820,7 @@ function ResumeProjectScreen({
           <button
             className="project-button project-button-primary"
             type="button"
-            disabled={busy || !candidate || editorLoadError !== null}
+            disabled={busy || !candidate || !editorReady || editorLoadError !== null}
             onClick={() => onEnterEditor(() => activateResumedProject())}
           >
             {needsPermission
@@ -837,14 +839,52 @@ function ResumeProjectScreen({
 
 export default function ProjectLaunch() {
   const screen = useProjectSessionStore((state) => state.screen)
+  const hasResumeCandidate = useProjectSessionStore(
+    (state) => state.candidate !== null,
+  )
   const [editorLoading, setEditorLoading] = useState(false)
+  const [editorReady, setEditorReady] = useState(false)
   const [editorLoadError, setEditorLoadError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (
+      screen !== 'resume'
+      || !hasResumeCandidate
+      || editorReady
+      || editorLoadError !== null
+    ) return
+
+    let active = true
+    setEditorLoading(true)
+    void loadEditorShell().then(
+      () => {
+        if (!active) return
+        setEditorReady(true)
+        setEditorLoading(false)
+      },
+      () => {
+        if (!active) return
+        setEditorLoading(false)
+        setEditorLoadError(
+          'The editing tools could not load. Your project has not been changed.',
+        )
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [editorLoadError, editorReady, hasResumeCandidate, screen])
+
   const enterEditor = (action: () => Promise<unknown>): void => {
+    if (editorReady) {
+      void action()
+      return
+    }
     setEditorLoading(true)
     setEditorLoadError(null)
     void loadEditorShell().then(
       () => {
+        setEditorReady(true)
         setEditorLoading(false)
         void action()
       },
@@ -859,6 +899,7 @@ export default function ProjectLaunch() {
 
   const entryProps: EditorEntryProps = {
     editorLoading,
+    editorReady,
     editorLoadError,
     onEnterEditor: enterEditor,
   }
