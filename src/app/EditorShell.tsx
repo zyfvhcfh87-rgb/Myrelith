@@ -43,7 +43,11 @@ export default function EditorShell({ closing }: EditorShellProps) {
       <header className="area-toolbar">
         <Toolbar />
       </header>
-      <aside className="area-media-pool" inert={closing}>
+      <aside
+        className="area-media-pool"
+        data-media-pool-scroll
+        inert={closing}
+      >
         <MediaPool />
       </aside>
       <main className="area-preview" inert={closing}>

@@ -7,6 +7,10 @@
  */
 
 import {
+  Profiler,
+  type ProfilerOnRenderCallback,
+} from 'react'
+import {
   act,
   fireEvent,
   render,
@@ -320,6 +324,39 @@ function seedOfflineDescriptor(
   })
 }
 
+function seedLargeCatalog(count: number, connected: boolean): void {
+  const descriptors = new Map<string, PortableAssetDescriptor>()
+  const assets = new Map<string, MediaAsset>()
+  for (let index = 0; index < count; index++) {
+    const kind = index % 3 === 0
+      ? 'video'
+      : index % 3 === 1 ? 'audio' : 'image'
+    const extension = kind === 'video' ? 'mp4' : kind === 'audio' ? 'wav' : 'webp'
+    const asset = makeAsset({
+      id: `asset-${String(index).padStart(4, '0')}`,
+      fileName: `Clip ${String(index).padStart(4, '0')}.${extension}`,
+      mimeType: kind === 'video'
+        ? 'video/mp4'
+        : kind === 'audio' ? 'audio/wav' : 'image/webp',
+      objectUrl: `blob:asset-${index}`,
+      kind,
+      hasAudio: kind !== 'image',
+      width: kind === 'audio' ? null : 1_920,
+      height: kind === 'audio' ? null : 1_080,
+      audioSampleRate: kind !== 'image' ? 48_000 : null,
+      audioChannels: kind !== 'image' ? 2 : null,
+    })
+    descriptors.set(asset.id, descriptorFromAsset(asset))
+    if (connected) assets.set(asset.id, asset)
+  }
+  useMediaStore.setState({
+    descriptors,
+    assets,
+    visuals: new Map(),
+    compatibility: new Map(),
+  })
+}
+
 beforeEach(() => {
   let urlCount = 0
   URL.createObjectURL = vi.fn(
@@ -359,6 +396,88 @@ beforeEach(() => {
 })
 
 describe('MediaPool presentation', () => {
+  test('keeps the rendered DOM bounded for a searchable 500-item catalog', async () => {
+    seedLargeCatalog(500, true)
+    render(<MediaPool />)
+
+    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+    expect(within(listbox).getAllByRole('option').length).toBeLessThan(40)
+    expect(screen.getByText('500 of 500')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'clip 0499' },
+    })
+
+    await waitFor(() => {
+      expect(within(listbox).getAllByRole('option')).toHaveLength(1)
+    })
+    expect(screen.getByTitle('Clip 0499.wav')).toHaveAttribute(
+      'aria-posinset',
+      '1',
+    )
+    expect(screen.getByText('1 of 500')).toBeInTheDocument()
+  })
+
+  test('does not subscribe the rendered pool to offscreen visual updates', () => {
+    seedLargeCatalog(500, true)
+    let commitCount = 0
+    const countCommit: ProfilerOnRenderCallback = () => {
+      commitCount++
+    }
+    render(
+      <Profiler id="media-pool" onRender={countCommit}>
+        <MediaPool />
+      </Profiler>,
+    )
+    expect(screen.queryByTitle('Clip 0499.wav')).not.toBeInTheDocument()
+    const initialCommitCount = commitCount
+
+    act(() => {
+      useMediaStore.setState((state) => ({
+        visuals: new Map(state.visuals).set('asset-0499', {
+          filmstrip: null,
+          waveform: { url: 'blob:offscreen-waveform', width: 800, height: 44 },
+        }),
+      }))
+    })
+
+    expect(commitCount).toBe(initialCommitCount)
+  })
+
+  test('keeps keyboard selection and drag identity across a virtual boundary', async () => {
+    seedLargeCatalog(500, true)
+    render(<MediaPool />)
+    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+    listbox.focus()
+
+    fireEvent.keyDown(listbox, { key: 'End' })
+
+    const finalCard = await screen.findByTitle('Clip 0499.wav')
+    expect(listbox).toHaveFocus()
+    expect(finalCard).toHaveAttribute('aria-selected', 'true')
+    expect(finalCard).toHaveAttribute('aria-posinset', '500')
+    const setData = vi.fn()
+    fireEvent.dragStart(finalCard, {
+      dataTransfer: { setData, effectAllowed: 'none' },
+    })
+    expect(setData).toHaveBeenCalledWith(ASSET_DRAG_TYPE, 'asset-0499')
+    expect(setData).toHaveBeenCalledWith(assetKindDragType('audio'), 'audio')
+  })
+
+  test('relinks an offline item reached across a virtual boundary', async () => {
+    seedLargeCatalog(500, false)
+    render(<MediaPool />)
+    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+    listbox.focus()
+
+    fireEvent.keyDown(listbox, { key: 'End' })
+
+    const input = await screen.findByLabelText('Relink Clip 0499.wav')
+    const file = new File(['audio'], 'Clip 0499.wav', { type: 'audio/wav' })
+    fireEvent.change(input, { target: { files: [file] } })
+    expect(connectActiveAssetMedia).toHaveBeenCalledWith('asset-0499', file)
+  })
+
   test('edits the future-import duration with an exact accessible name', () => {
     render(<MediaPool />)
 

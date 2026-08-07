@@ -87,6 +87,7 @@ and the open list below.
 | **Post-MVP #55 — launcher/editor bundle split** | ✅ implementation complete | editor JS/CSS and Export/Text/Animation first-use chunks are absent from the initial launcher graph; initial gzip JS+CSS -19.7%; three-sample launcher median -10.6% and p95 -11.3%; production Chromium network/failure/focus gate clean; delivery tracked by PR #83 |
 | **Post-MVP #56 — bounded media-analysis scheduling** | ✅ complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-4 benchmark evidence; reviewed head `902078f` normally merged through PR #84 as `b431623` |
 | **Post-MVP #57 — runtime and document-memory telemetry** | ✅ complete | schema-3 local telemetry with explainable document/history estimates, bounded worker/audio health evidence, cache-drain checks, optional lab APIs, and measured overhead; PR #82 normally merged as `f7eedab` |
+| **Post-MVP #60 — virtualized/searchable Media Pool** | ✅ implementation complete | variable-height grid virtualization, deterministic text/type/status filters, retained keyboard selection and drag/relink identity, visible-row scheduler priority, bounded 500-source Chromium QA; local branch only |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -1495,6 +1496,44 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
+- Issue #60 is implementation-complete locally on
+  `codex/issue-60-media-pool`; publication and issue closure are not implied.
+  `mediaPoolModel` owns browser-free stable indexing, AND-token search,
+  exact type/status facets, grid-row packing, and variable-height window math.
+  `useMediaPoolVirtualizer` measures the existing sidebar scroll owner and
+  renders one overscanned contiguous window. Cards keep asset ids as React,
+  drag, relink, and accessibility identity; only mounted cards subscribe to
+  thumbnails/waveforms. Search/filter/selection remain transient UI state and
+  never mutate the project.
+- Visible Media Pool ids now travel through the existing app facade into
+  `mediaVisualsController`; selected timeline media still wins, while either
+  visible timeline or Media Pool media outranks background work. The bounded
+  scheduler, generation checks, cancellation, and resource ownership are
+  unchanged.
+- The 500-item component fixture proves fewer than 40 mounted cards, End-key
+  focus/selection, cross-window drag and relink payloads, deterministic filters,
+  and zero React commits for an offscreen visual update. The final complete gate
+  passed 1,885/1,885 Vitest cases across 117 files plus all 16 Node runner cases,
+  production build/typecheck, oxlint, zero-vulnerability production audit, and
+  diff checks. There is no separate repository accessibility-audit command;
+  semantic roles/names and keyboard behavior are covered by RTL and Chromium.
+- In-app Chromium imported 500 real PNGs in five supported 100-file batches;
+  the >100 guard supplied the error-state gate. Desktop rendered 12–15 cards,
+  the 1,180px viewport rendered 8 in two columns, and the settled 800px viewport
+  rendered 3 in one column. End reached positions 500/501 with focus retained;
+  exact search returned one row in 136 ms end-to-end, empty/type/status states
+  stayed deterministic, recovery reopened 500 sources offline with the relink
+  control present at position 500, and the console had no warnings/errors.
+  Browser file-chooser automation could not attach to the single-file relink
+  input, so its actual file handoff remains covered by the passing component
+  test rather than claimed as a Chromium action.
+- Reproducible source identity started from clean baseline `df9ceef` /
+  `sha256:0355e4252ca15f8d757ae5d9fffa97195d6e2945487f4af94901ef0175ff4782`
+  and reached the browser-validated implementation checkpoint
+  `sha256:0ff135313894df54a9aba0f638dc7d6b5e499236e265513d6e4d5b957df2c841`.
+  The final commit id is the authoritative post-work source identity; the
+  checkpoint intentionally predates handoff text and the final padding-alignment
+  follow-up.
 - The Soft Studio visual overhaul is implementation-complete. The launcher now
   presents the real create/open/recovery flows through a warmer local-first
   hierarchy; project creation exposes the existing reviewed canvas presets as

@@ -370,9 +370,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `src/app/mediaJobScheduler.ts` is the app-layer owner for disposable media
   analysis queue state. `mediaVisualsController` submits one generation-safe
   job per connected asset with a conservative two-job/two-decoder default
-  budget; selected-clip media outranks exact on-screen timeline media, which
-  outranks background media, while aging prevents starvation. Timeline UI may
-  publish its transient visible frame range only through the app facade.
+  budget; selected-clip media outranks exact on-screen timeline or Media Pool
+  media, which outranks background media, while aging prevents starvation.
+  Timeline and Media Pool UI may publish only their transient visible ranges
+  through app facades; neither viewport is document or session truth.
   Removal, replacement, project teardown, or supersession aborts queued/active
   work; each pipeline owner must close its Input/decoder and revoke any URL
   that did not transfer to `mediaStore`. Scheduler snapshots are bounded,

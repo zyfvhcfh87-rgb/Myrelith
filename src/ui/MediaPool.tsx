@@ -6,7 +6,17 @@
  * controller facades; the component reads serializable store projections only.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 import {
   FileVideo,
   ImageSquare,
@@ -31,6 +41,7 @@ import {
   chooseActiveMediaFolder,
   connectActiveAssetMedia,
 } from '../app/projectController'
+import { setMediaVisualPoolViewport } from '../app/mediaVisualsController'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import {
   isValidStillImageDurationMicroseconds,
@@ -59,8 +70,15 @@ import { useMediaStore } from '../state/mediaStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import { usePreferencesStore } from '../state/preferencesStore'
 import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
+import {
+  buildMediaPoolItems,
+  filterMediaPoolItems,
+  type MediaPoolKindFilter,
+  type MediaPoolStatusFilter,
+} from './mediaPoolModel'
 import MediaImportDialog from './MediaImportDialog'
 import MediaRelinkDialog from './MediaRelinkDialog'
+import { useMediaPoolVirtualizer } from './useMediaPoolVirtualizer'
 
 function formatPreferenceSeconds(durationMicroseconds: number): string {
   return String(durationMicroseconds / 1_000_000)
@@ -569,32 +587,310 @@ function MediaRelinkStatus() {
   )
 }
 
+interface MediaPoolItemCardProps {
+  readonly id: string
+  readonly optionId: string
+  readonly rowKey: string
+  readonly position: number
+  readonly itemCount: number
+  readonly selected: boolean
+  readonly projectRate: FrameRate
+  readonly busy: boolean
+  readonly handlePickerAvailable: boolean
+  readonly onSelect: (id: string) => void
+  readonly onReviewPartial: (
+    id: string,
+    selection: PartialTrackImportSelection,
+    trigger: HTMLButtonElement,
+  ) => void
+}
+
+const MediaPoolItemCard = memo(function MediaPoolItemCard({
+  id,
+  optionId,
+  rowKey,
+  position,
+  itemCount,
+  selected,
+  projectRate,
+  busy,
+  handlePickerAvailable,
+  onSelect,
+  onReviewPartial,
+}: MediaPoolItemCardProps) {
+  const descriptor = useMediaStore((state) => state.descriptors.get(id))
+  const asset = useMediaStore((state) => state.assets.get(id))
+  const visual = useMediaStore((state) => state.visuals.get(id))
+  const compatibilityItem = useMediaStore(
+    (state) => state.compatibility.get(id),
+  )
+  const removeAsset = useMediaStore((state) => state.removeAsset)
+  const fileName = descriptor?.fileName ?? compatibilityItem?.fileName
+  if (!fileName) return null
+
+  const connected = asset !== undefined
+  const filmstrip = connected ? visual?.filmstrip ?? null : null
+  const thumbnailStyle = filmstrip
+    ? {
+        backgroundImage: `url("${filmstrip.url}")`,
+        ...(asset?.kind === 'image'
+          ? {
+              backgroundSize: 'contain',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+            }
+          : {
+              // Scale the strip so its first tile fills the thumbnail.
+              backgroundSize: `${filmstrip.tiles * 100}% auto`,
+            }),
+      }
+    : undefined
+  const draggable = Boolean(
+    asset
+    && asset.durationFrames > 0
+    && compatibilityAllowsTimelineUse(compatibilityItem),
+  )
+  const connection = connected
+    ? 'online'
+    : descriptor ? 'offline' : 'provisional'
+  const metadata = descriptor
+    ? formatAssetMetadata(descriptor, projectRate, compatibilityItem)
+    : compatibilityItem
+      ? formatSelectedFile(compatibilityItem)
+      : ''
+
+  return (
+    <li
+      id={optionId}
+      role="option"
+      aria-selected={selected}
+      aria-posinset={position}
+      aria-setsize={itemCount}
+      aria-label={`${fileName}, ${connection}, ${metadata}`}
+      key={id}
+      className="media-item"
+      data-media-id={id}
+      data-media-virtual-row={rowKey}
+      data-connection={connection}
+      data-compatibility={compatibilityItem?.status}
+      title={fileName}
+      draggable={draggable}
+      onClick={(event) => {
+        const target = event.target
+        if (
+          target instanceof Element
+          && target.closest('button, input, label, select, textarea, a')
+        ) return
+        onSelect(id)
+      }}
+      onDragStart={(event) => {
+        const liveMedia = useMediaStore.getState()
+        const liveAsset = liveMedia.assets.get(id)
+        if (
+          !liveAsset
+          || liveAsset.durationFrames <= 0
+          || !compatibilityAllowsTimelineUse(
+            liveMedia.compatibility.get(id),
+          )
+        ) {
+          event.preventDefault()
+          return
+        }
+        event.dataTransfer.setData(ASSET_DRAG_TYPE, liveAsset.id)
+        event.dataTransfer.setData(
+          assetKindDragType(liveAsset.kind),
+          liveAsset.kind,
+        )
+        event.dataTransfer.effectAllowed = 'copy'
+      }}
+    >
+      <div
+        className="media-thumbnail"
+        data-testid={`media-thumbnail-${id}`}
+        data-state={connected
+          ? filmstrip ? 'ready' : 'placeholder'
+          : descriptor ? 'offline' : compatibilityItem?.status}
+        style={thumbnailStyle}
+        aria-hidden="true"
+      >
+        {!filmstrip
+          ? descriptor?.kind === 'image'
+            ? <ImageSquare className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
+            : descriptor?.kind === 'audio'
+              ? <Waveform className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
+              : <FileVideo className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
+          : null}
+      </div>
+
+      <div className="media-details">
+        <span className="media-name">{fileName}</span>
+        <span className="media-meta">{metadata}</span>
+        {descriptor && !connected ? (
+          <div className="media-offline-actions">
+            <span className="media-offline-badge">Offline</span>
+            {handlePickerAvailable ? (
+              <button
+                className="media-source-relink"
+                type="button"
+                aria-label={`Relink & remember ${fileName}`}
+                title="Reconnect this source and remember access for future sessions"
+                disabled={busy}
+                onClick={() => void chooseActiveAssetMedia(id)}
+              >
+                Relink &amp; remember
+              </button>
+            ) : null}
+            <label
+              className={handlePickerAvailable
+                ? 'media-source-relink media-source-relink-quick'
+                : 'media-source-relink'}
+              title={handlePickerAvailable
+                ? 'Reconnect this source for this session without remembering access'
+                : undefined}
+            >
+              {handlePickerAvailable ? 'Quick relink' : 'Relink'}
+              <input
+                className="media-import-input"
+                aria-label={handlePickerAvailable
+                  ? `Quick relink ${fileName}`
+                  : `Relink ${fileName}`}
+                type="file"
+                accept={MEDIA_FILE_INPUT_ACCEPT}
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (file) void connectActiveAssetMedia(id, file)
+                }}
+              />
+            </label>
+          </div>
+        ) : null}
+      </div>
+
+      <button
+        className="media-remove"
+        type="button"
+        draggable={false}
+        aria-label={`Remove ${fileName}`}
+        onDragStart={(event) => event.stopPropagation()}
+        onClick={() => {
+          if (!descriptor) {
+            removeMediaCompatibility(id)
+            return
+          }
+          if (assetIsUsedOnTimeline(id)) {
+            window.alert(
+              'Remove this media\'s clips from the timeline before removing its source.',
+            )
+            return
+          }
+          forgetImportedMediaHandle(id)
+          removeAsset(id)
+        }}
+      >
+        <X aria-hidden="true" size={14} weight="bold" />
+      </button>
+      {compatibilityItem ? (
+        <CompatibilityDiagnostics
+          item={compatibilityItem}
+          busy={busy}
+          onReviewPartial={descriptor
+            ? undefined
+            : (selection, trigger) => onReviewPartial(
+                id,
+                selection,
+                trigger,
+              )}
+          onRetry={descriptor
+            ? undefined
+            : () => void retryMediaCompatibility(id)}
+        />
+      ) : null}
+    </li>
+  )
+})
+
 export default function MediaPool() {
   const documentFrameRate = useDocumentStore((state) => state.doc.frameRate)
   const descriptors = useMediaStore((state) => state.descriptors)
   const assets = useMediaStore((state) => state.assets)
-  const visuals = useMediaStore((state) => state.visuals)
   const compatibility = useMediaStore((state) => state.compatibility)
-  const removeAsset = useMediaStore((state) => state.removeAsset)
   const importBusy = useMediaImportStore((state) => state.phase !== 'idle')
   const relinkPhase = useProjectSessionStore(
     (state) => state.activeMediaRelink.phase,
   )
   const relinkBusy = relinkPhase === 'scanning'
     || relinkPhase === 'awaiting-choice'
+  const busy = importBusy || relinkBusy
   const handlePickerAvailable = canRememberImportedMedia()
   const folderPickerAvailable = canChooseActiveMediaFolder()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [kindFilter, setKindFilter] = useState<MediaPoolKindFilter>('all')
+  const [statusFilter, setStatusFilter] =
+    useState<MediaPoolStatusFilter>('all')
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [partialReview, setPartialReview] =
     useState<PartialTrackImportReview | null>(null)
   const partialReviewTriggerRef = useRef<HTMLButtonElement | null>(null)
-  let offlineCount = 0
-  for (const descriptor of descriptors.values()) {
-    if (!assets.has(descriptor.id)) offlineCount++
-  }
-  const itemIds = [
-    ...descriptors.keys(),
-    ...[...compatibility.keys()].filter((id) => !descriptors.has(id)),
-  ]
+  const deferredSearchQuery = useDeferredValue(searchQuery)
+  const itemModels = useMemo(
+    () => buildMediaPoolItems(descriptors, assets, compatibility),
+    [assets, compatibility, descriptors],
+  )
+  const filteredItems = useMemo(
+    () => filterMediaPoolItems(itemModels, {
+      query: deferredSearchQuery,
+      kind: kindFilter,
+      status: statusFilter,
+    }),
+    [deferredSearchQuery, itemModels, kindFilter, statusFilter],
+  )
+  const virtualizer = useMediaPoolVirtualizer(filteredItems)
+  const { scrollToStart, visibleItemIds } = virtualizer
+  const filteredIndexById = useMemo(() => new Map(
+    filteredItems.map((item, index) => [item.id, index] as const),
+  ), [filteredItems])
+  const rowKeyByItemId = useMemo(() => {
+    const result = new Map<string, string>()
+    for (const row of virtualizer.rows) {
+      for (const id of row.itemIds) result.set(id, row.key)
+    }
+    return result
+  }, [virtualizer.rows])
+  const renderedItemIds = useMemo(
+    () => new Set(virtualizer.renderedItemIds),
+    [virtualizer.renderedItemIds],
+  )
+  const effectiveSelectedAssetId = selectedAssetId
+    && filteredIndexById.has(selectedAssetId)
+      ? selectedAssetId
+      : filteredItems[0]?.id ?? null
+  const activeOptionId = effectiveSelectedAssetId
+    && renderedItemIds.has(effectiveSelectedAssetId)
+      ? `media-pool-option-${filteredIndexById.get(effectiveSelectedAssetId)}`
+      : undefined
+  const offlineCount = useMemo(() => {
+    let count = 0
+    for (const descriptor of descriptors.values()) {
+      if (!assets.has(descriptor.id)) count++
+    }
+    return count
+  }, [assets, descriptors])
+  const filtersActive = searchQuery.length > 0
+    || kindFilter !== 'all'
+    || statusFilter !== 'all'
+  const filterPending = searchQuery !== deferredSearchQuery
+  useEffect(() => {
+    setMediaVisualPoolViewport(visibleItemIds)
+  }, [visibleItemIds])
+
+  useEffect(() => () => setMediaVisualPoolViewport([]), [])
+
+  useEffect(() => {
+    scrollToStart()
+  }, [deferredSearchQuery, kindFilter, scrollToStart, statusFilter])
+
   const partialReviewItem = partialReview
     ? compatibility.get(partialReview.itemId)
     : undefined
@@ -608,20 +904,87 @@ export default function MediaPool() {
       ? { review: partialReview, item: partialReviewItem }
       : null
 
-  const closePartialReview = (restoreFocus: boolean): void => {
+  const selectItem = useCallback((id: string): void => {
+    setSelectedAssetId(id)
+    requestAnimationFrame(() => {
+      virtualizer.listRef.current?.focus({ preventScroll: true })
+    })
+  }, [virtualizer.listRef])
+
+  const openPartialReview = useCallback((
+    id: string,
+    selection: PartialTrackImportSelection,
+    trigger: HTMLButtonElement,
+  ): void => {
+    partialReviewTriggerRef.current = trigger
+    setPartialReview({ itemId: id, selection })
+  }, [])
+
+  const closePartialReview = useCallback((restoreFocus: boolean): void => {
     const trigger = partialReviewTriggerRef.current
+    const reviewId = partialReview?.itemId ?? null
     partialReviewTriggerRef.current = null
     setPartialReview(null)
-    if (restoreFocus && trigger) {
+    if (restoreFocus) {
       requestAnimationFrame(() => {
-        if (trigger.isConnected) trigger.focus()
+        if (trigger?.isConnected) {
+          trigger.focus()
+          return
+        }
+        if (reviewId) {
+          const rowIndex = virtualizer.rowIndexByItemId.get(reviewId)
+          if (rowIndex !== undefined) virtualizer.ensureRowVisible(rowIndex)
+          setSelectedAssetId(reviewId)
+        }
+        virtualizer.listRef.current?.focus({ preventScroll: true })
       })
     }
-  }
+  }, [partialReview?.itemId, virtualizer])
 
   useEffect(() => {
     if (partialReview && !partialReviewIsValid) closePartialReview(true)
-  }, [partialReview, partialReviewIsValid])
+  }, [closePartialReview, partialReview, partialReviewIsValid])
+
+  const handleListKeyDown = useCallback((
+    event: ReactKeyboardEvent<HTMLUListElement>,
+  ): void => {
+    if (event.currentTarget !== event.target || filteredItems.length === 0) {
+      return
+    }
+    const currentIndex = effectiveSelectedAssetId
+      ? filteredIndexById.get(effectiveSelectedAssetId) ?? 0
+      : 0
+    let nextIndex: number | null = null
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = currentIndex + 1
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextIndex = currentIndex - 1
+    } else if (event.key === 'Home') {
+      nextIndex = 0
+    } else if (event.key === 'End') {
+      nextIndex = filteredItems.length - 1
+    } else if (event.key === 'PageDown') {
+      nextIndex = currentIndex + virtualizer.columnCount * 4
+    } else if (event.key === 'PageUp') {
+      nextIndex = currentIndex - virtualizer.columnCount * 4
+    }
+    if (nextIndex === null) return
+    event.preventDefault()
+    const boundedIndex = Math.max(
+      0,
+      Math.min(filteredItems.length - 1, nextIndex),
+    )
+    const nextId = filteredItems[boundedIndex]?.id
+    if (!nextId) return
+    const rowIndex = virtualizer.rowIndexByItemId.get(nextId)
+    if (rowIndex !== undefined) virtualizer.ensureRowVisible(rowIndex)
+    setSelectedAssetId(nextId)
+  }, [
+    effectiveSelectedAssetId,
+    filteredIndexById,
+    filteredItems,
+    virtualizer,
+  ])
 
   return (
     <div className="media-pool">
@@ -679,202 +1042,168 @@ export default function MediaPool() {
             </label>
           </div>
         </div>
+        <div className="media-pool-filters" role="search" aria-label="Filter media">
+          <label className="media-pool-search">
+            <span>Search</span>
+            <input
+              type="search"
+              value={searchQuery}
+              placeholder="Name, codec, or format"
+              aria-controls="media-pool-list"
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+          </label>
+          <label className="media-pool-filter">
+            <span>Type</span>
+            <select
+              value={kindFilter}
+              aria-controls="media-pool-list"
+              onChange={(event) => setKindFilter(
+                event.target.value as MediaPoolKindFilter,
+              )}
+            >
+              <option value="all">All types</option>
+              <option value="video">Video</option>
+              <option value="audio">Audio</option>
+              <option value="image">Still images</option>
+            </select>
+          </label>
+          <label className="media-pool-filter">
+            <span>Status</span>
+            <select
+              value={statusFilter}
+              aria-controls="media-pool-list"
+              onChange={(event) => setStatusFilter(
+                event.target.value as MediaPoolStatusFilter,
+              )}
+            >
+              <option value="all">All statuses</option>
+              <option value="ready">Ready media</option>
+              <option value="offline">Offline media</option>
+              <option value="checking">Checking media</option>
+              <option value="limited">Limited media</option>
+              <option value="unsupported">Unsupported media</option>
+              <option value="error">Media errors</option>
+            </select>
+          </label>
+          {filtersActive ? (
+            <button
+              className="media-pool-clear-filters"
+              type="button"
+              onClick={() => {
+                setSearchQuery('')
+                setKindFilter('all')
+                setStatusFilter('all')
+              }}
+            >
+              Clear
+            </button>
+          ) : null}
+          <span
+            className="media-pool-filter-status"
+            aria-live="polite"
+          >
+            {filterPending
+              ? 'Filtering media...'
+              : `${filteredItems.length} of ${itemModels.length}`}
+          </span>
+        </div>
         <StillImageDurationPreference />
       </div>
 
       <MediaRelinkStatus />
 
-      {itemIds.length === 0 ? (
+      <ul
+        ref={virtualizer.listRef}
+        id="media-pool-list"
+        className="media-list"
+        role="listbox"
+        aria-label="Media assets"
+        aria-busy={filterPending}
+        aria-activedescendant={activeOptionId}
+        aria-describedby="media-pool-keyboard-help"
+        tabIndex={0}
+        style={{
+          '--media-pool-columns': virtualizer.columnCount,
+        } as CSSProperties}
+        onFocus={() => {
+          if (!effectiveSelectedAssetId) return
+          const rowIndex = virtualizer.rowIndexByItemId.get(
+            effectiveSelectedAssetId,
+          )
+          if (rowIndex !== undefined) virtualizer.ensureRowVisible(rowIndex)
+        }}
+        onKeyDown={handleListKeyDown}
+      >
+        {virtualizer.virtualWindow.topSpacerHeight > 0 ? (
+          <li
+            className="media-list-spacer"
+            aria-hidden="true"
+            style={{ height: virtualizer.virtualWindow.topSpacerHeight }}
+          />
+        ) : null}
+        {virtualizer.renderedItemIds.map((id) => {
+          const position = filteredIndexById.get(id)
+          const rowKey = rowKeyByItemId.get(id)
+          if (position === undefined || !rowKey) return null
+          return (
+            <MediaPoolItemCard
+              key={id}
+              id={id}
+              optionId={`media-pool-option-${position}`}
+              rowKey={rowKey}
+              position={position + 1}
+              itemCount={filteredItems.length}
+              selected={effectiveSelectedAssetId === id}
+              projectRate={documentFrameRate}
+              busy={busy}
+              handlePickerAvailable={handlePickerAvailable}
+              onSelect={selectItem}
+              onReviewPartial={openPartialReview}
+            />
+          )
+        })}
+        {virtualizer.virtualWindow.bottomSpacerHeight > 0 ? (
+          <li
+            className="media-list-spacer"
+            aria-hidden="true"
+            style={{ height: virtualizer.virtualWindow.bottomSpacerHeight }}
+          />
+        ) : null}
+      </ul>
+      {itemModels.length === 0 ? (
         <p className="media-empty">
           no media yet — import video, audio, or a still image
         </p>
-      ) : (
-        <ul className="media-list">
-          {itemIds.map((id) => {
-            const descriptor = descriptors.get(id)
-            const compatibilityItem = compatibility.get(id)
-            const fileName = descriptor?.fileName ?? compatibilityItem?.fileName
-            if (!fileName) return null
-            const asset = assets.get(id)
-            const connected = asset !== undefined
-            const filmstrip = connected
-              ? visuals.get(id)?.filmstrip ?? null
-              : null
-            const thumbnailStyle = filmstrip
-              ? {
-                  backgroundImage: `url("${filmstrip.url}")`,
-                  ...(asset?.kind === 'image'
-                    ? {
-                        backgroundSize: 'contain',
-                        backgroundPosition: 'center',
-                        backgroundRepeat: 'no-repeat',
-                      }
-                    : {
-                        // Scale the strip so its first tile fills the thumbnail.
-                        backgroundSize: `${filmstrip.tiles * 100}% auto`,
-                      }),
-                }
-              : undefined
-            const draggable = Boolean(
-              asset
-              && asset.durationFrames > 0
-              && compatibilityAllowsTimelineUse(compatibilityItem),
-            )
-            const connection = connected
-              ? 'online'
-              : descriptor ? 'offline' : 'provisional'
-
-            return (
-              <li
-                key={id}
-                className="media-item"
-                data-connection={connection}
-                data-compatibility={compatibilityItem?.status}
-                title={fileName}
-                draggable={draggable}
-                onDragStart={(event) => {
-                  const liveMedia = useMediaStore.getState()
-                  const liveAsset = liveMedia.assets.get(id)
-                  if (
-                    !liveAsset
-                    || liveAsset.durationFrames <= 0
-                    || !compatibilityAllowsTimelineUse(
-                      liveMedia.compatibility.get(id),
-                    )
-                  ) {
-                    event.preventDefault()
-                    return
-                  }
-                  event.dataTransfer.setData(ASSET_DRAG_TYPE, liveAsset.id)
-                  event.dataTransfer.setData(
-                    assetKindDragType(liveAsset.kind),
-                    liveAsset.kind,
-                  )
-                  event.dataTransfer.effectAllowed = 'copy'
-                }}
-              >
-                <div
-                  className="media-thumbnail"
-                  data-testid={`media-thumbnail-${id}`}
-                  data-state={connected
-                    ? filmstrip ? 'ready' : 'placeholder'
-                    : descriptor ? 'offline' : compatibilityItem?.status}
-                  style={thumbnailStyle}
-                  aria-hidden="true"
-                >
-                  {!filmstrip
-                    ? descriptor?.kind === 'image'
-                      ? <ImageSquare className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
-                      : descriptor?.kind === 'audio'
-                        ? <Waveform className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
-                        : <FileVideo className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
-                    : null}
-                </div>
-
-                <div className="media-details">
-                  <span className="media-name">{fileName}</span>
-                  <span className="media-meta">
-                    {descriptor
-                      ? formatAssetMetadata(
-                          descriptor,
-                          documentFrameRate,
-                          compatibilityItem,
-                        )
-                      : compatibilityItem
-                        ? formatSelectedFile(compatibilityItem)
-                        : null}
-                  </span>
-                  {descriptor && !connected ? (
-                    <div className="media-offline-actions">
-                      <span className="media-offline-badge">Offline</span>
-                      {handlePickerAvailable ? (
-                        <button
-                          className="media-source-relink"
-                          type="button"
-                          aria-label={`Relink & remember ${fileName}`}
-                          title="Reconnect this source and remember access for future sessions"
-                          disabled={importBusy || relinkBusy}
-                          onClick={() => void chooseActiveAssetMedia(id)}
-                        >
-                          Relink &amp; remember
-                        </button>
-                      ) : null}
-                      <label
-                        className={handlePickerAvailable
-                          ? 'media-source-relink media-source-relink-quick'
-                          : 'media-source-relink'}
-                        title={handlePickerAvailable
-                          ? 'Reconnect this source for this session without remembering access'
-                          : undefined}
-                      >
-                        {handlePickerAvailable ? 'Quick relink' : 'Relink'}
-                        <input
-                          className="media-import-input"
-                          aria-label={handlePickerAvailable
-                            ? `Quick relink ${fileName}`
-                            : `Relink ${fileName}`}
-                          type="file"
-                          accept={MEDIA_FILE_INPUT_ACCEPT}
-                          disabled={importBusy || relinkBusy}
-                          onChange={(event) => {
-                            const file = event.target.files?.[0]
-                            event.target.value = ''
-                            if (file) {
-                              void connectActiveAssetMedia(id, file)
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-                  ) : null}
-                </div>
-
-                <button
-                  className="media-remove"
-                  type="button"
-                  draggable={false}
-                  aria-label={`Remove ${fileName}`}
-                  onDragStart={(event) => event.stopPropagation()}
-                  onClick={() => {
-                    if (!descriptor) {
-                      removeMediaCompatibility(id)
-                      return
-                    }
-                    if (assetIsUsedOnTimeline(id)) {
-                      window.alert(
-                        'Remove this media\'s clips from the timeline before removing its source.',
-                      )
-                      return
-                    }
-                    forgetImportedMediaHandle(id)
-                    removeAsset(id)
-                  }}
-                >
-                  <X aria-hidden="true" size={14} weight="bold" />
-                </button>
-                {compatibilityItem ? (
-                  <CompatibilityDiagnostics
-                    item={compatibilityItem}
-                    busy={importBusy || relinkBusy}
-                    onReviewPartial={descriptor
-                      ? undefined
-                      : (selection, trigger) => {
-                          partialReviewTriggerRef.current = trigger
-                          setPartialReview({ itemId: id, selection })
-                        }}
-                    onRetry={descriptor
-                      ? undefined
-                      : () => void retryMediaCompatibility(id)}
-                  />
-                ) : null}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {itemIds.length > 0 && (
+      ) : filteredItems.length === 0 && !filterPending ? (
+        <div className="media-empty" role="status">
+          <p>No media matches these filters.</p>
+          <button
+            type="button"
+            className="media-pool-clear-empty"
+            onClick={() => {
+              setSearchQuery('')
+              setKindFilter('all')
+              setStatusFilter('all')
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      ) : null}
+      <span id="media-pool-keyboard-help" className="media-pool-sr-only">
+        Use arrow keys, Home, End, Page Up, and Page Down to move the Media Pool selection.
+      </span>
+      <span className="media-pool-sr-only" aria-live="polite">
+        {effectiveSelectedAssetId
+          ? `Selected ${filteredItems[filteredIndexById.get(effectiveSelectedAssetId) ?? -1]?.fileName ?? 'media'}`
+          : 'No media selected'}
+      </span>
+      {itemModels.length > 0 && (
         <div className="media-count">
-          {itemIds.length} {itemIds.length === 1 ? 'item' : 'items'}
+          {filteredItems.length === itemModels.length
+            ? `${itemModels.length} ${itemModels.length === 1 ? 'item' : 'items'}`
+            : `${filteredItems.length} of ${itemModels.length} items`}
         </div>
       )}
       <MediaImportDialog />
