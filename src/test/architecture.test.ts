@@ -159,6 +159,7 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
   ])
   const benchmarkDevImportAllowances = new Map<string, ReadonlySet<string>>([
     ['dev/performance/fixture.ts', new Set(['domain'])],
+    ['dev/performance/framePlanningBenchmark.ts', new Set(['domain'])],
     ['dev/performance/runtime.ts', new Set(['app', 'domain', 'state'])],
     ['dev/performance/PerformanceBenchmarkApp.tsx', new Set(['ui'])],
   ])

@@ -230,6 +230,26 @@ describe('performance evidence contract', () => {
         visibleStartedBeforeBackground: true,
         startOrderPreview: ['selected-099', 'visible-091', 'background-000'],
       },
+      framePlanningIndex: {
+        version: 'issue-59-v1',
+        lookup: 'immutable-per-track-binary-search',
+        rebuildPolicy: 'planner-construction-on-document-or-source-catalog-change',
+        scenarios: [{
+          layout: 'dense',
+          trackCount: 2,
+          clipsPerTrack: 4_096,
+          transitionCount: 24,
+          framesPerSample: 256,
+          sampleCount: 3,
+          parityFrameCount: 256,
+          transitionParityFrameCount: 36,
+          legacyMillisecondsPerFrame: [1, 1.1, 1.2],
+          indexedMillisecondsPerFrame: [0.1, 0.11, 0.12],
+          legacy: summarizeDistribution([1, 1.1, 1.2]),
+          indexed: summarizeDistribution([0.1, 0.11, 0.12]),
+          p95ImprovementPercent: 90,
+        }],
+      },
       telemetry: {
         documentMemory: estimateDocumentMemory(
           createTimelineDoc('Telemetry', DEFAULT_PROJECT_SETTINGS, 'telemetry'),
@@ -287,6 +307,7 @@ describe('performance evidence contract', () => {
     expect(report).toContain('Memory provenance: private-bytes via powershell:Get-Process')
     expect(report).toContain('modeled legacy launch-all decoder demand: 145')
     expect(report).toContain('Completed/cancelled/failed: 101/1/0')
+    expect(report).toContain('legacy/indexed p95 1.190/0.119 ms per frame')
     expect(report).toContain('Created/revoked benchmark URLs: 10/10')
 
     const manualReport = performanceArtifactMarkdown({

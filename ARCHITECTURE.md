@@ -31,6 +31,9 @@ non-negotiable rules. Re-read it at the start of every coding session.
 - The opt-in Issue #54 benchmark has one narrow, architecture-guarded dev
   exception. `dev/performance/runtime.ts` may compose existing `app/`
   controllers with `state/` and its bounded Mediabunny fixture generator;
+  `dev/performance/framePlanningBenchmark.ts` may import only browser-free
+  `domain/` planners to produce the Issue #59 legacy/indexed parity and timing
+  evidence;
   `PerformanceBenchmarkApp.tsx` may reuse existing `ui/` surfaces. No other
   `dev/` module may reach those layers, and only the build-gated exact route in
   `main.tsx` may import the benchmark UI. Ordinary production builds remove
@@ -174,6 +177,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `TimelineDoc.height` and is never persisted as another source of truth.
   Portable projects and export profiles retain their existing schemas; resume,
   preview, render, and export consume the document dimensions unchanged.
+- `domain/presentationProfile.ts` is the browser-free authority for disposable
+  Program Monitor presentation. It resolves Auto/Full/Half/Quarter into one
+  uniform project-to-output scale plus an explainable reason and device-pixel
+  policy. The app may combine session quality, transport state, and measured
+  monitor size, but authored transforms/crops/text/keyframes remain in project
+  coordinates. The render worker may resize and reuse only preview surfaces;
+  export always requests an explicit full-resolution profile.
 
 ## Crossfade planning, composition, and audio
 

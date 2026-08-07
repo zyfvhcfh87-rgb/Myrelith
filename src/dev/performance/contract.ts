@@ -1,5 +1,5 @@
-export const PERFORMANCE_ARTIFACT_SCHEMA_VERSION = 4 as const
-export const PERFORMANCE_HARNESS_VERSION = 'issues-56-57-v1' as const
+export const PERFORMANCE_ARTIFACT_SCHEMA_VERSION = 5 as const
+export const PERFORMANCE_HARNESS_VERSION = 'issue-59-v1' as const
 
 export type PerformanceMetricId =
   | 'launcher-interactive-ms'
@@ -356,6 +356,31 @@ export interface MediaAnalysisSchedulerEvidence {
   readonly startOrderPreview: readonly string[]
 }
 
+export type FramePlanningLayout = 'dense' | 'sparse'
+
+export interface FramePlanningScenarioEvidence {
+  readonly layout: FramePlanningLayout
+  readonly trackCount: number
+  readonly clipsPerTrack: number
+  readonly transitionCount: number
+  readonly framesPerSample: number
+  readonly sampleCount: number
+  readonly parityFrameCount: number
+  readonly transitionParityFrameCount: number
+  readonly legacyMillisecondsPerFrame: readonly number[]
+  readonly indexedMillisecondsPerFrame: readonly number[]
+  readonly legacy: DistributionSummary
+  readonly indexed: DistributionSummary
+  readonly p95ImprovementPercent: number
+}
+
+export interface FramePlanningIndexEvidence {
+  readonly version: 'issue-59-v1'
+  readonly lookup: 'immutable-per-track-binary-search'
+  readonly rebuildPolicy: 'planner-construction-on-document-or-source-catalog-change'
+  readonly scenarios: readonly FramePlanningScenarioEvidence[]
+}
+
 export type ProposedGateStatistic =
   | 'median'
   | 'p75'
@@ -388,6 +413,7 @@ export interface PerformanceArtifact {
   readonly proposedGates: readonly ProposedPerformanceGate[]
   readonly memoryEvidence: ChromiumProcessMemoryEvidence
   readonly mediaAnalysisScheduler: MediaAnalysisSchedulerEvidence
+  readonly framePlanningIndex: FramePlanningIndexEvidence
   readonly telemetry: RuntimeTelemetryEvidence
   readonly warnings: readonly string[]
   readonly consoleProblems: readonly string[]
@@ -611,6 +637,7 @@ export function performanceArtifactMarkdown(artifact: PerformanceArtifact): stri
     : `unavailable (${gpu.acceleration.reason})`
   const memoryEvidence = artifact.memoryEvidence
   const mediaAnalysis = artifact.mediaAnalysisScheduler
+  const framePlanning = artifact.framePlanningIndex
   const memoryProvenance = memoryEvidence.status === 'measured'
     ? `${memoryEvidence.primaryMetric} via ${memoryEvidence.hostSampler}; ${memoryEvidence.samples.length} complete CDP process-table samples`
     : `unavailable (${memoryEvidence.reason})`
@@ -657,6 +684,13 @@ export function performanceArtifactMarkdown(artifact: PerformanceArtifact): stri
     `Observed budget/peak: ${mediaAnalysis.budget.maxConcurrentJobs} assets and ${mediaAnalysis.budget.maxDecoderSlots} decoder slots; ${mediaAnalysis.maxActiveJobCount} active assets and ${mediaAnalysis.maxActiveDecoderCount} active decoders. Queue peak/final: ${mediaAnalysis.maxQueueDepth}/${mediaAnalysis.finalQueueDepth}.`,
     `Completed/cancelled/failed: ${mediaAnalysis.completedCount}/${mediaAnalysis.cancelledCount}/${mediaAnalysis.failedCount}. Wait p50/p75/p95: ${decimal(mediaAnalysis.waitTimeMs.median)}/${decimal(mediaAnalysis.waitTimeMs.p75)}/${decimal(mediaAnalysis.waitTimeMs.p95)} ms. Event-loop delay p95: ${decimal(mediaAnalysis.eventLoopDelayMs.p95)} ms. Yield: ${mediaAnalysis.yieldStrategy}.`,
     `Priority proof: selected before background=${mediaAnalysis.selectedStartedBeforeBackground}; visible before background=${mediaAnalysis.visibleStartedBeforeBackground}; progress observed=${mediaAnalysis.progressObserved}.`,
+    '',
+    '## Frame planning index',
+    '',
+    `Lookup: ${framePlanning.lookup}; rebuild policy: ${framePlanning.rebuildPolicy}.`,
+    ...framePlanning.scenarios.map((scenario) => (
+      `${scenario.layout}: ${scenario.trackCount} tracks x ${scenario.clipsPerTrack} clips, ${scenario.transitionCount} transitions, ${scenario.parityFrameCount} parity frames including ${scenario.transitionParityFrameCount} transition-boundary frames; legacy/indexed p95 ${decimal(scenario.legacy.p95)}/${decimal(scenario.indexed.p95)} ms per frame (${decimal(scenario.p95ImprovementPercent)}% improvement).`
+    )),
     '',
     '## Warnings',
     '',
