@@ -37,6 +37,7 @@ import { framesToSeconds, rescaleFrames } from '../domain/time'
 import type {
   FromRenderWorker,
   RenderMode,
+  RenderWorkerRuntimeTelemetrySnapshot,
   StreamingCompositeSourceEntry,
   ToRenderWorker,
 } from '../workers/render-protocol'
@@ -122,6 +123,7 @@ export class RenderWorkerBridge {
   /** Invalidates legacy chunk reads when any source is replaced or removed. */
   private sourceRevision = 0
   private nextRequestId = 1
+  private nextTelemetryRequestId = 1
   /** Monotonic identity for one configure/open attempt; prevents asset ABA. */
   private nextSetupId = 1
   /** Id of the newest renderFrame CALL — stale calls detect supersession. */
@@ -130,6 +132,13 @@ export class RenderWorkerBridge {
   private readonly pendingConfigures = new Map<
     AssetId,
     { setupId: number; resolve: () => void; reject: (error: Error) => void }
+  >()
+  private readonly pendingTelemetry = new Map<
+    number,
+    {
+      resolve: (snapshot: RenderWorkerRuntimeTelemetrySnapshot) => void
+      reject: (error: Error) => void
+    }
   >()
   private disposed = false
   private closeTimeout: ReturnType<typeof setTimeout> | null = null
@@ -266,6 +275,25 @@ export class RenderWorkerBridge {
     this.pendingConfigures.get(assetId)?.reject(new Error('asset released'))
     this.pendingConfigures.delete(assetId)
     this.post({ type: 'releaseAsset', assetId }, [])
+  }
+
+  /** Enable/reset or disable the local-only worker health counters. */
+  setRuntimeTelemetryEnabled(enabled: boolean): void {
+    if (this.disposed) return
+    this.post({ type: 'setRuntimeTelemetry', enabled }, [])
+  }
+
+  /** Capture a point-in-time worker health snapshot for the performance lab. */
+  requestRuntimeTelemetry(): Promise<RenderWorkerRuntimeTelemetrySnapshot> {
+    if (this.disposed) return Promise.reject(new Error('bridge disposed'))
+    const requestId = this.nextTelemetryRequestId++
+    if (!Number.isSafeInteger(requestId)) {
+      return Promise.reject(new RangeError('Render telemetry request id overflow'))
+    }
+    return new Promise((resolve, reject) => {
+      this.pendingTelemetry.set(requestId, { resolve, reject })
+      this.post({ type: 'requestRuntimeTelemetry', requestId }, [])
+    })
   }
 
   /**
@@ -441,6 +469,10 @@ export class RenderWorkerBridge {
       waiter.reject(new Error('bridge disposed'))
     }
     this.pendingConfigures.clear()
+    for (const waiter of this.pendingTelemetry.values()) {
+      waiter.reject(new Error('bridge disposed'))
+    }
+    this.pendingTelemetry.clear()
   }
 
   private terminateWorker(): void {
@@ -491,6 +523,13 @@ export class RenderWorkerBridge {
           missingClipIds: msg.missingClipIds,
           renderMs: msg.renderMs,
         })
+        break
+      }
+      case 'runtimeTelemetry': {
+        const waiter = this.pendingTelemetry.get(msg.requestId)
+        if (!waiter) break
+        this.pendingTelemetry.delete(msg.requestId)
+        waiter.resolve(msg.snapshot)
         break
       }
       case 'error': {

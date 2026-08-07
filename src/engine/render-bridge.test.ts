@@ -17,7 +17,11 @@ import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, FrameRate, TimelineDoc, Track } from '../domain/schema'
 import { defaultTextProps } from '../domain/textOverlay'
 import type { ChunkPayload } from '../workers/decode-protocol'
-import type { FromRenderWorker, ToRenderWorker } from '../workers/render-protocol'
+import type {
+  FromRenderWorker,
+  RenderWorkerRuntimeTelemetrySnapshot,
+  ToRenderWorker,
+} from '../workers/render-protocol'
 import { RenderAssetOpenError, RenderWorkerBridge } from './render-bridge'
 import type { ChunkProvider, WorkerLike } from './worker-bridge'
 
@@ -36,6 +40,40 @@ const BUDGET: LocalDecoderBudget = {
   framesPerSecond: 30,
   sampleRate: 48_000,
   channels: 2,
+}
+
+function emptyRuntimeTelemetry(): RenderWorkerRuntimeTelemetrySnapshot {
+  return {
+    enabled: true,
+    active: {
+      videoSources: 0,
+      videoDecoders: 0,
+      pendingBitmapCopies: 0,
+      pendingStaticImageOpens: 0,
+    },
+    queues: {
+      renderDepth: 0,
+      renderMaxDepth: 2,
+      decodeDepth: 0,
+      decodeMaxDepth: 1,
+    },
+    caches: { hits: 3, misses: 2 },
+    decodedMedia: {
+      retainedStaticImages: 0,
+      retainedStaticImageBytes: 0,
+    },
+    derivedCaches: {
+      streamingFrameBitmaps: 0,
+      estimatedStreamingFrameBytes: 0,
+      scratchSurfaceBytes: 0,
+      transitionSurfaceBytes: 0,
+    },
+    closes: {
+      decodedVideoFrames: 4,
+      streamingBitmaps: 4,
+      staticImageSources: 0,
+    },
+  }
 }
 
 class FakeWorker implements WorkerLike {
@@ -1411,5 +1449,30 @@ describe('reply routing', () => {
     await expect(configuring).rejects.toThrow('bridge disposed')
     worker.emit({ type: 'closed' })
     expect(worker.terminated).toBe(true)
+  })
+
+  test('runtime telemetry is opt-in and routed independently from renders', async () => {
+    const worker = new FakeWorker()
+    const bridge = new RenderWorkerBridge(worker)
+
+    bridge.setRuntimeTelemetryEnabled(true)
+    expect(worker.posted.at(-1)?.msg).toEqual({
+      type: 'setRuntimeTelemetry',
+      enabled: true,
+    })
+
+    const pending = bridge.requestRuntimeTelemetry()
+    const request = worker.posted.at(-1)?.msg
+    expect(request?.type).toBe('requestRuntimeTelemetry')
+    if (request?.type !== 'requestRuntimeTelemetry') {
+      throw new Error('telemetry request was not posted')
+    }
+    const snapshot = emptyRuntimeTelemetry()
+    worker.emit({
+      type: 'runtimeTelemetry',
+      requestId: request.requestId,
+      snapshot,
+    })
+    await expect(pending).resolves.toEqual(snapshot)
   })
 })
