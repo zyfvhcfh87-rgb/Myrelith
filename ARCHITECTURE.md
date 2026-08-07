@@ -28,6 +28,13 @@ non-negotiable rules. Re-read it at the start of every coding session.
   (e.g. `app/previewController.ts`) may import state/ AND engine/pipeline
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
+- The opt-in Issue #54 benchmark has one narrow, architecture-guarded dev
+  exception. `dev/performance/runtime.ts` may compose existing `app/`
+  controllers with `state/` and its bounded Mediabunny fixture generator;
+  `PerformanceBenchmarkApp.tsx` may reuse existing `ui/` surfaces. No other
+  `dev/` module may reach those layers, and only the build-gated exact route in
+  `main.tsx` may import the benchmark UI. Ordinary production builds remove
+  that dynamic import and its complete closure.
 - Sanctioned exceptions between those three (and nothing more):
   - anyone may import `workers/decode-types.ts`,
     `workers/decode-protocol.ts`, `workers/render-legacy-protocol.ts`, and
@@ -442,5 +449,5 @@ src/
                Ruler, Playhead
   app/         App, project/persistence/controllers, ordered layout.css manifest
   app/styles/  feature-owned editor styles in binding cascade order
-  dev/         temporary scratch harnesses — may import anything, never shipped
+  dev/         explicitly guarded, build-gated benchmark UI/runtime only
 ```

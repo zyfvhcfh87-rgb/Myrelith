@@ -2357,6 +2357,51 @@ remain out of scope.
   responsive no-overflow layouts, Inspector keyboard behavior, Add Text focus
   restoration, and zero console warnings/errors.
 
+## Post-MVP issue #54 - performance benchmark harness
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+
+- [x] Add a deterministic portable stress fixture with exactly 100 mixed-media
+  assets, eight tracks, a 30-minute 4K timeline, 320 clips, 39 transitions,
+  20 text clips, and bounded connected 4K video/still plus audio sources.
+- [x] Measure launcher/editor readiness, scrub input-to-present, worker frame
+  rendering, dropped frames, audio underruns, import readiness, complete
+  CDP-scoped Chromium process-memory plateau/growth, and export real-time ratio
+  with raw samples, provenance, and distribution summaries. Renderer/GPU/host
+  process coverage failures record the memory metric as unavailable.
+  Input-to-present ends at a browser presentation boundary after the matching
+  worker draw, exposed through a testable dependency seam.
+- [x] Emit schema-defined JSON, a human-readable Markdown summary, and a
+  Chromium screenshot. Bind every result to exact branch/commit/dirty and
+  fixture SHA-256 fingerprints plus runtime/browser/device metadata, including
+  CDP GPU renderer/vendor/driver and acceleration identity. Fixture
+  identity includes the portable project, connected source/scrub plan, and
+  stable generation settings/sample plan while excluding browser-dependent
+  output bytes; canonical-state verification recomputes it.
+- [x] Keep every threshold advisory, document the exact production-browser
+  workflow and proposals, and fail the command only for harness, console,
+  mutation/restoration, or cleanup integrity failures.
+- [x] Exclude the route and its chunks from ordinary production builds; include
+  it only for the exact path in development or an explicitly flagged production
+  build. Architecture tests enforce the one benchmark runtime composition
+  exception and the one benchmark UI reuse exception.
+- [x] Build and preview the enabled bundle from the same unique OS-temporary
+  output directory, then recursively remove it on success/failure so the
+  benchmark cannot replace or serve an existing ordinary `dist/`.
+- [x] Refuse active project state, avoid persistence controllers, dispose every
+  preview/audio/export owner, revoke generated/import URLs, and restore exact
+  document/history, media, transport, and project-session state.
+- [x] Reject playback beyond 2,000 ms and export beyond 31 frames before
+  measurement so fixed generated video is never advertised as continuous after
+  it enters the held tail.
+- [x] Pass focused Vitest coverage plus all 16 Node runner cases, canonical
+  `npm test` with 1,847/1,847 Vitest cases across 110 files plus those runner
+  cases, production build/typecheck, oxlint, a 0-vulnerability production
+  audit, and fresh smoke/full Chromium measurements. Both runs restored every
+  isolated store and URL owner with no browser console problem. Smoke/full
+  captured 2/7 complete Windows private-memory process-table samples and both
+  artifacts validated against schema 2.
+
 ## Public preview foundation — v0.1.0-alpha.1
 
 **COMPLETE AND RELEASED (2026-08-01).**

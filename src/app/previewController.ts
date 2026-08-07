@@ -101,6 +101,44 @@ export interface PreviewDeps {
   transferCanvas(canvas: HTMLCanvasElement): OffscreenCanvas
   init(bridge: BridgeLike, canvas: OffscreenCanvas): void
   fetchBlob(url: string): Promise<Blob>
+  now(): number
+  /** Resolve only after a paint opportunity following the completed draw. */
+  afterPresentationBoundary(): Promise<number>
+}
+
+/** Passive timing evidence for dev tools; absent listeners add no clock reads. */
+export interface PreviewRenderDiagnostic {
+  readonly frame: number
+  readonly mode: RenderMode
+  readonly requestedAt: number
+  readonly presentedAt: number
+  readonly result: RenderFrameResult
+}
+
+export type PreviewRenderDiagnosticListener = (
+  diagnostic: PreviewRenderDiagnostic,
+) => void
+
+const renderDiagnosticListeners = new Set<PreviewRenderDiagnosticListener>()
+
+/** Subscribe without putting benchmark data in project or Zustand state. */
+export function subscribePreviewRenderDiagnostics(
+  listener: PreviewRenderDiagnosticListener,
+): () => void {
+  renderDiagnosticListeners.add(listener)
+  return () => renderDiagnosticListeners.delete(listener)
+}
+
+function publishRenderDiagnostic(
+  diagnostic: PreviewRenderDiagnostic,
+): void {
+  for (const listener of renderDiagnosticListeners) {
+    try {
+      listener(diagnostic)
+    } catch {
+      // Diagnostics are observational and must never disturb presentation.
+    }
+  }
 }
 
 const realDeps: PreviewDeps = {
@@ -108,6 +146,15 @@ const realDeps: PreviewDeps = {
   transferCanvas: (canvas) => canvas.transferControlToOffscreen(),
   init: (bridge, offscreen) => (bridge as RenderWorkerBridge).init(offscreen),
   fetchBlob: (url) => fetch(url).then((r) => r.blob()),
+  now: () => performance.now(),
+  afterPresentationBoundary: () => new Promise((resolve) => {
+    // The worker draw may resolve between browser frames. The first callback
+    // queues behind that completion; by the second callback, the browser has
+    // crossed the intervening paint/compositor opportunity for the canvas.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve(performance.now()))
+    })
+  }),
 }
 
 interface ControllerState {
@@ -124,6 +171,8 @@ interface ControllerState {
   rafPending: boolean
   /** Invalidates callbacks queued for a disposed/replaced bridge. */
   renderGeneration: number
+  /** Invalidates presentation evidence when a newer render is dispatched. */
+  presentationGeneration: number
 }
 
 const state: ControllerState = {
@@ -134,6 +183,7 @@ const state: ControllerState = {
   unsubscribes: [],
   rafPending: false,
   renderGeneration: 0,
+  presentationGeneration: 0,
 }
 
 function modeForTransport(transport: {
@@ -213,7 +263,7 @@ function syncPreviewDocument(bridge: BridgeLike): void {
   bridge.setDoc(doc)
 }
 
-function scheduleRender(): void {
+function scheduleRender(deps: PreviewDeps): void {
   const bridge = state.bridge
   if (state.rafPending || !bridge) return
   const generation = state.renderGeneration
@@ -241,9 +291,35 @@ function scheduleRender(): void {
       }
     }
     usePreviewStatusStore.getState().setOfflineVisualAssetIds(offlineIds)
+    const frame = transport.playheadFrame
+    const mode = modeForTransport(transport)
+    const diagnosticsEnabled = renderDiagnosticListeners.size > 0
+    const requestedAt = diagnosticsEnabled ? deps.now() : 0
+    const presentationGeneration = ++state.presentationGeneration
     void bridge
-      .renderFrame(transport.playheadFrame, modeForTransport(transport))
+      .renderFrame(frame, mode)
       .then((result) => {
+        if (diagnosticsEnabled && result.status !== 'superseded') {
+          // Presentation evidence is deliberately passive: ordinary preview
+          // completion/error handling below is not held behind browser paint.
+          void deps.afterPresentationBoundary().then((presentedAt) => {
+            if (
+              renderDiagnosticListeners.size === 0
+              || state.renderGeneration !== generation
+              || state.bridge !== bridge
+              || state.presentationGeneration !== presentationGeneration
+            ) return
+            publishRenderDiagnostic({
+              frame,
+              mode,
+              requestedAt,
+              presentedAt,
+              result,
+            })
+          }).catch(() => {
+            // Diagnostics must never disturb presentation or app behavior.
+          })
+        }
         if (
           state.renderGeneration === generation
           && state.bridge === bridge
@@ -408,7 +484,7 @@ export function initPreview(
   }
   // A source came online: repaint so its clips fill in (retry policy).
   bridge.onAssetReady = () =>
-    scheduleRender()
+    scheduleRender(deps)
   state.canvas = canvas
   state.bridge = bridge
 
@@ -423,7 +499,7 @@ export function initPreview(
       if (s.doc !== prev.doc) {
         syncPreviewDocument(bridge)
         syncAssets(deps)
-        scheduleRender()
+        scheduleRender(deps)
       }
     }),
     useTransportStore.subscribe((s, prev) => {
@@ -438,7 +514,7 @@ export function initPreview(
         || modeForTransport(s) !== modeForTransport(prev)
         || s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
-      ) scheduleRender()
+      ) scheduleRender(deps)
     }),
     useMediaStore.subscribe(() => {
       const bounds = currentSourceBoundsCatalog()
@@ -448,18 +524,19 @@ export function initPreview(
       )
       bridge.setSourceBoundsCatalog(bounds)
       syncAssets(deps)
-      scheduleRender()
+      scheduleRender(deps)
     }),
   )
   // Assets may already be waiting (import before mount, HMR, tests) and an
   // empty timeline still paints its background.
   syncAssets(deps)
-  scheduleRender()
+  scheduleRender(deps)
 }
 
 /** Tear everything down (tests / real app teardown, not StrictMode churn). */
 export function disposePreview(): void {
   state.renderGeneration++
+  state.presentationGeneration++
   for (const unsubscribe of state.unsubscribes) unsubscribe()
   state.unsubscribes = []
   state.bridge?.dispose()
