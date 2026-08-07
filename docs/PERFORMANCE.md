@@ -96,13 +96,13 @@ they are never replaced with zero.
 | `telemetry-overhead-percent` | Balanced ABBA aggregate scrub input-to-present overhead across identical frame sequences with worker telemetry enabled versus disabled. |
 | `export-real-time-ratio` | Elapsed export time divided by the bounded 4K segment duration. |
 
-The schema-3 `mediaAnalysisScheduler` object is separate from these product
+The schema-4 `mediaAnalysisScheduler` object is separate from these product
 metrics. It preserves exact queue/resource facts and a modeled 145-slot legacy
 comparison without inventing a before-run measurement from the current tree.
 
 ## Local runtime and document-memory evidence
 
-The v3 artifact separates authored document bytes, undo/redo snapshots,
+The v4 artifact separates authored document bytes, undo/redo snapshots,
 decoded media, and derived caches instead of presenting one misleading heap
 number. `documentMemory` records exact serialized UTF-8 sizes plus an
 explainable retained-graph comparison model. The model counts fixed object,
