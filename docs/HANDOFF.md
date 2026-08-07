@@ -1739,7 +1739,7 @@ surface; it is not a second zoom and never enters document history.
 
 ## Post-MVP issue #54 - performance evidence foundation
 
-**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07; not committed or published).**
+**COMPLETE AND PUBLISHED (2026-08-07; PR #81).**
 
 - The opt-in production benchmark route owns a deterministic, validator-clean
   100-asset / 8-track / 30-minute fixture with 320 clips, 39 crossfades,
@@ -1793,6 +1793,8 @@ surface; it is not a second zoom and never enters document history.
   framework overlay, warning/error log, or horizontal page overflow. Zoom In
   changed the real slider from 0.725 to 0.748. The automated production run's
   1440x900 screenshot rendered the completed human-readable summary.
+- Reviewed head `f873818` was normally merged through PR #81 as `9920491`;
+  Issue #54 closed automatically.
 
 ## Post-MVP issue #55 - launcher and editor bundle split
 

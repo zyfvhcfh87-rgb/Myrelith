@@ -2359,7 +2359,7 @@ remain out of scope.
 
 ## Post-MVP issue #54 - performance benchmark harness
 
-**IMPLEMENTATION COMPLETE (2026-08-07); DELIVERY TRACKED BY PR #83.**
+**COMPLETE AND PUBLISHED (2026-08-07; PR #81).**
 
 - [x] Add a deterministic portable stress fixture with exactly 100 mixed-media
   assets, eight tracks, a 30-minute 4K timeline, 320 clips, 39 transitions,
@@ -2401,10 +2401,12 @@ remain out of scope.
   isolated store and URL owner with no browser console problem. Smoke/full
   captured 2/7 complete Windows private-memory process-table samples and both
   artifacts validated against schema 2.
+- [x] Reviewed head `f873818` was normally merged through PR #81 as `9920491`;
+  Issue #54 closed automatically.
 
 ## Post-MVP issue #55 - launcher and editor bundle split
 
-**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+**IMPLEMENTATION COMPLETE (2026-08-07); DELIVERY TRACKED BY PR #83.**
 
 - [x] Move the editor composition, lifecycles, shortcuts, and CSS behind one
   shared `EditorShell` dynamic import while keeping ProjectLaunch eager.
