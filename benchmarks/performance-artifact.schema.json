@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://webcut.local/schemas/performance-artifact-v2.json",
+  "$id": "https://webcut.local/schemas/performance-artifact-v3.json",
   "title": "WebCut performance evidence artifact",
   "type": "object",
   "additionalProperties": false,
@@ -14,13 +14,14 @@
     "metrics",
     "proposedGates",
     "memoryEvidence",
+    "telemetry",
     "warnings",
     "consoleProblems",
     "resources"
   ],
   "properties": {
-    "schemaVersion": { "const": 2 },
-    "harnessVersion": { "const": "issue-54-v3" },
+    "schemaVersion": { "const": 3 },
+    "harnessVersion": { "const": "issue-57-v1" },
     "capturedAt": { "type": "string", "format": "date-time" },
     "metadata": {
       "type": "object",
@@ -47,6 +48,7 @@
         "import-readiness-ms",
         "memory-plateau-mib",
         "memory-growth-kib-per-batch",
+        "telemetry-overhead-percent",
         "export-real-time-ratio"
       ],
       "properties": {
@@ -59,6 +61,7 @@
         "import-readiness-ms": { "$ref": "#/$defs/metric" },
         "memory-plateau-mib": { "$ref": "#/$defs/metric" },
         "memory-growth-kib-per-batch": { "$ref": "#/$defs/metric" },
+        "telemetry-overhead-percent": { "$ref": "#/$defs/metric" },
         "export-real-time-ratio": { "$ref": "#/$defs/metric" }
       }
     },
@@ -67,6 +70,7 @@
       "items": { "$ref": "#/$defs/proposedGate" }
     },
     "memoryEvidence": { "$ref": "#/$defs/memoryEvidence" },
+    "telemetry": { "$ref": "#/$defs/telemetry" },
     "warnings": { "type": "array", "items": { "type": "string" } },
     "consoleProblems": { "type": "array", "items": { "type": "string" } },
     "resources": { "$ref": "#/$defs/resources" }
@@ -368,7 +372,7 @@
           "required": ["status", "unit", "samples", "summary", "definition"],
           "properties": {
             "status": { "const": "measured" },
-            "unit": { "enum": ["ms", "count", "MiB", "KiB/batch", "ratio"] },
+            "unit": { "enum": ["ms", "count", "MiB", "KiB/batch", "percent", "ratio"] },
             "samples": {
               "type": "array",
               "minItems": 1,
@@ -391,7 +395,7 @@
           ],
           "properties": {
             "status": { "const": "unavailable" },
-            "unit": { "enum": ["ms", "count", "MiB", "KiB/batch", "ratio"] },
+            "unit": { "enum": ["ms", "count", "MiB", "KiB/batch", "percent", "ratio"] },
             "samples": { "type": "array", "maxItems": 0 },
             "summary": { "type": "null" },
             "definition": { "type": "string", "minLength": 1 },
@@ -502,6 +506,252 @@
         }
       ]
     },
+    "retainedDocumentGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "estimatedBytes",
+        "objectCount",
+        "arrayCount",
+        "propertySlotCount",
+        "arraySlotCount",
+        "stringCount",
+        "stringCodeUnitCount",
+        "numberRootCount"
+      ],
+      "properties": {
+        "estimatedBytes": { "type": "integer", "minimum": 0 },
+        "objectCount": { "type": "integer", "minimum": 0 },
+        "arrayCount": { "type": "integer", "minimum": 0 },
+        "propertySlotCount": { "type": "integer", "minimum": 0 },
+        "arraySlotCount": { "type": "integer", "minimum": 0 },
+        "stringCount": { "type": "integer", "minimum": 0 },
+        "stringCodeUnitCount": { "type": "integer", "minimum": 0 },
+        "numberRootCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "documentMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["estimator", "assumptions", "authoredDocument", "history", "totals"],
+      "properties": {
+        "estimator": { "const": "json-retained-graph-v1" },
+        "assumptions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "authoredDocument": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["serializedUtf8Bytes", "retainedGraph"],
+          "properties": {
+            "serializedUtf8Bytes": { "type": "integer", "minimum": 0 },
+            "retainedGraph": { "$ref": "#/$defs/retainedDocumentGraph" }
+          }
+        },
+        "history": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pastDepth",
+            "futureDepth",
+            "snapshotCount",
+            "serializedUtf8Bytes",
+            "estimatedAdditionalRetainedBytes",
+            "estimatedStructuralSharingSavingsBytes"
+          ],
+          "properties": {
+            "pastDepth": { "type": "integer", "minimum": 0 },
+            "futureDepth": { "type": "integer", "minimum": 0 },
+            "snapshotCount": { "type": "integer", "minimum": 0 },
+            "serializedUtf8Bytes": { "type": "integer", "minimum": 0 },
+            "estimatedAdditionalRetainedBytes": { "type": "integer", "minimum": 0 },
+            "estimatedStructuralSharingSavingsBytes": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "totals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["serializedUtf8Bytes", "estimatedRetainedBytes"],
+          "properties": {
+            "serializedUtf8Bytes": { "type": "integer", "minimum": 0 },
+            "estimatedRetainedBytes": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "workerRuntimeTelemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "active", "queues", "caches", "decodedMedia", "derivedCaches", "closes"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "active": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["videoSources", "videoDecoders", "pendingBitmapCopies", "pendingStaticImageOpens"],
+          "properties": {
+            "videoSources": { "type": "integer", "minimum": 0 },
+            "videoDecoders": { "type": "integer", "minimum": 0 },
+            "pendingBitmapCopies": { "type": "integer", "minimum": 0 },
+            "pendingStaticImageOpens": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "queues": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["renderDepth", "renderMaxDepth", "decodeDepth", "decodeMaxDepth"],
+          "properties": {
+            "renderDepth": { "type": "integer", "minimum": 0 },
+            "renderMaxDepth": { "type": "integer", "minimum": 0 },
+            "decodeDepth": { "type": "integer", "minimum": 0 },
+            "decodeMaxDepth": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "caches": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hits", "misses"],
+          "properties": {
+            "hits": { "type": "integer", "minimum": 0 },
+            "misses": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "decodedMedia": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["retainedStaticImages", "retainedStaticImageBytes"],
+          "properties": {
+            "retainedStaticImages": { "type": "integer", "minimum": 0 },
+            "retainedStaticImageBytes": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "derivedCaches": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["streamingFrameBitmaps", "estimatedStreamingFrameBytes", "scratchSurfaceBytes", "transitionSurfaceBytes"],
+          "properties": {
+            "streamingFrameBitmaps": { "type": "integer", "minimum": 0 },
+            "estimatedStreamingFrameBytes": { "type": "integer", "minimum": 0 },
+            "scratchSurfaceBytes": { "type": "integer", "minimum": 0 },
+            "transitionSurfaceBytes": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "closes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["decodedVideoFrames", "streamingBitmaps", "staticImageSources"],
+          "properties": {
+            "decodedVideoFrames": { "type": "integer", "minimum": 0 },
+            "streamingBitmaps": { "type": "integer", "minimum": 0 },
+            "staticImageSources": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "audioRuntimeTelemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contextTime",
+        "activeNodeCount",
+        "rms",
+        "activeDecoderCount",
+        "pendingBufferCount",
+        "anchorTime",
+        "fromFrame",
+        "scheduledThroughTimelineTime",
+        "scheduledThroughContextTime"
+      ],
+      "properties": {
+        "contextTime": { "type": "number", "minimum": 0 },
+        "activeNodeCount": { "type": "integer", "minimum": 0 },
+        "rms": { "type": "number", "minimum": 0 },
+        "activeDecoderCount": { "type": "integer", "minimum": 0 },
+        "pendingBufferCount": { "type": "integer", "minimum": 0 },
+        "anchorTime": { "type": "number", "minimum": 0 },
+        "fromFrame": { "type": "integer", "minimum": 0 },
+        "scheduledThroughTimelineTime": { "type": "number", "minimum": 0 },
+        "scheduledThroughContextTime": { "type": "number", "minimum": 0 }
+      }
+    },
+    "runtimeHealthSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cycleIndex", "phase", "worker", "audio"],
+      "properties": {
+        "cycleIndex": { "type": "integer", "minimum": 1 },
+        "phase": { "enum": ["playback", "drained"] },
+        "worker": {
+          "oneOf": [
+            { "$ref": "#/$defs/workerRuntimeTelemetry" },
+            { "type": "null" }
+          ]
+        },
+        "audio": {
+          "oneOf": [
+            { "$ref": "#/$defs/audioRuntimeTelemetry" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentMemory", "overhead", "healthSamples", "cacheDrain", "longAnimationFrames", "userAgentSpecificMemory"],
+      "properties": {
+        "documentMemory": { "$ref": "#/$defs/documentMemory" },
+        "overhead": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["controlDurationsMs", "instrumentedDurationsMs", "overheadPercentSamples"],
+          "properties": {
+            "controlDurationsMs": { "type": "array", "items": { "type": "number", "minimum": 0 } },
+            "instrumentedDurationsMs": { "type": "array", "items": { "type": "number", "minimum": 0 } },
+            "overheadPercentSamples": { "type": "array", "items": { "type": "number" } }
+          }
+        },
+        "healthSamples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/runtimeHealthSample" }
+        },
+        "cacheDrain": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason", "checkedSamples"],
+          "properties": {
+            "status": { "enum": ["pass", "fail", "unavailable"] },
+            "reason": { "type": ["string", "null"], "minLength": 1 },
+            "checkedSamples": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "longAnimationFrames": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason", "entryCount", "overflowed", "durationMs"],
+          "properties": {
+            "status": { "enum": ["measured", "unavailable"] },
+            "reason": { "type": ["string", "null"], "minLength": 1 },
+            "entryCount": { "type": "integer", "minimum": 0 },
+            "overflowed": { "type": "boolean" },
+            "durationMs": { "type": "array", "items": { "type": "number", "minimum": 0 }, "maxItems": 500 }
+          }
+        },
+        "userAgentSpecificMemory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason", "bytes", "breakdownCount"],
+          "properties": {
+            "status": { "enum": ["measured", "unavailable"] },
+            "reason": { "type": ["string", "null"], "minLength": 1 },
+            "bytes": { "type": ["number", "null"], "minimum": 0 },
+            "breakdownCount": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        }
+      }
+    },
     "proposedGate": {
       "type": "object",
       "additionalProperties": false,
@@ -526,6 +776,7 @@
             "import-readiness-ms",
             "memory-plateau-mib",
             "memory-growth-kib-per-batch",
+            "telemetry-overhead-percent",
             "export-real-time-ratio"
           ]
         },

@@ -256,6 +256,8 @@ function makeAudioSession(anchorTime: number): TimelineAudioPlaybackSession & {
       fromFrame: 0,
       contextTime: anchorTime,
       activeNodeCount: 1,
+      activeDecoderCount: 1,
+      pendingBufferCount: 0,
       rms: 0.25,
       scheduledThroughTimelineTime: 1,
       scheduledThroughContextTime: anchorTime + 1,

@@ -58,7 +58,10 @@ import {
   type ClipVisualPreview,
   type TextOverlayPreview,
 } from '../state/transportStore'
-import type { RenderMode } from '../workers/render-protocol'
+import type {
+  RenderMode,
+  RenderWorkerRuntimeTelemetrySnapshot,
+} from '../workers/render-protocol'
 import {
   captureMediaRuntimeGuard,
   mediaRuntimeFailure,
@@ -84,6 +87,8 @@ export interface BridgeLike {
   ): Promise<void>
   releaseAsset(assetId: AssetId): void
   renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult>
+  setRuntimeTelemetryEnabled?(enabled: boolean): void
+  requestRuntimeTelemetry?(): Promise<RenderWorkerRuntimeTelemetrySnapshot>
   dispose(): void
   onWorkerError: ((message: string) => void) | null
   onAssetError: ((
@@ -127,6 +132,23 @@ export function subscribePreviewRenderDiagnostics(
 ): () => void {
   renderDiagnosticListeners.add(listener)
   return () => renderDiagnosticListeners.delete(listener)
+}
+
+/** Enable/reset or disable the opt-in worker counters, if preview is live. */
+export function setPreviewRuntimeTelemetryEnabled(enabled: boolean): boolean {
+  const method = state.bridge?.setRuntimeTelemetryEnabled
+  if (!method) return false
+  method.call(state.bridge, enabled)
+  return true
+}
+
+/** Capture local benchmark evidence without putting it in application state. */
+export function capturePreviewRuntimeTelemetry(): Promise<
+  RenderWorkerRuntimeTelemetrySnapshot | null
+> {
+  const method = state.bridge?.requestRuntimeTelemetry
+  if (!method) return Promise.resolve(null)
+  return method.call(state.bridge)
 }
 
 function publishRenderDiagnostic(

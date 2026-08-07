@@ -1785,6 +1785,44 @@ surface; it is not a second zoom and never enters document history.
   changed the real slider from 0.725 to 0.748. The automated production run's
   1440x900 screenshot rendered the completed human-readable summary.
 
+## Post-MVP issue #57 - runtime and document-memory telemetry
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07; not published).**
+
+- The issue #54 harness now emits schema 3 / `issue-57-v1` evidence. A pure
+  domain estimator separates authored UTF-8 size, undo/redo serialization,
+  additional shared retained-graph cost, and structural-sharing savings. Its
+  fixed assumptions and exclusions are embedded in every artifact; it is not
+  presented as browser heap usage.
+- The isolated fixture builds six deterministic undo snapshots while ending
+  on the exact authored document and preserving the existing fixture
+  fingerprint. Export temporarily replaces and then restores the complete
+  document/history state, not only the current document.
+- Render-worker telemetry is dormant by default and enabled/reset only by the
+  benchmark. Typed bridge snapshots classify live sources/decoders, queue
+  depth/max depth, cache hits/misses, retained still bytes, streaming bitmap
+  and canvas cache estimates, and VideoFrame/ImageBitmap/static-source close
+  counts. Audio diagnostics add active decoder cursors and pending buffers.
+- Each process-memory batch is now a bounded long-health cycle: playback,
+  live worker/audio capture, scrub pressure, pause/drain, GC/paint settling,
+  drained capture, then the unchanged complete CDP process-table sample.
+  Drained worker samples fail their explicit cache-drain check if any decoder,
+  pending copy/open, render/decode queue, or streaming bitmap remains.
+- A balanced ABBA control/instrumented scrub metric measures aggregate
+  telemetry overhead across identical frame sequences with an advisory 10%
+  proposal. Long-animation-frame observation is bounded at
+  500 entries. `measureUserAgentSpecificMemory()` remains optional lab-only
+  evidence; absence or rejection becomes `unavailable` without degrading the
+  editor or benchmark. No memory byte cap was introduced.
+- Focused coverage passed 190 tests. The complete gate passed 1,852/1,852
+  Vitest cases across 111 files plus all 16 Node runner cases, production
+  build/typecheck, oxlint, diff checking, and the production audit with 0
+  vulnerabilities. A fresh Chromium smoke artifact validated against schema 3
+  with two complete private-byte process samples, two passing drains, measured
+  long-animation-frame entries, explicit unavailable lab-memory evidence,
+  11/11 generated URLs revoked, all isolated stores restored, and no console
+  warning or error.
+
 ## Working agreements (the user's explicit preferences)
 
 - Changes may span every module needed for one complete fix. Keep dependency

@@ -140,6 +140,10 @@ export interface PlaybackAudioOutput {
 
 export interface TimelineAudioPlaybackDiagnostics
   extends PlaybackAudioOutputDiagnostics {
+  /** Live clip-scoped sequential decoder cursors. */
+  activeDecoderCount: number
+  /** Decoded buffers held for a future scheduling boundary. */
+  pendingBufferCount: number
   anchorTime: number
   fromFrame: number
   scheduledThroughTimelineTime: number
@@ -1340,6 +1344,10 @@ export async function startTimelineAudioPlayback(
     stop,
     diagnostics: () => ({
       ...output.diagnostics(),
+      activeDecoderCount: cursorStates.size,
+      pendingBufferCount: [...cursorStates.values()].filter(
+        (cursor) => cursor.pending !== null,
+      ).length,
       anchorTime,
       fromFrame,
       scheduledThroughTimelineTime: scheduledThroughTime,
