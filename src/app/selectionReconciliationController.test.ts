@@ -34,6 +34,7 @@ function makeClip(id: string, startFrame: number, durationFrames: number): Clip 
       anchorY: 0.5,
     },
     opacity: 1,
+    blendMode: 'normal',
     volume: 1,
     visual: defaultClipVisualSettings(),
     audio: defaultClipAudioSettings(),
@@ -64,7 +65,7 @@ function makeAudioTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc-selection-reconciliation',
     name: 'Selection reconciliation',
     frameRate: { num: 30, den: 1 },

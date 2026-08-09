@@ -55,6 +55,14 @@ import type {
   VideoFrameRequest,
 } from '../domain/crossfadePlan'
 import { clipVisualSettings } from '../domain/clipInspector'
+import {
+  DEFAULT_BLEND_MODE,
+  resolveBlendMode,
+  type BlendModeResolution,
+} from '../domain/blendModes'
+import { probeCanvasBlendMode } from './blendModeCapabilities'
+
+const NORMAL_BLEND_MODE = resolveBlendMode(DEFAULT_BLEND_MODE)
 
 /**
  * A compositor-ready browser image. VideoFrame is retained here because the
@@ -156,9 +164,9 @@ export interface CompositeSurface {
 }
 
 /**
- * Persistent scratch surfaces for isolated transition composition. Preview
- * and export own separate pairs so concurrent renders cannot overwrite one
- * another. The compositor clears and reuses both surfaces per group.
+ * Persistent scratch surfaces for isolated layer/transition composition.
+ * Preview and export own separate pairs so concurrent renders cannot overwrite
+ * one another. The compositor clears and reuses surfaces on every borrowed path.
  */
 export interface TransitionSurfaces {
   /** Renders one complete transformed clip with ordinary source-over rules. */
@@ -167,7 +175,7 @@ export interface TransitionSurfaces {
   group: CompositeSurface
 }
 
-/** Lazily supplies persistent surfaces only when a frame has a transition. */
+/** Lazily supplies caller-owned persistent surfaces when a layer needs isolation. */
 export interface TransitionSurfaceProvider {
   get(): TransitionSurfaces
 }
@@ -246,6 +254,7 @@ export async function compositeFrame(
           ctx,
           transitionSurfaceProvider,
           item.requests,
+          item.blendMode,
           imagesByRequest,
           drawn,
           missing,
@@ -256,7 +265,15 @@ export async function compositeFrame(
 
       if (item.kind === 'text') {
         try {
-          drawTextClip(ctx, doc, item.clip, item.opacity)
+          compositeTextLayer(
+            doc,
+            ctx,
+            transitionSurfaceProvider,
+            item.clip,
+            item.opacity,
+            item.blendMode,
+            presentationScale,
+          )
           drawn.push(item.clip.id)
         } catch (e) {
           console.warn(
@@ -277,6 +294,7 @@ export async function compositeFrame(
             item.paint.transform,
             item.paint.visual,
             item.paint.opacity,
+            NORMAL_BLEND_MODE,
           )
           drawn.push(item.paint.id)
         } catch (e) {
@@ -297,7 +315,7 @@ export async function compositeFrame(
         continue
       }
       try {
-        drawClip(ctx, doc, request, image)
+        drawClip(ctx, doc, request, image, item.blendMode)
         drawn.push(clip.id)
       } catch (e) {
         // e.g. the bitmap was closed under us — record and keep compositing.
@@ -366,6 +384,7 @@ function drawTextClip(
   doc: TimelineDoc,
   clip: Clip,
   opacity: number,
+  blendMode: BlendModeResolution,
 ): void {
   if (!supportsTextDrawing(ctx)) {
     throw new TypeError('The compositor context does not support text drawing.')
@@ -382,6 +401,7 @@ function drawTextClip(
     clip.transform,
     clipVisualSettings(clip),
     opacity,
+    blendMode,
   )
 }
 
@@ -393,6 +413,7 @@ function drawTextPayload(
   transform: Transform,
   visual: ClipVisualSettings,
   opacity: number,
+  blendMode: BlendModeResolution,
 ): void {
   if (!supportsTextDrawing(ctx)) {
     throw new TypeError('The compositor context does not support text drawing.')
@@ -414,7 +435,7 @@ function drawTextPayload(
   ctx.save()
   try {
     ctx.globalAlpha = opacity
-    ctx.globalCompositeOperation = 'source-over'
+    applyCanvasBlendMode(ctx, blendMode)
     ctx.translate(canvasX, canvasY)
     ctx.rotate((transform.rotation * Math.PI) / 180)
     ctx.scale(
@@ -422,11 +443,6 @@ function drawTextPayload(
       transform.scaleY * (visual.flipVertical ? -1 : 1),
     )
     ctx.translate(-anchorX, -anchorY)
-    if (text.backgroundEnabled) {
-      ctx.fillStyle = text.backgroundColor
-      ctx.fillRect(0, 0, text.boxWidthPx, text.boxHeightPx)
-    }
-
     const cropX = visual.crop.left * text.boxWidthPx
     const cropY = visual.crop.top * text.boxHeightPx
     const cropWidth = text.boxWidthPx * (1 - visual.crop.left - visual.crop.right)
@@ -434,6 +450,10 @@ function drawTextPayload(
     ctx.beginPath()
     ctx.rect(cropX, cropY, cropWidth, cropHeight)
     ctx.clip()
+    if (text.backgroundEnabled) {
+      ctx.fillStyle = text.backgroundColor
+      ctx.fillRect(0, 0, text.boxWidthPx, text.boxHeightPx)
+    }
     ctx.font = `${text.italic ? 'italic' : 'normal'} ${text.bold ? '700' : '400'} ${text.fontSizePx}px ${text.fontFamily}`
     ctx.textAlign = text.align
     ctx.textBaseline = 'top'
@@ -477,6 +497,7 @@ function compositeTransitionGroup(
   destination: Composite2D,
   surfaceProvider: TransitionSurfaceProvider,
   requests: readonly [CrossfadeFrameRequest, CrossfadeFrameRequest],
+  blendMode: BlendModeResolution,
   imagesByRequest: ReadonlyMap<VideoFrameRequest, RenderFrameSource | null>,
   drawn: ClipId[],
   missing: ClipId[],
@@ -485,9 +506,11 @@ function compositeTransitionGroup(
   const ready: ClipId[] = []
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
   const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
+  let borrowedSurfaces: TransitionSurfaces | null = null
 
   try {
     const surfaces = surfaceProvider.get()
+    borrowedSurfaces = surfaces
     inPresentationSpace(surfaces.group.ctx, presentationScale, () => {
       clearSurface(surfaces.group.ctx, doc)
     })
@@ -503,7 +526,7 @@ function compositeTransitionGroup(
       try {
         inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
           clearSurface(surfaces.leg.ctx, doc)
-          drawClip(surfaces.leg.ctx, doc, request, image)
+          drawClip(surfaces.leg.ctx, doc, request, image, NORMAL_BLEND_MODE)
         })
 
         inPresentationSpace(surfaces.group.ctx, presentationScale, () => {
@@ -536,7 +559,7 @@ function compositeTransitionGroup(
     destination.save()
     try {
       destination.globalAlpha = 1
-      destination.globalCompositeOperation = 'source-over'
+      applyCanvasBlendMode(destination, blendMode)
       destination.drawImage(
         surfaces.group.canvas,
         0,
@@ -563,6 +586,11 @@ function compositeTransitionGroup(
         .filter((request) => request.opacity > 0 && request.weight > 0)
         .map((request) => request.clip.id),
     ))
+  } finally {
+    if (borrowedSurfaces) {
+      releaseSurfacePixels(borrowedSurfaces.leg.ctx, doc, presentationScale)
+      releaseSurfacePixels(borrowedSurfaces.group.ctx, doc, presentationScale)
+    }
   }
 }
 
@@ -603,6 +631,7 @@ function drawClip(
   doc: TimelineDoc,
   request: VideoFrameRequest,
   image: RenderFrameSource,
+  blendMode: BlendModeResolution,
 ): void {
   const clip: Clip = request.clip
   const t = clip.transform
@@ -619,7 +648,7 @@ function drawClip(
   ctx.save()
   try {
     ctx.globalAlpha = request.opacity
-    ctx.globalCompositeOperation = 'source-over'
+    applyCanvasBlendMode(ctx, blendMode)
     ctx.translate(canvasX, canvasY)
     ctx.rotate((t.rotation * Math.PI) / 180)
     ctx.scale(
@@ -649,4 +678,67 @@ function drawClip(
   } finally {
     ctx.restore()
   }
+}
+
+/** Best-effort release of scratch pixels without transferring surface ownership. */
+function releaseSurfacePixels(
+  ctx: Composite2D,
+  doc: TimelineDoc,
+  presentationScale: { readonly x: number; readonly y: number },
+): void {
+  try {
+    inPresentationSpace(ctx, presentationScale, () => clearSurface(ctx, doc))
+  } catch {
+    // The render result already records the drawing failure; cleanup must not mask it.
+  }
+}
+
+/** Render procedural text into one transparent layer, then blend it once. */
+function compositeTextLayer(
+  doc: TimelineDoc,
+  destination: Composite2D,
+  surfaceProvider: TransitionSurfaceProvider,
+  clip: Clip,
+  opacity: number,
+  blendMode: BlendModeResolution,
+  presentationScale: { readonly x: number; readonly y: number },
+): void {
+  const surfaces = surfaceProvider.get()
+  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
+  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
+  try {
+    inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
+      clearSurface(surfaces.leg.ctx, doc)
+      drawTextClip(surfaces.leg.ctx, doc, clip, 1, NORMAL_BLEND_MODE)
+    })
+
+    destination.save()
+    try {
+      destination.globalAlpha = opacity
+      applyCanvasBlendMode(destination, blendMode)
+      destination.drawImage(
+        surfaces.leg.canvas,
+        0,
+        0,
+        surfaceWidth,
+        surfaceHeight,
+        0,
+        0,
+        doc.width,
+        doc.height,
+      )
+    } finally {
+      destination.restore()
+    }
+  } finally {
+    releaseSurfacePixels(surfaces.leg.ctx, doc, presentationScale)
+  }
+}
+
+function applyCanvasBlendMode(
+  ctx: Composite2D,
+  blendMode: BlendModeResolution,
+): void {
+  const capability = probeCanvasBlendMode(ctx, blendMode.effective)
+  ctx.globalCompositeOperation = capability.operation
 }

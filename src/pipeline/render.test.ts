@@ -70,7 +70,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -102,12 +102,20 @@ interface Op {
   args: unknown[]
 }
 
-function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
+function makeCtx(opts: {
+  throwOn?: ImageBitmap
+  rejectComposite?: GlobalCompositeOperation
+} = {}) {
   const log: Op[] = []
   let alpha = 1
   let operation: GlobalCompositeOperation = 'source-over'
   let fill: Composite2D['fillStyle'] = ''
   let depth = 0
+  const stack: Array<{
+    alpha: number
+    operation: GlobalCompositeOperation
+    fill: Composite2D['fillStyle']
+  }> = []
   const ctx: Composite2D = {
     get globalAlpha() {
       return alpha
@@ -120,6 +128,7 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
       return operation
     },
     set globalCompositeOperation(v) {
+      if (opts.rejectComposite === v) return
       operation = v
       log.push({ name: 'composite', args: [v] })
     },
@@ -141,10 +150,17 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
     shadowOffsetX: 0,
     shadowOffsetY: 0,
     save: () => {
+      stack.push({ alpha, operation, fill })
       depth++
       log.push({ name: 'save', args: [] })
     },
     restore: () => {
+      const restored = stack.pop()
+      if (restored) {
+        alpha = restored.alpha
+        operation = restored.operation
+        fill = restored.fill
+      }
       depth--
       log.push({ name: 'restore', args: [] })
     },
@@ -167,7 +183,13 @@ function makeCtx(opts: { throwOn?: ImageBitmap } = {}) {
     },
   }
   const ops = (name: string) => log.filter((op) => op.name === name)
-  return { ctx, log, ops, depth: () => depth }
+  return {
+    ctx,
+    log,
+    ops,
+    depth: () => depth,
+    state: () => ({ alpha, operation, fill }),
+  }
 }
 
 function makeTransitionSurfaceProvider() {
@@ -319,6 +341,7 @@ describe('compositeFrame — background & selection', () => {
       makeTrack('V2', 'video', [makeClip('later-clip', 50, 10)]), // gap at frame 5
       makeTrack('V3', 'video', [
         makeClip('text-clip', 0, 100, {
+          blendMode: 'screen',
           text: {
             ...defaultTextProps(1920, 1080),
             content: 'hi',
@@ -333,12 +356,16 @@ describe('compositeFrame — background & selection', () => {
       ]),
     ])
     const { ctx, ops } = makeCtx()
+    const surfaces = makeTransitionSurfaceProvider()
     const { source, requests } = makeSource()
-    const result = await compositeFrame(doc, 5, ctx, source)
+    const result = await compositeFrame(doc, 5, ctx, source, surfaces.provider)
 
     expect(requests).toEqual([]) // nothing even asked for pixels
-    expect(ops('drawImage')).toHaveLength(0)
-    expect(ops('fillText')).toHaveLength(1)
+    expect(ops('drawImage')).toHaveLength(1)
+    expect(ops('composite').map((op) => op.args[0])).toContain('screen')
+    expect(surfaces.leg.ops('fillText')).toHaveLength(1)
+    expect(surfaces.leg.ops('composite').map((op) => op.args[0])).not.toContain('screen')
+    expect(surfaces.gets()).toBe(1)
     expect(result).toEqual({ drawn: ['text-clip'], missing: [] })
   })
 
@@ -467,11 +494,15 @@ describe('compositeFrame — stacking order & concurrency', () => {
     ).toContain('lighter')
     expect(
       surfaces.group.ops('alpha').map((op) => op.args[0]),
-    ).toEqual([1, 0.5, 0.5])
+    ).toEqual([1, 0.5, 0.5, 1])
     expect(ops('drawImage').map((op) => op.args[0])).toEqual([
       surfaces.groupCanvas,
     ])
     expect(surfaces.gets()).toBe(1)
+    expect(surfaces.leg.ops('clearRect')).toHaveLength(3)
+    expect(surfaces.group.ops('clearRect')).toHaveLength(2)
+    expect(surfaces.leg.depth()).toBe(0)
+    expect(surfaces.group.depth()).toBe(0)
     expect(result).toEqual({ drawn: ['from', 'to'], missing: [] })
   })
 
@@ -509,6 +540,8 @@ describe('compositeFrame — stacking order & concurrency', () => {
     expect(ops('drawImage').map((op) => op.args[0])).toEqual([
       surfaces.groupCanvas,
     ])
+    expect(surfaces.leg.ops('clearRect')).toHaveLength(2)
+    expect(surfaces.group.ops('clearRect')).toHaveLength(2)
     expect(result).toEqual({ drawn: ['to'], missing: ['from'] })
   })
 })
@@ -629,13 +662,21 @@ describe('compositeFrame — transform & opacity', () => {
       },
     })
     const { ctx, ops } = makeCtx()
+    const surfaces = makeTransitionSurfaceProvider()
     const { source, requests } = makeSource()
 
-    await compositeFrame(makeDoc([makeTrack('V1', 'video', [clip])]), 0, ctx, source)
+    await compositeFrame(
+      makeDoc([makeTrack('V1', 'video', [clip])]),
+      0,
+      ctx,
+      source,
+      surfaces.provider,
+    )
 
     expect(requests).toEqual([])
-    expect(ops('scale')[0].args).toEqual([1, -1])
-    expect(ops('rect')[0].args).toEqual([100, 100, 700, 240])
+    expect(ops('drawImage')).toHaveLength(1)
+    expect(surfaces.leg.ops('scale')[0].args).toEqual([1, -1])
+    expect(surfaces.leg.ops('rect')[0].args).toEqual([100, 100, 700, 240])
   })
 
   test('per-clip opacity is set (clamped to 1) inside save/restore', async () => {
@@ -651,6 +692,44 @@ describe('compositeFrame — transform & opacity', () => {
     expect(ops('alpha').map((op) => op.args[0])).toEqual([1, 0.5, 1])
     expect(depth()).toBe(0) // every save matched by a restore
     expect(result.drawn).toEqual(['half', 'over'])
+  })
+
+  test('uses the resolved Canvas blend operation and restores incoming state', async () => {
+    const clip = makeClip('blend', 0, 10, { assetId: 'A', blendMode: 'overlay' })
+    const { ctx, ops, depth, state } = makeCtx()
+    ctx.globalAlpha = 0.25
+    ctx.globalCompositeOperation = 'destination-over'
+    const { source } = makeSource({ 'A@0': fakeBitmap(10, 10) })
+
+    const result = await compositeFrame(
+      makeDoc([makeTrack('V1', 'video', [clip])]),
+      0,
+      ctx,
+      source,
+    )
+
+    expect(result.drawn).toEqual(['blend'])
+    expect(ops('composite').map((op) => op.args[0])).toContain('overlay')
+    expect(state()).toMatchObject({ alpha: 0.25, operation: 'destination-over' })
+    expect(depth()).toBe(0)
+  })
+
+  test('uses source-over when the concrete Canvas context rejects a supported name', async () => {
+    const clip = makeClip('blend', 0, 10, { assetId: 'A', blendMode: 'overlay' })
+    const { ctx, ops, state } = makeCtx({ rejectComposite: 'overlay' })
+    const { source } = makeSource({ 'A@0': fakeBitmap(10, 10) })
+
+    const result = await compositeFrame(
+      makeDoc([makeTrack('V1', 'video', [clip])]),
+      0,
+      ctx,
+      source,
+    )
+
+    expect(result.drawn).toEqual(['blend'])
+    expect(ops('composite').map((op) => op.args[0])).not.toContain('overlay')
+    expect(ops('composite').map((op) => op.args[0])).toContain('source-over')
+    expect(state().operation).toBe('source-over')
   })
 
   test('opacity <= 0 skips the clip without fetching pixels', async () => {
@@ -710,13 +789,16 @@ describe('compositeFrame — failure isolation', () => {
         makeTrack('V1', 'video', [makeClip('dead', 0, 10, { assetId: 'DEAD' })]),
         makeTrack('V2', 'video', [makeClip('alive', 0, 10, { assetId: 'ALIVE' })]),
       ])
-      const { ctx, ops, depth } = makeCtx({ throwOn: dead })
+      const { ctx, ops, depth, state } = makeCtx({ throwOn: dead })
+      ctx.globalAlpha = 0.75
+      ctx.globalCompositeOperation = 'destination-over'
       const { source } = makeSource({ 'DEAD@0': dead, 'ALIVE@0': fakeBitmap(10, 10) })
       const result = await compositeFrame(doc, 0, ctx, source)
 
       expect(result).toEqual({ drawn: ['alive'], missing: ['dead'] })
       expect(ops('drawImage')).toHaveLength(1) // only the live bitmap landed
       expect(depth()).toBe(0) // finally-restore ran despite the throw
+      expect(state()).toMatchObject({ alpha: 0.75, operation: 'destination-over' })
       expect(warn).toHaveBeenCalledOnce()
     } finally {
       warn.mockRestore()

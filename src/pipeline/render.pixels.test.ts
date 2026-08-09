@@ -304,8 +304,42 @@ class PixelCanvas {
       }
       return
     }
-    if (this.state.operation !== 'source-over') {
+    const operation = this.state.operation
+    if (
+      operation !== 'source-over'
+      && operation !== 'multiply'
+      && operation !== 'screen'
+      && operation !== 'overlay'
+    ) {
       throw new Error(`Unsupported pixel-test operation: ${this.state.operation}`)
+    }
+    if (operation !== 'source-over') {
+      const sourceAlpha = source[3]
+      const destinationAlpha = destination[3]
+      const outputAlpha = sourceAlpha + destinationAlpha * (1 - sourceAlpha)
+      for (let channel = 0; channel < 3; channel++) {
+        const sourceStraight = sourceAlpha > 0 ? source[channel] / sourceAlpha : 0
+        const destinationStraight = destinationAlpha > 0
+          ? destination[channel] / destinationAlpha
+          : 0
+        let blended = sourceStraight
+        if (operation === 'multiply') blended = destinationStraight * sourceStraight
+        if (operation === 'screen') {
+          blended = destinationStraight + sourceStraight
+            - destinationStraight * sourceStraight
+        }
+        if (operation === 'overlay') {
+          blended = destinationStraight <= 0.5
+            ? 2 * destinationStraight * sourceStraight
+            : 1 - 2 * (1 - destinationStraight) * (1 - sourceStraight)
+        }
+        const isolatedSource = (1 - destinationAlpha) * sourceStraight
+          + destinationAlpha * blended
+        this.premultiplied[offset + channel] = sourceAlpha * isolatedSource
+          + destination[channel] * (1 - sourceAlpha)
+      }
+      this.premultiplied[offset + 3] = outputAlpha
+      return
     }
     const inverseSourceAlpha = 1 - source[3]
     for (let channel = 0; channel < 3; channel++) {
@@ -410,7 +444,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[], width = 5, height = 5): TimelineDoc {
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'pixel-doc',
     name: 'pixel-doc',
     frameRate: { num: 30, den: 1 },
@@ -458,7 +492,7 @@ function makeProvider(width: number, height: number) {
       }
     },
   }
-  return { provider, gets: () => gets }
+  return { provider, leg, group, gets: () => gets }
 }
 
 function makeSource(frames: Record<string, RenderFrameSource | null>) {
@@ -503,6 +537,124 @@ async function render(
 }
 
 describe('compositeFrame pixel goldens', () => {
+  test.each([
+    ['normal', [192, 96, 32, 255]],
+    ['multiply', [48, 48, 24, 255]],
+    ['screen', [208, 176, 200, 255]],
+    ['overlay', [96, 97, 145, 255]],
+  ] as const)('matches the opaque %s reference pixel through the shared compositor', async (
+    blendMode,
+    expected,
+  ) => {
+    const lower = makeClip('lower', 'backdrop', 0, 1)
+    const upper = makeClip('upper', 'source', 0, 1, { blendMode })
+    const rendered = await render(
+      makeDoc([makeTrack('lower-track', [lower]), makeTrack('upper-track', [upper])], 1, 1),
+      0,
+      {
+        backdrop: solid(1, 1, [64, 128, 192, 255]),
+        source: solid(1, 1, [192, 96, 32, 255]),
+      },
+    )
+
+    expect(rendered.output.rgbaAt(0, 0)).toEqual(expected)
+    expect(rendered.surfaces.gets()).toBe(0)
+  })
+
+  test('applies source opacity to premultiplied overlay alpha exactly once', async () => {
+    const lower = makeClip('lower', 'backdrop', 0, 1)
+    const upper = makeClip('upper', 'source', 0, 1, {
+      blendMode: 'overlay',
+      opacity: 0.5,
+    })
+    const rendered = await render(
+      makeDoc([makeTrack('lower-track', [lower]), makeTrack('upper-track', [upper])], 1, 1),
+      0,
+      {
+        backdrop: solid(1, 1, [64, 128, 192, 255]),
+        source: solid(1, 1, [192, 96, 32, 128]),
+      },
+    )
+
+    expect(rendered.output.rgbaAt(0, 0)).toEqual([72, 120, 180, 255])
+  })
+
+  test('keeps transformed and cropped blend coverage isolated from uncovered pixels', async () => {
+    const lower = makeClip('lower', 'backdrop', 0, 1)
+    const transformed = makeClip('transformed', 'source', 0, 1, {
+      blendMode: 'multiply',
+      transform: {
+        x: 0,
+        y: 0,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 90,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      },
+      visual: {
+        crop: { left: 1 / 3, right: 1 / 3, top: 0, bottom: 0 },
+        flipHorizontal: false,
+        flipVertical: false,
+        scaleLocked: true,
+      },
+    })
+    const rendered = await render(
+      makeDoc([
+        makeTrack('lower-track', [lower]),
+        makeTrack('upper-track', [transformed]),
+      ]),
+      0,
+      {
+        backdrop: solid(5, 5, [64, 128, 192, 255]),
+        source: solid(3, 1, [192, 96, 32, 255]),
+      },
+    )
+
+    expect(rendered.output.rgbaAt(2, 2)).toEqual([48, 48, 24, 255])
+    expect(rendered.output.rgbaAt(2, 1)).toEqual([64, 128, 192, 255])
+    expect(rendered.output.rgbaAt(0, 0)).toEqual([64, 128, 192, 255])
+  })
+
+  test('composites an agreeing transition as one isolated blend group', async () => {
+    const lower = makeClip('lower', 'backdrop', 0, 4)
+    const from = makeClip('from', 'red', 0, 2, { blendMode: 'multiply' })
+    const to = makeClip('to', 'blue', 2, 2, { blendMode: 'multiply' })
+    const rendered = await render(
+      makeDoc([makeTrack('lower-track', [lower]), transitionTrack(from, to, 1)]),
+      2,
+      {
+        backdrop: solid(5, 5, [64, 128, 192, 255]),
+        red: solid(5, 5, [255, 0, 0, 255]),
+        blue: solid(5, 5, [0, 0, 255, 255]),
+      },
+    )
+
+    expect(rendered.output.rgbaAt(2, 2)).toEqual([32, 0, 96, 255])
+    expect(rendered.surfaces.gets()).toBe(1)
+    expect(rendered.surfaces.leg.rgbaAt(2, 2)).toEqual([0, 0, 0, 0])
+    expect(rendered.surfaces.group.rgbaAt(2, 2)).toEqual([0, 0, 0, 0])
+  })
+
+  test('preserves unknown intent while rendering the safe normal path', async () => {
+    const lower = makeClip('lower', 'green', 0, 1)
+    const upper = makeClip('upper', 'red', 0, 1, {
+      blendMode: 'future-soft-light',
+      opacity: 0.5,
+    })
+    const rendered = await render(
+      makeDoc([makeTrack('lower-track', [lower]), makeTrack('upper-track', [upper])]),
+      0,
+      {
+        green: solid(5, 5, [0, 255, 0, 255]),
+        red: solid(5, 5, [255, 0, 0, 255]),
+      },
+    )
+
+    expect(rendered.output.rgbaAt(2, 2)).toEqual([128, 128, 0, 255])
+    expect(upper.blendMode).toBe('future-soft-light')
+  })
+
   test('opaque crossfade follows the exact quarter/midpoint/quarter sweep', async () => {
     const from = makeClip('from', 'red', 0, 3, {
       sourceRange: { startFrame: 10, durationFrames: 3 },

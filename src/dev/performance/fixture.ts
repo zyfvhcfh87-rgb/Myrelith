@@ -209,6 +209,7 @@ function mediaClip(
     },
     transform: clipTransform(clipIndex),
     opacity: clipIndex % 8 === 0 ? 0.88 : 1,
+    blendMode: 'normal',
     volume: clipIndex % 6 === 0 ? 0.82 : 1,
     visual: defaultClipVisualSettings(),
     audio: {
@@ -251,6 +252,7 @@ function textClip(clipIndex: number): Clip {
       y: PERFORMANCE_FIXTURE_HEIGHT * 0.28,
     },
     opacity: 0.96,
+    blendMode: 'normal',
     volume: 1,
     visual: defaultClipVisualSettings(),
     audio: defaultClipAudioSettings(),

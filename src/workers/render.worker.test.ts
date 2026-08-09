@@ -634,7 +634,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 10, den: 1 },
@@ -1082,12 +1082,12 @@ describe('composite happy path', () => {
       h.ops.filter(
         (op) => op.surface === 'transition-leg' && op.name === 'clearRect',
       ),
-    ).toHaveLength(2)
+    ).toHaveLength(3)
     expect(
       h.ops.filter(
         (op) => op.surface === 'transition-group' && op.name === 'clearRect',
       ),
-    ).toHaveLength(1)
+    ).toHaveLength(2)
     expect(
       h.ops.filter(
         (op) => op.surface === 'transition-group'
@@ -1111,7 +1111,7 @@ describe('composite happy path', () => {
       h.ops.filter(
         (op) => op.surface === 'transition-group' && op.name === 'clearRect',
       ),
-    ).toHaveLength(2)
+    ).toHaveLength(4)
 
     await h.core.handleMessage({
       type: 'setPresentationProfile',

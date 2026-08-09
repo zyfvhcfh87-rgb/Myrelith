@@ -80,6 +80,11 @@ import {
   textOverlayName,
   textPropsValidationError,
 } from './textOverlay'
+import {
+  blendModeIntentValidationError,
+  clipBlendModeIntent,
+  DEFAULT_BLEND_MODE,
+} from './blendModes'
 
 /** Which clip edge a trim moves. */
 export type TrimEdge = 'start' | 'end'
@@ -636,6 +641,7 @@ export function clipFromAsset(
       anchorY: 0.5,
     },
     opacity: 1,
+    blendMode: DEFAULT_BLEND_MODE,
     volume: 1,
     visual: defaultClipVisualSettings(),
     audio: defaultClipAudioSettings(),
@@ -679,6 +685,7 @@ export function createTextClip(
       anchorY: 0.5,
     },
     opacity: 1,
+    blendMode: DEFAULT_BLEND_MODE,
     volume: 1,
     visual: defaultClipVisualSettings(),
     audio: defaultClipAudioSettings(),
@@ -1346,6 +1353,8 @@ export interface ClipVisualSettingsPatch {
 
 /** Complete static video/text Inspector mutation surface. */
 export interface ClipVisualPatch extends ClipTransformPatch {
+  /** Exact serialized blend intent; unknown names remain durable and render safely. */
+  blendMode?: string
   visual?: ClipVisualSettingsPatch
 }
 
@@ -1391,7 +1400,7 @@ function sameVisual(
 }
 
 /**
- * Atomically edit transform, opacity, crop, flips, and scale-lock state.
+ * Atomically edit transform, opacity, blend intent, crop, flips, and scale-lock state.
  * When locking previously independent scales, X is authoritative. While the
  * lock remains enabled, an edit to either scale updates both axes.
  */
@@ -1436,7 +1445,12 @@ export function updateClipVisual(
   if (hasOpacity && !Number.isFinite(patch.opacity)) {
     return reject(doc, op, `opacity must be a finite number, got ${patch.opacity}`)
   }
-  if (transformKeys.length === 0 && visualKeys.length === 0 && !hasOpacity) {
+  const hasBlendMode = patch.blendMode !== undefined
+  if (hasBlendMode) {
+    const blendError = blendModeIntentValidationError(patch.blendMode)
+    if (blendError) return reject(doc, op, blendError)
+  }
+  if (transformKeys.length === 0 && visualKeys.length === 0 && !hasOpacity && !hasBlendMode) {
     return reject(doc, op, 'empty patch — nothing to change')
   }
 
@@ -1484,12 +1498,16 @@ export function updateClipVisual(
   const opacity = hasOpacity
     ? Math.min(1, Math.max(0, patch.opacity as number))
     : loc.clip.opacity
+  const blendMode = hasBlendMode
+    ? patch.blendMode as string
+    : clipBlendModeIntent(loc.clip)
   const transformUnchanged = [...TRANSFORM_KEYS].every(
     (key) => nextTransform[key] === loc.clip.transform[key],
   )
   if (
     transformUnchanged
     && opacity === loc.clip.opacity
+    && blendMode === clipBlendModeIntent(loc.clip)
     && sameVisual(nextVisual, currentVisual)
   ) return doc
 
@@ -1498,6 +1516,7 @@ export function updateClipVisual(
     ...loc.clip,
     transform: nextTransform,
     opacity,
+    blendMode,
     visual: nextVisual,
   }
   return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
@@ -1643,6 +1662,10 @@ function staticVisualPatchDiffers(
     if (clip.transform[key] !== value) return true
   }
   if (patch.opacity !== undefined && clip.opacity !== patch.opacity) return true
+  if (
+    patch.blendMode !== undefined
+    && clipBlendModeIntent(clip) !== patch.blendMode
+  ) return true
   if (patch.visual) {
     const current = clipVisualSettings(clip)
     const next = {
@@ -1725,6 +1748,7 @@ export function updateClipVisualAtFrame(
   const staticPatch: ClipVisualPatch = {
     ...(Object.keys(staticTransform).length === 0 ? {} : { transform: staticTransform }),
     ...(staticOpacity === undefined ? {} : { opacity: staticOpacity }),
+    ...(patch.blendMode === undefined ? {} : { blendMode: patch.blendMode }),
     ...(patch.visual === undefined ? {} : { visual: patch.visual }),
   }
   const hasStaticPatch = Object.keys(staticPatch).length > 0

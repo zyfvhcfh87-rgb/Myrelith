@@ -16,12 +16,19 @@ import {
 } from './crossfadePlan'
 import { resolveClipAnimationAtFrame } from './clipAnimation'
 import { createFrameIndex, type FrameIndex } from './frameIndex'
+import {
+  clipBlendModeIntent,
+  resolveBlendMode,
+  resolveTransitionGroupBlendMode,
+  type BlendModeResolution,
+} from './blendModes'
 
 export interface OrdinaryVideoPlanItem {
   kind: 'clip'
   trackId: TrackId
   frame: number
   request: VideoFrameRequest
+  blendMode: BlendModeResolution
 }
 
 export interface TextOverlayPlanItem {
@@ -30,6 +37,11 @@ export interface TextOverlayPlanItem {
   frame: number
   clip: Clip
   opacity: number
+  blendMode: BlendModeResolution
+}
+
+export interface CrossfadeCompositionItem extends CrossfadeFrameGroup {
+  blendMode: BlendModeResolution
 }
 
 /** Semantic caption paint. It remains identifiable as a caption end-to-end. */
@@ -44,7 +56,7 @@ export type VideoCompositionItem =
   | OrdinaryVideoPlanItem
   | TextOverlayPlanItem
   | CaptionPlanItem
-  | CrossfadeFrameGroup
+  | CrossfadeCompositionItem
 
 /** One transferable, paint-ordered plan for one exact document frame. */
 export interface VideoCompositionPlan {
@@ -77,12 +89,14 @@ function ordinaryItem(
       frame,
       clip: resolvedClip,
       opacity,
+      blendMode: resolveBlendMode(clipBlendModeIntent(resolvedClip)),
     }
   }
   return {
     kind: 'clip',
     trackId,
     frame,
+    blendMode: resolveBlendMode(clipBlendModeIntent(resolvedClip)),
     request: {
       clip: resolvedClip,
       sourceFrame: resolvedClip.sourceMode === 'still'
@@ -96,19 +110,21 @@ function ordinaryItem(
 
 function resolveCrossfadeGroupAnimation(
   group: CrossfadeFrameGroup,
-): CrossfadeFrameGroup {
+): CrossfadeCompositionItem {
   const resolveRequest = (
     request: CrossfadeFrameGroup['requests'][number],
   ): CrossfadeFrameGroup['requests'][number] => {
     const clip = resolveClipAnimationAtFrame(request.clip, group.frame)
     return { ...request, clip, opacity: clipOpacity(clip) }
   }
+  const requests: CrossfadeFrameGroup['requests'] = [
+    resolveRequest(group.requests[0]),
+    resolveRequest(group.requests[1]),
+  ]
   return {
     ...group,
-    requests: [
-      resolveRequest(group.requests[0]),
-      resolveRequest(group.requests[1]),
-    ],
+    requests,
+    blendMode: resolveTransitionGroupBlendMode(requests[0].clip, requests[1].clip),
   }
 }
 

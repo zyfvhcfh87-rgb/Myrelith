@@ -88,6 +88,11 @@ import {
   normalizeMediaCollectionName,
   type MediaCollection,
 } from './mediaCollections'
+import {
+  blendModeIntentValidationError,
+  clipBlendModeIntent,
+  DEFAULT_BLEND_MODE,
+} from './blendModes'
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
 /** Serialized format marker used by releases published before the rebrand. */
@@ -100,7 +105,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 8 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 9 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -946,7 +951,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   const clip = record(value, path)
   exactKeys(
     clip,
-    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'timelineRange', 'transform', 'opacity', 'volume', 'visual', 'audio', 'effects'],
+    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'timelineRange', 'transform', 'opacity', 'blendMode', 'volume', 'visual', 'audio', 'effects'],
     ['animation', 'text', 'linkGroupId'],
     path,
   )
@@ -1017,6 +1022,8 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   }
   validateTransform(clip.transform, `${path}.transform`)
   finiteNumber(clip.opacity, `${path}.opacity`, 0, 1)
+  const blendModeError = blendModeIntentValidationError(clip.blendMode)
+  if (blendModeError) fail(`${path}.blendMode`, blendModeError)
   finiteNumber(clip.volume, `${path}.volume`, 0, 2)
   validateClipVisual(clip.visual, `${path}.visual`)
   validateClipAudio(
@@ -1516,6 +1523,31 @@ function migrateCaptionTracks(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 8, captionTracks: [] }
 }
 
+/** Upgrade schema-8 clips with explicit normal/source-over compositing intent. */
+function migrateClipBlendModes(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    boundedArray(
+      track.clips,
+      `$.document.tracks[${trackIndex}].clips`,
+      PROJECT_FILE_LIMITS.maxClips,
+    )
+    return {
+      ...track,
+      clips: track.clips.map((clipValue, clipIndex) => ({
+        ...record(
+          clipValue,
+          `$.document.tracks[${trackIndex}].clips[${clipIndex}]`,
+        ),
+        blendMode: DEFAULT_BLEND_MODE,
+      })),
+    }
+  })
+  return { ...document, schemaVersion: 9, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1555,6 +1587,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 7) {
     migrated = migrateCaptionTracks(migrated)
+  }
+  if (migrated.schemaVersion === 8) {
+    migrated = migrateClipBlendModes(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
@@ -1699,6 +1734,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           timelineRange: { ...clip.timelineRange },
           transform: { ...clip.transform },
           opacity: clip.opacity,
+          blendMode: clipBlendModeIntent(clip),
           volume: clip.volume,
           visual: {
             ...clipVisualSettings(clip),

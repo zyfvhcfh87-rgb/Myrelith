@@ -54,8 +54,22 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
+import {
+  BLEND_MODE_NAMES,
+  clipBlendModeIntent,
+  DEFAULT_BLEND_MODE,
+  isBlendModeName,
+  type BlendModeName,
+} from '../domain/blendModes'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
+
+const BLEND_MODE_LABELS: Readonly<Record<BlendModeName, string>> = {
+  normal: 'Normal',
+  multiply: 'Multiply',
+  screen: 'Screen',
+  overlay: 'Overlay',
+}
 
 interface NumberFieldProps {
   label: string
@@ -395,6 +409,8 @@ function VideoInspectorSections({
     )
   const cropPercent = (value: number): number => Math.round(value * 10_000) / 100
   const cropFraction = (value: number): number => Math.round(value * 100) / 10_000
+  const blendModeIntent = clipBlendModeIntent(clip)
+  const supportedBlendMode = isBlendModeName(blendModeIntent)
 
   return (
     <div className="inspector-section-stack" key={`video:${clip.id}`}>
@@ -438,6 +454,38 @@ function VideoInspectorSections({
           <ToggleField label="Flip horizontally" checked={visual.flipHorizontal} disabled={locked} testId="inspector-flip-horizontal" onChange={(flipHorizontal) => patch({ visual: { flipHorizontal } })} />
           <ToggleField label="Flip vertically" checked={visual.flipVertical} disabled={locked} testId="inspector-flip-vertical" onChange={(flipVertical) => patch({ visual: { flipVertical } })} />
         </div>
+        </InspectorSection>
+
+        <InspectorSection
+          title="Compositing"
+          resetLabel="Reset video blend mode"
+          disabled={locked}
+          onReset={() => patch({ blendMode: DEFAULT_BLEND_MODE })}
+        >
+          <label className="inspector-field inspector-field-wide">
+            <span className="inspector-field-label">Blend mode</span>
+            <select
+              value={blendModeIntent}
+              disabled={locked}
+              data-testid="inspector-blend-mode"
+              aria-describedby="inspector-blend-mode-note"
+              onChange={(event) => patch({ blendMode: event.target.value })}
+            >
+              {!supportedBlendMode && (
+                <option value={blendModeIntent}>
+                  Unsupported: {blendModeIntent || '(empty name)'}
+                </option>
+              )}
+              {BLEND_MODE_NAMES.map((mode) => (
+                <option key={mode} value={mode}>{BLEND_MODE_LABELS[mode]}</option>
+              ))}
+            </select>
+          </label>
+          <span id="inspector-blend-mode-note" className="inspector-note" aria-live="polite">
+            {supportedBlendMode
+              ? `${BLEND_MODE_LABELS[blendModeIntent]} is applied after transform, crop, and opacity.`
+              : `“${blendModeIntent || '(empty name)'}” is preserved, but preview and export use Normal until it is supported.`}
+          </span>
         </InspectorSection>
 
         <InspectorSection
