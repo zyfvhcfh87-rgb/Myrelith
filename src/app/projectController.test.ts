@@ -447,7 +447,7 @@ function makeFolderSelection(
   fileName: string,
   relativePath = `media/${fileName}`,
   lastModified = 999,
-): LocalMediaFolderSelection {
+): LocalMediaFolderSelection & { handle: LocalMediaFileHandle } {
   const file = new File(['12345678'], fileName, {
     type: 'video/mp4',
     lastModified,
@@ -1976,6 +1976,7 @@ describe('active-project media relink', () => {
     )
     expect(useProjectSessionStore.getState().activeMediaRelink).toEqual({
       phase: 'complete',
+      processedFileCount: 2,
       scannedFileCount: 2,
       connectedCount: 1,
       skippedCount: 1,
@@ -2068,6 +2069,7 @@ describe('active-project media relink', () => {
     const summary = useProjectSessionStore.getState().activeMediaRelink
     expect(summary).toEqual({
       phase: 'awaiting-choice',
+      processedFileCount: 1,
       scannedFileCount: 1,
       connectedCount: 0,
       skippedCount: 0,

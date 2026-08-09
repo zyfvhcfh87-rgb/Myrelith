@@ -4,6 +4,7 @@ import {
   enumerateLocalMediaFolder,
   isLocalMediaPickerCancellation,
   LocalMediaFolderTraversalError,
+  localMediaFolderSelectionsFromFiles,
   MEDIA_FILE_INPUT_ACCEPT,
   pickLocalMediaFiles,
   pickLocalMediaFolder,
@@ -131,6 +132,34 @@ describe('local media handle registry', () => {
 })
 
 describe('local media folder picker', () => {
+  test('normalizes a one-time directory input without reusable handles', () => {
+    const nested = new File(['nested'], 'clip.mp4', { type: 'video/mp4' })
+    const root = new File(['root'], 'poster.png', { type: 'image/png' })
+    const unsupported = new File(['notes'], 'notes.txt', { type: 'text/plain' })
+    Object.defineProperty(nested, 'webkitRelativePath', {
+      value: 'z-folder/clip.mp4',
+    })
+    Object.defineProperty(root, 'webkitRelativePath', {
+      value: 'poster.png',
+    })
+
+    const selections = localMediaFolderSelectionsFromFiles([
+      nested,
+      unsupported,
+      root,
+    ])
+
+    expect(selections.map((selection) => selection.relativePath)).toEqual([
+      'poster.png',
+      'z-folder/clip.mp4',
+    ])
+    expect(selections.every((selection) => selection.handle === null)).toBe(true)
+    expect(() => localMediaFolderSelectionsFromFiles(
+      [nested, root],
+      { maxEntries: 1 },
+    )).toThrow('limited to 1 entries')
+  })
+
   test('recursively returns supported files in deterministic relative-path order', async () => {
     const unsupported = makeHandle('notes.txt')
     const unsafeVector = makeHandle('art.svg')
