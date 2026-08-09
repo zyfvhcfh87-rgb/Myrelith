@@ -15,6 +15,9 @@ import {
 import {
   EXPORT_SELECTION_STORAGE_KEY,
   initPreferencesPersistence,
+  LEGACY_EXPORT_SELECTION_STORAGE_KEY,
+  LEGACY_USER_PREFERENCES_STORAGE_KEY,
+  LEGACY_WORKSPACE_LAYOUT_STORAGE_KEY,
   USER_PREFERENCES_STORAGE_KEY,
   WORKSPACE_LAYOUT_STORAGE_KEY,
   type PreferencesStorage,
@@ -56,6 +59,32 @@ afterEach(() => {
 })
 
 describe('preferences persistence', () => {
+  test('hydrates preferences written before the Myrelith rebrand', () => {
+    const backing = storage({
+      [LEGACY_USER_PREFERENCES_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        defaultStillImageDurationMicroseconds: 2_500_000,
+      }),
+      [LEGACY_EXPORT_SELECTION_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        selectionId: 'web',
+      }),
+      [LEGACY_WORKSPACE_LAYOUT_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        ...INITIAL_WORKSPACE_LAYOUT,
+        preset: 'media',
+      }),
+    })
+
+    dispose = initPreferencesPersistence(backing)
+
+    expect(usePreferencesStore.getState()).toMatchObject({
+      defaultStillImageDurationMicroseconds: 2_500_000,
+      exportSelection: { selectionId: 'web', profile: null },
+    })
+    expect(useWorkspaceLayoutStore.getState().preset).toBe('media')
+  })
+
   test('loads and persists the independent local workspace preference', () => {
     const persisted = {
       version: 1,

@@ -645,7 +645,7 @@ export function performanceArtifactMarkdown(artifact: PerformanceArtifact): stri
   const documentMemory = telemetry.documentMemory
 
   return [
-    '# WebCut performance evidence',
+    '# Myrelith performance evidence',
     '',
     `Captured: ${artifact.capturedAt}`,
     `Harness: ${artifact.harnessVersion}; schema: ${artifact.schemaVersion}`,

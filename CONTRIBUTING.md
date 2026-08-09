@@ -1,6 +1,6 @@
-# Contributing to WebCut
+# Contributing to Myrelith
 
-Thanks for helping make WebCut better.
+Thanks for helping make Myrelith better.
 
 ## Before you start
 

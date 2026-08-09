@@ -190,7 +190,7 @@ function resolvedLimits(
       ]
       if (value > ceiling) {
         throw new RangeError(
-          `${name} cannot exceed WebCut's immutable ${ceiling} ceiling`,
+          `${name} cannot exceed Myrelith's immutable ${ceiling} ceiling`,
         )
       }
     }
@@ -276,7 +276,7 @@ function ensureAvailable(
   inspectionError(
     'resource-limit',
     'header-scan-limit',
-    `${detail} lies beyond WebCut's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
+    `${detail} lies beyond Myrelith's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
     format,
   )
 }
@@ -400,7 +400,7 @@ function validatedGeometry(
     inspectionError(
       'resource-limit',
       'dimension-limit',
-      `${width}×${height} exceeds WebCut's ${limits.maxDimension}px image-edge limit.`,
+      `${width}×${height} exceeds Myrelith's ${limits.maxDimension}px image-edge limit.`,
       format,
     )
   }
@@ -409,7 +409,7 @@ function validatedGeometry(
     inspectionError(
       'resource-limit',
       'pixel-limit',
-      `${width}×${height} exceeds WebCut's ${limits.maxPixels}-pixel image limit.`,
+      `${width}×${height} exceeds Myrelith's ${limits.maxPixels}-pixel image limit.`,
       format,
     )
   }
@@ -421,7 +421,7 @@ function validatedGeometry(
     inspectionError(
       'resource-limit',
       'decoded-byte-limit',
-      `${width}×${height} would exceed WebCut's ${limits.maxAggregateDecodedBytes}-byte decoded-image budget.`,
+      `${width}×${height} would exceed Myrelith's ${limits.maxAggregateDecodedBytes}-byte decoded-image budget.`,
       format,
     )
   }
@@ -582,7 +582,7 @@ function inspectPng(context: InspectionContext): StaticImageInspection {
       inspectionError(
         'resource-limit',
         'header-scan-limit',
-        `PNG metadata extends beyond WebCut's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
+        `PNG metadata extends beyond Myrelith's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
         format,
       )
     }
@@ -705,7 +705,7 @@ function inspectJpeg(context: InspectionContext): StaticImageInspection {
       inspectionError(
         'resource-limit',
         'header-scan-limit',
-        `JPEG metadata extends beyond WebCut's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
+        `JPEG metadata extends beyond Myrelith's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
         format,
       )
     }
@@ -923,7 +923,7 @@ function inspectWebpAnimationFrame(
       inspectionError(
         'resource-limit',
         'header-scan-limit',
-        `WebP animation frame metadata extends beyond WebCut's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
+        `WebP animation frame metadata extends beyond Myrelith's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
         'webp',
       )
     }
@@ -1099,7 +1099,7 @@ function inspectWebp(context: InspectionContext): StaticImageInspection {
       inspectionError(
         'resource-limit',
         'header-scan-limit',
-        `WebP metadata extends beyond WebCut's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
+        `WebP metadata extends beyond Myrelith's ${context.limits.maxHeaderBytes}-byte image-header scan limit.`,
         format,
       )
     }
@@ -1449,7 +1449,7 @@ function inspectStaticImageBytesWithLimits(
     inspectionError(
       'resource-limit',
       'file-size-limit',
-      `${totalFileBytes} bytes exceeds WebCut's ${limits.maxFileBytes}-byte static-image file limit.`,
+      `${totalFileBytes} bytes exceeds Myrelith's ${limits.maxFileBytes}-byte static-image file limit.`,
       detectedFormat,
     )
   }
@@ -1476,7 +1476,7 @@ function inspectStaticImageBytesWithLimits(
     inspectionError(
       'unsupported-format',
       'unsupported-format',
-      'SVG is not supported because WebCut accepts decoded raster images only.',
+      'SVG is not supported because Myrelith accepts decoded raster images only.',
       'svg',
     )
   }

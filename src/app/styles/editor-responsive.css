@@ -117,7 +117,7 @@
   }
 }
 
-/* WebCut is a desktop editor. Keep every transport group usable down to the
+/* Myrelith is a desktop editor. Keep every transport group usable down to the
    720px supported shell width; narrower windows scroll the shell instead of
    letting the centered playback controls collide with either dock. */
 @media (max-width: 820px) {

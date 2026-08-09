@@ -61,16 +61,16 @@ describe('PerformanceBenchmarkApp browser evidence', () => {
     ))
     render(<PerformanceBenchmarkApp />)
 
-    await waitFor(() => expect(window.__webcutPerformanceHarness).toBeDefined())
+    await waitFor(() => expect(window.__myrelithPerformanceHarness).toBeDefined())
     await act(async () => {
-      await window.__webcutPerformanceHarness?.run({} as never)
+      await window.__myrelithPerformanceHarness?.run({} as never)
     })
     expect(screen.getByText('Initial summary without late console evidence'))
       .toBeInTheDocument()
 
     const finalizedArtifact = artifact(['warning: late console evidence'])
     act(() => {
-      expect(window.__webcutPerformanceHarness?.formatArtifact(finalizedArtifact))
+      expect(window.__myrelithPerformanceHarness?.formatArtifact(finalizedArtifact))
         .toBe('Final summary: warning: late console evidence')
     })
 
@@ -84,11 +84,11 @@ describe('PerformanceBenchmarkApp browser evidence', () => {
     runtime.run.mockRejectedValue(new Error('simulated export preflight regression'))
     render(<PerformanceBenchmarkApp />)
 
-    await waitFor(() => expect(window.__webcutPerformanceHarness).toBeDefined())
+    await waitFor(() => expect(window.__myrelithPerformanceHarness).toBeDefined())
     let caught: unknown
     await act(async () => {
       try {
-        await window.__webcutPerformanceHarness?.run({} as never)
+        await window.__myrelithPerformanceHarness?.run({} as never)
       } catch (cause) {
         caught = cause
       }

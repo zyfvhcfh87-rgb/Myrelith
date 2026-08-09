@@ -181,7 +181,7 @@ type ProcessMemoryBindingResult =
   | ProcessMemoryUnavailableResult
 
 interface PerformanceMemoryWindow extends Window {
-  __webcutSampleChromiumProcessMemory?: (
+  __myrelithSampleChromiumProcessMemory?: (
     request: { readonly batchIndex: number },
   ) => Promise<ProcessMemoryBindingResult>
 }
@@ -664,7 +664,7 @@ function validatedProcessMemorySample(
 export async function collectChromiumProcessMemoryEvidence(
   options: Pick<PerformanceRunOptions, 'memoryBatches'>,
   runBatchWork: (batchIndex: number) => Promise<void>,
-  sampleMemory: PerformanceMemoryWindow['__webcutSampleChromiumProcessMemory'],
+  sampleMemory: PerformanceMemoryWindow['__myrelithSampleChromiumProcessMemory'],
   platform: string,
 ): Promise<ChromiumProcessMemoryEvidence> {
   const samples: ChromiumProcessMemoryBatchSample[] = []
@@ -917,7 +917,7 @@ async function createSynthetic4kPng(): Promise<Blob> {
   context.font = '700 180px system-ui'
   context.textAlign = 'center'
   context.fillText(
-    'WebCut 4K benchmark',
+    'Myrelith 4K benchmark',
     PERFORMANCE_FIXTURE_WIDTH / 2,
     PERFORMANCE_FIXTURE_HEIGHT / 2,
   )
@@ -960,7 +960,7 @@ async function createSynthetic4kVideo(): Promise<Blob> {
       context.font = '700 180px system-ui'
       context.textAlign = 'center'
       context.fillText(
-        `WebCut 4K video ${sample.index + 1}`,
+        `Myrelith 4K video ${sample.index + 1}`,
         PERFORMANCE_FIXTURE_WIDTH / 2,
         PERFORMANCE_FIXTURE_HEIGHT / 2,
       )
@@ -1437,11 +1437,11 @@ export function createPerformanceExportDocument(
     { startFrame: 0, durationFrames: frames },
   )
   textClip.assetId = proceduralTextAssetId(textClip.id)
-  textClip.name = 'WebCut 4K export benchmark'
+  textClip.name = 'Myrelith 4K export benchmark'
   if (!textClip.text) throw new Error('Fixture text clip lost its text properties')
   textClip.text = {
     ...textClip.text,
-    content: 'WebCut 4K export benchmark',
+    content: 'Myrelith 4K export benchmark',
   }
 
   const audioTracks = audioSources.map((source, index) => {
@@ -1823,7 +1823,7 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
     readonly healthSamples: readonly RuntimeHealthSample[]
   }> {
     const sampleMemory = (window as PerformanceMemoryWindow)
-      .__webcutSampleChromiumProcessMemory
+      .__myrelithSampleChromiumProcessMemory
     const healthSamples: RuntimeHealthSample[] = []
     try {
       let scrubIndex = 0

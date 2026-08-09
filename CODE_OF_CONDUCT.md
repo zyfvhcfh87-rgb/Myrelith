@@ -2,7 +2,7 @@
 
 ## Our standard
 
-WebCut contributors should make participation welcoming, respectful, and safe.
+Myrelith contributors should make participation welcoming, respectful, and safe.
 Be considerate, accept constructive feedback, respect different experiences,
 and focus disagreement on the work rather than the person.
 

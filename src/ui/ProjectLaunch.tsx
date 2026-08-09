@@ -95,7 +95,7 @@ function confirmRecoveryDiscard(projectName: string): boolean {
 
 function confirmStaleRecoveryCleanup(count: number): boolean {
   return window.confirm(
-    `Discard ${count} recovery ${count === 1 ? 'copy' : 'copies'} older than 30 days? This permanently removes only those local unsaved safety copies. It does not delete .webcut files, source media, remembered access, or newer recovery copies.`,
+    `Discard ${count} recovery ${count === 1 ? 'copy' : 'copies'} older than 30 days? This permanently removes only those local unsaved safety copies. It does not delete .myrelith files, source media, remembered access, or newer recovery copies.`,
   )
 }
 
@@ -128,7 +128,7 @@ function LocalStorageSummary() {
   const clearDisposable = (): void => {
     if (!hasDisposableData || clearing) return
     const confirmed = window.confirm(
-      `Clear ${formatBytes(storage.disposableBytes)} of disposable derived data? Only registered WebCut cache or proxy data will be removed. Project files, recovery copies, remembered access, and source media will stay untouched.`,
+      `Clear ${formatBytes(storage.disposableBytes)} of disposable derived data? Only registered Myrelith cache or proxy data will be removed. Project files, recovery copies, remembered access, and source media will stay untouched.`,
     )
     if (!confirmed) return
     setClearing(true)
@@ -152,7 +152,7 @@ function LocalStorageSummary() {
       </header>
       <dl className="project-storage-list">
         <div data-storage-kind="project-truth">
-          <dt>Portable .webcut files</dt>
+          <dt>Portable .myrelith files</dt>
           <dd>On your disk · never cleared here</dd>
           <small>Saved project truth. Source media is referenced, not bundled.</small>
         </div>
@@ -164,7 +164,7 @@ function LocalStorageSummary() {
         <div data-storage-kind="access">
           <dt>Remembered access</dt>
           <dd>{recentCount} recent project {recentCount === 1 ? 'shortcut' : 'shortcuts'}</dd>
-          <small>Browser permissions and labels only; WebCut does not copy the files.</small>
+          <small>Browser permissions and labels only; Myrelith does not copy the files.</small>
         </div>
         <div data-storage-kind="disposable">
           <dt>Derived cache &amp; proxies</dt>
@@ -214,7 +214,7 @@ function LaunchFrame({
           <a href="/privacy/">Privacy</a>
           <a href="/licenses/">Licenses</a>
           <a
-            href="https://github.com/zyfvhcfh87-rgb/WebCut"
+            href="https://github.com/zyfvhcfh87-rgb/Myrelith"
             rel="noreferrer"
             target="_blank"
           >
@@ -262,7 +262,7 @@ function HomeScreen() {
     <LaunchFrame home>
       <header className="project-launch-home-nav">
         <div className="project-launch-brand">
-          <strong>WebCut</strong>
+          <strong>Myrelith</strong>
           <span>Browser video editor</span>
         </div>
         <div className="project-launch-trust">
@@ -303,8 +303,8 @@ function HomeScreen() {
               <strong>Open a project</strong>
             </button>
           </div>
-          <ul className="project-launch-capabilities" aria-label="WebCut capabilities">
-            <li>Portable .webcut projects</li>
+          <ul className="project-launch-capabilities" aria-label="Myrelith capabilities">
+            <li>Portable .myrelith projects</li>
             <li>Any canvas ratio</li>
             <li>Multitrack editing</li>
           </ul>
@@ -401,7 +401,7 @@ function HomeScreen() {
                     className="project-library-remove"
                     type="button"
                     aria-label={`Remove ${project.projectName} from Recent`}
-                    title="Remove this shortcut only — the .webcut file stays on disk"
+                    title="Remove this shortcut only — the .myrelith file stays on disk"
                     onClick={() => void forgetRecentProject(project.documentId)}
                   >
                     <DotsThreeVertical aria-hidden="true" size={20} weight="bold" />
@@ -441,7 +441,7 @@ function HomeScreen() {
                 <input
                   type="search"
                   value={recoveryQuery}
-                  placeholder="Project or .webcut name"
+                  placeholder="Project or .myrelith name"
                   onChange={(event) => setRecoveryQuery(event.target.value)}
                 />
               </label>
@@ -484,7 +484,7 @@ function HomeScreen() {
                         <span className="project-library-copy">
                           <strong>{recovery.projectName}</strong>
                           <span>
-                            {recovery.projectFileName ?? 'Not saved to a .webcut yet'}
+                            {recovery.projectFileName ?? 'Not saved to a .myrelith yet'}
                           </span>
                         </span>
                         <time dateTime={new Date(recovery.updatedAt).toISOString()}>
@@ -552,7 +552,7 @@ function EditorLoadNotice({
     <div className="project-launch-error project-editor-load-error" role="alert">
       <span>{message}</span>
       <div className="project-editor-load-actions">
-        <button type="button" onClick={() => window.location.reload()}>Reload WebCut</button>
+        <button type="button" onClick={() => window.location.reload()}>Reload Myrelith</button>
       </div>
     </div>
   )
@@ -605,7 +605,7 @@ function NewProjectScreen({
     <LaunchFrame setup>
       <header className="project-launch-home-nav project-setup-nav">
         <div className="project-launch-brand">
-          <strong>WebCut</strong>
+          <strong>Myrelith</strong>
           <span>Browser video editor</span>
         </div>
         <div className="project-launch-trust">
@@ -761,7 +761,7 @@ function NewProjectScreen({
               <dd>4 video + 4 audio tracks</dd>
             </div>
           </dl>
-          <p>Starts locally and unsaved. Save a portable .webcut when you are ready.</p>
+          <p>Starts locally and unsaved. Save a portable .myrelith when you are ready.</p>
         </section>
         {error && <p className="project-launch-error" role="alert">{error}</p>}
         {editorLoadError && (
@@ -822,10 +822,10 @@ function ResumeProjectScreen({
   const missingCount = candidate?.assets.filter(
     (asset) => asset.status === 'missing',
   ).length ?? 0
-  const reusableChoiceTarget = candidate ? 'another project file' : '.webcut'
+  const reusableChoiceTarget = candidate ? 'another project file' : '.myrelith'
   const ordinaryProjectChoice = projectHandlePickerAvailable
     ? localAccessChoiceLabel('Open', 'once')
-    : candidate ? 'Choose another project file' : 'Choose a .webcut file'
+    : candidate ? 'Choose another project file' : 'Choose a .myrelith file'
 
   return (
     <LaunchFrame>
@@ -852,7 +852,7 @@ function ResumeProjectScreen({
               className={`project-file-choice project-file-choice-remembered${
                 busy ? ' is-disabled' : ''
               }`}
-              aria-label="Open and remember a WebCut project file"
+              aria-label="Open and remember a Myrelith project file"
               type="button"
               disabled={busy}
               onClick={() => void chooseProjectFile()}
@@ -872,15 +872,15 @@ function ResumeProjectScreen({
             <span>
               {projectHandlePickerAvailable
                 ? localAccessChoiceDescription('once')
-                : 'Only a validated portable WebCut project will continue.'}
+                : 'Only a validated portable Myrelith project will continue.'}
             </span>
             <input
               className="project-file-input"
               aria-label={projectHandlePickerAvailable
-                ? 'Open a WebCut project file once'
-                : 'Choose a WebCut project file'}
+                ? 'Open a Myrelith project file once'
+                : 'Choose a Myrelith project file'}
               type="file"
-              accept=".webcut"
+              accept=".myrelith,.webcut"
               disabled={busy}
               onChange={(event) => {
                 const file = event.target.files?.[0]
@@ -933,7 +933,7 @@ function ResumeProjectScreen({
                   {candidate.assets.length === 0
                     ? 'This project does not need any source files.'
                     : needsPermission
-                      ? 'WebCut remembers these files. Open the project once to allow access again.'
+                      ? 'Myrelith remembers these files. Open the project once to allow access again.'
                       : missingCount > 0
                         ? `${missingCount} source${missingCount === 1 ? '' : 's'} will open offline. You can reconnect them now or from the editor.`
                         : 'Every source is ready. Remembered files reconnect automatically.'}

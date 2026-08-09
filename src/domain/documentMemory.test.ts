@@ -4,7 +4,7 @@ import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from './projectSettings'
 
 describe('document memory estimate', () => {
   test('counts UTF-8 without a browser TextEncoder', () => {
-    expect(utf8ByteLength('WebCut')).toBe(6)
+    expect(utf8ByteLength('Myrelith')).toBe(8)
     expect(utf8ByteLength('\u00b5')).toBe(2)
     expect(utf8ByteLength('\ud83c\udfac')).toBe(4)
   })

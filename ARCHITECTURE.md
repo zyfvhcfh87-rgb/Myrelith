@@ -123,12 +123,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   ripple, razor, and slide change timeline geometry without inventing source
   frames; Slip is an intentional no-op.
 - Text overlays are procedural timed video clips. They use a reserved
-  `__webcut_text__:` asset id, carry their full supported appearance in
+  `__myrelith_text__:` asset id, carry their full supported appearance in
   `Clip.text`, and require no `MediaAsset`, durable descriptor, Blob, file
   handle, decoder, or relink state. Their source range is always
   `[0, timeline duration)`; trim, ripple, split, move, slide, and linked edits
   preserve that identity, while Slip is an intentional no-op. Unsupported
   font/color/geometry values fail validation instead of being substituted.
+  Project-file migration accepts the legacy `__webcut_text__:` prefix only to
+  normalize it to the current prefix before validation and editing.
 - Visual media clips may carry `Clip.animation`, a canonical list of scalar
   tracks for position X/Y, scale X/Y, rotation, and opacity. Keyframe times are
   exact clip-local integer frames, sorted strictly with no duplicates; an edit
@@ -235,7 +237,7 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - Buffered output owns a `BufferTarget` result. Direct-file output begins with
   a user-gesture picker in `app/`, passes only a one-shot opaque capability,
   and uses `StreamTarget` with at most 1 MiB of awaited positioned writes.
-  WebCut commits only after successful mux finalization; cancellation or
+  Myrelith commits only after successful mux finalization; cancellation or
   failure aborts, and uncertain abort cleanup is a terminal integrity error.
 - AAC and Opus must preserve the exact scheduled presentation length. The
   exact-version Mediabunny patch writes and reopens Opus `CodecDelay`, 80 ms
@@ -416,8 +418,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   origin-local IndexedDB. `src/app/projectLibraryController.ts` retains those
   opaque values outside Zustand and publishes Home summaries. Recovery keeps
   several complete generations, is offered explicitly, and never stores media
-  bytes. Intentional project exit or a revision-current successful `.webcut`
+  bytes. Intentional project exit or a revision-current successful `.myrelith`
   save removes the active journal before session resources are released.
+  New saves use `.myrelith` and `myrelith-project`; parsing also accepts the
+  legacy `.webcut` filename and `webcut-project` marker, then returns only a
+  current normalized project. The historical IndexedDB database names are
+  durable compatibility identifiers and must not be renamed without an atomic
+  record migration.
 - Media import policy — `src/app/mediaImportDecisions.ts` is the store-free
   authority for FPS-prompt eligibility, partial-track choice reapplication,
   active-document/rate validation, and Keep/Match rate resolution. It accepts
@@ -433,7 +440,7 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - Local media reconnection — `src/app/localMediaHandles.ts` stores opaque
   `FileSystemFileHandle` capabilities in an origin-local IndexedDB sidecar,
   keyed by stable document + asset ids. Paths and handles never enter domain
-  data or `.webcut` JSON. Resume may query permission silently; prompting must
+  data or `.myrelith` JSON. Resume may query permission silently; prompting must
   originate in a user click. Missing, denied, moved, changed, or unsupported
   sources remain offline and may be reconnected individually or through one
   recursively enumerated folder. Folder scans are deterministically bounded;

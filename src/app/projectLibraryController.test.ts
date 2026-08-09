@@ -17,8 +17,8 @@ import {
 function handle(): LocalProjectFileHandle {
   return {
     kind: 'file',
-    name: 'Recent.webcut',
-    getFile: vi.fn(async () => new File(['{}'], 'Recent.webcut')),
+    name: 'Recent.myrelith',
+    getFile: vi.fn(async () => new File(['{}'], 'Recent.myrelith')),
     queryPermission: vi.fn(async () => 'prompt' as const),
   }
 }
@@ -28,7 +28,7 @@ function recent(): RecentProjectRecord {
     version: LOCAL_PROJECT_RECORD_VERSION,
     documentId: 'doc-recent',
     projectName: 'Recent edit',
-    fileName: 'Recent.webcut',
+    fileName: 'Recent.myrelith',
     lastOpenedAt: 200,
     handle: handle(),
   }

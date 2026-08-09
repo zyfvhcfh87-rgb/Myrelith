@@ -15,6 +15,8 @@ import {
   CURRENT_PROJECT_FORMAT_VERSION,
   CURRENT_TIMELINE_SCHEMA_VERSION,
   createProjectFileSnapshot,
+  hasSupportedProjectFileExtension,
+  LEGACY_PROJECT_FILE_FORMAT,
   parseProjectFile,
   PROJECT_FILE_FORMAT,
   PROJECT_FILE_LIMITS,
@@ -210,7 +212,7 @@ describe('portable project file', () => {
     const original = makeProject()
     const parsed = parseProjectFile(serializeProjectFile(original))
 
-    expect(parsed.format).toBe('webcut-project')
+    expect(parsed.format).toBe('myrelith-project')
     expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
     expect(parsed.document).toEqual(original.document)
     expect(parsed.assets.map((asset) => asset.id)).toEqual(['image-a', 'video-z'])
@@ -226,6 +228,29 @@ describe('portable project file', () => {
     expect(parsed.document.tracks[0].transitions).toEqual(
       original.document.tracks[0].transitions,
     )
+  })
+
+  test('migrates a legacy branded project and procedural text id', () => {
+    const legacy = clone(makeProject()) as unknown as {
+      format: string
+      document: TimelineDoc
+    }
+    legacy.format = LEGACY_PROJECT_FILE_FORMAT
+    legacy.document.tracks[0].clips[2].assetId = '__webcut_text__:clip-title'
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.format).toBe(PROJECT_FILE_FORMAT)
+    expect(parsed.document.tracks[0].clips[2].assetId).toBe(
+      '__myrelith_text__:clip-title',
+    )
+    expect(serializeProjectFile(parsed)).not.toContain('webcut')
+  })
+
+  test('recognizes current and legacy project filename extensions', () => {
+    expect(hasSupportedProjectFileExtension('edit.myrelith')).toBe(true)
+    expect(hasSupportedProjectFileExtension('EDIT.WEBCUT')).toBe(true)
+    expect(hasSupportedProjectFileExtension('edit.json')).toBe(false)
   })
 
   test('round-trips keyframes and custom easing without changing order or precision', () => {
@@ -354,7 +379,7 @@ describe('portable project file', () => {
         .every((clip) => clip.sourceMode === 'timed'),
     ).toBe(true)
     expect(parsed.document.tracks[0].clips[2]).toMatchObject({
-      assetId: expect.stringMatching(/^__webcut_text__:/),
+      assetId: expect.stringMatching(/^__myrelith_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
       text: { content: 'A portable title' },
@@ -443,7 +468,7 @@ describe('portable project file', () => {
     const parsed = parseProjectFile(JSON.stringify(legacy))
     const migrated = parsed.document.tracks[0].clips[2]
     expect(migrated).toMatchObject({
-      assetId: expect.stringMatching(/^__webcut_text__:/),
+      assetId: expect.stringMatching(/^__myrelith_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
       text: {
@@ -526,7 +551,7 @@ describe('portable project file', () => {
       sourceRange: { startFrame: 5, durationFrames: 10 },
     })
     expect(parsed.document.tracks[0].clips[2]).toMatchObject({
-      assetId: expect.stringMatching(/^__webcut_text__:/),
+      assetId: expect.stringMatching(/^__myrelith_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
       text: { content: 'A portable title' },
@@ -546,7 +571,7 @@ describe('portable project file', () => {
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
     expect(parsed.document.tracks[0].clips[2]).toMatchObject({
-      assetId: expect.stringMatching(/^__webcut_text__:/),
+      assetId: expect.stringMatching(/^__myrelith_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
       timelineRange: { startFrame: 24, durationFrames: 20 },

@@ -187,7 +187,7 @@ export async function generateStaticImageThumbnail(
       if (cause instanceof StaticImageThumbnailError) throw cause
       throw new StaticImageThumbnailError(
         'encode-failed',
-        'WebCut could not draw the still-image thumbnail.',
+        'Myrelith could not draw the still-image thumbnail.',
         cause,
       )
     }
@@ -199,7 +199,7 @@ export async function generateStaticImageThumbnail(
       if (cause instanceof Error && cause.name === 'AbortError') throw cause
       throw new StaticImageThumbnailError(
         'encode-failed',
-        'WebCut could not encode the still-image thumbnail.',
+        'Myrelith could not encode the still-image thumbnail.',
         cause,
       )
     }
@@ -210,7 +210,7 @@ export async function generateStaticImageThumbnail(
     ) {
       throw new StaticImageThumbnailError(
         'resource-limit',
-        `The still-image thumbnail exceeds WebCut's ${STATIC_IMAGE_THUMBNAIL_LIMITS.maxEncodedBytes}-byte limit.`,
+        `The still-image thumbnail exceeds Myrelith's ${STATIC_IMAGE_THUMBNAIL_LIMITS.maxEncodedBytes}-byte limit.`,
       )
     }
     throwIfAborted(options.signal)
@@ -219,7 +219,7 @@ export async function generateStaticImageThumbnail(
     } catch (cause) {
       throw new StaticImageThumbnailError(
         'encode-failed',
-        'WebCut could not retain the still-image thumbnail.',
+        'Myrelith could not retain the still-image thumbnail.',
         cause,
       )
     }

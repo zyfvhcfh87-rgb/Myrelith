@@ -276,7 +276,7 @@ export function ExportPhaseContent({
           >
             Choose the export file in your browser…
           </span>
-          <p>WebCut will begin encoding after you approve the destination.</p>
+          <p>Myrelith will begin encoding after you approve the destination.</p>
         </section>
       )}
 

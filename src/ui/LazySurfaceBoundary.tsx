@@ -99,7 +99,7 @@ export default function LazySurfaceBoundary({
       <h2>{failureTitle}</h2>
       <p>
         The requested tools could not be downloaded. Check your connection or
-        reload WebCut to fetch the current files.
+        reload Myrelith to fetch the current files.
       </p>
       <div className="lazy-surface-actions">
         {onClose && (
@@ -108,7 +108,7 @@ export default function LazySurfaceBoundary({
           </button>
         )}
         <button type="button" autoFocus={!onClose} onClick={onReload}>
-          Reload WebCut
+          Reload Myrelith
         </button>
       </div>
     </SurfaceState>

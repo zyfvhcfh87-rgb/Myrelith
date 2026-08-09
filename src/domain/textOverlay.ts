@@ -23,7 +23,9 @@ export const TEXT_OVERLAY_LIMITS = Object.freeze({
   maxShadowOffsetPx: 512,
 })
 
-const TEXT_ASSET_PREFIX = '__webcut_text__:'
+const TEXT_ASSET_PREFIX = '__myrelith_text__:'
+/** Reserved prefix emitted by releases published before the Myrelith rebrand. */
+export const LEGACY_TEXT_ASSET_PREFIX = '__webcut_text__:'
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
 
 export function proceduralTextAssetId(clipId: ClipId): string {
@@ -31,7 +33,20 @@ export function proceduralTextAssetId(clipId: ClipId): string {
 }
 
 export function isProceduralTextAssetId(assetId: string): boolean {
-  return assetId.startsWith(TEXT_ASSET_PREFIX) && assetId.length > TEXT_ASSET_PREFIX.length
+  return (
+    (assetId.startsWith(TEXT_ASSET_PREFIX) && assetId.length > TEXT_ASSET_PREFIX.length)
+    || (
+      assetId.startsWith(LEGACY_TEXT_ASSET_PREFIX)
+      && assetId.length > LEGACY_TEXT_ASSET_PREFIX.length
+    )
+  )
+}
+
+/** Normalize the old reserved id without changing the clip identity it carries. */
+export function migrateLegacyProceduralTextAssetId(assetId: string): string {
+  return assetId.startsWith(LEGACY_TEXT_ASSET_PREFIX)
+    ? `${TEXT_ASSET_PREFIX}${assetId.slice(LEGACY_TEXT_ASSET_PREFIX.length)}`
+    : assetId
 }
 
 export function isSupportedTextFontFamily(value: unknown): value is TextFontFamily {

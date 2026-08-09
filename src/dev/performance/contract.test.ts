@@ -299,7 +299,7 @@ describe('performance evidence contract', () => {
     } satisfies PerformanceArtifact
 
     const report = performanceArtifactMarkdown(artifact)
-    expect(report).toContain('# WebCut performance evidence')
+    expect(report).toContain('# Myrelith performance evidence')
     expect(report).toContain('Median | p75 | p95 | Variance')
     expect(report).toContain('one run is never a product claim')
     expect(report).toContain(`Fixture fingerprint: sha256:${'a'.repeat(64)}`)

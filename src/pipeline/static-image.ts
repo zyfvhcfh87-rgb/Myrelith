@@ -49,7 +49,7 @@ const DECODE_FAILURE_MESSAGES: Readonly<
     'This browser cannot decode the selected still image.',
   'decode-failed': 'The selected still image could not be decoded.',
   'resource-limit':
-    "The decoded still image exceeds WebCut's image resource limits.",
+    "The decoded still image exceeds Myrelith's image resource limits.",
   'metadata-mismatch':
     'The decoded still image dimensions do not match the inspected source.',
 })

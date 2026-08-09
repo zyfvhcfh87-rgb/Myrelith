@@ -49,7 +49,7 @@ describe('editor lazy boundary', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'We couldn’t load the editing tools',
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Reload WebCut' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reload Myrelith' }))
     expect(reload).toHaveBeenCalledOnce()
   })
 })

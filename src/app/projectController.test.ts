@@ -465,7 +465,7 @@ async function activateSavedProject(
     ...overrides,
   })
   await expect(openProjectFile(
-    new File([serialized], 'offline.webcut'),
+    new File([serialized], 'offline.myrelith'),
     deps,
   )).resolves.toEqual({ status: 'ready' })
   await expect(activateResumedProject(deps)).resolves.toEqual({
@@ -792,7 +792,7 @@ describe('portable project resume', () => {
     const oldAsset = makeAsset({ id: 'old', objectUrl: 'blob:old' })
     useMediaStore.getState().addAsset(oldAsset)
     const deps = makeDeps({ readText: vi.fn(async () => '{broken') })
-    const file = new File(['x'], 'broken.webcut')
+    const file = new File(['x'], 'broken.myrelith')
 
     await expect(openProjectFile(file, deps)).resolves.toMatchObject({
       status: 'failed',
@@ -813,7 +813,7 @@ describe('portable project resume', () => {
     const savedProject = makeLegacyTwoTrackProject('Empty saved work')
     const serialized = serializeProjectFile(savedProject)
     const deps = makeDeps({ readText: vi.fn(async () => serialized) })
-    const file = new File([serialized], 'empty.webcut')
+    const file = new File([serialized], 'empty.myrelith')
 
     await expect(openProjectFile(file, deps)).resolves.toEqual({ status: 'ready' })
     expect(useDocumentStore.getState().doc).toBe(current)
@@ -828,17 +828,36 @@ describe('portable project resume', () => {
     expect(useDocumentStore.getState().doc).toEqual(savedProject.document)
     expect(useProjectSessionStore.getState()).toMatchObject({
       screen: 'editor',
-      activeProjectFileName: 'empty.webcut',
+      activeProjectFileName: 'empty.myrelith',
     })
     expect(deps.startProjectPersistence).toHaveBeenCalledWith({
-      fileName: 'empty.webcut',
+      fileName: 'empty.myrelith',
       persisted: true,
+    })
+  })
+
+  test('opens a legacy .webcut filename and migrates its format marker', async () => {
+    const savedProject = makeLegacyTwoTrackProject('Legacy saved work')
+    const legacySerialized = serializeProjectFile(savedProject).replace(
+      'myrelith-project',
+      'webcut-project',
+    )
+    const deps = makeDeps({ readText: vi.fn(async () => legacySerialized) })
+
+    await expect(openProjectFile(
+      new File([legacySerialized], 'legacy.webcut'),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+
+    expect(useProjectSessionStore.getState().candidate).toMatchObject({
+      projectName: 'Legacy saved work',
+      projectFileName: 'legacy.webcut',
     })
   })
 
   test('the Chrome project picker remembers a validated reusable handle', async () => {
     const serialized = serializeProjectFile(makeProject([], 'Picker project'))
-    const file = new File([serialized], 'picker.webcut')
+    const file = new File([serialized], 'picker.myrelith')
     const handle = makeProjectHandle(file)
     const deps = makeDeps({
       readText: vi.fn(async () => serialized),
@@ -855,7 +874,7 @@ describe('portable project resume', () => {
     expect(deps.rememberRecentProject).toHaveBeenCalledWith({
       documentId: 'doc-saved',
       projectName: 'Picker project',
-      fileName: 'picker.webcut',
+      fileName: 'picker.myrelith',
       lastOpenedAt: 1_234,
       handle,
     })
@@ -863,14 +882,14 @@ describe('portable project resume', () => {
 
   test('a Recent click starts permission synchronously and verifies document identity', async () => {
     const serialized = serializeProjectFile(makeProject([], 'Recent project'))
-    const file = new File([serialized], 'recent.webcut')
+    const file = new File([serialized], 'recent.myrelith')
     const handle = makeProjectHandle(file)
     const permission = deferred<'granted'>()
     const record: RecentProjectRecord = {
       version: LOCAL_PROJECT_RECORD_VERSION,
       documentId: 'doc-saved',
       projectName: 'Recent project',
-      fileName: 'recent.webcut',
+      fileName: 'recent.myrelith',
       lastOpenedAt: 10,
       handle,
     }
@@ -912,7 +931,7 @@ describe('portable project resume', () => {
       journalId: 'journal-recovery',
       documentId: 'doc-saved',
       projectName: 'Recovered project',
-      projectFileName: 'Recovered.webcut',
+      projectFileName: 'Recovered.myrelith',
       updatedAt: 200,
       generations: [{
         snapshotId: 'snapshot-good',
@@ -940,7 +959,7 @@ describe('portable project resume', () => {
     })
     expect(useDocumentStore.getState().doc).toEqual(savedProject.document)
     expect(deps.startProjectPersistence).toHaveBeenCalledWith({
-      fileName: 'Recovered.webcut',
+      fileName: 'Recovered.myrelith',
       persisted: false,
       recoveryJournalId: 'journal-recovery',
       recoveryCapturedAt: 100,
@@ -1003,7 +1022,7 @@ describe('portable project resume', () => {
       readText: vi.fn(async () => serialized),
       inspectMedia,
     })
-    const projectFile = new File([serialized], 'image.webcut')
+    const projectFile = new File([serialized], 'image.myrelith')
     const sourceFile = new File(['12345678'], 'renamed-poster.png', {
       type: 'image/png',
       lastModified: 999,
@@ -1062,7 +1081,7 @@ describe('portable project resume', () => {
     })
 
     await expect(
-      openProjectFile(new File([serialized], 'remembered.webcut'), deps),
+      openProjectFile(new File([serialized], 'remembered.myrelith'), deps),
     ).resolves.toEqual({ status: 'ready' })
 
     expect(deps.loadMediaHandle).toHaveBeenCalledWith(
@@ -1121,7 +1140,7 @@ describe('portable project resume', () => {
     })
 
     await expect(openProjectFile(
-      new File([serialized], 'remembered-partial.webcut'),
+      new File([serialized], 'remembered-partial.myrelith'),
       deps,
     )).resolves.toEqual({ status: 'ready' })
     await expect(activateResumedProject(deps)).resolves.toEqual({
@@ -1170,7 +1189,7 @@ describe('portable project resume', () => {
     })
 
     await expect(openProjectFile(
-      new File([serialized], 'unsupported.webcut'),
+      new File([serialized], 'unsupported.myrelith'),
       deps,
     )).resolves.toEqual({ status: 'ready' })
     expect(deps.forgetMediaHandle).not.toHaveBeenCalled()
@@ -1220,7 +1239,7 @@ describe('portable project resume', () => {
       inspectMedia: vi.fn(async () => inspection),
     })
 
-    await openProjectFile(new File([serialized], 'prompt.webcut'), deps)
+    await openProjectFile(new File([serialized], 'prompt.myrelith'), deps)
     expect(useProjectSessionStore.getState().candidate?.assets[0].status)
       .toBe('remembered')
 
@@ -1269,7 +1288,7 @@ describe('portable project resume', () => {
       inspectMedia: vi.fn(async () => inspection),
     })
 
-    await openProjectFile(new File([serialized], 'mismatch.webcut'), deps)
+    await openProjectFile(new File([serialized], 'mismatch.myrelith'), deps)
     await expect(chooseProjectMedia(deps)).resolves.toEqual({
       status: 'failed',
       message: inspection.compatibility.detail,
@@ -1301,7 +1320,7 @@ describe('portable project resume', () => {
       requestMediaPermission,
       inspectMedia: vi.fn(async () => readyInspection(analyzed)),
     })
-    await openProjectFile(new File([serialized], 'permission.webcut'), deps)
+    await openProjectFile(new File([serialized], 'permission.myrelith'), deps)
 
     expect(useProjectSessionStore.getState().candidate?.assets[0].status)
       .toBe('remembered')
@@ -1329,7 +1348,7 @@ describe('portable project resume', () => {
       queryMediaPermission: vi.fn(async () => 'denied' as const),
     })
 
-    await openProjectFile(new File([serialized], 'denied.webcut'), deniedDeps)
+    await openProjectFile(new File([serialized], 'denied.myrelith'), deniedDeps)
     expect(useProjectSessionStore.getState().candidate?.assets[0].status)
       .toBe('missing')
     expect(deniedDeps.inspectMedia).not.toHaveBeenCalled()
@@ -1344,7 +1363,7 @@ describe('portable project resume', () => {
       queryMediaPermission: vi.fn(async () => 'granted' as const),
       inspectMedia: vi.fn(async () => readyInspection(changed)),
     })
-    await openProjectFile(new File([serialized], 'changed.webcut'), changedDeps)
+    await openProjectFile(new File([serialized], 'changed.myrelith'), changedDeps)
 
     expect(changedDeps.revokeObjectURL).toHaveBeenCalledWith('blob:changed')
     expect(changedDeps.forgetMediaHandle).toHaveBeenCalledWith(
@@ -1375,7 +1394,7 @@ describe('portable project resume', () => {
       readText: vi.fn(async () => serialized),
       inspectMedia,
     })
-    const projectFile = new File([serialized], 'edit.webcut')
+    const projectFile = new File([serialized], 'edit.myrelith')
     const sourceFile = new File(['12345678'], 'renamed-copy.mp4', {
       type: 'video/mp4',
       lastModified: 999,
@@ -1427,7 +1446,7 @@ describe('portable project resume', () => {
       pickMediaFiles: vi.fn(async () => [{ file: source, handle }]),
       inspectMedia: vi.fn(async () => readyInspection(analyzed)),
     })
-    await openProjectFile(new File([serialized], 'legacy.webcut'), deps)
+    await openProjectFile(new File([serialized], 'legacy.myrelith'), deps)
 
     await expect(chooseProjectMedia(deps)).resolves.toEqual({ status: 'ready' })
 
@@ -1463,7 +1482,7 @@ describe('portable project resume', () => {
         audioDurationMicroseconds: descriptor.durationMicroseconds,
       })),
     })
-    await openProjectFile(new File([serialized], 'audio-only.webcut'), deps)
+    await openProjectFile(new File([serialized], 'audio-only.myrelith'), deps)
 
     await expect(chooseProjectMedia(deps)).resolves.toEqual({ status: 'ready' })
     await expect(activateResumedProject(deps)).resolves.toEqual({
@@ -1513,7 +1532,7 @@ describe('portable project resume', () => {
       inspectMedia: vi.fn(async () => readyInspection(mismatch)),
     })
 
-    await openProjectFile(new File([serialized], 'edit.webcut'), deps)
+    await openProjectFile(new File([serialized], 'edit.myrelith'), deps)
     await expect(connectProjectMedia([
       new File(['12345678'], 'wrong.mp4'),
     ], deps)).resolves.toMatchObject({ status: 'failed' })
@@ -1550,7 +1569,7 @@ describe('portable project resume', () => {
       readText: vi.fn(async () => serialized),
       inspectMedia,
     })
-    await openProjectFile(new File([serialized], 'two.webcut'), deps)
+    await openProjectFile(new File([serialized], 'two.myrelith'), deps)
 
     const connecting = connectProjectMedia([
       new File(['first'], 'first.mp4'),
@@ -1581,7 +1600,7 @@ describe('portable project resume', () => {
       readText: vi.fn(async () => serialized),
       inspectMedia: vi.fn(() => analyzedGate.promise),
     })
-    await openProjectFile(new File([serialized], 'edit.webcut'), deps)
+    await openProjectFile(new File([serialized], 'edit.myrelith'), deps)
 
     const connecting = connectProjectMedia([
       new File(['12345678'], 'source.mp4'),

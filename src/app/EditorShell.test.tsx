@@ -86,7 +86,7 @@ describe('EditorShell', () => {
   test('renders every editor panel area', () => {
     const { container } = render(<EditorShell closing={false} />)
 
-    expect(screen.getByText('WebCut')).toBeInTheDocument()
+    expect(screen.getByText('Myrelith')).toBeInTheDocument()
     expect(container.querySelector('.media-pool')).not.toBeNull()
     expect(screen.getByTestId('preview-canvas')).toBeInTheDocument()
     expect(container.querySelector('.inspector-empty-title')).not.toBeNull()

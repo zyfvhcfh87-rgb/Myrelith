@@ -122,7 +122,7 @@ export default function Toolbar() {
 
   return (
     <div className="toolbar">
-      <strong className="toolbar-brand">WebCut</strong>
+      <strong className="toolbar-brand">Myrelith</strong>
       <div className="toolbar-project" title={projectFile ?? undefined}>
         <strong>{projectName ?? 'Untitled project'}</strong>
         <span
@@ -182,7 +182,7 @@ export default function Toolbar() {
           type="button"
           className="toolbar-button"
           disabled={busy}
-          title="Save to the current .webcut; the first save asks where to store it"
+          title="Save to the current .myrelith; the first save asks where to store it"
           onClick={() => void saveActiveProject()}
         >
           Save
@@ -191,7 +191,7 @@ export default function Toolbar() {
           type="button"
           className="toolbar-button"
           disabled={busy}
-          title="Choose a new .webcut file and enable live save"
+          title="Choose a new .myrelith file and enable live save"
           onClick={() => void saveActiveProjectAs()}
         >
           Save As

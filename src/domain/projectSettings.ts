@@ -182,7 +182,7 @@ export const PROJECT_AUDIO_SAMPLE_RATE_PRESETS = Object.freeze([
   96_000,
 ])
 
-/** The current WebCut default: 1080p, 30 fps, 48 kHz. */
+/** The current Myrelith default: 1080p, 30 fps, 48 kHz. */
 export const DEFAULT_PROJECT_SETTINGS: Readonly<ProjectSettings> = Object.freeze({
   width: 1920,
   height: 1080,

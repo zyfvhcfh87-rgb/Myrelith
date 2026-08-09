@@ -1,6 +1,6 @@
 # Support
 
-WebCut is an experimental prerelease maintained in spare time.
+Myrelith is an experimental prerelease maintained in spare time.
 
 - For reproducible bugs, use the repository's bug-report issue form.
 - For scoped ideas, use the feature-request form.

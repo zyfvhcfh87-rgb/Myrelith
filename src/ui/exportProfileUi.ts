@@ -72,9 +72,9 @@ export function exportFileName(
     /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
       .test(base)
   ) {
-    base = `webcut-${base}`
+    base = `myrelith-${base}`
   }
-  return `${base || 'webcut-export'}.${extension}`
+  return `${base || 'myrelith-export'}.${extension}`
 }
 
 /** Bitrate-based estimate only; real variable-rate output may differ. */

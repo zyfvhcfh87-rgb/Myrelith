@@ -504,7 +504,7 @@ function PartialTrackImportDialog({
         </header>
         <div className="media-partial-import-body">
           <p id={descriptionId}>
-            The original file stays unchanged. WebCut will use {keptLabels} and
+            The original file stays unchanged. Myrelith will use {keptLabels} and
             {' '}omit {omittedLabels}. Omitted {omittedKind} will not appear on
             {' '}the timeline or in exports.
           </p>

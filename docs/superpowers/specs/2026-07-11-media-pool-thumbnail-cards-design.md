@@ -36,7 +36,7 @@ Imported assets appear as compact horizontal cards sized for the existing
 - A roughly 88 by 50 pixel thumbnail area on the left.
 - Filename and resolution/timecode metadata in the middle.
 - A small remove control at the top-right.
-- Subtle border, hover, and draggable-ready states that match WebCut's dark UI.
+- Subtle border, hover, and draggable-ready states that match Myrelith's dark UI.
 
 Long filenames stay on one line and truncate with an ellipsis. The full name
 remains available through the existing title text. Cards keep their current

@@ -50,7 +50,7 @@ export default function MediaImportDialog() {
             <div className="media-import-dialog-body">
               <p id="media-import-description">
                 <strong>{prompt.fileName}</strong> uses a different frame rate
-                from this project. Choose how WebCut should time the import.
+                from this project. Choose how Myrelith should time the import.
               </p>
               <dl className="media-import-rates">
                 <div>

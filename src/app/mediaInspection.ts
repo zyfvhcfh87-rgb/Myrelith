@@ -120,7 +120,7 @@ function decodeFailure(
       file,
       'error',
       'malformed-media',
-      'The image bytes changed while WebCut was verifying them.',
+      'The image bytes changed while Myrelith was verifying them.',
       inspection.format,
       inspection.mimeType,
     )
@@ -218,7 +218,7 @@ function readyImageResult(
       },
       reason: null,
       detail: animated
-        ? 'Animated image detected; WebCut uses its first frame only.'
+        ? 'Animated image detected; Myrelith uses its first frame only.'
         : 'Still image bytes and browser decode verified.',
     },
   }
@@ -263,8 +263,8 @@ export async function inspectMediaFileCompatibility(
         'error',
         'resource-unavailable',
         cause instanceof Error
-          ? `WebCut could not retain the image source: ${cause.message}`
-          : 'WebCut could not retain the image source.',
+          ? `Myrelith could not retain the image source: ${cause.message}`
+          : 'Myrelith could not retain the image source.',
         inspection.format,
         inspection.mimeType,
       )

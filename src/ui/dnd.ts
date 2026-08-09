@@ -16,7 +16,7 @@
 import type { AssetKind, TrackKind } from '../domain/schema'
 
 /** dataTransfer format whose payload is the dragged MediaAsset's id. */
-export const ASSET_DRAG_TYPE = 'application/x-webcut-asset'
+export const ASSET_DRAG_TYPE = 'application/x-myrelith-asset'
 
 /** Marker format (empty payload) advertising the dragged asset's kind. */
 export function assetKindDragType(kind: AssetKind): string {

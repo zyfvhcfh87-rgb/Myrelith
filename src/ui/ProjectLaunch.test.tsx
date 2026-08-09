@@ -92,7 +92,7 @@ describe('ProjectLaunch', () => {
         journalId: 'journal-old',
         documentId: 'doc-old',
         projectName: 'Archive edit',
-        projectFileName: 'mountains.webcut',
+        projectFileName: 'mountains.myrelith',
         updatedAt: now - 31 * 86_400_000,
         generationCount: 2,
       }],
@@ -113,7 +113,7 @@ describe('ProjectLaunch', () => {
     expect(libraryController.discardRecoveryJournals)
       .toHaveBeenCalledWith(['journal-old'])
     expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining('does not delete .webcut files'),
+      expect.stringContaining('does not delete .myrelith files'),
     )
   })
 
@@ -131,7 +131,7 @@ describe('ProjectLaunch', () => {
     })
     render(<ProjectLaunch />)
 
-    expect(screen.getByText('Portable .webcut files')).toBeInTheDocument()
+    expect(screen.getByText('Portable .myrelith files')).toBeInTheDocument()
     expect(screen.getByText(/1\.0 KB protected/)).toBeInTheDocument()
     expect(screen.getByText(/No derived media is stored today/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Clear disposable data' }))
@@ -146,7 +146,7 @@ describe('ProjectLaunch', () => {
       recentProjects: [{
         documentId: 'doc-recent',
         projectName: 'Recent edit',
-        fileName: 'Recent.webcut',
+        fileName: 'Recent.myrelith',
         lastOpenedAt: 1_000,
         permission: 'prompt',
       }],
@@ -273,7 +273,7 @@ describe('ProjectLaunch', () => {
       screen: 'resume',
       candidate: {
         origin: 'file',
-        projectFileName: 'edit.webcut',
+        projectFileName: 'edit.myrelith',
         projectName: 'Saved edit',
         width: 1920,
         height: 1080,
@@ -288,10 +288,10 @@ describe('ProjectLaunch', () => {
       },
     })
     render(<ProjectLaunch />)
-    const project = new File(['{}'], 'other.webcut')
+    const project = new File(['{}'], 'other.myrelith')
     const source = new File(['video'], 'source.mp4', { type: 'video/mp4' })
 
-    fireEvent.change(screen.getByLabelText('Choose a WebCut project file'), {
+    fireEvent.change(screen.getByLabelText('Choose a Myrelith project file'), {
       target: { files: [project] },
     })
     fireEvent.change(screen.getByLabelText('Relink project source media'), {
@@ -318,7 +318,7 @@ describe('ProjectLaunch', () => {
       screen: 'resume',
       candidate: {
         origin: 'file',
-        projectFileName: 'empty.webcut',
+        projectFileName: 'empty.myrelith',
         projectName: 'Empty saved work',
         width: 2560,
         height: 1440,
@@ -342,7 +342,7 @@ describe('ProjectLaunch', () => {
       screen: 'resume',
       candidate: {
         origin: 'file',
-        projectFileName: 'portrait.webcut',
+        projectFileName: 'portrait.myrelith',
         projectName: 'Portrait cut',
         width: 1080,
         height: 1920,
@@ -362,7 +362,7 @@ describe('ProjectLaunch', () => {
       screen: 'resume',
       candidate: {
         origin: 'file',
-        projectFileName: 'partial.webcut',
+        projectFileName: 'partial.myrelith',
         projectName: 'Partial imports',
         width: 1920,
         height: 1080,
@@ -428,7 +428,7 @@ describe('ProjectLaunch', () => {
       screen: 'resume',
       candidate: {
         origin: 'file',
-        projectFileName: 'remembered.webcut',
+        projectFileName: 'remembered.myrelith',
         projectName: 'Remembered work',
         width: 1920,
         height: 1080,
@@ -460,7 +460,7 @@ describe('ProjectLaunch', () => {
       screen: 'resume',
       candidate: {
         origin: 'file',
-        projectFileName: 'remembered.webcut',
+        projectFileName: 'remembered.myrelith',
         projectName: 'Remembered work',
         width: 1920,
         height: 1080,
@@ -502,7 +502,7 @@ describe('ProjectLaunch', () => {
       screen: 'resume',
       candidate: {
         origin: 'file',
-        projectFileName: 'remembered.webcut',
+        projectFileName: 'remembered.myrelith',
         projectName: 'Remembered work',
         width: 1920,
         height: 1080,
@@ -540,7 +540,7 @@ describe('ProjectLaunch', () => {
     )
     expect(controller.createNewProject).not.toHaveBeenCalled()
     expect(useProjectSessionStore.getState().screen).toBe('new-project')
-    expect(screen.getByRole('button', { name: 'Reload WebCut' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Reload Myrelith' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Create project' })).toBeDisabled()
   })
 
@@ -550,7 +550,7 @@ describe('ProjectLaunch', () => {
       screen: 'resume',
       candidate: {
         origin: 'file',
-        projectFileName: 'edit.webcut',
+        projectFileName: 'edit.myrelith',
         projectName: 'Saved edit',
         width: 1920,
         height: 1080,
@@ -578,12 +578,12 @@ describe('ProjectLaunch', () => {
     render(<ProjectLaunch />)
 
     fireEvent.click(screen.getByRole('button', {
-      name: 'Open and remember a WebCut project file',
+      name: 'Open and remember a Myrelith project file',
     }))
 
     expect(controller.chooseProjectFile).toHaveBeenCalledOnce()
-    const project = new File(['{}'], 'quick-open.webcut')
-    fireEvent.change(screen.getByLabelText('Open a WebCut project file once'), {
+    const project = new File(['{}'], 'quick-open.myrelith')
+    fireEvent.change(screen.getByLabelText('Open a Myrelith project file once'), {
       target: { files: [project] },
     })
     expect(controller.openProjectFile).toHaveBeenCalledWith(project)

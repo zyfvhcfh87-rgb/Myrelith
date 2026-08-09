@@ -1,5 +1,5 @@
 /**
- * Portable, versioned WebCut project-file contract.
+ * Portable, versioned Myrelith project-file contract.
  *
  * This module is deliberately pure TypeScript. A project file contains the
  * durable timeline and enough source-file metadata to relink media, but none
@@ -52,6 +52,7 @@ import {
   isProceduralTextAssetId,
   isSupportedTextColor,
   isSupportedTextFontFamily,
+  migrateLegacyProceduralTextAssetId,
   TEXT_OVERLAY_LIMITS,
   textPropsValidationError,
   proceduralTextAssetId,
@@ -61,7 +62,16 @@ import {
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
 
-export const PROJECT_FILE_FORMAT = 'webcut-project' as const
+export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
+/** Serialized format marker used by releases published before the rebrand. */
+export const LEGACY_PROJECT_FILE_FORMAT = 'webcut-project' as const
+export const PROJECT_FILE_EXTENSION = '.myrelith' as const
+/** Portable project extension used before the Myrelith rebrand. */
+export const LEGACY_PROJECT_FILE_EXTENSION = '.webcut' as const
+export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
+  PROJECT_FILE_EXTENSION,
+  LEGACY_PROJECT_FILE_EXTENSION,
+] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 4 as const
 export const CURRENT_TIMELINE_SCHEMA_VERSION = 6 as const
 
@@ -126,6 +136,13 @@ export class ProjectFileError extends Error {
     super(message)
     this.name = 'ProjectFileError'
   }
+}
+
+export function hasSupportedProjectFileExtension(fileName: string): boolean {
+  const normalized = fileName.toLowerCase()
+  return SUPPORTED_PROJECT_FILE_EXTENSIONS.some((extension) => (
+    normalized.endsWith(extension)
+  ))
 }
 
 type JsonRecord = Record<string, unknown>
@@ -1309,7 +1326,31 @@ function migrateTimelineDocument(
   if (migrated.schemaVersion === 5) {
     migrated = migrateClipAnimation(migrated)
   }
-  return migrated
+  boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = migrated.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    boundedArray(
+      track.clips,
+      `$.document.tracks[${trackIndex}].clips`,
+      PROJECT_FILE_LIMITS.maxClips,
+    )
+    return {
+      ...track,
+      clips: track.clips.map((clipValue, clipIndex) => {
+        const clip = record(
+          clipValue,
+          `$.document.tracks[${trackIndex}].clips[${clipIndex}]`,
+        )
+        return typeof clip.assetId === 'string'
+          ? {
+              ...clip,
+              assetId: migrateLegacyProceduralTextAssetId(clip.assetId),
+            }
+          : clip
+      }),
+    }
+  })
+  return { ...migrated, tracks }
 }
 
 function migrateLegacyAssetBounds(assetsValue: unknown): JsonRecord[] {
@@ -1335,32 +1376,47 @@ function migrateLegacyAssetBounds(assetsValue: unknown): JsonRecord[] {
  */
 export function migrateProjectFile(value: unknown): unknown {
   const project = record(value, '$')
-  if (project.format !== PROJECT_FILE_FORMAT) {
-    fail('$.format', `expected ${PROJECT_FILE_FORMAT}`)
+  if (
+    project.format !== PROJECT_FILE_FORMAT
+    && project.format !== LEGACY_PROJECT_FILE_FORMAT
+  ) {
+    fail(
+      '$.format',
+      `expected ${PROJECT_FILE_FORMAT} or legacy ${LEGACY_PROJECT_FILE_FORMAT}`,
+    )
   }
-  safeInteger(project.formatVersion, '$.formatVersion', 1)
-  if (project.formatVersion > CURRENT_PROJECT_FORMAT_VERSION) {
-    fail('$.formatVersion', `unsupported future project format ${project.formatVersion}`)
+  const brandedProject = project.format === LEGACY_PROJECT_FILE_FORMAT
+    ? { ...project, format: PROJECT_FILE_FORMAT }
+    : project
+  safeInteger(brandedProject.formatVersion, '$.formatVersion', 1)
+  if (brandedProject.formatVersion > CURRENT_PROJECT_FORMAT_VERSION) {
+    fail('$.formatVersion', `unsupported future project format ${brandedProject.formatVersion}`)
   }
-  switch (project.formatVersion) {
+  switch (brandedProject.formatVersion) {
     case 1:
     case 2:
     case 3: {
-      const assets = migrateLegacyAssetBounds(project.assets)
+      const assets = migrateLegacyAssetBounds(brandedProject.assets)
       return {
-        ...project,
+        ...brandedProject,
         formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-        document: migrateTimelineDocument(project.document, assets),
+        document: migrateTimelineDocument(brandedProject.document, assets),
         assets,
       }
     }
     case CURRENT_PROJECT_FORMAT_VERSION:
       return {
-        ...project,
-        document: migrateTimelineDocument(project.document, project.assets),
+        ...brandedProject,
+        document: migrateTimelineDocument(
+          brandedProject.document,
+          brandedProject.assets,
+        ),
       }
     default:
-      return fail('$.formatVersion', `unsupported project format ${project.formatVersion}`)
+      return fail(
+        '$.formatVersion',
+        `unsupported project format ${brandedProject.formatVersion}`,
+      )
   }
 }
 

@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose one focused improvement to WebCut.
+description: Propose one focused improvement to Myrelith.
 title: "[Feature]: "
 labels: [enhancement]
 body:
@@ -26,4 +26,4 @@ body:
     attributes:
       label: Local-first boundary
       options:
-        - label: This can preserve WebCut's browser-local media and explicit capability behavior.
+        - label: This can preserve Myrelith's browser-local media and explicit capability behavior.

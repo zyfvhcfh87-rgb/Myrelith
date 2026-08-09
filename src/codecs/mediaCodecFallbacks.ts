@@ -1,5 +1,5 @@
 /**
- * Realm-local, lazy registration for WebCut's reviewed decoder fallbacks.
+ * Realm-local, lazy registration for Myrelith's reviewed decoder fallbacks.
  *
  * The window and render worker each get their own registry because
  * Mediabunny's custom decoders are registered per JavaScript realm. Literal
@@ -450,7 +450,7 @@ export function localDecoderBudgetProblem(
   if (budget.fileBytes > LOCAL_DECODER_LIMITS.maxFileBytes) {
     return {
       reason: 'resource-limit',
-      detail: `Local ${label} fallback is disabled above WebCut's ${gibibytes(LOCAL_DECODER_LIMITS.maxFileBytes)} GiB automatic decode budget. Create a smaller editing proxy and retry.`,
+      detail: `Local ${label} fallback is disabled above Myrelith's ${gibibytes(LOCAL_DECODER_LIMITS.maxFileBytes)} GiB automatic decode budget. Create a smaller editing proxy and retry.`,
     }
   }
   if (
@@ -459,7 +459,7 @@ export function localDecoderBudgetProblem(
   ) {
     return {
       reason: 'resource-limit',
-      detail: `Local ${label} fallback is disabled above WebCut's 2-hour automatic decode budget. Create a shorter editing proxy and retry.`,
+      detail: `Local ${label} fallback is disabled above Myrelith's 2-hour automatic decode budget. Create a shorter editing proxy and retry.`,
     }
   }
 
@@ -478,7 +478,7 @@ export function localDecoderBudgetProblem(
     ) {
       return {
         reason: 'resource-limit',
-        detail: 'Local ProRes fallback is disabled above WebCut\'s DCI 4K at 30 fps automatic decode budget. Create a lower-resolution or lower-frame-rate editing proxy and retry.',
+        detail: 'Local ProRes fallback is disabled above Myrelith\'s DCI 4K at 30 fps automatic decode budget. Create a lower-resolution or lower-frame-rate editing proxy and retry.',
       }
     }
   } else if (
@@ -487,7 +487,7 @@ export function localDecoderBudgetProblem(
   ) {
     return {
       reason: 'resource-limit',
-      detail: `Local AC-3/E-AC-3 fallback is disabled above WebCut's ${LOCAL_DECODER_LIMITS.maxAc3Channels}-channel, ${LOCAL_DECODER_LIMITS.maxAc3SampleRate / 1000} kHz automatic decode budget. Create an editing proxy and retry.`,
+      detail: `Local AC-3/E-AC-3 fallback is disabled above Myrelith's ${LOCAL_DECODER_LIMITS.maxAc3Channels}-channel, ${LOCAL_DECODER_LIMITS.maxAc3SampleRate / 1000} kHz automatic decode budget. Create an editing proxy and retry.`,
     }
   }
 
@@ -893,7 +893,7 @@ export function createMediaCodecFallbackRegistry(
             attemptedFallback: null,
             failure: {
               reason: 'unsupported-codec',
-              detail: `WebCut's local ${fallbackLabel(family)} decoder does not support this track configuration.`,
+              detail: `Myrelith's local ${fallbackLabel(family)} decoder does not support this track configuration.`,
             },
           })
         }
@@ -919,7 +919,7 @@ export function createMediaCodecFallbackRegistry(
             attemptedFallback: null,
             failure: {
               reason: 'unsupported-codec',
-              detail: 'This browser cannot decode this media codec, and WebCut has no reviewed local fallback for it.',
+              detail: 'This browser cannot decode this media codec, and Myrelith has no reviewed local fallback for it.',
             },
           })
         }
@@ -971,7 +971,7 @@ export function createMediaCodecFallbackRegistry(
             attemptedFallback: family,
             failure: {
               reason: 'unsupported-codec',
-              detail: `WebCut's local ${fallbackLabel(family)} decoder does not support this track configuration.`,
+              detail: `Myrelith's local ${fallbackLabel(family)} decoder does not support this track configuration.`,
             },
           })
         }

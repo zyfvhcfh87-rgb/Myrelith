@@ -3,7 +3,7 @@
 Issue #54 establishes the repeatable evidence format. Issues #56 and #57 add
 deterministic media-analysis scheduler evidence plus opt-in local runtime and
 document-memory telemetry to that same harness. It records trends; it does not
-declare WebCut fast or enforce release or memory budgets from one machine or
+declare Myrelith fast or enforce release or memory budgets from one machine or
 one run.
 
 ## Issue #55 bundle-split evidence
@@ -62,13 +62,13 @@ introduced by the launcher split and not release enforcement.
 
 ## Production route gate
 
-The harness route is `/__webcut/performance`.
+The harness route is `/__myrelith/performance`.
 
 - Vite development builds allow that exact route.
 - An ordinary production build does not contain the route, fixture, or harness
   UI.
 - A production build includes the route only when
-  `VITE_WEBCUT_PERFORMANCE_HARNESS=1` is present at build time.
+  `VITE_MYRELITH_PERFORMANCE_HARNESS=1` is present at build time.
 - Every other path continues to render the product UI.
 
 The benchmark command sets the flag only inside its Node process, creates an
@@ -234,20 +234,20 @@ restoration, or generated-URL cleanup checks fail.
 For a manual production-route check in PowerShell:
 
 ```powershell
-$benchmarkOutDir = Join-Path ([IO.Path]::GetTempPath()) ("webcut-benchmark-manual-{0}" -f [guid]::NewGuid().ToString("N"))
+$benchmarkOutDir = Join-Path ([IO.Path]::GetTempPath()) ("myrelith-benchmark-manual-{0}" -f [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $benchmarkOutDir | Out-Null
-$env:VITE_WEBCUT_PERFORMANCE_HARNESS = '1'
+$env:VITE_MYRELITH_PERFORMANCE_HARNESS = '1'
 try {
   npx tsc -b
   node node_modules/vite/bin/vite.js build --outDir $benchmarkOutDir --emptyOutDir
   node node_modules/vite/bin/vite.js preview --outDir $benchmarkOutDir --host 127.0.0.1 --port 41854 --strictPort
 } finally {
-  Remove-Item Env:VITE_WEBCUT_PERFORMANCE_HARNESS -ErrorAction SilentlyContinue
+  Remove-Item Env:VITE_MYRELITH_PERFORMANCE_HARNESS -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $benchmarkOutDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 ```
 
-Open `http://127.0.0.1:41854/__webcut/performance`. Stop preview with Ctrl+C;
+Open `http://127.0.0.1:41854/__myrelith/performance`. Stop preview with Ctrl+C;
 the `finally` block clears the flag and removes only that unique temporary
 build. Normal `dist/` remains untouched.
 

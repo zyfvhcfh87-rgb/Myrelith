@@ -31,7 +31,7 @@ function EditorLoadingState() {
     >
       <span className="lazy-load-spinner" aria-hidden="true" />
       <h1>Opening your studio…</h1>
-      <p>Your project is ready. WebCut is loading the editing tools.</p>
+      <p>Your project is ready. Myrelith is loading the editing tools.</p>
     </main>
   )
 }
@@ -46,7 +46,7 @@ function EditorLoadFailure({ onReload }: EditorLoadFailureProps) {
       <span className="project-launch-eyebrow">Editor loading paused</span>
       <h1>We couldn’t load the editing tools.</h1>
       <p>
-        Your browser may be offline or holding an older WebCut file. Reload to
+        Your browser may be offline or holding an older Myrelith file. Reload to
         fetch the current editor, then reopen your local project or recovery copy.
       </p>
       <button
@@ -55,7 +55,7 @@ function EditorLoadFailure({ onReload }: EditorLoadFailureProps) {
         autoFocus
         onClick={onReload}
       >
-        Reload WebCut
+        Reload Myrelith
       </button>
     </main>
   )

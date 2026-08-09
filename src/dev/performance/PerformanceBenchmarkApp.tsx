@@ -15,7 +15,7 @@ import './performance.css'
 
 declare global {
   interface Window {
-    __webcutPerformanceHarness?: PerformanceHarnessApi
+    __myrelithPerformanceHarness?: PerformanceHarnessApi
   }
 }
 
@@ -83,7 +83,7 @@ export default function PerformanceBenchmarkApp() {
         },
         cleanup: () => next.cleanup(),
       }
-      window.__webcutPerformanceHarness = exposed
+      window.__myrelithPerformanceHarness = exposed
       setApi(exposed)
       setStatus('ready')
     }, (cause) => {
@@ -93,7 +93,7 @@ export default function PerformanceBenchmarkApp() {
     })
     return () => {
       active = false
-      delete window.__webcutPerformanceHarness
+      delete window.__myrelithPerformanceHarness
       if (prepared) void prepared.cleanup()
     }
   }, [])
@@ -116,7 +116,7 @@ export default function PerformanceBenchmarkApp() {
       <header className="performance-header">
         <div>
           <p className="performance-eyebrow">Opt-in performance evidence route</p>
-          <h1>WebCut performance harness</h1>
+          <h1>Myrelith performance harness</h1>
           <p>
             Deterministic stress data, real browser pipelines, and zero project
             persistence. The command-line workflow adds source and device provenance.
