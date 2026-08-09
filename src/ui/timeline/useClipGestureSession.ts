@@ -12,15 +12,25 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from 'react'
 import type {
+  Clip,
   ClipId,
   TimelineDoc,
   TrackId,
   TrackKind,
 } from '../../domain/schema'
+import { linkedPartners } from '../../domain/linking'
 import { findClip, trackOfClip } from '../../domain/selectors'
 import { microsecondsDurationToFrames } from '../../domain/time'
+import {
+  resolveTimelineSnap,
+  timelineSnapCandidates,
+  type TimelineSnapCandidate,
+  type TimelineSnapGuide,
+  type TimelineSnapMovingPoint,
+} from '../../domain/timelineSnapping'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
+import { usePreferencesStore } from '../../state/preferencesStore'
 import { useTransportStore } from '../../state/transportStore'
 import {
   linkedGestureBounds,
@@ -52,6 +62,67 @@ interface GestureSession {
   /** Live clamp for the signed frame delta (source/timeline floors). */
   minDelta: number
   maxDelta: number
+  /** Stable targets from the same immutable pointer-down document. */
+  snapCandidates: readonly TimelineSnapCandidate[]
+}
+
+interface SnapPreviewUpdate {
+  deltaFrames: number
+  guide: TimelineSnapGuide | null
+}
+
+function gestureMembers(doc: TimelineDoc, ownerClipId: ClipId): readonly Clip[] {
+  const owner = findClip(doc, ownerClipId)
+  return owner ? [owner, ...linkedPartners(doc, ownerClipId)] : []
+}
+
+/** Exact timeline points changed by one signed edit delta. */
+function movingSnapPoints(
+  doc: TimelineDoc,
+  ownerClipId: ClipId,
+  mode: GestureMode,
+  deltaFrames: number,
+): readonly TimelineSnapMovingPoint[] {
+  const points: TimelineSnapMovingPoint[] = []
+  for (const member of gestureMembers(doc, ownerClipId)) {
+    const track = trackOfClip(doc, member.id)
+    if (!track) continue
+    const trackIndex = doc.tracks.findIndex((candidate) => candidate.id === track.id)
+    const start = member.timelineRange.startFrame
+    const end = start + member.timelineRange.durationFrames
+    const add = (
+      kind: 'start' | 'end',
+      frame: number,
+      deltaDirection: 1 | -1,
+    ) => points.push({
+      id: `${member.id}:${kind}`,
+      kind,
+      frame,
+      deltaDirection,
+      trackKind: track.kind,
+      trackIndex,
+    })
+    switch (mode) {
+      case 'move':
+      case 'slide':
+        add('start', start + deltaFrames, 1)
+        add('end', end + deltaFrames, 1)
+        break
+      case 'trim-start':
+        add('start', start + deltaFrames, 1)
+        break
+      case 'trim-end':
+      case 'ripple-end':
+        add('end', end + deltaFrames, 1)
+        break
+      case 'ripple-start':
+        add('end', end - deltaFrames, -1)
+        break
+      case 'slip':
+        break
+    }
+  }
+  return points
 }
 
 export function useClipGestureSession({
@@ -63,31 +134,41 @@ export function useClipGestureSession({
 }: ClipGestureSessionOptions) {
   const setDragPreview = useTransportStore((s) => s.setDragPreview)
   const setEditPreview = useTransportStore((s) => s.setEditPreview)
+  const setSnapGuide = useTransportStore((s) => s.setSnapGuide)
   const session = useRef<GestureSession | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const keyboardGuideTimer = useRef<number | null>(null)
 
   // If a gesture owner disappears before pointerup, clear only its preview.
   useEffect(
     () => () => {
       const transport = useTransportStore.getState()
+      const ownsPreview = transport.dragPreview?.clipId === clipId
+        || transport.editPreview?.clipId === clipId
       if (transport.dragPreview?.clipId === clipId) {
         transport.setDragPreview(null)
       }
       if (transport.editPreview?.clipId === clipId) {
         transport.setEditPreview(null)
       }
+      if (keyboardGuideTimer.current !== null) {
+        window.clearTimeout(keyboardGuideTimer.current)
+      }
+      if (ownsPreview || keyboardGuideTimer.current !== null) {
+        transport.setSnapGuide(null)
+      }
     },
     [clipId],
   )
 
-  const scheduleMovePreview = useScrubScheduler((deltaFrames: number) => {
+  const scheduleMovePreview = useScrubScheduler((update: SnapPreviewUpdate) => {
     // A late rAF flush must never restore a preview after pointerup cleared it.
     const active = session.current
     if (active?.mode === 'move') {
       const crossTrack = active.targetTrackId !== trackId
       setDragPreview({
         clipId,
-        deltaFrames,
+        deltaFrames: update.deltaFrames,
         linkGroupId: active.linkGroupId,
         ...(crossTrack
           ? {
@@ -96,17 +177,19 @@ export function useClipGestureSession({
             }
           : {}),
       })
+      setSnapGuide(update.guide)
     }
   })
-  const scheduleEditPreview = useScrubScheduler((deltaFrames: number) => {
+  const scheduleEditPreview = useScrubScheduler((update: SnapPreviewUpdate) => {
     const active = session.current
     if (active && active.mode !== 'move') {
       setEditPreview({
         clipId,
         kind: active.mode,
-        deltaFrames,
+        deltaFrames: update.deltaFrames,
         linkGroupId: active.linkGroupId,
       })
+      setSnapGuide(update.guide)
     }
   })
 
@@ -129,10 +212,40 @@ export function useClipGestureSession({
     })
   }
 
-  const deltaFromEvent = (event: ReactPointerEvent<HTMLDivElement>): number => {
+  const rawDeltaFromEvent = (event: ReactPointerEvent<HTMLDivElement>): number => {
     const active = session.current as GestureSession
     const raw = Math.round((event.clientX - active.pointerStartX) / zoom)
     return Math.min(active.maxDelta, Math.max(active.minDelta, raw))
+  }
+
+  const snapUpdate = (
+    active: GestureSession,
+    rawDeltaFrames: number,
+    bypassSnapping: boolean,
+  ): SnapPreviewUpdate => {
+    if (
+      rawDeltaFrames === 0
+      || active.mode === 'slip'
+      || bypassSnapping
+      || !usePreferencesStore.getState().snappingEnabled
+    ) return { deltaFrames: rawDeltaFrames, guide: null }
+    const resolution = resolveTimelineSnap({
+      candidates: active.snapCandidates,
+      movingPoints: movingSnapPoints(
+        active.document,
+        clipId,
+        active.mode,
+        rawDeltaFrames,
+      ),
+      rawDeltaFrames,
+      minDeltaFrames: active.minDelta,
+      maxDeltaFrames: active.maxDelta,
+      zoom,
+    })
+    return {
+      deltaFrames: resolution.deltaFrames,
+      guide: resolution.guide,
+    }
   }
 
   /** Resolve the same-kind lane under a captured pointer from lane rectangles. */
@@ -148,6 +261,9 @@ export function useClipGestureSession({
     const lanes = laneContainer.querySelectorAll<HTMLElement>('[data-track-id]')
     for (const lane of lanes) {
       if (lane.dataset.trackKind !== trackKind) continue
+      if (lane.dataset.trackLocked === 'true' || lane.dataset.trackHidden === 'true') {
+        continue
+      }
       const rect = lane.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) continue
       if (
@@ -178,6 +294,10 @@ export function useClipGestureSession({
     // A capture-phase edit can make this rendered ClipView stale before its
     // own pointer handler runs. Fail closed instead of mixing snapshots.
     if (!currentClip || currentTrack?.id !== trackId) return false
+    if (currentTrack.locked || currentTrack.hidden) return false
+
+    const members = gestureMembers(currentDoc, clipId)
+    const excludedClipIds = new Set(members.map((member) => member.id))
 
     session.current = {
       mode,
@@ -188,7 +308,16 @@ export function useClipGestureSession({
       targetTrackId: trackId,
       trackOffsetY: 0,
       ...boundsFor(currentDoc, mode),
+      snapCandidates: timelineSnapCandidates(currentDoc, {
+        playheadFrame: useTransportStore.getState().playheadFrame,
+        excludedClipIds,
+      }),
     }
+    if (keyboardGuideTimer.current !== null) {
+      window.clearTimeout(keyboardGuideTimer.current)
+      keyboardGuideTimer.current = null
+    }
+    setSnapGuide(null)
     if (mode === 'move') {
       setDragPreview({
         clipId,
@@ -215,6 +344,7 @@ export function useClipGestureSession({
     session.current = null
     setDragPreview(null)
     setEditPreview(null)
+    setSnapGuide(null)
   }
 
   const commitGesture = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -225,7 +355,11 @@ export function useClipGestureSession({
       endGesture()
       return
     }
-    const delta = deltaFromEvent(event)
+    const delta = snapUpdate(
+      active,
+      rawDeltaFromEvent(event),
+      event.altKey,
+    ).deltaFrames
     const moveTarget =
       active.mode === 'move'
         ? trackTargetAt(event.clientX, event.clientY)
@@ -338,6 +472,74 @@ export function useClipGestureSession({
   }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (
+      (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+      && (event.ctrlKey || event.metaKey)
+      && useTransportStore.getState().tool === 'select'
+    ) {
+      event.preventDefault()
+      event.stopPropagation()
+      const currentDoc = useDocumentStore.getState().doc
+      const currentClip = findClip(currentDoc, clipId)
+      const currentTrack = trackOfClip(currentDoc, clipId)
+      if (
+        !currentClip
+        || currentTrack?.id !== trackId
+        || currentTrack.locked
+        || currentTrack.hidden
+      ) return
+      const rawDelta = event.key === 'ArrowLeft' ? -1 : 1
+      const bounds = boundsFor(currentDoc, 'move')
+      const members = gestureMembers(currentDoc, clipId)
+      const active: GestureSession = {
+        mode: 'move',
+        pointerStartX: 0,
+        document: currentDoc,
+        originFrame: currentClip.timelineRange.startFrame,
+        linkGroupId: currentClip.linkGroupId,
+        targetTrackId: trackId,
+        trackOffsetY: 0,
+        ...bounds,
+        snapCandidates: timelineSnapCandidates(currentDoc, {
+          playheadFrame: useTransportStore.getState().playheadFrame,
+          excludedClipIds: new Set(members.map((member) => member.id)),
+        }),
+      }
+      const update = snapUpdate(active, rawDelta, event.altKey)
+      const store = useDocumentStore.getState()
+      const before = store.doc
+      if (update.deltaFrames !== 0) {
+        store.moveClip(
+          clipId,
+          trackId,
+          currentClip.timelineRange.startFrame + update.deltaFrames,
+        )
+      }
+      const committed = useDocumentStore.getState().doc !== before
+      const heldAtExistingSnap = update.deltaFrames === 0
+        && update.guide !== null
+      if ((committed || heldAtExistingSnap) && update.guide !== null) {
+        setSnapGuide(update.guide)
+        if (keyboardGuideTimer.current !== null) {
+          window.clearTimeout(keyboardGuideTimer.current)
+        }
+        const keyboardGuide = update.guide
+        keyboardGuideTimer.current = window.setTimeout(() => {
+          keyboardGuideTimer.current = null
+          const transport = useTransportStore.getState()
+          if (
+            transport.snapGuide?.frame === keyboardGuide.frame
+            && transport.snapGuide.candidateId === keyboardGuide.candidateId
+          ) {
+            transport.setSnapGuide(null)
+          }
+        }, 900)
+      } else {
+        setSnapGuide(null)
+      }
+      return
+    }
+
     if (event.key !== 'Enter' && event.key !== ' ') return
 
     event.preventDefault()
@@ -360,9 +562,17 @@ export function useClipGestureSession({
       const target = trackTargetAt(event.clientX, event.clientY)
       active.targetTrackId = target.trackId
       active.trackOffsetY = target.offsetY
-      scheduleMovePreview(deltaFromEvent(event))
+      scheduleMovePreview(snapUpdate(
+        active,
+        rawDeltaFromEvent(event),
+        event.altKey,
+      ))
     } else {
-      scheduleEditPreview(deltaFromEvent(event))
+      scheduleEditPreview(snapUpdate(
+        active,
+        rawDeltaFromEvent(event),
+        event.altKey,
+      ))
     }
   }
 

@@ -19,8 +19,11 @@ import {
 
 export interface PreferencesState {
   defaultStillImageDurationMicroseconds: number
+  /** Persistent user intent; Alt temporarily bypasses it during an edit. */
+  snappingEnabled: boolean
   exportSelection: Readonly<ExportSelectionPreference>
   setDefaultStillImageDurationMicroseconds(value: number): void
+  setSnappingEnabled(value: boolean): void
   setExportSelection(value: ExportSelectionPreference): void
 }
 
@@ -49,6 +52,7 @@ const EXPORT_SELECTION_IDS: readonly ExportPreferenceSelectionId[] =
 export const INITIAL_PREFERENCES_STATE = Object.freeze({
   defaultStillImageDurationMicroseconds:
     DEFAULT_STILL_IMAGE_DURATION_MICROSECONDS,
+  snappingEnabled: true,
   exportSelection: INITIAL_EXPORT_SELECTION,
 })
 
@@ -74,6 +78,12 @@ export const usePreferencesStore = create<PreferencesState>()((set) => ({
     set((state) => state.defaultStillImageDurationMicroseconds === value
       ? state
       : { defaultStillImageDurationMicroseconds: value })
+  },
+  setSnappingEnabled: (value) => {
+    if (typeof value !== 'boolean') return
+    set((state) => state.snappingEnabled === value
+      ? state
+      : { snappingEnabled: value })
   },
   setExportSelection: (value) => {
     let exportSelection: Readonly<ExportSelectionPreference>

@@ -28,6 +28,7 @@ export const LEGACY_WORKSPACE_LAYOUT_STORAGE_KEY = 'webcut.workspace:v1'
 interface PersistedPreferencesV1 {
   version: 1
   defaultStillImageDurationMicroseconds: number
+  snappingEnabled: boolean
 }
 
 interface PersistedExportSelectionV1 {
@@ -56,21 +57,30 @@ function parsePersistedPreferences(raw: string | null): PersistedPreferencesV1 |
       || !isValidStillImageDurationMicroseconds(
         record.defaultStillImageDurationMicroseconds,
       )
+      || (record.snappingEnabled !== undefined
+        && typeof record.snappingEnabled !== 'boolean')
     ) return null
     return {
       version: 1,
       defaultStillImageDurationMicroseconds:
         record.defaultStillImageDurationMicroseconds,
+      // Existing v1 records predate snapping. Missing means the safe product
+      // default, while an explicit false survives restarts and the rebrand.
+      snappingEnabled: record.snappingEnabled ?? true,
     }
   } catch {
     return null
   }
 }
 
-function serializePreferences(durationMicroseconds: number): string {
+function serializePreferences(
+  durationMicroseconds: number,
+  snappingEnabled: boolean,
+): string {
   const value: PersistedPreferencesV1 = {
     version: 1,
     defaultStillImageDurationMicroseconds: durationMicroseconds,
+    snappingEnabled,
   }
   return JSON.stringify(value)
 }
@@ -171,6 +181,7 @@ export function initPreferencesPersistence(
         usePreferencesStore.setState({
           defaultStillImageDurationMicroseconds:
             persisted.defaultStillImageDurationMicroseconds,
+          snappingEnabled: persisted.snappingEnabled,
         })
       }
     } catch {
@@ -204,14 +215,20 @@ export function initPreferencesPersistence(
 
   const unsubscribe = usePreferencesStore.subscribe((state, previous) => {
     if (
-      state.defaultStillImageDurationMicroseconds
-      !== previous.defaultStillImageDurationMicroseconds
+      (
+        state.defaultStillImageDurationMicroseconds
+        !== previous.defaultStillImageDurationMicroseconds
+        || state.snappingEnabled !== previous.snappingEnabled
+      )
       && persistenceStorage !== null
     ) {
       try {
         persistenceStorage.setItem(
           USER_PREFERENCES_STORAGE_KEY,
-          serializePreferences(state.defaultStillImageDurationMicroseconds),
+          serializePreferences(
+            state.defaultStillImageDurationMicroseconds,
+            state.snappingEnabled,
+          ),
         )
       } catch {
         // Preference changes still work for this session when storage rejects.

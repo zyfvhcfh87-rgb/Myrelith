@@ -10,10 +10,10 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 
-export function useScrubScheduler(
-  commit: (value: number) => void,
-): (value: number) => void {
-  const latestValue = useRef(0)
+export function useScrubScheduler<Value = number>(
+  commit: (value: Value) => void,
+): (value: Value) => void {
+  const latestValue = useRef<{ value: Value } | null>(null)
   const rafPending = useRef(false)
   const rafId = useRef(0)
   const commitRef = useRef(commit)
@@ -27,13 +27,14 @@ export function useScrubScheduler(
     [],
   )
 
-  return useCallback((value: number) => {
-    latestValue.current = value
+  return useCallback((value: Value) => {
+    latestValue.current = { value }
     if (rafPending.current) return
     rafPending.current = true
     rafId.current = requestAnimationFrame(() => {
       rafPending.current = false
-      commitRef.current(latestValue.current)
+      const latest = latestValue.current
+      if (latest !== null) commitRef.current(latest.value)
     })
   }, [])
 }

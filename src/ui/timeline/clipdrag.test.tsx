@@ -13,6 +13,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track as TrackData } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
+import { usePreferencesStore } from '../../state/preferencesStore'
 import { useTransportStore } from '../../state/transportStore'
 import ClipView from './ClipView'
 import Track from './Track'
@@ -78,7 +79,9 @@ beforeEach(() => {
     timelineOriginFrame: 0,
     inOut: null,
     dragPreview: null,
+    snapGuide: null,
   })
+  usePreferencesStore.getState().setSnappingEnabled(true)
   doc().setDoc(makeDoc())
 })
 
@@ -150,6 +153,97 @@ describe('drag: scrub-preview then commit', () => {
 
     doc().undo()
     expect(clipA().timelineRange.startFrame).toBe(100)
+  })
+
+  test('snaps a moving edge to the playhead in preview, then commits exactly once', async () => {
+    act(() => transport().setPlayheadFrame(213))
+    render(<Track track={doc().doc.tracks[0]} />)
+    const el = screen.getByTestId('clip-clipA')
+
+    fireEvent.pointerDown(el, { pointerId: 21, clientX: 500 })
+    fireEvent.pointerMove(el, { pointerId: 21, clientX: 560 })
+
+    await waitFor(() => {
+      expect(transport().dragPreview?.deltaFrames).toBe(63)
+      expect(transport().snapGuide).toMatchObject({
+        frame: 213,
+        candidateKind: 'playhead',
+      })
+    })
+    expect(clipA().timelineRange.startFrame).toBe(100)
+    expect(doc().past).toHaveLength(0)
+
+    fireEvent.pointerUp(el, { pointerId: 21, clientX: 560 })
+
+    expect(clipA().timelineRange.startFrame).toBe(163)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().dragPreview).toBeNull()
+    expect(transport().snapGuide).toBeNull()
+  })
+
+  test('Alt temporarily bypasses snapping without changing the preference', async () => {
+    act(() => transport().setPlayheadFrame(213))
+    render(<Track track={doc().doc.tracks[0]} />)
+    const el = screen.getByTestId('clip-clipA')
+
+    fireEvent.pointerDown(el, { pointerId: 22, clientX: 500 })
+    fireEvent.pointerMove(el, {
+      pointerId: 22,
+      clientX: 560,
+      altKey: true,
+    })
+    await waitFor(() => {
+      expect(transport().dragPreview?.deltaFrames).toBe(60)
+    })
+    expect(transport().snapGuide).toBeNull()
+
+    fireEvent.pointerUp(el, {
+      pointerId: 22,
+      clientX: 560,
+      altKey: true,
+    })
+    expect(clipA().timelineRange.startFrame).toBe(160)
+    expect(doc().past).toHaveLength(1)
+    expect(usePreferencesStore.getState().snappingEnabled).toBe(true)
+  })
+
+  test('the persistent preference disables snapping for pointer moves', async () => {
+    act(() => {
+      transport().setPlayheadFrame(213)
+      usePreferencesStore.getState().setSnappingEnabled(false)
+    })
+    render(<Track track={doc().doc.tracks[0]} />)
+    const el = screen.getByTestId('clip-clipA')
+
+    fireEvent.pointerDown(el, { pointerId: 23, clientX: 500 })
+    fireEvent.pointerMove(el, { pointerId: 23, clientX: 560 })
+    await waitFor(() => {
+      expect(transport().dragPreview?.deltaFrames).toBe(60)
+    })
+    expect(transport().snapGuide).toBeNull()
+    fireEvent.pointerUp(el, { pointerId: 23, clientX: 560 })
+
+    expect(clipA().timelineRange.startFrame).toBe(160)
+    expect(doc().past).toHaveLength(1)
+  })
+
+  test('Ctrl or Command arrows use the same resolver and one commit', () => {
+    act(() => transport().setPlayheadFrame(107))
+    render(<Track track={doc().doc.tracks[0]} />)
+    const el = screen.getByTestId('clip-clipA')
+
+    fireEvent.keyDown(el, { key: 'ArrowRight', ctrlKey: true })
+
+    expect(clipA().timelineRange.startFrame).toBe(107)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().snapGuide).toMatchObject({
+      frame: 107,
+      candidateKind: 'playhead',
+    })
+
+    fireEvent.keyDown(el, { key: 'ArrowRight', ctrlKey: true })
+    expect(clipA().timelineRange.startFrame).toBe(107)
+    expect(doc().past).toHaveLength(1)
   })
 
   test('rejected drop (overlap) pushes no history and snaps back', async () => {
@@ -714,14 +808,14 @@ describe('linked clip gestures (A/V pairs)', () => {
     const audioEl = screen.getByTestId('clip-aud')
 
     fireEvent.pointerDown(videoEl, { pointerId: 10, clientX: 500 })
-    fireEvent.pointerMove(videoEl, { pointerId: 10, clientX: 560 })
+    fireEvent.pointerMove(videoEl, { pointerId: 10, clientX: 560, altKey: true })
     await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(60))
     expect(videoEl).toHaveStyle({ transform: 'translateX(160px)' })
     expect(audioEl).toHaveStyle({ transform: 'translateX(95px)' })
     expect(videoEl).toHaveClass('dragging')
     expect(audioEl).toHaveClass('dragging')
 
-    fireEvent.pointerUp(videoEl, { pointerId: 10, clientX: 560 })
+    fireEvent.pointerUp(videoEl, { pointerId: 10, clientX: 560, altKey: true })
 
     expect(transport().dragPreview).toBeNull()
     expect(videoEl).toHaveStyle({ transform: 'translateX(100px)' })

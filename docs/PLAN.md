@@ -2782,3 +2782,52 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
 - [x] Publish the exact committed branch as a ready-for-review PR targeting
   `master` with `Closes #46`; leave merge, deployment, and closure to the
   coordinating task.
+
+## Post-MVP issue #67 - snapping and alignment guides
+
+**IMPLEMENTATION COMPLETE (2026-08-09).**
+
+- [x] Add one browser-free pure resolver for playhead, clip-edge,
+  transition-edge, and sequence-marker candidates with integer-frame results,
+  gesture-bound clamping, and deterministic distance/kind/frame/track/id ties.
+- [x] Keep the default 8px tolerance visually stable by deriving its integer
+  frame radius from the authoritative zoom; never persist presentation scale
+  or fractional authored geometry.
+- [x] Exclude the moving clip/link group, locked and hidden tracks, wrong-kind
+  track candidates, and attached transitions while retaining global marker and
+  playhead anchors.
+- [x] Share the resolver across applicable pointer previews/commits,
+  Ctrl/Cmd+Arrow moves, and ruler playhead scrubbing. Alt temporarily bypasses
+  snapping without mutating the preference.
+- [x] Persist an accessible snapping toggle with safe legacy-v1 defaults and
+  render the active guide through transport-only state plus live status text.
+- [x] Preserve the established transaction contract: previews and guides never
+  touch document history, one completed gesture creates exactly one entry, and
+  an already-aligned keyboard snap dispatches no no-op action.
+- [x] Pass 136 focused tests, all 2,023 Vitest tests, all 16 benchmark-runner
+  tests, TypeScript + production build, oxlint, and the production high-level
+  dependency audit with 0 vulnerabilities.
+- [x] Verify headed Chromium exclusively on port 41867 at 1px/frame and
+  2px/frame, across eligible/ineligible anchors, pointer and keyboard paths,
+  preference persistence, Alt bypass, history isolation, guide cleanup,
+  1280×720 and 800×720 layouts, and a zero-warning/zero-error console.
+- [x] Record clean-base fingerprint
+  `sha256:89ee303aad205fd8ef1736e2ea63cc2cc454660442d4543d554de4d91088be87`
+  at `c8bb275` and completed-implementation checkpoint
+  `sha256:8cc9e64ea4f5b3f21d20dda536fca647fc8945f568cfe31f698c166855942bc0`;
+  publish the final commit as a ready PR targeting `master` without merging it.
+- [x] Rebase after Issue #68 onto `78d0d075`, retaining both completion records
+  and caption schema 8/migration/implementation unchanged. Advance only the
+  snapping unit fixture to schema 8 with empty captions; pass 233 targeted,
+  2,062 full, 16 benchmark-runner, build, lint, and diff checks. Record the
+  unchanged `master` dev-audit baseline of two high transitive findings while
+  keeping the production audit at 0 vulnerabilities; skip repeat browser QA
+  because the rebase resolution changed only docs and test compatibility.
+- [x] Complete the final Issue #46 integration rebase onto `1a09f782`, retain
+  caption schema 8 plus 7→8 migration and blend schema 9 plus 8→9 Normal
+  migration/compositor behavior unchanged, and order the delivered records as
+  captions → blends → snapping. Advance the snapping fixture to schema 9 with
+  empty captions and explicit Normal blend intent; pass 385 targeted, 2,093
+  full, 16 benchmark-runner, build, lint, both audits with the inherited
+  dev-only baseline documented, production audit at 0, and clean diff checks.
+  Carry forward browser evidence because only docs/test compatibility changed.

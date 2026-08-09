@@ -306,6 +306,25 @@ describe('Phase 4.2 tool / selection / edit-preview state', () => {
     getState().setEditPreview(null)
     expect(getState().editPreview).toBeNull()
   })
+
+  test('alignment guides are ephemeral, idempotent, and reset with transport', () => {
+    const guide = {
+      frame: 42,
+      candidateKind: 'marker' as const,
+      candidateId: 'marker:m1',
+      label: 'Marker: Beat',
+      trackId: null,
+    }
+    getState().setSnapGuide(guide)
+    expect(getState().snapGuide).toEqual(guide)
+    expect(getState().snapGuide).not.toBe(guide)
+    const withGuide = getState()
+    getState().setSnapGuide({ ...guide })
+    expect(getState()).toBe(withGuide)
+
+    getState().resetTransport()
+    expect(getState().snapGuide).toBeNull()
+  })
 })
 
 describe('Phase 4.3.8 linked clip previews', () => {

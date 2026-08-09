@@ -20,6 +20,7 @@ import type {
   TrackId,
   Transform,
 } from '../domain/schema'
+import type { TimelineSnapGuide } from '../domain/timelineSnapping'
 
 /**
  * Live position of a clip mid-drag — the "scrubbing" half of the
@@ -127,6 +128,8 @@ export interface TransportState {
   editingMarkerId: TimelineMarkerId | null
   /** Trim/ripple/slip/slide gesture preview, or null when none is live. */
   editPreview: EditPreview | null
+  /** Chosen alignment target for the active timeline preview, never history. */
+  snapGuide: TimelineSnapGuide | null
   /** Uncommitted text move/resize shown by the shared preview compositor. */
   textOverlayPreview: TextOverlayPreview | null
   /** Uncommitted media geometry shown by the shared preview compositor. */
@@ -180,6 +183,8 @@ export interface TransportState {
    * integer (negative allowed — deltas are signed).
    */
   setEditPreview: (preview: EditPreview | null) => void
+  /** Publish or clear the visible alignment guide for a transient edit. */
+  setSnapGuide: (guide: TimelineSnapGuide | null) => void
   /** Update or clear one preview-only text manipulation. */
   setTextOverlayPreview: (preview: TextOverlayPreview | null) => void
   /** Update or clear one preview-only media manipulation. */
@@ -206,6 +211,7 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   selectedMarkerId: null,
   editingMarkerId: null,
   editPreview: null,
+  snapGuide: null,
   textOverlayPreview: null,
   clipVisualPreview: null,
 })
@@ -386,6 +392,20 @@ export const useTransportStore = create<TransportState>()((set) => ({
       editPreview: preview
         ? { ...preview, deltaFrames: Math.round(preview.deltaFrames) }
         : null,
+    }),
+  setSnapGuide: (snapGuide) =>
+    set((state) => {
+      if (snapGuide === null) {
+        return state.snapGuide === null ? state : { snapGuide: null }
+      }
+      if (
+        state.snapGuide?.frame === snapGuide.frame
+        && state.snapGuide.candidateKind === snapGuide.candidateKind
+        && state.snapGuide.candidateId === snapGuide.candidateId
+        && state.snapGuide.label === snapGuide.label
+        && state.snapGuide.trackId === snapGuide.trackId
+      ) return state
+      return { snapGuide: { ...snapGuide } }
     }),
   setTextOverlayPreview: (textOverlayPreview) =>
     set({

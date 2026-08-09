@@ -80,6 +80,7 @@ describe('preferences persistence', () => {
 
     expect(usePreferencesStore.getState()).toMatchObject({
       defaultStillImageDurationMicroseconds: 2_500_000,
+      snappingEnabled: true,
       exportSelection: { selectionId: 'web', profile: null },
     })
     expect(useWorkspaceLayoutStore.getState().preset).toBe('media')
@@ -180,8 +181,29 @@ describe('preferences persistence', () => {
       JSON.stringify({
         version: 1,
         defaultStillImageDurationMicroseconds: 8_000_000,
+        snappingEnabled: true,
       }),
     )
+
+    usePreferencesStore.getState().setSnappingEnabled(false)
+    expect(backing.setItem).toHaveBeenLastCalledWith(
+      USER_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        defaultStillImageDurationMicroseconds: 8_000_000,
+        snappingEnabled: false,
+      }),
+    )
+  })
+
+  test('hydrates an explicit disabled snap preference', () => {
+    dispose = initPreferencesPersistence(storage(JSON.stringify({
+      version: 1,
+      defaultStillImageDurationMicroseconds: 5_000_000,
+      snappingEnabled: false,
+    })))
+
+    expect(usePreferencesStore.getState().snappingEnabled).toBe(false)
   })
 
   test.each([

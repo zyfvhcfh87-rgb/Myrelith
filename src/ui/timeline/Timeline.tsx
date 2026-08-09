@@ -38,6 +38,7 @@ import Ruler from './Ruler'
 import Track from './Track'
 import TrackHeader from './TrackHeader'
 import Playhead from './Playhead'
+import AlignmentGuide from './AlignmentGuide'
 import { timelineRunwayFrames } from './timelineZoom'
 import {
   calculateTimelineViewport,
@@ -209,6 +210,10 @@ export default function Timeline() {
             />
           ))}
         </div>
+        <AlignmentGuide
+          timelineOriginFrame={viewport.originFrame}
+          timelineWindowEndFrame={viewport.endFrame}
+        />
         <Playhead
           timelineOriginFrame={viewport.originFrame}
           timelineWindowEndFrame={viewport.endFrame}

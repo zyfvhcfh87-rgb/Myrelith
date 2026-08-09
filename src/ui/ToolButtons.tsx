@@ -12,12 +12,14 @@ import {
   ArrowsInLineHorizontal,
   ArrowsLeftRight,
   CursorClick,
+  Magnet,
   Scissors,
   TextT,
 } from '@phosphor-icons/react'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import type { TimelineTool } from '../state/transportStore'
 import { useTransportStore } from '../state/transportStore'
+import { usePreferencesStore } from '../state/preferencesStore'
 import { shortcutForCommand, type EditorCommandId } from '../app/editorCommands'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 
@@ -36,6 +38,8 @@ export default function ToolButtons() {
   const textButtonRef = useRef<HTMLButtonElement | null>(null)
   const tool = useTransportStore((s) => s.tool)
   const setTool = useTransportStore((s) => s.setTool)
+  const snappingEnabled = usePreferencesStore((s) => s.snappingEnabled)
+  const setSnappingEnabled = usePreferencesStore((s) => s.setSnappingEnabled)
   const closing = useProjectSessionStore((state) => state.phase === 'closing')
 
   const closeText = (): void => {
@@ -76,6 +80,16 @@ export default function ToolButtons() {
           onClick={() => setTextOpen(true)}
         >
           <TextT aria-hidden="true" size={17} weight="bold" />
+        </button>
+        <button
+          type="button"
+          className={`tool-button tool-button-snap${snappingEnabled ? ' active' : ''}`}
+          title={`${snappingEnabled ? 'Snapping on' : 'Snapping off'} — hold Alt to bypass while editing`}
+          aria-label={`${snappingEnabled ? 'Snapping on' : 'Snapping off'} — hold Alt to temporarily bypass snapping`}
+          aria-pressed={snappingEnabled}
+          onClick={() => setSnappingEnabled(!snappingEnabled)}
+        >
+          <Magnet aria-hidden="true" size={17} weight="bold" />
         </button>
       </div>
       {textOpen && (

@@ -189,6 +189,10 @@
   margin-left: 3px;
 }
 
+.tool-button-snap {
+  margin-left: 3px;
+}
+
 .tool-button-add-text:disabled {
   cursor: not-allowed;
   opacity: 0.45;

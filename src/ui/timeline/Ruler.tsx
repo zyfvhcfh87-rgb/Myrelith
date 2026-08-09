@@ -29,8 +29,15 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { timelineDisplayDurationFrames } from '../../domain/selectors'
 import { formatTimecode, secondsToFrames } from '../../domain/time'
 import { timelineMarkers } from '../../domain/timelineMarkers'
+import {
+  resolveTimelineSnap,
+  timelineSnapCandidates,
+  type TimelineSnapCandidate,
+  type TimelineSnapGuide,
+} from '../../domain/timelineSnapping'
 import type { FrameRate } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
+import { usePreferencesStore } from '../../state/preferencesStore'
 import { useTransportStore } from '../../state/transportStore'
 import { useScrubScheduler } from './useScrubScheduler'
 import { timelineRunwayFrames } from './timelineZoom'
@@ -92,19 +99,28 @@ interface ViewWindow {
   widthPx: number
 }
 
+interface RulerSnapUpdate {
+  frame: number
+  guide: TimelineSnapGuide | null
+}
+
 export default function Ruler() {
   const zoom = useTransportStore((s) => s.zoom)
   const timelineOriginFrame = useTransportStore((s) => s.timelineOriginFrame)
   const setIsScrubbing = useTransportStore((s) => s.setIsScrubbing)
   const setPlayheadFrame = useTransportStore((s) => s.setPlayheadFrame)
+  const setSnapGuide = useTransportStore((s) => s.setSnapGuide)
   const frameRate = useDocumentStore((s) => s.doc.frameRate)
   const durationFrames = useDocumentStore((s) => timelineDisplayDurationFrames(s.doc))
   const markers = useDocumentStore((s) => timelineMarkers(s.doc))
 
-  const schedule = useScrubScheduler(setPlayheadFrame)
-  /** Our own gesture flag — capture status is NOT the source of truth. */
   const scrubbingRef = useRef(false)
-
+  const snapCandidatesRef = useRef<readonly TimelineSnapCandidate[]>([])
+  const schedule = useScrubScheduler((update: RulerSnapUpdate) => {
+    setPlayheadFrame(update.frame)
+    setSnapGuide(scrubbingRef.current ? update.guide : null)
+  })
+  /** Our own gesture flag — capture status is NOT the source of truth. */
   const rootRef = useRef<HTMLDivElement | null>(null)
   const [view, setView] = useState<ViewWindow>({
     leftPx: 0,
@@ -212,6 +228,38 @@ export default function Ruler() {
     )
   }
 
+  const snapFromPointer = (
+    e: ReactPointerEvent<HTMLDivElement>,
+  ): RulerSnapUpdate => {
+    const frame = frameFromPointer(e)
+    if (e.altKey || !usePreferencesStore.getState().snappingEnabled) {
+      return { frame, guide: null }
+    }
+    const resolution = resolveTimelineSnap({
+      candidates: snapCandidatesRef.current,
+      movingPoints: [{
+        id: 'playhead',
+        kind: 'cursor',
+        frame,
+        deltaDirection: 1,
+        trackKind: null,
+        trackIndex: -1,
+      }],
+      rawDeltaFrames: frame,
+      minDeltaFrames: 0,
+      maxDeltaFrames: viewport.totalFrames,
+      zoom,
+    })
+    return { frame: resolution.deltaFrames, guide: resolution.guide }
+  }
+
+  const endScrub = (): void => {
+    scrubbingRef.current = false
+    snapCandidatesRef.current = []
+    setIsScrubbing(false)
+    setSnapGuide(null)
+  }
+
   // Capture can throw (inactive/synthetic pointer, detached node) — the
   // seek itself must never depend on it, so it runs first and capture is
   // best-effort.
@@ -238,26 +286,34 @@ export default function Ruler() {
       style={{ width: viewport.surfaceWidth }}
       onPointerDown={(e) => {
         scrubbingRef.current = true
+        snapCandidatesRef.current = timelineSnapCandidates(
+          useDocumentStore.getState().doc,
+        )
         setIsScrubbing(true)
-        schedule(frameFromPointer(e))
+        schedule(snapFromPointer(e))
         capturePointer(e)
       }}
       onPointerMove={(e) => {
         if (scrubbingRef.current) {
-          schedule(frameFromPointer(e))
+          schedule(snapFromPointer(e))
         }
       }}
       onPointerUp={(e) => {
         scrubbingRef.current = false
         releasePointer(e)
-        schedule(frameFromPointer(e))
+        schedule(snapFromPointer(e))
+        snapCandidatesRef.current = []
         setIsScrubbing(false)
+        setSnapGuide(null)
+      }}
+      onPointerCancel={endScrub}
+      onLostPointerCapture={() => {
+        if (scrubbingRef.current) endScrub()
       }}
       onPointerLeave={(e) => {
         // Capture failed and the pointer left: end the scrub cleanly.
         if (scrubbingRef.current && !e.currentTarget.hasPointerCapture(e.pointerId)) {
-          scrubbingRef.current = false
-          setIsScrubbing(false)
+          endScrub()
         }
       }}
     >
