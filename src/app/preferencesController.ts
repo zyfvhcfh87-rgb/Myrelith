@@ -10,9 +10,16 @@ import {
   type ExportPreferenceSelectionId,
   type ExportSelectionPreference,
 } from '../state/preferencesStore'
+import {
+  INITIAL_WORKSPACE_LAYOUT,
+  useWorkspaceLayoutStore,
+  validateWorkspaceLayoutPreference,
+  type WorkspaceLayoutPreference,
+} from '../state/workspaceLayoutStore'
 
 export const USER_PREFERENCES_STORAGE_KEY = 'webcut.preferences:v1'
 export const EXPORT_SELECTION_STORAGE_KEY = 'webcut.export-selection:v1'
+export const WORKSPACE_LAYOUT_STORAGE_KEY = 'webcut.workspace:v1'
 
 interface PersistedPreferencesV1 {
   version: 1
@@ -23,6 +30,10 @@ interface PersistedExportSelectionV1 {
   version: 1
   selectionId: ExportPreferenceSelectionId
   profile?: ExportSelectionPreference['profile']
+}
+
+interface PersistedWorkspaceLayoutV1 extends WorkspaceLayoutPreference {
+  version: 1
 }
 
 export interface PreferencesStorage {
@@ -93,6 +104,39 @@ function serializeExportSelection(
   return JSON.stringify(value)
 }
 
+function parsePersistedWorkspaceLayout(
+  raw: string | null,
+): Readonly<WorkspaceLayoutPreference> | null {
+  if (raw === null) return null
+  try {
+    const value = JSON.parse(raw) as unknown
+    if (!value || typeof value !== 'object') return null
+    const { version, ...preference } = value as Record<string, unknown>
+    if (version !== 1) return null
+    return validateWorkspaceLayoutPreference(preference)
+  } catch {
+    return null
+  }
+}
+
+function serializeWorkspaceLayout(
+  preference: WorkspaceLayoutPreference,
+): string {
+  const value: PersistedWorkspaceLayoutV1 = {
+    version: 1,
+    preset: preference.preset,
+    mediaWidth: preference.mediaWidth,
+    inspectorWidth: preference.inspectorWidth,
+    timelineHeight: preference.timelineHeight,
+    mediaCollapsed: preference.mediaCollapsed,
+    inspectorCollapsed: preference.inspectorCollapsed,
+    timelineCollapsed: preference.timelineCollapsed,
+    inspectorFocused: preference.inspectorFocused,
+    inspectorRestoreWidth: preference.inspectorRestoreWidth,
+  }
+  return JSON.stringify(value)
+}
+
 let activeDisposer: (() => void) | null = null
 
 export function initPreferencesPersistence(
@@ -101,6 +145,7 @@ export function initPreferencesPersistence(
   if (activeDisposer) return activeDisposer
 
   usePreferencesStore.setState({ ...INITIAL_PREFERENCES_STATE })
+  useWorkspaceLayoutStore.setState({ ...INITIAL_WORKSPACE_LAYOUT })
   let persistenceStorage = storage ?? null
   if (persistenceStorage === null) {
     try {
@@ -135,6 +180,16 @@ export function initPreferencesPersistence(
     } catch {
       // Export selection persistence is independent from other preferences.
     }
+    try {
+      const persisted = parsePersistedWorkspaceLayout(
+        persistenceStorage.getItem(WORKSPACE_LAYOUT_STORAGE_KEY),
+      )
+      if (persisted) {
+        useWorkspaceLayoutStore.getState().hydrateWorkspaceLayout(persisted)
+      }
+    } catch {
+      // Workspace geometry remains usable in memory when storage rejects.
+    }
   }
 
   const unsubscribe = usePreferencesStore.subscribe((state, previous) => {
@@ -163,11 +218,36 @@ export function initPreferencesPersistence(
       // Export selection changes remain usable for this session.
     }
   })
+  const unsubscribeWorkspace = useWorkspaceLayoutStore.subscribe(
+    (state, previous) => {
+      if (
+        state.preset === previous.preset
+        && state.mediaWidth === previous.mediaWidth
+        && state.inspectorWidth === previous.inspectorWidth
+        && state.timelineHeight === previous.timelineHeight
+        && state.mediaCollapsed === previous.mediaCollapsed
+        && state.inspectorCollapsed === previous.inspectorCollapsed
+        && state.timelineCollapsed === previous.timelineCollapsed
+        && state.inspectorFocused === previous.inspectorFocused
+        && state.inspectorRestoreWidth === previous.inspectorRestoreWidth
+      ) return
+      if (persistenceStorage === null) return
+      try {
+        persistenceStorage.setItem(
+          WORKSPACE_LAYOUT_STORAGE_KEY,
+          serializeWorkspaceLayout(state),
+        )
+      } catch {
+        // Resizing remains a session-only preference if storage is unavailable.
+      }
+    },
+  )
 
   const dispose = (): void => {
     if (activeDisposer !== dispose) return
     activeDisposer = null
     unsubscribe()
+    unsubscribeWorkspace()
   }
   activeDisposer = dispose
   return dispose

@@ -6,7 +6,13 @@
  * when a project entry action explicitly prepares the editor boundary.
  */
 
-import { useEffect } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import './layout.css'
 import Toolbar from '../ui/Toolbar'
 import ToolButtons from '../ui/ToolButtons'
@@ -16,6 +22,13 @@ import Inspector from '../ui/Inspector'
 import TransportBar from '../ui/TransportBar'
 import Timeline from '../ui/timeline/Timeline'
 import TimelineZoomControls from '../ui/timeline/TimelineZoomControls'
+import WorkspaceControls from '../ui/WorkspaceControls'
+import WorkspaceResizeHandle from '../ui/WorkspaceResizeHandle'
+import { fitWorkspaceLayout } from '../ui/workspaceLayout'
+import {
+  WORKSPACE_PANEL_LIMITS,
+  useWorkspaceLayoutStore,
+} from '../state/workspaceLayoutStore'
 import { useUndoRedoShortcuts } from './useUndoRedoShortcuts'
 import { useEditShortcuts } from './useEditShortcuts'
 import { initMediaVisuals } from './mediaVisualsController'
@@ -27,6 +40,11 @@ export interface EditorShellProps {
 }
 
 export default function EditorShell({ closing }: EditorShellProps) {
+  const shellRef = useRef<HTMLDivElement>(null)
+  const [viewport, setViewport] = useState({ width: 1440, height: 900 })
+  const [workspaceAnnouncement, setWorkspaceAnnouncement] = useState('')
+  const workspace = useWorkspaceLayoutStore()
+  const fitted = fitWorkspaceLayout(workspace, viewport)
   useUndoRedoShortcuts()
   useEditShortcuts()
   useEffect(() => initMediaCapabilityLifecycle(), [])
@@ -34,26 +52,143 @@ export default function EditorShell({ closing }: EditorShellProps) {
   useEffect(() => {
     initMediaVisuals()
   }, [])
+  useEffect(() => {
+    const shell = shellRef.current
+    if (!shell) return
+    const measure = (): void => {
+      const bounds = shell.getBoundingClientRect()
+      const width = Math.max(720, Math.round(bounds.width || window.innerWidth))
+      const height = Math.max(570, Math.round(bounds.height || window.innerHeight))
+      setViewport((current) => (
+        current.width === width && current.height === height
+          ? current
+          : { width, height }
+      ))
+    }
+    measure()
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(measure)
+      observer.observe(shell)
+      return () => observer.disconnect()
+    }
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+
+  const previewSize = useCallback((property: string, value: number): void => {
+    shellRef.current?.style.setProperty(property, `${value}px`)
+  }, [])
+  const previewMedia = useCallback(
+    (value: number) => previewSize('--workspace-media-width', value),
+    [previewSize],
+  )
+  const previewInspector = useCallback(
+    (value: number) => previewSize('--workspace-inspector-width', value),
+    [previewSize],
+  )
+  const previewTimeline = useCallback(
+    (value: number) => previewSize('--workspace-timeline-height', value),
+    [previewSize],
+  )
+  const cancelMedia = useCallback(
+    () => previewMedia(fitted.mediaWidth),
+    [fitted.mediaWidth, previewMedia],
+  )
+  const cancelInspector = useCallback(
+    () => previewInspector(fitted.inspectorWidth),
+    [fitted.inspectorWidth, previewInspector],
+  )
+  const cancelTimeline = useCallback(
+    () => previewTimeline(fitted.timelineHeight),
+    [fitted.timelineHeight, previewTimeline],
+  )
+  const commitMedia = useCallback((value: number): void => {
+    useWorkspaceLayoutStore.getState().setPanelSize('media', value)
+  }, [])
+  const commitInspector = useCallback((value: number): void => {
+    useWorkspaceLayoutStore.getState().setPanelSize('inspector', value)
+  }, [])
+  const commitTimeline = useCallback((value: number): void => {
+    useWorkspaceLayoutStore.getState().setPanelSize('timeline', value)
+  }, [])
+  const shellStyle = {
+    '--workspace-media-width': `${fitted.mediaWidth}px`,
+    '--workspace-inspector-width': `${fitted.inspectorWidth}px`,
+    '--workspace-timeline-height': `${fitted.timelineHeight}px`,
+  } as CSSProperties
+
   return (
     <div
+      ref={shellRef}
       className="app-shell"
       data-closing={closing ? 'true' : undefined}
       aria-busy={closing}
+      style={shellStyle}
     >
       <header className="area-toolbar">
         <Toolbar />
       </header>
+      <section className="area-workspace" inert={closing}>
+        <WorkspaceControls onAnnounce={setWorkspaceAnnouncement} />
+        <span
+          className="workspace-status visually-hidden"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {workspaceAnnouncement}
+        </span>
+      </section>
       <aside
+        id="workspace-media-panel"
         className="area-media-pool"
         data-media-pool-scroll
-        inert={closing}
+        data-collapsed={fitted.mediaWidth === 0 ? 'true' : undefined}
+        aria-hidden={fitted.mediaWidth === 0 || undefined}
+        inert={closing || fitted.mediaWidth === 0}
       >
         <MediaPool />
       </aside>
+      <WorkspaceResizeHandle
+        className="area-media-resize"
+        controls="workspace-media-panel"
+        label="Resize Media panel"
+        orientation="vertical"
+        value={fitted.mediaWidth}
+        min={WORKSPACE_PANEL_LIMITS.media.min}
+        max={fitted.mediaMax}
+        direction={1}
+        onPreview={previewMedia}
+        onCommit={commitMedia}
+        onCancel={cancelMedia}
+        onAnnounce={setWorkspaceAnnouncement}
+        disabled={closing}
+      />
       <main className="area-preview" inert={closing}>
         <Preview />
       </main>
-      <aside className="area-inspector" inert={closing}>
+      <WorkspaceResizeHandle
+        className="area-inspector-resize"
+        controls="workspace-inspector-panel"
+        label="Resize Inspector panel"
+        orientation="vertical"
+        value={fitted.inspectorWidth}
+        min={WORKSPACE_PANEL_LIMITS.inspector.min}
+        max={fitted.inspectorMax}
+        direction={-1}
+        onPreview={previewInspector}
+        onCommit={commitInspector}
+        onCancel={cancelInspector}
+        onAnnounce={setWorkspaceAnnouncement}
+        disabled={closing}
+      />
+      <aside
+        id="workspace-inspector-panel"
+        className="area-inspector"
+        data-collapsed={fitted.inspectorWidth === 0 ? 'true' : undefined}
+        aria-hidden={fitted.inspectorWidth === 0 || undefined}
+        inert={closing || fitted.inspectorWidth === 0}
+      >
         <Inspector />
       </aside>
       <section className="area-transport" inert={closing}>
@@ -61,10 +196,28 @@ export default function EditorShell({ closing }: EditorShellProps) {
         <TransportBar />
         <TimelineZoomControls />
       </section>
+      <WorkspaceResizeHandle
+        className="area-timeline-resize"
+        controls="workspace-timeline-panel"
+        label="Resize Timeline panel"
+        orientation="horizontal"
+        value={fitted.timelineHeight}
+        min={WORKSPACE_PANEL_LIMITS.timeline.min}
+        max={fitted.timelineMax}
+        direction={-1}
+        onPreview={previewTimeline}
+        onCommit={commitTimeline}
+        onCancel={cancelTimeline}
+        onAnnounce={setWorkspaceAnnouncement}
+        disabled={closing}
+      />
       <section
+        id="workspace-timeline-panel"
         className="area-timeline"
         data-timeline-scroll
-        inert={closing}
+        data-collapsed={fitted.timelineHeight === 0 ? 'true' : undefined}
+        aria-hidden={fitted.timelineHeight === 0 || undefined}
+        inert={closing || fitted.timelineHeight === 0}
       >
         <Timeline />
       </section>
