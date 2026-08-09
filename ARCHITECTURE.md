@@ -142,6 +142,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   audio, crop, flips, effects, and text styling are intentionally outside this
   first property set. Timeline schema 6 adds the durable contract; schema-5
   migration installs an empty animation without changing appearance.
+- `TimelineDoc.markers` holds sequence-level annotations as stable ids, exact
+  non-negative integer frames, bounded labels/optional notes, and one color
+  from the portable marker palette. `domain/timelineMarkers.ts` is the pure
+  add/edit/move/duplicate/delete/navigation authority and keeps the array
+  strictly sorted by `(frame, id)`, making equal-frame behavior deterministic.
+  Markers are independent of tracks and never extend preview/export duration;
+  `timelineDisplayDurationFrames()` is the UI-only extent used to reveal far
+  markers. Timeline schema 7 adds the explicit array, and schema-6 migration
+  installs an empty default. Selection/editor state stays ephemeral in
+  `transportStore`; the ruler clusters only its visible pixel window.
 - Clips on one track are sorted by `timelineRange.startFrame` and pairwise
   non-overlapping; `operations.ts` rejects violations.
 - `TimelineDoc.tracks[0]` composites first (bottom layer).

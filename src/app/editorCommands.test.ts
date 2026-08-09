@@ -48,7 +48,7 @@ function track(id: string, clips: Clip[], locked = false): Track {
 
 function documentFixture(tracks: Track[] = [track('V1', [clip('clip-1', 0, 60)])]): TimelineDoc {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: 'doc-commands',
     name: 'Command fixture',
     frameRate: { num: 30, den: 1 },
@@ -56,6 +56,7 @@ function documentFixture(tracks: Track[] = [track('V1', [clip('clip-1', 0, 60)])
     height: 1080,
     audioSampleRate: 48000,
     tracks,
+    markers: [],
   }
 }
 
@@ -88,6 +89,21 @@ describe('editor command catalog', () => {
     expect(matchEditorCommandShortcut(undo, 'edit')).toBeNull()
     expect(matchEditorCommandShortcut(razor, 'edit')).toBe('tool.razor')
     expect(matchEditorCommandShortcut(razor, 'history')).toBeNull()
+  })
+
+  test('resolves distinct add/next/previous marker shortcuts', () => {
+    expect(matchEditorCommandShortcut(
+      new KeyboardEvent('keydown', { key: 'm' }),
+      'edit',
+    )).toBe('marker.add')
+    expect(matchEditorCommandShortcut(
+      new KeyboardEvent('keydown', { key: 'M', shiftKey: true }),
+      'edit',
+    )).toBe('marker.next')
+    expect(matchEditorCommandShortcut(
+      new KeyboardEvent('keydown', { key: 'M', ctrlKey: true, shiftKey: true }),
+      'edit',
+    )).toBe('marker.previous')
   })
 
   test('reports live reasons and refuses unavailable commands', () => {
@@ -146,6 +162,31 @@ describe('editor command catalog', () => {
     useTransportStore.getState().setSelectedClip('clip-1')
     expect(executeEditorCommand('timeline.ripple-delete').executed).toBe(true)
     expect(useDocumentStore.getState().doc.tracks[0].clips).toHaveLength(1)
+  })
+
+  test('executes marker create, edit, duplicate, navigation, and delete paths', () => {
+    expect(executeEditorCommand('marker.add').executed).toBe(true)
+    const first = useDocumentStore.getState().doc.markers?.[0]
+    expect(first).toMatchObject({ frame: 10, label: 'Marker 1', color: 'yellow' })
+    expect(useTransportStore.getState().selectedMarkerId).toBe(first?.id)
+
+    expect(executeEditorCommand('marker.edit').executed).toBe(true)
+    expect(useTransportStore.getState().editingMarkerId).toBe(first?.id)
+    expect(executeEditorCommand('marker.duplicate').executed).toBe(true)
+    const markers = useDocumentStore.getState().doc.markers ?? []
+    expect(markers).toHaveLength(2)
+    expect(markers[0].frame).toBe(10)
+    expect(markers[1].frame).toBe(10)
+    expect(new Set(markers.map(({ id }) => id)).size).toBe(2)
+
+    useTransportStore.getState().setSelectedMarker(markers[1].id)
+    expect(executeEditorCommand('marker.previous').executed).toBe(true)
+    expect(useTransportStore.getState().selectedMarkerId).toBe(markers[0].id)
+    expect(executeEditorCommand('marker.next').executed).toBe(true)
+    expect(useTransportStore.getState().selectedMarkerId).toBe(markers[1].id)
+
+    expect(executeEditorCommand('marker.delete').executed).toBe(true)
+    expect(useDocumentStore.getState().doc.markers).toHaveLength(1)
   })
 
   test('linked edits explain locked partner blockers without invoking a rejected operation', () => {

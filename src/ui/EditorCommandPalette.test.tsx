@@ -36,7 +36,7 @@ function fixture(): TimelineDoc {
     locked: false,
   }
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: 'palette-doc',
     name: 'Palette fixture',
     frameRate: { num: 30, den: 1 },

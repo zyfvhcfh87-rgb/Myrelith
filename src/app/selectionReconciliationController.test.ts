@@ -64,7 +64,7 @@ function makeAudioTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: 'doc-selection-reconciliation',
     name: 'Selection reconciliation',
     frameRate: { num: 30, den: 1 },
@@ -79,6 +79,7 @@ function makeDoc(): TimelineDoc {
       makeTrack('V2', [makeClip('clipD', 20, 30)]),
       makeTrack('VL', [makeClip('clipE', 0, 30)], true),
     ],
+    markers: [],
   }
 }
 

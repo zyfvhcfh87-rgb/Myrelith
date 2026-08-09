@@ -95,7 +95,7 @@ function track(
 
 function doc(tracks: Track[], rate: FrameRate = F30): TimelineDoc {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: 'crossfade-plan-doc',
     name: 'Crossfade plan',
     frameRate: rate,

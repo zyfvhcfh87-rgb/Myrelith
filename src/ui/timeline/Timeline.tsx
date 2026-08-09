@@ -30,7 +30,10 @@ import {
   getTransportResetRevision,
   useTransportStore,
 } from '../../state/transportStore'
-import { docDurationFrames, tracksInDisplayOrder } from '../../domain/selectors'
+import {
+  timelineDisplayDurationFrames,
+  tracksInDisplayOrder,
+} from '../../domain/selectors'
 import Ruler from './Ruler'
 import Track from './Track'
 import TrackHeader from './TrackHeader'
@@ -57,7 +60,7 @@ export default function Timeline() {
   )
 
   const totalFrames = timelineRunwayFrames(
-    docDurationFrames(doc),
+    timelineDisplayDurationFrames(doc),
     doc.frameRate,
   )
   const viewport = calculateTimelineViewport(
@@ -96,7 +99,7 @@ export default function Timeline() {
       const transport = useTransportStore.getState()
       const liveDoc = useDocumentStore.getState().doc
       const liveTotalFrames = timelineRunwayFrames(
-        docDurationFrames(liveDoc),
+        timelineDisplayDurationFrames(liveDoc),
         liveDoc.frameRate,
       )
       const liveViewport = calculateTimelineViewport(

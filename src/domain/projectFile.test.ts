@@ -190,6 +190,7 @@ function makeDocument(): TimelineDoc {
     height: 1_080,
     audioSampleRate: 48_000,
     tracks: [video, audio],
+    markers: [],
   }
 }
 
@@ -215,6 +216,16 @@ describe('portable project file', () => {
       { id: 'collection-selects', name: 'Selects', assetIds: ['video-z', 'image-a'] },
       { id: 'collection-broll', name: 'B-roll', assetIds: ['video-z'] },
     ]
+    original.document.markers = [
+      { id: 'marker-intro', frame: 0, label: 'Intro', color: 'blue' },
+      {
+        id: 'marker-beat',
+        frame: 240,
+        label: 'Beat drop',
+        color: 'purple',
+        note: 'Cut on the kick',
+      },
+    ]
     const parsed = parseProjectFile(serializeProjectFile(original))
 
     expect(parsed.format).toBe('myrelith-project')
@@ -234,6 +245,40 @@ describe('portable project file', () => {
     expect(parsed.document.tracks[0].transitions).toEqual(
       original.document.tracks[0].transitions,
     )
+    expect(parsed.document.markers).toEqual(original.document.markers)
+  })
+
+  test('migrates schema-6 projects to explicit empty marker defaults', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 6
+    Reflect.deleteProperty(legacy.document, 'markers')
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.markers).toEqual([])
+  })
+
+  test('rejects invalid, duplicate, and unsorted marker records', () => {
+    const invalid = makeProject()
+    invalid.document.markers = [
+      { id: 'late', frame: 20, label: 'Late', color: 'yellow' },
+      { id: 'early', frame: 10, label: 'Early', color: 'yellow' },
+    ]
+    expect(() => validateProjectFile(invalid)).toThrow(/sorted by frame then id/)
+
+    const duplicate = makeProject()
+    duplicate.document.markers = [
+      { id: 'same', frame: 10, label: 'One', color: 'yellow' },
+      { id: 'same', frame: 20, label: 'Two', color: 'red' },
+    ]
+    expect(() => validateProjectFile(duplicate)).toThrow(/duplicate marker id/)
+
+    const badFrame = makeProject()
+    badFrame.document.markers = [
+      { id: 'bad', frame: 1.5, label: 'Bad', color: 'yellow' },
+    ]
+    expect(() => validateProjectFile(badFrame)).toThrow(/safe integer/)
   })
 
   test('migrates a legacy branded project and procedural text id', () => {

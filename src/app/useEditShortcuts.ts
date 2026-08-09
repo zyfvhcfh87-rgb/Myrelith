@@ -7,6 +7,8 @@
  * Keys (no modifier):
  *   A/B/T/Y/U        → select / razor / trim / slip / slide tool
  *   S                → split every clip under the playhead
+ *   M / Shift+M      → add / navigate to the next sequence marker
+ *   Ctrl/⌘+Shift+M   → navigate to the previous sequence marker
  *   Delete/Backspace → ripple-delete the selected clip
  *   ←/→              → step the playhead one frame (Phase 4 gate item)
  *
