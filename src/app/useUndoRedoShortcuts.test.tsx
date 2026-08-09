@@ -48,7 +48,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc-shortcuts',
     name: 'shortcut fixture',
     frameRate: { num: 30, den: 1 },

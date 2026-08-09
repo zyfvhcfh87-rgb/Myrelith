@@ -11,7 +11,13 @@ import {
 import type { Clip, TimelineDoc, Track, TrackId, Transition } from '../../domain/schema'
 import { rangeContains } from '../../domain/time'
 import {
+  clipBlendModeIntent,
+  resolveBlendMode,
+  resolveTransitionGroupBlendMode,
+} from '../../domain/blendModes'
+import {
   createVideoCompositionPlanner,
+  type CrossfadeCompositionItem,
   type OrdinaryVideoPlanItem,
   type TextOverlayPlanItem,
   type VideoCompositionItem,
@@ -101,6 +107,7 @@ function benchmarkClip(trackIndex: number, clipIndex: number, startFrame: number
       anchorY: 0.5,
     },
     opacity: 1,
+    blendMode: 'normal',
     volume: 1,
     effects: [],
   }
@@ -204,7 +211,7 @@ function createScenario(
   return {
     layout,
     doc: {
-      schemaVersion: 8,
+      schemaVersion: 9,
       id: `frame-planning-${layout}`,
       name: `Frame planning ${layout}`,
       frameRate: { num: 30, den: 1 },
@@ -252,12 +259,14 @@ function legacyOrdinaryItem(
         frame,
         clip: resolvedClip,
         opacity,
+        blendMode: resolveBlendMode(clipBlendModeIntent(resolvedClip)),
       }
     }
     return {
       kind: 'clip',
       trackId: track.id,
       frame,
+      blendMode: resolveBlendMode(clipBlendModeIntent(resolvedClip)),
       request: {
         clip: resolvedClip,
         sourceFrame: resolvedClip.sourceMode === 'still'
@@ -271,19 +280,21 @@ function legacyOrdinaryItem(
   return null
 }
 
-function resolveGroupAnimation(group: CrossfadeFrameGroup): CrossfadeFrameGroup {
+function resolveGroupAnimation(group: CrossfadeFrameGroup): CrossfadeCompositionItem {
   const resolveRequest = (
     request: CrossfadeFrameGroup['requests'][number],
   ): CrossfadeFrameGroup['requests'][number] => {
     const clip = resolveClipAnimationAtFrame(request.clip, group.frame)
     return { ...request, clip, opacity: clipOpacity(clip) }
   }
+  const requests: CrossfadeFrameGroup['requests'] = [
+    resolveRequest(group.requests[0]),
+    resolveRequest(group.requests[1]),
+  ]
   return {
     ...group,
-    requests: [
-      resolveRequest(group.requests[0]),
-      resolveRequest(group.requests[1]),
-    ],
+    requests,
+    blendMode: resolveTransitionGroupBlendMode(requests[0].clip, requests[1].clip),
   }
 }
 

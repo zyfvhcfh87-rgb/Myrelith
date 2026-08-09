@@ -19,6 +19,7 @@ function clip(
   sourceStart: number,
   opacity = 1,
   sourceMode: Clip['sourceMode'] = 'timed',
+  blendMode?: string,
 ): Clip {
   return {
     id,
@@ -39,6 +40,7 @@ function clip(
       anchorY: 0.5,
     },
     opacity,
+    ...(blendMode === undefined ? {} : { blendMode }),
     volume: 1,
     effects: [],
   }
@@ -80,7 +82,7 @@ function track(
 
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },
@@ -181,6 +183,40 @@ describe('video composition plan', () => {
     expect(plan.items[0].kind === 'crossfade'
       ? plan.items[0].requests[1].clip.transform.x
       : null).toBe(7)
+  })
+
+  test('makes ordinary and transition-group blend resolution explicit', () => {
+    const ordinary = clip('ordinary', 'ordinary-asset', 0, 0, 1, 'timed', 'overlay')
+    const ordinaryItem = createVideoCompositionPlanner(
+      doc([track('V1', [ordinary])]),
+      new Map(),
+    ).planFrame(1).items[0]
+    expect(ordinaryItem).toMatchObject({
+      kind: 'clip',
+      blendMode: { intent: 'overlay', effective: 'overlay', status: 'supported' },
+    })
+
+    const from = clip('from', 'from-asset', 0, 20, 1, 'timed', 'screen')
+    const to = clip('to', 'to-asset', 10, 60, 1, 'timed', 'screen')
+    const matchingGroup = createVideoCompositionPlanner(
+      doc([track('V1', [from, to], [crossfade(from.id, to.id)])]),
+      catalog([['from-asset', exact()], ['to-asset', exact()]]),
+    ).planFrame(11).items[0]
+    expect(matchingGroup).toMatchObject({
+      kind: 'crossfade',
+      blendMode: { effective: 'screen', status: 'supported' },
+    })
+
+    to.blendMode = 'future-soft-light'
+    const compatibilityGroup = createVideoCompositionPlanner(
+      doc([track('V1', [from, to], [crossfade(from.id, to.id)])]),
+      catalog([['from-asset', exact()], ['to-asset', exact()]]),
+    ).planFrame(11).items[0]
+    expect(compatibilityGroup).toMatchObject({
+      kind: 'crossfade',
+      blendMode: { effective: 'normal', status: 'compatibility-fallback' },
+      requests: [{ clip: { blendMode: 'screen' } }, { clip: { blendMode: 'future-soft-light' } }],
+    })
   })
 
   test('falls back to a hard cut when exact source handles are insufficient', () => {

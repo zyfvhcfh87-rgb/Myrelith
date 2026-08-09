@@ -396,6 +396,12 @@ export interface Clip {
   transform: Transform
   /** Overall clip opacity, 0..1 (1 = opaque). Applied after effects. */
   opacity: number
+  /**
+   * Serialized compositing intent. Current names are normal, multiply,
+   * screen, and overlay; unknown strings are retained and render as normal.
+   * Optional typing keeps pre-schema-9 pure fixtures source compatible.
+   */
+  blendMode?: string
   /** Linear audio gain, 0..1 (1 = unity). Ignored for silent assets. */
   volume: number
   /**

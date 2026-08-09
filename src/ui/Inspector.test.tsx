@@ -45,7 +45,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -116,6 +116,43 @@ describe('Inspector', () => {
     expect(screen.getByTestId('inspector-x')).toHaveValue(0)
     expect(screen.getByTestId('inspector-scale-x')).toHaveValue(1)
     expect(screen.getByTestId('inspector-opacity')).toHaveValue(1)
+    expect(screen.getByRole('combobox', { name: 'Blend mode' })).toHaveValue('normal')
+  })
+
+  test('selects, undoes, redoes, and resets an accessible blend mode', async () => {
+    const user = userEvent.setup()
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+    const select = screen.getByRole('combobox', { name: 'Blend mode' })
+
+    await user.selectOptions(select, 'multiply')
+    expect(clipA().blendMode).toBe('multiply')
+    expect(doc().past).toHaveLength(1)
+
+    act(() => doc().undo())
+    expect(select).toHaveValue('normal')
+    act(() => doc().redo())
+    expect(select).toHaveValue('multiply')
+
+    await user.click(screen.getByRole('button', { name: 'Reset video blend mode' }))
+    expect(clipA().blendMode).toBe('normal')
+    expect(select).toHaveValue('normal')
+  })
+
+  test('shows preserved unsupported intent and disables selection/reset on a locked track', () => {
+    const fixture = makeDoc()
+    fixture.tracks[0].clips[0].blendMode = 'future-soft-light'
+    fixture.tracks[0].locked = true
+    doc().setDoc(fixture)
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    const select = screen.getByRole('combobox', { name: 'Blend mode' })
+    expect(select).toHaveValue('future-soft-light')
+    expect(screen.getByRole('option', { name: 'Unsupported: future-soft-light' })).toBeInTheDocument()
+    expect(screen.getByText(/is preserved, but preview and export use Normal/)).toBeInTheDocument()
+    expect(select).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reset video blend mode' })).toBeDisabled()
   })
 
   test('mirrors the ephemeral canvas geometry without committing document history', () => {

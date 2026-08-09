@@ -59,6 +59,7 @@ function mediaClip(
       anchorY: 0.6,
     },
     opacity: 0.8,
+    blendMode: 'normal',
     volume: 1.25,
     visual: {
       ...defaultClipVisualSettings(),
@@ -260,15 +261,50 @@ describe('portable project file', () => {
     expect(parsed.document.markers).toEqual([])
   })
 
-  test('migrates schema-7 projects to explicit empty caption tracks', () => {
+  test('migrates schema-7 projects through caption and blend defaults', () => {
     const legacy = clone(makeProject())
     legacy.document.schemaVersion = 7
     Reflect.deleteProperty(legacy.document, 'captionTracks')
+    for (const legacyTrack of legacy.document.tracks) {
+      for (const legacyClip of legacyTrack.clips) {
+        Reflect.deleteProperty(legacyClip, 'blendMode')
+      }
+    }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
     expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(parsed.document.captionTracks).toEqual([])
+    expect(parsed.document.tracks.flatMap((item) => item.clips).map((item) => item.blendMode))
+      .toEqual(['normal', 'normal', 'normal', 'normal'])
+  })
+
+  test('migrates schema-8 captions intact while adding normal blend intent', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 8
+    legacy.document.captionTracks = [{
+      id: 'captions-en',
+      name: 'English CC',
+      language: 'en-US',
+      role: 'captions',
+      stylePreset: 'boxed',
+      hidden: false,
+      items: [
+        { id: 'caption-a', range: { startFrame: 3, durationFrames: 20 }, text: 'Hello' },
+      ],
+    }]
+    for (const legacyTrack of legacy.document.tracks) {
+      for (const legacyClip of legacyTrack.clips) {
+        Reflect.deleteProperty(legacyClip, 'blendMode')
+      }
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.captionTracks).toEqual(legacy.document.captionTracks)
+    expect(parsed.document.tracks.flatMap((item) => item.clips).map((item) => item.blendMode))
+      .toEqual(['normal', 'normal', 'normal', 'normal'])
   })
 
   test('round-trips semantic captions and rejects malformed persisted cues', () => {
@@ -292,6 +328,17 @@ describe('portable project file', () => {
     const malformed = clone(project)
     malformed.document.captionTracks![0]!.items[0]!.text = '<b>Hello</b>'
     expect(() => validateProjectFile(malformed)).toThrow(/markup/u)
+  })
+
+  test('round-trips supported and unsupported blend intent without substitution', () => {
+    const original = makeProject()
+    original.document.tracks[0].clips[0].blendMode = 'multiply'
+    original.document.tracks[0].clips[1].blendMode = 'future-soft-light'
+
+    const parsed = parseProjectFile(serializeProjectFile(original))
+
+    expect(parsed.document.tracks[0].clips[0].blendMode).toBe('multiply')
+    expect(parsed.document.tracks[0].clips[1].blendMode).toBe('future-soft-light')
   })
 
   test('rejects invalid, duplicate, and unsorted marker records', () => {

@@ -113,6 +113,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #58 — adaptive preview resolution** | ✅ implementation complete | session-only Auto/Full/Half/Quarter monitor quality; project-space compositor scaling across ordinary/text/transition frames; reusable scaled worker surfaces; explicit full-resolution export; full 4K harness memory plateau -6.4% median/-7.5% p95; real Chromium 4K/720px gates |
 | **Post-MVP #64 — timeline markers** | ✅ implementation complete | schema-7 sequence markers; deterministic pure operations/navigation, undoable store actions, portable migration/round trips, accessible clustered ruler/editor, command palette + keyboard paths; 125 focused + 1,979 total tests; clean in-app Chromium gate on exclusive port 5174; delivery tracked by draft PR |
 | **Post-MVP #68 — caption tracks + SRT/VTT** | ✅ implementation complete | schema-8 semantic tracks/cues; exact frame/timestamp round trips, atomic strict import, accessible bounded editor, shared preview/export text composition, undo/recovery; 2,046 total tests and clean Chromium QA on exclusive port 41868 |
+| **Post-MVP #46 — minimal blend modes** | ✅ implementation complete | explicit normal/multiply/screen/overlay intent; schema-9 migration preserving schema-8 captions and unknown blend intent; isolated Canvas2D composition plus capability fallback seam; accessible Inspector/history; clean preview/export/reload Chromium gate on exclusive port 41846 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -2195,6 +2196,60 @@ surface; it is not a second zoom and never enters document history.
 - Publication is a ready-for-review PR because later merge was explicitly
   authorized. The coordinating task still owns review/rebase/merge order;
   this implementation does not merge, deploy, or close the issue itself.
+
+## Post-MVP issue #46 - minimal blend modes and compositing foundation
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-09).**
+
+- Timeline schema 9 persists an explicit blend-mode intent on every visual
+  clip. New and migrated clips write `normal`; `multiply`, `screen`, and
+  `overlay` round-trip exactly. Bounded unknown strings are retained through
+  save, recovery, undo/redo, and portable project paths while current rendering
+  safely resolves them to source-over-compatible Normal. Schema-8 caption
+  tracks migrate intact while their clips receive the blend default.
+- `domain/blendModes.ts` owns the browser-free names, compatibility resolution,
+  transition-group rule, and sRGB source-over reference-pixel model. The
+  normative layer order, opacity timing, straight/premultiplied-alpha boundary,
+  clipping, isolation, color-space, and transition semantics are recorded in
+  `docs/BLEND_MODES.md` and locked by exact pixel fixtures.
+- Preview and export share the same composition plan. Canvas2D probes each
+  concrete operation, restores its previous state even when probing throws,
+  and falls back to source-over without discarding stored intent. A backend
+  capability adapter leaves an explicit WebGL parity-registration seam; no
+  shader backend is claimed today.
+- Text layers render into isolated scratch surfaces before clip opacity and
+  blend are applied once. Crossfade legs remain Normal inside one isolated
+  group and the agreed group mode is applied once to the destination; mixed or
+  unsupported requests resolve the group to Normal. Scratch pixels are cleared
+  before reuse and on every success/failure exit, and Canvas state restoration
+  is guarded by `finally` paths.
+- The Inspector exposes an accessible native selector and explicit reset,
+  disables both on locked tracks, and explains preserved unsupported intent.
+  The canonical document-store action creates one undo step per selection.
+- After rebasing onto caption head
+  `78d0d0756a9b9248d8c08f485bf4892407279347`, the reconciliation-focused gate
+  passed 280 tests across 10 files. The complete repository gate passed all
+  2,077 Vitest cases across 146 files and all 16 benchmark-runner cases.
+  Production build/typecheck, oxlint, diff checking, and
+  `npm audit --omit=dev --audit-level=high` are green; Vite retains only the
+  repository's advisory large-chunk warning. The explicitly requested
+  all-dependency `npm audit --audit-level=high` reports two inherited
+  high-severity development-only transitives (`nanoid` and `undici`); this
+  branch's `package.json` and lockfile are identical to `origin/master`.
+- Real in-app Chromium used only
+  `npm run dev -- --port 41846 --strictPort` and `http://localhost:41846`.
+  The original gate used a 1920x1080 project with overlapping V1/V2 text layers
+  to exercise all four choices, Screen undo to Overlay and redo to Screen,
+  reset to Normal, locked control disabling, Overlay preview, and a successful
+  MP4 export-ready result. The post-rebase gate added a semantic caption cue
+  above the same isolated composition, reached MP4 Export ready, then reloaded
+  recovery and retained the cue, both clips, and exact Overlay intent. The
+  final browser warning/error log was empty, no error overlay appeared, and
+  port 41846 was released. The inspected post-rebase screenshot is
+  `issue-46-rebase-schema9-persisted.png` in the task visualization artifacts.
+- Publication is a ready-for-review PR targeting `master` because later merge
+  was authorized for the coordinating task. This implementation does not merge,
+  deploy, or close the issue itself.
 
 ## Working agreements (the user's explicit preferences)
 

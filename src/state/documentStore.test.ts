@@ -44,7 +44,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
 /** V1: clipA [0,300), clipB [400,100). A1: clipD [0,300). V2 empty. */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc-1',
     name: 'Store test doc',
     frameRate: { num: 30, den: 1 },
@@ -61,7 +61,7 @@ function makeDoc(): TimelineDoc {
 
 function makeStillDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc-still-history',
     name: 'Still history test',
     frameRate: { num: 30, den: 1 },
@@ -102,7 +102,7 @@ function makeTransitionDoc(
   v1Locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc-transitions',
     name: 'Transition store test',
     frameRate: { num: 30, den: 1 },
@@ -639,11 +639,13 @@ describe('Phase 4.2 editing actions', () => {
     getState().updateClipVisual('clipA', {
       transform: { x: 48, scaleX: 1.25 },
       opacity: 0.7,
+      blendMode: 'screen',
       visual: { crop: { left: 0.1 }, flipVertical: true },
     })
     const edited = getState().doc.tracks[0].clips[0]
     expect(edited.transform).toMatchObject({ x: 48, scaleX: 1.25, scaleY: 1.25 })
     expect(edited.opacity).toBe(0.7)
+    expect(edited.blendMode).toBe('screen')
     expect(edited.visual).toMatchObject({
       crop: { left: 0.1, right: 0, top: 0, bottom: 0 },
       flipVertical: true,
@@ -656,6 +658,11 @@ describe('Phase 4.2 editing actions', () => {
 
     getState().undo()
     expect(getState().doc).toBe(before)
+    getState().redo()
+    expect(getState().doc.tracks[0].clips[0].blendMode).toBe('screen')
+
+    getState().updateClipVisual('clipA', { blendMode: 'future-soft-light' })
+    expect(getState().doc.tracks[0].clips[0].blendMode).toBe('future-soft-light')
   })
 
   test('Issue #34 audio edits are one undoable entry and invalid edits preserve redo', () => {
@@ -939,7 +946,7 @@ function makeManualLinkStoreDoc(): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc-manual-link-store',
     name: 'Manual link store test',
     frameRate: { num: 30, den: 1 },
@@ -1145,7 +1152,7 @@ const PAIR2 = 'link_pair2'
  */
 function makeLinkedDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: 'doc-linked',
     name: 'Linked test doc',
     frameRate: { num: 30, den: 1 },
@@ -1265,7 +1272,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * well outside it. */
   function makeTwoPairsDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 8,
+      schemaVersion: 9,
       id: 'doc-split-pairs',
       name: 'Split pairs test doc',
       frameRate: { num: 30, den: 1 },
@@ -1285,7 +1292,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * under the playhead. */
   function makeMixedDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 8,
+      schemaVersion: 9,
       id: 'doc-split-mixed',
       name: 'Split mixed test doc',
       frameRate: { num: 30, den: 1 },

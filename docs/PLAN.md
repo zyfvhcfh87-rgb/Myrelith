@@ -2745,3 +2745,40 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
   `sha256:4fdd045a9fbdcda1938124f51cd9fd49b53dc114e1a2acd7e8767a9aaecc1473`.
   Publish the exact committed head as a ready PR, without merging it; final
   commit id is the authoritative delivered identity.
+
+## Post-MVP issue #46 - minimal blend modes and compositing foundation
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-09).**
+
+- [x] Persist exact `normal`, `multiply`, `screen`, and `overlay` clip intent in
+  schema 9, migrate schema-8 caption documents without losing caption tracks,
+  default blends to Normal, and retain bounded unsupported stored intent while
+  rendering it through the source-over compatibility path.
+- [x] Add one browser-free blend contract plus exact sRGB reference pixels for
+  layer order, clip opacity, straight/premultiplied alpha, clipping, isolation,
+  and transition-group semantics.
+- [x] Carry explicit clip/group resolutions through the shared preview/export
+  composition plan and use probed Canvas2D operations with restored state,
+  safe fallback, and an explicit WebGL parity-registration seam.
+- [x] Isolate complete text layers and transition groups, apply opacity/blend
+  once at the correct boundary, and clear/release reusable intermediates on
+  success and every failure path.
+- [x] Add an accessible Inspector selector/reset with locked and unsupported
+  states; connect it through canonical one-step undo/redo and all persistence
+  paths.
+- [x] After rebasing onto caption head
+  `78d0d0756a9b9248d8c08f485bf4892407279347`, pass 280 reconciliation-focused
+  tests across 10 files, all 2,077 Vitest cases across 146 files, all 16
+  benchmark cases, build/typecheck, lint, diff check, and the zero-vulnerability
+  production high-severity audit. Record the separate all-dependency audit's
+  two inherited development-only highs against manifests unchanged from
+  `origin/master`.
+- [x] Verify two overlapping text layers, selection, undo/redo, reset, locked
+  controls, Overlay preview, MP4 export-ready output, and recovery reload in
+  real Chromium exclusively on port 41846. Re-run the conflict path after the
+  caption merge with a persisted semantic cue above both layers; retain exact
+  Overlay and caption intent through reload with zero warnings/errors, no error
+  overlay, an inspected screenshot artifact, and the test port released.
+- [x] Publish the exact committed branch as a ready-for-review PR targeting
+  `master` with `Closes #46`; leave merge, deployment, and closure to the
+  coordinating task.

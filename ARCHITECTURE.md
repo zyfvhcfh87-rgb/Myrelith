@@ -164,6 +164,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   synthetic clips. Caption cues extend derived preview/export duration.
   Timeline schema 8 adds the explicit array, and schema-7 migration installs
   an empty default.
+- `Clip.blendMode` is explicit in timeline schema 9. The current serialized
+  allow-list is `normal`, `multiply`, `screen`, and `overlay`; schema-8
+  migration installs `normal`, which maps to source-over. Unknown bounded
+  strings remain durable author intent but resolve to the normal compatibility
+  path. `domain/blendModes.ts` is the browser-free vocabulary, transition-group
+  resolver, and sRGB premultiplied-alpha reference authority. The complete
+  layer/transition contract is normative in `docs/BLEND_MODES.md`.
 - Clips on one track are sorted by `timelineRange.startFrame` and pairwise
   non-overlapping; `operations.ts` rejects violations.
 - `TimelineDoc.tracks[0]` composites first (bottom layer).
@@ -228,6 +235,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   declared Canvas2D sRGB, then composites the isolated group over lower tracks
   exactly once. Scratch surfaces, cached text layouts, and borrowed frames
   retain explicit bounded owners.
+- Every composition item carries resolved blend intent. Ordinary decoded media
+  blends after transform/crop and opacity. Procedural text first renders as one
+  isolated source-over layer, then blends once. A crossfade keeps source-over
+  legs plus premultiplied `lighter` weighting and applies a non-normal mode to
+  the isolated group only when both legs agree on the same supported name;
+  mixed/unknown intent uses normal without rewriting either clip. The concrete
+  Canvas operation is capability-probed and restored in `finally`; the adapter
+  permits a future parity-verified WebGL backend but never selects an implicit
+  shader fallback. Preview and export share this exact plan/compositor path.
 - `domain/audioMixPlan.ts` is the shared live/export audible-contributor and
   envelope contract. Valid linked fades open real virtual handle ranges and
   apply clip volume with an absolute linear or equal-power envelope. Web Audio
