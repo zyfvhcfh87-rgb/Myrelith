@@ -10,16 +10,19 @@ import { Profiler } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { useTransportStore } from '../state/transportStore'
+import { useAudioMeterStore } from '../state/audioMeterStore'
 import TransportBar from './TransportBar'
 import { stepFrame, togglePlayback } from '../app/transportController'
 
 vi.mock('../app/transportController', () => ({
   togglePlayback: vi.fn(),
   stepFrame: vi.fn(),
+  resetAudioMeterOverload: vi.fn(),
 }))
 
 beforeEach(() => {
   vi.clearAllMocks()
+  useAudioMeterStore.getState().resetAudioMeter()
   useTransportStore.setState({
     playheadFrame: 0,
     isPlaying: false,

@@ -115,6 +115,10 @@
   .transport-play {
     min-width: 36px;
   }
+
+  .audio-meter {
+    width: 70px;
+  }
 }
 
 /* Myrelith is a desktop editor. Keep every transport group usable down to the
@@ -187,6 +191,10 @@
 
   .transport-play {
     min-width: 32px;
+  }
+
+  .audio-meter {
+    width: 64px;
   }
 }
 

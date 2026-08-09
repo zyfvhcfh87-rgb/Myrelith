@@ -222,6 +222,103 @@
   color: #f6f8fb;
 }
 
+/* Bounded 10 Hz playback feedback; visual gain only, never a mixer control. */
+.audio-meter {
+  position: absolute;
+  right: 8px;
+  top: -34px;
+  z-index: 2;
+  width: 84px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 23px;
+  align-items: center;
+  gap: 5px;
+}
+
+.audio-meter-channels {
+  display: grid;
+  gap: 2px;
+}
+
+.audio-meter-lane {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+}
+
+.audio-meter-label {
+  color: #8395aa;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.audio-meter-track {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  background: #09121d;
+  border: 1px solid #273b52;
+  border-radius: 999px;
+}
+
+.audio-meter-lane.master .audio-meter-track {
+  height: 4px;
+}
+
+.audio-meter-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    #3fa477 0%,
+    #79bd70 72%,
+    #e4b75d 90%,
+    #e36d69 100%
+  );
+  transform-origin: left center;
+  transition: transform 90ms linear;
+}
+
+.audio-meter-overload-zone {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 9.1%;
+  border-left: 1px solid rgb(228 183 93 / 55%);
+}
+
+.audio-meter-track[data-overload] {
+  border-color: #ef7e76;
+  box-shadow: 0 0 4px rgb(239 126 118 / 45%);
+}
+
+.audio-meter-reset {
+  height: 20px;
+  padding: 0 2px;
+  color: #ffaaa3;
+  background: #3a1e25;
+  border: 1px solid #8e4650;
+  border-radius: 4px;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.audio-meter-reset:disabled {
+  color: #647386;
+  background: #132031;
+  border-color: #2b4058;
+  cursor: default;
+  opacity: 0.8;
+}
+
+.audio-meter-reset:focus-visible {
+  outline: 2px solid #76a8ea;
+  outline-offset: 1px;
+}
+
 .timeline-zoom-slider::-webkit-slider-runnable-track {
   background: #32465d;
 }

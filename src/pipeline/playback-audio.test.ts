@@ -296,6 +296,10 @@ function makeOutputHarness(initialTime: number): OutputHarness {
       contextTime: now,
       activeNodeCount: scheduled.length,
       rms: 0,
+      peakLeft: 0,
+      peakRight: 0,
+      peakMaster: 0,
+      meterSampleSize: 256,
     }),
   }
   return {
@@ -415,20 +419,26 @@ interface FakeChannelNode {
   disconnect: ReturnType<typeof vi.fn>
 }
 
+interface FakeAnalyserNode extends FakeChannelNode {
+  fftSize: number
+  smoothingTimeConstant: number
+  samples: readonly number[]
+  getFloatTimeDomainData: ReturnType<typeof vi.fn>
+}
+
 function makeWebAudioHarness(state: AudioContextState): {
   context: AudioContext
   gains: FakeGainNode[]
   sources: FakeSourceNode[]
   splitters: FakeChannelNode[]
   mergers: FakeChannelNode[]
-  analyser: {
-    disconnect: ReturnType<typeof vi.fn>
-  }
+  analysers: FakeAnalyserNode[]
 } {
   const gains: FakeGainNode[] = []
   const sources: FakeSourceNode[] = []
   const splitters: FakeChannelNode[] = []
   const mergers: FakeChannelNode[] = []
+  const analysers: FakeAnalyserNode[] = []
   const makeGain = (): FakeGainNode => ({
     gain: {
       value: 1,
@@ -440,12 +450,6 @@ function makeWebAudioHarness(state: AudioContextState): {
     connect: vi.fn(),
     disconnect: vi.fn(),
   })
-  const analyser = {
-    fftSize: 0,
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    getFloatTimeDomainData: vi.fn((samples: Float32Array) => samples.fill(0)),
-  }
   const context = {
     currentTime: 5,
     state,
@@ -455,7 +459,22 @@ function makeWebAudioHarness(state: AudioContextState): {
       gains.push(gain)
       return gain
     }),
-    createAnalyser: vi.fn(() => analyser),
+    createAnalyser: vi.fn(() => {
+      const analyser: FakeAnalyserNode = {
+        fftSize: 0,
+        smoothingTimeConstant: 1,
+        samples: [],
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        getFloatTimeDomainData: vi.fn((samples: Float32Array) => {
+          samples.forEach((_, index) => {
+            samples[index] = analyser.samples[index] ?? 0
+          })
+        }),
+      }
+      analysers.push(analyser)
+      return analyser
+    }),
     createChannelSplitter: vi.fn(() => {
       const splitter = { connect: vi.fn(), disconnect: vi.fn() }
       splitters.push(splitter)
@@ -479,7 +498,7 @@ function makeWebAudioHarness(state: AudioContextState): {
       return source
     }),
   } as unknown as AudioContext
-  return { context, gains, sources, splitters, mergers, analyser }
+  return { context, gains, sources, splitters, mergers, analysers }
 }
 
 describe('startTimelineAudioPlayback scheduling', () => {
@@ -1351,6 +1370,32 @@ describe('startTimelineAudioPlayback ownership', () => {
 })
 
 describe('createWebAudioPlaybackOutput ownership', () => {
+  test('reports bounded independent channel and master sample peaks', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    h.analysers[0].samples = [0.25, -0.75, 0.5]
+    h.analysers[1].samples = [0.1, -0.2, 0.4]
+
+    const diagnostics = output.diagnostics()
+    expect(diagnostics.peakLeft).toBeCloseTo(0.75, 7)
+    expect(diagnostics.peakRight).toBeCloseTo(0.4, 7)
+    expect(diagnostics.peakMaster).toBeCloseTo(0.75, 7)
+    expect(diagnostics.meterSampleSize).toBe(256)
+    expect(h.analysers).toHaveLength(2)
+    expect(h.splitters[0].connect).toHaveBeenNthCalledWith(
+      1,
+      h.analysers[0],
+      0,
+    )
+    expect(h.splitters[0].connect).toHaveBeenNthCalledWith(
+      2,
+      h.analysers[1],
+      1,
+    )
+
+    output.stop()
+  })
+
   test('uses exact ramps for linear legs and bounded curves for equal-power legs', () => {
     const h = makeWebAudioHarness('running')
     const output = createWebAudioPlaybackOutput(h.context)
@@ -1455,28 +1500,28 @@ describe('createWebAudioPlaybackOutput ownership', () => {
     expect(curve[96]).toBeCloseTo(0.8 / 3)
     expect(curve.at(-1)).toBe(0)
 
-    expect(h.splitters).toHaveLength(1)
-    expect(h.mergers).toHaveLength(1)
-    expect(envelopeGain.connect).toHaveBeenCalledWith(h.splitters[0])
-    expect(h.splitters[0].connect).toHaveBeenNthCalledWith(
+    expect(h.splitters).toHaveLength(2)
+    expect(h.mergers).toHaveLength(2)
+    expect(envelopeGain.connect).toHaveBeenCalledWith(h.splitters[1])
+    expect(h.splitters[1].connect).toHaveBeenNthCalledWith(
       1,
       h.gains[2],
       0,
     )
-    expect(h.splitters[0].connect).toHaveBeenNthCalledWith(
+    expect(h.splitters[1].connect).toHaveBeenNthCalledWith(
       2,
       h.gains[3],
       1,
     )
     expect(h.gains[2].gain.value).toBe(0.5)
     expect(h.gains[3].gain.value).toBe(1)
-    expect(h.gains[2].connect).toHaveBeenCalledWith(h.mergers[0], 0, 0)
-    expect(h.gains[3].connect).toHaveBeenCalledWith(h.mergers[0], 0, 1)
+    expect(h.gains[2].connect).toHaveBeenCalledWith(h.mergers[1], 0, 0)
+    expect(h.gains[3].connect).toHaveBeenCalledWith(h.mergers[1], 0, 1)
 
     h.sources[0].onended?.()
     output.stop()
-    expect(h.splitters[0].disconnect).toHaveBeenCalledOnce()
-    expect(h.mergers[0].disconnect).toHaveBeenCalledOnce()
+    expect(h.splitters[1].disconnect).toHaveBeenCalledOnce()
+    expect(h.mergers[1].disconnect).toHaveBeenCalledOnce()
   })
 
   test('ramps in once and synchronously cleans a suspended context', () => {
@@ -1519,7 +1564,8 @@ describe('createWebAudioPlaybackOutput ownership', () => {
       disconnect.mock.calls.length === 1)).toBe(true)
     expect(h.gains.every(({ disconnect }) =>
       disconnect.mock.calls.length === 1)).toBe(true)
-    expect(h.analyser.disconnect).toHaveBeenCalledOnce()
+    expect(h.analysers.every(({ disconnect }) =>
+      disconnect.mock.calls.length === 1)).toBe(true)
   })
 
   test('uses a wall-clock cleanup fallback when running nodes never end', () => {
@@ -1545,7 +1591,8 @@ describe('createWebAudioPlaybackOutput ownership', () => {
       expect(output.diagnostics().activeNodeCount).toBe(0)
       expect(h.sources[0].disconnect).toHaveBeenCalledOnce()
       expect(h.gains[0].disconnect).toHaveBeenCalledOnce()
-      expect(h.analyser.disconnect).toHaveBeenCalledOnce()
+      expect(h.analysers.every(({ disconnect }) =>
+        disconnect.mock.calls.length === 1)).toBe(true)
     } finally {
       vi.useRealTimers()
     }
