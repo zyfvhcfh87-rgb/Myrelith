@@ -18,6 +18,13 @@ remembered media grants. A hostname change is a new browser origin, so its
 storage cannot be transferred automatically; users migrate with portable
 project files and grant local media access again when requested.
 
+PR #91 passed exact-head CI at `82a1ed4` and was normally merged as
+`d393416`. The GitHub repository is `zyfvhcfh87-rgb/Myrelith`. Cloudflare
+Pages project `b55a0fe2-bb44-42b1-8dc5-2b55d618f0e6` owns the primary
+`myrelith.pages.dev` origin with `master` auto-deploys. The former Pages
+project is retained as `myrelith-legacy` on its old hostname only as a
+temporary origin-migration bridge; it is not the canonical public URL.
+
 ## Status (2026-08-07)
 
 | Phase | State | Proof |
