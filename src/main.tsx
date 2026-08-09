@@ -13,7 +13,16 @@ function exposeDevelopmentStores(): void {
     import('./state/mediaImportStore'),
     import('./state/projectSessionStore'),
     import('./state/preferencesStore'),
-  ]).then(([doc, transport, media, mediaImport, projectSession, preferences]) => {
+    import('./state/audioMeterStore'),
+  ]).then(([
+    doc,
+    transport,
+    media,
+    mediaImport,
+    projectSession,
+    preferences,
+    audioMeter,
+  ]) => {
     Object.assign(window, {
       __stores: {
         document: doc.useDocumentStore,
@@ -22,6 +31,7 @@ function exposeDevelopmentStores(): void {
         mediaImport: mediaImport.useMediaImportStore,
         projectSession: projectSession.useProjectSessionStore,
         preferences: preferences.usePreferencesStore,
+        audioMeter: audioMeter.useAudioMeterStore,
       },
     })
   })

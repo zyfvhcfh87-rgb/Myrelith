@@ -34,6 +34,10 @@ import type {
 } from '../domain/crossfadePlan'
 import { audibleTracks, docDurationFrames } from '../domain/selectors'
 import { framesToSeconds, rangeEnd } from '../domain/time'
+import {
+  AUDIO_METER_FFT_SIZE,
+  measureAudioMeterSample,
+} from '../domain/audioMeter'
 
 export const PLAYBACK_AUDIO_LOOKAHEAD_SECONDS = 0.75
 export const PLAYBACK_AUDIO_START_LEAD_SECONDS = 0.05
@@ -129,6 +133,10 @@ export interface PlaybackAudioOutputDiagnostics {
   contextTime: number
   activeNodeCount: number
   rms: number
+  peakLeft: number
+  peakRight: number
+  peakMaster: number
+  meterSampleSize: number
 }
 
 export interface PlaybackAudioOutput {
@@ -778,14 +786,25 @@ export function createWebAudioPlaybackOutput(
   context: AudioContext,
 ): PlaybackAudioOutput {
   const master = context.createGain()
-  const analyser = context.createAnalyser()
-  analyser.fftSize = 2_048
+  const meterSplitter = context.createChannelSplitter(2)
+  const leftAnalyser = context.createAnalyser()
+  const rightAnalyser = context.createAnalyser()
+  const meterMerger = context.createChannelMerger(2)
+  leftAnalyser.fftSize = AUDIO_METER_FFT_SIZE
+  rightAnalyser.fftSize = AUDIO_METER_FFT_SIZE
+  leftAnalyser.smoothingTimeConstant = 0
+  rightAnalyser.smoothingTimeConstant = 0
   master.gain.value = 0
-  master.connect(analyser)
-  analyser.connect(context.destination)
+  master.connect(meterSplitter)
+  meterSplitter.connect(leftAnalyser, 0)
+  meterSplitter.connect(rightAnalyser, 1)
+  leftAnalyser.connect(meterMerger, 0, 0)
+  rightAnalyser.connect(meterMerger, 0, 1)
+  meterMerger.connect(context.destination)
 
   const nodes = new Set<ActiveOutputNode>()
-  const sampleWindow = new Float32Array(analyser.fftSize)
+  const leftSampleWindow = new Float32Array(leftAnalyser.fftSize)
+  const rightSampleWindow = new Float32Array(rightAnalyser.fftSize)
   let stopped = false
   let graphDisconnected = false
   let armed = false
@@ -796,7 +815,19 @@ export function createWebAudioPlaybackOutput(
     try {
       master.disconnect()
     } finally {
-      analyser.disconnect()
+      try {
+        meterSplitter.disconnect()
+      } finally {
+        try {
+          leftAnalyser.disconnect()
+        } finally {
+          try {
+            rightAnalyser.disconnect()
+          } finally {
+            meterMerger.disconnect()
+          }
+        }
+      }
     }
   }
 
@@ -912,15 +943,28 @@ export function createWebAudioPlaybackOutput(
   }
 
   const diagnostics = (): PlaybackAudioOutputDiagnostics => {
-    let sum = 0
-    if (!stopped) {
-      analyser.getFloatTimeDomainData(sampleWindow)
-      for (const sample of sampleWindow) sum += sample * sample
+    if (stopped) {
+      return {
+        contextTime: context.currentTime,
+        activeNodeCount: nodes.size,
+        rms: 0,
+        peakLeft: 0,
+        peakRight: 0,
+        peakMaster: 0,
+        meterSampleSize: AUDIO_METER_FFT_SIZE,
+      }
     }
+    leftAnalyser.getFloatTimeDomainData(leftSampleWindow)
+    rightAnalyser.getFloatTimeDomainData(rightSampleWindow)
+    const sample = measureAudioMeterSample(leftSampleWindow, rightSampleWindow)
     return {
       contextTime: context.currentTime,
       activeNodeCount: nodes.size,
-      rms: stopped ? 0 : Math.sqrt(sum / sampleWindow.length),
+      rms: sample.rms,
+      peakLeft: sample.left,
+      peakRight: sample.right,
+      peakMaster: sample.master,
+      meterSampleSize: AUDIO_METER_FFT_SIZE,
     }
   }
 

@@ -13,6 +13,7 @@ import { CaretLeft, CaretRight, Pause, Play } from '@phosphor-icons/react'
 import { useTransportStore } from '../state/transportStore'
 import { stepFrame, togglePlayback } from '../app/transportController'
 import { shortcutForCommand } from '../app/editorCommands'
+import AudioMeter from './AudioMeter'
 
 export default function TransportBar() {
   const isPlaying = useTransportStore((s) => s.isPlaying)
@@ -49,6 +50,7 @@ export default function TransportBar() {
       >
         <CaretRight aria-hidden="true" size={16} weight="fill" />
       </button>
+      <AudioMeter />
     </div>
   )
 }

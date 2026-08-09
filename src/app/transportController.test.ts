@@ -16,17 +16,20 @@ import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { Clip, MediaAsset, TimelineDoc, Track } from '../domain/schema'
 import type {
   PlaybackAssetResolver,
+  TimelineAudioPlaybackDiagnostics,
   TimelineAudioPlaybackSession,
   TimelineAudioPlaybackWarning,
 } from '../pipeline/playback-audio'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
+import { useAudioMeterStore } from '../state/audioMeterStore'
 import {
   configureTransport,
   disposeTransport,
   pause,
   play,
+  resetAudioMeterOverload,
   stepFrame,
   togglePlayback,
 } from './transportController'
@@ -245,13 +248,17 @@ function seedReadyAsset(
   return compatibility
 }
 
-function makeAudioSession(anchorTime: number): TimelineAudioPlaybackSession & {
+function makeAudioSession(
+  anchorTime: number,
+  diagnosticOverrides: Partial<TimelineAudioPlaybackDiagnostics> = {},
+): TimelineAudioPlaybackSession & {
   stop: ReturnType<typeof vi.fn>
+  diagnostics: ReturnType<typeof vi.fn>
 } {
   return {
     anchorTime,
     stop: vi.fn(async () => undefined),
-    diagnostics: () => ({
+    diagnostics: vi.fn(() => ({
       anchorTime,
       fromFrame: 0,
       contextTime: anchorTime,
@@ -259,9 +266,14 @@ function makeAudioSession(anchorTime: number): TimelineAudioPlaybackSession & {
       activeDecoderCount: 1,
       pendingBufferCount: 0,
       rms: 0.25,
+      peakLeft: 0.5,
+      peakRight: 0.25,
+      peakMaster: 0.5,
+      meterSampleSize: 256,
       scheduledThroughTimelineTime: 1,
       scheduledThroughContextTime: anchorTime + 1,
-    }),
+      ...diagnosticOverrides,
+    })),
   }
 }
 
@@ -304,6 +316,10 @@ function makeFakeDeps() {
   )
   let nextId = 1
   const pending = new Map<number, () => void>()
+  const meterPending = new Map<number, () => void>()
+  let nowMs = 0
+  let deviceChange: (() => void) | null = null
+  const unsubscribeDeviceChange = vi.fn()
   const deps = {
     createContext: () => clock,
     scheduleTick: (cb: () => void) => {
@@ -312,6 +328,17 @@ function makeFakeDeps() {
       return id
     },
     cancelTick: (id: number) => void pending.delete(id),
+    scheduleMeterPoll: (cb: () => void) => {
+      const id = nextId++
+      meterPending.set(id, cb)
+      return id
+    },
+    cancelMeterPoll: (id: number) => void meterPending.delete(id),
+    now: () => nowMs,
+    subscribeDeviceChange: (cb: () => void) => {
+      deviceChange = cb
+      return unsubscribeDeviceChange
+    },
     fetchBlob,
     startAudio,
   }
@@ -327,6 +354,15 @@ function makeFakeDeps() {
     startAudio,
     pump,
     pendingCount: () => pending.size,
+    pumpMeter: (elapsedMs = 100) => {
+      nowMs += elapsedMs
+      const cbs = [...meterPending.values()]
+      meterPending.clear()
+      for (const cb of cbs) cb()
+    },
+    meterPendingCount: () => meterPending.size,
+    fireDeviceChange: () => deviceChange?.(),
+    unsubscribeDeviceChange,
   }
 }
 
@@ -335,6 +371,7 @@ const transport = () => useTransportStore.getState()
 let fake: ReturnType<typeof makeFakeDeps>
 
 beforeEach(() => {
+  useAudioMeterStore.getState().resetAudioMeter()
   useTransportStore.setState({
     playheadFrame: 0,
     isPlaying: false,
@@ -1224,6 +1261,84 @@ describe('live audio integration', () => {
     stopGate.resolve()
     await disposing
     expect(fake.clock.close).toHaveBeenCalledOnce()
+  })
+})
+
+describe('bounded audio meter telemetry', () => {
+  test('publishes at 10 Hz, latches overload, and stops cleanly on pause', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const session = makeAudioSession(0, {
+      peakLeft: 1.25,
+      peakRight: 0.5,
+      peakMaster: 1.25,
+    })
+    fake.startAudio.mockResolvedValueOnce(session)
+
+    play()
+    await vi.waitFor(() => expect(fake.meterPendingCount()).toBe(1))
+    expect(useAudioMeterStore.getState()).toMatchObject({
+      status: 'active',
+      sampleWindowSize: 256,
+      readout: {
+        overloadLatched: { left: true, right: false, master: true },
+      },
+    })
+    const firstSequence = useAudioMeterStore.getState().sequence
+
+    for (let index = 0; index < 5; index++) fake.pumpMeter()
+    expect(session.diagnostics).toHaveBeenCalledTimes(6)
+    expect(useAudioMeterStore.getState().sequence - firstSequence).toBe(5)
+    expect(fake.meterPendingCount()).toBe(1)
+
+    pause()
+    const pausedSequence = useAudioMeterStore.getState().sequence
+    expect(fake.meterPendingCount()).toBe(0)
+    expect(useAudioMeterStore.getState()).toMatchObject({
+      status: 'idle',
+      readout: {
+        db: { left: -60, right: -60, master: -60 },
+        overloadLatched: { left: true, right: false, master: true },
+      },
+    })
+    fake.pumpMeter(500)
+    expect(useAudioMeterStore.getState().sequence).toBe(pausedSequence)
+
+    resetAudioMeterOverload()
+    expect(useAudioMeterStore.getState().readout.overloadLatched.master)
+      .toBe(false)
+  })
+
+  test('reports unavailable without audio and does not schedule a meter loop', () => {
+    play()
+
+    expect(useAudioMeterStore.getState()).toMatchObject({
+      status: 'unavailable',
+      reason: 'No audible audio at the playhead',
+    })
+    expect(fake.meterPendingCount()).toBe(0)
+  })
+
+  test('device change supersedes the session, timer, and graph generation', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const first = makeAudioSession(0, { peakMaster: 0.25 })
+    const second = makeAudioSession(1, { peakMaster: 0.75 })
+    fake.startAudio
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second)
+
+    play()
+    await vi.waitFor(() => expect(fake.meterPendingCount()).toBe(1))
+    fake.fireDeviceChange()
+
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(second.diagnostics).toHaveBeenCalledOnce())
+    expect(first.stop).toHaveBeenCalledOnce()
+    expect(fake.meterPendingCount()).toBe(1)
+
+    await disposeTransport()
+    expect(fake.meterPendingCount()).toBe(0)
+    expect(fake.unsubscribeDeviceChange).toHaveBeenCalledOnce()
+    expect(useAudioMeterStore.getState().sequence).toBe(0)
   })
 })
 

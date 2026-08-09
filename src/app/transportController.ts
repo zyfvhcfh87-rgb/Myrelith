@@ -25,6 +25,16 @@ import {
   type SourceBoundsCatalog,
 } from '../domain/crossfadePlan'
 import { docDurationFrames } from '../domain/selectors'
+import {
+  AUDIO_METER_FFT_SIZE,
+  AUDIO_METER_UPDATE_INTERVAL_MS,
+  advanceAudioMeterBallistics,
+  audioMeterReadout,
+  clearAudioMeterOverload,
+  createAudioMeterBallistics,
+  silenceAudioMeterBallistics,
+  type AudioMeterBallisticsState,
+} from '../domain/audioMeter'
 import { PlaybackEngine } from '../engine/playback-engine'
 import type { PlaybackClock } from '../engine/playback-engine'
 import {
@@ -44,6 +54,10 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 import {
+  useAudioMeterStore,
+  type AudioMeterStatus,
+} from '../state/audioMeterStore'
+import {
   captureMediaRuntimeGuard,
   mediaRuntimeFailure,
   reportMediaRuntimeFailure,
@@ -61,6 +75,10 @@ export interface TransportDeps {
   createContext(): ClockContext
   scheduleTick(cb: () => void): number
   cancelTick(id: number): void
+  scheduleMeterPoll(cb: () => void, delayMs: number): number
+  cancelMeterPoll(id: number): void
+  now(): number
+  subscribeDeviceChange(cb: () => void): () => void
   fetchBlob(url: string): Promise<Blob>
   startAudio(
     context: ClockContext,
@@ -75,6 +93,15 @@ const realDeps: TransportDeps = {
   createContext: () => new AudioContext(),
   scheduleTick: (cb) => requestAnimationFrame(cb),
   cancelTick: (id) => cancelAnimationFrame(id),
+  scheduleMeterPoll: (cb, delayMs) => window.setTimeout(cb, delayMs),
+  cancelMeterPoll: (id) => window.clearTimeout(id),
+  now: () => performance.now(),
+  subscribeDeviceChange: (cb) => {
+    const mediaDevices = navigator.mediaDevices
+    if (!mediaDevices?.addEventListener) return () => undefined
+    mediaDevices.addEventListener('devicechange', cb)
+    return () => mediaDevices.removeEventListener('devicechange', cb)
+  },
   fetchBlob: async (url) => {
     const response = await fetch(url)
     if (!response.ok) {
@@ -103,6 +130,10 @@ interface ControllerState {
   playGeneration: number
   audioPlanKey: string
   audioAssetsKey: string
+  meterTimer: number | null
+  meterBallistics: AudioMeterBallisticsState
+  meterSequence: number
+  meterSampleWindowSize: number
   unsubscribes: Array<() => void>
   /** Async playback startups and stop work that project switching must drain. */
   playbackTasks: Set<Promise<void>>
@@ -118,6 +149,10 @@ const state: ControllerState = {
   playGeneration: 0,
   audioPlanKey: '',
   audioAssetsKey: '',
+  meterTimer: null,
+  meterBallistics: createAudioMeterBallistics(),
+  meterSequence: 0,
+  meterSampleWindowSize: AUDIO_METER_FFT_SIZE,
   unsubscribes: [],
   playbackTasks: new Set(),
   cleanupTasks: new Set(),
@@ -133,6 +168,75 @@ function warnAudio(message: string, cause: unknown): void {
     `[transportController] ${message}:`,
     cause instanceof Error ? cause.message : cause,
   )
+}
+
+function publishAudioMeter(status: AudioMeterStatus, reason: string): void {
+  const nowMs = state.deps.now()
+  state.meterSequence += 1
+  useAudioMeterStore.getState().publishAudioMeter({
+    status,
+    reason,
+    readout: audioMeterReadout(state.meterBallistics, nowMs),
+    sequence: state.meterSequence,
+    updatedAtMs: nowMs,
+    sampleWindowSize: state.meterSampleWindowSize,
+  })
+}
+
+function stopAudioMeter(status: AudioMeterStatus, reason: string): void {
+  if (state.meterTimer !== null) {
+    state.deps.cancelMeterPoll(state.meterTimer)
+    state.meterTimer = null
+  }
+  state.meterBallistics = silenceAudioMeterBallistics(state.meterBallistics)
+  publishAudioMeter(status, reason)
+}
+
+function pollAudioMeter(
+  generation: number,
+  session: TimelineAudioPlaybackSession,
+): void {
+  if (
+    generation !== state.playGeneration
+    || session !== state.audioSession
+    || !useTransportStore.getState().isPlaying
+  ) return
+
+  const nowMs = state.deps.now()
+  try {
+    const diagnostics = session.diagnostics()
+    state.meterSampleWindowSize = diagnostics.meterSampleSize
+    state.meterBallistics = advanceAudioMeterBallistics(
+      state.meterBallistics,
+      {
+        left: diagnostics.peakLeft,
+        right: diagnostics.peakRight,
+        master: diagnostics.peakMaster,
+      },
+      nowMs,
+    )
+    publishAudioMeter('active', 'Live playback levels')
+  } catch (cause) {
+    warnAudio('audio meter telemetry failed', cause)
+    stopAudioMeter('unavailable', 'Playback levels unavailable')
+    return
+  }
+
+  state.meterTimer = state.deps.scheduleMeterPoll(
+    () => pollAudioMeter(generation, session),
+    AUDIO_METER_UPDATE_INTERVAL_MS,
+  )
+}
+
+function startAudioMeter(
+  generation: number,
+  session: TimelineAudioPlaybackSession,
+): void {
+  if (state.meterTimer !== null) {
+    state.deps.cancelMeterPoll(state.meterTimer)
+    state.meterTimer = null
+  }
+  pollAudioMeter(generation, session)
 }
 
 function audioWarningMessage(warning: TimelineAudioPlaybackWarning): string {
@@ -246,6 +350,7 @@ function stopAudioSession(): void {
 function cancelPlaybackWork(): void {
   state.playGeneration++
   state.engine?.stop()
+  stopAudioMeter('idle', 'Playback is paused')
   stopAudioSession()
 }
 
@@ -304,6 +409,9 @@ function ensureEngine(): PlaybackEngine {
         }
       }
     }),
+    state.deps.subscribeDeviceChange(() => {
+      if (useTransportStore.getState().isPlaying) restartPlayback()
+    }),
   )
   return state.engine
 }
@@ -322,6 +430,7 @@ function startPlayback(fromFrame: number): void {
   const durationFrames = docDurationFrames(doc)
   if (durationFrames <= 0) {
     transport.setIsPlaying(false)
+    stopAudioMeter('idle', 'Playback is paused')
     return
   }
 
@@ -333,11 +442,13 @@ function startPlayback(fromFrame: number): void {
   } catch (cause) {
     warnAudio('playback clock initialization failed', cause)
     transport.setIsPlaying(false)
+    stopAudioMeter('unavailable', 'Playback levels unavailable')
     return
   }
   const context = state.clockCtx
   if (!context) {
     transport.setIsPlaying(false)
+    stopAudioMeter('unavailable', 'Playback levels unavailable')
     return
   }
 
@@ -353,6 +464,7 @@ function startPlayback(fromFrame: number): void {
   // unrelated media-pool edit after an early clip ends would look like a
   // playback-asset removal and cause an unnecessary restart.
   state.audioAssetsKey = audioAssetsKey(doc, 0, assets, catalog)
+  publishAudioMeter('priming', 'Preparing playback levels')
 
   let resumePromise: Promise<unknown>
   try {
@@ -369,11 +481,13 @@ function startPlayback(fromFrame: number): void {
     ) return
     warnAudio('AudioContext resume failed', cause)
     cancelPlaybackWork()
+    publishAudioMeter('unavailable', 'Playback levels unavailable')
     useTransportStore.getState().setIsPlaying(false)
   })
 
   if (!hasAudioPlaybackContent(doc, from, catalog)) {
     state.startupAbort = null
+    stopAudioMeter('unavailable', 'No audible audio at the playhead')
     engine.start(from, durationFrames, doc.frameRate, context.currentTime)
     return
   }
@@ -420,6 +534,7 @@ function startPlayback(fromFrame: number): void {
 
     state.startupAbort = null
     state.audioSession = session
+    startAudioMeter(generation, session)
     engine.start(from, durationFrames, doc.frameRate, session.anchorTime)
   })().catch((cause) => {
     if (
@@ -429,6 +544,7 @@ function startPlayback(fromFrame: number): void {
     ) return
     state.startupAbort = null
     warnAudio('audio playback disabled; continuing with video', cause)
+    stopAudioMeter('unavailable', 'Playback levels unavailable')
     engine.start(from, durationFrames, doc.frameRate, context.currentTime)
   })
   state.playbackTasks.add(playbackTask)
@@ -502,6 +618,10 @@ export async function disposeTransport(): Promise<void> {
   state.unsubscribes = []
   state.audioPlanKey = ''
   state.audioAssetsKey = ''
+  state.meterBallistics = createAudioMeterBallistics()
+  state.meterSequence = 0
+  state.meterSampleWindowSize = AUDIO_METER_FFT_SIZE
+  useAudioMeterStore.getState().resetAudioMeter()
   state.deps = realDeps
 
   await Promise.all([
@@ -522,4 +642,11 @@ export function getAudioPlaybackDiagnostics():
   | TimelineAudioPlaybackDiagnostics
   | null {
   return state.audioSession?.diagnostics() ?? null
+}
+
+/** Clear held/latched overload feedback without changing playback gain. */
+export function resetAudioMeterOverload(): void {
+  state.meterBallistics = clearAudioMeterOverload(state.meterBallistics)
+  const meter = useAudioMeterStore.getState()
+  publishAudioMeter(meter.status, meter.reason)
 }
