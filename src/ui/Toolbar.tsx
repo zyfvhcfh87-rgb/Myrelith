@@ -3,14 +3,20 @@
  * The heavy export workflow mounts only while its dialog is open.
  */
 
-import { lazy, useRef, useState } from 'react'
+import { lazy, useCallback, useRef, useState } from 'react'
+import { Command } from '@phosphor-icons/react'
 import {
   saveActiveProject,
   saveActiveProjectAs,
 } from '../app/projectPersistenceController'
 import { leaveActiveProject } from '../app/projectController'
+import {
+  COMMAND_PALETTE_SHORTCUT,
+  useCommandPaletteShortcut,
+} from '../app/useCommandPaletteShortcut'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
+import EditorCommandPalette from './EditorCommandPalette'
 
 const ExportDialog = lazy(() => import('./ExportDialog'))
 
@@ -46,9 +52,12 @@ function recoveryStatus(
 
 export default function Toolbar() {
   const [exportOpen, setExportOpen] = useState(false)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [leaveError, setLeaveError] = useState<string | null>(null)
   const exportButtonRef = useRef<HTMLButtonElement | null>(null)
+  const commandButtonRef = useRef<HTMLButtonElement | null>(null)
+  const commandReturnFocusRef = useRef<HTMLElement | null>(null)
   const projectName = useProjectSessionStore((state) => state.activeProjectName)
   const projectFile = useProjectSessionStore(
     (state) => state.activeProjectFileName,
@@ -69,6 +78,26 @@ export default function Toolbar() {
   const busy = saving || closing
   const statusError = closing ? null : leaveError ?? saveError
   const recoveryCopyStatus = recoveryStatus(recoveryPhase, lastRecoveryAt)
+
+  const openCommandPalette = useCallback((): void => {
+    if (useProjectSessionStore.getState().phase === 'closing') return
+    commandReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      && document.activeElement !== document.body
+      ? document.activeElement
+      : commandButtonRef.current
+    setCommandPaletteOpen(true)
+  }, [])
+
+  const closeCommandPalette = useCallback((): void => {
+    setCommandPaletteOpen(false)
+    requestAnimationFrame(() => {
+      const target = commandReturnFocusRef.current
+      if (target?.isConnected) target.focus()
+      else commandButtonRef.current?.focus()
+    })
+  }, [])
+
+  useCommandPaletteShortcut(openCommandPalette)
 
   const closeExport = (): void => {
     setExportOpen(false)
@@ -126,6 +155,22 @@ export default function Toolbar() {
       <span className="placeholder-note">S splits at playhead · Del ripple-deletes</span>
       <div className="toolbar-actions">
         <button
+          ref={commandButtonRef}
+          type="button"
+          className="toolbar-button toolbar-commands"
+          aria-label="Commands"
+          aria-haspopup="dialog"
+          aria-expanded={commandPaletteOpen}
+          aria-keyshortcuts={COMMAND_PALETTE_SHORTCUT.ariaKeyShortcuts}
+          disabled={closing}
+          title={`Find editor commands (${COMMAND_PALETTE_SHORTCUT.label})`}
+          onClick={openCommandPalette}
+        >
+          <Command aria-hidden="true" size={15} weight="bold" />
+          <span>Commands</span>
+          <kbd>{COMMAND_PALETTE_SHORTCUT.label}</kbd>
+        </button>
+        <button
           type="button"
           className="toolbar-button toolbar-projects"
           disabled={busy}
@@ -163,6 +208,7 @@ export default function Toolbar() {
           Export
         </button>
       </div>
+      {commandPaletteOpen && <EditorCommandPalette onClose={closeCommandPalette} />}
       {exportOpen && (
         <LazySurfaceBoundary
           variant="dialog"

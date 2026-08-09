@@ -18,16 +18,17 @@ import {
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import type { TimelineTool } from '../state/transportStore'
 import { useTransportStore } from '../state/transportStore'
+import { shortcutForCommand, type EditorCommandId } from '../app/editorCommands'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 
 const TextOverlayDialog = lazy(() => import('./TextOverlayDialog'))
 
 const TOOLS = [
-  { id: 'select', icon: CursorClick, label: 'Select — move clips, drag edges to trim (A)' },
-  { id: 'razor', icon: Scissors, label: 'Razor — click a clip to cut it (B)' },
-  { id: 'trim', icon: ArrowsHorizontal, label: 'Ripple trim — drag edges, later clips follow (T)' },
-  { id: 'slip', icon: ArrowsInLineHorizontal, label: 'Slip — drag to change WHICH material plays (Y)' },
-  { id: 'slide', icon: ArrowsLeftRight, label: 'Slide — drag between neighbors, they absorb it (U)' },
+  { id: 'select', commandId: 'tool.select', icon: CursorClick, label: 'Select — move clips, drag edges to trim (A)' },
+  { id: 'razor', commandId: 'tool.razor', icon: Scissors, label: 'Razor — click a clip to cut it (B)' },
+  { id: 'trim', commandId: 'tool.trim', icon: ArrowsHorizontal, label: 'Ripple trim — drag edges, later clips follow (T)' },
+  { id: 'slip', commandId: 'tool.slip', icon: ArrowsInLineHorizontal, label: 'Slip — drag to change WHICH material plays (Y)' },
+  { id: 'slide', commandId: 'tool.slide', icon: ArrowsLeftRight, label: 'Slide — drag between neighbors, they absorb it (U)' },
 ] as const
 
 export default function ToolButtons() {
@@ -45,8 +46,9 @@ export default function ToolButtons() {
   return (
     <>
       <div className="transport-tools" role="group" aria-label="timeline tools">
-        {TOOLS.map(({ id, icon: Icon, label }) => {
+        {TOOLS.map(({ id, commandId, icon: Icon, label }) => {
           const toolId: TimelineTool = id
+          const shortcut = shortcutForCommand(commandId as EditorCommandId)
           return (
             <button
               key={id}
@@ -54,6 +56,7 @@ export default function ToolButtons() {
               className={`tool-button${tool === id ? ' active' : ''}`}
               title={label}
               aria-label={label}
+              aria-keyshortcuts={shortcut?.ariaKeyShortcuts}
               aria-pressed={tool === id}
               onClick={() => setTool(toolId)}
             >

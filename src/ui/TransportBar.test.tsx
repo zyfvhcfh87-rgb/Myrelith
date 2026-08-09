@@ -36,9 +36,15 @@ beforeEach(() => {
 describe('TransportBar', () => {
   test('buttons call the controller facade', () => {
     render(<TransportBar />)
-    fireEvent.click(screen.getByLabelText('one frame back'))
+    const previous = screen.getByLabelText('one frame back')
+    expect(previous).toHaveAttribute('title', 'one frame back (←)')
+    expect(previous).toHaveAttribute('aria-keyshortcuts', 'ArrowLeft')
+    fireEvent.click(previous)
     expect(stepFrame).toHaveBeenCalledWith(-1)
-    fireEvent.click(screen.getByLabelText('one frame forward'))
+    const next = screen.getByLabelText('one frame forward')
+    expect(next).toHaveAttribute('title', 'one frame forward (→)')
+    expect(next).toHaveAttribute('aria-keyshortcuts', 'ArrowRight')
+    fireEvent.click(next)
     expect(stepFrame).toHaveBeenCalledWith(1)
     fireEvent.click(screen.getByLabelText('play'))
     expect(togglePlayback).toHaveBeenCalledTimes(1)

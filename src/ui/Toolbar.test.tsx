@@ -9,6 +9,8 @@ import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
+import { useDocumentStore } from '../state/documentStore'
+import { useTransportStore } from '../state/transportStore'
 import Toolbar from './Toolbar'
 
 vi.mock('../app/projectPersistenceController', () => ({
@@ -56,6 +58,35 @@ describe('Toolbar project persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Export' }))
     expect(await screen.findByRole('dialog', { name: 'Export project' }))
       .toBeInTheDocument()
+  })
+
+  test('opens command discovery from the button or Ctrl/Cmd+K and restores exact focus', async () => {
+    render(<Toolbar />)
+    const commands = screen.getByRole('button', { name: 'Commands' })
+    expect(commands).toHaveAttribute('aria-keyshortcuts', 'Control+K Meta+K')
+    fireEvent.click(commands)
+    expect(screen.getByRole('dialog', { name: 'Find a command' })).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() => expect(commands).toHaveFocus())
+
+    const save = screen.getByRole('button', { name: 'Save' })
+    save.focus()
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(screen.getByRole('searchbox', { name: 'Search commands' })).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() => expect(save).toHaveFocus())
+  })
+
+  test('keeps command discovery off document and transport render subscriptions', () => {
+    const documentSubscribe = vi.spyOn(useDocumentStore, 'subscribe')
+    const transportSubscribe = vi.spyOn(useTransportStore, 'subscribe')
+    render(<Toolbar />)
+    expect(documentSubscribe).not.toHaveBeenCalled()
+    expect(transportSubscribe).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Commands' }))
+    expect(documentSubscribe).not.toHaveBeenCalled()
+    expect(transportSubscribe).not.toHaveBeenCalled()
   })
 
   test('guards dirty work before returning to Projects', async () => {

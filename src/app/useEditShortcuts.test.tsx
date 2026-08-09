@@ -246,7 +246,7 @@ describe('Delete — ripple delete the selection', () => {
     expect(doc().past).toHaveLength(1)
   })
 
-  test('a clip on a locked track survives and STAYS selected', () => {
+  test('a clip on a locked track stays selected without invoking a rejected edit', () => {
     render(<Host />)
     transport().setSelectedClip('clipA')
     transport().toggleClipSelection('clipE')
@@ -257,6 +257,6 @@ describe('Delete — ripple delete the selection', () => {
       selectedClipId: 'clipE',
     }) // rejection kept the exact selection
     expect(doc().past).toHaveLength(0)
-    expect(warnSpy).toHaveBeenCalled()
+    expect(warnSpy).not.toHaveBeenCalled()
   })
 })
