@@ -152,6 +152,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   markers. Timeline schema 7 adds the explicit array, and schema-6 migration
   installs an empty default. Selection/editor state stays ephemeral in
   `transportStore`; the ruler clusters only its visible pixel window.
+- `TimelineDoc.captionTracks` holds semantic captions separately from video
+  clips. Tracks own stable ids, a bounded name, BCP-47-compatible language,
+  subtitle/caption role, style preset, visibility, and sorted cue arrays. Cues
+  own globally stable ids, non-empty plain text, and half-open integer-frame
+  ranges; overlap is legal up to the document-wide visible-active bound.
+  `domain/captions.ts` is the pure validation/edit authority and
+  `domain/captionFiles.ts` is the pure SRT/WebVTT authority. The compositor
+  may reuse the procedural-text layout and paint path, but caption identity,
+  timing, metadata, import/export, and editing must never be converted into
+  synthetic clips. Caption cues extend derived preview/export duration.
+  Timeline schema 8 adds the explicit array, and schema-7 migration installs
+  an empty default.
 - Clips on one track are sorted by `timelineRange.startFrame` and pairwise
   non-overlapping; `operations.ts` rejects violations.
 - `TimelineDoc.tracks[0]` composites first (bottom layer).

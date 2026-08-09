@@ -27,6 +27,12 @@ export function docDurationFrames(doc: TimelineDoc): number {
       if (end > last) last = end
     }
   }
+  for (const track of doc.captionTracks ?? []) {
+    for (const item of track.items) {
+      const end = rangeEnd(item.range)
+      if (end > last) last = end
+    }
+  }
   return last
 }
 

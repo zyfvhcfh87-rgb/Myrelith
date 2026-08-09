@@ -379,8 +379,9 @@ export function createTimelineDoc(
     ...emptyTracks('A', 'audio'),
   ]
   const markers: NonNullable<TimelineDoc['markers']> = []
+  const captionTracks: NonNullable<TimelineDoc['captionTracks']> = []
   const doc: TimelineDoc = {
-    schemaVersion: 7,
+    schemaVersion: 8,
     id,
     name: projectName,
     frameRate: { ...validated.frameRate },
@@ -389,6 +390,7 @@ export function createTimelineDoc(
     audioSampleRate: validated.audioSampleRate,
     tracks,
     markers,
+    captionTracks,
   }
 
   Object.freeze(doc.frameRate)
@@ -399,5 +401,6 @@ export function createTimelineDoc(
   }
   Object.freeze(doc.tracks)
   Object.freeze(doc.markers)
+  Object.freeze(doc.captionTracks)
   return Object.freeze(doc)
 }

@@ -295,7 +295,7 @@ describe('createTimelineDoc', () => {
     const doc = createTimelineDoc('  Demo project  ', settings, 'project-123')
 
     expect(doc).toEqual({
-      schemaVersion: 7,
+      schemaVersion: 8,
       id: 'project-123',
       name: 'Demo project',
       frameRate: { num: 60_000, den: 1_001 },
@@ -304,11 +304,13 @@ describe('createTimelineDoc', () => {
       audioSampleRate: 96_000,
       tracks: expectedInitialTracks(),
       markers: [],
+      captionTracks: [],
     })
     expect(Object.isFrozen(doc)).toBe(true)
     expect(Object.isFrozen(doc.frameRate)).toBe(true)
     expect(Object.isFrozen(doc.tracks)).toBe(true)
     expect(Object.isFrozen(doc.markers)).toBe(true)
+    expect(Object.isFrozen(doc.captionTracks)).toBe(true)
     expect(doc.tracks.every(Object.isFrozen)).toBe(true)
     expect(doc.tracks.every((track) => (
       Object.isFrozen(track.clips) && Object.isFrozen(track.transitions)
@@ -330,6 +332,7 @@ describe('createTimelineDoc', () => {
     expect(first.frameRate).not.toBe(settings.frameRate)
     expect(first.tracks).not.toBe(second.tracks)
     expect(first.markers).not.toBe(second.markers)
+    expect(first.captionTracks).not.toBe(second.captionTracks)
     expect(first.tracks).toHaveLength(8)
     expect(new Set(first.tracks.map((track) => track.id)).size).toBe(8)
     for (let index = 0; index < first.tracks.length; index++) {
@@ -356,7 +359,7 @@ describe('createTimelineDoc', () => {
     )
 
     expect(JSON.stringify(doc)).toBe(JSON.stringify({
-      schemaVersion: 7,
+      schemaVersion: 8,
       id: 'doc_default',
       name: 'Untitled',
       frameRate: { num: 30, den: 1 },
@@ -365,6 +368,7 @@ describe('createTimelineDoc', () => {
       audioSampleRate: 48_000,
       tracks: expectedInitialTracks(),
       markers: [],
+      captionTracks: [],
     }))
   })
 

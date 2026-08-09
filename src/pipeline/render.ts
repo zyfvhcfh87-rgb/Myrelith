@@ -34,7 +34,15 @@
  *   ordered plan; this compositor never reconstructs groups by adjacency.
  */
 
-import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
+import type {
+  AssetId,
+  Clip,
+  ClipId,
+  ClipVisualSettings,
+  TextProps,
+  TimelineDoc,
+  Transform,
+} from '../domain/schema'
 import type { PresentationProfile } from '../domain/presentationProfile'
 import { wrapTextLines } from '../domain/textLayout'
 import { textPropsValidationError } from '../domain/textOverlay'
@@ -260,6 +268,27 @@ export async function compositeFrame(
         continue
       }
 
+      if (item.kind === 'caption') {
+        try {
+          drawTextPayload(
+            ctx,
+            doc,
+            item.paint.text,
+            item.paint.transform,
+            item.paint.visual,
+            item.paint.opacity,
+          )
+          drawn.push(item.paint.id)
+        } catch (e) {
+          console.warn(
+            `[render] drawing caption "${item.paint.id}" failed:`,
+            e instanceof Error ? e.message : e,
+          )
+          missing.push(item.paint.id)
+        }
+        continue
+      }
+
       const request = item.request
       const clip = request.clip
       const image = imagesByRequest.get(request) ?? null
@@ -292,10 +321,8 @@ const textLayoutCaches = new WeakMap<object, Map<string, readonly string[]>>()
 
 function textLines(
   ctx: TextComposite2D,
-  clip: Clip,
+  text: TextProps,
 ): readonly string[] {
-  const text = clip.text
-  if (!text) return []
   const lineHeight = Math.ceil(text.fontSizePx * 1.2)
   const innerWidth = text.boxWidthPx - text.paddingPx * 2
   const innerHeight = text.boxHeightPx - text.paddingPx * 2
@@ -348,8 +375,31 @@ function drawTextClip(
   const validationError = textPropsValidationError(text)
   if (validationError) throw new RangeError(validationError)
 
-  const transform = clip.transform
-  const visual = clipVisualSettings(clip)
+  drawTextPayload(
+    ctx,
+    doc,
+    text,
+    clip.transform,
+    clipVisualSettings(clip),
+    opacity,
+  )
+}
+
+/** Shared Canvas2D text layout/composition for text clips and captions. */
+function drawTextPayload(
+  ctx: Composite2D,
+  doc: TimelineDoc,
+  text: TextProps,
+  transform: Transform,
+  visual: ClipVisualSettings,
+  opacity: number,
+): void {
+  if (!supportsTextDrawing(ctx)) {
+    throw new TypeError('The compositor context does not support text drawing.')
+  }
+  const validationError = textPropsValidationError(text)
+  if (validationError) throw new RangeError(validationError)
+
   const anchorX = transform.anchorX * text.boxWidthPx
   const anchorY = transform.anchorY * text.boxHeightPx
   const canvasX = (doc.width - text.boxWidthPx) / 2 + anchorX + transform.x
@@ -388,7 +438,7 @@ function drawTextClip(
     ctx.textAlign = text.align
     ctx.textBaseline = 'top'
     ctx.lineJoin = 'round'
-    const lines = textLines(ctx, clip)
+    const lines = textLines(ctx, text)
     for (let index = 0; index < lines.length; index++) {
       const y = text.paddingPx + index * lineHeight
       if (text.outlineEnabled && text.outlineWidthPx > 0) {

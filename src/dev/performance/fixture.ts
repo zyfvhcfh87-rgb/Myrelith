@@ -339,6 +339,7 @@ function fixtureDocument(
       ...audioTracks,
     ],
     markers: [],
+    captionTracks: [],
   }
 }
 

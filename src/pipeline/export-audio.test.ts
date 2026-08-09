@@ -95,7 +95,7 @@ function makeDoc(
   audioSampleRate = 48_000,
 ): TimelineDoc {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     id: 'doc',
     name: 'Audio export test',
     frameRate,
@@ -244,7 +244,7 @@ function crossfadeFixture(options: {
         options.frameRate ?? { num: 1, den: 1 },
         options.audioSampleRate ?? 4_096,
       ),
-      schemaVersion: 7,
+      schemaVersion: 8,
     },
     catalog: new Map(
       [...new Set(assetIds)].map((assetId) => [assetId, exactBounds()]),

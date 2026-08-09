@@ -191,6 +191,7 @@ function makeDocument(): TimelineDoc {
     audioSampleRate: 48_000,
     tracks: [video, audio],
     markers: [],
+    captionTracks: [],
   }
 }
 
@@ -257,6 +258,40 @@ describe('portable project file', () => {
 
     expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(parsed.document.markers).toEqual([])
+  })
+
+  test('migrates schema-7 projects to explicit empty caption tracks', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 7
+    Reflect.deleteProperty(legacy.document, 'captionTracks')
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.captionTracks).toEqual([])
+  })
+
+  test('round-trips semantic captions and rejects malformed persisted cues', () => {
+    const project = makeProject()
+    project.document.captionTracks = [{
+      id: 'captions-en',
+      name: 'English CC',
+      language: 'en-US',
+      role: 'captions',
+      stylePreset: 'boxed',
+      hidden: false,
+      items: [
+        { id: 'caption-a', range: { startFrame: 3, durationFrames: 20 }, text: 'Hello' },
+        { id: 'caption-b', range: { startFrame: 23, durationFrames: 10 }, text: 'World' },
+      ],
+    }]
+
+    expect(parseProjectFile(serializeProjectFile(project)).document.captionTracks)
+      .toEqual(project.document.captionTracks)
+
+    const malformed = clone(project)
+    malformed.document.captionTracks![0]!.items[0]!.text = '<b>Hello</b>'
+    expect(() => validateProjectFile(malformed)).toThrow(/markup/u)
   })
 
   test('rejects invalid, duplicate, and unsorted marker records', () => {

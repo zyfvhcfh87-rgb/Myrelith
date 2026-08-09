@@ -9,6 +9,8 @@
 
 import type {
   AssetKind,
+  CaptionItem,
+  CaptionTrack,
   Clip,
   ClipAnimation,
   ClipAnimationEasing,
@@ -27,6 +29,14 @@ import type {
   Transform,
   PartialTrackImportSelection,
 } from './schema'
+import {
+  CAPTION_LIMITS,
+  CAPTION_STYLE_PRESETS,
+  CAPTION_TRACK_ROLES,
+  captionDocumentValidationError,
+  captionTrackValidationError,
+  compareCaptionItems,
+} from './captions'
 import {
   compareTimelineMarkers,
   MAX_TIMELINE_MARKER_FRAME,
@@ -90,7 +100,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 7 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 8 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -168,6 +178,68 @@ function validateTimelineMarker(
     fail(path, 'markers must be uniquely sorted by frame then id')
   }
   return typed
+}
+
+function validateCaptionItem(
+  value: unknown,
+  path: string,
+  itemIds: Set<string>,
+  previous: CaptionItem | null,
+): CaptionItem {
+  const item = record(value, path)
+  exactKeys(item, ['id', 'range', 'text'], [], path)
+  stringValue(item.id, `${path}.id`, CAPTION_LIMITS.maxIdCharacters)
+  if (itemIds.has(item.id)) fail(`${path}.id`, 'duplicate caption item id')
+  itemIds.add(item.id)
+  const range = record(item.range, `${path}.range`)
+  exactKeys(range, ['startFrame', 'durationFrames'], [], `${path}.range`)
+  safeInteger(range.startFrame, `${path}.range.startFrame`, 0, CAPTION_LIMITS.maxFrame)
+  safeInteger(range.durationFrames, `${path}.range.durationFrames`, 1, CAPTION_LIMITS.maxFrame)
+  stringValue(item.text, `${path}.text`, CAPTION_LIMITS.maxItemCharacters)
+  const typed = item as unknown as CaptionItem
+  if (previous && compareCaptionItems(previous, typed) > 0) {
+    fail(path, 'caption items must be sorted by timing and id')
+  }
+  return typed
+}
+
+function validateCaptionTrack(
+  value: unknown,
+  path: string,
+  trackIds: Set<string>,
+  itemIds: Set<string>,
+): void {
+  const track = record(value, path)
+  exactKeys(
+    track,
+    ['id', 'name', 'language', 'role', 'stylePreset', 'hidden', 'items'],
+    [],
+    path,
+  )
+  stringValue(track.id, `${path}.id`, CAPTION_LIMITS.maxIdCharacters)
+  if (trackIds.has(track.id)) fail(`${path}.id`, 'duplicate caption track id')
+  trackIds.add(track.id)
+  stringValue(track.name, `${path}.name`, CAPTION_LIMITS.maxTrackNameCharacters)
+  stringValue(track.language, `${path}.language`, CAPTION_LIMITS.maxLanguageCharacters)
+  if (!CAPTION_TRACK_ROLES.includes(track.role as never)) {
+    fail(`${path}.role`, 'unsupported caption role')
+  }
+  if (!CAPTION_STYLE_PRESETS.includes(track.stylePreset as never)) {
+    fail(`${path}.stylePreset`, 'unsupported caption style preset')
+  }
+  booleanValue(track.hidden, `${path}.hidden`)
+  boundedArray(track.items, `${path}.items`, CAPTION_LIMITS.maxItemsPerTrack)
+  let previous: CaptionItem | null = null
+  for (let index = 0; index < track.items.length; index++) {
+    previous = validateCaptionItem(
+      track.items[index],
+      `${path}.items[${index}]`,
+      itemIds,
+      previous,
+    )
+  }
+  const error = captionTrackValidationError(track as unknown as CaptionTrack)
+  if (error) fail(path, error)
 }
 
 export interface ProjectFileV5 {
@@ -1124,7 +1196,7 @@ function validateDocument(value: unknown, context: ValidationContext): asserts v
   const document = record(value, '$.document')
   exactKeys(
     document,
-    ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks', 'markers'],
+    ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks', 'markers', 'captionTracks'],
     [],
     '$.document',
   )
@@ -1163,6 +1235,19 @@ function validateDocument(value: unknown, context: ValidationContext): asserts v
       previousMarker,
     )
   }
+  boundedArray(document.captionTracks, '$.document.captionTracks', CAPTION_LIMITS.maxTracks)
+  const captionTrackIds = new Set<string>()
+  const captionItemIds = new Set<string>()
+  for (let index = 0; index < document.captionTracks.length; index++) {
+    validateCaptionTrack(
+      document.captionTracks[index],
+      `$.document.captionTracks[${index}]`,
+      captionTrackIds,
+      captionItemIds,
+    )
+  }
+  const captionError = captionDocumentValidationError(document as unknown as TimelineDoc)
+  if (captionError) fail('$.document.captionTracks', captionError)
 }
 
 /**
@@ -1425,6 +1510,12 @@ function migrateTimelineMarkers(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 7, markers: [] }
 }
 
+/** Upgrade schema-7 documents with explicit semantic caption-track storage. */
+function migrateCaptionTracks(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  return { ...document, schemaVersion: 8, captionTracks: [] }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1461,6 +1552,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 6) {
     migrated = migrateTimelineMarkers(migrated)
+  }
+  if (migrated.schemaVersion === 7) {
+    migrated = migrateCaptionTracks(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
@@ -1639,6 +1733,19 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           color: marker.color,
           ...(marker.note === undefined ? {} : { note: marker.note }),
         })),
+      captionTracks: (document.captionTracks ?? []).map((track) => ({
+        id: track.id,
+        name: track.name,
+        language: track.language,
+        role: track.role,
+        stylePreset: track.stylePreset,
+        hidden: track.hidden,
+        items: track.items.map((item) => ({
+          id: item.id,
+          range: { ...item.range },
+          text: item.text,
+        })),
+      })),
     },
     assets: project.assets
       .map((asset) => ({
@@ -1680,7 +1787,9 @@ export function createProjectFileSnapshot(
   const project: ProjectFile = {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-    document,
+    document: document.captionTracks === undefined
+      ? { ...document, captionTracks: [] }
+      : document,
     assets,
     collections: cloneMediaCollections(collections),
   }

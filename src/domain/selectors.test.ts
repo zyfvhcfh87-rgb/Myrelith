@@ -54,7 +54,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -82,6 +82,20 @@ describe('docDurationFrames', () => {
   test('a lone clip starting late still defines the duration', () => {
     const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 500, 10)])])
     expect(docDurationFrames(doc)).toBe(510)
+  })
+
+  test('semantic captions extend render/export duration without becoming clips', () => {
+    const doc = makeDoc([])
+    doc.captionTracks = [{
+      id: 'captions',
+      name: 'Captions',
+      language: 'und',
+      role: 'captions',
+      stylePreset: 'classic',
+      hidden: false,
+      items: [{ id: 'cue', range: { startFrame: 400, durationFrames: 25 }, text: 'End' }],
+    }]
+    expect(docDurationFrames(doc)).toBe(425)
   })
 })
 
@@ -332,6 +346,13 @@ describe('videoCompositionPlanAtFrame', () => {
               opacity: item.opacity,
               weight: null,
             }]
+          : item.kind === 'caption'
+            ? [{
+                id: item.paint.id,
+                sourceFrame: 0,
+                opacity: item.paint.opacity,
+                weight: null,
+              }]
         : item.requests
             .filter((request) => request.opacity > 0 && request.weight > 0)
             .map((request) => ({

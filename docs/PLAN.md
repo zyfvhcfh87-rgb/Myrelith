@@ -2701,3 +2701,47 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
 - [x] Record the final complete suite/build/lint/audit and source fingerprints;
   verify observable behavior in real Chromium exclusively on port 5174; then
   publish the exact committed head as a draft PR without merging it.
+
+## Post-MVP issue #68 - caption tracks with SRT/VTT round trips
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-09).**
+
+- [x] Add schema-8 semantic caption tracks/cues with stable portable ids,
+  half-open integer-frame ranges, non-empty plain text, language/role-ready
+  metadata, style presets, visibility, strict bounded validation, and schema-7
+  empty-default migration across save/load/recovery/Resume.
+- [x] Add browser-free immutable track/cue operations for add/edit/delete,
+  navigation, split, touching merge, and suffix/all timing shifts; wire each
+  gesture and full-file import through ordinary undoable document history.
+- [x] Implement strict atomic SRT/WebVTT parsing and serialization with exact
+  rational-rate conversions: import floors starts/ceils ends; export ceils
+  starts/floors ends. Preserve safe VTT cue ids, generate ids where the format
+  cannot, and return typed line-specific errors for malformed timing, empty
+  text, markup, bounds, limits, and unsupported VTT features.
+- [x] Keep caption semantics explicit in the composition plan while reusing
+  the shared procedural-text layout/paint path. Make captions media-free,
+  topmost, half-open at seek boundaries, duration-bearing, and identical in
+  preview/playback/export planning.
+- [x] Add a lazy, focus-contained accessible Caption editor with bounded cue
+  DOM, keyboard list navigation/seek, track metadata, add/edit/delete,
+  split/merge, batch timing, SRT/VTT import/download, live status, Escape, and
+  toolbar focus return.
+- [x] Cover canonical integer and NTSC frame rates, overlapping/touching cues,
+  bounds/limits/markup, atomic failures, explicit plan/render semantics,
+  selector duration, history, migration, save/load/recovery, controller races,
+  UI accessibility, and architecture boundaries.
+- [x] Pass 144 test files / 2,046 tests plus 16 benchmark-runner tests,
+  production build/typecheck, oxlint, and the production high-severity audit
+  with 0 vulnerabilities. Retain only the existing Vite chunk-size advisory.
+- [x] Verify the real app only on port 41868: semantic edit, accessible dialog,
+  caption-only preview, exclusive-end seek behavior, recovery, valid multiline
+  SRT import, atomic line-specific malformed rejection, SRT/VTT downloads,
+  import undo, a 30-frame 1080p H.264 caption-only export with native Chromium
+  reopen/playback, and a console with 0 warnings/errors.
+- [x] Record source identity from clean
+  `c8bb2757833fa69da2360a56460bea6fd03274c0` /
+  `sha256:1be12fbeed146910d5339d4f10696f719c9e0d247290d6bb8b0eeb378faedd1d`
+  to implementation checkpoint
+  `sha256:4fdd045a9fbdcda1938124f51cd9fd49b53dc114e1a2acd7e8767a9aaecc1473`.
+  Publish the exact committed head as a ready PR, without merging it; final
+  commit id is the authoritative delivered identity.

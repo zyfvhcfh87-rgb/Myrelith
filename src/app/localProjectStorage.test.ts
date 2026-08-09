@@ -69,6 +69,7 @@ function serializedProject(
       audioSampleRate: 48_000,
       tracks: [],
       markers: [],
+      captionTracks: [],
     },
     assets: [],
     collections: [],
