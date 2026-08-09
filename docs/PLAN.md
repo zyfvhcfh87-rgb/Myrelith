@@ -2518,6 +2518,49 @@ remain out of scope.
 - [ ] Publication, pull request review, and Issue #60 closure remain separate
   work; this local implementation does not imply any of them.
 
+## Post-MVP issue #65 - Media Pool bins and collections
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-09).**
+
+- [x] Add pure bounded collection operations over stable asset ids: normalized
+  unique names, ordered create/rename/reorder/delete, and non-owning
+  multi-collection membership with no duplicated media descriptors or bytes.
+- [x] Advance the portable project format from v4 to v5, migrate older projects
+  to an empty collection catalog, validate ids/names/membership budgets and
+  references, and carry collections through Save, live save, recovery, Resume,
+  and portable snapshot cloning.
+- [x] Add bounded collection-only undo/redo. Collection deletion never removes
+  media; asset deletion prunes current and historical membership so undo cannot
+  restore a dangling id; offline/relink paths retain organization.
+- [x] Integrate collection selection before the existing search/type/status and
+  virtualization pipeline. Keep selected collection transient, publish only
+  rendered rows to media scheduling, and preserve the 500-item DOM bound.
+- [x] Add accessible collection tabs, create/rename/reorder/delete/history
+  controls, checkbox multi-membership for connected and offline cards, and
+  virtualized card-to-tab drag organization with stable keyboard focus.
+- [x] Final gates: 7 focused files / 196 tests; `npm test` 132 files / 1,975
+  Vitest tests plus 16 benchmark-runner tests; production build/typecheck;
+  oxlint; `npm audit --omit=dev` with zero vulnerabilities; and clean diff
+  checks. The expected existing Vite large-chunk advisory remains non-fatal.
+- [x] Real Chromium on the task-exclusive `http://localhost:5175` imported 500
+  supported PNGs, kept 12 or fewer cards mounted at the sampled boundaries,
+  searched the final item in 57 ms, reached position 500 by keyboard, exercised
+  create/rename/reorder/delete/undo and multi-collection membership, and stayed
+  usable without page overflow at 800×720. A fresh launcher recovery reopened
+  all 500 one-time sources offline while preserving the three collection names,
+  counts, selected-collection filter, and two checked memberships; the console
+  had no warnings or errors. The in-app browser did not synthesize an HTML5
+  `DataTransfer`, so exact virtualized final-card drop is covered by the passing
+  component test rather than claimed as a Chromium action.
+- [x] Reproducible source identity started at clean `7036e23` /
+  `sha256:d3c715957a67cc796e3b3ace716712b8f55ef1e5a83c93c8759fe4fd5ec26360`
+  and reached implementation checkpoint
+  `sha256:5b708007c1d877db8fbb95f3660a4bb091e37a294498fe9759f55af34f9a7faf`.
+  The checkpoint intentionally predates this evidence block; the final commit
+  id is the authoritative delivered source identity.
+- [x] Local implementation is complete and this delivery publishes a draft PR.
+  Review, merge, and Issue #65 closure remain separate and are not implied.
+
 ## Post-MVP issue #59 - indexed frame planning
 
 **IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**

@@ -61,6 +61,13 @@ import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
+import {
+  cloneMediaCollections,
+  mediaCollectionNameKey,
+  MEDIA_COLLECTION_LIMITS,
+  normalizeMediaCollectionName,
+  type MediaCollection,
+} from './mediaCollections'
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
 /** Serialized format marker used by releases published before the rebrand. */
@@ -72,13 +79,17 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   PROJECT_FILE_EXTENSION,
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
-export const CURRENT_PROJECT_FORMAT_VERSION = 4 as const
+export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
 export const CURRENT_TIMELINE_SCHEMA_VERSION = 6 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
   maxSerializedCharacters: 10_000_000,
   maxAssets: 50_000,
+  maxCollections: MEDIA_COLLECTION_LIMITS.maxCollections,
+  maxCollectionMemberships: MEDIA_COLLECTION_LIMITS.maxMembershipsPerCollection,
+  maxTotalCollectionMemberships: MEDIA_COLLECTION_LIMITS.maxTotalMemberships,
+  maxCollectionNameCharacters: MEDIA_COLLECTION_LIMITS.maxNameCharacters,
   maxTracks: 256,
   maxClips: 100_000,
   maxEffectsPerClip: 256,
@@ -122,14 +133,15 @@ export interface PortableAssetDescriptor {
   audioChannels: number | null
 }
 
-export interface ProjectFileV4 {
+export interface ProjectFileV5 {
   format: typeof PROJECT_FILE_FORMAT
   formatVersion: typeof CURRENT_PROJECT_FORMAT_VERSION
   document: TimelineDoc
   assets: PortableAssetDescriptor[]
+  collections: MediaCollection[]
 }
 
-export type ProjectFile = ProjectFileV4
+export type ProjectFile = ProjectFileV5
 
 export class ProjectFileError extends Error {
   constructor(message: string) {
@@ -420,6 +432,67 @@ function validateAsset(value: unknown, path: string): asserts value is PortableA
   }
   if (asset.hasAudio !== (asset.sourceBounds.audio !== null)) {
     fail(path, 'audio source bounds must match hasAudio')
+  }
+}
+
+function validateMediaCollections(
+  value: unknown,
+  assetIds: ReadonlySet<string>,
+): asserts value is MediaCollection[] {
+  boundedArray(value, '$.collections', PROJECT_FILE_LIMITS.maxCollections)
+  const collectionIds = new Set<string>()
+  const collectionNames = new Set<string>()
+  let totalMemberships = 0
+  for (let index = 0; index < value.length; index++) {
+    const path = `$.collections[${index}]`
+    const collection = record(value[index], path)
+    exactKeys(collection, ['id', 'name', 'assetIds'], [], path)
+    stringValue(collection.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+    if (collection.id.trim().length === 0) {
+      fail(`${path}.id`, 'must not be empty')
+    }
+    stringValue(
+      collection.name,
+      `${path}.name`,
+      PROJECT_FILE_LIMITS.maxCollectionNameCharacters,
+    )
+    const normalizedName = normalizeMediaCollectionName(collection.name)
+    if (normalizedName.length === 0) {
+      fail(`${path}.name`, 'must not be empty')
+    }
+    if (normalizedName !== collection.name) {
+      fail(`${path}.name`, 'must use normalized non-empty spacing')
+    }
+    if (collectionIds.has(collection.id)) {
+      fail(`${path}.id`, 'duplicate collection id')
+    }
+    const nameKey = mediaCollectionNameKey(collection.name)
+    if (collectionNames.has(nameKey)) {
+      fail(`${path}.name`, 'duplicate collection name')
+    }
+    collectionIds.add(collection.id)
+    collectionNames.add(nameKey)
+    boundedArray(
+      collection.assetIds,
+      `${path}.assetIds`,
+      PROJECT_FILE_LIMITS.maxCollectionMemberships,
+    )
+    const membershipIds = new Set<string>()
+    for (let assetIndex = 0; assetIndex < collection.assetIds.length; assetIndex++) {
+      const membershipPath = `${path}.assetIds[${assetIndex}]`
+      const assetId = collection.assetIds[assetIndex]
+      stringValue(assetId, membershipPath, PROJECT_FILE_LIMITS.maxIdCharacters)
+      if (!assetIds.has(assetId)) fail(membershipPath, 'unknown media asset id')
+      if (membershipIds.has(assetId)) fail(membershipPath, 'duplicate media asset id')
+      membershipIds.add(assetId)
+    }
+    totalMemberships += collection.assetIds.length
+    if (totalMemberships > PROJECT_FILE_LIMITS.maxTotalCollectionMemberships) {
+      fail(
+        '$.collections',
+        `exceeds ${PROJECT_FILE_LIMITS.maxTotalCollectionMemberships} memberships in total`,
+      )
+    }
   }
 }
 
@@ -1050,7 +1123,12 @@ function validateDocument(value: unknown, context: ValidationContext): asserts v
  */
 export function validateProjectFile(value: unknown): ProjectFile {
   const project = record(value, '$')
-  exactKeys(project, ['format', 'formatVersion', 'document', 'assets'], [], '$')
+  exactKeys(
+    project,
+    ['format', 'formatVersion', 'document', 'assets', 'collections'],
+    [],
+    '$',
+  )
   if (project.format !== PROJECT_FILE_FORMAT) {
     fail('$.format', `expected ${PROJECT_FILE_FORMAT}`)
   }
@@ -1073,6 +1151,7 @@ export function validateProjectFile(value: unknown): ProjectFile {
     assetIds.add(asset.id)
     assetsById.set(asset.id, asset)
   }
+  validateMediaCollections(project.collections, assetIds)
 
   const context: ValidationContext = {
     assetIds,
@@ -1371,8 +1450,8 @@ function migrateLegacyAssetBounds(assetsValue: unknown): JsonRecord[] {
 
 /**
  * Upgrade a parsed historical value into the current format. Outer version 4
- * adds durable stream bounds; nested schema 3 adds transition audio settings,
- * and schema 4 adds bounded procedural text-overlay styling and geometry.
+ * added durable stream bounds and outer version 5 adds Media Pool collections.
+ * Nested migrations remain independently versioned on TimelineDoc.
  */
 export function migrateProjectFile(value: unknown): unknown {
   const project = record(value, '$')
@@ -1392,6 +1471,12 @@ export function migrateProjectFile(value: unknown): unknown {
   if (brandedProject.formatVersion > CURRENT_PROJECT_FORMAT_VERSION) {
     fail('$.formatVersion', `unsupported future project format ${brandedProject.formatVersion}`)
   }
+  if (
+    brandedProject.formatVersion < CURRENT_PROJECT_FORMAT_VERSION
+    && Object.prototype.hasOwnProperty.call(brandedProject, 'collections')
+  ) {
+    fail('$.collections', 'unknown field for this project format')
+  }
   switch (brandedProject.formatVersion) {
     case 1:
     case 2:
@@ -1402,8 +1487,19 @@ export function migrateProjectFile(value: unknown): unknown {
         formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
         document: migrateTimelineDocument(brandedProject.document, assets),
         assets,
+        collections: [],
       }
     }
+    case 4:
+      return {
+        ...brandedProject,
+        formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
+        document: migrateTimelineDocument(
+          brandedProject.document,
+          brandedProject.assets,
+        ),
+        collections: [],
+      }
     case CURRENT_PROJECT_FORMAT_VERSION:
       return {
         ...brandedProject,
@@ -1500,6 +1596,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
         audioChannels: asset.audioChannels,
       }))
       .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)),
+    collections: cloneMediaCollections(project.collections),
   }
 }
 
@@ -1511,6 +1608,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
 export function createProjectFileSnapshot(
   document: TimelineDoc,
   descriptors: Iterable<PortableAssetDescriptor>,
+  collections: readonly MediaCollection[] = [],
 ): ProjectFile {
   const assets = Array.from(descriptors)
   const project: ProjectFile = {
@@ -1518,6 +1616,7 @@ export function createProjectFileSnapshot(
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
     document,
     assets,
+    collections: cloneMediaCollections(collections),
   }
   validateProjectFile(project)
   return portableProjectSnapshot(project)

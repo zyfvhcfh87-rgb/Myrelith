@@ -172,10 +172,12 @@ export function buildMediaPoolItems(
 export function filterMediaPoolItems(
   items: readonly MediaPoolItemModel[],
   filter: MediaPoolFilter,
+  allowedAssetIds: ReadonlySet<string> | null = null,
 ): readonly MediaPoolItemModel[] {
   const tokens = normalizeSearchText(filter.query).split(/\s+/).filter(Boolean)
   return items.filter((item) => (
-    (filter.kind === 'all' || item.kind === filter.kind)
+    (allowedAssetIds === null || allowedAssetIds.has(item.id))
+    && (filter.kind === 'all' || item.kind === filter.kind)
     && (filter.status === 'all' || item.statuses.has(filter.status))
     && tokens.every((token) => item.searchText.includes(token))
   ))

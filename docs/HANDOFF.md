@@ -108,6 +108,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #56 — bounded media-analysis scheduling** | ✅ complete | app-owned two-job/two-decoder scheduler; cancellation/generation cleanup, selected/visible/background aging priority, progress diagnostics, schema-4 benchmark evidence; reviewed head `902078f` normally merged through PR #84 as `b431623` |
 | **Post-MVP #57 — runtime and document-memory telemetry** | ✅ complete | schema-3 local telemetry with explainable document/history estimates, bounded worker/audio health evidence, cache-drain checks, optional lab APIs, and measured overhead; PR #82 normally merged as `f7eedab` |
 | **Post-MVP #60 — virtualized/searchable Media Pool** | ✅ implementation complete | variable-height grid virtualization, deterministic text/type/status filters, retained keyboard selection and drag/relink identity, visible-row scheduler priority, bounded 500-source Chromium QA; local branch only |
+| **Post-MVP #65 — Media Pool collections** | ✅ implementation complete | portable ordered collections with stable multi-membership, collection-only undo/redo, integrated filters, accessible keyboard/drag organization, deletion/relink safety, 196 focused + 1,975 total tests, and 500-source Chromium recovery QA on port 5175 |
 | **Post-MVP #59 — indexed frame planning** | ✅ implementation complete | immutable per-track clip/transition indices; exact ordinary/text/crossfade/animation parity; schema-5 sparse/dense Chromium evidence measured 94.26%/94.81% p95 improvement |
 | **Post-MVP #58 — adaptive preview resolution** | ✅ implementation complete | session-only Auto/Full/Half/Quarter monitor quality; project-space compositor scaling across ordinary/text/transition frames; reusable scaled worker surfaces; explicit full-resolution export; full 4K harness memory plateau -6.4% median/-7.5% p95; real Chromium 4K/720px gates |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
@@ -1561,6 +1562,41 @@ surface; it is not a second zoom and never enters document history.
   The final commit id is the authoritative post-work source identity; the
   checkpoint intentionally predates handoff text and the final padding-alignment
   follow-up.
+- Issue #65 adds project-format v5 Media Pool collections. Each ordered
+  collection stores only its stable id, normalized unique name, and stable
+  descriptor ids; an asset can belong to several collections without another
+  media descriptor, URL, handle, or byte copy. Version 1–4 projects migrate to
+  an empty collection catalog, while save, live save, recovery, and Resume carry
+  v5 membership unchanged.
+- `mediaStore` owns bounded collection-only undo/redo. Removing a collection
+  leaves every source intact; removing an asset prunes it from current, past,
+  and future collection snapshots. Offline descriptors keep their membership,
+  and reconnecting the same stable id does not rewrite organization.
+- The Media Pool applies selected-collection membership before its existing
+  search/type/status pipeline and virtual row planner. Collection tabs use
+  roving keyboard focus and remain drop targets while cards virtualize; each
+  durable card exposes checkbox multi-membership, including offline cards.
+- Issue #65's final gates passed: 7 focused files / 196 tests, 132 files /
+  1,975 tests plus 16 benchmark-runner tests in `npm test`, production
+  build/typecheck, oxlint, a zero-vulnerability production dependency audit,
+  and clean diff checks. Vite still prints its existing non-fatal large-chunk
+  advisory.
+- Real Chromium on the exclusive `http://localhost:5175` imported 500 PNGs,
+  kept the rendered card count bounded, searched the final asset in 57 ms,
+  reached item 500 by keyboard, exercised collection CRUD/reorder/history and
+  multi-membership, and stayed free of page overflow at 800×720. A new launcher
+  tab recovered the project with 500 truthful offline descriptors while
+  preserving all three collection names/counts and both memberships on the
+  filtered asset. The console had no warnings/errors. Browser automation could
+  not synthesize the HTML5 drag `DataTransfer`; the virtualized final-card drop
+  remains covered by the passing component test rather than claimed as a
+  Chromium action.
+- Issue #65 source identity started at clean `7036e23` /
+  `sha256:d3c715957a67cc796e3b3ace716712b8f55ef1e5a83c93c8759fe4fd5ec26360`
+  and reached implementation checkpoint
+  `sha256:5b708007c1d877db8fbb95f3660a4bb091e37a294498fe9759f55af34f9a7faf`.
+  That checkpoint intentionally predates this handoff evidence; the final
+  commit id is the authoritative delivered source identity.
 - The Soft Studio visual overhaul is implementation-complete. The launcher now
   presents the real create/open/recovery flows through a warmer local-first
   hierarchy; project creation exposes the existing reviewed canvas presets as

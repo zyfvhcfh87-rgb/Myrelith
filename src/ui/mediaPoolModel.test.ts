@@ -125,6 +125,36 @@ describe('mediaPoolModel', () => {
     expect(lastWindow.bottomSpacerHeight).toBe(0)
   })
 
+  test('combines a 500-item collection with search, type, and status filters', () => {
+    const items = Array.from({ length: 500 }, (_, index): MediaPoolItemModel => ({
+      ...item(`asset-${String(index).padStart(3, '0')}`),
+      kind: index % 2 === 0 ? 'video' : 'audio',
+      statuses: new Set<MediaPoolStatus>([
+        index % 4 === 0 ? 'offline' : 'ready',
+      ]),
+      searchText: `asset-${String(index).padStart(3, '0')} ${index % 2 === 0 ? 'video' : 'audio'}`,
+    }))
+    const collectionAssetIds = new Set(
+      items.filter((_, index) => index % 5 === 0).map((candidate) => candidate.id),
+    )
+
+    const filtered = filterMediaPoolItems(items, {
+      query: 'asset-0',
+      kind: 'video',
+      status: 'offline',
+    }, collectionAssetIds)
+
+    expect(filtered.map((candidate) => candidate.id)).toEqual([
+      'asset-000',
+      'asset-020',
+      'asset-040',
+      'asset-060',
+      'asset-080',
+    ])
+    expect(planMediaPoolRows(filtered, 3).flatMap((row) => row.itemIds))
+      .toEqual(filtered.map((candidate) => candidate.id))
+  })
+
   test('keeps expanded diagnostics on isolated measured rows', () => {
     const rows = planMediaPoolRows([
       item('a'),

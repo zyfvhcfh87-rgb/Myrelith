@@ -78,6 +78,9 @@ import {
   type MediaPoolStatusFilter,
 } from './mediaPoolModel'
 import MediaImportDialog from './MediaImportDialog'
+import MediaCollectionsPanel, {
+  MediaCollectionMembership,
+} from './MediaCollectionsPanel'
 import MediaRelinkDialog from './MediaRelinkDialog'
 import { useMediaPoolVirtualizer } from './useMediaPoolVirtualizer'
 import {
@@ -791,6 +794,12 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
             </label>
           </div>
         ) : null}
+        {descriptor ? (
+          <MediaCollectionMembership
+            assetId={descriptor.id}
+            fileName={descriptor.fileName}
+          />
+        ) : null}
       </div>
 
       <button
@@ -841,6 +850,19 @@ export default function MediaPool() {
   const descriptors = useMediaStore((state) => state.descriptors)
   const assets = useMediaStore((state) => state.assets)
   const compatibility = useMediaStore((state) => state.compatibility)
+  const collections = useMediaStore((state) => state.collections)
+  const canUndoCollection = useMediaStore(
+    (state) => state.collectionPast.length > 0,
+  )
+  const canRedoCollection = useMediaStore(
+    (state) => state.collectionFuture.length > 0,
+  )
+  const undoCollectionEdit = useMediaStore(
+    (state) => state.undoCollectionEdit,
+  )
+  const redoCollectionEdit = useMediaStore(
+    (state) => state.redoCollectionEdit,
+  )
   const importBusy = useMediaImportStore((state) => state.phase !== 'idle')
   const relinkPhase = useProjectSessionStore(
     (state) => state.activeMediaRelink.phase,
@@ -854,6 +876,8 @@ export default function MediaPool() {
   const [kindFilter, setKindFilter] = useState<MediaPoolKindFilter>('all')
   const [statusFilter, setStatusFilter] =
     useState<MediaPoolStatusFilter>('all')
+  const [selectedCollectionId, setSelectedCollectionId] =
+    useState<string | null>(null)
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [partialReview, setPartialReview] =
     useState<PartialTrackImportReview | null>(null)
@@ -863,13 +887,42 @@ export default function MediaPool() {
     () => buildMediaPoolItems(descriptors, assets, compatibility),
     [assets, compatibility, descriptors],
   )
+  const selectedCollection = useMemo(
+    () => collections.find(
+      (collection) => collection.id === selectedCollectionId,
+    ) ?? null,
+    [collections, selectedCollectionId],
+  )
+  const selectedCollectionMissing = selectedCollectionId !== null
+    && selectedCollection === null
+  const collectionAssetIds = useMemo(
+    () => selectedCollection
+      ? new Set(selectedCollection.assetIds)
+      : null,
+    [selectedCollection],
+  )
+  const collectionItemCount = useMemo(
+    () => collectionAssetIds === null
+      ? itemModels.length
+      : itemModels.reduce(
+          (count, item) => count + Number(collectionAssetIds.has(item.id)),
+          0,
+        ),
+    [collectionAssetIds, itemModels],
+  )
   const filteredItems = useMemo(
     () => filterMediaPoolItems(itemModels, {
       query: deferredSearchQuery,
       kind: kindFilter,
       status: statusFilter,
-    }),
-    [deferredSearchQuery, itemModels, kindFilter, statusFilter],
+    }, collectionAssetIds),
+    [
+      collectionAssetIds,
+      deferredSearchQuery,
+      itemModels,
+      kindFilter,
+      statusFilter,
+    ],
   )
   const virtualizer = useMediaPoolVirtualizer(filteredItems)
   const { scrollToStart, visibleItemIds } = virtualizer
@@ -914,7 +967,17 @@ export default function MediaPool() {
 
   useEffect(() => {
     scrollToStart()
-  }, [deferredSearchQuery, kindFilter, scrollToStart, statusFilter])
+  }, [
+    deferredSearchQuery,
+    kindFilter,
+    scrollToStart,
+    selectedCollectionId,
+    statusFilter,
+  ])
+
+  useEffect(() => {
+    if (selectedCollectionMissing) setSelectedCollectionId(null)
+  }, [selectedCollectionMissing])
 
   const partialReviewItem = partialReview
     ? compatibility.get(partialReview.itemId)
@@ -1011,8 +1074,37 @@ export default function MediaPool() {
     virtualizer,
   ])
 
+  const handleCollectionHistoryKeyDown = useCallback((
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ): void => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return
+    const target = event.target
+    if (
+      target instanceof HTMLElement
+      && (target.isContentEditable
+        || target.closest('input, textarea, select, [contenteditable="true"]'))
+    ) return
+    const key = event.key.toLowerCase()
+    const redoRequested = (key === 'z' && event.shiftKey) || key === 'y'
+    const undoRequested = key === 'z' && !event.shiftKey
+    if (
+      (undoRequested && !canUndoCollection)
+      || (redoRequested && !canRedoCollection)
+      || (!undoRequested && !redoRequested)
+    ) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (redoRequested) redoCollectionEdit()
+    else undoCollectionEdit()
+  }, [
+    canRedoCollection,
+    canUndoCollection,
+    redoCollectionEdit,
+    undoCollectionEdit,
+  ])
+
   return (
-    <div className="media-pool">
+    <div className="media-pool" onKeyDown={handleCollectionHistoryKeyDown}>
       <div className="media-pool-header">
         <div className="media-pool-header-main">
           <h2 className="media-pool-title">Media</h2>
@@ -1167,11 +1259,16 @@ export default function MediaPool() {
           >
             {filterPending
               ? 'Filtering media...'
-              : `${filteredItems.length} of ${itemModels.length}`}
+              : `${filteredItems.length} of ${collectionItemCount}`}
           </span>
         </div>
         <StillImageDurationPreference />
       </div>
+
+      <MediaCollectionsPanel
+        selectedCollectionId={selectedCollectionId}
+        onSelectCollection={setSelectedCollectionId}
+      />
 
       <MediaRelinkStatus />
 
@@ -1237,6 +1334,10 @@ export default function MediaPool() {
         <p className="media-empty">
           no media yet — import video, audio, or a still image
         </p>
+      ) : selectedCollection && collectionItemCount === 0 ? (
+        <p className="media-empty" role="status">
+          This collection is empty. Drag media to its tab or use Organize.
+        </p>
       ) : filteredItems.length === 0 && !filterPending ? (
         <div className="media-empty" role="status">
           <p>No media matches these filters.</p>
@@ -1263,9 +1364,10 @@ export default function MediaPool() {
       </span>
       {itemModels.length > 0 && (
         <div className="media-count">
-          {filteredItems.length === itemModels.length
-            ? `${itemModels.length} ${itemModels.length === 1 ? 'item' : 'items'}`
-            : `${filteredItems.length} of ${itemModels.length} items`}
+          {selectedCollection ? `${selectedCollection.name}: ` : ''}
+          {filteredItems.length === collectionItemCount
+            ? `${collectionItemCount} ${collectionItemCount === 1 ? 'item' : 'items'}`
+            : `${filteredItems.length} of ${collectionItemCount} items`}
         </div>
       )}
       <MediaImportDialog />

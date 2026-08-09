@@ -132,6 +132,10 @@ beforeEach(() => {
     descriptors: new Map(),
     assets: new Map(),
     visuals: new Map(),
+    compatibility: new Map(),
+    collections: [],
+    collectionPast: [],
+    collectionFuture: [],
   })
 })
 
@@ -267,6 +271,37 @@ describe('project persistence', () => {
     useDocumentStore.getState().addTrack('video')
     await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
     expect(deps.appendRecoverySnapshot).toHaveBeenCalledOnce()
+  })
+
+  test('collection edits become dirty and persist in recovery and project saves', async () => {
+    const handle = makeHandle()
+    const deps = makeDeps(handle)
+    controller = new ProjectPersistenceController(deps)
+    const asset = makeAsset()
+    useMediaStore.getState().addAsset(asset)
+    controller.startSession({ fileName: 'Opened.myrelith', persisted: true })
+
+    const collectionId = useMediaStore.getState().createCollection('Selects')!
+    useMediaStore.getState().setCollectionMembership(
+      collectionId,
+      asset.id,
+      true,
+    )
+
+    expect(useProjectSessionStore.getState().hasUnsavedChanges).toBe(true)
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    const recovered = parseProjectFile(
+      vi.mocked(deps.appendRecoverySnapshot).mock.calls[0][0].serializedProject,
+    )
+    expect(recovered.collections).toEqual([{
+      id: collectionId,
+      name: 'Selects',
+      assetIds: [asset.id],
+    }])
+
+    await expect(controller.saveAs()).resolves.toMatchObject({ status: 'saved' })
+    expect(parseProjectFile(handle.writes[0]).collections)
+      .toEqual(recovered.collections)
   })
 
   test('an edit during a recovery write schedules one newest follow-up', async () => {

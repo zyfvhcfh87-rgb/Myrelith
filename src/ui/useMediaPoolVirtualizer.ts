@@ -44,8 +44,8 @@ function scrollRootFor(list: HTMLUListElement): HTMLElement {
     ?? list
 }
 
-function stickyHeaderHeight(root: HTMLElement): number {
-  return root.querySelector<HTMLElement>('.media-pool-header')?.offsetHeight ?? 0
+function stickyCollectionHeight(root: HTMLElement): number {
+  return root.querySelector<HTMLElement>('.media-collections')?.offsetHeight ?? 0
 }
 
 function listPaddingTop(list: HTMLUListElement): number {
@@ -101,7 +101,7 @@ export function useMediaPoolVirtualizer(
       - listOffsetWithinRoot(list, root)
       - listPaddingTop(list)
     const coveredByStickyHeader = relativeScroll >= 0
-      ? stickyHeaderHeight(root)
+      ? stickyCollectionHeight(root)
       : 0
     const start = Math.max(0, relativeScroll + coveredByStickyHeader)
     const end = Math.max(start + 1, relativeScroll + rootHeight)
@@ -184,8 +184,8 @@ export function useMediaPoolVirtualizer(
       : null
     observer?.observe(root)
     observer?.observe(list)
-    const header = root.querySelector<HTMLElement>('.media-pool-header')
-    if (header) observer?.observe(header)
+    const collections = root.querySelector<HTMLElement>('.media-collections')
+    if (collections) observer?.observe(collections)
     measureViewport()
     measureRenderedRows()
     return () => {
@@ -207,7 +207,7 @@ export function useMediaPoolVirtualizer(
     if (!list || rowOffset === undefined || rowHeight === undefined) return
     const root = scrollRootFor(list)
     const rootHeight = root.clientHeight || FALLBACK_VIEWPORT_HEIGHT
-    const headerHeight = stickyHeaderHeight(root)
+    const headerHeight = stickyCollectionHeight(root)
     const rowStart = listOffsetWithinRoot(list, root)
       + listPaddingTop(list)
       + rowOffset
@@ -228,7 +228,7 @@ export function useMediaPoolVirtualizer(
     const root = scrollRootFor(list)
     root.scrollTop = Math.max(
       0,
-      listOffsetWithinRoot(list, root) - stickyHeaderHeight(root),
+      listOffsetWithinRoot(list, root) - stickyCollectionHeight(root),
     )
     measureViewport()
   }, [measureViewport])

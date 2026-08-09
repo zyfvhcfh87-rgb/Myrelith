@@ -323,6 +323,9 @@ function seedOfflineDescriptor(
     assets: new Map(),
     visuals: new Map(),
     compatibility: new Map(),
+    collections: [],
+    collectionPast: [],
+    collectionFuture: [],
   })
 }
 
@@ -399,6 +402,109 @@ beforeEach(() => {
 })
 
 describe('MediaPool presentation', () => {
+  test('creates, renames, reorders, deletes, and undoes collection edits without touching media', () => {
+    const asset = makeAsset()
+    seedAsset(asset)
+    render(<MediaPool />)
+
+    const collectionRegion = screen.getByRole('region', {
+      name: 'Collections',
+    })
+    expect(collectionRegion.parentElement).toHaveClass('media-pool')
+    expect(collectionRegion.previousElementSibling)
+      .toHaveClass('media-pool-header')
+
+    fireEvent.click(screen.getByRole('button', { name: 'New collection' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Collection name' }), {
+      target: { value: 'Selects' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(screen.getByText(/This collection is empty/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'All media' }))
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Organize beach.mp4 in collections',
+    }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Selects' }))
+    expect(useMediaStore.getState().collections[0]?.assetIds).toEqual([asset.id])
+
+    fireEvent.click(screen.getByRole('button', { name: 'New collection' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Collection name' }), {
+      target: { value: 'Favorites' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Favorites' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'New collection name' }), {
+      target: { value: 'Hero shots' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Move Hero shots earlier' }))
+    expect(useMediaStore.getState().collections.map((collection) => collection.name))
+      .toEqual(['Hero shots', 'Selects'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Hero shots' }))
+    expect(useMediaStore.getState().descriptors.has(asset.id)).toBe(true)
+    expect(useMediaStore.getState().assets.has(asset.id)).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Undo collection change' }))
+    expect(useMediaStore.getState().collections.map((collection) => collection.name))
+      .toEqual(['Hero shots', 'Selects'])
+  })
+
+  test('uses collection tabs as a keyboard filter and supports multi-membership offline', () => {
+    const asset = makeAsset()
+    seedOfflineDescriptor(descriptorFromAsset(asset))
+    useMediaStore.setState({
+      collections: [
+        { id: 'selects', name: 'Selects', assetIds: [asset.id] },
+        { id: 'favorites', name: 'Favorites', assetIds: [asset.id] },
+      ],
+    })
+    render(<MediaPool />)
+
+    const allTab = screen.getByRole('tab', { name: 'All media' })
+    allTab.focus()
+    fireEvent.keyDown(allTab, { key: 'ArrowRight' })
+
+    expect(screen.getByRole('tab', { name: /Selects/ })).toHaveFocus()
+    expect(screen.getByTitle('beach.mp4')).toHaveAttribute(
+      'data-connection',
+      'offline',
+    )
+    expect(screen.getByText('Selects: 1 item')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Organize beach.mp4 in collections',
+    }))
+    expect(screen.getByRole('checkbox', { name: 'Selects' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Favorites' })).toBeChecked()
+  })
+
+  test('drops a virtualized final card onto a persistent collection tab', async () => {
+    seedLargeCatalog(500, true)
+    useMediaStore.setState({
+      collections: [{ id: 'selects', name: 'Selects', assetIds: [] }],
+    })
+    render(<MediaPool />)
+    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+    listbox.focus()
+    fireEvent.keyDown(listbox, { key: 'End' })
+    const finalCard = await screen.findByTitle('Clip 0499.wav')
+    const collectionTab = screen.getByRole('tab', { name: /Selects/ })
+
+    fireEvent.drop(collectionTab, {
+      dataTransfer: {
+        types: [ASSET_DRAG_TYPE],
+        getData: (type: string) => type === ASSET_DRAG_TYPE ? 'asset-0499' : '',
+      },
+    })
+
+    expect(finalCard).toHaveAttribute('aria-posinset', '500')
+    expect(useMediaStore.getState().collections[0]?.assetIds)
+      .toEqual(['asset-0499'])
+    fireEvent.click(collectionTab)
+    await waitFor(() => expect(screen.getByText('1 of 1')).toBeInTheDocument())
+    expect(await screen.findByTitle('Clip 0499.wav')).toBeInTheDocument()
+  })
+
   test('keeps the rendered DOM bounded for a searchable 500-item catalog', async () => {
     seedLargeCatalog(500, true)
     render(<MediaPool />)
