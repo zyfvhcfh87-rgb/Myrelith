@@ -22,7 +22,7 @@ import {
   type RecoverySnapshotInput,
 } from './localProjectStorage'
 
-function makeHandle(name = 'project.webcut'): LocalProjectFileHandle {
+function makeHandle(name = 'project.myrelith'): LocalProjectFileHandle {
   return {
     kind: 'file',
     name,
@@ -45,9 +45,9 @@ function recentProject(
     version: LOCAL_PROJECT_RECORD_VERSION,
     documentId,
     projectName: `Project ${documentId}`,
-    fileName: `${documentId}.webcut`,
+    fileName: `${documentId}.myrelith`,
     lastOpenedAt,
-    handle: makeHandle(`${documentId}.webcut`),
+    handle: makeHandle(`${documentId}.myrelith`),
   }
 }
 
@@ -84,7 +84,7 @@ function recoverySnapshot(
     snapshotId: `${journalId}-snapshot-${capturedAt}`,
     documentId,
     projectName,
-    projectFileName: `${documentId}.webcut`,
+    projectFileName: `${documentId}.myrelith`,
     capturedAt,
     serializedProject: serializedProject(documentId, projectName),
   }
@@ -129,9 +129,9 @@ describe('recent project storage', () => {
       version: LOCAL_PROJECT_RECORD_VERSION,
       documentId: 'broken',
       projectName: 'Broken',
-      fileName: 'broken.webcut',
+      fileName: 'broken.myrelith',
       lastOpenedAt: 10,
-      handle: { kind: 'file', name: 'broken.webcut', getFile: 'not callable' },
+      handle: { kind: 'file', name: 'broken.myrelith', getFile: 'not callable' },
     })
     backend.stores['recent-projects'].set('future', {
       ...recentProject('future', 20),
@@ -299,7 +299,7 @@ describe('recovery journal storage', () => {
     await expect(storage.appendRecoverySnapshot({
       ...recoverySnapshot('new', 'doc-a', 2),
       serializedProject: '{}',
-    })).rejects.toThrow('not a portable .webcut file')
+    })).rejects.toThrow('not a portable Myrelith project')
   })
 
   test('falls back to an older complete generation when the newest is corrupt', async () => {
@@ -335,8 +335,8 @@ describe('recovery journal storage', () => {
 })
 
 describe('local project picker helpers', () => {
-  test('opens one .webcut file through a remembered handle', async () => {
-    const handle = makeHandle('saved.webcut')
+  test('opens one .myrelith file through a remembered handle', async () => {
+    const handle = makeHandle('saved.myrelith')
     const picker = vi.fn(async () => [handle])
     Object.defineProperty(window, 'showOpenFilePicker', {
       configurable: true,
@@ -347,14 +347,14 @@ describe('local project picker helpers', () => {
     const selection = await pickLocalProjectFile()
 
     expect(selection.handle).toBe(handle)
-    expect(selection.file.name).toBe('saved.webcut')
+    expect(selection.file.name).toBe('saved.myrelith')
     expect(picker).toHaveBeenCalledWith({
-      id: 'webcut-project',
+      id: 'myrelith-project',
       multiple: false,
       excludeAcceptAllOption: true,
       types: [{
-        description: 'WebCut project',
-        accept: { 'application/json': ['.webcut'] },
+        description: 'Myrelith project',
+        accept: { 'application/json': ['.myrelith', '.webcut'] },
       }],
     })
   })

@@ -33,8 +33,8 @@ import { isAbsolute, join } from 'node:path'
 
 function initializeRepository(root) {
   execFileSync('git', ['init', '--quiet'], { cwd: root })
-  execFileSync('git', ['config', 'user.name', 'WebCut test'], { cwd: root })
-  execFileSync('git', ['config', 'user.email', 'test@webcut.invalid'], { cwd: root })
+  execFileSync('git', ['config', 'user.name', 'Myrelith test'], { cwd: root })
+  execFileSync('git', ['config', 'user.email', 'test@myrelith.invalid'], { cwd: root })
   execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: root })
   writeFileSync(join(root, 'tracked.txt'), 'fixture\n')
   execFileSync('git', ['add', 'tracked.txt'], { cwd: root })
@@ -142,11 +142,11 @@ test('source identity rejects end-of-run drift', () => {
 })
 
 test('dirty fingerprint streams a tracked diff larger than one MiB', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'webcut-benchmark-fingerprint-'))
+  const root = mkdtempSync(join(tmpdir(), 'myrelith-benchmark-fingerprint-'))
   try {
     execFileSync('git', ['init', '--quiet'], { cwd: root })
-    execFileSync('git', ['config', 'user.name', 'WebCut test'], { cwd: root })
-    execFileSync('git', ['config', 'user.email', 'test@webcut.invalid'], { cwd: root })
+    execFileSync('git', ['config', 'user.name', 'Myrelith test'], { cwd: root })
+    execFileSync('git', ['config', 'user.email', 'test@myrelith.invalid'], { cwd: root })
     execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: root })
     const trackedPath = join(root, 'large-diff.txt')
     writeFileSync(trackedPath, 'before\n'.repeat(200_000))
@@ -185,7 +185,7 @@ test('dirty fingerprint streams a tracked diff larger than one MiB', async () =>
 })
 
 test('dirty fingerprint streams multiple untracked regular files larger than one MiB', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'webcut-benchmark-untracked-'))
+  const root = mkdtempSync(join(tmpdir(), 'myrelith-benchmark-untracked-'))
   try {
     const commit = initializeRepository(root)
     const chunk = Buffer.alloc(64 * 1024, 0x5a)
@@ -222,7 +222,7 @@ test('dirty fingerprint streams multiple untracked regular files larger than one
 })
 
 test('untracked symlinks, directories, and special files have explicit deterministic identities', async () => {
-  const repositoryRoot = join(tmpdir(), 'webcut-benchmark-repository')
+  const repositoryRoot = join(tmpdir(), 'myrelith-benchmark-repository')
   const symlinkTarget = join('..', 'outside', 'target.txt')
   const symlinkHash = createHash('sha256')
   await hashUntrackedPath(repositoryRoot, 'link.txt', symlinkHash, {
@@ -388,7 +388,7 @@ test('Chromium process memory is unavailable instead of partial without renderer
 })
 
 test('benchmark build runs the repository TypeScript gate before Vite', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'webcut-benchmark-build-order-'))
+  const root = mkdtempSync(join(tmpdir(), 'myrelith-benchmark-build-order-'))
   const outputDirectory = join(root, 'benchmark-output')
   const calls = []
   try {
@@ -421,7 +421,7 @@ test('benchmark build runs the repository TypeScript gate before Vite', async ()
 })
 
 test('successful benchmark build and preview preserve dist and remove the temporary output', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'webcut-benchmark-success-'))
+  const root = mkdtempSync(join(tmpdir(), 'myrelith-benchmark-success-'))
   const distDirectory = join(root, 'dist')
   const sentinelPath = join(distDirectory, 'deployable-sentinel.txt')
   let temporaryOutputDirectory
@@ -467,7 +467,7 @@ test('successful benchmark build and preview preserve dist and remove the tempor
 })
 
 test('failed benchmark build preserves dist and removes the partial temporary output', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'webcut-benchmark-failure-'))
+  const root = mkdtempSync(join(tmpdir(), 'myrelith-benchmark-failure-'))
   const distDirectory = join(root, 'dist')
   const sentinelPath = join(distDirectory, 'deployable-sentinel.txt')
   let temporaryOutputDirectory
@@ -500,7 +500,7 @@ test('failed benchmark build preserves dist and removes the partial temporary ou
 })
 
 test('TypeScript gate uses the repository compiler in build mode', () => {
-  const root = join(tmpdir(), 'webcut-benchmark-repository')
+  const root = join(tmpdir(), 'myrelith-benchmark-repository')
   let invocation
   runTypeScriptGate(root, (file, args, options) => {
     invocation = { file, args, options }

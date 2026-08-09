@@ -72,7 +72,7 @@ interface FakeHandle extends ProjectWritableFileHandle {
 }
 
 function makeHandle(
-  name = 'Edit.webcut',
+  name = 'Edit.myrelith',
   streamFactory?: () => ProjectWritableFileStream,
 ): FakeHandle {
   const writes: string[] = []
@@ -143,10 +143,11 @@ afterEach(() => {
 
 describe('project persistence', () => {
   test('uses stable Windows-safe project filenames', () => {
-    expect(projectFileName('  My edit.webcut  ')).toBe('My edit.webcut')
-    expect(projectFileName('CON.txt')).toBe('webcut-CON.txt.webcut')
-    expect(projectFileName('  ')).toBe('untitled-project.webcut')
-    expect(projectFileName('bad<name>|*')).toBe('bad-name---.webcut')
+    expect(projectFileName('  My edit.myrelith  ')).toBe('My edit.myrelith')
+    expect(projectFileName('  Legacy edit.webcut  ')).toBe('Legacy edit.myrelith')
+    expect(projectFileName('CON.txt')).toBe('myrelith-CON.txt.myrelith')
+    expect(projectFileName('  ')).toBe('untitled-project.myrelith')
+    expect(projectFileName('bad<name>|*')).toBe('bad-name---.myrelith')
   })
 
   test('new sessions start dirty while resumed sessions start clean and read-only', () => {
@@ -160,9 +161,9 @@ describe('project persistence', () => {
     })
     expect(deps.addBeforeUnload).toHaveBeenCalledOnce()
 
-    controller.startSession({ fileName: 'Opened.webcut', persisted: true })
+    controller.startSession({ fileName: 'Opened.myrelith', persisted: true })
     expect(useProjectSessionStore.getState()).toMatchObject({
-      activeProjectFileName: 'Opened.webcut',
+      activeProjectFileName: 'Opened.myrelith',
       hasUnsavedChanges: false,
       liveSaveEnabled: false,
     })
@@ -258,7 +259,7 @@ describe('project persistence', () => {
   test('a clean opened project waits for its first edit before recovery', async () => {
     const deps = makeDeps(makeHandle())
     controller = new ProjectPersistenceController(deps)
-    controller.startSession({ fileName: 'Opened.webcut', persisted: true })
+    controller.startSession({ fileName: 'Opened.myrelith', persisted: true })
 
     await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
     expect(deps.appendRecoverySnapshot).not.toHaveBeenCalled()
@@ -303,13 +304,13 @@ describe('project persistence', () => {
     controller.startSession({ fileName: null, persisted: false })
     await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
 
-    controller.startSession({ fileName: 'Replacement.webcut', persisted: true })
+    controller.startSession({ fileName: 'Replacement.myrelith', persisted: true })
     oldWrite.resolve()
     await oldWrite.promise
     await Promise.resolve()
 
     expect(useProjectSessionStore.getState()).toMatchObject({
-      activeProjectFileName: 'Replacement.webcut',
+      activeProjectFileName: 'Replacement.myrelith',
       hasUnsavedChanges: false,
       recoveryPhase: 'idle',
       lastRecoveryAt: null,
@@ -331,7 +332,7 @@ describe('project persistence', () => {
     expect(deps.rememberRecentProject).toHaveBeenCalledWith(expect.objectContaining({
       documentId: 'doc-save-test',
       projectName: 'My edit',
-      fileName: 'Edit.webcut',
+      fileName: 'Edit.myrelith',
       handle,
     }))
     expect(useProjectSessionStore.getState()).toMatchObject({
@@ -389,7 +390,7 @@ describe('project persistence', () => {
 
     await expect(controller.saveAs()).resolves.toEqual({
       status: 'saved',
-      fileName: 'Edit.webcut',
+      fileName: 'Edit.myrelith',
       liveSaveEnabled: true,
     })
 
@@ -403,7 +404,7 @@ describe('project persistence', () => {
     })
     expect(handle.writes[0]).not.toContain('blob:source')
     expect(useProjectSessionStore.getState()).toMatchObject({
-      activeProjectFileName: 'Edit.webcut',
+      activeProjectFileName: 'Edit.myrelith',
       hasUnsavedChanges: false,
       liveSaveEnabled: true,
       lastSavedAt: 1_234,
@@ -442,7 +443,7 @@ describe('project persistence', () => {
 
     await expect(controller.saveAs()).resolves.toEqual({ status: 'cancelled' })
     expect(useProjectSessionStore.getState()).toMatchObject({
-      activeProjectFileName: 'Edit.webcut',
+      activeProjectFileName: 'Edit.myrelith',
       hasUnsavedChanges: true,
       liveSaveEnabled: true,
       savePhase: 'idle',
@@ -484,7 +485,7 @@ describe('project persistence', () => {
 
   test('a save failure preserves the true dirty state and aborts the write', async () => {
     const abort = vi.fn(async () => undefined)
-    const failingHandle = makeHandle('Broken.webcut', () => ({
+    const failingHandle = makeHandle('Broken.myrelith', () => ({
       write: vi.fn(async () => {
         throw new Error('disk full')
       }),
@@ -493,7 +494,7 @@ describe('project persistence', () => {
     }))
     const deps = makeDeps(failingHandle)
     controller = new ProjectPersistenceController(deps)
-    controller.startSession({ fileName: 'Opened.webcut', persisted: true })
+    controller.startSession({ fileName: 'Opened.myrelith', persisted: true })
 
     await expect(controller.saveAs()).resolves.toMatchObject({
       status: 'failed',
@@ -502,7 +503,7 @@ describe('project persistence', () => {
 
     expect(abort).toHaveBeenCalledOnce()
     expect(useProjectSessionStore.getState()).toMatchObject({
-      activeProjectFileName: 'Opened.webcut',
+      activeProjectFileName: 'Opened.myrelith',
       hasUnsavedChanges: false,
       liveSaveEnabled: false,
       savePhase: 'error',
@@ -553,7 +554,7 @@ describe('project persistence', () => {
   test('pausing waits for an already-open writable stream', async () => {
     const liveClose = deferred<void>()
     let streamIndex = 0
-    const handle = makeHandle('Wait.webcut', () => {
+    const handle = makeHandle('Wait.myrelith', () => {
       const index = streamIndex++
       return {
         write: vi.fn(async () => undefined),
@@ -593,7 +594,7 @@ describe('project persistence', () => {
     const firstClose = deferred<void>()
     const writes: string[] = []
     let streamIndex = 0
-    const handle = makeHandle('Latest.webcut', () => {
+    const handle = makeHandle('Latest.myrelith', () => {
       const index = streamIndex++
       return {
         write: vi.fn(async (data: string) => {
@@ -631,11 +632,11 @@ describe('project persistence', () => {
 
     await expect(controller.save()).resolves.toEqual({
       status: 'saved',
-      fileName: 'Edit.webcut',
+      fileName: 'Edit.myrelith',
       liveSaveEnabled: true,
     })
 
-    expect(deps.pickSaveFile).toHaveBeenCalledWith('My edit.webcut')
+    expect(deps.pickSaveFile).toHaveBeenCalledWith('My edit.myrelith')
     expect(download).not.toHaveBeenCalled()
     expect(handle.createWritable).toHaveBeenCalledOnce()
     expect(parseProjectFile(handle.writes[0]).document.name).toBe('My edit')
@@ -657,7 +658,7 @@ describe('project persistence', () => {
 
     await expect(controller.saveAs()).resolves.toEqual({
       status: 'downloaded',
-      fileName: 'My edit.webcut',
+      fileName: 'My edit.myrelith',
       liveSaveEnabled: false,
     })
 
@@ -688,7 +689,7 @@ describe('project persistence', () => {
 
     await expect(controller.saveAs()).resolves.toEqual({
       status: 'downloaded',
-      fileName: 'Edit.webcut',
+      fileName: 'Edit.myrelith',
       liveSaveEnabled: true,
     })
     expect(useProjectSessionStore.getState()).toMatchObject({
@@ -707,7 +708,7 @@ describe('project persistence', () => {
     const asset = makeAsset()
     useMediaStore.getState().addAsset(asset)
     controller = new ProjectPersistenceController(deps)
-    controller.startSession({ fileName: 'Opened.webcut', persisted: true })
+    controller.startSession({ fileName: 'Opened.myrelith', persisted: true })
 
     useMediaStore.getState().setAssetVisuals(asset.id, {
       filmstrip: null,
@@ -722,7 +723,7 @@ describe('project persistence', () => {
 
   test('only attaches beforeunload while dirty and a stale save cannot touch a replacement', async () => {
     const closeGate = deferred<void>()
-    const handle = makeHandle('Old.webcut', () => ({
+    const handle = makeHandle('Old.myrelith', () => ({
       write: vi.fn(async () => undefined),
       close: vi.fn(() => closeGate.promise),
       abort: vi.fn(async () => undefined),
@@ -741,12 +742,12 @@ describe('project persistence', () => {
 
     const oldSave = controller.saveAs()
     await vi.waitFor(() => expect(handle.createWritable).toHaveBeenCalledOnce())
-    controller.startSession({ fileName: 'New.webcut', persisted: true })
+    controller.startSession({ fileName: 'New.myrelith', persisted: true })
     closeGate.resolve()
 
     await expect(oldSave).resolves.toEqual({ status: 'cancelled' })
     expect(useProjectSessionStore.getState()).toMatchObject({
-      activeProjectFileName: 'New.webcut',
+      activeProjectFileName: 'New.myrelith',
       hasUnsavedChanges: false,
       liveSaveEnabled: false,
       lastSavedAt: null,

@@ -28,16 +28,16 @@ import { build, preview } from 'vite'
 
 const DEFAULT_PORT = 41_854
 const DEFAULT_VIEWPORT = { width: 1_440, height: 900 }
-const BENCHMARK_PATH = '/__webcut/performance'
+const BENCHMARK_PATH = '/__myrelith/performance'
 const CHROMIUM_MEMORY_SOURCE = 'cdp:SystemInfo.getProcessInfo+host-os-process'
 const CHROMIUM_GPU_SOURCE = 'cdp:SystemInfo.getInfo'
-const PROCESS_MEMORY_BINDING = '__webcutSampleChromiumProcessMemory'
+const PROCESS_MEMORY_BINDING = '__myrelithSampleChromiumProcessMemory'
 const MEMORY_SAMPLE_ATTEMPTS = 3
 export const MAX_CONTINUOUS_PLAYBACK_DURATION_MS = 2_000
 export const MAX_CONTINUOUS_EXPORT_FRAMES = 31
 
 function usage() {
-  return `WebCut performance benchmark
+  return `Myrelith performance benchmark
 
 Usage:
   node scripts/performance/run-benchmark.mjs [--headed] [--samples 7]
@@ -752,7 +752,7 @@ export async function createTemporaryBenchmarkOutput(deps = {}) {
   const createTemporaryDirectory = deps.createTemporaryDirectory ?? mkdtemp
   const removeTemporaryDirectory = deps.removeTemporaryDirectory ?? rm
   const outputDirectory = resolve(await createTemporaryDirectory(
-    join(tmpdir(), 'webcut-benchmark-build-'),
+    join(tmpdir(), 'myrelith-benchmark-build-'),
   ))
   let cleaned = false
   const cleanup = async () => {
@@ -798,7 +798,7 @@ async function launcherInteractiveSample(page, baseUrl) {
 
 async function waitForHarness(page, baseUrl) {
   await page.goto(`${baseUrl}${BENCHMARK_PATH}`, { waitUntil: 'domcontentloaded' })
-  await page.waitForFunction(() => window.__webcutPerformanceHarness !== undefined, null, {
+  await page.waitForFunction(() => window.__myrelithPerformanceHarness !== undefined, null, {
     timeout: 120_000,
   })
   await page.locator('[data-harness-status="ready"]').waitFor({
@@ -832,8 +832,8 @@ async function main() {
   const root = cwd()
   const initialSource = await sourceIdentity(root)
   const artifactDirectory = outputDirectory(root, options.output)
-  const priorHarnessFlag = env.VITE_WEBCUT_PERFORMANCE_HARNESS
-  env.VITE_WEBCUT_PERFORMANCE_HARNESS = '1'
+  const priorHarnessFlag = env.VITE_MYRELITH_PERFORMANCE_HARNESS
+  env.VITE_MYRELITH_PERFORMANCE_HARNESS = '1'
 
   let server
   let browser
@@ -882,9 +882,9 @@ async function main() {
         attachProblemCollector(page, consoleProblems)
         await waitForHarness(page, baseUrl)
         const sample = await page.evaluate(() => (
-          window.__webcutPerformanceHarness.firstUsableFrameMs()
+          window.__myrelithPerformanceHarness.firstUsableFrameMs()
         ))
-        await page.evaluate(() => window.__webcutPerformanceHarness.cleanup())
+        await page.evaluate(() => window.__myrelithPerformanceHarness.cleanup())
         return sample
       },
     )
@@ -934,7 +934,7 @@ async function main() {
       skipExport: options.skipExport,
     }
     const result = await page.evaluate(async (request) => (
-      window.__webcutPerformanceHarness.run(request)
+      window.__myrelithPerformanceHarness.run(request)
     ), {
       host,
       chromium: chromiumMetadata,
@@ -963,7 +963,7 @@ async function main() {
       async (finalConsoleProblems) => {
         result.artifact.consoleProblems = finalConsoleProblems
         return page.evaluate((artifact) => (
-          window.__webcutPerformanceHarness.formatArtifact(artifact)
+          window.__myrelithPerformanceHarness.formatArtifact(artifact)
         ), result.artifact)
       },
     )
@@ -1003,8 +1003,8 @@ async function main() {
       try {
         if (benchmarkOutput) await benchmarkOutput.cleanup()
       } finally {
-        if (priorHarnessFlag === undefined) delete env.VITE_WEBCUT_PERFORMANCE_HARNESS
-        else env.VITE_WEBCUT_PERFORMANCE_HARNESS = priorHarnessFlag
+        if (priorHarnessFlag === undefined) delete env.VITE_MYRELITH_PERFORMANCE_HARNESS
+        else env.VITE_MYRELITH_PERFORMANCE_HARNESS = priorHarnessFlag
       }
     }
   }

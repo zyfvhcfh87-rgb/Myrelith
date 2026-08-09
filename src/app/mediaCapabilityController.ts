@@ -4,7 +4,7 @@
  * Durable media state remains the source of truth. This controller only
  * invalidates the codecs leaf cache when a connected source changes, a
  * provisional source disappears, or the browser resumes from a suspended
- * runtime. Nothing here is serialized into a .webcut project.
+ * runtime. Nothing here is serialized into a .myrelith project.
  */
 
 import type { PortableAssetDescriptor } from '../domain/projectFile'

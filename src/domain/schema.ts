@@ -1,5 +1,5 @@
 /**
- * domain/schema.ts — Data-model contracts for the WebCut timeline document.
+ * domain/schema.ts — Data-model contracts for the Myrelith timeline document.
  *
  * Phase 0. Types only — no logic, no browser APIs (see ARCHITECTURE.md:
  * domain/ imports nothing). All positions and durations on the timeline are

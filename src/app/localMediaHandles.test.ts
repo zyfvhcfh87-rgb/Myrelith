@@ -240,7 +240,7 @@ describe('local media folder picker', () => {
       relativePath: 'source.webm',
     }])
     expect(picker).toHaveBeenCalledWith({
-      id: 'webcut-media-folder',
+      id: 'myrelith-media-folder',
       mode: 'read',
     })
 
@@ -269,7 +269,7 @@ describe('local media file picker', () => {
 
     await expect(pickLocalMediaFiles(true)).resolves.toHaveLength(2)
     expect(picker).toHaveBeenCalledWith({
-      id: 'webcut-media',
+      id: 'myrelith-media',
       multiple: true,
       excludeAcceptAllOption: false,
       types: [{

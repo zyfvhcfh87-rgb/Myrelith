@@ -1,9 +1,22 @@
-# WebCut — Session Handoff
+# Myrelith — Session Handoff
 
 Read this first in a new session. It is the deep context; [PLAN.md](PLAN.md)
 records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTURE.md)
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
+
+## Myrelith rebrand (2026-08-09)
+
+The current product, package, repository, documentation, UI, benchmark, future
+container target, and public hostname are Myrelith. New portable projects use
+`.myrelith`, `myrelith-project`, and `__myrelith_text__:`. Parsing intentionally
+accepts the legacy `.webcut`, `webcut-project`, and `__webcut_text__:` values
+and normalizes them before current validation. Preference reads fall back to
+the former localStorage keys, and the two historical IndexedDB database names
+remain stable so an in-place upgrade does not orphan Recents, recovery, or
+remembered media grants. A hostname change is a new browser origin, so its
+storage cannot be transferred automatically; users migrate with portable
+project files and grant local media access again when requested.
 
 ## Status (2026-08-07)
 
@@ -42,7 +55,7 @@ and the open list below.
 | Post-MVP #3 — undistorted timeline visuals | ✅ done | fixed-aspect SVG thumbnail patterns + antialiased vector waveform; Chrome razor continuity, clean console |
 | Post-MVP #5 — live audio playback | ✅ done | user verified; Chrome: audible RMS, mute/pause/seek cleanup, exact final frame, clean console |
 | Post-MVP #9 — three-mode timeline zoom | ✅ done | authoritative px/frame plus exact-endpoint 12h runway over a bounded 16Mpx surface; 127 focused + 930 total tests; real Chrome long-project/rebase/fit/center/resize/visual gate |
-| Post-MVP project system — Slice 1 foundations | ✅ done | presets + portable `.webcut`; Chrome: 2.000s 60fps source stays 2.000s at 30fps, clean console |
+| Post-MVP project system — Slice 1 foundations | ✅ done | presets + portable `.myrelith`; Chrome: 2.000s 60fps source stays 2.000s at 30fps, clean console |
 | Post-MVP project system — Slice 2 media import | ✅ done | one analysis per file; explicit Keep/Match/Cancel; complete-asset commits; 745 tests + Chrome gate |
 | Post-MVP project system — Slice 3 sessions/UI | ✅ done | atomic Create/Resume/relink; 764 tests; real 4K60 create + 1440p60 media-resume Chrome gate |
 | Post-MVP project system — Slice 4 persistence | ✅ done | portable Save/Save As, revision-safe live save, quiesced exit; 794 tests + Chrome toolbar/Resume/layout gate |
@@ -77,7 +90,7 @@ and the open list below.
 | **Post-MVP #18 — original Slice 9 acceptance/closeout** | ✅ complete | 693 focused + 1,385 total tests; 18-file hostile/orientation matrix; Chrome multi-import, edit, recovery/relink, layered crossfade, and export gate; Issue #18 closeout evidence complete |
 | **Post-MVP #17 — exact audio-aware crossfades** | ✅ complete | canonical grouped visual/audio plans, real per-stream handles, atomic accessible settings, exact live/export envelopes, 1,441 tests, and full-app Chromium transparent-layer/tone/export-reopen acceptance |
 | **Post-MVP #16 — capability-aware export profiles** | ✅ complete | Auto + four probed profiles; exact buffered/direct A/V reopen/playback and failure/memory gates; 17 browser gates, 14 reopened outputs, clean console; PR #29 normally merged and Issue #16 closed |
-| **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.webcut` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
+| **Post-MVP #31 — project aspect ratios** | ✅ implementation complete | four exact creation families × four size tiers; unchanged `.myrelith` schema; 183 focused + 1,659 total tests; in-app Chromium monitor/export/720px gate with a clean console |
 | **Post-MVP #32 — four default tracks per kind** | ✅ complete | fresh documents create `V1`–`V4` + `A1`–`A4`; saved track sets stay unpadded; 157 focused + 1,661 total tests; in-app Chromium 720px gate; PR #37 normally merged and Issue #32 closed |
 | **Post-MVP #33 — editable text overlays** | ✅ complete | procedural timed text clips; accessible add/edit/move/resize/delete; shared preview/export Canvas2D renderer; schema 3→4 migration; 304 focused + 1,747 total tests; real 1280/720px Chromium text-only export gate; PR #47 normally merged and Issue #33 closed |
 | **Post-MVP #34 — full clip Inspector** | ✅ complete | schema-5 visual/audio editing, shared preview/export rendering, contextual Inspector, direct Program Monitor manipulation, and explicit remembered/quick file paths; 1,784 tests plus real-media reopen/playback/export and 720px Chromium acceptance; PR #49 normally merged as `571fff6` and Issue #34 closed |
@@ -117,7 +130,7 @@ tone gates, and the final full-app Chromium acceptance matrix pass. Issue #18's
 that total. Earlier
 completed phases remain committed separately
 (see `git log --oneline`). The user completed the
-Phase 5 / MVP manual gate on 2026-07-12, so WebCut is MVP-complete; the
+Phase 5 / MVP manual gate on 2026-07-12, so Myrelith is MVP-complete; the
 post-MVP project-system milestone is now active. Phase 3 gate CLOSED
 2026-07-06. Phase 4 BUILD-COMPLETE the same day: 4.1 compositor preview,
 4.2 full editing toolset (select/razor/trim/ripple/slip/slide + S/Del),
@@ -219,7 +232,7 @@ waveform with a clean secure-origin warning/error console.
 
 Project-system Slice 1 establishes the non-UI foundations: one authoritative
 catalog for 720p/1080p/1440p/4K, exact common frame rates, and 44.1/48/96 kHz
-audio; a pure new-document factory; and a versioned portable `.webcut` contract
+audio; a pure new-document factory; and a versioned portable `.myrelith` contract
 with deterministic serialization, strict validation, migration entry points,
 resource bounds, stable asset descriptors, and no session-only URLs, handles,
 decoder state, visuals, or undo history. Media assets now retain canonical
@@ -230,7 +243,7 @@ Project-system Slice 2 centralizes media import behind one app controller. A
 selected File is analyzed exactly once, stays outside Zustand while a decision
 is open, and enters mediaStore only as one complete asset. Exact rational native
 and project rates drive an explicit Keep project rate / Match source rate /
-Cancel dialog; WebCut never changes project FPS silently. Match is safe only
+Cancel dialog; Myrelith never changes project FPS silently. Match is safe only
 for an empty timeline and a supported project preset. It updates the document
 and re-conforms every unused asset from canonical microseconds; once clips
 exist, Match remains visible but disabled because edited-timeline retiming is a
@@ -238,10 +251,10 @@ separate operation. Every rejected/cancelled path closes Mediabunny Input and
 revokes the uncommitted source URL. Preview now forwards the committed asset's
 Blob and native rate directly to the worker instead of re-demuxing it.
 
-Project-system Slice 3 makes those foundations user-visible. WebCut now opens
+Project-system Slice 3 makes those foundations user-visible. Myrelith now opens
 on a responsive Home screen with explicit Create and Resume paths. Create uses
 the authoritative resolution/frame-rate/audio catalogs. Resume validates a
-`.webcut` candidate before touching the editor, then analyzes selected source
+`.myrelith` candidate before touching the editor, then analyzes selected source
 files exactly once and restores their durable asset ids only on exact metadata
 matches. Files, parsed candidates, and object URLs remain controller-local
 until all required sources are ready. Activation awaits export and live-audio
@@ -269,7 +282,7 @@ be removed into an unsavable document.
 The remembered-media follow-up removes the repeated source picker on the same
 browser/origin. Chrome imports and exact manual relinks now persist opaque
 `FileSystemFileHandle`s in an IndexedDB sidecar keyed by document + asset id;
-raw paths and handles never enter `.webcut`, Zustand, or domain data. Resume
+raw paths and handles never enter `.myrelith`, Zustand, or domain data. Resume
 queries each remembered handle: a retained read grant analyzes and reconnects
 the exact descriptor automatically, while a `prompt` state becomes one
 **Allow media & open** click whose permission requests start before the first
@@ -278,7 +291,7 @@ data cases stay on the existing manual relink fallback. Old projects seed the
 sidecar after their next successful handle-aware relink.
 
 Project-system Slice 5 adds an origin-local project library without changing
-the portable `.webcut` format. Validated handles become removable Recent
+the portable `.myrelith` format. Validated handles become removable Recent
 shortcuts in supporting Chrome builds. Dirty work writes a separate bounded
 recovery journal: at most three complete generations per editing lineage,
 twelve Recent entries, eight journals, and a fixed serialized-character budget.
@@ -287,7 +300,7 @@ it explicitly after reload/crash and requires confirmation before permanent
 discard. Successful revision-current Save and intentional Projects exit clear
 the journal. Recovery failures remain separate from file-save truth, and a
 failed exit rebuilds its deleted safety copy before editing continues. No media
-bytes, paths, object URLs, or handles enter `.webcut` or Zustand.
+bytes, paths, object URLs, or handles enter `.myrelith` or Zustand.
 
 The real-Chrome gate passed 2026-07-14: four recovery writes retained exactly
 three generations; reload offered, but did not silently activate, the local
@@ -297,7 +310,7 @@ picker entry rendered; the Home layout stayed intact; and the final console was
 clean.
 
 Project-system Slice 6 separates the durable media catalog from its connected
-session resources. A validated `.webcut` now activates even when some or all
+session resources. A validated `.myrelith` now activates even when some or all
 sources are unavailable: affected clips stay visible, retain finite descriptor
 bounds, and are labeled Offline in the Media panel, timeline, and Preview.
 Individual Relink restores one source. Scan folder performs a bounded recursive
@@ -309,7 +322,7 @@ Zustand, and every cancellation/supersession path releases its URLs. Preview
 and live audio fail soft while media is missing; output-contributing offline
 sources block export before any Blob or encoder is created.
 
-The real-Chrome gate passed 2026-07-14 with a disk-backed `.webcut` and MP4:
+The real-Chrome gate passed 2026-07-14 with a disk-backed `.myrelith` and MP4:
 the project opened with one offline source, the clip remained visible, Preview
 named the missing file, and export named it while disabling Start. One folder
 selection auto-matched and re-analyzed the MP4, restored thumbnail/Preview and
@@ -357,7 +370,7 @@ poison an asset. Media Pool announces one surface-specific runtime diagnostic,
 keeps the source Offline, exposes Relink rather than import Retry, and publishes
 a fresh Ready report after successful recovery.
 
-The in-app Chromium gate passed 2026-07-18 at 1280×720 through WebCut's ordinary
+The in-app Chromium gate passed 2026-07-18 at 1280×720 through Myrelith's ordinary
 file-input fallback. H.264/AAC relinked Offline → Ready with exact report facts;
 ProRes relinked to Unsupported; selecting the wrong H.264 replacement restored
 the prior ProRes report. A generated AAC file with valid metadata/config but
@@ -380,7 +393,7 @@ dedupes their Mediabunny core instance.
 
 Automatic fallback is intentionally conservative: at most 8 GiB, 2 hours,
 DCI 4K30 ProRes pixel throughput, and 8-channel/48 kHz AC-3/E-AC-3. Above that
-boundary the asset remains visible with a `resource-limit` diagnostic; WebCut
+boundary the asset remains visible with a `resource-limit` diagnostic; Myrelith
 does not silently proxy it or omit a track. The probe checks cancellation
 before and after the non-abortable module load and decoder checks, so an
 aborted generation cannot publish Ready. ProRes correctness does not require
@@ -432,7 +445,7 @@ exact canonical-configuration SHA-256 hash that includes description bytes. It
 retains no Blob, Mediabunny Input, track, decoder, or mutable configuration;
 LRU entry, active-source, copied-material, and canonical-JSON ceilings bound its
 memory. Unsafe or oversized keys simply bypass caching. The cache is realm-local
-only and remains outside Zustand and `.webcut`, so another browser or resumed
+only and remains outside Zustand and `.myrelith`, so another browser or resumed
 session must establish its own facts.
 
 The metadata probe can reuse a settled session fact. Render-worker opens,
@@ -470,7 +483,7 @@ public atomic streaming OPFS output sink.
 
 The result is a firm no-go for a built-in proxy feature in this issue. The stock
 core also has a documented 2 GB input ceiling, requires cross-origin isolation
-for its multi-thread option, and is packaged GPL-2.0-or-later with x264. WebCut
+for its multi-thread option, and is packaged GPL-2.0-or-later with x264. Myrelith
 also needs a separate original/proxy provenance model before a downscaled or
 CFR representation can safely cross preview, visuals, audio, render, export,
 Save/Resume, Relink, and cleanup. The
@@ -501,11 +514,11 @@ Chromium-based; Firefox/WebKit remain untested.
 
 **Next: Issue #19 is closed at 46/49.** The three unchecked proxy implementation
 children are the intentional no-go outcome, not forgotten work. Public
-distribution remains a separate gate: add the WebCut license and third-party
+distribution remains a separate gate: add the Myrelith license and third-party
 notices/source links, finish FFmpeg/LGPL and Dolby review, and run representative
 low-memory testing before making a release-compliance claim. Future project
 storage is also separate opt-in media caching with quota/eviction UX and
-multi-tab recovery ownership; do not imply recovery or a portable `.webcut`
+multi-tab recovery ownership; do not imply recovery or a portable `.myrelith`
 contains source bytes today.
 
 Issue #18 follows the original researched nine-slice roadmap. The older local
@@ -526,7 +539,7 @@ conservative budget candidates because clean-aperture, rotation, derived items,
 and WebCodecs track selection can legitimately change displayed geometry.
 They do not absolutely cap native AV1 decoder work: sequence-header maximum
 frame dimensions and intermediate images may exceed `ispe` before the browser
-returns a source WebCut can inspect. The 256 MiB ceiling bounds WebCut's
+returns a source Myrelith can inspect. The 256 MiB ceiling bounds Myrelith's
 estimates and accepted returned allocation, not every transient browser-decoder
 allocation. Future hardening should parse sequence-header limits where practical
 and stress hostile inputs in an isolated decoder context.
@@ -757,7 +770,7 @@ all temporary acceptance files and server logs were removed.
 ## What works today (user-visible)
 
 Run `npm run dev` → project Home. Create a project with an explicit canvas,
-frame rate, and audio rate, choose a `.webcut`, reopen a Recent file, or review
+frame rate, and audio rate, choose a `.myrelith`, reopen a Recent file, or review
 an explicitly offered recovery copy. Remembered sources with a
 retained grant reconnect automatically; a returned permission prompt needs one
 Allow-and-open click. Genuinely missing sources can open Offline without hiding
@@ -955,7 +968,7 @@ surface; it is not a second zoom and never enters document history.
   settings validation, and the pure empty-document factory. Fresh documents
   own four independent video tracks followed by four independent audio tracks;
   persisted documents are never padded to that creation-time default.
-- `src/domain/projectFile.ts` — versioned portable `.webcut` serialization,
+- `src/domain/projectFile.ts` — versioned portable `.myrelith` serialization,
   migration entry point, strict untrusted-input validation, and bounded durable
   asset metadata; excludes every session-owned field. Issue #17 advances the
   outer project format to 4 and nested timeline schema to 3 for independent
@@ -1033,7 +1046,7 @@ surface; it is not a second zoom and never enters document history.
   exact project-rate frame conversion.
 - `src/state/preferencesStore.ts` + `src/app/preferencesController.ts` — the
   persisted, versioned **Default still-image duration** preference plus the
-  separate `webcut.export-selection:v1` last-known-valid export choice. Export
+  separate `myrelith.export-selection:v1` last-known-valid export choice. Export
   capabilities, project-owned dimensions/FPS/sample rate, file capabilities,
   and output bytes are never persisted. Both preferences fail safely when
   browser storage is unavailable.
@@ -1478,7 +1491,7 @@ surface; it is not a second zoom and never enters document history.
   matrix plus a hash/ffprobe manifest under `.tmp/issue-19-codec-fixtures/`;
   it exits nonzero when the expected container/codec/damage matrix drifts.
 - Generate a labeled test MP4 IN THE BROWSER:
-  import mediabunny via `/@fs/E:/ClaudeSpace/WebCut/node_modules/mediabunny/dist/modules/src/index.js`,
+  import mediabunny via `/@fs/E:/ClaudeSpace/Myrelith/node_modules/mediabunny/dist/modules/src/index.js`,
   `Output` + `Mp4OutputFormat` + `BufferTarget` + `CanvasSource`, draw
   frame numbers, `File` it, then `DataTransfer` into a file input.
   For a clean-console gate, generate it first in a same-origin non-app page
@@ -1645,13 +1658,13 @@ surface; it is not a second zoom and never enters document history.
   passed Linux CI, and normally merged as `256887b`. The
   `v0.1.0-alpha.1` prerelease points to that exact merge, includes the verified
   1,124,158-byte static build and checksum, and published the private
-  `ghcr.io/zyfvhcfh87-rgb/webcut:0.1.0-alpha.1` multi-architecture image at
+  legacy `ghcr.io/zyfvhcfh87-rgb/webcut:0.1.0-alpha.1` multi-architecture image at
   digest `sha256:837cc8ea8d2b5b206283580b5806053cf861886c26d03668abab27f58646ec8b`.
   Cloudflare production deployment `c85ceeb0-0913-44ec-8ea4-db79c815dd31`
-  serves the exact merge through `webcut-d27.pages.dev`; the live launcher and
+  served the exact merge through the original preview hostname; the live launcher and
   legal routes were re-read after deployment. GitHub detects MIT and now shows
   the description, homepage, topics, community resources, release, and package.
-  WebCut has an MIT license, privacy notice, third-party/source notices,
+  Myrelith has an MIT license, privacy notice, third-party/source notices,
   community and security policies, versioned changelog, CI, public `/privacy/`
   and `/licenses/` pages, and a non-root static container workflow. This permits an
   explicitly experimental alpha release; it does **not** certify patent

@@ -118,7 +118,7 @@ export default function EditorCommandPalette({ onClose }: EditorCommandPalettePr
           </button>
         </div>
         <p id={descriptionId} className="command-palette-description">
-          Search WebCut’s existing editing commands. Unavailable commands explain what they need.
+          Search Myrelith’s existing editing commands. Unavailable commands explain what they need.
         </p>
         <label className="command-palette-search">
           <MagnifyingGlass aria-hidden="true" size={17} />

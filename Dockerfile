@@ -11,9 +11,9 @@ FROM nginxinc/nginx-unprivileged:1.28-alpine
 
 ARG VERSION=dev
 ARG REVISION=unknown
-LABEL org.opencontainers.image.title="WebCut" \
+LABEL org.opencontainers.image.title="Myrelith" \
       org.opencontainers.image.description="Private-by-design browser video editor" \
-      org.opencontainers.image.source="https://github.com/zyfvhcfh87-rgb/WebCut" \
+      org.opencontainers.image.source="https://github.com/zyfvhcfh87-rgb/Myrelith" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}"

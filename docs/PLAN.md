@@ -1,4 +1,4 @@
-# WebCut — MVP Build Record (Phases 3-gate, 4, 5)
+# Myrelith — MVP Build Record (Phases 3-gate, 4, 5)
 
 Adapted from the original implementation plan (source:
 `C:\Users\Aryel\Pictures\nle-implementation-plan.md`) with corrections for
@@ -537,7 +537,7 @@ adding partial-track consent or proxy conversion.
   decoder-support calls so a cancelled probe cannot publish Ready.
 - [x] Bound automatic fallback at 8 GiB, 2 hours, DCI 4K30 ProRes pixel
   throughput, and 8-channel/48 kHz AC-3/E-AC-3. Exceeding a budget returns an
-  exact `resource-limit` diagnostic; WebCut neither silently omits a track nor
+  exact `resource-limit` diagnostic; Myrelith neither silently omits a track nor
   converts the source.
 - [x] Keep diagnostics honest and state-only in Media Pool: every supported
   track names `Native browser decoder`, `Local fallback (ProRes)`, or `Local
@@ -603,7 +603,7 @@ not add automatic omission or proxy conversion.
 
 At this slice boundary, Issue #19 remained open; this slice caches only settled
 decoder capability facts for the current JavaScript realm. It does not persist
-source bytes, decoder objects, or capability results in `.webcut` projects.
+source bytes, decoder objects, or capability results in `.myrelith` projects.
 
 - [x] Add one shared, bounded cache keyed by decode boundary, track kind,
   normalized codec, and a SHA-256 hash of the canonical decoder configuration,
@@ -664,7 +664,7 @@ shipped proxy feature; the detailed record is in
   input ceiling is 2 GB, and `readFile()` returns one whole WASM-FS buffer
   rather than an atomic streaming OPFS sink.
 - [x] Keep proxy consent, storage, and lifecycle UI out of production. No
-  converter dependency, proxy bytes, Zustand state, or `.webcut` field is
+  converter dependency, proxy bytes, Zustand state, or `.myrelith` field is
   added; the original file remains the sole source/relink identity.
 - [x] Record strict reopen conditions: reviewed redistributable encoder,
   streaming OPFS I/O, first-class original/proxy provenance, representative
@@ -711,7 +711,7 @@ Detailed evidence lives in
   errors. Edge is Chromium-based, so Firefox/WebKit diversity remains untested.
 - [x] Complete the distribution/security review. Exact package pins, local
   lazy bundles, zero production advisories, and no runtime decoder downloads
-  are established. Public release still requires a WebCut license,
+  are established. Public release still requires a Myrelith license,
   third-party/source notices, FFmpeg/LGPL and Dolby review, and representative
   low-memory testing; Issue #19 closure does not certify those gates.
 
@@ -1025,7 +1025,7 @@ raster-image sources; it does not make images importable or user-visible yet.
   Residual boundary: `ispe` cannot absolutely cap native AV1 decoder work;
   sequence-header maximum frame dimensions and intermediate images may exceed
   item extents before the browser returns a source we can inspect. The 256 MiB
-  ceiling therefore bounds WebCut's estimates and accepted returned allocation,
+  ceiling therefore bounds Myrelith's estimates and accepted returned allocation,
   not every transient browser-decoder allocation. Future hardening should parse
   sequence-header limits where practical and stress hostile inputs in an
   isolated decoder context.
@@ -1730,7 +1730,7 @@ behavior.
 - The buffered path retains `BufferTarget`. Direct-file output owns its picker
   and writable stream in `app/`, acquires the handle first in the user click,
   and adapts positional `StreamTarget` writes. Mediabunny may close its wrapper;
-  WebCut alone commits the underlying file on success or aborts it on cancel or
+  Myrelith alone commits the underlying file on success or aborts it on cancel or
   failure so a partial file is never reported as a successful export.
 - AAC tail trimming remains isolated. Mediabunny 1.50.9 is patched locally and
   reproducibly for WebM/Opus: the encoder source records the exact post-
@@ -1837,7 +1837,7 @@ behavior.
 - [x] One shared output-format factory now selects Mediabunny's real
   `Mp4OutputFormat` or `WebMOutputFormat`, and both capability discovery and
   the writer consume it. The pinned-package contract is tested directly:
-  Mediabunny extensions include their leading dot while WebCut's canonical
+  Mediabunny extensions include their leading dot while Myrelith's canonical
   profile/result extensions do not, so `.mp4`/`.webm` comparisons can no
   longer make every real profile appear unavailable.
 - [x] The buffered writer passes the validated AVC, HEVC, VP9, or AV1 codec,
@@ -1891,7 +1891,7 @@ behavior.
   audio track. It is explicitly labelled approximate because variable-rate
   encoding and container overhead can change the result. Audio-off also stops
   offline audio-only media from blocking an otherwise complete video export.
-- [x] A separate versioned `webcut.export-selection:v1` preference remembers
+- [x] A separate versioned `myrelith.export-selection:v1` preference remembers
   only the last profile proven valid on this browser: a preset/Auto id or one
   validated custom profile. Capability results, reasons, Auto's resolution,
   and project-owned dimensions/FPS/sample rate are never persisted. Malformed
@@ -2053,7 +2053,7 @@ selected size tier and recomputes the exact paired resolution.
   pairs, deterministic family lookup, exact-ratio derivation, display labels,
   uniqueness/even-integer checks, and the current 3840 × 2160 pixel envelope.
 - [x] Kept project schema/format unchanged. Every vertical, square, and social
-  creation size round-trips through `.webcut`, and invalid/custom dimensions
+  creation size round-trips through `.myrelith`, and invalid/custom dimensions
   still fail the existing project-settings boundary.
 - [x] Added accessible Aspect ratio and dependent Resolution controls. Resume
   cards and Export identify the derived family plus exact fixed dimensions.
@@ -2122,7 +2122,7 @@ and Canvas2D painting path so supported appearance and timing stay aligned.
   Slip is an explicit no-op because procedural text has no hidden source range.
   Live geometry drafts remain ephemeral and commit one document mutation on
   release.
-- [x] `.webcut` save/load advances the nested timeline schema to 4, migrates
+- [x] `.myrelith` save/load advances the nested timeline schema to 4, migrates
   older documents conservatively, reserves procedural asset ids, and rejects
   unsupported or malformed text settings instead of substituting them.
 - [x] The shared composition planner requests no media for text-only projects;
@@ -2573,7 +2573,7 @@ This slice makes the existing hosted app understandable and responsibly
 releasable as an experimental preview without overstating legal or product
 maturity.
 
-- [x] License WebCut's own source under MIT and record exact runtime dependency
+- [x] License Myrelith's own source under MIT and record exact runtime dependency
   licenses/source links, including the FFmpeg-derived AC-3/E-AC-3 boundary.
 - [x] Publish an implementation-matched privacy notice: app media stays local;
   preferences, opaque file handles, and bounded recovery snapshots remain in
@@ -2584,7 +2584,7 @@ maturity.
 - [x] Add a clearer README, changelog, citation metadata, contribution/support/
   security/conduct files, and structured issue and pull-request templates.
 - [x] Add read-only CI and a version-tagged, multi-platform, SBOM/provenance
-  GHCR workflow for a non-root static WebCut container.
+  GHCR workflow for a non-root static Myrelith container.
 - [x] Focused launcher coverage passed 13/13 and the complete suite passed
   1,661/1,661 across 86 files. Production build, oxlint, the high-severity
   production audit, and diff checking passed; only the known large lazy codec
@@ -2619,3 +2619,19 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
   through app/ composition-root controllers (previewController pattern).
 - Keep dependency boundaries explicit, test logical steps as they land, and
   browser-verify anything touching pipeline/workers/gestures.
+
+## Myrelith rebrand
+
+**IMPLEMENTED (2026-08-09).**
+
+- [x] Rename the current product, package, repository references, UI copy,
+  documentation, benchmark surfaces, future container target, and anticipated
+  public hostname from WebCut to Myrelith.
+- [x] Make `.myrelith`, `myrelith-project`, and `__myrelith_text__:` the only
+  values emitted by new saves and current app behavior.
+- [x] Preserve old-project access by accepting and normalizing legacy
+  `.webcut`, `webcut-project`, and `__webcut_text__:` values.
+- [x] Read the former localStorage keys as fallbacks and keep the historical
+  IndexedDB names as durable identifiers for same-origin in-place upgrades.
+- [x] Document that browser-origin storage cannot move automatically when the
+  public hostname changes; portable project files are the migration path.

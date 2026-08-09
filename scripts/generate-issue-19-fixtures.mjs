@@ -135,7 +135,7 @@ rmSync(path('avc-aac-tail-moov.mp4'))
 writeFileSync(path('empty.mp4'), Buffer.alloc(0))
 writeFileSync(
   path('random-bytes.mp4'),
-  Buffer.from('WebCut issue 19: deliberately not a media container.\n', 'utf8'),
+  Buffer.from('Myrelith issue 19: deliberately not a media container.\n', 'utf8'),
 )
 
 const fixtureMatrix = [

@@ -1,8 +1,25 @@
 # Changelog
 
-All notable release changes are recorded here. WebCut follows semantic version
+All notable release changes are recorded here. Myrelith follows semantic version
 labels while it is experimental; prerelease APIs and project behavior may
 still change.
+
+## Unreleased
+
+### Changed
+
+- Renamed the app, repository, package, container target, documentation, and
+  public site from WebCut to Myrelith.
+- New portable saves use `.myrelith`, the `myrelith-project` marker, and
+  Myrelith-owned procedural text identifiers.
+
+### Compatibility
+
+- Existing `.webcut` files and `webcut-project` documents still open and are
+  normalized without changing their timeline or media identity.
+- Existing browser preferences and origin-local IndexedDB records remain
+  readable after an in-place upgrade. Browser storage cannot cross from the
+  previous public hostname to the new Myrelith hostname.
 
 ## [0.1.0-alpha.1] - 2026-08-01
 
@@ -26,4 +43,4 @@ still change.
 - This is an experimental public preview, not a production-ready editor or a
   patent-clearance certification.
 
-[0.1.0-alpha.1]: https://github.com/zyfvhcfh87-rgb/WebCut/releases/tag/v0.1.0-alpha.1
+[0.1.0-alpha.1]: https://github.com/zyfvhcfh87-rgb/Myrelith/releases/tag/v0.1.0-alpha.1

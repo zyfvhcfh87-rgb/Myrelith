@@ -644,7 +644,7 @@ describe('MediaPool presentation', () => {
           firstFrameOnly: true,
           decodePath: 'image-bitmap',
         },
-        detail: 'Animated image detected; WebCut uses its first frame only.',
+        detail: 'Animated image detected; Myrelith uses its first frame only.',
       }),
     }))
     render(<MediaPool />)
@@ -963,7 +963,7 @@ describe('MediaPool presentation', () => {
       name: 'Import “beach.mp4” without audio?',
     })
     expect(dialog).toHaveAccessibleDescription(
-      'The original file stays unchanged. WebCut will use Video track 1 (primary) and omit Audio track 1 (primary). Omitted audio will not appear on the timeline or in exports.',
+      'The original file stays unchanged. Myrelith will use Video track 1 (primary) and omit Audio track 1 (primary). Omitted audio will not appear on the timeline or in exports.',
     )
     expect(within(dialog).getByText('Video track 1 (primary)')).toBeInTheDocument()
     expect(within(dialog).getByText('Audio track 1 (primary)')).toBeInTheDocument()
@@ -1058,7 +1058,7 @@ describe('MediaPool presentation', () => {
       name: 'Import “beach.mp4” without video?',
     })
     expect(dialog).toHaveAccessibleDescription(
-      'The original file stays unchanged. WebCut will use Audio track 1 (primary) and omit Video track 1 (primary). Omitted video will not appear on the timeline or in exports.',
+      'The original file stays unchanged. Myrelith will use Audio track 1 (primary) and omit Video track 1 (primary). Omitted video will not appear on the timeline or in exports.',
     )
 
     fireEvent.click(within(dialog).getByRole('button', {

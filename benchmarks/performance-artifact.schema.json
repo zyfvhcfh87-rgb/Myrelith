@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://webcut.local/schemas/performance-artifact-v4.json",
-  "title": "WebCut performance evidence artifact",
+  "$id": "https://myrelith.local/schemas/performance-artifact-v4.json",
+  "title": "Myrelith performance evidence artifact",
   "type": "object",
   "additionalProperties": false,
   "required": [

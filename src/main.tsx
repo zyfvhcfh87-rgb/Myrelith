@@ -34,7 +34,7 @@ async function renderApplication(): Promise<void> {
   if (
     (
       import.meta.env.DEV
-      || import.meta.env.VITE_WEBCUT_PERFORMANCE_HARNESS === '1'
+      || import.meta.env.VITE_MYRELITH_PERFORMANCE_HARNESS === '1'
     )
     && window.location.pathname === PERFORMANCE_BENCHMARK_PATH
   ) {

@@ -106,7 +106,7 @@ describe('Toolbar project persistence', () => {
 
   test('clean projects leave directly and explain the first Save grants write access', async () => {
     useProjectSessionStore.setState({
-      activeProjectFileName: 'Opened.webcut',
+      activeProjectFileName: 'Opened.myrelith',
       hasUnsavedChanges: false,
     })
     const confirm = vi.spyOn(window, 'confirm')

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 const PROJECT_NAME = 'Stage 1 Recovery Smoke'
+const RECOVERY_DEBOUNCE_SETTLE_MS = 750
 
 function collectPageProblems(page: Page, problems: string[]): void {
   page.on('console', (message) => {
@@ -14,9 +15,9 @@ function collectPageProblems(page: Page, problems: string[]): void {
 }
 
 async function expectHome(page: Page): Promise<void> {
-  await expect(page.getByRole('heading', { name: 'WebCut', exact: true }))
+  await expect(page.getByRole('main').getByText('Myrelith', { exact: true }))
     .toBeVisible()
-  await expect(page.getByRole('region', { name: 'Your projects' }))
+  await expect(page.getByRole('region', { name: 'Back to your projects' }))
     .toBeVisible()
 }
 
@@ -29,13 +30,19 @@ test('recovers an unsaved project after a fresh page and clears it on exit', asy
 
   await page.goto('/')
   await expectHome(page)
-  await page.getByRole('button', { name: /Create a new project/ }).click()
+  await page.getByRole('button', { name: 'Start a new project' }).click()
   await page.getByLabel('Project name').fill(PROJECT_NAME)
   await page.getByRole('button', { name: 'Create project', exact: true }).click()
 
   await expect(page.getByText('Unsaved changes', { exact: true })).toBeVisible()
+  await expect(page.getByText('Recovery copy updated', { exact: true }))
+    .toBeVisible()
   await page.getByRole('button', { name: 'add video track', exact: true }).click()
   await expect(page.getByText('V5', { exact: true })).toBeVisible()
+  // The 500 ms recovery debounce can enter and leave its `saving` state between
+  // Playwright polls. Wait past that explicit product boundary before crashing
+  // the page, then confirm the settled status.
+  await page.waitForTimeout(RECOVERY_DEBOUNCE_SETTLE_MS)
   await expect(page.getByText('Recovery copy updated', { exact: true }))
     .toBeVisible()
 

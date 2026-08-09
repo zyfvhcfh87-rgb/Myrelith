@@ -4,7 +4,7 @@
  * Portable project files keep durable metadata only. Chromium file handles
  * are opaque, origin-local capabilities, so they live in IndexedDB and are
  * keyed by the stable document + asset ids instead of entering Zustand or
- * the serialized `.webcut` contract.
+ * the serialized `.myrelith` contract.
  */
 
 export type LocalMediaPermission = 'granted' | 'denied' | 'prompt'
@@ -128,6 +128,7 @@ export interface LocalMediaHandleRegistry {
   forget(documentId: string, assetId: string): Promise<void>
 }
 
+// Stable legacy database identity: changing it would orphan remembered grants.
 const DATABASE_NAME = 'webcut-local-media'
 const DATABASE_VERSION = 1
 const STORE_NAME = 'file-handles'
@@ -220,7 +221,7 @@ class IndexedDbMediaHandleStore implements LocalMediaHandleStore {
         request.error ?? new Error('Could not open the local media registry'),
       )
       request.onblocked = () => reject(
-        new Error('The local media registry is blocked by another WebCut tab'),
+        new Error('The local media registry is blocked by another Myrelith tab'),
       )
     })
     void this.database.catch(() => {
@@ -277,7 +278,7 @@ export async function pickLocalMediaFiles(
   // This picker call must remain before the first await so transient user
   // activation from the button click is still available.
   const handles = await picker.call(window, {
-    id: 'webcut-media',
+    id: 'myrelith-media',
     multiple,
     excludeAcceptAllOption: false,
     types: [{
@@ -492,7 +493,7 @@ export async function pickLocalMediaFolder(
   // This picker call must remain before the first await so transient user
   // activation from the button click is still available.
   const directory = await picker.call(window, {
-    id: 'webcut-media-folder',
+    id: 'myrelith-media-folder',
     mode: 'read',
   })
   return enumerateLocalMediaFolder(directory, limitOverrides)

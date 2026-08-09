@@ -1,4 +1,4 @@
-# WebCut landing redesign — design QA
+# Myrelith landing redesign — design QA
 
 ## Comparison target
 
@@ -81,7 +81,7 @@ No actionable P0, P1, or P2 differences remain.
 ### Comparison history
 
 1. The first setup capture used a mismatched viewport; the comparison was repeated at the reference viewport and the page hierarchy, divider, form rhythm, CTA placement, and footer now align closely.
-2. The editor pass tightened the shell proportions, three-column media grid, monitor controls, Inspector summary/tabs, and timeline density while retaining WebCut's real application states.
+2. The editor pass tightened the shell proportions, three-column media grid, monitor controls, Inspector summary/tabs, and timeline density while retaining Myrelith's real application states.
 3. The reference editor's populated coast timeline is concept content. The implementation deliberately uses available real state, so the remaining content-state difference is not a visual defect or a promise of nonexistent functionality.
 4. No P0, P1, or P2 visual mismatch remains. P3 variation is limited to real imported media/text state versus the reference's staged project content.
 

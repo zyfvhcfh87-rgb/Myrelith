@@ -61,7 +61,7 @@ describe('LazyLoadBoundary', () => {
     fireEvent.keyDown(closeButton, { key: 's' })
     expect(shortcut).not.toHaveBeenCalled()
     window.removeEventListener('keydown', shortcut)
-    fireEvent.click(screen.getByRole('button', { name: 'Reload WebCut' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reload Myrelith' }))
     fireEvent.click(closeButton)
     expect(reload).toHaveBeenCalledOnce()
     expect(close).toHaveBeenCalledOnce()

@@ -4,12 +4,12 @@
 
 **Date:** 2026-07-20
 
-This is a decision about automatic or opt-in transcoding inside WebCut. It does
+This is a decision about automatic or opt-in transcoding inside Myrelith. It does
 not remove direct import, the locally bundled ProRes and AC-3/E-AC-3 decoder
 fallbacks, or explicit video-only/audio-only import.
 
 The optional proxy-conversion go/no-go decision is complete. The conversion
-implementation is not shipped. WebCut must continue to report unsupported media
+implementation is not shipped. Myrelith must continue to report unsupported media
 honestly and preserve the original source reference.
 
 ## Candidate and acceptance boundary
@@ -41,7 +41,7 @@ A shippable implementation would have needed all of the following:
 
 ## Measured browser spike
 
-The spike ran in Chrome 150.0.0.0 through WebCut's in-app browser on Windows,
+The spike ran in Chrome 150.0.0.0 through Myrelith's in-app browser on Windows,
 on an AMD Ryzen 9 5900X (12 cores/24 logical processors) with 34,216,189,952
 bytes (31.9 GiB) of physical RAM. `navigator.deviceMemory` returned a coarse
 32 GiB hint. The page was not cross-origin isolated and did not expose
@@ -107,11 +107,11 @@ truthful product progress contract without a separate measured progress model.
 
 | Gate | Decision evidence |
 |---|---|
-| Bounded memory and storage | **Not demonstrated; fail closed.** The measured `writeFile`/`readFile` path materialized the complete input and output. WORKERFS can avoid the input copy, but there is no public atomic streaming OPFS output contract. Upstream documents a 2 GB input ceiling, below WebCut's 8 GiB automatic local-fallback ceiling and 64 GiB metadata-probe ceiling. Worker/WASM peak memory and cleanup were not portably measurable. |
+| Bounded memory and storage | **Not demonstrated; fail closed.** The measured `writeFile`/`readFile` path materialized the complete input and output. WORKERFS can avoid the input copy, but there is no public atomic streaming OPFS output contract. Upstream documents a 2 GB input ceiling, below Myrelith's 8 GiB automatic local-fallback ceiling and 64 GiB metadata-probe ceiling. Worker/WASM peak memory and cleanup were not portably measurable. |
 | Progress and cancellation | **Fail/unproven.** Progress is documented as experimental and produced an invalid value in the rerun. Hard-stop requires worker termination and a full core reload; the 0.2 ms return time did not prove memory reclamation or exact cleanup. |
 | Bundle and startup cost | **Unaccepted.** The raw single-thread core is 32.2 MB. The published package is 64.7 MB unpacked install footprint, not compressed transfer size. No acceptable lazy-payload budget was established. Multi-threading does not remove the storage/memory problem. |
 | Browser isolation and performance | **Not demonstrated; fail closed.** Single-thread conversion worked without isolation. Multi-thread requires `SharedArrayBuffer` and therefore an app-wide isolation decision. Upstream's historical core 0.12.3 benchmark on Chrome 116/Linux took 128.8 s single-threaded and 60.4 s multi-threaded for its WebM→MP4 case, versus 5.2 s native. The fast Ryzen synthetic fixtures do not prove representative or low-memory behavior for current core 0.12.10. |
-| License/distribution readiness | **Fail.** The stock core is marked GPL-2.0-or-later and includes GPL encoders such as x264. WebCut has no reviewed GPL/source-distribution or codec/patent plan for this payload. Shipping it now would make the existing final distribution review less honest, not more complete. |
+| License/distribution readiness | **Fail.** The stock core is marked GPL-2.0-or-later and includes GPL encoders such as x264. Myrelith has no reviewed GPL/source-distribution or codec/patent plan for this payload. Shipping it now would make the existing final distribution review less honest, not more complete. |
 | Original/proxy identity | **Fail.** `MediaAsset` and `PortableAssetDescriptor` currently describe one effective media representation while also retaining the original relink identity. A downscaled/CFR proxy needs a separate provenance and timing model so preview, thumbnails, audio, render, export, Save/Resume, Relink, and cleanup cannot accidentally replace or export the wrong representation. |
 
 Any unmet required gate blocks shipping. The spike directly failed several and
@@ -122,12 +122,12 @@ storage, or cleanup UI for a path that cannot yet satisfy its safety contract.
 ## Product behavior after the decision
 
 - No converter package or proxy bytes are added to the shipped app.
-- No proxy state is added to Zustand or `.webcut`.
+- No proxy state is added to Zustand or `.myrelith`.
 - The original selected file remains the only source and relink identity.
 - Unsupported files stay visible and non-draggable unless the existing safe,
   explicitly confirmed whole-kind partial import applies.
-- Users may convert unsupported media outside WebCut and import the converted
-  result as a new source; WebCut does not claim to manage that external file.
+- Users may convert unsupported media outside Myrelith and import the converted
+  result as a new source; Myrelith does not claim to manage that external file.
 
 ## Reopen conditions
 

@@ -1,14 +1,16 @@
 /**
  * Origin-local project capabilities and crash-recovery snapshots.
  *
- * A portable `.webcut` file remains plain validated JSON. Opaque browser file
+ * A portable `.myrelith` file remains plain validated JSON. Opaque browser file
  * handles and recovery history live beside it in IndexedDB, never in domain or
  * Zustand state. The adapter boundary below also keeps storage deterministic in
  * tests without pretending that file handles are JSON-serializable.
  */
 
 import {
+  LEGACY_PROJECT_FILE_EXTENSION,
   parseProjectFile,
+  PROJECT_FILE_EXTENSION,
   PROJECT_FILE_LIMITS,
 } from '../domain/projectFile'
 import {
@@ -133,6 +135,9 @@ export interface LocalProjectStorageOptions {
   limits?: Partial<LocalProjectStorageLimits>
 }
 
+// This origin-local database name is a durable compatibility identifier.
+// Keeping it lets an upgraded installation see Recents and recovery journals
+// created before the Myrelith rebrand.
 const DATABASE_NAME = 'webcut-local-projects'
 const DATABASE_VERSION = 1
 const RECENT_STORE = 'recent-projects' as const
@@ -354,7 +359,7 @@ function validateSnapshotInput(
   try {
     project = parseProjectFile(input.serializedProject)
   } catch (cause) {
-    throw new TypeError('Recovery project snapshot is not a portable .webcut file', {
+    throw new TypeError('Recovery snapshot is not a portable Myrelith project', {
       cause,
     })
   }
@@ -674,7 +679,7 @@ class IndexedDbLocalProjectStorageBackend implements LocalProjectStorageBackend 
         request.error ?? new Error('Could not open local project storage'),
       )
       request.onblocked = () => reject(
-        new Error('Local project storage is blocked by another WebCut tab'),
+        new Error('Local project storage is blocked by another Myrelith tab'),
       )
     })
     void this.database.catch(() => {
@@ -747,12 +752,17 @@ export async function pickLocalProjectFile(): Promise<LocalProjectSelection> {
   // Keep the picker invocation before the first await so it retains the
   // transient user activation from the Open/Resume click.
   const handles = await picker.call(browserWindow, {
-    id: 'webcut-project',
+    id: 'myrelith-project',
     multiple: false,
     excludeAcceptAllOption: true,
     types: [{
-      description: 'WebCut project',
-      accept: { 'application/json': ['.webcut'] },
+      description: 'Myrelith project',
+      accept: {
+        'application/json': [
+          PROJECT_FILE_EXTENSION,
+          LEGACY_PROJECT_FILE_EXTENSION,
+        ],
+      },
     }],
   })
   const handle = handles[0]

@@ -1,6 +1,6 @@
 # Third-party notices
 
-WebCut is MIT-licensed, but its built application includes third-party work
+Myrelith is MIT-licensed, but its built application includes third-party work
 under other licenses. Those components remain governed by their own terms.
 
 ## Runtime JavaScript dependencies
@@ -34,5 +34,5 @@ license.
 
 Codec patent rights are separate from copyright licenses and can vary by
 country and use. This experimental prerelease is not a patent-clearance or
-legal-compliance certification. If you redistribute WebCut, review the exact
+legal-compliance certification. If you redistribute Myrelith, review the exact
 dependency sources and obligations for your distribution.

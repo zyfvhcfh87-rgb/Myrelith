@@ -165,7 +165,7 @@ function decoderCodecProblem(
   if (config.codec.length > MAX_DIAGNOSTIC_TOKEN_CHARACTERS) {
     return {
       reason: 'resource-limit',
-      detail: `The ${kind} decoder codec identifier exceeds WebCut's diagnostic safety limit.`,
+      detail: `The ${kind} decoder codec identifier exceeds Myrelith's diagnostic safety limit.`,
     }
   }
   return null
@@ -278,7 +278,7 @@ function videoResourceProblem(
   ) {
     return {
       reason: 'resource-limit',
-      detail: `${codedWidth}×${codedHeight} exceeds WebCut's ${MEDIA_PROBE_LIMITS.maxDimension}px coded-dimension limit.`,
+      detail: `${codedWidth}×${codedHeight} exceeds Myrelith's ${MEDIA_PROBE_LIMITS.maxDimension}px coded-dimension limit.`,
     }
   }
   if (
@@ -287,7 +287,7 @@ function videoResourceProblem(
   ) {
     return {
       reason: 'resource-limit',
-      detail: `${displayWidth}×${displayHeight} exceeds WebCut's ${MEDIA_PROBE_LIMITS.maxDimension}px display-dimension limit.`,
+      detail: `${displayWidth}×${displayHeight} exceeds Myrelith's ${MEDIA_PROBE_LIMITS.maxDimension}px display-dimension limit.`,
     }
   }
   const codedPixels = codedWidth * codedHeight
@@ -297,7 +297,7 @@ function videoResourceProblem(
   ) {
     return {
       reason: 'resource-limit',
-      detail: `${codedWidth}×${codedHeight} exceeds WebCut's safe pixels-per-frame limit.`,
+      detail: `${codedWidth}×${codedHeight} exceeds Myrelith's safe pixels-per-frame limit.`,
     }
   }
   const displayPixels = displayWidth * displayHeight
@@ -307,7 +307,7 @@ function videoResourceProblem(
   ) {
     return {
       reason: 'resource-limit',
-      detail: `${displayWidth}×${displayHeight} exceeds WebCut's safe display-pixels limit.`,
+      detail: `${displayWidth}×${displayHeight} exceeds Myrelith's safe display-pixels limit.`,
     }
   }
   if (!Number.isFinite(averagePacketRate) || averagePacketRate <= 0) {
@@ -319,13 +319,13 @@ function videoResourceProblem(
   if (averagePacketRate > MEDIA_PROBE_LIMITS.maxFramesPerSecond) {
     return {
       reason: 'resource-limit',
-      detail: `${averagePacketRate.toFixed(3)} fps exceeds WebCut's safe frame-rate limit.`,
+      detail: `${averagePacketRate.toFixed(3)} fps exceeds Myrelith's safe frame-rate limit.`,
     }
   }
   if (decoderDescriptionBytes > MEDIA_PROBE_LIMITS.maxDecoderDescriptionBytes) {
     return {
       reason: 'resource-limit',
-      detail: 'The video decoder configuration exceeds WebCut\'s 1 MiB safety limit.',
+      detail: 'The video decoder configuration exceeds Myrelith\'s 1 MiB safety limit.',
     }
   }
   return null
@@ -345,7 +345,7 @@ function audioResourceProblem(
   if (sampleRate > MEDIA_PROBE_LIMITS.maxAudioSampleRate) {
     return {
       reason: 'resource-limit',
-      detail: `${sampleRate} Hz exceeds WebCut's safe audio sample-rate limit.`,
+      detail: `${sampleRate} Hz exceeds Myrelith's safe audio sample-rate limit.`,
     }
   }
   if (!Number.isSafeInteger(channels) || channels <= 0) {
@@ -357,13 +357,13 @@ function audioResourceProblem(
   if (channels > MEDIA_PROBE_LIMITS.maxAudioChannels) {
     return {
       reason: 'resource-limit',
-      detail: `${channels} audio channels exceeds WebCut's safe channel-count limit.`,
+      detail: `${channels} audio channels exceeds Myrelith's safe channel-count limit.`,
     }
   }
   if (decoderDescriptionBytes > MEDIA_PROBE_LIMITS.maxDecoderDescriptionBytes) {
     return {
       reason: 'resource-limit',
-      detail: 'The audio decoder configuration exceeds WebCut\'s 1 MiB safety limit.',
+      detail: 'The audio decoder configuration exceeds Myrelith\'s 1 MiB safety limit.',
     }
   }
   return null
@@ -436,7 +436,7 @@ async function probeVideoTrack(
       detail = problem.detail
     } else if (!codec) {
       reason = 'unknown-codec'
-      detail = 'WebCut could not identify this video track codec.'
+      detail = 'Myrelith could not identify this video track codec.'
     } else if (!decoderConfig) {
       reason = 'malformed-media'
       detail = 'The video decoder configuration is missing or invalid.'
@@ -567,7 +567,7 @@ async function probeAudioTrack(
       detail = problem.detail
     } else if (!codec) {
       reason = 'unknown-codec'
-      detail = 'WebCut could not identify this audio track codec.'
+      detail = 'Myrelith could not identify this audio track codec.'
     } else if (!decoderConfig) {
       reason = 'malformed-media'
       detail = 'The audio decoder configuration is missing or invalid.'
@@ -753,7 +753,7 @@ async function probeOpenedInput(
         durationMicroseconds: null,
         tracks: [],
         reason: 'resource-limit',
-        detail: `${trackCount} media tracks exceeds WebCut's ${MEDIA_PROBE_LIMITS.maxTracks}-track safety limit.`,
+        detail: `${trackCount} media tracks exceeds Myrelith's ${MEDIA_PROBE_LIMITS.maxTracks}-track safety limit.`,
       },
       primaryVideo: null,
       primaryAudio: null,
@@ -901,7 +901,7 @@ async function probeOpenedInput(
         durationMicroseconds: null,
         tracks,
         reason: 'resource-limit',
-        detail: 'The media duration exceeds WebCut\'s 24-hour safety limit.',
+        detail: 'The media duration exceeds Myrelith\'s 24-hour safety limit.',
       },
       primaryVideo: null,
       primaryAudio: null,
@@ -961,7 +961,7 @@ export async function probeMediaFile(
     const compatibility = fileFailure(
       'unsupported',
       'resource-limit',
-      `"${file.name}" exceeds WebCut's 64 GiB media-file safety limit.`,
+      `"${file.name}" exceeds Myrelith's 64 GiB media-file safety limit.`,
     ).compatibility
     return { status: 'unsupported', asset: null, compatibility }
   }

@@ -554,10 +554,10 @@ if (-not $listener) {
   $startArgs = @{
     FilePath = 'npm.cmd'
     ArgumentList = @('run', 'dev', '--', '--host', '127.0.0.1', '--port', '5173')
-    WorkingDirectory = 'E:\ClaudeSpace\WebCut'
+    WorkingDirectory = 'E:\ClaudeSpace\Myrelith'
     WindowStyle = 'Hidden'
-    RedirectStandardOutput = "$env:TEMP\webcut-vite.stdout.log"
-    RedirectStandardError = "$env:TEMP\webcut-vite.stderr.log"
+    RedirectStandardOutput = "$env:TEMP\myrelith-vite.stdout.log"
+    RedirectStandardError = "$env:TEMP\myrelith-vite.stderr.log"
   }
   Start-Process @startArgs
 }

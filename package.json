@@ -1,17 +1,17 @@
 {
-  "name": "webcut",
+  "name": "myrelith",
   "private": true,
   "version": "0.1.0-alpha.1",
   "description": "Private-by-design, browser-native non-linear video editor powered by WebCodecs.",
   "license": "MIT",
   "author": "Aryel",
-  "homepage": "https://webcut-d27.pages.dev",
+  "homepage": "https://myrelith.pages.dev",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zyfvhcfh87-rgb/WebCut.git"
+    "url": "git+https://github.com/zyfvhcfh87-rgb/Myrelith.git"
   },
   "bugs": {
-    "url": "https://github.com/zyfvhcfh87-rgb/WebCut/issues"
+    "url": "https://github.com/zyfvhcfh87-rgb/Myrelith/issues"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

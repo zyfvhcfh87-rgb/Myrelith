@@ -29,7 +29,7 @@ export interface LocalStorageSummary {
   /** Complete browser-origin usage, which may include browser bookkeeping. */
   browserUsageBytes: number | null
   browserQuotaBytes: number | null
-  /** UTF-8 bytes in the complete recovery snapshots managed by WebCut. */
+  /** UTF-8 bytes in the complete recovery snapshots managed by Myrelith. */
   recoveryBytes: number
   disposableBytes: number
   disposableItemCount: number

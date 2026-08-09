@@ -913,7 +913,7 @@ describe('Export dialog lifecycle', () => {
     expect(blob).toBeInstanceOf(Blob)
     expect(blob).toMatchObject({ size: 4, type: 'video/webm' })
     expect(download).toHaveAttribute('href', 'blob:finished-export')
-    expect(download).toHaveAttribute('download', 'webcut-CON.txt.webm')
+    expect(download).toHaveAttribute('download', 'myrelith-CON.txt.webm')
 
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))

@@ -26,9 +26,9 @@ describe('project recovery model', () => {
   test('filters by project or file name and groups compact rows by local age', () => {
     const now = new Date(2026, 7, 9, 12).getTime()
     const groups = groupRecoveryJournals([
-      recovery('today-z', 'Zulu', 'zulu.webcut', now - 1_000),
+      recovery('today-z', 'Zulu', 'zulu.myrelith', now - 1_000),
       recovery('today-a', 'Alpha', null, now - 2_000),
-      recovery('week', 'Field notes', 'brussels.webcut', now - 2 * 86_400_000),
+      recovery('week', 'Field notes', 'brussels.myrelith', now - 2 * 86_400_000),
       recovery('older', 'Archive', null, now - 10 * 86_400_000),
     ], { query: '', sort: 'name', now })
 
@@ -40,7 +40,7 @@ describe('project recovery model', () => {
     expect(groups[0]?.recoveries.map((entry) => entry.projectName))
       .toEqual(['Alpha', 'Zulu'])
     expect(groupRecoveryJournals([
-      recovery('file-match', 'Unrelated', 'brussels.webcut', now),
+      recovery('file-match', 'Unrelated', 'brussels.myrelith', now),
     ], { query: 'BRUSSELS', sort: 'newest', now })).toHaveLength(1)
     expect(groupRecoveryJournals([
       recovery('today', 'Today', null, now),

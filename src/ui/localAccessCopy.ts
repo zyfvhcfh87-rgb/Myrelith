@@ -7,7 +7,7 @@ export type LocalAccessAction =
   | 'Relink folder'
 
 export const LOCAL_ACCESS_EXPLANATION =
-  'Remember access stores a browser-only file or folder permission and its label. WebCut never copies or uploads the file. Use once keeps no reusable access after this session.'
+  'Remember access stores a browser-only file or folder permission and its label. Myrelith never copies or uploads the file. Use once keeps no reusable access after this session.'
 
 export function localAccessChoiceLabel(
   action: LocalAccessAction,

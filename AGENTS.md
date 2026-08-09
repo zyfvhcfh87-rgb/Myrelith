@@ -1,4 +1,4 @@
-# WebCut
+# Myrelith
 
 Web-native non-linear video editor.
 Stack: React + Vite + TypeScript + Zustand + Immer + WebCodecs + Mediabunny + Canvas2D/WebGL.

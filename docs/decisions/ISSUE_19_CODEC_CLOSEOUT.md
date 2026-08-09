@@ -6,7 +6,7 @@ items. The three unchecked proxy-conversion implementation items remain
 intentionally out of scope under the accepted no-go decision.
 
 This record closes the compatibility, diagnostics, fallback, resource-safety,
-and browser-gate work. It does **not** certify WebCut for public distribution or
+and browser-gate work. It does **not** certify Myrelith for public distribution or
 claim universal codec support.
 
 ## Reproducible fixture matrix
@@ -39,7 +39,7 @@ does not match the matrix. No fixture bytes enter the product bundle.
 | `empty.mp4` | Error; rejected by the file-size/resource boundary |
 | `random-bytes.mp4` | Unsupported; not a supported media container |
 
-HEVC and AV1 are observations, not hard-coded promises. WebCut asks the active
+HEVC and AV1 are observations, not hard-coded promises. Myrelith asks the active
 browser about the exact configuration again in every new runtime and at each
 real decode boundary.
 
@@ -113,12 +113,12 @@ untested.
 ## Distribution boundary
 
 The decoder packages are exact-version and lockfile-integrity pinned, fallback
-code is lazy and locally bundled, and WebCut does not download executable
+code is lazy and locally bundled, and Myrelith does not download executable
 decoder code at runtime. Cross-origin isolation is not required for correctness
 with the selected fallbacks.
 
 This is still not a public-distribution compliance conclusion. Before a public
-release claim, WebCut needs:
+release claim, Myrelith needs:
 
 - a project license;
 - third-party notices and MPL source-availability links;

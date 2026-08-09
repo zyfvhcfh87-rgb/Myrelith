@@ -1,34 +1,38 @@
-# WebCut
+# Myrelith
 
 > A private-by-design, browser-native video editor. Your media stays on your
 > device.
 
 [![MIT License](https://img.shields.io/badge/license-MIT-78a9e8.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/zyfvhcfh87-rgb/WebCut?include_prereleases&label=release)](https://github.com/zyfvhcfh87-rgb/WebCut/releases)
-[![CI](https://github.com/zyfvhcfh87-rgb/WebCut/actions/workflows/ci.yml/badge.svg)](https://github.com/zyfvhcfh87-rgb/WebCut/actions/workflows/ci.yml)
-[![Container](https://img.shields.io/badge/ghcr.io-webcut-8a63d2)](https://github.com/zyfvhcfh87-rgb/WebCut/pkgs/container/webcut)
+[![Release](https://img.shields.io/github/v/release/zyfvhcfh87-rgb/Myrelith?include_prereleases&label=release)](https://github.com/zyfvhcfh87-rgb/Myrelith/releases)
+[![CI](https://github.com/zyfvhcfh87-rgb/Myrelith/actions/workflows/ci.yml/badge.svg)](https://github.com/zyfvhcfh87-rgb/Myrelith/actions/workflows/ci.yml)
+[![Container](https://img.shields.io/badge/ghcr.io-myrelith-8a63d2)](https://github.com/zyfvhcfh87-rgb/Myrelith/pkgs/container/myrelith)
 
-**[Open WebCut](https://webcut-d27.pages.dev)** ·
+**[Open Myrelith](https://myrelith.pages.dev)** ·
 [Privacy](PRIVACY.md) ·
-[Releases](https://github.com/zyfvhcfh87-rgb/WebCut/releases) ·
-[Report a bug](https://github.com/zyfvhcfh87-rgb/WebCut/issues/new/choose)
+[Releases](https://github.com/zyfvhcfh87-rgb/Myrelith/releases) ·
+[Report a bug](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/new/choose)
 
-WebCut is an experimental non-linear editor built with React, TypeScript,
+Myrelith is an experimental non-linear editor built with React, TypeScript,
 WebCodecs, Mediabunny, Web Audio, and worker-owned Canvas rendering. It can take
 a project from local media to a capability-aware MP4 or WebM export without
 sending the source files to an application server.
 
-## Why WebCut?
+New saves use the `.myrelith` extension and `myrelith-project` format marker.
+Projects created before the rename with a `.webcut` filename or
+`webcut-project` marker remain supported and are normalized when opened.
+
+## Why Myrelith?
 
 - **Local-first:** media decoding, preview, editing, and export happen in your
   browser. There are no accounts, ads, cookies, or in-app analytics.
 - **A real editing model:** multi-track editing, editable titles/captions,
   linked A/V, trim/ripple/slip/slide/razor tools, transitions, transforms,
   opacity, and clip volume.
-- **Portable projects:** `.webcut` files contain the edit, not bundled source
+- **Portable projects:** `.myrelith` files contain the edit, not bundled source
   media. Chrome can remember browser-managed file permissions and reconnect
   sources when allowed.
-- **Honest compatibility:** WebCut inspects media bytes and probes real decoder
+- **Honest compatibility:** Myrelith inspects media bytes and probes real decoder
   and encoder configurations. Unsupported explicit export choices stay blocked
   with a reason; the app never quietly swaps in another format.
 - **Resilient work:** recent-project shortcuts, offline sources, relinking, and
@@ -46,15 +50,15 @@ sending the source files to an application server.
 
 ## Try it
 
-WebCut targets current desktop Chromium. Open the
-[hosted preview](https://webcut-d27.pages.dev), create a project, and choose
-local media. The browser may ask for file access; WebCut receives only the files
+Myrelith targets current desktop Chromium. Open the
+[hosted preview](https://myrelith.pages.dev), create a project, and choose
+local media. The browser may ask for file access; Myrelith receives only the files
 or folders you explicitly choose.
 
 Chrome is the primary development target. Chrome 150 and Edge 150 on Windows
 have passed the current import, editing, playback, cancellation, and export
 gates. Firefox and Safari are not yet verified. Exact codec support still
-depends on the browser, operating system, and hardware, so WebCut probes it each
+depends on the browser, operating system, and hardware, so Myrelith probes it each
 time instead of relying on file extensions.
 
 ## Run locally
@@ -63,8 +67,8 @@ Requirements: Node.js `^20.19.0` or `>=22.12.0`, npm, and a current desktop
 Chrome or Edge installation.
 
 ```bash
-git clone https://github.com/zyfvhcfh87-rgb/WebCut.git
-cd WebCut
+git clone https://github.com/zyfvhcfh87-rgb/Myrelith.git
+cd Myrelith
 npm ci
 npm run dev
 ```
@@ -73,8 +77,9 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Run the container
 
-Versioned images are published to GitHub Container Registry. The server listens
-on port `8080` inside the container.
+Future versioned images publish to GitHub Container Registry under the
+`myrelith` package name. The previously released alpha remains immutable under
+its legacy package name; the server listens on port `8080` inside the container.
 
 ```bash
 docker run --rm -p 8080:8080 ghcr.io/zyfvhcfh87-rgb/webcut:0.1.0-alpha.1
@@ -85,20 +90,25 @@ the static app; editing remains in the visitor's browser.
 
 ## Privacy and local storage
 
-WebCut does not upload selected media or projects. It uses browser storage for
+Myrelith does not upload selected media or projects. It uses browser storage for
 preferences, browser-managed file handles you authorize, and bounded recovery
 snapshots that contain project structure and source metadata—but never the
 source video, audio, or image bytes. Clearing the site's browser data removes
 these conveniences.
 
+Browser storage is bound to the exact site origin. Moving to the Myrelith
+hostname cannot automatically transfer Recents, recovery copies, preferences,
+or remembered permissions from the previous hostname; save a portable project
+file there and open it in Myrelith when migration is needed.
+
 Cloudflare Pages delivers the hosted app and processes ordinary request and
 security metadata. Cloudflare Web Analytics is disabled. Read the full
 [Privacy Notice](PRIVACY.md) or the
-[public hosted copy](https://webcut-d27.pages.dev/privacy/).
+[public hosted copy](https://myrelith.pages.dev/privacy/).
 
 ## Known limitations
 
-- WebCut is an **alpha preview**, not a production-ready editor. Keep your
+- Myrelith is an **alpha preview**, not a production-ready editor. Keep your
   source media and exported files backed up.
 - Browser and OS codec support varies. Auto tries Modern, then Web, then
   Compatibility; HEVC is explicit-only. Unsupported selections are never
@@ -107,7 +117,7 @@ security metadata. Cloudflare Web Analytics is disabled. Read the full
   context and compatible File System Access APIs. Other browsers use downloads
   and manual reconnection.
 - Recovery copies are origin-local browser conveniences, not user-owned
-  `.webcut` saves. Multi-tab recovery ownership is not coordinated.
+  `.myrelith` saves. Multi-tab recovery ownership is not coordinated.
 - Local ProRes and AC-3/E-AC-3 extensions cover import only. There is no proxy
   converter or local export-encoder fallback.
 - The bundled AC-3/E-AC-3 decoder includes FFmpeg-derived WebAssembly. Copyright
@@ -146,6 +156,6 @@ sensitive vulnerabilities. General support expectations are in
 
 ## License
 
-WebCut is copyright © 2026 Aryel and released under the [MIT License](LICENSE).
+Myrelith is copyright © 2026 Aryel and released under the [MIT License](LICENSE).
 Bundled dependencies keep their own licenses; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

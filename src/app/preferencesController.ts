@@ -17,9 +17,13 @@ import {
   type WorkspaceLayoutPreference,
 } from '../state/workspaceLayoutStore'
 
-export const USER_PREFERENCES_STORAGE_KEY = 'webcut.preferences:v1'
-export const EXPORT_SELECTION_STORAGE_KEY = 'webcut.export-selection:v1'
-export const WORKSPACE_LAYOUT_STORAGE_KEY = 'webcut.workspace:v1'
+export const USER_PREFERENCES_STORAGE_KEY = 'myrelith.preferences:v1'
+export const EXPORT_SELECTION_STORAGE_KEY = 'myrelith.export-selection:v1'
+export const WORKSPACE_LAYOUT_STORAGE_KEY = 'myrelith.workspace:v1'
+/** Local-storage keys written before the Myrelith rebrand. */
+export const LEGACY_USER_PREFERENCES_STORAGE_KEY = 'webcut.preferences:v1'
+export const LEGACY_EXPORT_SELECTION_STORAGE_KEY = 'webcut.export-selection:v1'
+export const LEGACY_WORKSPACE_LAYOUT_STORAGE_KEY = 'webcut.workspace:v1'
 
 interface PersistedPreferencesV1 {
   version: 1
@@ -160,6 +164,8 @@ export function initPreferencesPersistence(
     try {
       const persisted = parsePersistedPreferences(
         persistenceStorage.getItem(USER_PREFERENCES_STORAGE_KEY),
+      ) ?? parsePersistedPreferences(
+        persistenceStorage.getItem(LEGACY_USER_PREFERENCES_STORAGE_KEY),
       )
       if (persisted) {
         usePreferencesStore.setState({
@@ -173,6 +179,8 @@ export function initPreferencesPersistence(
     try {
       const persisted = parsePersistedExportSelection(
         persistenceStorage.getItem(EXPORT_SELECTION_STORAGE_KEY),
+      ) ?? parsePersistedExportSelection(
+        persistenceStorage.getItem(LEGACY_EXPORT_SELECTION_STORAGE_KEY),
       )
       if (persisted) {
         usePreferencesStore.setState({ exportSelection: persisted })
@@ -183,6 +191,8 @@ export function initPreferencesPersistence(
     try {
       const persisted = parsePersistedWorkspaceLayout(
         persistenceStorage.getItem(WORKSPACE_LAYOUT_STORAGE_KEY),
+      ) ?? parsePersistedWorkspaceLayout(
+        persistenceStorage.getItem(LEGACY_WORKSPACE_LAYOUT_STORAGE_KEY),
       )
       if (persisted) {
         useWorkspaceLayoutStore.getState().hydrateWorkspaceLayout(persisted)

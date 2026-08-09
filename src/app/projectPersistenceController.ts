@@ -9,6 +9,7 @@
 
 import {
   createProjectFileSnapshot,
+  PROJECT_FILE_EXTENSION,
   serializeProjectFile,
 } from '../domain/projectFile'
 import { useDocumentStore } from '../state/documentStore'
@@ -127,8 +128,8 @@ const realDeps: ProjectPersistenceDeps = {
       suggestedName,
       excludeAcceptAllOption: true,
       types: [{
-        description: 'WebCut project',
-        accept: { 'application/json': ['.webcut'] },
+        description: 'Myrelith project',
+        accept: { 'application/json': [PROJECT_FILE_EXTENSION] },
       }],
     })
   },
@@ -180,7 +181,10 @@ function isPickerCancellation(cause: unknown): boolean {
 
 /** Windows-safe, extension-stable default for both picker and fallback. */
 export function projectFileName(projectName: string): string {
-  let base = projectName.trim().replace(/[. ]+$/g, '').replace(/\.webcut$/i, '')
+  let base = projectName
+    .trim()
+    .replace(/[. ]+$/g, '')
+    .replace(/\.(?:myrelith|webcut)$/i, '')
   base = base.replace(/[<>:"/\\|?*]/g, '-')
   base = Array.from(base, (character) => (
     character.charCodeAt(0) < 32 ? '-' : character
@@ -190,9 +194,9 @@ export function projectFileName(projectName: string): string {
     /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
       .test(base)
   ) {
-    base = `webcut-${base}`
+    base = `myrelith-${base}`
   }
-  return `${base || 'untitled-project'}.webcut`
+  return `${base || 'untitled-project'}${PROJECT_FILE_EXTENSION}`
 }
 
 interface SaveOperation {

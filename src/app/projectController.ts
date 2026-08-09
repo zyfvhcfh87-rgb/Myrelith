@@ -7,6 +7,9 @@
  */
 
 import {
+  hasSupportedProjectFileExtension,
+  LEGACY_PROJECT_FILE_EXTENSION,
+  PROJECT_FILE_EXTENSION,
   PROJECT_FILE_LIMITS,
   parseProjectFile,
   type PortableAssetDescriptor,
@@ -639,8 +642,11 @@ async function readProjectCandidateFile(
   deps: ProjectControllerDeps,
 ): Promise<ProjectActionResult> {
   try {
-    if (!file.name.toLowerCase().endsWith('.webcut')) {
-      throw new Error('Choose a file ending in .webcut')
+    if (!hasSupportedProjectFileExtension(file.name)) {
+      throw new Error(
+        `Choose a file ending in ${PROJECT_FILE_EXTENSION}`
+        + ` or legacy ${LEGACY_PROJECT_FILE_EXTENSION}`,
+      )
     }
     if (file.size > PROJECT_FILE_LIMITS.maxSerializedCharacters) {
       throw new Error('This project file is too large to open safely')
@@ -679,7 +685,7 @@ export function canRememberProjectFiles(): boolean {
   return supportsLocalProjectFiles()
 }
 
-/** Choose a reusable `.webcut` handle directly from the Resume click. */
+/** Choose a reusable Myrelith or legacy project handle from the Resume click. */
 export async function chooseProjectFile(
   deps: ProjectControllerDeps = realDeps,
 ): Promise<ProjectActionResult> {
@@ -1355,7 +1361,7 @@ async function connectProjectMediaSelections(
 ): Promise<ProjectActionResult> {
   const pending = pendingResume
   if (!pending) {
-    const message = 'Choose a valid .webcut project before reconnecting media'
+    const message = 'Choose a valid Myrelith project before reconnecting media'
     useProjectSessionStore.setState({ phase: 'error', error: message })
     return { status: 'failed', message }
   }
@@ -1534,7 +1540,7 @@ export async function chooseProjectMedia(
 ): Promise<ProjectActionResult> {
   const pending = pendingResume
   if (!pending) {
-    const message = 'Choose a valid .webcut project before reconnecting media'
+    const message = 'Choose a valid Myrelith project before reconnecting media'
     useProjectSessionStore.setState({ phase: 'error', error: message })
     return { status: 'failed', message }
   }
@@ -1976,7 +1982,7 @@ export function activateResumedProject(
 ): Promise<ProjectActionResult> {
   const pending = pendingResume
   if (!pending) {
-    const message = 'Choose a valid .webcut project first'
+    const message = 'Choose a valid Myrelith project first'
     useProjectSessionStore.setState({ phase: 'error', error: message })
     return Promise.resolve({ status: 'failed', message })
   }

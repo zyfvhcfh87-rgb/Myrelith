@@ -1,4 +1,4 @@
-export const PERFORMANCE_BENCHMARK_PATH = '/__webcut/performance'
+export const PERFORMANCE_BENCHMARK_PATH = '/__myrelith/performance'
 
 export interface BenchmarkRouteEnvironment {
   readonly development: boolean
