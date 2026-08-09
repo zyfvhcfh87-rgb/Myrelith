@@ -186,6 +186,7 @@ function ClipView({
       tabIndex={0}
       aria-label={`${clip.name}, ${accessibleKind} clip`}
       aria-pressed={isSelected}
+      aria-keyshortcuts="Control+ArrowLeft Control+ArrowRight Meta+ArrowLeft Meta+ArrowRight"
       title={interactionTitle}
       style={{
         transform:

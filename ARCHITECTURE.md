@@ -79,6 +79,17 @@ gesture (coalesced to one update per animation frame). The `documentStore`
 mutation — which creates an undo-history entry — happens once, on `pointerup`.
 Never write to `documentStore` on every `pointermove`.
 
+Timeline snapping follows the same boundary. `domain/timelineSnapping.ts`
+collects eligible playhead, clip-edge, transition-edge, and marker candidates
+from an immutable document snapshot, then resolves a bounded signed delta with
+deterministic distance/kind/frame/track/id ordering. Locked and hidden tracks,
+the moving linked group, and wrong-kind track candidates are excluded. The
+8px interaction threshold is converted with authoritative pixels-per-frame
+`zoom`, so it stays visually stable without introducing fractional authored
+frames. Pointer and keyboard moves call this same resolver. Their alignment
+guide lives only in `transportStore`; Alt bypasses snapping for the current
+move, while the persistent preference remains unchanged.
+
 ## Browser-safe timeline geometry
 
 - `zoom` is the one and only pixels-per-frame scale. The logical timeline
@@ -351,8 +362,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   integer global frame represented by local x=0 in the bounded DOM surface).
   `setZoom` atomically updates rendered + remembered zoom and activates Custom;
   `setPresetZoom` updates rendered zoom + Full/Detail mode without overwriting
-  `customZoom`; `setTimelineOriginFrame` changes translation only. All four
-  fields are ephemeral/non-history and reset deterministically. Also `inOut`,
+  `customZoom`; `setTimelineOriginFrame` changes translation only. These
+  geometry fields are ephemeral/non-history and reset deterministically. Also
+  `inOut`,
   `dragPreview` ({clipId, deltaFrames,
   targetTrackId?, trackOffsetY?, linkGroupId?} | null — the live half of
   the scrubbing-vs-committed pattern for select-tool moves; every participating
@@ -371,14 +383,21 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   visual-media transform/settings respectively. `app/previewController.ts`
   projects those drafts into the immutable document snapshot sent to the
   shared preview renderer; neither enters document history until the gesture
-  owner dispatches its single pointerup mutation.
+  owner dispatches its single pointerup mutation. `snapGuide`
+  (`{frame, kind} | null`) is the equally ephemeral visible-alignment result;
+  it is published with a drag/edit/ruler preview and cleared on commit, cancel,
+  lost capture, or reset. It never enters project data or history.
   `ui/timeline/useClipGestureSession.ts` is the
   single owner of clip pointer/keyboard routing, pointer capture, cancellation,
   rAF-coalesced previews, and the one pointerup document dispatch. At
   pointerdown it delegates to pure `ui/timeline/gestureBounds.ts`, using one
   fresh document/media snapshot to intersect every participating linked
   member's legal signed-delta interval, so no owner can preview beyond a
-  partner's timeline, source, duration, and headroom bounds. The gesture
+  partner's timeline, source, duration, and headroom bounds. It snapshots
+  snapping candidates from that same document and uses the domain resolver for
+  pointer previews, pointer commits, and applicable Ctrl/Cmd+Arrow moves. A
+  snapped zero-delta keyboard move may show the guide but dispatches no
+  document action. The gesture
   session retains that exact pointer-down document reference and group
   identity; if the committed document changes before pointerup, the preview is
   cleared and no stale commit is dispatched. Normal pointer or unmodified

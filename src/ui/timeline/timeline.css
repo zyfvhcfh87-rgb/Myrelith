@@ -780,6 +780,44 @@
   z-index: 10;
 }
 
+.timeline-alignment-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 11;
+  width: 1px;
+  background: #f4ca64;
+  box-shadow: 0 0 0 1px rgb(244 202 100 / 18%);
+  pointer-events: none;
+}
+
+.timeline-alignment-guide > span {
+  position: absolute;
+  top: 30px;
+  left: 5px;
+  max-width: 190px;
+  overflow: hidden;
+  padding: 2px 5px;
+  border: 1px solid #d6a944;
+  border-radius: 4px;
+  color: #fff4c5;
+  background: #4b3918;
+  font-size: 10px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+  .timeline-alignment-guide {
+    background: Highlight;
+  }
+  .timeline-alignment-guide > span {
+    border-color: Highlight;
+  }
+}
+
 /* ---------------- Phase 4.2 editing tools ---------------- */
 
 .clip-view.selected {

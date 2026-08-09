@@ -24,6 +24,19 @@ describe('preferencesStore', () => {
       selectionId: 'compatibility',
       profile: null,
     })
+    expect(usePreferencesStore.getState().snappingEnabled).toBe(true)
+  })
+
+  test('stores the accessible snapping preference idempotently', () => {
+    const before = usePreferencesStore.getState()
+    before.setSnappingEnabled(true)
+    expect(usePreferencesStore.getState()).toBe(before)
+
+    before.setSnappingEnabled(false)
+    expect(usePreferencesStore.getState().snappingEnabled).toBe(false)
+    const disabled = usePreferencesStore.getState()
+    disabled.setSnappingEnabled(false)
+    expect(usePreferencesStore.getState()).toBe(disabled)
   })
 
   test('accepts bounded integer microseconds and ignores invalid values', () => {

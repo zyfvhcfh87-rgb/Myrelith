@@ -28,6 +28,7 @@ import type {
 } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
+import { usePreferencesStore } from '../../state/preferencesStore'
 import { useTransportStore } from '../../state/transportStore'
 import ClipView from './ClipView'
 import Track from './Track'
@@ -298,7 +299,9 @@ beforeEach(() => {
     selectedClipId: null,
     selectedClipIds: [],
     editPreview: null,
+    snapGuide: null,
   })
+  usePreferencesStore.getState().setSnappingEnabled(true)
   doc().setDoc(makeDoc())
   useMediaStore.setState({
     descriptors: new Map([[connectedDescriptor.id, connectedDescriptor]]),
@@ -481,6 +484,36 @@ describe('trim via edges (select tool)', () => {
     expect(clipById('clipB').timelineRange.startFrame).toBe(150) // plain trim: no ripple
     expect(doc().past).toHaveLength(1)
     expect(transport().editPreview).toBeNull()
+  })
+
+  test('trim preview snaps to a marker without history, then commits one entry', async () => {
+    doc().setDoc({
+      ...makeDoc(),
+      markers: [{ id: 'marker-beat', frame: 133, label: 'Beat', color: 'yellow' }],
+    })
+    renderTrack()
+    const clip = screen.getByTestId('clip-clipA')
+    const edge = screen.getByTestId('clip-clipA-edge-end')
+
+    fireEvent.pointerDown(edge, { pointerId: 31, clientX: 150 })
+    fireEvent.pointerMove(clip, { pointerId: 31, clientX: 130 })
+
+    await waitFor(() => {
+      expect(transport().editPreview?.deltaFrames).toBe(-17)
+      expect(transport().snapGuide).toMatchObject({
+        frame: 133,
+        candidateKind: 'marker',
+      })
+    })
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+    expect(doc().past).toHaveLength(0)
+
+    fireEvent.pointerUp(clip, { pointerId: 31, clientX: 130 })
+
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(33)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().editPreview).toBeNull()
+    expect(transport().snapGuide).toBeNull()
   })
 
   test('start-edge drag trims head and advances the source in-point', async () => {

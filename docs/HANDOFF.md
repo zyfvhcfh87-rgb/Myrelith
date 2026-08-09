@@ -114,6 +114,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #64 — timeline markers** | ✅ implementation complete | schema-7 sequence markers; deterministic pure operations/navigation, undoable store actions, portable migration/round trips, accessible clustered ruler/editor, command palette + keyboard paths; 125 focused + 1,979 total tests; clean in-app Chromium gate on exclusive port 5174; delivery tracked by draft PR |
 | **Post-MVP #68 — caption tracks + SRT/VTT** | ✅ implementation complete | schema-8 semantic tracks/cues; exact frame/timestamp round trips, atomic strict import, accessible bounded editor, shared preview/export text composition, undo/recovery; 2,046 total tests and clean Chromium QA on exclusive port 41868 |
 | **Post-MVP #46 — minimal blend modes** | ✅ implementation complete | explicit normal/multiply/screen/overlay intent; schema-9 migration preserving schema-8 captions and unknown blend intent; isolated Canvas2D composition plus capability fallback seam; accessible Inspector/history; clean preview/export/reload Chromium gate on exclusive port 41846 |
+| **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -2250,6 +2251,79 @@ surface; it is not a second zoom and never enters document history.
 - Publication is a ready-for-review PR targeting `master` because later merge
   was authorized for the coordinating task. This implementation does not merge,
   deploy, or close the issue itself.
+
+## Post-MVP issue #67 - snapping and alignment guides
+
+**IMPLEMENTATION COMPLETE (2026-08-09).**
+
+- `domain/timelineSnapping.ts` is the single browser-free source of truth for
+  playhead, clip-start/end, transition-start/end, and marker candidates. It
+  converts the 8px tolerance through the current zoom into integer frames,
+  clamps to gesture bounds, and breaks ties deterministically by distance,
+  candidate kind, frame, track order, and stable ids.
+- Candidate planning excludes the moving clip/link group, locked or hidden
+  tracks, ineligible track kinds, and their attached transitions. Global
+  playhead and marker anchors remain eligible across compatible lanes.
+- Clip move/trim/ripple/slide previews and applicable Ctrl/Cmd+Arrow moves use
+  the same resolver. The ruler uses it for playhead scrubbing. Holding Alt
+  bypasses snapping for that move without changing the persisted preference;
+  the toolbar exposes the preference as a keyboard-focusable pressed-state
+  button with explanatory accessible text.
+- The visible guide is transport-only state with an adjacent live status. A
+  pointer preview changes no document/history state, pointerup dispatches the
+  existing single document action, cancel/lost capture clears the preview, and
+  an already-aligned keyboard move creates no phantom undo entry.
+- Focused validation passed 136 tests across the resolver, preferences,
+  transport state, toolbar, ruler, move, and edit gesture surfaces. The final
+  regression gate passed all 2,023 Vitest tests plus all 16 benchmark-runner
+  tests; TypeScript + production Vite build and oxlint are green; the required
+  production dependency audit reports 0 vulnerabilities. Vite retains only
+  the repository's advisory large-chunk warning.
+- Real headed Chromium QA used only
+  `npm run dev -- --port 41867 --strictPort`. At 1px/frame and 2px/frame it
+  covered playhead, marker, and transition-edge snaps; closer hidden/locked and
+  wrong-kind anchors; pointer preview/history isolation; one-entry commit;
+  Alt bypass; persistent off/reload/on preference; keyboard snap and snapped
+  no-op; guide cleanup; 1280×720 and 800×720 layouts; and an empty console
+  warning/error log. The synthetic store-seeded timeline fixture deliberately
+  avoided media decode/export because snapping owns authored timeline geometry,
+  not pipeline resources.
+- Source fingerprints: clean base `c8bb275` was
+  `sha256:89ee303aad205fd8ef1736e2ea63cc2cc454660442d4543d554de4d91088be87`;
+  the completed implementation checkpoint was
+  `sha256:8cc9e64ea4f5b3f21d20dda536fca647fc8945f568cfe31f698c166855942bc0`.
+  The final commit SHA is the authoritative publication identity.
+- Delivery is a ready-for-review PR targeting `master`, with merge and issue
+  closeout left to the coordinating task's dependency-order review.
+- The post-Issue-#68 rebase onto
+  `78d0d0756a9b9248d8c08f485bf4892407279347` combined both completion records
+  in this file and PLAN.md. Caption schema 8, its schema-7 migration, caption
+  operations/import/render/editor code, and snapping production behavior were
+  unchanged; only the snapping unit-test fixture needed the current schema 8
+  plus explicit empty `captionTracks`.
+- Post-rebase validation passed 15 targeted architecture/snapping/caption files
+  with 233 tests, all 145 repository files with 2,062 tests, all 16
+  benchmark-runner tests, TypeScript + production Vite build, oxlint, and diff
+  checks. The requested all-dependency high-severity audit reports the same two
+  dev-only transitive findings as `master` (`nanoid` through Vite/PostCSS and
+  `undici` through jsdom); manifests/lockfile are unchanged and the production
+  dependency audit remains 0 vulnerabilities. Browser QA was not repeated
+  because conflict resolution and the only compatibility fix were docs/tests;
+  the original headed Chromium snapping evidence above remains applicable.
+- The final post-Issue-#46 integration rebase onto
+  `1a09f782e28ac3f23a0b599ed56a86eca763ff2f` keeps captions semantic/topmost,
+  preserves schema 8 and its 7→8 migration, and preserves schema 9 blend intent,
+  the 8→9 Normal default, and the shared preview/export compositor. Only this
+  evidence log and PLAN.md conflicted. The snapping fixture advanced to schema
+  9 with empty caption tracks and explicit `normal` blend intent; no caption or
+  blend schema/migration/composition source changed in the snapping commit.
+- Final integration validation passed 21 targeted files / 385 tests across all
+  three slices, all 147 repository files / 2,093 tests, all 16 benchmark-runner
+  tests, TypeScript + production Vite build, oxlint, and diff checks. The
+  all-dependency audit retains the same two inherited dev-only highs while the
+  production audit reports 0 vulnerabilities. Browser QA was carried forward
+  because the final rebase resolution and compatibility change were docs/test
+  fixture only; no production or observable behavior changed.
 
 ## Working agreements (the user's explicit preferences)
 

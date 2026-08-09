@@ -5,10 +5,15 @@ import {
   useProjectSessionStore,
 } from '../state/projectSessionStore'
 import { INITIAL_TRANSPORT_STATE, useTransportStore } from '../state/transportStore'
+import {
+  INITIAL_PREFERENCES_STATE,
+  usePreferencesStore,
+} from '../state/preferencesStore'
 import ToolButtons from './ToolButtons'
 
 beforeEach(() => {
   useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
+  usePreferencesStore.setState({ ...INITIAL_PREFERENCES_STATE })
   useProjectSessionStore.setState({
     ...INITIAL_PROJECT_SESSION_STATE,
     screen: 'editor',
@@ -34,5 +39,16 @@ describe('ToolButtons command discovery', () => {
     render(<ToolButtons />)
     fireEvent.click(screen.getByRole('button', { name: /Razor.*\(B\)/ }))
     expect(useTransportStore.getState().tool).toBe('razor')
+  })
+
+  test('the persistent snap preference is a named pressed control with its Alt override', () => {
+    render(<ToolButtons />)
+    const snapping = screen.getByRole('button', { name: /Snapping on.*Alt/ })
+    expect(snapping).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(snapping)
+    expect(usePreferencesStore.getState().snappingEnabled).toBe(false)
+    expect(screen.getByRole('button', { name: /Snapping off.*Alt/ }))
+      .toHaveAttribute('aria-pressed', 'false')
   })
 })

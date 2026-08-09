@@ -76,6 +76,8 @@ function Track({
       data-testid={`track-${track.id}`}
       data-track-id={track.id}
       data-track-kind={track.kind}
+      data-track-locked={track.locked ? 'true' : 'false'}
+      data-track-hidden={track.hidden ? 'true' : 'false'}
       onPointerDown={(e) => {
         // Empty-lane click deselects; clip pointerdowns have the CLIP as
         // target, so they never land here (Phase 4.2 selection).

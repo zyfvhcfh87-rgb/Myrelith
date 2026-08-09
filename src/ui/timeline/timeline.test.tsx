@@ -13,7 +13,9 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { TimelineDoc } from '../../domain/schema'
 import { formatTimecode } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
+import { usePreferencesStore } from '../../state/preferencesStore'
 import { useTransportStore } from '../../state/transportStore'
+import AlignmentGuide from './AlignmentGuide'
 import Playhead from './Playhead'
 import Ruler from './Ruler'
 import Timeline from './Timeline'
@@ -73,7 +75,9 @@ beforeEach(() => {
     timelineOriginFrame: 0,
     inOut: null,
     dragPreview: null,
+    snapGuide: null,
   })
+  usePreferencesStore.getState().setSnappingEnabled(true)
   useDocumentStore.getState().setDoc(makeDoc())
 })
 
@@ -253,6 +257,56 @@ describe('Ruler', () => {
       expect(useTransportStore.getState().playheadFrame).toBe(151),
     )
     expect(useTransportStore.getState().isScrubbing).toBe(false)
+  })
+
+  test('ruler scrubs snap to markers, show a guide, and Alt bypasses temporarily', async () => {
+    useDocumentStore.getState().setDoc({
+      ...makeDoc(),
+      markers: [{ id: 'marker-cue', frame: 103, label: 'Cue', color: 'blue' }],
+    })
+    act(() => useTransportStore.getState().setZoom(2))
+    const docBefore = useDocumentStore.getState().doc
+    const historyBefore = useDocumentStore.getState().past
+    render(
+      <>
+        <Ruler />
+        <AlignmentGuide timelineOriginFrame={0} timelineWindowEndFrame={1_000} />
+      </>,
+    )
+    const ruler = screen.getByTestId('ruler')
+
+    fireEvent.pointerDown(ruler, { pointerId: 41, clientX: 202 })
+    await nextFrame()
+
+    expect(useTransportStore.getState().playheadFrame).toBe(103)
+    expect(screen.getByTestId('timeline-alignment-guide')).toHaveAttribute(
+      'data-snap-kind',
+      'marker',
+    )
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Aligned to Marker: Cue at frame 103',
+    )
+    expect(useDocumentStore.getState().doc).toBe(docBefore)
+    expect(useDocumentStore.getState().past).toBe(historyBefore)
+
+    fireEvent.pointerUp(ruler, { pointerId: 41, clientX: 202 })
+    await nextFrame()
+    expect(screen.queryByTestId('timeline-alignment-guide')).toBeNull()
+
+    fireEvent.pointerDown(ruler, {
+      pointerId: 42,
+      clientX: 202,
+      altKey: true,
+    })
+    await nextFrame()
+    expect(useTransportStore.getState().playheadFrame).toBe(101)
+    expect(useTransportStore.getState().snapGuide).toBeNull()
+    expect(usePreferencesStore.getState().snappingEnabled).toBe(true)
+    fireEvent.pointerUp(ruler, {
+      pointerId: 42,
+      clientX: 202,
+      altKey: true,
+    })
   })
 
   test('pointer moves without capture (hover) do not seek', async () => {
