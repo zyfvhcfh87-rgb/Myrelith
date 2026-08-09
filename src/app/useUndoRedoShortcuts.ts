@@ -14,8 +14,7 @@
  */
 
 import { useEffect } from 'react'
-import { useDocumentStore } from '../state/documentStore'
-import { useProjectSessionStore } from '../state/projectSessionStore'
+import { executeEditorCommand, matchEditorCommandShortcut } from './editorCommands'
 
 /** Shared by all app/ keyboard hooks: native text editing wins in fields. */
 export function isEditableTarget(target: EventTarget | null): boolean {
@@ -31,20 +30,10 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 export function useUndoRedoShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (useProjectSessionStore.getState().phase === 'closing') return
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.isComposing) return
       if (isEditableTarget(e.target)) return
-
-      const key = e.key.toLowerCase()
-      if (key === 'z') {
-        e.preventDefault()
-        const store = useDocumentStore.getState()
-        if (e.shiftKey) store.redo()
-        else store.undo()
-      } else if (key === 'y' && !e.shiftKey) {
-        e.preventDefault()
-        useDocumentStore.getState().redo()
-      }
+      const commandId = matchEditorCommandShortcut(e, 'history')
+      if (!commandId) return
+      if (executeEditorCommand(commandId).executed) e.preventDefault()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)

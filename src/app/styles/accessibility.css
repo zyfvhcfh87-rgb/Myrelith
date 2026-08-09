@@ -1,0 +1,58 @@
+/* Measured target and contrast corrections from the Part 4c audit. */
+
+.transport-tools .tool-button,
+.timeline-zoom-button {
+  min-width: 24px;
+}
+
+.timeline-zoom-slider {
+  min-height: 24px;
+}
+
+.track-toggle,
+.media-remove {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.track-rename-input,
+.transition-duration,
+.transition-audio-curve,
+.transition-editor-actions button {
+  min-height: 24px;
+}
+
+.inspector-reset,
+.inspector-field input,
+.inspector-field select,
+.inspector-range-field > input[type='range'],
+.inspector-toggle {
+  min-height: 24px;
+}
+
+.media-pool .media-import:not(.media-import-quick) {
+  color: #f5f8ff;
+  background: #315fb8;
+  border-color: #5f8de0;
+}
+
+.media-pool .media-import:not(.media-import-quick):hover {
+  background: #3768c4;
+  border-color: #79a2ea;
+}
+
+.toolbar .placeholder-note,
+.preview-hint,
+.media-still-duration-help,
+.media-empty,
+.panel-placeholder .placeholder-note {
+  color: #9bb0c8;
+}
+
+.area-timeline .ruler-label {
+  color: #c2d0e1;
+}
+
+.timeline-root .track-header-count {
+  color: #a1b2c6;
+}

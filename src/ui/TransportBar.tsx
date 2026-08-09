@@ -12,16 +12,20 @@
 import { CaretLeft, CaretRight, Pause, Play } from '@phosphor-icons/react'
 import { useTransportStore } from '../state/transportStore'
 import { stepFrame, togglePlayback } from '../app/transportController'
+import { shortcutForCommand } from '../app/editorCommands'
 
 export default function TransportBar() {
   const isPlaying = useTransportStore((s) => s.isPlaying)
+  const previousShortcut = shortcutForCommand('transport.previous-frame')!
+  const nextShortcut = shortcutForCommand('transport.next-frame')!
 
   return (
     <div className="transport-bar" data-testid="transport-bar">
       <button
         className="transport-button"
         aria-label="one frame back"
-        title="one frame back"
+        aria-keyshortcuts={previousShortcut.ariaKeyShortcuts}
+        title={`one frame back (${previousShortcut.label})`}
         onClick={() => stepFrame(-1)}
       >
         <CaretLeft aria-hidden="true" size={16} weight="fill" />
@@ -39,7 +43,8 @@ export default function TransportBar() {
       <button
         className="transport-button"
         aria-label="one frame forward"
-        title="one frame forward"
+        aria-keyshortcuts={nextShortcut.ariaKeyShortcuts}
+        title={`one frame forward (${nextShortcut.label})`}
         onClick={() => stepFrame(1)}
       >
         <CaretRight aria-hidden="true" size={16} weight="fill" />

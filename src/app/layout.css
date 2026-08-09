@@ -15,3 +15,5 @@
 @import './styles/editor-responsive.css';
 @import './styles/inspector.css';
 @import './styles/placeholders.css';
+@import './styles/command-palette.css';
+@import './styles/accessibility.css';
