@@ -2543,7 +2543,7 @@ remain out of scope.
   oxlint; `npm audit --omit=dev` with zero vulnerabilities; and clean diff
   checks. The expected existing Vite large-chunk advisory remains non-fatal.
 - [x] Real Chromium on the task-exclusive `http://localhost:5175` imported 500
-  supported PNGs, kept 12 or fewer cards mounted at the sampled boundaries,
+  supported PNGs, kept 18 or fewer cards mounted at the sampled boundaries,
   searched the final item in 57 ms, reached position 500 by keyboard, exercised
   create/rename/reorder/delete/undo and multi-collection membership, and stayed
   usable without page overflow at 800×720. A fresh launcher recovery reopened
