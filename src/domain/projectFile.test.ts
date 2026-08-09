@@ -199,6 +199,7 @@ function makeProject(): ProjectFile {
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
     document: makeDocument(),
     assets: makeAssets(),
+    collections: [],
   }
 }
 
@@ -210,6 +211,10 @@ describe('portable project file', () => {
 
   test('round-trips every durable edit field and portable asset metadata', () => {
     const original = makeProject()
+    original.collections = [
+      { id: 'collection-selects', name: 'Selects', assetIds: ['video-z', 'image-a'] },
+      { id: 'collection-broll', name: 'B-roll', assetIds: ['video-z'] },
+    ]
     const parsed = parseProjectFile(serializeProjectFile(original))
 
     expect(parsed.format).toBe('myrelith-project')
@@ -217,6 +222,7 @@ describe('portable project file', () => {
     expect(parsed.document).toEqual(original.document)
     expect(parsed.assets.map((asset) => asset.id)).toEqual(['image-a', 'video-z'])
     expect(parsed.assets.find((asset) => asset.id === 'video-z')).toEqual(original.assets[0])
+    expect(parsed.collections).toEqual(original.collections)
     expect(parsed.document.tracks[0].clips[0]).toMatchObject({
       effects: original.document.tracks[0].clips[0].effects,
       linkGroupId: 'linked-av',
@@ -360,6 +366,7 @@ describe('portable project file', () => {
       document: TimelineDoc
     }
     legacy.formatVersion = 1
+    Reflect.deleteProperty(legacy, 'collections')
     legacy.document.schemaVersion = 1
     for (const asset of legacy.assets) delete asset.partialTrackSelection
     for (const track of legacy.document.tracks) {
@@ -384,6 +391,20 @@ describe('portable project file', () => {
       sourceRange: { startFrame: 0, durationFrames: 20 },
       text: { content: 'A portable title' },
     })
+  })
+
+  test('migrates v4 projects to an empty portable collection catalog', () => {
+    const legacy = clone(makeProject()) as unknown as {
+      formatVersion: number
+      collections?: unknown
+    }
+    legacy.formatVersion = 4
+    delete legacy.collections
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
+    expect(parsed.collections).toEqual([])
   })
 
   test('migrates schema-4 clip Inspector defaults and preserves legacy scale signs as flips', () => {
@@ -427,6 +448,7 @@ describe('portable project file', () => {
       }
     }
     legacy.formatVersion = 3
+    Reflect.deleteProperty(legacy, 'collections')
     legacy.document.schemaVersion = 2
     for (const asset of legacy.assets) delete asset.sourceBounds
     for (const track of legacy.document.tracks) {
@@ -510,6 +532,7 @@ describe('portable project file', () => {
       document: TimelineDoc
     }
     legacy.formatVersion = 2
+    Reflect.deleteProperty(legacy, 'collections')
     legacy.document.schemaVersion = 1
     const title = legacy.document.tracks[0].clips[2]
     delete title.text
@@ -989,6 +1012,32 @@ describe('portable project file', () => {
     const orphaned = makeProject()
     delete orphaned.document.tracks[1].clips[0].linkGroupId
     expect(() => validateProjectFile(orphaned)).toThrow(/has no partner/)
+  })
+
+  test('rejects duplicate collection names and dangling or duplicate membership', () => {
+    const duplicateNames = makeProject()
+    duplicateNames.collections = [
+      { id: 'one', name: 'Selects', assetIds: ['video-z'] },
+      { id: 'two', name: 'SELECTS', assetIds: ['image-a'] },
+    ]
+    const dangling = makeProject()
+    dangling.collections = [
+      { id: 'one', name: 'Selects', assetIds: ['missing'] },
+    ]
+    const duplicateMembership = makeProject()
+    duplicateMembership.collections = [
+      { id: 'one', name: 'Selects', assetIds: ['video-z', 'video-z'] },
+    ]
+    const emptyName = makeProject()
+    emptyName.collections = [{ id: 'one', name: '', assetIds: [] }]
+    const emptyId = makeProject()
+    emptyId.collections = [{ id: ' ', name: 'Selects', assetIds: [] }]
+
+    expect(() => validateProjectFile(duplicateNames)).toThrow(/duplicate collection name/i)
+    expect(() => validateProjectFile(dangling)).toThrow(/unknown media asset/i)
+    expect(() => validateProjectFile(duplicateMembership)).toThrow(/duplicate media asset/i)
+    expect(() => validateProjectFile(emptyName)).toThrow(/must not be empty/i)
+    expect(() => validateProjectFile(emptyId)).toThrow(/must not be empty/i)
   })
 
   test('rejects unsafe integers and non-canonical exact frame rates', () => {

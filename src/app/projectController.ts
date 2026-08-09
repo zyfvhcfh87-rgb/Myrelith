@@ -29,6 +29,7 @@ import type {
   MediaAsset,
   TimelineDoc,
 } from '../domain/schema'
+import type { MediaCollection } from '../domain/mediaCollections'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import {
@@ -476,6 +477,7 @@ async function activateProject(
   descriptors: readonly PortableAssetDescriptor[],
   assets: readonly MediaAsset[],
   compatibility: readonly MediaCompatibilityItem[],
+  collections: readonly MediaCollection[],
   persistence: ProjectPersistenceSession,
   generation: number,
   deps: ProjectControllerDeps,
@@ -500,6 +502,7 @@ async function activateProject(
       descriptors,
       assets,
       compatibility,
+      collections,
     )) {
       throw new Error('Could not install the project media catalog')
     }
@@ -549,6 +552,7 @@ export async function createNewProject(
   }
   return activateProject(
     document,
+    [],
     [],
     [],
     [],
@@ -1960,6 +1964,7 @@ async function restoreRequestedMediaAndActivate(
     pending.project.assets,
     [...pending.assets.values()],
     [...pending.compatibility.values()],
+    pending.project.collections,
     pendingPersistenceSession(pending),
     generation,
     deps,
@@ -1997,6 +2002,7 @@ export function activateResumedProject(
       pending.project.assets,
       [...pending.assets.values()],
       [...pending.compatibility.values()],
+      pending.project.collections,
       pendingPersistenceSession(pending),
       generation,
       deps,

@@ -128,11 +128,74 @@ beforeEach(() => {
     assets: new Map(),
     visuals: new Map(),
     compatibility: new Map(),
+    collections: [],
+    collectionPast: [],
+    collectionFuture: [],
   })
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
 })
 
 describe('mediaStore', () => {
+  test('edits ordered multi-collection membership with bounded undo and redo', () => {
+    const asset = makeAsset()
+    getState().addAsset(asset)
+
+    const selectsId = getState().createCollection('Selects')
+    const interviewsId = getState().createCollection('Interviews')
+    expect(selectsId).not.toBeNull()
+    expect(interviewsId).not.toBeNull()
+    expect(getState().setCollectionMembership(selectsId!, asset.id, true)).toBe(true)
+    expect(getState().setCollectionMembership(interviewsId!, asset.id, true)).toBe(true)
+    expect(getState().collections.map((collection) => ({
+      name: collection.name,
+      assetIds: collection.assetIds,
+    }))).toEqual([
+      { name: 'Selects', assetIds: [asset.id] },
+      { name: 'Interviews', assetIds: [asset.id] },
+    ])
+
+    expect(getState().reorderCollection(interviewsId!, 0)).toBe(true)
+    expect(getState().renameCollection(interviewsId!, 'Talking heads')).toBe(true)
+    expect(getState().undoCollectionEdit()).toBe(true)
+    expect(getState().collections[0]?.name).toBe('Interviews')
+    expect(getState().redoCollectionEdit()).toBe(true)
+    expect(getState().collections[0]?.name).toBe('Talking heads')
+
+    expect(getState().deleteCollection(selectsId!)).toBe(true)
+    expect(getState().descriptors.has(asset.id)).toBe(true)
+    expect(getState().assets.has(asset.id)).toBe(true)
+  })
+
+  test('restores portable membership offline and preserves it through reconnect', () => {
+    const asset = makeAsset()
+    const descriptor = descriptorFor(asset)
+    expect(getState().replaceAssets([descriptor], [], [], [{
+      id: 'collection-1',
+      name: 'Offline selects',
+      assetIds: [asset.id],
+    }])).toBe(true)
+
+    expect(getState().assets.has(asset.id)).toBe(false)
+    expect(getState().collections[0]?.assetIds).toEqual([asset.id])
+    expect(getState().connectAsset(asset)).toBe(true)
+    expect(getState().collections[0]?.assetIds).toEqual([asset.id])
+  })
+
+  test('prunes a deleted asset from current and historical collection snapshots', () => {
+    const asset = makeAsset()
+    getState().addAsset(asset)
+    const collectionId = getState().createCollection('Temporary')!
+    getState().setCollectionMembership(collectionId, asset.id, true)
+    getState().renameCollection(collectionId, 'Renamed')
+
+    getState().removeAsset(asset.id)
+    expect(getState().collections[0]?.assetIds).toEqual([])
+    expect(getState().undoCollectionEdit()).toBe(true)
+    expect(getState().collections[0]?.assetIds).toEqual([])
+    expect(getState().redoCollectionEdit()).toBe(true)
+    expect(getState().collections[0]?.assetIds).toEqual([])
+  })
+
   test('compatibility results are guarded by the current request generation', () => {
     const first = makeCompatibilityItem()
     expect(getState().startCompatibility(first)).toBe(true)

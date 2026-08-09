@@ -69,6 +69,7 @@ function serializedProject(
       tracks: [],
     },
     assets: [],
+    collections: [],
   }
   return serializeProjectFile(project)
 }

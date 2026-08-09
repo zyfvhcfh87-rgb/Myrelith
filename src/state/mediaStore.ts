@@ -14,6 +14,18 @@ import type {
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { FrameRate, MediaAsset } from '../domain/schema'
 import {
+  cloneMediaCollections,
+  createMediaCollection,
+  deleteMediaCollection,
+  mediaCollectionsMatchCatalog,
+  MEDIA_COLLECTION_LIMITS,
+  removeAssetFromMediaCollections,
+  renameMediaCollection,
+  reorderMediaCollection,
+  setMediaCollectionMembership,
+  type MediaCollection,
+} from '../domain/mediaCollections'
+import {
   cloneMediaSourceBounds,
   mediaSourceBoundsAcceptAnalyzed,
   mediaSourceBoundsEqual,
@@ -173,6 +185,53 @@ function compatibilityMapFrom(
   return compatibility
 }
 
+interface CollectionHistoryState {
+  readonly collections: readonly MediaCollection[]
+  readonly collectionPast: readonly (readonly MediaCollection[])[]
+  readonly collectionFuture: readonly (readonly MediaCollection[])[]
+}
+
+function commitCollectionEdit(
+  state: CollectionHistoryState,
+  collections: readonly MediaCollection[],
+): Pick<MediaState, 'collections' | 'collectionPast' | 'collectionFuture'> {
+  return {
+    collections,
+    collectionPast: [
+      ...state.collectionPast,
+      state.collections,
+    ].slice(-MEDIA_COLLECTION_LIMITS.historyEntries),
+    collectionFuture: [],
+  }
+}
+
+function pruneCollectionHistory(
+  history: readonly (readonly MediaCollection[])[],
+  assetId: string,
+): readonly (readonly MediaCollection[])[] {
+  let changed = false
+  const next = history.map((snapshot) => {
+    const pruned = removeAssetFromMediaCollections(snapshot, assetId)
+    if (pruned !== snapshot) changed = true
+    return pruned
+  })
+  return changed ? next : history
+}
+
+let fallbackCollectionId = 0
+
+function nextCollectionId(collections: readonly MediaCollection[]): string {
+  const generated = typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `local-${Date.now()}-${++fallbackCollectionId}`
+  const root = `collection-${generated}`
+  const ids = new Set(collections.map((collection) => collection.id))
+  if (!ids.has(root)) return root
+  let suffix = 2
+  while (ids.has(`${root}-${suffix}`)) suffix++
+  return `${root}-${suffix}`
+}
+
 export interface MediaState {
   /** Durable portable descriptors for every project source, online or offline. */
   descriptors: Map<string, PortableAssetDescriptor>
@@ -182,6 +241,11 @@ export interface MediaState {
   visuals: Map<string, AssetVisuals>
   /** Session-only compatibility checks and provisional rejected imports. */
   compatibility: Map<string, MediaCompatibilityItem>
+  /** Durable ordered Media Pool organization referencing stable descriptor ids. */
+  collections: readonly MediaCollection[]
+  /** Collection-only history; timeline history remains owned by documentStore. */
+  collectionPast: readonly (readonly MediaCollection[])[]
+  collectionFuture: readonly (readonly MediaCollection[])[]
 
   /** Begin a guarded import or offline-relink compatibility request. */
   startCompatibility: (item: MediaCompatibilityItem) => boolean
@@ -238,6 +302,7 @@ export interface MediaState {
     descriptors: Iterable<PortableAssetDescriptor>,
     assets: Iterable<MediaAsset>,
     compatibility?: Iterable<MediaCompatibilityItem>,
+    collections?: readonly MediaCollection[],
   ) => boolean
   /** Revoke and remove every descriptor, connection, and generated visual. */
   clearAssets: () => void
@@ -254,6 +319,17 @@ export interface MediaState {
    * immediately, so URL ownership remains exact on every path.
    */
   setAssetVisuals: (id: string, visuals: AssetVisuals) => void
+  createCollection: (name: string) => string | null
+  renameCollection: (id: string, name: string) => boolean
+  reorderCollection: (id: string, toIndex: number) => boolean
+  deleteCollection: (id: string) => boolean
+  setCollectionMembership: (
+    collectionId: string,
+    assetId: string,
+    included: boolean,
+  ) => boolean
+  undoCollectionEdit: () => boolean
+  redoCollectionEdit: () => boolean
 }
 
 export const useMediaStore = create<MediaState>()((set) => ({
@@ -261,6 +337,9 @@ export const useMediaStore = create<MediaState>()((set) => ({
   assets: new Map(),
   visuals: new Map(),
   compatibility: new Map(),
+  collections: [],
+  collectionPast: [],
+  collectionFuture: [],
 
   startCompatibility: (item) => {
     let started = false
@@ -457,11 +536,20 @@ export const useMediaStore = create<MediaState>()((set) => ({
       return { assets, visuals, compatibility }
     }),
 
-  replaceAssets: (nextDescriptors, nextAssets, nextCompatibility = []) => {
+  replaceAssets: (
+    nextDescriptors,
+    nextAssets,
+    nextCompatibility = [],
+    nextCollections = [],
+  ) => {
     const descriptors = descriptorMapFrom(nextDescriptors)
     if (!descriptors) return false
     const assets = connectionMapFrom(descriptors, nextAssets)
     if (!assets) return false
+    if (!mediaCollectionsMatchCatalog(
+      nextCollections,
+      new Set(descriptors.keys()),
+    )) return false
     for (const asset of assets.values()) {
       const descriptor = descriptors.get(asset.id)
       if (
@@ -493,6 +581,9 @@ export const useMediaStore = create<MediaState>()((set) => ({
         assets,
         visuals: new Map(),
         compatibility,
+        collections: cloneMediaCollections(nextCollections),
+        collectionPast: [],
+        collectionFuture: [],
       }
     })
     return true
@@ -505,6 +596,9 @@ export const useMediaStore = create<MediaState>()((set) => ({
         && state.assets.size === 0
         && state.visuals.size === 0
         && state.compatibility.size === 0
+        && state.collections.length === 0
+        && state.collectionPast.length === 0
+        && state.collectionFuture.length === 0
       ) {
         return state
       }
@@ -519,6 +613,9 @@ export const useMediaStore = create<MediaState>()((set) => ({
         assets: new Map(),
         visuals: new Map(),
         compatibility: new Map(),
+        collections: [],
+        collectionPast: [],
+        collectionFuture: [],
       }
     }),
 
@@ -543,7 +640,18 @@ export const useMediaStore = create<MediaState>()((set) => ({
       visuals.delete(id)
       const compatibility = new Map(state.compatibility)
       compatibility.delete(id)
-      return { descriptors, assets, visuals, compatibility }
+      const collections = removeAssetFromMediaCollections(state.collections, id)
+      const collectionPast = pruneCollectionHistory(state.collectionPast, id)
+      const collectionFuture = pruneCollectionHistory(state.collectionFuture, id)
+      return {
+        descriptors,
+        assets,
+        visuals,
+        compatibility,
+        collections,
+        collectionPast,
+        collectionFuture,
+      }
     }),
 
   reconformAssets: (rate) =>
@@ -575,4 +683,98 @@ export const useMediaStore = create<MediaState>()((set) => ({
       visuals.set(id, next)
       return { visuals }
     }),
+
+  createCollection: (name) => {
+    let createdId: string | null = null
+    set((state) => {
+      const id = nextCollectionId(state.collections)
+      const collections = createMediaCollection(state.collections, id, name)
+      if (collections === state.collections) return state
+      createdId = id
+      return commitCollectionEdit(state, collections)
+    })
+    return createdId
+  },
+
+  renameCollection: (id, name) => {
+    let changed = false
+    set((state) => {
+      const collections = renameMediaCollection(state.collections, id, name)
+      if (collections === state.collections) return state
+      changed = true
+      return commitCollectionEdit(state, collections)
+    })
+    return changed
+  },
+
+  reorderCollection: (id, toIndex) => {
+    let changed = false
+    set((state) => {
+      const collections = reorderMediaCollection(state.collections, id, toIndex)
+      if (collections === state.collections) return state
+      changed = true
+      return commitCollectionEdit(state, collections)
+    })
+    return changed
+  },
+
+  deleteCollection: (id) => {
+    let changed = false
+    set((state) => {
+      const collections = deleteMediaCollection(state.collections, id)
+      if (collections === state.collections) return state
+      changed = true
+      return commitCollectionEdit(state, collections)
+    })
+    return changed
+  },
+
+  setCollectionMembership: (collectionId, assetId, included) => {
+    let changed = false
+    set((state) => {
+      if (!state.descriptors.has(assetId)) return state
+      const collections = setMediaCollectionMembership(
+        state.collections,
+        collectionId,
+        assetId,
+        included,
+      )
+      if (collections === state.collections) return state
+      changed = true
+      return commitCollectionEdit(state, collections)
+    })
+    return changed
+  },
+
+  undoCollectionEdit: () => {
+    let changed = false
+    set((state) => {
+      const previous = state.collectionPast.at(-1)
+      if (!previous) return state
+      changed = true
+      return {
+        collections: previous,
+        collectionPast: state.collectionPast.slice(0, -1),
+        collectionFuture: [state.collections, ...state.collectionFuture]
+          .slice(0, MEDIA_COLLECTION_LIMITS.historyEntries),
+      }
+    })
+    return changed
+  },
+
+  redoCollectionEdit: () => {
+    let changed = false
+    set((state) => {
+      const next = state.collectionFuture[0]
+      if (!next) return state
+      changed = true
+      return {
+        collections: next,
+        collectionPast: [...state.collectionPast, state.collections]
+          .slice(-MEDIA_COLLECTION_LIMITS.historyEntries),
+        collectionFuture: state.collectionFuture.slice(1),
+      }
+    })
+    return changed
+  },
 }))

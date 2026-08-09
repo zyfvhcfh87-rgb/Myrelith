@@ -367,7 +367,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `addAsset`/`connectAsset` install a fully analyzed source and take ownership
   of its URL; `disconnectAsset` keeps the descriptor but releases the source;
   `replaceAssets` atomically installs a project catalog plus its connected
-  subset; and `removeAsset` deletes both. `visuals: Map<AssetId, AssetVisuals>`
+  subset; and `removeAsset` deletes both. `collections: MediaCollection[]` is
+  the durable ordered Media Pool organization layer: each collection owns only
+  a unique name plus stable descriptor ids, and one id may belong to multiple
+  collections. Collection create/rename/reorder/delete/membership changes have
+  a bounded collection-only undo/redo history. Deleting a collection never
+  deletes a descriptor or connected source; deleting a descriptor prunes that
+  id from current and historical collection snapshots so undo cannot resurrect
+  a ghost membership. `visuals: Map<AssetId, AssetVisuals>`
   + `setAssetVisuals(id, v)` owns filmstrip/waveform URLs. Replacement,
   disconnection, removal, late visual results, and `clearAssets()` revoke each
   owned source/generated URL exactly once. Project persistence serializes the
@@ -402,7 +409,8 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   serialized recovery snapshots remain controller-local; this store may only
   expose labels, timestamps, permission state, and stable local record ids.
 - Project persistence — `src/app/projectPersistenceController.ts`: builds a
-  validated portable snapshot from `documentStore` + `mediaStore`, owns the
+  validated portable snapshot from `documentStore` + `mediaStore`, including
+  descriptors and ordered collection membership in project format v5, owns the
   current writable handle, debounces live saves, serializes overlapping edits
   by revision, and attaches `beforeunload` only while work is dirty. `Save`
   and `Save As` request an explicit user-gesture grant when no writable handle

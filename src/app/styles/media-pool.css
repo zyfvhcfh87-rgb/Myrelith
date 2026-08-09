@@ -1396,3 +1396,215 @@
   clip: rect(0 0 0 0);
   clip-path: inset(50%);
 }
+
+/* Issue #65: durable Media Pool collections. */
+.media-collections {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  margin: 8px 12px 0;
+  padding: 8px;
+  background: #121e2d;
+  border: 1px solid #293e56;
+  border-radius: 8px;
+}
+
+.media-pool-header {
+  position: static;
+}
+
+.media-collections-heading,
+.media-collection-manage {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: #91a6bf;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.media-collections-heading > :first-child {
+  margin-right: auto;
+}
+
+.media-collection-history {
+  display: flex;
+  gap: 4px;
+}
+
+.media-collection-history button,
+.media-collection-manage button,
+.media-collection-form button,
+.media-membership > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 25px;
+  padding: 0 7px;
+  color: #c3d2e4;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  background: #192a3e;
+  border: 1px solid #354d68;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.media-collection-history button:disabled,
+.media-collection-manage button:disabled,
+.media-membership > button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.media-collection-tabs {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  padding: 1px 1px 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.media-collection-tabs [role='tab'] {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 27px;
+  max-width: 150px;
+  padding: 0 8px;
+  color: #9dafc4;
+  font-size: 9px;
+  background: #182638;
+  border: 1px solid #30465f;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.media-collection-tabs [role='tab'] > span:not(.media-collection-count) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-collection-tabs [role='tab'][aria-selected='true'] {
+  color: #eef5fd;
+  background: #274562;
+  border-color: #6f9ac7;
+}
+
+.media-collection-tabs [role='tab'][data-drop-target='true'] {
+  color: #eef8ff;
+  background: #285d69;
+  border-color: #8ad1d7;
+  box-shadow: 0 0 0 2px rgb(138 209 215 / 18%);
+}
+
+.media-collection-count {
+  min-width: 17px;
+  padding: 1px 4px;
+  color: #bfd1e4;
+  font-size: 8px;
+  text-align: center;
+  background: rgb(8 18 29 / 52%);
+  border-radius: 999px;
+}
+
+.media-collection-manage > span {
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-collection-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 5px;
+}
+
+.media-collection-form input {
+  min-width: 0;
+  height: 27px;
+  padding: 0 8px;
+  color: #edf4fc;
+  font-size: 10px;
+  background: #162538;
+  border: 1px solid #4b6a8c;
+  border-radius: 6px;
+}
+
+.media-collection-history button:focus-visible,
+.media-collection-manage button:focus-visible,
+.media-collection-tabs [role='tab']:focus-visible,
+.media-collection-form input:focus-visible,
+.media-collection-form button:focus-visible,
+.media-membership button:focus-visible,
+.media-membership input:focus-visible {
+  outline: 2px solid #79a8df;
+  outline-offset: 2px;
+}
+
+.media-collection-status {
+  min-height: 11px;
+  color: #8499b2;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.media-membership {
+  align-self: flex-start;
+}
+
+.media-membership > button {
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 6px;
+  color: #9fb4cb;
+  font-size: 8px;
+}
+
+.media-membership-options {
+  display: grid;
+  min-width: 150px;
+  max-width: 220px;
+  max-height: 150px;
+  margin-top: 4px;
+  padding: 5px;
+  overflow: auto;
+  color: #d7e3f0;
+  font-size: 9px;
+  background: #101c2a;
+  border: 1px solid #44617f;
+  border-radius: 7px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 38%);
+}
+
+.media-membership-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.media-membership-options label:hover {
+  background: #20344b;
+}
+
+.media-membership-options span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

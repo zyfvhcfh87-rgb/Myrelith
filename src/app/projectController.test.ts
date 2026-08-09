@@ -16,6 +16,7 @@ import type {
   PartialTrackImportSelection,
 } from '../domain/schema'
 import type { MediaCompatibilityReport } from '../domain/mediaCompatibility'
+import type { MediaCollection } from '../domain/mediaCollections'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -337,6 +338,7 @@ function descriptorFrom(
 function makeProject(
   assets: PortableAssetDescriptor[] = [],
   name = 'Saved project',
+  collections: readonly MediaCollection[] = [],
 ): ProjectFile {
   return {
     format: PROJECT_FILE_FORMAT,
@@ -347,6 +349,7 @@ function makeProject(
       'doc-saved',
     ),
     assets,
+    collections: [...collections],
   }
 }
 
@@ -511,6 +514,9 @@ beforeEach(() => {
     assets: new Map(),
     visuals: new Map(),
     compatibility: new Map(),
+    collections: [],
+    collectionPast: [],
+    collectionFuture: [],
   })
   useTransportStore.getState().resetTransport()
 })
@@ -834,6 +840,34 @@ describe('portable project resume', () => {
       fileName: 'empty.myrelith',
       persisted: true,
     })
+  })
+
+  test('activates saved collection membership with offline stable asset ids', async () => {
+    const descriptor = descriptorFrom(makeAsset({ id: 'saved-source' }))
+    const collections: readonly MediaCollection[] = [{
+      id: 'selects',
+      name: 'Selects',
+      assetIds: [descriptor.id],
+    }]
+    const savedProject = makeProject(
+      [descriptor],
+      'Collected project',
+      collections,
+    )
+    const serialized = serializeProjectFile(savedProject)
+    const deps = makeDeps({ readText: vi.fn(async () => serialized) })
+
+    await expect(openProjectFile(
+      new File([serialized], 'collected.myrelith'),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+
+    expect(useMediaStore.getState().collections).toEqual(collections)
+    expect(useMediaStore.getState().assets.size).toBe(0)
+    expect(useMediaStore.getState().collectionPast).toEqual([])
   })
 
   test('opens a legacy .webcut filename and migrates its format marker', async () => {

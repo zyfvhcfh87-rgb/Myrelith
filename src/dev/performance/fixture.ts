@@ -437,6 +437,7 @@ export function createPerformanceFixture(): PerformanceFixture {
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
     document: fixtureDocument(videoAssets, audioAssets, imageAssets),
     assets: [...videoAssets, ...audioAssets, ...imageAssets],
+    collections: [],
   }
   return {
     version: PERFORMANCE_FIXTURE_VERSION,
