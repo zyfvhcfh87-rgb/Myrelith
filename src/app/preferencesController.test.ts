@@ -9,9 +9,14 @@ import {
   usePreferencesStore,
 } from '../state/preferencesStore'
 import {
+  INITIAL_WORKSPACE_LAYOUT,
+  useWorkspaceLayoutStore,
+} from '../state/workspaceLayoutStore'
+import {
   EXPORT_SELECTION_STORAGE_KEY,
   initPreferencesPersistence,
   USER_PREFERENCES_STORAGE_KEY,
+  WORKSPACE_LAYOUT_STORAGE_KEY,
   type PreferencesStorage,
 } from './preferencesController'
 
@@ -23,14 +28,16 @@ function storage(
   getItem: ReturnType<typeof vi.fn<(key: string) => string | null>>
   setItem: ReturnType<typeof vi.fn<(key: string, value: string) => void>>
 } {
-  const values: StorageSeed = typeof initial === 'string'
+  const values: Record<string, string | null> = typeof initial === 'string'
     ? { [USER_PREFERENCES_STORAGE_KEY]: initial }
-    : initial ?? {}
+    : { ...(initial ?? {}) }
   return {
     getItem: vi.fn<(key: string) => string | null>(
       (key) => values[key] ?? null,
     ),
-    setItem: vi.fn<(key: string, value: string) => void>(),
+    setItem: vi.fn<(key: string, value: string) => void>(
+      (key, value) => { values[key] = value },
+    ),
   }
 }
 
@@ -40,6 +47,7 @@ beforeEach(() => {
   dispose?.()
   dispose = null
   usePreferencesStore.setState({ ...INITIAL_PREFERENCES_STATE })
+  useWorkspaceLayoutStore.setState({ ...INITIAL_WORKSPACE_LAYOUT })
 })
 
 afterEach(() => {
@@ -48,6 +56,83 @@ afterEach(() => {
 })
 
 describe('preferences persistence', () => {
+  test('loads and persists the independent local workspace preference', () => {
+    const persisted = {
+      version: 1,
+      preset: 'custom',
+      mediaWidth: 410,
+      inspectorWidth: 370,
+      timelineHeight: 290,
+      mediaCollapsed: true,
+      inspectorCollapsed: false,
+      timelineCollapsed: false,
+      inspectorFocused: false,
+      inspectorRestoreWidth: null,
+    }
+    const backing = storage({
+      [WORKSPACE_LAYOUT_STORAGE_KEY]: JSON.stringify(persisted),
+    })
+
+    dispose = initPreferencesPersistence(backing)
+
+    expect(backing.getItem).toHaveBeenCalledWith(WORKSPACE_LAYOUT_STORAGE_KEY)
+    expect(useWorkspaceLayoutStore.getState()).toMatchObject({
+      preset: 'custom',
+      mediaWidth: 410,
+      inspectorWidth: 370,
+      timelineHeight: 290,
+      mediaCollapsed: true,
+    })
+
+    useWorkspaceLayoutStore.getState().applyPreset('inspect')
+    expect(backing.setItem).toHaveBeenCalledWith(
+      WORKSPACE_LAYOUT_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        preset: 'inspect',
+        mediaWidth: 240,
+        inspectorWidth: 500,
+        timelineHeight: 340,
+        mediaCollapsed: false,
+        inspectorCollapsed: false,
+        timelineCollapsed: false,
+        inspectorFocused: false,
+        inspectorRestoreWidth: null,
+      }),
+    )
+
+    dispose()
+    dispose = null
+    useWorkspaceLayoutStore.setState({ ...INITIAL_WORKSPACE_LAYOUT })
+    dispose = initPreferencesPersistence(backing)
+    expect(useWorkspaceLayoutStore.getState()).toMatchObject({
+      preset: 'inspect',
+      mediaWidth: 240,
+      inspectorWidth: 500,
+      timelineHeight: 340,
+    })
+  })
+
+  test('rejects invalid workspace data without disturbing other preferences', () => {
+    dispose = initPreferencesPersistence(storage({
+      [USER_PREFERENCES_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        defaultStillImageDurationMicroseconds: 2_500_000,
+      }),
+      [WORKSPACE_LAYOUT_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        ...INITIAL_WORKSPACE_LAYOUT,
+        preset: 'mystery',
+      }),
+    }))
+
+    expect(useWorkspaceLayoutStore.getState()).toMatchObject(
+      INITIAL_WORKSPACE_LAYOUT,
+    )
+    expect(usePreferencesStore.getState()
+      .defaultStillImageDurationMicroseconds).toBe(2_500_000)
+  })
+
   test('loads the minimal versioned preference and persists later changes', () => {
     const backing = storage(JSON.stringify({
       version: 1,

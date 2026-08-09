@@ -8,6 +8,10 @@ import {
 } from '../state/projectSessionStore'
 import { useTransportStore } from '../state/transportStore'
 import {
+  INITIAL_WORKSPACE_LAYOUT,
+  useWorkspaceLayoutStore,
+} from '../state/workspaceLayoutStore'
+import {
   resetDocumentStoreForTest,
   resetTransportStoreForTest,
 } from '../test/storeFixtures'
@@ -75,6 +79,7 @@ beforeEach(() => {
   })
   resetTransportStoreForTest()
   resetDocumentStoreForTest(makeDocument())
+  useWorkspaceLayoutStore.setState({ ...INITIAL_WORKSPACE_LAYOUT })
 })
 
 describe('EditorShell', () => {
@@ -84,7 +89,7 @@ describe('EditorShell', () => {
     expect(screen.getByText('WebCut')).toBeInTheDocument()
     expect(container.querySelector('.media-pool')).not.toBeNull()
     expect(screen.getByTestId('preview-canvas')).toBeInTheDocument()
-    expect(screen.getByText('Inspector')).toBeInTheDocument()
+    expect(container.querySelector('.inspector-empty-title')).not.toBeNull()
     expect(screen.getByTestId('timeline-root')).toBeInTheDocument()
     expect(
       screen.getByRole('group', { name: 'Timeline zoom controls' }),
@@ -94,6 +99,7 @@ describe('EditorShell', () => {
     expect(shell).not.toBeNull()
     for (const area of [
       'area-toolbar',
+      'area-workspace',
       'area-media-pool',
       'area-preview',
       'area-inspector',
@@ -104,6 +110,83 @@ describe('EditorShell', () => {
     expect(
       shell?.querySelector('.area-transport > .timeline-zoom-controls'),
     ).not.toBeNull()
+    expect(screen.getAllByRole('separator')).toHaveLength(3)
+  })
+
+  test('collapses and restores mounted panels without losing editor state', () => {
+    useTransportStore.getState().setSelectedClip('clipA')
+    const documentBefore = useDocumentStore.getState()
+    const { container } = render(<EditorShell closing={false} />)
+    const panels = [
+      { name: 'Media', selector: '.area-media-pool', scrollTop: 72 },
+      { name: 'Inspector', selector: '.area-inspector', scrollTop: 48 },
+      { name: 'Timeline', selector: '.area-timeline', scrollTop: 31 },
+    ] as const
+
+    for (const panel of panels) {
+      const area = container.querySelector<HTMLElement>(panel.selector)
+      if (!area) throw new Error(`${panel.name} area missing`)
+      area.scrollTop = panel.scrollTop
+      const toggle = screen.getByRole('button', { name: panel.name })
+      toggle.focus()
+      fireEvent.click(toggle)
+
+      expect(toggle).toHaveFocus()
+      expect(area).toHaveAttribute('data-collapsed', 'true')
+      expect(area).toHaveAttribute('inert')
+      expect(area.scrollTop).toBe(panel.scrollTop)
+      expect(useTransportStore.getState().selectedClipId).toBe('clipA')
+      expect(useDocumentStore.getState().doc).toBe(documentBefore.doc)
+      expect(useDocumentStore.getState().past).toBe(documentBefore.past)
+      expect(useDocumentStore.getState().future).toBe(documentBefore.future)
+
+      fireEvent.click(toggle)
+      expect(toggle).toHaveFocus()
+      expect(area).not.toHaveAttribute('data-collapsed')
+      expect(area).not.toHaveAttribute('inert')
+      expect(area.scrollTop).toBe(panel.scrollTop)
+      expect(useTransportStore.getState().selectedClipId).toBe('clipA')
+      expect(useDocumentStore.getState().doc).toBe(documentBefore.doc)
+      expect(useDocumentStore.getState().past).toBe(documentBefore.past)
+      expect(useDocumentStore.getState().future).toBe(documentBefore.future)
+    }
+  })
+
+  test('applies presets and temporarily expands the focused Inspector', () => {
+    const { container } = render(<EditorShell closing={false} />)
+    const shell = container.querySelector<HTMLElement>('.app-shell')
+    const mediaArea = container.querySelector('.area-media-pool')
+    if (!shell || !mediaArea) throw new Error('Editor workspace missing')
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace preset' }), {
+      target: { value: 'media' },
+    })
+    expect(useWorkspaceLayoutStore.getState()).toMatchObject({
+      preset: 'media',
+      mediaWidth: 460,
+      inspectorWidth: 240,
+    })
+    expect(container.querySelector('.workspace-status'))
+      .toHaveTextContent('Media workspace applied.')
+
+    const focusInspector = screen.getByRole('button', {
+      name: 'Focus Inspector',
+    })
+    focusInspector.focus()
+    fireEvent.click(focusInspector)
+    expect(focusInspector).toHaveFocus()
+    expect(focusInspector).toHaveAttribute('aria-pressed', 'true')
+    expect(mediaArea).toHaveAttribute('data-collapsed', 'true')
+    expect(shell.style.getPropertyValue('--workspace-inspector-width'))
+      .toBe('520px')
+
+    fireEvent.click(focusInspector)
+    expect(mediaArea).not.toHaveAttribute('data-collapsed')
+    expect(useWorkspaceLayoutStore.getState().inspectorWidth).toBe(240)
+    expect(Number.parseInt(
+      shell.style.getPropertyValue('--workspace-inspector-width'),
+      10,
+    )).toBeGreaterThanOrEqual(180)
   })
 
   test('keeps Add text with the timeline tools', async () => {
@@ -146,6 +229,7 @@ describe('EditorShell', () => {
     expect(shell).toHaveAttribute('aria-busy', 'true')
     for (const area of [
       'area-media-pool',
+      'area-workspace',
       'area-preview',
       'area-inspector',
       'area-transport',
@@ -154,5 +238,9 @@ describe('EditorShell', () => {
       expect(shell?.querySelector(`.${area}`)).toHaveAttribute('inert')
     }
     expect(shell?.querySelector('.area-toolbar')).not.toHaveAttribute('inert')
+    for (const handle of screen.getAllByRole('separator')) {
+      expect(handle).toHaveAttribute('aria-disabled', 'true')
+      expect(handle).toHaveAttribute('tabindex', '-1')
+    }
   })
 })
