@@ -33,6 +33,7 @@ import {
   chooseActiveAssetMedia,
   chooseActiveMediaFolder,
   connectActiveAssetMedia,
+  connectActiveMediaFolderFiles,
 } from '../app/projectController'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import {
@@ -88,6 +89,7 @@ vi.mock('../app/projectController', () => ({
   chooseActiveAssetMedia: vi.fn(async () => ({ status: 'ready' })),
   chooseActiveMediaFolder: vi.fn(async () => ({ status: 'ready' })),
   connectActiveAssetMedia: vi.fn(async () => ({ status: 'ready' })),
+  connectActiveMediaFolderFiles: vi.fn(async () => ({ status: 'ready' })),
   resolveActiveMediaAmbiguity: vi.fn(async () => ({ status: 'ready' })),
   skipActiveMediaAmbiguity: vi.fn(async () => ({ status: 'ready' })),
   cancelActiveMediaRelink: vi.fn(),
@@ -389,6 +391,7 @@ beforeEach(() => {
   vi.mocked(chooseActiveAssetMedia).mockClear()
   vi.mocked(chooseActiveMediaFolder).mockClear()
   vi.mocked(connectActiveAssetMedia).mockClear()
+  vi.mocked(connectActiveMediaFolderFiles).mockClear()
   useDocumentStore.getState().setDoc({
     ...useDocumentStore.getState().doc,
     frameRate: { num: 30, den: 1 },
@@ -528,7 +531,7 @@ describe('MediaPool presentation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import & remember' }))
 
     expect(chooseMediaForImport).toHaveBeenCalledOnce()
-    const quickInput = screen.getByLabelText('Quick import media')
+    const quickInput = screen.getByLabelText('Import media once')
     const file = new File(['video'], 'fresh.mp4', { type: 'video/mp4' })
     fireEvent.change(quickInput, { target: { files: [file] } })
 
@@ -548,7 +551,7 @@ describe('MediaPool presentation', () => {
     expect(screen.getByRole('button', {
       name: 'Import & remember',
     })).toBeDisabled()
-    expect(screen.getByLabelText('Quick import media')).toBeDisabled()
+    expect(screen.getByLabelText('Import media once')).toBeDisabled()
   })
 
   test('shows a placeholder while preserving ready metadata and drag state', () => {
@@ -752,7 +755,7 @@ describe('MediaPool presentation', () => {
     const card = screen.getByTitle('beach.mp4')
     expect(card).toHaveAttribute('data-connection', 'offline')
     expect(card).toHaveAttribute('draggable', 'false')
-    expect(screen.getByText('Offline')).toBeInTheDocument()
+    expect(screen.getByText('Offline · relink needed')).toBeInTheDocument()
     expect(screen.getByTestId('media-thumbnail-asset-9')).toHaveAttribute(
       'data-state',
       'offline',
@@ -769,7 +772,7 @@ describe('MediaPool presentation', () => {
     expect(chooseActiveAssetMedia).toHaveBeenCalledWith('asset-9')
 
     const file = new File(['source'], 'beach.mp4', { type: 'video/mp4' })
-    fireEvent.change(screen.getByLabelText('Quick relink beach.mp4'), {
+    fireEvent.change(screen.getByLabelText('Relink beach.mp4 once'), {
       target: { files: [file] },
     })
     expect(connectActiveAssetMedia).toHaveBeenCalledWith('asset-9', file)
@@ -1144,14 +1147,22 @@ describe('MediaPool presentation', () => {
     expect(chooseActiveAssetMedia).toHaveBeenCalledWith('asset-9')
   })
 
-  test('offers one folder scan while offline sources exist', () => {
+  test('offers remembered and one-time folder relink while offline sources exist', () => {
     seedOfflineDescriptor()
     vi.mocked(canChooseActiveMediaFolder).mockReturnValue(true)
     render(<MediaPool />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Scan folder' }))
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Relink folder & remember',
+    }))
 
     expect(chooseActiveMediaFolder).toHaveBeenCalledOnce()
+
+    const file = new File(['source'], 'beach.mp4', { type: 'video/mp4' })
+    fireEvent.change(screen.getByLabelText('Relink a media folder once'), {
+      target: { files: [file] },
+    })
+    expect(connectActiveMediaFolderFiles).toHaveBeenCalledWith([file])
   })
 
   test('shows folder scan progress, completion counts, and errors', () => {
@@ -1159,6 +1170,7 @@ describe('MediaPool presentation', () => {
     useProjectSessionStore.setState({
       activeMediaRelink: {
         phase: 'scanning',
+        processedFileCount: 0,
         scannedFileCount: 3,
         connectedCount: 1,
         skippedCount: 0,
@@ -1169,13 +1181,17 @@ describe('MediaPool presentation', () => {
     render(<MediaPool />)
 
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Scanning 3 source files',
+      'Checking 0 of 3 source files',
     )
+    expect(screen.getByRole('progressbar', {
+      name: 'Folder relink progress',
+    })).toHaveAttribute('max', '3')
 
     act(() => {
       useProjectSessionStore.setState({
         activeMediaRelink: {
           phase: 'complete',
+          processedFileCount: 3,
           scannedFileCount: 3,
           connectedCount: 2,
           skippedCount: 1,
@@ -1185,7 +1201,7 @@ describe('MediaPool presentation', () => {
       })
     })
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Relink finished · 2 connected · 1 skipped',
+      'Relink finished · 3 of 3 checked · 2 connected · 1 skipped',
     )
     expect(screen.getByRole('alert')).toHaveTextContent(
       'One source could not be inspected.',

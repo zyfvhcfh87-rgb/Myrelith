@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import {
   ArrowRight,
   CheckCircle,
@@ -23,7 +23,9 @@ import {
   showResumeProject,
 } from '../app/projectController'
 import {
+  clearDisposableLocalData,
   discardRecoveryJournal,
+  discardRecoveryJournals,
   forgetRecentProject,
   refreshProjectLibrary,
 } from '../app/projectLibraryController'
@@ -45,6 +47,16 @@ import { MAX_PROJECT_NAME_CHARACTERS } from '../domain/projectLimits'
 import type { FrameRate } from '../domain/schema'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import { useProjectLibraryStore } from '../state/projectLibraryStore'
+import {
+  LOCAL_ACCESS_EXPLANATION,
+  localAccessChoiceDescription,
+  localAccessChoiceLabel,
+} from './localAccessCopy'
+import {
+  groupRecoveryJournals,
+  staleRecoveryJournals,
+  type RecoverySort,
+} from './projectRecoveryModel'
 
 function rateKey(rate: FrameRate): string {
   return `${rate.num}/${rate.den}`
@@ -78,6 +90,101 @@ function isBusy(phase: string): boolean {
 function confirmRecoveryDiscard(projectName: string): boolean {
   return window.confirm(
     `Discard the recovery copy for "${projectName}"? This permanently removes its local unsaved safety copies.`,
+  )
+}
+
+function confirmStaleRecoveryCleanup(count: number): boolean {
+  return window.confirm(
+    `Discard ${count} recovery ${count === 1 ? 'copy' : 'copies'} older than 30 days? This permanently removes only those local unsaved safety copies. It does not delete .webcut files, source media, remembered access, or newer recovery copies.`,
+  )
+}
+
+function formatBytes(bytes: number | null): string {
+  if (bytes === null) return 'Unavailable'
+  if (bytes < 1_024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB', 'TB'] as const
+  let value = bytes / 1_024
+  let unit: (typeof units)[number] = units[0]
+  for (const nextUnit of units.slice(1)) {
+    if (value < 1_024) break
+    value /= 1_024
+    unit = nextUnit
+  }
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${unit}`
+}
+
+function LocalStorageSummary() {
+  const storage = useProjectLibraryStore((state) => state.storage)
+  const recentCount = useProjectLibraryStore(
+    (state) => state.recentProjects.length,
+  )
+  const recoveryCount = useProjectLibraryStore(
+    (state) => state.recoveries.length,
+  )
+  const [clearing, setClearing] = useState(false)
+  const hasDisposableData = storage.disposableBytes > 0
+    || storage.disposableItemCount > 0
+
+  const clearDisposable = (): void => {
+    if (!hasDisposableData || clearing) return
+    const confirmed = window.confirm(
+      `Clear ${formatBytes(storage.disposableBytes)} of disposable derived data? Only registered WebCut cache or proxy data will be removed. Project files, recovery copies, remembered access, and source media will stay untouched.`,
+    )
+    if (!confirmed) return
+    setClearing(true)
+    void clearDisposableLocalData().finally(() => setClearing(false))
+  }
+
+  return (
+    <section className="project-storage" aria-labelledby="project-storage-title">
+      <header>
+        <div>
+          <h3 id="project-storage-title">Local storage</h3>
+          <p>Portable project truth stays separate from browser-local convenience data.</p>
+        </div>
+        <strong>
+          {storage.browserUsageBytes === null
+            ? 'Browser estimate unavailable'
+            : storage.browserQuotaBytes === null
+              ? `${formatBytes(storage.browserUsageBytes)} used by this site`
+              : `${formatBytes(storage.browserUsageBytes)} of ${formatBytes(storage.browserQuotaBytes)}`}
+        </strong>
+      </header>
+      <dl className="project-storage-list">
+        <div data-storage-kind="project-truth">
+          <dt>Portable .webcut files</dt>
+          <dd>On your disk · never cleared here</dd>
+          <small>Saved project truth. Source media is referenced, not bundled.</small>
+        </div>
+        <div data-storage-kind="recovery">
+          <dt>Recovery copies</dt>
+          <dd>{recoveryCount} · {formatBytes(storage.recoveryBytes)} protected</dd>
+          <small>Unsaved project snapshots only. They contain no source-media bytes.</small>
+        </div>
+        <div data-storage-kind="access">
+          <dt>Remembered access</dt>
+          <dd>{recentCount} recent project {recentCount === 1 ? 'shortcut' : 'shortcuts'}</dd>
+          <small>Browser permissions and labels only; WebCut does not copy the files.</small>
+        </div>
+        <div data-storage-kind="disposable">
+          <dt>Derived cache &amp; proxies</dt>
+          <dd>{formatBytes(storage.disposableBytes)} disposable</dd>
+          <small>
+            {storage.disposableItemCount === 0
+              ? 'No derived media is stored today. Future cache data can be regenerated.'
+              : `${storage.disposableItemCount} derived ${storage.disposableItemCount === 1 ? 'item' : 'items'} can be regenerated.`}
+          </small>
+          <button
+            type="button"
+            disabled={!hasDisposableData || clearing}
+            onClick={clearDisposable}
+          >
+            {clearing ? 'Clearing…' : 'Clear disposable data'}
+          </button>
+        </div>
+      </dl>
+      {storage.error ? <p className="project-storage-error">{storage.error}</p> : null}
+    </section>
   )
 }
 
@@ -128,6 +235,18 @@ function HomeScreen() {
   const recoveries = useProjectLibraryStore((state) => state.recoveries)
   const libraryError = useProjectLibraryStore((state) => state.error)
   const homeError = useProjectSessionStore((state) => state.error)
+  const [recoveryQuery, setRecoveryQuery] = useState('')
+  const [recoverySort, setRecoverySort] = useState<RecoverySort>('newest')
+  const [recoveryNow] = useState(() => Date.now())
+  const recoveryGroups = useMemo(() => groupRecoveryJournals(recoveries, {
+    query: recoveryQuery,
+    sort: recoverySort,
+    now: recoveryNow,
+  }), [recoveries, recoveryNow, recoveryQuery, recoverySort])
+  const staleRecoveries = useMemo(
+    () => staleRecoveryJournals(recoveries, recoveryNow),
+    [recoveries, recoveryNow],
+  )
 
   useEffect(() => {
     void refreshProjectLibrary().catch((cause) => {
@@ -296,58 +415,114 @@ function HomeScreen() {
         {recoveries.length > 0 && (
           <div className="project-library-group" id="recovery-copies">
             <div className="project-library-group-heading">
-              <h3>Recovery copies</h3>
-              <span>Unsaved safety copies—never opened automatically</span>
+              <div>
+                <h3>Recovery copies</h3>
+                <span>Unsaved project snapshots · no source media · never opened automatically</span>
+              </div>
+              {staleRecoveries.length > 0 ? (
+                <button
+                  className="project-recovery-cleanup"
+                  type="button"
+                  onClick={() => {
+                    if (confirmStaleRecoveryCleanup(staleRecoveries.length)) {
+                      void discardRecoveryJournals(
+                        staleRecoveries.map((recovery) => recovery.journalId),
+                      )
+                    }
+                  }}
+                >
+                  Clean up {staleRecoveries.length} older than 30 days
+                </button>
+              ) : null}
             </div>
-            <ul className="project-library-list">
-              {recoveries.map((recovery, index) => (
-                <li key={recovery.journalId} data-kind="recovery">
-                  <img
-                    className="project-library-thumbnail"
-                    src={index % 2 === 0
-                      ? '/landing/coast-path.webp'
-                      : '/landing/coast-cliffs.webp'}
-                    alt=""
-                  />
-                  <button
-                    className="project-library-open"
-                    type="button"
-                    aria-label={`Recover ${recovery.projectName}`}
-                    onClick={() => void openRecoveryProject(recovery.journalId)}
-                  >
-                    <span className="project-library-copy">
-                      <strong>{recovery.projectName}</strong>
-                      <span>
-                        {recovery.projectFileName ?? 'Not saved to a .webcut yet'}
-                      </span>
-                    </span>
-                    <time dateTime={new Date(recovery.updatedAt).toISOString()}>
-                      <small>{recovery.generationCount} safety {recovery.generationCount === 1 ? 'copy' : 'copies'}</small>
-                      Updated {formatLocalTime(recovery.updatedAt)}
-                    </time>
-                    <span className="project-library-open-action project-library-recover-action">
-                      Recover
-                      <ArrowRight aria-hidden="true" size={17} weight="bold" />
-                    </span>
-                  </button>
-                  <button
-                    className="project-library-remove"
-                    type="button"
-                    aria-label={`Discard recovery for ${recovery.projectName}`}
-                    title="Permanently discard this local recovery copy"
-                    onClick={() => {
-                      if (confirmRecoveryDiscard(recovery.projectName)) {
-                        void discardRecoveryJournal(recovery.journalId)
-                      }
-                    }}
-                  >
-                    <DotsThreeVertical aria-hidden="true" size={20} weight="bold" />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="project-recovery-controls" role="search" aria-label="Find recovery copies">
+              <label>
+                <span>Search</span>
+                <input
+                  type="search"
+                  value={recoveryQuery}
+                  placeholder="Project or .webcut name"
+                  onChange={(event) => setRecoveryQuery(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Sort</span>
+                <select
+                  value={recoverySort}
+                  onChange={(event) => setRecoverySort(
+                    event.target.value as RecoverySort,
+                  )}
+                >
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="name">Project name</option>
+                </select>
+              </label>
+              <span aria-live="polite">
+                {recoveryGroups.reduce(
+                  (count, group) => count + group.recoveries.length,
+                  0,
+                )} of {recoveries.length}
+              </span>
+            </div>
+            {recoveryGroups.map((group) => (
+              <section
+                className="project-recovery-age-group"
+                aria-labelledby={`recovery-age-${group.id}`}
+                key={group.id}
+              >
+                <h4 id={`recovery-age-${group.id}`}>{group.label}</h4>
+                <ul className="project-library-list project-recovery-list">
+                  {group.recoveries.map((recovery) => (
+                    <li key={recovery.journalId} data-kind="recovery">
+                      <button
+                        className="project-library-open"
+                        type="button"
+                        aria-label={`Recover ${recovery.projectName}`}
+                        onClick={() => void openRecoveryProject(recovery.journalId)}
+                      >
+                        <span className="project-library-copy">
+                          <strong>{recovery.projectName}</strong>
+                          <span>
+                            {recovery.projectFileName ?? 'Not saved to a .webcut yet'}
+                          </span>
+                        </span>
+                        <time dateTime={new Date(recovery.updatedAt).toISOString()}>
+                          <small>{recovery.generationCount} safety {recovery.generationCount === 1 ? 'copy' : 'copies'}</small>
+                          {formatLocalTime(recovery.updatedAt)}
+                        </time>
+                        <span className="project-library-open-action project-library-recover-action">
+                          Recover
+                          <ArrowRight aria-hidden="true" size={17} weight="bold" />
+                        </span>
+                      </button>
+                      <button
+                        className="project-library-remove"
+                        type="button"
+                        aria-label={`Discard recovery for ${recovery.projectName}`}
+                        title="Permanently discard this recovery copy only"
+                        onClick={() => {
+                          if (confirmRecoveryDiscard(recovery.projectName)) {
+                            void discardRecoveryJournal(recovery.journalId)
+                          }
+                        }}
+                      >
+                        <DotsThreeVertical aria-hidden="true" size={20} weight="bold" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+            {recoveryGroups.length === 0 ? (
+              <p className="project-library-empty" role="status">
+                No recovery copies match that search.
+              </p>
+            ) : null}
           </div>
         )}
+
+        {libraryPhase !== 'loading' ? <LocalStorageSummary /> : null}
 
         {libraryEmpty && (
           <p className="project-library-empty">
@@ -409,18 +584,18 @@ function NewProjectScreen({
     aspectRatioId,
     resolutionTier,
   )
+  const selectedFrameRate = PROJECT_FRAME_RATE_PRESETS.find(
+    (preset) => rateKey(preset) === frameRate,
+  )
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
-    const selectedRate = PROJECT_FRAME_RATE_PRESETS.find(
-      (preset) => rateKey(preset) === frameRate,
-    )
     const selectedAudioRate = Number(audioSampleRate)
-    if (!selectedResolution || !selectedRate) return
+    if (!selectedResolution || !selectedFrameRate) return
     const settings: ProjectSettings = {
       width: selectedResolution.width,
       height: selectedResolution.height,
-      frameRate: { ...selectedRate },
+      frameRate: { ...selectedFrameRate },
       audioSampleRate: selectedAudioRate,
     }
     onEnterEditor(() => createNewProject(name, settings))
@@ -559,6 +734,35 @@ function NewProjectScreen({
             ))}
           </select>
         </label>
+        <section className="project-create-summary" aria-labelledby="project-create-summary-title">
+          <div>
+            <span id="project-create-summary-title">Ready to create</span>
+            <h2>{name.trim() || 'Untitled project'}</h2>
+          </div>
+          <dl>
+            <div>
+              <dt>Canvas</dt>
+              <dd>{selectedResolution
+                ? formatProjectCanvas(selectedResolution.width, selectedResolution.height)
+                : 'Choose a canvas'}</dd>
+            </div>
+            <div>
+              <dt>Video</dt>
+              <dd>{selectedFrameRate
+                ? formatRate(selectedFrameRate)
+                : 'Choose a frame rate'}</dd>
+            </div>
+            <div>
+              <dt>Audio</dt>
+              <dd>{Number(audioSampleRate) / 1_000} kHz</dd>
+            </div>
+            <div>
+              <dt>Timeline</dt>
+              <dd>4 video + 4 audio tracks</dd>
+            </div>
+          </dl>
+          <p>Starts locally and unsaved. Save a portable .webcut when you are ready.</p>
+        </section>
         {error && <p className="project-launch-error" role="alert">{error}</p>}
         {editorLoadError && (
           <EditorLoadNotice
@@ -620,7 +824,7 @@ function ResumeProjectScreen({
   ).length ?? 0
   const reusableChoiceTarget = candidate ? 'another project file' : '.webcut'
   const ordinaryProjectChoice = projectHandlePickerAvailable
-    ? `Quick open ${reusableChoiceTarget}`
+    ? localAccessChoiceLabel('Open', 'once')
     : candidate ? 'Choose another project file' : 'Choose a .webcut file'
 
   return (
@@ -648,14 +852,14 @@ function ResumeProjectScreen({
               className={`project-file-choice project-file-choice-remembered${
                 busy ? ' is-disabled' : ''
               }`}
-              aria-label="Choose & remember a WebCut project file"
+              aria-label="Open and remember a WebCut project file"
               type="button"
               disabled={busy}
               onClick={() => void chooseProjectFile()}
             >
-              <strong>Choose &amp; remember {reusableChoiceTarget}</strong>
+              <strong>{localAccessChoiceLabel('Open', 'remember')} {reusableChoiceTarget}</strong>
               <span>
-                Add the validated project to Recent for direct reopening.
+                {localAccessChoiceDescription('remember')}
               </span>
             </button>
           ) : null}
@@ -667,13 +871,13 @@ function ResumeProjectScreen({
             <strong>{ordinaryProjectChoice}</strong>
             <span>
               {projectHandlePickerAvailable
-                ? 'Open once without remembering a browser file handle.'
+                ? localAccessChoiceDescription('once')
                 : 'Only a validated portable WebCut project will continue.'}
             </span>
             <input
               className="project-file-input"
               aria-label={projectHandlePickerAvailable
-                ? 'Quick open a WebCut project file'
+                ? 'Open a WebCut project file once'
                 : 'Choose a WebCut project file'}
               type="file"
               accept=".webcut"
@@ -686,6 +890,11 @@ function ResumeProjectScreen({
             />
           </label>
         </div>
+        {projectHandlePickerAvailable ? (
+          <p className="project-access-explanation">
+            {LOCAL_ACCESS_EXPLANATION}
+          </p>
+        ) : null}
 
         {candidate && (
           <section className="project-candidate" aria-label="Project summary">
@@ -731,21 +940,26 @@ function ResumeProjectScreen({
                 </p>
               </div>
               {candidate.assets.length > 0 && (
-                mediaHandlePickerAvailable ? (
-                  <button
-                    className="project-button project-button-secondary project-relink-button"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void chooseProjectMedia()}
-                  >
-                    Reconnect files
-                  </button>
-                ) : (
+                <div className="project-relink-actions">
+                  {mediaHandlePickerAvailable ? (
+                    <button
+                      className="project-button project-button-secondary project-relink-button"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void chooseProjectMedia()}
+                    >
+                      {localAccessChoiceLabel('Relink', 'remember')}
+                    </button>
+                  ) : null}
                   <label className={`project-button project-button-secondary project-relink-button${busy ? ' is-disabled' : ''}`}>
-                    Reconnect files
+                    {mediaHandlePickerAvailable
+                      ? localAccessChoiceLabel('Relink', 'once')
+                      : 'Relink files'}
                     <input
                       className="project-file-input"
-                      aria-label="Reconnect project source media"
+                      aria-label={mediaHandlePickerAvailable
+                        ? 'Relink project source media once'
+                        : 'Relink project source media'}
                       type="file"
                       accept={MEDIA_FILE_INPUT_ACCEPT}
                       multiple
@@ -757,9 +971,15 @@ function ResumeProjectScreen({
                       }}
                     />
                   </label>
-                )
+                </div>
               )}
             </div>
+
+            {candidate.assets.length > 0 && mediaHandlePickerAvailable ? (
+              <p className="project-access-explanation">
+                {LOCAL_ACCESS_EXPLANATION}
+              </p>
+            ) : null}
 
             {candidate.assets.length > 0 && (
               <ul className="project-source-list">
@@ -777,10 +997,10 @@ function ResumeProjectScreen({
                     </div>
                     <span>
                       {asset.status === 'ready'
-                        ? 'Ready'
+                        ? 'Connected'
                         : asset.status === 'remembered'
-                          ? 'Remembered'
-                          : 'Opens offline'}
+                          ? 'Permission needed'
+                          : 'Offline · relink needed'}
                     </span>
                   </li>
                 ))}

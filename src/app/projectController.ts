@@ -73,6 +73,7 @@ import { disposeTransport } from './transportController'
 import {
   isLocalMediaPickerCancellation,
   localMediaHandleRegistry,
+  localMediaFolderSelectionsFromFiles,
   pickLocalMediaFolder,
   pickLocalMediaFiles,
   queryLocalMediaPermission,
@@ -212,7 +213,7 @@ let operationGeneration = 0
 interface StagedFolderMedia {
   token: string
   file: File
-  handle: LocalMediaFileHandle
+  handle: LocalMediaFileHandle | null
   relativePath: string
   candidateIds: Set<string>
 }
@@ -222,6 +223,7 @@ interface ActiveMediaRelinkWork {
   documentId: string
   documentRate: FrameRate
   outcome: 'running' | 'complete' | 'cancelled'
+  processedFileCount: number
   scannedFileCount: number
   connectedCount: number
   skippedCount: number
@@ -818,6 +820,7 @@ function publishActiveMediaRelink(
   useProjectSessionStore.setState({
     activeMediaRelink: {
       phase,
+      processedFileCount: work.processedFileCount,
       scannedFileCount: work.scannedFileCount,
       connectedCount: work.connectedCount,
       skippedCount: work.skippedCount,
@@ -840,6 +843,7 @@ function createActiveMediaRelinkWork(
     documentId: document.id,
     documentRate: { ...document.frameRate },
     outcome: 'running',
+    processedFileCount: 0,
     scannedFileCount,
     connectedCount: 0,
     skippedCount: 0,
@@ -1065,6 +1069,7 @@ function finishActiveMediaRelink(work: ActiveMediaRelinkWork): void {
   useProjectSessionStore.setState({
     activeMediaRelink: {
       phase: 'complete',
+      processedFileCount: work.processedFileCount,
       scannedFileCount: work.scannedFileCount,
       connectedCount: work.connectedCount,
       skippedCount: work.skippedCount,
@@ -1614,6 +1619,7 @@ async function connectActiveAssetSelection(
       releaseSelection: () => {},
     },
   )
+  work.processedFileCount = 1
   if (activeRelinkIsCurrent(work)) finishActiveMediaRelink(work)
   if (result.status === 'connected') return { status: 'ready' }
   if (result.status === 'cancelled') return result
@@ -1686,6 +1692,8 @@ export async function connectActiveMediaFolder(
     )
     if (!possibleBySize) {
       work.skippedCount++
+      work.processedFileCount++
+      publishActiveMediaRelink(work, 'scanning')
       continue
     }
 
@@ -1709,6 +1717,7 @@ export async function connectActiveMediaFolder(
           inspection.compatibility.detail
             ?? `Could not use "${selection.relativePath}" in this browser.`,
         )
+        work.processedFileCount++
         publishActiveMediaRelink(work, 'scanning')
         continue
       }
@@ -1717,6 +1726,8 @@ export async function connectActiveMediaFolder(
       analyzed = null
       if (candidateIds.size === 0) {
         work.skippedCount++
+        work.processedFileCount++
+        publishActiveMediaRelink(work, 'scanning')
         continue
       }
       work.staged.push({
@@ -1736,6 +1747,7 @@ export async function connectActiveMediaFolder(
         )
       }
     }
+    work.processedFileCount++
     publishActiveMediaRelink(work, 'scanning')
   }
 
@@ -1743,6 +1755,29 @@ export async function connectActiveMediaFolder(
   return activeRelinkIsCurrent(work) || work.outcome === 'complete'
     ? { status: 'ready' }
     : { status: 'cancelled' }
+}
+
+/** Run the same bounded folder relink from a one-time directory input. */
+export function connectActiveMediaFolderFiles(
+  files: readonly File[],
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  try {
+    return connectActiveMediaFolder(
+      localMediaFolderSelectionsFromFiles(files),
+      deps,
+    )
+  } catch (cause) {
+    const message = `Could not scan the media folder: ${messageFrom(cause)}`
+    useProjectSessionStore.setState({
+      activeMediaRelink: {
+        ...INITIAL_ACTIVE_MEDIA_RELINK,
+        phase: 'complete',
+        errors: [message],
+      },
+    })
+    return Promise.resolve({ status: 'failed', message })
+  }
 }
 
 export function canChooseActiveMediaFolder(): boolean {
@@ -1860,6 +1895,7 @@ export function cancelActiveMediaRelink(
   useProjectSessionStore.setState({
     activeMediaRelink: {
       phase: 'complete',
+      processedFileCount: work.processedFileCount,
       scannedFileCount: work.scannedFileCount,
       connectedCount: work.connectedCount,
       skippedCount: work.skippedCount,

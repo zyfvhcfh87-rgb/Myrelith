@@ -35,7 +35,9 @@ const editorModule = vi.hoisted(() => ({
 vi.mock('../app/editorModuleLoader', () => editorModule)
 
 const libraryController = vi.hoisted(() => ({
+  clearDisposableLocalData: vi.fn(async () => true),
   discardRecoveryJournal: vi.fn(async () => true),
+  discardRecoveryJournals: vi.fn(async () => true),
   forgetRecentProject: vi.fn(async () => true),
   refreshProjectLibrary: vi.fn(async () => undefined),
 }))
@@ -72,6 +74,68 @@ describe('ProjectLaunch', () => {
       .toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /your footage/i }))
       .toBeInTheDocument()
+  })
+
+  test('recovery search, age groups, and confirmed stale cleanup stay narrowly scoped', () => {
+    const now = Date.now()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    useProjectLibraryStore.setState({
+      phase: 'ready',
+      recoveries: [{
+        journalId: 'journal-today',
+        documentId: 'doc-today',
+        projectName: 'Today edit',
+        projectFileName: null,
+        updatedAt: now,
+        generationCount: 1,
+      }, {
+        journalId: 'journal-old',
+        documentId: 'doc-old',
+        projectName: 'Archive edit',
+        projectFileName: 'mountains.webcut',
+        updatedAt: now - 31 * 86_400_000,
+        generationCount: 2,
+      }],
+    })
+    render(<ProjectLaunch />)
+
+    expect(screen.getByRole('heading', { name: 'Today' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Older' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'mountains' },
+    })
+    expect(screen.queryByText('Today edit')).not.toBeInTheDocument()
+    expect(screen.getByText('Archive edit')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Clean up 1 older than 30 days',
+    }))
+    expect(libraryController.discardRecoveryJournals)
+      .toHaveBeenCalledWith(['journal-old'])
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('does not delete .webcut files'),
+    )
+  })
+
+  test('local storage explains project truth, protected recovery, and empty disposable data', () => {
+    useProjectLibraryStore.setState({
+      phase: 'ready',
+      storage: {
+        browserUsageBytes: 4_096,
+        browserQuotaBytes: 8_192,
+        recoveryBytes: 1_024,
+        disposableBytes: 0,
+        disposableItemCount: 0,
+        error: null,
+      },
+    })
+    render(<ProjectLaunch />)
+
+    expect(screen.getByText('Portable .webcut files')).toBeInTheDocument()
+    expect(screen.getByText(/1\.0 KB protected/)).toBeInTheDocument()
+    expect(screen.getByText(/No derived media is stored today/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear disposable data' }))
+      .toBeDisabled()
   })
 
   test('home offers recovery and recent entries with removable shortcuts', () => {
@@ -230,7 +294,7 @@ describe('ProjectLaunch', () => {
     fireEvent.change(screen.getByLabelText('Choose a WebCut project file'), {
       target: { files: [project] },
     })
-    fireEvent.change(screen.getByLabelText('Reconnect project source media'), {
+    fireEvent.change(screen.getByLabelText('Relink project source media'), {
       target: { files: [source] },
     })
 
@@ -380,7 +444,7 @@ describe('ProjectLaunch', () => {
     })
     render(<ProjectLaunch />)
 
-    expect(screen.getByText('Remembered')).toBeInTheDocument()
+    expect(screen.getByText('Permission needed')).toBeInTheDocument()
     const open = screen.getByRole('button', { name: 'Allow media & open' })
     await waitFor(() => expect(open).toBeEnabled())
     expect(editorModule.loadEditorShell).toHaveBeenCalledOnce()
@@ -502,10 +566,10 @@ describe('ProjectLaunch', () => {
     })
     render(<ProjectLaunch />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reconnect files' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Relink & remember' }))
     expect(controller.chooseProjectMedia).toHaveBeenCalledOnce()
-    expect(screen.queryByLabelText('Reconnect project source media'))
-      .not.toBeInTheDocument()
+    expect(screen.getByLabelText('Relink project source media once'))
+      .toBeInTheDocument()
   })
 
   test('supporting browsers offer remembered and quick project-open paths', () => {
@@ -514,14 +578,27 @@ describe('ProjectLaunch', () => {
     render(<ProjectLaunch />)
 
     fireEvent.click(screen.getByRole('button', {
-      name: 'Choose & remember a WebCut project file',
+      name: 'Open and remember a WebCut project file',
     }))
 
     expect(controller.chooseProjectFile).toHaveBeenCalledOnce()
     const project = new File(['{}'], 'quick-open.webcut')
-    fireEvent.change(screen.getByLabelText('Quick open a WebCut project file'), {
+    fireEvent.change(screen.getByLabelText('Open a WebCut project file once'), {
       target: { files: [project] },
     })
     expect(controller.openProjectFile).toHaveBeenCalledWith(project)
+  })
+
+  test('summarizes the complete local setup before project creation', () => {
+    useProjectSessionStore.setState({ screen: 'new-project' })
+    render(<ProjectLaunch />)
+
+    const summary = screen.getByRole('region', { name: 'Ready to create' })
+    expect(summary).toHaveTextContent('Untitled project')
+    expect(summary).toHaveTextContent('Horizontal 16:9 · 1920 × 1080')
+    expect(summary).toHaveTextContent('30 fps')
+    expect(summary).toHaveTextContent('48 kHz')
+    expect(summary).toHaveTextContent('4 video + 4 audio tracks')
+    expect(summary).toHaveTextContent('Starts locally and unsaved')
   })
 })

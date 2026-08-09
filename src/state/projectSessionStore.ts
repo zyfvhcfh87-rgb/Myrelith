@@ -64,6 +64,7 @@ export interface MediaRelinkAmbiguitySummary {
 /** Serializable projection only; Files, handles, URLs, and assets stay in app/. */
 export interface ActiveMediaRelinkSummary {
   phase: ActiveMediaRelinkPhase
+  processedFileCount: number
   scannedFileCount: number
   connectedCount: number
   skippedCount: number
@@ -74,6 +75,7 @@ export interface ActiveMediaRelinkSummary {
 export const INITIAL_ACTIVE_MEDIA_RELINK: Readonly<ActiveMediaRelinkSummary> =
   Object.freeze({
     phase: 'idle',
+    processedFileCount: 0,
     scannedFileCount: 0,
     connectedCount: 0,
     skippedCount: 0,

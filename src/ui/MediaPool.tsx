@@ -40,6 +40,7 @@ import {
   chooseActiveAssetMedia,
   chooseActiveMediaFolder,
   connectActiveAssetMedia,
+  connectActiveMediaFolderFiles,
 } from '../app/projectController'
 import { setMediaVisualPoolViewport } from '../app/mediaVisualsController'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
@@ -79,6 +80,11 @@ import {
 import MediaImportDialog from './MediaImportDialog'
 import MediaRelinkDialog from './MediaRelinkDialog'
 import { useMediaPoolVirtualizer } from './useMediaPoolVirtualizer'
+import {
+  LOCAL_ACCESS_EXPLANATION,
+  localAccessChoiceDescription,
+  localAccessChoiceLabel,
+} from './localAccessCopy'
 
 function formatPreferenceSeconds(durationMicroseconds: number): string {
   return String(durationMicroseconds / 1_000_000)
@@ -555,6 +561,9 @@ function MediaRelinkStatus() {
   const scannedFileCount = useProjectSessionStore(
     (state) => state.activeMediaRelink.scannedFileCount,
   )
+  const processedFileCount = useProjectSessionStore(
+    (state) => state.activeMediaRelink.processedFileCount,
+  )
   const connectedCount = useProjectSessionStore(
     (state) => state.activeMediaRelink.connectedCount,
   )
@@ -568,14 +577,21 @@ function MediaRelinkStatus() {
   if (phase === 'idle') return null
 
   const message = phase === 'scanning'
-    ? `Scanning ${scannedFileCount} source ${scannedFileCount === 1 ? 'file' : 'files'}…`
+    ? `Checking ${processedFileCount} of ${scannedFileCount} source ${scannedFileCount === 1 ? 'file' : 'files'}…`
     : phase === 'awaiting-choice'
-      ? `Waiting for a file choice · ${connectedCount} connected so far`
-      : `Relink finished · ${connectedCount} connected · ${skippedCount} skipped`
+      ? `Checked ${processedFileCount} of ${scannedFileCount} · waiting for a source choice · ${connectedCount} connected so far`
+      : `Relink finished · ${processedFileCount} of ${scannedFileCount} checked · ${connectedCount} connected · ${skippedCount} skipped`
 
   return (
     <section className="media-relink-status" aria-label="Media relink status">
       <p role="status" data-phase={phase}>{message}</p>
+      {scannedFileCount > 0 ? (
+        <progress
+          aria-label="Folder relink progress"
+          max={scannedFileCount}
+          value={Math.min(processedFileCount, scannedFileCount)}
+        />
+      ) : null}
       {errors.length > 0 ? (
         <ul className="media-relink-errors" role="alert">
           {errors.map((error, index) => (
@@ -725,9 +741,16 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
       <div className="media-details">
         <span className="media-name">{fileName}</span>
         <span className="media-meta">{metadata}</span>
+        {descriptor && connected ? (
+          <span className="media-connection-badge" data-status="connected">
+            Connected
+          </span>
+        ) : null}
         {descriptor && !connected ? (
           <div className="media-offline-actions">
-            <span className="media-offline-badge">Offline</span>
+            <span className="media-connection-badge" data-status="offline">
+              Offline · relink needed
+            </span>
             {handlePickerAvailable ? (
               <button
                 className="media-source-relink"
@@ -737,7 +760,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
                 disabled={busy}
                 onClick={() => void chooseActiveAssetMedia(id)}
               >
-                Relink &amp; remember
+                {localAccessChoiceLabel('Relink', 'remember')}
               </button>
             ) : null}
             <label
@@ -748,11 +771,13 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
                 ? 'Reconnect this source for this session without remembering access'
                 : undefined}
             >
-              {handlePickerAvailable ? 'Quick relink' : 'Relink'}
+              {handlePickerAvailable
+                ? localAccessChoiceLabel('Relink', 'once')
+                : 'Relink'}
               <input
                 className="media-import-input"
                 aria-label={handlePickerAvailable
-                  ? `Quick relink ${fileName}`
+                  ? `Relink ${fileName} once`
                   : `Relink ${fileName}`}
                 type="file"
                 accept={MEDIA_FILE_INPUT_ACCEPT}
@@ -999,8 +1024,38 @@ export default function MediaPool() {
                 disabled={importBusy || relinkBusy}
                 onClick={() => void chooseActiveMediaFolder()}
               >
-                Scan folder
+                {localAccessChoiceLabel('Relink folder', 'remember')}
               </button>
+            ) : null}
+            {offlineCount > 0 ? (
+              <label
+                className={folderPickerAvailable
+                  ? 'media-folder-relink media-folder-relink-once'
+                  : 'media-folder-relink'}
+                title={folderPickerAvailable
+                  ? localAccessChoiceDescription('once')
+                  : undefined}
+              >
+                {folderPickerAvailable
+                  ? localAccessChoiceLabel('Relink folder', 'once')
+                  : 'Relink folder'}
+                <input
+                  className="media-import-input"
+                  aria-label={folderPickerAvailable
+                    ? 'Relink a media folder once'
+                    : 'Relink a media folder'}
+                  type="file"
+                  accept={MEDIA_FILE_INPUT_ACCEPT}
+                  multiple
+                  disabled={importBusy || relinkBusy}
+                  ref={(input) => input?.setAttribute('webkitdirectory', '')}
+                  onChange={(event) => {
+                    const files = [...(event.target.files ?? [])]
+                    event.target.value = ''
+                    if (files.length > 0) void connectActiveMediaFolderFiles(files)
+                  }}
+                />
+              </label>
             ) : null}
             {handlePickerAvailable ? (
               <button
@@ -1011,7 +1066,7 @@ export default function MediaPool() {
                 onClick={() => void chooseMediaForImport()}
               >
                 <UploadSimple aria-hidden="true" size={16} weight="bold" />
-                <span>Import &amp; remember</span>
+                <span>{localAccessChoiceLabel('Import', 'remember')}</span>
               </button>
             ) : null}
             <label
@@ -1023,11 +1078,13 @@ export default function MediaPool() {
                 : undefined}
             >
               <Plus aria-hidden="true" size={15} weight="bold" />
-              <span>{handlePickerAvailable ? 'Quick import' : 'Import'}</span>
+              <span>{handlePickerAvailable
+                ? localAccessChoiceLabel('Import', 'once')
+                : 'Import'}</span>
               <input
                 className="media-import-input"
                 aria-label={handlePickerAvailable
-                  ? 'Quick import media'
+                  ? 'Import media once'
                   : 'Import media'}
                 type="file"
                 accept={MEDIA_FILE_INPUT_ACCEPT}
@@ -1042,6 +1099,11 @@ export default function MediaPool() {
             </label>
           </div>
         </div>
+        {handlePickerAvailable ? (
+          <p className="media-access-explanation">
+            {LOCAL_ACCESS_EXPLANATION}
+          </p>
+        ) : null}
         <div className="media-pool-filters" role="search" aria-label="Filter media">
           <label className="media-pool-search">
             <span>Search</span>

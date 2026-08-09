@@ -36,7 +36,10 @@ export interface LocalMediaDirectoryHandle {
   >
 }
 
-export interface LocalMediaFolderSelection extends LocalMediaSelection {
+export interface LocalMediaFolderSelection {
+  file: File
+  /** Null for a one-session folder input that must not be remembered. */
+  handle: LocalMediaFileHandle | null
   /** Forward-slash path relative to the chosen folder, for display only. */
   relativePath: string
 }
@@ -319,6 +322,40 @@ function isSupportedMediaName(name: string): boolean {
   return dot >= 0 && SUPPORTED_MEDIA_EXTENSIONS.has(
     name.slice(dot).toLowerCase(),
   )
+}
+
+/**
+ * Normalize a native directory-input FileList without manufacturing reusable
+ * handles. The same traversal bounds as remembered folders apply.
+ */
+export function localMediaFolderSelectionsFromFiles(
+  files: readonly File[],
+  limitOverrides: Partial<LocalMediaFolderLimits> = {},
+): LocalMediaFolderSelection[] {
+  const limits = resolveFolderLimits(limitOverrides)
+  if (files.length > limits.maxEntries) {
+    throw new LocalMediaFolderTraversalError(
+      `Folder relink is limited to ${limits.maxEntries} entries`,
+    )
+  }
+  const selections: LocalMediaFolderSelection[] = []
+  for (const file of files) {
+    if (!isSupportedMediaName(file.name)) continue
+    if (selections.length >= limits.maxFiles) {
+      throw new LocalMediaFolderTraversalError(
+        `Folder relink is limited to ${limits.maxFiles} media files`,
+      )
+    }
+    const relativePath = file.webkitRelativePath || file.name
+    if (relativePath.length > limits.maxRelativePathCharacters) {
+      throw new LocalMediaFolderTraversalError(
+        'A selected folder path is too long',
+      )
+    }
+    for (const segment of relativePath.split('/')) assertSafeEntryName(segment)
+    selections.push({ file, handle: null, relativePath })
+  }
+  return selections.toSorted(compareRelativePath)
 }
 
 function assertSafeEntryName(name: string): void {

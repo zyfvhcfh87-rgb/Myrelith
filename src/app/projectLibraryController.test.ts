@@ -98,6 +98,24 @@ describe('project library controller', () => {
       .not.toHaveProperty('generations')
   })
 
+  test('reports protected recovery bytes separately from disposable data and quota', async () => {
+    const controller = new ProjectLibraryController(deps({
+      estimateBrowserStorage: vi.fn(async () => ({ usage: 4_096, quota: 8_192 })),
+      estimateDisposableStorage: vi.fn(async () => ({ bytes: 512, itemCount: 3 })),
+    }))
+
+    await controller.refresh()
+
+    expect(useProjectLibraryStore.getState().storage).toEqual({
+      browserUsageBytes: 4_096,
+      browserQuotaBytes: 8_192,
+      recoveryBytes: 2,
+      disposableBytes: 512,
+      disposableItemCount: 3,
+      error: null,
+    })
+  })
+
   test('keeps usable partial results when one local surface fails', async () => {
     const controller = new ProjectLibraryController(deps({
       listRecentProjects: vi.fn(async () => {
@@ -133,5 +151,37 @@ describe('project library controller', () => {
       recentProjects: [],
       recoveries: [],
     })
+  })
+
+  test('bulk cleanup deletes only exact loaded recovery ids once', async () => {
+    const fixture = deps()
+    const controller = new ProjectLibraryController(fixture)
+    await controller.refresh()
+
+    await expect(controller.deleteRecoveryJournals([
+      'journal-recovery',
+      'unknown-journal',
+      'journal-recovery',
+    ])).resolves.toBe(true)
+
+    expect(fixture.deleteRecoveryJournal).toHaveBeenCalledTimes(1)
+    expect(fixture.deleteRecoveryJournal).toHaveBeenCalledWith('journal-recovery')
+  })
+
+  test('clears only the registered disposable surface then refreshes usage', async () => {
+    const clearDisposableStorage = vi.fn(async () => undefined)
+    const estimateDisposableStorage = vi
+      .fn<() => Promise<{ bytes: number; itemCount: number }>>()
+      .mockResolvedValueOnce({ bytes: 100, itemCount: 1 })
+      .mockResolvedValueOnce({ bytes: 0, itemCount: 0 })
+    const controller = new ProjectLibraryController(deps({
+      clearDisposableStorage,
+      estimateDisposableStorage,
+    }))
+    await controller.refresh()
+
+    await expect(controller.clearDisposableStorage()).resolves.toBe(true)
+    expect(clearDisposableStorage).toHaveBeenCalledOnce()
+    expect(useProjectLibraryStore.getState().storage.disposableBytes).toBe(0)
   })
 })
