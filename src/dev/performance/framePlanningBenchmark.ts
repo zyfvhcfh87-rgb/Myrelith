@@ -204,7 +204,7 @@ function createScenario(
   return {
     layout,
     doc: {
-      schemaVersion: 7,
+      schemaVersion: 8,
       id: `frame-planning-${layout}`,
       name: `Frame planning ${layout}`,
       frameRate: { num: 30, den: 1 },
@@ -336,6 +336,7 @@ function planChecksum(plan: VideoCompositionPlan): number {
   for (const item of plan.items) {
     if (item.kind === 'clip') checksum += item.request.sourceFrame + item.request.opacity
     else if (item.kind === 'text') checksum += item.opacity + item.clip.id.length
+    else if (item.kind === 'caption') checksum += item.paint.opacity + item.paint.id.length
     else {
       checksum += item.requests[0].sourceFrame + item.requests[0].weight
         + item.requests[1].sourceFrame + item.requests[1].weight

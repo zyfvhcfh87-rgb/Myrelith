@@ -112,6 +112,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #59 — indexed frame planning** | ✅ implementation complete | immutable per-track clip/transition indices; exact ordinary/text/crossfade/animation parity; schema-5 sparse/dense Chromium evidence measured 94.26%/94.81% p95 improvement |
 | **Post-MVP #58 — adaptive preview resolution** | ✅ implementation complete | session-only Auto/Full/Half/Quarter monitor quality; project-space compositor scaling across ordinary/text/transition frames; reusable scaled worker surfaces; explicit full-resolution export; full 4K harness memory plateau -6.4% median/-7.5% p95; real Chromium 4K/720px gates |
 | **Post-MVP #64 — timeline markers** | ✅ implementation complete | schema-7 sequence markers; deterministic pure operations/navigation, undoable store actions, portable migration/round trips, accessible clustered ruler/editor, command palette + keyboard paths; 125 focused + 1,979 total tests; clean in-app Chromium gate on exclusive port 5174; delivery tracked by draft PR |
+| **Post-MVP #68 — caption tracks + SRT/VTT** | ✅ implementation complete | schema-8 semantic tracks/cues; exact frame/timestamp round trips, atomic strict import, accessible bounded editor, shared preview/export text composition, undo/recovery; 2,046 total tests and clean Chromium QA on exclusive port 41868 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -2131,6 +2132,69 @@ surface; it is not a second zoom and never enters document history.
   recovery status at 1280×720; the browser warning/error log was empty.
 - Publication is a draft PR only. Merge, deployment, and issue closure remain
   separate and are not authorized by this implementation.
+
+## Post-MVP issue #68 - caption tracks with SRT/VTT round trips
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-09).**
+
+- Timeline schema 8 persists semantic caption tracks and cues with stable,
+  portable ids; half-open integer-frame ranges; plain multiline text;
+  BCP-47-compatible language; subtitle/caption role; classic/boxed/minimal
+  style preset; and track visibility. Schema-7 projects migrate to an empty
+  list, while current save, live save, load, recovery, and Resume use the same
+  strict validator. SRT has no durable cue-id field, so its imports mint ids;
+  WebVTT cue identifiers are retained only when portable and non-colliding.
+- `domain/captions.ts` owns immutable track/cue validation and edit semantics.
+  Cues may overlap, touching ranges do not overlap, and no more than eight
+  visible cues may be active at one frame. The document is bounded to 32
+  tracks, 20,000 cues per track, 50,000 cues and 2,000,000 caption characters
+  total, 4,000 characters per cue, and frame 1,000,000,000. Empty/outer-space
+  text and markup reject instead of being silently changed.
+- `domain/captionFiles.ts` uses exact integer arithmetic at the document's
+  rational frame rate. Import floors start milliseconds and ceils end
+  milliseconds so every file-covered frame survives. Export ceils starts and
+  floors ends to the millisecond boundaries that map back to the same authored
+  frame range. Tests cover 24, 25, 30, 50, 60, 24000/1001, and 30000/1001.
+  SRT and WebVTT support BOM/CRLF, multiline cues, and VTT NOTE blocks. VTT
+  STYLE/REGION/X-TIMESTAMP-MAP/cue settings and all caption markup reject with
+  typed, line-specific errors. The complete file parses and validates before
+  one history commit, so malformed input is atomic.
+- Caption composition remains explicit in `videoCompositionPlan`: active
+  semantic cues are appended above visual tracks and reuse the shared Canvas2D
+  text layout/paint implementation without becoming clips or requesting media
+  decode resources. The same plan drives paused seek, playback, and full-size
+  export; captions also extend derived document/export duration.
+- The lazy Caption editor provides accessible track metadata, bounded 200-row
+  cue rendering, listbox Arrow/Home/End navigation with seek, add/edit/delete,
+  previous/next, split, touching-cue merge, shift-all/shift-from-selected, file
+  import, and SRT/VTT download. Focus is trapped in the dialog, Escape closes
+  it, and focus returns to the toolbar. Each edit/import is ordinary undoable
+  document history.
+- Final local gates are green: 144 test files / 2,046 tests plus the 16
+  benchmark-runner tests, TypeScript + production Vite build, oxlint, and
+  `npm audit --omit=dev --audit-level=high` with 0 vulnerabilities. Vite still
+  prints the repository's non-fatal large-chunk advisory.
+- Real Chromium QA used only `http://127.0.0.1:41868`. It covered add/edit and
+  metadata, dialog accessibility/focus return, caption-only preview pixels,
+  exclusive-end seek disappearance, recovery reopen, valid multiline SRT
+  import (`0–30`, `30–75`), line-specific malformed-SRT rejection with both
+  existing cues unchanged, SRT/VTT downloads, and Ctrl+Z import reversal.
+  A caption-only Compatibility export produced a 30-frame, 1920×1080,
+  30 fps H.264 MP4 (`sha256:9c9f2d165261b445be98474c1db82e52c5ea6fc894f72f66a4522fdaee0411e6`);
+  Chromium reopened it at readyState 4, played it natively with no media error,
+  and showed the same caption pixels. Console evidence reported 0 warnings and
+  0 errors. Visual/video evidence is in `output/playwright/issue-68/`.
+- Reproducible source identity started at clean
+  `c8bb2757833fa69da2360a56460bea6fd03274c0` /
+  `sha256:1be12fbeed146910d5339d4f10696f719c9e0d247290d6bb8b0eeb378faedd1d`
+  and reached the browser-validated implementation checkpoint
+  `sha256:4fdd045a9fbdcda1938124f51cd9fd49b53dc114e1a2acd7e8767a9aaecc1473`.
+  The checkpoint intentionally predates this evidence block and the final
+  keyboard-friendly metadata-draft follow-up; the final commit id is the
+  authoritative delivered source identity.
+- Publication is a ready-for-review PR because later merge was explicitly
+  authorized. The coordinating task still owns review/rebase/merge order;
+  this implementation does not merge, deploy, or close the issue itself.
 
 ## Working agreements (the user's explicit preferences)
 

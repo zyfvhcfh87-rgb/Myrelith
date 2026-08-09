@@ -1,6 +1,11 @@
 /** Pure, explicit visual composition planning for preview and export. */
 
-import type { Clip, TimelineDoc, TrackId } from './schema'
+import type { CaptionTrackId, Clip, TimelineDoc, TrackId } from './schema'
+import {
+  activeCaptionItemsAtFrame,
+  captionPaintFor,
+  type CaptionPaint,
+} from './captions'
 import {
   crossfadeFrameGroupAt,
   resolveCrossfadePlan,
@@ -27,9 +32,18 @@ export interface TextOverlayPlanItem {
   opacity: number
 }
 
+/** Semantic caption paint. It remains identifiable as a caption end-to-end. */
+export interface CaptionPlanItem {
+  kind: 'caption'
+  trackId: CaptionTrackId
+  frame: number
+  paint: CaptionPaint
+}
+
 export type VideoCompositionItem =
   | OrdinaryVideoPlanItem
   | TextOverlayPlanItem
+  | CaptionPlanItem
   | CrossfadeFrameGroup
 
 /** One transferable, paint-ordered plan for one exact document frame. */
@@ -161,6 +175,16 @@ export function createVideoCompositionPlanner(
         const ordinary = ordinaryItem(track.id, track.clips.activeAt(frame), frame)
         if (ordinary) items.push(ordinary)
       }
+      const captions = activeCaptionItemsAtFrame(doc, frame)
+      for (let index = 0; index < captions.length; index++) {
+        const caption = captions[index]!
+        items.push({
+          kind: 'caption',
+          trackId: caption.track.id,
+          frame,
+          paint: captionPaintFor(doc, caption.track, caption.item, index, captions.length),
+        })
+      }
       return { frame, items }
     },
   }
@@ -185,7 +209,7 @@ export function videoCompositionRequests(
       requests.push(item.request)
       continue
     }
-    if (item.kind === 'text') continue
+    if (item.kind === 'text' || item.kind === 'caption') continue
     for (const request of item.requests) {
       if (request.opacity > 0 && request.weight > 0) requests.push(request)
     }

@@ -19,6 +19,7 @@ import LazySurfaceBoundary from './LazySurfaceBoundary'
 import EditorCommandPalette from './EditorCommandPalette'
 
 const ExportDialog = lazy(() => import('./ExportDialog'))
+const CaptionEditor = lazy(() => import('./CaptionEditor'))
 
 function saveStatus(
   phase: 'idle' | 'saving' | 'error',
@@ -52,10 +53,12 @@ function recoveryStatus(
 
 export default function Toolbar() {
   const [exportOpen, setExportOpen] = useState(false)
+  const [captionsOpen, setCaptionsOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [leaveError, setLeaveError] = useState<string | null>(null)
   const exportButtonRef = useRef<HTMLButtonElement | null>(null)
+  const captionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const commandButtonRef = useRef<HTMLButtonElement | null>(null)
   const commandReturnFocusRef = useRef<HTMLElement | null>(null)
   const projectName = useProjectSessionStore((state) => state.activeProjectName)
@@ -102,6 +105,11 @@ export default function Toolbar() {
   const closeExport = (): void => {
     setExportOpen(false)
     requestAnimationFrame(() => exportButtonRef.current?.focus())
+  }
+
+  const closeCaptions = (): void => {
+    setCaptionsOpen(false)
+    requestAnimationFrame(() => captionsButtonRef.current?.focus())
   }
 
   const openProjects = async (): Promise<void> => {
@@ -197,6 +205,17 @@ export default function Toolbar() {
           Save As
         </button>
         <button
+          ref={captionsButtonRef}
+          type="button"
+          className="toolbar-button"
+          aria-haspopup="dialog"
+          aria-expanded={captionsOpen}
+          disabled={closing}
+          onClick={() => setCaptionsOpen(true)}
+        >
+          Captions
+        </button>
+        <button
           ref={exportButtonRef}
           type="button"
           className="toolbar-export"
@@ -209,6 +228,16 @@ export default function Toolbar() {
         </button>
       </div>
       {commandPaletteOpen && <EditorCommandPalette onClose={closeCommandPalette} />}
+      {captionsOpen && (
+        <LazySurfaceBoundary
+          variant="dialog"
+          loadingLabel="Loading caption tools…"
+          failureTitle="Caption tools could not load"
+          onClose={closeCaptions}
+        >
+          <CaptionEditor onClose={closeCaptions} />
+        </LazySurfaceBoundary>
+      )}
       {exportOpen && (
         <LazySurfaceBoundary
           variant="dialog"

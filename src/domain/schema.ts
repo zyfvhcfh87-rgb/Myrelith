@@ -68,6 +68,10 @@ export type EffectId = string
 export type TransitionId = string
 /** Unique id of a sequence-level timeline marker. */
 export type TimelineMarkerId = string
+/** Unique id of a semantic caption track. */
+export type CaptionTrackId = string
+/** Unique id of a semantic caption item. */
+export type CaptionItemId = string
 
 /* ------------------------------------------------------------------ */
 /* Media assets                                                         */
@@ -491,6 +495,40 @@ export interface TimelineMarker {
   note?: string
 }
 
+/** Intended downstream use. The model is ready for additional roles later. */
+export type CaptionTrackRole = 'subtitles' | 'captions'
+
+/** Portable rendering treatments shared by preview and export. */
+export type CaptionStylePreset = 'classic' | 'boxed' | 'minimal'
+
+/** One semantic caption cue on the document's integer-frame timebase. */
+export interface CaptionItem {
+  /** Stable across edit, split/merge history, save/load, undo, and redo. */
+  id: CaptionItemId
+  /** Half-open authored interval [start, end), with at least one frame. */
+  range: TimeRange
+  /** Plain text. Newlines are preserved; markup and empty text are rejected. */
+  text: string
+}
+
+/** A language/role-ready caption lane, independent from media/text clips. */
+export interface CaptionTrack {
+  /** Stable track identity. */
+  id: CaptionTrackId
+  /** Accessible editor label. */
+  name: string
+  /** BCP-47-compatible language tag, or `und` when unspecified. */
+  language: string
+  /** Semantic downstream role. */
+  role: CaptionTrackRole
+  /** Portable visual treatment used by every composition surface. */
+  stylePreset: CaptionStylePreset
+  /** Hidden tracks are retained but excluded from preview/export. */
+  hidden: boolean
+  /** Cues sorted by (startFrame, endFrame, id); bounded overlap is allowed. */
+  items: CaptionItem[]
+}
+
 /**
  * The whole editable project document. Pure data: serializable with
  * JSON.stringify/parse with no loss (undo history snapshots rely on this).
@@ -498,7 +536,7 @@ export interface TimelineMarker {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 7. */
+  /** Schema version for forward-compatible project files. Currently 8. */
   schemaVersion: number
   /** Unique document id. */
   id: string
@@ -520,4 +558,9 @@ export interface TimelineDoc {
    * validate and serialize an explicit array.
    */
   markers?: TimelineMarker[]
+  /**
+   * Semantic caption lanes. Optional only for historical in-memory fixtures;
+   * current project files validate and serialize an explicit array.
+   */
+  captionTracks?: CaptionTrack[]
 }

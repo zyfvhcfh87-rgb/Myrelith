@@ -20,6 +20,10 @@
 
 import { create } from 'zustand'
 import type {
+  CaptionItem,
+  CaptionItemId,
+  CaptionTrack,
+  CaptionTrackId,
   Clip,
   ClipAnimationKeyframe,
   ClipAnimationProperty,
@@ -32,6 +36,18 @@ import type {
   TrackKind,
   TransitionId,
 } from '../domain/schema'
+import {
+  addCaptionItem as addCaptionCue,
+  addCaptionTrack as addCaptionLane,
+  mergeCaptionWithNext,
+  removeCaptionItem as deleteCaptionCue,
+  removeCaptionTrack as deleteCaptionLane,
+  replaceCaptionItems,
+  shiftCaptionItems,
+  splitCaptionItem,
+  updateCaptionItem as updateCaptionCue,
+  updateCaptionTrack as updateCaptionLane,
+} from '../domain/captions'
 import type { TimelineMarkerPatch } from '../domain/timelineMarkers'
 import {
   addTimelineMarker as addMarker,
@@ -103,6 +119,8 @@ export interface DocumentState {
 
   /** Replace the whole document (project load). Clears history. */
   setDoc: (doc: TimelineDoc) => void
+  /** Commit a prevalidated whole-document gesture without clearing history. */
+  setDocWithHistory: (doc: TimelineDoc) => void
   /**
    * Split every clip that the playhead falls strictly inside, across all
    * unlocked tracks. One history entry for the whole gesture. Each link
@@ -289,6 +307,33 @@ export interface DocumentState {
     duplicateId: TimelineMarkerId,
   ) => void
   deleteTimelineMarker: (markerId: TimelineMarkerId) => void
+  /** Semantic caption edits. Every call is one bounded undoable gesture. */
+  addCaptionTrack: (track: CaptionTrack) => void
+  updateCaptionTrack: (
+    trackId: CaptionTrackId,
+    patch: Partial<Pick<CaptionTrack, 'name' | 'language' | 'role' | 'stylePreset' | 'hidden'>>,
+  ) => void
+  deleteCaptionTrack: (trackId: CaptionTrackId) => void
+  addCaptionItem: (trackId: CaptionTrackId, item: CaptionItem) => void
+  updateCaptionItem: (
+    trackId: CaptionTrackId,
+    itemId: CaptionItemId,
+    patch: Partial<Pick<CaptionItem, 'range' | 'text'>>,
+  ) => void
+  deleteCaptionItem: (trackId: CaptionTrackId, itemId: CaptionItemId) => void
+  replaceCaptionItems: (trackId: CaptionTrackId, items: CaptionItem[]) => void
+  splitCaptionItem: (
+    trackId: CaptionTrackId,
+    itemId: CaptionItemId,
+    frame: number,
+    rightItemId: CaptionItemId,
+  ) => void
+  mergeCaptionWithNext: (trackId: CaptionTrackId, itemId: CaptionItemId) => void
+  shiftCaptionItems: (
+    trackId: CaptionTrackId,
+    fromItemId: CaptionItemId | null,
+    deltaFrames: number,
+  ) => void
   /** Append an effect to a clip's chain. */
   addEffect: (clipId: ClipId, effect: Effect) => void
   /** Step back one snapshot. No-op when history is empty. */
@@ -319,6 +364,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   future: [],
 
   setDoc: (doc) => set({ doc, past: [], future: [] }),
+
+  setDocWithHistory: (doc) =>
+    set((state) => commit(state, doc)),
 
   splitClipAtPlayhead: (playheadFrame) =>
     set((state) => {
@@ -528,6 +576,45 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   deleteTimelineMarker: (markerId) =>
     set((state) => commit(state, deleteMarker(state.doc, markerId))),
+
+  addCaptionTrack: (track) =>
+    set((state) => commit(state, addCaptionLane(state.doc, track))),
+
+  updateCaptionTrack: (trackId, patch) =>
+    set((state) => commit(state, updateCaptionLane(state.doc, trackId, patch))),
+
+  deleteCaptionTrack: (trackId) =>
+    set((state) => commit(state, deleteCaptionLane(state.doc, trackId))),
+
+  addCaptionItem: (trackId, item) =>
+    set((state) => commit(state, addCaptionCue(state.doc, trackId, item))),
+
+  updateCaptionItem: (trackId, itemId, patch) =>
+    set((state) => commit(state, updateCaptionCue(state.doc, trackId, itemId, patch))),
+
+  deleteCaptionItem: (trackId, itemId) =>
+    set((state) => commit(state, deleteCaptionCue(state.doc, trackId, itemId))),
+
+  replaceCaptionItems: (trackId, items) =>
+    set((state) => commit(state, replaceCaptionItems(state.doc, trackId, items))),
+
+  splitCaptionItem: (trackId, itemId, frame, rightItemId) =>
+    set((state) => commit(
+      state,
+      splitCaptionItem(state.doc, trackId, itemId, frame, rightItemId),
+    )),
+
+  mergeCaptionWithNext: (trackId, itemId) =>
+    set((state) => commit(
+      state,
+      mergeCaptionWithNext(state.doc, trackId, itemId),
+    )),
+
+  shiftCaptionItems: (trackId, fromItemId, deltaFrames) =>
+    set((state) => commit(
+      state,
+      shiftCaptionItems(state.doc, trackId, fromItemId, deltaFrames),
+    )),
 
   addEffect: (clipId, effect) =>
     set((state) => commit(state, addEffect(state.doc, clipId, effect))),

@@ -347,6 +347,7 @@ describe('architecture guard', () => {
 
     const editorClosure = eagerRuntimeClosure(['app/EditorShell.tsx'], edges)
     expect(editorClosure).not.toContain('ui/ExportDialog.tsx')
+    expect(editorClosure).not.toContain('ui/CaptionEditor.tsx')
     expect(editorClosure).not.toContain('ui/TextOverlayDialog.tsx')
     expect(editorClosure).not.toContain('ui/AnimationCurveEditor.tsx')
   })

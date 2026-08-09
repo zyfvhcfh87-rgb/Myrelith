@@ -80,7 +80,7 @@ function track(
 
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },
@@ -109,6 +109,35 @@ function catalog(
 }
 
 describe('video composition plan', () => {
+  test('keeps semantic captions explicit, topmost, half-open, and media-free', () => {
+    const document = doc([track('V1', [clip('video', 'asset', 0, 0)])])
+    document.captionTracks = [{
+      id: 'captions-en',
+      name: 'English',
+      language: 'en',
+      role: 'captions',
+      stylePreset: 'boxed',
+      hidden: false,
+      items: [{
+        id: 'cue-1',
+        range: { startFrame: 2, durationFrames: 3 },
+        text: 'Same frame everywhere',
+      }],
+    }]
+    const planner = createVideoCompositionPlanner(document, new Map())
+    const active = planner.planFrame(2)
+
+    expect(active.items.map((item) => item.kind)).toEqual(['clip', 'caption'])
+    expect(active.items[1]).toMatchObject({
+      kind: 'caption',
+      trackId: 'captions-en',
+      frame: 2,
+      paint: { id: 'cue-1', text: { content: 'Same frame everywhere' } },
+    })
+    expect(videoCompositionRequests(active)).toHaveLength(1)
+    expect(planner.planFrame(5).items.map((item) => item.kind)).toEqual(['clip'])
+  })
+
   test('plans ordinary clips in bottom-to-top track order', () => {
     const lower = clip('lower', 'lower-asset', 0, 30)
     const upper = clip('upper', 'upper-asset', 0, 80)

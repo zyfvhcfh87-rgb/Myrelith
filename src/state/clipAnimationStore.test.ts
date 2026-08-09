@@ -31,7 +31,7 @@ function makeClip(): Clip {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     id: 'doc-animation-store',
     name: 'Animation store',
     frameRate: { num: 30, den: 1 },

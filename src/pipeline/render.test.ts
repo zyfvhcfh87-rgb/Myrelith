@@ -70,7 +70,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -340,6 +340,29 @@ describe('compositeFrame — background & selection', () => {
     expect(ops('drawImage')).toHaveLength(0)
     expect(ops('fillText')).toHaveLength(1)
     expect(result).toEqual({ drawn: ['text-clip'], missing: [] })
+  })
+
+  test('draws semantic captions through shared text layout without media requests', async () => {
+    const doc = makeDoc([])
+    doc.captionTracks = [{
+      id: 'captions-en',
+      name: 'English',
+      language: 'en',
+      role: 'captions',
+      stylePreset: 'boxed',
+      hidden: false,
+      items: [{ id: 'cue-1', range: { startFrame: 4, durationFrames: 2 }, text: 'Caption' }],
+    }]
+    const { ctx, ops } = makeCtx()
+    const { source, requests } = makeSource()
+
+    const active = await compositeFrame(doc, 4, ctx, source)
+    const ended = await compositeFrame(doc, 6, makeCtx().ctx, source)
+
+    expect(requests).toEqual([])
+    expect(ops('fillText').map((operation) => operation.args[0])).toContain('Caption')
+    expect(active).toEqual({ drawn: ['cue-1'], missing: [] })
+    expect(ended).toEqual({ drawn: [], missing: [] })
   })
 
   test('active-clip boundaries are half-open at the compositor too', async () => {

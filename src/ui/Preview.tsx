@@ -5,7 +5,7 @@
  * transferred on first mount), scrubbing is driven by app/previewController
  * reacting to transportStore. This component hands the canvas and measured
  * monitor viewport to the controller, exposes the session-only quality mode,
- * and shows a hint until a visual asset is loaded. It never imports
+ * and shows a hint until visual content is available. It never imports
  * engine/pipeline/workers (the controller is the facade).
  */
 
@@ -28,6 +28,11 @@ export default function Preview() {
   const setQualityMode = usePreviewQualityStore((state) => state.setQualityMode)
   const hasTextOverlay = useDocumentStore((state) =>
     state.doc.tracks.some((track) => track.clips.some((clip) => clip.text !== undefined)),
+  )
+  const hasVisibleCaption = useDocumentStore((state) =>
+    (state.doc.captionTracks ?? []).some(
+      (track) => !track.hidden && track.items.length > 0,
+    ),
   )
   const hasLoadedVisual = useMediaStore((s) => {
     for (const asset of s.assets.values()) {
@@ -132,7 +137,7 @@ export default function Preview() {
             Reconnect {offlineFileNames || 'this source'} in the Media panel.
           </span>
         </div>
-      ) : !hasVisualDescriptor && !hasTextOverlay ? (
+      ) : !hasVisualDescriptor && !hasTextOverlay && !hasVisibleCaption ? (
         <div className="preview-hint">
           import a video or still image in the Media Pool to preview it here
         </div>

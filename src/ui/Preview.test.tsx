@@ -2,6 +2,8 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
+import { createCaptionTrack } from '../domain/captions'
+import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
@@ -63,6 +65,9 @@ beforeEach(() => {
   })
   usePreviewStatusStore.getState().resetPreviewStatus()
   usePreviewQualityStore.setState({ qualityMode: 'auto' })
+  useDocumentStore.getState().setDoc(
+    createTimelineDoc('Preview', DEFAULT_PROJECT_SETTINGS, 'preview-doc'),
+  )
 })
 
 describe('Preview', () => {
@@ -126,6 +131,25 @@ describe('Preview', () => {
     render(<Preview />)
 
     expect(screen.queryByText(/visual sources are offline/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/import a video or still image/i)).not.toBeInTheDocument()
+  })
+
+  test('does not cover a caption-only project with the empty-preview hint', () => {
+    useMediaStore.setState({
+      descriptors: new Map(),
+      assets: new Map(),
+      visuals: new Map(),
+    })
+    const store = useDocumentStore.getState()
+    store.addCaptionTrack(createCaptionTrack('captions', 'English', 'en'))
+    store.addCaptionItem('captions', {
+      id: 'caption-1',
+      range: { startFrame: 0, durationFrames: 30 },
+      text: 'Caption-only preview',
+    })
+
+    render(<Preview />)
+
     expect(screen.queryByText(/import a video or still image/i)).not.toBeInTheDocument()
   })
 })
