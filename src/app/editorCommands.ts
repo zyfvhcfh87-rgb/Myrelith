@@ -159,8 +159,8 @@ export const EDITOR_COMMAND_DEFINITIONS: readonly EditorCommandDefinition[] = [
   {
     id: 'transport.toggle-playback',
     category: 'Transport',
-    label: 'Play',
-    description: 'Start timeline playback from the current frame.',
+    label: 'Play/Pause',
+    description: 'Toggle timeline playback from the current frame.',
     keywords: ['pause', 'preview', 'transport'],
   },
   {
@@ -263,14 +263,8 @@ function commandDisabledReason(id: EditorCommandId): string | null {
         : 'Move the playhead inside an unlocked clip first.'
     case 'timeline.ripple-delete':
       return rippleDeleteDisabledReason(document.doc, transport.selectedClipId)
-    case 'transport.previous-frame':
-      return transport.playheadFrame <= 0 ? 'The playhead is already at the first frame.' : null
-    case 'transport.next-frame':
-      return duration === 0 || transport.playheadFrame >= duration - 1
-        ? 'The playhead is already at the final available frame.'
-        : null
     case 'transport.toggle-playback':
-      return !transport.isPlaying && duration === 0
+      return duration === 0
         ? 'Add a clip to the timeline before starting playback.'
         : null
   }
@@ -283,20 +277,8 @@ function definitionFor(id: EditorCommandId): EditorCommandDefinition {
   return definition
 }
 
-function dynamicDefinition(definition: EditorCommandDefinition): EditorCommandDefinition {
-  if (definition.id !== 'transport.toggle-playback') return definition
-  const playing = useTransportStore.getState().isPlaying
-  return {
-    ...definition,
-    label: playing ? 'Pause' : 'Play',
-    description: playing
-      ? 'Pause playback and keep the playhead at its current frame.'
-      : 'Start timeline playback from the current frame.',
-  }
-}
-
 export function resolveEditorCommand(id: EditorCommandId): ResolvedEditorCommand {
-  const definition = dynamicDefinition(definitionFor(id))
+  const definition = definitionFor(id)
   const disabledReason = commandDisabledReason(id)
   return { ...definition, enabled: disabledReason === null, disabledReason }
 }

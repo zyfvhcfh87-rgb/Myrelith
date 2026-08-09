@@ -107,6 +107,29 @@ describe('editor command catalog', () => {
     expect(useDocumentStore.getState().doc).toBe(before)
   })
 
+  test('keeps transport discovery truthful while playback and playhead advance', () => {
+    useTransportStore.setState({ playheadFrame: 0, isPlaying: false })
+    expect(resolveEditorCommand('transport.previous-frame')).toMatchObject({ enabled: true })
+    expect(resolveEditorCommand('transport.toggle-playback')).toMatchObject({
+      enabled: true,
+      label: 'Play/Pause',
+      description: 'Toggle timeline playback from the current frame.',
+    })
+
+    useTransportStore.setState({ playheadFrame: 59, isPlaying: true })
+    expect(resolveEditorCommand('transport.next-frame')).toMatchObject({ enabled: true })
+    expect(resolveEditorCommand('transport.toggle-playback')).toMatchObject({
+      enabled: true,
+      label: 'Play/Pause',
+    })
+
+    useDocumentStore.getState().setDoc(documentFixture([]))
+    expect(resolveEditorCommand('transport.toggle-playback')).toMatchObject({
+      enabled: false,
+      disabledReason: 'Add a clip to the timeline before starting playback.',
+    })
+  })
+
   test('executes the same real tool, split, delete, undo, and redo paths', () => {
     expect(executeEditorCommand('tool.razor').executed).toBe(true)
     expect(useTransportStore.getState().tool).toBe('razor')

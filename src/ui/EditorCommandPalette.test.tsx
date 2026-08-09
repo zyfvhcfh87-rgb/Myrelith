@@ -111,6 +111,20 @@ describe('EditorCommandPalette', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  test('keeps transport names and availability stable while the playhead advances', () => {
+    render(<EditorCommandPalette onClose={vi.fn()} />)
+    const toggle = screen.getByRole('button', { name: 'Play/Pause' })
+    const previous = screen.getByRole('button', { name: 'Previous frame' })
+    const next = screen.getByRole('button', { name: 'Next frame' })
+
+    useTransportStore.setState({ playheadFrame: 59, isPlaying: true })
+
+    expect(toggle).toHaveAttribute('aria-disabled', 'false')
+    expect(previous).toHaveAttribute('aria-disabled', 'false')
+    expect(next).toHaveAttribute('aria-disabled', 'false')
+    expect(toggle).toHaveAccessibleDescription('Toggle timeline playback from the current frame.')
+  })
+
   test('contains editing keys and traps focus at both modal boundaries', () => {
     const onClose = vi.fn()
     render(<ShortcutHarness onClose={onClose} />)
