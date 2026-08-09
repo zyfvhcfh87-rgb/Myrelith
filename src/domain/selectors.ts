@@ -31,6 +31,18 @@ export function docDurationFrames(doc: TimelineDoc): number {
 }
 
 /**
+ * UI-only extent: a marker beyond the last clip remains scrollable and fits
+ * Full Extent Zoom, while render/export duration continues to use clips only.
+ */
+export function timelineDisplayDurationFrames(doc: TimelineDoc): number {
+  let last = docDurationFrames(doc)
+  for (const marker of doc.markers ?? []) {
+    if (marker.frame + 1 > last) last = marker.frame + 1
+  }
+  return last
+}
+
+/**
  * The clip playing on `track` at timeline `frame`, or null when the frame
  * falls in a gap. At most one clip can match (clips on a track are pairwise
  * non-overlapping), and half-open ranges mean a clip's exclusive end frame

@@ -45,7 +45,7 @@ function makeTrack(id: string, clips: Clip[], locked = false): Track {
 /** V1: clipA [100,50), clipB [200,40). VL (locked): clipE [0,30). */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: 'doc-keys',
     name: 'keys fixture',
     frameRate: { num: 30, den: 1 },
@@ -56,6 +56,7 @@ function makeDoc(): TimelineDoc {
       makeTrack('V1', [makeClip('clipA', 100, 50), makeClip('clipB', 200, 40)]),
       makeTrack('VL', [makeClip('clipE', 0, 30)], true),
     ],
+    markers: [],
   }
 }
 
@@ -79,6 +80,8 @@ beforeEach(() => {
     tool: 'select',
     selectedClipId: null,
     selectedClipIds: [],
+    selectedMarkerId: null,
+    editingMarkerId: null,
     editPreview: null,
   })
   doc().setDoc(makeDoc())
@@ -156,6 +159,40 @@ describe('S — split at playhead', () => {
     key({ key: 's' })
     expect(doc().doc.tracks[0].clips).toHaveLength(2)
     expect(doc().past).toHaveLength(0)
+  })
+})
+
+describe('M — sequence markers', () => {
+  test('adds at the integer playhead and navigates exact/equal boundaries', () => {
+    render(<Host />)
+    transport().setPlayheadFrame(15)
+    key({ key: 'm' })
+    expect(doc().doc.markers).toHaveLength(1)
+    expect(doc().doc.markers?.[0]).toMatchObject({ frame: 15, label: 'Marker 1' })
+
+    doc().setDoc({
+      ...makeDoc(),
+      markers: [
+        { id: 'first', frame: 10, label: 'First', color: 'yellow' },
+        { id: 'second', frame: 20, label: 'Second', color: 'blue' },
+      ],
+    })
+    transport().setSelectedMarker(null)
+    transport().setPlayheadFrame(10)
+    key({ key: 'M', shiftKey: true })
+    expect(transport()).toMatchObject({ selectedMarkerId: 'first', playheadFrame: 10 })
+    key({ key: 'M', shiftKey: true })
+    expect(transport()).toMatchObject({ selectedMarkerId: 'second', playheadFrame: 20 })
+    key({ key: 'M', ctrlKey: true, shiftKey: true })
+    expect(transport()).toMatchObject({ selectedMarkerId: 'first', playheadFrame: 10 })
+  })
+
+  test('marker shortcuts leave editable fields untouched', () => {
+    const { getByTestId } = render(<Host />)
+    getByTestId('field').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'm', bubbles: true }),
+    )
+    expect(doc().doc.markers).toEqual([])
   })
 })
 

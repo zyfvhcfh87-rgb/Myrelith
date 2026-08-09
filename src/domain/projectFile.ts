@@ -22,10 +22,20 @@ import type {
   SourceTimestampBounds,
   TextProps,
   TimelineDoc,
+  TimelineMarker,
   Track,
   Transform,
   PartialTrackImportSelection,
 } from './schema'
+import {
+  compareTimelineMarkers,
+  MAX_TIMELINE_MARKER_FRAME,
+  MAX_TIMELINE_MARKER_ID_CHARACTERS,
+  MAX_TIMELINE_MARKER_LABEL_CHARACTERS,
+  MAX_TIMELINE_MARKER_NOTE_CHARACTERS,
+  MAX_TIMELINE_MARKERS,
+  TIMELINE_MARKER_COLORS,
+} from './timelineMarkers'
 import {
   ANIMATABLE_CLIP_PROPERTIES,
   clipAnimation,
@@ -80,7 +90,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 6 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 7 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -98,6 +108,7 @@ export const PROJECT_FILE_LIMITS = {
   maxTotalEffectParams: 50_000,
   maxTotalEffectStringCharacters: 10_000_000,
   maxTransitions: 100_000,
+  maxMarkers: MAX_TIMELINE_MARKERS,
   maxTotalKeyframes: 100_000,
   maxTotalTextCharacters: 10_000_000,
   maxIdCharacters: MAX_DOCUMENT_ID_CHARACTERS,
@@ -131,6 +142,32 @@ export interface PortableAssetDescriptor {
   hasAudio: boolean
   audioSampleRate: number | null
   audioChannels: number | null
+}
+
+function validateTimelineMarker(
+  value: unknown,
+  path: string,
+  markerIds: Set<string>,
+  previous: TimelineMarker | null,
+): TimelineMarker {
+  const marker = record(value, path)
+  exactKeys(marker, ['id', 'frame', 'label', 'color'], ['note'], path)
+  stringValue(marker.id, `${path}.id`, MAX_TIMELINE_MARKER_ID_CHARACTERS)
+  if (markerIds.has(marker.id)) fail(`${path}.id`, 'duplicate marker id')
+  markerIds.add(marker.id)
+  safeInteger(marker.frame, `${path}.frame`, 0, MAX_TIMELINE_MARKER_FRAME)
+  stringValue(marker.label, `${path}.label`, MAX_TIMELINE_MARKER_LABEL_CHARACTERS)
+  if (!TIMELINE_MARKER_COLORS.includes(marker.color as never)) {
+    fail(`${path}.color`, 'unsupported marker color')
+  }
+  if (marker.note !== undefined) {
+    stringValue(marker.note, `${path}.note`, MAX_TIMELINE_MARKER_NOTE_CHARACTERS)
+  }
+  const typed = marker as unknown as TimelineMarker
+  if (previous && compareTimelineMarkers(previous, typed) >= 0) {
+    fail(path, 'markers must be uniquely sorted by frame then id')
+  }
+  return typed
 }
 
 export interface ProjectFileV5 {
@@ -1087,7 +1124,7 @@ function validateDocument(value: unknown, context: ValidationContext): asserts v
   const document = record(value, '$.document')
   exactKeys(
     document,
-    ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks'],
+    ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks', 'markers'],
     [],
     '$.document',
   )
@@ -1114,6 +1151,17 @@ function validateDocument(value: unknown, context: ValidationContext): asserts v
   const trackIds = new Set<string>()
   for (let index = 0; index < document.tracks.length; index++) {
     validateTrack(document.tracks[index], `$.document.tracks[${index}]`, trackIds, context)
+  }
+  boundedArray(document.markers, '$.document.markers', PROJECT_FILE_LIMITS.maxMarkers)
+  const markerIds = new Set<string>()
+  let previousMarker: TimelineMarker | null = null
+  for (let index = 0; index < document.markers.length; index++) {
+    previousMarker = validateTimelineMarker(
+      document.markers[index],
+      `$.document.markers[${index}]`,
+      markerIds,
+      previousMarker,
+    )
   }
 }
 
@@ -1371,6 +1419,12 @@ function migrateClipAnimation(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 6, tracks }
 }
 
+/** Upgrade schema-6 documents with an explicit empty sequence-marker list. */
+function migrateTimelineMarkers(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  return { ...document, schemaVersion: 7, markers: [] }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1404,6 +1458,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 5) {
     migrated = migrateClipAnimation(migrated)
+  }
+  if (migrated.schemaVersion === 6) {
+    migrated = migrateTimelineMarkers(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
@@ -1573,6 +1630,15 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
         solo: track.solo,
         locked: track.locked,
       })),
+      markers: [...(document.markers ?? [])]
+        .sort(compareTimelineMarkers)
+        .map((marker) => ({
+          id: marker.id,
+          frame: marker.frame,
+          label: marker.label,
+          color: marker.color,
+          ...(marker.note === undefined ? {} : { note: marker.note }),
+        })),
     },
     assets: project.assets
       .map((asset) => ({

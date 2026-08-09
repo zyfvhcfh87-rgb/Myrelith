@@ -204,7 +204,7 @@ function createScenario(
   return {
     layout,
     doc: {
-      schemaVersion: 6,
+      schemaVersion: 7,
       id: `frame-planning-${layout}`,
       name: `Frame planning ${layout}`,
       frameRate: { num: 30, den: 1 },
@@ -212,6 +212,7 @@ function createScenario(
       height: 2_160,
       audioSampleRate: 48_000,
       tracks,
+      markers: [],
     },
     catalog: new Map(),
     frames: benchmarkFrames(

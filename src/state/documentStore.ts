@@ -26,10 +26,19 @@ import type {
   ClipId,
   Effect,
   TimelineDoc,
+  TimelineMarker,
+  TimelineMarkerId,
   TrackId,
   TrackKind,
   TransitionId,
 } from '../domain/schema'
+import type { TimelineMarkerPatch } from '../domain/timelineMarkers'
+import {
+  addTimelineMarker as addMarker,
+  deleteTimelineMarker as deleteMarker,
+  duplicateTimelineMarker as duplicateMarker,
+  updateTimelineMarker as updateMarker,
+} from '../domain/timelineMarkers'
 import type {
   ClipAudioPatch,
   ClipTransformPatch,
@@ -269,6 +278,17 @@ export interface DocumentState {
    * brings the track and all its clips back. Locked tracks reject.
    */
   removeTrack: (trackId: TrackId) => void
+  /** Add/edit/duplicate/delete sequence markers as ordinary undoable edits. */
+  addTimelineMarker: (marker: TimelineMarker) => void
+  updateTimelineMarker: (
+    markerId: TimelineMarkerId,
+    patch: TimelineMarkerPatch,
+  ) => void
+  duplicateTimelineMarker: (
+    markerId: TimelineMarkerId,
+    duplicateId: TimelineMarkerId,
+  ) => void
+  deleteTimelineMarker: (markerId: TimelineMarkerId) => void
   /** Append an effect to a clip's chain. */
   addEffect: (clipId: ClipId, effect: Effect) => void
   /** Step back one snapshot. No-op when history is empty. */
@@ -493,6 +513,21 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   removeTrack: (trackId) =>
     set((state) => commit(state, removeTrack(state.doc, trackId))),
+
+  addTimelineMarker: (marker) =>
+    set((state) => commit(state, addMarker(state.doc, marker))),
+
+  updateTimelineMarker: (markerId, patch) =>
+    set((state) => commit(state, updateMarker(state.doc, markerId, patch))),
+
+  duplicateTimelineMarker: (markerId, duplicateId) =>
+    set((state) => commit(
+      state,
+      duplicateMarker(state.doc, markerId, duplicateId),
+    )),
+
+  deleteTimelineMarker: (markerId) =>
+    set((state) => commit(state, deleteMarker(state.doc, markerId))),
 
   addEffect: (clipId, effect) =>
     set((state) => commit(state, addEffect(state.doc, clipId, effect))),

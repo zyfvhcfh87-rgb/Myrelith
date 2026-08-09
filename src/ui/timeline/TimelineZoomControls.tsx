@@ -24,7 +24,7 @@ import {
   Plus,
   SlidersHorizontal,
 } from '@phosphor-icons/react'
-import { docDurationFrames } from '../../domain/selectors'
+import { timelineDisplayDurationFrames } from '../../domain/selectors'
 import { useDocumentStore } from '../../state/documentStore'
 import {
   getTransportResetRevision,
@@ -73,7 +73,7 @@ export default function TimelineZoomControls() {
   const customZoom = useTransportStore((state) => state.customZoom)
   const frameRate = useDocumentStore((state) => state.doc.frameRate)
   const durationFrames = useDocumentStore((state) =>
-    docDurationFrames(state.doc),
+    timelineDisplayDurationFrames(state.doc),
   )
 
   const [geometry, setGeometry] = useState(() =>
@@ -95,7 +95,7 @@ export default function TimelineZoomControls() {
       const laneWidth = measureTimelineLaneWidth(scroller)
       const doc = useDocumentStore.getState().doc
       const totalFrames = timelineRunwayFrames(
-        docDurationFrames(doc),
+        timelineDisplayDurationFrames(doc),
         doc.frameRate,
       )
       const transport = useTransportStore.getState()
@@ -125,7 +125,7 @@ export default function TimelineZoomControls() {
             ? planTimelineStart()
             : planTimelineAnchor(
                 timelineRunwayFrames(
-                  docDurationFrames(liveDoc),
+                  timelineDisplayDurationFrames(liveDoc),
                   liveDoc.frameRate,
                 ),
                 newZoom,
@@ -156,7 +156,7 @@ export default function TimelineZoomControls() {
     const doc = useDocumentStore.getState().doc
     const next = calculateTimelineZoomGeometry(
       measureTimelineLaneWidth(scroller),
-      docDurationFrames(doc),
+      timelineDisplayDurationFrames(doc),
       doc.frameRate,
     )
     updateGeometryState(next)

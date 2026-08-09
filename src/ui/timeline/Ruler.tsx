@@ -2,8 +2,9 @@
  * ui/timeline/Ruler.tsx — Timecode ruler + seek surface. Phase 3.2;
  * 12-hour virtualized runway since 4.0.6.
  *
- * Subscribes to zoom (transport) and frameRate/duration (document) — NOT to
- * playheadFrame, so scrubbing never re-renders the ruler (Phase 3 gate).
+ * Subscribes to zoom/marker selection (transport) and frameRate/display extent
+ * (document) — NOT to playheadFrame, so scrubbing never re-renders the ruler
+ * (Phase 3 gate).
  * Clicking/dragging the ruler IS scrubbing: pointer capture + the
  * rAF-coalescing scheduler write transportStore.playheadFrame; nothing here
  * touches documentStore.
@@ -25,8 +26,9 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { docDurationFrames } from '../../domain/selectors'
+import { timelineDisplayDurationFrames } from '../../domain/selectors'
 import { formatTimecode, secondsToFrames } from '../../domain/time'
+import { timelineMarkers } from '../../domain/timelineMarkers'
 import type { FrameRate } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import { useTransportStore } from '../../state/transportStore'
@@ -36,7 +38,9 @@ import {
   calculateTimelineViewport,
   frameAtTimelineLocalPx,
   frameToTimelineLocalPx,
+  measureTimelineLaneWidth,
 } from './timelineViewport'
+import TimelineMarkers from './TimelineMarkers'
 
 /** Ticks want at least this much horizontal room per label. */
 const MIN_LABEL_PX = 90
@@ -94,7 +98,8 @@ export default function Ruler() {
   const setIsScrubbing = useTransportStore((s) => s.setIsScrubbing)
   const setPlayheadFrame = useTransportStore((s) => s.setPlayheadFrame)
   const frameRate = useDocumentStore((s) => s.doc.frameRate)
-  const durationFrames = useDocumentStore((s) => docDurationFrames(s.doc))
+  const durationFrames = useDocumentStore((s) => timelineDisplayDurationFrames(s.doc))
+  const markers = useDocumentStore((s) => timelineMarkers(s.doc))
 
   const schedule = useScrubScheduler(setPlayheadFrame)
   /** Our own gesture flag — capture status is NOT the source of truth. */
@@ -115,7 +120,7 @@ export default function Ruler() {
     const read = () =>
       setView((prev) => {
         const leftPx = scroller.scrollLeft
-        const widthPx = scroller.clientWidth || FALLBACK_VIEWPORT_PX
+        const widthPx = measureTimelineLaneWidth(scroller) || FALLBACK_VIEWPORT_PX
         return prev.leftPx === leftPx && prev.widthPx === widthPx
           ? prev
           : { leftPx, widthPx }
@@ -130,12 +135,33 @@ export default function Ruler() {
       })
     }
     read()
+    // Lazy editor CSS can settle after the first layout effect. Observe the
+    // real scroller/header so marker edge feedback never uses the pre-style
+    // full width and lands behind the sticky gutter or browser scrollbar.
+    let observer: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(onScroll)
+      observer.observe(scroller)
+      const header = scroller.querySelector<HTMLElement>('[data-timeline-headers]')
+      if (header) observer.observe(header)
+    }
+    onScroll()
+    // The in-app browser intentionally omits ResizeObserver. Re-read after a
+    // painted frame as a deterministic fallback for lazy CSS/header sizing.
+    let settleRafId = requestAnimationFrame(() => {
+      settleRafId = requestAnimationFrame(() => {
+        settleRafId = 0
+        read()
+      })
+    })
     scroller.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onScroll)
     return () => {
       scroller.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onScroll)
+      observer?.disconnect()
       if (rafId) cancelAnimationFrame(rafId)
+      if (settleRafId) cancelAnimationFrame(settleRafId)
     }
   }, [timelineOriginFrame, zoom])
 
@@ -252,6 +278,15 @@ export default function Ruler() {
           </span>
         </div>
       ))}
+      <TimelineMarkers
+        markers={markers}
+        frameRate={frameRate}
+        totalFrames={totalFrames}
+        originFrame={viewport.originFrame}
+        zoom={zoom}
+        viewLeftPx={view.leftPx}
+        viewWidthPx={view.widthPx}
+      />
     </div>
   )
 }

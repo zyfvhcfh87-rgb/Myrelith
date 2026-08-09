@@ -66,6 +66,8 @@ export type ClipId = string
 export type EffectId = string
 /** Unique id of a transition instance on a track. */
 export type TransitionId = string
+/** Unique id of a sequence-level timeline marker. */
+export type TimelineMarkerId = string
 
 /* ------------------------------------------------------------------ */
 /* Media assets                                                         */
@@ -465,6 +467,30 @@ export interface Track {
   locked: boolean
 }
 
+/** Deliberately small, portable palette shared by marker files and UI. */
+export type TimelineMarkerColor =
+  | 'yellow'
+  | 'orange'
+  | 'red'
+  | 'pink'
+  | 'purple'
+  | 'blue'
+  | 'green'
+
+/** A durable sequence-level annotation at one exact integer frame. */
+export interface TimelineMarker {
+  /** Stable across edit, save/load, duplicate, undo, and redo. */
+  id: TimelineMarkerId
+  /** Integer document frame. Markers do not extend render/export duration. */
+  frame: number
+  /** Short accessible name shown on the ruler and in the editor. */
+  label: string
+  /** Portable semantic color from TimelineMarkerColor. */
+  color: TimelineMarkerColor
+  /** Optional longer annotation; absent rather than empty when unused. */
+  note?: string
+}
+
 /**
  * The whole editable project document. Pure data: serializable with
  * JSON.stringify/parse with no loss (undo history snapshots rely on this).
@@ -472,7 +498,7 @@ export interface Track {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 6. */
+  /** Schema version for forward-compatible project files. Currently 7. */
   schemaVersion: number
   /** Unique document id. */
   id: string
@@ -488,4 +514,10 @@ export interface TimelineDoc {
   audioSampleRate: number
   /** All tracks, bottom-to-top compositing order (index 0 drawn first). */
   tracks: Track[]
+  /**
+   * Sequence-level markers sorted by (frame, id). Optional only so historical
+   * in-memory fixtures remain source-compatible; current project files always
+   * validate and serialize an explicit array.
+   */
+  markers?: TimelineMarker[]
 }

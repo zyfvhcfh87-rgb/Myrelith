@@ -410,7 +410,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[], width = 5, height = 5): TimelineDoc {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: 'pixel-doc',
     name: 'pixel-doc',
     frameRate: { num: 30, den: 1 },

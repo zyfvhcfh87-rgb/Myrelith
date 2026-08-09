@@ -2678,3 +2678,26 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
   IndexedDB names as durable identifiers for same-origin in-place upgrades.
 - [x] Document that browser-origin storage cannot move automatically when the
   public hostname changes; portable project files are the migration path.
+
+## Post-MVP issue #64 - timeline markers
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-09).**
+
+- [x] Add schema-7 sequence markers with stable ids, integer frames, bounded
+  labels/notes, portable colors, strict validation, and schema-6 empty-default
+  migration across save/load/recovery project paths.
+- [x] Add pure immutable create/edit/move/duplicate/delete operations plus
+  deterministic next/previous navigation in canonical `(frame, id)` order.
+- [x] Add thin one-gesture document-store actions, undo/redo, ephemeral marker
+  selection/editor state, stale-id reconciliation, and clip-exclusive
+  selection.
+- [x] Render markers on the ruler with selected/offscreen feedback, accessible
+  names/focus, explicit editing, Delete/Duplicate/Previous/Next keyboard paths,
+  global add/navigation shortcuts, and command-palette discovery.
+- [x] Keep clip-derived preview/export duration unchanged while using a
+  marker-aware timeline-only extent for scrolling and Full Zoom.
+- [x] Binary-search and pixel-cluster the visible ruler slice so 10k+ marker
+  projects retain bounded DOM work, including deterministic equal-frame piles.
+- [x] Record the final complete suite/build/lint/audit and source fingerprints;
+  verify observable behavior in real Chromium exclusively on port 5174; then
+  publish the exact committed head as a draft PR without merging it.

@@ -338,6 +338,7 @@ function fixtureDocument(
       track('V4', 'video', v4Clips, v4Transitions),
       ...audioTracks,
     ],
+    markers: [],
   }
 }
 

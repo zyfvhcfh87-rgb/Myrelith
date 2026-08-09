@@ -111,6 +111,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #65 — Media Pool collections** | ✅ implementation complete | portable ordered collections with stable multi-membership, collection-only undo/redo, integrated filters, accessible keyboard/drag organization, deletion/relink safety, 196 focused + 1,975 total tests, and 500-source Chromium recovery QA on port 5175 |
 | **Post-MVP #59 — indexed frame planning** | ✅ implementation complete | immutable per-track clip/transition indices; exact ordinary/text/crossfade/animation parity; schema-5 sparse/dense Chromium evidence measured 94.26%/94.81% p95 improvement |
 | **Post-MVP #58 — adaptive preview resolution** | ✅ implementation complete | session-only Auto/Full/Half/Quarter monitor quality; project-space compositor scaling across ordinary/text/transition frames; reusable scaled worker surfaces; explicit full-resolution export; full 4K harness memory plateau -6.4% median/-7.5% p95; real Chromium 4K/720px gates |
+| **Post-MVP #64 — timeline markers** | ✅ implementation complete | schema-7 sequence markers; deterministic pure operations/navigation, undoable store actions, portable migration/round trips, accessible clustered ruler/editor, command palette + keyboard paths; 125 focused + 1,979 total tests; clean in-app Chromium gate on exclusive port 5174; delivery tracked by draft PR |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -2094,6 +2095,42 @@ surface; it is not a second zoom and never enters document history.
   allocation spike was followed by a reclamation; no leak improvement is
   claimed from that derived metric. Both artifacts cleaned 11/11 URLs, restored
   every isolated store/controller, and captured no console warnings or errors.
+
+## Post-MVP issue #64 - timeline markers
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-09).**
+
+- Timeline schema 7 persists an explicit, bounded sequence-marker list with
+  stable ids, integer frames, labels, palette colors, and optional notes.
+  Schema-6 projects migrate to an empty list; current/legacy branded save,
+  recovery, and portable project paths share the same strict validator.
+- `domain/timelineMarkers.ts` owns immutable add/edit/move/duplicate/delete and
+  next/previous navigation. `(frame, id)` order makes equal-frame and boundary
+  results deterministic. Clip-derived output duration stays unchanged while a
+  separate UI extent keeps far markers scrollable and included in Full Zoom.
+- Marker selection and the explicit editor are session-only. Document-store
+  actions create one undo entry per committed gesture; reconciliation drops
+  deleted/stale marker selection without resurrecting it through history.
+- The ruler renders accessible color flags, selected/offscreen feedback, an
+  explicit label/frame/color/note editor, focus-local Delete/Duplicate/
+  Previous/Next controls, global add/navigation shortcuts, and discoverable
+  command-palette actions. Marker controls stop ruler scrub gestures.
+- Visible marker planning binary-searches the sorted array and clusters by
+  pixels, bounding rendered controls by viewport width. Focused coverage
+  includes 20,000 spread and equal-frame markers, existing ruler render
+  isolation, keyboard editing, migration, history, and portable round trips.
+- Final local gates are green: 125 focused tests, all 1,979 repository tests
+  plus the 16 benchmark-runner tests, TypeScript + production Vite build,
+  oxlint, and the canonical production dependency audit (0 vulnerabilities).
+  Vite retains the repository's advisory large-chunk warning.
+- Real in-app Chromium verification used only
+  `npm run dev -- --port 5174 --strictPort` and
+  `http://localhost:5174`. It covered create/edit/move-to-frame-10000,
+  fixed-viewport offscreen reveal, equal-frame clustering, duplicate,
+  focus-local Delete, undo, command discovery, next/previous shortcuts, and
+  recovery status at 1280×720; the browser warning/error log was empty.
+- Publication is a draft PR only. Merge, deployment, and issue closure remain
+  separate and are not authorized by this implementation.
 
 ## Working agreements (the user's explicit preferences)
 

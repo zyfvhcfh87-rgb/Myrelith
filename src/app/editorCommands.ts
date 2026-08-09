@@ -10,6 +10,15 @@
 
 import type { Clip, TimelineDoc } from '../domain/schema'
 import { docDurationFrames, findClip, trackOfClip } from '../domain/selectors'
+import {
+  createDefaultTimelineMarker,
+  createTimelineMarkerId,
+  findTimelineMarker,
+  MAX_TIMELINE_MARKERS,
+  nextTimelineMarker,
+  previousTimelineMarker,
+  timelineMarkers,
+} from '../domain/timelineMarkers'
 import { rangeEnd } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
@@ -26,12 +35,18 @@ export type EditorCommandId =
   | 'tool.slide'
   | 'timeline.split'
   | 'timeline.ripple-delete'
+  | 'marker.add'
+  | 'marker.previous'
+  | 'marker.next'
+  | 'marker.edit'
+  | 'marker.duplicate'
+  | 'marker.delete'
   | 'transport.previous-frame'
   | 'transport.toggle-playback'
   | 'transport.next-frame'
 
 export type EditorCommandScope = 'edit' | 'history'
-export type EditorCommandCategory = 'History' | 'Tools' | 'Timeline' | 'Transport'
+export type EditorCommandCategory = 'History' | 'Tools' | 'Timeline' | 'Markers' | 'Transport'
 
 export interface EditorCommandShortcut {
   readonly label: string
@@ -149,6 +164,54 @@ export const EDITOR_COMMAND_DEFINITIONS: readonly EditorCommandDefinition[] = [
     },
   },
   {
+    id: 'marker.add',
+    category: 'Markers',
+    label: 'Add marker',
+    description: 'Add a sequence marker at the current playhead frame.',
+    keywords: ['cue', 'note', 'beat', 'flag'],
+    shortcut: { label: 'M', ariaKeyShortcuts: 'M' },
+  },
+  {
+    id: 'marker.previous',
+    category: 'Markers',
+    label: 'Previous marker',
+    description: 'Move the playhead and selection to the previous marker.',
+    keywords: ['back', 'navigate', 'cue'],
+    shortcut: {
+      label: 'Ctrl/⌘+Shift+M',
+      ariaKeyShortcuts: 'Control+Shift+M Meta+Shift+M',
+    },
+  },
+  {
+    id: 'marker.next',
+    category: 'Markers',
+    label: 'Next marker',
+    description: 'Move the playhead and selection to the next marker.',
+    keywords: ['forward', 'navigate', 'cue'],
+    shortcut: { label: 'Shift+M', ariaKeyShortcuts: 'Shift+M' },
+  },
+  {
+    id: 'marker.edit',
+    category: 'Markers',
+    label: 'Edit selected marker',
+    description: 'Edit the selected marker label, frame, color, and note.',
+    keywords: ['rename', 'move', 'color', 'note'],
+  },
+  {
+    id: 'marker.duplicate',
+    category: 'Markers',
+    label: 'Duplicate selected marker',
+    description: 'Create a new marker with the selected marker’s details.',
+    keywords: ['copy', 'clone', 'cue'],
+  },
+  {
+    id: 'marker.delete',
+    category: 'Markers',
+    label: 'Delete selected marker',
+    description: 'Remove the selected sequence marker.',
+    keywords: ['remove', 'clear', 'cue'],
+  },
+  {
     id: 'transport.previous-frame',
     category: 'Transport',
     label: 'Previous frame',
@@ -185,6 +248,9 @@ export const EDITOR_SHORTCUT_BINDINGS: readonly EditorShortcutBinding[] = [
   { commandId: 'timeline.split', scope: 'edit', key: 's', primary: false },
   { commandId: 'timeline.ripple-delete', scope: 'edit', key: 'delete', primary: false },
   { commandId: 'timeline.ripple-delete', scope: 'edit', key: 'backspace', primary: false },
+  { commandId: 'marker.add', scope: 'edit', key: 'm', primary: false, shift: false },
+  { commandId: 'marker.next', scope: 'edit', key: 'm', primary: false, shift: true },
+  { commandId: 'marker.previous', scope: 'edit', key: 'm', primary: true, shift: true },
   { commandId: 'transport.previous-frame', scope: 'edit', key: 'arrowleft', primary: false },
   { commandId: 'transport.next-frame', scope: 'edit', key: 'arrowright', primary: false },
 ]
@@ -263,6 +329,28 @@ function commandDisabledReason(id: EditorCommandId): string | null {
         : 'Move the playhead inside an unlocked clip first.'
     case 'timeline.ripple-delete':
       return rippleDeleteDisabledReason(document.doc, transport.selectedClipId)
+    case 'marker.add':
+      return timelineMarkers(document.doc).length >= MAX_TIMELINE_MARKERS
+        ? `This project already has ${MAX_TIMELINE_MARKERS} markers.`
+        : null
+    case 'marker.previous':
+      return previousTimelineMarker(
+        document.doc,
+        transport.playheadFrame,
+        transport.selectedMarkerId,
+      ) ? null : 'There is no previous marker.'
+    case 'marker.next':
+      return nextTimelineMarker(
+        document.doc,
+        transport.playheadFrame,
+        transport.selectedMarkerId,
+      ) ? null : 'There is no next marker.'
+    case 'marker.edit':
+    case 'marker.duplicate':
+    case 'marker.delete':
+      return transport.selectedMarkerId
+        && findTimelineMarker(document.doc, transport.selectedMarkerId)
+        ? null : 'Select a marker first.'
     case 'transport.toggle-playback':
       return duration === 0
         ? 'Add a clip to the timeline before starting playback.'
@@ -311,6 +399,45 @@ export function executeEditorCommand(id: EditorCommandId): EditorCommandExecutio
       break
     case 'timeline.ripple-delete':
       document.rippleDelete(transport.selectedClipId!)
+      break
+    case 'marker.add': {
+      const marker = createDefaultTimelineMarker(document.doc, transport.playheadFrame)
+      document.addTimelineMarker(marker)
+      transport.setSelectedMarker(marker.id)
+      break
+    }
+    case 'marker.previous': {
+      const marker = previousTimelineMarker(
+        document.doc,
+        transport.playheadFrame,
+        transport.selectedMarkerId,
+      )!
+      transport.setSelectedMarker(marker.id)
+      transport.setPlayheadFrame(marker.frame)
+      break
+    }
+    case 'marker.next': {
+      const marker = nextTimelineMarker(
+        document.doc,
+        transport.playheadFrame,
+        transport.selectedMarkerId,
+      )!
+      transport.setSelectedMarker(marker.id)
+      transport.setPlayheadFrame(marker.frame)
+      break
+    }
+    case 'marker.edit':
+      transport.setEditingMarker(transport.selectedMarkerId)
+      break
+    case 'marker.duplicate': {
+      const duplicateId = createTimelineMarkerId(document.doc)
+      document.duplicateTimelineMarker(transport.selectedMarkerId!, duplicateId)
+      transport.setSelectedMarker(duplicateId)
+      transport.setEditingMarker(duplicateId)
+      break
+    }
+    case 'marker.delete':
+      document.deleteTimelineMarker(transport.selectedMarkerId!)
       break
     case 'transport.previous-frame':
       stepFrame(-1)

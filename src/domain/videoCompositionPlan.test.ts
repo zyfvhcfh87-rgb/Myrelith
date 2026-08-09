@@ -80,7 +80,7 @@ function track(
 
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },

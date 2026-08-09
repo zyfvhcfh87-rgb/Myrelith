@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
   CURRENT_PROJECT_FORMAT_VERSION,
   CURRENT_TIMELINE_SCHEMA_VERSION,
+  parseProjectFile,
   PROJECT_FILE_FORMAT,
   serializeProjectFile,
   type ProjectFile,
@@ -67,6 +68,7 @@ function serializedProject(
       height: 1080,
       audioSampleRate: 48_000,
       tracks: [],
+      markers: [],
     },
     assets: [],
     collections: [],
@@ -191,6 +193,29 @@ describe('recent project storage', () => {
 })
 
 describe('recovery journal storage', () => {
+  test('round-trips timeline markers inside recovery snapshots', async () => {
+    const backend = createMapLocalProjectStorageBackend()
+    const storage = createLocalProjectStorage(backend)
+    const project = parseProjectFile(serializedProject('doc-markers'))
+    project.document.markers = [{
+      id: 'marker-recovery',
+      frame: 240,
+      label: 'Recovery beat',
+      color: 'purple',
+      note: 'Still here',
+    }]
+    const snapshot = recoverySnapshot('journal-markers', 'doc-markers', 1)
+
+    await storage.appendRecoverySnapshot({
+      ...snapshot,
+      serializedProject: serializeProjectFile(project),
+    })
+
+    const journal = await storage.getRecoveryJournal('journal-markers')
+    const recovered = parseProjectFile(journal?.generations[0].serializedProject ?? '')
+    expect(recovered.document.markers).toEqual(project.document.markers)
+  })
+
   test('writes each full journal atomically and retains only three generations', async () => {
     const mapBackend = createMapLocalProjectStorageBackend()
     const writtenGenerationCounts: number[] = []

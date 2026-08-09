@@ -15,6 +15,7 @@ import type {
   ClipId,
   ClipVisualSettings,
   TextProps,
+  TimelineMarkerId,
   TimeRange,
   TrackId,
   Transform,
@@ -120,6 +121,10 @@ export interface TransportState {
    * or null. When present it is always a member of selectedClipIds.
    */
   selectedClipId: ClipId | null
+  /** Primary sequence marker selection; mutually exclusive with clips. */
+  selectedMarkerId: TimelineMarkerId | null
+  /** Marker whose explicit edit popover is open, or null. */
+  editingMarkerId: TimelineMarkerId | null
   /** Trim/ripple/slip/slide gesture preview, or null when none is live. */
   editPreview: EditPreview | null
   /** Uncommitted text move/resize shown by the shared preview compositor. */
@@ -162,6 +167,14 @@ export interface TransportState {
    * agnostic; surviving order and primary selection remain stable.
    */
   reconcileClipSelection: (existingClipIds: ReadonlySet<ClipId>) => void
+  /** Select/clear one sequence marker without adding document history. */
+  setSelectedMarker: (markerId: TimelineMarkerId | null) => void
+  /** Open/close the explicit sequence-marker editor. */
+  setEditingMarker: (markerId: TimelineMarkerId | null) => void
+  /** Drop marker selection/editor state when document history removes ids. */
+  reconcileMarkerSelection: (
+    existingMarkerIds: ReadonlySet<TimelineMarkerId>,
+  ) => void
   /**
    * Update or clear the edit-gesture preview. deltaFrames is rounded to an
    * integer (negative allowed — deltas are signed).
@@ -190,6 +203,8 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   tool: 'select' as TimelineTool,
   selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
   selectedClipId: null,
+  selectedMarkerId: null,
+  editingMarkerId: null,
   editPreview: null,
   textOverlayPreview: null,
   clipVisualPreview: null,
@@ -251,19 +266,31 @@ export const useTransportStore = create<TransportState>()((set) => ({
   setSelectedClip: (clipId) =>
     set((state) => {
       if (clipId === null) {
-        return state.selectedClipId === null && state.selectedClipIds.length === 0
+        return state.selectedClipId === null
+          && state.selectedClipIds.length === 0
+          && state.selectedMarkerId === null
+          && state.editingMarkerId === null
           ? state
           : {
               selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
               selectedClipId: null,
+              selectedMarkerId: null,
+              editingMarkerId: null,
             }
       }
 
       return state.selectedClipId === clipId &&
         state.selectedClipIds.length === 1 &&
-        state.selectedClipIds[0] === clipId
+        state.selectedClipIds[0] === clipId &&
+        state.selectedMarkerId === null &&
+        state.editingMarkerId === null
         ? state
-        : { selectedClipIds: [clipId], selectedClipId: clipId }
+        : {
+            selectedClipIds: [clipId],
+            selectedClipId: clipId,
+            selectedMarkerId: null,
+            editingMarkerId: null,
+          }
     }),
   toggleClipSelection: (clipId) =>
     set((state) => {
@@ -271,6 +298,8 @@ export const useTransportStore = create<TransportState>()((set) => ({
         return {
           selectedClipIds: [...state.selectedClipIds, clipId],
           selectedClipId: clipId,
+          selectedMarkerId: null,
+          editingMarkerId: null,
         }
       }
 
@@ -313,6 +342,44 @@ export const useTransportStore = create<TransportState>()((set) => ({
             : selectedClipIds,
         selectedClipId,
       }
+    }),
+  setSelectedMarker: (markerId) =>
+    set((state) => {
+      if (markerId === null) {
+        return state.selectedMarkerId === null && state.editingMarkerId === null
+          ? state
+          : { selectedMarkerId: null, editingMarkerId: null }
+      }
+      return state.selectedMarkerId === markerId
+        && state.selectedClipIds.length === 0
+        && state.selectedClipId === null
+        ? state
+        : {
+            selectedMarkerId: markerId,
+            selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
+            selectedClipId: null,
+          }
+    }),
+  setEditingMarker: (markerId) =>
+    set((state) => (
+      state.editingMarkerId === markerId
+        ? state
+        : { editingMarkerId: markerId }
+    )),
+  reconcileMarkerSelection: (existingMarkerIds) =>
+    set((state) => {
+      const selectedMarkerId = state.selectedMarkerId !== null
+        && existingMarkerIds.has(state.selectedMarkerId)
+        ? state.selectedMarkerId
+        : null
+      const editingMarkerId = state.editingMarkerId !== null
+        && existingMarkerIds.has(state.editingMarkerId)
+        ? state.editingMarkerId
+        : null
+      return selectedMarkerId === state.selectedMarkerId
+        && editingMarkerId === state.editingMarkerId
+        ? state
+        : { selectedMarkerId, editingMarkerId }
     }),
   setEditPreview: (preview) =>
     set({
