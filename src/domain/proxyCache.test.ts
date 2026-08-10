@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
   DEFAULT_PROXY_PARAMETERS,
+  MAX_PROXY_CACHE_ENTRIES,
   PROXY_CACHE_SCHEMA_VERSION,
   PROXY_GENERATOR_VERSION,
   estimateProxyBytes,
@@ -74,6 +75,73 @@ describe('proxy cache contract', () => {
       schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
       entries: [entry(), entry()],
     })).toThrow('duplicate')
+  })
+
+  test('rejects hostile manifests with unknown keys or unbounded facts', () => {
+    const valid = entry()
+    const hostile: unknown[] = [
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [], extra: true },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{ ...valid, extra: true }] },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{
+        ...valid,
+        assetId: 'x'.repeat(257),
+      }] },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{
+        ...valid,
+        original: { ...valid.original, fileName: 'x'.repeat(4_097) },
+      }] },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{
+        ...valid,
+        parameters: { ...valid.parameters, bitrate: 200_000_001 },
+      }] },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{
+        ...valid,
+        width: 65_536,
+      }] },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{
+        ...valid,
+        durationMicroseconds: Number.POSITIVE_INFINITY,
+      }] },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{
+        ...valid,
+        createdAt: 21,
+        lastUsedAt: 20,
+      }] },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{
+        ...valid,
+        frameRate: { num: 60, den: 2 },
+      }] },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{
+        ...valid,
+        frameRate: { num: 1_000_000, den: 999 },
+      }] },
+      { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries: [{
+        ...valid,
+        frameRate: { num: 1_000_001, den: 1_001 },
+      }] },
+    ]
+    for (const candidate of hostile) {
+      expect(() => parseProxyCacheManifest(candidate)).toThrow()
+    }
+  })
+
+  test('rejects aggregate byte totals that cannot be represented exactly', () => {
+    const huge = {
+      ...entry(),
+      byteSize: Number.MAX_SAFE_INTEGER,
+    }
+    const entries = Array.from({ length: 2 }, (_, index) => ({
+      ...huge,
+      assetId: `asset-${index}`,
+      cacheKey: String(index + 1).repeat(64),
+      fileName: `${String(index + 1).repeat(64)}.${String(index + 1).repeat(32)}.mp4`,
+    }))
+    expect(entries).toHaveLength(2)
+    expect(entries.length).toBeLessThan(MAX_PROXY_CACHE_ENTRIES)
+    expect(() => parseProxyCacheManifest({
+      schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
+      entries,
+    })).toThrow('byte total')
   })
 
   test('matches provenance and produces bounded even output geometry', () => {

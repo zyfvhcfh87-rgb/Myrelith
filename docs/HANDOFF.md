@@ -117,7 +117,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #46 — minimal blend modes** | ✅ implementation complete | explicit normal/multiply/screen/overlay intent; schema-9 migration preserving schema-8 captions and unknown blend intent; isolated Canvas2D composition plus capability fallback seam; accessible Inspector/history; clean preview/export/reload Chromium gate on exclusive port 41846 |
 | **Post-MVP #69 — constant-speed retiming** | ✅ implementation complete | schema-11 exact rational `SourceTimeMap` after the schema-10 effect stack; deterministic linked trim/split/move/transition/keyframe/thumbnail/seek/composition behavior; shared preview/export audio-mute and output-resource policy outside exact 1×; accessible Inspector timing controls; complete automated gates and clean in-app Chromium QA on exclusive port 41869 |
 | **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
-| **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 147 focused + 2,104 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
+| **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -2479,9 +2479,11 @@ surface; it is not a second zoom and never enters document history.
 - The published matrix in `PROXY_CODEC_SUPPORT.md` is the shipped contract:
   pinned Mediabunny 1.50.9 must open the source, its exact video config must
   pass the existing `proxy-generation` decoder revalidation boundary, and the
-  browser must prove exact AVC/MP4 output geometry and bitrate before Generate
-  enables. The shipped 720p/2 Mbit/s proxy is video-only; audio stays on the
-  original path.
+  browser must prove exact AVC/MP4 output geometry, bitrate, key-frame interval,
+  and actual source frame rate before Generate enables. The disposable probe
+  initializes the real conversion-canvas state and writes only to a null target.
+  The shipped 720p/2 Mbit/s proxy is video-only; audio stays on the original
+  path.
 - Schema-1 cache truth lives only under
   `myrelith-derived/proxy-cache-v1`. Entries record stable asset id, explicit
   sampled-SHA-256 fingerprint algorithm, original identity, complete profile
@@ -2490,7 +2492,11 @@ surface; it is not a second zoom and never enters document history.
   deleting the old physical file, so same-provenance regeneration cancellation
   cannot truncate the committed proxy. Quota eviction is LRU, protects the
   asset being regenerated, and targets both 80% origin usage and 64 MiB
-  headroom when the browser supplies estimates.
+  headroom when the browser supplies estimates. Parsing rejects unknown keys
+  and bounds all strings/numbers/reduced rational rates before aggregate cache
+  arithmetic. Controller acceptance is a two-phase finalize/rollback decision;
+  remove and clear invalidate work, await scheduler idle, and share serialized
+  storage mutation, so a queued late commit cannot resurrect cache/UI state.
 - `MediaJobScheduler` allows one proxy job and one decoder. CanvasSink uses a
   pool of one, every CanvasSource add and OPFS write is awaited, and cancel,
   replacement/removal, unsupported input, quota, worker/decode, manifest, and
@@ -2498,7 +2504,14 @@ surface; it is not a second zoom and never enters document history.
   queued/running cancel, retry, regenerate, remove, clear-all, progress, bytes,
   whole-origin quota, and persistence state are exposed without claiming
   durable project data. A failed/corrupt estimate still leaves the narrow
-  disposable-clear recovery action available.
+  disposable-clear recovery action available. Generation uses the exact durable
+  primary-video PTS span, supports negative/nonzero first PTS, normalizes output
+  timestamps to zero, and cannot extend video to a longer audio duration.
+- The editor acquires an async ref-counted controller lease. Concurrent
+  StrictMode init/unmount/re-entry shares initialization, and only the last
+  release unsubscribes, disposes the scheduler, drains work/storage, and clears
+  runtime state. Expanded video/proxy cards are single-row in both CSS and the
+  pure Media Pool row planner, so virtual height/spacers remain exact.
 - Preview and final export call one browser-free selection policy. Preview may
   open only a fresh proxy and can keep displaying it while the original is
   offline; proxy open/decode failure becomes a proxy error and falls back to a
@@ -2506,15 +2519,15 @@ surface; it is not a second zoom and never enters document history.
   and explicitly blocks while it is offline. No proxy field was added to
   `TimelineDoc`, `.myrelith`, recovery, descriptors, remembered handles, or
   export preferences.
-- Focused validation passed 147 tests across the proxy/domain/storage,
+- Focused post-rebase validation passed 170 tests across the proxy/domain/storage,
   preview/export, Media Pool/Preview, launcher, and architecture surfaces. The
-  complete gate passed all 2,104 Vitest cases across 150 files plus all 16
+  complete gate passed all 2,186 Vitest cases across 155 files plus all 16
   benchmark-runner cases. TypeScript/production Vite build and oxlint pass;
   Vite retains only the existing advisory large-chunk warning. The production
   high-severity audit reports 0 vulnerabilities; the all-dependency audit
   retains the unchanged two dev-only highs in `nanoid` and `undici`, with
   package manifests unchanged from the base.
-- Real in-app Chromium used only
+- Real Chromium used only
   `npm run dev -- --port 41870 --strictPort`. The generated H.264 stress source
   was 50,948,082 bytes, 3840x2160, 30 fps, 12.000 seconds, and a 300-frame GOP.
   The exact input/output preflight enabled generation; cancel left no bytes;
@@ -2527,6 +2540,31 @@ surface; it is not a second zoom and never enters document history.
   Export-ready result in 4.413 seconds. The final warning/error log and Vite
   overlay count were both zero, screenshots covered offline proxy playback and
   connected Export-ready state, and port 41870 was released.
+- Independent review remediation reran the same 50,948,082-byte 3840x2160,
+  30 fps, 12-second, 300-frame-GOP fixture through the exact timeline asset.
+  Fixture SHA-256 was
+  `76f110d8dea87582d50aa2b091225051278771e9f4a934b466549901fbe9b079`.
+  Original worker-complete seeks were 456.6 ms median / 1176.7 ms p95, with
+  worker render at 456.2 / 1176.2 ms; the 1280x720 proxy measured 15.9 / 21.5 ms
+  and 15.8 / 21.3 ms respectively (about 96.5% lower median worker cost). A
+  serialized unpaced live-bridge trial, capped at 119 frames and four seconds,
+  rendered 35/119 original frames in 4081.3 ms (8.576 fps, 84 budget misses)
+  versus 119/119 proxy frames in 2631.5 ms (45.221 fps, no budget misses).
+  Browser paint-boundary samples (527.6 ms original, 1072 ms proxy) are reported
+  separately and excluded from the benefit claim because the extension-owned
+  background tab throttled animation-frame presentation. Method limitation:
+  this establishes selected-source decode/composite capacity on this one local
+  H.264 fixture and machine, not universal codec/GPU performance.
+- After rebasing cumulatively onto schema-11 master `532a728`, a fresh strict-
+  port Chromium smoke reopened the persisted proxy as ready, exposed both the
+  schema-11 Timing controls and schema-10 Effect stack, and repeated the exact
+  selected proxy path at 15.5 ms median / 22.3 ms p95 completion and 15.2 /
+  21.8 ms worker render. The same unpaced cap rendered 119/119 frames in
+  2634.3 ms (45.173 fps, zero misses). Browser warnings/errors remained zero,
+  the visible progress copy used plain `Measuring...`, and port 41870 was
+  released. The full production benchmark also completed with clean console
+  and resource restoration; its repository-wide proposed thresholds remain
+  advisory and are not Issue #70 acceptance claims.
 - Source evidence: clean base `718c0d28e3611e2bad3b511d45ce1e3adcba0270`
   had tree SHA-256
   `47e1f912b11b21a3cf4e7db082f7e9807b9d2b1bbff258b75b2ddb1e2b7dc8e4`

@@ -3,6 +3,7 @@ import {
   PROXY_CACHE_SCHEMA_VERSION,
   isProxyCacheFileName,
   parseProxyCacheManifest,
+  proxyCacheByteSize,
   type ProxyCacheEntry,
   type ProxyCacheManifest,
 } from '../domain/proxyCache'
@@ -28,6 +29,13 @@ export interface ProxyStorageDeps {
   persisted(): Promise<boolean>
   now(): number
   createToken(): string
+}
+
+export interface ProxyStorageEntryCommit {
+  /** Keep the committed entry and reclaim only the bytes it replaced. */
+  finalize(): Promise<void>
+  /** Restore the prior manifest entry and delete the unaccepted output bytes. */
+  rollback(): Promise<void>
 }
 
 const realDeps: ProxyStorageDeps = {
@@ -124,6 +132,12 @@ export class ProxyStorage {
     }
   }
 
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.mutationTail.then(operation)
+    this.mutationTail = run.then(() => undefined, () => undefined)
+    return run
+  }
+
   private mutate(
     mutation: (manifest: ProxyCacheManifest) => Promise<ProxyCacheManifest>,
     afterCommit?: (
@@ -131,14 +145,13 @@ export class ProxyStorage {
       committed: ProxyCacheManifest,
     ) => Promise<void>,
   ): Promise<void> {
-    const run = this.mutationTail.then(async () => {
+    return this.serialize(async () => {
       const current = await this.readManifest()
       const next = await mutation(current)
-      await this.writeManifest(next)
-      await afterCommit?.(current, next)
+      const validated = parseProxyCacheManifest(next)
+      await this.writeManifest(validated)
+      await afterCommit?.(current, validated)
     })
-    this.mutationTail = run.catch(() => undefined)
-    return run
   }
 
   async prepareFileCapability(cacheKey: string): Promise<PreparedExportFileCapability> {
@@ -163,14 +176,20 @@ export class ProxyStorage {
     }
   }
 
-  async commitEntry(entry: ProxyCacheEntry): Promise<void> {
+  async commitEntry(entry: ProxyCacheEntry): Promise<ProxyStorageEntryCommit> {
+    parseProxyCacheManifest({
+      schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
+      entries: [entry],
+    })
     const obsoleteFiles = new Set<string>()
+    const replacedEntries: ProxyCacheEntry[] = []
     await this.mutate(async (manifest) => {
       const entries = manifest.entries.filter((candidate) => (
         candidate.assetId !== entry.assetId && candidate.cacheKey !== entry.cacheKey
       ))
       for (const candidate of manifest.entries) {
         if (!entries.includes(candidate) && candidate.fileName !== entry.fileName) {
+          replacedEntries.push(candidate)
           obsoleteFiles.add(candidate.fileName)
         }
       }
@@ -179,19 +198,55 @@ export class ProxyStorage {
         entries.sort((a, b) => a.lastUsedAt - b.lastUsedAt || a.cacheKey.localeCompare(b.cacheKey))
         const evicted = entries.splice(0, entries.length - MAX_PROXY_CACHE_ENTRIES)
         for (const candidate of evicted) {
-          if (candidate.fileName !== entry.fileName) obsoleteFiles.add(candidate.fileName)
+          if (candidate.fileName !== entry.fileName) {
+            replacedEntries.push(candidate)
+            obsoleteFiles.add(candidate.fileName)
+          }
         }
       }
       return { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries }
-    }, async () => {
-      for (const fileName of obsoleteFiles) {
-        try {
-          await this.removeFile(fileName)
-        } catch {
-          // The committed manifest stays authoritative; clear-all may reclaim an orphan.
-        }
-      }
     })
+    let settlement: Promise<void> | null = null
+    return {
+      finalize: () => {
+        settlement ??= this.serialize(async () => {
+          for (const fileName of obsoleteFiles) {
+            try {
+              await this.removeFile(fileName)
+            } catch {
+              // The committed manifest stays authoritative; clear-all may reclaim an orphan.
+            }
+          }
+        })
+        return settlement
+      },
+      rollback: () => {
+        settlement ??= this.mutate(async (manifest) => {
+          const committed = manifest.entries.some((candidate) => (
+            candidate.assetId === entry.assetId
+            && candidate.cacheKey === entry.cacheKey
+            && candidate.fileName === entry.fileName
+          ))
+          if (!committed) return manifest
+          const entries = manifest.entries.filter((candidate) => !(
+            candidate.assetId === entry.assetId
+            && candidate.cacheKey === entry.cacheKey
+            && candidate.fileName === entry.fileName
+          ))
+          for (const previous of replacedEntries) {
+            if (entries.some((candidate) => (
+              candidate.assetId === previous.assetId
+              || candidate.cacheKey === previous.cacheKey
+            ))) continue
+            entries.push(previous)
+          }
+          return { schemaVersion: PROXY_CACHE_SCHEMA_VERSION, entries }
+        }, async () => {
+          await this.removeFile(entry.fileName)
+        })
+        return settlement
+      },
+    }
   }
 
   async readEntryFile(entry: ProxyCacheEntry): Promise<File> {
@@ -205,11 +260,13 @@ export class ProxyStorage {
   }
 
   async touch(cacheKey: string): Promise<void> {
-    const lastUsedAt = this.deps.now()
+    const now = this.deps.now()
     await this.mutate(async (manifest) => ({
       schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
       entries: manifest.entries.map((entry) => (
-        entry.cacheKey === cacheKey ? { ...entry, lastUsedAt } : entry
+        entry.cacheKey === cacheKey
+          ? { ...entry, lastUsedAt: Math.max(entry.createdAt, entry.lastUsedAt, now) }
+          : entry
       )),
     }))
   }
@@ -250,13 +307,15 @@ export class ProxyStorage {
   }
 
   async clear(): Promise<void> {
-    try {
-      const root = await this.deps.getRoot()
-      const derived = await root.getDirectoryHandle(CACHE_ROOT_DIRECTORY)
-      await derived.removeEntry(PROXY_DIRECTORY, { recursive: true })
-    } catch (cause) {
-      if (!notFound(cause)) throw cause
-    }
+    await this.serialize(async () => {
+      try {
+        const root = await this.deps.getRoot()
+        const derived = await root.getDirectoryHandle(CACHE_ROOT_DIRECTORY)
+        await derived.removeEntry(PROXY_DIRECTORY, { recursive: true })
+      } catch (cause) {
+        if (!notFound(cause)) throw cause
+      }
+    })
   }
 
   async estimate(): Promise<ProxyStorageEstimate> {
@@ -275,7 +334,7 @@ export class ProxyStorage {
       persistedPromise,
     ])
     return {
-      cacheBytes: manifest.entries.reduce((sum, entry) => sum + entry.byteSize, 0),
+      cacheBytes: proxyCacheByteSize(manifest.entries),
       itemCount: manifest.entries.length,
       originUsageBytes: Number.isSafeInteger(origin.usage) ? origin.usage! : null,
       originQuotaBytes: Number.isSafeInteger(origin.quota) ? origin.quota! : null,

@@ -14,8 +14,8 @@ import {
   CanvasSource,
   Input,
   Mp4OutputFormat,
+  NullTarget,
   Output,
-  canEncodeVideo,
 } from 'mediabunny'
 import {
   ensureMediaDecoderSupport,
@@ -41,7 +41,10 @@ export interface ProxyGenerationAsset {
   readonly id: string
   readonly fileName: string
   readonly size: number
-  readonly durationMicroseconds: number
+  readonly videoBounds: {
+    readonly firstTimestampUs: number
+    readonly endTimestampUs: number
+  }
   readonly frameRate: FrameRate
   readonly width: number
   readonly height: number
@@ -76,6 +79,35 @@ export interface ProxyInputSupport {
   readonly reason: string
 }
 
+export interface ProxyGenerationPlan {
+  readonly firstTimestampUs: number
+  readonly endTimestampUs: number
+  readonly durationMicroseconds: number
+  readonly frameCount: number
+  readonly framesPerSecond: number
+  readonly frameDurationSeconds: number
+  sourceTimestampSeconds(frame: number): number
+  outputTimestampSeconds(frame: number): number
+  outputDurationSeconds(frame: number): number
+}
+
+export interface ProxyEncoderProbeConfig {
+  readonly width: number
+  readonly height: number
+  readonly bitrate: number
+  readonly framesPerSecond: number
+  readonly keyFrameIntervalSeconds: number
+}
+
+export interface ProxyEncoderProbeDeps {
+  runExactProbe(config: ProxyEncoderProbeConfig): Promise<ProxyEncoderProbeResult>
+}
+
+export interface ProxyEncoderProbeResult {
+  readonly supported: boolean
+  readonly reason?: string
+}
+
 function abortError(): Error {
   const error = new Error('Proxy generation was canceled')
   error.name = 'AbortError'
@@ -88,10 +120,26 @@ function throwIfAborted(signal?: AbortSignal): void {
   throw abortError()
 }
 
-function assertAsset(asset: ProxyGenerationAsset): number {
+function assertFrameIndex(frame: number, frameCount: number): void {
+  if (!Number.isSafeInteger(frame) || frame < 0 || frame >= frameCount) {
+    throw new RangeError('Proxy frame index is outside the generation plan')
+  }
+}
+
+export function planProxyGeneration(asset: ProxyGenerationAsset): ProxyGenerationPlan {
   if (!asset.id || !asset.fileName) throw new TypeError('Proxy source identity is required')
-  if (!Number.isSafeInteger(asset.durationMicroseconds) || asset.durationMicroseconds <= 0) {
-    throw new RangeError('Proxy source duration must be a positive integer number of microseconds')
+  const firstTimestampUs = asset.videoBounds.firstTimestampUs
+  const endTimestampUs = asset.videoBounds.endTimestampUs
+  if (
+    !Number.isSafeInteger(firstTimestampUs)
+    || !Number.isSafeInteger(endTimestampUs)
+    || endTimestampUs <= firstTimestampUs
+  ) {
+    throw new RangeError('Proxy source video bounds must be an exact increasing microsecond range')
+  }
+  const durationMicroseconds = endTimestampUs - firstTimestampUs
+  if (!Number.isSafeInteger(durationMicroseconds)) {
+    throw new RangeError('Proxy source video duration exceeds the safe integer range')
   }
   if (
     !Number.isSafeInteger(asset.frameRate.num)
@@ -99,12 +147,100 @@ function assertAsset(asset: ProxyGenerationAsset): number {
     || !Number.isSafeInteger(asset.frameRate.den)
     || asset.frameRate.den <= 0
   ) throw new RangeError('Proxy source frame rate is invalid')
-  const frameRate = asset.frameRate.num / asset.frameRate.den
-  const frameCount = Math.ceil(asset.durationMicroseconds / 1_000_000 * frameRate)
+  const framesPerSecond = asset.frameRate.num / asset.frameRate.den
+  const frameDurationUsDenominator = BigInt(asset.frameRate.den) * 1_000_000n
+  const frameCount = Number((
+    BigInt(durationMicroseconds) * BigInt(asset.frameRate.num)
+    + frameDurationUsDenominator - 1n
+  ) / frameDurationUsDenominator)
   if (!Number.isSafeInteger(frameCount) || frameCount <= 0 || frameCount > MAX_PROXY_FRAMES) {
     throw new RangeError(`Proxy generation is limited to ${MAX_PROXY_FRAMES} frames`)
   }
-  return frameCount
+  const frameDurationSeconds = asset.frameRate.den / asset.frameRate.num
+  const durationSeconds = durationMicroseconds / 1_000_000
+  return {
+    firstTimestampUs,
+    endTimestampUs,
+    durationMicroseconds,
+    frameCount,
+    framesPerSecond,
+    frameDurationSeconds,
+    sourceTimestampSeconds(frame) {
+      assertFrameIndex(frame, frameCount)
+      return Math.min(
+        firstTimestampUs / 1_000_000 + frame * frameDurationSeconds,
+        (endTimestampUs - 1) / 1_000_000,
+      )
+    },
+    outputTimestampSeconds(frame) {
+      assertFrameIndex(frame, frameCount)
+      return frame * frameDurationSeconds
+    },
+    outputDurationSeconds(frame) {
+      assertFrameIndex(frame, frameCount)
+      return Math.min(
+        frameDurationSeconds,
+        Math.max(0, durationSeconds - frame * frameDurationSeconds),
+      )
+    },
+  }
+}
+
+const realEncoderProbeDeps: ProxyEncoderProbeDeps = {
+  async runExactProbe(config) {
+    const canvas = new OffscreenCanvas(config.width, config.height)
+    const context = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' })
+    if (!context) {
+      return { supported: false, reason: 'Could not create the exact proxy conversion canvas.' }
+    }
+    context.fillStyle = '#000'
+    context.fillRect(0, 0, config.width, config.height)
+    const output = new Output({
+      format: new Mp4OutputFormat(),
+      target: new NullTarget(),
+    })
+    const source = new CanvasSource(canvas, {
+      codec: 'avc',
+      bitrate: config.bitrate,
+      keyFrameInterval: config.keyFrameIntervalSeconds,
+    })
+    output.addVideoTrack(source, { frameRate: config.framesPerSecond })
+    let closed = false
+    try {
+      await output.start()
+      await source.add(0, 1 / config.framesPerSecond)
+      source.close()
+      closed = true
+      await output.finalize()
+      return { supported: true }
+    } catch (cause) {
+      if (!closed) {
+        try {
+          source.close()
+        } catch {
+          // Output cancellation below remains the authoritative cleanup.
+        }
+      }
+      try {
+        await output.cancel()
+      } catch {
+        // The exact probe is disposable and reports only supported/unsupported.
+      }
+      return {
+        supported: false,
+        reason: cause instanceof Error ? cause.message : String(cause),
+      }
+    }
+  },
+}
+
+const encoderProbeCache = new Map<string, Promise<ProxyEncoderProbeResult>>()
+let encoderProbeTail: Promise<void> = Promise.resolve()
+
+function runBoundedEncoderProbe(config: ProxyEncoderProbeConfig): Promise<ProxyEncoderProbeResult> {
+  const run = encoderProbeTail.then(() => realEncoderProbeDeps.runExactProbe(config))
+  encoderProbeTail = run.then(() => undefined, () => undefined)
+  return run
 }
 
 export async function probeProxyEncoderSupport(
@@ -112,12 +248,16 @@ export async function probeProxyEncoderSupport(
   height: number,
   frameRate: FrameRate,
   parameters: ProxyGenerationParameters = DEFAULT_PROXY_PARAMETERS,
+  deps: ProxyEncoderProbeDeps = realEncoderProbeDeps,
 ): Promise<ProxyEncoderSupport> {
   const framesPerSecond = frameRate.num / frameRate.den
   if (!Number.isFinite(framesPerSecond) || framesPerSecond <= 0) {
     return { supported: false, reason: 'The source frame rate is invalid for proxy generation.' }
   }
-  if (typeof OffscreenCanvas === 'undefined' || typeof VideoEncoder === 'undefined') {
+  if (
+    deps === realEncoderProbeDeps
+    && (typeof OffscreenCanvas === 'undefined' || typeof VideoEncoder === 'undefined')
+  ) {
     return {
       supported: false,
       reason: 'This browser does not expose the required OffscreenCanvas and WebCodecs encoder APIs.',
@@ -129,19 +269,32 @@ export async function probeProxyEncoderSupport(
     if (!format.getSupportedVideoCodecs().includes(parameters.videoCodec)) {
       return { supported: false, reason: 'MP4 output does not support the AVC proxy profile.' }
     }
-    const supported = await canEncodeVideo(parameters.videoCodec, {
+    const config: ProxyEncoderProbeConfig = {
       width: output.width,
       height: output.height,
       bitrate: parameters.bitrate,
-    })
-    return supported
+      framesPerSecond,
+      keyFrameIntervalSeconds: parameters.keyFrameIntervalSeconds,
+    }
+    const cacheKey = JSON.stringify(config)
+    let probe = encoderProbeCache.get(cacheKey)
+    if (!probe || deps !== realEncoderProbeDeps) {
+      probe = deps === realEncoderProbeDeps
+        ? runBoundedEncoderProbe(config)
+        : deps.runExactProbe(config)
+      if (deps === realEncoderProbeDeps) encoderProbeCache.set(cacheKey, probe)
+    }
+    const result = await probe
+    return result.supported
       ? {
           supported: true,
-          reason: `AVC MP4 ${output.width}×${output.height} encoding is available.`,
+          reason: `AVC MP4 ${output.width}×${output.height} at ${framesPerSecond.toFixed(3)} fps is available.`,
         }
       : {
           supported: false,
-          reason: `AVC MP4 ${output.width}×${output.height} encoding is unavailable in this browser.`,
+          reason: result.reason
+            ? `AVC MP4 ${output.width}×${output.height} at ${framesPerSecond.toFixed(3)} fps is unavailable: ${result.reason}`
+            : `AVC MP4 ${output.width}×${output.height} at ${framesPerSecond.toFixed(3)} fps is unavailable in this browser.`,
         }
   } catch (cause) {
     return {
@@ -207,7 +360,7 @@ export async function generateEditingProxy(
   request: ProxyGenerationRequest,
 ): Promise<ProxyGenerationResult> {
   const parameters = request.parameters ?? DEFAULT_PROXY_PARAMETERS
-  const frameCount = assertAsset(request.asset)
+  const plan = planProxyGeneration(request.asset)
   const outputSize = proxyOutputDimensions(
     request.asset.width,
     request.asset.height,
@@ -225,11 +378,18 @@ export async function generateEditingProxy(
   try {
     const track = await input.getPrimaryVideoTrack()
     if (!track) throw new Error(`"${request.asset.fileName}" has no video track`)
-    const [codec, configuration, firstTimestamp] = await Promise.all([
+    const [codec, configuration, firstTimestamp, endTimestamp] = await Promise.all([
       track.getCodec(),
       track.getDecoderConfig(),
       track.getFirstTimestamp(),
+      track.computeDuration(),
     ])
+    if (
+      Math.abs(Math.round(firstTimestamp * 1_000_000) - plan.firstTimestampUs) > 1
+      || Math.abs(Math.round(endTimestamp * 1_000_000) - plan.endTimestampUs) > 1
+    ) {
+      throw new Error('The exact video timestamp bounds changed; relink and re-analyze before proxying')
+    }
     const support = await ensureMediaDecoderSupport({
       codec,
       canDecode: () => track.canDecode(),
@@ -272,8 +432,7 @@ export async function generateEditingProxy(
       bitrate: parameters.bitrate,
       keyFrameInterval: parameters.keyFrameIntervalSeconds,
     })
-    const framesPerSecond = request.asset.frameRate.num / request.asset.frameRate.den
-    output.addVideoTrack(encoderSource, { frameRate: framesPerSecond })
+    output.addVideoTrack(encoderSource, { frameRate: plan.framesPerSecond })
     await output.start()
 
     const decoderSink = new CanvasSink(track, {
@@ -282,11 +441,9 @@ export async function generateEditingProxy(
       fit: 'fill',
       poolSize: 1,
     })
-    const frameDuration = request.asset.frameRate.den / request.asset.frameRate.num
-    const durationSeconds = request.asset.durationMicroseconds / 1_000_000
     function* sourceTimestamps(): Generator<number> {
-      for (let frame = 0; frame < frameCount; frame++) {
-        yield firstTimestamp + frame * frameDuration
+      for (let frame = 0; frame < plan.frameCount; frame++) {
+        yield plan.sourceTimestampSeconds(frame)
       }
     }
 
@@ -296,15 +453,15 @@ export async function generateEditingProxy(
       throwIfAborted(request.signal)
       if (!decoded) throw new Error(`The source decoder returned no frame at proxy frame ${frame}`)
       context.drawImage(decoded.canvas, 0, 0, outputSize.width, outputSize.height)
-      const timestamp = frame * frameDuration
-      const duration = Math.min(frameDuration, Math.max(0, durationSeconds - timestamp))
+      const timestamp = plan.outputTimestampSeconds(frame)
+      const duration = plan.outputDurationSeconds(frame)
       if (!(duration > 0)) throw new Error(`Proxy frame ${frame} has no presentation duration`)
       await encoderSource.add(timestamp, duration)
       frame++
-      request.onProgress?.(frame / frameCount)
+      request.onProgress?.(frame / plan.frameCount)
     }
-    if (frame !== frameCount) {
-      throw new Error(`Proxy decoder produced ${frame} of ${frameCount} required frames`)
+    if (frame !== plan.frameCount) {
+      throw new Error(`Proxy decoder produced ${frame} of ${plan.frameCount} required frames`)
     }
     throwIfAborted(request.signal)
     encoderSource.close()
@@ -316,8 +473,8 @@ export async function generateEditingProxy(
       width: outputSize.width,
       height: outputSize.height,
       frameRate: request.asset.frameRate,
-      durationMicroseconds: request.asset.durationMicroseconds,
-      frameCount,
+      durationMicroseconds: plan.durationMicroseconds,
+      frameCount: plan.frameCount,
     }
   } catch (cause) {
     if (output && !finalized) {

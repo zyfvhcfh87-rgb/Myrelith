@@ -139,11 +139,23 @@ export interface PreviewRenderDiagnostic {
   readonly result: RenderFrameResult
 }
 
+/** Worker completion evidence captured before browser paint scheduling. */
+export interface PreviewRenderCompletionDiagnostic {
+  readonly frame: number
+  readonly mode: RenderMode
+  readonly requestedAt: number
+  readonly completedAt: number
+  readonly result: RenderFrameResult
+}
+
 export type PreviewRenderDiagnosticListener = (
   diagnostic: PreviewRenderDiagnostic,
 ) => void
 
 const renderDiagnosticListeners = new Set<PreviewRenderDiagnosticListener>()
+const renderCompletionListeners = new Set<(
+  diagnostic: PreviewRenderCompletionDiagnostic,
+) => void>()
 
 /** Subscribe without putting benchmark data in project or Zustand state. */
 export function subscribePreviewRenderDiagnostics(
@@ -151,6 +163,14 @@ export function subscribePreviewRenderDiagnostics(
 ): () => void {
   renderDiagnosticListeners.add(listener)
   return () => renderDiagnosticListeners.delete(listener)
+}
+
+/** Subscribe to selected-source worker completion without touching app state. */
+export function subscribePreviewRenderCompletions(
+  listener: (diagnostic: PreviewRenderCompletionDiagnostic) => void,
+): () => void {
+  renderCompletionListeners.add(listener)
+  return () => renderCompletionListeners.delete(listener)
 }
 
 /** Enable/reset or disable the opt-in worker counters, if preview is live. */
@@ -168,6 +188,21 @@ export function capturePreviewRuntimeTelemetry(): Promise<
   const method = state.bridge?.requestRuntimeTelemetry
   if (!method) return Promise.resolve(null)
   return method.call(state.bridge)
+}
+
+/**
+ * Dev-benchmark boundary: one serialized request through the live bridge and
+ * its currently selected original/proxy sources, without browser paint time.
+ */
+export function renderPreviewFrameForDevBenchmark(
+  frame: number,
+): Promise<RenderFrameResult> {
+  if (!Number.isSafeInteger(frame) || frame < 0) {
+    return Promise.reject(new RangeError('Benchmark preview frame must be a non-negative integer'))
+  }
+  const bridge = state.bridge
+  if (!bridge) return Promise.reject(new Error('Preview is not initialized'))
+  return bridge.renderFrame(frame, 'seek')
 }
 
 function publishRenderDiagnostic(
@@ -292,9 +327,26 @@ export function setPreviewViewport(viewport: PresentationViewport | null): void 
 }
 
 function currentSourceBoundsCatalog(): SourceBoundsCatalog {
-  return createSourceBoundsCatalog(
+  const catalog = new Map(createSourceBoundsCatalog(
     useMediaStore.getState().descriptors.values(),
-  )
+  ))
+  for (const [assetId, proxy] of useProxyStore.getState().assets) {
+    if (
+      proxy.phase !== 'ready'
+      || !proxy.entry
+      || previewRepresentationDecision(assetId).representation !== 'proxy'
+    ) continue
+    const original = catalog.get(assetId)
+    catalog.set(assetId, {
+      video: {
+        status: 'exact',
+        firstTimestampUs: 0,
+        endTimestampUs: proxy.entry.durationMicroseconds,
+      },
+      audio: original?.audio ?? null,
+    })
+  }
+  return catalog
 }
 
 /** Apply a transport-owned draft without touching document history. */
@@ -404,13 +456,24 @@ function scheduleRender(deps: PreviewDeps): void {
     usePreviewStatusStore.getState().setOfflineVisualAssetIds(offlineIds)
     const frame = transport.playheadFrame
     const mode = modeForTransport(transport)
-    const diagnosticsEnabled = renderDiagnosticListeners.size > 0
+    const diagnosticsEnabled = (
+      renderDiagnosticListeners.size > 0 || renderCompletionListeners.size > 0
+    )
     const requestedAt = diagnosticsEnabled ? deps.now() : 0
     const presentationGeneration = ++state.presentationGeneration
     void bridge
       .renderFrame(frame, mode)
       .then((result) => {
-        if (diagnosticsEnabled && result.status !== 'superseded') {
+        if (diagnosticsEnabled) {
+          publishRenderCompletion({
+            frame,
+            mode,
+            requestedAt,
+            completedAt: deps.now(),
+            result,
+          })
+        }
+        if (renderDiagnosticListeners.size > 0 && result.status !== 'superseded') {
           // Presentation evidence is deliberately passive: ordinary preview
           // completion/error handling below is not held behind browser paint.
           void deps.afterPresentationBoundary().then((presentedAt) => {
@@ -548,6 +611,18 @@ async function loadOneVideoAsset(
         guard,
         mediaRuntimeFailure('preview', failureTrackKind, e, failureReason),
       )
+    }
+  }
+}
+
+function publishRenderCompletion(
+  diagnostic: PreviewRenderCompletionDiagnostic,
+): void {
+  for (const listener of renderCompletionListeners) {
+    try {
+      listener(diagnostic)
+    } catch {
+      // Diagnostics are observational and must never disturb rendering.
     }
   }
 }
@@ -731,6 +806,12 @@ export function initPreview(
     }),
     useProxyStore.subscribe((current, previous) => {
       if (current.assets === previous.assets) return
+      const bounds = currentSourceBoundsCatalog()
+      state.visualPlanner = createVideoCompositionPlanner(
+        currentPreviewDocument(),
+        bounds,
+      )
+      bridge.setSourceBoundsCatalog(bounds)
       syncAssets(deps)
       scheduleRender(deps)
     }),

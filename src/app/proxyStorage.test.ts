@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_PROXY_PARAMETERS,
   PROXY_CACHE_SCHEMA_VERSION,
@@ -25,6 +25,7 @@ class MemoryFileHandle {
   readonly kind = 'file' as const
   bytes = new Uint8Array()
   failNextWrite = false
+  closeGate: Promise<void> | null = null
   readonly events: string[]
   readonly name: string
 
@@ -48,6 +49,11 @@ class MemoryFileHandle {
         staged = await chunkBytes(chunk)
       },
       close: async () => {
+        this.events.push(`${this.name}:closing`)
+        if (this.closeGate) {
+          await this.closeGate
+          this.closeGate = null
+        }
         this.bytes = staged
         this.events.push(`${this.name}:committed`)
       },
@@ -157,6 +163,11 @@ async function writeStaged(storage: ProxyStorage, cacheKey: string, size: number
   return capability.fileName
 }
 
+async function commit(storage: ProxyStorage, candidate: ProxyCacheEntry): Promise<void> {
+  const transaction = await storage.commitEntry(candidate)
+  await transaction.finalize()
+}
+
 function proxyDirectory(root: MemoryDirectory): MemoryDirectory {
   return root.directories.get('myrelith-derived')!.directories.get('proxy-cache-v1')!
 }
@@ -167,7 +178,7 @@ describe('ProxyStorage', () => {
     const cacheKey = 'a'.repeat(64)
     const committedFileName = await writeStaged(storage, cacheKey, 10)
     const committed = entry('asset', 'a', 1, committedFileName)
-    await storage.commitEntry(committed)
+    await commit(storage, committed)
 
     const replacementFileName = await writeStaged(storage, cacheKey, 12)
     expect(replacementFileName).not.toBe(committedFileName)
@@ -183,21 +194,44 @@ describe('ProxyStorage', () => {
     const firstKey = 'a'.repeat(64)
     const firstFileName = await writeStaged(storage, firstKey, 10)
     const first = entry('asset', 'a', 1, firstFileName)
-    await storage.commitEntry(first)
+    await commit(storage, first)
 
     const secondKey = firstKey
     const secondFileName = await writeStaged(storage, secondKey, 12)
     const second = entry('asset', 'a', 2, secondFileName, 12)
     events.length = 0
-    await storage.commitEntry(second)
+    await commit(storage, second)
 
     expect(await storage.readManifest()).toEqual({
       schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
       entries: [second],
     })
-    expect(events).toEqual(['manifest.json:committed', `${first.fileName}:removed`])
+    expect(events).toEqual([
+      'manifest.json:closing',
+      'manifest.json:committed',
+      `${first.fileName}:removed`,
+    ])
     await expect(storage.readEntryFile(second)).resolves.toHaveProperty('size', 12)
     expect(proxyDirectory(root).files.has(first.fileName)).toBe(false)
+  })
+
+  it('can roll back a late commit before replaced bytes are reclaimed', async () => {
+    const { root, storage } = fixture()
+    const firstFileName = await writeStaged(storage, 'a'.repeat(64), 10)
+    const first = entry('asset', 'a', 1, firstFileName)
+    await commit(storage, first)
+
+    const secondFileName = await writeStaged(storage, 'b'.repeat(64), 12)
+    const second = entry('asset', 'b', 2, secondFileName, 12)
+    const transaction = await storage.commitEntry(second)
+    expect((await storage.readManifest()).entries).toEqual([second])
+    expect(proxyDirectory(root).files.has(first.fileName)).toBe(true)
+
+    await transaction.rollback()
+
+    expect((await storage.readManifest()).entries).toEqual([first])
+    expect(proxyDirectory(root).files.has(first.fileName)).toBe(true)
+    expect(proxyDirectory(root).files.has(second.fileName)).toBe(false)
   })
 
   it('preserves the previous manifest and bytes when replacement commit fails', async () => {
@@ -205,7 +239,7 @@ describe('ProxyStorage', () => {
     const firstKey = 'a'.repeat(64)
     const firstFileName = await writeStaged(storage, firstKey, 10)
     const first = entry('asset', 'a', 1, firstFileName)
-    await storage.commitEntry(first)
+    await commit(storage, first)
     const directory = proxyDirectory(root)
 
     const secondKey = 'b'.repeat(64)
@@ -218,16 +252,45 @@ describe('ProxyStorage', () => {
     expect(directory.files.has(first.fileName)).toBe(true)
   })
 
+  it('serializes clear behind an in-flight manifest commit', async () => {
+    const { root, storage, events } = fixture()
+    const firstFileName = await writeStaged(storage, 'a'.repeat(64), 10)
+    await commit(storage, entry('first', 'a', 1, firstFileName))
+    const fileName = await writeStaged(storage, 'b'.repeat(64), 10)
+    const candidate = entry('second', 'b', 2, fileName)
+    const directory = proxyDirectory(root)
+    let releaseClose!: () => void
+    const manifestHandle = directory.files.get('manifest.json')!
+    manifestHandle.closeGate = new Promise<void>((resolve) => {
+      releaseClose = resolve
+    })
+    events.length = 0
+
+    const commitPromise = storage.commitEntry(candidate)
+    await vi.waitFor(() => expect(events).toContain('manifest.json:closing'))
+    const clearPromise = storage.clear()
+    expect(root.directories.has('myrelith-derived')).toBe(true)
+
+    releaseClose()
+    const transaction = await commitPromise
+    await transaction.finalize()
+    await clearPromise
+
+    expect(events.indexOf('manifest.json:committed'))
+      .toBeLessThan(events.indexOf('proxy-cache-v1:removed'))
+    expect(root.directories.get('myrelith-derived')?.directories.has('proxy-cache-v1')).toBe(false)
+  })
+
   it('evicts least-recently-used owned proxies and refuses to evict the protected asset', async () => {
     const { root, storage } = fixture(750_000_000, 1_000_000_000)
     const oldKey = 'a'.repeat(64)
     const oldFileName = await writeStaged(storage, oldKey, 40_000_000)
     const old = entry('old', 'a', 1, oldFileName, 40_000_000)
-    await storage.commitEntry(old)
+    await commit(storage, old)
     const recentKey = 'b'.repeat(64)
     const recentFileName = await writeStaged(storage, recentKey, 40_000_000)
     const recent = entry('recent', 'b', 2, recentFileName, 40_000_000)
-    await storage.commitEntry(recent)
+    await commit(storage, recent)
 
     await storage.ensureCapacity(80_000_000, 'recent')
     expect((await storage.readManifest()).entries).toEqual([recent])

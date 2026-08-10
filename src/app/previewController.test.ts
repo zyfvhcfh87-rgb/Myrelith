@@ -42,7 +42,9 @@ import {
   documentWithClipVisualPreview,
   documentWithTextOverlayPreview,
   initPreview,
+  renderPreviewFrameForDevBenchmark,
   setPreviewViewport,
+  subscribePreviewRenderCompletions,
   subscribePreviewRenderDiagnostics,
 } from './previewController'
 
@@ -1345,6 +1347,55 @@ describe('previewController', () => {
     } finally {
       unsubscribe()
     }
+  })
+
+  test('publishes exact worker completion before the presentation boundary', async () => {
+    const { deps } = makeDeps()
+    vi.mocked(deps.now)
+      .mockReturnValueOnce(10)
+      .mockReturnValueOnce(15)
+    const completions: Array<{
+      frame: number
+      requestedAt: number
+      completedAt: number
+      status: string
+    }> = []
+    const unsubscribe = subscribePreviewRenderCompletions((diagnostic) => {
+      completions.push({
+        frame: diagnostic.frame,
+        requestedAt: diagnostic.requestedAt,
+        completedAt: diagnostic.completedAt,
+        status: diagnostic.result.status,
+      })
+    })
+    try {
+      initPreview(canvasEl(), deps)
+      await nextFrame()
+      await flush()
+
+      expect(deps.afterPresentationBoundary).not.toHaveBeenCalled()
+      expect(completions).toEqual([{
+        frame: 0,
+        requestedAt: 10,
+        completedAt: 15,
+        status: 'drawn',
+      }])
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  test('routes dev benchmark frames through the live selected-source bridge', async () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+    await nextFrame()
+    await flush()
+    bridge.rendered.length = 0
+
+    const result = await renderPreviewFrameForDevBenchmark(17)
+
+    expect(result.status).toBe('drawn')
+    expect(bridge.rendered).toEqual([{ frame: 17, mode: 'seek' }])
   })
 
   test('does not publish a draw superseded before its presentation boundary', async () => {
