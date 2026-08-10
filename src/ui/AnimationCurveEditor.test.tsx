@@ -37,7 +37,7 @@ function clip(): Clip {
 
 function doc(): TimelineDoc {
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'animation-editor-doc',
     name: 'Animation editor',
     frameRate: { num: 30, den: 1 },
@@ -122,7 +122,7 @@ describe('AnimationCurveEditor', () => {
     expect(keyframes().map((keyframe) => keyframe.frame)).toEqual([0, 10])
     await user.click(screen.getByRole('button', { name: 'Reset Position X animation' }))
     expect(useDocumentStore.getState().doc.tracks[0].clips[0].animation)
-      .toEqual({ tracks: [] })
+      .toEqual({ tracks: [], effectTracks: [] })
     expect(screen.getByRole('status')).toHaveTextContent(/static value is unchanged/)
   })
 

@@ -48,6 +48,7 @@ describe('effect registry and ordered evaluation', () => {
   test('keeps the no-effect path exact and reports unavailable capability', () => {
     expect(resolveCanvasEffectStack([], true)).toEqual({
       filter: null,
+      pixelEffects: [],
       pixelCorrections: [],
       effects: [],
     })

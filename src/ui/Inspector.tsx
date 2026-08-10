@@ -54,7 +54,6 @@ import {
 } from '../domain/textOverlay'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
-import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { useTransportStore } from '../state/transportStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 import {
@@ -64,13 +63,6 @@ import {
   isBlendModeName,
   type BlendModeName,
 } from '../domain/blendModes'
-import {
-  COLOR_ADJUST_EFFECT_TYPE,
-  COLOR_ADJUST_EFFECT_VERSION,
-  COLOR_ADJUST_LIMITS,
-  createColorAdjustEffect,
-} from '../domain/effectStack'
-import { effectAppendBudgetError } from '../domain/effectBounds'
 import {
   clipSourceTimeMap,
   sourceTimeMapUsesSpeedCurve,
@@ -82,6 +74,7 @@ import {
   sourceTimeSpeedRateFromPercent,
   sourceTimeSpeedRatePercent,
 } from '../domain/sourceTimeMap'
+import EffectStackInspector from './EffectStackInspector'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
 
@@ -91,10 +84,6 @@ const BLEND_MODE_LABELS: Readonly<Record<BlendModeName, string>> = {
   screen: 'Screen',
   overlay: 'Overlay',
 }
-
-const ADD_COLOR_BUDGET_PROBE = createColorAdjustEffect('__effect-budget-probe__')
-const PENDING_PREVIEW_EFFECT_DETAIL =
-  'Preview renderer status has not been projected yet; the effect is preserved and bypassed.'
 
 interface NumberFieldProps {
   label: string
@@ -901,202 +890,14 @@ function VideoInspectorSections({
         aria-labelledby="inspector-effects-tab"
         hidden={activeTab !== 'effects'}
       >
-        <EffectStackInspector doc={doc} clip={clip} locked={locked} />
+        <EffectStackInspector
+          doc={doc}
+          clip={clip}
+          locked={locked}
+          playheadFrame={playheadFrame}
+        />
       </div>
     </div>
-  )
-}
-
-function EffectStackInspector({
-  doc,
-  clip,
-  locked,
-}: {
-  doc: TimelineDoc
-  clip: Clip
-  locked: boolean
-}) {
-  const effectStatuses = usePreviewStatusStore((state) => state.effectStatuses)
-  const addLimitReason = effectAppendBudgetError(doc, clip, ADD_COLOR_BUDGET_PROBE)
-  const store = useDocumentStore.getState
-
-  return (
-    <section className="inspector-section inspector-effects" aria-labelledby="inspector-effects-heading">
-      <div className="inspector-section-bar">
-        <h3 id="inspector-effects-heading">Effect stack</h3>
-        <button
-          type="button"
-          className="inspector-effect-add"
-          disabled={locked || addLimitReason !== null}
-          aria-describedby={addLimitReason ? 'inspector-effect-add-limit' : undefined}
-          onClick={() => store().addEffect(
-            clip.id,
-            createColorAdjustEffect(`fx_${crypto.randomUUID()}`),
-          )}
-        >
-          Add color
-        </button>
-      </div>
-      <span className="inspector-note">
-        Effects run from top to bottom before opacity and compositing.
-      </span>
-      <span className="inspector-note">
-        Status describes Program Monitor preview. Export probes its own render context separately.
-      </span>
-      {addLimitReason && (
-        <span id="inspector-effect-add-limit" className="inspector-note" role="status">
-          {addLimitReason}.
-        </span>
-      )}
-      {clip.effects.length === 0
-        ? <span className="inspector-effect-empty">No effects on this clip.</span>
-        : (
-            <ol className="inspector-effect-list" aria-label="Ordered clip effects">
-              {clip.effects.map((effect, index) => {
-                const resolution = effectStatuses.get(effect.id) ?? {
-                  label: effect.type,
-                  status: 'unsupported' as const,
-                  detail: PENDING_PREVIEW_EFFECT_DETAIL,
-                }
-                const editableColor = effect.type === COLOR_ADJUST_EFFECT_TYPE
-                  && effect.version === COLOR_ADJUST_EFFECT_VERSION
-                  && resolution.status !== 'invalid'
-                return (
-                  <li className="inspector-effect-card" key={effect.id}>
-                    <div className="inspector-effect-card-heading">
-                      <span>
-                        <strong>{resolution.label}</strong>
-                        <small>{index + 1} of {clip.effects.length}</small>
-                      </span>
-                      <span
-                        className={`inspector-effect-status is-${resolution.status}`}
-                        aria-label={`Effect status: ${resolution.status}`}
-                      >
-                        {resolution.status}
-                      </span>
-                    </div>
-                    <ToggleField
-                      label={effect.enabled ? 'Enabled' : 'Bypassed'}
-                      checked={effect.enabled}
-                      disabled={locked}
-                      testId={`inspector-effect-enabled-${effect.id}`}
-                      onChange={(enabled) => store().setEffectEnabled(clip.id, effect.id, enabled)}
-                    />
-                    {editableColor && (
-                      <div className="inspector-effect-params">
-                        <RangeNumberField
-                          label="Exposure (stops)"
-                          value={effect.params.exposure as number}
-                          step={COLOR_ADJUST_LIMITS.exposure.step}
-                          min={COLOR_ADJUST_LIMITS.exposure.min}
-                          max={COLOR_ADJUST_LIMITS.exposure.max}
-                          testId={`inspector-effect-exposure-${effect.id}`}
-                          disabled={locked}
-                          onCommit={(exposure) => store().updateEffectParams(
-                            clip.id,
-                            effect.id,
-                            { exposure },
-                          )}
-                        />
-                        <RangeNumberField
-                          label="Contrast (%)"
-                          value={(effect.params.contrast as number) * 100}
-                          step={1}
-                          min={COLOR_ADJUST_LIMITS.contrast.min * 100}
-                          max={COLOR_ADJUST_LIMITS.contrast.max * 100}
-                          testId={`inspector-effect-contrast-${effect.id}`}
-                          disabled={locked}
-                          onCommit={(contrast) => store().updateEffectParams(
-                            clip.id,
-                            effect.id,
-                            { contrast: contrast / 100 },
-                          )}
-                        />
-                        <RangeNumberField
-                          label="Saturation (%)"
-                          value={(effect.params.saturation as number) * 100}
-                          step={1}
-                          min={COLOR_ADJUST_LIMITS.saturation.min * 100}
-                          max={COLOR_ADJUST_LIMITS.saturation.max * 100}
-                          testId={`inspector-effect-saturation-${effect.id}`}
-                          disabled={locked}
-                          onCommit={(saturation) => store().updateEffectParams(
-                            clip.id,
-                            effect.id,
-                            { saturation: saturation / 100 },
-                          )}
-                        />
-                        <RangeNumberField
-                          label="Temperature (%)"
-                          value={Number(effect.params.temperature ?? 0) * 100}
-                          step={1}
-                          min={COLOR_ADJUST_LIMITS.temperature.min * 100}
-                          max={COLOR_ADJUST_LIMITS.temperature.max * 100}
-                          testId={`inspector-effect-temperature-${effect.id}`}
-                          disabled={locked}
-                          onCommit={(temperature) => store().updateEffectParams(
-                            clip.id,
-                            effect.id,
-                            { temperature: temperature / 100 },
-                          )}
-                        />
-                        <RangeNumberField
-                          label="Tint (%)"
-                          value={Number(effect.params.tint ?? 0) * 100}
-                          step={1}
-                          min={COLOR_ADJUST_LIMITS.tint.min * 100}
-                          max={COLOR_ADJUST_LIMITS.tint.max * 100}
-                          testId={`inspector-effect-tint-${effect.id}`}
-                          disabled={locked}
-                          onCommit={(tint) => store().updateEffectParams(
-                            clip.id,
-                            effect.id,
-                            { tint: tint / 100 },
-                          )}
-                        />
-                      </div>
-                    )}
-                    <span className="inspector-note">{resolution.detail}</span>
-                    <div className="inspector-effect-actions" aria-label={`${resolution.label} actions`}>
-                      <button
-                        type="button"
-                        disabled={locked || index === 0}
-                        aria-label={`Move ${resolution.label} up`}
-                        onClick={() => store().reorderEffect(clip.id, effect.id, index - 1)}
-                      >
-                        Move up
-                      </button>
-                      <button
-                        type="button"
-                        disabled={locked || index === clip.effects.length - 1}
-                        aria-label={`Move ${resolution.label} down`}
-                        onClick={() => store().reorderEffect(clip.id, effect.id, index + 1)}
-                      >
-                        Move down
-                      </button>
-                      <button
-                        type="button"
-                        disabled={locked || !editableColor}
-                        aria-label={`Reset ${resolution.label}`}
-                        onClick={() => store().resetEffect(clip.id, effect.id)}
-                      >
-                        Reset
-                      </button>
-                      <button
-                        type="button"
-                        disabled={locked}
-                        aria-label={`Remove ${resolution.label}`}
-                        onClick={() => store().removeEffect(clip.id, effect.id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ol>
-          )}
-    </section>
   )
 }
 

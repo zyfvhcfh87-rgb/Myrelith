@@ -2742,3 +2742,66 @@ surface; it is not a second zoom and never enters document history.
   commits/docs, not the summary.
 - Be honest about mistakes and rejected-first-try test runs; the user
   values the "honest notes" sections.
+
+## Milestone 4 issue #73 - masks and chroma key (2026-08-11)
+
+**IMPLEMENTATION COMPLETE LOCALLY.**
+
+- The built-in effect stack now owns version-1 `mask` and `chroma-key`
+  descriptors. Rectangle, ellipse, and bounded cubic Bezier masks use normalized
+  project-canvas coordinates after crop/transform; project-edge clipping,
+  feather, invert, enable/bypass, and exact authored ordering are shared by
+  preview and export. Chroma key exposes explicit color, tolerance, softness,
+  and spill suppression with safe identity-compatible defaults.
+- `ClipAnimation.effectTracks` is the schema-13 durable animation contract.
+  Tracks address a stable effect id plus supported scalar parameter, reuse the
+  pure scalar evaluator, follow source-time, retime, split, trim, duplicate, and
+  remint rules, and are pruned atomically when their effect is removed or reset.
+  Per-track and document budgets are bounded. Unknown or dangling targets remain
+  stored for forward authoring intent but are ignored deterministically at
+  evaluation and rendering time.
+- Schema 12 migrates by identity to schema 13, including the valid historical
+  case where `clip.animation` was omitted. Current save validation requires
+  canonical bounded `effectTracks`. The broad-looking test-only change is a
+  mechanical current-document update: 66 `schemaVersion: 12` literals across 48
+  test files became schema 13; intentional schema-12 migration and legacy
+  fixtures in `projectFile.test.ts` remain unchanged and include the omitted-
+  animation regression.
+- The compositor builds one explicit executable pixel chain, so ready color,
+  chroma, and mask effects keep exact authored interleaving. Eligible historical
+  color-only stacks retain the Canvas filter fast path and no-effect output is
+  unchanged. Pixel-path media and transition legs render effects at alpha 1,
+  then apply clip or weighted transition opacity to match text and the documented
+  effects-before-opacity contract.
+- The Inspector exposes accessible ordered cards, numeric inputs, checkboxes,
+  mask-shape selection, synchronized Bezier draft editing, and stable-id effect
+  keyframe controls. Text clips keep static effect editing, but mask animation is
+  deliberately not offered there because Issue #43's text property set does not
+  define effect tracks. No direct-manipulation mask overlay is exposed in this
+  slice: the bounded numeric/list surface avoids adding a second gesture/history
+  controller late; therefore pointer-up history is not claimed as browser-
+  verified. Tracking roto, auto masks, and arbitrary shaders remain out of scope.
+- Final-tree validation passed 293 focused mask/chroma/schema/render/store tests,
+  the explicit 81-test budget/migration subset, all 2,260 Vitest cases across 163
+  files plus 16 benchmark-runner checks, production build/typecheck, oxlint, and
+  `npm audit --omit=dev` with 0 vulnerabilities. The first full run honestly
+  failed 43 files after 2,217 passing tests because current test documents still
+  declared schema 12; only those current fixtures were updated, and the corrected
+  full run passed. The build emitted only the established large-chunk advisory.
+- Real Chrome QA used exactly `http://localhost:5181/` from
+  `npm run dev -- --port 5181 --strictPort`. A local 640x360 green/red/blue PNG
+  was imported and placed on V1. Chroma plus rectangle and Bezier masks reported
+  ready; width was keyed at exact clip-local frame 0 = 55% and frame 35 = 35%,
+  reordered mask/chroma through undo/redo, and stayed project-space aligned after
+  x=120 px, rotation=12 degrees, scale=0.9, crop-left=10%, and crop-top=5%.
+  Invalid Bezier blur restored the valid stored path, bypass/re-enable worked,
+  and reload -> recovery review -> offline restore -> relink preserved all three
+  descriptors plus both keys. The only console warning was the intentionally
+  rejected invalid path; there were no errors. Evidence:
+  `.tmp/issue-73-browser/qa-frame0-keyframe.png` SHA-256
+  `7FB94298EB1D8204BB64D9FB511D7F4E6ED32465095EFD824D6A7B45C1016649`
+  and `.tmp/issue-73-browser/qa-frame35-keyframe.png` SHA-256
+  `38E553EA5D5C3DCFBFE5DC20FAD863C59EA47CD1B47BC49E98340349D4A292E1`.
+  Authored noncommuting order, colored-destination alpha, and encoded-export
+  parity are covered by deterministic pixel/compositor tests, not claimed as
+  browser-observed. Port 5181 was released.

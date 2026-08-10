@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { PreviewRenderDiagnostic } from '../../app/previewController'
 import { resolveCrossfadePlan } from '../../domain/crossfadePlan'
+import { createMaskEffect } from '../../domain/effectStack'
 import { validateProjectFile } from '../../domain/projectFile'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
@@ -332,6 +333,23 @@ describe('performance source-backed workloads', () => {
 
   test('builds a valid bounded export from connected 4K video, layers, transition, and audio', () => {
     const fixture = createPerformanceFixture()
+    const sourceVideo = fixture.project.document.tracks
+      .find((track) => track.kind === 'video')?.clips[0]
+    if (!sourceVideo) throw new Error('performance fixture has no source video')
+    sourceVideo.effects = [createMaskEffect('fixture-mask', 'ellipse')]
+    sourceVideo.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: 'fixture-mask',
+        parameter: 'x',
+        keyframes: [{
+          frame: 0,
+          sourceTimeTicks: 1_000_000,
+          value: 0.25,
+          easing: { type: 'linear' },
+        }],
+      }],
+    }
     const document = createPerformanceExportDocument(fixture, 30)
     const connectedAssetIds = new Set([
       ...fixture.connectedVideoAssetIds,
@@ -376,6 +394,13 @@ describe('performance source-backed workloads', () => {
     expect(document.tracks.filter((track) => track.kind === 'audio').every(
       (track) => track.clips.length === 1 && track.clips[0].timelineRange.durationFrames === 30,
     )).toBe(true)
+    const remintedMasks = document.tracks.flatMap((track) => track.clips)
+      .filter((clip) => clip.effects.some((effect) => effect.type === 'builtin.mask'))
+    expect(remintedMasks.length).toBeGreaterThan(0)
+    expect(remintedMasks.every((clip) => (
+      clip.animation?.effectTracks?.[0].effectId === clip.effects[0].id
+      && clip.effects[0].id !== 'fixture-mask'
+    ))).toBe(true)
   })
 
   test('keeps the maximum export request inside ordinary sequential video samples', () => {

@@ -91,7 +91,12 @@ import {
   updateClipVisual,
   updateClipVisualAtFrame,
   updateEffectParams,
+  updateEffectParamsAtFrame,
   setClipKeyframe,
+  setEffectKeyframe,
+  moveEffectKeyframe,
+  removeEffectKeyframe,
+  resetEffectAnimationTrack,
   moveClipKeyframe,
   removeClipKeyframe,
   resetClipAnimationTrack,
@@ -369,6 +374,37 @@ export interface DocumentState {
     clipId: ClipId,
     effectId: EffectId,
     patch: Readonly<Record<string, EffectParamValue>>,
+  ) => void
+  /** Edit static values or an existing effect track at one playhead frame. */
+  updateEffectParamsAtFrame: (
+    clipId: ClipId,
+    effectId: EffectId,
+    timelineFrame: number,
+    patch: Readonly<Record<string, EffectParamValue>>,
+  ) => void
+  setEffectKeyframe: (
+    clipId: ClipId,
+    effectId: EffectId,
+    parameter: string,
+    keyframe: ClipAnimationKeyframe,
+  ) => void
+  moveEffectKeyframe: (
+    clipId: ClipId,
+    effectId: EffectId,
+    parameter: string,
+    fromFrame: number,
+    toFrame: number,
+  ) => void
+  removeEffectKeyframe: (
+    clipId: ClipId,
+    effectId: EffectId,
+    parameter: string,
+    frame: number,
+  ) => void
+  resetEffectAnimationTrack: (
+    clipId: ClipId,
+    effectId: EffectId,
+    parameter: string,
   ) => void
   /** Move one effect to an exact stack index. */
   reorderEffect: (clipId: ClipId, effectId: EffectId, targetIndex: number) => void
@@ -687,6 +723,43 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     set((state) => commit(
       state,
       updateEffectParams(state.doc, clipId, effectId, patch),
+    )),
+
+  updateEffectParamsAtFrame: (clipId, effectId, timelineFrame, patch) =>
+    set((state) => commit(
+      state,
+      updateEffectParamsAtFrame(state.doc, clipId, effectId, timelineFrame, patch),
+    )),
+
+  setEffectKeyframe: (clipId, effectId, parameter, keyframe) =>
+    set((state) => commit(
+      state,
+      setEffectKeyframe(state.doc, clipId, effectId, parameter, keyframe),
+    )),
+
+  moveEffectKeyframe: (clipId, effectId, parameter, fromFrame, toFrame) =>
+    set((state) => commit(
+      state,
+      moveEffectKeyframe(
+        state.doc,
+        clipId,
+        effectId,
+        parameter,
+        fromFrame,
+        toFrame,
+      ),
+    )),
+
+  removeEffectKeyframe: (clipId, effectId, parameter, frame) =>
+    set((state) => commit(
+      state,
+      removeEffectKeyframe(state.doc, clipId, effectId, parameter, frame),
+    )),
+
+  resetEffectAnimationTrack: (clipId, effectId, parameter) =>
+    set((state) => commit(
+      state,
+      resetEffectAnimationTrack(state.doc, clipId, effectId, parameter),
     )),
 
   reorderEffect: (clipId, effectId, targetIndex) =>

@@ -806,16 +806,20 @@ export function animationWithSourceTimeIntent(
   animation: ClipAnimation,
   map: SourceTimeMap,
 ): ClipAnimation {
-  return {
-    tracks: animation.tracks.map((track) => ({
-      property: track.property,
-      keyframes: track.keyframes.map((keyframe) => ({
-        ...keyframe,
-        sourceTimeTicks: keyframe.sourceTimeTicks
-          ?? sourceTicksAtTimelineOffset(map, keyframe.frame),
-        easing: { ...keyframe.easing },
-      })),
+  const withIntent = <T extends ClipAnimation['tracks'][number] | NonNullable<ClipAnimation['effectTracks']>[number]>(
+    tracks: readonly T[],
+  ): T[] => tracks.map((track) => ({
+    ...track,
+    keyframes: track.keyframes.map((keyframe) => ({
+      ...keyframe,
+      sourceTimeTicks: keyframe.sourceTimeTicks
+        ?? sourceTicksAtTimelineOffset(map, keyframe.frame),
+      easing: { ...keyframe.easing },
     })),
+  }))
+  return {
+    tracks: withIntent(animation.tracks),
+    effectTracks: withIntent(animation.effectTracks ?? []),
   }
 }
 
@@ -832,8 +836,11 @@ export function shiftClipAnimationSourceTimeIntent(
   } catch {
     return null
   }
-  const tracks: ClipAnimation['tracks'] = []
-  for (const track of withIntent.tracks) {
+  const shiftTracks = <T extends ClipAnimation['tracks'][number] | NonNullable<ClipAnimation['effectTracks']>[number]>(
+    sourceTracks: readonly T[],
+  ): T[] | null => {
+    const tracks: T[] = []
+    for (const track of sourceTracks) {
     const keyframes: typeof track.keyframes = []
     for (const keyframe of track.keyframes) {
       const sourceTimeTicks = keyframe.sourceTimeTicks! + sourceDeltaTicks
@@ -844,9 +851,13 @@ export function shiftClipAnimationSourceTimeIntent(
         easing: { ...keyframe.easing },
       })
     }
-    tracks.push({ property: track.property, keyframes })
+      tracks.push({ ...track, keyframes })
+    }
+    return tracks
   }
-  return { tracks }
+  const tracks = shiftTracks(withIntent.tracks)
+  const effectTracks = shiftTracks(withIntent.effectTracks ?? [])
+  return tracks && effectTracks ? { tracks, effectTracks } : null
 }
 
 export function retimeClipAnimation(
@@ -858,8 +869,11 @@ export function retimeClipAnimation(
   if (!Number.isSafeInteger(newDurationFrames) || newDurationFrames < 1) {
     throw new RangeError('Retimed animation duration must be a positive safe integer')
   }
-  const tracks: ClipAnimation['tracks'] = []
-  for (const track of animation.tracks) {
+  const retimeTracks = <T extends ClipAnimation['tracks'][number] | NonNullable<ClipAnimation['effectTracks']>[number]>(
+    sourceTracks: readonly T[],
+  ): T[] | null => {
+    const tracks: T[] = []
+    for (const track of sourceTracks) {
     const remapped = new Map<number, typeof track.keyframes[number]>()
     for (const keyframe of track.keyframes) {
       let sourceTicks: number
@@ -888,12 +902,16 @@ export function retimeClipAnimation(
         easing: { ...keyframe.easing },
       })
     }
-    tracks.push({
-      property: track.property,
+      tracks.push({
+      ...track,
       keyframes: [...remapped.values()].sort((left, right) => left.frame - right.frame),
     })
+    }
+    return tracks
   }
-  return { tracks }
+  const tracks = retimeTracks(animation.tracks)
+  const effectTracks = retimeTracks(animation.effectTracks ?? [])
+  return tracks && effectTracks ? { tracks, effectTracks } : null
 }
 
 export type SourceTimeAudioPolicy =

@@ -372,6 +372,83 @@ describe('portable project file', () => {
     }
   })
 
+  test('migrates schema-12 clips with omitted animation to canonical effect tracks', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 12
+    for (const clip of legacy.document.tracks.flatMap((track) => track.clips)) {
+      Reflect.deleteProperty(clip, 'animation')
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(13)
+    expect(parsed.document.tracks.flatMap((track) => track.clips).map((clip) => clip.animation))
+      .toEqual(parsed.document.tracks.flatMap((track) => track.clips).map(() => ({
+        tracks: [],
+        effectTracks: [],
+      })))
+  })
+
+  test('requires bounded effect tracks in current saves while retaining dangling intent', () => {
+    const current = makeProject()
+    current.document.tracks[0].clips[0].animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: 'future-effect',
+        parameter: 'future-scalar',
+        keyframes: [{
+          frame: 0,
+          sourceTimeTicks: 5_000_000,
+          value: 42,
+          easing: { type: 'linear' },
+        }],
+      }],
+    }
+    const parsed = parseProjectFile(serializeProjectFile(current))
+    expect(parsed.document.tracks[0].clips[0].animation?.effectTracks)
+      .toEqual(current.document.tracks[0].clips[0].animation.effectTracks)
+
+    const missing = clone(current)
+    Reflect.deleteProperty(missing.document.tracks[0].clips[0].animation!, 'effectTracks')
+    expect(() => validateProjectFile(missing)).toThrow(/missing field effectTracks/)
+
+    const overlong = clone(current)
+    overlong.document.tracks[0].clips[0].animation!.effectTracks![0].parameter = 'x'.repeat(
+      PROJECT_FILE_LIMITS.maxNameCharacters + 1,
+    )
+    expect(() => validateProjectFile(overlong)).toThrow(/exceeds/)
+  })
+
+  test('counts effect keyframes against the global portable-project budget', () => {
+    const current = makeProject()
+    const fullTrackCount = Math.floor(PROJECT_FILE_LIMITS.maxTotalKeyframes / 1_024)
+    const remainingKeyframes = PROJECT_FILE_LIMITS.maxTotalKeyframes
+      - (fullTrackCount * 1_024)
+      + 1
+    current.document.tracks[0].clips[0].animation = {
+      tracks: [],
+      effectTracks: Array.from(
+        { length: fullTrackCount + 1 },
+        (_unused, trackIndex) => ({
+          effectId: 'future-effect',
+          parameter: `future-scalar-${trackIndex}`,
+          keyframes: Array.from(
+            { length: trackIndex === fullTrackCount ? remainingKeyframes : 1_024 },
+            (_keyframe, frame) => ({
+              frame,
+              sourceTimeTicks: frame * 1_000_000,
+              value: frame,
+              easing: { type: 'linear' as const },
+            }),
+          ),
+        }),
+      ),
+    }
+
+    expect(() => validateProjectFile(current))
+      .toThrow(`exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`)
+  })
+
   test('round-trips a deterministic piecewise speed curve exactly', () => {
     const project = makeProject()
     const retimed = project.document.tracks[0].clips[1]
@@ -687,6 +764,7 @@ describe('portable project file', () => {
   test('round-trips keyframes and custom easing without changing order or precision', () => {
     const original = makeProject()
     original.document.tracks[0].clips[0].animation = {
+      effectTracks: [],
       tracks: [
         {
           property: 'position-x',
@@ -740,13 +818,14 @@ describe('portable project file', () => {
 
     expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(parsed.document.tracks.flatMap((track) => track.clips)
-      .every((item) => JSON.stringify(item.animation) === '{"tracks":[]}'))
+      .every((item) => JSON.stringify(item.animation) === '{"tracks":[],"effectTracks":[]}'))
       .toBe(true)
   })
 
   test('rejects non-canonical duplicate times and invalid easing control points', () => {
     const duplicate = makeProject()
     duplicate.document.tracks[0].clips[0].animation = {
+      effectTracks: [],
       tracks: [{
         property: 'position-x',
         keyframes: [
@@ -757,6 +836,7 @@ describe('portable project file', () => {
     }
     const badEasing = makeProject()
     badEasing.document.tracks[0].clips[0].animation = {
+      effectTracks: [],
       tracks: [{
         property: 'position-x',
         keyframes: [{
@@ -775,6 +855,7 @@ describe('portable project file', () => {
   test('requires bounded durable source-time intent on current keyframes', () => {
     const missing = makeProject()
     missing.document.tracks[0].clips[0].animation = {
+      effectTracks: [],
       tracks: [{
         property: 'opacity',
         keyframes: [{ frame: 0, value: 0.5, easing: { type: 'linear' } }],

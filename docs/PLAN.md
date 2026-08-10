@@ -3112,3 +3112,42 @@ acceptance claims.
   baseline failure for the undersized audio-overload reset target as separate
   work; Docker image execution remains unverified because the local Linux
   daemon was not running.
+
+## Milestone 4 issue #73 - masks and chroma key
+
+**COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Add bounded rectangle, ellipse, and normalized cubic-Bezier mask
+  descriptors with project-space clipping, alpha, feather, invert, enable, and
+  exact authored ordering after crop/transform and before opacity/compositing.
+- [x] Add a safe-default chroma-key descriptor with explicit key color,
+  tolerance, softness, and spill suppression in the same executable pixel chain
+  as color and mask effects.
+- [x] Introduce schema-13 `ClipAnimation.effectTracks`, stable effect-id
+  addressing, evaluator/budget rules, and source-time/retime/split/trim/remint/
+  duplicate behavior; prune tracks atomically on remove/reset and preserve
+  unknown authoring intent deterministically.
+- [x] Migrate schema 12 by identity, including clips whose animation was omitted;
+  require canonical current `effectTracks` and keep intentional legacy fixtures.
+  Mechanically update only 66 current-document schema literals across 48 tests.
+- [x] Preserve byte behavior for no-effect and eligible filter-only paths while
+  sharing exact pixel execution, opacity order, and fallback semantics across
+  Program Monitor, transitions, text, and export.
+- [x] Add accessible ordered Inspector editing and effect-key controls, including
+  synchronized rejected Bezier drafts and static text-effect editing. Deliberately
+  leave direct mask gestures and text effect animation outside this slice rather
+  than add an unbounded or misleading interaction.
+- [x] Pass 293 final-tree focused tests, the explicit 81-test budget/migration
+  subset, all 2,260 Vitest cases across 163 files plus 16 benchmark checks,
+  build/typecheck,
+  oxlint, and the production dependency audit at 0 vulnerabilities.
+- [x] Verify real Chrome at `http://localhost:5181/` using only strict port 5181:
+  local fixture import/drop, three ready effects, frame-0/frame-35 mask geometry,
+  transformed/cropped project-space behavior, reorder undo/redo, bypass, rejected
+  Bezier draft recovery, reload/recovery/offline restore/relink persistence, and
+  no console errors; save exact screenshot hashes and release the port. Keep
+  noncommuting stack order, colored-destination transparency, and encoded-export
+  parity claims grounded in deterministic tests rather than browser observation.
+- [x] Publish the exact commit as a draft PR targeting `master` with `Closes
+  #73`; do not merge or manually close the issue, and leave Issue #74's isolated
+  worktree/branch untouched.

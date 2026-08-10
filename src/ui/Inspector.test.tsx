@@ -49,7 +49,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -614,6 +614,80 @@ describe('Inspector', () => {
     })
     await user.click(screen.getAllByRole('button', { name: 'Remove Color adjustment' })[0])
     expect(clipA().effects).toHaveLength(1)
+    uuid.mockRestore()
+  })
+
+  test('edits masks, chroma key, and stable mask keyframes with undo/redo', async () => {
+    const user = userEvent.setup()
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000073')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000074')
+    transport().setSelectedClip('clipA')
+    transport().setPlayheadFrame(10)
+    render(<Inspector />)
+    await user.click(screen.getByRole('tab', { name: 'Effects' }))
+
+    await user.click(screen.getByRole('button', { name: 'Add rectangle mask' }))
+    await user.click(screen.getByRole('button', { name: 'Add chroma key' }))
+    act(() => projectEffectStatuses(true))
+    const [mask, key] = clipA().effects
+    expect(mask.params).toMatchObject({
+      shape: 'rectangle', x: 0, y: 0, width: 1, height: 1, feather: 0, invert: false,
+    })
+    expect(key.params).toEqual({
+      color: '#00ff00', tolerance: 0.08, softness: 0.12, spill: 0.5,
+    })
+
+    await user.selectOptions(
+      screen.getByTestId(`inspector-effect-mask-shape-${mask.id}`),
+      'bezier',
+    )
+    const path = screen.getByTestId(`inspector-effect-mask-path-${mask.id}`)
+    const defaultPath = String(clipA().effects[0].params.path)
+    fireEvent.change(path, { target: { value: 'M 0 0 C nope Z' } })
+    fireEvent.blur(path)
+    expect(path).toHaveValue(defaultPath)
+    const alternatePath = 'M 0 0 C 0 0 1 1 0 0 Z'
+    fireEvent.change(path, { target: { value: alternatePath } })
+    fireEvent.blur(path)
+    expect(clipA().effects[0].params.path).toBe(alternatePath)
+    act(() => doc().undo())
+    expect(screen.getByTestId(`inspector-effect-mask-path-${mask.id}`))
+      .toHaveValue(defaultPath)
+    act(() => doc().redo())
+    expect(screen.getByTestId(`inspector-effect-mask-path-${mask.id}`))
+      .toHaveValue(alternatePath)
+
+    const left = screen.getByTestId(`inspector-effect-mask-x-${mask.id}`)
+    fireEvent.change(left, { target: { value: '25' } })
+    fireEvent.keyDown(left, { key: 'Enter' })
+    expect(clipA().effects[0].params.x).toBe(0.25)
+    await user.click(screen.getByRole('button', { name: 'Animate Left (%)' }))
+    expect(clipA().animation?.effectTracks?.[0]).toMatchObject({
+      effectId: mask.id,
+      parameter: 'x',
+      keyframes: [{ frame: 10, value: 0.25 }],
+    })
+
+    fireEvent.change(screen.getByTestId(`inspector-effect-mask-x-${mask.id}`), {
+      target: { value: '50' },
+    })
+    fireEvent.keyDown(screen.getByTestId(`inspector-effect-mask-x-${mask.id}`), {
+      key: 'Enter',
+    })
+    expect(clipA().effects[0].params.x).toBe(0.25)
+    expect(clipA().animation?.effectTracks?.[0].keyframes[0].value).toBe(0.5)
+    expect(screen.getByRole('list', { name: 'Left (%) keyframes' })).toBeInTheDocument()
+
+    const tolerance = screen.getByTestId(`inspector-effect-key-tolerance-${key.id}`)
+    fireEvent.change(tolerance, { target: { value: '20' } })
+    fireEvent.keyDown(tolerance, { key: 'Enter' })
+    expect(clipA().effects[1].params.tolerance).toBe(0.2)
+
+    act(() => doc().undo())
+    expect(clipA().effects[1].params.tolerance).toBe(0.08)
+    act(() => doc().redo())
+    expect(clipA().effects[1].params.tolerance).toBe(0.2)
     uuid.mockRestore()
   })
 

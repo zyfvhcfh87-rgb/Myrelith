@@ -22,7 +22,11 @@ import {
   pause,
   play,
 } from '../../app/transportController'
-import { defaultClipAnimation } from '../../domain/clipAnimation'
+import {
+  cloneClipAnimation,
+  defaultClipAnimation,
+  remapEffectAnimationIds,
+} from '../../domain/clipAnimation'
 import { estimateDocumentMemory } from '../../domain/documentMemory'
 import {
   defaultClipAudioSettings,
@@ -1289,6 +1293,12 @@ function boundedExportClip(
   const visual = source.visual ?? defaultClipVisualSettings()
   const audio = source.audio ?? defaultClipAudioSettings()
   const animation = source.animation ?? defaultClipAnimation()
+  const effectIdMap = new Map<string, string>()
+  const effects = source.effects.map((effect, index) => {
+    const effectId = `performance-export-effect-${id}-${index + 1}`
+    effectIdMap.set(effect.id, effectId)
+    return { ...effect, id: effectId, params: { ...effect.params } }
+  })
   return {
     ...source,
     id,
@@ -1308,20 +1318,8 @@ function boundedExportClip(
       fadeInFrames: Math.min(audio.fadeInFrames, maximumFadeFrames),
       fadeOutFrames: Math.min(audio.fadeOutFrames, maximumFadeFrames),
     },
-    animation: {
-      tracks: animation.tracks.map((track) => ({
-        ...track,
-        keyframes: track.keyframes.map((keyframe) => ({
-          ...keyframe,
-          easing: { ...keyframe.easing },
-        })),
-      })),
-    },
-    effects: source.effects.map((effect, index) => ({
-      ...effect,
-      id: `performance-export-effect-${id}-${index + 1}`,
-      params: { ...effect.params },
-    })),
+    animation: remapEffectAnimationIds(cloneClipAnimation(animation), effectIdMap),
+    effects,
     ...(source.text === undefined ? {} : { text: { ...source.text } }),
   }
 }
