@@ -69,10 +69,15 @@ import type {
   TrimEdge,
 } from '../domain/operations'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
+import type {
+  DynamicZoomRequest,
+  DynamicZoomSourceDimensions,
+} from '../domain/dynamicZoom'
 import {
   addCrossfade,
   addCrossfadeWithSourceBounds as addExactCrossfade,
   addEffect,
+  applyDynamicZoom,
   addTrack,
   insertClip,
   removeTransition,
@@ -100,6 +105,7 @@ import {
   moveClipKeyframe,
   removeClipKeyframe,
   resetClipAnimationTrack,
+  resetClipFramingAnimation,
   updateTextClip,
 } from '../domain/operations'
 import {
@@ -295,6 +301,14 @@ export interface DocumentState {
     clipId: ClipId,
     property: ClipAnimationProperty,
   ) => void
+  /** Replace Position X/Y and Scale X/Y with one ordinary-keyframe preset. */
+  applyDynamicZoom: (
+    clipId: ClipId,
+    source: DynamicZoomSourceDimensions,
+    request: DynamicZoomRequest,
+  ) => void
+  /** Explicitly remove all four position/scale animation tracks. */
+  resetClipFramingAnimation: (clipId: ClipId) => void
   /** Update one text payload atomically; invalid/unchanged patches add no history. */
   updateTextClip: (clipId: ClipId, patch: TextPropsPatch) => void
   /**
@@ -634,6 +648,18 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     set((state) => commit(
       state,
       resetClipAnimationTrack(state.doc, clipId, property),
+    )),
+
+  applyDynamicZoom: (clipId, source, request) =>
+    set((state) => commit(
+      state,
+      applyDynamicZoom(state.doc, clipId, source, request),
+    )),
+
+  resetClipFramingAnimation: (clipId) =>
+    set((state) => commit(
+      state,
+      resetClipFramingAnimation(state.doc, clipId),
     )),
 
   updateTextClip: (clipId, patch) =>

@@ -47,6 +47,7 @@ import type {
   Transform,
 } from './schema'
 import {
+  ANIMATABLE_CLIP_PROPERTIES,
   clipAnimation,
   clipAnimationKeyframeCount,
   clipAnimationValidationError,
@@ -69,6 +70,12 @@ import {
   upsertAnimationKeyframe,
   upsertEffectAnimationKeyframe,
 } from './clipAnimation'
+import {
+  createDynamicZoomPlan,
+  isDynamicZoomFramingProperty,
+  type DynamicZoomRequest,
+  type DynamicZoomSourceDimensions,
+} from './dynamicZoom'
 import {
   clipAudioSettings,
   clipAudioSettingsValidationError,
@@ -2177,6 +2184,84 @@ export function resetEffectAnimationTrack(
       new Set([parameter]),
     ),
   )
+}
+
+/**
+ * Replace the four ordinary position/scale tracks with one dynamic-zoom plan.
+ * Rotation/opacity and future animation-container fields remain untouched.
+ */
+export function applyDynamicZoom(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  source: DynamicZoomSourceDimensions,
+  request: DynamicZoomRequest,
+): TimelineDoc {
+  const op = 'applyDynamicZoom'
+  const loc = animationEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  const result = createDynamicZoomPlan(doc, loc.clip, source, request)
+  if (!result.ok) return reject(doc, op, result.reason)
+
+  const current = clipAnimation(loc.clip)
+  const retainedTracks = current.tracks.filter(
+    ({ property }) => !isDynamicZoomFramingProperty(property),
+  )
+  const replacedKeyframes = current.tracks
+    .filter(({ property }) => isDynamicZoomFramingProperty(property))
+    .reduce((total, track) => total + track.keyframes.length, 0)
+  const plannedKeyframes = result.plan.tracks.reduce(
+    (total, track) => total + track.keyframes.length,
+    0,
+  )
+  if (!documentAnimationKeyframeGrowthAllowed(
+    doc,
+    Math.max(0, plannedKeyframes - replacedKeyframes),
+  )) return reject(doc, op, 'dynamic zoom would exceed the document keyframe budget')
+  let plannedTracks: typeof result.plan.tracks
+  try {
+    plannedTracks = result.plan.tracks.map((track) => ({
+      property: track.property,
+      keyframes: track.keyframes.map((keyframe) => ({
+        ...keyframe,
+        sourceTimeTicks: sourceTicksAtTimelineOffset(
+          clipSourceTimeMap(loc.clip),
+          keyframe.frame,
+        ),
+      })),
+    }))
+  } catch {
+    return reject(doc, op, 'dynamic zoom keyframe source time exceeds safe integer bounds')
+  }
+  const tracks = [...retainedTracks, ...plannedTracks]
+  tracks.sort(
+    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property)
+      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property),
+  )
+  const animation = { ...current, tracks }
+  const animationError = clipAnimationValidationError(animation)
+  if (animationError) return reject(doc, op, animationError)
+  if (JSON.stringify(animation) === JSON.stringify(current)) return doc
+  return replaceClipAnimation(doc, loc, animation)
+}
+
+/**
+ * Explicitly remove every Position X/Y and Scale X/Y track. With no hidden
+ * preset provenance this also removes later manual edits on those tracks;
+ * rotation, opacity, and static transform values remain unchanged.
+ */
+export function resetClipFramingAnimation(
+  doc: TimelineDoc,
+  clipId: ClipId,
+): TimelineDoc {
+  const op = 'resetClipFramingAnimation'
+  const loc = animationEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  const current = clipAnimation(loc.clip)
+  const tracks = current.tracks.filter(
+    ({ property }) => !isDynamicZoomFramingProperty(property),
+  )
+  if (tracks.length === current.tracks.length) return doc
+  return replaceClipAnimation(doc, loc, { ...current, tracks })
 }
 
 function staticVisualPatchDiffers(

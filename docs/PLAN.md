@@ -3185,3 +3185,44 @@ acceptance claims.
   oxlint, and the production audit with
   0 vulnerabilities. Publish the Aryel-only follow-up commit and verify its exact
   remote SHA and fresh CI on draft PR #107 before handoff.
+
+## Milestone 4 Part 9b / issue #74 - dynamic zoom and reframe presets
+
+**COMPLETE (2026-08-10).**
+
+- [x] Add four bounded, editable framing presets that compile into normal
+  Position X/Y and Scale X/Y keyframes only, with no procedural durable state,
+  second evaluator, or schema bump.
+- [x] Accept editable start/end horizontal and vertical focus, safe zoom,
+  integer-frame duration, and existing easing; support reverse by swapping
+  endpoints and reversing cubic-bezier timing.
+- [x] Use portable descriptor dimensions first, with a connected-asset fallback,
+  and solve full-canvas coverage from project aspect, source size, crop, anchor,
+  and static rotation in compositor transform order.
+- [x] Clamp requested duration to clips of at least two frames; support stills,
+  reject one-frame clips and text with an accessible reason, support static crop
+  and rotation, reject animated Rotation, and leave transition evaluation on the
+  shared ordinary clip resolver.
+- [x] Make Apply, Reverse, and Reset deliberate one-entry history operations.
+  Replace/remove only all four framing properties, preserve static and unrelated
+  curves/container fields, avoid pointer-move document writes, and state Reset's
+  no-hidden-provenance boundary in the UI.
+- [x] Keep the Inspector, monitor, scrub, recovery, and export on
+  `resolveClipAnimationAtFrame`; expose labeled native controls, fieldsets,
+  keyboard tab navigation, a live status, and direct disabled-reason descriptions.
+- [x] Cover safety math, eased interior frames, resolver parity, source-time ticks,
+  persistence, still/text/short/locked/rotation behavior, transitions through the
+  existing composition tests, history/idempotence, descriptor priority, reset,
+  and accessible keyboard/screen-reader UI.
+- [x] Pass the final gate: 2,261 Vitest cases across 166 files plus 16 benchmark-
+  runner cases, build/typecheck, oxlint, clean diff checks, and production audit
+  with 0 vulnerabilities.
+- [x] Verify real headed Chromium only at `http://localhost:5182/` using
+  `npm run dev -- --port 5182 --strictPort`: real still import, keyboard access,
+  200-to-150-frame clamp, exact local frames 0/75/149, Reverse, Reset, undo,
+  720x800 overflow, recovery while offline, relink, and a downloaded 1080x1920
+  H.264 export with 180 frames at 30 fps. Record local artifacts/hashes, confirm
+  zero console warnings/errors, and release port 5182.
+- [x] Publish a draft PR targeting `master` with `Closes #74`; do not merge or
+  manually close the issue. Rebase after #73 only when the milestone coordinator
+  integrates the schema-13 effect-track work.

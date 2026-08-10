@@ -77,6 +77,7 @@ import {
 import EffectStackInspector from './EffectStackInspector'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
+const DynamicZoomEditor = lazy(() => import('./DynamicZoomEditor'))
 
 const BLEND_MODE_LABELS: Readonly<Record<BlendModeName, string>> = {
   normal: 'Normal',
@@ -1470,6 +1471,10 @@ export default function Inspector() {
                   loadingLabel="Loading animation curves…"
                   failureTitle="Animation curves could not load"
                 >
+                  <DynamicZoomEditor
+                    clip={videoClip}
+                    locked={videoLocked}
+                  />
                   <AnimationCurveEditor
                     clip={videoClip}
                     locked={videoLocked}

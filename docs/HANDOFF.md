@@ -2731,6 +2731,70 @@ surface; it is not a second zoom and never enters document history.
   audit or the deployed static bundle. They are separate dependency-maintenance
   work, not hidden inside this six-finding change.
 
+## Milestone 4 Part 9b / issue #74 - dynamic zoom and reframe presets
+
+**IMPLEMENTATION COMPLETE (2026-08-10).**
+
+- `domain/dynamicZoom.ts` is a pure authoring helper, not a second animation
+  engine. Four small presets (gentle in/out and horizontal/vertical reframe)
+  resolve editable start/end focus, safe zoom, duration, and existing easing
+  into exactly two ordinary keyframes on each of Position X/Y and Scale X/Y.
+  Apply replaces only those four properties, Reverse swaps the endpoints and
+  reverses cubic-bezier timing, and Reset deliberately removes every authored
+  curve on those four properties. Rotation, Opacity, crop, static transform,
+  and any other animation-container fields remain untouched.
+- Portable asset descriptors are the primary immutable source of width/height;
+  a connected session asset is an explicit fallback only when descriptor
+  dimensions are unavailable. The bounded framing math combines source size,
+  project aspect, asymmetric crop, authored anchor, and static rotation in the
+  same transform order as the compositor. Requested focus is projected into
+  the feasible full-coverage region at both endpoints; convex interpolation of
+  those safe endpoints retains coverage at interior frames.
+- Stills use their authored timeline duration and are supported. A requested
+  duration longer than a clip clamps to that clip; one-frame clips are rejected
+  because two distinct keys cannot exist. Text is explicitly unavailable because
+  the current ordinary clip-animation contract does not animate text geometry.
+  Static crop and rotation are supported by the safety solver; a Rotation curve
+  is rejected because one static bound cannot guarantee every animated angle.
+  Transitions continue to evaluate the same normal clip animation on each
+  composition leg, so there is no transition-specific preset state.
+- The lazy Animation-tab editor keeps preset drafts local until Apply/Reverse.
+  Every committed apply, reverse, or reset is one normal document-history entry;
+  rejected/idempotent requests do not grow history and pointer movement never
+  mutates the document. Inspector fields, monitor gestures, scrub, recovery, and
+  export therefore stay synchronized through `resolveClipAnimationAtFrame`.
+  Native labels, fieldsets, tab keyboard navigation, live status, and direct
+  Apply/Reverse `aria-describedby` links expose every configuration value and
+  disabled reason to keyboard and screen-reader users.
+- Focused tests cover safe endpoints and eased interior frames across landscape,
+  portrait, square, asymmetric-crop, off-center-anchor, and rotated inputs;
+  normal resolver use at an interior integer frame; source-time ticks; still,
+  text, lock, rotation-animation, and short-clip rules; exact persistence;
+  one-entry undo/redo; reset boundaries; portable-descriptor priority; and the
+  accessible UI. The final gate passed 2,261 Vitest cases across 166 files plus
+  all 16 benchmark-runner cases, production typecheck/build, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities. Vite retained only
+  its existing advisory large-chunk warning.
+- Real headed Chromium used exactly `http://localhost:5182/` via
+  `npm run dev -- --port 5182 --strictPort`. A real 1672x941 still in a
+  1080x1920/30 fps project produced four visible ordinary tracks; a requested
+  200 frames clamped to 150. Exact clip-local frames 0, 75, and 149 showed
+  distinct full-coverage reframes. Reverse swapped the visible Position X
+  endpoint values and timing curve; Reset removed the tracks; Ctrl+Z restored
+  them. A 720x800 pass had no dynamic-panel horizontal overflow. Recovery reload
+  retained exact keys while the source was offline, descriptor dimensions kept
+  the editor ready, relink succeeded, and Chromium exported a 1080x1920 H.264
+  MP4 with 180 decoded frames at 30 fps. Extracted output frames 30, 105, and
+  179 visually retained the recovered reversed reframe. Final console evidence
+  reported 0 warnings and 0 errors; artifacts and hashes are recorded in
+  `output/playwright/issue-74-browser-evidence.txt`; port 5182 was released.
+- Browser QA used one uncropped, unrotated still; the crop/anchor/rotation matrix
+  is covered by pure and composition tests rather than additional browser
+  fixtures. Subject tracking and AI reframing remain intentionally out of scope.
+  No schema version changed. Issue #73 may touch the shared operations/store/
+  Inspector/persistence-test/docs seams during rebase, but this work preserves
+  the full animation container and does not own effect-stack or Effects-tab code.
+
 ## Working agreements (the user's explicit preferences)
 
 - Changes may span every module needed for one complete fix. Keep dependency
