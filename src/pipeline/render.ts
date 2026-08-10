@@ -64,7 +64,9 @@ import { probeCanvasBlendMode } from './blendModeCapabilities'
 import {
   resolveCanvasEffectStack,
   supportsCanvasEffectFilter,
+  supportsCanvasEffectPixels,
 } from '../domain/effectStack'
+import { applyColorCorrectionsToRgba } from '../domain/colorCorrection'
 
 const NORMAL_BLEND_MODE = resolveBlendMode(DEFAULT_BLEND_MODE)
 
@@ -98,6 +100,8 @@ export interface Composite2D {
   globalCompositeOperation: GlobalCompositeOperation
   /** Optional on test fakes; present on modern Canvas2D/OffscreenCanvas contexts. */
   filter?: string
+  getImageData?(sx: number, sy: number, sw: number, sh: number): ImageData
+  putImageData?(imageData: ImageData, dx: number, dy: number): void
   fillStyle: string | CanvasGradient | CanvasPattern
   strokeStyle?: string | CanvasGradient | CanvasPattern
   font?: string
@@ -321,7 +325,19 @@ export async function compositeFrame(
         continue
       }
       try {
-        drawClip(ctx, doc, request, image, item.blendMode)
+        if (requiresPixelColorCorrection(ctx, clip)) {
+          compositePixelCorrectedMediaLayer(
+            doc,
+            ctx,
+            transitionSurfaceProvider,
+            request,
+            image,
+            item.blendMode,
+            presentationScale,
+          )
+        } else {
+          drawClip(ctx, doc, request, image, item.blendMode)
+        }
         drawn.push(clip.id)
       } catch (e) {
         // e.g. the bitmap was closed under us — record and keep compositing.
@@ -532,8 +548,25 @@ function compositeTransitionGroup(
       try {
         inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
           clearSurface(surfaces.leg.ctx, doc)
-          drawClip(surfaces.leg.ctx, doc, request, image, NORMAL_BLEND_MODE)
+          const pixelCorrection = requiresPixelColorCorrection(
+            surfaces.leg.ctx,
+            request.clip,
+          )
+          drawClip(
+            surfaces.leg.ctx,
+            doc,
+            request,
+            image,
+            NORMAL_BLEND_MODE,
+            !pixelCorrection,
+          )
         })
+        applyPixelColorCorrectionToSurface(
+          surfaces.leg.ctx,
+          request.clip,
+          surfaceWidth,
+          surfaceHeight,
+        )
 
         inPresentationSpace(surfaces.group.ctx, presentationScale, () => {
           surfaces.group.ctx.globalAlpha = request.weight
@@ -638,6 +671,7 @@ function drawClip(
   request: VideoFrameRequest,
   image: RenderFrameSource,
   blendMode: BlendModeResolution,
+  applyEffects = true,
 ): void {
   const clip: Clip = request.clip
   const t = clip.transform
@@ -655,7 +689,7 @@ function drawClip(
   try {
     ctx.globalAlpha = request.opacity
     applyCanvasBlendMode(ctx, blendMode)
-    applyCanvasEffectStack(ctx, clip)
+    if (applyEffects) applyCanvasEffectStack(ctx, clip)
     ctx.translate(canvasX, canvasY)
     ctx.rotate((t.rotation * Math.PI) / 180)
     ctx.scale(
@@ -684,6 +718,59 @@ function drawClip(
     }
   } finally {
     ctx.restore()
+  }
+}
+
+function compositePixelCorrectedMediaLayer(
+  doc: TimelineDoc,
+  destination: Composite2D,
+  surfaceProvider: TransitionSurfaceProvider,
+  request: VideoFrameRequest,
+  image: RenderFrameSource,
+  blendMode: BlendModeResolution,
+  presentationScale: { readonly x: number; readonly y: number },
+): void {
+  const surfaces = surfaceProvider.get()
+  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
+  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
+  try {
+    inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
+      clearSurface(surfaces.leg.ctx, doc)
+      drawClip(
+        surfaces.leg.ctx,
+        doc,
+        request,
+        image,
+        NORMAL_BLEND_MODE,
+        false,
+      )
+    })
+    applyPixelColorCorrectionToSurface(
+      surfaces.leg.ctx,
+      request.clip,
+      surfaceWidth,
+      surfaceHeight,
+    )
+    destination.save()
+    try {
+      destination.globalAlpha = 1
+      applyCanvasBlendMode(destination, blendMode)
+      destination.drawImage(
+        surfaces.leg.canvas,
+        0,
+        0,
+        surfaceWidth,
+        surfaceHeight,
+        0,
+        0,
+        doc.width,
+        doc.height,
+      )
+    } finally {
+      destination.restore()
+    }
+  } finally {
+    releaseSurfacePixels(surfaces.leg.ctx, doc, presentationScale)
   }
 }
 
@@ -719,6 +806,16 @@ function compositeTextLayer(
       drawTextClip(surfaces.leg.ctx, doc, clip, 1, NORMAL_BLEND_MODE)
     })
 
+    const pixelCorrection = requiresPixelColorCorrection(surfaces.leg.ctx, clip)
+    if (pixelCorrection) {
+      applyPixelColorCorrectionToSurface(
+        surfaces.leg.ctx,
+        clip,
+        surfaceWidth,
+        surfaceHeight,
+      )
+    }
+
     destination.save()
     try {
       destination.globalAlpha = opacity
@@ -726,7 +823,7 @@ function compositeTextLayer(
       // Filter the completed transparent text layer once. Applying filters
       // while painting its background/stroke/fill primitives changes their
       // overlap semantics and compounds the authored stack.
-      applyCanvasEffectStack(destination, clip)
+      if (!pixelCorrection) applyCanvasEffectStack(destination, clip)
       destination.drawImage(
         surfaces.leg.canvas,
         0,
@@ -761,6 +858,42 @@ function applyCanvasBlendMode(
  */
 function applyCanvasEffectStack(ctx: Composite2D, clip: Clip): void {
   const supportsCanvasFilter = supportsCanvasEffectFilter(ctx)
-  const resolution = resolveCanvasEffectStack(clip.effects, supportsCanvasFilter)
+  const resolution = resolveCanvasEffectStack(
+    clip.effects,
+    supportsCanvasFilter,
+    supportsCanvasEffectPixels(ctx),
+  )
   if (resolution.filter !== null && supportsCanvasFilter) ctx.filter = resolution.filter
+}
+
+function requiresPixelColorCorrection(ctx: Composite2D, clip: Clip): boolean {
+  return resolveCanvasEffectStack(
+    clip.effects,
+    supportsCanvasEffectFilter(ctx),
+    supportsCanvasEffectPixels(ctx),
+  ).pixelCorrections.length > 0
+}
+
+function applyPixelColorCorrectionToSurface(
+  ctx: Composite2D,
+  clip: Clip,
+  width: number,
+  height: number,
+): void {
+  const resolution = resolveCanvasEffectStack(
+    clip.effects,
+    supportsCanvasEffectFilter(ctx),
+    supportsCanvasEffectPixels(ctx),
+  )
+  if (resolution.pixelCorrections.length === 0) return
+  if (
+    !supportsCanvasEffectPixels(ctx)
+    || !ctx.getImageData
+    || !ctx.putImageData
+  ) {
+    throw new Error('Canvas pixel access became unavailable during color correction')
+  }
+  const imageData = ctx.getImageData(0, 0, width, height)
+  applyColorCorrectionsToRgba(imageData.data, resolution.pixelCorrections)
+  ctx.putImageData(imageData, 0, 0)
 }

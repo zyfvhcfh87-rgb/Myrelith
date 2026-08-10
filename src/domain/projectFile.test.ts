@@ -440,6 +440,8 @@ describe('portable project file', () => {
           exposure: 1,
           contrast: 0,
           saturation: 0,
+          temperature: 0,
+          tint: 0,
           futureKnob: 'keep-owned-extra',
         },
       },
@@ -475,6 +477,21 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(serializeProjectFile(original))
     expect(parsed.document.tracks[0].clips[0].effects).toEqual(effects)
+  })
+
+  test('keeps existing version-1 color descriptors valid without inventing new fields', () => {
+    const original = makeProject()
+    const existing: EffectDescriptor = {
+      id: 'effect-existing-color',
+      type: COLOR_ADJUST_EFFECT_TYPE,
+      version: COLOR_ADJUST_EFFECT_VERSION,
+      enabled: true,
+      params: { exposure: 0.5, contrast: -0.2, saturation: 0.1 },
+    }
+    original.document.tracks[0].clips[0].effects = [existing]
+
+    const parsed = parseProjectFile(serializeProjectFile(original))
+    expect(parsed.document.tracks[0].clips[0].effects).toEqual([existing])
   })
 
   test('every accepted exact-limit live effect edit remains serializable', () => {

@@ -118,6 +118,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #69 — constant-speed retiming** | ✅ implementation complete | schema-11 exact rational `SourceTimeMap` after the schema-10 effect stack; deterministic linked trim/split/move/transition/keyframe/thumbnail/seek/composition behavior; shared preview/export audio-mute and output-resource policy outside exact 1×; accessible Inspector timing controls; complete automated gates and clean in-app Chromium QA on exclusive port 41869 |
 | **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
 | **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
+| **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -2576,6 +2577,66 @@ surface; it is not a second zoom and never enters document history.
 - Delivery is a ready PR targeting `master` with `Closes #70`. The milestone
   coordinator owns the requested #45, then #69, then #70 rebase/squash-merge
   sequence; this branch does not merge or close the issue itself.
+
+## Post-MVP issue #71 - basic color correction and video scopes
+
+**IMPLEMENTATION COMPLETE (2026-08-10).**
+
+- `builtin.color-adjust` remains the stable version-1 descriptor. Newly authored
+  effects store bounded exposure, contrast, saturation, temperature, and tint;
+  older version-1 descriptors that omit temperature/tint still resolve those
+  fields to zero without rewriting unknown authoring intent. Add, enabled/bypass,
+  move, reset, remove, persistence, recovery, and undo/redo continue through the
+  existing effect-stack and document-history contracts. No preset was added: five
+  neutral defaults plus one reset action are the complete basic-correction UX.
+- Pixel correction is display-referred, unpremultiplied 8-bit sRGB ImageData.
+  Alpha is copied byte-for-byte; transparent RGB is still transformed, each
+  descriptor clamps before the next descriptor, and final channels round to the
+  nearest byte. Exposure, contrast, Rec.709-luma saturation, temperature red/blue
+  gains, and tint magenta/green gains run in documented stack order. The existing
+  Canvas filter path remains for exposure/contrast/saturation-only stacks; any
+  ready temperature/tint request moves the complete ready color stack to the
+  exact pixel path so ordering cannot drift.
+- The shared compositor applies correction to complete isolated media/still,
+  crossfade-leg, and text layers before opacity and blend composition. Preview and
+  export call that same compositor and capability contract. A missing pixel-access
+  capability produces an honest effect status instead of silently approximating
+  temperature/tint.
+- Video scopes analyze only the completed presented frame. The render worker
+  downsamples to a fixed 160x90 sample, allows at most one pending analysis at a
+  four-Hz maximum, and sends it to a dedicated analysis worker. Generation guards
+  reject stale work; disable, document replacement, and close terminate pending
+  analysis and release the sampling canvas. Histogram, waveform, and vectorscope
+  use bounded fixed-size arrays, ignore fully transparent pixels, and treat partial
+  alpha as displayed over black.
+- The Program Monitor exposes a session-only Scopes toggle and accessible ARIA
+  tablist with roving keyboard focus. Histogram, waveform, and vectorscope canvases
+  include live status text; unsupported pixel readback is reported explicitly.
+  The Inspector exposes labeled range/number pairs for all five parameters plus
+  the existing enable, order, reset, and remove controls.
+- Focused development validation passed 496 tests before the final additions. The
+  final gate passed all 2,224 Vitest cases across 162 files plus all 16 benchmark-
+  runner cases, production build/typecheck, oxlint, and the production high audit
+  at 0 vulnerabilities. Vite emitted `video-scopes.worker-C8a-Vnob.js` separately;
+  its only build diagnostic was the existing advisory large-chunk warning.
+- Real Chromium used only
+  `npm run dev -- --host 127.0.0.1 --port 41871 --strictPort`. A 1280x720 text
+  fixture exercised two ordered color descriptors, all five parameters, ready
+  status, reorder (`0.75`, `-0.5` -> `-0.5`, `0.75` after moving the second
+  descriptor), bypass/re-enable, five-field reset,
+  recovery reload, and scope disable/restart. Keyboard ArrowRight selected
+  waveform then vectorscope; scopes reported 14,400 samples and advanced from
+  frame 2 to frame 41 during playback. Browser warning/error logs were empty,
+  screenshots were captured under `.tmp/issue-71-browser`, and port 41871 was
+  released. After the exact-identity review correction, a fresh exact-source
+  Chromium recovery smoke again showed both effects `READY`, the first descriptor
+  at five zero defaults, a 14,400-sample histogram at frame 0, and no browser
+  warnings/errors. Its screenshot is
+  `.tmp/issue-71-browser-final/exact-head-recovery-scopes.png` with SHA-256
+  `70c7b377961719f26e7d03f01969868169d4dd05a39e0e259865b26f008aa4a7`;
+  strict port 41871 was released again.
+- Delivery is a ready PR targeting `master` with `Closes #71`. This branch does
+  not merge or close the issue and does not modify Issue #72's branch/worktree.
 
 ## Security hardening - six audit findings (2026-08-10)
 

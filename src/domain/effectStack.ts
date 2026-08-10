@@ -1,31 +1,42 @@
 /** Pure effect descriptor registry, validation, migration, and evaluation. */
 
 import type { EffectDescriptor, EffectParamValue } from './schema'
+import type { ColorCorrectionParameters } from './colorCorrection'
 
 export const COLOR_ADJUST_EFFECT_TYPE = 'builtin.color-adjust' as const
 export const COLOR_ADJUST_EFFECT_VERSION = 1 as const
 export const LEGACY_UNVERSIONED_EFFECT_VERSION = 0 as const
 export const CANVAS_FILTER_EFFECT_CAPABILITY = 'canvas2d-filter' as const
+export const CANVAS_PIXEL_EFFECT_CAPABILITY = 'canvas2d-pixel-access' as const
 
-export interface ColorAdjustParams extends Record<string, EffectParamValue> {
+export interface ColorAdjustParams
+  extends Record<string, EffectParamValue>, ColorCorrectionParameters {
   exposure: number
   contrast: number
   saturation: number
+  temperature: number
+  tint: number
 }
 
 export const DEFAULT_COLOR_ADJUST_PARAMS: Readonly<ColorAdjustParams> = Object.freeze({
   exposure: 0,
   contrast: 0,
   saturation: 0,
+  temperature: 0,
+  tint: 0,
 })
 
 export const COLOR_ADJUST_LIMITS = Object.freeze({
   exposure: Object.freeze({ min: -4, max: 4, step: 0.1 }),
   contrast: Object.freeze({ min: -1, max: 1, step: 0.01 }),
   saturation: Object.freeze({ min: -1, max: 1, step: 0.01 }),
+  temperature: Object.freeze({ min: -1, max: 1, step: 0.01 }),
+  tint: Object.freeze({ min: -1, max: 1, step: 0.01 }),
 })
 
-export type EffectCapability = typeof CANVAS_FILTER_EFFECT_CAPABILITY
+export type EffectCapability =
+  | typeof CANVAS_FILTER_EFFECT_CAPABILITY
+  | typeof CANVAS_PIXEL_EFFECT_CAPABILITY
 
 /** Structural probe shared by the compositor and worker capability report. */
 export function supportsCanvasEffectFilter(
@@ -34,11 +45,18 @@ export function supportsCanvasEffectFilter(
   return typeof surface.filter === 'string'
 }
 
+export function supportsCanvasEffectPixels(
+  surface: { readonly getImageData?: unknown; readonly putImageData?: unknown },
+): boolean {
+  return typeof surface.getImageData === 'function'
+    && typeof surface.putImageData === 'function'
+}
+
 export interface EffectRegistration {
   readonly type: string
   readonly version: number
   readonly label: string
-  readonly capabilities: readonly EffectCapability[]
+  readonly capabilities: (effect: EffectDescriptor) => readonly EffectCapability[]
   readonly defaultParams: Readonly<Record<string, EffectParamValue>>
   readonly validateParams: (params: Readonly<Record<string, EffectParamValue>>) => string | null
   readonly migrateLegacy: (effect: EffectDescriptor) => EffectDescriptor | null
@@ -49,7 +67,7 @@ const COLOR_ADJUST_REGISTRATION: EffectRegistration = Object.freeze({
   type: COLOR_ADJUST_EFFECT_TYPE,
   version: COLOR_ADJUST_EFFECT_VERSION,
   label: 'Color adjustment',
-  capabilities: Object.freeze([CANVAS_FILTER_EFFECT_CAPABILITY]),
+  capabilities: colorAdjustCapabilities,
   defaultParams: DEFAULT_COLOR_ADJUST_PARAMS,
   validateParams: validateColorAdjustParams,
   migrateLegacy: migrateLegacyColorAdjust,
@@ -86,6 +104,41 @@ function finiteInRange(value: EffectParamValue | undefined, min: number, max: nu
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
 }
 
+function optionalFiniteInRange(
+  value: EffectParamValue | undefined,
+  min: number,
+  max: number,
+): boolean {
+  return value === undefined || finiteInRange(value, min, max)
+}
+
+export function colorAdjustParams(effect: EffectDescriptor): ColorAdjustParams {
+  return {
+    exposure: effect.params.exposure as number,
+    contrast: effect.params.contrast as number,
+    saturation: effect.params.saturation as number,
+    temperature: (effect.params.temperature as number | undefined) ?? 0,
+    tint: (effect.params.tint as number | undefined) ?? 0,
+  }
+}
+
+function colorAdjustIsIdentity(effect: EffectDescriptor): boolean {
+  const params = colorAdjustParams(effect)
+  return params.exposure === 0
+    && params.contrast === 0
+    && params.saturation === 0
+    && params.temperature === 0
+    && params.tint === 0
+}
+
+function colorAdjustCapabilities(effect: EffectDescriptor): readonly EffectCapability[] {
+  if (colorAdjustIsIdentity(effect)) return []
+  const params = colorAdjustParams(effect)
+  return params.temperature === 0 && params.tint === 0
+    ? [CANVAS_FILTER_EFFECT_CAPABILITY]
+    : [CANVAS_PIXEL_EFFECT_CAPABILITY]
+}
+
 /** Validate registered semantics without rejecting opaque unknown descriptors. */
 function validateColorAdjustParams(
   params: Readonly<Record<string, EffectParamValue>>,
@@ -110,6 +163,20 @@ function validateColorAdjustParams(
     COLOR_ADJUST_LIMITS.saturation.max,
   )) {
     return `saturation must be between ${COLOR_ADJUST_LIMITS.saturation.min} and ${COLOR_ADJUST_LIMITS.saturation.max}`
+  }
+  if (!optionalFiniteInRange(
+    params.temperature,
+    COLOR_ADJUST_LIMITS.temperature.min,
+    COLOR_ADJUST_LIMITS.temperature.max,
+  )) {
+    return `temperature must be between ${COLOR_ADJUST_LIMITS.temperature.min} and ${COLOR_ADJUST_LIMITS.temperature.max}`
+  }
+  if (!optionalFiniteInRange(
+    params.tint,
+    COLOR_ADJUST_LIMITS.tint.min,
+    COLOR_ADJUST_LIMITS.tint.max,
+  )) {
+    return `tint must be between ${COLOR_ADJUST_LIMITS.tint.min} and ${COLOR_ADJUST_LIMITS.tint.max}`
   }
   return null
 }
@@ -201,7 +268,7 @@ export function resolveEffectStack(
         canvasFilter: null,
       }
     }
-    const missingCapability = registration.capabilities.find((capability) =>
+    const missingCapability = registration.capabilities(effect).find((capability) =>
       !capabilities.has(capability),
     )
     if (missingCapability) {
@@ -234,6 +301,7 @@ export function resolveEffectStack(
 
 export interface CanvasEffectStackResolution {
   readonly filter: string | null
+  readonly pixelCorrections: readonly ColorCorrectionParameters[]
   readonly effects: readonly EffectResolution[]
 }
 
@@ -241,15 +309,39 @@ export interface CanvasEffectStackResolution {
 export function resolveCanvasEffectStack(
   effects: readonly EffectDescriptor[],
   supportsCanvasFilter: boolean,
+  supportsPixelAccess = false,
 ): CanvasEffectStackResolution {
   const capabilities = new Set<EffectCapability>()
   if (supportsCanvasFilter) capabilities.add(CANVAS_FILTER_EFFECT_CAPABILITY)
+  if (supportsPixelAccess) capabilities.add(CANVAS_PIXEL_EFFECT_CAPABILITY)
   const resolutions = resolveEffectStack(effects, capabilities)
+  const usePixelPath = resolutions.some((resolution) => (
+    resolution.status === 'ready'
+    && resolution.effect.type === COLOR_ADJUST_EFFECT_TYPE
+    && colorAdjustCapabilities(resolution.effect).includes(CANVAS_PIXEL_EFFECT_CAPABILITY)
+  ))
+  const pixelCorrections = usePixelPath
+    ? resolutions.flatMap((resolution) => (
+        resolution.status === 'ready'
+        && resolution.effect.type === COLOR_ADJUST_EFFECT_TYPE
+        && !colorAdjustIsIdentity(resolution.effect)
+          ? [colorAdjustParams(resolution.effect)]
+          : []
+      ))
+    : []
   const filters = resolutions.flatMap((resolution) =>
-    resolution.canvasFilter === null ? [] : [resolution.canvasFilter],
+    usePixelPath
+    || resolution.canvasFilter === null
+    || (
+      resolution.effect.type === COLOR_ADJUST_EFFECT_TYPE
+      && colorAdjustIsIdentity(resolution.effect)
+    )
+      ? []
+      : [resolution.canvasFilter],
   )
   return {
     filter: filters.length === 0 ? null : filters.join(' '),
+    pixelCorrections,
     effects: resolutions,
   }
 }

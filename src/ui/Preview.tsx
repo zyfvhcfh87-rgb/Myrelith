@@ -10,14 +10,20 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { initPreview, setPreviewViewport } from '../app/previewController'
+import {
+  initPreview,
+  setPreviewViewport,
+  setVideoScopesEnabled,
+} from '../app/previewController'
 import type { PresentationQualityMode } from '../domain/presentationProfile'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useProxyStore } from '../state/proxyStore'
+import { useVideoScopesStore } from '../state/videoScopesStore'
 import TextOverlayControls from './TextOverlayControls'
+import VideoScopesPanel from './VideoScopesPanel'
 import VisualOverlayControls from './VisualOverlayControls'
 
 export default function Preview() {
@@ -27,6 +33,8 @@ export default function Preview() {
   const docHeight = useDocumentStore((state) => state.doc.height)
   const qualityMode = usePreviewQualityStore((state) => state.qualityMode)
   const setQualityMode = usePreviewQualityStore((state) => state.setQualityMode)
+  const scopesEnabled = useVideoScopesStore((state) => state.enabled)
+  const scopesSupported = useVideoScopesStore((state) => state.rendererSupported)
   const hasTextOverlay = useDocumentStore((state) =>
     state.doc.tracks.some((track) => track.clips.some((clip) => clip.text !== undefined)),
   )
@@ -117,6 +125,15 @@ export default function Preview() {
 
   return (
     <div className="preview-panel" ref={panelRef}>
+      <button
+        type="button"
+        className="preview-scopes-toggle"
+        aria-pressed={scopesEnabled}
+        disabled={!scopesEnabled && scopesSupported === false}
+        onClick={() => setVideoScopesEnabled(!scopesEnabled)}
+      >
+        {scopesSupported === false ? 'Scopes unavailable' : 'Scopes'}
+      </button>
       <label className="preview-quality-control">
         <span>Quality</span>
         <select
@@ -139,6 +156,7 @@ export default function Preview() {
       />
       <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
       <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+      {scopesEnabled ? <VideoScopesPanel /> : null}
       {offlineVisualAssetIds.length > 0 ? (
         <div className="preview-hint preview-hint-offline" role="status">
           <strong>Source offline</strong>

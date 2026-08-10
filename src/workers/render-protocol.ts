@@ -31,6 +31,7 @@ import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PresentationProfile } from '../domain/presentationProfile'
+import type { VideoScopeAnalysis } from '../domain/videoScopes'
 import type {
   LegacyCompositeMessage,
   LegacyConfigureAssetMessage,
@@ -53,6 +54,7 @@ export type RenderMode = 'playback' | 'seek'
 /** Actual session capabilities of the preview worker's compositor context. */
 export interface RenderWorkerCapabilities {
   readonly canvasFilter: boolean
+  readonly canvasPixelAccess: boolean
 }
 
 /**
@@ -226,6 +228,12 @@ export type ToRenderWorker =
       enabled: boolean
     }
   | {
+      /** Enable or release the bounded 4 Hz post-composite scope sampler. */
+      type: 'setVideoScopes'
+      enabled: boolean
+      generation: number
+    }
+  | {
       /** Capture gauges and opt-in counters without changing render state. */
       type: 'requestRuntimeTelemetry'
       requestId: number
@@ -253,6 +261,13 @@ export type FromRenderWorker =
       type: 'runtimeTelemetry'
       requestId: number
       snapshot: RenderWorkerRuntimeTelemetrySnapshot
+    }
+  | {
+      type: 'videoScopes'
+      generation: number
+      frame: number
+      analyzedAt: number
+      analysis: VideoScopeAnalysis
     }
   | {
       /** A render finished (exactly one per renderFrame/legacy composite). */

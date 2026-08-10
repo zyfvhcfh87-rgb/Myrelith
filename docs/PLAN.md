@@ -3002,6 +3002,44 @@ full production benchmark completed with clean console/resource restoration;
 its repository-wide proposed thresholds remain advisory rather than Issue #70
 acceptance claims.
 
+## Post-MVP issue #71 - basic color correction and video scopes
+
+**IMPLEMENTATION COMPLETE (2026-08-10).**
+
+- [x] Extend the stable version-1 built-in color descriptor compatibly with
+  bounded temperature and tint while retaining exposure, contrast, saturation,
+  old-descriptor defaults, unknown preservation, persistence, recovery, and one-
+  entry history operations.
+- [x] Specify and test the exact pixel contract: display-referred unpremultiplied
+  8-bit sRGB, byte-identical alpha, transparent-RGB transformation, float64
+  intermediates, per-descriptor clamp, final nearest-byte rounding, and authored
+  stack order.
+- [x] Apply the same correction implementation in shared preview/export
+  composition for media, stills, crossfade legs, and procedural text before
+  opacity/blending, with an explicit pixel-readback capability fallback.
+- [x] Add fixed-resource histogram, waveform, and vectorscope analysis in a
+  dedicated worker behind a one-pending/four-Hz render-worker sampler with
+  generation guards and disable/replacement/close cleanup.
+- [x] Add accessible Inspector enable/bypass/order/reset/remove plus labeled five-
+  parameter controls, and a session-only Program Monitor scope toggle with ARIA
+  tabs, Arrow-key navigation, status copy, and unsupported-capability feedback.
+- [x] Cover neutral identity, SDR fixture values, full/partial transparency,
+  still/text/crossfade composition, preview/export agreement, legacy version-1
+  omission, save/recovery/history, scope math, cadence, stale work, and resource
+  cleanup.
+- [x] Pass the full gate: 2,224 Vitest cases across 162 files plus 16 benchmark-
+  runner cases, production build/typecheck, oxlint, production high audit with 0
+  vulnerabilities, and clean diff/source evidence.
+- [x] Verify real Chromium only at
+  `http://127.0.0.1:41871/` using `--host 127.0.0.1 --port 41871 --strictPort`:
+  two ready color descriptors, all five values, order/bypass/reset/recovery,
+  keyboard-selected histogram/waveform/vectorscope, 14,400-sample analysis
+  advancing from frame 2 to frame 41 during playback, disable/restart cleanup,
+  zero browser warnings/errors, screenshot evidence, and released port.
+- [x] Publish the exact commit as a ready PR targeting `master` with
+  `Closes #71`; do not merge, close the issue manually, or touch Issue #72's
+  isolated worktree/branch.
+
 ## Security hardening - six audit findings
 
 **COMPLETE LOCALLY (2026-08-10).**

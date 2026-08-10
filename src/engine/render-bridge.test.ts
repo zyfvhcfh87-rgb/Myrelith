@@ -17,6 +17,7 @@ import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, FrameRate, TimelineDoc, Track } from '../domain/schema'
 import { resolvePresentationProfile } from '../domain/presentationProfile'
 import { defaultTextProps } from '../domain/textOverlay'
+import { analyzeVideoScopes } from '../domain/videoScopes'
 import type { ChunkPayload } from '../workers/decode-protocol'
 import type {
   FromRenderWorker,
@@ -279,11 +280,37 @@ describe('preview renderer capability routing', () => {
 
     worker.emit({
       type: 'rendererCapabilities',
-      capabilities: { canvasFilter: false },
+      capabilities: { canvasFilter: false, canvasPixelAccess: true },
     })
 
     expect(listener).toHaveBeenCalledOnce()
-    expect(listener).toHaveBeenCalledWith({ canvasFilter: false })
+    expect(listener).toHaveBeenCalledWith({ canvasFilter: false, canvasPixelAccess: true })
+  })
+
+  test('forwards scope configuration and analysis without touching render requests', () => {
+    const { worker, bridge } = makeBridge()
+    const listener = vi.fn()
+    bridge.onVideoScopes = listener
+
+    bridge.setVideoScopesEnabled(true, 4)
+    expect(worker.posted.at(-1)).toEqual({
+      msg: { type: 'setVideoScopes', enabled: true, generation: 4 },
+      transfer: [],
+    })
+
+    const analysis = analyzeVideoScopes(
+      new Uint8ClampedArray([255, 0, 0, 255]),
+      1,
+      1,
+    )
+    worker.emit({
+      type: 'videoScopes',
+      generation: 4,
+      frame: 12,
+      analyzedAt: 250,
+      analysis,
+    })
+    expect(listener).toHaveBeenCalledWith(4, 12, 250, analysis)
   })
 })
 

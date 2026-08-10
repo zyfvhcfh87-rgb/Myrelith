@@ -424,6 +424,113 @@
   outline-offset: 2px;
 }
 
+.preview-scopes-toggle {
+  position: absolute;
+  z-index: 7;
+  top: 6px;
+  left: 16px;
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid #34465d;
+  border-radius: 7px;
+  color: #a9b8ca;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #172538;
+  cursor: pointer;
+}
+
+.preview-scopes-toggle[aria-pressed='true'] {
+  border-color: #6ca6e8;
+  color: #eff7ff;
+  background: #254b72;
+}
+
+.preview-scopes-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.preview-scopes-toggle:focus-visible,
+.video-scopes button:focus-visible {
+  outline: 2px solid #79aee8;
+  outline-offset: 2px;
+}
+
+.video-scopes {
+  position: absolute;
+  z-index: 6;
+  right: 16px;
+  bottom: 16px;
+  width: min(320px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid #39516a;
+  border-radius: 12px;
+  color: #d9e7f5;
+  background: rgb(10 20 31 / 94%);
+  box-shadow: 0 14px 32px rgb(0 0 0 / 38%);
+}
+
+.video-scopes-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  font-size: 11px;
+}
+
+.video-scopes-heading span,
+.video-scopes-status {
+  color: #8297ad;
+  font-size: 9px;
+}
+
+.video-scopes-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-bottom: 7px;
+}
+
+.video-scopes-tabs button {
+  min-width: 0;
+  padding: 4px 3px;
+  overflow: hidden;
+  border: 1px solid #2c4157;
+  border-radius: 6px;
+  color: #8fa5bb;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  background: #101d2b;
+  cursor: pointer;
+}
+
+.video-scopes-tabs button[aria-selected='true'] {
+  border-color: #5e9ddb;
+  color: #eef7ff;
+  background: #1d3f60;
+}
+
+.video-scopes-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 20 / 9;
+  border: 1px solid #20384e;
+  border-radius: 6px;
+  background: #071019;
+}
+
+.video-scopes-status {
+  display: block;
+  min-height: 12px;
+  margin-top: 6px;
+}
+
 .preview-hint {
   color: #65778e;
 }

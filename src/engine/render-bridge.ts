@@ -28,6 +28,7 @@ import type { PresentationProfile } from '../domain/presentationProfile'
 import type { AssetId, ClipId, FrameRate, TimelineDoc } from '../domain/schema'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
+import type { VideoScopeAnalysis } from '../domain/videoScopes'
 import {
   createVideoCompositionPlanner,
   videoCompositionRequests,
@@ -158,6 +159,13 @@ export class RenderWorkerBridge {
   onAssetReady: ((assetId: AssetId) => void) | null = null
   /** Actual capabilities reported by the worker-owned preview compositor. */
   onRendererCapabilities: ((capabilities: RenderWorkerCapabilities) => void) | null = null
+  /** Bounded, generation-tagged post-composite scope projection. */
+  onVideoScopes: ((
+    generation: number,
+    frame: number,
+    analyzedAt: number,
+    analysis: VideoScopeAnalysis,
+  ) => void) | null = null
 
   constructor(worker: WorkerLike) {
     this.worker = worker
@@ -292,6 +300,12 @@ export class RenderWorkerBridge {
   setRuntimeTelemetryEnabled(enabled: boolean): void {
     if (this.disposed) return
     this.post({ type: 'setRuntimeTelemetry', enabled }, [])
+  }
+
+  /** Configure the worker-owned bounded scope sampler for this UI generation. */
+  setVideoScopesEnabled(enabled: boolean, generation: number): void {
+    if (this.disposed) return
+    this.post({ type: 'setVideoScopes', enabled, generation }, [])
   }
 
   /** Capture a point-in-time worker health snapshot for the performance lab. */
@@ -545,6 +559,15 @@ export class RenderWorkerBridge {
         if (!waiter) break
         this.pendingTelemetry.delete(msg.requestId)
         waiter.resolve(msg.snapshot)
+        break
+      }
+      case 'videoScopes': {
+        this.onVideoScopes?.(
+          msg.generation,
+          msg.frame,
+          msg.analyzedAt,
+          msg.analysis,
+        )
         break
       }
       case 'error': {
