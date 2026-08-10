@@ -17,6 +17,8 @@ import { fullResolutionPresentationProfile } from '../domain/presentationProfile
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import { docDurationFrames } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
+import { assertExportWorkBudget } from '../domain/exportWorkBudget'
+import { assertRenderSurfaceBudget } from '../domain/renderSurfaceBudget'
 import {
   compositeFrame,
   type Composite2D,
@@ -272,10 +274,12 @@ export async function* exportTimeline(
   try {
     const validatedSettings = assertSettings(settings)
     const frameCount = exportFrameCount(doc)
+    assertRenderSurfaceBudget(doc.width, doc.height)
     const frameDurationSec = assertBoundaryTime(
       framesToSeconds(1, doc.frameRate),
       'duration',
     )
+    assertExportWorkBudget(frameCount, doc.frameRate, validatedSettings)
     yield 0
 
     sink = await deps.createVideoSink(doc, validatedSettings)

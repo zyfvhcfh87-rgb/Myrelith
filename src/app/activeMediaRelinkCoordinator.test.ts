@@ -211,7 +211,7 @@ function harness(
 }
 
 const CONTEXT = {
-  documentId: 'document-1',
+  projectBindingId: 'local-project:test',
   documentRate: { num: 30, den: 1 },
   signal: new AbortController().signal,
 }
@@ -249,7 +249,7 @@ describe('active media relink coordinator', () => {
     expect(deps.progress.connected).toHaveBeenCalledOnce()
     expect(deps.progress.publishConnected).toHaveBeenCalledOnce()
     expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
-      'document-1',
+      'local-project:test',
       'stable',
       HANDLE,
     )

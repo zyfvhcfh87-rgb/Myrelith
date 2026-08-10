@@ -17,6 +17,7 @@ function entry(): ProxyCacheEntry {
   const cacheKey = 'a'.repeat(64)
   return {
     cacheKey,
+    projectBindingId: 'local-project:test',
     assetId: 'asset-1',
     original: {
       algorithm: 'sha256-sampled-v1',
@@ -75,6 +76,33 @@ describe('proxy cache contract', () => {
       schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
       entries: [entry(), entry()],
     })).toThrow('duplicate')
+
+    const otherOwner = {
+      ...entry(),
+      cacheKey: 'c'.repeat(64),
+      projectBindingId: 'local-project:other',
+      fileName: `${'c'.repeat(64)}.${'2'.repeat(32)}.mp4`,
+    }
+    expect(parseProxyCacheManifest({
+      schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
+      entries: [entry(), otherOwner],
+    }).entries).toHaveLength(2)
+
+    expect(() => parseProxyCacheManifest({
+      schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
+      entries: [entry(), { ...otherOwner, projectBindingId: 'local-project:test' }],
+    })).toThrow('duplicate')
+  })
+
+  test('quarantines schema-v1 entries until an original-backed owner adopts them', () => {
+    const legacy = { ...entry() } as Record<string, unknown>
+    Reflect.deleteProperty(legacy, 'projectBindingId')
+    const parsed = parseProxyCacheManifest({
+      schemaVersion: PROXY_CACHE_SCHEMA_VERSION - 1,
+      entries: [legacy],
+    })
+    expect(parsed.schemaVersion).toBe(PROXY_CACHE_SCHEMA_VERSION)
+    expect(parsed.entries[0]?.projectBindingId).toBeNull()
   })
 
   test('rejects hostile manifests with unknown keys or unbounded facts', () => {

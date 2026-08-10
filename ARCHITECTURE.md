@@ -244,6 +244,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `TimelineDoc.height` and is never persisted as another source of truth.
   Portable projects and export profiles retain their existing schemas; resume,
   preview, render, and export consume the document dimensions unchanged.
+- `domain/renderSurfaceBudget.ts` is the shared browser-free allocation gate
+  for parsed projects, preview-worker canvas synchronization, and export. It
+  bounds each dimension, total pixels, and the aggregate memory represented by
+  the compositor's reusable RGBA surfaces before any canvas is resized or
+  created. Creation presets stay inside that envelope; hostile portable files
+  fail closed instead of reaching a browser allocation.
 - `domain/presentationProfile.ts` is the browser-free authority for disposable
   Program Monitor presentation. It resolves Auto/Full/Half/Quarter into one
   uniform project-to-output scale plus an explainable reason and device-pixel
@@ -325,7 +331,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `domain/proxyCache.ts` is the browser-free authority for proxy provenance,
   profile parameters, strict manifest parsing, and preview/export representation
   selection. Preview may select only a fresh proxy; final export always selects
-  and revalidates the original. A proxy is never project truth.
+  and revalidates the original. Every current entry also carries the opaque
+  local-project binding that owns it. Same asset ids in copied or unrelated
+  portable projects cannot select each other's offline sidecars. Schema-1
+  entries load as quarantined legacy data and may be adopted only after a
+  connected original proves the saved fingerprint. A proxy is never project
+  truth.
 - `app/proxyStorage.ts` owns the versioned origin-local OPFS sidecar and
   manifest-first replacement/LRU transactions. Strict parsing rejects unknown
   or unbounded fields before cache-byte arithmetic. Replacement exposes an
@@ -355,6 +366,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   MIME, extension, and destination shapes. `auto` is selection policy only and
   resolves Modern → Web → Compatibility; HEVC is explicit-only. Dimensions,
   exact rational FPS, and audio sample rate remain `TimelineDoc` facts.
+- `domain/exportWorkBudget.ts` rejects unbounded finite work before a sink,
+  encoder, or frame lease exists. The current ceiling is five million frames,
+  24 hours, a conservative bitrate-derived four-GiB buffered-output estimate,
+  or a 256-GiB direct-file estimate. Long but valid projects remain openable;
+  the limit applies only when export is requested.
 - `pipeline/export-capabilities.ts` validates containment and native encoder
   support. Cached catalog checks are hints; `app/exportController.ts` reruns
   the exact disposable preflight before allocating an output writer or
@@ -595,11 +611,17 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   must not bypass that exact cleanup owner.
 - Local media reconnection — `src/app/localMediaHandles.ts` stores opaque
   `FileSystemFileHandle` capabilities in an origin-local IndexedDB sidecar,
-  keyed by stable document + asset ids. Paths and handles never enter domain
-  data or `.myrelith` JSON. Resume may query permission silently; prompting must
-  originate in a user click. Missing, denied, moved, changed, or unsupported
-  sources remain offline and may be reconnected individually or through one
-  recursively enumerated folder. Folder scans are deterministically bounded;
+  keyed by opaque local-project binding + asset ids. The binding lives only in
+  Recent/recovery/session storage and never enters domain data or `.myrelith`
+  JSON. Reopening the exact remembered `FileSystemFileHandle` preserves it;
+  opening a copied or independently selected file creates a fresh binding even
+  when its portable document id matches. Legacy records retain a narrowly
+  derived migration binding. Resume may query permission silently; prompting
+  must originate in a user click. Remembered-handle reads use a bounded
+  eight-worker pool and stop scheduling after cancellation. Missing, denied,
+  moved, changed, or unsupported sources remain offline and may be reconnected
+  individually or through one recursively enumerated folder. Folder scans are
+  deterministically bounded;
   conservative filename/size/modified-time/media-metadata matching accepts
   unique sources, while ambiguous candidates require an explicit user choice.
   Accepted sources keep the original asset id and are re-analyzed before

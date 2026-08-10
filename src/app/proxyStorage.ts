@@ -177,6 +177,9 @@ export class ProxyStorage {
   }
 
   async commitEntry(entry: ProxyCacheEntry): Promise<ProxyStorageEntryCommit> {
+    if (!entry.projectBindingId) {
+      throw new TypeError('A proxy cache commit requires a local project owner')
+    }
     parseProxyCacheManifest({
       schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
       entries: [entry],
@@ -185,7 +188,11 @@ export class ProxyStorage {
     const replacedEntries: ProxyCacheEntry[] = []
     await this.mutate(async (manifest) => {
       const entries = manifest.entries.filter((candidate) => (
-        candidate.assetId !== entry.assetId && candidate.cacheKey !== entry.cacheKey
+        !(
+          candidate.projectBindingId === entry.projectBindingId
+          && candidate.assetId === entry.assetId
+        )
+        && candidate.cacheKey !== entry.cacheKey
       ))
       for (const candidate of manifest.entries) {
         if (!entries.includes(candidate) && candidate.fileName !== entry.fileName) {
@@ -223,19 +230,26 @@ export class ProxyStorage {
       rollback: () => {
         settlement ??= this.mutate(async (manifest) => {
           const committed = manifest.entries.some((candidate) => (
+            candidate.projectBindingId === entry.projectBindingId
+            &&
             candidate.assetId === entry.assetId
             && candidate.cacheKey === entry.cacheKey
             && candidate.fileName === entry.fileName
           ))
           if (!committed) return manifest
           const entries = manifest.entries.filter((candidate) => !(
+            candidate.projectBindingId === entry.projectBindingId
+            &&
             candidate.assetId === entry.assetId
             && candidate.cacheKey === entry.cacheKey
             && candidate.fileName === entry.fileName
           ))
           for (const previous of replacedEntries) {
             if (entries.some((candidate) => (
-              candidate.assetId === previous.assetId
+              (
+                candidate.projectBindingId === previous.projectBindingId
+                && candidate.assetId === previous.assetId
+              )
               || candidate.cacheKey === previous.cacheKey
             ))) continue
             entries.push(previous)
@@ -271,15 +285,19 @@ export class ProxyStorage {
     }))
   }
 
-  async removeAsset(assetId: string): Promise<void> {
+  async removeAsset(projectBindingId: string, assetId: string): Promise<void> {
     const obsoleteFiles: string[] = []
     await this.mutate(async (manifest) => {
       obsoleteFiles.push(...manifest.entries
-        .filter((entry) => entry.assetId === assetId)
+        .filter((entry) => (
+          entry.projectBindingId === projectBindingId && entry.assetId === assetId
+        ))
         .map((entry) => entry.fileName))
       return {
         schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
-        entries: manifest.entries.filter((entry) => entry.assetId !== assetId),
+        entries: manifest.entries.filter((entry) => !(
+          entry.projectBindingId === projectBindingId && entry.assetId === assetId
+        )),
       }
     }, async () => {
       for (const fileName of obsoleteFiles) {
@@ -343,7 +361,10 @@ export class ProxyStorage {
   }
 
   /** LRU eviction touches only manifest-owned proxy files, never project data. */
-  async ensureCapacity(requiredBytes: number, protectedAssetId?: string): Promise<void> {
+  async ensureCapacity(
+    requiredBytes: number,
+    protectedOwner?: Readonly<{ projectBindingId: string; assetId: string }>,
+  ): Promise<void> {
     if (!Number.isSafeInteger(requiredBytes) || requiredBytes <= 0) {
       throw new RangeError('Required proxy capacity must be a positive safe integer')
     }
@@ -365,7 +386,11 @@ export class ProxyStorage {
     await this.mutate(async (manifest) => {
       const entries = [...manifest.entries]
       const candidates = entries
-        .filter((entry) => entry.assetId !== protectedAssetId)
+        .filter((entry) => !(
+          protectedOwner
+          && entry.projectBindingId === protectedOwner.projectBindingId
+          && entry.assetId === protectedOwner.assetId
+        ))
         .sort((a, b) => a.lastUsedAt - b.lastUsedAt || a.cacheKey.localeCompare(b.cacheKey))
       const evicted = new Set<string>()
       for (const entry of candidates) {

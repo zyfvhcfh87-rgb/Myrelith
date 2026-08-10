@@ -43,6 +43,7 @@ import {
 } from '../domain/presentationProfile'
 import { videoCompositionRequests } from '../domain/videoCompositionPlan'
 import { supportsCanvasEffectFilter } from '../domain/effectStack'
+import { assertRenderSurfaceBudget } from '../domain/renderSurfaceBudget'
 import {
   invalidateMediaDecoderRuntime,
   invalidateMediaDecoderSource,
@@ -435,6 +436,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     const profile = currentPresentationProfile()
     if (!visible || !profile) return
     const { outputWidth, outputHeight } = profile
+    assertRenderSurfaceBudget(outputWidth, outputHeight)
     if (visible.width !== outputWidth || visible.height !== outputHeight) {
       visible.width = outputWidth
       visible.height = outputHeight

@@ -117,6 +117,7 @@ function entry(
   const cacheKey = digit.repeat(64)
   return {
     cacheKey,
+    projectBindingId: 'local-project:test',
     assetId,
     original: {
       algorithm: 'sha256-sampled-v1',
@@ -292,9 +293,14 @@ describe('ProxyStorage', () => {
     const recent = entry('recent', 'b', 2, recentFileName, 40_000_000)
     await commit(storage, recent)
 
-    await storage.ensureCapacity(80_000_000, 'recent')
+    const protectedOwner = {
+      projectBindingId: 'local-project:test',
+      assetId: 'recent',
+    }
+    await storage.ensureCapacity(80_000_000, protectedOwner)
     expect((await storage.readManifest()).entries).toEqual([recent])
     expect(proxyDirectory(root).files.has(old.fileName)).toBe(false)
-    await expect(storage.ensureCapacity(100_000_000, 'recent')).rejects.toBeInstanceOf(ProxyQuotaError)
+    await expect(storage.ensureCapacity(100_000_000, protectedOwner))
+      .rejects.toBeInstanceOf(ProxyQuotaError)
   })
 })

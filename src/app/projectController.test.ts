@@ -39,6 +39,7 @@ import {
   openProjectFile,
   openRecentProject,
   openRecoveryProject,
+  MAX_CONCURRENT_REMEMBERED_HANDLE_LOOKUPS,
   resetProjectController,
   resolveActiveMediaAmbiguity,
   returnToProjectHome,
@@ -379,6 +380,7 @@ function makeDeps(
   let compatibilityRequestId = 0
   return {
     createDocumentId: vi.fn(() => 'doc-new'),
+    createProjectBindingId: vi.fn(() => 'local-project:test'),
     createCompatibilityRequestId: vi.fn(
       () => `compat-test-${++compatibilityRequestId}`,
     ),
@@ -600,6 +602,7 @@ describe('new-project activation', () => {
     expect(deps.startProjectPersistence).toHaveBeenCalledWith({
       fileName: null,
       persisted: false,
+      projectBindingId: 'local-project:test',
     })
   })
 
@@ -839,6 +842,7 @@ describe('portable project resume', () => {
     expect(deps.startProjectPersistence).toHaveBeenCalledWith({
       fileName: 'empty.myrelith',
       persisted: true,
+      projectBindingId: 'local-project:test',
     })
   })
 
@@ -911,6 +915,7 @@ describe('portable project resume', () => {
       fileName: 'picker.myrelith',
       lastOpenedAt: 1_234,
       handle,
+      projectBindingId: 'local-project:test',
     })
   })
 
@@ -926,6 +931,7 @@ describe('portable project resume', () => {
       fileName: 'recent.myrelith',
       lastOpenedAt: 10,
       handle,
+      projectBindingId: 'local-project:recent',
     }
     const deps = makeDeps({
       readText: vi.fn(async () => serialized),
@@ -976,6 +982,7 @@ describe('portable project resume', () => {
         capturedAt: 200,
         serializedProject: '{broken',
       }],
+      projectBindingId: 'local-project:recovery',
     }
     const deps = makeDeps({
       getRecoveryJournal: vi.fn(() => record),
@@ -997,6 +1004,7 @@ describe('portable project resume', () => {
       persisted: false,
       recoveryJournalId: 'journal-recovery',
       recoveryCapturedAt: 100,
+      projectBindingId: 'local-project:recovery',
     })
   })
 
@@ -1119,7 +1127,7 @@ describe('portable project resume', () => {
     ).resolves.toEqual({ status: 'ready' })
 
     expect(deps.loadMediaHandle).toHaveBeenCalledWith(
-      'doc-saved',
+      'local-project:test',
       'asset-stable',
     )
     expect(deps.queryMediaPermission).toHaveBeenCalledWith(handle)
@@ -1145,6 +1153,101 @@ describe('portable project resume', () => {
         report: { status: 'ready', container: { name: 'MP4' } },
       })
     expect(deps.requestMediaPermission).not.toHaveBeenCalled()
+  })
+
+  test('bounds remembered-handle lookups and preserves descriptor order', async () => {
+    const descriptors = Array.from({ length: 40 }, (_, index) => (
+      descriptorFrom(makeAsset(), { id: `asset-${String(index).padStart(2, '0')}` })
+    ))
+    const serialized = serializeProjectFile(makeProject(descriptors))
+    let active = 0
+    let maximumActive = 0
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(async (_bindingId, _assetId) => {
+        active++
+        maximumActive = Math.max(maximumActive, active)
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
+        active--
+        return null
+      }),
+    })
+
+    await expect(openProjectFile(
+      new File([serialized], 'many-assets.myrelith'),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+
+    expect(maximumActive).toBe(MAX_CONCURRENT_REMEMBERED_HANDLE_LOOKUPS)
+    expect(deps.loadMediaHandle).toHaveBeenCalledTimes(descriptors.length)
+    expect(vi.mocked(deps.loadMediaHandle).mock.calls.map((call) => call[1]))
+      .toEqual(descriptors.map((item) => item.id))
+  })
+
+  test('stops scheduling remembered-handle lookups after project-open cancellation', async () => {
+    const descriptors = Array.from({ length: 40 }, (_, index) => (
+      descriptorFrom(makeAsset(), { id: `asset-${String(index).padStart(2, '0')}` })
+    ))
+    const serialized = serializeProjectFile(makeProject(descriptors))
+    const lookup = deferred<LocalMediaFileHandle | null>()
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(() => lookup.promise),
+    })
+
+    const opening = openProjectFile(
+      new File([serialized], 'cancelled-open.myrelith'),
+      deps,
+    )
+    await vi.waitFor(() => {
+      expect(deps.loadMediaHandle)
+        .toHaveBeenCalledTimes(MAX_CONCURRENT_REMEMBERED_HANDLE_LOOKUPS)
+    })
+
+    resetProjectController(deps)
+    lookup.resolve(null)
+
+    await expect(opening).resolves.toEqual({ status: 'cancelled' })
+    expect(deps.loadMediaHandle)
+      .toHaveBeenCalledTimes(MAX_CONCURRENT_REMEMBERED_HANDLE_LOOKUPS)
+  })
+
+  test('does not replay an original project capability into a copied project', async () => {
+    const descriptor = descriptorFrom(makeAsset())
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const originalFile = new File([serialized], 'original.myrelith')
+    const originalHandle = makeProjectHandle(originalFile)
+    const copiedFile = new File([serialized], 'copy.myrelith')
+    const copiedHandle = makeProjectHandle(copiedFile)
+    const privateMedia = makeHandle(new File(['private'], 'source.mp4'))
+    const record: RecentProjectRecord = {
+      version: LOCAL_PROJECT_RECORD_VERSION,
+      documentId: 'doc-saved',
+      projectName: 'Original',
+      fileName: originalFile.name,
+      lastOpenedAt: 1,
+      handle: originalHandle,
+      projectBindingId: 'local-project:original',
+    }
+    const loadMediaHandle = vi.fn(async (bindingId: string) => (
+      bindingId === record.projectBindingId ? privateMedia : null
+    ))
+    const deps = makeDeps({
+      createProjectBindingId: vi.fn(() => 'local-project:copy'),
+      readText: vi.fn(async () => serialized),
+      pickProjectFile: vi.fn(async () => ({ file: copiedFile, handle: copiedHandle })),
+      getRecentProject: vi.fn(() => record),
+      loadMediaHandle,
+    })
+
+    await expect(chooseProjectFile(deps)).resolves.toEqual({ status: 'ready' })
+
+    expect(loadMediaHandle).toHaveBeenCalledWith(
+      'local-project:copy',
+      descriptor.id,
+    )
+    expect(deps.queryMediaPermission).not.toHaveBeenCalled()
+    expect(deps.rememberRecentProject).not.toHaveBeenCalled()
   })
 
   test('reapplies a saved video-only choice when a remembered source becomes fully decodable', async () => {
@@ -1282,7 +1385,7 @@ describe('portable project resume', () => {
       message: inspection.compatibility.detail,
     })
     expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
-      'doc-saved',
+      'local-project:test',
       descriptor.id,
       replacementHandle,
     )
@@ -1401,7 +1504,7 @@ describe('portable project resume', () => {
 
     expect(changedDeps.revokeObjectURL).toHaveBeenCalledWith('blob:changed')
     expect(changedDeps.forgetMediaHandle).toHaveBeenCalledWith(
-      'doc-saved',
+      'local-project:test',
       'asset-stable',
     )
     expect(useProjectSessionStore.getState()).toMatchObject({
@@ -1485,7 +1588,7 @@ describe('portable project resume', () => {
     await expect(chooseProjectMedia(deps)).resolves.toEqual({ status: 'ready' })
 
     expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
-      'doc-saved',
+      'local-project:test',
       'asset-stable',
       handle,
     )
@@ -1542,7 +1645,7 @@ describe('portable project resume', () => {
       },
     })
     expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
-      'doc-saved',
+      'local-project:test',
       descriptor.id,
       handle,
     )
@@ -1733,7 +1836,7 @@ describe('active-project media relink', () => {
       objectUrl: 'blob:individual-relink',
     })
     expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
-      'doc-saved',
+      'local-project:test',
       descriptor.id,
       selection.handle,
     )
@@ -2023,7 +2126,7 @@ describe('active-project media relink', () => {
     expect(media.assets.has(second.id)).toBe(false)
     expect(media.descriptors.size).toBe(2)
     expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
-      'doc-saved',
+      'local-project:test',
       first.id,
       matching.handle,
     )
@@ -2181,7 +2284,7 @@ describe('active-project media relink', () => {
     })
     expect(media.assets.has(second.id)).toBe(false)
     expect(deps.rememberMediaHandle).toHaveBeenCalledWith(
-      'doc-saved',
+      'local-project:test',
       first.id,
       selection.handle,
     )

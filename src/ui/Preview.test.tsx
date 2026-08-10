@@ -111,6 +111,7 @@ describe('Preview', () => {
       originalAvailable: false,
       entry: {
         cacheKey,
+        projectBindingId: 'local-project:test',
         assetId: offlineVideo.id,
         original: {
           algorithm: 'sha256-sampled-v1',

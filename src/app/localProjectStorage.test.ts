@@ -22,6 +22,7 @@ import {
   type RecentProjectRecord,
   type RecoverySnapshotInput,
 } from './localProjectStorage'
+import { legacyLocalProjectBindingId } from './localProjectProvenance'
 
 function makeHandle(name = 'project.myrelith'): LocalProjectFileHandle {
   return {
@@ -49,6 +50,7 @@ function recentProject(
     fileName: `${documentId}.myrelith`,
     lastOpenedAt,
     handle: makeHandle(`${documentId}.myrelith`),
+    projectBindingId: legacyLocalProjectBindingId(documentId),
   }
 }
 
@@ -91,6 +93,7 @@ function recoverySnapshot(
     projectFileName: `${documentId}.myrelith`,
     capturedAt,
     serializedProject: serializedProject(documentId, projectName),
+    projectBindingId: legacyLocalProjectBindingId(documentId),
   }
 }
 
@@ -99,6 +102,19 @@ afterEach(() => {
 })
 
 describe('recent project storage', () => {
+  test('adds a narrow migration binding when reading a raw legacy record', async () => {
+    const backend = createMapLocalProjectStorageBackend()
+    const legacy = recentProject('legacy-doc', 1) as unknown as Record<string, unknown>
+    Reflect.deleteProperty(legacy, 'projectBindingId')
+    await backend.set('recent-projects', 'legacy-doc', legacy)
+
+    const storage = createLocalProjectStorage(backend)
+    await expect(storage.listRecentProjects()).resolves.toMatchObject([{
+      documentId: 'legacy-doc',
+      projectBindingId: legacyLocalProjectBindingId('legacy-doc'),
+    }])
+  })
+
   test('sorts recent project handles and keeps only the newest twelve', async () => {
     const backend = createMapLocalProjectStorageBackend()
     const storage = createLocalProjectStorage(backend)

@@ -111,6 +111,7 @@ import {
   sourceTimeMapValidationError,
   SOURCE_TIME_TICKS_PER_FRAME,
 } from './sourceTimeMap'
+import { renderSurfaceBudget } from './renderSurfaceBudget'
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
 /** Serialized format marker used by releases published before the rebrand. */
@@ -1261,6 +1262,10 @@ function validateDocument(value: unknown, context: ValidationContext): asserts v
   context.documentFrameRate = document.frameRate
   safeInteger(document.width, '$.document.width', 1, PROJECT_FILE_LIMITS.maxDimension)
   safeInteger(document.height, '$.document.height', 1, PROJECT_FILE_LIMITS.maxDimension)
+  const renderBudget = renderSurfaceBudget(document.width, document.height)
+  if (!renderBudget.allowed) {
+    fail('$.document', renderBudget.reason ?? 'unsafe render surface')
+  }
   safeInteger(
     document.audioSampleRate,
     '$.document.audioSampleRate',

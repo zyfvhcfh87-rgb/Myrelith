@@ -15,6 +15,7 @@ import {
   type LocalMediaFileHandle,
   type LocalMediaHandleStore,
 } from './localMediaHandles'
+import { legacyLocalProjectBindingId } from './localProjectProvenance'
 
 function makeHandle(name = 'source.mp4'): LocalMediaFileHandle {
   return {
@@ -58,7 +59,7 @@ afterEach(() => {
 })
 
 describe('local media handle registry', () => {
-  test('scopes opaque handles by document and stable asset id', async () => {
+  test('scopes opaque handles by local project binding and stable asset id', async () => {
     const store = makeStore()
     const registry = createLocalMediaHandleRegistry(store)
     const first = makeHandle('first.mp4')
@@ -74,6 +75,24 @@ describe('local media handle registry', () => {
     await registry.forget('doc-a', 'asset-1')
     await expect(registry.load('doc-a', 'asset-1')).resolves.toBeNull()
     await expect(registry.load('doc-b', 'asset-1')).resolves.toBe(second)
+  })
+
+  test('migrates legacy document keys only through a locally recognized binding', async () => {
+    const store = makeStore()
+    const registry = createLocalMediaHandleRegistry(store)
+    const handle = makeHandle('legacy.mp4')
+    store.values.set(JSON.stringify(['doc-a', 'asset-1']), handle)
+
+    await expect(registry.load('doc-a', 'asset-1')).resolves.toBeNull()
+    await expect(registry.load(
+      legacyLocalProjectBindingId('doc-a'),
+      'asset-1',
+    )).resolves.toBe(handle)
+    expect(store.values.get(JSON.stringify([
+      'v2',
+      legacyLocalProjectBindingId('doc-a'),
+      'asset-1',
+    ]))).toBe(handle)
   })
 
   test('rejects malformed IndexedDB values instead of trusting them as handles', async () => {

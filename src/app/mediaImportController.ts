@@ -48,6 +48,7 @@ import {
 } from './mediaImportDecisions'
 import { inspectMediaFileCompatibility } from './mediaInspection'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
+import { getActiveLocalProjectBindingId } from './localProjectProvenance'
 
 export type { MediaImportDecision } from './mediaImportDecisions'
 
@@ -126,9 +127,12 @@ const realDeps: MediaImportDeps = {
   removeCompatibility: (id) => (
     useMediaStore.getState().removeCompatibility(id)
   ),
-  rememberMediaHandle: (documentId, assetId, handle) => (
-    localMediaHandleRegistry.remember(documentId, assetId, handle)
-  ),
+  rememberMediaHandle: (_documentId, assetId, handle) => {
+    const projectBindingId = getActiveLocalProjectBindingId()
+    return projectBindingId
+      ? localMediaHandleRegistry.remember(projectBindingId, assetId, handle)
+      : Promise.resolve()
+  },
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
 }
 
@@ -734,8 +738,9 @@ export async function chooseMediaForImport(
 
 /** Forget a removed asset's local capability without affecting store removal. */
 export function forgetImportedMediaHandle(assetId: string): void {
-  const documentId = useDocumentStore.getState().doc.id
-  void localMediaHandleRegistry.forget(documentId, assetId).catch((cause) => {
+  const projectBindingId = getActiveLocalProjectBindingId()
+  if (!projectBindingId) return
+  void localMediaHandleRegistry.forget(projectBindingId, assetId).catch((cause) => {
     console.warn('Could not forget the removed media file', cause)
   })
 }

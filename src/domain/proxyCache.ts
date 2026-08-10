@@ -1,7 +1,11 @@
 import type { FrameRate } from './schema'
 import { MAX_DOCUMENT_ID_CHARACTERS } from './projectLimits'
+import {
+  isLocalProjectBindingId,
+} from './localProjectBinding'
 
-export const PROXY_CACHE_SCHEMA_VERSION = 1 as const
+export const PROXY_CACHE_SCHEMA_VERSION = 2 as const
+const LEGACY_PROXY_CACHE_SCHEMA_VERSION = 1 as const
 export const PROXY_GENERATOR_VERSION = 'mediabunny-webcodecs-v1' as const
 export const MAX_PROXY_CACHE_ENTRIES = 2_048
 export const MAX_PROXY_FILE_NAME_CHARACTERS = 4_096
@@ -40,6 +44,8 @@ export const DEFAULT_PROXY_PARAMETERS = Object.freeze({
 
 export interface ProxyCacheEntry {
   readonly cacheKey: string
+  /** Null only for a schema-v1 entry awaiting connected-original adoption. */
+  readonly projectBindingId: string | null
   readonly assetId: string
   readonly original: ProxyOriginalFingerprint
   readonly parameters: ProxyGenerationParameters
@@ -230,9 +236,10 @@ function validFingerprint(value: unknown): value is ProxyOriginalFingerprint {
     && fingerprint.lastModified <= MAX_PROXY_TIMESTAMP
 }
 
-function validEntry(value: unknown): value is ProxyCacheEntry {
+function validEntry(value: unknown, legacy = false): value is ProxyCacheEntry {
   if (!record(value) || !exactKeys(value, [
     'cacheKey',
+    ...(legacy ? [] : ['projectBindingId']),
     'assetId',
     'original',
     'parameters',
@@ -250,6 +257,11 @@ function validEntry(value: unknown): value is ProxyCacheEntry {
   const entry = value as Partial<ProxyCacheEntry>
   return typeof entry.cacheKey === 'string'
     && /^[a-f0-9]{64}$/.test(entry.cacheKey)
+    && (
+      legacy
+      || entry.projectBindingId === null
+      || isLocalProjectBindingId(entry.projectBindingId)
+    )
     && boundedString(entry.assetId, MAX_DOCUMENT_ID_CHARACTERS)
     && validFingerprint(entry.original)
     && validParameters(entry.parameters)
@@ -281,31 +293,46 @@ export function parseProxyCacheManifest(value: unknown): ProxyCacheManifest {
   if (!record(value) || !exactKeys(value, ['schemaVersion', 'entries'])) {
     throw new TypeError('Proxy cache manifest must be an object')
   }
-  const candidate = value as Partial<ProxyCacheManifest>
-  if (candidate.schemaVersion !== PROXY_CACHE_SCHEMA_VERSION) {
+  const schemaVersion = value.schemaVersion
+  if (
+    schemaVersion !== PROXY_CACHE_SCHEMA_VERSION
+    && schemaVersion !== LEGACY_PROXY_CACHE_SCHEMA_VERSION
+  ) {
     throw new TypeError('Unsupported proxy cache manifest version')
   }
-  if (!Array.isArray(candidate.entries) || candidate.entries.length > MAX_PROXY_CACHE_ENTRIES) {
+  if (!Array.isArray(value.entries) || value.entries.length > MAX_PROXY_CACHE_ENTRIES) {
     throw new TypeError('Proxy cache manifest has an invalid entry list')
   }
-  const assetIds = new Set<string>()
+  const ownerAssetIds = new Set<string>()
   const cacheKeys = new Set<string>()
+  const entries: ProxyCacheEntry[] = []
   let aggregateBytes = 0
-  for (const entry of candidate.entries) {
-    if (!validEntry(entry)) throw new TypeError('Proxy cache manifest has an invalid entry')
-    if (assetIds.has(entry.assetId) || cacheKeys.has(entry.cacheKey)) {
+  for (const rawEntry of value.entries) {
+    const legacy = schemaVersion === LEGACY_PROXY_CACHE_SCHEMA_VERSION
+    if (!validEntry(rawEntry, legacy)) {
+      throw new TypeError('Proxy cache manifest has an invalid entry')
+    }
+    const entry: ProxyCacheEntry = legacy
+      ? { ...rawEntry, projectBindingId: null }
+      : rawEntry
+    const ownerAssetId = JSON.stringify([
+      legacy ? null : entry.projectBindingId,
+      entry.assetId,
+    ])
+    if (ownerAssetIds.has(ownerAssetId) || cacheKeys.has(entry.cacheKey)) {
       throw new TypeError('Proxy cache manifest contains duplicate entries')
     }
-    assetIds.add(entry.assetId)
+    ownerAssetIds.add(ownerAssetId)
     cacheKeys.add(entry.cacheKey)
     aggregateBytes += entry.byteSize
     if (!Number.isSafeInteger(aggregateBytes)) {
       throw new TypeError('Proxy cache manifest byte total exceeds the safe integer range')
     }
+    entries.push(entry)
   }
   return {
     schemaVersion: PROXY_CACHE_SCHEMA_VERSION,
-    entries: candidate.entries.map((entry) => ({
+    entries: entries.map((entry) => ({
       ...entry,
       original: { ...entry.original },
       parameters: { ...entry.parameters },

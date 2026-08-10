@@ -20,6 +20,7 @@ import {
   localProjectStorage,
   type LocalProjectFileHandle,
 } from './localProjectStorage'
+import { legacyLocalProjectBindingId } from './localProjectProvenance'
 
 export const LIVE_SAVE_DELAY_MS = 800
 export const RECOVERY_SAVE_DELAY_MS = 500
@@ -45,6 +46,7 @@ export interface ProjectRecoverySnapshot {
   projectFileName: string | null
   capturedAt: number
   serializedProject: string
+  projectBindingId: string
 }
 
 export interface RecentProjectBookmark {
@@ -53,6 +55,7 @@ export interface RecentProjectBookmark {
   fileName: string
   lastOpenedAt: number
   handle: ProjectWritableFileHandle
+  projectBindingId: string
 }
 
 export interface ProjectPersistenceDeps {
@@ -76,6 +79,7 @@ export interface ProjectPersistenceSession {
   persisted: boolean
   recoveryJournalId?: string
   recoveryCapturedAt?: number | null
+  projectBindingId?: string
 }
 
 export type ProjectSaveResult =
@@ -164,6 +168,7 @@ const realDeps: ProjectPersistenceDeps = {
       fileName: bookmark.fileName,
       lastOpenedAt: bookmark.lastOpenedAt,
       handle: handle as LocalProjectFileHandle,
+      projectBindingId: bookmark.projectBindingId,
     })
   },
 }
@@ -227,6 +232,7 @@ export class ProjectPersistenceController {
   private recoveryRevision = 0
   private recoveryJournalId: string | null = null
   private paused = false
+  private projectBindingId: string | null = null
   private unsubscribeDocument: (() => void) | null = null
   private unsubscribeMedia: (() => void) | null = null
   private beforeUnloadAttached = false
@@ -250,6 +256,8 @@ export class ProjectPersistenceController {
       : -1
     this.recoveryJournalId = session.recoveryJournalId
       ?? this.deps.createRecoveryJournalId()
+    this.projectBindingId = session.projectBindingId
+      ?? legacyLocalProjectBindingId(useDocumentStore.getState().doc.id)
     this.recoveryFollowUp = false
     this.unsubscribeDocument = useDocumentStore.subscribe((state, previous) => {
       if (state.doc !== previous.doc) this.markDirty()
@@ -290,6 +298,7 @@ export class ProjectPersistenceController {
     this.handle = null
     this.operation = null
     this.recoveryJournalId = null
+    this.projectBindingId = null
     this.recoveryFollowUp = false
     this.paused = false
     this.syncBeforeUnload(false)
@@ -551,6 +560,7 @@ export class ProjectPersistenceController {
         fileName: handle.name,
         lastOpenedAt: this.deps.now(),
         handle,
+        projectBindingId: this.requireProjectBindingId(),
       })
     } catch (cause) {
       console.warn('Could not add the saved project to Recent projects', cause)
@@ -722,6 +732,7 @@ export class ProjectPersistenceController {
         projectFileName: useProjectSessionStore.getState().activeProjectFileName,
         capturedAt: this.deps.now(),
         serializedProject: snapshot.serialized,
+        projectBindingId: this.requireProjectBindingId(),
       })
     ))
     this.activeRecoveryWrite = write
@@ -768,6 +779,11 @@ export class ProjectPersistenceController {
         this.scheduleRecovery()
       }
     }
+  }
+
+  private requireProjectBindingId(): string {
+    if (!this.projectBindingId) throw new Error('Project binding is unavailable')
+    return this.projectBindingId
   }
 
   private async runLiveSave(): Promise<void> {
