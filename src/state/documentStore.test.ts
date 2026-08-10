@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track, Transition } from '../domain/schema'
+import { createColorAdjustEffect } from '../domain/effectStack'
 import { useDocumentStore } from './documentStore'
 
 /* ------------------------------------------------------------------ */
@@ -44,7 +45,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
 /** V1: clipA [0,300), clipB [400,100). A1: clipD [0,300). V2 empty. */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-1',
     name: 'Store test doc',
     frameRate: { num: 30, den: 1 },
@@ -61,7 +62,7 @@ function makeDoc(): TimelineDoc {
 
 function makeStillDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-still-history',
     name: 'Still history test',
     frameRate: { num: 30, den: 1 },
@@ -102,7 +103,7 @@ function makeTransitionDoc(
   v1Locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-transitions',
     name: 'Transition store test',
     frameRate: { num: 30, den: 1 },
@@ -512,11 +513,43 @@ describe('actions delegate to domain operations', () => {
     getState().addEffect('clipB', {
       id: 'fx1',
       type: 'brightness',
+      version: 1,
       enabled: true,
       params: { amount: 0.5 },
     })
     expect(getState().doc.tracks[1].clips[0].effects).toHaveLength(1)
     expect(getState().past).toHaveLength(3)
+  })
+
+  test('every effect-stack action is one byte-exact undo/redo snapshot', () => {
+    getState().addEffect('clipA', createColorAdjustEffect('fx-a'))
+    getState().addEffect('clipA', createColorAdjustEffect('fx-b'))
+    const afterAdd = JSON.stringify(getState().doc)
+    expect(getState().past).toHaveLength(2)
+
+    getState().updateEffectParams('clipA', 'fx-a', { exposure: 1.2 })
+    const afterParams = JSON.stringify(getState().doc)
+    expect(getState().past).toHaveLength(3)
+    getState().setEffectEnabled('clipA', 'fx-a', false)
+    expect(getState().past).toHaveLength(4)
+    getState().reorderEffect('clipA', 'fx-b', 0)
+    expect(getState().past).toHaveLength(5)
+    getState().resetEffect('clipA', 'fx-a')
+    expect(getState().past).toHaveLength(6)
+    getState().removeEffect('clipA', 'fx-b')
+    const afterRemove = JSON.stringify(getState().doc)
+    expect(getState().past).toHaveLength(7)
+
+    getState().undo()
+    getState().redo()
+    expect(JSON.stringify(getState().doc)).toBe(afterRemove)
+    getState().undo()
+    getState().undo()
+    getState().undo()
+    getState().undo()
+    expect(JSON.stringify(getState().doc)).toBe(afterParams)
+    getState().undo()
+    expect(JSON.stringify(getState().doc)).toBe(afterAdd)
   })
 
   test('document survives a JSON round-trip after edits', () => {
@@ -924,6 +957,7 @@ function makeManualLinkStoreDoc(): TimelineDoc {
       {
         id: 'effect-video-manual',
         type: 'brightness',
+        version: 1,
         enabled: true,
         params: { amount: 0.2 },
       },
@@ -939,6 +973,7 @@ function makeManualLinkStoreDoc(): TimelineDoc {
       {
         id: 'effect-audio-manual',
         type: 'compressor',
+        version: 1,
         enabled: false,
         params: { threshold: -12 },
       },
@@ -946,7 +981,7 @@ function makeManualLinkStoreDoc(): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-manual-link-store',
     name: 'Manual link store test',
     frameRate: { num: 30, den: 1 },
@@ -1152,7 +1187,7 @@ const PAIR2 = 'link_pair2'
  */
 function makeLinkedDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-linked',
     name: 'Linked test doc',
     frameRate: { num: 30, den: 1 },
@@ -1272,7 +1307,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * well outside it. */
   function makeTwoPairsDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 9,
+      schemaVersion: 10,
       id: 'doc-split-pairs',
       name: 'Split pairs test doc',
       frameRate: { num: 30, den: 1 },
@@ -1292,7 +1327,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * under the playhead. */
   function makeMixedDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 9,
+      schemaVersion: 10,
       id: 'doc-split-mixed',
       name: 'Split mixed test doc',
       frameRate: { num: 30, den: 1 },

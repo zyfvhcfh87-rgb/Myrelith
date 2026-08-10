@@ -261,19 +261,25 @@ export interface ClipAnimation {
 export type EffectParamValue = number | string | boolean
 
 /**
- * An effect instance applied to one clip. `type` selects the implementation
- * in the render pipeline; `params` is that implementation's config.
+ * A serializable effect instance applied to one clip. `type` and `version`
+ * select one registry contract; unknown descriptors stay opaque and ordered
+ * so newer projects can round-trip through an older build without data loss.
  */
-export interface Effect {
+export interface EffectDescriptor {
   /** Unique effect-instance id. */
   id: EffectId
-  /** Effect implementation key, e.g. 'brightness', 'blur'. */
+  /** Stable effect implementation key, e.g. `builtin.color-adjust`. */
   type: string
+  /** Registry schema version. Zero is reserved for migrated legacy effects. */
+  version: number
   /** When false, the render pipeline skips this effect without removing it. */
   enabled: boolean
   /** Implementation-defined parameters, keyed by parameter name. */
   params: Record<string, EffectParamValue>
 }
+
+/** Backward-compatible name for the durable descriptor contract. */
+export type Effect = EffectDescriptor
 
 /**
  * A transition between two adjacent clips on the same track. MVP supports

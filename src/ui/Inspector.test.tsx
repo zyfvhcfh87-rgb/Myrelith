@@ -45,7 +45,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -448,6 +448,70 @@ describe('Inspector', () => {
     act(() => transport().setSelectedClip('gone'))
     rerender(<Inspector />)
     expect(screen.getByText('select a clip to edit it')).toBeInTheDocument()
+  })
+
+  test('authors an ordered effect stack through keyboard-accessible controls', async () => {
+    const user = userEvent.setup()
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000045')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000046')
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    const transformTab = screen.getByRole('tab', { name: 'Transform' })
+    transformTab.focus()
+    await user.keyboard('{ArrowRight}{ArrowRight}')
+    const effectsTab = screen.getByRole('tab', { name: 'Effects' })
+    expect(effectsTab).toHaveFocus()
+    expect(effectsTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('No effects on this clip.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Add color' }))
+    await user.click(screen.getByRole('button', { name: 'Add color' }))
+    expect(clipA().effects.map((effect) => effect.id)).toEqual([
+      'fx_00000000-0000-4000-8000-000000000045',
+      'fx_00000000-0000-4000-8000-000000000046',
+    ])
+
+    const exposure = screen.getByTestId(
+      'inspector-effect-exposure-fx_00000000-0000-4000-8000-000000000045',
+    )
+    fireEvent.change(exposure, { target: { value: '1.5' } })
+    fireEvent.keyDown(exposure, { key: 'Enter' })
+    expect(clipA().effects[0].params.exposure).toBe(1.5)
+
+    await user.click(screen.getAllByRole('button', { name: 'Move Color adjustment down' })[0])
+    expect(clipA().effects.map((effect) => effect.id)).toEqual([
+      'fx_00000000-0000-4000-8000-000000000046',
+      'fx_00000000-0000-4000-8000-000000000045',
+    ])
+    await user.click(screen.getAllByRole('checkbox', { name: 'Enabled' })[1])
+    expect(clipA().effects[1].enabled).toBe(false)
+    await user.click(screen.getAllByRole('button', { name: 'Reset Color adjustment' })[1])
+    expect(clipA().effects[1].params.exposure).toBe(0)
+    await user.click(screen.getAllByRole('button', { name: 'Remove Color adjustment' })[0])
+    expect(clipA().effects).toHaveLength(1)
+    uuid.mockRestore()
+  })
+
+  test('reports opaque unsupported effects without stranding removal or reorder controls', () => {
+    const fixture = makeDoc()
+    fixture.tracks[0].clips[0].effects = [{
+      id: 'fx-future',
+      type: 'future.sparkle',
+      version: 12,
+      enabled: true,
+      params: { seed: 42, mode: 'prismatic' },
+    }]
+    resetDocumentStoreForTest(fixture)
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Effects' }))
+    expect(screen.getByLabelText('Effect status: unsupported')).toBeInTheDocument()
+    expect(screen.getByText(/not installed; its data is preserved/u)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reset future.sparkle' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Remove future.sparkle' })).toBeEnabled()
   })
 })
 

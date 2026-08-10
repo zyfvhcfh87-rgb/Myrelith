@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, Effect, MediaAsset, TimelineDoc, Track, Transition } from './schema'
 import { defaultTextProps } from './textOverlay'
+import { createColorAdjustEffect } from './effectStack'
 import {
   addCrossfade,
   addCrossfadeWithSourceBounds,
@@ -18,12 +19,16 @@ import {
   insertClip,
   MAX_CLIP_VOLUME,
   moveClip,
+  removeEffect,
   removeTrack,
   removeTransition,
   renameTrack,
+  reorderEffect,
+  resetEffect,
   rippleDelete,
   rippleTrim,
   setClipVolume,
+  setEffectEnabled,
   setCrossfadeDuration,
   setCrossfadeDurationWithSourceBounds,
   setCrossfadeSettings,
@@ -36,6 +41,7 @@ import {
   updateClipAudio,
   updateClipTransform,
   updateClipVisual,
+  updateEffectParams,
 } from './operations'
 import { rangeEnd } from './time'
 
@@ -86,7 +92,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -121,7 +127,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -147,6 +153,7 @@ function clipIn(doc: TimelineDoc, trackId: string, clipId: string): Clip {
 const fx = (id: string): Effect => ({
   id,
   type: 'brightness',
+  version: 1,
   enabled: true,
   params: { amount: 0.5 },
 })
@@ -379,6 +386,50 @@ describe('addEffect', () => {
     const doc = makeDoc()
     expect(addEffect(doc, 'nope', fx('fx1'))).toBe(doc)
     expect(addEffect(doc, 'clipE', fx('fx1'))).toBe(doc)
+  })
+
+  test('requires globally unique effect ids', () => {
+    const doc = addEffect(makeDoc(), 'clipA', fx('shared-id'))
+    expect(addEffect(doc, 'clipB', fx('shared-id'))).toBe(doc)
+  })
+})
+
+describe('ordered effect-stack operations', () => {
+  test('enable, parameter, reorder, reset, and remove are immutable atomic edits', () => {
+    const first = createColorAdjustEffect('fx-color-a')
+    const second = createColorAdjustEffect('fx-color-b')
+    let doc = addEffect(addEffect(makeDoc(), 'clipA', first), 'clipA', second)
+    const original = doc
+
+    doc = setEffectEnabled(doc, 'clipA', first.id, false)
+    expect(clipIn(doc, 'V1', 'clipA').effects[0].enabled).toBe(false)
+    doc = updateEffectParams(doc, 'clipA', first.id, { exposure: 1.5, contrast: 0.25 })
+    expect(clipIn(doc, 'V1', 'clipA').effects[0].params).toMatchObject({
+      exposure: 1.5,
+      contrast: 0.25,
+    })
+    doc = reorderEffect(doc, 'clipA', second.id, 0)
+    expect(clipIn(doc, 'V1', 'clipA').effects.map((effect) => effect.id))
+      .toEqual([second.id, first.id])
+    doc = resetEffect(doc, 'clipA', first.id)
+    expect(clipIn(doc, 'V1', 'clipA').effects[1].params).toEqual({
+      exposure: 0,
+      contrast: 0,
+      saturation: 0,
+    })
+    doc = removeEffect(doc, 'clipA', second.id)
+    expect(clipIn(doc, 'V1', 'clipA').effects.map((effect) => effect.id)).toEqual([first.id])
+    expect(original).not.toBe(doc)
+    expect(clipIn(original, 'V1', 'clipA').effects.map((effect) => effect.id))
+      .toEqual([first.id, second.id])
+  })
+
+  test('rejects invalid params, indices, missing effects, and locked clips', () => {
+    const doc = deepFreeze(addEffect(makeDoc(), 'clipA', createColorAdjustEffect('fx-color')))
+    expect(updateEffectParams(doc, 'clipA', 'fx-color', { exposure: 99 })).toBe(doc)
+    expect(reorderEffect(doc, 'clipA', 'fx-color', 9)).toBe(doc)
+    expect(removeEffect(doc, 'clipA', 'missing')).toBe(doc)
+    expect(setEffectEnabled(doc, 'clipE', 'fx-color', false)).toBe(doc)
   })
 })
 
@@ -877,7 +928,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },

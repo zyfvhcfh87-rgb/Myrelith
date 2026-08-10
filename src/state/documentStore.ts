@@ -29,6 +29,8 @@ import type {
   ClipAnimationProperty,
   ClipId,
   Effect,
+  EffectId,
+  EffectParamValue,
   TimelineDoc,
   TimelineMarker,
   TimelineMarkerId,
@@ -73,8 +75,12 @@ import {
   insertClip,
   removeTransition,
   removeTrack,
+  removeEffect,
+  reorderEffect,
+  resetEffect,
   renameTrack,
   setClipVolume,
+  setEffectEnabled,
   setCrossfadeDuration,
   setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
@@ -82,6 +88,7 @@ import {
   updateClipTransform,
   updateClipVisual,
   updateClipVisualAtFrame,
+  updateEffectParams,
   setClipKeyframe,
   moveClipKeyframe,
   removeClipKeyframe,
@@ -336,6 +343,20 @@ export interface DocumentState {
   ) => void
   /** Append an effect to a clip's chain. */
   addEffect: (clipId: ClipId, effect: Effect) => void
+  /** Enable or bypass one effect. */
+  setEffectEnabled: (clipId: ClipId, effectId: EffectId, enabled: boolean) => void
+  /** Commit one parameter patch as one history action. */
+  updateEffectParams: (
+    clipId: ClipId,
+    effectId: EffectId,
+    patch: Readonly<Record<string, EffectParamValue>>,
+  ) => void
+  /** Move one effect to an exact stack index. */
+  reorderEffect: (clipId: ClipId, effectId: EffectId, targetIndex: number) => void
+  /** Restore registered defaults without discarding opaque keys. */
+  resetEffect: (clipId: ClipId, effectId: EffectId) => void
+  /** Remove one effect descriptor. */
+  removeEffect: (clipId: ClipId, effectId: EffectId) => void
   /** Step back one snapshot. No-op when history is empty. */
   undo: () => void
   /** Step forward one undone snapshot. No-op when future is empty. */
@@ -618,6 +639,30 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   addEffect: (clipId, effect) =>
     set((state) => commit(state, addEffect(state.doc, clipId, effect))),
+
+  setEffectEnabled: (clipId, effectId, enabled) =>
+    set((state) => commit(
+      state,
+      setEffectEnabled(state.doc, clipId, effectId, enabled),
+    )),
+
+  updateEffectParams: (clipId, effectId, patch) =>
+    set((state) => commit(
+      state,
+      updateEffectParams(state.doc, clipId, effectId, patch),
+    )),
+
+  reorderEffect: (clipId, effectId, targetIndex) =>
+    set((state) => commit(
+      state,
+      reorderEffect(state.doc, clipId, effectId, targetIndex),
+    )),
+
+  resetEffect: (clipId, effectId) =>
+    set((state) => commit(state, resetEffect(state.doc, clipId, effectId))),
+
+  removeEffect: (clipId, effectId) =>
+    set((state) => commit(state, removeEffect(state.doc, clipId, effectId))),
 
   undo: () =>
     set((state) => {

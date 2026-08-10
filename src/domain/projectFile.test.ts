@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { Clip, TimelineDoc, Track } from './schema'
+import type { Clip, EffectDescriptor, TimelineDoc, Track } from './schema'
 import { PROJECT_ASPECT_RATIO_PRESETS } from './projectSettings'
 import { defaultTextProps, proceduralTextAssetId } from './textOverlay'
 import {
@@ -7,6 +7,10 @@ import {
   defaultClipVisualSettings,
 } from './clipInspector'
 import { defaultClipAnimation } from './clipAnimation'
+import {
+  COLOR_ADJUST_EFFECT_TYPE,
+  COLOR_ADJUST_EFFECT_VERSION,
+} from './effectStack'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
@@ -143,6 +147,7 @@ function makeDocument(): TimelineDoc {
     {
       id: 'effect-color',
       type: 'color-correction',
+      version: 1,
       enabled: true,
       params: { amount: 0.5, mode: 'soft', preserveHighlights: true },
     },
@@ -305,6 +310,79 @@ describe('portable project file', () => {
     expect(parsed.document.captionTracks).toEqual(legacy.document.captionTracks)
     expect(parsed.document.tracks.flatMap((item) => item.clips).map((item) => item.blendMode))
       .toEqual(['normal', 'normal', 'normal', 'normal'])
+  })
+
+  test('migrates schema-9 effect descriptors and preserves opaque legacy payloads', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 9
+    legacy.document.tracks[0].clips[0].effects = [
+      {
+        id: 'effect-owned',
+        type: COLOR_ADJUST_EFFECT_TYPE,
+        version: 0,
+        enabled: true,
+        params: { exposure: 1, futureKnob: 'keep-owned-extra' },
+      },
+      {
+        id: 'effect-future',
+        type: 'future.sparkle',
+        version: 0,
+        enabled: false,
+        params: { seed: 42, mode: 'prismatic', preserveAlpha: true },
+      },
+    ]
+    for (const effect of legacy.document.tracks[0].clips[0].effects) {
+      Reflect.deleteProperty(effect, 'version')
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.tracks[0].clips[0].effects).toEqual([
+      {
+        id: 'effect-owned',
+        type: COLOR_ADJUST_EFFECT_TYPE,
+        version: COLOR_ADJUST_EFFECT_VERSION,
+        enabled: true,
+        params: {
+          exposure: 1,
+          contrast: 0,
+          saturation: 0,
+          futureKnob: 'keep-owned-extra',
+        },
+      },
+      {
+        id: 'effect-future',
+        type: 'future.sparkle',
+        version: 0,
+        enabled: false,
+        params: { seed: 42, mode: 'prismatic', preserveAlpha: true },
+      },
+    ])
+  })
+
+  test('round-trips unknown effect type, version, order, and payload without substitution', () => {
+    const original = makeProject()
+    const effects: EffectDescriptor[] = [
+      {
+        id: 'effect-future-a',
+        type: 'future.sparkle',
+        version: 17,
+        enabled: true,
+        params: { seed: 42, mode: 'prismatic', preserveAlpha: true },
+      },
+      {
+        id: 'effect-future-b',
+        type: 'future.glow',
+        version: 3,
+        enabled: false,
+        params: { radius: 12.5, colorSpace: 'oklab' },
+      },
+    ]
+    original.document.tracks[0].clips[0].effects = effects
+
+    const parsed = parseProjectFile(serializeProjectFile(original))
+    expect(parsed.document.tracks[0].clips[0].effects).toEqual(effects)
   })
 
   test('round-trips semantic captions and rejects malformed persisted cues', () => {
@@ -995,6 +1073,7 @@ describe('portable project file', () => {
         (_effect, effectIndex) => ({
           id: `bulk-effect-${clipIndex}-${effectIndex}`,
           type: 'test',
+          version: 1,
           enabled: true,
           params: {},
         }),
@@ -1019,6 +1098,7 @@ describe('portable project file', () => {
       (_value, index) => ({
         id: `parameter-effect-${index}`,
         type: 'test',
+        version: 1,
         enabled: true,
         params: fullParams,
       }),
@@ -1031,6 +1111,7 @@ describe('portable project file', () => {
       {
         id: 'large-string-effect',
         type: 'test',
+        version: 1,
         enabled: true,
         params: Object.fromEntries(
           Array.from(

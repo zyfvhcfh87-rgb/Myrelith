@@ -182,6 +182,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   path. `domain/blendModes.ts` is the browser-free vocabulary, transition-group
   resolver, and sRGB premultiplied-alpha reference authority. The complete
   layer/transition contract is normative in `docs/BLEND_MODES.md`.
+- `Clip.effects` is a durable ordered list of versioned `EffectDescriptor`
+  records in timeline schema 10. `domain/effectStack.ts` is the browser-free
+  registry, validation, migration, capability, and evaluation authority.
+  Schema-9 migration assigns the reserved legacy version zero to unknown types
+  without changing their payload; registry-owned legacy descriptors migrate to
+  their current version. Unknown types, versions, and parameter keys must remain
+  ordered and serializable, while evaluation reports and bypasses anything it
+  cannot safely execute. The normative contract is in `docs/EFFECTS.md`.
 - Clips on one track are sorted by `timelineRange.startFrame` and pairwise
   non-overlapping; `operations.ts` rejects violations.
 - `TimelineDoc.tracks[0]` composites first (bottom layer).
@@ -247,14 +255,17 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   exactly once. Scratch surfaces, cached text layouts, and borrowed frames
   retain explicit bounded owners.
 - Every composition item carries resolved blend intent. Ordinary decoded media
-  blends after transform/crop and opacity. Procedural text first renders as one
+  applies its ordered effect stack during the source draw, then blends after
+  transform/crop and opacity. Procedural text first renders effects as part of one
   isolated source-over layer, then blends once. A crossfade keeps source-over
   legs plus premultiplied `lighter` weighting and applies a non-normal mode to
   the isolated group only when both legs agree on the same supported name;
   mixed/unknown intent uses normal without rewriting either clip. The concrete
   Canvas operation is capability-probed and restored in `finally`; the adapter
   permits a future parity-verified WebGL backend but never selects an implicit
-  shader fallback. Preview and export share this exact plan/compositor path.
+  shader fallback. Canvas filters use the existing saved context and reusable
+  text/transition surfaces; effects never allocate per-frame scratch resources.
+  Preview and export share this exact plan/compositor path.
 - `domain/audioMixPlan.ts` is the shared live/export audible-contributor and
   envelope contract. Valid linked fades open real virtual handle ranges and
   apply clip volume with an absolute linear or equal-power envelope. Web Audio
@@ -327,6 +338,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `rippleTrim(clipId, edge, delta)`, `slipClip(clipId, delta)`,
   `slideClip(clipId, delta)`, `moveClip(clipId, toTrackId, toFrame)`,
   `rippleDelete(clipId)`, `addEffect(clipId, effect)`,
+  `setEffectEnabled(clipId, effectId, enabled)`,
+  `updateEffectParams(clipId, effectId, patch)`,
+  `reorderEffect(clipId, effectId, targetIndex)`,
+  `resetEffect(clipId, effectId)`, `removeEffect(clipId, effectId)`,
   `addTrack(kind)`, `setTrackFlags(trackId, {hidden?, muted?, solo?,
   locked?})` (idempotent patches push no history entry; flags and
   renames WORK on locked tracks — metadata, not content),

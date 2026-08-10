@@ -381,7 +381,7 @@ export function createTimelineDoc(
   const markers: NonNullable<TimelineDoc['markers']> = []
   const captionTracks: NonNullable<TimelineDoc['captionTracks']> = []
   const doc: TimelineDoc = {
-    schemaVersion: 9,
+    schemaVersion: 10,
     id,
     name: projectName,
     frameRate: { ...validated.frameRate },

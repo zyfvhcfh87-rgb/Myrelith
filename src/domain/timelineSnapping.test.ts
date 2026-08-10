@@ -54,7 +54,7 @@ function doc(): TimelineDoc {
   const from = clip('from', 100, 20)
   const to = clip('to', 120, 20)
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'snap-doc',
     name: 'snap doc',
     frameRate: { num: 30, den: 1 },

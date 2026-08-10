@@ -93,6 +93,10 @@ import {
   clipBlendModeIntent,
   DEFAULT_BLEND_MODE,
 } from './blendModes'
+import {
+  LEGACY_UNVERSIONED_EFFECT_VERSION,
+  migrateEffectDescriptor,
+} from './effectStack'
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
 /** Serialized format marker used by releases published before the rebrand. */
@@ -105,7 +109,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 9 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 10 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -776,11 +780,12 @@ function validateEffect(
   context: ValidationContext,
 ): asserts value is Effect {
   const effect = record(value, path)
-  exactKeys(effect, ['id', 'type', 'enabled', 'params'], [], path)
+  exactKeys(effect, ['id', 'type', 'version', 'enabled', 'params'], [], path)
   stringValue(effect.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
   if (context.effectIds.has(effect.id)) fail(`${path}.id`, 'duplicate effect id')
   context.effectIds.add(effect.id)
   stringValue(effect.type, `${path}.type`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  safeInteger(effect.version, `${path}.version`, LEGACY_UNVERSIONED_EFFECT_VERSION)
   booleanValue(effect.enabled, `${path}.enabled`)
   const params = record(effect.params, `${path}.params`)
   const keys = Object.keys(params)
@@ -1548,6 +1553,39 @@ function migrateClipBlendModes(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 9, tracks }
 }
 
+/** Upgrade schema-9 effect records to explicit per-effect registry versions. */
+function migrateVersionedEffectDescriptors(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const trackPath = `$.document.tracks[${trackIndex}]`
+    const track = record(trackValue, trackPath)
+    boundedArray(track.clips, `${trackPath}.clips`, PROJECT_FILE_LIMITS.maxClips)
+    return {
+      ...track,
+      clips: track.clips.map((clipValue, clipIndex) => {
+        const clipPath = `${trackPath}.clips[${clipIndex}]`
+        const clip = record(clipValue, clipPath)
+        boundedArray(clip.effects, `${clipPath}.effects`, PROJECT_FILE_LIMITS.maxEffectsPerClip)
+        return {
+          ...clip,
+          effects: clip.effects.map((effectValue, effectIndex) => {
+            const effectPath = `${clipPath}.effects[${effectIndex}]`
+            const effect = record(effectValue, effectPath)
+            const params = record(effect.params, `${effectPath}.params`)
+            return migrateEffectDescriptor({
+              ...effect,
+              version: LEGACY_UNVERSIONED_EFFECT_VERSION,
+              params: { ...params },
+            } as unknown as Effect)
+          }),
+        }
+      }),
+    }
+  })
+  return { ...document, schemaVersion: 10, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1590,6 +1628,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 8) {
     migrated = migrateClipBlendModes(migrated)
+  }
+  if (migrated.schemaVersion === 9) {
+    migrated = migrateVersionedEffectDescriptors(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
@@ -1745,6 +1786,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           effects: clip.effects.map((effect) => ({
             id: effect.id,
             type: effect.type,
+            version: effect.version,
             enabled: effect.enabled,
             params: cloneEffectParams(effect.params),
           })),
