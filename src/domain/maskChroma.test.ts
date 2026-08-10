@@ -6,7 +6,10 @@ import {
   DEFAULT_MASK_BEZIER_PATH,
   resolveCanvasEffectStack,
 } from './effectStack'
-import { EFFECT_STACK_LIMITS } from './effectBounds'
+import {
+  documentEffectBudgetUsage,
+  EFFECT_STACK_LIMITS,
+} from './effectBounds'
 import { applyOrderedPixelEffectsToRgba } from './effectPixels'
 import {
   defaultClipAnimation,
@@ -29,6 +32,11 @@ import {
 import { PROJECT_FILE_LIMITS } from './projectFile'
 import { defaultTextProps } from './textOverlay'
 import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
+import {
+  documentAtAggregateEffectBudget,
+  effectBudgetInsertionClip,
+  type AggregateEffectBudget,
+} from '../test/effectBudgetFixtures'
 
 const linear = { type: 'linear' } as const
 
@@ -294,6 +302,81 @@ describe('mask and chroma-key effects', () => {
     expect(tall[0]).toBe(128)
   })
 
+  test('keeps wide-ellipse center and adjacent feather samples continuous', () => {
+    const size = 1_001
+    const mask = createMaskEffect('mask-wide-center-distance', 'ellipse')
+    mask.params = {
+      ...mask.params,
+      x: 0.1,
+      y: 0.4,
+      width: 0.8,
+      height: 0.2,
+      feather: 0.2,
+    }
+    const pixels = new Uint8ClampedArray(size * size * 4).fill(255)
+    const startedAt = performance.now()
+    applyOrderedPixelEffectsToRgba(
+      pixels,
+      resolveCanvasEffectStack([mask], true, true).pixelEffects,
+      { surfaceWidth: size, surfaceHeight: size, projectWidth: size, projectHeight: size },
+    )
+    const alpha = (x: number, y: number): number => pixels[(y * size + x) * 4 + 3]
+    const center = alpha(500, 500)
+    const horizontalNeighbor = alpha(501, 500)
+    const verticalNeighbor = alpha(500, 501)
+
+    expect(center).toBe(128)
+    expect(horizontalNeighbor).toBe(127)
+    expect(verticalNeighbor).toBe(126)
+    expect(Math.abs(center - horizontalNeighbor)).toBeLessThanOrEqual(1)
+    expect(performance.now() - startedAt).toBeLessThan(2_000)
+  })
+
+  test('bounds 1080p ellipse work at zero, typical, and maximum feather', () => {
+    const width = 1_920
+    const height = 1_080
+    const pixelCount = width * height
+    const mask = createMaskEffect('mask-ellipse-hd-work', 'ellipse')
+    const pixels = new Uint8ClampedArray(pixelCount * 4)
+    const run = (feather: number): { elapsed: number; solves: number } => {
+      mask.params.feather = feather
+      pixels.fill(255)
+      const work = {
+        maskScanlineEdgeTests: 0,
+        maskDistanceSamples: 0,
+        maskEllipseDistanceSolves: 0,
+      }
+      const startedAt = performance.now()
+      applyOrderedPixelEffectsToRgba(
+        pixels,
+        resolveCanvasEffectStack([mask], true, true).pixelEffects,
+        {
+          surfaceWidth: width,
+          surfaceHeight: height,
+          projectWidth: width,
+          projectHeight: height,
+        },
+        work,
+      )
+      return {
+        elapsed: performance.now() - startedAt,
+        solves: work.maskEllipseDistanceSolves,
+      }
+    }
+
+    const zero = run(0)
+    const typical = run(0.05)
+    const maximum = run(1)
+    expect(zero.solves).toBe(0)
+    expect(typical.solves).toBeGreaterThan(0)
+    expect(typical.solves).toBeLessThan(pixelCount / 2)
+    expect(maximum.solves).toBeGreaterThan(typical.solves)
+    expect(maximum.solves).toBeLessThan(pixelCount)
+    expect(zero.elapsed).toBeLessThan(2_000)
+    expect(typical.elapsed).toBeLessThan(2_000)
+    expect(maximum.elapsed).toBeLessThan(2_000)
+  })
+
   test('keys matching color, softens the boundary, and suppresses spill with explicit defaults', () => {
     const key = createChromaKeyEffect('key-a')
     const pixels = new Uint8ClampedArray([
@@ -517,6 +600,39 @@ describe('effect parameter animation', () => {
         0,
       ) ?? 0,
     )).toBe(PROJECT_FILE_LIMITS.maxTotalKeyframes)
+  })
+
+  test.each([
+    ['effects', EFFECT_STACK_LIMITS.maxTotalEffects],
+    ['params', EFFECT_STACK_LIMITS.maxTotalEffectParams],
+    ['stringCharacters', EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters],
+  ] as const)(
+    'rejects insert and split growth at the aggregate %s cap',
+    (budget, maximum) => {
+      const capped = documentAtAggregateEffectBudget(budget)
+      const usage = documentEffectBudgetUsage(capped)
+      expect(usage[budget]).toBe(maximum)
+
+      const incoming = effectBudgetInsertionClip(
+        budget as AggregateEffectBudget,
+        10_000,
+      )
+      expect(insertClip(capped, 'track-1', incoming)).toBe(capped)
+      expect(splitClipAtFrame(capped, 'effect-budget-clip-0', 20)).toBe(capped)
+    },
+  )
+
+  test('allows effectless insert and split at the aggregate effect cap', () => {
+    const capped = documentAtAggregateEffectBudget('effects')
+    const effectless = effectBudgetInsertionClip('effects', 10_000)
+    effectless.effects = []
+    const inserted = insertClip(capped, 'track-1', effectless)
+    expect(inserted).not.toBe(capped)
+
+    const split = splitClipAtFrame(inserted, effectless.id, 10_020)
+    expect(split).not.toBe(inserted)
+    expect(documentEffectBudgetUsage(split).effects)
+      .toBe(EFFECT_STACK_LIMITS.maxTotalEffects)
   })
 
   test('rejects reset before clearing tracks when merged defaults exceed descriptor bounds', () => {

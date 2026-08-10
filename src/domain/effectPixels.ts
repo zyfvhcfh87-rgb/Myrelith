@@ -19,6 +19,7 @@ export interface PixelEffectGeometry {
 export interface PixelEffectWorkMetrics {
   maskScanlineEdgeTests: number
   maskDistanceSamples: number
+  maskEllipseDistanceSolves?: number
   maskInsideScratchPixelsPeak?: number
   maskDistanceScratchPixelsPeak?: number
 }
@@ -35,6 +36,13 @@ interface SurfaceBounds {
   readonly maximumY: number
   readonly width: number
   readonly height: number
+}
+
+interface EllipseMaskGeometry {
+  readonly centerX: number
+  readonly centerY: number
+  readonly radiusX: number
+  readonly radiusY: number
 }
 
 function clamp01(value: number): number {
@@ -320,7 +328,7 @@ function rasterizePolygonEdgeDistances(
   }
 }
 
-function maskSignedDistance(
+function rectangleSignedDistance(
   x: number,
   y: number,
   params: MaskParams,
@@ -330,29 +338,116 @@ function maskSignedDistance(
   const top = params.y * geometry.projectHeight
   const width = params.width * geometry.projectWidth
   const height = params.height * geometry.projectHeight
-  if (params.shape === 'rectangle') {
-    const right = left + width
-    const bottom = top + height
-    const insideDistance = Math.min(x - left, right - x, y - top, bottom - y)
-    if (insideDistance >= 0) return insideDistance
-    const outsideX = Math.max(left - x, 0, x - right)
-    const outsideY = Math.max(top - y, 0, y - bottom)
-    return -Math.hypot(outsideX, outsideY)
+  const right = left + width
+  const bottom = top + height
+  const insideDistance = Math.min(x - left, right - x, y - top, bottom - y)
+  if (insideDistance >= 0) return insideDistance
+  const outsideX = Math.max(left - x, 0, x - right)
+  const outsideY = Math.max(top - y, 0, y - bottom)
+  return -Math.hypot(outsideX, outsideY)
+}
+
+function ellipseUnsignedBoundaryDistance(
+  rawOffsetX: number,
+  rawOffsetY: number,
+  radiusX: number,
+  radiusY: number,
+): number {
+  const coordinateEpsilon = Number.EPSILON * Math.max(
+    1,
+    radiusX,
+    radiusY,
+  ) * 8
+  const offsetX = Math.abs(rawOffsetX) <= coordinateEpsilon ? 0 : rawOffsetX
+  const offsetY = Math.abs(rawOffsetY) <= coordinateEpsilon ? 0 : rawOffsetY
+  const majorRadius = Math.max(radiusX, radiusY)
+  const minorRadius = Math.min(radiusX, radiusY)
+  const majorOffset = Math.abs(radiusX >= radiusY ? offsetX : offsetY)
+  const minorOffset = Math.abs(radiusX >= radiusY ? offsetY : offsetX)
+  let distance: number
+
+  if (majorRadius === minorRadius) {
+    distance = Math.abs(Math.hypot(majorOffset, minorOffset) - majorRadius)
+  } else if (minorOffset > 0) {
+    if (majorOffset === 0) {
+      distance = Math.abs(minorOffset - minorRadius)
+    } else {
+      // Robust bounded root from Eberly's point-to-ellipse construction.
+      const normalizedMajor = majorOffset / majorRadius
+      const normalizedMinor = minorOffset / minorRadius
+      const extentRatio = (majorRadius / minorRadius) ** 2
+      const initial = normalizedMajor ** 2 + normalizedMinor ** 2 - 1
+      if (initial === 0) return 0
+      const scaledMajor = extentRatio * normalizedMajor
+      let lower = normalizedMinor - 1
+      let upper = initial < 0
+        ? 0
+        : Math.hypot(scaledMajor, normalizedMinor) - 1
+      let root = 0
+      for (let iteration = 0; iteration < 32; iteration++) {
+        root = (lower + upper) / 2
+        if (root === lower || root === upper) break
+        const majorRatio = scaledMajor / (root + extentRatio)
+        const minorRatio = normalizedMinor / (root + 1)
+        const value = majorRatio ** 2 + minorRatio ** 2 - 1
+        if (value > 0) lower = root
+        else if (value < 0) upper = root
+        else break
+      }
+      const closestMajor = extentRatio * majorOffset / (root + extentRatio)
+      const closestMinor = minorOffset / (root + 1)
+      distance = Math.hypot(
+        closestMajor - majorOffset,
+        closestMinor - minorOffset,
+      )
+    }
+  } else {
+    const numerator = majorRadius * majorOffset
+    const denominator = majorRadius ** 2 - minorRadius ** 2
+    if (numerator < denominator) {
+      const normalizedClosestMajor = numerator / denominator
+      const closestMajor = majorRadius * normalizedClosestMajor
+      const closestMinor = minorRadius * Math.sqrt(
+        Math.max(0, 1 - normalizedClosestMajor ** 2),
+      )
+      distance = Math.hypot(
+        closestMajor - majorOffset,
+        closestMinor,
+      )
+    } else {
+      distance = Math.abs(majorOffset - majorRadius)
+    }
   }
-  const radiusX = width / 2
-  const radiusY = height / 2
-  const offsetX = x - left - radiusX
-  const offsetY = y - top - radiusY
-  if (offsetX === 0 && offsetY === 0) return Math.min(radiusX, radiusY)
-  if (offsetY === 0) return radiusX - Math.abs(offsetX)
-  if (offsetX === 0) return radiusY - Math.abs(offsetY)
-  const normalizedDistance = Math.hypot(offsetX / radiusX, offsetY / radiusY)
-  const inverseRadiusDistance = Math.hypot(
-    offsetX / (radiusX * radiusX),
-    offsetY / (radiusY * radiusY),
+  return distance
+}
+
+function ellipseInsideCoverage(
+  x: number,
+  y: number,
+  ellipse: EllipseMaskGeometry,
+  featherPixels: number,
+  metrics?: PixelEffectWorkMetrics,
+): number {
+  const rawOffsetX = x - ellipse.centerX
+  const rawOffsetY = y - ellipse.centerY
+  const normalizedRadius = Math.hypot(
+    rawOffsetX / ellipse.radiusX,
+    rawOffsetY / ellipse.radiusY,
   )
-  if (inverseRadiusDistance === 0) return Math.min(radiusX, radiusY)
-  return normalizedDistance * (1 - normalizedDistance) / inverseRadiusDistance
+  if (normalizedRadius > 1) return 0
+  if (featherPixels === 0) return 1
+  const conservativeDistance = Math.min(ellipse.radiusX, ellipse.radiusY)
+    * (1 - normalizedRadius)
+  if (conservativeDistance >= featherPixels) return 1
+  if (metrics) {
+    metrics.maskEllipseDistanceSolves = (metrics.maskEllipseDistanceSolves ?? 0) + 1
+  }
+  return clamp01(ellipseUnsignedBoundaryDistance(
+    rawOffsetX,
+    rawOffsetY,
+    ellipse.radiusX,
+    ellipse.radiusY,
+  ) / featherPixels)
 }
 
 function applyBezierMask(
@@ -438,19 +533,42 @@ function applyMask(
     )
     return
   }
+  const ellipse: EllipseMaskGeometry | null = params.shape === 'ellipse'
+    ? (() => {
+        const radiusX = params.width * geometry.projectWidth / 2
+        const radiusY = params.height * geometry.projectHeight / 2
+        return {
+          centerX: params.x * geometry.projectWidth + radiusX,
+          centerY: params.y * geometry.projectHeight + radiusY,
+          radiusX,
+          radiusY,
+        }
+      })()
+    : null
   for (let surfaceY = 0; surfaceY < geometry.surfaceHeight; surfaceY++) {
     const projectY = (surfaceY + 0.5) * geometry.projectHeight / geometry.surfaceHeight
     for (let surfaceX = 0; surfaceX < geometry.surfaceWidth; surfaceX++) {
       const projectX = (surfaceX + 0.5) * geometry.projectWidth / geometry.surfaceWidth
-      const distance = maskSignedDistance(
-        projectX,
-        projectY,
-        params,
-        geometry,
-      )
-      const insideCoverage = featherPixels === 0
-        ? (distance >= 0 ? 1 : 0)
-        : clamp01(distance / featherPixels)
+      let insideCoverage: number
+      if (ellipse) {
+        insideCoverage = ellipseInsideCoverage(
+          projectX,
+          projectY,
+          ellipse,
+          featherPixels,
+          metrics,
+        )
+      } else {
+        const distance = rectangleSignedDistance(
+          projectX,
+          projectY,
+          params,
+          geometry,
+        )
+        insideCoverage = featherPixels === 0
+          ? (distance >= 0 ? 1 : 0)
+          : clamp01(distance / featherPixels)
+      }
       const coverage = params.invert ? 1 - insideCoverage : insideCoverage
       const alphaIndex = (surfaceY * geometry.surfaceWidth + surfaceX) * 4 + 3
       rgba[alphaIndex] = Math.round(rgba[alphaIndex] * coverage)

@@ -2825,6 +2825,10 @@ surface; it is not a second zoom and never enters document history.
   Replacements, moves, and removals remain valid at the cap. Reset preflights
   descriptor and aggregate budgets before it clears target tracks, preserving
   history and forward-compatible parameters on rejection.
+- Animated insert/split also preflight aggregate effect count, parameter count,
+  and effect-string growth through the shared effect-budget authority before
+  cloning descriptors. Exact-cap rejection is history-neutral, while inserting
+  or splitting an effectless clip remains legal because it adds no effect data.
 - Bezier masks use scanline parity for zero-feather coverage and exact segment
   distances only inside clipped, feather-expanded edge neighborhoods. Scratch
   storage is grow-only `Uint8Array`/`Float32Array` sized to the clipped mask
@@ -2832,11 +2836,18 @@ surface; it is not a second zoom and never enters document history.
   processed pixels plus rows times flattened edges; typical feather work is
   bounded by the edge neighborhoods. At maximum feather, worst-case work can
   still approach flattened edges times clipped-region pixels, so no feather-
-  independent performance claim is made. Ellipse feather now uses a project-
-  space Euclidean implicit-gradient distance with bounded center handling.
-- Review-hardening validation passed 67 post-tweak focused tests, a fresh
-  expanded 415-test broad subset, all 2,274 Vitest cases across 163 files, and
-  all 16 benchmark-runner checks. Standalone TypeScript, production
-  build/typecheck, oxlint, and
+  independent performance claim is made. Ellipse feather uses a normalized,
+  fixed-32-step bisection for the true project-space nearest boundary, with
+  exact circle and axis cases; wide-ellipse center and adjacent samples remain
+  continuous across all bounded aspect ratios. Zero feather uses only the
+  implicit inside test, outside pixels skip distance work, and a conservative
+  minor-radius bound skips fully covered interior pixels. At 1920x1080 on the
+  local Ryzen 5900X, zero/5%/maximum feather took 59.1/155.0/548.0 ms and ran
+  0/309,440/1,628,644 exact solves; all remain under the 2-second regression
+  threshold.
+- Review-hardening validation passed the earlier 67-test focus and 415-test
+  broad subset, then a final 291-test ellipse/budget focus, all 2,281 Vitest
+  cases across 163 files, and all 16 benchmark-runner checks. Standalone
+  TypeScript, production build/typecheck, oxlint, and
   `npm audit --omit=dev` also passed; the audit found 0 vulnerabilities and the
   build emitted only the established large-chunk advisory.

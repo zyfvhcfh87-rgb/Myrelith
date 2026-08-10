@@ -3166,15 +3166,22 @@ acceptance claims.
   non-growth edits legal at the cap and rejected store actions history-neutral.
 - [x] Preflight Reset through descriptor and replacement-budget checks before
   changing defaults or clearing tracks.
+- [x] Preflight cloned effect descriptors on insert and split against the shared
+  aggregate effect, parameter, and string budgets; reject exact-cap growth
+  without history while keeping effectless zero-growth operations legal.
 - [x] Replace Bezier per-pixel double edge scans with scanline coverage and
   clipped edge-neighborhood feather distances using grow-only `Uint8Array` and
   `Float32Array` scratch. Cover zero feather and representative 5% feather at
   1080p under a generous CI-safe threshold; document that maximum feather can
   still approach edges times clipped-region pixels.
-- [x] Use project-space Euclidean near-boundary ellipse distance and verify equal
-  inward feather coverage on both axes of wide and tall ellipses.
-- [x] Pass 67 post-tweak focused tests, a fresh expanded 415-test broad subset,
-  all 2,274 Vitest cases across 163 files plus 16 benchmark-runner checks, standalone
-  TypeScript, production build/typecheck, oxlint, and the production audit with
+- [x] Use a bounded 32-step nearest-boundary solve for project-space Euclidean
+  ellipse distance; verify equal inward axis coverage plus wide-ellipse center
+  and adjacent-pixel continuity. Skip exact work at zero feather, outside the
+  ellipse, and in the provably full-coverage interior; gate zero, 5%, and
+  maximum feather at 1920x1080 under 2 seconds each.
+- [x] Pass the earlier 67-test focus and 415-test broad subset, a final 291-test
+  ellipse/budget focus, all 2,281 Vitest cases across 163 files plus 16
+  benchmark-runner checks, standalone TypeScript, production build/typecheck,
+  oxlint, and the production audit with
   0 vulnerabilities. Publish the Aryel-only follow-up commit and verify its exact
   remote SHA and fresh CI on draft PR #107 before handoff.

@@ -191,6 +191,9 @@ when their positive key-count delta would cross the limit. Replacement, movement
 and removal remain available at the limit. Reset validates the merged descriptor
 and aggregate replacement budgets before clearing the target's tracks, so a
 rejected reset preserves both forward-compatible parameters and history.
+Insert and split apply the same aggregate effect-count, parameter-count, and
+effect-string authority before cloning descriptor stacks. An exact-cap growth
+attempt is rejected atomically; an effectless insert or split remains legal.
 
 Bezier coverage uses scanline parity over the clipped polygon bounds. With zero
 feather it performs no distance-field work. With feather, exact segment distance
@@ -198,6 +201,10 @@ is evaluated only for inside pixels in each clipped, feather-expanded edge
 neighborhood, backed by reusable region-sized `Uint8Array` and `Float32Array`
 scratch. Typical work therefore tracks the covered edge neighborhoods, while the
 honest maximum-feather worst case can still approach flattened edges times all
-pixels in the clipped mask bounds. Ellipse feather uses project-pixel Euclidean
-distance, including finite axis and center handling, so equal inward distances
-on wide and tall ellipses receive equal coverage.
+pixels in the clipped mask bounds. Ellipse feather uses a normalized, robust
+nearest-boundary construction with exact circle/axis cases and a fixed maximum
+of 32 bisections. Zero feather needs only the implicit inside test; outside
+pixels and interior pixels whose minor-radius lower bound proves full coverage
+skip the solve. This keeps project-pixel Euclidean coverage continuous at the
+center of wide ellipses as well as at equal inward distances on wide and tall
+axes without turning the common path into an all-pixel root solve.

@@ -106,6 +106,7 @@ import {
   cloneEffectDescriptor,
 } from './effectStack'
 import {
+  effectCollectionAppendBudgetError,
   effectAppendBudgetError,
   effectDescriptorBoundsError,
   effectReplacementBudgetError,
@@ -883,6 +884,8 @@ export function insertClip(
   if (overlapsAny(track.clips, tl)) {
     return reject(doc, op, 'insert would overlap a clip on the target track')
   }
+  const effectBudgetError = effectCollectionAppendBudgetError(doc, clip.effects)
+  if (effectBudgetError) return reject(doc, op, effectBudgetError)
   if (!documentAnimationKeyframeGrowthAllowed(
     doc,
     clipAnimationKeyframeCount(animation),
@@ -937,6 +940,8 @@ export function splitClipAtFrame(
       `frame ${frame} is not strictly inside clip [${tl.startFrame}, ${rangeEnd(tl)})`,
     )
   }
+  const effectBudgetError = effectCollectionAppendBudgetError(doc, clip.effects)
+  if (effectBudgetError) return reject(doc, op, effectBudgetError)
   if (!documentAnimationKeyframeGrowthAllowed(
     doc,
     clipAnimationKeyframeCount(clipAnimation(clip)),

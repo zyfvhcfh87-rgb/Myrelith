@@ -9,6 +9,10 @@ import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import { sourceTimeRateFromPercent } from '../domain/sourceTimeMap'
 import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
+import {
+  documentAtAggregateEffectBudget,
+  effectBudgetInsertionClip,
+} from '../test/effectBudgetFixtures'
 import { useDocumentStore } from './documentStore'
 
 /* ------------------------------------------------------------------ */
@@ -648,6 +652,25 @@ describe('actions delegate to domain operations', () => {
     beforePatch.updateEffectParams('clipA', 'full-params', { overflow: true })
     expect(getState().doc).toBe(beforePatch.doc)
     expect(getState().past).toBe(beforePatch.past)
+  })
+
+  test('aggregate effect-growth rejections keep insert and split history-neutral', () => {
+    const capped = deepFreeze(documentAtAggregateEffectBudget('effects'))
+    getState().setDoc(capped)
+    const beforeInsert = getState()
+    beforeInsert.insertClip(
+      'track-1',
+      effectBudgetInsertionClip('effects', 10_000),
+    )
+    expect(getState().doc).toBe(beforeInsert.doc)
+    expect(getState().past).toBe(beforeInsert.past)
+    expect(getState().future).toBe(beforeInsert.future)
+
+    const beforeSplit = getState()
+    beforeSplit.splitClipAt('effect-budget-clip-0', 20)
+    expect(getState().doc).toBe(beforeSplit.doc)
+    expect(getState().past).toBe(beforeSplit.past)
+    expect(getState().future).toBe(beforeSplit.future)
   })
 
   test('effect keyframe budget rejection keeps document and history references', () => {
