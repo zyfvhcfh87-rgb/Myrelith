@@ -97,6 +97,11 @@ import {
   LEGACY_UNVERSIONED_EFFECT_VERSION,
   migrateEffectDescriptor,
 } from './effectStack'
+import {
+  EFFECT_STACK_LIMITS,
+  effectDescriptorBoundsError,
+  effectDescriptorBudget,
+} from './effectBounds'
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
 /** Serialized format marker used by releases published before the rebrand. */
@@ -121,11 +126,11 @@ export const PROJECT_FILE_LIMITS = {
   maxCollectionNameCharacters: MEDIA_COLLECTION_LIMITS.maxNameCharacters,
   maxTracks: 256,
   maxClips: 100_000,
-  maxEffectsPerClip: 256,
-  maxEffectParams: 256,
-  maxTotalEffects: 10_000,
-  maxTotalEffectParams: 50_000,
-  maxTotalEffectStringCharacters: 10_000_000,
+  maxEffectsPerClip: EFFECT_STACK_LIMITS.maxEffectsPerClip,
+  maxEffectParams: EFFECT_STACK_LIMITS.maxEffectParams,
+  maxTotalEffects: EFFECT_STACK_LIMITS.maxTotalEffects,
+  maxTotalEffectParams: EFFECT_STACK_LIMITS.maxTotalEffectParams,
+  maxTotalEffectStringCharacters: EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
   maxTransitions: 100_000,
   maxMarkers: MAX_TIMELINE_MARKERS,
   maxTotalKeyframes: 100_000,
@@ -135,13 +140,13 @@ export const PROJECT_FILE_LIMITS = {
   maxFileNameCharacters: 4_096,
   maxMimeTypeCharacters: 256,
   maxTextCharacters: TEXT_OVERLAY_LIMITS.maxCharacters,
-  maxEffectStringCharacters: 65_536,
+  maxEffectStringCharacters: EFFECT_STACK_LIMITS.maxEffectStringCharacters,
   maxDimension: 65_535,
   maxAudioSampleRate: 768_000,
   maxAudioChannels: 64,
   maxRatePart: 1_000_000,
   maxFramesPerSecond: 1_000,
-  maxFiniteMagnitude: 1_000_000_000,
+  maxFiniteMagnitude: EFFECT_STACK_LIMITS.maxFiniteMagnitude,
 } as const
 
 /** Durable effective-import metadata plus original-file relink identity. */
@@ -781,57 +786,28 @@ function validateEffect(
 ): asserts value is Effect {
   const effect = record(value, path)
   exactKeys(effect, ['id', 'type', 'version', 'enabled', 'params'], [], path)
-  stringValue(effect.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
-  if (context.effectIds.has(effect.id)) fail(`${path}.id`, 'duplicate effect id')
-  context.effectIds.add(effect.id)
-  stringValue(effect.type, `${path}.type`, PROJECT_FILE_LIMITS.maxNameCharacters)
-  safeInteger(effect.version, `${path}.version`, LEGACY_UNVERSIONED_EFFECT_VERSION)
-  booleanValue(effect.enabled, `${path}.enabled`)
-  const params = record(effect.params, `${path}.params`)
-  const keys = Object.keys(params)
-  if (keys.length > PROJECT_FILE_LIMITS.maxEffectParams) {
-    fail(`${path}.params`, `exceeds ${PROJECT_FILE_LIMITS.maxEffectParams} entries`)
-  }
-  context.effectParamCount += keys.length
+  const boundsError = effectDescriptorBoundsError(effect)
+  if (boundsError) fail(path, boundsError)
+  const descriptor = effect as unknown as Effect
+  if (context.effectIds.has(descriptor.id)) fail(`${path}.id`, 'duplicate effect id')
+  context.effectIds.add(descriptor.id)
+  const budget = effectDescriptorBudget(descriptor)
+  context.effectParamCount += budget.params
   if (context.effectParamCount > PROJECT_FILE_LIMITS.maxTotalEffectParams) {
     fail(
       '$.document.tracks',
       `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectParams} effect parameters in total`,
     )
   }
-  for (const key of keys) {
-    stringValue(key, `${path}.params key`, PROJECT_FILE_LIMITS.maxNameCharacters)
-    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
-      fail(`${path}.params.${key}`, 'unsafe parameter key')
-    }
-    const parameter = params[key]
-    if (typeof parameter === 'number') {
-      finiteNumber(
-        parameter,
-        `${path}.params.${key}`,
-        -PROJECT_FILE_LIMITS.maxFiniteMagnitude,
-        PROJECT_FILE_LIMITS.maxFiniteMagnitude,
-      )
-    } else if (typeof parameter === 'string') {
-      stringValue(
-        parameter,
-        `${path}.params.${key}`,
-        PROJECT_FILE_LIMITS.maxEffectStringCharacters,
-        true,
-      )
-      context.effectStringCharacterCount += parameter.length
-      if (
-        context.effectStringCharacterCount >
-        PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters
-      ) {
-        fail(
-          '$.document.tracks',
-          `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters} effect-string characters in total`,
-        )
-      }
-    } else if (typeof parameter !== 'boolean') {
-      fail(`${path}.params.${key}`, 'expected a finite number, string, or boolean')
-    }
+  context.effectStringCharacterCount += budget.stringCharacters
+  if (
+    context.effectStringCharacterCount >
+    PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters
+  ) {
+    fail(
+      '$.document.tracks',
+      `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters} effect-string characters in total`,
+    )
   }
 }
 

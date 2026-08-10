@@ -8,6 +8,7 @@ import {
   migrateEffectDescriptor,
   resolveCanvasEffectStack,
   resolveEffectStack,
+  supportsCanvasEffectFilter,
 } from './effectStack'
 
 describe('effect registry and ordered evaluation', () => {
@@ -44,6 +45,8 @@ describe('effect registry and ordered evaluation', () => {
     expect(resolution.status).toBe('unsupported')
     expect(resolution.detail).toContain(CANVAS_FILTER_EFFECT_CAPABILITY)
     expect(resolution.canvasFilter).toBeNull()
+    expect(supportsCanvasEffectFilter({ filter: 'none' })).toBe(true)
+    expect(supportsCanvasEffectFilter({})).toBe(false)
   })
 
   test('bypasses invalid and unknown effects without changing their payload', () => {

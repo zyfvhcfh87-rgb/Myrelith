@@ -420,6 +420,58 @@ describe('compositeFrame — background & selection', () => {
     expect(result).toEqual({ drawn: ['text-clip'], missing: [] })
   })
 
+  test('applies ordered effects once to the completed isolated text layer', async () => {
+    const first = createColorAdjustEffect('text-fx-a')
+    first.params = { exposure: 1, contrast: 0.25, saturation: -0.5 }
+    const second = createColorAdjustEffect('text-fx-b')
+    second.params = { exposure: -1, contrast: -0.25, saturation: 0.5 }
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [
+        makeClip('styled-text', 0, 30, {
+          opacity: 0.75,
+          blendMode: 'screen',
+          effects: [first, second],
+          text: {
+            ...defaultTextProps(1920, 1080),
+            content: 'Layered',
+            backgroundEnabled: true,
+            outlineWidthPx: 3,
+          },
+        }),
+      ]),
+    ])
+    const destination = makeCtx({ supportsFilter: true })
+    const surfaces = makeTransitionSurfaceProvider()
+
+    const result = await compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource().source,
+      surfaces.provider,
+    )
+
+    expect(surfaces.leg.ops('fillRect')).not.toHaveLength(0)
+    expect(surfaces.leg.ops('strokeText')).toHaveLength(1)
+    expect(surfaces.leg.ops('fillText')).toHaveLength(1)
+    expect(surfaces.leg.ops('filter')).toHaveLength(0)
+    expect(destination.ops('filter').map((operation) => operation.args[0])).toEqual([
+      'brightness(2) contrast(1.25) saturate(0.5) '
+      + 'brightness(0.5) contrast(0.75) saturate(1.5)',
+    ])
+    const layerDraw = destination.ops('drawImage')[0]
+    expect(layerDraw.args[0]).toBe(surfaces.legCanvas)
+    const names = destination.log.map((operation) => operation.name)
+    expect(names.indexOf('alpha')).toBeLessThan(names.indexOf('filter'))
+    expect(names.indexOf('composite')).toBeLessThan(names.indexOf('filter'))
+    expect(names.indexOf('filter')).toBeLessThan(names.indexOf('drawImage'))
+    expect(destination.state()).toMatchObject({ filter: 'none', operation: 'source-over' })
+    expect(destination.depth()).toBe(0)
+    expect(surfaces.leg.depth()).toBe(0)
+    expect(surfaces.gets()).toBe(1)
+    expect(result).toEqual({ drawn: ['styled-text'], missing: [] })
+  })
+
   test('draws semantic captions through shared text layout without media requests', async () => {
     const doc = makeDoc([])
     doc.captionTracks = [{

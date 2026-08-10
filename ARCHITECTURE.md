@@ -185,6 +185,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `Clip.effects` is a durable ordered list of versioned `EffectDescriptor`
   records in timeline schema 10. `domain/effectStack.ts` is the browser-free
   registry, validation, migration, capability, and evaluation authority.
+  `domain/effectBounds.ts` is the one browser-free descriptor and aggregate
+  budget contract used by both live operations and portable validation: no
+  successful edit may create a document that save/recovery must reject.
   Schema-9 migration assigns the reserved legacy version zero to unknown types
   without changing their payload; registry-owned legacy descriptors migrate to
   their current version. Unknown types, versions, and parameter keys must remain
@@ -256,8 +259,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   retain explicit bounded owners.
 - Every composition item carries resolved blend intent. Ordinary decoded media
   applies its ordered effect stack during the source draw, then blends after
-  transform/crop and opacity. Procedural text first renders effects as part of one
-  isolated source-over layer, then blends once. A crossfade keeps source-over
+  transform/crop and opacity. Procedural text paints background, outline, and
+  fill unfiltered into one isolated source-over layer, then applies the ordered
+  stack once while drawing that completed layer before opacity/blend. A
+  crossfade keeps source-over
   legs plus premultiplied `lighter` weighting and applies a non-normal mode to
   the isolated group only when both legs agree on the same supported name;
   mixed/unknown intent uses normal without rewriting either clip. The concrete
@@ -266,6 +271,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   shader fallback. Canvas filters use the existing saved context and reusable
   text/transition surfaces; effects never allocate per-frame scratch resources.
   Preview and export share this exact plan/compositor path.
+- Preview capability is runtime fact, not a UI constant. The render worker
+  probes its actual Program Monitor compositor context and reports the result
+  through the worker protocol/bridge. `app/previewController.ts` evaluates the
+  document against that report and publishes a session-only status projection;
+  the Inspector only reads it. Export uses the same compositor but separately
+  probes its own export-owned context, so preview and export capability status
+  may differ without either path inventing support.
 - `domain/audioMixPlan.ts` is the shared live/export audible-contributor and
   envelope contract. Valid linked fades open real virtual handle ranges and
   apply clip volume with an absolute linear or equal-power envelope. Web Audio

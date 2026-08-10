@@ -27,6 +27,13 @@ export const COLOR_ADJUST_LIMITS = Object.freeze({
 
 export type EffectCapability = typeof CANVAS_FILTER_EFFECT_CAPABILITY
 
+/** Structural probe shared by the compositor and worker capability report. */
+export function supportsCanvasEffectFilter(
+  surface: { readonly filter?: unknown },
+): boolean {
+  return typeof surface.filter === 'string'
+}
+
 export interface EffectRegistration {
   readonly type: string
   readonly version: number
@@ -194,15 +201,6 @@ export function resolveEffectStack(
         canvasFilter: null,
       }
     }
-    if (!effect.enabled) {
-      return {
-        effect,
-        label: registration.label,
-        status: 'disabled',
-        detail: 'Bypassed by the effect toggle.',
-        canvasFilter: null,
-      }
-    }
     const missingCapability = registration.capabilities.find((capability) =>
       !capabilities.has(capability),
     )
@@ -212,6 +210,15 @@ export function resolveEffectStack(
         label: registration.label,
         status: 'unsupported',
         detail: `This renderer does not provide ${missingCapability}; the effect is bypassed.`,
+        canvasFilter: null,
+      }
+    }
+    if (!effect.enabled) {
+      return {
+        effect,
+        label: registration.label,
+        status: 'disabled',
+        detail: 'Bypassed by the effect toggle.',
         canvasFilter: null,
       }
     }

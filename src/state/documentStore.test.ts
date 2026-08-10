@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track, Transition } from '../domain/schema'
 import { createColorAdjustEffect } from '../domain/effectStack'
+import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import { useDocumentStore } from './documentStore'
 
 /* ------------------------------------------------------------------ */
@@ -550,6 +551,42 @@ describe('actions delegate to domain operations', () => {
     expect(JSON.stringify(getState().doc)).toBe(afterParams)
     getState().undo()
     expect(JSON.stringify(getState().doc)).toBe(afterAdd)
+  })
+
+  test('effect budget rejections keep the exact document and history references', () => {
+    const saturated = JSON.parse(JSON.stringify(makeDoc())) as TimelineDoc
+    saturated.tracks[0].clips[0].effects = Array.from(
+      { length: EFFECT_STACK_LIMITS.maxEffectsPerClip },
+      (_value, index) => ({
+        id: `limit-${index}`,
+        type: 'future.opaque',
+        version: 1,
+        enabled: true,
+        params: {},
+      }),
+    )
+    getState().setDoc(deepFreeze(saturated))
+    const beforeAdd = getState()
+    beforeAdd.addEffect('clipA', createColorAdjustEffect('over-limit'))
+    expect(getState().doc).toBe(beforeAdd.doc)
+    expect(getState().past).toBe(beforeAdd.past)
+
+    const editable = JSON.parse(JSON.stringify(makeDoc())) as TimelineDoc
+    editable.tracks[0].clips[0].effects = [{
+      id: 'full-params',
+      type: 'future.opaque',
+      version: 1,
+      enabled: true,
+      params: Object.fromEntries(Array.from(
+        { length: EFFECT_STACK_LIMITS.maxEffectParams },
+        (_value, index) => [`parameter-${index}`, index],
+      )),
+    }]
+    getState().setDoc(deepFreeze(editable))
+    const beforePatch = getState()
+    beforePatch.updateEffectParams('clipA', 'full-params', { overflow: true })
+    expect(getState().doc).toBe(beforePatch.doc)
+    expect(getState().past).toBe(beforePatch.past)
   })
 
   test('document survives a JSON round-trip after edits', () => {

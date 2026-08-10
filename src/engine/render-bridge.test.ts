@@ -271,6 +271,22 @@ const flushMicrotasks = async (): Promise<void> => {
   for (let i = 0; i < 12; i++) await Promise.resolve()
 }
 
+describe('preview renderer capability routing', () => {
+  test('forwards the exact worker capability snapshot', () => {
+    const { worker, bridge } = makeBridge()
+    const listener = vi.fn()
+    bridge.onRendererCapabilities = listener
+
+    worker.emit({
+      type: 'rendererCapabilities',
+      capabilities: { canvasFilter: false },
+    })
+
+    expect(listener).toHaveBeenCalledOnce()
+    expect(listener).toHaveBeenCalledWith({ canvasFilter: false })
+  })
+})
+
 /* ------------------------------------------------------------------ */
 /* Entry building                                                       */
 /* ------------------------------------------------------------------ */

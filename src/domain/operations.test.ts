@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, Effect, MediaAsset, TimelineDoc, Track, Transition } from './schema'
 import { defaultTextProps } from './textOverlay'
 import { createColorAdjustEffect } from './effectStack'
+import { EFFECT_STACK_LIMITS } from './effectBounds'
 import {
   addCrossfade,
   addCrossfadeWithSourceBounds,
@@ -392,6 +393,56 @@ describe('addEffect', () => {
     const doc = addEffect(makeDoc(), 'clipA', fx('shared-id'))
     expect(addEffect(doc, 'clipB', fx('shared-id'))).toBe(doc)
   })
+
+  test('accepts the exact descriptor limits and rejects every over-limit edit', () => {
+    const params: Effect['params'] = Object.fromEntries(Array.from(
+      { length: EFFECT_STACK_LIMITS.maxEffectParams },
+      (_value, index) => [`parameter-${index}`, index],
+    ))
+    params['parameter-0'] = 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters)
+    const exact: Effect = {
+      id: 'i'.repeat(EFFECT_STACK_LIMITS.maxIdCharacters),
+      type: 't'.repeat(EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters),
+      version: Number.MAX_SAFE_INTEGER,
+      enabled: true,
+      params,
+    }
+    const base = makeDoc()
+    const accepted = addEffect(base, 'clipA', exact)
+    expect(accepted).not.toBe(base)
+
+    const overCases: Effect[] = [
+      { ...exact, id: `${exact.id}x` },
+      { ...exact, type: `${exact.type}x` },
+      { ...exact, id: 'too-many-params', params: { ...params, overflow: true } },
+      {
+        ...exact,
+        id: 'too-long-string',
+        params: { label: 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters + 1) },
+      },
+      {
+        ...exact,
+        id: 'too-large-number',
+        params: { amount: EFFECT_STACK_LIMITS.maxFiniteMagnitude + 1 },
+      },
+    ]
+    for (const candidate of overCases) {
+      const doc = deepFreeze(makeDoc())
+      expect(addEffect(doc, 'clipA', candidate)).toBe(doc)
+    }
+  })
+
+  test('rejects an add after the exact per-clip limit without changing the document', () => {
+    let doc = makeDoc()
+    for (let index = 0; index < EFFECT_STACK_LIMITS.maxEffectsPerClip; index++) {
+      doc = addEffect(doc, 'clipA', fx(`limit-${index}`))
+    }
+    const full = deepFreeze(doc)
+    expect(clipIn(full, 'V1', 'clipA').effects).toHaveLength(
+      EFFECT_STACK_LIMITS.maxEffectsPerClip,
+    )
+    expect(addEffect(full, 'clipA', fx('over-limit'))).toBe(full)
+  })
 })
 
 describe('ordered effect-stack operations', () => {
@@ -430,6 +481,27 @@ describe('ordered effect-stack operations', () => {
     expect(reorderEffect(doc, 'clipA', 'fx-color', 9)).toBe(doc)
     expect(removeEffect(doc, 'clipA', 'missing')).toBe(doc)
     expect(setEffectEnabled(doc, 'clipE', 'fx-color', false)).toBe(doc)
+  })
+
+  test('rejects parameter patches that cross portable descriptor bounds', () => {
+    const opaque: Effect = {
+      id: 'fx-opaque',
+      type: 'future.opaque',
+      version: 1,
+      enabled: true,
+      params: Object.fromEntries(Array.from(
+        { length: EFFECT_STACK_LIMITS.maxEffectParams },
+        (_value, index) => [`parameter-${index}`, index],
+      )),
+    }
+    const doc = deepFreeze(addEffect(makeDoc(), 'clipA', opaque))
+    expect(updateEffectParams(doc, 'clipA', opaque.id, { overflow: true })).toBe(doc)
+    expect(updateEffectParams(doc, 'clipA', opaque.id, {
+      'parameter-0': EFFECT_STACK_LIMITS.maxFiniteMagnitude + 1,
+    })).toBe(doc)
+    expect(updateEffectParams(doc, 'clipA', opaque.id, {
+      'parameter-0': 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters + 1),
+    })).toBe(doc)
   })
 })
 

@@ -61,7 +61,10 @@ import {
   type BlendModeResolution,
 } from '../domain/blendModes'
 import { probeCanvasBlendMode } from './blendModeCapabilities'
-import { resolveCanvasEffectStack } from '../domain/effectStack'
+import {
+  resolveCanvasEffectStack,
+  supportsCanvasEffectFilter,
+} from '../domain/effectStack'
 
 const NORMAL_BLEND_MODE = resolveBlendMode(DEFAULT_BLEND_MODE)
 
@@ -713,7 +716,6 @@ function compositeTextLayer(
   try {
     inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
       clearSurface(surfaces.leg.ctx, doc)
-      applyCanvasEffectStack(surfaces.leg.ctx, clip)
       drawTextClip(surfaces.leg.ctx, doc, clip, 1, NORMAL_BLEND_MODE)
     })
 
@@ -721,6 +723,10 @@ function compositeTextLayer(
     try {
       destination.globalAlpha = opacity
       applyCanvasBlendMode(destination, blendMode)
+      // Filter the completed transparent text layer once. Applying filters
+      // while painting its background/stroke/fill primitives changes their
+      // overlap semantics and compounds the authored stack.
+      applyCanvasEffectStack(destination, clip)
       destination.drawImage(
         surfaces.leg.canvas,
         0,
@@ -754,7 +760,7 @@ function applyCanvasBlendMode(
  * not write `filter`, preserving the exact historical no-effect path.
  */
 function applyCanvasEffectStack(ctx: Composite2D, clip: Clip): void {
-  const supportsCanvasFilter = typeof ctx.filter === 'string'
+  const supportsCanvasFilter = supportsCanvasEffectFilter(ctx)
   const resolution = resolveCanvasEffectStack(clip.effects, supportsCanvasFilter)
   if (resolution.filter !== null && supportsCanvasFilter) ctx.filter = resolution.filter
 }

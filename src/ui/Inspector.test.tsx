@@ -13,10 +13,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
+import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { useTransportStore } from '../state/transportStore'
 import { initSelectionReconciliation } from '../app/selectionReconciliationController'
+import { projectPreviewEffectStatuses } from '../app/previewEffectStatus'
 import {
   resetDocumentStoreForTest,
   resetTransportStoreForTest,
@@ -77,6 +80,15 @@ const doc = () => useDocumentStore.getState()
 const transport = () => useTransportStore.getState()
 const clipA = () => doc().doc.tracks[0].clips.find((c) => c.id === 'clipA') as Clip
 
+function projectEffectStatuses(canvasFilter: boolean): void {
+  const timeline = doc().doc
+  const capabilities = { canvasFilter }
+  usePreviewStatusStore.getState().setEffectProjection(
+    capabilities,
+    projectPreviewEffectStatuses(timeline, capabilities),
+  )
+}
+
 function setMultiSelection(selectedClipIds: readonly string[], primaryId?: string): void {
   useTransportStore.setState({
     selectedClipIds,
@@ -95,6 +107,7 @@ beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   resetTransportStoreForTest()
   resetDocumentStoreForTest(makeDoc())
+  usePreviewStatusStore.getState().resetPreviewStatus()
   useMediaStore.getState().clearAssets()
   warnSpy.mockClear()
 })
@@ -472,6 +485,7 @@ describe('Inspector', () => {
       'fx_00000000-0000-4000-8000-000000000045',
       'fx_00000000-0000-4000-8000-000000000046',
     ])
+    act(() => projectEffectStatuses(true))
 
     const exposure = screen.getByTestId(
       'inspector-effect-exposure-fx_00000000-0000-4000-8000-000000000045',
@@ -504,6 +518,7 @@ describe('Inspector', () => {
       params: { seed: 42, mode: 'prismatic' },
     }]
     resetDocumentStoreForTest(fixture)
+    projectEffectStatuses(true)
     transport().setSelectedClip('clipA')
     render(<Inspector />)
 
@@ -512,6 +527,50 @@ describe('Inspector', () => {
     expect(screen.getByText(/not installed; its data is preserved/u)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reset future.sparkle' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Remove future.sparkle' })).toBeEnabled()
+  })
+
+  test('reports unavailable preview capability without assuming export capability', () => {
+    const fixture = makeDoc()
+    fixture.tracks[0].clips[0].effects = [{
+      id: 'fx-preview-unavailable',
+      type: 'builtin.color-adjust',
+      version: 1,
+      enabled: true,
+      params: { exposure: 0, contrast: 0, saturation: 0 },
+    }]
+    resetDocumentStoreForTest(fixture)
+    projectEffectStatuses(false)
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Effects' }))
+    expect(screen.getByLabelText('Effect status: unsupported')).toBeInTheDocument()
+    expect(screen.getByText(/Program Monitor preview renderer does not provide/u))
+      .toBeInTheDocument()
+    expect(screen.getByText(/Export probes its own render context separately/u))
+      .toBeInTheDocument()
+  })
+
+  test('disables Add color and explains the per-clip effect limit', () => {
+    const fixture = makeDoc()
+    fixture.tracks[0].clips[0].effects = Array.from(
+      { length: EFFECT_STACK_LIMITS.maxEffectsPerClip },
+      (_value, index) => ({
+        id: `fx-limit-${index}`,
+        type: 'future.opaque',
+        version: 1,
+        enabled: true,
+        params: {},
+      }),
+    )
+    resetDocumentStoreForTest(fixture)
+    projectEffectStatuses(true)
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Effects' }))
+    expect(screen.getByRole('button', { name: 'Add color' })).toBeDisabled()
+    expect(screen.getByText(/clip has reached the 256-effect limit/u)).toBeInTheDocument()
   })
 })
 

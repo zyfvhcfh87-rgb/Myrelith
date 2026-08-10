@@ -21,6 +21,7 @@ import type {
 } from '../domain/schema'
 import { defaultTextProps } from '../domain/textOverlay'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
+import { createColorAdjustEffect } from '../domain/effectStack'
 import {
   RenderAssetOpenError,
   type RenderFrameResult,
@@ -30,7 +31,10 @@ import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useTransportStore } from '../state/transportStore'
-import type { RenderMode } from '../workers/render-protocol'
+import type {
+  RenderMode,
+  RenderWorkerCapabilities,
+} from '../workers/render-protocol'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
 import type { BridgeLike, PreviewDeps } from './previewController'
 import {
@@ -53,6 +57,7 @@ class FakeBridge implements BridgeLike {
     message: string,
   ) => void) | null = null
   onAssetReady: ((assetId: string) => void) | null = null
+  onRendererCapabilities: ((capabilities: RenderWorkerCapabilities) => void) | null = null
   docs: TimelineDoc[] = []
   catalogs: SourceBoundsCatalog[] = []
   profiles: PresentationProfile[] = []
@@ -443,6 +448,34 @@ describe('previewController', () => {
 
     useTransportStore.getState().setClipVisualPreview(null)
     expect(bridge.docs.at(-1)).toBe(doc)
+  })
+
+  test('projects the actual preview renderer effect capability into session state', () => {
+    const { deps, bridge } = makeDeps()
+    const doc = makeVideoDoc(['graded'])
+    doc.tracks[0].clips[0].effects = [createColorAdjustEffect('fx-preview')]
+    useDocumentStore.getState().setDoc(doc)
+    initPreview(canvasEl(), deps)
+
+    expect(usePreviewStatusStore.getState().effectStatuses.get('fx-preview'))
+      .toMatchObject({ status: 'unsupported' })
+    expect(usePreviewStatusStore.getState().effectStatuses.get('fx-preview')?.detail)
+      .toMatch(/still being detected/)
+
+    bridge.onRendererCapabilities?.({ canvasFilter: false })
+    expect(usePreviewStatusStore.getState()).toMatchObject({
+      rendererCapabilities: { canvasFilter: false },
+    })
+    expect(usePreviewStatusStore.getState().effectStatuses.get('fx-preview'))
+      .toMatchObject({
+        label: 'Color adjustment',
+        status: 'unsupported',
+        detail: expect.stringMatching(/Program Monitor preview renderer does not provide/),
+      })
+
+    bridge.onRendererCapabilities?.({ canvasFilter: true })
+    expect(usePreviewStatusStore.getState().effectStatuses.get('fx-preview'))
+      .toMatchObject({ status: 'ready' })
   })
 
   test('keeps an unreferenced analyzed video warm without re-demuxing', async () => {

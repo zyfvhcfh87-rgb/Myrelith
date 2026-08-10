@@ -42,6 +42,7 @@ import {
   type PresentationProfile,
 } from '../domain/presentationProfile'
 import { videoCompositionRequests } from '../domain/videoCompositionPlan'
+import { supportsCanvasEffectFilter } from '../domain/effectStack'
 import {
   invalidateMediaDecoderRuntime,
   invalidateMediaDecoderSource,
@@ -224,6 +225,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   let transitionLegCtx: Composite2D | null = null
   let transitionGroup: RenderCanvasLike | null = null
   let transitionGroupCtx: Composite2D | null = null
+  let publishedCanvasFilterCapability: boolean | null = null
   let doc: TimelineDoc | null = null
   let presentationProfile: PresentationProfile | null = null
   /** Bumped by every composite/setDoc/configureAsset/releaseAsset/close;
@@ -446,6 +448,16 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     } else if (scratch.width !== outputWidth || scratch.height !== outputHeight) {
       scratch.width = outputWidth
       scratch.height = outputHeight
+    }
+    if (scratchCtx) {
+      const canvasFilter = supportsCanvasEffectFilter(scratchCtx)
+      if (canvasFilter !== publishedCanvasFilterCapability) {
+        publishedCanvasFilterCapability = canvasFilter
+        env.post({
+          type: 'rendererCapabilities',
+          capabilities: { canvasFilter },
+        })
+      }
     }
     if (
       transitionLeg

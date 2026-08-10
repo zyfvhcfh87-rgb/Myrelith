@@ -92,6 +92,11 @@ import {
   effectRegistration,
   cloneEffectDescriptor,
 } from './effectStack'
+import {
+  effectAppendBudgetError,
+  effectDescriptorBoundsError,
+  effectReplacementBudgetError,
+} from './effectBounds'
 
 /** Which clip edge a trim moves. */
 export type TrimEdge = 'start' | 'end'
@@ -2160,6 +2165,8 @@ export function addEffect(
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
   const validationError = effectDescriptorValidationError(effect)
   if (validationError) return reject(doc, op, validationError)
+  const budgetError = effectAppendBudgetError(doc, loc.clip, effect)
+  if (budgetError) return reject(doc, op, budgetError)
   if (effectIdExists(doc, effect.id)) {
     return reject(doc, op, `document already has an effect with id ${effect.id}`)
   }
@@ -2179,31 +2186,7 @@ function effectIdExists(doc: TimelineDoc, effectId: EffectId): boolean {
 }
 
 function effectDescriptorValidationError(effect: Effect): string | null {
-  if (typeof effect.id !== 'string' || effect.id.length === 0) {
-    return 'effect id must be a non-empty string'
-  }
-  if (typeof effect.type !== 'string' || effect.type.length === 0) {
-    return 'effect type must be a non-empty string'
-  }
-  if (!Number.isSafeInteger(effect.version) || effect.version < 0) {
-    return `effect version must be a non-negative safe integer, got ${effect.version}`
-  }
-  if (typeof effect.enabled !== 'boolean') return 'effect enabled must be a boolean'
-  if (!effect.params || typeof effect.params !== 'object' || Array.isArray(effect.params)) {
-    return 'effect params must be a record'
-  }
-  for (const [key, value] of Object.entries(effect.params)) {
-    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
-      return `unsafe effect parameter key ${key}`
-    }
-    if (
-      (typeof value === 'number' && !Number.isFinite(value))
-      || (typeof value !== 'number' && typeof value !== 'string' && typeof value !== 'boolean')
-    ) {
-      return `effect parameter ${key} must be a finite number, string, or boolean`
-    }
-  }
-  return effectParamsValidationError(effect)
+  return effectDescriptorBoundsError(effect) ?? effectParamsValidationError(effect)
 }
 
 function updateEffect(
@@ -2256,6 +2239,11 @@ export function updateEffectParams(
     const validationError = effectDescriptorValidationError(next)
     if (validationError) {
       reject(doc, 'updateEffectParams', validationError)
+      return null
+    }
+    const budgetError = effectReplacementBudgetError(doc, effect, next)
+    if (budgetError) {
+      reject(doc, 'updateEffectParams', budgetError)
       return null
     }
     const changed = Object.entries(patch).some(([key, value]) => effect.params[key] !== value)

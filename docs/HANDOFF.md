@@ -2376,6 +2376,35 @@ surface; it is not a second zoom and never enters document history.
 - The publication is a ready PR to `master` with `Closes #45`. Do not merge it
   here; the coordinating task will review and integrate #45 before rebasing #69
   and then #70.
+- PR review remediation keeps one `domain/effectBounds.ts` contract between
+  live editing and portable validation. Exact-limit edits serialize; any
+  per-clip, per-document, parameter, key/value, string, or finite-magnitude
+  overflow returns the same document and adds no undo entry. Inspector Add is
+  disabled with the shared reason when the selected budget is exhausted.
+- Preview effect status now comes from the worker's actual Program Monitor
+  compositor capability report via bridge/controller/session projection. The
+  Inspector reads this state and never evaluates effects itself. Export still
+  probes its separately owned context through the shared compositor, so its
+  capability can legitimately differ from preview.
+- Procedural text now paints background, outline, and fill unfiltered into the
+  existing reusable leg, then filters that completed layer on its single
+  destination draw before opacity/blend. This adds no surface, retains
+  crossfade group behavior, and restores/clears borrowed contexts in `finally`.
+- Post-review validation passed 11 focused files / 466 tests, all 149 Vitest
+  files / 2,124 tests, all 16 benchmark-runner tests, TypeScript plus production
+  build, oxlint, the architecture boundary guard, production audit at 0
+  vulnerabilities, and clean diff checks. The benchmark captured hardware-
+  accelerated Chromium with no browser warnings/errors; its advisory stress
+  thresholds remain benchmark evidence, not Issue #45 acceptance gates.
+- Real Chrome used only `http://localhost:41845/` with `--strictPort`. A
+  procedural text clip with background, outline, and shadow received two
+  ordered effects, both reported `ready` from the actual worker capability
+  handshake. Bypassing versus applying exposure -2 changed the isolated
+  Program Monitor screenshot SHA-256 from
+  `65e1584f19213d0e5116cd46b7b619dde3495ea4c1c19a8ba4e3f000773583ff`
+  to `00966aed3643a50ad08fcd5da8977a9cb295ebc65d5a86a05032a1fc6c3a10f0`.
+  The final console had 0 warnings/errors, no error overlay appeared, and port
+  41845 was released.
 
 ## Working agreements (the user's explicit preferences)
 

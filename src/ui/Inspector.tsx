@@ -52,6 +52,7 @@ import {
 } from '../domain/textOverlay'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { useTransportStore } from '../state/transportStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 import {
@@ -62,13 +63,12 @@ import {
   type BlendModeName,
 } from '../domain/blendModes'
 import {
-  CANVAS_FILTER_EFFECT_CAPABILITY,
   COLOR_ADJUST_EFFECT_TYPE,
   COLOR_ADJUST_EFFECT_VERSION,
   COLOR_ADJUST_LIMITS,
   createColorAdjustEffect,
-  resolveEffectStack,
 } from '../domain/effectStack'
+import { effectAppendBudgetError } from '../domain/effectBounds'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
 
@@ -79,7 +79,9 @@ const BLEND_MODE_LABELS: Readonly<Record<BlendModeName, string>> = {
   overlay: 'Overlay',
 }
 
-const INSPECTOR_EFFECT_CAPABILITIES = new Set([CANVAS_FILTER_EFFECT_CAPABILITY])
+const ADD_COLOR_BUDGET_PROBE = createColorAdjustEffect('__effect-budget-probe__')
+const PENDING_PREVIEW_EFFECT_DETAIL =
+  'Preview renderer status has not been projected yet; the effect is preserved and bypassed.'
 
 interface NumberFieldProps {
   label: string
@@ -399,11 +401,13 @@ function ToggleField({
 }
 
 function VideoInspectorSections({
+  doc,
   clip,
   locked,
   playheadFrame,
   activeTab,
 }: {
+  doc: TimelineDoc
   clip: Clip
   locked: boolean
   playheadFrame: number
@@ -536,14 +540,23 @@ function VideoInspectorSections({
         aria-labelledby="inspector-effects-tab"
         hidden={activeTab !== 'effects'}
       >
-        <EffectStackInspector clip={clip} locked={locked} />
+        <EffectStackInspector doc={doc} clip={clip} locked={locked} />
       </div>
     </div>
   )
 }
 
-function EffectStackInspector({ clip, locked }: { clip: Clip; locked: boolean }) {
-  const resolutions = resolveEffectStack(clip.effects, INSPECTOR_EFFECT_CAPABILITIES)
+function EffectStackInspector({
+  doc,
+  clip,
+  locked,
+}: {
+  doc: TimelineDoc
+  clip: Clip
+  locked: boolean
+}) {
+  const effectStatuses = usePreviewStatusStore((state) => state.effectStatuses)
+  const addLimitReason = effectAppendBudgetError(doc, clip, ADD_COLOR_BUDGET_PROBE)
   const store = useDocumentStore.getState
 
   return (
@@ -553,7 +566,8 @@ function EffectStackInspector({ clip, locked }: { clip: Clip; locked: boolean })
         <button
           type="button"
           className="inspector-effect-add"
-          disabled={locked}
+          disabled={locked || addLimitReason !== null}
+          aria-describedby={addLimitReason ? 'inspector-effect-add-limit' : undefined}
           onClick={() => store().addEffect(
             clip.id,
             createColorAdjustEffect(`fx_${crypto.randomUUID()}`),
@@ -565,12 +579,24 @@ function EffectStackInspector({ clip, locked }: { clip: Clip; locked: boolean })
       <span className="inspector-note">
         Effects run from top to bottom before opacity and compositing.
       </span>
-      {resolutions.length === 0
+      <span className="inspector-note">
+        Status describes Program Monitor preview. Export probes its own render context separately.
+      </span>
+      {addLimitReason && (
+        <span id="inspector-effect-add-limit" className="inspector-note" role="status">
+          {addLimitReason}.
+        </span>
+      )}
+      {clip.effects.length === 0
         ? <span className="inspector-effect-empty">No effects on this clip.</span>
         : (
             <ol className="inspector-effect-list" aria-label="Ordered clip effects">
-              {resolutions.map((resolution, index) => {
-                const effect = resolution.effect
+              {clip.effects.map((effect, index) => {
+                const resolution = effectStatuses.get(effect.id) ?? {
+                  label: effect.type,
+                  status: 'unsupported' as const,
+                  detail: PENDING_PREVIEW_EFFECT_DETAIL,
+                }
                 const editableColor = effect.type === COLOR_ADJUST_EFFECT_TYPE
                   && effect.version === COLOR_ADJUST_EFFECT_VERSION
                   && (resolution.status === 'ready' || resolution.status === 'disabled')
@@ -579,7 +605,7 @@ function EffectStackInspector({ clip, locked }: { clip: Clip; locked: boolean })
                     <div className="inspector-effect-card-heading">
                       <span>
                         <strong>{resolution.label}</strong>
-                        <small>{index + 1} of {resolutions.length}</small>
+                        <small>{index + 1} of {clip.effects.length}</small>
                       </span>
                       <span
                         className={`inspector-effect-status is-${resolution.status}`}
@@ -653,7 +679,7 @@ function EffectStackInspector({ clip, locked }: { clip: Clip; locked: boolean })
                       </button>
                       <button
                         type="button"
-                        disabled={locked || index === resolutions.length - 1}
+                        disabled={locked || index === clip.effects.length - 1}
                         aria-label={`Move ${resolution.label} down`}
                         onClick={() => store().reorderEffect(clip.id, effect.id, index + 1)}
                       >
@@ -1232,6 +1258,7 @@ export default function Inspector() {
       )}
       {displayedVideoClip && (
         <VideoInspectorSections
+          doc={timelineDoc}
           clip={displayedVideoClip}
           locked={videoLocked}
           playheadFrame={playheadFrame}

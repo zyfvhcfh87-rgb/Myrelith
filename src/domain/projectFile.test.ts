@@ -30,6 +30,8 @@ import {
   type ProjectFile,
   validateProjectFile,
 } from './projectFile'
+import { EFFECT_STACK_LIMITS } from './effectBounds'
+import { addEffect, updateEffectParams } from './operations'
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -383,6 +385,33 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(serializeProjectFile(original))
     expect(parsed.document.tracks[0].clips[0].effects).toEqual(effects)
+  })
+
+  test('every accepted exact-limit live effect edit remains serializable', () => {
+    const project = makeProject()
+    const clip = project.document.tracks[0].clips[0]
+    clip.effects = []
+    const params: EffectDescriptor['params'] = Object.fromEntries(Array.from(
+      { length: EFFECT_STACK_LIMITS.maxEffectParams },
+      (_value, index) => [`parameter-${index}`, index],
+    ))
+    params['parameter-0'] = 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters)
+    const edited = addEffect(project.document, clip.id, {
+      id: 'i'.repeat(EFFECT_STACK_LIMITS.maxIdCharacters),
+      type: 't'.repeat(EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters),
+      version: Number.MAX_SAFE_INTEGER,
+      enabled: true,
+      params,
+    })
+    expect(edited).not.toBe(project.document)
+    const acceptedProject = { ...project, document: edited }
+    const serialized = serializeProjectFile(acceptedProject)
+    expect(parseProjectFile(serialized).document).toEqual(edited)
+
+    const effectId = edited.tracks[0].clips[0].effects[0].id
+    const rejected = updateEffectParams(edited, clip.id, effectId, { overflow: true })
+    expect(rejected).toBe(edited)
+    expect(() => serializeProjectFile({ ...project, document: rejected })).not.toThrow()
   })
 
   test('round-trips semantic captions and rejects malformed persisted cues', () => {
