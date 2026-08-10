@@ -1596,8 +1596,8 @@ surface; it is not a second zoom and never enters document history.
   remained deliberately offline, so decoded-frame QA is covered by the shared
   composition/runtime tests rather than claimed as a browser result. Chromium
   reported zero warnings/errors and port 41869 was released after the pass.
-- Issue #60 is implementation-complete locally on
-  `codex/issue-60-media-pool`; publication and issue closure are not implied.
+- Issue #60 was normally merged through PR #85 as `809474f`; Issue #60 closed
+  automatically.
   `mediaPoolModel` owns browser-free stable indexing, AND-token search,
   exact type/status facets, grid-row packing, and variable-height window math.
   `useMediaPoolVirtualizer` measures the existing sidebar scroll owner and

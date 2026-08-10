@@ -2489,7 +2489,7 @@ remain out of scope.
 
 ## Post-MVP issue #60 - virtualize and search the Media Pool
 
-**IMPLEMENTATION COMPLETE LOCALLY (2026-08-07).**
+**IMPLEMENTATION COMPLETE AND MERGED (2026-08-07).**
 
 - [x] Add a browser-free stable index with deterministic token search and exact
   type/status facets; preserve insertion order and never mutate project state.
@@ -2515,8 +2515,8 @@ remain out of scope.
   relink control present at the far boundary, and no console warning/error.
   Single-file relink handoff is component-tested because the in-app browser's
   chooser hook did not attach to that virtualized input during manual QA.
-- [ ] Publication, pull request review, and Issue #60 closure remain separate
-  work; this local implementation does not imply any of them.
+- [x] PR #85 passed review and was normally merged as `809474f`; Issue #60
+  closed automatically.
 
 ## Post-MVP issue #65 - Media Pool bins and collections
 
