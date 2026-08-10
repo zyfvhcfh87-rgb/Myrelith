@@ -104,6 +104,7 @@ import {
   effectDescriptorBudget,
 } from './effectBounds'
 import {
+  animationWithSourceTimeIntent,
   cloneSourceTimeMap,
   defaultSourceTimeMap,
   sourceRangeForMap,
@@ -762,12 +763,23 @@ function validateClipAnimation(
     for (let keyframeIndex = 0; keyframeIndex < track.keyframes.length; keyframeIndex++) {
       const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
       const keyframe = record(track.keyframes[keyframeIndex], keyframePath)
-      exactKeys(keyframe, ['frame', 'value', 'easing'], [], keyframePath)
+      exactKeys(
+        keyframe,
+        ['frame', 'sourceTimeTicks', 'value', 'easing'],
+        [],
+        keyframePath,
+      )
       safeInteger(
         keyframe.frame,
         `${keyframePath}.frame`,
         -MAX_KEYFRAME_FRAME,
         MAX_KEYFRAME_FRAME,
+      )
+      safeInteger(
+        keyframe.sourceTimeTicks,
+        `${keyframePath}.sourceTimeTicks`,
+        Number.MIN_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER,
       )
       if (previousFrame !== null && keyframe.frame <= previousFrame) {
         fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
@@ -1642,12 +1654,61 @@ function migrateClipSourceTimeMaps(documentValue: unknown): JsonRecord {
           `$.document.tracks[${trackIndex}].clips[${clipIndex}].sourceRange.durationFrames`,
           1,
         )
+        const sourceTimeMap = defaultSourceTimeMap(
+          Number(sourceRange.startFrame),
+          Number(sourceRange.durationFrames),
+        )
+        const animationValue = clip.animation
+        let animation = animationValue
+        if (animationValue !== undefined) {
+          const animationRecord = record(
+            animationValue,
+            `$.document.tracks[${trackIndex}].clips[${clipIndex}].animation`,
+          )
+          boundedArray(
+            animationRecord.tracks,
+            `$.document.tracks[${trackIndex}].clips[${clipIndex}].animation.tracks`,
+            ANIMATABLE_CLIP_PROPERTIES.length,
+          )
+          animation = {
+            ...animationRecord,
+            tracks: animationRecord.tracks.map((trackValue, animationTrackIndex) => {
+              const trackPath = `$.document.tracks[${trackIndex}].clips[${clipIndex}].animation.tracks[${animationTrackIndex}]`
+              const animationTrack = record(trackValue, trackPath)
+              boundedArray(
+                animationTrack.keyframes,
+                `${trackPath}.keyframes`,
+                MAX_KEYFRAMES_PER_TRACK,
+              )
+              return {
+                ...animationTrack,
+                keyframes: animationTrack.keyframes.map((keyframeValue, keyframeIndex) => {
+                  const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
+                  const keyframe = record(keyframeValue, keyframePath)
+                  safeInteger(
+                    keyframe.frame,
+                    `${keyframePath}.frame`,
+                    -MAX_KEYFRAME_FRAME,
+                    MAX_KEYFRAME_FRAME,
+                  )
+                  const sourceTimeTicks = sourceTimeMap.sourceStartTicks
+                    + Number(keyframe.frame) * SOURCE_TIME_TICKS_PER_FRAME
+                  safeInteger(
+                    sourceTimeTicks,
+                    `${keyframePath}.sourceTimeTicks`,
+                    Number.MIN_SAFE_INTEGER,
+                    Number.MAX_SAFE_INTEGER,
+                  )
+                  return { ...keyframe, sourceTimeTicks }
+                }),
+              }
+            }),
+          }
+        }
         return {
           ...clip,
-          sourceTimeMap: defaultSourceTimeMap(
-            Number(sourceRange.startFrame),
-            Number(sourceRange.durationFrames),
-          ),
+          sourceTimeMap,
+          ...(animation === undefined ? {} : { animation }),
         }
       }),
     }
@@ -1860,7 +1921,13 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
             crop: { ...clipVisualSettings(clip).crop },
           },
           audio: { ...clipAudioSettings(clip) },
-          animation: cloneClipAnimation(clipAnimation(clip)),
+          animation: cloneClipAnimation(animationWithSourceTimeIntent(
+            clipAnimation(clip),
+            clip.sourceTimeMap ?? defaultSourceTimeMap(
+              clip.sourceRange.startFrame,
+              clip.sourceRange.durationFrames,
+            ),
+          )),
           effects: clip.effects.map((effect) => ({
             id: effect.id,
             type: effect.type,

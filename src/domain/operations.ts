@@ -104,8 +104,10 @@ import {
   cloneSourceTimeMap,
   defaultSourceTimeMap,
   retimeClipAnimation,
+  shiftClipAnimationSourceTimeIntent,
   sourceRangeForMap,
   sourceSpanTicks,
+  sourceTicksAtTimelineOffset,
   sourceTimeMapAtOffset,
   sourceTimeMapForTimelineDuration,
   sourceTimeMapValidationError,
@@ -1104,8 +1106,18 @@ export function retimeClip(
   if (newDurationFrames < 1) {
     return reject(doc, op, 'retimed clip would be shorter than one timeline frame')
   }
+  const startFrame = loc.clip.timelineRange.startFrame
+  const endFrame = startFrame + newDurationFrames
+  if (
+    !Number.isSafeInteger(startFrame)
+    || startFrame < 0
+    || !Number.isSafeInteger(endFrame)
+    || endFrame <= startFrame
+  ) {
+    return reject(doc, op, 'retimed timeline range must stay within safe integer frames')
+  }
   const newTimelineRange = {
-    startFrame: loc.clip.timelineRange.startFrame,
+    startFrame,
     durationFrames: newDurationFrames,
   }
   if (overlapsAny(loc.track.clips, newTimelineRange, clipId)) {
@@ -1123,6 +1135,9 @@ export function retimeClip(
     newMap,
     newDurationFrames,
   )
+  if (!animation) {
+    return reject(doc, op, 'retime would collapse or exceed keyframe frame bounds')
+  }
   const clips = loc.track.clips.slice()
   clips[loc.clipIndex] = withClampedAudioFades({
     ...loc.clip,
@@ -1292,6 +1307,14 @@ export function slipClip(
     return reject(doc, op, 'no source material before the asset start')
   }
   const newSourceTimeMap = { ...sourceTimeMap, sourceStartTicks }
+  const animation = shiftClipAnimationSourceTimeIntent(
+    clipAnimation(loc.clip),
+    sourceTimeMap,
+    sourceStartTicks - sourceTimeMap.sourceStartTicks,
+  )
+  if (!animation) {
+    return reject(doc, op, 'slip would exceed keyframe source-time bounds')
+  }
   let sourceRange: TimeRange
   try {
     sourceRange = sourceRangeForMap(
@@ -1307,6 +1330,7 @@ export function slipClip(
     ...loc.clip,
     sourceRange,
     sourceTimeMap: newSourceTimeMap,
+    animation,
   }
   const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
   return withTrack(doc, loc.trackIndex, nextTrack)
@@ -1783,6 +1807,16 @@ export function setClipKeyframe(
   const loc = animationEditLocation(doc, clipId, op)
   if (!loc) return doc
   const current = clipAnimation(loc.clip)
+  let sourceTimeTicks: number
+  try {
+    sourceTimeTicks = sourceTicksAtTimelineOffset(
+      clipSourceTimeMap(loc.clip),
+      keyframe.frame,
+    )
+  } catch {
+    return reject(doc, op, 'keyframe source time exceeds safe integer bounds')
+  }
+  const authoredKeyframe = { ...keyframe, sourceTimeTicks }
   const existing = current.tracks
     .find((track) => track.property === property)
     ?.keyframes.find((item) => item.frame === keyframe.frame)
@@ -1790,8 +1824,9 @@ export function setClipKeyframe(
     existing
     && existing.value === keyframe.value
     && sameAnimationEasing(existing.easing, keyframe.easing)
+    && (existing.sourceTimeTicks ?? sourceTimeTicks) === sourceTimeTicks
   ) return doc
-  const animation = upsertAnimationKeyframe(current, property, keyframe)
+  const animation = upsertAnimationKeyframe(current, property, authoredKeyframe)
   if (!animation) return reject(doc, op, 'invalid or over-budget keyframe')
   return replaceClipAnimation(doc, loc, animation)
 }
@@ -1815,7 +1850,22 @@ export function moveClipKeyframe(
   )
   if (!animation) return reject(doc, op, 'source keyframe is missing or target frame is invalid')
   if (animation === clipAnimation(loc.clip)) return doc
-  return replaceClipAnimation(doc, loc, animation)
+  const moved = animation.tracks
+    .find((track) => track.property === property)
+    ?.keyframes.find((keyframe) => keyframe.frame === toFrame)
+  if (!moved) return reject(doc, op, 'moved keyframe is missing')
+  let sourceTimeTicks: number
+  try {
+    sourceTimeTicks = sourceTicksAtTimelineOffset(clipSourceTimeMap(loc.clip), toFrame)
+  } catch {
+    return reject(doc, op, 'keyframe source time exceeds safe integer bounds')
+  }
+  const withIntent = upsertAnimationKeyframe(animation, property, {
+    ...moved,
+    sourceTimeTicks,
+  })
+  if (!withIntent) return reject(doc, op, 'moved keyframe source time is invalid')
+  return replaceClipAnimation(doc, loc, withIntent)
 }
 
 export function removeClipKeyframe(
@@ -1963,6 +2013,10 @@ export function updateClipVisualAtFrame(
       ?.keyframes.find((keyframe) => keyframe.frame === localFrame)
     const next = upsertAnimationKeyframe(animation, property, {
       frame: localFrame,
+      sourceTimeTicks: sourceTicksAtTimelineOffset(
+        clipSourceTimeMap(workingLoc.clip),
+        localFrame,
+      ),
       value,
       easing: existing?.easing ?? LINEAR_ANIMATION_EASING,
     })

@@ -441,6 +441,73 @@ describe('exportController wiring and completion', () => {
     expect(h.runExport).toHaveBeenCalledOnce()
   })
 
+  test('retimed audio-only output neither gates offline export nor fetches the source', async () => {
+    const audioDoc = docWithSourceClipOn('audio')
+    audioDoc.tracks[0].clips[0] = {
+      ...audioDoc.tracks[0].clips[0],
+      timelineRange: { startFrame: 0, durationFrames: 1 },
+      sourceRange: { startFrame: 0, durationFrames: 2 },
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 2_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    }
+    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).toHaveBeenCalledOnce()
+    expect(h.runExport).toHaveBeenCalledOnce()
+  })
+
+  test('retimed audio-only output does not eagerly retain an online source blob', async () => {
+    const audioDoc = docWithSourceClipOn('audio')
+    audioDoc.tracks[0].clips[0] = {
+      ...audioDoc.tracks[0].clips[0],
+      timelineRange: { startFrame: 0, durationFrames: 1 },
+      sourceRange: { startFrame: 0, durationFrames: 2 },
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 2_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    }
+    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+  })
+
+  test('a retimed visual contributor still requires and retains its source', async () => {
+    const videoDoc = docWithSourceClipOn('video')
+    videoDoc.tracks[0].clips[0] = {
+      ...videoDoc.tracks[0].clips[0],
+      timelineRange: { startFrame: 0, durationFrames: 1 },
+      sourceRange: { startFrame: 0, durationFrames: 2 },
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 2_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    }
+    useDocumentStore.setState({ doc: videoDoc, past: [], future: [] })
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
+
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    const offlineHarness = makeHarness()
+    await expect(startExport(SETTINGS, {}, offlineHarness.deps)).rejects.toThrow(
+      'Reconnect 1 offline source before exporting: source.mp4.',
+    )
+    expect(offlineHarness.fetchBlob).not.toHaveBeenCalled()
+  })
+
   test('rejects a video clip from an audio-only import before fetching', async () => {
     const audioOnly: MediaAsset = {
       ...ASSET,

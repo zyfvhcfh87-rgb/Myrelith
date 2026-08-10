@@ -94,11 +94,11 @@ describe('clip animation document operations', () => {
 
     expect(findClip(original).animation).toEqual({ tracks: [] })
     expect(findClip(replaced).animation?.tracks[0].keyframes).toEqual([
-      { frame: 0, value: 10, easing: linear },
-      { frame: 10, value: 25, easing: { type: 'hold' } },
+      { frame: 0, sourceTimeTicks: 0, value: 10, easing: linear },
+      { frame: 10, sourceTimeTicks: 10_000_000, value: 25, easing: { type: 'hold' } },
     ])
     expect(findClip(moved).animation?.tracks[0].keyframes).toEqual([
-      { frame: 10, value: 10, easing: linear },
+      { frame: 10, sourceTimeTicks: 10_000_000, value: 10, easing: linear },
     ])
     expect(findClip(removed).animation).toEqual({ tracks: [] })
     expect(resetClipAnimationTrack(second, 'clip-1', 'position-x'))
@@ -128,8 +128,8 @@ describe('clip animation document operations', () => {
     expect(result.transform.x).toBe(30)
     expect(result.opacity).toBe(0.5)
     expect(result.animation?.tracks[0].keyframes).toEqual([
-      { frame: 0, value: 30, easing: linear },
-      { frame: 5, value: 80, easing: linear },
+      { frame: 0, sourceTimeTicks: 0, value: 30, easing: linear },
+      { frame: 5, sourceTimeTicks: 5_000_000, value: 80, easing: linear },
     ])
   })
 

@@ -53,7 +53,7 @@ export interface TimeRange {
   durationFrames: number
 }
 
-/** Exact positive rational constant-speed multiplier (source / timeline). */
+/** Exact 25%-step rational constant-speed multiplier (source / timeline). */
 export interface SourceTimeRate {
   numerator: number
   denominator: number
@@ -261,6 +261,12 @@ export type ClipAnimationEasing =
 /** One exact clip-local integer-frame value. */
 export interface ClipAnimationKeyframe {
   frame: number
+  /**
+   * Absolute source-time intent used to recover authored timing after a
+   * constant-speed map quantizes this key onto an integer timeline frame.
+   * Legacy in-memory values may omit it; current portable files require it.
+   */
+  sourceTimeTicks?: number
   value: number
   easing: ClipAnimationEasing
 }

@@ -46,7 +46,11 @@ import {
   updateEffectParams,
 } from './operations'
 import { rangeEnd } from './time'
-import { sourceFrameAtTimelineFrame, sourceTimeRateFromPercent } from './sourceTimeMap'
+import {
+  defaultSourceTimeMap,
+  sourceFrameAtTimelineFrame,
+  sourceTimeRateFromPercent,
+} from './sourceTimeMap'
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                             */
@@ -250,6 +254,102 @@ describe('constant-speed retiming', () => {
       timelineRange: { startFrame: 0, durationFrames: 100 },
       sourceRange: { startFrame: 0, durationFrames: 100 },
     })
+  })
+
+  test('rejects a retime whose timeline end is not a safe integer', () => {
+    const base = makeDoc()
+    const unsafe = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.filter((clip) => clip.id === 'clipA').map((clip) => ({
+              ...clip,
+              timelineRange: {
+                startFrame: Number.MAX_SAFE_INTEGER - 1,
+                durationFrames: 1,
+              },
+              sourceRange: { startFrame: 0, durationFrames: 2 },
+              sourceTimeMap: {
+                sourceStartTicks: 0,
+                sourceDurationTicks: 2_000_000,
+                rate: sourceTimeRateFromPercent(200),
+              },
+            })),
+          }
+        : track),
+    })
+
+    expect(retimeClip(unsafe, 'clipA', sourceTimeRateFromPercent(100))).toBe(unsafe)
+  })
+
+  test('restores keyframe frames exactly after 100% to 150% to 100%', () => {
+    const base = makeDoc()
+    const isolated = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.filter((clip) => clip.id === 'clipA').map((clip) => ({
+              ...clip,
+              sourceRange: { startFrame: 0, durationFrames: 3 },
+              timelineRange: { startFrame: 0, durationFrames: 3 },
+              sourceTimeMap: undefined,
+              animation: {
+                tracks: [{
+                  property: 'opacity' as const,
+                  keyframes: [{ frame: 1, value: 0.5, easing: { type: 'linear' as const } }],
+                }],
+              },
+            })),
+          }
+        : track),
+    })
+
+    const accelerated = retimeClip(
+      isolated,
+      'clipA',
+      sourceTimeRateFromPercent(150),
+    )
+    expect(clipIn(accelerated, 'V1', 'clipA').animation?.tracks[0].keyframes[0])
+      .toMatchObject({ frame: 0, sourceTimeTicks: 1_000_000 })
+
+    const restored = retimeClip(
+      accelerated,
+      'clipA',
+      sourceTimeRateFromPercent(100),
+    )
+    expect(clipIn(restored, 'V1', 'clipA').animation?.tracks[0].keyframes[0])
+      .toMatchObject({ frame: 1, sourceTimeTicks: 1_000_000 })
+  })
+
+  test('rejects a retime that would collapse distinct keyframes', () => {
+    const base = makeDoc()
+    const isolated = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.filter((clip) => clip.id === 'clipA').map((clip) => ({
+              ...clip,
+              sourceRange: { startFrame: 0, durationFrames: 3 },
+              timelineRange: { startFrame: 0, durationFrames: 3 },
+              animation: {
+                tracks: [{
+                  property: 'opacity' as const,
+                  keyframes: [
+                    { frame: 0, value: 0, easing: { type: 'linear' as const } },
+                    { frame: 1, value: 1, easing: { type: 'linear' as const } },
+                  ],
+                }],
+              },
+            })),
+          }
+        : track),
+    })
+
+    expect(retimeClip(isolated, 'clipA', sourceTimeRateFromPercent(200)))
+      .toBe(isolated)
   })
 })
 
@@ -832,6 +932,36 @@ describe('slipClip', () => {
 
     expect(slipClip(doc, 'clipA', -11)).toBe(doc)
     expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
+
+  test('slip re-anchors durable keyframe source intent while keeping its timeline frame', () => {
+    const base = makeDoc()
+    const modern = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.map((clip) => clip.id === 'clipA'
+              ? {
+                  ...clip,
+                  sourceTimeMap: defaultSourceTimeMap(10, 100),
+                  animation: {
+                    tracks: [{
+                      property: 'opacity' as const,
+                      keyframes: [{ frame: 5, value: 0.5, easing: { type: 'linear' as const } }],
+                    }],
+                  },
+                }
+              : clip),
+          }
+        : track),
+    })
+
+    const slipped = clipIn(slipClip(modern, 'clipA', 3), 'V1', 'clipA')
+    expect(slipped.animation?.tracks[0].keyframes[0]).toMatchObject({
+      frame: 5,
+      sourceTimeTicks: 18_000_000,
+    })
   })
 
   test('rejects non-integer deltas, unknown clips, and locked tracks', () => {

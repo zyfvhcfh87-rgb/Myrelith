@@ -4,9 +4,9 @@
  * Source positions use one million integer ticks per conformed source frame.
  * Every position is derived from the stored origin with BigInt arithmetic;
  * callers never advance a floating accumulator. Constant rates are reduced
- * rationals from 1/4x through 4x. The fixed precision makes every Inspector
- * step (25%) exact while leaving a documented sub-frame boundary for future
- * ramps.
+ * 25%-step rationals from 1/4x through 4x. Restricting the durable vocabulary
+ * to steps exactly representable by the fixed precision keeps split/trim
+ * composition associative without storing a hidden fractional phase.
  */
 
 import type {
@@ -16,6 +16,7 @@ import type {
   SourceTimeRate,
   TimeRange,
 } from './schema'
+import { MAX_KEYFRAME_FRAME } from './clipAnimation'
 
 export const SOURCE_TIME_TICKS_PER_FRAME = 1_000_000 as const
 export const MIN_SOURCE_TIME_RATE: Readonly<SourceTimeRate> = Object.freeze({
@@ -83,6 +84,15 @@ export function canonicalSourceTimeRate(
       > MAX_SOURCE_TIME_RATE.numerator * rate.denominator
   ) {
     throw new RangeError('Source-time rate must be from 1/4x through 4x')
+  }
+  const percentNumerator = rate.numerator * 100
+  if (
+    percentNumerator % rate.denominator !== 0
+    || (percentNumerator / rate.denominator) % 25 !== 0
+  ) {
+    throw new RangeError(
+      'Source-time rate must use a whole 25% step at the fixed source-time tick precision',
+    )
   }
   return rate
 }
@@ -302,46 +312,106 @@ export function sourceTimeMapIsAudioCompatible(map: SourceTimeMap): boolean {
     && map.sourceStartTicks % SOURCE_TIME_TICKS_PER_FRAME === 0
 }
 
-/**
- * Preserve keyframe source-time intent when a constant rate changes. Multiple
- * authored keys may quantize onto one shorter timeline frame; the later
- * source-time key deterministically wins that frame.
- */
+/** Attach recoverable absolute source-time intent to legacy timeline-only keys. */
+export function animationWithSourceTimeIntent(
+  animation: ClipAnimation,
+  map: SourceTimeMap,
+): ClipAnimation {
+  return {
+    tracks: animation.tracks.map((track) => ({
+      property: track.property,
+      keyframes: track.keyframes.map((keyframe) => ({
+        ...keyframe,
+        sourceTimeTicks: keyframe.sourceTimeTicks
+          ?? sourceTicksAtTimelineOffset(map, keyframe.frame),
+        easing: { ...keyframe.easing },
+      })),
+    })),
+  }
+}
+
+/** Re-anchor authored source intent after a slip keeps timeline keys fixed. */
+export function shiftClipAnimationSourceTimeIntent(
+  animation: ClipAnimation,
+  oldMap: SourceTimeMap,
+  sourceDeltaTicks: number,
+): ClipAnimation | null {
+  if (!Number.isSafeInteger(sourceDeltaTicks)) return null
+  let withIntent: ClipAnimation
+  try {
+    withIntent = animationWithSourceTimeIntent(animation, oldMap)
+  } catch {
+    return null
+  }
+  const tracks: ClipAnimation['tracks'] = []
+  for (const track of withIntent.tracks) {
+    const keyframes: typeof track.keyframes = []
+    for (const keyframe of track.keyframes) {
+      const sourceTimeTicks = keyframe.sourceTimeTicks! + sourceDeltaTicks
+      if (!Number.isSafeInteger(sourceTimeTicks)) return null
+      keyframes.push({
+        ...keyframe,
+        sourceTimeTicks,
+        easing: { ...keyframe.easing },
+      })
+    }
+    tracks.push({ property: track.property, keyframes })
+  }
+  return { tracks }
+}
+
 export function retimeClipAnimation(
   animation: ClipAnimation,
   oldMap: SourceTimeMap,
   newMap: SourceTimeMap,
   newDurationFrames: number,
-): ClipAnimation {
+): ClipAnimation | null {
   if (!Number.isSafeInteger(newDurationFrames) || newDurationFrames < 1) {
     throw new RangeError('Retimed animation duration must be a positive safe integer')
   }
-  return {
-    tracks: animation.tracks.map((track) => {
-      const remapped = new Map<number, typeof track.keyframes[number]>()
-      for (const keyframe of track.keyframes) {
-        const sourceTicks = sourceTicksAtTimelineOffset(oldMap, keyframe.frame)
-        const relativeTicks = BigInt(sourceTicks - newMap.sourceStartTicks)
-        const frame = safeNumber(
+  const tracks: ClipAnimation['tracks'] = []
+  for (const track of animation.tracks) {
+    const remapped = new Map<number, typeof track.keyframes[number]>()
+    for (const keyframe of track.keyframes) {
+      let sourceTicks: number
+      try {
+        sourceTicks = keyframe.sourceTimeTicks
+          ?? sourceTicksAtTimelineOffset(oldMap, keyframe.frame)
+      } catch {
+        return null
+      }
+      if (!Number.isSafeInteger(sourceTicks)) return null
+      const relativeTicks = BigInt(sourceTicks - newMap.sourceStartTicks)
+      let frame: number
+      try {
+        frame = safeNumber(
           floorDiv(
             relativeTicks * BigInt(newMap.rate.denominator),
             BigInt(newMap.rate.numerator) * TICKS,
           ),
           'Retimed keyframe',
         )
-        const boundedFrame = Math.min(newDurationFrames - 1, Math.max(0, frame))
-        remapped.set(boundedFrame, {
-          ...keyframe,
-          frame: boundedFrame,
-          easing: { ...keyframe.easing },
-        })
+      } catch {
+        return null
       }
-      return {
-        property: track.property,
-        keyframes: [...remapped.values()].sort((left, right) => left.frame - right.frame),
-      }
-    }),
+      if (frame < -MAX_KEYFRAME_FRAME || frame > MAX_KEYFRAME_FRAME) return null
+      // Integer-frame animation cannot represent two independently authored
+      // source instants on one frame. Reject the whole retime rather than
+      // silently discarding either key; the caller preserves the document.
+      if (remapped.has(frame)) return null
+      remapped.set(frame, {
+        ...keyframe,
+        frame,
+        sourceTimeTicks: sourceTicks,
+        easing: { ...keyframe.easing },
+      })
+    }
+    tracks.push({
+      property: track.property,
+      keyframes: [...remapped.values()].sort((left, right) => left.frame - right.frame),
+    })
   }
+  return { tracks }
 }
 
 export type SourceTimeAudioPolicy =

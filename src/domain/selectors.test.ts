@@ -271,6 +271,27 @@ describe('outputMediaAssetIds', () => {
       'video-visible',
     ])
   })
+
+  test('excludes muted retimed audio but keeps the same asset when it contributes video', () => {
+    const mutedAudio = {
+      ...makeClip('retimed-audio', 0, 5),
+      assetId: 'shared-retimed',
+      sourceRange: { startFrame: 0, durationFrames: 10 },
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 10_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    }
+    const audioOnly = makeDoc([makeTrack('A1', 'audio', [mutedAudio])])
+    expect([...outputMediaAssetIds(audioOnly)]).toEqual([])
+
+    const audiovisual = makeDoc([
+      makeTrack('V1', 'video', [{ ...mutedAudio, id: 'retimed-video' }]),
+      makeTrack('A1', 'audio', [mutedAudio]),
+    ])
+    expect([...outputMediaAssetIds(audiovisual)]).toEqual(['shared-retimed'])
+  })
 })
 
 describe('clipSourceFrame', () => {

@@ -12,7 +12,7 @@ import type {
   Transition,
 } from './schema'
 import { resolveCrossfadeGeometry } from './crossfadePlan'
-import { sourceFrameAtTimelineFrame } from './sourceTimeMap'
+import { sourceFrameAtTimelineFrame, sourceTimeAudioPolicy } from './sourceTimeMap'
 import { rangeContains, rangeEnd } from './time'
 
 /**
@@ -132,7 +132,11 @@ export function outputMediaAssetIds(
   if (includeAudio) {
     for (const track of audibleTracks(doc)) {
       for (const clip of track.clips) {
-        if (!clip.text && clip.volume > 0) ids.add(clip.assetId)
+        if (
+          !clip.text
+          && clip.volume > 0
+          && sourceTimeAudioPolicy(clip).status === 'supported'
+        ) ids.add(clip.assetId)
       }
     }
   }

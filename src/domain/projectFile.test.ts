@@ -262,6 +262,12 @@ describe('portable project file', () => {
   test('migrates schema-9 clips to exact 1x maps without changing frame intent', () => {
     const legacy = clone(makeProject())
     legacy.document.schemaVersion = 9
+    legacy.document.tracks[0].clips[0].animation = {
+      tracks: [{
+        property: 'opacity',
+        keyframes: [{ frame: 2, value: 0.5, easing: { type: 'linear' } }],
+      }],
+    }
     const originalRanges = legacy.document.tracks.flatMap((item) => item.clips).map(
       (clip) => ({ sourceRange: clip.sourceRange, timelineRange: clip.timelineRange }),
     )
@@ -285,6 +291,10 @@ describe('portable project file', () => {
         clip.sourceRange.durationFrames,
       )),
     )
+    expect(clips[0].animation?.tracks[0].keyframes[0]).toMatchObject({
+      frame: 2,
+      sourceTimeTicks: 7_000_000,
+    })
   })
 
   test('round-trips a non-unity rational source-time map exactly', () => {
@@ -553,9 +563,15 @@ describe('portable project file', () => {
         {
           property: 'position-x',
           keyframes: [
-            { frame: -5, value: -125.25, easing: { type: 'hold' } },
+            {
+              frame: -5,
+              sourceTimeTicks: 0,
+              value: -125.25,
+              easing: { type: 'hold' },
+            },
             {
               frame: 12,
+              sourceTimeTicks: 17_000_000,
               value: 240.75,
               easing: {
                 type: 'cubic-bezier',
@@ -569,7 +585,12 @@ describe('portable project file', () => {
         },
         {
           property: 'opacity',
-          keyframes: [{ frame: 0, value: 0.625, easing: { type: 'linear' } }],
+          keyframes: [{
+            frame: 0,
+            sourceTimeTicks: 5_000_000,
+            value: 0.625,
+            easing: { type: 'linear' },
+          }],
         },
       ],
     }
@@ -601,8 +622,8 @@ describe('portable project file', () => {
       tracks: [{
         property: 'position-x',
         keyframes: [
-          { frame: 3, value: 10, easing: { type: 'linear' } },
-          { frame: 3, value: 20, easing: { type: 'linear' } },
+          { frame: 3, sourceTimeTicks: 8_000_000, value: 10, easing: { type: 'linear' } },
+          { frame: 3, sourceTimeTicks: 8_000_000, value: 20, easing: { type: 'linear' } },
         ],
       }],
     }
@@ -612,6 +633,7 @@ describe('portable project file', () => {
         property: 'position-x',
         keyframes: [{
           frame: 0,
+          sourceTimeTicks: 5_000_000,
           value: 0,
           easing: { type: 'cubic-bezier', x1: -0.1, y1: 0, x2: 1, y2: 1 },
         }],
@@ -620,6 +642,28 @@ describe('portable project file', () => {
 
     expect(() => validateProjectFile(duplicate)).toThrow(/strictly increasing/)
     expect(() => validateProjectFile(badEasing)).toThrow(/from 0 to 1/)
+  })
+
+  test('requires bounded durable source-time intent on current keyframes', () => {
+    const missing = makeProject()
+    missing.document.tracks[0].clips[0].animation = {
+      tracks: [{
+        property: 'opacity',
+        keyframes: [{ frame: 0, value: 0.5, easing: { type: 'linear' } }],
+      }],
+    }
+    const unsafe = clone(missing)
+    unsafe.document.tracks[0].clips[0].animation!.tracks[0].keyframes[0]
+      .sourceTimeTicks = Number.MAX_SAFE_INTEGER + 1
+    const unknown = clone(missing)
+    const unknownKeyframe = unknown.document.tracks[0].clips[0]
+      .animation!.tracks[0].keyframes[0] as unknown as Record<string, unknown>
+    unknownKeyframe.sourceTimeTicks = 5_000_000
+    unknownKeyframe.futureTiming = true
+
+    expect(() => validateProjectFile(missing)).toThrow(/sourceTimeTicks/)
+    expect(() => validateProjectFile(unsafe)).toThrow(/sourceTimeTicks/)
+    expect(() => validateProjectFile(unknown)).toThrow(/unknown field/)
   })
 
   test.each(

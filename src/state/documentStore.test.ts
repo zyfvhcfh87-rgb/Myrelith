@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track, Transition } from '../domain/schema'
 import { createColorAdjustEffect } from '../domain/effectStack'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
+import { sourceTimeRateFromPercent } from '../domain/sourceTimeMap'
 import { useDocumentStore } from './documentStore'
 
 /* ------------------------------------------------------------------ */
@@ -143,6 +144,39 @@ beforeEach(() => {
 
 afterEach(() => {
   warnSpy.mockRestore()
+})
+
+test('an unsafe retime end is a same-reference no-op with no history entry', () => {
+  const base = makeDoc()
+  const unsafe = deepFreeze({
+    ...base,
+    tracks: base.tracks.map((track, index) => index === 0
+      ? {
+          ...track,
+          clips: [{
+            ...track.clips[0],
+            timelineRange: {
+              startFrame: Number.MAX_SAFE_INTEGER - 1,
+              durationFrames: 1,
+            },
+            sourceRange: { startFrame: 0, durationFrames: 2 },
+            sourceTimeMap: {
+              sourceStartTicks: 0,
+              sourceDurationTicks: 2_000_000,
+              rate: sourceTimeRateFromPercent(200),
+            },
+          }],
+        }
+      : track),
+  })
+  getState().setDoc(unsafe)
+  const before = getState()
+
+  getState().retimeClip('clipA', sourceTimeRateFromPercent(100))
+
+  expect(getState().doc).toBe(before.doc)
+  expect(getState().past).toBe(before.past)
+  expect(getState().future).toBe(before.future)
 })
 
 /* ------------------------------------------------------------------ */
