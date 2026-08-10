@@ -115,7 +115,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #68 — caption tracks + SRT/VTT** | ✅ implementation complete | schema-8 semantic tracks/cues; exact frame/timestamp round trips, atomic strict import, accessible bounded editor, shared preview/export text composition, undo/recovery; 2,046 total tests and clean Chromium QA on exclusive port 41868 |
 | **Post-MVP #45 — versioned effect stack** | ✅ implementation complete | schema-10 ordered descriptors with registry validation/migration/capability fallback and unknown preservation; atomic history operations; shared preview/export exposure/contrast/saturation; accessible Inspector; 306 focused + 2,108 total tests; clean Chromium/recovery/export-ready gate on exclusive port 41845 |
 | **Post-MVP #46 — minimal blend modes** | ✅ implementation complete | explicit normal/multiply/screen/overlay intent; schema-9 migration preserving schema-8 captions and unknown blend intent; isolated Canvas2D composition plus capability fallback seam; accessible Inspector/history; clean preview/export/reload Chromium gate on exclusive port 41846 |
-| **Post-MVP #69 — constant-speed retiming** | ✅ implementation complete | schema-10 exact rational `SourceTimeMap`; deterministic linked trim/split/move/transition/keyframe/thumbnail/seek/composition behavior; shared preview/export audio-mute policy outside exact 1×; accessible Inspector timing controls; 2,113 tests + 16 benchmark-runner tests and clean in-app Chromium QA on exclusive port 41869 |
+| **Post-MVP #69 — constant-speed retiming** | ✅ implementation complete | schema-11 exact rational `SourceTimeMap` after the schema-10 effect stack; deterministic linked trim/split/move/transition/keyframe/thumbnail/seek/composition behavior; shared preview/export audio-mute and output-resource policy outside exact 1×; accessible Inspector timing controls; complete automated gates and clean in-app Chromium QA on exclusive port 41869 |
 | **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
@@ -1531,48 +1531,52 @@ surface; it is not a second zoom and never enters document history.
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
 - Issue #69 is implementation-complete on
-  `codex/issue-69-constant-retiming`. Timeline schema 10 adds a durable exact
-  rational `SourceTimeMap` for timed decoded media. One million integer ticks
-  per source frame retain fractional out-points independently from the
-  whole-frame timeline duration, so repeated rate changes do not accumulate
-  drift or silently lose a source tail. Schema-9 projects migrate to exact 1×
-  maps without changing authored timing; current portable snapshots always
-  emit the map, while pure in-memory legacy fixtures retain a compatible 1×
-  fallback at operation boundaries.
+  `codex/issue-69-constant-retiming`. Timeline schema 11 adds a durable exact
+  rational `SourceTimeMap` for timed decoded media after schema 10's versioned
+  effect descriptors. One million integer ticks per source frame and a public
+  vocabulary of whole 25-percentage-point rates retain fractional out-points
+  independently from whole-frame timeline duration without split/trim phase
+  drift. Schema-9 projects retain the effect 9→10 migration before the 10→11
+  exact-1× source-time migration; current portable snapshots always emit the
+  map and durable keyframe source-time intent, while pure in-memory legacy
+  fixtures retain a compatible 1× fallback at operation boundaries.
 - `domain/sourceTimeMap.ts` is the single mapping authority for ordinary and
   transition composition, selectors/seeking, filmstrips, waveforms, handle
   capacity, trims, splits, slips, moves, and keyframe retiming. The pure retime
   operation keeps the clip start fixed, selects the greatest whole timeline
   span that fits the exact source interval, rejects overlap/locked/still/text
   edits by reference, reconciles transitions, clamps fades, and lets linked A/V
-  groups commit atomically as one history entry. Keyframes retain source-time
-  intent; deterministic later-key wins resolve integer-frame collisions.
+  groups commit atomically as one history entry, including mixed-rate groups
+  with members already at target. Unsafe timeline ends and keyframe frame
+  collisions reject atomically. Keyframes retain exact durable source-time
+  intent across repeated and round-trip retimes without quantization drift.
 - Non-1× audio is intentionally unavailable until Myrelith has a pitch-safe
   time-stretch implementation. The shared audio plan omits those contributors,
   live playback and export therefore agree on silence, and the Inspector says
   so explicitly. Exact 1× maps with integer source origins retain the previous
-  audio path byte-for-byte.
-- Issue #69's automated gates pass: 301 focused tests plus a 51-test explicit
-  playback/export audio-policy pass, all 2,113 Vitest cases
-  across 148 files, all 16 benchmark-runner cases, production build/typecheck,
-  oxlint, the production high-severity audit with 0 vulnerabilities, and clean
-  diff/source-identity checks. Vite retains only its existing non-fatal
-  large-chunk advisory.
-- Issue #69 source identity started from clean base
-  `718c0d28e3611e2bad3b511d45ce1e3adcba0270` /
-  `sha256:5acd7a8b1c89f0eafeef6ca504d183c18f415835da1fb994a65a97427ad84745`
-  and reached completed implementation checkpoint
-  `sha256:40987d6a59449ac12ff8608b5a7ca887e4c854e5f4925c5bedfc57513bba0c3a`.
-  That checkpoint intentionally predates this identity note; the final commit
-  id is the authoritative delivered source identity.
-- In-app Chromium on exclusive port 41869 opened a schema-10 portable fixture,
-  selected its timeline clip, verified 100% 120→120, 200% 120→60, command-
-  palette Undo back to 120, 75% 120→160, Reset back to exact 1×, the live audio
-  policy message, one-frame seeking, play/pause, and the 1000×800 layout. The
-  portable fixture's media remained deliberately offline, so decoded-frame QA
-  is covered by the shared composition/runtime tests rather than claimed as a
-  browser result. Chromium reported zero warnings/errors and port 41869 was
-  released after the pass.
+  audio path byte-for-byte. Muted audio-only contributors are also excluded
+  from output asset requirements, offline/export gating, retained Blobs, and
+  fetches; an asset still contributing video remains required.
+- Issue #69's post-review automated gates pass: 375 focused tests across the
+  eight retiming/review contract files, all 2,159 Vitest cases across 150 files,
+  all 16 benchmark-runner cases, production build/typecheck, oxlint, the
+  production high-severity audit with 0 vulnerabilities, and clean diff checks.
+  Vite retains only its existing non-fatal large-chunk advisory.
+- The integrated Issue #69 source identity is based on clean effect-stack
+  `master` `c33ffa35aad0d8c2c993b6ccb6c9fbed4065c34c` /
+  `sha256:77119aeef265c5fed69dbd0b7aaeea4d36dbb7da01dd52f2469e2027e81e8b04`.
+  The completed dirty checkpoint before this evidence note was
+  `sha256:4034ac7db9317fcd78e9444b21e124b96ffd94e742ea6e94af2bfd2d0facfa3d`;
+  the final commit id is the authoritative delivered identity.
+- Real Chromium on exclusive port 41869 opened and validated a schema-10
+  effect-era portable fixture through the schema-11 migration, selected its
+  timeline clip, verified 100% 120→120 and 150% 120→80 with the live audio-mute
+  explanation, then Reset to exact 1×. A Position X key authored at frame 1
+  quantized to frame 0 at 150% and recovered to frame 1 after Reset, proving
+  durable source-time intent at the observable boundary. The fixture's media
+  remained deliberately offline, so decoded-frame QA is covered by the shared
+  composition/runtime tests rather than claimed as a browser result. Chromium
+  reported zero warnings/errors and port 41869 was released after the pass.
 - Issue #60 is implementation-complete locally on
   `codex/issue-60-media-pool`; publication and issue closure are not implied.
   `mediaPoolModel` owns browser-free stable indexing, AND-token search,

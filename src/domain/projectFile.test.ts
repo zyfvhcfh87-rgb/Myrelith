@@ -259,7 +259,7 @@ describe('portable project file', () => {
     expect(parsed.document.markers).toEqual(original.document.markers)
   })
 
-  test('migrates schema-9 clips to exact 1x maps without changing frame intent', () => {
+  test('migrates schema-9 through versioned effects and exact 1x maps without changing intent', () => {
     const legacy = clone(makeProject())
     legacy.document.schemaVersion = 9
     legacy.document.tracks[0].clips[0].animation = {
@@ -295,6 +295,33 @@ describe('portable project file', () => {
       frame: 2,
       sourceTimeTicks: 7_000_000,
     })
+  })
+
+  test('migrates schema-10 effect documents to schema-11 source-time intent', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 10
+    legacy.document.tracks[0].clips[0].animation = {
+      tracks: [{
+        property: 'opacity',
+        keyframes: [{ frame: 2, value: 0.5, easing: { type: 'linear' } }],
+      }],
+    }
+    const effects = clone(legacy.document.tracks[0].clips[0].effects)
+    for (const legacyTrack of legacy.document.tracks) {
+      for (const legacyClip of legacyTrack.clips) {
+        Reflect.deleteProperty(legacyClip, 'sourceTimeMap')
+      }
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(11)
+    expect(parsed.document.tracks[0].clips[0].effects).toEqual(effects)
+    expect(parsed.document.tracks[0].clips[0].sourceTimeMap).toEqual(
+      defaultSourceTimeMap(5, 10),
+    )
+    expect(parsed.document.tracks[0].clips[0].animation?.tracks[0].keyframes[0])
+      .toMatchObject({ frame: 2, sourceTimeTicks: 7_000_000 })
   })
 
   test('round-trips a non-unity rational source-time map exactly', () => {

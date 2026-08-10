@@ -40,7 +40,7 @@ function makeTrack(id: string, kind: TrackData['kind'], clips: Clip[] = []): Tra
 /** V1 (2 clips), V2 (empty), A1 (1 clip) — doc order = compositing order. */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'doc-headers',
     name: 'header fixture',
     frameRate: { num: 30, den: 1 },

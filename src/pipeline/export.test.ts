@@ -96,7 +96,7 @@ function makeDoc(
         ]
 
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'doc',
     name: 'doc',
     frameRate,

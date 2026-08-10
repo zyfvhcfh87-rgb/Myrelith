@@ -169,7 +169,7 @@ export function defaultSourceTimeMap(
   }
 }
 
-/** Legacy-tolerant accessor; persisted schema-10 clips never need fallback. */
+/** Legacy-tolerant accessor; persisted schema-11 clips never need fallback. */
 export function clipSourceTimeMap(clip: Clip): SourceTimeMap {
   return clip.sourceTimeMap ?? defaultSourceTimeMap(
     clip.sourceRange.startFrame,

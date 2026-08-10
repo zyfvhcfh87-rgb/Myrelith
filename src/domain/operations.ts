@@ -1271,7 +1271,7 @@ export function slipClip(
   if (loc.clip.sourceMode === 'still' || loc.clip.text !== undefined) return doc
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
 
-  // Historical pure fixtures can still omit the schema-10 map. Preserve the
+  // Historical pure fixtures can still omit the schema-11 map. Preserve the
   // exact old 1x safe-integer repair path until they cross persistence.
   if (loc.clip.sourceTimeMap === undefined) {
     const sourceRange = loc.clip.sourceRange

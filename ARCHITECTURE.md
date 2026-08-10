@@ -128,15 +128,20 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   the document rate.
 - `Clip.sourceMode` and `Clip.sourceTimeMap` make source mapping explicit.
   Timed clips use an exact affine map: integer micro-frame source ticks plus a
-  reduced rational rate in the inclusive 1/4×–4× range. The map retains its
+  reduced rational rate in whole 25-percentage-point steps across the inclusive
+  1/4×–4× range. Restricting the public vocabulary to fixed-tick-exact rates
+  keeps split/trim composition associative without hidden remainder state. The
+  map retains its
   exact source span independently from the whole-frame timeline duration, so
   changing speed repeatedly cannot discard a fractional source tail. All
   preview, playback, export, transition, thumbnail, waveform, seeking, trim,
   split, slip, slide, move, and keyframe-remap paths delegate to
   `domain/sourceTimeMap.ts`; no consumer reconstructs `sourceStart + offset`.
-  Timeline schema 10 adds this durable contract, and schema-9 migration
-  installs an exact 1× identity map without changing prior behavior. Still and
-  text clips retain their fixed source semantics and cannot be retimed.
+  Timeline schema 11 adds this durable contract. Schema 9 first migrates effect
+  descriptors through schema 10, then the 10→11 migration installs an exact 1×
+  identity map and durable keyframe source-time intent without changing prior
+  behavior. Still and text clips retain their fixed source semantics and cannot
+  be retimed.
 - Text overlays are procedural timed video clips. They use a reserved
   `__myrelith_text__:` asset id, carry their full supported appearance in
   `Clip.text`, and require no `MediaAsset`, durable descriptor, Blob, file
@@ -267,8 +272,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   integer envelope used for asset-bound validation; `sourceDurationTicks`
   preserves the exact authored out-point. Retime keeps the timeline start
   fixed, chooses the greatest whole-frame timeline duration whose mapped span
-  fits the preserved source interval, rejects overlaps atomically, and remaps
-  keyframes by source-time intent with deterministic later-key collision wins.
+  fits the preserved source interval, rejects unsafe timeline ends and overlaps
+  atomically, and remaps keyframes from durable exact source-time intent. If two
+  authored instants would occupy the same integer timeline frame, the whole
+  retime rejects instead of destructively dropping either key.
+- The non-1× audio policy removes muted audio-only contributors from
+  `outputMediaAssetIds`, export/offline preflight, retained Blob ownership, and
+  source fetches. A video clip using that same asset remains an output
+  contributor, so its visual media is still required.
 - Every composition item carries resolved blend intent. Ordinary decoded media
   applies its ordered effect stack during the source draw, then blends after
   transform/crop and opacity. Procedural text paints background, outline, and

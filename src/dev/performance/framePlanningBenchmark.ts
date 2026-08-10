@@ -216,7 +216,7 @@ function createScenario(
   return {
     layout,
     doc: {
-      schemaVersion: 10,
+      schemaVersion: 11,
       id: `frame-planning-${layout}`,
       name: `Frame planning ${layout}`,
       frameRate: { num: 30, den: 1 },
