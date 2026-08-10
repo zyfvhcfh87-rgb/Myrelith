@@ -380,6 +380,34 @@ describe('TimelineAudioMixer selection and mapping', () => {
     await mixer.close()
   })
 
+  test('exports explicit silence without opening a reader for retimed audio', async () => {
+    const clip = makeClip('retimed', 0, 1)
+    clip.sourceRange = { startFrame: 0, durationFrames: 2 }
+    clip.sourceTimeMap = {
+      sourceStartTicks: 0,
+      sourceDurationTicks: 2_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])])
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const blocks: CapturedBlock[] = []
+
+    expect(mixer.hasAudio).toBe(true)
+    await mixer.writeFrame(0, async (block) => {
+      blocks.push(captureBlock(block))
+    })
+
+    expect(h.requests).toEqual([])
+    expect(blocks.every((block) =>
+      block.channels.every((channel) => channel.every((sample) => sample === 0)),
+    )).toBe(true)
+    await mixer.close()
+  })
+
   test('opens a trimmed source range at its document-rate sample offset', async () => {
     const clip = makeClip('trimmed', 1, 2, {
       sourceStart: 3,

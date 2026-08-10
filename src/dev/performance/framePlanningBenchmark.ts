@@ -31,6 +31,10 @@ import {
   type FramePlanningLayout,
   type FramePlanningScenarioEvidence,
 } from './contract'
+import {
+  defaultSourceTimeMap,
+  sourceFrameAtTimelineFrame,
+} from '../../domain/sourceTimeMap'
 
 const DEFAULT_CLIPS_PER_TRACK = 4_096
 const DEFAULT_TRACK_COUNT = 2
@@ -93,6 +97,7 @@ function benchmarkClip(trackIndex: number, clipIndex: number, startFrame: number
     name: id,
     sourceMode: 'still',
     sourceRange: { startFrame: 0, durationFrames: 1 },
+    sourceTimeMap: defaultSourceTimeMap(0),
     timelineRange: {
       startFrame,
       durationFrames: CLIP_DURATION_FRAMES,
@@ -211,7 +216,7 @@ function createScenario(
   return {
     layout,
     doc: {
-      schemaVersion: 9,
+      schemaVersion: 10,
       id: `frame-planning-${layout}`,
       name: `Frame planning ${layout}`,
       frameRate: { num: 30, den: 1 },
@@ -271,8 +276,7 @@ function legacyOrdinaryItem(
         clip: resolvedClip,
         sourceFrame: resolvedClip.sourceMode === 'still'
           ? 0
-          : resolvedClip.sourceRange.startFrame
-            + (frame - resolvedClip.timelineRange.startFrame),
+          : sourceFrameAtTimelineFrame(resolvedClip, frame),
         opacity,
       },
     }

@@ -288,6 +288,20 @@ describe('clipSourceFrame', () => {
     expect(clipSourceFrame(clip, 149)).toBe(79)
   })
 
+  test('constant-speed clips use the shared rational map', () => {
+    const clip = makeClip('retimed', 100, 25, 30)
+    clip.sourceRange = { startFrame: 30, durationFrames: 51 }
+    clip.sourceTimeMap = {
+      sourceStartTicks: 30_500_000,
+      sourceDurationTicks: 50_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+
+    expect(clipSourceFrame(clip, 100)).toBe(30)
+    expect(clipSourceFrame(clip, 110)).toBe(50)
+    expect(clipSourceFrame(clip, 124)).toBe(78)
+  })
+
   test('every timeline frame of a still resolves to its sole source frame', () => {
     const clip = {
       ...makeClip('still', 100, 500),

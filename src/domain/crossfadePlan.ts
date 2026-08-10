@@ -25,6 +25,17 @@ import {
   microsecondsTimestampToFrameCeil,
   rangeEnd,
 } from './time'
+import {
+  clipSourceTimeMap,
+  sourceFrameAtTimelineFrame,
+  sourceFrameAtTimelineOffset,
+  sourceRangeForMap,
+  sourceTicksAtTimelineOffset,
+  sourceTimeAudioPolicy,
+  sourceTimeMapValidationError,
+  timelineFramesWithinSourceTicks,
+  SOURCE_TIME_TICKS_PER_FRAME,
+} from './sourceTimeMap'
 
 export type SourceBoundsCatalog = ReadonlyMap<AssetId, MediaSourceBounds>
 export interface SourceBoundsCatalogEntry {
@@ -78,6 +89,7 @@ export type CrossfadeAudioUnavailableReason =
   | 'audio-source-stream-absent'
   | 'audio-source-bounds-unknown'
   | 'audio-source-boundary-unsafe'
+  | 'retimed-audio-unsupported'
   | 'duration-exceeds-audio-capacity'
 
 export interface CrossfadeVideoLeg {
@@ -192,11 +204,21 @@ function validSourceRange(clip: Clip): boolean {
   if (clip.sourceMode === 'still') {
     return startFrame === 0 && durationFrames === 1
   }
-  return Number.isSafeInteger(startFrame)
+  if (!(Number.isSafeInteger(startFrame)
     && startFrame >= 0
     && Number.isSafeInteger(durationFrames)
     && durationFrames >= 1
-    && Number.isSafeInteger(startFrame + durationFrames)
+    && Number.isSafeInteger(startFrame + durationFrames))) return false
+  if (clip.sourceTimeMap === undefined) return true
+  const map = clipSourceTimeMap(clip)
+  if (sourceTimeMapValidationError(map)) return false
+  try {
+    const envelope = sourceRangeForMap(map, clip.timelineRange.durationFrames)
+    return envelope.startFrame === startFrame
+      && envelope.durationFrames === durationFrames
+  } catch {
+    return false
+  }
 }
 
 function validTimelineRange(clip: Clip): boolean {
@@ -300,17 +322,33 @@ function sourceCapacities(
       streamBounds.endTimestampUs,
       rate,
     )
-    const sourceFrameAtCut = role === 'from'
-      ? clip.sourceRange.startFrame + clip.sourceRange.durationFrames
-      : clip.sourceRange.startFrame
-    if (!Number.isSafeInteger(sourceFrameAtCut)) {
+    const map = clipSourceTimeMap(clip)
+    const sourceTicksAtCut = sourceTicksAtTimelineOffset(
+      map,
+      role === 'from' ? clip.timelineRange.durationFrames : 0,
+    )
+    const firstTicks = firstFrame * SOURCE_TIME_TICKS_PER_FRAME
+    const endTicks = endFrame * SOURCE_TIME_TICKS_PER_FRAME
+    if (
+      !Number.isSafeInteger(sourceTicksAtCut)
+      || !Number.isSafeInteger(firstTicks)
+      || !Number.isSafeInteger(endTicks)
+      || sourceTicksAtCut < firstTicks
+      || sourceTicksAtCut > endTicks
+    ) {
       return { status: 'unavailable', reason: 'boundary-unsafe', leg: role }
     }
     return {
       status: 'available',
       capacities: {
-        left: sourceFrameAtCut - firstFrame,
-        right: endFrame - sourceFrameAtCut,
+        left: timelineFramesWithinSourceTicks(
+          sourceTicksAtCut - firstTicks,
+          map.rate,
+        ),
+        right: timelineFramesWithinSourceTicks(
+          endTicks - sourceTicksAtCut,
+          map.rate,
+        ),
       },
     }
   } catch {
@@ -492,6 +530,17 @@ function audioPlan(
     }
   }
   if (
+    sourceTimeAudioPolicy(fromPartner.clip).status === 'muted'
+    || sourceTimeAudioPolicy(toPartner.clip).status === 'muted'
+  ) {
+    return {
+      status: 'unavailable',
+      reason: 'retimed-audio-unsupported',
+      leg: null,
+      maximumDurationFrames: null,
+    }
+  }
+  if (
     fromPartner.clip.sourceMode !== 'timed'
     || toPartner.clip.sourceMode !== 'timed'
     || fromPartner.clip.text !== undefined
@@ -559,14 +608,19 @@ function audioPlan(
       trackId: fromPartner.track.id,
       clip: fromPartner.clip,
       sourceFrameAtCut:
-        fromPartner.clip.sourceRange.startFrame
-        + fromPartner.clip.sourceRange.durationFrames,
+        sourceFrameAtTimelineOffset(
+          clipSourceTimeMap(fromPartner.clip),
+          fromPartner.clip.timelineRange.durationFrames,
+        ),
     },
     to: {
       role: 'to',
       trackId: toPartner.track.id,
       clip: toPartner.clip,
-      sourceFrameAtCut: toPartner.clip.sourceRange.startFrame,
+      sourceFrameAtCut: sourceFrameAtTimelineOffset(
+        clipSourceTimeMap(toPartner.clip),
+        0,
+      ),
     },
     maximumDurationFrames: audioMaximum,
   }
@@ -658,15 +712,17 @@ export function resolveCrossfadePlan(
       clip: resolved.from,
       sourceFrameAtCut: resolved.from.sourceMode === 'still'
         ? 0
-        : resolved.from.sourceRange.startFrame
-          + resolved.from.sourceRange.durationFrames,
+        : sourceFrameAtTimelineOffset(
+            clipSourceTimeMap(resolved.from),
+            resolved.from.timelineRange.durationFrames,
+          ),
     },
     to: {
       role: 'to',
       clip: resolved.to,
       sourceFrameAtCut: resolved.to.sourceMode === 'still'
         ? 0
-        : resolved.to.sourceRange.startFrame,
+        : sourceFrameAtTimelineOffset(clipSourceTimeMap(resolved.to), 0),
     },
     audio: audioPlan(doc, resolved, doc.frameRate, catalog),
   }
@@ -757,7 +813,6 @@ export function crossfadeFrameGroupAt(
     || frame < plan.startFrame
     || frame >= plan.endFrame
   ) return null
-  const offset = frame - plan.cutFrame
   const index = frame - plan.startFrame
   const progress = (index + 1) / (plan.durationFrames + 1)
   const request = (
@@ -768,7 +823,7 @@ export function crossfadeFrameGroupAt(
     clip: leg.clip,
     sourceFrame: leg.clip.sourceMode === 'still'
       ? 0
-      : leg.sourceFrameAtCut + offset,
+      : sourceFrameAtTimelineFrame(leg.clip, frame),
     opacity: clipOpacity(leg.clip),
     weight,
   })

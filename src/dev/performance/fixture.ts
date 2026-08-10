@@ -24,6 +24,7 @@ import {
   textOverlayName,
 } from '../../domain/textOverlay'
 import type { PerformanceFixtureSummary } from './contract'
+import { defaultSourceTimeMap } from '../../domain/sourceTimeMap'
 
 export const PERFORMANCE_FIXTURE_VERSION = 'stress-100x8-30m-v1' as const
 export const PERFORMANCE_FIXTURE_RATE: Readonly<FrameRate> = Object.freeze({
@@ -203,6 +204,10 @@ function mediaClip(
           startFrame: PERFORMANCE_FIXTURE_SOURCE_IN_FRAME,
           durationFrames: PERFORMANCE_FIXTURE_CLIP_FRAMES,
         },
+    sourceTimeMap: defaultSourceTimeMap(
+      still ? 0 : PERFORMANCE_FIXTURE_SOURCE_IN_FRAME,
+      still ? 1 : PERFORMANCE_FIXTURE_CLIP_FRAMES,
+    ),
     timelineRange: {
       startFrame: clipIndex * PERFORMANCE_FIXTURE_CLIP_FRAMES,
       durationFrames: PERFORMANCE_FIXTURE_CLIP_FRAMES,
@@ -244,6 +249,7 @@ function textClip(clipIndex: number): Clip {
     name: textOverlayName(content),
     sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames: PERFORMANCE_FIXTURE_CLIP_FRAMES },
+    sourceTimeMap: defaultSourceTimeMap(0, PERFORMANCE_FIXTURE_CLIP_FRAMES),
     timelineRange: {
       startFrame: clipIndex * PERFORMANCE_FIXTURE_CLIP_FRAMES,
       durationFrames: PERFORMANCE_FIXTURE_CLIP_FRAMES,

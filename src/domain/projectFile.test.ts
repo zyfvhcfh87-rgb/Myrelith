@@ -7,6 +7,7 @@ import {
   defaultClipVisualSettings,
 } from './clipInspector'
 import { defaultClipAnimation } from './clipAnimation'
+import { defaultSourceTimeMap } from './sourceTimeMap'
 import {
   COLOR_ADJUST_EFFECT_TYPE,
   COLOR_ADJUST_EFFECT_VERSION,
@@ -54,6 +55,7 @@ function mediaClip(
     name: id,
     sourceMode: 'timed',
     sourceRange: { startFrame: sourceStart, durationFrames: duration },
+    sourceTimeMap: defaultSourceTimeMap(sourceStart, duration),
     timelineRange: { startFrame: timelineStart, durationFrames: duration },
     transform: {
       x: 12.5,
@@ -255,6 +257,57 @@ describe('portable project file', () => {
       original.document.tracks[0].transitions,
     )
     expect(parsed.document.markers).toEqual(original.document.markers)
+  })
+
+  test('migrates schema-9 clips to exact 1x maps without changing frame intent', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 9
+    const originalRanges = legacy.document.tracks.flatMap((item) => item.clips).map(
+      (clip) => ({ sourceRange: clip.sourceRange, timelineRange: clip.timelineRange }),
+    )
+    for (const legacyTrack of legacy.document.tracks) {
+      for (const legacyClip of legacyTrack.clips) {
+        Reflect.deleteProperty(legacyClip, 'sourceTimeMap')
+      }
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+    const clips = parsed.document.tracks.flatMap((item) => item.clips)
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(clips.map((clip) => ({
+      sourceRange: clip.sourceRange,
+      timelineRange: clip.timelineRange,
+    }))).toEqual(originalRanges)
+    expect(clips.map((clip) => clip.sourceTimeMap)).toEqual(
+      clips.map((clip) => defaultSourceTimeMap(
+        clip.sourceRange.startFrame,
+        clip.sourceRange.durationFrames,
+      )),
+    )
+  })
+
+  test('round-trips a non-unity rational source-time map exactly', () => {
+    const project = makeProject()
+    const retimed = project.document.tracks[0].clips[1]
+    retimed.timelineRange = { startFrame: 10, durationFrames: 5 }
+    retimed.sourceTimeMap = {
+      sourceStartTicks: 15_000_000,
+      sourceDurationTicks: 10_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+
+    const parsed = parseProjectFile(serializeProjectFile(project))
+
+    expect(parsed.document.tracks[0].clips[1]).toMatchObject({
+      sourceRange: { startFrame: 15, durationFrames: 10 },
+      timelineRange: { startFrame: 10, durationFrames: 5 },
+      sourceTimeMap: {
+        sourceStartTicks: 15_000_000,
+        sourceDurationTicks: 10_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    })
   })
 
   test('migrates schema-6 projects to explicit empty marker defaults', () => {
@@ -843,6 +896,7 @@ describe('portable project file', () => {
     title.assetId = 'image-a'
     title.sourceMode = 'still'
     title.sourceRange = { startFrame: 0, durationFrames: 1 }
+    title.sourceTimeMap = defaultSourceTimeMap(0)
 
     const parsed = parseProjectFile(serializeProjectFile(project))
     expect(parsed.document.tracks[0].clips[2]).toMatchObject({
@@ -1192,6 +1246,7 @@ describe('portable project file', () => {
       startFrame: 0,
       durationFrames: 1,
     }
+    project.document.tracks[0].clips[2].sourceTimeMap = defaultSourceTimeMap(0)
     const textClipCount = Math.floor(
       PROJECT_FILE_LIMITS.maxTotalTextCharacters / PROJECT_FILE_LIMITS.maxTextCharacters,
     )
@@ -1379,6 +1434,7 @@ describe('portable project file', () => {
       for (const clip of track.clips) {
         if (clip.assetId !== 'video-z') continue
         clip.sourceRange = { startFrame: 0, durationFrames: 1 }
+        clip.sourceTimeMap = defaultSourceTimeMap(0)
         clip.timelineRange.durationFrames = 1
         if (clip.audio) {
           clip.audio.fadeInFrames = Math.min(clip.audio.fadeInFrames, 1)

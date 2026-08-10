@@ -88,6 +88,33 @@ describe('planClipPresentation', () => {
     })
   })
 
+  test('maps retimed filmstrips and waveforms through the same source interval', () => {
+    const clip: Clip = {
+      ...makeClip('retimed', 25, 50, 60),
+      sourceRange: { startFrame: 60, durationFrames: 100 },
+      sourceTimeMap: {
+        sourceStartTicks: 60_000_000,
+        sourceDurationTicks: 100_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    }
+    const filmstrip = plan({ clip })
+    const waveform = plan({ clip, trackKind: 'audio' })
+
+    expect(filmstrip?.visual).toEqual({
+      kind: 'filmstrip',
+      source: visuals.filmstrip,
+      tiles: [
+        { index: 0, leftPx: 0, widthPx: 40, patternX: -60, spriteX: -0 },
+        { index: 1, leftPx: 40, widthPx: 60, patternX: -0, spriteX: -156 },
+      ],
+    })
+    expect(waveform?.visual).toMatchObject({
+      kind: 'waveform',
+      viewBox: `${60 / 300} 0 ${100 / 300} 1`,
+    })
+  })
+
   test.each<{
     kind: EditPreview['kind']
     displayedStartFrame: number

@@ -10,7 +10,12 @@
 import { linkedPartners } from '../../domain/linking'
 import type { Clip, ClipId, TimelineDoc } from '../../domain/schema'
 import { findClip } from '../../domain/selectors'
-import { rangeEnd } from '../../domain/time'
+import {
+  clipSourceTimeMap,
+  sourceTicksAtTimelineOffset,
+  timelineFramesWithinSourceTicks,
+  SOURCE_TIME_TICKS_PER_FRAME,
+} from '../../domain/sourceTimeMap'
 import type { EditPreviewKind } from '../../state/transportStore'
 
 export type GestureMode = 'move' | EditPreviewKind
@@ -29,15 +34,31 @@ export function gestureBoundsForClip(
   assetDurationFrames: number,
 ): GestureBounds {
   const timeline = clip.timelineRange
-  const source = clip.sourceRange
   const stillSource = clip.sourceMode === 'still'
   const textSource = clip.text !== undefined
+  const sourceTimeMap = clipSourceTimeMap(clip)
+  const sourceEndTicks = sourceTicksAtTimelineOffset(
+    sourceTimeMap,
+    timeline.durationFrames,
+  )
+  const sourceHeadroomFrames = stillSource || textSource
+    ? Number.POSITIVE_INFINITY
+    : timelineFramesWithinSourceTicks(
+        Math.max(0, sourceTimeMap.sourceStartTicks),
+        sourceTimeMap.rate,
+      )
   // Text clips have no media descriptor and intentionally remain extendable.
   // A still repeats its single source frame for any legal timeline duration.
   // Unknown timed sources fail closed at their current source end.
   const headroom = textSource || stillSource
     ? Number.POSITIVE_INFINITY
-    : Math.max(0, assetDurationFrames - rangeEnd(source))
+    : timelineFramesWithinSourceTicks(
+        Math.max(
+          0,
+          assetDurationFrames * SOURCE_TIME_TICKS_PER_FRAME - sourceEndTicks,
+        ),
+        sourceTimeMap.rate,
+      )
 
   switch (mode) {
     case 'move':
@@ -50,14 +71,14 @@ export function gestureBoundsForClip(
       return {
         minDelta: stillSource || textSource
           ? -timeline.startFrame
-          : Math.max(-timeline.startFrame, -source.startFrame),
+          : Math.max(-timeline.startFrame, -sourceHeadroomFrames),
         maxDelta: timeline.durationFrames - 1,
       }
     case 'ripple-start':
       return {
         minDelta: stillSource || textSource
           ? Number.NEGATIVE_INFINITY
-          : -source.startFrame,
+          : -sourceHeadroomFrames,
         maxDelta: timeline.durationFrames - 1,
       }
     case 'trim-end':
@@ -69,8 +90,15 @@ export function gestureBoundsForClip(
     case 'slip':
       if (stillSource || textSource) return { minDelta: 0, maxDelta: 0 }
       return {
-        minDelta: -source.startFrame,
-        maxDelta: headroom,
+        minDelta: -Math.floor(
+          sourceTimeMap.sourceStartTicks / SOURCE_TIME_TICKS_PER_FRAME,
+        ),
+        maxDelta: Math.floor(
+          Math.max(
+            0,
+            assetDurationFrames * SOURCE_TIME_TICKS_PER_FRAME - sourceEndTicks,
+          ) / SOURCE_TIME_TICKS_PER_FRAME,
+        ),
       }
   }
 }

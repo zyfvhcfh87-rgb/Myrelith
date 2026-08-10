@@ -20,6 +20,11 @@ import {
   clipAudioSettingsValidationError,
   stereoBalanceGains,
 } from './clipInspector'
+import {
+  clipSourceTimeMap,
+  sourceFrameAtTimelineOffset,
+  sourceTimeAudioPolicy,
+} from './sourceTimeMap'
 
 export interface TimelineAudioEnvelope {
   transitionId: TransitionId
@@ -48,6 +53,13 @@ export interface TimelineAudioClipPlan {
 
 export interface TimelineAudioMixPlan {
   clips: TimelineAudioClipPlan[]
+  mutedClips: TimelineAudioMutedClip[]
+}
+
+export interface TimelineAudioMutedClip {
+  clipId: ClipId
+  trackId: TrackId
+  reason: 'constant-speed-audio-unsupported'
 }
 
 interface PlannedCrossfadeAudio {
@@ -95,6 +107,7 @@ export function createTimelineAudioMixPlan(
 ): TimelineAudioMixPlan {
   const audible = audibleTracks(doc)
   const plans = new Map<ClipId, TimelineAudioClipPlan>()
+  const mutedClips: TimelineAudioMutedClip[] = []
   const sourceTimelinePhases = new Map<ClipId, number>()
   for (const track of audible) {
     for (const clip of track.clips) {
@@ -115,6 +128,15 @@ export function createTimelineAudioMixPlan(
       if (!Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2) {
         throw new RangeError(`Audio clip "${clip.id}" has an invalid volume`)
       }
+      const retimePolicy = sourceTimeAudioPolicy(clip)
+      if (retimePolicy.status === 'muted') {
+        mutedClips.push({
+          clipId: clip.id,
+          trackId: track.id,
+          reason: retimePolicy.reason,
+        })
+        continue
+      }
       const audio = clipAudioSettings(clip)
       const audioError = clipAudioSettingsValidationError(
         audio,
@@ -127,7 +149,8 @@ export function createTimelineAudioMixPlan(
       const [leftGain, rightGain] = stereoBalanceGains(audio.balance)
       sourceTimelinePhases.set(
         clip.id,
-        clip.sourceRange.startFrame - clip.timelineRange.startFrame,
+        sourceFrameAtTimelineOffset(clipSourceTimeMap(clip), 0)
+          - clip.timelineRange.startFrame,
       )
       plans.set(clip.id, {
         clipId: clip.id,
@@ -135,7 +158,7 @@ export function createTimelineAudioMixPlan(
         assetId: clip.assetId,
         timelineStartFrame: clip.timelineRange.startFrame,
         timelineEndFrame,
-        sourceStartFrame: clip.sourceRange.startFrame,
+        sourceStartFrame: sourceFrameAtTimelineOffset(clipSourceTimeMap(clip), 0),
         sourceEndFrame,
         volume: clip.volume,
         balance: audio.balance,
@@ -252,6 +275,10 @@ export function createTimelineAudioMixPlan(
     clips: [...plans.values()].sort((left, right) =>
       left.timelineStartFrame - right.timelineStartFrame
       || left.trackId.localeCompare(right.trackId)
+      || left.clipId.localeCompare(right.clipId),
+    ),
+    mutedClips: mutedClips.sort((left, right) =>
+      left.trackId.localeCompare(right.trackId)
       || left.clipId.localeCompare(right.clipId),
     ),
   }

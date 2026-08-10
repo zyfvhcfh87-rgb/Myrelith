@@ -132,6 +132,55 @@ describe('Inspector', () => {
     expect(screen.getByRole('combobox', { name: 'Blend mode' })).toHaveValue('normal')
   })
 
+  test('retimes a clip from the accessible Timing control and keeps undo exact', async () => {
+    const user = userEvent.setup()
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    const speed = screen.getByRole('combobox', { name: 'Speed' })
+    expect(speed).toHaveValue('100')
+    expect(screen.getByText('Timeline 100 frames · source 100 frames.')).toBeInTheDocument()
+
+    await user.selectOptions(speed, '200')
+    expect(speed).toHaveValue('200')
+    expect(clipA().timelineRange.durationFrames).toBe(50)
+    expect(clipA().sourceTimeMap).toEqual({
+      sourceStartTicks: 0,
+      sourceDurationTicks: 100_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    })
+    expect(screen.getByText('Timeline 50 frames · source 100 frames.')).toBeInTheDocument()
+    expect(screen.getByText(/Audio is muted at this speed in preview and export/)).toBeInTheDocument()
+    expect(doc().past).toHaveLength(1)
+
+    act(() => doc().undo())
+    expect(speed).toHaveValue('100')
+    expect(clipA().timelineRange.durationFrames).toBe(100)
+  })
+
+  test('explains rejected speed changes and updates linked clips atomically', async () => {
+    const user = userEvent.setup()
+    transport().setSelectedClip('clipA')
+    const { unmount } = render(<Inspector />)
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Speed' }), '50')
+    expect(screen.getByRole('combobox', { name: 'Speed' })).toHaveValue('100')
+    expect(screen.getByText(/Speed change was not applied/)).toBeInTheDocument()
+    expect(doc().past).toHaveLength(0)
+
+    unmount()
+    act(() => {
+      doc().setDoc(makeLinkedFixture())
+      transport().setSelectedClip('clipV')
+    })
+    render(<Inspector />)
+    expect(screen.getByText(/The 2 linked clips change together/)).toBeInTheDocument()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Speed' }), '200')
+    expect(doc().doc.tracks[0].clips[0].timelineRange.durationFrames).toBe(25)
+    expect(doc().doc.tracks[1].clips[0].timelineRange.durationFrames).toBe(25)
+    expect(doc().past).toHaveLength(1)
+  })
+
   test('selects, undoes, redoes, and resets an accessible blend mode', async () => {
     const user = userEvent.setup()
     transport().setSelectedClip('clipA')

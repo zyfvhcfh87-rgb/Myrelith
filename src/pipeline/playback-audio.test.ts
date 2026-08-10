@@ -502,6 +502,32 @@ function makeWebAudioHarness(state: AudioContextState): {
 }
 
 describe('startTimelineAudioPlayback scheduling', () => {
+  test('does not resolve or schedule a retimed audio source', async () => {
+    const clip = makeClip('retimed', 0, 10)
+    clip.sourceRange = { startFrame: 0, durationFrames: 20 }
+    clip.sourceTimeMap = {
+      sourceStartTicks: 0,
+      sourceDurationTicks: 20_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 10)
+    const h = makePlaybackHarness()
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(audioPlaybackAssetIds(doc, 0)).toEqual([])
+    expect(h.media.requests).toEqual([])
+    expect(h.output.scheduled).toEqual([])
+    await session.stop()
+  })
+
   test('shares one future anchor and maps a mid-buffer seek exactly', async () => {
     const doc = makeDoc([
       makeTrack('A-mid', 'audio', [

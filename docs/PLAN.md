@@ -2879,3 +2879,51 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
   ordered text effects ready, effect bypass/application produced distinct
   Program Monitor screenshot hashes, browser diagnostics were empty, and the
   port was released.
+
+## Post-MVP issue #69 - constant-speed clip retiming
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-10).**
+
+- [x] Add schema-10 `SourceTimeMap` with exact integer source ticks, a reduced
+  rational rate bounded to 25%–400%, an exact preserved source span, strict
+  validation, and schema-9→10 migration that is behavior-identical at 1×.
+- [x] Make one browser-free mapping contract authoritative for selection,
+  seeking, preview, playback, export, ordinary composition, crossfades,
+  thumbnails, waveforms, trim, split, slip, slide, move, transition handles,
+  and source-capacity checks.
+- [x] Add pure constant-speed retiming for timed decoded media. Keep timeline
+  start fixed; derive the greatest valid whole-frame duration without losing a
+  fractional source tail; reject locked/still/text/overlap edits atomically;
+  reconcile transitions and fades; remap animation keys by exact source-time
+  intent with deterministic collision handling.
+- [x] Route linked A/V retiming through the existing all-or-nothing linking
+  contract and expose one document-store history entry per accepted edit, with
+  rejected and idempotent edits preserving redo by reference.
+- [x] Define the audio policy explicitly: exact 1× with integer source origin
+  keeps existing audio; every other constant-speed map is muted consistently
+  in live playback and export until pitch-safe time stretching is implemented.
+- [x] Add accessible Inspector Speed choices in 25% increments, Reset, exact
+  timeline/source frame feedback, linked/locked eligibility feedback, and a
+  visible explanation when audio is muted.
+- [x] Cover rational no-drift/tail preservation, migration/round trips,
+  operations and linking, transitions, animation remapping, selectors,
+  filmstrips/waveforms, audio mixing/export silence, store history, Inspector,
+  and shared composition planning with focused and complete automated gates.
+- [x] Pass 301 focused tests plus a 51-test explicit playback/export audio-
+  policy pass, all 2,113 Vitest cases across 148 files, all 16
+  benchmark-runner tests, production build/typecheck, oxlint, the production
+  high-severity audit with 0 vulnerabilities, and clean diff/source-identity
+  checks. Retain only the existing non-fatal Vite large-chunk advisory.
+- [x] Record clean base `718c0d28e3611e2bad3b511d45ce1e3adcba0270` /
+  `sha256:5acd7a8b1c89f0eafeef6ca504d183c18f415835da1fb994a65a97427ad84745`
+  and completed-implementation checkpoint
+  `sha256:40987d6a59449ac12ff8608b5a7ca887e4c854e5f4925c5bedfc57513bba0c3a`;
+  use the final commit id as the authoritative delivered identity.
+- [x] Verify observable UI behavior in real Chromium only on port 41869:
+  100%→200%→Undo, 75%→Reset, exact frame feedback, mute-policy feedback,
+  one-frame seek, play/pause, compact 1000×800 layout, zero warning/error logs,
+  and released test port. The portable media stayed offline, so decoded-frame
+  behavior is attributed only to automated composition/runtime coverage.
+- [x] Publish the exact committed branch as a ready PR targeting `master` with
+  `Closes #69`; leave merge, deployment, schema-number reconciliation after
+  Issue #45, and closure to the coordinating task.

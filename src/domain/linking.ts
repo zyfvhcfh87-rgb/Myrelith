@@ -27,13 +27,14 @@ import {
   moveClip,
   rippleDelete,
   rippleTrim,
+  retimeClip,
   slideClip,
   slipClip,
   splitClipAtFrame,
   trimClip,
 } from './operations'
 import type { TrimEdge } from './operations'
-import type { Clip, ClipId, TimelineDoc, TrackId } from './schema'
+import type { Clip, ClipId, SourceTimeRate, TimelineDoc, TrackId } from './schema'
 import { findClip, trackOfClip } from './selectors'
 import { rangeEnd } from './time'
 
@@ -380,6 +381,22 @@ export function linkedRippleTrim(
 ): TimelineDoc {
   return applyToGroup(doc, clipId, 'linkedRippleTrim', (d, id) =>
     rippleTrim(d, id, edge, deltaFrames),
+  )
+}
+
+/** Apply one constant rate to every linked member as one atomic edit. */
+export function linkedRetimeClip(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  rate: SourceTimeRate,
+): TimelineDoc {
+  if (
+    groupMembers(doc, clipId).some(
+      (member) => member.sourceMode === 'still' || member.text !== undefined,
+    )
+  ) return doc
+  return applyToGroup(doc, clipId, 'linkedRetimeClip', (next, memberId) =>
+    retimeClip(next, memberId, rate),
   )
 }
 
