@@ -16,6 +16,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
+import { useProxyStore } from '../state/proxyStore'
 import TextOverlayControls from './TextOverlayControls'
 import VisualOverlayControls from './VisualOverlayControls'
 
@@ -41,9 +42,17 @@ export default function Preview() {
     }
     return false
   })
-  const hasVisualDescriptor = useMediaStore((s) => {
-    for (const descriptor of s.descriptors.values()) {
-      if (descriptor.kind === 'video' || descriptor.kind === 'image') return true
+  const mediaDescriptors = useMediaStore((state) => state.descriptors)
+  const hasVisualDescriptor = [...mediaDescriptors.values()].some(
+    (descriptor) => descriptor.kind === 'video' || descriptor.kind === 'image',
+  )
+  const hasLoadedProxy = useProxyStore((state) => {
+    for (const item of state.assets.values()) {
+      if (
+        item.phase === 'ready'
+        && item.entry !== null
+        && mediaDescriptors.get(item.assetId)?.kind === 'video'
+      ) return true
     }
     return false
   })
@@ -141,7 +150,7 @@ export default function Preview() {
         <div className="preview-hint">
           import a video or still image in the Media Pool to preview it here
         </div>
-      ) : hasVisualDescriptor && !hasLoadedVisual ? (
+      ) : hasVisualDescriptor && !hasLoadedVisual && !hasLoadedProxy ? (
         <div className="preview-hint preview-hint-offline" role="status">
           Visual sources are offline. Reconnect them in the Media panel.
         </div>

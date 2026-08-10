@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ComponentType,
 } from 'react'
 import './layout.css'
 import Toolbar from '../ui/Toolbar'
@@ -34,6 +35,7 @@ import { useEditShortcuts } from './useEditShortcuts'
 import { initMediaVisuals } from './mediaVisualsController'
 import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
 import { initSelectionReconciliation } from './selectionReconciliationController'
+import { initProxyController } from './proxyController'
 
 export interface EditorShellProps {
   closing: boolean
@@ -43,12 +45,47 @@ export default function EditorShell({ closing }: EditorShellProps) {
   const shellRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 1440, height: 900 })
   const [workspaceAnnouncement, setWorkspaceAnnouncement] = useState('')
+  const [ProxyBenchmarkPanel, setProxyBenchmarkPanel] = useState<ComponentType | null>(null)
   const workspace = useWorkspaceLayoutStore()
   const fitted = fitWorkspaceLayout(workspace, viewport)
   useUndoRedoShortcuts()
   useEditShortcuts()
+  useEffect(() => {
+    if (
+      !import.meta.env.DEV
+      || new URLSearchParams(window.location.search).get('proxyBenchmark') !== '1'
+    ) return
+    let active = true
+    void import('../dev/ProxyEditingBenchmarkPanel').then((module) => {
+      if (active) setProxyBenchmarkPanel(() => module.default)
+    }, (cause) => {
+      console.warn('[EditorShell] proxy benchmark panel failed to load:', cause)
+    })
+    return () => { active = false }
+  }, [])
   useEffect(() => initMediaCapabilityLifecycle(), [])
   useEffect(() => initSelectionReconciliation(), [])
+  useEffect(() => {
+    let unmounted = false
+    let release: (() => Promise<void>) | null = null
+    void initProxyController().then((acquiredRelease) => {
+      if (unmounted) {
+        void acquiredRelease().catch((cause) => {
+          console.warn('[EditorShell] proxy controller cleanup failed:', cause)
+        })
+      } else release = acquiredRelease
+    }, (cause) => {
+      console.warn('[EditorShell] proxy controller initialization failed:', cause)
+    })
+    return () => {
+      unmounted = true
+      if (release) {
+        void release().catch((cause) => {
+          console.warn('[EditorShell] proxy controller cleanup failed:', cause)
+        })
+      }
+    }
+  }, [])
   useEffect(() => {
     initMediaVisuals()
   }, [])
@@ -221,6 +258,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
       >
         <Timeline />
       </section>
+      {ProxyBenchmarkPanel ? <ProxyBenchmarkPanel /> : null}
     </div>
   )
 }

@@ -133,9 +133,31 @@ describe('ProjectLaunch', () => {
 
     expect(screen.getByText('Portable .myrelith files')).toBeInTheDocument()
     expect(screen.getByText(/1\.0 KB protected/)).toBeInTheDocument()
-    expect(screen.getByText(/No derived media is stored today/)).toBeInTheDocument()
+    expect(screen.getByText(/No derived media is stored/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Clear disposable data' }))
       .toBeDisabled()
+  })
+
+  test('still offers disposable cleanup when a corrupt cache prevents an estimate', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    useProjectLibraryStore.setState({
+      phase: 'ready',
+      storage: {
+        browserUsageBytes: 4_096,
+        browserQuotaBytes: 8_192,
+        recoveryBytes: 0,
+        disposableBytes: 0,
+        disposableItemCount: 0,
+        error: 'Disposable storage usage is unavailable.',
+      },
+    })
+    render(<ProjectLaunch />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear disposable data' }))
+
+    await waitFor(() => {
+      expect(libraryController.clearDisposableLocalData).toHaveBeenCalledOnce()
+    })
   })
 
   test('home offers recovery and recent entries with removable shortcuts', () => {

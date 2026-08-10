@@ -82,6 +82,7 @@ import MediaCollectionsPanel, {
   MediaCollectionMembership,
 } from './MediaCollectionsPanel'
 import MediaRelinkDialog from './MediaRelinkDialog'
+import { ProxyControls, ProxyStorageSummary } from './ProxyControls'
 import { useMediaPoolVirtualizer } from './useMediaPoolVirtualizer'
 import {
   LOCAL_ACCESS_EXPLANATION,
@@ -800,6 +801,9 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
             fileName={descriptor.fileName}
           />
         ) : null}
+        {descriptor?.kind === 'video' ? (
+          <ProxyControls assetId={descriptor.id} fileName={descriptor.fileName} />
+        ) : null}
       </div>
 
       <button
@@ -1196,6 +1200,7 @@ export default function MediaPool() {
             {LOCAL_ACCESS_EXPLANATION}
           </p>
         ) : null}
+        <ProxyStorageSummary />
         <div className="media-pool-filters" role="search" aria-label="Filter media">
           <label className="media-pool-search">
             <span>Search</span>

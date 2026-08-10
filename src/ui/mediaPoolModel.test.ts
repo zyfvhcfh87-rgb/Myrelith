@@ -52,7 +52,7 @@ function item(id: string, expanded = false): MediaPoolItemModel {
   return {
     id,
     fileName: `${id}.mp4`,
-    kind: 'video',
+    kind: 'audio',
     statuses: new Set<MediaPoolStatus>(['ready']),
     searchText: `${id}.mp4 video ready`,
     expanded,
@@ -179,5 +179,30 @@ describe('mediaPoolModel', () => {
     expect(rows.map((row) => row.itemStartIndex)).toEqual([0, 2, 3])
     expect(window.rowHeights).toEqual([112, 310, 112])
     expect(window.totalHeight).toBe(558)
+  })
+
+  test('isolates every proxy-enabled video card in large mixed and video-only pools', () => {
+    const mixed = Array.from({ length: 300 }, (_, index): MediaPoolItemModel => ({
+      ...item(`mixed-${index}`),
+      kind: index % 3 === 0 ? 'video' : 'audio',
+    }))
+    const mixedRows = planMediaPoolRows(mixed, 3)
+    for (const row of mixedRows) {
+      if (row.itemIds.some((id) => mixed.find((candidate) => candidate.id === id)?.kind === 'video')) {
+        expect(row.itemIds).toHaveLength(1)
+      }
+    }
+    expect(mixedRows.flatMap((row) => row.itemIds)).toEqual(mixed.map((candidate) => candidate.id))
+
+    const videos = Array.from({ length: 500 }, (_, index): MediaPoolItemModel => ({
+      ...item(`video-${index}`),
+      kind: 'video',
+    }))
+    const videoRows = planMediaPoolRows(videos, 3)
+    const window = computeMediaPoolVirtualWindow(videoRows, new Map(), 0, 640)
+
+    expect(videoRows).toHaveLength(500)
+    expect(videoRows.every((row) => row.itemIds.length === 1)).toBe(true)
+    expect(window.totalHeight).toBeGreaterThan(500 * 100)
   })
 })

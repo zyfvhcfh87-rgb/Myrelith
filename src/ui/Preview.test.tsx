@@ -7,6 +7,7 @@ import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSe
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
+import { useProxyStore } from '../state/proxyStore'
 import Preview from './Preview'
 import { createTextClip } from '../domain/operations'
 import { useDocumentStore } from '../state/documentStore'
@@ -65,6 +66,7 @@ beforeEach(() => {
   })
   usePreviewStatusStore.getState().resetPreviewStatus()
   usePreviewQualityStore.setState({ qualityMode: 'auto' })
+  useProxyStore.getState().reset()
   useDocumentStore.getState().setDoc(
     createTimelineDoc('Preview', DEFAULT_PROJECT_SETTINGS, 'preview-doc'),
   )
@@ -96,6 +98,51 @@ describe('Preview', () => {
     expect(status).toHaveTextContent(/reconnect them in the Media panel/i)
     expect(screen.queryByText(/import a video or still image/i))
       .not.toBeInTheDocument()
+  })
+
+  test('does not cover an offline video when its editing proxy is ready', () => {
+    const cacheKey = 'a'.repeat(64)
+    useProxyStore.getState().setAsset({
+      assetId: offlineVideo.id,
+      phase: 'ready',
+      progress: 1,
+      detail: 'Proxy ready for preview.',
+      canGenerate: false,
+      originalAvailable: false,
+      entry: {
+        cacheKey,
+        assetId: offlineVideo.id,
+        original: {
+          algorithm: 'sha256-sampled-v1',
+          digest: 'b'.repeat(64),
+          fileName: offlineVideo.fileName,
+          size: offlineVideo.size,
+          lastModified: offlineVideo.lastModified,
+        },
+        parameters: {
+          container: 'mp4',
+          videoCodec: 'avc',
+          bitrate: 2_000_000,
+          maxWidth: 1_280,
+          maxHeight: 720,
+          keyFrameIntervalSeconds: 1,
+        },
+        generatorVersion: 'mediabunny-webcodecs-v1',
+        fileName: `${cacheKey}.${'1'.repeat(32)}.mp4`,
+        mimeType: 'video/mp4',
+        byteSize: 1_000,
+        width: 1_280,
+        height: 720,
+        frameRate: { num: 30, den: 1 },
+        durationMicroseconds: 2_000_000,
+        createdAt: 1,
+        lastUsedAt: 1,
+      },
+    })
+
+    render(<Preview />)
+
+    expect(screen.queryByText(/visual sources are offline/i)).not.toBeInTheDocument()
   })
 
   test('names an offline still needed by the displayed frame', () => {

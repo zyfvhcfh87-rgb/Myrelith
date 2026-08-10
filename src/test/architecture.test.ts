@@ -158,6 +158,7 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     'workers/decode.worker.ts',
   ])
   const benchmarkDevImportAllowances = new Map<string, ReadonlySet<string>>([
+    ['dev/ProxyEditingBenchmarkPanel.tsx', new Set(['app', 'domain', 'state'])],
     ['dev/performance/fixture.ts', new Set(['domain'])],
     ['dev/performance/framePlanningBenchmark.ts', new Set(['domain'])],
     ['dev/performance/runtime.ts', new Set(['app', 'domain', 'state'])],
@@ -190,8 +191,15 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
       toArea === 'dev'
       && fromArea !== 'dev'
       && !(
-        fromName === 'main.tsx'
-        && toName === 'dev/performance/PerformanceBenchmarkApp.tsx'
+        (
+          fromName === 'main.tsx'
+          && toName === 'dev/performance/PerformanceBenchmarkApp.tsx'
+        )
+        || (
+          fromName === 'app/EditorShell.tsx'
+          && toName === 'dev/ProxyEditingBenchmarkPanel.tsx'
+          && edge.dynamic
+        )
       )
     ) {
       violations.push(`${edgeLabel(edge)} imports a dev module outside the gated entry route`)
@@ -358,6 +366,7 @@ describe('architecture guard', () => {
       .filter((edge) => new Set(['app', 'state', 'ui']).has(area(edge.to!)))
       .map((edge) => moduleName(edge.from)))
     expect(privilegedImporters).toEqual(new Set([
+      'dev/ProxyEditingBenchmarkPanel.tsx',
       'dev/performance/PerformanceBenchmarkApp.tsx',
       'dev/performance/runtime.ts',
     ]))

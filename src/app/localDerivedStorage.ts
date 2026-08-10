@@ -1,3 +1,5 @@
+import { proxyStorage } from './proxyStorage'
+
 /**
  * Strict registry for disposable origin-local artifacts.
  *
@@ -68,6 +70,18 @@ export function createDisposableStorageController(
   }
 }
 
-// No proxy or derived-media cache ships today. Future owners register here
-// only after they have a reviewed namespace and exact cleanup contract.
-export const localDerivedStorage = createDisposableStorageController([])
+export const localDerivedStorage = createDisposableStorageController([
+  {
+    id: 'opfs-proxy-cache-v1',
+    async estimate() {
+      const estimate = await proxyStorage.estimate()
+      return {
+        bytes: estimate.cacheBytes,
+        itemCount: estimate.itemCount,
+      }
+    },
+    async clear() {
+      await proxyStorage.clear()
+    },
+  },
+])

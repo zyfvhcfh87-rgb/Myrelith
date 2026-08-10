@@ -28,16 +28,21 @@ non-negotiable rules. Re-read it at the start of every coding session.
   (e.g. `app/previewController.ts`) may import state/ AND engine/pipeline
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
-- The opt-in Issue #54 benchmark has one narrow, architecture-guarded dev
-  exception. `dev/performance/runtime.ts` may compose existing `app/`
-  controllers with `state/` and its bounded Mediabunny fixture generator;
+- The opt-in Issue #54 and Issue #70 evidence panels have narrow,
+  architecture-guarded dev exceptions. `dev/performance/runtime.ts` may compose
+  existing `app/` controllers with `state/` and its bounded Mediabunny fixture
+  generator;
   `dev/performance/framePlanningBenchmark.ts` may import only browser-free
   `domain/` planners to produce the Issue #59 legacy/indexed parity and timing
   evidence;
-  `PerformanceBenchmarkApp.tsx` may reuse existing `ui/` surfaces. No other
-  `dev/` module may reach those layers, and only the build-gated exact route in
-  `main.tsx` may import the benchmark UI. Ordinary production builds remove
-  that dynamic import and its complete closure.
+  `PerformanceBenchmarkApp.tsx` may reuse existing `ui/` surfaces.
+  `ProxyEditingBenchmarkPanel.tsx` may read the selected document/media state
+  and call the app-owned preview/proxy/transport facades solely to measure the
+  exact live source path. No other `dev/` module may reach those layers. Only
+  the build-gated exact route in `main.tsx` may import the Issue #54 UI, and
+  only `EditorShell.tsx` may dynamically import the Issue #70 panel behind its
+  development-only query guard. Ordinary production builds remove both
+  dynamic imports and their complete closures.
 - Sanctioned exceptions between those three (and nothing more):
   - anyone may import `workers/decode-types.ts`,
     `workers/decode-protocol.ts`, `workers/render-legacy-protocol.ts`, and
@@ -314,6 +319,34 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   export therefore agree. Pitch-safe time stretching is a separate future
   capability and must not be approximated with divergent browser playbackRate
   behavior. The Inspector exposes this policy whenever a non-1× speed is set.
+
+## Editing-proxy representation and cache
+
+- `domain/proxyCache.ts` is the browser-free authority for proxy provenance,
+  profile parameters, strict manifest parsing, and preview/export representation
+  selection. Preview may select only a fresh proxy; final export always selects
+  and revalidates the original. A proxy is never project truth.
+- `app/proxyStorage.ts` owns the versioned origin-local OPFS sidecar and
+  manifest-first replacement/LRU transactions. Strict parsing rejects unknown
+  or unbounded fields before cache-byte arithmetic. Replacement exposes an
+  explicit finalize/rollback transaction; remove and clear serialize through
+  the same mutation tail. Its registry entry is the only derived-storage
+  clearing capability. Project files, recovery, media handles, and portable
+  schemas cannot reference or clear through this boundary.
+- `app/proxyController.ts` composes exact source/output capability probes, a
+  one-job/one-decoder `MediaJobScheduler`, provenance checks, serializable UI
+  facts, source replacement/removal cancellation, awaitable cache quiescence,
+  async editor-lifecycle leases, and representation facades. A late cache
+  commit is rolled back unless the source, job, and controller lifecycle still
+  match after commit. `pipeline/proxyGeneration.ts` alone owns the temporary
+  Input/decoder, CanvasSource/encoder, muxer, direct OPFS writer, and their exact
+  cleanup. It uses the durable primary-video PTS span, normalizes proxy output
+  to zero, and probes the exact encoder configuration including frame rate.
+- `previewController.ts` and `exportController.ts` both call the shared pure
+  representation policy. Preview worker runtime tokens distinguish proxy
+  failures from original-media failures; export cannot resolve a proxy when an
+  original is offline. The exact supported codec/profile matrix is published in
+  `docs/PROXY_CODEC_SUPPORT.md` and is runtime-probed before generation enables.
 
 ## Export profile and delivery contracts
 

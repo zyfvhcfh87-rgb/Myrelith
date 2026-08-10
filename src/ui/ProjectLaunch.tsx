@@ -124,6 +124,7 @@ function LocalStorageSummary() {
   const [clearing, setClearing] = useState(false)
   const hasDisposableData = storage.disposableBytes > 0
     || storage.disposableItemCount > 0
+    || storage.error !== null
 
   const clearDisposable = (): void => {
     if (!hasDisposableData || clearing) return
@@ -171,7 +172,7 @@ function LocalStorageSummary() {
           <dd>{formatBytes(storage.disposableBytes)} disposable</dd>
           <small>
             {storage.disposableItemCount === 0
-              ? 'No derived media is stored today. Future cache data can be regenerated.'
+              ? 'No derived media is stored. Proxies are disposable and can be regenerated.'
               : `${storage.disposableItemCount} derived ${storage.disposableItemCount === 1 ? 'item' : 'items'} can be regenerated.`}
           </small>
           <button

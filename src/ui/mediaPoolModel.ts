@@ -33,7 +33,7 @@ export interface MediaPoolItemModel {
   readonly kind: MediaPoolKind
   readonly statuses: ReadonlySet<MediaPoolStatus>
   readonly searchText: string
-  /** Non-ready diagnostics use the complete grid width and therefore one row. */
+  /** Full-width proxy controls or diagnostics consume one complete grid row. */
   readonly expanded: boolean
 }
 
@@ -162,8 +162,8 @@ export function buildMediaPoolItems(
       kind,
       statuses,
       searchText,
-      expanded: compatibilityItem !== undefined
-        && compatibilityItem.status !== 'ready',
+      expanded: kind === 'video'
+        || (compatibilityItem !== undefined && compatibilityItem.status !== 'ready'),
     }]
   })
 }
@@ -208,10 +208,10 @@ export function planMediaPoolRows(
   }
 
   for (const item of items) {
-    if (item.expanded) {
+    if (item.expanded || item.kind === 'video') {
       flushPending()
       rows.push({
-        key: `expanded:${item.id}`,
+        key: `full-width:${item.id}`,
         itemIds: [item.id],
         itemStartIndex: 0,
         estimatedHeight: MEDIA_POOL_EXPANDED_ROW_ESTIMATE_PX,
