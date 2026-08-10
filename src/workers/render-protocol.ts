@@ -50,6 +50,11 @@ export type {
  */
 export type RenderMode = 'playback' | 'seek'
 
+/** Actual session capabilities of the preview worker's compositor context. */
+export interface RenderWorkerCapabilities {
+  readonly canvasFilter: boolean
+}
+
 /**
  * Opt-in, point-in-time worker health evidence for the local performance lab.
  * Byte fields are explicitly classified so callers never confuse document,
@@ -232,6 +237,11 @@ export type ToRenderWorker =
 
 /** Messages the render worker sends back to the main thread. */
 export type FromRenderWorker =
+  | {
+      /** Published once the worker has created its real preview compositor. */
+      type: 'rendererCapabilities'
+      capabilities: RenderWorkerCapabilities
+    }
   | {
       /** The asset's worker source/decoder is ready; renders may reference it. */
       type: 'assetConfigured'

@@ -38,6 +38,7 @@ import { framesToSeconds, rescaleFrames } from '../domain/time'
 import type {
   FromRenderWorker,
   RenderMode,
+  RenderWorkerCapabilities,
   RenderWorkerRuntimeTelemetrySnapshot,
   StreamingCompositeSourceEntry,
   ToRenderWorker,
@@ -155,6 +156,8 @@ export class RenderWorkerBridge {
   ) => void) | null = null
   /** An asset's decoder became ready — a good moment to re-render. */
   onAssetReady: ((assetId: AssetId) => void) | null = null
+  /** Actual capabilities reported by the worker-owned preview compositor. */
+  onRendererCapabilities: ((capabilities: RenderWorkerCapabilities) => void) | null = null
 
   constructor(worker: WorkerLike) {
     this.worker = worker
@@ -513,6 +516,10 @@ export class RenderWorkerBridge {
 
   private route(msg: FromRenderWorker): void {
     switch (msg.type) {
+      case 'rendererCapabilities': {
+        this.onRendererCapabilities?.(msg.capabilities)
+        break
+      }
       case 'assetConfigured': {
         const waiter = this.pendingConfigures.get(msg.assetId)
         if (!waiter || waiter.setupId !== msg.setupId) break

@@ -295,7 +295,7 @@ describe('createTimelineDoc', () => {
     const doc = createTimelineDoc('  Demo project  ', settings, 'project-123')
 
     expect(doc).toEqual({
-      schemaVersion: 9,
+      schemaVersion: 10,
       id: 'project-123',
       name: 'Demo project',
       frameRate: { num: 60_000, den: 1_001 },
@@ -359,7 +359,7 @@ describe('createTimelineDoc', () => {
     )
 
     expect(JSON.stringify(doc)).toBe(JSON.stringify({
-      schemaVersion: 9,
+      schemaVersion: 10,
       id: 'doc_default',
       name: 'Untitled',
       frameRate: { num: 30, den: 1 },

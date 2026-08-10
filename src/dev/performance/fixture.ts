@@ -222,6 +222,7 @@ function mediaClip(
       ? [{
           id: `effect-${id}`,
           type: 'brightness',
+          version: 1,
           enabled: true,
           params: { amount: 1.05 },
         }]

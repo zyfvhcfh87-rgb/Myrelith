@@ -113,6 +113,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #58 — adaptive preview resolution** | ✅ implementation complete | session-only Auto/Full/Half/Quarter monitor quality; project-space compositor scaling across ordinary/text/transition frames; reusable scaled worker surfaces; explicit full-resolution export; full 4K harness memory plateau -6.4% median/-7.5% p95; real Chromium 4K/720px gates |
 | **Post-MVP #64 — timeline markers** | ✅ implementation complete | schema-7 sequence markers; deterministic pure operations/navigation, undoable store actions, portable migration/round trips, accessible clustered ruler/editor, command palette + keyboard paths; 125 focused + 1,979 total tests; clean in-app Chromium gate on exclusive port 5174; delivery tracked by draft PR |
 | **Post-MVP #68 — caption tracks + SRT/VTT** | ✅ implementation complete | schema-8 semantic tracks/cues; exact frame/timestamp round trips, atomic strict import, accessible bounded editor, shared preview/export text composition, undo/recovery; 2,046 total tests and clean Chromium QA on exclusive port 41868 |
+| **Post-MVP #45 — versioned effect stack** | ✅ implementation complete | schema-10 ordered descriptors with registry validation/migration/capability fallback and unknown preservation; atomic history operations; shared preview/export exposure/contrast/saturation; accessible Inspector; 306 focused + 2,108 total tests; clean Chromium/recovery/export-ready gate on exclusive port 41845 |
 | **Post-MVP #46 — minimal blend modes** | ✅ implementation complete | explicit normal/multiply/screen/overlay intent; schema-9 migration preserving schema-8 captions and unknown blend intent; isolated Canvas2D composition plus capability fallback seam; accessible Inspector/history; clean preview/export/reload Chromium gate on exclusive port 41846 |
 | **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
@@ -2324,6 +2325,86 @@ surface; it is not a second zoom and never enters document history.
   production audit reports 0 vulnerabilities. Browser QA was carried forward
   because the final rebase resolution and compatibility change were docs/test
   fixture only; no production or observable behavior changed.
+
+## Post-MVP issue #45 - versioned visual-effect stack foundation
+
+- Timeline schema 10 adds an explicit non-negative registry `version` to every
+  ordered `EffectDescriptor`. The 9→10 migration upgrades the owned
+  `builtin.color-adjust` legacy shape with defaults while assigning version 0
+  to unknown types and retaining their type, enabled state, order, and complete
+  bounded primitive payload. Save/load snapshots clone every descriptor field.
+- `domain/effectStack.ts` is the pure registry authority. Each registration owns
+  its parameter validation, migration hook, capability declaration, defaults,
+  label, and evaluation function. Resolution returns ordered `ready`,
+  `disabled`, `invalid`, or `unsupported` records; unsafe entries are preserved
+  and bypassed without aborting later effects.
+- The proof effect exposes exposure (-4…4 stops), contrast (-100…100%), and
+  saturation (-100…100%). Its Canvas2D filter chain is applied in authored
+  order during the source draw before opacity/destination blend. Empty or fully
+  bypassed stacks do not write filter state. Ordinary media needs no scratch;
+  text and crossfade legs reuse and release the compositor's existing bounded
+  caller-owned surfaces.
+- Preview, seek/playback, and export receive the same animation-resolved clips
+  through `videoCompositionPlan` and execute effects only in
+  `pipeline/render.ts`. There is no React evaluator and no second export path.
+- Pure add, enable/bypass, parameter patch, exact-index reorder, reset, and
+  remove operations reject locked/missing/invalid edits without mutation. Store
+  adapters commit every success as one history snapshot. Reset retains unknown
+  forward-compatible parameter keys; unsupported descriptors still expose
+  bypass/reorder/remove so their data is not stranded.
+- The Inspector adds a fourth roving tab plus native labeled controls, ordered
+  position text, status badges/details, and explicit Move up/down, Reset, and
+  Remove labels. Unknown/invalid states remain visible and actionable.
+- Focused validation passed 306 tests across effect registry, operations,
+  history, project migration/round-trip, compositor, Inspector, and architecture
+  files. Full validation passed 148 Vitest files / 2,108 tests and all 16
+  benchmark-runner tests. TypeScript/production build, oxlint, production audit,
+  and diff checks are recorded in the delivery PR.
+- Source fingerprints: clean base `718c0d28e3611e2bad3b511d45ce1e3adcba0270`
+  was `sha256:5acd7a8b1c89f0eafeef6ca504d183c18f415835da1fb994a65a97427ad84745`;
+  the completed dirty implementation checkpoint was
+  `sha256:f791a282c72b571bdaff260e32a0232eb8ee0caf80cf40b1c66a9688d66e7a41`.
+- Real Chromium on exclusive `http://127.0.0.1:41845/` created a text clip,
+  reached Effects by ArrowRight focus movement, added two effects, edited all
+  three proof parameters, visibly changed the Canvas output, bypassed/reordered/
+  reset/removed, restored reorder and removal with undo/redo, and recovered both
+  ordered descriptors after reload. An effected 150-frame 1920×1080 MP4 reached
+  `Export ready` with a Blob download link through the shared compositor. The
+  in-app browser did not expose a download event for that Blob link, but export
+  completed successfully; the final console contained 0 warnings/errors and
+  port 41845 was released.
+- The publication is a ready PR to `master` with `Closes #45`. Do not merge it
+  here; the coordinating task will review and integrate #45 before rebasing #69
+  and then #70.
+- PR review remediation keeps one `domain/effectBounds.ts` contract between
+  live editing and portable validation. Exact-limit edits serialize; any
+  per-clip, per-document, parameter, key/value, string, or finite-magnitude
+  overflow returns the same document and adds no undo entry. Inspector Add is
+  disabled with the shared reason when the selected budget is exhausted.
+- Preview effect status now comes from the worker's actual Program Monitor
+  compositor capability report via bridge/controller/session projection. The
+  Inspector reads this state and never evaluates effects itself. Export still
+  probes its separately owned context through the shared compositor, so its
+  capability can legitimately differ from preview.
+- Procedural text now paints background, outline, and fill unfiltered into the
+  existing reusable leg, then filters that completed layer on its single
+  destination draw before opacity/blend. This adds no surface, retains
+  crossfade group behavior, and restores/clears borrowed contexts in `finally`.
+- Post-review validation passed 11 focused files / 466 tests, all 149 Vitest
+  files / 2,124 tests, all 16 benchmark-runner tests, TypeScript plus production
+  build, oxlint, the architecture boundary guard, production audit at 0
+  vulnerabilities, and clean diff checks. The benchmark captured hardware-
+  accelerated Chromium with no browser warnings/errors; its advisory stress
+  thresholds remain benchmark evidence, not Issue #45 acceptance gates.
+- Real Chrome used only `http://localhost:41845/` with `--strictPort`. A
+  procedural text clip with background, outline, and shadow received two
+  ordered effects, both reported `ready` from the actual worker capability
+  handshake. Bypassing versus applying exposure -2 changed the isolated
+  Program Monitor screenshot SHA-256 from
+  `65e1584f19213d0e5116cd46b7b619dde3495ea4c1c19a8ba4e3f000773583ff`
+  to `00966aed3643a50ad08fcd5da8977a9cb295ebc65d5a86a05032a1fc6c3a10f0`.
+  The final console had 0 warnings/errors, no error overlay appeared, and port
+  41845 was released.
 
 ## Working agreements (the user's explicit preferences)
 

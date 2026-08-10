@@ -195,7 +195,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], overrides: Pa
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc',
     name: 'doc',
     frameRate: R30,
@@ -270,6 +270,22 @@ function openImageAcked(
 const flushMicrotasks = async (): Promise<void> => {
   for (let i = 0; i < 12; i++) await Promise.resolve()
 }
+
+describe('preview renderer capability routing', () => {
+  test('forwards the exact worker capability snapshot', () => {
+    const { worker, bridge } = makeBridge()
+    const listener = vi.fn()
+    bridge.onRendererCapabilities = listener
+
+    worker.emit({
+      type: 'rendererCapabilities',
+      capabilities: { canvasFilter: false },
+    })
+
+    expect(listener).toHaveBeenCalledOnce()
+    expect(listener).toHaveBeenCalledWith({ canvasFilter: false })
+  })
+})
 
 /* ------------------------------------------------------------------ */
 /* Entry building                                                       */

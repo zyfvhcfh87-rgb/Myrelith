@@ -93,6 +93,15 @@ import {
   clipBlendModeIntent,
   DEFAULT_BLEND_MODE,
 } from './blendModes'
+import {
+  LEGACY_UNVERSIONED_EFFECT_VERSION,
+  migrateEffectDescriptor,
+} from './effectStack'
+import {
+  EFFECT_STACK_LIMITS,
+  effectDescriptorBoundsError,
+  effectDescriptorBudget,
+} from './effectBounds'
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
 /** Serialized format marker used by releases published before the rebrand. */
@@ -105,7 +114,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 9 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 10 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -117,11 +126,11 @@ export const PROJECT_FILE_LIMITS = {
   maxCollectionNameCharacters: MEDIA_COLLECTION_LIMITS.maxNameCharacters,
   maxTracks: 256,
   maxClips: 100_000,
-  maxEffectsPerClip: 256,
-  maxEffectParams: 256,
-  maxTotalEffects: 10_000,
-  maxTotalEffectParams: 50_000,
-  maxTotalEffectStringCharacters: 10_000_000,
+  maxEffectsPerClip: EFFECT_STACK_LIMITS.maxEffectsPerClip,
+  maxEffectParams: EFFECT_STACK_LIMITS.maxEffectParams,
+  maxTotalEffects: EFFECT_STACK_LIMITS.maxTotalEffects,
+  maxTotalEffectParams: EFFECT_STACK_LIMITS.maxTotalEffectParams,
+  maxTotalEffectStringCharacters: EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
   maxTransitions: 100_000,
   maxMarkers: MAX_TIMELINE_MARKERS,
   maxTotalKeyframes: 100_000,
@@ -131,13 +140,13 @@ export const PROJECT_FILE_LIMITS = {
   maxFileNameCharacters: 4_096,
   maxMimeTypeCharacters: 256,
   maxTextCharacters: TEXT_OVERLAY_LIMITS.maxCharacters,
-  maxEffectStringCharacters: 65_536,
+  maxEffectStringCharacters: EFFECT_STACK_LIMITS.maxEffectStringCharacters,
   maxDimension: 65_535,
   maxAudioSampleRate: 768_000,
   maxAudioChannels: 64,
   maxRatePart: 1_000_000,
   maxFramesPerSecond: 1_000,
-  maxFiniteMagnitude: 1_000_000_000,
+  maxFiniteMagnitude: EFFECT_STACK_LIMITS.maxFiniteMagnitude,
 } as const
 
 /** Durable effective-import metadata plus original-file relink identity. */
@@ -776,57 +785,29 @@ function validateEffect(
   context: ValidationContext,
 ): asserts value is Effect {
   const effect = record(value, path)
-  exactKeys(effect, ['id', 'type', 'enabled', 'params'], [], path)
-  stringValue(effect.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
-  if (context.effectIds.has(effect.id)) fail(`${path}.id`, 'duplicate effect id')
-  context.effectIds.add(effect.id)
-  stringValue(effect.type, `${path}.type`, PROJECT_FILE_LIMITS.maxNameCharacters)
-  booleanValue(effect.enabled, `${path}.enabled`)
-  const params = record(effect.params, `${path}.params`)
-  const keys = Object.keys(params)
-  if (keys.length > PROJECT_FILE_LIMITS.maxEffectParams) {
-    fail(`${path}.params`, `exceeds ${PROJECT_FILE_LIMITS.maxEffectParams} entries`)
-  }
-  context.effectParamCount += keys.length
+  exactKeys(effect, ['id', 'type', 'version', 'enabled', 'params'], [], path)
+  const boundsError = effectDescriptorBoundsError(effect)
+  if (boundsError) fail(path, boundsError)
+  const descriptor = effect as unknown as Effect
+  if (context.effectIds.has(descriptor.id)) fail(`${path}.id`, 'duplicate effect id')
+  context.effectIds.add(descriptor.id)
+  const budget = effectDescriptorBudget(descriptor)
+  context.effectParamCount += budget.params
   if (context.effectParamCount > PROJECT_FILE_LIMITS.maxTotalEffectParams) {
     fail(
       '$.document.tracks',
       `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectParams} effect parameters in total`,
     )
   }
-  for (const key of keys) {
-    stringValue(key, `${path}.params key`, PROJECT_FILE_LIMITS.maxNameCharacters)
-    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
-      fail(`${path}.params.${key}`, 'unsafe parameter key')
-    }
-    const parameter = params[key]
-    if (typeof parameter === 'number') {
-      finiteNumber(
-        parameter,
-        `${path}.params.${key}`,
-        -PROJECT_FILE_LIMITS.maxFiniteMagnitude,
-        PROJECT_FILE_LIMITS.maxFiniteMagnitude,
-      )
-    } else if (typeof parameter === 'string') {
-      stringValue(
-        parameter,
-        `${path}.params.${key}`,
-        PROJECT_FILE_LIMITS.maxEffectStringCharacters,
-        true,
-      )
-      context.effectStringCharacterCount += parameter.length
-      if (
-        context.effectStringCharacterCount >
-        PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters
-      ) {
-        fail(
-          '$.document.tracks',
-          `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters} effect-string characters in total`,
-        )
-      }
-    } else if (typeof parameter !== 'boolean') {
-      fail(`${path}.params.${key}`, 'expected a finite number, string, or boolean')
-    }
+  context.effectStringCharacterCount += budget.stringCharacters
+  if (
+    context.effectStringCharacterCount >
+    PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters
+  ) {
+    fail(
+      '$.document.tracks',
+      `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters} effect-string characters in total`,
+    )
   }
 }
 
@@ -1548,6 +1529,39 @@ function migrateClipBlendModes(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 9, tracks }
 }
 
+/** Upgrade schema-9 effect records to explicit per-effect registry versions. */
+function migrateVersionedEffectDescriptors(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const trackPath = `$.document.tracks[${trackIndex}]`
+    const track = record(trackValue, trackPath)
+    boundedArray(track.clips, `${trackPath}.clips`, PROJECT_FILE_LIMITS.maxClips)
+    return {
+      ...track,
+      clips: track.clips.map((clipValue, clipIndex) => {
+        const clipPath = `${trackPath}.clips[${clipIndex}]`
+        const clip = record(clipValue, clipPath)
+        boundedArray(clip.effects, `${clipPath}.effects`, PROJECT_FILE_LIMITS.maxEffectsPerClip)
+        return {
+          ...clip,
+          effects: clip.effects.map((effectValue, effectIndex) => {
+            const effectPath = `${clipPath}.effects[${effectIndex}]`
+            const effect = record(effectValue, effectPath)
+            const params = record(effect.params, `${effectPath}.params`)
+            return migrateEffectDescriptor({
+              ...effect,
+              version: LEGACY_UNVERSIONED_EFFECT_VERSION,
+              params: { ...params },
+            } as unknown as Effect)
+          }),
+        }
+      }),
+    }
+  })
+  return { ...document, schemaVersion: 10, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1590,6 +1604,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 8) {
     migrated = migrateClipBlendModes(migrated)
+  }
+  if (migrated.schemaVersion === 9) {
+    migrated = migrateVersionedEffectDescriptors(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
@@ -1745,6 +1762,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           effects: clip.effects.map((effect) => ({
             id: effect.id,
             type: effect.type,
+            version: effect.version,
             enabled: effect.enabled,
             params: cloneEffectParams(effect.params),
           })),

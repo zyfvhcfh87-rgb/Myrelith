@@ -93,6 +93,7 @@ interface TrackedStreamingFrame {
 
 interface FakeOptions {
   supported?: boolean
+  supportsCanvasFilter?: boolean
   /** Drain one queue slot per microtask after each decode, like a live decoder. */
   autoDrain?: boolean
   /** decode() of the chunk at this timestamp fires the error callback. */
@@ -336,10 +337,15 @@ interface FakeSurface {
 }
 
 /** A canvas whose 2D ctx logs ops; drawing a closed bitmap THROWS (real). */
-function makeSurface(surface: CtxOp['surface'], log: CtxOp[]): FakeSurface {
+function makeSurface(
+  surface: CtxOp['surface'],
+  log: CtxOp[],
+  supportsCanvasFilter = false,
+): FakeSurface {
   let alpha = 1
   let operation: GlobalCompositeOperation = 'source-over'
   let fill: Composite2D['fillStyle'] = ''
+  let filter = 'none'
   const ctx: Composite2D = {
     get globalAlpha() {
       return alpha
@@ -376,6 +382,16 @@ function makeSurface(surface: CtxOp['surface'], log: CtxOp[]): FakeSurface {
       }
       log.push({ surface, name: 'drawImage', args: [image, dx, dy] })
     },
+  }
+  if (supportsCanvasFilter) {
+    Object.defineProperty(ctx, 'filter', {
+      configurable: true,
+      get: () => filter,
+      set: (value: string) => {
+        filter = value
+        log.push({ surface, name: 'filter', args: [value] })
+      },
+    })
   }
   const raw = { width: 0, height: 0 }
   const canvas: RenderCanvasLike = {
@@ -557,6 +573,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
       const surface = makeSurface(
         labels[createdSurfaces.length] ?? 'transition-group',
         ops,
+        opts.supportsCanvasFilter,
       )
       surface.canvas.width = width
       surface.canvas.height = height
@@ -634,7 +651,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 10, den: 1 },
@@ -988,6 +1005,23 @@ const twoTrackDoc = () =>
 /* ------------------------------------------------------------------ */
 
 describe('composite happy path', () => {
+  test.each([false, true])(
+    'reports actual preview Canvas-filter capability (%s) once',
+    async (supportsCanvasFilter) => {
+      const h = makeHarness({ supportsCanvasFilter })
+      const doc = makeDoc([])
+      await h.core.handleMessage(initMsg(h))
+      expect(h.posts.filter((post) => post.type === 'rendererCapabilities')).toEqual([])
+
+      await h.core.handleMessage(docMsg(doc))
+      await h.core.handleMessage(docMsg(doc))
+      expect(h.posts.filter((post) => post.type === 'rendererCapabilities')).toEqual([{
+        type: 'rendererCapabilities',
+        capabilities: { canvasFilter: supportsCanvasFilter },
+      }])
+    },
+  )
+
   test('two assets decode in their own decoders, draw bottom-to-top, blit once', async () => {
     const h = makeHarness()
     await setup(h, twoTrackDoc(), ['A', 'B'])
@@ -1468,7 +1502,7 @@ describe('failure containment', () => {
   test('an unsupported codec posts an error and the asset never exists', async () => {
     const h = makeHarness({ supported: false })
     await setup(h, makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])]), ['A'])
-    expect(h.posts[0]).toMatchObject({
+    expect(h.posts.find((message) => message.type === 'error')).toMatchObject({
       type: 'error',
       assetId: 'A',
       setupId: 1,

@@ -2831,3 +2831,51 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
   full, 16 benchmark-runner, build, lint, both audits with the inherited
   dev-only baseline documented, production audit at 0, and clean diff checks.
   Carry forward browser evidence because only docs/test compatibility changed.
+
+## Post-MVP issue #45 - versioned visual-effect stack foundation
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-10).**
+
+- [x] Advance to timeline schema 10 with ordered, versioned effect descriptors;
+  migrate schema-9 owned effects through registry hooks and preserve unknown
+  type/version/order/payload through save, load, migration, and recovery.
+- [x] Add the browser-free registry contract for typed parameter validation,
+  defaults, migrations, capability declarations, deterministic status reports,
+  and ordered evaluation. Preserve and bypass invalid/unsupported entries.
+- [x] Add pure add, enable/bypass, parameter, reorder, reset, and remove edits
+  plus one-snapshot store actions, exact undo/redo, locked/missing rejection,
+  global effect-id uniqueness, and forward-compatible reset behavior.
+- [x] Execute exposure, contrast, and saturation through the one shared
+  preview/seek/export Canvas2D compositor before opacity/blending. Retain the
+  exact no-effect path and use no new per-frame intermediate resources.
+- [x] Add a four-tab accessible Inspector with native controls, roving keyboard
+  focus, ordered status/action labels, and usable unknown/invalid fallbacks.
+- [x] Pass 306 focused tests, all 148 Vitest files / 2,108 tests, all 16
+  benchmark-runner tests, TypeScript plus production build, oxlint, production
+  high-severity audit, and clean diff checks.
+- [x] Record clean-base fingerprint
+  `sha256:5acd7a8b1c89f0eafeef6ca504d183c18f415835da1fb994a65a97427ad84745`
+  at `718c0d28e3611e2bad3b511d45ce1e3adcba0270` and completed dirty checkpoint
+  `sha256:f791a282c72b571bdaff260e32a0232eb8ee0caf80cf40b1c66a9688d66e7a41`.
+- [x] Verify real Chromium exclusively on port 41845: visible filtered output,
+  all stack operations, undo/redo, keyboard tab focus, recovery reload, two
+  ordered persisted effects, and a 150-frame 1920×1080 effected MP4 reaching
+  Export ready. Record the in-app browser's missing Blob download event as a
+  harness caveat, confirm 0 warnings/errors, and release the port.
+- [x] Prepare a ready PR targeting `master` with `Closes #45`; leave merge and
+  ordered #69/#70 rebases to the coordinating task.
+- [x] Review remediation: centralize portable/live descriptor and aggregate
+  budgets, reject over-limit adds/patches without history, and disable Add with
+  an accessible reason at the selected clip/document limit.
+- [x] Review remediation: replace Inspector's assumed Canvas capability with
+  the actual worker preview-context report projected by the app into session
+  state; document that export probes its separately owned context.
+- [x] Review remediation: paint procedural text primitives unfiltered into the
+  existing leg surface and apply the ordered stack exactly once to the
+  completed layer draw before opacity/blending, with no additional surface.
+- [x] Re-run post-review gates: 466 focused tests, all 149 files / 2,124 tests,
+  16 benchmark-runner tests, build, lint, production audit at 0, clean diff,
+  and real Chrome exclusively on strict port 41845. The worker reported both
+  ordered text effects ready, effect bypass/application produced distinct
+  Program Monitor screenshot hashes, browser diagnostics were empty, and the
+  port was released.

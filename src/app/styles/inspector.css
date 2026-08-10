@@ -475,7 +475,7 @@
 
 .inspector-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   border: 1px solid #2d4057;
   border-radius: 7px 7px 0 0;
 }
@@ -533,6 +533,117 @@
   color: #91a6bf;
   background: #18283a;
   border-color: #354c66;
+}
+
+.inspector-effect-add,
+.inspector-effect-actions button {
+  min-height: 28px;
+  padding: 4px 7px;
+  color: #b8cae0;
+  background: #18283a;
+  border: 1px solid #354c66;
+  border-radius: 5px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.inspector-effect-add:hover:not(:disabled),
+.inspector-effect-actions button:hover:not(:disabled) {
+  color: #f1f7ff;
+  background: #22364d;
+}
+
+.inspector-effect-add:focus-visible,
+.inspector-effect-actions button:focus-visible {
+  outline: 2px solid #83adff;
+  outline-offset: 2px;
+}
+
+.inspector-effect-add:disabled,
+.inspector-effect-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.inspector-effect-empty {
+  padding: 12px 8px;
+  color: #8195ad;
+  font-size: 10px;
+  text-align: center;
+  border: 1px dashed #35485f;
+  border-radius: 6px;
+}
+
+.inspector-effect-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.inspector-effect-card {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  background: #101b29;
+  border: 1px solid #34465c;
+  border-radius: 7px;
+}
+
+.inspector-effect-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inspector-effect-card-heading > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.inspector-effect-card-heading strong {
+  color: #e6eef8;
+  font-size: 11px;
+}
+
+.inspector-effect-card-heading small {
+  color: #7f93aa;
+  font-size: 9px;
+}
+
+.inspector-effect-status {
+  padding: 2px 5px;
+  color: #afbdd0;
+  background: #273344;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inspector-effect-status.is-ready {
+  color: #b9eed2;
+  background: #173b2b;
+}
+
+.inspector-effect-status.is-invalid,
+.inspector-effect-status.is-unsupported {
+  color: #ffd0a8;
+  background: #4a2d1d;
+}
+
+.inspector-effect-params {
+  display: grid;
+  gap: 8px;
+}
+
+.inspector-effect-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
 }
 
 .inspector-field input,

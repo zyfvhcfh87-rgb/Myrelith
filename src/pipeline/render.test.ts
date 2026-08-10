@@ -14,6 +14,7 @@ import {
   type PresentationProfile,
 } from '../domain/presentationProfile'
 import { defaultTextProps } from '../domain/textOverlay'
+import { createColorAdjustEffect } from '../domain/effectStack'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import type {
   Composite2D,
@@ -70,7 +71,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -105,16 +106,19 @@ interface Op {
 function makeCtx(opts: {
   throwOn?: ImageBitmap
   rejectComposite?: GlobalCompositeOperation
+  supportsFilter?: boolean
 } = {}) {
   const log: Op[] = []
   let alpha = 1
   let operation: GlobalCompositeOperation = 'source-over'
   let fill: Composite2D['fillStyle'] = ''
+  let filter = 'none'
   let depth = 0
   const stack: Array<{
     alpha: number
     operation: GlobalCompositeOperation
     fill: Composite2D['fillStyle']
+    filter: string
   }> = []
   const ctx: Composite2D = {
     get globalAlpha() {
@@ -150,7 +154,7 @@ function makeCtx(opts: {
     shadowOffsetX: 0,
     shadowOffsetY: 0,
     save: () => {
-      stack.push({ alpha, operation, fill })
+      stack.push({ alpha, operation, fill, filter })
       depth++
       log.push({ name: 'save', args: [] })
     },
@@ -160,6 +164,7 @@ function makeCtx(opts: {
         alpha = restored.alpha
         operation = restored.operation
         fill = restored.fill
+        filter = restored.filter
       }
       depth--
       log.push({ name: 'restore', args: [] })
@@ -182,13 +187,23 @@ function makeCtx(opts: {
       log.push({ name: 'drawImage', args: [image, ...args] })
     },
   }
+  if (opts.supportsFilter) {
+    Object.defineProperty(ctx, 'filter', {
+      configurable: true,
+      get: () => filter,
+      set: (value: string) => {
+        filter = value
+        log.push({ name: 'filter', args: [value] })
+      },
+    })
+  }
   const ops = (name: string) => log.filter((op) => op.name === name)
   return {
     ctx,
     log,
     ops,
     depth: () => depth,
-    state: () => ({ alpha, operation, fill }),
+    state: () => ({ alpha, operation, fill, filter }),
   }
 }
 
@@ -275,6 +290,42 @@ function deferred<T>() {
 /* ------------------------------------------------------------------ */
 
 describe('compositeFrame — background & selection', () => {
+  test('no effects never touches Canvas filter state', async () => {
+    const bitmap = fakeBitmap(640, 360)
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('plain', 0, 30)])])
+    const { ctx, ops, state } = makeCtx({ supportsFilter: true })
+
+    await compositeFrame(doc, 0, ctx, makeSource({ 'asset-1@0': bitmap }).source)
+
+    expect(ops('filter')).toEqual([])
+    expect(state().filter).toBe('none')
+  })
+
+  test('applies supported effects in order and restores filter ownership', async () => {
+    const bitmap = fakeBitmap(640, 360)
+    const first = createColorAdjustEffect('fx-first')
+    first.params = { exposure: 1, contrast: 0.25, saturation: -0.5 }
+    const second = createColorAdjustEffect('fx-second')
+    second.params = { exposure: -1, contrast: -0.25, saturation: 0.5 }
+    const clip = makeClip('graded', 0, 30, { effects: [first, second] })
+    const doc = makeDoc([makeTrack('V1', 'video', [clip])])
+    const { ctx, ops, state } = makeCtx({ supportsFilter: true })
+
+    const result = await compositeFrame(
+      doc,
+      0,
+      ctx,
+      makeSource({ 'asset-1@0': bitmap }).source,
+    )
+
+    expect(ops('filter').map((op) => op.args[0])).toEqual([
+      'brightness(2) contrast(1.25) saturate(0.5) '
+      + 'brightness(0.5) contrast(0.75) saturate(1.5)',
+    ])
+    expect(state().filter).toBe('none')
+    expect(result).toEqual({ drawn: ['graded'], missing: [] })
+  })
+
   test('presentation scaling wraps project-space geometry without changing it', async () => {
     const bitmap = fakeBitmap(640, 360)
     const clip = makeClip('scaled-preview', 0, 30, {
@@ -367,6 +418,58 @@ describe('compositeFrame — background & selection', () => {
     expect(surfaces.leg.ops('composite').map((op) => op.args[0])).not.toContain('screen')
     expect(surfaces.gets()).toBe(1)
     expect(result).toEqual({ drawn: ['text-clip'], missing: [] })
+  })
+
+  test('applies ordered effects once to the completed isolated text layer', async () => {
+    const first = createColorAdjustEffect('text-fx-a')
+    first.params = { exposure: 1, contrast: 0.25, saturation: -0.5 }
+    const second = createColorAdjustEffect('text-fx-b')
+    second.params = { exposure: -1, contrast: -0.25, saturation: 0.5 }
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [
+        makeClip('styled-text', 0, 30, {
+          opacity: 0.75,
+          blendMode: 'screen',
+          effects: [first, second],
+          text: {
+            ...defaultTextProps(1920, 1080),
+            content: 'Layered',
+            backgroundEnabled: true,
+            outlineWidthPx: 3,
+          },
+        }),
+      ]),
+    ])
+    const destination = makeCtx({ supportsFilter: true })
+    const surfaces = makeTransitionSurfaceProvider()
+
+    const result = await compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource().source,
+      surfaces.provider,
+    )
+
+    expect(surfaces.leg.ops('fillRect')).not.toHaveLength(0)
+    expect(surfaces.leg.ops('strokeText')).toHaveLength(1)
+    expect(surfaces.leg.ops('fillText')).toHaveLength(1)
+    expect(surfaces.leg.ops('filter')).toHaveLength(0)
+    expect(destination.ops('filter').map((operation) => operation.args[0])).toEqual([
+      'brightness(2) contrast(1.25) saturate(0.5) '
+      + 'brightness(0.5) contrast(0.75) saturate(1.5)',
+    ])
+    const layerDraw = destination.ops('drawImage')[0]
+    expect(layerDraw.args[0]).toBe(surfaces.legCanvas)
+    const names = destination.log.map((operation) => operation.name)
+    expect(names.indexOf('alpha')).toBeLessThan(names.indexOf('filter'))
+    expect(names.indexOf('composite')).toBeLessThan(names.indexOf('filter'))
+    expect(names.indexOf('filter')).toBeLessThan(names.indexOf('drawImage'))
+    expect(destination.state()).toMatchObject({ filter: 'none', operation: 'source-over' })
+    expect(destination.depth()).toBe(0)
+    expect(surfaces.leg.depth()).toBe(0)
+    expect(surfaces.gets()).toBe(1)
+    expect(result).toEqual({ drawn: ['styled-text'], missing: [] })
   })
 
   test('draws semantic captions through shared text layout without media requests', async () => {

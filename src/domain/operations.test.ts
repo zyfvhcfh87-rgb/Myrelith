@@ -9,6 +9,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, Effect, MediaAsset, TimelineDoc, Track, Transition } from './schema'
 import { defaultTextProps } from './textOverlay'
+import { createColorAdjustEffect } from './effectStack'
+import { EFFECT_STACK_LIMITS } from './effectBounds'
 import {
   addCrossfade,
   addCrossfadeWithSourceBounds,
@@ -18,12 +20,16 @@ import {
   insertClip,
   MAX_CLIP_VOLUME,
   moveClip,
+  removeEffect,
   removeTrack,
   removeTransition,
   renameTrack,
+  reorderEffect,
+  resetEffect,
   rippleDelete,
   rippleTrim,
   setClipVolume,
+  setEffectEnabled,
   setCrossfadeDuration,
   setCrossfadeDurationWithSourceBounds,
   setCrossfadeSettings,
@@ -36,6 +42,7 @@ import {
   updateClipAudio,
   updateClipTransform,
   updateClipVisual,
+  updateEffectParams,
 } from './operations'
 import { rangeEnd } from './time'
 
@@ -86,7 +93,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -121,7 +128,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -147,6 +154,7 @@ function clipIn(doc: TimelineDoc, trackId: string, clipId: string): Clip {
 const fx = (id: string): Effect => ({
   id,
   type: 'brightness',
+  version: 1,
   enabled: true,
   params: { amount: 0.5 },
 })
@@ -379,6 +387,121 @@ describe('addEffect', () => {
     const doc = makeDoc()
     expect(addEffect(doc, 'nope', fx('fx1'))).toBe(doc)
     expect(addEffect(doc, 'clipE', fx('fx1'))).toBe(doc)
+  })
+
+  test('requires globally unique effect ids', () => {
+    const doc = addEffect(makeDoc(), 'clipA', fx('shared-id'))
+    expect(addEffect(doc, 'clipB', fx('shared-id'))).toBe(doc)
+  })
+
+  test('accepts the exact descriptor limits and rejects every over-limit edit', () => {
+    const params: Effect['params'] = Object.fromEntries(Array.from(
+      { length: EFFECT_STACK_LIMITS.maxEffectParams },
+      (_value, index) => [`parameter-${index}`, index],
+    ))
+    params['parameter-0'] = 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters)
+    const exact: Effect = {
+      id: 'i'.repeat(EFFECT_STACK_LIMITS.maxIdCharacters),
+      type: 't'.repeat(EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters),
+      version: Number.MAX_SAFE_INTEGER,
+      enabled: true,
+      params,
+    }
+    const base = makeDoc()
+    const accepted = addEffect(base, 'clipA', exact)
+    expect(accepted).not.toBe(base)
+
+    const overCases: Effect[] = [
+      { ...exact, id: `${exact.id}x` },
+      { ...exact, type: `${exact.type}x` },
+      { ...exact, id: 'too-many-params', params: { ...params, overflow: true } },
+      {
+        ...exact,
+        id: 'too-long-string',
+        params: { label: 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters + 1) },
+      },
+      {
+        ...exact,
+        id: 'too-large-number',
+        params: { amount: EFFECT_STACK_LIMITS.maxFiniteMagnitude + 1 },
+      },
+    ]
+    for (const candidate of overCases) {
+      const doc = deepFreeze(makeDoc())
+      expect(addEffect(doc, 'clipA', candidate)).toBe(doc)
+    }
+  })
+
+  test('rejects an add after the exact per-clip limit without changing the document', () => {
+    let doc = makeDoc()
+    for (let index = 0; index < EFFECT_STACK_LIMITS.maxEffectsPerClip; index++) {
+      doc = addEffect(doc, 'clipA', fx(`limit-${index}`))
+    }
+    const full = deepFreeze(doc)
+    expect(clipIn(full, 'V1', 'clipA').effects).toHaveLength(
+      EFFECT_STACK_LIMITS.maxEffectsPerClip,
+    )
+    expect(addEffect(full, 'clipA', fx('over-limit'))).toBe(full)
+  })
+})
+
+describe('ordered effect-stack operations', () => {
+  test('enable, parameter, reorder, reset, and remove are immutable atomic edits', () => {
+    const first = createColorAdjustEffect('fx-color-a')
+    const second = createColorAdjustEffect('fx-color-b')
+    let doc = addEffect(addEffect(makeDoc(), 'clipA', first), 'clipA', second)
+    const original = doc
+
+    doc = setEffectEnabled(doc, 'clipA', first.id, false)
+    expect(clipIn(doc, 'V1', 'clipA').effects[0].enabled).toBe(false)
+    doc = updateEffectParams(doc, 'clipA', first.id, { exposure: 1.5, contrast: 0.25 })
+    expect(clipIn(doc, 'V1', 'clipA').effects[0].params).toMatchObject({
+      exposure: 1.5,
+      contrast: 0.25,
+    })
+    doc = reorderEffect(doc, 'clipA', second.id, 0)
+    expect(clipIn(doc, 'V1', 'clipA').effects.map((effect) => effect.id))
+      .toEqual([second.id, first.id])
+    doc = resetEffect(doc, 'clipA', first.id)
+    expect(clipIn(doc, 'V1', 'clipA').effects[1].params).toEqual({
+      exposure: 0,
+      contrast: 0,
+      saturation: 0,
+    })
+    doc = removeEffect(doc, 'clipA', second.id)
+    expect(clipIn(doc, 'V1', 'clipA').effects.map((effect) => effect.id)).toEqual([first.id])
+    expect(original).not.toBe(doc)
+    expect(clipIn(original, 'V1', 'clipA').effects.map((effect) => effect.id))
+      .toEqual([first.id, second.id])
+  })
+
+  test('rejects invalid params, indices, missing effects, and locked clips', () => {
+    const doc = deepFreeze(addEffect(makeDoc(), 'clipA', createColorAdjustEffect('fx-color')))
+    expect(updateEffectParams(doc, 'clipA', 'fx-color', { exposure: 99 })).toBe(doc)
+    expect(reorderEffect(doc, 'clipA', 'fx-color', 9)).toBe(doc)
+    expect(removeEffect(doc, 'clipA', 'missing')).toBe(doc)
+    expect(setEffectEnabled(doc, 'clipE', 'fx-color', false)).toBe(doc)
+  })
+
+  test('rejects parameter patches that cross portable descriptor bounds', () => {
+    const opaque: Effect = {
+      id: 'fx-opaque',
+      type: 'future.opaque',
+      version: 1,
+      enabled: true,
+      params: Object.fromEntries(Array.from(
+        { length: EFFECT_STACK_LIMITS.maxEffectParams },
+        (_value, index) => [`parameter-${index}`, index],
+      )),
+    }
+    const doc = deepFreeze(addEffect(makeDoc(), 'clipA', opaque))
+    expect(updateEffectParams(doc, 'clipA', opaque.id, { overflow: true })).toBe(doc)
+    expect(updateEffectParams(doc, 'clipA', opaque.id, {
+      'parameter-0': EFFECT_STACK_LIMITS.maxFiniteMagnitude + 1,
+    })).toBe(doc)
+    expect(updateEffectParams(doc, 'clipA', opaque.id, {
+      'parameter-0': 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters + 1),
+    })).toBe(doc)
   })
 })
 
@@ -877,7 +1000,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },

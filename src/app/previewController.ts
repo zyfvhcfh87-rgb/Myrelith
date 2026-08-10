@@ -68,6 +68,7 @@ import {
 } from '../state/transportStore'
 import type {
   RenderMode,
+  RenderWorkerCapabilities,
   RenderWorkerRuntimeTelemetrySnapshot,
 } from '../workers/render-protocol'
 import {
@@ -76,6 +77,7 @@ import {
   reportMediaRuntimeFailure,
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
+import { projectPreviewEffectStatuses } from './previewEffectStatus'
 
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
@@ -107,6 +109,7 @@ export interface BridgeLike {
     message: string,
   ) => void) | null
   onAssetReady: ((assetId: AssetId) => void) | null
+  onRendererCapabilities: ((capabilities: RenderWorkerCapabilities) => void) | null
 }
 
 /** Injection points so tests can run without Worker/OffscreenCanvas/fetch. */
@@ -342,6 +345,16 @@ function currentPreviewDocument(): TimelineDoc {
   )
 }
 
+function publishPreviewEffectStatuses(
+  doc = currentPreviewDocument(),
+  capabilities = usePreviewStatusStore.getState().rendererCapabilities,
+): void {
+  usePreviewStatusStore.getState().setEffectProjection(
+    capabilities,
+    projectPreviewEffectStatuses(doc, capabilities),
+  )
+}
+
 function syncPreviewDocument(bridge: BridgeLike): void {
   const doc = currentPreviewDocument()
   state.visualPlanner = createVideoCompositionPlanner(
@@ -349,6 +362,7 @@ function syncPreviewDocument(bridge: BridgeLike): void {
     currentSourceBoundsCatalog(),
   )
   bridge.setDoc(doc)
+  publishPreviewEffectStatuses(doc)
   syncPresentationProfile(bridge, doc)
 }
 
@@ -574,6 +588,8 @@ export function initPreview(
   // A source came online: repaint so its clips fill in (retry policy).
   bridge.onAssetReady = () =>
     scheduleRender(deps)
+  bridge.onRendererCapabilities = (capabilities) =>
+    publishPreviewEffectStatuses(currentPreviewDocument(), capabilities)
   state.canvas = canvas
   state.bridge = bridge
   state.deps = deps
@@ -583,6 +599,7 @@ export function initPreview(
   state.visualPlanner = createVideoCompositionPlanner(initialDoc, initialBounds)
   bridge.setSourceBoundsCatalog(initialBounds)
   bridge.setDoc(initialDoc)
+  publishPreviewEffectStatuses(initialDoc, null)
   syncPresentationProfile(bridge, initialDoc)
 
   state.unsubscribes.push(

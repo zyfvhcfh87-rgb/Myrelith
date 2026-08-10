@@ -61,6 +61,10 @@ import {
   type BlendModeResolution,
 } from '../domain/blendModes'
 import { probeCanvasBlendMode } from './blendModeCapabilities'
+import {
+  resolveCanvasEffectStack,
+  supportsCanvasEffectFilter,
+} from '../domain/effectStack'
 
 const NORMAL_BLEND_MODE = resolveBlendMode(DEFAULT_BLEND_MODE)
 
@@ -92,6 +96,8 @@ export interface FrameSource {
 export interface Composite2D {
   globalAlpha: number
   globalCompositeOperation: GlobalCompositeOperation
+  /** Optional on test fakes; present on modern Canvas2D/OffscreenCanvas contexts. */
+  filter?: string
   fillStyle: string | CanvasGradient | CanvasPattern
   strokeStyle?: string | CanvasGradient | CanvasPattern
   font?: string
@@ -649,6 +655,7 @@ function drawClip(
   try {
     ctx.globalAlpha = request.opacity
     applyCanvasBlendMode(ctx, blendMode)
+    applyCanvasEffectStack(ctx, clip)
     ctx.translate(canvasX, canvasY)
     ctx.rotate((t.rotation * Math.PI) / 180)
     ctx.scale(
@@ -716,6 +723,10 @@ function compositeTextLayer(
     try {
       destination.globalAlpha = opacity
       applyCanvasBlendMode(destination, blendMode)
+      // Filter the completed transparent text layer once. Applying filters
+      // while painting its background/stroke/fill primitives changes their
+      // overlap semantics and compounds the authored stack.
+      applyCanvasEffectStack(destination, clip)
       destination.drawImage(
         surfaces.leg.canvas,
         0,
@@ -741,4 +752,15 @@ function applyCanvasBlendMode(
 ): void {
   const capability = probeCanvasBlendMode(ctx, blendMode.effective)
   ctx.globalCompositeOperation = capability.operation
+}
+
+/**
+ * Apply an ordered effect chain to the next draw only. The caller owns a
+ * save/restore boundary. Empty, disabled, invalid, and unsupported stacks do
+ * not write `filter`, preserving the exact historical no-effect path.
+ */
+function applyCanvasEffectStack(ctx: Composite2D, clip: Clip): void {
+  const supportsCanvasFilter = supportsCanvasEffectFilter(ctx)
+  const resolution = resolveCanvasEffectStack(clip.effects, supportsCanvasFilter)
+  if (resolution.filter !== null && supportsCanvasFilter) ctx.filter = resolution.filter
 }
