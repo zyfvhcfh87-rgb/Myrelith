@@ -378,6 +378,7 @@ export function audioPlaybackPlanKey(
           assetId: clip.assetId,
           sourceMode: clip.sourceMode,
           sourceRange: clip.sourceRange,
+          sourceTimeMap: clip.sourceTimeMap ?? null,
           timelineRange: clip.timelineRange,
           volume: clip.volume,
           audio: clip.audio ?? null,

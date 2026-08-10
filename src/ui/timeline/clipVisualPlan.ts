@@ -7,7 +7,13 @@
  * so trim, slip, razor, zoom, and origin rebasing remain exactly aligned.
  */
 
-import type { Clip, TrackKind } from '../../domain/schema'
+import type { Clip, SourceTimeMap, SourceTimeRate, TrackKind } from '../../domain/schema'
+import {
+  clipSourceTimeMap,
+  sourceTicksAtTimelineOffset,
+  sourceTimeMapAtOffset,
+  SOURCE_TIME_TICKS_PER_FRAME,
+} from '../../domain/sourceTimeMap'
 import type { AssetVisuals } from '../../state/mediaStore'
 import type {
   EditPreview,
@@ -29,6 +35,7 @@ export function visibleFilmstripBuckets(
   zoom: number,
   sourceStartFrame: number,
   sourceDurationFrames: number,
+  rate: SourceTimeRate = { numerator: 1, denominator: 1 },
 ): FilmstripBucket[] {
   if (
     !Number.isSafeInteger(assetDurationFrames) ||
@@ -42,6 +49,10 @@ export function visibleFilmstripBuckets(
     !Number.isSafeInteger(sourceStartFrame) ||
     !Number.isSafeInteger(sourceDurationFrames) ||
     sourceDurationFrames <= 0
+    || !Number.isSafeInteger(rate.numerator)
+    || !Number.isSafeInteger(rate.denominator)
+    || rate.numerator <= 0
+    || rate.denominator <= 0
   ) {
     return []
   }
@@ -49,7 +60,8 @@ export function visibleFilmstripBuckets(
   const sourceEndFrame = sourceStartFrame + sourceDurationFrames
   if (!Number.isSafeInteger(sourceEndFrame)) return []
 
-  const assetWidth = assetDurationFrames * zoom
+  const sourcePixelsPerFrame = zoom * rate.denominator / rate.numerator
+  const assetWidth = assetDurationFrames * sourcePixelsPerFrame
   if (!Number.isFinite(assetWidth)) return []
   const displayCount = Math.min(
     tileCount,
@@ -145,7 +157,7 @@ interface GeneratedVisualPlanInput {
   displayedDurationFrames: number
   clipStartFrame: number
   clipDurationFrames: number
-  sourceStartFrame: number
+  sourceTimeMap: SourceTimeMap
 }
 
 function planGeneratedVisual({
@@ -159,18 +171,37 @@ function planGeneratedVisual({
   displayedDurationFrames,
   clipStartFrame,
   clipDurationFrames,
-  sourceStartFrame,
+  sourceTimeMap,
 }: GeneratedVisualPlanInput): ClipGeneratedVisualPresentation {
   if (!hasVisibleSlice) return null
 
-  const displayedSourceStartFrame =
-    sourceStartFrame + (displayedStartFrame - clipStartFrame)
+  const displayedSourceStartTicks = sourceTicksAtTimelineOffset(
+    sourceTimeMap,
+    displayedStartFrame - clipStartFrame,
+  )
+  const displayedSourceEndTicks = sourceTicksAtTimelineOffset(
+    sourceTimeMap,
+    displayedStartFrame - clipStartFrame + displayedDurationFrames,
+  )
+  const displayedSourceStartFrame = Math.floor(
+    displayedSourceStartTicks / SOURCE_TIME_TICKS_PER_FRAME,
+  )
+  const displayedSourceEndFrame = Math.ceil(
+    displayedSourceEndTicks / SOURCE_TIME_TICKS_PER_FRAME,
+  )
+  const displayedSourceDurationFrames = Math.max(
+    1,
+    displayedSourceEndFrame - displayedSourceStartFrame,
+  )
   const visualDurationFrames = isStillSource
     ? clipDurationFrames
     : assetDurationFrames
   const displayedVisualStartFrame = isStillSource
     ? displayedStartFrame - clipStartFrame
     : displayedSourceStartFrame
+  const displayedVisualDurationFrames = isStillSource
+    ? displayedDurationFrames
+    : displayedSourceDurationFrames
 
   const filmstrip = trackKind === 'video' ? visuals?.filmstrip : null
   if (filmstrip && visualDurationFrames > 0) {
@@ -180,7 +211,8 @@ function planGeneratedVisual({
       filmstrip.tileWidth,
       zoom,
       displayedVisualStartFrame,
-      displayedDurationFrames,
+      isStillSource ? displayedDurationFrames : displayedSourceDurationFrames,
+      sourceTimeMap.rate,
     )
     if (buckets.length > 0) {
       return {
@@ -193,15 +225,19 @@ function planGeneratedVisual({
           )
           const visibleBucketEnd = Math.min(
             bucket.endFrame,
-            displayedVisualStartFrame + displayedDurationFrames,
+            displayedVisualStartFrame + displayedVisualDurationFrames,
           )
           const croppedHeadPx =
-            (visibleBucketStart - bucket.startFrame) * zoom
+            (visibleBucketStart - bucket.startFrame)
+            * zoom * sourceTimeMap.rate.denominator / sourceTimeMap.rate.numerator
+          const sourcePixelsPerFrame = isStillSource
+            ? zoom
+            : zoom * sourceTimeMap.rate.denominator / sourceTimeMap.rate.numerator
           return {
             index: bucket.index,
             leftPx:
-              (visibleBucketStart - displayedVisualStartFrame) * zoom,
-            widthPx: (visibleBucketEnd - visibleBucketStart) * zoom,
+              (visibleBucketStart - displayedVisualStartFrame) * sourcePixelsPerFrame,
+            widthPx: (visibleBucketEnd - visibleBucketStart) * sourcePixelsPerFrame,
             patternX: -(croppedHeadPx % filmstrip.tileWidth),
             spriteX: -bucket.spriteIndex * filmstrip.tileWidth,
           }
@@ -216,8 +252,8 @@ function planGeneratedVisual({
       kind: 'waveform',
       source: waveform,
       viewBox:
-        `${displayedSourceStartFrame / assetDurationFrames} 0 `
-        + `${displayedDurationFrames / assetDurationFrames} 1`,
+        `${(displayedSourceStartTicks / SOURCE_TIME_TICKS_PER_FRAME) / assetDurationFrames} 0 `
+        + `${((displayedSourceEndTicks - displayedSourceStartTicks) / SOURCE_TIME_TICKS_PER_FRAME) / assetDurationFrames} 1`,
     }
   }
 
@@ -272,7 +308,7 @@ export function planClipPresentation({
     }
   }
 
-  let sourceStartFrame = clip.sourceRange.startFrame
+  let sourceTimeMap = clipSourceTimeMap(clip)
   if (
     !isStillSource
     && editPreview
@@ -282,7 +318,14 @@ export function planClipPresentation({
       || editPreview.kind === 'ripple-start'
     )
   ) {
-    sourceStartFrame += editPreview.deltaFrames
+    sourceTimeMap = editPreview.kind === 'slip'
+      ? {
+          ...sourceTimeMap,
+          sourceStartTicks:
+            sourceTimeMap.sourceStartTicks
+            + editPreview.deltaFrames * SOURCE_TIME_TICKS_PER_FRAME,
+        }
+      : sourceTimeMapAtOffset(sourceTimeMap, editPreview.deltaFrames)
   }
 
   const clippedStartFrame = Math.max(startFrame, timelineOriginFrame)
@@ -355,7 +398,7 @@ export function planClipPresentation({
       displayedDurationFrames,
       clipStartFrame: startFrame,
       clipDurationFrames: durationFrames,
-      sourceStartFrame,
+      sourceTimeMap,
     }),
   }
 }

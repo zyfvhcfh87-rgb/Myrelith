@@ -126,13 +126,22 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `TimeRange` is **half-open** `[startFrame, startFrame + durationFrames)`;
   ranges that merely touch do not overlap. All ranges are integer frames at
   the document rate.
-- `Clip.sourceMode` makes source mapping explicit. Timed clips play at speed
-  1.0 against conformed assets, so their source and timeline durations match.
-  Still clips always use `sourceRange = { startFrame: 0, durationFrames: 1 }`;
-  every timeline frame (including transition windows) resolves to source frame
-  0, while `timelineRange.durationFrames` is independently editable. Trim,
-  ripple, razor, and slide change timeline geometry without inventing source
-  frames; Slip is an intentional no-op.
+- `Clip.sourceMode` and `Clip.sourceTimeMap` make source mapping explicit.
+  Timed clips use an exact affine map: integer micro-frame source ticks plus a
+  reduced rational rate in whole 25-percentage-point steps across the inclusive
+  1/4×–4× range. Restricting the public vocabulary to fixed-tick-exact rates
+  keeps split/trim composition associative without hidden remainder state. The
+  map retains its
+  exact source span independently from the whole-frame timeline duration, so
+  changing speed repeatedly cannot discard a fractional source tail. All
+  preview, playback, export, transition, thumbnail, waveform, seeking, trim,
+  split, slip, slide, move, and keyframe-remap paths delegate to
+  `domain/sourceTimeMap.ts`; no consumer reconstructs `sourceStart + offset`.
+  Timeline schema 11 adds this durable contract. Schema 9 first migrates effect
+  descriptors through schema 10, then the 10→11 migration installs an exact 1×
+  identity map and durable keyframe source-time intent without changing prior
+  behavior. Still and text clips retain their fixed source semantics and cannot
+  be retimed.
 - Text overlays are procedural timed video clips. They use a reserved
   `__myrelith_text__:` asset id, carry their full supported appearance in
   `Clip.text`, and require no `MediaAsset`, durable descriptor, Blob, file
@@ -257,6 +266,20 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   declared Canvas2D sRGB, then composites the isolated group over lower tracks
   exactly once. Scratch surfaces, cached text layouts, and borrowed frames
   retain explicit bounded owners.
+- `domain/sourceTimeMap.ts` is the browser-free authority for constant-speed
+  retiming. It maps integer timeline offsets to exact source ticks and only
+  floors at a decoder/frame-selection boundary. `sourceRange` remains the
+  integer envelope used for asset-bound validation; `sourceDurationTicks`
+  preserves the exact authored out-point. Retime keeps the timeline start
+  fixed, chooses the greatest whole-frame timeline duration whose mapped span
+  fits the preserved source interval, rejects unsafe timeline ends and overlaps
+  atomically, and remaps keyframes from durable exact source-time intent. If two
+  authored instants would occupy the same integer timeline frame, the whole
+  retime rejects instead of destructively dropping either key.
+- The non-1× audio policy removes muted audio-only contributors from
+  `outputMediaAssetIds`, export/offline preflight, retained Blob ownership, and
+  source fetches. A video clip using that same asset remains an output
+  contributor, so its visual media is still required.
 - Every composition item carries resolved blend intent. Ordinary decoded media
   applies its ordered effect stack during the source draw, then blends after
   transform/crop and opacity. Procedural text paints background, outline, and
@@ -285,6 +308,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   the exact BigInt-derived sample grid before one final sum/clamp. Invalid or
   unavailable audio falls back to the ordinary hard cut without weakening a
   valid visual crossfade.
+- Constant-speed audio is deliberately supported only for the exact 1×,
+  integer-origin map. Any other map is omitted from the shared live/export mix
+  plan and produces silence with an explicit unavailable reason; preview and
+  export therefore agree. Pitch-safe time stretching is a separate future
+  capability and must not be approximated with divergent browser playbackRate
+  behavior. The Inspector exposes this policy whenever a non-1× speed is set.
 
 ## Export profile and delivery contracts
 
@@ -349,6 +378,8 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   delta)`,
   `rippleTrim(clipId, edge, delta)`, `slipClip(clipId, delta)`,
   `slideClip(clipId, delta)`, `moveClip(clipId, toTrackId, toFrame)`,
+  `retimeClip(clipId, rate)` (timed decoded media only; linked groups retime
+  atomically through the pure linking wrapper),
   `rippleDelete(clipId)`, `addEffect(clipId, effect)`,
   `setEffectEnabled(clipId, effectId, enabled)`,
   `updateEffectParams(clipId, effectId, patch)`,
@@ -373,7 +404,7 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   pure domain contract, so rejection preserves the entire state and redo
   branch by reference; undo/redo restore the exact generated group id),
   `unlinkClip(clipId)` (dissolves the clip's whole link group), `undo`,
-  `redo`. The geometry actions (move/trim/rippleTrim/slip/slide/
+  `redo`. The geometry actions (move/trim/rippleTrim/slip/slide/retime/
   rippleDelete/splitClipAt/splitClipAtPlayhead) are LINK-AWARE: they
   delegate to domain/linking wrappers, so edits apply to every member of
   a `Clip.linkGroupId` group atomically (any member rejecting rolls the

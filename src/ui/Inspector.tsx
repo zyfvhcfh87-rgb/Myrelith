@@ -69,6 +69,12 @@ import {
   createColorAdjustEffect,
 } from '../domain/effectStack'
 import { effectAppendBudgetError } from '../domain/effectBounds'
+import {
+  clipSourceTimeMap,
+  sourceTimeAudioPolicy,
+  sourceTimeRateFromPercent,
+  sourceTimeRatePercent,
+} from '../domain/sourceTimeMap'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
 
@@ -397,6 +403,108 @@ function ToggleField({
       />
       <span>{label}</span>
     </label>
+  )
+}
+
+const SPEED_PERCENT_OPTIONS = Object.freeze(
+  Array.from({ length: 16 }, (_value, index) => (index + 1) * 25),
+)
+
+/** Constant-speed authoring stays visible regardless of the active video tab. */
+function TimingInspectorSection({
+  clip,
+  doc,
+}: {
+  clip: Clip
+  doc: TimelineDoc
+}) {
+  const map = clipSourceTimeMap(clip)
+  const speedPercent = sourceTimeRatePercent(map.rate)
+  const members = [clip, ...linkedPartners(doc, clip.id)]
+  const retimable = members.every(
+    (member) => member.sourceMode === 'timed' && member.text === undefined,
+  )
+  const locked = members.some(
+    (member) => trackOfClip(doc, member.id)?.locked ?? true,
+  )
+  const [message, setMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    setMessage(null)
+  }, [clip.id, map.rate.numerator, map.rate.denominator])
+
+  const commit = (percent: number): void => {
+    const store = useDocumentStore.getState()
+    const before = store.doc
+    const latest = findClip(before, clip.id)
+    if (!latest) {
+      setMessage('This clip is no longer available. Select it again and retry.')
+      return
+    }
+    store.retimeClip(clip.id, sourceTimeRateFromPercent(percent))
+    const after = useDocumentStore.getState().doc
+    if (after === before) {
+      setMessage(
+        'Speed change was not applied. Unlock linked tracks or make room beside the clip and try again.',
+      )
+      return
+    }
+    const updated = findClip(after, clip.id)
+    setMessage(
+      updated
+        ? `Speed changed to ${percent}%. Timeline duration is now ${updated.timelineRange.durationFrames} frames.`
+        : `Speed changed to ${percent}%.`,
+    )
+  }
+
+  const audioPolicy = sourceTimeAudioPolicy(clip)
+  const linkedNote = members.length > 1
+    ? ` The ${members.length} linked clips change together.`
+    : ''
+
+  return (
+    <InspectorSection
+      title="Timing"
+      resetLabel="Reset clip speed"
+      disabled={locked || !retimable || speedPercent === 100}
+      onReset={() => commit(100)}
+    >
+      <label className="inspector-field inspector-field-wide">
+        <span className="inspector-field-label">Speed</span>
+        <select
+          aria-describedby="inspector-speed-detail inspector-speed-audio inspector-speed-status"
+          data-testid="inspector-speed"
+          value={speedPercent}
+          disabled={locked || !retimable}
+          onChange={(event) => commit(Number(event.target.value))}
+        >
+          {SPEED_PERCENT_OPTIONS.map((percent) => (
+            <option key={percent} value={percent}>{percent}%</option>
+          ))}
+        </select>
+      </label>
+      <span id="inspector-speed-detail" className="inspector-note">
+        {retimable
+          ? `Timeline ${clip.timelineRange.durationFrames} frames · source ${clip.sourceRange.durationFrames} frames.${linkedNote}`
+          : 'Constant-speed retiming is available for timed video and audio clips.'}
+      </span>
+      <span id="inspector-speed-audio" className="inspector-note">
+        {!retimable
+          ? 'Still images and text keep their authored duration without decoded source-time mapping.'
+          : audioPolicy.status === 'muted'
+          ? 'Audio is muted at this speed in preview and export because pitch-safe time-stretch is not available.'
+          : 'Audio stays enabled at 100% speed.'}
+      </span>
+      <span
+        id="inspector-speed-status"
+        className="inspector-text-status"
+        role={message ? 'status' : undefined}
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {message ?? (locked ? 'Unlock this clip and every linked track to change speed.' : '')}
+      </span>
+    </InspectorSection>
   )
 }
 
@@ -1249,6 +1357,7 @@ export default function Inspector() {
         </div>
       )}
       <LinkSelectionControls key="linking-controls" />
+      <TimingInspectorSection clip={clip} doc={timelineDoc} />
       {videoClip?.text && (
         <TextOverlayFields
           key={`text:${videoClip.id}`}

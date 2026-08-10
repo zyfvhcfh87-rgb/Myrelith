@@ -22,6 +22,7 @@ import type {
   FrameRate,
   MediaSourceBounds,
   SourceTimestampBounds,
+  SourceTimeMap,
   TextProps,
   TimelineDoc,
   TimelineMarker,
@@ -102,6 +103,14 @@ import {
   effectDescriptorBoundsError,
   effectDescriptorBudget,
 } from './effectBounds'
+import {
+  animationWithSourceTimeIntent,
+  cloneSourceTimeMap,
+  defaultSourceTimeMap,
+  sourceRangeForMap,
+  sourceTimeMapValidationError,
+  SOURCE_TIME_TICKS_PER_FRAME,
+} from './sourceTimeMap'
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
 /** Serialized format marker used by releases published before the rebrand. */
@@ -114,7 +123,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 10 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 11 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -754,12 +763,23 @@ function validateClipAnimation(
     for (let keyframeIndex = 0; keyframeIndex < track.keyframes.length; keyframeIndex++) {
       const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
       const keyframe = record(track.keyframes[keyframeIndex], keyframePath)
-      exactKeys(keyframe, ['frame', 'value', 'easing'], [], keyframePath)
+      exactKeys(
+        keyframe,
+        ['frame', 'sourceTimeTicks', 'value', 'easing'],
+        [],
+        keyframePath,
+      )
       safeInteger(
         keyframe.frame,
         `${keyframePath}.frame`,
         -MAX_KEYFRAME_FRAME,
         MAX_KEYFRAME_FRAME,
+      )
+      safeInteger(
+        keyframe.sourceTimeTicks,
+        `${keyframePath}.sourceTimeTicks`,
+        Number.MIN_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER,
       )
       if (previousFrame !== null && keyframe.frame <= previousFrame) {
         fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
@@ -928,11 +948,27 @@ interface ValidationContext {
   keyframeCount: number
 }
 
+function validateSourceTimeMap(
+  value: unknown,
+  path: string,
+): asserts value is SourceTimeMap {
+  const map = record(value, path)
+  exactKeys(map, ['sourceStartTicks', 'sourceDurationTicks', 'rate'], [], path)
+  safeInteger(map.sourceStartTicks, `${path}.sourceStartTicks`, 0)
+  safeInteger(map.sourceDurationTicks, `${path}.sourceDurationTicks`, 1)
+  const rate = record(map.rate, `${path}.rate`)
+  exactKeys(rate, ['numerator', 'denominator'], [], `${path}.rate`)
+  safeInteger(rate.numerator, `${path}.rate.numerator`, 1)
+  safeInteger(rate.denominator, `${path}.rate.denominator`, 1)
+  const error = sourceTimeMapValidationError(map as unknown as SourceTimeMap)
+  if (error) fail(path, error)
+}
+
 function validateClip(value: unknown, path: string, trackKind: Track['kind'], context: ValidationContext): asserts value is Clip {
   const clip = record(value, path)
   exactKeys(
     clip,
-    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'timelineRange', 'transform', 'opacity', 'blendMode', 'volume', 'visual', 'audio', 'effects'],
+    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'sourceTimeMap', 'timelineRange', 'transform', 'opacity', 'blendMode', 'volume', 'visual', 'audio', 'effects'],
     ['animation', 'text', 'linkGroupId'],
     path,
   )
@@ -957,6 +993,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
     fail(`${path}.sourceMode`, 'expected timed or still')
   }
   validateRange(clip.sourceRange, `${path}.sourceRange`, 1)
+  validateSourceTimeMap(clip.sourceTimeMap, `${path}.sourceTimeMap`)
   validateRange(clip.timelineRange, `${path}.timelineRange`, 1)
   const sourceRange = clip.sourceRange as {
     startFrame: number
@@ -970,14 +1007,37 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   ) {
     fail(`${path}.sourceRange`, 'still clips must use source frame 0 with duration 1')
   }
-  if (!stillSource && sourceRange.durationFrames !== timelineRange.durationFrames) {
-    fail(path, 'source and timeline durations must match')
+  if (!stillSource) {
+    const envelope = sourceRangeForMap(
+      clip.sourceTimeMap as SourceTimeMap,
+      timelineRange.durationFrames,
+    )
+    if (
+      envelope.startFrame !== sourceRange.startFrame
+      || envelope.durationFrames !== sourceRange.durationFrames
+    ) fail(path, 'durations must match the source-time mapping envelope')
+  } else {
+    const map = clip.sourceTimeMap as SourceTimeMap
+    if (
+      map.sourceStartTicks !== 0
+      || map.sourceDurationTicks !== SOURCE_TIME_TICKS_PER_FRAME
+      || map.rate.numerator !== 1
+      || map.rate.denominator !== 1
+    ) fail(`${path}.sourceTimeMap`, 'still clips must use the canonical 1x map')
   }
   if (clip.text !== undefined) {
     if (stillSource) fail(`${path}.sourceMode`, 'text clips must use timed source mode')
     if (sourceRange.startFrame !== 0) {
       fail(`${path}.sourceRange.startFrame`, 'text clips must use procedural source start 0')
     }
+    const map = clip.sourceTimeMap as SourceTimeMap
+    if (
+      map.sourceStartTicks !== 0
+      || map.sourceDurationTicks
+        !== sourceRange.durationFrames * SOURCE_TIME_TICKS_PER_FRAME
+      || map.rate.numerator !== 1
+      || map.rate.denominator !== 1
+    ) fail(`${path}.sourceTimeMap`, 'text clips must use the canonical 1x map')
   }
   if (clip.text === undefined && asset?.kind === 'image' && !stillSource) {
     fail(`${path}.sourceMode`, 'image clips must use still source mode')
@@ -1562,6 +1622,100 @@ function migrateVersionedEffectDescriptors(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 10, tracks }
 }
 
+/** Upgrade schema-10 clips with the exact backward-compatible 1x map. */
+function migrateClipSourceTimeMaps(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    boundedArray(
+      track.clips,
+      `$.document.tracks[${trackIndex}].clips`,
+      PROJECT_FILE_LIMITS.maxClips,
+    )
+    return {
+      ...track,
+      clips: track.clips.map((clipValue, clipIndex) => {
+        const clip = record(
+          clipValue,
+          `$.document.tracks[${trackIndex}].clips[${clipIndex}]`,
+        )
+        const sourceRange = record(
+          clip.sourceRange,
+          `$.document.tracks[${trackIndex}].clips[${clipIndex}].sourceRange`,
+        )
+        safeInteger(
+          sourceRange.startFrame,
+          `$.document.tracks[${trackIndex}].clips[${clipIndex}].sourceRange.startFrame`,
+          0,
+        )
+        safeInteger(
+          sourceRange.durationFrames,
+          `$.document.tracks[${trackIndex}].clips[${clipIndex}].sourceRange.durationFrames`,
+          1,
+        )
+        const sourceTimeMap = defaultSourceTimeMap(
+          Number(sourceRange.startFrame),
+          Number(sourceRange.durationFrames),
+        )
+        const animationValue = clip.animation
+        let animation = animationValue
+        if (animationValue !== undefined) {
+          const animationRecord = record(
+            animationValue,
+            `$.document.tracks[${trackIndex}].clips[${clipIndex}].animation`,
+          )
+          boundedArray(
+            animationRecord.tracks,
+            `$.document.tracks[${trackIndex}].clips[${clipIndex}].animation.tracks`,
+            ANIMATABLE_CLIP_PROPERTIES.length,
+          )
+          animation = {
+            ...animationRecord,
+            tracks: animationRecord.tracks.map((trackValue, animationTrackIndex) => {
+              const trackPath = `$.document.tracks[${trackIndex}].clips[${clipIndex}].animation.tracks[${animationTrackIndex}]`
+              const animationTrack = record(trackValue, trackPath)
+              boundedArray(
+                animationTrack.keyframes,
+                `${trackPath}.keyframes`,
+                MAX_KEYFRAMES_PER_TRACK,
+              )
+              return {
+                ...animationTrack,
+                keyframes: animationTrack.keyframes.map((keyframeValue, keyframeIndex) => {
+                  const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
+                  const keyframe = record(keyframeValue, keyframePath)
+                  safeInteger(
+                    keyframe.frame,
+                    `${keyframePath}.frame`,
+                    -MAX_KEYFRAME_FRAME,
+                    MAX_KEYFRAME_FRAME,
+                  )
+                  const sourceTimeTicks = sourceTimeMap.sourceStartTicks
+                    + Number(keyframe.frame) * SOURCE_TIME_TICKS_PER_FRAME
+                  safeInteger(
+                    sourceTimeTicks,
+                    `${keyframePath}.sourceTimeTicks`,
+                    Number.MIN_SAFE_INTEGER,
+                    Number.MAX_SAFE_INTEGER,
+                  )
+                  return { ...keyframe, sourceTimeTicks }
+                }),
+              }
+            }),
+          }
+        }
+        return {
+          ...clip,
+          sourceTimeMap,
+          ...(animation === undefined ? {} : { animation }),
+        }
+      }),
+    }
+  })
+  return { ...document, schemaVersion: 11, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1607,6 +1761,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 9) {
     migrated = migrateVersionedEffectDescriptors(migrated)
+  }
+  if (migrated.schemaVersion === 10) {
+    migrated = migrateClipSourceTimeMaps(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
@@ -1748,6 +1905,12 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           name: clip.name,
           sourceMode: clip.sourceMode,
           sourceRange: { ...clip.sourceRange },
+          sourceTimeMap: cloneSourceTimeMap(
+            clip.sourceTimeMap ?? defaultSourceTimeMap(
+              clip.sourceRange.startFrame,
+              clip.sourceRange.durationFrames,
+            ),
+          ),
           timelineRange: { ...clip.timelineRange },
           transform: { ...clip.transform },
           opacity: clip.opacity,
@@ -1758,7 +1921,13 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
             crop: { ...clipVisualSettings(clip).crop },
           },
           audio: { ...clipAudioSettings(clip) },
-          animation: cloneClipAnimation(clipAnimation(clip)),
+          animation: cloneClipAnimation(animationWithSourceTimeIntent(
+            clipAnimation(clip),
+            clip.sourceTimeMap ?? defaultSourceTimeMap(
+              clip.sourceRange.startFrame,
+              clip.sourceRange.durationFrames,
+            ),
+          )),
           effects: clip.effects.map((effect) => ({
             id: effect.id,
             type: effect.type,
@@ -1847,8 +2016,9 @@ export function createProjectFileSnapshot(
     assets,
     collections: cloneMediaCollections(collections),
   }
-  validateProjectFile(project)
-  return portableProjectSnapshot(project)
+  const snapshot = portableProjectSnapshot(project)
+  validateProjectFile(snapshot)
+  return snapshot
 }
 
 interface SerializationBudget {

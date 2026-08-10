@@ -22,6 +22,7 @@ import {
   resolveTransitionGroupBlendMode,
   type BlendModeResolution,
 } from './blendModes'
+import { sourceFrameAtTimelineFrame } from './sourceTimeMap'
 
 export interface OrdinaryVideoPlanItem {
   kind: 'clip'
@@ -101,8 +102,7 @@ function ordinaryItem(
       clip: resolvedClip,
       sourceFrame: resolvedClip.sourceMode === 'still'
         ? 0
-        : resolvedClip.sourceRange.startFrame
-          + (frame - resolvedClip.timelineRange.startFrame),
+        : sourceFrameAtTimelineFrame(resolvedClip, frame),
       opacity,
     },
   }

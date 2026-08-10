@@ -12,6 +12,7 @@ import type {
   Transition,
 } from './schema'
 import { resolveCrossfadeGeometry } from './crossfadePlan'
+import { sourceFrameAtTimelineFrame, sourceTimeAudioPolicy } from './sourceTimeMap'
 import { rangeContains, rangeEnd } from './time'
 
 /**
@@ -131,7 +132,11 @@ export function outputMediaAssetIds(
   if (includeAudio) {
     for (const track of audibleTracks(doc)) {
       for (const clip of track.clips) {
-        if (!clip.text && clip.volume > 0) ids.add(clip.assetId)
+        if (
+          !clip.text
+          && clip.volume > 0
+          && sourceTimeAudioPolicy(clip).status === 'supported'
+        ) ids.add(clip.assetId)
       }
     }
   }
@@ -140,15 +145,12 @@ export function outputMediaAssetIds(
 
 /**
  * Map a timeline frame to the source-asset frame the clip shows there.
- * Stills always resolve frame 0; timed clips add the offset into the clip to
- * their source in-point. Only meaningful inside clip.timelineRange; callers
- * check that via activeClipAt/rangeContains.
+ * Stills always resolve frame 0; timed clips use the canonical rational map.
+ * Only meaningful inside clip.timelineRange; callers check that via
+ * activeClipAt/rangeContains.
  */
 export function clipSourceFrame(clip: Clip, timelineFrame: number): number {
-  if (clip.sourceMode === 'still') return 0
-  return (
-    clip.sourceRange.startFrame + (timelineFrame - clip.timelineRange.startFrame)
-  )
+  return sourceFrameAtTimelineFrame(clip, timelineFrame)
 }
 
 /**

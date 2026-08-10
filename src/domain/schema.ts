@@ -6,11 +6,12 @@
  * INTEGER frame counts; seconds exist only at the encoder/decoder/audio-clock
  * boundary, converted via domain/time.ts.
  *
- * Timed clips play at speed 1.0 and assets are treated as conformed to the
- * document frame rate, so `sourceRange` is measured in document-rate frames
- * from asset start and its duration matches `timelineRange`. Still clips use
- * the explicit one-frame source below while their timeline duration is
- * independently editable.
+ * Timed assets are treated as conformed to the document frame rate.
+ * `sourceTimeMap` is the canonical affine timeline-to-source mapping; its
+ * fixed-point origin and rational rate keep constant-speed edits exact without
+ * accumulating floating-point drift. `sourceRange` is the integer source-frame
+ * envelope touched by that mapping. Still clips use the explicit one-frame
+ * source below while their timeline duration is independently editable.
  */
 
 /* ------------------------------------------------------------------ */
@@ -50,6 +51,24 @@ export interface TimeRange {
   startFrame: number
   /** Length in frames. Integer >= 0; clip ranges must be >= 1. */
   durationFrames: number
+}
+
+/** Exact 25%-step rational constant-speed multiplier (source / timeline). */
+export interface SourceTimeRate {
+  numerator: number
+  denominator: number
+}
+
+/**
+ * Affine source-time origin, preserved source span, and rate. Tick values use
+ * the fixed precision declared by domain/sourceTimeMap.ts. The explicit span
+ * retains an exact out-point when a rate produces a fractional final timeline
+ * frame, so changing speed repeatedly cannot nibble source time away.
+ */
+export interface SourceTimeMap {
+  sourceStartTicks: number
+  sourceDurationTicks: number
+  rate: SourceTimeRate
 }
 
 /* ------------------------------------------------------------------ */
@@ -242,6 +261,12 @@ export type ClipAnimationEasing =
 /** One exact clip-local integer-frame value. */
 export interface ClipAnimationKeyframe {
   frame: number
+  /**
+   * Absolute source-time intent used to recover authored timing after a
+   * constant-speed map quantizes this key onto an integer timeline frame.
+   * Legacy in-memory values may omit it; current portable files require it.
+   */
+  sourceTimeTicks?: number
   value: number
   easing: ClipAnimationEasing
 }
@@ -371,7 +396,8 @@ export type ClipSourceMode = 'timed' | 'still'
  * One piece of media placed on a track. Invariants (enforced by
  * domain/operations.ts, assumed everywhere else):
  * - timelineRange.durationFrames >= 1
- * - timed sourceRange.durationFrames === timelineRange.durationFrames
+ * - timed sourceRange is the exact integer envelope of sourceTimeMap over the
+ *   clip's half-open timeline duration
  * - still sourceRange is always exactly frame 0 with duration 1
  * - never overlaps another clip on the same track (half-open ranges)
  */
@@ -396,6 +422,12 @@ export interface Clip {
    * canonical one-frame range `{ startFrame: 0, durationFrames: 1 }`.
    */
   sourceRange: TimeRange
+  /**
+   * Canonical timeline-frame to source-time mapping. Optional typing keeps
+   * historical pure fixtures source-compatible; current persisted documents
+   * always include it after schema migration.
+   */
+  sourceTimeMap?: SourceTimeMap
   /** Where the clip sits on the timeline, in document-rate frames. */
   timelineRange: TimeRange
   /** Placement within the composition. */

@@ -28,6 +28,7 @@ import {
   resetEffect,
   rippleDelete,
   rippleTrim,
+  retimeClip,
   setClipVolume,
   setEffectEnabled,
   setCrossfadeDuration,
@@ -45,6 +46,11 @@ import {
   updateEffectParams,
 } from './operations'
 import { rangeEnd } from './time'
+import {
+  defaultSourceTimeMap,
+  sourceFrameAtTimelineFrame,
+  sourceTimeRateFromPercent,
+} from './sourceTimeMap'
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                             */
@@ -93,7 +99,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -128,7 +134,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -157,6 +163,194 @@ const fx = (id: string): Effect => ({
   version: 1,
   enabled: true,
   params: { amount: 0.5 },
+})
+
+describe('constant-speed retiming', () => {
+  test('changes duration, source mapping, trim, split, and keyframe time deterministically', () => {
+    const base = makeDoc()
+    const doc = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.map((clip) => clip.id === 'clipA'
+              ? {
+                  ...clip,
+                  sourceRange: { startFrame: 0, durationFrames: 100 },
+                  animation: {
+                    tracks: [{
+                      property: 'opacity' as const,
+                      keyframes: [{ frame: 20, value: 0.5, easing: { type: 'linear' as const } }],
+                    }],
+                  },
+                }
+              : clip),
+          }
+        : track),
+    })
+
+    const doubled = retimeClip(doc, 'clipA', sourceTimeRateFromPercent(200))
+    const doubledClip = clipIn(doubled, 'V1', 'clipA')
+    expect(doubledClip.timelineRange.durationFrames).toBe(50)
+    expect(doubledClip.sourceRange).toEqual({ startFrame: 0, durationFrames: 100 })
+    expect(doubledClip.animation?.tracks[0].keyframes[0].frame).toBe(10)
+    expect(sourceFrameAtTimelineFrame(doubledClip, 12)).toBe(24)
+
+    const moved = moveClip(doubled, 'clipA', 'V2', 30)
+    const movedClip = clipIn(moved, 'V2', 'clipA')
+    expect(movedClip.sourceTimeMap).toEqual(doubledClip.sourceTimeMap)
+    expect(sourceFrameAtTimelineFrame(movedClip, 42)).toBe(24)
+
+    const trimmed = trimClip(doubled, 'clipA', 'start', 1)
+    const trimmedClip = clipIn(trimmed, 'V1', 'clipA')
+    expect(trimmedClip.timelineRange).toEqual({ startFrame: 1, durationFrames: 49 })
+    expect(trimmedClip.sourceRange).toEqual({ startFrame: 2, durationFrames: 98 })
+    expect(sourceFrameAtTimelineFrame(trimmedClip, 1)).toBe(2)
+
+    const split = splitClipAtFrame(doubled, 'clipA', 25)
+    const halves = clipsOf(split, 'V1').slice(0, 2)
+    expect(halves.map((clip) => clip.sourceRange)).toEqual([
+      { startFrame: 0, durationFrames: 50 },
+      { startFrame: 50, durationFrames: 50 },
+    ])
+    expect(sourceFrameAtTimelineFrame(halves[1], 25)).toBe(50)
+  })
+
+  test('rejects overlap and non-media retiming without changing the document', () => {
+    const doc = makeDoc()
+    expect(retimeClip(doc, 'clipA', sourceTimeRateFromPercent(50))).toBe(doc)
+    const stillDoc = {
+      ...doc,
+      tracks: doc.tracks.map((track) => track.id === 'V2'
+        ? { ...track, clips: [makeStillClip('still', 0, 100)] }
+        : track),
+    }
+    expect(retimeClip(stillDoc, 'still', sourceTimeRateFromPercent(200))).toBe(stillDoc)
+  })
+
+  test('does not lose a fractional source tail across repeated rate changes', () => {
+    const base = makeDoc()
+    const isolated = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.filter((clip) => clip.id === 'clipA').map((clip) => ({
+              ...clip,
+              sourceRange: { startFrame: 0, durationFrames: 100 },
+            })),
+          }
+        : track),
+    })
+
+    const slowed = retimeClip(isolated, 'clipA', sourceTimeRateFromPercent(75))
+    expect(clipIn(slowed, 'V1', 'clipA')).toMatchObject({
+      timelineRange: { startFrame: 0, durationFrames: 133 },
+      sourceRange: { startFrame: 0, durationFrames: 100 },
+      sourceTimeMap: { sourceDurationTicks: 100_000_000 },
+    })
+    const restored = retimeClip(slowed, 'clipA', sourceTimeRateFromPercent(100))
+    expect(clipIn(restored, 'V1', 'clipA')).toMatchObject({
+      timelineRange: { startFrame: 0, durationFrames: 100 },
+      sourceRange: { startFrame: 0, durationFrames: 100 },
+    })
+  })
+
+  test('rejects a retime whose timeline end is not a safe integer', () => {
+    const base = makeDoc()
+    const unsafe = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.filter((clip) => clip.id === 'clipA').map((clip) => ({
+              ...clip,
+              timelineRange: {
+                startFrame: Number.MAX_SAFE_INTEGER - 1,
+                durationFrames: 1,
+              },
+              sourceRange: { startFrame: 0, durationFrames: 2 },
+              sourceTimeMap: {
+                sourceStartTicks: 0,
+                sourceDurationTicks: 2_000_000,
+                rate: sourceTimeRateFromPercent(200),
+              },
+            })),
+          }
+        : track),
+    })
+
+    expect(retimeClip(unsafe, 'clipA', sourceTimeRateFromPercent(100))).toBe(unsafe)
+  })
+
+  test('restores keyframe frames exactly after 100% to 150% to 100%', () => {
+    const base = makeDoc()
+    const isolated = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.filter((clip) => clip.id === 'clipA').map((clip) => ({
+              ...clip,
+              sourceRange: { startFrame: 0, durationFrames: 3 },
+              timelineRange: { startFrame: 0, durationFrames: 3 },
+              sourceTimeMap: undefined,
+              animation: {
+                tracks: [{
+                  property: 'opacity' as const,
+                  keyframes: [{ frame: 1, value: 0.5, easing: { type: 'linear' as const } }],
+                }],
+              },
+            })),
+          }
+        : track),
+    })
+
+    const accelerated = retimeClip(
+      isolated,
+      'clipA',
+      sourceTimeRateFromPercent(150),
+    )
+    expect(clipIn(accelerated, 'V1', 'clipA').animation?.tracks[0].keyframes[0])
+      .toMatchObject({ frame: 0, sourceTimeTicks: 1_000_000 })
+
+    const restored = retimeClip(
+      accelerated,
+      'clipA',
+      sourceTimeRateFromPercent(100),
+    )
+    expect(clipIn(restored, 'V1', 'clipA').animation?.tracks[0].keyframes[0])
+      .toMatchObject({ frame: 1, sourceTimeTicks: 1_000_000 })
+  })
+
+  test('rejects a retime that would collapse distinct keyframes', () => {
+    const base = makeDoc()
+    const isolated = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.filter((clip) => clip.id === 'clipA').map((clip) => ({
+              ...clip,
+              sourceRange: { startFrame: 0, durationFrames: 3 },
+              timelineRange: { startFrame: 0, durationFrames: 3 },
+              animation: {
+                tracks: [{
+                  property: 'opacity' as const,
+                  keyframes: [
+                    { frame: 0, value: 0, easing: { type: 'linear' as const } },
+                    { frame: 1, value: 1, easing: { type: 'linear' as const } },
+                  ],
+                }],
+              },
+            })),
+          }
+        : track),
+    })
+
+    expect(retimeClip(isolated, 'clipA', sourceTimeRateFromPercent(200)))
+      .toBe(isolated)
+  })
 })
 
 let warnSpy: ReturnType<typeof vi.spyOn>
@@ -740,6 +934,36 @@ describe('slipClip', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1)
   })
 
+  test('slip re-anchors durable keyframe source intent while keeping its timeline frame', () => {
+    const base = makeDoc()
+    const modern = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.map((clip) => clip.id === 'clipA'
+              ? {
+                  ...clip,
+                  sourceTimeMap: defaultSourceTimeMap(10, 100),
+                  animation: {
+                    tracks: [{
+                      property: 'opacity' as const,
+                      keyframes: [{ frame: 5, value: 0.5, easing: { type: 'linear' as const } }],
+                    }],
+                  },
+                }
+              : clip),
+          }
+        : track),
+    })
+
+    const slipped = clipIn(slipClip(modern, 'clipA', 3), 'V1', 'clipA')
+    expect(slipped.animation?.tracks[0].keyframes[0]).toMatchObject({
+      frame: 5,
+      sourceTimeTicks: 18_000_000,
+    })
+  })
+
   test('rejects non-integer deltas, unknown clips, and locked tracks', () => {
     const doc = makeDoc()
     expect(slipClip(doc, 'clipA', 1.5)).toBe(doc)
@@ -1000,7 +1224,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },

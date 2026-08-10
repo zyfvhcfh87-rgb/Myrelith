@@ -118,7 +118,7 @@ function fixture(options: {
   }
   return {
     doc: {
-      schemaVersion: 10,
+      schemaVersion: 11,
       id: 'audio-plan-doc',
       name: 'Audio plan',
       frameRate: { num: 30, den: 1 },
@@ -141,6 +141,28 @@ function fixture(options: {
 }
 
 describe('timeline audio mix plan', () => {
+  test('omits retimed audio with an explicit shared preview/export policy', () => {
+    const input = fixture()
+    input.doc.tracks[1].clips[0].sourceRange = {
+      startFrame: 30,
+      durationFrames: 20,
+    }
+    input.doc.tracks[1].clips[0].sourceTimeMap = {
+      sourceStartTicks: 30_000_000,
+      sourceDurationTicks: 20_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+
+    const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+
+    expect(plan.clips.map((item) => item.clipId)).not.toContain('audio-from')
+    expect(plan.mutedClips).toContainEqual({
+      clipId: 'audio-from',
+      trackId: 'A-from',
+      reason: 'constant-speed-audio-unsupported',
+    })
+  })
+
   test('creates odd virtual handle legs without changing the document', () => {
     const input = fixture()
     const before = JSON.stringify(input.doc)

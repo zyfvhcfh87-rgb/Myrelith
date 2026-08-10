@@ -55,6 +55,9 @@ export function cloneClipAnimation(animation: ClipAnimation): ClipAnimation {
       property: track.property,
       keyframes: track.keyframes.map((keyframe) => ({
         frame: keyframe.frame,
+        ...(keyframe.sourceTimeTicks === undefined
+          ? {}
+          : { sourceTimeTicks: keyframe.sourceTimeTicks }),
         value: keyframe.value,
         easing: cloneAnimationEasing(keyframe.easing),
       })),
@@ -152,6 +155,10 @@ export function animationTrackValidationError(
     ) {
       return `keyframe frame must be a safe integer from ${-MAX_KEYFRAME_FRAME} to ${MAX_KEYFRAME_FRAME}`
     }
+    if (
+      keyframe.sourceTimeTicks !== undefined
+      && !Number.isSafeInteger(keyframe.sourceTimeTicks)
+    ) return 'keyframe sourceTimeTicks must be a safe integer'
     if (previousFrame !== null && keyframe.frame <= previousFrame) {
       return 'keyframe frames must be strictly increasing and unique'
     }

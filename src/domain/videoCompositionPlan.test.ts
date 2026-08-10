@@ -82,7 +82,7 @@ function track(
 
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },
@@ -152,6 +152,26 @@ describe('video composition plan', () => {
     expect(plan.items.map((item) => item.kind === 'clip'
       ? `${item.trackId}:${item.request.clip.id}@${item.request.sourceFrame}`
       : item.kind)).toEqual(['V1:lower@34', 'V2:upper@84'])
+  })
+
+  test('uses the shared rational source-time map for ordinary frame requests', () => {
+    const retimed = {
+      ...clip('retimed', 'retimed-asset', 10, 20),
+      sourceRange: { startFrame: 20, durationFrames: 11 },
+      timelineRange: { startFrame: 10, durationFrames: 5 },
+      sourceTimeMap: {
+        sourceStartTicks: 20_500_000,
+        sourceDurationTicks: 10_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    }
+    const planner = createVideoCompositionPlanner(
+      doc([track('V1', [retimed])]),
+      new Map(),
+    )
+
+    expect(videoCompositionRequests(planner.planFrame(10))[0].sourceFrame).toBe(20)
+    expect(videoCompositionRequests(planner.planFrame(14))[0].sourceFrame).toBe(28)
   })
 
   test('emits one explicit group with genuine timed handle requests', () => {

@@ -27,14 +27,16 @@ import {
   moveClip,
   rippleDelete,
   rippleTrim,
+  retimeClip,
   slideClip,
   slipClip,
   splitClipAtFrame,
   trimClip,
 } from './operations'
 import type { TrimEdge } from './operations'
-import type { Clip, ClipId, TimelineDoc, TrackId } from './schema'
+import type { Clip, ClipId, SourceTimeRate, TimelineDoc, TrackId } from './schema'
 import { findClip, trackOfClip } from './selectors'
+import { clipSourceTimeMap } from './sourceTimeMap'
 import { rangeEnd } from './time'
 
 /** Rejection path: warn and hand back the SAME doc reference. */
@@ -381,6 +383,34 @@ export function linkedRippleTrim(
   return applyToGroup(doc, clipId, 'linkedRippleTrim', (d, id) =>
     rippleTrim(d, id, edge, deltaFrames),
   )
+}
+
+/** Apply one constant rate to every linked member as one atomic edit. */
+export function linkedRetimeClip(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  rate: SourceTimeRate,
+): TimelineDoc {
+  const members = groupMembers(doc, clipId)
+  if (
+    members.some(
+      (member) => member.sourceMode === 'still' || member.text !== undefined,
+    )
+  ) return doc
+  if (members.length <= 1) return retimeClip(doc, clipId, rate)
+
+  let next = doc
+  for (const member of members) {
+    const current = clipSourceTimeMap(member).rate
+    if (
+      current.numerator === rate.numerator
+      && current.denominator === rate.denominator
+    ) continue
+    const applied = retimeClip(next, member.id, rate)
+    if (applied === next) return reject(doc, 'linkedRetimeClip', 'partner could not follow')
+    next = applied
+  }
+  return next
 }
 
 /** Slip every member of clipId's group by the same source delta. See

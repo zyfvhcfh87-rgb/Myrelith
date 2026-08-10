@@ -54,7 +54,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -271,6 +271,27 @@ describe('outputMediaAssetIds', () => {
       'video-visible',
     ])
   })
+
+  test('excludes muted retimed audio but keeps the same asset when it contributes video', () => {
+    const mutedAudio = {
+      ...makeClip('retimed-audio', 0, 5),
+      assetId: 'shared-retimed',
+      sourceRange: { startFrame: 0, durationFrames: 10 },
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 10_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    }
+    const audioOnly = makeDoc([makeTrack('A1', 'audio', [mutedAudio])])
+    expect([...outputMediaAssetIds(audioOnly)]).toEqual([])
+
+    const audiovisual = makeDoc([
+      makeTrack('V1', 'video', [{ ...mutedAudio, id: 'retimed-video' }]),
+      makeTrack('A1', 'audio', [mutedAudio]),
+    ])
+    expect([...outputMediaAssetIds(audiovisual)]).toEqual(['shared-retimed'])
+  })
 })
 
 describe('clipSourceFrame', () => {
@@ -286,6 +307,20 @@ describe('clipSourceFrame', () => {
     expect(clipSourceFrame(clip, 100)).toBe(30)
     expect(clipSourceFrame(clip, 110)).toBe(40)
     expect(clipSourceFrame(clip, 149)).toBe(79)
+  })
+
+  test('constant-speed clips use the shared rational map', () => {
+    const clip = makeClip('retimed', 100, 25, 30)
+    clip.sourceRange = { startFrame: 30, durationFrames: 51 }
+    clip.sourceTimeMap = {
+      sourceStartTicks: 30_500_000,
+      sourceDurationTicks: 50_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+
+    expect(clipSourceFrame(clip, 100)).toBe(30)
+    expect(clipSourceFrame(clip, 110)).toBe(50)
+    expect(clipSourceFrame(clip, 124)).toBe(78)
   })
 
   test('every timeline frame of a still resolves to its sole source frame', () => {

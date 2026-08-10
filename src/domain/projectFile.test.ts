@@ -7,6 +7,7 @@ import {
   defaultClipVisualSettings,
 } from './clipInspector'
 import { defaultClipAnimation } from './clipAnimation'
+import { defaultSourceTimeMap } from './sourceTimeMap'
 import {
   COLOR_ADJUST_EFFECT_TYPE,
   COLOR_ADJUST_EFFECT_VERSION,
@@ -54,6 +55,7 @@ function mediaClip(
     name: id,
     sourceMode: 'timed',
     sourceRange: { startFrame: sourceStart, durationFrames: duration },
+    sourceTimeMap: defaultSourceTimeMap(sourceStart, duration),
     timelineRange: { startFrame: timelineStart, durationFrames: duration },
     transform: {
       x: 12.5,
@@ -255,6 +257,94 @@ describe('portable project file', () => {
       original.document.tracks[0].transitions,
     )
     expect(parsed.document.markers).toEqual(original.document.markers)
+  })
+
+  test('migrates schema-9 through versioned effects and exact 1x maps without changing intent', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 9
+    legacy.document.tracks[0].clips[0].animation = {
+      tracks: [{
+        property: 'opacity',
+        keyframes: [{ frame: 2, value: 0.5, easing: { type: 'linear' } }],
+      }],
+    }
+    const originalRanges = legacy.document.tracks.flatMap((item) => item.clips).map(
+      (clip) => ({ sourceRange: clip.sourceRange, timelineRange: clip.timelineRange }),
+    )
+    for (const legacyTrack of legacy.document.tracks) {
+      for (const legacyClip of legacyTrack.clips) {
+        Reflect.deleteProperty(legacyClip, 'sourceTimeMap')
+      }
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+    const clips = parsed.document.tracks.flatMap((item) => item.clips)
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(clips.map((clip) => ({
+      sourceRange: clip.sourceRange,
+      timelineRange: clip.timelineRange,
+    }))).toEqual(originalRanges)
+    expect(clips.map((clip) => clip.sourceTimeMap)).toEqual(
+      clips.map((clip) => defaultSourceTimeMap(
+        clip.sourceRange.startFrame,
+        clip.sourceRange.durationFrames,
+      )),
+    )
+    expect(clips[0].animation?.tracks[0].keyframes[0]).toMatchObject({
+      frame: 2,
+      sourceTimeTicks: 7_000_000,
+    })
+  })
+
+  test('migrates schema-10 effect documents to schema-11 source-time intent', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 10
+    legacy.document.tracks[0].clips[0].animation = {
+      tracks: [{
+        property: 'opacity',
+        keyframes: [{ frame: 2, value: 0.5, easing: { type: 'linear' } }],
+      }],
+    }
+    const effects = clone(legacy.document.tracks[0].clips[0].effects)
+    for (const legacyTrack of legacy.document.tracks) {
+      for (const legacyClip of legacyTrack.clips) {
+        Reflect.deleteProperty(legacyClip, 'sourceTimeMap')
+      }
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(11)
+    expect(parsed.document.tracks[0].clips[0].effects).toEqual(effects)
+    expect(parsed.document.tracks[0].clips[0].sourceTimeMap).toEqual(
+      defaultSourceTimeMap(5, 10),
+    )
+    expect(parsed.document.tracks[0].clips[0].animation?.tracks[0].keyframes[0])
+      .toMatchObject({ frame: 2, sourceTimeTicks: 7_000_000 })
+  })
+
+  test('round-trips a non-unity rational source-time map exactly', () => {
+    const project = makeProject()
+    const retimed = project.document.tracks[0].clips[1]
+    retimed.timelineRange = { startFrame: 10, durationFrames: 5 }
+    retimed.sourceTimeMap = {
+      sourceStartTicks: 15_000_000,
+      sourceDurationTicks: 10_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+
+    const parsed = parseProjectFile(serializeProjectFile(project))
+
+    expect(parsed.document.tracks[0].clips[1]).toMatchObject({
+      sourceRange: { startFrame: 15, durationFrames: 10 },
+      timelineRange: { startFrame: 10, durationFrames: 5 },
+      sourceTimeMap: {
+        sourceStartTicks: 15_000_000,
+        sourceDurationTicks: 10_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    })
   })
 
   test('migrates schema-6 projects to explicit empty marker defaults', () => {
@@ -500,9 +590,15 @@ describe('portable project file', () => {
         {
           property: 'position-x',
           keyframes: [
-            { frame: -5, value: -125.25, easing: { type: 'hold' } },
+            {
+              frame: -5,
+              sourceTimeTicks: 0,
+              value: -125.25,
+              easing: { type: 'hold' },
+            },
             {
               frame: 12,
+              sourceTimeTicks: 17_000_000,
               value: 240.75,
               easing: {
                 type: 'cubic-bezier',
@@ -516,7 +612,12 @@ describe('portable project file', () => {
         },
         {
           property: 'opacity',
-          keyframes: [{ frame: 0, value: 0.625, easing: { type: 'linear' } }],
+          keyframes: [{
+            frame: 0,
+            sourceTimeTicks: 5_000_000,
+            value: 0.625,
+            easing: { type: 'linear' },
+          }],
         },
       ],
     }
@@ -548,8 +649,8 @@ describe('portable project file', () => {
       tracks: [{
         property: 'position-x',
         keyframes: [
-          { frame: 3, value: 10, easing: { type: 'linear' } },
-          { frame: 3, value: 20, easing: { type: 'linear' } },
+          { frame: 3, sourceTimeTicks: 8_000_000, value: 10, easing: { type: 'linear' } },
+          { frame: 3, sourceTimeTicks: 8_000_000, value: 20, easing: { type: 'linear' } },
         ],
       }],
     }
@@ -559,6 +660,7 @@ describe('portable project file', () => {
         property: 'position-x',
         keyframes: [{
           frame: 0,
+          sourceTimeTicks: 5_000_000,
           value: 0,
           easing: { type: 'cubic-bezier', x1: -0.1, y1: 0, x2: 1, y2: 1 },
         }],
@@ -567,6 +669,28 @@ describe('portable project file', () => {
 
     expect(() => validateProjectFile(duplicate)).toThrow(/strictly increasing/)
     expect(() => validateProjectFile(badEasing)).toThrow(/from 0 to 1/)
+  })
+
+  test('requires bounded durable source-time intent on current keyframes', () => {
+    const missing = makeProject()
+    missing.document.tracks[0].clips[0].animation = {
+      tracks: [{
+        property: 'opacity',
+        keyframes: [{ frame: 0, value: 0.5, easing: { type: 'linear' } }],
+      }],
+    }
+    const unsafe = clone(missing)
+    unsafe.document.tracks[0].clips[0].animation!.tracks[0].keyframes[0]
+      .sourceTimeTicks = Number.MAX_SAFE_INTEGER + 1
+    const unknown = clone(missing)
+    const unknownKeyframe = unknown.document.tracks[0].clips[0]
+      .animation!.tracks[0].keyframes[0] as unknown as Record<string, unknown>
+    unknownKeyframe.sourceTimeTicks = 5_000_000
+    unknownKeyframe.futureTiming = true
+
+    expect(() => validateProjectFile(missing)).toThrow(/sourceTimeTicks/)
+    expect(() => validateProjectFile(unsafe)).toThrow(/sourceTimeTicks/)
+    expect(() => validateProjectFile(unknown)).toThrow(/unknown field/)
   })
 
   test.each(
@@ -843,6 +967,7 @@ describe('portable project file', () => {
     title.assetId = 'image-a'
     title.sourceMode = 'still'
     title.sourceRange = { startFrame: 0, durationFrames: 1 }
+    title.sourceTimeMap = defaultSourceTimeMap(0)
 
     const parsed = parseProjectFile(serializeProjectFile(project))
     expect(parsed.document.tracks[0].clips[2]).toMatchObject({
@@ -1192,6 +1317,7 @@ describe('portable project file', () => {
       startFrame: 0,
       durationFrames: 1,
     }
+    project.document.tracks[0].clips[2].sourceTimeMap = defaultSourceTimeMap(0)
     const textClipCount = Math.floor(
       PROJECT_FILE_LIMITS.maxTotalTextCharacters / PROJECT_FILE_LIMITS.maxTextCharacters,
     )
@@ -1379,6 +1505,7 @@ describe('portable project file', () => {
       for (const clip of track.clips) {
         if (clip.assetId !== 'video-z') continue
         clip.sourceRange = { startFrame: 0, durationFrames: 1 }
+        clip.sourceTimeMap = defaultSourceTimeMap(0)
         clip.timelineRange.durationFrames = 1
         if (clip.audio) {
           clip.audio.fadeInFrames = Math.min(clip.audio.fadeInFrames, 1)

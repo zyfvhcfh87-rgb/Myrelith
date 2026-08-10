@@ -18,6 +18,7 @@ import {
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { audibleTracks, outputMediaAssetIds } from '../domain/selectors'
+import { sourceTimeAudioPolicy } from '../domain/sourceTimeMap'
 import {
   exportTimeline,
   type ExportDeps as PipelineExportDeps,
@@ -189,21 +190,13 @@ function createAssetResolver(
   }
 }
 
-/** Start retaining every Blob the captured document can reference. */
+/** Start retaining every Blob that can contribute to the captured output. */
 function retainReferencedBlobs(
   doc: TimelineDoc,
   resolveAsset: ExportAssetResolver,
   includeAudio: boolean,
 ): void {
-  const assetIds = new Set<AssetId>()
-  for (const track of doc.tracks) {
-    if (track.kind === 'audio' && !includeAudio) continue
-    for (const clip of track.clips) {
-      if (clip.text === undefined) assetIds.add(clip.assetId)
-    }
-  }
-
-  for (const assetId of assetIds) {
+  for (const assetId of outputMediaAssetIds(doc, includeAudio)) {
     try {
       // The pipeline remains the error owner when it requests this same
       // cached promise. This handler only prevents an unused hidden/muted
@@ -232,6 +225,7 @@ function partialTrackConflict(
       if (
         clip.text
         || (track.kind === 'video' ? clip.opacity <= 0 : clip.volume <= 0)
+        || (track.kind === 'audio' && sourceTimeAudioPolicy(clip).status === 'muted')
       ) continue
       const asset = assets.get(clip.assetId)
       if (!asset) continue

@@ -38,6 +38,7 @@ import type {
   Track,
   Transition,
 } from '../../domain/schema'
+import { defaultSourceTimeMap } from '../../domain/sourceTimeMap'
 import { proceduralTextAssetId } from '../../domain/textOverlay'
 import { microsecondsDurationToFrames } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
@@ -1292,6 +1293,10 @@ function boundedExportClip(
     ...source,
     id,
     sourceRange,
+    sourceTimeMap: defaultSourceTimeMap(
+      sourceRange.startFrame,
+      sourceRange.durationFrames,
+    ),
     timelineRange,
     transform: { ...source.transform },
     visual: {

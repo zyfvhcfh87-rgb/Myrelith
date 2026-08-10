@@ -2879,3 +2879,62 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
   ordered text effects ready, effect bypass/application produced distinct
   Program Monitor screenshot hashes, browser diagnostics were empty, and the
   port was released.
+
+## Post-MVP issue #69 - constant-speed clip retiming
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-10).**
+
+- [x] Add schema-11 `SourceTimeMap` with exact integer source ticks, a reduced
+  rational rate in whole 25-percentage-point steps bounded to 25%–400%, an
+  exact preserved source span, strict validation, and a behavior-identical
+  schema-10→11 migration after the existing schema-9→10 effect migration.
+- [x] Make one browser-free mapping contract authoritative for selection,
+  seeking, preview, playback, export, ordinary composition, crossfades,
+  thumbnails, waveforms, trim, split, slip, slide, move, transition handles,
+  and source-capacity checks.
+- [x] Add pure constant-speed retiming for timed decoded media. Keep timeline
+  start fixed; derive the greatest valid whole-frame duration without losing a
+  fractional source tail; reject locked/still/text/overlap edits atomically;
+  reconcile transitions and fades; remap animation keys by exact source-time
+  intent with deterministic collision handling.
+- [x] Route linked A/V retiming through the existing all-or-nothing linking
+  contract and expose one document-store history entry per accepted edit, with
+  rejected and idempotent edits preserving redo by reference. Mixed-rate
+  groups accept already-at-target members without weakening atomic rollback.
+- [x] Define the audio policy explicitly: exact 1× with integer source origin
+  keeps existing audio; every other constant-speed map is muted consistently
+  in live playback and export until pitch-safe time stretching is implemented.
+  Exclude muted audio-only contributors from output/offline/Blob/fetch
+  requirements while preserving any visual contributor using the same asset.
+- [x] Add accessible Inspector Speed choices in 25% increments, Reset, exact
+  timeline/source frame feedback, linked/locked eligibility feedback, and a
+  visible explanation when audio is muted.
+- [x] Cover rational no-drift/tail preservation, migration/round trips,
+  operations and linking, transitions, animation remapping, selectors,
+  filmstrips/waveforms, audio mixing/export silence, store history, Inspector,
+  and shared composition planning with focused and complete automated gates.
+- [x] Review remediation: reject unsafe retime ends; preserve exact keyframe
+  source intent across repeated round trips; reject destructive key collisions;
+  make split/trim mapping associative by accepting only fixed-tick-exact 25%
+  steps; and cover mixed-rate linked groups plus muted-output resource policy.
+- [x] Pass 375 focused tests across the eight review-contract files, all 2,159
+  Vitest cases across 150 files, all 16 benchmark-runner tests, production
+  build/typecheck, oxlint, the production high-severity audit with 0
+  vulnerabilities, and clean diff/source-identity checks. Retain only the
+  existing non-fatal Vite large-chunk advisory.
+- [x] Rebase onto clean effect-stack base
+  `c33ffa35aad0d8c2c993b6ccb6c9fbed4065c34c` /
+  `sha256:77119aeef265c5fed69dbd0b7aaeea4d36dbb7da01dd52f2469e2027e81e8b04`
+  and record completed dirty checkpoint
+  `sha256:4034ac7db9317fcd78e9444b21e124b96ffd94e742ea6e94af2bfd2d0facfa3d`;
+  use the final commit id as the authoritative delivered identity.
+- [x] Verify observable UI behavior in real Chromium only on port 41869: open
+  and validate a schema-10 effect-era fixture through schema 11, exercise
+  100%→150%→Reset with 120→80→120 frame and audio-policy feedback, and prove a
+  frame-1 key quantizes to frame 0 at 150% then returns to frame 1 at 100%.
+  Finish with zero warning/error logs and release the test port. The portable
+  media stayed offline, so decoded-frame behavior is attributed only to
+  automated composition/runtime coverage.
+- [x] Publish the exact committed branch as a ready PR targeting `master` with
+  `Closes #69`; rebase it after Issue #45 so effects remain schema 10 and
+  retiming becomes schema 11, then leave merge and closure to the coordinator.

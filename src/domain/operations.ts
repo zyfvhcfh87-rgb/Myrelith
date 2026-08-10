@@ -10,7 +10,7 @@
  * - Invariants enforced here, assumed everywhere else:
  *   - clips on one track never overlap (half-open ranges),
  *   - clip duration >= 1 frame,
- *   - timed source duration equals timeline duration (speed 1.0),
+ *   - timed source ranges equal the integer envelope of SourceTimeMap,
  *   - still source range is exactly frame 0 with duration 1,
  *   - clips stay sorted by timelineRange.startFrame,
  *   - locked tracks reject all edits.
@@ -33,6 +33,8 @@ import type {
   EffectId,
   EffectParamValue,
   MediaAsset,
+  SourceTimeRate,
+  SourceTimeMap,
   TimeRange,
   TimelineDoc,
   Track,
@@ -97,6 +99,22 @@ import {
   effectDescriptorBoundsError,
   effectReplacementBudgetError,
 } from './effectBounds'
+import {
+  clipSourceTimeMap,
+  cloneSourceTimeMap,
+  defaultSourceTimeMap,
+  retimeClipAnimation,
+  shiftClipAnimationSourceTimeIntent,
+  sourceRangeForMap,
+  sourceSpanTicks,
+  sourceTicksAtTimelineOffset,
+  sourceTimeMapAtOffset,
+  sourceTimeMapForTimelineDuration,
+  sourceTimeMapValidationError,
+  sourceTimeRateValidationError,
+  timelineFramesWithinSourceTicks,
+  SOURCE_TIME_TICKS_PER_FRAME,
+} from './sourceTimeMap'
 
 /** Which clip edge a trim moves. */
 export type TrimEdge = 'start' | 'end'
@@ -642,6 +660,10 @@ export function clipFromAsset(
       startFrame: 0,
       durationFrames: asset.kind === 'image' ? 1 : asset.durationFrames,
     },
+    sourceTimeMap: defaultSourceTimeMap(
+      0,
+      asset.kind === 'image' ? 1 : asset.durationFrames,
+    ),
     timelineRange: { startFrame, durationFrames: asset.durationFrames },
     transform: {
       x: 0,
@@ -686,6 +708,7 @@ export function createTextClip(
     name: textOverlayName(content),
     sourceMode: 'timed',
     sourceRange: { startFrame: 0, durationFrames },
+    sourceTimeMap: defaultSourceTimeMap(0, durationFrames),
     timelineRange: { startFrame, durationFrames },
     transform: {
       x: 0,
@@ -739,6 +762,18 @@ export function insertClip(
   if (clip.sourceMode !== 'timed' && clip.sourceMode !== 'still') {
     return reject(doc, op, `unknown source mode ${String(clip.sourceMode)}`)
   }
+  let sourceTimeMap: SourceTimeMap
+  try {
+    sourceTimeMap = clipSourceTimeMap(clip)
+  } catch (error) {
+    return reject(
+      doc,
+      op,
+      error instanceof Error ? error.message : 'invalid source-time mapping',
+    )
+  }
+  const sourceTimeMapError = sourceTimeMapValidationError(sourceTimeMap)
+  if (sourceTimeMapError) return reject(doc, op, sourceTimeMapError)
   if (
     clip.sourceMode === 'still'
     && (src.startFrame !== 0 || src.durationFrames !== 1)
@@ -749,14 +784,41 @@ export function insertClip(
       'still clips must use source frame 0 with duration 1',
     )
   }
+  if (clip.sourceMode !== 'still') {
+    let mappedSourceRange: TimeRange
+    try {
+      mappedSourceRange = sourceRangeForMap(sourceTimeMap, tl.durationFrames)
+    } catch (error) {
+      return reject(
+        doc,
+        op,
+        error instanceof Error ? error.message : 'invalid source-time mapping',
+      )
+    }
+    if (
+      mappedSourceRange.startFrame !== src.startFrame
+      || mappedSourceRange.durationFrames !== src.durationFrames
+    ) {
+      return reject(
+        doc,
+        op,
+        'sourceRange must equal the source-time mapping envelope',
+      )
+    }
+  }
   if (
-    clip.sourceMode !== 'still'
-    && src.durationFrames !== tl.durationFrames
+    clip.sourceMode === 'still'
+    && (
+      sourceTimeMap.sourceStartTicks !== 0
+      || sourceTimeMap.sourceDurationTicks !== SOURCE_TIME_TICKS_PER_FRAME
+      || sourceTimeMap.rate.numerator !== 1
+      || sourceTimeMap.rate.denominator !== 1
+    )
   ) {
     return reject(
       doc,
       op,
-      `sourceRange duration ${src.durationFrames} != timelineRange duration ${tl.durationFrames} (clips play at speed 1.0)`,
+      'still clips must use the canonical 1x source-time map',
     )
   }
   if (clip.text !== undefined) {
@@ -811,6 +873,7 @@ export function insertClip(
   const copy: Clip = {
     ...clip,
     sourceRange: { ...src },
+    sourceTimeMap: cloneSourceTimeMap(sourceTimeMap),
     timelineRange: { ...tl },
     transform: { ...clip.transform },
     visual: {
@@ -860,6 +923,16 @@ export function splitClipAtFrame(
   const offset = frame - tl.startFrame
   const stillSource = clip.sourceMode === 'still'
   const textSource = clip.text !== undefined
+  const sourceTimeMap = clipSourceTimeMap(clip)
+  const leftSourceTimeMap = textSource || stillSource
+    ? defaultSourceTimeMap(0, stillSource ? 1 : offset)
+    : sourceTimeMapForTimelineDuration(sourceTimeMap, offset)
+  const rightSourceTimeMap = textSource || stillSource
+    ? defaultSourceTimeMap(
+        0,
+        stillSource ? 1 : tl.durationFrames - offset,
+      )
+    : sourceTimeMapAtOffset(sourceTimeMap, offset)
   const rightAnimation = shiftClipAnimation(clipAnimation(clip), -offset)
   if (!rightAnimation) return reject(doc, op, 'split would exceed keyframe frame bounds')
   const left: Clip = withClampedAudioFades({
@@ -868,10 +941,8 @@ export function splitClipAtFrame(
       ? { startFrame: 0, durationFrames: 1 }
       : textSource
         ? { startFrame: 0, durationFrames: offset }
-      : {
-          startFrame: clip.sourceRange.startFrame,
-          durationFrames: offset,
-        },
+        : sourceRangeForMap(leftSourceTimeMap, offset),
+    sourceTimeMap: leftSourceTimeMap,
     timelineRange: { startFrame: tl.startFrame, durationFrames: offset },
   })
   const right: Clip = withClampedAudioFades({
@@ -881,10 +952,8 @@ export function splitClipAtFrame(
       ? { startFrame: 0, durationFrames: 1 }
       : textSource
         ? { startFrame: 0, durationFrames: tl.durationFrames - offset }
-      : {
-          startFrame: clip.sourceRange.startFrame + offset,
-          durationFrames: tl.durationFrames - offset,
-        },
+        : sourceRangeForMap(rightSourceTimeMap, tl.durationFrames - offset),
+    sourceTimeMap: rightSourceTimeMap,
     timelineRange: { startFrame: frame, durationFrames: tl.durationFrames - offset },
     animation: rightAnimation,
     effects: clip.effects.map((e) => ({
@@ -940,42 +1009,47 @@ export function trimClip(
   const src = clip.sourceRange
   const stillSource = clip.sourceMode === 'still'
   const textSource = clip.text !== undefined
+  const sourceTimeMap = clipSourceTimeMap(clip)
 
   let newTl: TimeRange
   let newSrc: TimeRange
+  let newSourceTimeMap = cloneSourceTimeMap(sourceTimeMap)
   if (edge === 'start') {
     newTl = {
       startFrame: tl.startFrame + deltaFrames,
       durationFrames: tl.durationFrames - deltaFrames,
     }
+    if (newTl.durationFrames < 1) {
+      return reject(doc, op, 'clip duration cannot shrink below 1 frame')
+    }
+    newSourceTimeMap = stillSource || textSource
+      ? defaultSourceTimeMap(0, stillSource ? 1 : newTl.durationFrames)
+      : sourceTimeMapAtOffset(sourceTimeMap, deltaFrames)
+    if (!stillSource && !textSource && newSourceTimeMap.sourceStartTicks < 0) {
+      return reject(doc, op, 'no source material before the asset start')
+    }
     newSrc = stillSource
       ? src
       : textSource
         ? { startFrame: 0, durationFrames: newTl.durationFrames }
-      : {
-          startFrame: src.startFrame + deltaFrames,
-          durationFrames: src.durationFrames - deltaFrames,
-        }
+        : sourceRangeForMap(newSourceTimeMap, newTl.durationFrames)
   } else {
     newTl = { startFrame: tl.startFrame, durationFrames: tl.durationFrames + deltaFrames }
+    if (newTl.durationFrames < 1) {
+      return reject(doc, op, 'clip duration cannot shrink below 1 frame')
+    }
+    newSourceTimeMap = stillSource || textSource
+      ? defaultSourceTimeMap(0, stillSource ? 1 : newTl.durationFrames)
+      : sourceTimeMapForTimelineDuration(sourceTimeMap, newTl.durationFrames)
     newSrc = stillSource
       ? src
       : textSource
         ? { startFrame: 0, durationFrames: newTl.durationFrames }
-      : {
-          startFrame: src.startFrame,
-          durationFrames: src.durationFrames + deltaFrames,
-        }
+        : sourceRangeForMap(newSourceTimeMap, newTl.durationFrames)
   }
 
-  if (newTl.durationFrames < 1) {
-    return reject(doc, op, 'clip duration cannot shrink below 1 frame')
-  }
   if (newTl.startFrame < 0) {
     return reject(doc, op, 'clip cannot start before timeline frame 0')
-  }
-  if (!stillSource && !textSource && newSrc.startFrame < 0) {
-    return reject(doc, op, 'no source material before the asset start')
   }
   if (overlapsAny(loc.track.clips, newTl, clipId)) {
     return reject(doc, op, 'trim would overlap a neighboring clip')
@@ -991,9 +1065,87 @@ export function trimClip(
     ...clip,
     timelineRange: newTl,
     sourceRange: newSrc,
+    sourceTimeMap: newSourceTimeMap,
     animation: nextAnimation,
   })
   clips.sort(byStart)
+  const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
+  return withTrack(doc, loc.trackIndex, nextTrack)
+}
+
+/**
+ * Change one timed media clip to a bounded constant rational rate. The source
+ * origin stays fixed, the new timeline duration is the greatest whole-frame
+ * duration that does not read beyond the current exact mapped source span,
+ * and keyframes are re-indexed by source time. Text/still clips deliberately
+ * reject: they have no time-varying decoded source to retime.
+ */
+export function retimeClip(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  rate: SourceTimeRate,
+): TimelineDoc {
+  const op = 'retimeClip'
+  const rateError = sourceTimeRateValidationError(rate)
+  if (rateError) return reject(doc, op, rateError)
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+  if (loc.clip.sourceMode === 'still' || loc.clip.text !== undefined) {
+    return reject(doc, op, 'only timed media clips can be retimed')
+  }
+
+  const oldMap = clipSourceTimeMap(loc.clip)
+  if (
+    oldMap.rate.numerator === rate.numerator
+    && oldMap.rate.denominator === rate.denominator
+  ) return doc
+
+  const spanTicks = sourceSpanTicks(oldMap)
+  const newDurationFrames = timelineFramesWithinSourceTicks(spanTicks, rate)
+  if (newDurationFrames < 1) {
+    return reject(doc, op, 'retimed clip would be shorter than one timeline frame')
+  }
+  const startFrame = loc.clip.timelineRange.startFrame
+  const endFrame = startFrame + newDurationFrames
+  if (
+    !Number.isSafeInteger(startFrame)
+    || startFrame < 0
+    || !Number.isSafeInteger(endFrame)
+    || endFrame <= startFrame
+  ) {
+    return reject(doc, op, 'retimed timeline range must stay within safe integer frames')
+  }
+  const newTimelineRange = {
+    startFrame,
+    durationFrames: newDurationFrames,
+  }
+  if (overlapsAny(loc.track.clips, newTimelineRange, clipId)) {
+    return reject(doc, op, 'retime would overlap a neighboring clip')
+  }
+
+  const newMap = {
+    sourceStartTicks: oldMap.sourceStartTicks,
+    sourceDurationTicks: oldMap.sourceDurationTicks,
+    rate: { ...rate },
+  }
+  const animation = retimeClipAnimation(
+    clipAnimation(loc.clip),
+    oldMap,
+    newMap,
+    newDurationFrames,
+  )
+  if (!animation) {
+    return reject(doc, op, 'retime would collapse or exceed keyframe frame bounds')
+  }
+  const clips = loc.track.clips.slice()
+  clips[loc.clipIndex] = withClampedAudioFades({
+    ...loc.clip,
+    timelineRange: newTimelineRange,
+    sourceRange: sourceRangeForMap(newMap, newDurationFrames),
+    sourceTimeMap: newMap,
+    animation,
+  })
   const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
   return withTrack(doc, loc.trackIndex, nextTrack)
 }
@@ -1119,23 +1271,66 @@ export function slipClip(
   if (loc.clip.sourceMode === 'still' || loc.clip.text !== undefined) return doc
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
 
-  const src = loc.clip.sourceRange
-  const newSrcStart = src.startFrame + deltaFrames
-  if (newSrcStart < 0) {
+  // Historical pure fixtures can still omit the schema-11 map. Preserve the
+  // exact old 1x safe-integer repair path until they cross persistence.
+  if (loc.clip.sourceTimeMap === undefined) {
+    const sourceRange = loc.clip.sourceRange
+    const startFrame = sourceRange.startFrame + deltaFrames
+    const endFrame = startFrame + sourceRange.durationFrames - 1
+    if (startFrame < 0) {
+      return reject(doc, op, 'no source material before the asset start')
+    }
+    if (!Number.isSafeInteger(startFrame) || !Number.isSafeInteger(endFrame)) {
+      return reject(doc, op, 'source range must stay within safe integer frames')
+    }
+    const clips = loc.track.clips.slice()
+    clips[loc.clipIndex] = {
+      ...loc.clip,
+      sourceRange: { startFrame, durationFrames: sourceRange.durationFrames },
+    }
+    return withTrack(
+      doc,
+      loc.trackIndex,
+      reconcileTransitions(loc.track, { ...loc.track, clips }),
+    )
+  }
+
+  let sourceTimeMap: SourceTimeMap
+  try {
+    sourceTimeMap = clipSourceTimeMap(loc.clip)
+  } catch {
+    return reject(doc, op, 'source range must stay within safe integer frames')
+  }
+  const sourceStartTicks = sourceTimeMap.sourceStartTicks
+    + deltaFrames * SOURCE_TIME_TICKS_PER_FRAME
+  if (!Number.isSafeInteger(sourceStartTicks) || sourceStartTicks < 0) {
     return reject(doc, op, 'no source material before the asset start')
   }
-  const newSrcEnd = newSrcStart + src.durationFrames - 1
-  if (
-    !Number.isSafeInteger(newSrcStart) ||
-    !Number.isSafeInteger(newSrcEnd)
-  ) {
+  const newSourceTimeMap = { ...sourceTimeMap, sourceStartTicks }
+  const animation = shiftClipAnimationSourceTimeIntent(
+    clipAnimation(loc.clip),
+    sourceTimeMap,
+    sourceStartTicks - sourceTimeMap.sourceStartTicks,
+  )
+  if (!animation) {
+    return reject(doc, op, 'slip would exceed keyframe source-time bounds')
+  }
+  let sourceRange: TimeRange
+  try {
+    sourceRange = sourceRangeForMap(
+      newSourceTimeMap,
+      loc.clip.timelineRange.durationFrames,
+    )
+  } catch {
     return reject(doc, op, 'source range must stay within safe integer frames')
   }
 
   const clips = loc.track.clips.slice()
   clips[loc.clipIndex] = {
     ...loc.clip,
-    sourceRange: { startFrame: newSrcStart, durationFrames: src.durationFrames },
+    sourceRange,
+    sourceTimeMap: newSourceTimeMap,
+    animation,
   }
   const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
   return withTrack(doc, loc.trackIndex, nextTrack)
@@ -1182,6 +1377,9 @@ export function slideClip(
       return reject(doc, op, 'left neighbor cannot shrink below 1 frame')
     }
     const leftIsText = left.text !== undefined
+    const leftSourceTimeMap = leftIsText || left.sourceMode === 'still'
+      ? defaultSourceTimeMap(0, left.sourceMode === 'still' ? 1 : newDur)
+      : sourceTimeMapForTimelineDuration(clipSourceTimeMap(left), newDur)
     clips[clipIndex - 1] = withClampedAudioFades({
       ...left,
       timelineRange: { ...left.timelineRange, durationFrames: newDur },
@@ -1189,21 +1387,22 @@ export function slideClip(
         ? left.sourceRange
         : leftIsText
           ? { startFrame: 0, durationFrames: newDur }
-        : { ...left.sourceRange, durationFrames: newDur },
+        : sourceRangeForMap(leftSourceTimeMap, newDur),
+      sourceTimeMap: leftSourceTimeMap,
     })
   }
   if (right && right.timelineRange.startFrame === rangeEnd(tl)) {
     // Touching right neighbor: its head follows our tail.
     const newDur = right.timelineRange.durationFrames - deltaFrames
-    const rightIsStill = right.sourceMode === 'still'
-    const rightIsText = right.text !== undefined
-    const newSrcStart = rightIsStill || rightIsText
-      ? right.sourceRange.startFrame
-      : right.sourceRange.startFrame + deltaFrames
     if (newDur < 1) {
       return reject(doc, op, 'right neighbor cannot shrink below 1 frame')
     }
-    if (!rightIsStill && !rightIsText && newSrcStart < 0) {
+    const rightIsStill = right.sourceMode === 'still'
+    const rightIsText = right.text !== undefined
+    const rightSourceTimeMap = rightIsStill || rightIsText
+      ? defaultSourceTimeMap(0, rightIsStill ? 1 : newDur)
+      : sourceTimeMapAtOffset(clipSourceTimeMap(right), deltaFrames)
+    if (!rightIsStill && !rightIsText && rightSourceTimeMap.sourceStartTicks < 0) {
       return reject(doc, op, 'right neighbor has no source material before the asset start')
     }
     const rightAnimation = shiftClipAnimation(clipAnimation(right), -deltaFrames)
@@ -1220,7 +1419,8 @@ export function slideClip(
         ? right.sourceRange
         : rightIsText
           ? { startFrame: 0, durationFrames: newDur }
-        : { startFrame: newSrcStart, durationFrames: newDur },
+        : sourceRangeForMap(rightSourceTimeMap, newDur),
+      sourceTimeMap: rightSourceTimeMap,
       animation: rightAnimation,
     })
   }
@@ -1274,18 +1474,19 @@ export function rippleTrim(
   const oldEnd = rangeEnd(tl)
   const stillSource = clip.sourceMode === 'still'
   const textSource = clip.text !== undefined
+  const sourceTimeMap = clipSourceTimeMap(clip)
 
   let newClip: Clip
   let shiftBy: number
   if (edge === 'start') {
     const newDur = tl.durationFrames - deltaFrames
-    const newSrcStart = stillSource || textSource
-      ? src.startFrame
-      : src.startFrame + deltaFrames
     if (newDur < 1) {
       return reject(doc, op, 'clip duration cannot shrink below 1 frame')
     }
-    if (!stillSource && !textSource && newSrcStart < 0) {
+    const newSourceTimeMap = stillSource || textSource
+      ? defaultSourceTimeMap(0, stillSource ? 1 : newDur)
+      : sourceTimeMapAtOffset(sourceTimeMap, deltaFrames)
+    if (!stillSource && !textSource && newSourceTimeMap.sourceStartTicks < 0) {
       return reject(doc, op, 'no source material before the asset start')
     }
     newClip = withClampedAudioFades({
@@ -1295,7 +1496,8 @@ export function rippleTrim(
         ? src
         : textSource
           ? { startFrame: 0, durationFrames: newDur }
-        : { startFrame: newSrcStart, durationFrames: newDur },
+        : sourceRangeForMap(newSourceTimeMap, newDur),
+      sourceTimeMap: newSourceTimeMap,
     })
     shiftBy = -deltaFrames
   } else {
@@ -1303,6 +1505,9 @@ export function rippleTrim(
     if (newDur < 1) {
       return reject(doc, op, 'clip duration cannot shrink below 1 frame')
     }
+    const newSourceTimeMap = stillSource || textSource
+      ? defaultSourceTimeMap(0, stillSource ? 1 : newDur)
+      : sourceTimeMapForTimelineDuration(sourceTimeMap, newDur)
     newClip = withClampedAudioFades({
       ...clip,
       timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
@@ -1310,7 +1515,8 @@ export function rippleTrim(
         ? src
         : textSource
           ? { startFrame: 0, durationFrames: newDur }
-        : { startFrame: src.startFrame, durationFrames: newDur },
+        : sourceRangeForMap(newSourceTimeMap, newDur),
+      sourceTimeMap: newSourceTimeMap,
     })
     shiftBy = deltaFrames
   }
@@ -1601,6 +1807,16 @@ export function setClipKeyframe(
   const loc = animationEditLocation(doc, clipId, op)
   if (!loc) return doc
   const current = clipAnimation(loc.clip)
+  let sourceTimeTicks: number
+  try {
+    sourceTimeTicks = sourceTicksAtTimelineOffset(
+      clipSourceTimeMap(loc.clip),
+      keyframe.frame,
+    )
+  } catch {
+    return reject(doc, op, 'keyframe source time exceeds safe integer bounds')
+  }
+  const authoredKeyframe = { ...keyframe, sourceTimeTicks }
   const existing = current.tracks
     .find((track) => track.property === property)
     ?.keyframes.find((item) => item.frame === keyframe.frame)
@@ -1608,8 +1824,9 @@ export function setClipKeyframe(
     existing
     && existing.value === keyframe.value
     && sameAnimationEasing(existing.easing, keyframe.easing)
+    && (existing.sourceTimeTicks ?? sourceTimeTicks) === sourceTimeTicks
   ) return doc
-  const animation = upsertAnimationKeyframe(current, property, keyframe)
+  const animation = upsertAnimationKeyframe(current, property, authoredKeyframe)
   if (!animation) return reject(doc, op, 'invalid or over-budget keyframe')
   return replaceClipAnimation(doc, loc, animation)
 }
@@ -1633,7 +1850,22 @@ export function moveClipKeyframe(
   )
   if (!animation) return reject(doc, op, 'source keyframe is missing or target frame is invalid')
   if (animation === clipAnimation(loc.clip)) return doc
-  return replaceClipAnimation(doc, loc, animation)
+  const moved = animation.tracks
+    .find((track) => track.property === property)
+    ?.keyframes.find((keyframe) => keyframe.frame === toFrame)
+  if (!moved) return reject(doc, op, 'moved keyframe is missing')
+  let sourceTimeTicks: number
+  try {
+    sourceTimeTicks = sourceTicksAtTimelineOffset(clipSourceTimeMap(loc.clip), toFrame)
+  } catch {
+    return reject(doc, op, 'keyframe source time exceeds safe integer bounds')
+  }
+  const withIntent = upsertAnimationKeyframe(animation, property, {
+    ...moved,
+    sourceTimeTicks,
+  })
+  if (!withIntent) return reject(doc, op, 'moved keyframe source time is invalid')
+  return replaceClipAnimation(doc, loc, withIntent)
 }
 
 export function removeClipKeyframe(
@@ -1781,6 +2013,10 @@ export function updateClipVisualAtFrame(
       ?.keyframes.find((keyframe) => keyframe.frame === localFrame)
     const next = upsertAnimationKeyframe(animation, property, {
       frame: localFrame,
+      sourceTimeTicks: sourceTicksAtTimelineOffset(
+        clipSourceTimeMap(workingLoc.clip),
+        localFrame,
+      ),
       value,
       easing: existing?.easing ?? LINEAR_ANIMATION_EASING,
     })

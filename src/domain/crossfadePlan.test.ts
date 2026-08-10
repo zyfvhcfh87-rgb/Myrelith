@@ -95,7 +95,7 @@ function track(
 
 function doc(tracks: Track[], rate: FrameRate = F30): TimelineDoc {
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'crossfade-plan-doc',
     name: 'Crossfade plan',
     frameRate: rate,
@@ -210,6 +210,43 @@ describe('canonical crossfade planner', () => {
     const group = crossfadeFrameGroupAt(resolved.plan, start)
     expect(group?.requests.map((request) => request.sourceFrame)).toEqual(source)
     expect(group?.requests.map((request) => request.weight)).toEqual(weights)
+  })
+
+  test('maps retimed transition handles through the same rational source clock', () => {
+    const from = {
+      ...clip('from', 'from-asset', 10, 10, 100),
+      sourceRange: { startFrame: 100, durationFrames: 20 },
+      sourceTimeMap: {
+        sourceStartTicks: 100_000_000,
+        sourceDurationTicks: 20_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    }
+    const to = {
+      ...clip('to', 'to-asset', 20, 10, 120),
+      sourceRange: { startFrame: 120, durationFrames: 20 },
+      sourceTimeMap: {
+        sourceStartTicks: 120_000_000,
+        sourceDurationTicks: 20_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      },
+    }
+    const dissolve = transition('retimed-dissolve', from.id, to.id, 4, false)
+    const project = doc([track('V1', 'video', [from, to], [dissolve])])
+    const bounds = catalog([
+      ['from-asset', exact([0, 10_000_000])],
+      ['to-asset', exact([0, 10_000_000])],
+    ])
+
+    const resolved = resolveCrossfadePlan(project, 'V1', dissolve.id, bounds)
+    expect(resolved.status).toBe('available')
+    if (resolved.status !== 'available') return
+    expect(crossfadeFrameGroupAt(resolved.plan, 18)?.requests.map(
+      (request) => request.sourceFrame,
+    )).toEqual([116, 116])
+    expect(crossfadeFrameGroupAt(resolved.plan, 21)?.requests.map(
+      (request) => request.sourceFrame,
+    )).toEqual([122, 122])
   })
 
   test('reports the exact maximum when real pre/post handles are insufficient', () => {

@@ -31,6 +31,7 @@ import type {
   Effect,
   EffectId,
   EffectParamValue,
+  SourceTimeRate,
   TimelineDoc,
   TimelineMarker,
   TimelineMarkerId,
@@ -100,6 +101,7 @@ import {
   linkedMoveClip,
   linkedRippleDelete,
   linkedRippleTrim,
+  linkedRetimeClip,
   linkedSlideClip,
   linkedSlipClip,
   linkedSplitClipAtFrame,
@@ -166,6 +168,8 @@ export interface DocumentState {
    * entry); see domain/linking.
    */
   rippleTrim: (clipId: ClipId, edge: TrimEdge, deltaFrames: number) => void
+  /** Change constant speed for a timed clip and every linked partner. */
+  retimeClip: (clipId: ClipId, rate: SourceTimeRate) => void
   /**
    * Shift a clip's source material without moving it (Phase 4.2 slip tool).
    * Linked partners follow (one entry); see domain/linking.
@@ -440,6 +444,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   rippleTrim: (clipId, edge, deltaFrames) =>
     set((state) => commit(state, linkedRippleTrim(state.doc, clipId, edge, deltaFrames))),
+
+  retimeClip: (clipId, rate) =>
+    set((state) => commit(state, linkedRetimeClip(state.doc, clipId, rate))),
 
   slipClip: (clipId, deltaFrames) =>
     set((state) => commit(state, linkedSlipClip(state.doc, clipId, deltaFrames))),

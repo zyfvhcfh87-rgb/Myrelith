@@ -14,6 +14,7 @@ import {
   linkClips,
   linkedMoveClip,
   linkedPartners,
+  linkedRetimeClip,
   linkedRippleDelete,
   linkedRippleTrim,
   linkedSlideClip,
@@ -32,6 +33,7 @@ import {
   trimClip,
 } from './operations'
 import type { Clip, MediaAsset, TimelineDoc, Track } from './schema'
+import { sourceTimeRateFromPercent } from './sourceTimeMap'
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                             */
@@ -97,7 +99,7 @@ const PAIR4 = 'link_pair4'
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -146,7 +148,7 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'doc-transition-linked',
     name: 'Linked transition test doc',
     frameRate: { num: 30, den: 1 },
@@ -159,6 +161,71 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
     ],
   })
 }
+
+describe('linked constant-speed retiming', () => {
+  test('synchronizes a mixed-rate pair while accepting an idempotent member', () => {
+    const doc = makeDoc()
+    const mixed = deepFreeze({
+      ...doc,
+      tracks: doc.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => clip.id === 'vClip'
+          ? {
+              ...clip,
+              timelineRange: { ...clip.timelineRange, durationFrames: 50 },
+              sourceTimeMap: {
+                sourceStartTicks: 10_000_000,
+                sourceDurationTicks: 100_000_000,
+                rate: sourceTimeRateFromPercent(200),
+              },
+            }
+          : clip),
+      })),
+    })
+
+    const retimed = linkedRetimeClip(
+      mixed,
+      'vClip',
+      sourceTimeRateFromPercent(200),
+    )
+
+    expect(retimed).not.toBe(mixed)
+    expect(retimed.tracks.flatMap((track) => track.clips)
+      .filter((clip) => clip.linkGroupId === PAIR1)
+      .map((clip) => clip.sourceTimeMap?.rate ?? { numerator: 1, denominator: 1 }))
+      .toEqual([
+        { numerator: 2, denominator: 1 },
+        { numerator: 2, denominator: 1 },
+      ])
+  })
+
+  test('rolls back a mixed-rate pair when a non-idempotent member rejects', () => {
+    const doc = makeDoc()
+    const mixed = deepFreeze({
+      ...doc,
+      tracks: doc.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => clip.id === 'vClip2'
+          ? {
+              ...clip,
+              timelineRange: { ...clip.timelineRange, durationFrames: 30 },
+              sourceTimeMap: {
+                sourceStartTicks: 0,
+                sourceDurationTicks: 60_000_000,
+                rate: sourceTimeRateFromPercent(200),
+              },
+            }
+          : clip),
+      })),
+    })
+
+    expect(linkedRetimeClip(
+      mixed,
+      'vClip2',
+      sourceTimeRateFromPercent(200),
+    )).toBe(mixed)
+  })
+})
 
 interface ManualLinkDocOptions {
   videoLocked?: boolean
@@ -216,7 +283,7 @@ function makeManualLinkDoc(options: ManualLinkDocOptions = {}): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: 'doc-manual-link',
     name: 'Manual link test doc',
     frameRate: { num: 30, den: 1 },
