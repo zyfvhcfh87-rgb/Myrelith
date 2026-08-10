@@ -14,6 +14,39 @@ export default function ClipVisualLayer({
   if (!visual) return null
 
   if (visual.kind === 'waveform') {
+    if (visual.segments && visual.widthPx !== undefined) {
+      return (
+        <svg
+          className="clip-visual clip-waveform"
+          data-testid={`clip-${clipId}-visual`}
+          aria-hidden="true"
+          focusable="false"
+          preserveAspectRatio="none"
+          viewBox={`0 0 ${Math.max(1, visual.widthPx)} 1`}
+        >
+          {visual.segments.map((segment) => (
+            <svg
+              key={segment.index}
+              x={segment.leftPx}
+              y="0"
+              width={segment.widthPx}
+              height="1"
+              preserveAspectRatio="none"
+              viewBox={segment.viewBox}
+            >
+              <image
+                href={visual.source.url}
+                x="0"
+                y="0"
+                width="1"
+                height="1"
+                preserveAspectRatio="none"
+              />
+            </svg>
+          ))}
+        </svg>
+      )
+    }
     return (
       <svg
         className="clip-visual clip-waveform"
@@ -21,7 +54,7 @@ export default function ClipVisualLayer({
         aria-hidden="true"
         focusable="false"
         preserveAspectRatio="none"
-        viewBox={visual.viewBox}
+        viewBox={visual.viewBox ?? '0 0 1 1'}
       >
         <image
           href={visual.source.url}

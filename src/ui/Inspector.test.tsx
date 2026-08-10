@@ -14,6 +14,7 @@ import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
+import { sourceTimeSpeedPointsAtClip } from '../domain/sourceTimeMap'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
@@ -48,7 +49,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -148,14 +149,54 @@ describe('Inspector', () => {
       sourceStartTicks: 0,
       sourceDurationTicks: 100_000_000,
       rate: { numerator: 2, denominator: 1 },
+      speedCurve: { originFrame: 0, points: [] },
     })
     expect(screen.getByText('Timeline 50 frames · source 100 frames.')).toBeInTheDocument()
-    expect(screen.getByText(/Audio is muted at this speed in preview and export/)).toBeInTheDocument()
+    expect(screen.getByText(/Audio is muted for this timing map in preview and export/)).toBeInTheDocument()
     expect(doc().past).toHaveLength(1)
 
     act(() => doc().undo())
     expect(speed).toHaveValue('100')
     expect(clipA().timelineRange.durationFrames).toBe(100)
+  })
+
+  test('authors an accessible bounded ramp and freeze with exact undo', async () => {
+    const user = userEvent.setup()
+    act(() => {
+      transport().setSelectedClip('clipA')
+      transport().setPlayheadFrame(40)
+    })
+    render(<Inspector />)
+
+    await user.click(screen.getByRole('button', { name: 'Add point at playhead' }))
+    expect(screen.getByRole('img', { name: 'Speed ramp with 2 points' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Frame 40: 100%' }))
+      .toHaveAttribute('aria-pressed', 'true')
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Point speed' }), '200')
+    expect(clipA().timelineRange.durationFrames).toBe(60)
+    expect(screen.getByText(/pitch-safe time-stretch is not available/)).toBeInTheDocument()
+
+    act(() => transport().setPlayheadFrame(20))
+    await user.click(screen.getByRole('button', { name: 'Add point at playhead' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Point speed' }), '0')
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Outgoing speed easing' }),
+      'hold',
+    )
+
+    expect(sourceTimeSpeedPointsAtClip(clipA().sourceTimeMap!)).toEqual([
+      { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'linear' },
+      { frame: 20, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+      { frame: 40, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
+    ])
+    const rampedJson = JSON.stringify(doc().doc)
+
+    await user.click(screen.getByRole('button', { name: 'Clear ramp' }))
+    expect(clipA().sourceTimeMap?.speedCurve).toEqual({ originFrame: 0, points: [] })
+    act(() => doc().undo())
+    expect(JSON.stringify(doc().doc)).toBe(rampedJson)
   })
 
   test('explains rejected speed changes and updates linked clips atomically', async () => {

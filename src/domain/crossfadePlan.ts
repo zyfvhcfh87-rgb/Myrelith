@@ -33,7 +33,7 @@ import {
   sourceTicksAtTimelineOffset,
   sourceTimeAudioPolicy,
   sourceTimeMapValidationError,
-  timelineFramesWithinSourceTicks,
+  timelineFramesWithinMappedSourceTicks,
   SOURCE_TIME_TICKS_PER_FRAME,
 } from './sourceTimeMap'
 
@@ -323,9 +323,10 @@ function sourceCapacities(
       rate,
     )
     const map = clipSourceTimeMap(clip)
+    const cutOffset = role === 'from' ? clip.timelineRange.durationFrames : 0
     const sourceTicksAtCut = sourceTicksAtTimelineOffset(
       map,
-      role === 'from' ? clip.timelineRange.durationFrames : 0,
+      cutOffset,
     )
     const firstTicks = firstFrame * SOURCE_TIME_TICKS_PER_FRAME
     const endTicks = endFrame * SOURCE_TIME_TICKS_PER_FRAME
@@ -341,13 +342,17 @@ function sourceCapacities(
     return {
       status: 'available',
       capacities: {
-        left: timelineFramesWithinSourceTicks(
+        left: timelineFramesWithinMappedSourceTicks(
+          map,
+          cutOffset,
           sourceTicksAtCut - firstTicks,
-          map.rate,
+          -1,
         ),
-        right: timelineFramesWithinSourceTicks(
+        right: timelineFramesWithinMappedSourceTicks(
+          map,
+          cutOffset,
           endTicks - sourceTicksAtCut,
-          map.rate,
+          1,
         ),
       },
     }

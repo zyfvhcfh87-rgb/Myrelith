@@ -13,7 +13,7 @@ import { findClip } from '../../domain/selectors'
 import {
   clipSourceTimeMap,
   sourceTicksAtTimelineOffset,
-  timelineFramesWithinSourceTicks,
+  timelineFramesWithinMappedSourceTicks,
   SOURCE_TIME_TICKS_PER_FRAME,
 } from '../../domain/sourceTimeMap'
 import type { EditPreviewKind } from '../../state/transportStore'
@@ -43,21 +43,25 @@ export function gestureBoundsForClip(
   )
   const sourceHeadroomFrames = stillSource || textSource
     ? Number.POSITIVE_INFINITY
-    : timelineFramesWithinSourceTicks(
+    : timelineFramesWithinMappedSourceTicks(
+        sourceTimeMap,
+        0,
         Math.max(0, sourceTimeMap.sourceStartTicks),
-        sourceTimeMap.rate,
+        -1,
       )
   // Text clips have no media descriptor and intentionally remain extendable.
   // A still repeats its single source frame for any legal timeline duration.
   // Unknown timed sources fail closed at their current source end.
   const headroom = textSource || stillSource
     ? Number.POSITIVE_INFINITY
-    : timelineFramesWithinSourceTicks(
+    : timelineFramesWithinMappedSourceTicks(
+        sourceTimeMap,
+        timeline.durationFrames,
         Math.max(
           0,
           assetDurationFrames * SOURCE_TIME_TICKS_PER_FRAME - sourceEndTicks,
         ),
-        sourceTimeMap.rate,
+        1,
       )
 
   switch (mode) {

@@ -35,6 +35,7 @@ import type {
   MediaAsset,
   SourceTimeRate,
   SourceTimeMap,
+  SourceTimeSpeedEasing,
   TimeRange,
   TimelineDoc,
   Track,
@@ -106,13 +107,16 @@ import {
   retimeClipAnimation,
   shiftClipAnimationSourceTimeIntent,
   sourceRangeForMap,
-  sourceSpanTicks,
   sourceTicksAtTimelineOffset,
   sourceTimeMapAtOffset,
   sourceTimeMapForTimelineDuration,
+  sourceTimeMapUsesSpeedCurve,
   sourceTimeMapValidationError,
+  sourceTimeMapWithSpeedPoint,
+  sourceTimeMapWithoutSpeedCurve,
+  sourceTimeMapWithoutSpeedPoint,
   sourceTimeRateValidationError,
-  timelineFramesWithinSourceTicks,
+  timelineFramesWithinSourceMap,
   SOURCE_TIME_TICKS_PER_FRAME,
 } from './sourceTimeMap'
 
@@ -1073,38 +1077,40 @@ export function trimClip(
   return withTrack(doc, loc.trackIndex, nextTrack)
 }
 
-/**
- * Change one timed media clip to a bounded constant rational rate. The source
- * origin stays fixed, the new timeline duration is the greatest whole-frame
- * duration that does not read beyond the current exact mapped source span,
- * and keyframes are re-indexed by source time. Text/still clips deliberately
- * reject: they have no time-varying decoded source to retime.
- */
-export function retimeClip(
-  doc: TimelineDoc,
-  clipId: ClipId,
-  rate: SourceTimeRate,
-): TimelineDoc {
-  const op = 'retimeClip'
-  const rateError = sourceTimeRateValidationError(rate)
-  if (rateError) return reject(doc, op, rateError)
-  const loc = locateClip(doc, clipId)
-  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
-  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
-  if (loc.clip.sourceMode === 'still' || loc.clip.text !== undefined) {
-    return reject(doc, op, 'only timed media clips can be retimed')
-  }
-
-  const oldMap = clipSourceTimeMap(loc.clip)
+function sameSourceTimeMap(left: SourceTimeMap, right: SourceTimeMap): boolean {
+  const leftCurve = left.speedCurve
+  const rightCurve = right.speedCurve
   if (
-    oldMap.rate.numerator === rate.numerator
-    && oldMap.rate.denominator === rate.denominator
-  ) return doc
+    left.sourceStartTicks !== right.sourceStartTicks
+    || left.sourceDurationTicks !== right.sourceDurationTicks
+    || left.rate.numerator !== right.rate.numerator
+    || left.rate.denominator !== right.rate.denominator
+    || (leftCurve?.originFrame ?? 0) !== (rightCurve?.originFrame ?? 0)
+    || (leftCurve?.points.length ?? 0) !== (rightCurve?.points.length ?? 0)
+  ) return false
+  const leftPoints = leftCurve?.points ?? []
+  const rightPoints = rightCurve?.points ?? []
+  return leftPoints.every((point, index) => {
+    const other = rightPoints[index]
+    return other !== undefined
+      && point.frame === other.frame
+      && point.rate.numerator === other.rate.numerator
+      && point.rate.denominator === other.rate.denominator
+      && point.easing === other.easing
+  })
+}
 
-  const spanTicks = sourceSpanTicks(oldMap)
-  const newDurationFrames = timelineFramesWithinSourceTicks(spanTicks, rate)
-  if (newDurationFrames < 1) {
-    return reject(doc, op, 'retimed clip would be shorter than one timeline frame')
+function replaceTimedClipSourceTimeMap(
+  doc: TimelineDoc,
+  loc: ClipLocation,
+  newMap: SourceTimeMap,
+  op: string,
+): TimelineDoc {
+  const mapError = sourceTimeMapValidationError(newMap)
+  if (mapError) return reject(doc, op, mapError)
+  const newDurationFrames = timelineFramesWithinSourceMap(newMap)
+  if (!Number.isFinite(newDurationFrames) || newDurationFrames < 1) {
+    return reject(doc, op, 'retimed clip must have a finite duration of at least one frame')
   }
   const startFrame = loc.clip.timelineRange.startFrame
   const endFrame = startFrame + newDurationFrames
@@ -1116,19 +1122,11 @@ export function retimeClip(
   ) {
     return reject(doc, op, 'retimed timeline range must stay within safe integer frames')
   }
-  const newTimelineRange = {
-    startFrame,
-    durationFrames: newDurationFrames,
-  }
-  if (overlapsAny(loc.track.clips, newTimelineRange, clipId)) {
+  const newTimelineRange = { startFrame, durationFrames: newDurationFrames }
+  if (overlapsAny(loc.track.clips, newTimelineRange, loc.clip.id)) {
     return reject(doc, op, 'retime would overlap a neighboring clip')
   }
-
-  const newMap = {
-    sourceStartTicks: oldMap.sourceStartTicks,
-    sourceDurationTicks: oldMap.sourceDurationTicks,
-    rate: { ...rate },
-  }
+  const oldMap = clipSourceTimeMap(loc.clip)
   const animation = retimeClipAnimation(
     clipAnimation(loc.clip),
     oldMap,
@@ -1143,11 +1141,122 @@ export function retimeClip(
     ...loc.clip,
     timelineRange: newTimelineRange,
     sourceRange: sourceRangeForMap(newMap, newDurationFrames),
-    sourceTimeMap: newMap,
+    sourceTimeMap: cloneSourceTimeMap(newMap),
     animation,
   })
   const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
   return withTrack(doc, loc.trackIndex, nextTrack)
+}
+
+function speedEditLocation(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  op: string,
+): ClipLocation | null {
+  const loc = locateClip(doc, clipId)
+  if (!loc) {
+    reject(doc, op, `clip ${clipId} not found`)
+    return null
+  }
+  if (loc.track.locked) {
+    reject(doc, op, `track ${loc.track.id} is locked`)
+    return null
+  }
+  if (loc.clip.sourceMode === 'still' || loc.clip.text !== undefined) {
+    reject(doc, op, 'only timed media clips can be retimed')
+    return null
+  }
+  return loc
+}
+
+/** Replace any ramp with one bounded constant rational speed. */
+export function retimeClip(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  rate: SourceTimeRate,
+): TimelineDoc {
+  const op = 'retimeClip'
+  const rateError = sourceTimeRateValidationError(rate)
+  if (rateError) return reject(doc, op, rateError)
+  const loc = speedEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  const oldMap = clipSourceTimeMap(loc.clip)
+  if (
+    !sourceTimeMapUsesSpeedCurve(oldMap)
+    && oldMap.rate.numerator === rate.numerator
+    && oldMap.rate.denominator === rate.denominator
+  ) return doc
+  const newMap = sourceTimeMapWithoutSpeedCurve(oldMap)
+  newMap.rate = { ...rate }
+  return replaceTimedClipSourceTimeMap(doc, loc, newMap, op)
+}
+
+/** Add or replace one clip-local speed handle; duplicate time is replace. */
+export function setClipSpeedPoint(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  frame: number,
+  rate: SourceTimeRate,
+  easing: SourceTimeSpeedEasing,
+): TimelineDoc {
+  const op = 'setClipSpeedPoint'
+  const loc = speedEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  if (
+    !Number.isSafeInteger(frame)
+    || frame < 0
+    || frame >= loc.clip.timelineRange.durationFrames
+  ) return reject(doc, op, 'speed point must be inside the clip timeline bounds')
+  let newMap: SourceTimeMap
+  try {
+    newMap = sourceTimeMapWithSpeedPoint(
+      clipSourceTimeMap(loc.clip),
+      frame,
+      rate,
+      easing,
+    )
+  } catch (error) {
+    return reject(doc, op, error instanceof Error ? error.message : 'invalid speed point')
+  }
+  if (sameSourceTimeMap(clipSourceTimeMap(loc.clip), newMap)) return doc
+  return replaceTimedClipSourceTimeMap(doc, loc, newMap, op)
+}
+
+export function removeClipSpeedPoint(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  frame: number,
+): TimelineDoc {
+  const op = 'removeClipSpeedPoint'
+  const loc = speedEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  let newMap: SourceTimeMap
+  try {
+    newMap = sourceTimeMapWithoutSpeedPoint(clipSourceTimeMap(loc.clip), frame)
+  } catch (error) {
+    return reject(doc, op, error instanceof Error ? error.message : 'invalid speed point')
+  }
+  if (sameSourceTimeMap(clipSourceTimeMap(loc.clip), newMap)) {
+    return reject(doc, op, `speed point at frame ${frame} not found`)
+  }
+  return replaceTimedClipSourceTimeMap(doc, loc, newMap, op)
+}
+
+export function clearClipSpeedRamp(
+  doc: TimelineDoc,
+  clipId: ClipId,
+): TimelineDoc {
+  const op = 'clearClipSpeedRamp'
+  const loc = speedEditLocation(doc, clipId, op)
+  if (!loc) return doc
+  const oldMap = clipSourceTimeMap(loc.clip)
+  if (!sourceTimeMapUsesSpeedCurve(oldMap)) return doc
+  return replaceTimedClipSourceTimeMap(
+    doc,
+    loc,
+    sourceTimeMapWithoutSpeedCurve(oldMap),
+    op,
+  )
 }
 
 /**

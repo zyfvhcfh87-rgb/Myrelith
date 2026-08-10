@@ -21,6 +21,7 @@ import {
   MAX_CLIP_VOLUME,
   moveClip,
   removeEffect,
+  removeClipSpeedPoint,
   removeTrack,
   removeTransition,
   renameTrack,
@@ -29,6 +30,8 @@ import {
   rippleDelete,
   rippleTrim,
   retimeClip,
+  clearClipSpeedRamp,
+  setClipSpeedPoint,
   setClipVolume,
   setEffectEnabled,
   setCrossfadeDuration,
@@ -50,6 +53,7 @@ import {
   defaultSourceTimeMap,
   sourceFrameAtTimelineFrame,
   sourceTimeRateFromPercent,
+  sourceTimeSpeedRateFromPercent,
 } from './sourceTimeMap'
 
 /* ------------------------------------------------------------------ */
@@ -99,7 +103,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -134,7 +138,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -350,6 +354,85 @@ describe('constant-speed retiming', () => {
 
     expect(retimeClip(isolated, 'clipA', sourceTimeRateFromPercent(200)))
       .toBe(isolated)
+  })
+})
+
+describe('piecewise speed ramps', () => {
+  test('adds, replaces, freezes, splits, removes, and clears points deterministically', () => {
+    const base = makeDoc()
+    const isolated = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => track.id === 'V1'
+        ? {
+            ...track,
+            clips: track.clips.filter((clip) => clip.id === 'clipA').map((clip) => ({
+              ...clip,
+              sourceRange: { startFrame: 0, durationFrames: 100 },
+              sourceTimeMap: defaultSourceTimeMap(0, 100),
+            })),
+          }
+        : track),
+    })
+
+    const withTail = setClipSpeedPoint(
+      isolated,
+      'clipA',
+      20,
+      sourceTimeSpeedRateFromPercent(200),
+      'linear',
+    )
+    const frozen = setClipSpeedPoint(
+      withTail,
+      'clipA',
+      0,
+      sourceTimeSpeedRateFromPercent(0),
+      'hold',
+    )
+    const ramped = clipIn(frozen, 'V1', 'clipA')
+    expect(ramped.timelineRange.durationFrames).toBe(70)
+    expect(ramped.sourceTimeMap?.speedCurve?.points).toEqual([
+      { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+      { frame: 20, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
+    ])
+    expect(sourceFrameAtTimelineFrame(ramped, 19)).toBe(0)
+    expect(sourceFrameAtTimelineFrame(ramped, 21)).toBe(2)
+
+    const split = splitClipAtFrame(frozen, 'clipA', 10)
+    const [left, right] = clipsOf(split, 'V1')
+    expect(left.sourceRange).toEqual({ startFrame: 0, durationFrames: 1 })
+    expect(right.sourceTimeMap?.speedCurve?.originFrame).toBe(10)
+    expect(sourceFrameAtTimelineFrame(right, 20)).toBe(0)
+    expect(sourceFrameAtTimelineFrame(right, 21)).toBe(2)
+
+    const replaced = setClipSpeedPoint(
+      frozen,
+      'clipA',
+      20,
+      sourceTimeSpeedRateFromPercent(100),
+      'smooth',
+    )
+    expect(clipIn(replaced, 'V1', 'clipA').sourceTimeMap?.speedCurve?.points)
+      .toHaveLength(2)
+    expect(clipIn(replaced, 'V1', 'clipA').sourceTimeMap?.speedCurve?.points[1])
+      .toMatchObject({ frame: 20, easing: 'smooth', rate: { numerator: 1, denominator: 1 } })
+
+    const removed = removeClipSpeedPoint(frozen, 'clipA', 0)
+    expect(clipIn(removed, 'V1', 'clipA').timelineRange.durationFrames).toBe(50)
+    const cleared = clearClipSpeedRamp(frozen, 'clipA')
+    expect(clipIn(cleared, 'V1', 'clipA').timelineRange.durationFrames).toBe(100)
+    expect(clipIn(cleared, 'V1', 'clipA').sourceTimeMap?.speedCurve)
+      .toEqual({ originFrame: 0, points: [] })
+  })
+
+  test('rejects an unbounded terminal freeze and preserves the input by reference', () => {
+    const doc = makeDoc()
+    expect(setClipSpeedPoint(
+      doc,
+      'clipA',
+      0,
+      sourceTimeSpeedRateFromPercent(0),
+      'hold',
+    )).toBe(doc)
   })
 })
 
@@ -1226,7 +1309,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },

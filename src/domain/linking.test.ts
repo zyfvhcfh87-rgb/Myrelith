@@ -14,12 +14,15 @@ import {
   linkClips,
   linkedMoveClip,
   linkedPartners,
+  linkedClearClipSpeedRamp,
+  linkedRemoveClipSpeedPoint,
   linkedRetimeClip,
   linkedRippleDelete,
   linkedRippleTrim,
   linkedSlideClip,
   linkedSlipClip,
   linkedSplitClipAtFrame,
+  linkedSetClipSpeedPoint,
   linkedTrimClip,
   unlinkClip,
 } from './linking'
@@ -33,7 +36,11 @@ import {
   trimClip,
 } from './operations'
 import type { Clip, MediaAsset, TimelineDoc, Track } from './schema'
-import { sourceTimeRateFromPercent } from './sourceTimeMap'
+import {
+  sourceTimeMapUsesSpeedCurve,
+  sourceTimeRateFromPercent,
+  sourceTimeSpeedPointsAtClip,
+} from './sourceTimeMap'
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                             */
@@ -99,7 +106,7 @@ const PAIR4 = 'link_pair4'
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -148,7 +155,7 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-transition-linked',
     name: 'Linked transition test doc',
     frameRate: { num: 30, den: 1 },
@@ -225,6 +232,93 @@ describe('linked constant-speed retiming', () => {
       sourceTimeRateFromPercent(200),
     )).toBe(mixed)
   })
+
+  test('constant retiming clears an existing ramp from every linked member', () => {
+    const ramped = linkedSetClipSpeedPoint(
+      makeDoc(),
+      'vClip',
+      50,
+      sourceTimeRateFromPercent(200),
+      'smooth',
+    )
+
+    const constant = linkedRetimeClip(
+      ramped,
+      'vClip',
+      sourceTimeRateFromPercent(100),
+    )
+
+    expect(constant.tracks.flatMap((track) => track.clips)
+      .filter((clip) => clip.linkGroupId === PAIR1)
+      .every((clip) => !sourceTimeMapUsesSpeedCurve(clip.sourceTimeMap!)))
+      .toBe(true)
+  })
+})
+
+describe('linked speed-ramp editing', () => {
+  test('adds, replaces, removes, and clears matching points atomically', () => {
+    const initial = makeDoc()
+    const added = linkedSetClipSpeedPoint(
+      initial,
+      'vClip',
+      50,
+      sourceTimeRateFromPercent(200),
+      'linear',
+    )
+    const members = added.tracks.flatMap((track) => track.clips)
+      .filter((clip) => clip.linkGroupId === PAIR1)
+    expect(members).toHaveLength(2)
+    expect(members.map((clip) => sourceTimeSpeedPointsAtClip(clip.sourceTimeMap!)))
+      .toEqual([
+        [
+          { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'linear' },
+          { frame: 50, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
+        ],
+        [
+          { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'linear' },
+          { frame: 50, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
+        ],
+      ])
+
+    const replaced = linkedSetClipSpeedPoint(
+      added,
+      'aClip',
+      50,
+      sourceTimeRateFromPercent(150),
+      'smooth',
+    )
+    expect(replaced.tracks.flatMap((track) => track.clips)
+      .filter((clip) => clip.linkGroupId === PAIR1)
+      .map((clip) => sourceTimeSpeedPointsAtClip(clip.sourceTimeMap!).at(-1)))
+      .toEqual([
+        { frame: 50, rate: { numerator: 3, denominator: 2 }, easing: 'smooth' },
+        { frame: 50, rate: { numerator: 3, denominator: 2 }, easing: 'smooth' },
+      ])
+
+    const removed = linkedRemoveClipSpeedPoint(replaced, 'vClip', 50)
+    expect(removed.tracks.flatMap((track) => track.clips)
+      .filter((clip) => clip.linkGroupId === PAIR1)
+      .map((clip) => sourceTimeSpeedPointsAtClip(clip.sourceTimeMap!).map((point) => point.frame)))
+      .toEqual([[0], [0]])
+
+    const cleared = linkedClearClipSpeedRamp(removed, 'aClip')
+    expect(cleared.tracks.flatMap((track) => track.clips)
+      .filter((clip) => clip.linkGroupId === PAIR1)
+      .every((clip) => !sourceTimeMapUsesSpeedCurve(clip.sourceTimeMap!)))
+      .toBe(true)
+  })
+
+  test('rolls the whole ramp edit back when a linked track is locked', () => {
+    const doc = makeDoc()
+
+    expect(linkedSetClipSpeedPoint(
+      doc,
+      'vClip2',
+      20,
+      sourceTimeRateFromPercent(200),
+      'linear',
+    )).toBe(doc)
+  })
 })
 
 interface ManualLinkDocOptions {
@@ -283,7 +377,7 @@ function makeManualLinkDoc(options: ManualLinkDocOptions = {}): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-manual-link',
     name: 'Manual link test doc',
     frameRate: { num: 30, den: 1 },

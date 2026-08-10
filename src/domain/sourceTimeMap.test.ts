@@ -10,8 +10,12 @@ import {
   sourceTimeAudioPolicy,
   sourceTimeMapAtOffset,
   sourceTimeMapForTimelineDuration,
+  sourceTimeMapValidationError,
   sourceTimeRateFromPercent,
   sourceTimeRatePercent,
+  sourceTimeSpeedRateFromPercent,
+  timelineFramesWithinSourceMap,
+  timelineOffsetAtSourceTicks,
   timelineFramesWithinSourceTicks,
   SOURCE_TIME_TICKS_PER_FRAME,
 } from './sourceTimeMap'
@@ -111,7 +115,124 @@ describe('SourceTimeMap', () => {
       sourceStartTicks: 10_000_000,
       sourceDurationTicks: 1_000_000,
       rate: { numerator: 1, denominator: 1 },
+      speedCurve: { originFrame: 0, points: [] },
     })
+  })
+
+  test('integrates hold, linear, smooth, and bounded freeze segments deterministically', () => {
+    const linear = {
+      ...defaultSourceTimeMap(0, 20),
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: sourceTimeSpeedRateFromPercent(100), easing: 'linear' as const },
+          { frame: 4, rate: sourceTimeSpeedRateFromPercent(200), easing: 'linear' as const },
+        ],
+      },
+    }
+    expect(sourceTicksAtTimelineOffset(linear, 1)).toBe(1_125_000)
+    expect(sourceTicksAtTimelineOffset(linear, 2)).toBe(2_500_000)
+    expect(sourceTicksAtTimelineOffset(linear, 4)).toBe(6_000_000)
+    expect(sourceTicksAtTimelineOffset(linear, 5)).toBe(8_000_000)
+
+    const smooth = {
+      ...linear,
+      speedCurve: {
+        ...linear.speedCurve,
+        points: linear.speedCurve.points.map((point, index) => ({
+          ...point,
+          easing: index === 0 ? 'smooth' as const : point.easing,
+        })),
+      },
+    }
+    expect(sourceTicksAtTimelineOffset(smooth, 2)).toBe(2_375_000)
+    expect(sourceTicksAtTimelineOffset(smooth, 4)).toBe(6_000_000)
+
+    const freeze = {
+      ...defaultSourceTimeMap(0, 4),
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: sourceTimeSpeedRateFromPercent(0), easing: 'hold' as const },
+          { frame: 3, rate: sourceTimeSpeedRateFromPercent(100), easing: 'linear' as const },
+        ],
+      },
+    }
+    expect(sourceTicksAtTimelineOffset(freeze, 3)).toBe(0)
+    expect(sourceTicksAtTimelineOffset(freeze, 4)).toBe(1_000_000)
+    expect(timelineFramesWithinSourceMap(freeze)).toBe(7)
+    expect(timelineOffsetAtSourceTicks(freeze, 0, 0, 7)).toBe(3)
+  })
+
+  test('keeps ramp phase exact across split and trim origins', () => {
+    const map = {
+      ...defaultSourceTimeMap(5, 30),
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: sourceTimeSpeedRateFromPercent(50), easing: 'smooth' as const },
+          { frame: 6, rate: sourceTimeSpeedRateFromPercent(200), easing: 'linear' as const },
+        ],
+      },
+    }
+    const direct = sourceTimeMapAtOffset(map, 5)
+    const composed = sourceTimeMapAtOffset(sourceTimeMapAtOffset(map, 2), 3)
+    expect(composed).toEqual(direct)
+    expect(direct.speedCurve?.originFrame).toBe(5)
+    expect(sourceTicksAtTimelineOffset(direct, 4)).toBe(
+      sourceTicksAtTimelineOffset(map, 9),
+    )
+  })
+
+  test('falls back to the preserved constant map for invalid in-memory curves', () => {
+    const invalid = {
+      ...defaultSourceTimeMap(2, 10),
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 3, rate: sourceTimeSpeedRateFromPercent(100), easing: 'linear' as const },
+          { frame: 3, rate: sourceTimeSpeedRateFromPercent(200), easing: 'linear' as const },
+        ],
+      },
+    }
+    expect(sourceTimeMapValidationError(invalid)).toMatch(/strictly increasing/)
+    expect(sourceTicksAtTimelineOffset(invalid, 4)).toBe(6_000_000)
+    const invalidClip = { ...clip(), sourceTimeMap: invalid }
+    expect(sourceTimeAudioPolicy(invalidClip)).toEqual({
+      status: 'muted',
+      reason: 'invalid-speed-curve',
+    })
+    expect(sourceTimeMapValidationError({
+      ...invalid,
+      speedCurve: {
+        originFrame: 0,
+        points: [{
+          frame: 0,
+          rate: sourceTimeSpeedRateFromPercent(0),
+          easing: 'hold' as const,
+        }],
+      },
+    })).toMatch(/final speed point must be positive/)
+  })
+
+  test('finds extreme finite ramp capacity after an overflowed exponential probe', () => {
+    const map = {
+      sourceStartTicks: 0,
+      sourceDurationTicks: Number.MAX_SAFE_INTEGER,
+      rate: sourceTimeRateFromPercent(100),
+      speedCurve: {
+        originFrame: 0,
+        points: [{
+          frame: 0,
+          rate: sourceTimeSpeedRateFromPercent(25),
+          easing: 'hold' as const,
+        }],
+      },
+    }
+
+    expect(timelineFramesWithinSourceMap(map)).toBe(
+      Number(BigInt(Number.MAX_SAFE_INTEGER) / 250_000n),
+    )
   })
 
   test('preserves the exact out-point across non-divisible speed changes', () => {

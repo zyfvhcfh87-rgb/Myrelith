@@ -8,7 +8,7 @@ import Ruler from './Ruler'
 
 function doc(markers: TimelineMarker[]): TimelineDoc {
   return {
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-marker-ui',
     name: 'Marker UI',
     frameRate: { num: 30, den: 1 },

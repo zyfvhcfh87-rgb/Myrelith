@@ -23,6 +23,7 @@ import type {
   MediaSourceBounds,
   SourceTimestampBounds,
   SourceTimeMap,
+  SourceTimeSpeedCurve,
   TextProps,
   TimelineDoc,
   TimelineMarker,
@@ -108,7 +109,11 @@ import {
   cloneSourceTimeMap,
   defaultSourceTimeMap,
   sourceRangeForMap,
+  sourceTimeSpeedCurveValidationError,
   sourceTimeMapValidationError,
+  MAX_SOURCE_TIME_SPEED_FRAME,
+  MAX_SOURCE_TIME_SPEED_POINTS,
+  SOURCE_TIME_SPEED_EASINGS,
   SOURCE_TIME_TICKS_PER_FRAME,
 } from './sourceTimeMap'
 import { renderSurfaceBudget } from './renderSurfaceBudget'
@@ -124,7 +129,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 11 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 12 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -144,6 +149,8 @@ export const PROJECT_FILE_LIMITS = {
   maxTransitions: 100_000,
   maxMarkers: MAX_TIMELINE_MARKERS,
   maxTotalKeyframes: 100_000,
+  maxSpeedPointsPerClip: MAX_SOURCE_TIME_SPEED_POINTS,
+  maxTotalSpeedPoints: 100_000,
   maxTotalTextCharacters: 10_000_000,
   maxIdCharacters: MAX_DOCUMENT_ID_CHARACTERS,
   maxNameCharacters: MAX_PROJECT_NAME_CHARACTERS,
@@ -947,20 +954,61 @@ interface ValidationContext {
   textCharacterCount: number
   transitionCount: number
   keyframeCount: number
+  speedPointCount: number
 }
 
 function validateSourceTimeMap(
   value: unknown,
   path: string,
+  context: ValidationContext,
 ): asserts value is SourceTimeMap {
   const map = record(value, path)
-  exactKeys(map, ['sourceStartTicks', 'sourceDurationTicks', 'rate'], [], path)
+  exactKeys(map, ['sourceStartTicks', 'sourceDurationTicks', 'rate', 'speedCurve'], [], path)
   safeInteger(map.sourceStartTicks, `${path}.sourceStartTicks`, 0)
   safeInteger(map.sourceDurationTicks, `${path}.sourceDurationTicks`, 1)
   const rate = record(map.rate, `${path}.rate`)
   exactKeys(rate, ['numerator', 'denominator'], [], `${path}.rate`)
   safeInteger(rate.numerator, `${path}.rate.numerator`, 1)
   safeInteger(rate.denominator, `${path}.rate.denominator`, 1)
+  const speedCurve = record(map.speedCurve, `${path}.speedCurve`)
+  exactKeys(speedCurve, ['originFrame', 'points'], [], `${path}.speedCurve`)
+  safeInteger(
+    speedCurve.originFrame,
+    `${path}.speedCurve.originFrame`,
+    -MAX_SOURCE_TIME_SPEED_FRAME,
+    MAX_SOURCE_TIME_SPEED_FRAME,
+  )
+  boundedArray(
+    speedCurve.points,
+    `${path}.speedCurve.points`,
+    PROJECT_FILE_LIMITS.maxSpeedPointsPerClip,
+  )
+  context.speedPointCount += speedCurve.points.length
+  if (context.speedPointCount > PROJECT_FILE_LIMITS.maxTotalSpeedPoints) {
+    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxTotalSpeedPoints} speed points in total`)
+  }
+  for (let index = 0; index < speedCurve.points.length; index++) {
+    const pointPath = `${path}.speedCurve.points[${index}]`
+    const point = record(speedCurve.points[index], pointPath)
+    exactKeys(point, ['frame', 'rate', 'easing'], [], pointPath)
+    safeInteger(
+      point.frame,
+      `${pointPath}.frame`,
+      -MAX_SOURCE_TIME_SPEED_FRAME,
+      MAX_SOURCE_TIME_SPEED_FRAME,
+    )
+    const pointRate = record(point.rate, `${pointPath}.rate`)
+    exactKeys(pointRate, ['numerator', 'denominator'], [], `${pointPath}.rate`)
+    safeInteger(pointRate.numerator, `${pointPath}.rate.numerator`, 0)
+    safeInteger(pointRate.denominator, `${pointPath}.rate.denominator`, 1)
+    if (!(SOURCE_TIME_SPEED_EASINGS as readonly unknown[]).includes(point.easing)) {
+      fail(`${pointPath}.easing`, 'expected hold, linear, or smooth')
+    }
+  }
+  const curveError = sourceTimeSpeedCurveValidationError(
+    speedCurve as unknown as SourceTimeSpeedCurve,
+  )
+  if (curveError) fail(`${path}.speedCurve`, curveError)
   const error = sourceTimeMapValidationError(map as unknown as SourceTimeMap)
   if (error) fail(path, error)
 }
@@ -994,7 +1042,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
     fail(`${path}.sourceMode`, 'expected timed or still')
   }
   validateRange(clip.sourceRange, `${path}.sourceRange`, 1)
-  validateSourceTimeMap(clip.sourceTimeMap, `${path}.sourceTimeMap`)
+  validateSourceTimeMap(clip.sourceTimeMap, `${path}.sourceTimeMap`, context)
   validateRange(clip.timelineRange, `${path}.timelineRange`, 1)
   const sourceRange = clip.sourceRange as {
     startFrame: number
@@ -1024,6 +1072,8 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
       || map.sourceDurationTicks !== SOURCE_TIME_TICKS_PER_FRAME
       || map.rate.numerator !== 1
       || map.rate.denominator !== 1
+      || map.speedCurve?.originFrame !== 0
+      || map.speedCurve?.points.length !== 0
     ) fail(`${path}.sourceTimeMap`, 'still clips must use the canonical 1x map')
   }
   if (clip.text !== undefined) {
@@ -1038,6 +1088,8 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
         !== sourceRange.durationFrames * SOURCE_TIME_TICKS_PER_FRAME
       || map.rate.numerator !== 1
       || map.rate.denominator !== 1
+      || map.speedCurve?.originFrame !== 0
+      || map.speedCurve?.points.length !== 0
     ) fail(`${path}.sourceTimeMap`, 'text clips must use the canonical 1x map')
   }
   if (clip.text === undefined && asset?.kind === 'image' && !stillSource) {
@@ -1354,6 +1406,7 @@ export function validateProjectFile(value: unknown): ProjectFile {
     textCharacterCount: 0,
     transitionCount: 0,
     keyframeCount: 0,
+    speedPointCount: 0,
   }
   validateDocument(project.document, context)
   for (const [linkGroupId, count] of context.linkGroupCounts) {
@@ -1721,6 +1774,33 @@ function migrateClipSourceTimeMaps(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 11, tracks }
 }
 
+/** Upgrade schema-11 affine maps with an empty behavior-identical speed curve. */
+function migrateClipSpeedCurves(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const trackPath = `$.document.tracks[${trackIndex}]`
+    const track = record(trackValue, trackPath)
+    boundedArray(track.clips, `${trackPath}.clips`, PROJECT_FILE_LIMITS.maxClips)
+    return {
+      ...track,
+      clips: track.clips.map((clipValue, clipIndex) => {
+        const clipPath = `${trackPath}.clips[${clipIndex}]`
+        const clip = record(clipValue, clipPath)
+        const sourceTimeMap = record(clip.sourceTimeMap, `${clipPath}.sourceTimeMap`)
+        return {
+          ...clip,
+          sourceTimeMap: {
+            ...sourceTimeMap,
+            speedCurve: { originFrame: 0, points: [] },
+          },
+        }
+      }),
+    }
+  })
+  return { ...document, schemaVersion: 12, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1769,6 +1849,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 10) {
     migrated = migrateClipSourceTimeMaps(migrated)
+  }
+  if (migrated.schemaVersion === 11) {
+    migrated = migrateClipSpeedCurves(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
@@ -1893,7 +1976,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
     document: {
-      schemaVersion: document.schemaVersion,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: document.id,
       name: document.name,
       frameRate: { num: document.frameRate.num, den: document.frameRate.den },

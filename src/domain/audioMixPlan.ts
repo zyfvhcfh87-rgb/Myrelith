@@ -24,6 +24,7 @@ import {
   clipSourceTimeMap,
   sourceFrameAtTimelineOffset,
   sourceTimeAudioPolicy,
+  type SourceTimeAudioPolicy,
 } from './sourceTimeMap'
 
 export interface TimelineAudioEnvelope {
@@ -59,7 +60,7 @@ export interface TimelineAudioMixPlan {
 export interface TimelineAudioMutedClip {
   clipId: ClipId
   trackId: TrackId
-  reason: 'constant-speed-audio-unsupported'
+  reason: Extract<SourceTimeAudioPolicy, { status: 'muted' }>['reason']
 }
 
 interface PlannedCrossfadeAudio {
