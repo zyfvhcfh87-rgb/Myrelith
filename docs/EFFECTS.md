@@ -49,29 +49,61 @@ unsupported even when a separate export context supports the effect (or vice
 versa). Reorder, bypass, and remove remain available for opaque descriptors, so
 unsupported data is never stranded.
 
-## Built-in color adjustment
+## Built-in color correction
 
-`builtin.color-adjust` version 1 has three numeric parameters:
+Issue #71 extends `builtin.color-adjust` version 1 without a timeline-schema
+bump. Existing version-1 descriptors that omit `temperature` and `tint` remain
+valid and interpret both as zero; round trips preserve the omission. New and
+reset descriptors write all five defaults.
 
-| Parameter | Range | Default | Canvas2D mapping |
+| Parameter | Range | Default | Operation |
 | --- | ---: | ---: | --- |
-| Exposure | -4…4 stops | 0 | `brightness(2 ** exposure)` |
-| Contrast | -1…1 | 0 | `contrast(1 + contrast)` |
-| Saturation | -1…1 | 0 | `saturate(1 + saturation)` |
+| Exposure | -4 to 4 stops | 0 | multiply RGB by `2 ** exposure` |
+| Contrast | -1 to 1 | 0 | scale RGB around 0.5 by `1 + contrast` |
+| Saturation | -1 to 1 | 0 | scale RGB from Rec.709 luma by `1 + saturation` |
+| Temperature | -1 to 1 | 0 | red gain / blue inverse gain, `2 ** (temperature * 0.5)` |
+| Tint | -1 to 1 | 0 | magenta gain `2 ** (tint * 0.125)` and green gain `2 ** (-tint * 0.25)` |
 
-Filters concatenate top-to-bottom in authored order. They operate in the
-browser's Canvas2D sRGB filter model on the source layer before clip opacity and
-destination blending. Preview, scrub/seek, and export consume the same video
-composition plan and `pipeline/render.ts` compositor, so no second effect
-implementation exists.
+An empty stack, a wholly bypassed stack, and a descriptor with all five
+defaults are exact identity paths. The historical exposure/contrast/saturation
+only case retains its ordered Canvas filter path. If any ready descriptor in
+the stack has non-zero temperature or tint, every ready built-in color
+descriptor runs in authored order through the reference pixel path so one
+stack never mixes filter and pixel precision.
 
-An empty or wholly bypassed stack does not write Canvas filter state. Media
-effects need no intermediate surface. Procedural text paints its complete
-background/outline/fill layer unfiltered into the existing leg surface, then
-filters the single destination `drawImage` before opacity/blend. Text and
-crossfade legs reuse the same caller-owned bounded surfaces already required
-for isolation; every borrow is cleared in `finally`, and decoded frames retain
-their existing single owner.
+The pixel contract reads unpremultiplied 8-bit `ImageData` in the compositor's
+display-referred sRGB context. It uses float64 JavaScript intermediates in the
+table order for each descriptor, clamps RGB to `[0, 1]` after every descriptor,
+and rounds to nearest 8-bit only at the end. Alpha is copied byte-for-byte.
+Transparent RGB is still corrected, but unchanged zero alpha keeps it
+invisible. Ordinary media/stills, complete procedural-text layers, and each
+crossfade leg use the existing reusable isolation surfaces; correction happens
+before clip opacity, transition weighting, and destination blend mode.
+
+Preview, scrub/seek, and export consume the same composition plan and
+`pipeline/render.ts` implementation. A context without Canvas filter or pixel
+read/write support reports the exact missing capability, preserves the
+descriptor, and bypasses only the unsupported operation. No presets ship in
+this slice: the five bounded defaults plus existing enable, reset, reorder, and
+remove controls are sufficient and avoid an unversioned preset contract.
+
+## Video scopes
+
+Scopes are session-only diagnostics over the completed preview composite; they
+never enter `TimelineDoc`, history, recovery, or portable saves. The render
+worker samples at most one 160 x 90 sRGB frame (14,400 pixels) every 250 ms,
+after the frame has already been presented. It transfers that tiny sample to a
+dedicated analysis worker, keeps at most one request pending, and never awaits
+scope work from the render queue.
+
+The worker produces 256-bin RGB/luma histograms, a 160 x 64 luma waveform, and
+a 64 x 64 Rec.709 Cb/Cr vectorscope. Fully transparent samples are ignored;
+partial alpha is premultiplied over black so the signal matches the displayed
+preview background. Saturating 16-bit counters bound every result. Generation
+checks discard disable/re-enable/close races. Disabling or closing shrinks and
+releases the sample canvas, terminates the analysis worker, rejects pending
+work, and clears UI data. Browsers without Canvas pixel access expose a visible
+`Scopes unavailable` fallback instead of starting analysis.
 
 ## Editing and history
 

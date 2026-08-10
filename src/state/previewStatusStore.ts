@@ -12,6 +12,7 @@ export interface PreviewEffectStatus {
 
 export interface PreviewRendererCapabilities {
   readonly canvasFilter: boolean
+  readonly canvasPixelAccess: boolean
 }
 
 export interface PreviewStatusState {

@@ -21,6 +21,12 @@ import { describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { resolvePresentationProfile } from '../domain/presentationProfile'
+import {
+  analyzeVideoScopes,
+  VIDEO_SCOPE_SAMPLE_HEIGHT,
+  VIDEO_SCOPE_SAMPLE_WIDTH,
+  type VideoScopeAnalysis,
+} from '../domain/videoScopes'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import type { Composite2D } from '../pipeline/render'
 import {
@@ -94,6 +100,15 @@ interface TrackedStreamingFrame {
 interface FakeOptions {
   supported?: boolean
   supportsCanvasFilter?: boolean
+  supportsCanvasPixels?: boolean
+  now?: () => number
+  schedule?: (callback: () => void) => void
+  analyzeVideoScopes?: (
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+  ) => Promise<VideoScopeAnalysis>
+  releaseVideoScopes?: () => void
   /** Drain one queue slot per microtask after each decode, like a live decoder. */
   autoDrain?: boolean
   /** decode() of the chunk at this timestamp fires the error callback. */
@@ -326,7 +341,7 @@ class DeferredFailingCloseVideoSource extends FakeVideoSource {
 }
 
 interface CtxOp {
-  surface: 'visible' | 'scratch' | 'transition-leg' | 'transition-group'
+  surface: 'visible' | 'scratch' | 'transition-leg' | 'transition-group' | 'video-scope'
   name: string
   args: unknown[]
 }
@@ -341,6 +356,7 @@ function makeSurface(
   surface: CtxOp['surface'],
   log: CtxOp[],
   supportsCanvasFilter = false,
+  supportsCanvasPixels = false,
 ): FakeSurface {
   let alpha = 1
   let operation: GlobalCompositeOperation = 'source-over'
@@ -392,6 +408,22 @@ function makeSurface(
         log.push({ surface, name: 'filter', args: [value] })
       },
     })
+  }
+  if (supportsCanvasPixels) {
+    ctx.getImageData = (x, y, width, height) => {
+      log.push({ surface, name: 'getImageData', args: [x, y, width, height] })
+      const data = new Uint8ClampedArray(width * height * 4)
+      for (let offset = 0; offset < data.length; offset += 4) {
+        data[offset] = 64
+        data[offset + 1] = 128
+        data[offset + 2] = 192
+        data[offset + 3] = 255
+      }
+      return { data, width, height, colorSpace: 'srgb' } as ImageData
+    }
+    ctx.putImageData = (imageData, x, y) => {
+      log.push({ surface, name: 'putImageData', args: [imageData, x, y] })
+    }
   }
   const raw = { width: 0, height: 0 }
   const canvas: RenderCanvasLike = {
@@ -569,11 +601,17 @@ function makeHarness(opts: FakeOptions = {}): Harness {
         'scratch',
         'transition-leg',
         'transition-group',
+        'video-scope',
       ]
+      const label = width === VIDEO_SCOPE_SAMPLE_WIDTH
+        && height === VIDEO_SCOPE_SAMPLE_HEIGHT
+        ? 'video-scope'
+        : labels[createdSurfaces.length] ?? 'transition-group'
       const surface = makeSurface(
-        labels[createdSurfaces.length] ?? 'transition-group',
+        label,
         ops,
         opts.supportsCanvasFilter,
+        opts.supportsCanvasPixels,
       )
       surface.canvas.width = width
       surface.canvas.height = height
@@ -581,7 +619,10 @@ function makeHarness(opts: FakeOptions = {}): Harness {
       scratch ??= surface
       return surface.canvas
     },
-    now: () => 0,
+    now: opts.now ?? (() => 0),
+    schedule: opts.schedule,
+    analyzeVideoScopes: opts.analyzeVideoScopes,
+    releaseVideoScopes: opts.releaseVideoScopes,
   }
 
   return {
@@ -1005,10 +1046,14 @@ const twoTrackDoc = () =>
 /* ------------------------------------------------------------------ */
 
 describe('composite happy path', () => {
-  test.each([false, true])(
-    'reports actual preview Canvas-filter capability (%s) once',
-    async (supportsCanvasFilter) => {
-      const h = makeHarness({ supportsCanvasFilter })
+  test.each([
+    [false, false],
+    [true, false],
+    [true, true],
+  ])(
+    'reports Canvas filter=%s and pixel=%s capabilities once',
+    async (supportsCanvasFilter, supportsCanvasPixels) => {
+      const h = makeHarness({ supportsCanvasFilter, supportsCanvasPixels })
       const doc = makeDoc([])
       await h.core.handleMessage(initMsg(h))
       expect(h.posts.filter((post) => post.type === 'rendererCapabilities')).toEqual([])
@@ -1017,10 +1062,77 @@ describe('composite happy path', () => {
       await h.core.handleMessage(docMsg(doc))
       expect(h.posts.filter((post) => post.type === 'rendererCapabilities')).toEqual([{
         type: 'rendererCapabilities',
-        capabilities: { canvasFilter: supportsCanvasFilter },
+        capabilities: {
+          canvasFilter: supportsCanvasFilter,
+          canvasPixelAccess: supportsCanvasPixels,
+        },
       }])
     },
   )
+
+  test('samples scopes after presentation, caps cadence, and drops stale analysis', async () => {
+    let now = 0
+    const scheduled: Array<() => void> = []
+    const releaseVideoScopes = vi.fn()
+    const firstAnalysis = vi.fn(async (
+      rgba: Uint8ClampedArray,
+      width: number,
+      height: number,
+    ) => analyzeVideoScopes(rgba, width, height))
+    const h = makeHarness({
+      supportsCanvasPixels: true,
+      now: () => now,
+      schedule: (callback) => scheduled.push(callback),
+      analyzeVideoScopes: firstAnalysis,
+      releaseVideoScopes,
+    })
+    await setup(h, makeDoc([]), [])
+    await h.core.handleMessage({ type: 'setVideoScopes', enabled: true, generation: 1 })
+    await h.core.handleMessage(renderMsg(1, 0, 'seek', []))
+
+    expect(h.posts.at(-1)).toMatchObject({ type: 'compositeDone', status: 'drawn' })
+    expect(firstAnalysis).not.toHaveBeenCalled()
+    expect(scheduled).toHaveLength(1)
+    scheduled.shift()?.()
+    await microtasks()
+    expect(firstAnalysis).toHaveBeenCalledOnce()
+    expect(h.posts.at(-1)).toMatchObject({
+      type: 'videoScopes',
+      generation: 1,
+      frame: 0,
+      analyzedAt: 0,
+    })
+
+    now = 249
+    await h.core.handleMessage(renderMsg(2, 1, 'seek', []))
+    expect(scheduled).toHaveLength(0)
+
+    const deferred = deferredValue<VideoScopeAnalysis>()
+    const delayedAnalysis = vi.fn(() => deferred.promise)
+    const delayed = makeHarness({
+      supportsCanvasPixels: true,
+      now: () => 250,
+      schedule: (callback) => scheduled.push(callback),
+      analyzeVideoScopes: delayedAnalysis,
+      releaseVideoScopes,
+    })
+    await setup(delayed, makeDoc([]), [])
+    await delayed.core.handleMessage({ type: 'setVideoScopes', enabled: true, generation: 7 })
+    await delayed.core.handleMessage(renderMsg(3, 2, 'seek', []))
+    scheduled.shift()?.()
+    await microtasks()
+    expect(delayedAnalysis).toHaveBeenCalledOnce()
+    await delayed.core.handleMessage({ type: 'setVideoScopes', enabled: false, generation: 8 })
+    expect(delayed.createdSurfaces().at(-1)?.raw).toEqual({ width: 1, height: 1 })
+    deferred.resolve(analyzeVideoScopes(
+      new Uint8ClampedArray(VIDEO_SCOPE_SAMPLE_WIDTH * VIDEO_SCOPE_SAMPLE_HEIGHT * 4),
+      VIDEO_SCOPE_SAMPLE_WIDTH,
+      VIDEO_SCOPE_SAMPLE_HEIGHT,
+    ))
+    await microtasks()
+    expect(delayed.posts.some((post) => post.type === 'videoScopes')).toBe(false)
+    expect(releaseVideoScopes).toHaveBeenCalled()
+  })
 
   test('two assets decode in their own decoders, draw bottom-to-top, blit once', async () => {
     const h = makeHarness()

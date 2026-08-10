@@ -661,6 +661,8 @@ describe('ordered effect-stack operations', () => {
       exposure: 0,
       contrast: 0,
       saturation: 0,
+      temperature: 0,
+      tint: 0,
     })
     doc = removeEffect(doc, 'clipA', second.id)
     expect(clipIn(doc, 'V1', 'clipA').effects.map((effect) => effect.id)).toEqual([first.id])

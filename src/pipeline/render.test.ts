@@ -107,6 +107,8 @@ function makeCtx(opts: {
   throwOn?: ImageBitmap
   rejectComposite?: GlobalCompositeOperation
   supportsFilter?: boolean
+  supportsPixels?: boolean
+  pixelData?: Uint8ClampedArray
 } = {}) {
   const log: Op[] = []
   let alpha = 1
@@ -197,6 +199,16 @@ function makeCtx(opts: {
       },
     })
   }
+  if (opts.supportsPixels) {
+    ctx.getImageData = (x, y, width, height) => {
+      log.push({ name: 'getImageData', args: [x, y, width, height] })
+      const data = opts.pixelData ?? new Uint8ClampedArray(width * height * 4)
+      return { data, width, height, colorSpace: 'srgb' } as ImageData
+    }
+    ctx.putImageData = (imageData, x, y) => {
+      log.push({ name: 'putImageData', args: [imageData, x, y] })
+    }
+  }
   const ops = (name: string) => log.filter((op) => op.name === name)
   return {
     ctx,
@@ -207,9 +219,12 @@ function makeCtx(opts: {
   }
 }
 
-function makeTransitionSurfaceProvider() {
-  const leg = makeCtx()
-  const group = makeCtx()
+function makeTransitionSurfaceProvider(opts: {
+  supportsPixels?: boolean
+  pixelData?: Uint8ClampedArray
+} = {}) {
+  const leg = makeCtx(opts)
+  const group = makeCtx({ supportsPixels: opts.supportsPixels })
   const legCanvas = fakeBitmap(1920, 1080)
   const groupCanvas = fakeBitmap(1920, 1080)
   let gets = 0
@@ -324,6 +339,40 @@ describe('compositeFrame — background & selection', () => {
     ])
     expect(state().filter).toBe('none')
     expect(result).toEqual({ drawn: ['graded'], missing: [] })
+  })
+
+  test('pixel-corrects a still on an isolated layer before compositing', async () => {
+    const effect = createColorAdjustEffect('fx-warm-still')
+    effect.params.temperature = 1
+    const clip = makeClip('warm-still', 0, 30, {
+      sourceMode: 'still',
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+      effects: [effect],
+    })
+    const doc = makeDoc([makeTrack('V1', 'video', [clip])])
+    doc.width = 1
+    doc.height = 1
+    const destination = makeCtx({ supportsPixels: true })
+    const pixels = new Uint8ClampedArray([128, 128, 128, 128])
+    const surfaces = makeTransitionSurfaceProvider({
+      supportsPixels: true,
+      pixelData: pixels,
+    })
+
+    const result = await compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource({ 'asset-1@0': fakeBitmap(1, 1) }).source,
+      surfaces.provider,
+    )
+
+    expect([...pixels]).toEqual([181, 128, 91, 128])
+    expect(surfaces.leg.ops('getImageData')).toHaveLength(1)
+    expect(surfaces.leg.ops('putImageData')).toHaveLength(1)
+    expect(destination.ops('filter')).toHaveLength(0)
+    expect(destination.ops('drawImage')[0].args[0]).toBe(surfaces.legCanvas)
+    expect(result).toEqual({ drawn: ['warm-still'], missing: [] })
   })
 
   test('presentation scaling wraps project-space geometry without changing it', async () => {
@@ -472,6 +521,41 @@ describe('compositeFrame — background & selection', () => {
     expect(result).toEqual({ drawn: ['styled-text'], missing: [] })
   })
 
+  test('pixel-corrects completed text without changing transparent alpha', async () => {
+    const effect = createColorAdjustEffect('text-tint')
+    effect.params.tint = 1
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [
+        makeClip('tinted-text', 0, 30, {
+          effects: [effect],
+          text: {
+            ...defaultTextProps(1, 1),
+            content: 'T',
+          },
+        }),
+      ]),
+    ])
+    doc.width = 1
+    doc.height = 1
+    const pixels = new Uint8ClampedArray([128, 128, 128, 0])
+    const surfaces = makeTransitionSurfaceProvider({
+      supportsPixels: true,
+      pixelData: pixels,
+    })
+
+    const result = await compositeFrame(
+      doc,
+      0,
+      makeCtx({ supportsPixels: true }).ctx,
+      makeSource().source,
+      surfaces.provider,
+    )
+
+    expect([...pixels]).toEqual([140, 108, 140, 0])
+    expect(surfaces.leg.ops('putImageData')).toHaveLength(1)
+    expect(result).toEqual({ drawn: ['tinted-text'], missing: [] })
+  })
+
   test('draws semantic captions through shared text layout without media requests', async () => {
     const doc = makeDoc([])
     doc.captionTracks = [{
@@ -607,6 +691,54 @@ describe('compositeFrame — stacking order & concurrency', () => {
     expect(surfaces.leg.depth()).toBe(0)
     expect(surfaces.group.depth()).toBe(0)
     expect(result).toEqual({ drawn: ['from', 'to'], missing: [] })
+  })
+
+  test('pixel-corrects each crossfade leg before weighted accumulation', async () => {
+    const outgoingEffect = createColorAdjustEffect('outgoing-warm')
+    outgoingEffect.params.temperature = 0.5
+    const incomingEffect = createColorAdjustEffect('incoming-tint')
+    incomingEffect.params.tint = -0.5
+    const from = makeClip('from-color', 0, 10, {
+      assetId: 'A',
+      effects: [outgoingEffect],
+    })
+    const to = makeClip('to-color', 10, 10, {
+      assetId: 'B',
+      effects: [incomingEffect],
+    })
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [from, to], {
+        transitions: [{
+          id: 'color-dissolve',
+          type: 'crossfade',
+          fromClipId: from.id,
+          toClipId: to.id,
+          durationFrames: 1,
+          audio: { enabled: true, curve: 'equal-power' },
+        }],
+      }),
+    ])
+    doc.width = 1
+    doc.height = 1
+    const destination = makeCtx({ supportsPixels: true })
+    const surfaces = makeTransitionSurfaceProvider({ supportsPixels: true })
+
+    const result = await compositeFrame(
+      doc,
+      10,
+      destination.ctx,
+      makeSource({
+        'A@10': fakeBitmap(1, 1),
+        'B@0': fakeBitmap(1, 1),
+      }).source,
+      surfaces.provider,
+    )
+
+    expect(surfaces.leg.ops('getImageData')).toHaveLength(2)
+    expect(surfaces.leg.ops('putImageData')).toHaveLength(2)
+    expect(surfaces.group.ops('drawImage')).toHaveLength(2)
+    expect(destination.ops('drawImage')[0].args[0]).toBe(surfaces.groupCanvas)
+    expect(result).toEqual({ drawn: ['from-color', 'to-color'], missing: [] })
   })
 
   test('keeps one missing crossfade leg isolated from the other', async () => {

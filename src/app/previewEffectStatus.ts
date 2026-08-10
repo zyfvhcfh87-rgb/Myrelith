@@ -2,6 +2,7 @@
 
 import {
   CANVAS_FILTER_EFFECT_CAPABILITY,
+  CANVAS_PIXEL_EFFECT_CAPABILITY,
   resolveEffectStack,
   type EffectCapability,
 } from '../domain/effectStack'
@@ -18,6 +19,9 @@ function previewCapabilities(
   if (capabilities?.canvasFilter) {
     resolved.add(CANVAS_FILTER_EFFECT_CAPABILITY)
   }
+  if (capabilities?.canvasPixelAccess) {
+    resolved.add(CANVAS_PIXEL_EFFECT_CAPABILITY)
+  }
   return resolved
 }
 
@@ -28,12 +32,17 @@ function previewDetail(
 ): string {
   if (
     status !== 'unsupported'
-    || !detail.includes(CANVAS_FILTER_EFFECT_CAPABILITY)
+    || (
+      !detail.includes(CANVAS_FILTER_EFFECT_CAPABILITY)
+      && !detail.includes(CANVAS_PIXEL_EFFECT_CAPABILITY)
+    )
   ) return detail
   if (capabilities === null) {
     return 'Preview renderer capability is still being detected; the effect is preserved and bypassed for now.'
   }
-  return 'The Program Monitor preview renderer does not provide Canvas filters; the effect is preserved and bypassed in preview.'
+  return detail.includes(CANVAS_PIXEL_EFFECT_CAPABILITY)
+    ? 'The Program Monitor preview renderer cannot read and write Canvas pixels; temperature and tint are preserved and the effect is bypassed in preview.'
+    : 'The Program Monitor preview renderer does not provide Canvas filters; the effect is preserved and bypassed in preview.'
 }
 
 /**

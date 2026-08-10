@@ -82,7 +82,7 @@ const clipA = () => doc().doc.tracks[0].clips.find((c) => c.id === 'clipA') as C
 
 function projectEffectStatuses(canvasFilter: boolean): void {
   const timeline = doc().doc
-  const capabilities = { canvasFilter }
+  const capabilities = { canvasFilter, canvasPixelAccess: canvasFilter }
   usePreviewStatusStore.getState().setEffectProjection(
     capabilities,
     projectPreviewEffectStatuses(timeline, capabilities),
@@ -542,6 +542,21 @@ describe('Inspector', () => {
     fireEvent.change(exposure, { target: { value: '1.5' } })
     fireEvent.keyDown(exposure, { key: 'Enter' })
     expect(clipA().effects[0].params.exposure).toBe(1.5)
+    const temperature = screen.getByTestId(
+      'inspector-effect-temperature-fx_00000000-0000-4000-8000-000000000045',
+    )
+    fireEvent.change(temperature, { target: { value: '35' } })
+    fireEvent.keyDown(temperature, { key: 'Enter' })
+    const tint = screen.getByTestId(
+      'inspector-effect-tint-fx_00000000-0000-4000-8000-000000000045',
+    )
+    fireEvent.change(tint, { target: { value: '-20' } })
+    fireEvent.keyDown(tint, { key: 'Enter' })
+    expect(clipA().effects[0].params).toMatchObject({
+      exposure: 1.5,
+      temperature: 0.35,
+      tint: -0.2,
+    })
 
     await user.click(screen.getAllByRole('button', { name: 'Move Color adjustment down' })[0])
     expect(clipA().effects.map((effect) => effect.id)).toEqual([
@@ -551,7 +566,11 @@ describe('Inspector', () => {
     await user.click(screen.getAllByRole('checkbox', { name: 'Enabled' })[1])
     expect(clipA().effects[1].enabled).toBe(false)
     await user.click(screen.getAllByRole('button', { name: 'Reset Color adjustment' })[1])
-    expect(clipA().effects[1].params.exposure).toBe(0)
+    expect(clipA().effects[1].params).toMatchObject({
+      exposure: 0,
+      temperature: 0,
+      tint: 0,
+    })
     await user.click(screen.getAllByRole('button', { name: 'Remove Color adjustment' })[0])
     expect(clipA().effects).toHaveLength(1)
     uuid.mockRestore()
@@ -585,7 +604,7 @@ describe('Inspector', () => {
       type: 'builtin.color-adjust',
       version: 1,
       enabled: true,
-      params: { exposure: 0, contrast: 0, saturation: 0 },
+      params: { exposure: 1, contrast: 0, saturation: 0 },
     }]
     resetDocumentStoreForTest(fixture)
     projectEffectStatuses(false)

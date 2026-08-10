@@ -707,7 +707,7 @@ function EffectStackInspector({
                 }
                 const editableColor = effect.type === COLOR_ADJUST_EFFECT_TYPE
                   && effect.version === COLOR_ADJUST_EFFECT_VERSION
-                  && (resolution.status === 'ready' || resolution.status === 'disabled')
+                  && resolution.status !== 'invalid'
                 return (
                   <li className="inspector-effect-card" key={effect.id}>
                     <div className="inspector-effect-card-heading">
@@ -771,6 +771,34 @@ function EffectStackInspector({
                             clip.id,
                             effect.id,
                             { saturation: saturation / 100 },
+                          )}
+                        />
+                        <RangeNumberField
+                          label="Temperature (%)"
+                          value={Number(effect.params.temperature ?? 0) * 100}
+                          step={1}
+                          min={COLOR_ADJUST_LIMITS.temperature.min * 100}
+                          max={COLOR_ADJUST_LIMITS.temperature.max * 100}
+                          testId={`inspector-effect-temperature-${effect.id}`}
+                          disabled={locked}
+                          onCommit={(temperature) => store().updateEffectParams(
+                            clip.id,
+                            effect.id,
+                            { temperature: temperature / 100 },
+                          )}
+                        />
+                        <RangeNumberField
+                          label="Tint (%)"
+                          value={Number(effect.params.tint ?? 0) * 100}
+                          step={1}
+                          min={COLOR_ADJUST_LIMITS.tint.min * 100}
+                          max={COLOR_ADJUST_LIMITS.tint.max * 100}
+                          testId={`inspector-effect-tint-${effect.id}`}
+                          disabled={locked}
+                          onCommit={(tint) => store().updateEffectParams(
+                            clip.id,
+                            effect.id,
+                            { tint: tint / 100 },
                           )}
                         />
                       </div>

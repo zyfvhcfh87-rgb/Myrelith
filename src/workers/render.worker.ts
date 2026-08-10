@@ -42,7 +42,16 @@ import {
   type PresentationProfile,
 } from '../domain/presentationProfile'
 import { videoCompositionRequests } from '../domain/videoCompositionPlan'
-import { supportsCanvasEffectFilter } from '../domain/effectStack'
+import {
+  supportsCanvasEffectFilter,
+  supportsCanvasEffectPixels,
+} from '../domain/effectStack'
+import {
+  analyzeVideoScopes,
+  VIDEO_SCOPE_SAMPLE_HEIGHT,
+  VIDEO_SCOPE_SAMPLE_WIDTH,
+  type VideoScopeAnalysis,
+} from '../domain/videoScopes'
 import { assertRenderSurfaceBudget } from '../domain/renderSurfaceBudget'
 import {
   invalidateMediaDecoderRuntime,
@@ -92,6 +101,10 @@ import type {
   VideoFrameCursor,
   WorkerVideoSource,
 } from './video-source'
+import type {
+  VideoScopeAnalyzeMessage,
+  VideoScopeWorkerReply,
+} from './video-scopes-protocol'
 
 /** A larger forward gap is a discontinuity, not useful sequential catch-up. */
 const PLAYBACK_RESTART_GAP_US = 1_000_000
@@ -140,6 +153,16 @@ export interface RenderWorkerEnv extends LegacyRenderWorkerEnv {
   createStreamingBitmap(frame: DecodedVideoFrame): Promise<BitmapLike>
   /** Create the scratch compositing surface (new OffscreenCanvas). */
   createCanvas(width: number, height: number): RenderCanvasLike
+  /** Yield non-critical analysis until after the current render task. */
+  schedule?(callback: () => void): void
+  /** Analyze the tiny scope sample away from the render worker when available. */
+  analyzeVideoScopes?(
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+  ): Promise<VideoScopeAnalysis>
+  /** Terminate analysis resources and reject any pending request. */
+  releaseVideoScopes?(): void
 }
 
 /* ------------------------------------------------------------------ */
@@ -227,6 +250,14 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   let transitionGroup: RenderCanvasLike | null = null
   let transitionGroupCtx: Composite2D | null = null
   let publishedCanvasFilterCapability: boolean | null = null
+  let publishedCanvasPixelCapability: boolean | null = null
+  let videoScopeCanvas: RenderCanvasLike | null = null
+  let videoScopeCtx: Composite2D | null = null
+  let videoScopesEnabled = false
+  let videoScopeGeneration = 0
+  let videoScopeTaskPending = false
+  let lastVideoScopeAnalysisAt = Number.NEGATIVE_INFINITY
+  let scratchFrame: number | null = null
   let doc: TimelineDoc | null = null
   let presentationProfile: PresentationProfile | null = null
   /** Bumped by every composite/setDoc/configureAsset/releaseAsset/close;
@@ -453,11 +484,16 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
     if (scratchCtx) {
       const canvasFilter = supportsCanvasEffectFilter(scratchCtx)
-      if (canvasFilter !== publishedCanvasFilterCapability) {
+      const canvasPixelAccess = supportsCanvasEffectPixels(scratchCtx)
+      if (
+        canvasFilter !== publishedCanvasFilterCapability
+        || canvasPixelAccess !== publishedCanvasPixelCapability
+      ) {
         publishedCanvasFilterCapability = canvasFilter
+        publishedCanvasPixelCapability = canvasPixelAccess
         env.post({
           type: 'rendererCapabilities',
-          capabilities: { canvasFilter },
+          capabilities: { canvasFilter, canvasPixelAccess },
         })
       }
     }
@@ -481,6 +517,124 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       transitionGroup.width = outputWidth
       transitionGroup.height = outputHeight
     }
+  }
+
+  function releaseVideoScopeSurface(): void {
+    if (videoScopeCanvas) {
+      videoScopeCanvas.width = 1
+      videoScopeCanvas.height = 1
+    }
+    videoScopeCanvas = null
+    videoScopeCtx = null
+  }
+
+  function setVideoScopes(enabled: boolean, nextGeneration: number): void {
+    if (!Number.isSafeInteger(nextGeneration) || nextGeneration < 0) {
+      throw new RangeError('video scope generation must be a non-negative safe integer')
+    }
+    videoScopesEnabled = enabled
+    videoScopeGeneration = nextGeneration
+    lastVideoScopeAnalysisAt = Number.NEGATIVE_INFINITY
+    if (!enabled) {
+      releaseVideoScopeSurface()
+      env.releaseVideoScopes?.()
+    }
+  }
+
+  function scheduleVideoScopes(): void {
+    if (
+      !videoScopesEnabled
+      || publishedCanvasPixelCapability !== true
+      || videoScopeTaskPending
+      || env.now() - lastVideoScopeAnalysisAt < 250
+    ) return
+
+    const scheduledGeneration = videoScopeGeneration
+    const scheduledLifecycle = workerLifecycle
+    videoScopeTaskPending = true
+    const run = async (): Promise<void> => {
+      if (
+        !videoScopesEnabled
+        || videoScopeGeneration !== scheduledGeneration
+        || workerLifecycle !== scheduledLifecycle
+        || !scratch
+      ) {
+        videoScopeTaskPending = false
+        return
+      }
+
+      try {
+        const sampledFrame = scratchFrame
+        if (sampledFrame === null) return
+        if (!videoScopeCanvas) {
+          videoScopeCanvas = env.createCanvas(
+            VIDEO_SCOPE_SAMPLE_WIDTH,
+            VIDEO_SCOPE_SAMPLE_HEIGHT,
+          )
+          videoScopeCtx = videoScopeCanvas.getContext('2d', SRGB_2D_CONTEXT)
+        }
+        if (
+          !videoScopeCtx
+          || !supportsCanvasEffectPixels(videoScopeCtx)
+          || !videoScopeCtx.getImageData
+        ) return
+        videoScopeCtx.clearRect(
+          0,
+          0,
+          VIDEO_SCOPE_SAMPLE_WIDTH,
+          VIDEO_SCOPE_SAMPLE_HEIGHT,
+        )
+        videoScopeCtx.drawImage(
+          scratch as unknown as CanvasImageSource,
+          0,
+          0,
+          scratch.width,
+          scratch.height,
+          0,
+          0,
+          VIDEO_SCOPE_SAMPLE_WIDTH,
+          VIDEO_SCOPE_SAMPLE_HEIGHT,
+        )
+        const pixels = videoScopeCtx.getImageData(
+          0,
+          0,
+          VIDEO_SCOPE_SAMPLE_WIDTH,
+          VIDEO_SCOPE_SAMPLE_HEIGHT,
+        )
+        const analysis = env.analyzeVideoScopes
+          ? await env.analyzeVideoScopes(
+              pixels.data,
+              VIDEO_SCOPE_SAMPLE_WIDTH,
+              VIDEO_SCOPE_SAMPLE_HEIGHT,
+            )
+          : analyzeVideoScopes(
+              pixels.data,
+              VIDEO_SCOPE_SAMPLE_WIDTH,
+              VIDEO_SCOPE_SAMPLE_HEIGHT,
+            )
+        const analyzedAt = env.now()
+        if (
+          !videoScopesEnabled
+          || videoScopeGeneration !== scheduledGeneration
+          || workerLifecycle !== scheduledLifecycle
+        ) return
+        lastVideoScopeAnalysisAt = analyzedAt
+        env.post({
+          type: 'videoScopes',
+          generation: scheduledGeneration,
+          frame: sampledFrame,
+          analyzedAt,
+          analysis,
+        })
+      } catch {
+        // Scopes are diagnostic only: sampling failures never fail playback.
+      } finally {
+        videoScopeTaskPending = false
+      }
+    }
+    const invoke = (): void => { void run() }
+    if (env.schedule) env.schedule(invoke)
+    else queueMicrotask(invoke)
   }
 
   const transitionSurfaceProvider: TransitionSurfaceProvider = {
@@ -1766,6 +1920,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         return
       }
       visibleCtx.drawImage(scratch as unknown as ImageBitmap, 0, 0)
+      scratchFrame = msg.frame
       env.post({
         type: 'compositeDone',
         requestId: msg.requestId,
@@ -1774,6 +1929,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         missingClipIds: result.missing,
         renderMs: env.now() - startedAt,
       })
+      scheduleVideoScopes()
     }
 
     enterRenderQueue()
@@ -1847,6 +2003,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       case 'setRuntimeTelemetry':
         setRuntimeTelemetry(msg.enabled)
         break
+      case 'setVideoScopes':
+        setVideoScopes(msg.enabled, msg.generation)
+        break
       case 'requestRuntimeTelemetry':
         env.post({
           type: 'runtimeTelemetry',
@@ -1856,6 +2015,10 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         break
       case 'close': {
         workerLifecycle++
+        videoScopesEnabled = false
+        videoScopeGeneration++
+        releaseVideoScopeSurface()
+        env.releaseVideoScopes?.()
         env.invalidateDecoderRuntime()
         supersede()
         assetRevisions.clear()
@@ -1981,9 +2144,82 @@ export async function createOrientedStreamingBitmap(
   return canvas.transferToImageBitmap()
 }
 
+function createVideoScopeAnalyzer(): {
+  analyze(
+    rgba: Uint8ClampedArray,
+    width: number,
+    height: number,
+  ): Promise<VideoScopeAnalysis>
+  release(): void
+} {
+  let worker: Worker | null = null
+  let requestId = 0
+  const pending = new Map<number, {
+    resolve(analysis: VideoScopeAnalysis): void
+    reject(error: Error): void
+  }>()
+
+  const rejectPending = (message: string): void => {
+    for (const request of pending.values()) request.reject(new Error(message))
+    pending.clear()
+  }
+  const ensureWorker = (): Worker => {
+    if (worker) return worker
+    worker = new Worker(new URL('./video-scopes.worker.ts', import.meta.url), {
+      type: 'module',
+      name: 'myrelith-video-scopes',
+    })
+    worker.onmessage = (event: MessageEvent<VideoScopeWorkerReply>) => {
+      const message = event.data
+      const request = pending.get(message.requestId)
+      if (!request) return
+      pending.delete(message.requestId)
+      if (message.type === 'analysis') request.resolve(message.analysis)
+      else request.reject(new Error(message.message))
+    }
+    worker.onerror = (event) => {
+      event.preventDefault()
+      rejectPending(event.message || 'Video scope analysis worker failed')
+      worker?.terminate()
+      worker = null
+    }
+    return worker
+  }
+  const release = (): void => {
+    worker?.terminate()
+    worker = null
+    rejectPending('Video scope analysis was released')
+  }
+  return {
+    analyze: (rgba, width, height) => {
+      requestId++
+      if (!Number.isSafeInteger(requestId)) {
+        release()
+        requestId = 1
+      }
+      const id = requestId
+      const copy = new Uint8ClampedArray(rgba)
+      const message: VideoScopeAnalyzeMessage = {
+        type: 'analyze',
+        requestId: id,
+        rgba: copy,
+        width,
+        height,
+      }
+      const result = new Promise<VideoScopeAnalysis>((resolve, reject) => {
+        pending.set(id, { resolve, reject })
+      })
+      ensureWorker().postMessage(message, [copy.buffer])
+      return result
+    },
+    release,
+  }
+}
+
 declare const WorkerGlobalScope: unknown
 
 if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
+  const videoScopeAnalyzer = createVideoScopeAnalyzer()
   const core = createRenderWorkerCore({
     post: (msg) => self.postMessage(msg),
     createDecoder: (init) =>
@@ -2012,6 +2248,10 @@ if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
     createStreamingBitmap: createOrientedStreamingBitmap,
     createCanvas: (width, height) => new OffscreenCanvas(width, height),
     now: () => performance.now(),
+    schedule: (callback) => setTimeout(callback, 0),
+    analyzeVideoScopes: (rgba, width, height) =>
+      videoScopeAnalyzer.analyze(rgba, width, height),
+    releaseVideoScopes: () => videoScopeAnalyzer.release(),
   })
 
   self.addEventListener('message', (event: MessageEvent<ToRenderWorker>) => {

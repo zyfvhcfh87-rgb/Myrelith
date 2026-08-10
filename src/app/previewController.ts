@@ -37,6 +37,7 @@ import {
   type PresentationViewport,
 } from '../domain/presentationProfile'
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
+import type { VideoScopeAnalysis } from '../domain/videoScopes'
 import { updateClipVisualAtFrame } from '../domain/operations'
 import {
   createSourceBoundsCatalog,
@@ -62,6 +63,7 @@ import { useMediaStore } from '../state/mediaStore'
 import { useProxyStore } from '../state/proxyStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
+import { useVideoScopesStore } from '../state/videoScopesStore'
 import {
   useTransportStore,
   type ClipVisualPreview,
@@ -107,6 +109,7 @@ export interface BridgeLike {
   renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult>
   setRuntimeTelemetryEnabled?(enabled: boolean): void
   requestRuntimeTelemetry?(): Promise<RenderWorkerRuntimeTelemetrySnapshot>
+  setVideoScopesEnabled?(enabled: boolean, generation: number): void
   dispose(): void
   onWorkerError: ((message: string) => void) | null
   onAssetError: ((
@@ -117,6 +120,12 @@ export interface BridgeLike {
   ) => void) | null
   onAssetReady: ((assetId: AssetId) => void) | null
   onRendererCapabilities: ((capabilities: RenderWorkerCapabilities) => void) | null
+  onVideoScopes?: ((
+    generation: number,
+    frame: number,
+    analyzedAt: number,
+    analysis: VideoScopeAnalysis,
+  ) => void) | null
 }
 
 /** Injection points so tests can run without Worker/OffscreenCanvas/fetch. */
@@ -252,6 +261,8 @@ interface ControllerState {
   renderGeneration: number
   /** Invalidates presentation evidence when a newer render is dispatched. */
   presentationGeneration: number
+  /** Guards disabled/re-enabled scope results against stale worker work. */
+  scopeGeneration: number
 }
 
 const state: ControllerState = {
@@ -266,6 +277,22 @@ const state: ControllerState = {
   rafPending: false,
   renderGeneration: 0,
   presentationGeneration: 0,
+  scopeGeneration: 0,
+}
+
+/** Enable/disable preview scopes without making their state project truth. */
+export function setVideoScopesEnabled(enabled: boolean): boolean {
+  state.scopeGeneration++
+  if (!Number.isSafeInteger(state.scopeGeneration)) {
+    throw new RangeError('Video scope generation overflow')
+  }
+  const generation = state.scopeGeneration
+  useVideoScopesStore.getState().setEnabled(enabled, generation)
+  const method = state.bridge?.setVideoScopesEnabled
+  if (!method) return false
+  method.call(state.bridge, enabled, generation)
+  if (enabled && state.deps) scheduleRender(state.deps)
+  return true
 }
 
 function modeForTransport(transport: {
@@ -753,8 +780,18 @@ export function initPreview(
   // A source came online: repaint so its clips fill in (retry policy).
   bridge.onAssetReady = () =>
     scheduleRender(deps)
-  bridge.onRendererCapabilities = (capabilities) =>
+  bridge.onRendererCapabilities = (capabilities) => {
     publishPreviewEffectStatuses(currentPreviewDocument(), capabilities)
+    useVideoScopesStore.getState().setRendererSupported(capabilities.canvasPixelAccess)
+  }
+  bridge.onVideoScopes = (generation, frame, analyzedAt, analysis) => {
+    useVideoScopesStore.getState().acceptAnalysis(
+      generation,
+      frame,
+      analyzedAt,
+      analysis,
+    )
+  }
   state.canvas = canvas
   state.bridge = bridge
   state.deps = deps
@@ -766,6 +803,8 @@ export function initPreview(
   bridge.setDoc(initialDoc)
   publishPreviewEffectStatuses(initialDoc, null)
   syncPresentationProfile(bridge, initialDoc)
+  const scopes = useVideoScopesStore.getState()
+  bridge.setVideoScopesEnabled?.(scopes.enabled, scopes.generation)
 
   state.unsubscribes.push(
     useDocumentStore.subscribe((s, prev) => {
@@ -831,6 +870,7 @@ export function initPreview(
 export function disposePreview(): void {
   state.renderGeneration++
   state.presentationGeneration++
+  state.scopeGeneration++
   for (const unsubscribe of state.unsubscribes) unsubscribe()
   state.unsubscribes = []
   state.bridge?.dispose()
@@ -843,4 +883,5 @@ export function disposePreview(): void {
   state.assetStates = new Map()
   state.rafPending = false
   usePreviewStatusStore.getState().resetPreviewStatus()
+  useVideoScopesStore.getState().reset()
 }

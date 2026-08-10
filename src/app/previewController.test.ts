@@ -20,6 +20,7 @@ import type {
   Track,
 } from '../domain/schema'
 import { defaultTextProps } from '../domain/textOverlay'
+import { analyzeVideoScopes } from '../domain/videoScopes'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
 import { createColorAdjustEffect } from '../domain/effectStack'
 import {
@@ -31,6 +32,7 @@ import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useTransportStore } from '../state/transportStore'
+import { useVideoScopesStore } from '../state/videoScopesStore'
 import type {
   RenderMode,
   RenderWorkerCapabilities,
@@ -44,6 +46,7 @@ import {
   initPreview,
   renderPreviewFrameForDevBenchmark,
   setPreviewViewport,
+  setVideoScopesEnabled,
   subscribePreviewRenderCompletions,
   subscribePreviewRenderDiagnostics,
 } from './previewController'
@@ -60,6 +63,7 @@ class FakeBridge implements BridgeLike {
   ) => void) | null = null
   onAssetReady: ((assetId: string) => void) | null = null
   onRendererCapabilities: ((capabilities: RenderWorkerCapabilities) => void) | null = null
+  onVideoScopes: BridgeLike['onVideoScopes'] = null
   docs: TimelineDoc[] = []
   catalogs: SourceBoundsCatalog[] = []
   profiles: PresentationProfile[] = []
@@ -77,6 +81,7 @@ class FakeBridge implements BridgeLike {
   }> = []
   released: string[] = []
   rendered: Array<{ frame: number; mode: RenderMode }> = []
+  videoScopes: Array<{ enabled: boolean; generation: number }> = []
   disposed = false
   openImpl: (
     assetId: string,
@@ -141,6 +146,10 @@ class FakeBridge implements BridgeLike {
   async renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult> {
     this.rendered.push({ frame, mode })
     return this.renderImpl(frame, mode)
+  }
+
+  setVideoScopesEnabled(enabled: boolean, generation: number): void {
+    this.videoScopes.push({ enabled, generation })
   }
 
   dispose(): void {
@@ -377,6 +386,7 @@ beforeEach(() => {
   })
   usePreviewStatusStore.getState().resetPreviewStatus()
   usePreviewQualityStore.setState({ qualityMode: 'auto' })
+  useVideoScopesStore.getState().reset()
 })
 
 afterEach(() => {
@@ -455,7 +465,9 @@ describe('previewController', () => {
   test('projects the actual preview renderer effect capability into session state', () => {
     const { deps, bridge } = makeDeps()
     const doc = makeVideoDoc(['graded'])
-    doc.tracks[0].clips[0].effects = [createColorAdjustEffect('fx-preview')]
+    const effect = createColorAdjustEffect('fx-preview')
+    effect.params.exposure = 1
+    doc.tracks[0].clips[0].effects = [effect]
     useDocumentStore.getState().setDoc(doc)
     initPreview(canvasEl(), deps)
 
@@ -464,7 +476,7 @@ describe('previewController', () => {
     expect(usePreviewStatusStore.getState().effectStatuses.get('fx-preview')?.detail)
       .toMatch(/still being detected/)
 
-    bridge.onRendererCapabilities?.({ canvasFilter: false })
+    bridge.onRendererCapabilities?.({ canvasFilter: false, canvasPixelAccess: false })
     expect(usePreviewStatusStore.getState()).toMatchObject({
       rendererCapabilities: { canvasFilter: false },
     })
@@ -475,9 +487,48 @@ describe('previewController', () => {
         detail: expect.stringMatching(/Program Monitor preview renderer does not provide/),
       })
 
-    bridge.onRendererCapabilities?.({ canvasFilter: true })
+    bridge.onRendererCapabilities?.({ canvasFilter: true, canvasPixelAccess: true })
     expect(usePreviewStatusStore.getState().effectStatuses.get('fx-preview'))
       .toMatchObject({ status: 'ready' })
+  })
+
+  test('guards scope generations and projects worker analysis into UI state', () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+    bridge.onRendererCapabilities?.({ canvasFilter: true, canvasPixelAccess: true })
+
+    expect(setVideoScopesEnabled(true)).toBe(true)
+    const enabled = bridge.videoScopes.at(-1)
+    expect(enabled).toMatchObject({ enabled: true })
+    if (!enabled) throw new Error('scope configuration was not posted')
+    expect(useVideoScopesStore.getState()).toMatchObject({
+      enabled: true,
+      generation: enabled.generation,
+      status: 'waiting',
+    })
+
+    const analysis = analyzeVideoScopes(
+      new Uint8ClampedArray([128, 128, 128, 255]),
+      1,
+      1,
+    )
+    bridge.onVideoScopes?.(enabled.generation - 1, 4, 10, analysis)
+    expect(useVideoScopesStore.getState().analysis).toBeNull()
+    bridge.onVideoScopes?.(enabled.generation, 5, 20, analysis)
+    expect(useVideoScopesStore.getState()).toMatchObject({
+      status: 'ready',
+      frame: 5,
+      analyzedAt: 20,
+      analysis,
+    })
+
+    expect(setVideoScopesEnabled(false)).toBe(true)
+    expect(bridge.videoScopes.at(-1)).toMatchObject({ enabled: false })
+    expect(useVideoScopesStore.getState()).toMatchObject({
+      enabled: false,
+      status: 'idle',
+      analysis: null,
+    })
   })
 
   test('keeps an unreferenced analyzed video warm without re-demuxing', async () => {

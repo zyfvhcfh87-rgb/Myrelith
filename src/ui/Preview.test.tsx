@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
@@ -8,6 +8,8 @@ import { useMediaStore } from '../state/mediaStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useProxyStore } from '../state/proxyStore'
+import { useVideoScopesStore } from '../state/videoScopesStore'
+import { analyzeVideoScopes } from '../domain/videoScopes'
 import Preview from './Preview'
 import { createTextClip } from '../domain/operations'
 import { useDocumentStore } from '../state/documentStore'
@@ -15,6 +17,7 @@ import { useDocumentStore } from '../state/documentStore'
 const previewController = vi.hoisted(() => ({
   initPreview: vi.fn(),
   setPreviewViewport: vi.fn(),
+  setVideoScopesEnabled: vi.fn(),
 }))
 
 vi.mock('../app/previewController', () => previewController)
@@ -59,6 +62,12 @@ const offlineImage: PortableAssetDescriptor = {
 beforeEach(() => {
   previewController.initPreview.mockClear()
   previewController.setPreviewViewport.mockClear()
+  previewController.setVideoScopesEnabled.mockReset()
+  previewController.setVideoScopesEnabled.mockImplementation((enabled: boolean) => {
+    const generation = useVideoScopesStore.getState().generation + 1
+    useVideoScopesStore.getState().setEnabled(enabled, generation)
+    return true
+  })
   useMediaStore.setState({
     descriptors: new Map([[offlineVideo.id, offlineVideo]]),
     assets: new Map(),
@@ -67,6 +76,7 @@ beforeEach(() => {
   usePreviewStatusStore.getState().resetPreviewStatus()
   usePreviewQualityStore.setState({ qualityMode: 'auto' })
   useProxyStore.getState().reset()
+  useVideoScopesStore.getState().reset()
   useDocumentStore.getState().setDoc(
     createTimelineDoc('Preview', DEFAULT_PROJECT_SETTINGS, 'preview-doc'),
   )
@@ -85,6 +95,56 @@ describe('Preview', () => {
     await user.selectOptions(quality, 'quarter')
     expect(usePreviewQualityStore.getState().qualityMode).toBe('quarter')
     expect(quality).toHaveValue('quarter')
+  })
+
+  test('opens accessible histogram, waveform, and vectorscope views', async () => {
+    const user = userEvent.setup()
+    const context = {
+      fillStyle: '',
+      strokeStyle: '',
+      globalAlpha: 1,
+      lineWidth: 1,
+      fillRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+    }
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(context as unknown as CanvasRenderingContext2D)
+    useVideoScopesStore.getState().setRendererSupported(true)
+
+    try {
+      render(<Preview />)
+      const toggle = screen.getByRole('button', { name: 'Scopes' })
+      expect(toggle).toHaveAttribute('aria-pressed', 'false')
+      await user.click(toggle)
+      expect(toggle).toHaveAttribute('aria-pressed', 'true')
+      expect(previewController.setVideoScopesEnabled).toHaveBeenCalledWith(true)
+
+      const waveform = screen.getByRole('tab', { name: 'waveform' })
+      expect(screen.getByRole('tab', { name: 'histogram' }))
+        .toHaveAttribute('aria-selected', 'true')
+      await user.click(waveform)
+      expect(waveform).toHaveAttribute('aria-selected', 'true')
+
+      const generation = useVideoScopesStore.getState().generation
+      const analysis = analyzeVideoScopes(
+        new Uint8ClampedArray([255, 255, 255, 255]),
+        1,
+        1,
+      )
+      act(() => useVideoScopesStore.getState().acceptAnalysis(
+        generation,
+        9,
+        100,
+        analysis,
+      ))
+      expect(screen.getByRole('img', { name: /waveform scope/i }))
+        .toHaveAccessibleName(/1 visible samples from frame 9/i)
+    } finally {
+      getContext.mockRestore()
+    }
   })
 
   test('offers reconnection instead of import when every visual is offline', () => {
