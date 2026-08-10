@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import type {
   Clip,
   ClipAnimationEasing,
@@ -530,6 +530,16 @@ export default function EffectStackInspector({
     chroma: effectAppendBudgetError(doc, clip, probes.chroma),
     mask: effectAppendBudgetError(doc, clip, probes.mask),
   }
+  const addBudgetReasonBaseId = useId()
+  const addBudgetReasons = [...new Set(
+    [limits.color, limits.chroma, limits.mask]
+      .filter((reason): reason is string => reason !== null),
+  )]
+  const addBudgetReasonId = (reason: string | null): string | undefined => {
+    if (reason === null) return undefined
+    const index = addBudgetReasons.indexOf(reason)
+    return index < 0 ? undefined : `${addBudgetReasonBaseId}-${index}`
+  }
   const store = useDocumentStore.getState
   const add = (effect: EffectDescriptor): void => store().addEffect(clip.id, effect)
   const newId = (): string => `fx_${crypto.randomUUID()}`
@@ -539,11 +549,11 @@ export default function EffectStackInspector({
       <div className="inspector-section-bar">
         <h3 id="inspector-effects-heading">Effect stack</h3>
         <div className="inspector-effect-actions" aria-label="Add effect">
-          <button type="button" className="inspector-effect-add" disabled={locked || limits.color !== null} onClick={() => add(createColorAdjustEffect(newId()))}>Add color</button>
-          <button type="button" className="inspector-effect-add" disabled={locked || limits.chroma !== null} onClick={() => add(createChromaKeyEffect(newId()))}>Add chroma key</button>
-          <button type="button" className="inspector-effect-add" disabled={locked || limits.mask !== null} onClick={() => add(createMaskEffect(newId(), 'rectangle'))}>Add rectangle mask</button>
-          <button type="button" className="inspector-effect-add" disabled={locked || limits.mask !== null} onClick={() => add(createMaskEffect(newId(), 'ellipse'))}>Add ellipse mask</button>
-          <button type="button" className="inspector-effect-add" disabled={locked || limits.mask !== null} onClick={() => add(createMaskEffect(newId(), 'bezier'))}>Add Bezier mask</button>
+          <button type="button" className="inspector-effect-add" disabled={locked || limits.color !== null} aria-describedby={addBudgetReasonId(limits.color)} onClick={() => add(createColorAdjustEffect(newId()))}>Add color</button>
+          <button type="button" className="inspector-effect-add" disabled={locked || limits.chroma !== null} aria-describedby={addBudgetReasonId(limits.chroma)} onClick={() => add(createChromaKeyEffect(newId()))}>Add chroma key</button>
+          <button type="button" className="inspector-effect-add" disabled={locked || limits.mask !== null} aria-describedby={addBudgetReasonId(limits.mask)} onClick={() => add(createMaskEffect(newId(), 'rectangle'))}>Add rectangle mask</button>
+          <button type="button" className="inspector-effect-add" disabled={locked || limits.mask !== null} aria-describedby={addBudgetReasonId(limits.mask)} onClick={() => add(createMaskEffect(newId(), 'ellipse'))}>Add ellipse mask</button>
+          <button type="button" className="inspector-effect-add" disabled={locked || limits.mask !== null} aria-describedby={addBudgetReasonId(limits.mask)} onClick={() => add(createMaskEffect(newId(), 'bezier'))}>Add Bezier mask</button>
         </div>
       </div>
       <span className="inspector-note">
@@ -555,11 +565,16 @@ export default function EffectStackInspector({
       <span className="inspector-note">
         Status describes Program Monitor preview. Export probes its own render context separately.
       </span>
-      {(limits.color ?? limits.chroma ?? limits.mask) && (
-        <span className="inspector-note" role="status">
-          {limits.color ?? limits.chroma ?? limits.mask}.
+      {addBudgetReasons.map((reason, index) => (
+        <span
+          className="inspector-note"
+          id={`${addBudgetReasonBaseId}-${index}`}
+          key={reason}
+          role="status"
+        >
+          {reason}.
         </span>
-      )}
+      ))}
       {clip.effects.length === 0
         ? <span className="inspector-effect-empty">No effects on this clip.</span>
         : (

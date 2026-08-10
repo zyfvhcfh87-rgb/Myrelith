@@ -22,7 +22,11 @@ import type {
 import { defaultTextProps } from '../domain/textOverlay'
 import { analyzeVideoScopes } from '../domain/videoScopes'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
-import { createColorAdjustEffect } from '../domain/effectStack'
+import {
+  createChromaKeyEffect,
+  createColorAdjustEffect,
+  createMaskEffect,
+} from '../domain/effectStack'
 import {
   RenderAssetOpenError,
   type RenderFrameResult,
@@ -38,6 +42,11 @@ import type {
   RenderWorkerCapabilities,
 } from '../workers/render-protocol'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
+import {
+  createPreviewEffectStatusIndex,
+  projectIndexedPreviewEffectStatuses,
+  refreshAnimatedPreviewEffectStatuses,
+} from './previewEffectStatus'
 import type { BridgeLike, PreviewDeps } from './previewController'
 import {
   disposePreview,
@@ -466,7 +475,7 @@ describe('previewController', () => {
     const { deps, bridge } = makeDeps()
     const doc = makeVideoDoc(['graded'])
     const effect = createColorAdjustEffect('fx-preview')
-    effect.params.exposure = 1
+    effect.params.temperature = 0.25
     doc.tracks[0].clips[0].effects = [effect]
     useDocumentStore.getState().setDoc(doc)
     initPreview(canvasEl(), deps)
@@ -484,12 +493,129 @@ describe('previewController', () => {
       .toMatchObject({
         label: 'Color adjustment',
         status: 'unsupported',
-        detail: expect.stringMatching(/Program Monitor preview renderer does not provide/),
+        detail: 'The Program Monitor preview renderer cannot read and write Canvas pixels; the effect settings are preserved and the effect is bypassed in preview.',
       })
 
     bridge.onRendererCapabilities?.({ canvasFilter: true, canvasPixelAccess: true })
     expect(usePreviewStatusStore.getState().effectStatuses.get('fx-preview'))
       .toMatchObject({ status: 'ready' })
+  })
+
+  test('uses accurate generic preview fallback copy for mask and chroma settings', () => {
+    const { deps, bridge } = makeDeps()
+    const doc = makeVideoDoc(['pixel-effects'])
+    const mask = createMaskEffect('fx-copy-mask', 'ellipse')
+    const chroma = createChromaKeyEffect('fx-copy-chroma')
+    doc.tracks[0].clips[0].effects = [mask, chroma]
+    useDocumentStore.getState().setDoc(doc)
+    initPreview(canvasEl(), deps)
+
+    bridge.onRendererCapabilities?.({ canvasFilter: false, canvasPixelAccess: false })
+    for (const effectId of [mask.id, chroma.id]) {
+      expect(usePreviewStatusStore.getState().effectStatuses.get(effectId))
+        .toMatchObject({
+          status: 'unsupported',
+          detail: 'The Program Monitor preview renderer cannot read and write Canvas pixels; the effect settings are preserved and the effect is bypassed in preview.',
+        })
+    }
+  })
+
+  test('refreshes animated mask capability status at the rendered playhead', async () => {
+    const { deps, bridge } = makeDeps()
+    const doc = makeVideoDoc(['animated-mask'])
+    const effect = createMaskEffect('fx-animated-mask', 'rectangle')
+    doc.tracks[0].clips[0].effects = [effect]
+    doc.tracks[0].clips[0].animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: effect.id,
+        parameter: 'width',
+        keyframes: [
+          { frame: 0, value: 1, easing: { type: 'hold' } },
+          { frame: 12, value: 0.5, easing: { type: 'hold' } },
+        ],
+      }],
+    }
+    useDocumentStore.getState().setDoc(doc)
+    initPreview(canvasEl(), deps)
+    bridge.onRendererCapabilities?.({ canvasFilter: false, canvasPixelAccess: false })
+
+    expect(usePreviewStatusStore.getState().effectStatuses.get(effect.id))
+      .toMatchObject({ status: 'ready' })
+
+    useTransportStore.getState().setPlayheadFrame(12)
+    await nextFrame()
+    expect(bridge.rendered.at(-1)).toMatchObject({ frame: 12 })
+    expect(usePreviewStatusStore.getState().effectStatuses.get(effect.id))
+      .toMatchObject({
+        status: 'unsupported',
+        detail: expect.stringMatching(/cannot read and write Canvas pixels/u),
+      })
+
+    bridge.onRendererCapabilities?.({ canvasFilter: true, canvasPixelAccess: true })
+    expect(usePreviewStatusStore.getState().effectStatuses.get(effect.id))
+      .toMatchObject({ status: 'ready' })
+    bridge.onRendererCapabilities?.({ canvasFilter: false, canvasPixelAccess: false })
+    expect(usePreviewStatusStore.getState().effectStatuses.get(effect.id))
+      .toMatchObject({ status: 'unsupported' })
+
+    useTransportStore.getState().setPlayheadFrame(0)
+    await nextFrame()
+    expect(bridge.rendered.at(-1)).toMatchObject({ frame: 0 })
+    expect(usePreviewStatusStore.getState().effectStatuses.get(effect.id))
+      .toMatchObject({ status: 'ready' })
+  })
+
+  test('bounds playhead status refresh work to animated-effect clips', () => {
+    const doc = makeVideoDoc([])
+    const staticClips = Array.from({ length: 5_000 }, (_unused, index) => ({
+      ...makeClip(`plain-${index}`, `asset-${index}`),
+      timelineRange: { startFrame: index * 30, durationFrames: 30 },
+    }))
+    const animated = makeClip('animated-owner', 'animated-asset')
+    const mask = createMaskEffect('fx-indexed-mask', 'rectangle')
+    animated.effects = [mask]
+    animated.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: mask.id,
+        parameter: 'width',
+        keyframes: [
+          { frame: 0, value: 1, easing: { type: 'hold' } },
+          { frame: 12, value: 0.5, easing: { type: 'hold' } },
+        ],
+      }],
+    }
+    doc.tracks = [{
+      id: 'large-track',
+      kind: 'video',
+      name: 'Large track',
+      clips: [...staticClips, animated],
+      transitions: [],
+      hidden: false,
+      muted: false,
+      solo: false,
+      locked: false,
+    }]
+
+    const index = createPreviewEffectStatusIndex(doc)
+    const capabilities = { canvasFilter: false, canvasPixelAccess: false }
+    const initial = projectIndexedPreviewEffectStatuses(index, capabilities, 0)
+    expect(refreshAnimatedPreviewEffectStatuses(index, capabilities, 0, initial))
+      .toBe(initial)
+    const work = { clipsResolved: 0 }
+    const refreshed = refreshAnimatedPreviewEffectStatuses(
+      index,
+      capabilities,
+      12,
+      initial,
+      work,
+    )
+
+    expect(index.effectClips).toHaveLength(1)
+    expect(index.animatedEffectClips).toHaveLength(1)
+    expect(work.clipsResolved).toBe(1)
+    expect(refreshed.get(mask.id)).toMatchObject({ status: 'unsupported' })
   })
 
   test('guards scope generations and projects worker analysis into UI state', () => {

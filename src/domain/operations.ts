@@ -48,9 +48,11 @@ import type {
 } from './schema'
 import {
   clipAnimation,
+  clipAnimationKeyframeCount,
   clipAnimationValidationError,
   cloneClipAnimation,
   defaultClipAnimation,
+  documentAnimationKeyframeGrowthAllowed,
   shiftClipAnimation,
   animationPropertyValueError,
   effectAnimationTrack,
@@ -881,6 +883,10 @@ export function insertClip(
   if (overlapsAny(track.clips, tl)) {
     return reject(doc, op, 'insert would overlap a clip on the target track')
   }
+  if (!documentAnimationKeyframeGrowthAllowed(
+    doc,
+    clipAnimationKeyframeCount(animation),
+  )) return reject(doc, op, 'insert would exceed the document keyframe budget')
 
   const copy: Clip = {
     ...clip,
@@ -931,6 +937,10 @@ export function splitClipAtFrame(
       `frame ${frame} is not strictly inside clip [${tl.startFrame}, ${rangeEnd(tl)})`,
     )
   }
+  if (!documentAnimationKeyframeGrowthAllowed(
+    doc,
+    clipAnimationKeyframeCount(clipAnimation(clip)),
+  )) return reject(doc, op, 'split would exceed the document keyframe budget')
 
   const offset = frame - tl.startFrame
   const stillSource = clip.sourceMode === 'still'
@@ -1946,6 +1956,9 @@ export function setClipKeyframe(
     && sameAnimationEasing(existing.easing, keyframe.easing)
     && (existing.sourceTimeTicks ?? sourceTimeTicks) === sourceTimeTicks
   ) return doc
+  if (!existing && !documentAnimationKeyframeGrowthAllowed(doc, 1)) {
+    return reject(doc, op, 'document has reached the keyframe budget')
+  }
   const animation = upsertAnimationKeyframe(current, property, authoredKeyframe)
   if (!animation) return reject(doc, op, 'invalid or over-budget keyframe')
   return replaceClipAnimation(doc, loc, animation)
@@ -2066,6 +2079,9 @@ export function setEffectKeyframe(
     && sameAnimationEasing(existing.easing, keyframe.easing)
     && (existing.sourceTimeTicks ?? sourceTimeTicks) === sourceTimeTicks
   ) return doc
+  if (!existing && !documentAnimationKeyframeGrowthAllowed(doc, 1)) {
+    return reject(doc, op, 'document has reached the keyframe budget')
+  }
   const animation = upsertEffectAnimationKeyframe(
     current,
     target.effect,
@@ -2250,6 +2266,15 @@ export function updateClipVisualAtFrame(
       || localFrame >= loc.clip.timelineRange.durationFrames
     )
   ) return reject(doc, op, 'playhead must be inside the clip to edit animated values')
+
+  const additionalKeyframes = [...animatedValues.keys()].filter((property) => (
+    !clipAnimation(loc.clip).tracks
+      .find((track) => track.property === property)
+      ?.keyframes.some((keyframe) => keyframe.frame === localFrame)
+  )).length
+  if (!documentAnimationKeyframeGrowthAllowed(doc, additionalKeyframes)) {
+    return reject(doc, op, 'animated edit would exceed the document keyframe budget')
+  }
 
   const staticPatch: ClipVisualPatch = {
     ...(Object.keys(staticTransform).length === 0 ? {} : { transform: staticTransform }),
@@ -2800,6 +2825,14 @@ export function updateEffectParamsAtFrame(
     && (localFrame < 0 || localFrame >= loc.clip.timelineRange.durationFrames)
   ) return reject(doc, op, 'playhead must be inside the clip to edit animated values')
 
+  const additionalKeyframes = [...animated.keys()].filter((parameter) => (
+    !effectAnimationTrack(currentAnimation, effectId, parameter)
+      ?.keyframes.some((keyframe) => keyframe.frame === localFrame)
+  )).length
+  if (!documentAnimationKeyframeGrowthAllowed(doc, additionalKeyframes)) {
+    return reject(doc, op, 'animated edit would exceed the document keyframe budget')
+  }
+
   let working = doc
   if (Object.keys(staticPatch).length > 0) {
     working = updateEffectParams(doc, clipId, effectId, staticPatch)
@@ -2883,6 +2916,11 @@ export function resetEffect(
     return reject(doc, op, `effect ${effectId} has no supported reset contract`)
   }
   const params = { ...effect.params, ...registration.defaultParams }
+  const candidate = { ...effect, params }
+  const boundsError = effectDescriptorBoundsError(candidate)
+  if (boundsError) return reject(doc, op, boundsError)
+  const budgetError = effectReplacementBudgetError(doc, effect, candidate)
+  if (budgetError) return reject(doc, op, budgetError)
   const animation = removeEffectAnimationTracks(clipAnimation(loc.clip), effectId)
   const changedParams = Object.entries(registration.defaultParams)
     .some(([key, value]) => effect.params[key] !== value)
@@ -2890,7 +2928,7 @@ export function resetEffect(
     !== effectAnimationTracks(clipAnimation(loc.clip)).length
   if (!changedParams && !changedTracks) return doc
   const effects = loc.clip.effects.slice()
-  effects[index] = { ...effect, params }
+  effects[index] = candidate
   const clips = loc.track.clips.slice()
   clips[loc.clipIndex] = { ...loc.clip, effects, animation }
   return withTrack(doc, loc.trackIndex, { ...loc.track, clips })

@@ -86,7 +86,7 @@ function projectEffectStatuses(canvasFilter: boolean): void {
   const capabilities = { canvasFilter, canvasPixelAccess: canvasFilter }
   usePreviewStatusStore.getState().setEffectProjection(
     capabilities,
-    projectPreviewEffectStatuses(timeline, capabilities),
+    projectPreviewEffectStatuses(timeline, capabilities, transport().playheadFrame),
   )
 }
 
@@ -734,7 +734,7 @@ describe('Inspector', () => {
       .toBeInTheDocument()
   })
 
-  test('disables Add color and explains the per-clip effect limit', () => {
+  test('describes every add action disabled by the displayed per-clip effect limit', () => {
     const fixture = makeDoc()
     fixture.tracks[0].clips[0].effects = Array.from(
       { length: EFFECT_STACK_LIMITS.maxEffectsPerClip },
@@ -752,8 +752,89 @@ describe('Inspector', () => {
     render(<Inspector />)
 
     fireEvent.click(screen.getByRole('tab', { name: 'Effects' }))
-    expect(screen.getByRole('button', { name: 'Add color' })).toBeDisabled()
-    expect(screen.getByText(/clip has reached the 256-effect limit/u)).toBeInTheDocument()
+    const reason = screen.getByText(/clip has reached the 256-effect limit/u)
+    expect(reason.id).not.toBe('')
+    for (const name of [
+      'Add color',
+      'Add chroma key',
+      'Add rectangle mask',
+      'Add ellipse mask',
+      'Add Bezier mask',
+    ]) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toBeDisabled()
+      expect(button).toHaveAccessibleName(name)
+      expect(button).toHaveAttribute('aria-describedby', reason.id)
+      expect(button).toHaveAccessibleDescription(/clip has reached the 256-effect limit/u)
+    }
+  })
+
+  test('does not describe lock-only add disables as a budget failure', () => {
+    const fixture = makeDoc()
+    fixture.tracks[0].locked = true
+    resetDocumentStoreForTest(fixture)
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Effects' }))
+    const button = screen.getByRole('button', { name: 'Add color' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleName('Add color')
+    expect(button).not.toHaveAttribute('aria-describedby')
+    expect(button).not.toHaveAccessibleDescription()
+  })
+
+  test('associates distinct aggregate budget reasons with only their affected add actions', () => {
+    const fixture = makeDoc()
+    const paramsRemainingStart = EFFECT_STACK_LIMITS.maxTotalEffectParams - 6
+    const stringsRemainingStart = EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters - 3
+    let paramsRemaining = paramsRemainingStart
+    let stringsRemaining = stringsRemainingStart
+    const sharedString = 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters)
+    const effects: Clip['effects'][number][] = []
+    for (let effectIndex = 0; paramsRemaining > 0; effectIndex++) {
+      const parameterCount = Math.min(paramsRemaining, EFFECT_STACK_LIMITS.maxEffectParams)
+      const params: Record<string, number | string> = {}
+      for (let parameterIndex = 0; parameterIndex < parameterCount; parameterIndex++) {
+        if (stringsRemaining > 0) {
+          const length = Math.min(
+            stringsRemaining,
+            EFFECT_STACK_LIMITS.maxEffectStringCharacters,
+          )
+          params[`p-${parameterIndex}`] = length === sharedString.length
+            ? sharedString
+            : sharedString.slice(0, length)
+          stringsRemaining -= length
+        } else {
+          params[`p-${parameterIndex}`] = parameterIndex
+        }
+      }
+      effects.push({
+        id: `aggregate-budget-${effectIndex}`,
+        type: 'future.opaque',
+        version: 1,
+        enabled: true,
+        params,
+      })
+      paramsRemaining -= parameterCount
+    }
+    fixture.tracks[0].clips[0].effects = effects
+    resetDocumentStoreForTest(fixture)
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Effects' }))
+    const color = screen.getByRole('button', { name: 'Add color' })
+    const chroma = screen.getByRole('button', { name: 'Add chroma key' })
+    const rectangle = screen.getByRole('button', { name: 'Add rectangle mask' })
+    expect(color).toBeEnabled()
+    expect(color).not.toHaveAttribute('aria-describedby')
+    expect(chroma).toBeDisabled()
+    expect(chroma).toHaveAccessibleDescription(/effect-string characters/u)
+    expect(rectangle).toBeDisabled()
+    expect(rectangle).toHaveAccessibleDescription(/effect parameters/u)
+    expect(chroma.getAttribute('aria-describedby'))
+      .not.toBe(rectangle.getAttribute('aria-describedby'))
   })
 })
 

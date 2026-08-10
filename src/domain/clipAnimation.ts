@@ -13,6 +13,7 @@ import type {
   ClipAnimationTrack,
   EffectAnimationTrack,
   EffectDescriptor,
+  TimelineDoc,
   Transform,
 } from './schema'
 import {
@@ -34,6 +35,7 @@ export const MAX_KEYFRAMES_PER_TRACK = 1_024
 export const MAX_KEYFRAME_FRAME = 1_000_000_000
 export const MAX_ANIMATED_FINITE_MAGNITUDE = 1_000_000_000
 export const MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP = 1_280
+export const MAX_TOTAL_ANIMATION_KEYFRAMES = 100_000
 
 export const LINEAR_ANIMATION_EASING: ClipAnimationEasing = {
   type: 'linear',
@@ -55,6 +57,34 @@ export function effectAnimationTracks(
 
 export function clipAnimation(clip: Clip): ClipAnimation {
   return clip.animation ?? DEFAULT_CLIP_ANIMATION
+}
+
+export function clipAnimationKeyframeCount(animation: ClipAnimation): number {
+  let total = 0
+  for (const track of animation.tracks) total += track.keyframes.length
+  for (const track of effectAnimationTracks(animation)) total += track.keyframes.length
+  return total
+}
+
+export function documentAnimationKeyframeCount(doc: TimelineDoc): number {
+  let total = 0
+  for (const track of doc.tracks) {
+    for (const clip of track.clips) {
+      total += clipAnimationKeyframeCount(clipAnimation(clip))
+    }
+  }
+  return total
+}
+
+/** Zero-growth edits remain legal even for preserved over-budget authoring intent. */
+export function documentAnimationKeyframeGrowthAllowed(
+  doc: TimelineDoc,
+  additionalKeyframes: number,
+): boolean {
+  if (!Number.isSafeInteger(additionalKeyframes) || additionalKeyframes < 0) return false
+  if (additionalKeyframes === 0) return true
+  return documentAnimationKeyframeCount(doc)
+    <= MAX_TOTAL_ANIMATION_KEYFRAMES - additionalKeyframes
 }
 
 export function cloneAnimationEasing(

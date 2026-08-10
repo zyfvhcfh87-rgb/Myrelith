@@ -3151,3 +3151,30 @@ acceptance claims.
 - [x] Publish the exact commit as a draft PR targeting `master` with `Closes
   #73`; do not merge or manually close the issue, and leave Issue #74's isolated
   worktree/branch untouched.
+
+## Milestone 4 issue #73 - review hardening follow-up
+
+**COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Make Program Monitor readiness playhead-aware through the shared pure
+  effect-track evaluator, while indexing effect owners on document changes and
+  resolving only animated owners during animation-frame refreshes.
+- [x] Give every budget-disabled effect Add button an accurate stable accessible
+  description, including mixed per-type aggregate-limit cases.
+- [x] Enforce the shared 100,000-key aggregate limit before all key-growing
+  direct edits, at-frame multi-edits, animated inserts, and splits; keep
+  non-growth edits legal at the cap and rejected store actions history-neutral.
+- [x] Preflight Reset through descriptor and replacement-budget checks before
+  changing defaults or clearing tracks.
+- [x] Replace Bezier per-pixel double edge scans with scanline coverage and
+  clipped edge-neighborhood feather distances using grow-only `Uint8Array` and
+  `Float32Array` scratch. Cover zero feather and representative 5% feather at
+  1080p under a generous CI-safe threshold; document that maximum feather can
+  still approach edges times clipped-region pixels.
+- [x] Use project-space Euclidean near-boundary ellipse distance and verify equal
+  inward feather coverage on both axes of wide and tall ellipses.
+- [x] Pass 67 post-tweak focused tests, a fresh expanded 415-test broad subset,
+  all 2,274 Vitest cases across 163 files plus 16 benchmark-runner checks, standalone
+  TypeScript, production build/typecheck, oxlint, and the production audit with
+  0 vulnerabilities. Publish the Aryel-only follow-up commit and verify its exact
+  remote SHA and fresh CI on draft PR #107 before handoff.

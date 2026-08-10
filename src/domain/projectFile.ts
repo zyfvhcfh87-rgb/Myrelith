@@ -58,6 +58,7 @@ import {
   MAX_ANIMATED_FINITE_MAGNITUDE,
   MAX_KEYFRAME_FRAME,
   MAX_KEYFRAMES_PER_TRACK,
+  MAX_TOTAL_ANIMATION_KEYFRAMES,
 } from './clipAnimation'
 import {
   clipAudioSettings,
@@ -149,7 +150,7 @@ export const PROJECT_FILE_LIMITS = {
   maxTotalEffectStringCharacters: EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
   maxTransitions: 100_000,
   maxMarkers: MAX_TIMELINE_MARKERS,
-  maxTotalKeyframes: 100_000,
+  maxTotalKeyframes: MAX_TOTAL_ANIMATION_KEYFRAMES,
   maxSpeedPointsPerClip: MAX_SOURCE_TIME_SPEED_POINTS,
   maxTotalSpeedPoints: 100_000,
   maxTotalTextCharacters: 10_000_000,

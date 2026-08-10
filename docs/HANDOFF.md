@@ -2805,3 +2805,38 @@ surface; it is not a second zoom and never enters document history.
   Authored noncommuting order, colored-destination alpha, and encoded-export
   parity are covered by deterministic pixel/compositor tests, not claimed as
   browser-observed. Port 5181 was released.
+
+## Milestone 4 issue #73 - review hardening follow-up (2026-08-11)
+
+**IMPLEMENTATION COMPLETE LOCALLY.**
+
+- Program Monitor effect readiness now resolves `effectTracks` at the current
+  integer playhead. Document changes rebuild a compact index of effect owners;
+  animation-frame refreshes evaluate only owners with animated effects, so
+  status work scales with that bounded subset rather than every timeline clip.
+  Pixel-readback fallback copy is generic and accurate for color, chroma, and
+  mask effects.
+- Every budget-disabled Add button has its own stable accessible description,
+  including mixed aggregate string/parameter limits where only some effect
+  types are unavailable. Lock-only disabling does not claim a budget reason.
+- The shared 100,000-key project limit is enforced before every operation in
+  this slice that can grow animation: ordinary/effect key insertion, multi-
+  parameter at-frame updates, animated clip insertion, and split duplication.
+  Replacements, moves, and removals remain valid at the cap. Reset preflights
+  descriptor and aggregate budgets before it clears target tracks, preserving
+  history and forward-compatible parameters on rejection.
+- Bezier masks use scanline parity for zero-feather coverage and exact segment
+  distances only inside clipped, feather-expanded edge neighborhoods. Scratch
+  storage is grow-only `Uint8Array`/`Float32Array` sized to the clipped mask
+  region, not a full-surface float64 field. Zero feather is proportional to
+  processed pixels plus rows times flattened edges; typical feather work is
+  bounded by the edge neighborhoods. At maximum feather, worst-case work can
+  still approach flattened edges times clipped-region pixels, so no feather-
+  independent performance claim is made. Ellipse feather now uses a project-
+  space Euclidean implicit-gradient distance with bounded center handling.
+- Review-hardening validation passed 67 post-tweak focused tests, a fresh
+  expanded 415-test broad subset, all 2,274 Vitest cases across 163 files, and
+  all 16 benchmark-runner checks. Standalone TypeScript, production
+  build/typecheck, oxlint, and
+  `npm audit --omit=dev` also passed; the audit found 0 vulnerabilities and the
+  build emitted only the established large-chunk advisory.

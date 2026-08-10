@@ -15,6 +15,28 @@ export interface PixelEffectGeometry {
   readonly projectHeight: number
 }
 
+/** Optional deterministic work evidence for performance regressions. */
+export interface PixelEffectWorkMetrics {
+  maskScanlineEdgeTests: number
+  maskDistanceSamples: number
+  maskInsideScratchPixelsPeak?: number
+  maskDistanceScratchPixelsPeak?: number
+}
+
+interface PixelEffectScratch {
+  polygonInside: Uint8Array
+  polygonDistances: Float32Array
+}
+
+interface SurfaceBounds {
+  readonly minimumX: number
+  readonly maximumX: number
+  readonly minimumY: number
+  readonly maximumY: number
+  readonly width: number
+  readonly height: number
+}
+
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value))
 }
@@ -101,19 +123,6 @@ function flattenedBezier(params: MaskParams, geometry: PixelEffectGeometry): Mas
   return points
 }
 
-function pointInPolygon(x: number, y: number, points: readonly MaskPoint[]): boolean {
-  let inside = false
-  for (let current = 0, previous = points.length - 1; current < points.length; previous = current++) {
-    const a = points[current]
-    const b = points[previous]
-    if (
-      (a.y > y) !== (b.y > y)
-      && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x
-    ) inside = !inside
-  }
-  return inside
-}
-
 function distanceToSegment(
   x: number,
   y: number,
@@ -129,13 +138,186 @@ function distanceToSegment(
   return Math.hypot(x - (start.x + dx * amount), y - (start.y + dy * amount))
 }
 
-function polygonSignedDistance(x: number, y: number, points: readonly MaskPoint[]): number {
-  if (points.length < 3) return Number.NEGATIVE_INFINITY
-  let distance = Number.POSITIVE_INFINITY
-  for (let current = 0, previous = points.length - 1; current < points.length; previous = current++) {
-    distance = Math.min(distance, distanceToSegment(x, y, points[previous], points[current]))
+function ensureInsideScratch(scratch: PixelEffectScratch, length: number): Uint8Array {
+  if (scratch.polygonInside.length < length) {
+    scratch.polygonInside = new Uint8Array(length)
   }
-  return pointInPolygon(x, y, points) ? distance : -distance
+  const region = scratch.polygonInside.subarray(0, length)
+  region.fill(0)
+  return region
+}
+
+function ensureDistanceScratch(
+  scratch: PixelEffectScratch,
+  length: number,
+  maximum: number,
+): Float32Array {
+  if (scratch.polygonDistances.length < length) {
+    scratch.polygonDistances = new Float32Array(length)
+  }
+  const region = scratch.polygonDistances.subarray(0, length)
+  region.fill(maximum)
+  return region
+}
+
+function rasterizePolygonInside(
+  points: readonly MaskPoint[],
+  geometry: PixelEffectGeometry,
+  bounds: SurfaceBounds,
+  inside: Uint8Array,
+  metrics?: PixelEffectWorkMetrics,
+): void {
+  if (points.length < 3) return
+  const intersections: number[] = []
+  const projectStepX = geometry.projectWidth / geometry.surfaceWidth
+  const projectStepY = geometry.projectHeight / geometry.surfaceHeight
+  for (let surfaceY = bounds.minimumY; surfaceY <= bounds.maximumY; surfaceY++) {
+    const projectY = (surfaceY + 0.5) * projectStepY
+    intersections.length = 0
+    for (
+      let current = 0, previous = points.length - 1;
+      current < points.length;
+      previous = current++
+    ) {
+      if (metrics) metrics.maskScanlineEdgeTests++
+      const a = points[current]
+      const b = points[previous]
+      if ((a.y > projectY) !== (b.y > projectY)) {
+        intersections.push(
+          ((b.x - a.x) * (projectY - a.y)) / (b.y - a.y) + a.x,
+        )
+      }
+    }
+    intersections.sort((left, right) => left - right)
+    let passed = 0
+    const rowOffset = (surfaceY - bounds.minimumY) * bounds.width
+    for (let surfaceX = bounds.minimumX; surfaceX <= bounds.maximumX; surfaceX++) {
+      const projectX = (surfaceX + 0.5) * projectStepX
+      while (passed < intersections.length && intersections[passed] <= projectX) passed++
+      inside[rowOffset + surfaceX - bounds.minimumX] = (intersections.length - passed) % 2
+    }
+  }
+}
+
+function minimumSurfaceIndex(
+  projectCoordinate: number,
+  projectExtent: number,
+  surfaceExtent: number,
+): number {
+  return Math.max(0, Math.ceil(projectCoordinate * surfaceExtent / projectExtent - 0.5))
+}
+
+function maximumSurfaceIndex(
+  projectCoordinate: number,
+  projectExtent: number,
+  surfaceExtent: number,
+): number {
+  return Math.min(
+    surfaceExtent - 1,
+    Math.floor(projectCoordinate * surfaceExtent / projectExtent - 0.5),
+  )
+}
+
+function polygonSurfaceBounds(
+  points: readonly MaskPoint[],
+  geometry: PixelEffectGeometry,
+): SurfaceBounds | null {
+  if (points.length < 3) return null
+  let projectMinimumX = Number.POSITIVE_INFINITY
+  let projectMaximumX = Number.NEGATIVE_INFINITY
+  let projectMinimumY = Number.POSITIVE_INFINITY
+  let projectMaximumY = Number.NEGATIVE_INFINITY
+  for (const point of points) {
+    projectMinimumX = Math.min(projectMinimumX, point.x)
+    projectMaximumX = Math.max(projectMaximumX, point.x)
+    projectMinimumY = Math.min(projectMinimumY, point.y)
+    projectMaximumY = Math.max(projectMaximumY, point.y)
+  }
+  const minimumX = minimumSurfaceIndex(
+    projectMinimumX,
+    geometry.projectWidth,
+    geometry.surfaceWidth,
+  )
+  const maximumX = maximumSurfaceIndex(
+    projectMaximumX,
+    geometry.projectWidth,
+    geometry.surfaceWidth,
+  )
+  const minimumY = minimumSurfaceIndex(
+    projectMinimumY,
+    geometry.projectHeight,
+    geometry.surfaceHeight,
+  )
+  const maximumY = maximumSurfaceIndex(
+    projectMaximumY,
+    geometry.projectHeight,
+    geometry.surfaceHeight,
+  )
+  if (minimumX > maximumX || minimumY > maximumY) return null
+  return {
+    minimumX,
+    maximumX,
+    minimumY,
+    maximumY,
+    width: maximumX - minimumX + 1,
+    height: maximumY - minimumY + 1,
+  }
+}
+
+function rasterizePolygonEdgeDistances(
+  points: readonly MaskPoint[],
+  geometry: PixelEffectGeometry,
+  bounds: SurfaceBounds,
+  featherPixels: number,
+  inside: Uint8Array,
+  distances: Float32Array,
+  metrics?: PixelEffectWorkMetrics,
+): void {
+  const projectStepX = geometry.projectWidth / geometry.surfaceWidth
+  const projectStepY = geometry.projectHeight / geometry.surfaceHeight
+  for (
+    let current = 0, previous = points.length - 1;
+    current < points.length;
+    previous = current++
+  ) {
+    const start = points[previous]
+    const end = points[current]
+    const minimumX = Math.max(bounds.minimumX, minimumSurfaceIndex(
+      Math.min(start.x, end.x) - featherPixels,
+      geometry.projectWidth,
+      geometry.surfaceWidth,
+    ))
+    const maximumX = Math.min(bounds.maximumX, maximumSurfaceIndex(
+      Math.max(start.x, end.x) + featherPixels,
+      geometry.projectWidth,
+      geometry.surfaceWidth,
+    ))
+    const minimumY = Math.max(bounds.minimumY, minimumSurfaceIndex(
+      Math.min(start.y, end.y) - featherPixels,
+      geometry.projectHeight,
+      geometry.surfaceHeight,
+    ))
+    const maximumY = Math.min(bounds.maximumY, maximumSurfaceIndex(
+      Math.max(start.y, end.y) + featherPixels,
+      geometry.projectHeight,
+      geometry.surfaceHeight,
+    ))
+    if (minimumX > maximumX || minimumY > maximumY) continue
+    for (let surfaceY = minimumY; surfaceY <= maximumY; surfaceY++) {
+      const projectY = (surfaceY + 0.5) * projectStepY
+      const rowOffset = (surfaceY - bounds.minimumY) * bounds.width
+      for (let surfaceX = minimumX; surfaceX <= maximumX; surfaceX++) {
+        const index = rowOffset + surfaceX - bounds.minimumX
+        if (inside[index] === 0) continue
+        if (metrics) metrics.maskDistanceSamples++
+        const projectX = (surfaceX + 0.5) * projectStepX
+        distances[index] = Math.min(
+          distances[index],
+          distanceToSegment(projectX, projectY, start, end),
+        )
+      }
+    }
+  }
 }
 
 function maskSignedDistance(
@@ -143,9 +325,7 @@ function maskSignedDistance(
   y: number,
   params: MaskParams,
   geometry: PixelEffectGeometry,
-  bezierPoints: readonly MaskPoint[],
 ): number {
-  if (params.shape === 'bezier') return polygonSignedDistance(x, y, bezierPoints)
   const left = params.x * geometry.projectWidth
   const top = params.y * geometry.projectHeight
   const width = params.width * geometry.projectWidth
@@ -161,23 +341,103 @@ function maskSignedDistance(
   }
   const radiusX = width / 2
   const radiusY = height / 2
-  const normalizedDistance = Math.hypot(
-    (x - left - radiusX) / radiusX,
-    (y - top - radiusY) / radiusY,
+  const offsetX = x - left - radiusX
+  const offsetY = y - top - radiusY
+  if (offsetX === 0 && offsetY === 0) return Math.min(radiusX, radiusY)
+  if (offsetY === 0) return radiusX - Math.abs(offsetX)
+  if (offsetX === 0) return radiusY - Math.abs(offsetY)
+  const normalizedDistance = Math.hypot(offsetX / radiusX, offsetY / radiusY)
+  const inverseRadiusDistance = Math.hypot(
+    offsetX / (radiusX * radiusX),
+    offsetY / (radiusY * radiusY),
   )
-  return (1 - normalizedDistance) * Math.min(radiusX, radiusY)
+  if (inverseRadiusDistance === 0) return Math.min(radiusX, radiusY)
+  return normalizedDistance * (1 - normalizedDistance) / inverseRadiusDistance
+}
+
+function applyBezierMask(
+  rgba: Uint8ClampedArray,
+  params: MaskParams,
+  geometry: PixelEffectGeometry,
+  points: readonly MaskPoint[],
+  featherPixels: number,
+  scratch: PixelEffectScratch,
+  metrics?: PixelEffectWorkMetrics,
+): void {
+  const pixelCount = geometry.surfaceWidth * geometry.surfaceHeight
+  const bounds = polygonSurfaceBounds(points, geometry)
+  const scratchPixels = bounds === null ? 0 : bounds.width * bounds.height
+  const inside = ensureInsideScratch(scratch, scratchPixels)
+  if (metrics) {
+    metrics.maskInsideScratchPixelsPeak = Math.max(
+      metrics.maskInsideScratchPixelsPeak ?? 0,
+      scratchPixels,
+    )
+  }
+  if (bounds) rasterizePolygonInside(points, geometry, bounds, inside, metrics)
+  const distances = featherPixels === 0
+    ? null
+    : ensureDistanceScratch(scratch, scratchPixels, featherPixels)
+  if (metrics && distances) {
+    metrics.maskDistanceScratchPixelsPeak = Math.max(
+      metrics.maskDistanceScratchPixelsPeak ?? 0,
+      scratchPixels,
+    )
+  }
+  if (bounds && distances) {
+    rasterizePolygonEdgeDistances(
+      points,
+      geometry,
+      bounds,
+      featherPixels,
+      inside,
+      distances,
+      metrics,
+    )
+  }
+  for (let index = 0; index < pixelCount; index++) {
+    const surfaceX = index % geometry.surfaceWidth
+    const surfaceY = Math.floor(index / geometry.surfaceWidth)
+    const localIndex = bounds
+      && surfaceX >= bounds.minimumX
+      && surfaceX <= bounds.maximumX
+      && surfaceY >= bounds.minimumY
+      && surfaceY <= bounds.maximumY
+      ? (surfaceY - bounds.minimumY) * bounds.width + surfaceX - bounds.minimumX
+      : -1
+    const insideCoverage = localIndex < 0 || inside[localIndex] === 0
+      ? 0
+      : distances === null ? 1 : clamp01(distances[localIndex] / featherPixels)
+    const coverage = params.invert ? 1 - insideCoverage : insideCoverage
+    const alphaIndex = index * 4 + 3
+    rgba[alphaIndex] = Math.round(rgba[alphaIndex] * coverage)
+  }
 }
 
 function applyMask(
   rgba: Uint8ClampedArray,
   params: MaskParams,
   geometry: PixelEffectGeometry,
+  scratch: PixelEffectScratch,
+  metrics?: PixelEffectWorkMetrics,
 ): void {
   const bezierPoints = params.shape === 'bezier'
     ? flattenedBezier(params, geometry)
     : []
   const featherPixels = params.feather
     * Math.min(geometry.projectWidth, geometry.projectHeight)
+  if (params.shape === 'bezier') {
+    applyBezierMask(
+      rgba,
+      params,
+      geometry,
+      bezierPoints,
+      featherPixels,
+      scratch,
+      metrics,
+    )
+    return
+  }
   for (let surfaceY = 0; surfaceY < geometry.surfaceHeight; surfaceY++) {
     const projectY = (surfaceY + 0.5) * geometry.projectHeight / geometry.surfaceHeight
     for (let surfaceX = 0; surfaceX < geometry.surfaceWidth; surfaceX++) {
@@ -187,7 +447,6 @@ function applyMask(
         projectY,
         params,
         geometry,
-        bezierPoints,
       )
       const insideCoverage = featherPixels === 0
         ? (distance >= 0 ? 1 : 0)
@@ -204,6 +463,7 @@ export function applyOrderedPixelEffectsToRgba(
   rgba: Uint8ClampedArray,
   effects: readonly CanvasPixelEffect[],
   geometry: PixelEffectGeometry,
+  metrics?: PixelEffectWorkMetrics,
 ): void {
   if (
     !Number.isSafeInteger(geometry.surfaceWidth)
@@ -217,13 +477,17 @@ export function applyOrderedPixelEffectsToRgba(
     || rgba.length !== geometry.surfaceWidth * geometry.surfaceHeight * 4
   ) throw new RangeError('Pixel effect geometry does not match the RGBA buffer')
 
+  const scratch: PixelEffectScratch = {
+    polygonInside: new Uint8Array(0),
+    polygonDistances: new Float32Array(0),
+  }
   for (const effect of effects) {
     if (effect.kind === 'color-adjust') {
       applyColorCorrectionsToRgba(rgba, [effect.params])
     } else if (effect.kind === 'chroma-key') {
       applyChromaKey(rgba, effect.params)
     } else {
-      applyMask(rgba, effect.params, geometry)
+      applyMask(rgba, effect.params, geometry, scratch, metrics)
     }
   }
 }

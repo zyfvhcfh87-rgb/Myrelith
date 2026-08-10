@@ -174,3 +174,30 @@ Home, and End keys move across tabs; every stack action has an explicit
 screen-reader label and native keyboard activation. Add is disabled with a
 visible/accessibly-associated reason whenever the selected clip or document
 has no remaining effect budget.
+
+## Issue #73 review hardening
+
+Program Monitor support status resolves animated effect parameters at the
+current integer playhead through the same pure evaluator as Inspector and
+rendering. The controller indexes effect-owning clips when the document changes,
+then refreshes only clips with `effectTracks` on animation frames; it does not
+rescan an otherwise static large timeline on every frame. Missing pixel access
+uses effect-neutral preservation and bypass copy for color, chroma, and masks.
+
+The 100,000-key portable-project limit is also a live-edit invariant. Operations
+that add ordinary or effect keys, add several animated parameters at one frame,
+insert an animated clip, or split and duplicate animation reject before mutation
+when their positive key-count delta would cross the limit. Replacement, movement,
+and removal remain available at the limit. Reset validates the merged descriptor
+and aggregate replacement budgets before clearing the target's tracks, so a
+rejected reset preserves both forward-compatible parameters and history.
+
+Bezier coverage uses scanline parity over the clipped polygon bounds. With zero
+feather it performs no distance-field work. With feather, exact segment distance
+is evaluated only for inside pixels in each clipped, feather-expanded edge
+neighborhood, backed by reusable region-sized `Uint8Array` and `Float32Array`
+scratch. Typical work therefore tracks the covered edge neighborhoods, while the
+honest maximum-feather worst case can still approach flattened edges times all
+pixels in the clipped mask bounds. Ellipse feather uses project-pixel Euclidean
+distance, including finite axis and center handling, so equal inward distances
+on wide and tall ellipses receive equal coverage.

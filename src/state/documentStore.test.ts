@@ -5,9 +5,10 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track, Transition } from '../domain/schema'
-import { createColorAdjustEffect } from '../domain/effectStack'
+import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import { sourceTimeRateFromPercent } from '../domain/sourceTimeMap'
+import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
 import { useDocumentStore } from './documentStore'
 
 /* ------------------------------------------------------------------ */
@@ -647,6 +648,73 @@ describe('actions delegate to domain operations', () => {
     beforePatch.updateEffectParams('clipA', 'full-params', { overflow: true })
     expect(getState().doc).toBe(beforePatch.doc)
     expect(getState().past).toBe(beforePatch.past)
+  })
+
+  test('effect keyframe budget rejection keeps document and history references', () => {
+    const saturated = JSON.parse(JSON.stringify(makeDoc())) as TimelineDoc
+    const clip = saturated.tracks[0].clips[0]
+    clip.effects = [createMaskEffect('mask-budget', 'rectangle')]
+    clip.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: 'mask-budget',
+        parameter: 'x',
+        keyframes: [{
+          frame: 0,
+          sourceTimeTicks: 0,
+          value: 0,
+          easing: { type: 'linear' },
+        }],
+      }],
+    }
+    saturated.tracks[0].clips[0] = clipWithAnimationKeyframeCount(clip)
+    getState().setDoc(saturated)
+    const before = getState()
+
+    before.setEffectKeyframe('clipA', 'mask-budget', 'x', {
+      frame: 5,
+      value: 0.25,
+      easing: { type: 'linear' },
+    })
+
+    expect(getState().doc).toBe(before.doc)
+    expect(getState().past).toBe(before.past)
+    expect(getState().future).toBe(before.future)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/keyframe/u),
+    )
+  })
+
+  test('valid effect reset restores defaults and clears its tracks in one history entry', () => {
+    const editable = JSON.parse(JSON.stringify(makeDoc())) as TimelineDoc
+    const clip = editable.tracks[0].clips[0]
+    const mask = createMaskEffect('mask-reset', 'rectangle')
+    mask.params.x = 0.25
+    mask.params.futureIntent = 'preserved'
+    clip.effects = [mask]
+    clip.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: mask.id,
+        parameter: 'x',
+        keyframes: [{
+          frame: 0,
+          sourceTimeTicks: 0,
+          value: 0.25,
+          easing: { type: 'linear' },
+        }],
+      }],
+    }
+    getState().setDoc(editable)
+
+    getState().resetEffect(clip.id, mask.id)
+
+    const reset = getState().doc.tracks[0].clips[0]
+    expect(reset.effects[0].params).toMatchObject({ x: 0, futureIntent: 'preserved' })
+    expect(reset.animation?.effectTracks).toEqual([])
+    expect(getState().past).toHaveLength(1)
+    getState().undo()
+    expect(getState().doc.tracks[0].clips[0].animation?.effectTracks).toHaveLength(1)
   })
 
   test('document survives a JSON round-trip after edits', () => {

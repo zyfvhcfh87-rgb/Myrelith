@@ -80,7 +80,12 @@ import {
   reportMediaRuntimeFailure,
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
-import { projectPreviewEffectStatuses } from './previewEffectStatus'
+import {
+  createPreviewEffectStatusIndex,
+  projectIndexedPreviewEffectStatuses,
+  refreshAnimatedPreviewEffectStatuses,
+  type PreviewEffectStatusIndex,
+} from './previewEffectStatus'
 import {
   getProxyPreviewSource,
   isProxyPreviewToken,
@@ -249,6 +254,7 @@ interface ControllerState {
   viewport: PresentationViewport | null
   presentationProfile: PresentationProfile | null
   visualPlanner: VideoCompositionPlanner | null
+  effectStatusIndex: PreviewEffectStatusIndex | null
   /** Per-asset pipeline status. Absent = not started (or failed: retried
    * on the next mediaStore change). Removal releases the worker source. */
   assetStates: Map<AssetId, {
@@ -272,6 +278,7 @@ const state: ControllerState = {
   viewport: null,
   presentationProfile: null,
   visualPlanner: null,
+  effectStatusIndex: null,
   assetStates: new Map(),
   unsubscribes: [],
   rafPending: false,
@@ -432,13 +439,20 @@ function currentPreviewDocument(): TimelineDoc {
 }
 
 function publishPreviewEffectStatuses(
-  doc = currentPreviewDocument(),
   capabilities = usePreviewStatusStore.getState().rendererCapabilities,
+  timelineFrame = useTransportStore.getState().playheadFrame,
 ): void {
+  const index = state.effectStatusIndex
+  if (!index) return
   usePreviewStatusStore.getState().setEffectProjection(
     capabilities,
-    projectPreviewEffectStatuses(doc, capabilities),
+    projectIndexedPreviewEffectStatuses(index, capabilities, timelineFrame),
   )
+}
+
+function rebuildPreviewEffectStatusIndex(doc: TimelineDoc): void {
+  state.effectStatusIndex = createPreviewEffectStatusIndex(doc)
+  publishPreviewEffectStatuses()
 }
 
 function syncPreviewDocument(bridge: BridgeLike): void {
@@ -448,7 +462,7 @@ function syncPreviewDocument(bridge: BridgeLike): void {
     currentSourceBoundsCatalog(),
   )
   bridge.setDoc(doc)
-  publishPreviewEffectStatuses(doc)
+  rebuildPreviewEffectStatusIndex(doc)
   syncPresentationProfile(bridge, doc)
 }
 
@@ -463,6 +477,22 @@ function scheduleRender(deps: PreviewDeps): void {
     // Document frames go straight through — per-asset rescaling happens
     // inside the bridge; source cursor policy belongs to the worker.
     const transport = useTransportStore.getState()
+    const previewStatus = usePreviewStatusStore.getState()
+    const effectStatusIndex = state.effectStatusIndex
+    if (effectStatusIndex?.animatedEffectClips.length) {
+      const refreshed = refreshAnimatedPreviewEffectStatuses(
+        effectStatusIndex,
+        previewStatus.rendererCapabilities,
+        transport.playheadFrame,
+        previewStatus.effectStatuses,
+      )
+      if (refreshed !== previewStatus.effectStatuses) {
+        previewStatus.setEffectProjection(
+          previewStatus.rendererCapabilities,
+          refreshed,
+        )
+      }
+    }
     const media = useMediaStore.getState()
     const offlineIds: AssetId[] = []
     const seen = new Set<AssetId>()
@@ -781,7 +811,7 @@ export function initPreview(
   bridge.onAssetReady = () =>
     scheduleRender(deps)
   bridge.onRendererCapabilities = (capabilities) => {
-    publishPreviewEffectStatuses(currentPreviewDocument(), capabilities)
+    publishPreviewEffectStatuses(capabilities)
     useVideoScopesStore.getState().setRendererSupported(capabilities.canvasPixelAccess)
   }
   bridge.onVideoScopes = (generation, frame, analyzedAt, analysis) => {
@@ -799,9 +829,10 @@ export function initPreview(
   const initialDoc = currentPreviewDocument()
   const initialBounds = currentSourceBoundsCatalog()
   state.visualPlanner = createVideoCompositionPlanner(initialDoc, initialBounds)
+  state.effectStatusIndex = createPreviewEffectStatusIndex(initialDoc)
   bridge.setSourceBoundsCatalog(initialBounds)
   bridge.setDoc(initialDoc)
-  publishPreviewEffectStatuses(initialDoc, null)
+  publishPreviewEffectStatuses(null)
   syncPresentationProfile(bridge, initialDoc)
   const scopes = useVideoScopesStore.getState()
   bridge.setVideoScopesEnabled?.(scopes.enabled, scopes.generation)
@@ -879,6 +910,7 @@ export function disposePreview(): void {
   state.viewport = null
   state.presentationProfile = null
   state.visualPlanner = null
+  state.effectStatusIndex = null
   state.canvas = null
   state.assetStates = new Map()
   state.rafPending = false
