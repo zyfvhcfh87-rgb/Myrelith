@@ -303,9 +303,23 @@ export interface ClipAnimationTrack {
   keyframes: ClipAnimationKeyframe[]
 }
 
+/** One scalar parameter track addressed to a stable effect-instance id. */
+export interface EffectAnimationTrack {
+  effectId: EffectId
+  parameter: string
+  /** Strictly increasing, unique clip-local frames. */
+  keyframes: ClipAnimationKeyframe[]
+}
+
 export interface ClipAnimation {
   /** At most one track for each supported property. */
   tracks: ClipAnimationTrack[]
+  /**
+   * Scalar effect tracks retain opaque future/dangling targets so portable
+   * authoring intent is never discarded. Current files always include this
+   * list; optional typing keeps historical pure fixtures source-compatible.
+   */
+  effectTracks?: EffectAnimationTrack[]
 }
 
 /** Allowed value types for a single effect parameter. */

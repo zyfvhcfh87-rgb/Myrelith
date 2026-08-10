@@ -49,7 +49,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -86,7 +86,7 @@ function projectEffectStatuses(canvasFilter: boolean): void {
   const capabilities = { canvasFilter, canvasPixelAccess: canvasFilter }
   usePreviewStatusStore.getState().setEffectProjection(
     capabilities,
-    projectPreviewEffectStatuses(timeline, capabilities),
+    projectPreviewEffectStatuses(timeline, capabilities, transport().playheadFrame),
   )
 }
 
@@ -617,6 +617,80 @@ describe('Inspector', () => {
     uuid.mockRestore()
   })
 
+  test('edits masks, chroma key, and stable mask keyframes with undo/redo', async () => {
+    const user = userEvent.setup()
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000073')
+      .mockReturnValueOnce('00000000-0000-4000-8000-000000000074')
+    transport().setSelectedClip('clipA')
+    transport().setPlayheadFrame(10)
+    render(<Inspector />)
+    await user.click(screen.getByRole('tab', { name: 'Effects' }))
+
+    await user.click(screen.getByRole('button', { name: 'Add rectangle mask' }))
+    await user.click(screen.getByRole('button', { name: 'Add chroma key' }))
+    act(() => projectEffectStatuses(true))
+    const [mask, key] = clipA().effects
+    expect(mask.params).toMatchObject({
+      shape: 'rectangle', x: 0, y: 0, width: 1, height: 1, feather: 0, invert: false,
+    })
+    expect(key.params).toEqual({
+      color: '#00ff00', tolerance: 0.08, softness: 0.12, spill: 0.5,
+    })
+
+    await user.selectOptions(
+      screen.getByTestId(`inspector-effect-mask-shape-${mask.id}`),
+      'bezier',
+    )
+    const path = screen.getByTestId(`inspector-effect-mask-path-${mask.id}`)
+    const defaultPath = String(clipA().effects[0].params.path)
+    fireEvent.change(path, { target: { value: 'M 0 0 C nope Z' } })
+    fireEvent.blur(path)
+    expect(path).toHaveValue(defaultPath)
+    const alternatePath = 'M 0 0 C 0 0 1 1 0 0 Z'
+    fireEvent.change(path, { target: { value: alternatePath } })
+    fireEvent.blur(path)
+    expect(clipA().effects[0].params.path).toBe(alternatePath)
+    act(() => doc().undo())
+    expect(screen.getByTestId(`inspector-effect-mask-path-${mask.id}`))
+      .toHaveValue(defaultPath)
+    act(() => doc().redo())
+    expect(screen.getByTestId(`inspector-effect-mask-path-${mask.id}`))
+      .toHaveValue(alternatePath)
+
+    const left = screen.getByTestId(`inspector-effect-mask-x-${mask.id}`)
+    fireEvent.change(left, { target: { value: '25' } })
+    fireEvent.keyDown(left, { key: 'Enter' })
+    expect(clipA().effects[0].params.x).toBe(0.25)
+    await user.click(screen.getByRole('button', { name: 'Animate Left (%)' }))
+    expect(clipA().animation?.effectTracks?.[0]).toMatchObject({
+      effectId: mask.id,
+      parameter: 'x',
+      keyframes: [{ frame: 10, value: 0.25 }],
+    })
+
+    fireEvent.change(screen.getByTestId(`inspector-effect-mask-x-${mask.id}`), {
+      target: { value: '50' },
+    })
+    fireEvent.keyDown(screen.getByTestId(`inspector-effect-mask-x-${mask.id}`), {
+      key: 'Enter',
+    })
+    expect(clipA().effects[0].params.x).toBe(0.25)
+    expect(clipA().animation?.effectTracks?.[0].keyframes[0].value).toBe(0.5)
+    expect(screen.getByRole('list', { name: 'Left (%) keyframes' })).toBeInTheDocument()
+
+    const tolerance = screen.getByTestId(`inspector-effect-key-tolerance-${key.id}`)
+    fireEvent.change(tolerance, { target: { value: '20' } })
+    fireEvent.keyDown(tolerance, { key: 'Enter' })
+    expect(clipA().effects[1].params.tolerance).toBe(0.2)
+
+    act(() => doc().undo())
+    expect(clipA().effects[1].params.tolerance).toBe(0.08)
+    act(() => doc().redo())
+    expect(clipA().effects[1].params.tolerance).toBe(0.2)
+    uuid.mockRestore()
+  })
+
   test('reports opaque unsupported effects without stranding removal or reorder controls', () => {
     const fixture = makeDoc()
     fixture.tracks[0].clips[0].effects = [{
@@ -660,7 +734,7 @@ describe('Inspector', () => {
       .toBeInTheDocument()
   })
 
-  test('disables Add color and explains the per-clip effect limit', () => {
+  test('describes every add action disabled by the displayed per-clip effect limit', () => {
     const fixture = makeDoc()
     fixture.tracks[0].clips[0].effects = Array.from(
       { length: EFFECT_STACK_LIMITS.maxEffectsPerClip },
@@ -678,8 +752,89 @@ describe('Inspector', () => {
     render(<Inspector />)
 
     fireEvent.click(screen.getByRole('tab', { name: 'Effects' }))
-    expect(screen.getByRole('button', { name: 'Add color' })).toBeDisabled()
-    expect(screen.getByText(/clip has reached the 256-effect limit/u)).toBeInTheDocument()
+    const reason = screen.getByText(/clip has reached the 256-effect limit/u)
+    expect(reason.id).not.toBe('')
+    for (const name of [
+      'Add color',
+      'Add chroma key',
+      'Add rectangle mask',
+      'Add ellipse mask',
+      'Add Bezier mask',
+    ]) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toBeDisabled()
+      expect(button).toHaveAccessibleName(name)
+      expect(button).toHaveAttribute('aria-describedby', reason.id)
+      expect(button).toHaveAccessibleDescription(/clip has reached the 256-effect limit/u)
+    }
+  })
+
+  test('does not describe lock-only add disables as a budget failure', () => {
+    const fixture = makeDoc()
+    fixture.tracks[0].locked = true
+    resetDocumentStoreForTest(fixture)
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Effects' }))
+    const button = screen.getByRole('button', { name: 'Add color' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleName('Add color')
+    expect(button).not.toHaveAttribute('aria-describedby')
+    expect(button).not.toHaveAccessibleDescription()
+  })
+
+  test('associates distinct aggregate budget reasons with only their affected add actions', () => {
+    const fixture = makeDoc()
+    const paramsRemainingStart = EFFECT_STACK_LIMITS.maxTotalEffectParams - 6
+    const stringsRemainingStart = EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters - 3
+    let paramsRemaining = paramsRemainingStart
+    let stringsRemaining = stringsRemainingStart
+    const sharedString = 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters)
+    const effects: Clip['effects'][number][] = []
+    for (let effectIndex = 0; paramsRemaining > 0; effectIndex++) {
+      const parameterCount = Math.min(paramsRemaining, EFFECT_STACK_LIMITS.maxEffectParams)
+      const params: Record<string, number | string> = {}
+      for (let parameterIndex = 0; parameterIndex < parameterCount; parameterIndex++) {
+        if (stringsRemaining > 0) {
+          const length = Math.min(
+            stringsRemaining,
+            EFFECT_STACK_LIMITS.maxEffectStringCharacters,
+          )
+          params[`p-${parameterIndex}`] = length === sharedString.length
+            ? sharedString
+            : sharedString.slice(0, length)
+          stringsRemaining -= length
+        } else {
+          params[`p-${parameterIndex}`] = parameterIndex
+        }
+      }
+      effects.push({
+        id: `aggregate-budget-${effectIndex}`,
+        type: 'future.opaque',
+        version: 1,
+        enabled: true,
+        params,
+      })
+      paramsRemaining -= parameterCount
+    }
+    fixture.tracks[0].clips[0].effects = effects
+    resetDocumentStoreForTest(fixture)
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Effects' }))
+    const color = screen.getByRole('button', { name: 'Add color' })
+    const chroma = screen.getByRole('button', { name: 'Add chroma key' })
+    const rectangle = screen.getByRole('button', { name: 'Add rectangle mask' })
+    expect(color).toBeEnabled()
+    expect(color).not.toHaveAttribute('aria-describedby')
+    expect(chroma).toBeDisabled()
+    expect(chroma).toHaveAccessibleDescription(/effect-string characters/u)
+    expect(rectangle).toBeDisabled()
+    expect(rectangle).toHaveAccessibleDescription(/effect parameters/u)
+    expect(chroma.getAttribute('aria-describedby'))
+      .not.toBe(rectangle.getAttribute('aria-describedby'))
   })
 })
 

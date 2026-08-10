@@ -54,9 +54,11 @@ import {
   clipAnimationValidationError,
   cloneClipAnimation,
   defaultClipAnimation,
+  MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP,
   MAX_ANIMATED_FINITE_MAGNITUDE,
   MAX_KEYFRAME_FRAME,
   MAX_KEYFRAMES_PER_TRACK,
+  MAX_TOTAL_ANIMATION_KEYFRAMES,
 } from './clipAnimation'
 import {
   clipAudioSettings,
@@ -129,7 +131,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 12 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 13 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -148,7 +150,7 @@ export const PROJECT_FILE_LIMITS = {
   maxTotalEffectStringCharacters: EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
   maxTransitions: 100_000,
   maxMarkers: MAX_TIMELINE_MARKERS,
-  maxTotalKeyframes: 100_000,
+  maxTotalKeyframes: MAX_TOTAL_ANIMATION_KEYFRAMES,
   maxSpeedPointsPerClip: MAX_SOURCE_TIME_SPEED_POINTS,
   maxTotalSpeedPoints: 100_000,
   maxTotalTextCharacters: 10_000_000,
@@ -736,7 +738,7 @@ function validateClipAnimation(
   context: ValidationContext,
 ): asserts value is ClipAnimation {
   const animation = record(value, path)
-  exactKeys(animation, ['tracks'], [], path)
+  exactKeys(animation, ['tracks', 'effectTracks'], [], path)
   boundedArray(
     animation.tracks,
     `${path}.tracks`,
@@ -801,6 +803,65 @@ function validateClipAnimation(
       finiteNumber(keyframe.value, `${keyframePath}.value`, minimum, maximum)
       validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
       previousFrame = keyframe.frame
+    }
+  }
+  boundedArray(
+    animation.effectTracks,
+    `${path}.effectTracks`,
+    MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP,
+  )
+  const effectTargets = new Set<string>()
+  for (let trackIndex = 0; trackIndex < animation.effectTracks.length; trackIndex++) {
+    const trackPath = `${path}.effectTracks[${trackIndex}]`
+    const track = record(animation.effectTracks[trackIndex], trackPath)
+    exactKeys(track, ['effectId', 'parameter', 'keyframes'], [], trackPath)
+    stringValue(track.effectId, `${trackPath}.effectId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+    stringValue(track.parameter, `${trackPath}.parameter`, PROJECT_FILE_LIMITS.maxNameCharacters)
+    const target = `${String(track.effectId)}\u0000${String(track.parameter)}`
+    if (effectTargets.has(target)) fail(trackPath, 'duplicate effect animation track')
+    effectTargets.add(target)
+    boundedArray(track.keyframes, `${trackPath}.keyframes`, MAX_KEYFRAMES_PER_TRACK)
+    if (track.keyframes.length === 0) fail(`${trackPath}.keyframes`, 'must not be empty')
+    context.keyframeCount += track.keyframes.length
+    if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
+      fail(
+        '$.document.tracks',
+        `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`,
+      )
+    }
+    let previousFrame: number | null = null
+    for (let keyframeIndex = 0; keyframeIndex < track.keyframes.length; keyframeIndex++) {
+      const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
+      const keyframe = record(track.keyframes[keyframeIndex], keyframePath)
+      exactKeys(
+        keyframe,
+        ['frame', 'sourceTimeTicks', 'value', 'easing'],
+        [],
+        keyframePath,
+      )
+      safeInteger(
+        keyframe.frame,
+        `${keyframePath}.frame`,
+        -MAX_KEYFRAME_FRAME,
+        MAX_KEYFRAME_FRAME,
+      )
+      safeInteger(
+        keyframe.sourceTimeTicks,
+        `${keyframePath}.sourceTimeTicks`,
+        Number.MIN_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER,
+      )
+      if (previousFrame !== null && keyframe.frame <= previousFrame) {
+        fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
+      }
+      finiteNumber(
+        keyframe.value,
+        `${keyframePath}.value`,
+        -MAX_ANIMATED_FINITE_MAGNITUDE,
+        MAX_ANIMATED_FINITE_MAGNITUDE,
+      )
+      validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
+      previousFrame = Number(keyframe.frame)
     }
   }
   const error = clipAnimationValidationError(animation as unknown as ClipAnimation)
@@ -1128,7 +1189,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   const animation = clip.animation ?? defaultClipAnimation()
   validateClipAnimation(animation, `${path}.animation`, context)
   if (
-    animation.tracks.length > 0
+    (animation.tracks.length > 0 || (animation.effectTracks?.length ?? 0) > 0)
     && (trackKind !== 'video' || clip.text !== undefined)
   ) {
     fail(`${path}.animation`, 'keyframes are supported only on visual media clips')
@@ -1801,6 +1862,29 @@ function migrateClipSpeedCurves(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 12, tracks }
 }
 
+/** Upgrade schema-12 animations with bounded stable effect-parameter tracks. */
+function migrateEffectAnimationTracks(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const trackPath = `$.document.tracks[${trackIndex}]`
+    const track = record(trackValue, trackPath)
+    boundedArray(track.clips, `${trackPath}.clips`, PROJECT_FILE_LIMITS.maxClips)
+    return {
+      ...track,
+      clips: track.clips.map((clipValue, clipIndex) => {
+        const clipPath = `${trackPath}.clips[${clipIndex}]`
+        const clip = record(clipValue, clipPath)
+        const animation = clip.animation === undefined
+          ? { tracks: [] }
+          : record(clip.animation, `${clipPath}.animation`)
+        return { ...clip, animation: { ...animation, effectTracks: [] } }
+      }),
+    }
+  })
+  return { ...document, schemaVersion: 13, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1852,6 +1936,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 11) {
     migrated = migrateClipSpeedCurves(migrated)
+  }
+  if (migrated.schemaVersion === 12) {
+    migrated = migrateEffectAnimationTracks(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {

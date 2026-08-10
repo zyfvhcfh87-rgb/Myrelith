@@ -53,7 +53,7 @@ function track(clips: Clip[], kind: Track['kind'] = 'video', locked = false): Tr
 
 function doc(clips = [clip()], kind: Track['kind'] = 'video', locked = false): TimelineDoc {
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-1',
     name: 'Animation operations',
     frameRate: { num: 30, den: 1 },
@@ -92,7 +92,7 @@ describe('clip animation document operations', () => {
     const moved = moveClipKeyframe(replaced, 'clip-1', 'position-x', 0, 10)
     const removed = removeClipKeyframe(moved, 'clip-1', 'position-x', 10)
 
-    expect(findClip(original).animation).toEqual({ tracks: [] })
+    expect(findClip(original).animation).toEqual({ tracks: [], effectTracks: [] })
     expect(findClip(replaced).animation?.tracks[0].keyframes).toEqual([
       { frame: 0, sourceTimeTicks: 0, value: 10, easing: linear },
       { frame: 10, sourceTimeTicks: 10_000_000, value: 25, easing: { type: 'hold' } },
@@ -100,7 +100,7 @@ describe('clip animation document operations', () => {
     expect(findClip(moved).animation?.tracks[0].keyframes).toEqual([
       { frame: 10, sourceTimeTicks: 10_000_000, value: 10, easing: linear },
     ])
-    expect(findClip(removed).animation).toEqual({ tracks: [] })
+    expect(findClip(removed).animation).toEqual({ tracks: [], effectTracks: [] })
     expect(resetClipAnimationTrack(second, 'clip-1', 'position-x'))
       .not.toBe(second)
     expect(findClip(resetClipAnimationTrack(second, 'clip-1', 'position-x')).transform.x)
@@ -124,7 +124,7 @@ describe('clip animation document operations', () => {
     const result = findClip(keyedEdit)
 
     expect(findClip(staticEdit).transform.x).toBe(30)
-    expect(findClip(staticEdit).animation).toEqual({ tracks: [] })
+    expect(findClip(staticEdit).animation).toEqual({ tracks: [], effectTracks: [] })
     expect(result.transform.x).toBe(30)
     expect(result.opacity).toBe(0.5)
     expect(result.animation?.tracks[0].keyframes).toEqual([

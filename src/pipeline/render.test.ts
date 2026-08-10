@@ -14,7 +14,7 @@ import {
   type PresentationProfile,
 } from '../domain/presentationProfile'
 import { defaultTextProps } from '../domain/textOverlay'
-import { createColorAdjustEffect } from '../domain/effectStack'
+import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import type {
   Composite2D,
@@ -71,7 +71,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -347,6 +347,7 @@ describe('compositeFrame — background & selection', () => {
     const clip = makeClip('warm-still', 0, 30, {
       sourceMode: 'still',
       sourceRange: { startFrame: 0, durationFrames: 1 },
+      opacity: 0.5,
       effects: [effect],
     })
     const doc = makeDoc([makeTrack('V1', 'video', [clip])])
@@ -370,9 +371,64 @@ describe('compositeFrame — background & selection', () => {
     expect([...pixels]).toEqual([181, 128, 91, 128])
     expect(surfaces.leg.ops('getImageData')).toHaveLength(1)
     expect(surfaces.leg.ops('putImageData')).toHaveLength(1)
+    expect(surfaces.leg.ops('alpha').map((op) => op.args[0])).toContain(1)
+    expect(destination.ops('alpha').map((op) => op.args[0])).toEqual([1, 0.5])
     expect(destination.ops('filter')).toHaveLength(0)
     expect(destination.ops('drawImage')[0].args[0]).toBe(surfaces.legCanvas)
     expect(result).toEqual({ drawn: ['warm-still'], missing: [] })
+  })
+
+  test('masks the transformed/cropped project-space layer before clip opacity', async () => {
+    const mask = createMaskEffect('left-half', 'rectangle')
+    mask.params.width = 0.5
+    const clip = makeClip('masked-still', 0, 30, {
+      sourceMode: 'still',
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+      opacity: 0.5,
+      transform: {
+        x: 0.25,
+        y: -0.1,
+        scaleX: 1.5,
+        scaleY: 0.75,
+        rotation: 15,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      },
+      visual: {
+        crop: { left: 0.1, right: 0, top: 0, bottom: 0 },
+        flipHorizontal: false,
+        flipVertical: false,
+        scaleLocked: true,
+      },
+      effects: [mask],
+    })
+    const doc = makeDoc([makeTrack('V1', 'video', [clip])])
+    doc.width = 2
+    doc.height = 1
+    const pixels = new Uint8ClampedArray([
+      255, 255, 255, 255,
+      255, 255, 255, 255,
+    ])
+    const destination = makeCtx({ supportsPixels: true })
+    const surfaces = makeTransitionSurfaceProvider({
+      supportsPixels: true,
+      pixelData: pixels,
+    })
+
+    await compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource({ 'asset-1@0': fakeBitmap(2, 1) }).source,
+      surfaces.provider,
+    )
+
+    expect([pixels[3], pixels[7]]).toEqual([255, 0])
+    expect(surfaces.leg.ops('scale').map((op) => op.args)).toContainEqual([1.5, 0.75])
+    expect(surfaces.leg.ops('rotate')[0].args[0]).toBeCloseTo(Math.PI / 12, 10)
+    expect(surfaces.leg.log.findIndex((op) => op.name === 'drawImage'))
+      .toBeLessThan(surfaces.leg.log.findIndex((op) => op.name === 'getImageData'))
+    expect(destination.ops('alpha').map((op) => op.args[0])).toEqual([1, 0.5])
   })
 
   test('presentation scaling wraps project-space geometry without changing it', async () => {

@@ -9,6 +9,7 @@ import {
   animationEasingProgress,
   clipAnimationValidationError,
   evaluateAnimationTrack,
+  MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP,
   moveAnimationKeyframe,
   removeAnimationKeyframe,
   resolveClipAnimationAtFrame,
@@ -148,7 +149,7 @@ describe('clip animation evaluator', () => {
     if (!shifted) return
     expect(evaluateAnimationTrack(shifted.tracks[0], 1, 0))
       .toBe(evaluateAnimationTrack(original.tracks[0], 5, 0))
-    expect(removed).toEqual({ tracks: [] })
+    expect(removed).toEqual({ tracks: [], effectTracks: [] })
   })
 
   test('rejects invalid easing, values, ordering, and duplicate times', () => {
@@ -171,5 +172,19 @@ describe('clip animation evaluator', () => {
         }],
       }],
     })).toMatch(/from 0 to 1/)
+  })
+
+  test('bounds effect-animation tracks per clip without resolving their targets', () => {
+    const effectTracks = Array.from(
+      { length: MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP + 1 },
+      (_unused, index) => ({
+        effectId: `future-effect-${index}`,
+        parameter: 'future-scalar',
+        keyframes: [{ frame: 0, value: index, easing: linear }],
+      }),
+    )
+
+    expect(clipAnimationValidationError({ tracks: [], effectTracks }))
+      .toBe(`clip animation exceeds ${MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP} effect tracks`)
   })
 })

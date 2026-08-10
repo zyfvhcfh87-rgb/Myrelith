@@ -31,7 +31,7 @@ function makeClip(): Clip {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-animation-store',
     name: 'Animation store',
     frameRate: { num: 30, den: 1 },
@@ -90,7 +90,7 @@ describe('clip animation store history', () => {
     expect(useDocumentStore.getState().past).toHaveLength(4)
     useDocumentStore.getState().resetClipAnimationTrack('clip-1', 'position-x')
     expect(useDocumentStore.getState().past).toHaveLength(5)
-    expect(animation()).toEqual({ tracks: [] })
+    expect(animation()).toEqual({ tracks: [], effectTracks: [] })
   })
 
   test('rejected and idempotent edits do not pollute history', () => {
@@ -104,6 +104,6 @@ describe('clip animation store history', () => {
     store.resetClipAnimationTrack('clip-1', 'opacity')
 
     expect(useDocumentStore.getState().past).toHaveLength(0)
-    expect(animation()).toEqual({ tracks: [] })
+    expect(animation()).toEqual({ tracks: [], effectTracks: [] })
   })
 })

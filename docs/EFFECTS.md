@@ -1,9 +1,9 @@
 # Effect stack contract
 
-Issue #45 establishes the first durable visual-effect boundary. The contract is
-deliberately small: an ordered, serializable descriptor stack plus one built-in
-color adjustment proves persistence, history, capability fallback, and shared
-preview/export evaluation before more effects are added.
+Issue #45 establishes the durable visual-effect boundary: an ordered,
+serializable descriptor stack with persistence, history, capability fallback,
+and shared preview/export evaluation. Later built-ins extend that same contract
+without creating parallel effect models.
 
 ## Durable descriptor
 
@@ -19,7 +19,10 @@ Timeline schema 10 adds `version`. During 9→10 migration, the registry-owned
 `builtin.color-adjust` descriptor advances from the reserved legacy version 0
 to version 1 and receives missing defaults. Unknown types receive version 0.
 Their type, enabled state, order, and complete parameter payload are preserved.
-Current saves never substitute or delete unknown data.
+Current saves never substitute or delete unknown data. Timeline schema 13 adds
+bounded `Clip.animation.effectTracks` addressed by stable effect id and
+parameter name; schema-12 clips receive an empty list without changing their
+rendering.
 
 `domain/effectBounds.ts` is the shared authority for descriptor shape and
 budgets: 256 effects per clip, 10,000 per document, 256 parameters per effect,
@@ -66,10 +69,11 @@ reset descriptors write all five defaults.
 
 An empty stack, a wholly bypassed stack, and a descriptor with all five
 defaults are exact identity paths. The historical exposure/contrast/saturation
-only case retains its ordered Canvas filter path. If any ready descriptor in
-the stack has non-zero temperature or tint, every ready built-in color
-descriptor runs in authored order through the reference pixel path so one
-stack never mixes filter and pixel precision.
+only case retains its ordered Canvas filter path. If any ready descriptor
+requires pixel access, every ready built-in stage in the chain emits one
+explicit pixel command in exact authored order. Noncontiguous color adjustments
+are never collapsed across a mask or key, and one stack never mixes filter and
+pixel precision.
 
 The pixel contract reads unpremultiplied 8-bit `ImageData` in the compositor's
 display-referred sRGB context. It uses float64 JavaScript intermediates in the
@@ -86,6 +90,59 @@ read/write support reports the exact missing capability, preserves the
 descriptor, and bypasses only the unsupported operation. No presets ship in
 this slice: the five bounded defaults plus existing enable, reset, reorder, and
 remove controls are sufficient and avoid an unversioned preset contract.
+
+## Masks and chroma key
+
+Issue #73 adds `builtin.mask` version 1 and `builtin.chroma-key` version 1.
+Both are ordinary ordered descriptors in `Clip.effects`; enable, reset,
+reorder, remove, history, recovery, and portable persistence use the existing
+effect-stack operations.
+
+Mask geometry is evaluated in normalized project-canvas space after the source
+crop and clip transform have produced an isolated project-sized layer. `x` and
+`y` are the bounding box's left and top divided by project width and height;
+`width` and `height` are fractions of those dimensions. Bounds may extend
+off-canvas and are clipped by the project surface. Rectangle and ellipse use
+that box. Bezier masks use a closed, normalized `M x y C x1 y1 x2 y2 x y ...
+Z` path with one to eight explicit cubic segments, coordinates from 0 through
+1, and at most 2,048 characters. Invalid paths and parameters are preserved,
+reported, and bypassed deterministically.
+
+`feather` is a fraction of the shorter project dimension and ramps alpha inward
+from the mask boundary. `invert` complements the resulting coverage. Multiple
+masks multiply the current 8-bit alpha in authored order; disabled, identity,
+invalid, unknown, and unsupported entries do not change pixels. Effects finish
+before clip opacity, transition weighting, and destination blend/composite.
+That order is shared by media, still, text, transition, preview, and export
+paths.
+
+Chroma key stores an explicit six-digit sRGB key color plus normalized
+`tolerance`, `softness`, and `spill`. New descriptors default to `#00ff00`,
+`0.08`, `0.12`, and `0.5`. RGB distance is normalized by the maximum sRGB
+cube distance: pixels inside tolerance are fully keyed, softness applies a
+deterministic smooth transition, and spill blends keyed RGB toward Rec.709
+luma before alpha reduction. All three scalar controls are bounded from 0 to
+1. Invalid values are preserved and bypassed.
+
+Mask `x`, `y`, `width`, `height`, and `feather` are keyframeable for visual
+media through the existing pure scalar evaluator. An effect track targets
+`effectId + parameter`, carries the same integer local frame, absolute
+`sourceTimeTicks`, easing, per-track keyframe limit, and global project budget
+as ordinary animation, and therefore distinguishes multiple masks. Split
+remints the right-hand effects and targets together; head trim, slip, and
+retime preserve the same source-time semantics as clip-property tracks.
+Unknown or dangling effect targets remain portable but are ignored at
+evaluation. Removing an effect prunes its tracks, while Reset restores known
+defaults and clears every track for that effect so keys cannot silently defeat
+the reset.
+
+The Inspector exposes labeled numeric fields, ordered effect/keyframe lists,
+shape and easing selects, a color input, invert/enable toggles, and a bounded
+Bezier text field. Text effects remain static because text is outside the
+existing visual-media keyframe property contract. Issue #73 intentionally does
+not add Program Monitor mask handles: there is no second pointer gesture or
+pointer-up history claim in this slice; precise numeric/list editing is the
+safe authoring surface.
 
 ## Video scopes
 
@@ -117,3 +174,37 @@ Home, and End keys move across tabs; every stack action has an explicit
 screen-reader label and native keyboard activation. Add is disabled with a
 visible/accessibly-associated reason whenever the selected clip or document
 has no remaining effect budget.
+
+## Issue #73 review hardening
+
+Program Monitor support status resolves animated effect parameters at the
+current integer playhead through the same pure evaluator as Inspector and
+rendering. The controller indexes effect-owning clips when the document changes,
+then refreshes only clips with `effectTracks` on animation frames; it does not
+rescan an otherwise static large timeline on every frame. Missing pixel access
+uses effect-neutral preservation and bypass copy for color, chroma, and masks.
+
+The 100,000-key portable-project limit is also a live-edit invariant. Operations
+that add ordinary or effect keys, add several animated parameters at one frame,
+insert an animated clip, or split and duplicate animation reject before mutation
+when their positive key-count delta would cross the limit. Replacement, movement,
+and removal remain available at the limit. Reset validates the merged descriptor
+and aggregate replacement budgets before clearing the target's tracks, so a
+rejected reset preserves both forward-compatible parameters and history.
+Insert and split apply the same aggregate effect-count, parameter-count, and
+effect-string authority before cloning descriptor stacks. An exact-cap growth
+attempt is rejected atomically; an effectless insert or split remains legal.
+
+Bezier coverage uses scanline parity over the clipped polygon bounds. With zero
+feather it performs no distance-field work. With feather, exact segment distance
+is evaluated only for inside pixels in each clipped, feather-expanded edge
+neighborhood, backed by reusable region-sized `Uint8Array` and `Float32Array`
+scratch. Typical work therefore tracks the covered edge neighborhoods, while the
+honest maximum-feather worst case can still approach flattened edges times all
+pixels in the clipped mask bounds. Ellipse feather uses a normalized, robust
+nearest-boundary construction with exact circle/axis cases and a fixed maximum
+of 32 bisections. Zero feather needs only the implicit inside test; outside
+pixels and interior pixels whose minor-radius lower bound proves full coverage
+skip the solve. This keeps project-pixel Euclidean coverage continuous at the
+center of wide ellipses as well as at equal inward distances on wide and tall
+axes without turning the common path into an all-pixel root solve.

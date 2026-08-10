@@ -5,9 +5,14 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track, Transition } from '../domain/schema'
-import { createColorAdjustEffect } from '../domain/effectStack'
+import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import { sourceTimeRateFromPercent } from '../domain/sourceTimeMap'
+import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
+import {
+  documentAtAggregateEffectBudget,
+  effectBudgetInsertionClip,
+} from '../test/effectBudgetFixtures'
 import { useDocumentStore } from './documentStore'
 
 /* ------------------------------------------------------------------ */
@@ -47,7 +52,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
 /** V1: clipA [0,300), clipB [400,100). A1: clipD [0,300). V2 empty. */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-1',
     name: 'Store test doc',
     frameRate: { num: 30, den: 1 },
@@ -64,7 +69,7 @@ function makeDoc(): TimelineDoc {
 
 function makeStillDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-still-history',
     name: 'Still history test',
     frameRate: { num: 30, den: 1 },
@@ -105,7 +110,7 @@ function makeTransitionDoc(
   v1Locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-transitions',
     name: 'Transition store test',
     frameRate: { num: 30, den: 1 },
@@ -649,6 +654,92 @@ describe('actions delegate to domain operations', () => {
     expect(getState().past).toBe(beforePatch.past)
   })
 
+  test('aggregate effect-growth rejections keep insert and split history-neutral', () => {
+    const capped = deepFreeze(documentAtAggregateEffectBudget('effects'))
+    getState().setDoc(capped)
+    const beforeInsert = getState()
+    beforeInsert.insertClip(
+      'track-1',
+      effectBudgetInsertionClip('effects', 10_000),
+    )
+    expect(getState().doc).toBe(beforeInsert.doc)
+    expect(getState().past).toBe(beforeInsert.past)
+    expect(getState().future).toBe(beforeInsert.future)
+
+    const beforeSplit = getState()
+    beforeSplit.splitClipAt('effect-budget-clip-0', 20)
+    expect(getState().doc).toBe(beforeSplit.doc)
+    expect(getState().past).toBe(beforeSplit.past)
+    expect(getState().future).toBe(beforeSplit.future)
+  })
+
+  test('effect keyframe budget rejection keeps document and history references', () => {
+    const saturated = JSON.parse(JSON.stringify(makeDoc())) as TimelineDoc
+    const clip = saturated.tracks[0].clips[0]
+    clip.effects = [createMaskEffect('mask-budget', 'rectangle')]
+    clip.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: 'mask-budget',
+        parameter: 'x',
+        keyframes: [{
+          frame: 0,
+          sourceTimeTicks: 0,
+          value: 0,
+          easing: { type: 'linear' },
+        }],
+      }],
+    }
+    saturated.tracks[0].clips[0] = clipWithAnimationKeyframeCount(clip)
+    getState().setDoc(saturated)
+    const before = getState()
+
+    before.setEffectKeyframe('clipA', 'mask-budget', 'x', {
+      frame: 5,
+      value: 0.25,
+      easing: { type: 'linear' },
+    })
+
+    expect(getState().doc).toBe(before.doc)
+    expect(getState().past).toBe(before.past)
+    expect(getState().future).toBe(before.future)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/keyframe/u),
+    )
+  })
+
+  test('valid effect reset restores defaults and clears its tracks in one history entry', () => {
+    const editable = JSON.parse(JSON.stringify(makeDoc())) as TimelineDoc
+    const clip = editable.tracks[0].clips[0]
+    const mask = createMaskEffect('mask-reset', 'rectangle')
+    mask.params.x = 0.25
+    mask.params.futureIntent = 'preserved'
+    clip.effects = [mask]
+    clip.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: mask.id,
+        parameter: 'x',
+        keyframes: [{
+          frame: 0,
+          sourceTimeTicks: 0,
+          value: 0.25,
+          easing: { type: 'linear' },
+        }],
+      }],
+    }
+    getState().setDoc(editable)
+
+    getState().resetEffect(clip.id, mask.id)
+
+    const reset = getState().doc.tracks[0].clips[0]
+    expect(reset.effects[0].params).toMatchObject({ x: 0, futureIntent: 'preserved' })
+    expect(reset.animation?.effectTracks).toEqual([])
+    expect(getState().past).toHaveLength(1)
+    getState().undo()
+    expect(getState().doc.tracks[0].clips[0].animation?.effectTracks).toHaveLength(1)
+  })
+
   test('document survives a JSON round-trip after edits', () => {
     getState().splitClipAtPlayhead(120)
     getState().trimClip('clipB', 'start', 10)
@@ -1078,7 +1169,7 @@ function makeManualLinkStoreDoc(): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-manual-link-store',
     name: 'Manual link store test',
     frameRate: { num: 30, den: 1 },
@@ -1284,7 +1375,7 @@ const PAIR2 = 'link_pair2'
  */
 function makeLinkedDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-linked',
     name: 'Linked test doc',
     frameRate: { num: 30, den: 1 },
@@ -1404,7 +1495,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * well outside it. */
   function makeTwoPairsDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 12,
+      schemaVersion: 13,
       id: 'doc-split-pairs',
       name: 'Split pairs test doc',
       frameRate: { num: 30, den: 1 },
@@ -1424,7 +1515,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * under the playhead. */
   function makeMixedDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 12,
+      schemaVersion: 13,
       id: 'doc-split-mixed',
       name: 'Split mixed test doc',
       frameRate: { num: 30, den: 1 },

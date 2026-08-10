@@ -13,7 +13,7 @@ const first: TimelineMarker = {
 
 function doc(): TimelineDoc {
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: 'doc-marker-store',
     name: 'Marker store',
     frameRate: { num: 30, den: 1 },

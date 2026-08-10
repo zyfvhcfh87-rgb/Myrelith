@@ -11,8 +11,16 @@ import type {
   ClipAnimationKeyframe,
   ClipAnimationProperty,
   ClipAnimationTrack,
+  EffectAnimationTrack,
+  EffectDescriptor,
+  TimelineDoc,
   Transform,
 } from './schema'
+import {
+  effectAnimationParameterSpec,
+  effectParamsValidationError,
+} from './effectStack'
+import { EFFECT_STACK_LIMITS } from './effectBounds'
 
 export const ANIMATABLE_CLIP_PROPERTIES = [
   'position-x',
@@ -26,21 +34,57 @@ export const ANIMATABLE_CLIP_PROPERTIES = [
 export const MAX_KEYFRAMES_PER_TRACK = 1_024
 export const MAX_KEYFRAME_FRAME = 1_000_000_000
 export const MAX_ANIMATED_FINITE_MAGNITUDE = 1_000_000_000
+export const MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP = 1_280
+export const MAX_TOTAL_ANIMATION_KEYFRAMES = 100_000
 
 export const LINEAR_ANIMATION_EASING: ClipAnimationEasing = {
   type: 'linear',
 }
 
-export const DEFAULT_CLIP_ANIMATION: ClipAnimation = { tracks: [] }
+export const DEFAULT_CLIP_ANIMATION: ClipAnimation = { tracks: [], effectTracks: [] }
 
 const PROPERTY_SET = new Set<ClipAnimationProperty>(ANIMATABLE_CLIP_PROPERTIES)
 
 export function defaultClipAnimation(): ClipAnimation {
-  return { tracks: [] }
+  return { tracks: [], effectTracks: [] }
+}
+
+export function effectAnimationTracks(
+  animation: ClipAnimation,
+): readonly EffectAnimationTrack[] {
+  return animation.effectTracks ?? []
 }
 
 export function clipAnimation(clip: Clip): ClipAnimation {
   return clip.animation ?? DEFAULT_CLIP_ANIMATION
+}
+
+export function clipAnimationKeyframeCount(animation: ClipAnimation): number {
+  let total = 0
+  for (const track of animation.tracks) total += track.keyframes.length
+  for (const track of effectAnimationTracks(animation)) total += track.keyframes.length
+  return total
+}
+
+export function documentAnimationKeyframeCount(doc: TimelineDoc): number {
+  let total = 0
+  for (const track of doc.tracks) {
+    for (const clip of track.clips) {
+      total += clipAnimationKeyframeCount(clipAnimation(clip))
+    }
+  }
+  return total
+}
+
+/** Zero-growth edits remain legal even for preserved over-budget authoring intent. */
+export function documentAnimationKeyframeGrowthAllowed(
+  doc: TimelineDoc,
+  additionalKeyframes: number,
+): boolean {
+  if (!Number.isSafeInteger(additionalKeyframes) || additionalKeyframes < 0) return false
+  if (additionalKeyframes === 0) return true
+  return documentAnimationKeyframeCount(doc)
+    <= MAX_TOTAL_ANIMATION_KEYFRAMES - additionalKeyframes
 }
 
 export function cloneAnimationEasing(
@@ -53,6 +97,18 @@ export function cloneClipAnimation(animation: ClipAnimation): ClipAnimation {
   return {
     tracks: animation.tracks.map((track) => ({
       property: track.property,
+      keyframes: track.keyframes.map((keyframe) => ({
+        frame: keyframe.frame,
+        ...(keyframe.sourceTimeTicks === undefined
+          ? {}
+          : { sourceTimeTicks: keyframe.sourceTimeTicks }),
+        value: keyframe.value,
+        easing: cloneAnimationEasing(keyframe.easing),
+      })),
+    })),
+    effectTracks: effectAnimationTracks(animation).map((track) => ({
+      effectId: track.effectId,
+      parameter: track.parameter,
       keyframes: track.keyframes.map((keyframe) => ({
         frame: keyframe.frame,
         ...(keyframe.sourceTimeTicks === undefined
@@ -142,12 +198,22 @@ export function animationTrackValidationError(
   track: ClipAnimationTrack,
 ): string | null {
   if (!PROPERTY_SET.has(track.property)) return 'unsupported animated property'
-  if (track.keyframes.length < 1) return 'animation tracks require at least one keyframe'
-  if (track.keyframes.length > MAX_KEYFRAMES_PER_TRACK) {
+  return keyframesValidationError(
+    track.keyframes,
+    (value) => animationPropertyValueError(track.property, value),
+  )
+}
+
+function keyframesValidationError(
+  keyframes: readonly ClipAnimationKeyframe[],
+  valueError: (value: number) => string | null,
+): string | null {
+  if (keyframes.length < 1) return 'animation tracks require at least one keyframe'
+  if (keyframes.length > MAX_KEYFRAMES_PER_TRACK) {
     return `animation track exceeds ${MAX_KEYFRAMES_PER_TRACK} keyframes`
   }
   let previousFrame: number | null = null
-  for (const keyframe of track.keyframes) {
+  for (const keyframe of keyframes) {
     if (
       !Number.isSafeInteger(keyframe.frame)
       || keyframe.frame < -MAX_KEYFRAME_FRAME
@@ -162,13 +228,33 @@ export function animationTrackValidationError(
     if (previousFrame !== null && keyframe.frame <= previousFrame) {
       return 'keyframe frames must be strictly increasing and unique'
     }
-    const valueError = animationPropertyValueError(track.property, keyframe.value)
-    if (valueError) return valueError
+    const invalidValue = valueError(keyframe.value)
+    if (invalidValue) return invalidValue
     const easingError = animationEasingValidationError(keyframe.easing)
     if (easingError) return easingError
     previousFrame = keyframe.frame
   }
   return null
+}
+
+export function effectAnimationTrackValidationError(
+  track: EffectAnimationTrack,
+): string | null {
+  if (
+    typeof track.effectId !== 'string'
+    || track.effectId.trim().length === 0
+    || track.effectId.length > EFFECT_STACK_LIMITS.maxIdCharacters
+  ) return 'effect id is missing or exceeds its bound'
+  if (
+    typeof track.parameter !== 'string'
+    || track.parameter.trim().length === 0
+    || track.parameter.length > EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters
+  ) return 'effect parameter is missing or exceeds its bound'
+  return keyframesValidationError(track.keyframes, (value) =>
+    !Number.isFinite(value) || Math.abs(value) > MAX_ANIMATED_FINITE_MAGNITUDE
+      ? 'effect keyframe value exceeds the finite project bound'
+      : null,
+  )
 }
 
 export function clipAnimationValidationError(animation: ClipAnimation): string | null {
@@ -181,6 +267,20 @@ export function clipAnimationValidationError(animation: ClipAnimation): string |
     properties.add(track.property)
     const error = animationTrackValidationError(track)
     if (error) return `${track.property}: ${error}`
+  }
+  const effectTracks = effectAnimationTracks(animation)
+  if (effectTracks.length > MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP) {
+    return `clip animation exceeds ${MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP} effect tracks`
+  }
+  const targets = new Set<string>()
+  for (const track of effectTracks) {
+    const target = `${track.effectId}\u0000${track.parameter}`
+    if (targets.has(target)) {
+      return `duplicate ${track.effectId}.${track.parameter} effect animation track`
+    }
+    targets.add(target)
+    const error = effectAnimationTrackValidationError(track)
+    if (error) return `${track.effectId}.${track.parameter}: ${error}`
   }
   return null
 }
@@ -221,11 +321,18 @@ export function animationEasingProgress(
  * Invalid in-memory tracks return the supplied static fallback.
  */
 export function evaluateAnimationTrack(
-  track: ClipAnimationTrack,
+  track: Pick<ClipAnimationTrack, 'keyframes'>,
   frame: number,
   fallback: number,
 ): number {
-  if (!Number.isSafeInteger(frame) || animationTrackValidationError(track)) return fallback
+  if (
+    !Number.isSafeInteger(frame)
+    || keyframesValidationError(track.keyframes, (value) =>
+      !Number.isFinite(value) || Math.abs(value) > MAX_ANIMATED_FINITE_MAGNITUDE
+        ? 'animated value exceeds the finite project bound'
+        : null,
+    )
+  ) return fallback
   const keyframes = track.keyframes
   if (frame <= keyframes[0].frame) return keyframes[0].value
   const last = keyframes[keyframes.length - 1]
@@ -268,11 +375,48 @@ function applyAnimatedValues(
   return { ...clip, transform: transform ?? clip.transform, opacity }
 }
 
+function applyAnimatedEffectValues(
+  clip: Clip,
+  tracks: readonly EffectAnimationTrack[],
+  localFrame: number,
+): Clip {
+  if (tracks.length === 0) return clip
+  let effects: EffectDescriptor[] | null = null
+  for (let effectIndex = 0; effectIndex < clip.effects.length; effectIndex++) {
+    const effect = clip.effects[effectIndex]
+    const targeted = tracks.filter((track) => track.effectId === effect.id)
+    if (targeted.length === 0) continue
+    const params = { ...effect.params }
+    let changed = false
+    for (const track of targeted) {
+      const spec = effectAnimationParameterSpec(effect, track.parameter)
+      const fallback = params[track.parameter]
+      if (!spec || typeof fallback !== 'number') continue
+      if (track.keyframes.some((keyframe) => (
+        keyframe.value < spec.min || keyframe.value > spec.max
+      ))) continue
+      const value = evaluateAnimationTrack(track, localFrame, fallback)
+      if (value < spec.min || value > spec.max || value === fallback) continue
+      params[track.parameter] = value
+      changed = true
+    }
+    if (!changed) continue
+    const resolved = { ...effect, params }
+    if (effectParamsValidationError(resolved)) continue
+    effects ??= clip.effects.slice()
+    effects[effectIndex] = resolved
+  }
+  return effects === null ? clip : { ...clip, effects }
+}
+
 /** Shared pure resolver used by Inspector, Program Monitor, preview, and export. */
 export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): Clip {
   if (!Number.isSafeInteger(timelineFrame)) return clip
   const animation = clipAnimation(clip)
-  if (animation.tracks.length === 0 || clipAnimationValidationError(animation)) return clip
+  if (
+    (animation.tracks.length === 0 && effectAnimationTracks(animation).length === 0)
+    || clipAnimationValidationError(animation)
+  ) return clip
   const localFrame = timelineFrame - clip.timelineRange.startFrame
   if (!Number.isSafeInteger(localFrame)) return clip
   const values = new Map<ClipAnimationProperty, number>()
@@ -283,7 +427,11 @@ export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): 
       evaluateAnimationTrack(track, localFrame, fallback),
     )
   }
-  return applyAnimatedValues(clip, values)
+  return applyAnimatedEffectValues(
+    applyAnimatedValues(clip, values),
+    effectAnimationTracks(animation),
+    localFrame,
+  )
 }
 
 function replaceTrack(
@@ -297,7 +445,7 @@ function replaceTrack(
     (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property)
       - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property),
   )
-  return { tracks }
+  return { tracks, effectTracks: [...effectAnimationTracks(animation)] }
 }
 
 /** Upsert semantics: a keyframe at the same property/time is replaced. */
@@ -376,14 +524,169 @@ export function removeAnimationTrack(
   return replaceTrack(animation, property, null)
 }
 
+export function effectAnimationTrack(
+  animation: ClipAnimation,
+  effectId: string,
+  parameter: string,
+): EffectAnimationTrack | null {
+  return effectAnimationTracks(animation).find((track) =>
+    track.effectId === effectId && track.parameter === parameter,
+  ) ?? null
+}
+
+function replaceEffectTrack(
+  animation: ClipAnimation,
+  effectId: string,
+  parameter: string,
+  nextTrack: EffectAnimationTrack | null,
+): ClipAnimation {
+  const effectTracks = effectAnimationTracks(animation).filter((track) =>
+    track.effectId !== effectId || track.parameter !== parameter,
+  )
+  if (nextTrack) effectTracks.push(nextTrack)
+  effectTracks.sort((left, right) => {
+    const idOrder = left.effectId.localeCompare(right.effectId)
+    return idOrder !== 0 ? idOrder : left.parameter.localeCompare(right.parameter)
+  })
+  return {
+    tracks: animation.tracks.map((track) => ({
+      property: track.property,
+      keyframes: track.keyframes.map((keyframe) => ({
+        ...keyframe,
+        easing: cloneAnimationEasing(keyframe.easing),
+      })),
+    })),
+    effectTracks,
+  }
+}
+
+export function upsertEffectAnimationKeyframe(
+  animation: ClipAnimation,
+  effect: EffectDescriptor,
+  parameter: string,
+  keyframe: ClipAnimationKeyframe,
+): ClipAnimation | null {
+  const spec = effectAnimationParameterSpec(effect, parameter)
+  if (!spec || keyframe.value < spec.min || keyframe.value > spec.max) return null
+  if (animationEasingValidationError(keyframe.easing)) return null
+  if (
+    !Number.isSafeInteger(keyframe.frame)
+    || keyframe.frame < -MAX_KEYFRAME_FRAME
+    || keyframe.frame > MAX_KEYFRAME_FRAME
+    || clipAnimationValidationError(animation)
+  ) return null
+  const existing = effectAnimationTrack(animation, effect.id, parameter)
+  const keyframes = (existing?.keyframes ?? [])
+    .filter((item) => item.frame !== keyframe.frame)
+    .map((item) => ({ ...item, easing: cloneAnimationEasing(item.easing) }))
+  keyframes.push({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) })
+  keyframes.sort((left, right) => left.frame - right.frame)
+  if (keyframes.length > MAX_KEYFRAMES_PER_TRACK) return null
+  if (!existing && effectAnimationTracks(animation).length >= MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP) {
+    return null
+  }
+  return replaceEffectTrack(animation, effect.id, parameter, {
+    effectId: effect.id,
+    parameter,
+    keyframes,
+  })
+}
+
+export function moveEffectAnimationKeyframe(
+  animation: ClipAnimation,
+  effect: EffectDescriptor,
+  parameter: string,
+  fromFrame: number,
+  toFrame: number,
+): ClipAnimation | null {
+  const track = effectAnimationTrack(animation, effect.id, parameter)
+  const source = track?.keyframes.find((keyframe) => keyframe.frame === fromFrame)
+  if (!track || !source) return null
+  if (fromFrame === toFrame) return animation
+  const remaining = track.keyframes
+    .filter((keyframe) => keyframe.frame !== fromFrame)
+    .map((keyframe) => ({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) }))
+  const withoutSource = replaceEffectTrack(
+    animation,
+    effect.id,
+    parameter,
+    remaining.length === 0 ? null : { ...track, keyframes: remaining },
+  )
+  return upsertEffectAnimationKeyframe(withoutSource, effect, parameter, {
+    ...source,
+    frame: toFrame,
+  })
+}
+
+export function removeEffectAnimationKeyframe(
+  animation: ClipAnimation,
+  effectId: string,
+  parameter: string,
+  frame: number,
+): ClipAnimation | null {
+  const track = effectAnimationTrack(animation, effectId, parameter)
+  if (!track || !track.keyframes.some((keyframe) => keyframe.frame === frame)) return null
+  const keyframes = track.keyframes
+    .filter((keyframe) => keyframe.frame !== frame)
+    .map((keyframe) => ({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) }))
+  return replaceEffectTrack(
+    animation,
+    effectId,
+    parameter,
+    keyframes.length === 0 ? null : { ...track, keyframes },
+  )
+}
+
+export function removeEffectAnimationTracks(
+  animation: ClipAnimation,
+  effectId: string,
+  parameters?: ReadonlySet<string>,
+): ClipAnimation {
+  return {
+    tracks: animation.tracks.map((track) => ({
+      property: track.property,
+      keyframes: track.keyframes.map((keyframe) => ({
+        ...keyframe,
+        easing: cloneAnimationEasing(keyframe.easing),
+      })),
+    })),
+    effectTracks: effectAnimationTracks(animation)
+      .filter((track) => track.effectId !== effectId || (
+        parameters !== undefined && !parameters.has(track.parameter)
+      ))
+      .map((track) => ({
+        ...track,
+        keyframes: track.keyframes.map((keyframe) => ({
+          ...keyframe,
+          easing: cloneAnimationEasing(keyframe.easing),
+        })),
+      })),
+  }
+}
+
+export function remapEffectAnimationIds(
+  animation: ClipAnimation,
+  replacements: ReadonlyMap<string, string>,
+): ClipAnimation {
+  const cloned = cloneClipAnimation(animation)
+  cloned.effectTracks = effectAnimationTracks(cloned).map((track) => ({
+    ...track,
+    effectId: replacements.get(track.effectId) ?? track.effectId,
+  }))
+  return cloned
+}
+
 /** Shift a clip-local animation origin while retaining exact curve geometry. */
 export function shiftClipAnimation(
   animation: ClipAnimation,
   deltaFrames: number,
 ): ClipAnimation | null {
   if (!Number.isSafeInteger(deltaFrames) || clipAnimationValidationError(animation)) return null
-  const tracks: ClipAnimationTrack[] = []
-  for (const track of animation.tracks) {
+  const shiftTracks = <T extends ClipAnimationTrack | EffectAnimationTrack>(
+    sourceTracks: readonly T[],
+  ): T[] | null => {
+    const tracks: T[] = []
+    for (const track of sourceTracks) {
     const keyframes: ClipAnimationKeyframe[] = []
     for (const keyframe of track.keyframes) {
       const frame = keyframe.frame + deltaFrames
@@ -398,7 +701,11 @@ export function shiftClipAnimation(
         easing: cloneAnimationEasing(keyframe.easing),
       })
     }
-    tracks.push({ property: track.property, keyframes })
+      tracks.push({ ...track, keyframes })
+    }
+    return tracks
   }
-  return { tracks }
+  const tracks = shiftTracks(animation.tracks)
+  const effectTracks = shiftTracks(effectAnimationTracks(animation))
+  return tracks && effectTracks ? { tracks, effectTracks } : null
 }

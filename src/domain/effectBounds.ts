@@ -138,6 +138,19 @@ export function documentEffectBudgetUsage(doc: TimelineDoc): EffectBudgetUsage {
   return { effects, params, stringCharacters }
 }
 
+function effectBudgetUsage(
+  effects: readonly EffectDescriptor[],
+): EffectBudgetUsage {
+  let params = 0
+  let stringCharacters = 0
+  for (const effect of effects) {
+    const descriptor = effectDescriptorBudget(effect)
+    params += descriptor.params
+    stringCharacters += descriptor.stringCharacters
+  }
+  return { effects: effects.length, params, stringCharacters }
+}
+
 function aggregateBudgetError(usage: EffectBudgetUsage): string | null {
   if (usage.effects > EFFECT_STACK_LIMITS.maxTotalEffects) {
     return `project exceeds ${EFFECT_STACK_LIMITS.maxTotalEffects} effects in total`
@@ -151,6 +164,21 @@ function aggregateBudgetError(usage: EffectBudgetUsage): string | null {
   return null
 }
 
+/** Explain whether cloning a bounded descriptor collection would exceed totals. */
+export function effectCollectionAppendBudgetError(
+  doc: TimelineDoc,
+  effects: readonly EffectDescriptor[],
+): string | null {
+  if (effects.length === 0) return null
+  const current = documentEffectBudgetUsage(doc)
+  const added = effectBudgetUsage(effects)
+  return aggregateBudgetError({
+    effects: current.effects + added.effects,
+    params: current.params + added.params,
+    stringCharacters: current.stringCharacters + added.stringCharacters,
+  })
+}
+
 /** Explain whether appending one already-bounded descriptor would exceed a budget. */
 export function effectAppendBudgetError(
   doc: TimelineDoc,
@@ -160,13 +188,7 @@ export function effectAppendBudgetError(
   if (clip.effects.length + 1 > EFFECT_STACK_LIMITS.maxEffectsPerClip) {
     return `clip has reached the ${EFFECT_STACK_LIMITS.maxEffectsPerClip}-effect limit`
   }
-  const current = documentEffectBudgetUsage(doc)
-  const added = effectDescriptorBudget(effect)
-  return aggregateBudgetError({
-    effects: current.effects + added.effects,
-    params: current.params + added.params,
-    stringCharacters: current.stringCharacters + added.stringCharacters,
-  })
+  return effectCollectionAppendBudgetError(doc, [effect])
 }
 
 /** Explain whether replacing one descriptor would exceed aggregate budgets. */
