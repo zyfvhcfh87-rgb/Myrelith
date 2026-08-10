@@ -59,6 +59,27 @@ export interface SourceTimeRate {
   denominator: number
 }
 
+/** Named fixed-polynomial interpolation for one outgoing speed segment. */
+export type SourceTimeSpeedEasing = 'hold' | 'linear' | 'smooth'
+
+/** One speed handle in the durable curve coordinate space. */
+export interface SourceTimeSpeedPoint {
+  frame: number
+  /** Canonical 0x freeze or a 25%-step rate from 1/4x through 4x. */
+  rate: SourceTimeRate
+  /** Interpolation from this handle to the next handle. */
+  easing: SourceTimeSpeedEasing
+}
+
+/**
+ * Piecewise speed authoring retained independently from clip trims/splits.
+ * `originFrame` is the curve-space frame represented by clip-local frame 0.
+ */
+export interface SourceTimeSpeedCurve {
+  originFrame: number
+  points: SourceTimeSpeedPoint[]
+}
+
 /**
  * Affine source-time origin, preserved source span, and rate. Tick values use
  * the fixed precision declared by domain/sourceTimeMap.ts. The explicit span
@@ -69,6 +90,11 @@ export interface SourceTimeMap {
   sourceStartTicks: number
   sourceDurationTicks: number
   rate: SourceTimeRate
+  /**
+   * Schema-12 piecewise speed curve. Optional typing keeps historical pure
+   * fixtures source-compatible; current persisted documents always include it.
+   */
+  speedCurve?: SourceTimeSpeedCurve
 }
 
 /* ------------------------------------------------------------------ */

@@ -196,7 +196,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], overrides: Pa
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc',
     name: 'doc',
     frameRate: R30,

@@ -57,7 +57,7 @@ function linkedDoc(
   audio = clip('audio', 'audio-asset', 35, 40, 2, 'link_bounds'),
 ): TimelineDoc {
   return {
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'gesture-bounds',
     name: 'Gesture bounds',
     frameRate: { num: 30, den: 1 },
@@ -89,6 +89,34 @@ describe('gestureBoundsForClip', () => {
     expect(gestureBoundsForClip(member, 'ripple-start', 200)).toEqual({
       minDelta: -20,
       maxDelta: 39,
+    })
+  })
+
+  test('derives trim head and tail capacity from the active speed curve', () => {
+    const member: Clip = {
+      ...clip('ramped-member', 'video-asset', 30, 10, 20),
+      sourceRange: { startFrame: 20, durationFrames: 15 },
+      sourceTimeMap: {
+        sourceStartTicks: 20_000_000,
+        sourceDurationTicks: 15_000_000,
+        rate: { numerator: 1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+            { frame: 5, rate: { numerator: 2, denominator: 1 }, easing: 'hold' },
+          ],
+        },
+      },
+    }
+
+    expect(gestureBoundsForClip(member, 'trim-start', 50)).toEqual({
+      minDelta: -20,
+      maxDelta: 9,
+    })
+    expect(gestureBoundsForClip(member, 'trim-end', 50)).toEqual({
+      minDelta: -9,
+      maxDelta: 7,
     })
   })
 

@@ -24,19 +24,33 @@
  */
 
 import {
+  clearClipSpeedRamp,
   moveClip,
+  removeClipSpeedPoint,
   rippleDelete,
   rippleTrim,
   retimeClip,
+  setClipSpeedPoint,
   slideClip,
   slipClip,
   splitClipAtFrame,
   trimClip,
 } from './operations'
 import type { TrimEdge } from './operations'
-import type { Clip, ClipId, SourceTimeRate, TimelineDoc, TrackId } from './schema'
+import type {
+  Clip,
+  ClipId,
+  SourceTimeRate,
+  SourceTimeSpeedEasing,
+  TimelineDoc,
+  TrackId,
+} from './schema'
 import { findClip, trackOfClip } from './selectors'
-import { clipSourceTimeMap } from './sourceTimeMap'
+import {
+  clipSourceTimeMap,
+  sourceTimeMapUsesSpeedCurve,
+  sourceTimeSpeedPointsAtClip,
+} from './sourceTimeMap'
 import { rangeEnd } from './time'
 
 /** Rejection path: warn and hand back the SAME doc reference. */
@@ -401,8 +415,11 @@ export function linkedRetimeClip(
 
   let next = doc
   for (const member of members) {
-    const current = clipSourceTimeMap(member).rate
+    const currentMap = clipSourceTimeMap(member)
+    const current = currentMap.rate
     if (
+      !sourceTimeMapUsesSpeedCurve(currentMap)
+      &&
       current.numerator === rate.numerator
       && current.denominator === rate.denominator
     ) continue
@@ -411,6 +428,89 @@ export function linkedRetimeClip(
     next = applied
   }
   return next
+}
+
+/** Add/replace the same local speed handle on every linked member atomically. */
+export function linkedSetClipSpeedPoint(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  frame: number,
+  rate: SourceTimeRate,
+  easing: SourceTimeSpeedEasing,
+): TimelineDoc {
+  const members = groupMembers(doc, clipId)
+  if (
+    members.some(
+      (member) => member.sourceMode === 'still' || member.text !== undefined,
+    )
+  ) return doc
+  let next = doc
+  let changed = false
+  for (const member of members) {
+    const existing = sourceTimeSpeedPointsAtClip(clipSourceTimeMap(member))
+      .find((point) => point.frame === frame)
+    if (
+      existing
+      && existing.rate.numerator === rate.numerator
+      && existing.rate.denominator === rate.denominator
+      && existing.easing === easing
+    ) continue
+    const applied = setClipSpeedPoint(next, member.id, frame, rate, easing)
+    if (applied === next) {
+      return reject(doc, 'linkedSetClipSpeedPoint', 'partner could not follow')
+    }
+    next = applied
+    changed = true
+  }
+  return changed ? next : doc
+}
+
+/** Remove a matching local speed handle from every member that carries it. */
+export function linkedRemoveClipSpeedPoint(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  frame: number,
+): TimelineDoc {
+  const members = groupMembers(doc, clipId)
+  const owner = members.find((member) => member.id === clipId)
+  if (
+    !owner
+    || !sourceTimeSpeedPointsAtClip(clipSourceTimeMap(owner))
+      .some((point) => point.frame === frame)
+  ) return removeClipSpeedPoint(doc, clipId, frame)
+  let next = doc
+  for (const member of members) {
+    if (
+      !sourceTimeSpeedPointsAtClip(clipSourceTimeMap(member))
+        .some((point) => point.frame === frame)
+    ) continue
+    const applied = removeClipSpeedPoint(next, member.id, frame)
+    if (applied === next) {
+      return reject(doc, 'linkedRemoveClipSpeedPoint', 'partner could not follow')
+    }
+    next = applied
+  }
+  return next
+}
+
+/** Clear every linked member's ramp while retaining its constant fallback. */
+export function linkedClearClipSpeedRamp(
+  doc: TimelineDoc,
+  clipId: ClipId,
+): TimelineDoc {
+  const members = groupMembers(doc, clipId)
+  let next = doc
+  let changed = false
+  for (const member of members) {
+    if (!sourceTimeMapUsesSpeedCurve(clipSourceTimeMap(member))) continue
+    const applied = clearClipSpeedRamp(next, member.id)
+    if (applied === next) {
+      return reject(doc, 'linkedClearClipSpeedRamp', 'partner could not follow')
+    }
+    next = applied
+    changed = true
+  }
+  return changed ? next : doc
 }
 
 /** Slip every member of clipId's group by the same source delta. See

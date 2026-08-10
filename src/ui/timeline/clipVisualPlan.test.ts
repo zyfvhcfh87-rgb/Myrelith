@@ -115,6 +115,45 @@ describe('planClipPresentation', () => {
     })
   })
 
+  test('warps filmstrip tiles and waveform slices through ramp and freeze boundaries', () => {
+    const clip: Clip = {
+      ...makeClip('ramped', 25, 8, 60),
+      sourceRange: { startFrame: 60, durationFrames: 7 },
+      sourceTimeMap: {
+        sourceStartTicks: 60_000_000,
+        sourceDurationTicks: 7_000_000,
+        rate: { numerator: 1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+            { frame: 2, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+            { frame: 4, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
+            { frame: 6, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+          ],
+        },
+      },
+    }
+
+    const filmstrip = plan({ clip })
+    const waveform = plan({ clip, trackKind: 'audio' })
+
+    expect(filmstrip?.visual).toMatchObject({ kind: 'filmstrip' })
+    if (filmstrip?.visual?.kind !== 'filmstrip') return
+    expect(filmstrip.visual.tiles).toHaveLength(1)
+    expect(filmstrip.visual.tiles[0]).toMatchObject({ leftPx: 0, widthPx: 16 })
+
+    expect(waveform?.visual).toMatchObject({ kind: 'waveform', widthPx: 16 })
+    if (waveform?.visual?.kind !== 'waveform') return
+    expect(waveform.visual.segments).toHaveLength(8)
+    expect(waveform.visual.segments?.[2]?.viewBox).toBe(
+      `${62 / 300} 0 ${1 / 1_000_000 / 300} 1`,
+    )
+    expect(waveform.visual.segments?.[3]?.viewBox).toBe(
+      waveform.visual.segments?.[2]?.viewBox,
+    )
+  })
+
   test.each<{
     kind: EditPreview['kind']
     displayedStartFrame: number

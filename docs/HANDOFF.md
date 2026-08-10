@@ -116,6 +116,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #45 — versioned effect stack** | ✅ implementation complete | schema-10 ordered descriptors with registry validation/migration/capability fallback and unknown preservation; atomic history operations; shared preview/export exposure/contrast/saturation; accessible Inspector; 306 focused + 2,108 total tests; clean Chromium/recovery/export-ready gate on exclusive port 41845 |
 | **Post-MVP #46 — minimal blend modes** | ✅ implementation complete | explicit normal/multiply/screen/overlay intent; schema-9 migration preserving schema-8 captions and unknown blend intent; isolated Canvas2D composition plus capability fallback seam; accessible Inspector/history; clean preview/export/reload Chromium gate on exclusive port 41846 |
 | **Post-MVP #69 — constant-speed retiming** | ✅ implementation complete | schema-11 exact rational `SourceTimeMap` after the schema-10 effect stack; deterministic linked trim/split/move/transition/keyframe/thumbnail/seek/composition behavior; shared preview/export audio-mute and output-resource policy outside exact 1×; accessible Inspector timing controls; complete automated gates and clean in-app Chromium QA on exclusive port 41869 |
+| **Post-MVP #72 — speed ramps** | ✅ implementation complete | schema-12 deterministic piecewise `SourceTimeMap` curves with hold/linear/smooth easing and bounded freezes; accessible linked/undoable Inspector editing; shared duration/seek/thumbnail/transition/composition/audio/export mapping; validation and real Chromium evidence on exclusive port 41872 |
 | **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
 | **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
@@ -1550,6 +1551,56 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
+- Issue #72 is implementation-complete on `codex/issue-72-speed-ramps`.
+  Timeline schema 12 adds an optional deterministic piecewise curve above the
+  schema-11 constant fallback. Curves have one bounded integer origin, strictly
+  increasing integer-frame points, canonical 0% or 25%–400% rational speeds,
+  and explicit hold/linear/smooth outgoing easing. Duplicate-time edits replace;
+  duplicate persisted points reject. A terminal freeze rejects so every clip
+  duration remains finite, while a freeze bounded by a later positive point is
+  valid. The 11→12 migration adds an empty curve without changing constant clips.
+- `domain/sourceTimeMap.ts` integrates every segment from one BigInt-backed
+  integer primitive, so direct evaluation and split/trim origins agree exactly.
+  The same authority now drives duration, seeking/scrubbing, ordinary and
+  transition composition, filmstrip tiles, waveform slices, source-handle
+  capacity, animation remapping, preview, and export. Malformed in-memory curve
+  intent uses the preserved constant visual fallback, fails audio closed, and
+  is rejected by portable validation rather than silently rewritten.
+- Ramp authoring reuses the Inspector's accessible curve patterns: add/select at
+  the playhead, edit speed and outgoing easing, remove, clear, seek from the
+  ordered point list, and receive linked/locked/bounds feedback. Linked A/V
+  partners update atomically and every accepted gesture is one exact undo entry.
+  Exact integer-origin 1× and all-1× curves retain audio; constant non-1×,
+  variable ramps, and freezes are silent in both preview and export until a
+  pitch-safe time-stretch implementation exists.
+- Issue #72's complete automated gate passes 2,226 Vitest cases across 159 files
+  plus all 16 benchmark-runner cases, production build/typecheck, oxlint, the
+  production high-severity audit with 0 vulnerabilities, and clean diff checks.
+  Vite retains only its existing non-fatal large-chunk advisory.
+- Real Chromium on exclusive strict port 41872 imported and relinked a
+  22,145,940-byte, 90-second H.264/AAC source at 640x360/30 fps, then edited one
+  linked 900-frame A/V pair into frame 0 at 100% smooth, frame 300 at 0% hold,
+  and frame 450 at 200% smooth. The live duration became 825 timeline frames for
+  900 source frames; scrubs at frames 325 and 425 retained the same frozen
+  preview, playback advanced from frame 280 into the freeze, and undo/redo
+  switched the hold segment and derived duration between 825 and 750 frames.
+- A fresh recovery reload plus real media relink preserved all three points,
+  easing choices, linked state, duration, and the explicit shared audio-silence
+  policy. The full browser export produced
+  `C:\Users\Aryel\Downloads\Issue 72 ramp browser QA.mp4`: 10,779,269 bytes,
+  27.5 seconds, 1280x720 H.264 at 30 fps with stereo 48 kHz AAC. Decoded export
+  frames 325 and 425 share MD5 `b8c95f7067d085238dc338d8bbdf3d2d`, while
+  post-freeze frame 700 is `322361091126915850d683b8297e3764`; the intentional
+  silent track measured -91.0 dB mean/max. Browser warnings/errors were zero.
+  Screenshots are retained at
+  `C:\Users\Aryel\AppData\Local\Temp\myrelith-issue72-freeze-scrub.png`,
+  `...\myrelith-issue72-export-ready.png`, and
+  `...\myrelith-issue72-recovered-ramp.png`; port 41872 was released.
+- Issue #72 started from clean `master`
+  `357d760c0105dda6d60e1300e61ab72401c3ba9a`, tree
+  `3c02d0b20058efd4ac93aed148a6ed9df126b40b`, and tracked-index manifest
+  `sha256:8c96e30b8cf8e6b62d4e34d70e74ce48883cdb01e1f7f596f83618150050ece3`.
+  The final commit and PR head are the authoritative delivered identity.
 - Issue #69 is implementation-complete on
   `codex/issue-69-constant-retiming`. Timeline schema 11 adds a durable exact
   rational `SourceTimeMap` for timed decoded media after schema 10's versioned

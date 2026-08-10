@@ -13,6 +13,7 @@
 import {
   lazy,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -41,6 +42,7 @@ import type {
 import type {
   Clip,
   ClipId,
+  SourceTimeSpeedEasing,
   TextFontFamily,
   TimelineDoc,
 } from '../domain/schema'
@@ -71,9 +73,14 @@ import {
 import { effectAppendBudgetError } from '../domain/effectBounds'
 import {
   clipSourceTimeMap,
+  sourceTimeMapUsesSpeedCurve,
+  sourceTimeSpeedAtTimelineOffset,
+  sourceTimeSpeedPointsAtClip,
   sourceTimeAudioPolicy,
   sourceTimeRateFromPercent,
   sourceTimeRatePercent,
+  sourceTimeSpeedRateFromPercent,
+  sourceTimeSpeedRatePercent,
 } from '../domain/sourceTimeMap'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
@@ -409,8 +416,246 @@ function ToggleField({
 const SPEED_PERCENT_OPTIONS = Object.freeze(
   Array.from({ length: 16 }, (_value, index) => (index + 1) * 25),
 )
+const RAMP_SPEED_PERCENT_OPTIONS = Object.freeze([0, ...SPEED_PERCENT_OPTIONS])
 
-/** Constant-speed authoring stays visible regardless of the active video tab. */
+const RAMP_EASING_LABELS: Readonly<Record<SourceTimeSpeedEasing, string>> = {
+  hold: 'Hold',
+  linear: 'Linear',
+  smooth: 'Smooth',
+}
+
+function speedCurvePolyline(clip: Clip): string {
+  const map = clipSourceTimeMap(clip)
+  const duration = Math.max(1, clip.timelineRange.durationFrames - 1)
+  const samples = Math.min(64, Math.max(2, clip.timelineRange.durationFrames))
+  return Array.from({ length: samples }, (_value, index) => {
+    const frame = Math.round(index * duration / (samples - 1))
+    const speed = sourceTimeSpeedAtTimelineOffset(map, frame)
+    const x = frame / duration * 240
+    const y = 92 - Math.min(4, Math.max(0, speed)) / 4 * 84
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+}
+
+function SpeedRampEditor({
+  clip,
+  locked,
+  linkedCount,
+}: {
+  clip: Clip
+  locked: boolean
+  linkedCount: number
+}) {
+  const map = clipSourceTimeMap(clip)
+  const points = useMemo(() => sourceTimeSpeedPointsAtClip(map), [map])
+  const rampActive = sourceTimeMapUsesSpeedCurve(map)
+  const playheadFrame = useTransportStore((state) => state.playheadFrame)
+  const localPlayhead = playheadFrame - clip.timelineRange.startFrame
+  const playheadInside = localPlayhead >= 0
+    && localPlayhead < clip.timelineRange.durationFrames
+  const [selectedFrame, setSelectedFrame] = useState<number | null>(null)
+  const [message, setMessage] = useState('')
+  const pointIdentity = points
+    .map((point) => `${point.frame}:${point.rate.numerator}/${point.rate.denominator}:${point.easing}`)
+    .join('|')
+  const selected = selectedFrame === null
+    ? null
+    : points.find((point) => point.frame === selectedFrame) ?? null
+
+  useEffect(() => {
+    if (selectedFrame !== null && points.some((point) => point.frame === selectedFrame)) {
+      return
+    }
+    const atPlayhead = points.find((point) => point.frame === localPlayhead)
+    setSelectedFrame(atPlayhead?.frame ?? points[0]?.frame ?? null)
+  }, [clip.id, localPlayhead, pointIdentity, points, selectedFrame])
+
+  const afterEdit = (before: TimelineDoc, success: string): boolean => {
+    const after = useDocumentStore.getState().doc
+    if (after === before) {
+      setMessage(
+        'Ramp edit was not applied. Keep points inside every linked clip, bound a freeze with a later positive point, unlock tracks, and make room beside the clip.',
+      )
+      return false
+    }
+    const updated = findClip(after, clip.id)
+    setMessage(updated
+      ? `${success} Timeline duration is now ${updated.timelineRange.durationFrames} frames.`
+      : success)
+    return true
+  }
+
+  const commitPoint = (
+    frame: number,
+    percent: number,
+    easing: SourceTimeSpeedEasing,
+  ): void => {
+    const store = useDocumentStore.getState()
+    const before = store.doc
+    store.setClipSpeedPoint(
+      clip.id,
+      frame,
+      sourceTimeSpeedRateFromPercent(percent),
+      easing,
+    )
+    if (afterEdit(before, `Speed point at frame ${frame} updated to ${percent}%.`)) {
+      setSelectedFrame(frame)
+    }
+  }
+
+  return (
+    <div className="animation-editor speed-ramp-editor">
+      <div className="animation-toolbar" aria-label="Speed ramp operations">
+        <button
+          type="button"
+          disabled={locked || !playheadInside}
+          onClick={() => {
+            const existing = points.find((point) => point.frame === localPlayhead)
+            if (existing) {
+              setSelectedFrame(existing.frame)
+              setMessage(`Speed point at frame ${existing.frame} selected.`)
+              return
+            }
+            const percent = Math.min(
+              400,
+              Math.max(
+                0,
+                Math.round(sourceTimeSpeedAtTimelineOffset(map, localPlayhead) * 4) * 25,
+              ),
+            )
+            commitPoint(localPlayhead, percent, 'linear')
+          }}
+        >
+          {points.some((point) => point.frame === localPlayhead)
+            ? 'Select point at playhead'
+            : 'Add point at playhead'}
+        </button>
+        <button
+          type="button"
+          disabled={locked || !rampActive}
+          onClick={() => {
+            const store = useDocumentStore.getState()
+            const before = store.doc
+            store.clearClipSpeedRamp(clip.id)
+            if (afterEdit(before, 'Speed ramp cleared; the constant fallback was restored.')) {
+              setSelectedFrame(null)
+            }
+          }}
+        >
+          Clear ramp
+        </button>
+      </div>
+
+      {rampActive ? (
+        <>
+          <div
+            className="animation-curve"
+            role="img"
+            aria-label={`Speed ramp with ${points.length} point${points.length === 1 ? '' : 's'}`}
+          >
+            <svg viewBox="0 0 240 100" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M0 92H240 M0 50H240 M0 8H240" className="animation-curve-grid" />
+              <polyline points={speedCurvePolyline(clip)} className="animation-curve-line" />
+            </svg>
+          </div>
+          <ul className="animation-keyframe-list" aria-label="Speed points">
+            {points.map((point) => (
+              <li key={point.frame}>
+                <button
+                  type="button"
+                  aria-pressed={selected?.frame === point.frame}
+                  onClick={() => {
+                    setSelectedFrame(point.frame)
+                    useTransportStore.getState().setPlayheadFrame(
+                      clip.timelineRange.startFrame + point.frame,
+                    )
+                  }}
+                >
+                  Frame {point.frame}: {sourceTimeSpeedRatePercent(point.rate)}%
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="animation-empty">
+          Add a point at the playhead to start a ramp. The current constant speed becomes frame 0.
+        </p>
+      )}
+
+      {selected && (
+        <div
+          className="animation-keyframe-fields"
+          aria-label={`Selected speed point at frame ${selected.frame}`}
+        >
+          <label className="animation-number-field">
+            <span>Point speed</span>
+            <select
+              aria-label="Point speed"
+              value={sourceTimeSpeedRatePercent(selected.rate)}
+              disabled={locked}
+              onChange={(event) => commitPoint(
+                selected.frame,
+                Number(event.target.value),
+                selected.easing,
+              )}
+            >
+              {RAMP_SPEED_PERCENT_OPTIONS.map((percent) => (
+                <option key={percent} value={percent}>
+                  {percent === 0 ? '0% (Freeze)' : `${percent}%`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="animation-number-field">
+            <span>Outgoing easing</span>
+            <select
+              aria-label="Outgoing speed easing"
+              value={selected.easing}
+              disabled={locked}
+              onChange={(event) => commitPoint(
+                selected.frame,
+                sourceTimeSpeedRatePercent(selected.rate),
+                event.target.value as SourceTimeSpeedEasing,
+              )}
+            >
+              {(Object.keys(RAMP_EASING_LABELS) as SourceTimeSpeedEasing[])
+                .map((easing) => (
+                  <option key={easing} value={easing}>
+                    {RAMP_EASING_LABELS[easing]}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <div className="animation-toolbar">
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => {
+                const store = useDocumentStore.getState()
+                const before = store.doc
+                store.removeClipSpeedPoint(clip.id, selected.frame)
+                if (afterEdit(before, `Speed point at frame ${selected.frame} removed.`)) {
+                  setSelectedFrame(null)
+                }
+              }}
+            >
+              Remove speed point
+            </button>
+          </div>
+        </div>
+      )}
+
+      <p className="animation-status" role="status" aria-live="polite">
+        {message || (playheadInside
+          ? `Playhead: clip frame ${localPlayhead}. A 0% freeze must be bounded by a later positive point.${linkedCount > 1 ? ` ${linkedCount} linked clips edit together.` : ''}`
+          : 'Move the playhead inside this clip to add a speed point.')}
+      </p>
+    </div>
+  )
+}
+
+/** Constant and piecewise-speed authoring stays visible across video tabs. */
 function TimingInspectorSection({
   clip,
   doc,
@@ -420,6 +665,7 @@ function TimingInspectorSection({
 }) {
   const map = clipSourceTimeMap(clip)
   const speedPercent = sourceTimeRatePercent(map.rate)
+  const rampActive = sourceTimeMapUsesSpeedCurve(map)
   const members = [clip, ...linkedPartners(doc, clip.id)]
   const retimable = members.every(
     (member) => member.sourceMode === 'timed' && member.text === undefined,
@@ -466,7 +712,7 @@ function TimingInspectorSection({
     <InspectorSection
       title="Timing"
       resetLabel="Reset clip speed"
-      disabled={locked || !retimable || speedPercent === 100}
+      disabled={locked || !retimable || (speedPercent === 100 && !rampActive)}
       onReset={() => commit(100)}
     >
       <label className="inspector-field inspector-field-wide">
@@ -486,15 +732,22 @@ function TimingInspectorSection({
       <span id="inspector-speed-detail" className="inspector-note">
         {retimable
           ? `Timeline ${clip.timelineRange.durationFrames} frames · source ${clip.sourceRange.durationFrames} frames.${linkedNote}`
-          : 'Constant-speed retiming is available for timed video and audio clips.'}
+          : 'Retiming is available for timed video and audio clips.'}
       </span>
       <span id="inspector-speed-audio" className="inspector-note">
         {!retimable
           ? 'Still images and text keep their authored duration without decoded source-time mapping.'
           : audioPolicy.status === 'muted'
-          ? 'Audio is muted at this speed in preview and export because pitch-safe time-stretch is not available.'
-          : 'Audio stays enabled at 100% speed.'}
+          ? audioPolicy.reason === 'invalid-speed-curve'
+            ? 'Audio is muted because the stored speed curve is invalid; video uses the preserved constant fallback.'
+            : 'Audio is muted for this timing map in preview and export because pitch-safe time-stretch is not available.'
+          : rampActive
+            ? 'Audio stays enabled because every active speed point is exactly 100%.'
+            : 'Audio stays enabled at 100% speed.'}
       </span>
+      {retimable && (
+        <SpeedRampEditor clip={clip} locked={locked} linkedCount={members.length} />
+      )}
       <span
         id="inspector-speed-status"
         className="inspector-text-status"

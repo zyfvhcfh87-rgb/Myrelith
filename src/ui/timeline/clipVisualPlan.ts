@@ -12,6 +12,8 @@ import {
   clipSourceTimeMap,
   sourceTicksAtTimelineOffset,
   sourceTimeMapAtOffset,
+  sourceTimeMapUsesSpeedCurve,
+  timelineOffsetAtSourceTicks,
   SOURCE_TIME_TICKS_PER_FRAME,
 } from '../../domain/sourceTimeMap'
 import type { AssetVisuals } from '../../state/mediaStore'
@@ -108,7 +110,14 @@ export interface FilmstripPresentation {
 export interface WaveformPresentation {
   kind: 'waveform'
   source: WaveformVisual
-  viewBox: string
+  viewBox?: string
+  widthPx?: number
+  segments?: Array<{
+    index: number
+    leftPx: number
+    widthPx: number
+    viewBox: string
+  }>
 }
 
 export type ClipGeneratedVisualPresentation =
@@ -160,6 +169,105 @@ interface GeneratedVisualPlanInput {
   sourceTimeMap: SourceTimeMap
 }
 
+function rampFilmstripTiles(
+  source: FilmstripVisual,
+  assetDurationFrames: number,
+  zoom: number,
+  map: SourceTimeMap,
+  clipDurationFrames: number,
+  displayedLocalStart: number,
+  displayedLocalEnd: number,
+): FilmstripTilePresentation[] {
+  const mappedStart = sourceTicksAtTimelineOffset(map, 0)
+  const mappedEnd = sourceTicksAtTimelineOffset(map, clipDurationFrames)
+  const mappedSourceFrames = Math.max(
+    1 / SOURCE_TIME_TICKS_PER_FRAME,
+    (mappedEnd - mappedStart) / SOURCE_TIME_TICKS_PER_FRAME,
+  )
+  const estimatedAssetWidth = assetDurationFrames
+    * (clipDurationFrames / mappedSourceFrames)
+    * zoom
+  const displayCount = Math.min(
+    source.tiles,
+    Math.max(1, Math.floor(estimatedAssetWidth / source.tileWidth)),
+  )
+  const tiles: FilmstripTilePresentation[] = []
+  const duration = BigInt(assetDurationFrames)
+  const divisor = BigInt(displayCount)
+  for (let index = 0; index < displayCount; index++) {
+    const bucketStartFrame = Number((BigInt(index) * duration) / divisor)
+    const bucketEndFrame = Number((BigInt(index + 1) * duration) / divisor)
+    if (bucketStartFrame >= bucketEndFrame) continue
+    const bucketStartTicks = bucketStartFrame * SOURCE_TIME_TICKS_PER_FRAME
+    const bucketEndTicks = bucketEndFrame * SOURCE_TIME_TICKS_PER_FRAME
+    const bucketLocalStart = bucketStartTicks <= mappedStart
+      ? 0
+      : timelineOffsetAtSourceTicks(
+          map,
+          bucketStartTicks,
+          0,
+          clipDurationFrames,
+        )
+    const bucketLocalEnd = bucketEndTicks >= mappedEnd
+      ? clipDurationFrames
+      : timelineOffsetAtSourceTicks(
+          map,
+          bucketEndTicks,
+          0,
+          clipDurationFrames,
+        )
+    if (bucketLocalStart === null || bucketLocalEnd === null) continue
+    const visibleStart = Math.max(displayedLocalStart, bucketLocalStart)
+    const visibleEnd = Math.min(displayedLocalEnd, bucketLocalEnd)
+    if (visibleEnd <= visibleStart) continue
+    const spriteIndex = Number(
+      (BigInt(index * 2 + 1) * BigInt(source.tiles)) / (divisor * 2n),
+    )
+    tiles.push({
+      index,
+      leftPx: (visibleStart - displayedLocalStart) * zoom,
+      widthPx: (visibleEnd - visibleStart) * zoom,
+      patternX: -(((visibleStart - bucketLocalStart) * zoom) % source.tileWidth),
+      spriteX: -spriteIndex * source.tileWidth,
+    })
+  }
+  return tiles
+}
+
+function rampWaveformSegments(
+  map: SourceTimeMap,
+  assetDurationFrames: number,
+  zoom: number,
+  displayedLocalStart: number,
+  displayedLocalDuration: number,
+): NonNullable<WaveformPresentation['segments']> {
+  const count = Math.min(128, Math.max(1, displayedLocalDuration))
+  const segments: NonNullable<WaveformPresentation['segments']> = []
+  for (let index = 0; index < count; index++) {
+    const start = displayedLocalStart
+      + Math.floor(index * displayedLocalDuration / count)
+    const end = displayedLocalStart
+      + Math.floor((index + 1) * displayedLocalDuration / count)
+    if (end <= start) continue
+    const sourceStart = sourceTicksAtTimelineOffset(map, start)
+    const sourceEnd = sourceTicksAtTimelineOffset(map, end)
+    const normalizedStart = (sourceStart / SOURCE_TIME_TICKS_PER_FRAME)
+      / assetDurationFrames
+    const normalizedDuration = Math.max(
+      1 / SOURCE_TIME_TICKS_PER_FRAME / assetDurationFrames,
+      ((sourceEnd - sourceStart) / SOURCE_TIME_TICKS_PER_FRAME)
+        / assetDurationFrames,
+    )
+    segments.push({
+      index,
+      leftPx: (start - displayedLocalStart) * zoom,
+      widthPx: (end - start) * zoom,
+      viewBox: `${normalizedStart} 0 ${normalizedDuration} 1`,
+    })
+  }
+  return segments
+}
+
 function planGeneratedVisual({
   trackKind,
   zoom,
@@ -202,9 +310,23 @@ function planGeneratedVisual({
   const displayedVisualDurationFrames = isStillSource
     ? displayedDurationFrames
     : displayedSourceDurationFrames
+  const displayedLocalStart = displayedStartFrame - clipStartFrame
+  const ramped = !isStillSource && sourceTimeMapUsesSpeedCurve(sourceTimeMap)
 
   const filmstrip = trackKind === 'video' ? visuals?.filmstrip : null
   if (filmstrip && visualDurationFrames > 0) {
+    if (ramped) {
+      const tiles = rampFilmstripTiles(
+        filmstrip,
+        assetDurationFrames,
+        zoom,
+        sourceTimeMap,
+        clipDurationFrames,
+        displayedLocalStart,
+        displayedLocalStart + displayedDurationFrames,
+      )
+      if (tiles.length > 0) return { kind: 'filmstrip', source: filmstrip, tiles }
+    }
     const buckets = visibleFilmstripBuckets(
       visualDurationFrames,
       filmstrip.tiles,
@@ -248,6 +370,20 @@ function planGeneratedVisual({
 
   const waveform = trackKind === 'audio' ? visuals?.waveform : null
   if (waveform && assetDurationFrames > 0) {
+    if (ramped) {
+      return {
+        kind: 'waveform',
+        source: waveform,
+        widthPx: displayedDurationFrames * zoom,
+        segments: rampWaveformSegments(
+          sourceTimeMap,
+          assetDurationFrames,
+          zoom,
+          displayedLocalStart,
+          displayedDurationFrames,
+        ),
+      }
+    }
     return {
       kind: 'waveform',
       source: waveform,

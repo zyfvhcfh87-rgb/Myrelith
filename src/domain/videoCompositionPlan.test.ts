@@ -82,7 +82,7 @@ function track(
 
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },
@@ -172,6 +172,34 @@ describe('video composition plan', () => {
 
     expect(videoCompositionRequests(planner.planFrame(10))[0].sourceFrame).toBe(20)
     expect(videoCompositionRequests(planner.planFrame(14))[0].sourceFrame).toBe(28)
+  })
+
+  test('uses the same ramp and freeze requests for preview and export composition', () => {
+    const ramped = {
+      ...clip('ramped', 'ramped-asset', 10, 20),
+      sourceTimeMap: {
+        sourceStartTicks: 20_000_000,
+        sourceDurationTicks: 10_000_000,
+        rate: { numerator: 1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' as const },
+            { frame: 2, rate: { numerator: 0, denominator: 1 }, easing: 'hold' as const },
+            { frame: 5, rate: { numerator: 2, denominator: 1 }, easing: 'linear' as const },
+            { frame: 7, rate: { numerator: 1, denominator: 1 }, easing: 'hold' as const },
+          ],
+        },
+      },
+    }
+    const planner = createVideoCompositionPlanner(
+      doc([track('V1', [ramped])]),
+      new Map(),
+    )
+
+    expect(Array.from({ length: 10 }, (_value, offset) =>
+      videoCompositionRequests(planner.planFrame(10 + offset))[0].sourceFrame,
+    )).toEqual([20, 21, 22, 22, 22, 22, 23, 25, 26, 27])
   })
 
   test('emits one explicit group with genuine timed handle requests', () => {

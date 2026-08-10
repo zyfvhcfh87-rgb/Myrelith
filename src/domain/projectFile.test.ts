@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest'
-import type { Clip, EffectDescriptor, TimelineDoc, Track } from './schema'
+import type {
+  Clip,
+  EffectDescriptor,
+  SourceTimeSpeedPoint,
+  TimelineDoc,
+  Track,
+} from './schema'
 import { PROJECT_ASPECT_RATIO_PRESETS } from './projectSettings'
 import { defaultTextProps, proceduralTextAssetId } from './textOverlay'
 import {
@@ -297,7 +303,7 @@ describe('portable project file', () => {
     })
   })
 
-  test('migrates schema-10 effect documents to schema-11 source-time intent', () => {
+  test('migrates schema-10 effect documents through schema-12 speed-curve intent', () => {
     const legacy = clone(makeProject())
     legacy.document.schemaVersion = 10
     legacy.document.tracks[0].clips[0].animation = {
@@ -315,7 +321,7 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(11)
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(parsed.document.tracks[0].clips[0].effects).toEqual(effects)
     expect(parsed.document.tracks[0].clips[0].sourceTimeMap).toEqual(
       defaultSourceTimeMap(5, 10),
@@ -332,6 +338,7 @@ describe('portable project file', () => {
       sourceStartTicks: 15_000_000,
       sourceDurationTicks: 10_000_000,
       rate: { numerator: 2, denominator: 1 },
+      speedCurve: { originFrame: 0, points: [] },
     }
 
     const parsed = parseProjectFile(serializeProjectFile(project))
@@ -343,8 +350,85 @@ describe('portable project file', () => {
         sourceStartTicks: 15_000_000,
         sourceDurationTicks: 10_000_000,
         rate: { numerator: 2, denominator: 1 },
+        speedCurve: { originFrame: 0, points: [] },
       },
     })
+  })
+
+  test('migrates schema-11 constant retiming to an explicit empty speed curve', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 11
+    for (const legacyTrack of legacy.document.tracks) {
+      for (const legacyClip of legacyTrack.clips) {
+        Reflect.deleteProperty(legacyClip.sourceTimeMap ?? {}, 'speedCurve')
+      }
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    for (const parsedClip of parsed.document.tracks.flatMap((item) => item.clips)) {
+      expect(parsedClip.sourceTimeMap?.speedCurve).toEqual({ originFrame: 0, points: [] })
+    }
+  })
+
+  test('round-trips a deterministic piecewise speed curve exactly', () => {
+    const project = makeProject()
+    const retimed = project.document.tracks[0].clips[1]
+    retimed.sourceTimeMap = {
+      ...retimed.sourceTimeMap!,
+      speedCurve: {
+        originFrame: -2,
+        points: [
+          { frame: -2, rate: { numerator: 1, denominator: 1 }, easing: 'linear' },
+          { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+          { frame: 2, rate: { numerator: 2, denominator: 1 }, easing: 'smooth' },
+          { frame: 4, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        ],
+      },
+    }
+
+    const parsed = parseProjectFile(serializeProjectFile(project))
+
+    expect(parsed.document.tracks[0].clips[1].sourceTimeMap).toEqual(
+      retimed.sourceTimeMap,
+    )
+  })
+
+  test.each([
+    {
+      label: 'duplicate point frames',
+      points: [
+        { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        { frame: 0, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
+      ] satisfies SourceTimeSpeedPoint[],
+      message: /strictly increasing|duplicate/i,
+    },
+    {
+      label: 'an unbounded terminal freeze',
+      points: [
+        { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        { frame: 2, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+      ] satisfies SourceTimeSpeedPoint[],
+      message: /final.*positive|finite/i,
+    },
+    {
+      label: 'an out-of-bounds point frame',
+      points: [
+        { frame: 1_000_000_001, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+      ] satisfies SourceTimeSpeedPoint[],
+      message: /bounded|range|frame/i,
+    },
+  ])('rejects $label without mutating the input', ({ points, message }) => {
+    const project = makeProject()
+    project.document.tracks[0].clips[1].sourceTimeMap!.speedCurve = {
+      originFrame: 0,
+      points,
+    }
+    const before = clone(project)
+
+    expect(() => validateProjectFile(project)).toThrow(message)
+    expect(project).toEqual(before)
   })
 
   test('migrates schema-6 projects to explicit empty marker defaults', () => {

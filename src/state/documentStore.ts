@@ -32,6 +32,7 @@ import type {
   EffectId,
   EffectParamValue,
   SourceTimeRate,
+  SourceTimeSpeedEasing,
   TimelineDoc,
   TimelineMarker,
   TimelineMarkerId,
@@ -101,7 +102,10 @@ import {
   linkedMoveClip,
   linkedRippleDelete,
   linkedRippleTrim,
+  linkedClearClipSpeedRamp,
+  linkedRemoveClipSpeedPoint,
   linkedRetimeClip,
+  linkedSetClipSpeedPoint,
   linkedSlideClip,
   linkedSlipClip,
   linkedSplitClipAtFrame,
@@ -170,6 +174,17 @@ export interface DocumentState {
   rippleTrim: (clipId: ClipId, edge: TrimEdge, deltaFrames: number) => void
   /** Change constant speed for a timed clip and every linked partner. */
   retimeClip: (clipId: ClipId, rate: SourceTimeRate) => void
+  /** Add or replace one clip-local speed-ramp point across linked partners. */
+  setClipSpeedPoint: (
+    clipId: ClipId,
+    frame: number,
+    rate: SourceTimeRate,
+    easing: SourceTimeSpeedEasing,
+  ) => void
+  /** Remove one clip-local speed-ramp point across linked partners. */
+  removeClipSpeedPoint: (clipId: ClipId, frame: number) => void
+  /** Restore the retained constant fallback across linked partners. */
+  clearClipSpeedRamp: (clipId: ClipId) => void
   /**
    * Shift a clip's source material without moving it (Phase 4.2 slip tool).
    * Linked partners follow (one entry); see domain/linking.
@@ -447,6 +462,21 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   retimeClip: (clipId, rate) =>
     set((state) => commit(state, linkedRetimeClip(state.doc, clipId, rate))),
+
+  setClipSpeedPoint: (clipId, frame, rate, easing) =>
+    set((state) => commit(
+      state,
+      linkedSetClipSpeedPoint(state.doc, clipId, frame, rate, easing),
+    )),
+
+  removeClipSpeedPoint: (clipId, frame) =>
+    set((state) => commit(
+      state,
+      linkedRemoveClipSpeedPoint(state.doc, clipId, frame),
+    )),
+
+  clearClipSpeedRamp: (clipId) =>
+    set((state) => commit(state, linkedClearClipSpeedRamp(state.doc, clipId))),
 
   slipClip: (clipId, deltaFrames) =>
     set((state) => commit(state, linkedSlipClip(state.doc, clipId, deltaFrames))),

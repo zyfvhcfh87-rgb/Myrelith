@@ -47,7 +47,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
 /** V1: clipA [0,300), clipB [400,100). A1: clipD [0,300). V2 empty. */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-1',
     name: 'Store test doc',
     frameRate: { num: 30, den: 1 },
@@ -64,7 +64,7 @@ function makeDoc(): TimelineDoc {
 
 function makeStillDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-still-history',
     name: 'Still history test',
     frameRate: { num: 30, den: 1 },
@@ -105,7 +105,7 @@ function makeTransitionDoc(
   v1Locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-transitions',
     name: 'Transition store test',
     frameRate: { num: 30, den: 1 },
@@ -525,6 +525,32 @@ describe('transition action history', () => {
 /* ------------------------------------------------------------------ */
 
 describe('actions delegate to domain operations', () => {
+  test('speed-ramp edits are byte-exact one-entry undo/redo gestures', () => {
+    const initialJson = JSON.stringify(getState().doc)
+
+    getState().setClipSpeedPoint(
+      'clipA',
+      150,
+      sourceTimeRateFromPercent(200),
+      'smooth',
+    )
+    const rampedJson = JSON.stringify(getState().doc)
+    expect(rampedJson).not.toBe(initialJson)
+    expect(getState().past).toHaveLength(1)
+
+    getState().undo()
+    expect(JSON.stringify(getState().doc)).toBe(initialJson)
+    getState().redo()
+    expect(JSON.stringify(getState().doc)).toBe(rampedJson)
+
+    getState().removeClipSpeedPoint('clipA', 150)
+    expect(getState().past).toHaveLength(2)
+    getState().clearClipSpeedRamp('clipA')
+    expect(getState().past).toHaveLength(3)
+    expect(getState().doc.tracks[0].clips[0].sourceTimeMap?.speedCurve)
+      .toEqual({ originFrame: 0, points: [] })
+  })
+
   test('splitClipAtPlayhead splits every unlocked clip under the playhead in one entry', () => {
     getState().splitClipAtPlayhead(120) // inside clipA (V1) and clipD (A1), not clipB
     const doc = getState().doc
@@ -1052,7 +1078,7 @@ function makeManualLinkStoreDoc(): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-manual-link-store',
     name: 'Manual link store test',
     frameRate: { num: 30, den: 1 },
@@ -1258,7 +1284,7 @@ const PAIR2 = 'link_pair2'
  */
 function makeLinkedDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: 'doc-linked',
     name: 'Linked test doc',
     frameRate: { num: 30, den: 1 },
@@ -1378,7 +1404,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * well outside it. */
   function makeTwoPairsDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 11,
+      schemaVersion: 12,
       id: 'doc-split-pairs',
       name: 'Split pairs test doc',
       frameRate: { num: 30, den: 1 },
@@ -1398,7 +1424,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * under the playhead. */
   function makeMixedDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 11,
+      schemaVersion: 12,
       id: 'doc-split-mixed',
       name: 'Split mixed test doc',
       frameRate: { num: 30, den: 1 },

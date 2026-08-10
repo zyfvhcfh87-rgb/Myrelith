@@ -2938,6 +2938,52 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
 - [x] Publish the exact committed branch as a ready PR targeting `master` with
   `Closes #69`; rebase it after Issue #45 so effects remain schema 10 and
   retiming becomes schema 11, then leave merge and closure to the coordinator.
+
+## Post-MVP issue #72 - speed ramps on top of retiming
+
+**IMPLEMENTATION COMPLETE (2026-08-10).**
+
+- [x] Add schema-12 serializable piecewise speed curves over the preserved
+  schema-11 constant fallback: bounded integer origin/points, canonical 0% or
+  25%–400% rational speeds, strictly ordered persisted times, deterministic
+  duplicate replacement in the editor, and explicit hold/linear/smooth easing.
+- [x] Integrate every segment through one BigInt-backed integer primitive so
+  direct mapping, split, trim, duration inversion, keyframe remapping, and
+  repeated edits retain exact phase without floating accumulation.
+- [x] Permit only bounded freezes with a later positive point; reject terminal
+  freezes, unsafe bounds, excessive point counts, duplicates, malformed easing,
+  and non-canonical speeds. Preserve the constant visual fallback for invalid
+  in-memory curves, fail audio closed, and reject malformed portable intent.
+- [x] Route duration, thumbnails, waveforms, seek/scrub, trim and transition
+  handles, ordinary/crossfade composition, preview, and export through the same
+  map. Preserve the established audio policy: exact integer-origin 1× and
+  all-1× curves keep audio; variable ramps/freezes are explicit shared silence
+  until pitch-safe time stretching exists.
+- [x] Add accessible Inspector ramp editing with add/select-at-playhead, ordered
+  point navigation, speed/easing controls, removal, clear, live duration/audio
+  feedback, linked atomicity, locked/bounds rejection, and byte-exact undo/redo.
+- [x] Cover migration/round trips, hostile curve validation, every easing and
+  freeze boundary, split/trim phase, extreme duration inversion, operations,
+  linking/history, transitions, composition, filmstrip/waveform mapping, gesture
+  capacity, audio policy, and the accessible Inspector in focused tests.
+- [x] Pass the complete test/build/lint/production-audit gates and clean diff/
+  source-identity checks; record exact counts and any retained advisories.
+- [x] Verify representative long scrub/play/export behavior and accessible ramp
+  editing in real Chromium only on strict port 41872, retain truthful artifacts,
+  finish with clean diagnostics, and release the port.
+- [x] Publish the exact committed branch as a ready PR targeting `master` with
+  `Closes #72`; do not merge, close manually, or rebase after publication.
+
+Validation: 2,226 complete Vitest cases across 159 files plus all 16
+benchmark-runner cases; production build/typecheck; oxlint; zero-vulnerability
+production high audit; clean diff checks. Real Chromium on strict port 41872
+imported/relinked a 90-second H.264/AAC source, authored a linked
+100%-smooth -> 0%-hold -> 200%-smooth curve, scrubbed and played across its
+bounded freeze, proved undo/redo and recovery reload, and completed a 27.5-second
+1280x720 MP4 export. Decoded export frames 325 and 425 were identical while
+frame 700 differed; the deliberate silent AAC track measured -91.0 dB
+mean/max. Browser warnings/errors were zero and port 41872 was released.
+
 ## Post-MVP issue #70 - OPFS editing proxies
 
 **IMPLEMENTATION COMPLETE (2026-08-10).**

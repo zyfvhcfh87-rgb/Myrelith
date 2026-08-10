@@ -118,7 +118,7 @@ function fixture(options: {
   }
   return {
     doc: {
-      schemaVersion: 11,
+      schemaVersion: 12,
       id: 'audio-plan-doc',
       name: 'Audio plan',
       frameRate: { num: 30, den: 1 },
@@ -160,6 +160,33 @@ describe('timeline audio mix plan', () => {
       clipId: 'audio-from',
       trackId: 'A-from',
       reason: 'constant-speed-audio-unsupported',
+    })
+  })
+
+  test('omits variable-speed and freeze audio with the ramp-specific policy', () => {
+    const input = fixture()
+    input.doc.tracks[1].clips[0].sourceTimeMap = {
+      sourceStartTicks: 30_000_000,
+      sourceDurationTicks: 13_000_000,
+      rate: { numerator: 1, denominator: 1 },
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+          { frame: 4, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+          { frame: 6, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
+          { frame: 10, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        ],
+      },
+    }
+
+    const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+
+    expect(plan.clips.map((item) => item.clipId)).not.toContain('audio-from')
+    expect(plan.mutedClips).toContainEqual({
+      clipId: 'audio-from',
+      trackId: 'A-from',
+      reason: 'speed-ramp-audio-unsupported',
     })
   })
 
