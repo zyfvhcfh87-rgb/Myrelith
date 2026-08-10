@@ -3,9 +3,11 @@
  *
  * Portable project files keep durable metadata only. Chromium file handles
  * are opaque, origin-local capabilities, so they live in IndexedDB and are
- * keyed by the stable document + asset ids instead of entering Zustand or
- * the serialized `.myrelith` contract.
+ * keyed by a non-portable local project binding + stable asset id instead of
+ * entering Zustand or the serialized `.myrelith` contract.
  */
+
+import { legacyDocumentIdForBinding } from './localProjectProvenance'
 
 export type LocalMediaPermission = 'granted' | 'denied' | 'prompt'
 
@@ -119,13 +121,13 @@ export interface LocalMediaHandleStore {
 }
 
 export interface LocalMediaHandleRegistry {
-  load(documentId: string, assetId: string): Promise<LocalMediaFileHandle | null>
+  load(projectBindingId: string, assetId: string): Promise<LocalMediaFileHandle | null>
   remember(
-    documentId: string,
+    projectBindingId: string,
     assetId: string,
     handle: LocalMediaFileHandle,
   ): Promise<void>
-  forget(documentId: string, assetId: string): Promise<void>
+  forget(projectBindingId: string, assetId: string): Promise<void>
 }
 
 // Stable legacy database identity: changing it would orphan remembered grants.
@@ -133,7 +135,11 @@ const DATABASE_NAME = 'webcut-local-media'
 const DATABASE_VERSION = 1
 const STORE_NAME = 'file-handles'
 
-function registryKey(documentId: string, assetId: string): string {
+function registryKey(projectBindingId: string, assetId: string): string {
+  return JSON.stringify(['v2', projectBindingId, assetId])
+}
+
+function legacyRegistryKey(documentId: string, assetId: string): string {
   return JSON.stringify([documentId, assetId])
 }
 
@@ -172,18 +178,30 @@ export function createLocalMediaHandleRegistry(
   }
 
   return {
-    async load(documentId, assetId) {
-      const key = registryKey(documentId, assetId)
+    async load(projectBindingId, assetId) {
+      const key = registryKey(projectBindingId, assetId)
       const value = await enqueue(key, () => store.get(key))
-      return isFileHandle(value) ? value : null
+      if (isFileHandle(value)) return value
+
+      const legacyDocumentId = legacyDocumentIdForBinding(projectBindingId)
+      if (!legacyDocumentId) return null
+      const legacyKey = legacyRegistryKey(legacyDocumentId, assetId)
+      const legacyValue = await enqueue(legacyKey, () => store.get(legacyKey))
+      if (!isFileHandle(legacyValue)) return null
+      await enqueue(key, () => store.set(key, legacyValue))
+      return legacyValue
     },
-    remember(documentId, assetId, handle) {
-      const key = registryKey(documentId, assetId)
+    remember(projectBindingId, assetId, handle) {
+      const key = registryKey(projectBindingId, assetId)
       return enqueue(key, () => store.set(key, handle))
     },
-    forget(documentId, assetId) {
-      const key = registryKey(documentId, assetId)
-      return enqueue(key, () => store.delete(key))
+    async forget(projectBindingId, assetId) {
+      const key = registryKey(projectBindingId, assetId)
+      await enqueue(key, () => store.delete(key))
+      const legacyDocumentId = legacyDocumentIdForBinding(projectBindingId)
+      if (!legacyDocumentId) return
+      const legacyKey = legacyRegistryKey(legacyDocumentId, assetId)
+      await enqueue(legacyKey, () => store.delete(legacyKey))
     },
   }
 }

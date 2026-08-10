@@ -24,7 +24,7 @@ export interface ActiveMediaRelinkSelection {
 }
 
 export interface ActiveMediaRelinkContext {
-  documentId: string
+  projectBindingId: string
   documentRate: FrameRate
   signal: AbortSignal
 }
@@ -324,7 +324,7 @@ export function createActiveMediaRelinkCoordinator(
         if (selection.handle) {
           try {
             await deps.rememberMediaHandle(
-              context.documentId,
+              context.projectBindingId,
               currentDescriptor.id,
               selection.handle,
             )

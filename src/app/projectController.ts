@@ -106,9 +106,17 @@ import {
   getRecoveryJournalRecord,
   rememberRecentProjectRecord,
 } from './projectLibraryController'
+import {
+  clearActiveLocalProjectBindingId,
+  createLocalProjectBindingId,
+  getActiveLocalProjectBindingId,
+  legacyLocalProjectBindingId,
+  setActiveLocalProjectBindingId,
+} from './localProjectProvenance'
 
 export interface ProjectControllerDeps {
   createDocumentId(): string
+  createProjectBindingId(): string
   createCompatibilityRequestId(): string
   now(): number
   readText(file: File): Promise<string>
@@ -162,6 +170,7 @@ export type ProjectActionResult =
 
 const realDeps: ProjectControllerDeps = {
   createDocumentId: () => `doc_${crypto.randomUUID()}`,
+  createProjectBindingId: createLocalProjectBindingId,
   createCompatibilityRequestId: () => `compat_${crypto.randomUUID()}`,
   now: () => Date.now(),
   readText: (file) => file.text(),
@@ -209,10 +218,13 @@ interface PendingResume {
   compatibility: Map<string, MediaCompatibilityItem>
   rememberedHandles: Map<string, LocalMediaFileHandle>
   abortController: AbortController
+  projectBindingId: string
 }
 
 let pendingResume: PendingResume | null = null
 let operationGeneration = 0
+
+export const MAX_CONCURRENT_REMEMBERED_HANDLE_LOOKUPS = 8
 
 interface StagedFolderMedia {
   token: string
@@ -226,6 +238,7 @@ interface ActiveMediaRelinkWork {
   generation: number
   documentId: string
   documentRate: FrameRate
+  projectBindingId: string
   outcome: 'running' | 'complete' | 'cancelled'
   processedFileCount: number
   scannedFileCount: number
@@ -426,6 +439,7 @@ export function showResumeProject(): void {
 export function returnToProjectHome(): void {
   invalidatePending()
   suspendProjectPersistenceSession()
+  clearActiveLocalProjectBindingId()
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
 }
 
@@ -461,6 +475,7 @@ export async function leaveActiveProject(
 
     useMediaStore.getState().clearAssets()
     useTransportStore.getState().resetTransport()
+    clearActiveLocalProjectBindingId()
     useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
     return { status: 'ready' }
   } catch (cause) {
@@ -482,8 +497,12 @@ async function activateProject(
   generation: number,
   deps: ProjectControllerDeps,
 ): Promise<ProjectActionResult> {
+  const previousProjectBindingId = getActiveLocalProjectBindingId()
   useProjectSessionStore.setState({ phase: 'activating', error: null })
   try {
+    if (!persistence.projectBindingId) {
+      throw new Error('The local project binding is unavailable')
+    }
     await deps.pauseProjectPersistence()
     if (generation !== operationGeneration) return { status: 'cancelled' }
     // Export and audio are the asynchronous consumers. They must release the
@@ -498,6 +517,7 @@ async function activateProject(
     deps.suspendProjectPersistence()
     if (generation !== operationGeneration) return { status: 'cancelled' }
 
+    setActiveLocalProjectBindingId(persistence.projectBindingId)
     if (!useMediaStore.getState().replaceAssets(
       descriptors,
       assets,
@@ -522,6 +542,11 @@ async function activateProject(
     deps.startProjectPersistence(persistence)
     return { status: 'activated' }
   } catch (cause) {
+    if (previousProjectBindingId) {
+      setActiveLocalProjectBindingId(previousProjectBindingId)
+    } else {
+      clearActiveLocalProjectBindingId()
+    }
     if (generation !== operationGeneration) return { status: 'cancelled' }
     const message = `Could not open the project: ${messageFrom(cause)}`
     deps.resumeProjectPersistence()
@@ -556,7 +581,11 @@ export async function createNewProject(
     [],
     [],
     [],
-    { fileName: null, persisted: false },
+    {
+      fileName: null,
+      persisted: false,
+      projectBindingId: deps.createProjectBindingId(),
+    },
     generation,
     deps,
   )
@@ -571,6 +600,54 @@ interface ProjectCandidateSource {
   handle?: LocalProjectFileHandle
   recoveryJournalId?: string
   recoveryCapturedAt?: number
+  projectBindingId?: string
+}
+
+async function sameProjectEntry(
+  left: LocalProjectFileHandle,
+  right: LocalProjectFileHandle,
+): Promise<boolean> {
+  if (left === right) return true
+  if (!left.isSameEntry) return false
+  try {
+    return await left.isSameEntry(right as FileSystemHandle)
+  } catch {
+    return false
+  }
+}
+
+async function resolveCandidateBinding(
+  documentId: string,
+  source: ProjectCandidateSource,
+  deps: ProjectControllerDeps,
+): Promise<{ projectBindingId: string; rememberSourceHandle: boolean }> {
+  if (source.projectBindingId) {
+    return {
+      projectBindingId: source.projectBindingId,
+      rememberSourceHandle: source.handle !== undefined,
+    }
+  }
+  const recent = deps.getRecentProject(documentId)
+  if (source.handle && recent) {
+    const matches = await sameProjectEntry(source.handle, recent.handle)
+    if (matches) {
+      return {
+        projectBindingId: recent.projectBindingId
+          ?? legacyLocalProjectBindingId(recent.documentId),
+        rememberSourceHandle: true,
+      }
+    }
+    // A portable copy may intentionally reuse document ids. Do not overwrite
+    // the locally trusted Recent entry or inherit any of its capabilities.
+    return {
+      projectBindingId: deps.createProjectBindingId(),
+      rememberSourceHandle: false,
+    }
+  }
+  return {
+    projectBindingId: deps.createProjectBindingId(),
+    rememberSourceHandle: source.handle !== undefined,
+  }
 }
 
 function beginProjectRead(deps: ProjectControllerDeps): number {
@@ -596,6 +673,13 @@ async function prepareProjectCandidate(
   }
   if (generation !== operationGeneration) return { status: 'cancelled' }
 
+  const binding = await resolveCandidateBinding(
+    project.document.id,
+    source,
+    deps,
+  )
+  if (generation !== operationGeneration) return { status: 'cancelled' }
+
   const pending: PendingResume = {
     project,
     projectFileName: source.projectFileName,
@@ -608,16 +692,18 @@ async function prepareProjectCandidate(
     compatibility: new Map(),
     rememberedHandles: new Map(),
     abortController: new AbortController(),
+    projectBindingId: binding.projectBindingId,
   }
   pendingResume = pending
 
-  if (source.handle) {
+  if (source.handle && binding.rememberSourceHandle) {
     void deps.rememberRecentProject({
       documentId: project.document.id,
       projectName: project.document.name,
       fileName: source.handle.name,
       lastOpenedAt: deps.now(),
       handle: source.handle,
+      projectBindingId: binding.projectBindingId,
     }).catch((cause) => {
       console.warn('Could not update the recent-project entry', cause)
     })
@@ -736,6 +822,8 @@ async function finishRecentProjectOpen(
       persisted: true,
       expectedDocumentId: record.documentId,
       handle: record.handle,
+      projectBindingId: record.projectBindingId
+        ?? legacyLocalProjectBindingId(record.documentId),
     }, generation, deps)
   } catch (cause) {
     if (generation !== operationGeneration) return { status: 'cancelled' }
@@ -797,6 +885,8 @@ export async function openRecoveryProject(
         expectedDocumentId: record.documentId,
         recoveryJournalId: record.journalId,
         recoveryCapturedAt: recovery.capturedAt,
+        projectBindingId: record.projectBindingId
+          ?? legacyLocalProjectBindingId(record.documentId),
       }, generation, deps)
     } catch (cause) {
       lastError = cause
@@ -848,10 +938,13 @@ function createActiveMediaRelinkWork(
   if (session.screen !== 'editor') return null
   invalidateActiveMediaRelink(deps)
   const document = useDocumentStore.getState().doc
+  const projectBindingId = getActiveLocalProjectBindingId()
+  if (!projectBindingId) return null
   const work: ActiveMediaRelinkWork = {
     generation: activeMediaRelinkGeneration,
     documentId: document.id,
     documentRate: { ...document.frameRate },
+    projectBindingId,
     outcome: 'running',
     processedFileCount: 0,
     scannedFileCount,
@@ -986,7 +1079,7 @@ async function runActiveMediaRelinkTransaction(
     },
   })
   return coordinator.connect(selection, {
-    documentId: work.documentId,
+    projectBindingId: work.projectBindingId,
     documentRate: work.documentRate,
     signal: work.abortController.signal,
   })
@@ -1155,6 +1248,7 @@ function pendingPersistenceSession(
   const session: ProjectPersistenceSession = {
     fileName: pending.projectFileName,
     persisted: pending.persisted,
+    projectBindingId: pending.projectBindingId,
   }
   if (pending.recoveryJournalId) {
     session.recoveryJournalId = pending.recoveryJournalId
@@ -1171,7 +1265,7 @@ function forgetStaleHandle(
   deps: ProjectControllerDeps,
 ): void {
   void deps.forgetMediaHandle(
-    pending.project.document.id,
+    pending.projectBindingId,
     descriptor.id,
   ).catch((cause) => {
     console.warn('Could not forget a stale remembered media file', cause)
@@ -1299,20 +1393,32 @@ async function restoreRememberedMedia(
   | { status: 'ready'; errors: string[] }
   | { status: 'cancelled' }
 > {
-  const documentId = pending.project.document.id
-  const loaded = await Promise.all(pending.project.assets.map(
-    async (descriptor) => {
+  const descriptors = pending.project.assets
+  const loaded: Array<{
+    descriptor: PortableAssetDescriptor
+    handle: LocalMediaFileHandle | null
+    error: unknown | null
+  }> = new Array(descriptors.length)
+  let nextIndex = 0
+  const workers = Array.from({
+    length: Math.min(MAX_CONCURRENT_REMEMBERED_HANDLE_LOOKUPS, descriptors.length),
+  }, async () => {
+    while (pendingIsCurrent(pending, generation)) {
+      const index = nextIndex++
+      if (index >= descriptors.length) return
+      const descriptor = descriptors[index]
       try {
-        return {
+        loaded[index] = {
           descriptor,
-          handle: await deps.loadMediaHandle(documentId, descriptor.id),
+          handle: await deps.loadMediaHandle(pending.projectBindingId, descriptor.id),
           error: null,
         }
       } catch (cause) {
-        return { descriptor, handle: null, error: cause }
+        loaded[index] = { descriptor, handle: null, error: cause }
       }
-    },
-  ))
+    }
+  })
+  await Promise.all(workers)
   if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
 
   const errors: string[] = []
@@ -1428,7 +1534,7 @@ async function connectProjectMediaSelections(
           if (handle) {
             try {
               await deps.rememberMediaHandle(
-                pending.project.document.id,
+                pending.projectBindingId,
                 descriptor.id,
                 handle,
               )
@@ -1473,7 +1579,7 @@ async function connectProjectMediaSelections(
       if (handle) {
         try {
           await deps.rememberMediaHandle(
-            pending.project.document.id,
+            pending.projectBindingId,
             descriptor.id,
             handle,
           )
@@ -2035,5 +2141,6 @@ export function resetProjectController(
 ): void {
   invalidatePending(deps)
   suspendProjectPersistenceSession()
+  clearActiveLocalProjectBindingId()
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
 }

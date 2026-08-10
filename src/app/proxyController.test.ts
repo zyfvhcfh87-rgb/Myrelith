@@ -20,6 +20,10 @@ import {
   type ProxyStorageEntryCommit,
   type ProxyStorageEstimate,
 } from './proxyStorage'
+import {
+  clearActiveLocalProjectBindingId,
+  setActiveLocalProjectBindingId,
+} from './localProjectProvenance'
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -124,9 +128,11 @@ class ControllerStorage extends ProxyStorage {
 
   override async discardFile(): Promise<void> {}
 
-  override async removeAsset(assetId: string): Promise<void> {
+  override async removeAsset(projectBindingId: string, assetId: string): Promise<void> {
     this.removeCount++
-    this.entries = this.entries.filter((entry) => entry.assetId !== assetId)
+    this.entries = this.entries.filter((entry) => !(
+      entry.projectBindingId === projectBindingId && entry.assetId === assetId
+    ))
   }
 
   override async clear(): Promise<void> {
@@ -180,14 +186,43 @@ beforeEach(async () => {
   await disposeProxyController()
   useMediaStore.getState().clearAssets()
   useProxyStore.getState().reset()
+  setActiveLocalProjectBindingId('local-project:test')
 })
 
 afterEach(async () => {
   await disposeProxyController()
   useMediaStore.getState().clearAssets()
+  clearActiveLocalProjectBindingId()
 })
 
 describe('proxy controller lifecycle and cache quiescing', () => {
+  test('keeps an offline proxy visible only to its owning local project', async () => {
+    const storage = new ControllerStorage()
+    setActiveLocalProjectBindingId('local-project:owner-a')
+    const releaseOwner = await initProxyController(deps(storage))
+    await connectAndWaitAvailable()
+    expect(requestProxyGeneration('asset-1')).toBe(true)
+    await waitForProxyIdle()
+    expect(storage.entries[0]?.projectBindingId).toBe('local-project:owner-a')
+
+    useMediaStore.getState().disconnectAsset('asset-1')
+    await releaseOwner()
+    setActiveLocalProjectBindingId('local-project:owner-b')
+    const releaseCopy = await initProxyController(deps(storage))
+    await vi.waitFor(() => {
+      expect(useProxyStore.getState().assets.get('asset-1')?.phase)
+        .toBe('unavailable')
+    })
+    await releaseCopy()
+
+    setActiveLocalProjectBindingId('local-project:owner-a')
+    const releaseReopen = await initProxyController(deps(storage))
+    await vi.waitFor(() => {
+      expect(useProxyStore.getState().assets.get('asset-1')?.phase).toBe('ready')
+    })
+    await releaseReopen()
+  })
+
   test('keeps a newer async initialization lease alive after an older mount releases', async () => {
     const storage = new ControllerStorage()
     storage.readGate = deferred<void>()

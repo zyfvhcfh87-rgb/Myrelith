@@ -30,6 +30,7 @@ import {
   ProxyStorageUnavailableError,
   proxyStorage,
 } from './proxyStorage'
+import { getActiveLocalProjectBindingId } from './localProjectProvenance'
 
 const FINGERPRINT_SAMPLE_BYTES = 64 * 1024
 const PROXY_JOB_PREFIX = 'proxy:'
@@ -67,6 +68,7 @@ interface ControllerState {
   deps: ProxyControllerDeps
   scheduler: MediaJobScheduler | null
   entries: Map<string, ProxyCacheEntry>
+  unownedEntries: Map<string, ProxyCacheEntry>
   previewTokens: Map<string, { cacheKey: string; token: object }>
   activeSources: Map<string, { objectUrl: string; generation: number }>
   probeGenerations: Map<string, number>
@@ -82,6 +84,7 @@ const state: ControllerState = {
   deps: realDeps,
   scheduler: null,
   entries: new Map(),
+  unownedEntries: new Map(),
   previewTokens: new Map(),
   activeSources: new Map(),
   probeGenerations: new Map(),
@@ -178,10 +181,12 @@ export async function fingerprintProxyOriginal(
 }
 
 async function proxyCacheKey(
+  projectBindingId: string,
   assetId: string,
   fingerprint: ProxyOriginalFingerprint,
 ): Promise<string> {
   return sha256(new TextEncoder().encode(JSON.stringify({
+    projectBindingId,
     assetId,
     fingerprint,
     parameters: DEFAULT_PROXY_PARAMETERS,
@@ -193,8 +198,15 @@ function jobId(assetId: string): string {
   return `${PROXY_JOB_PREFIX}${assetId}`
 }
 
+function entryKey(projectBindingId: string, assetId: string): string {
+  return JSON.stringify([projectBindingId, assetId])
+}
+
 function currentEntry(assetId: string): ProxyCacheEntry | null {
-  return state.entries.get(assetId) ?? null
+  const projectBindingId = getActiveLocalProjectBindingId()
+  return projectBindingId
+    ? state.entries.get(entryKey(projectBindingId, assetId)) ?? null
+    : null
 }
 
 function exactVideoBounds(asset: MediaAsset): {
@@ -212,6 +224,7 @@ function exactVideoBounds(asset: MediaAsset): {
 
 function generationIsCurrent(
   asset: MediaAsset,
+  projectBindingId: string,
   generation: number,
   lifecycleGeneration: number,
   signal: AbortSignal,
@@ -221,6 +234,7 @@ function generationIsCurrent(
     && state.lifecycleGeneration === lifecycleGeneration
     && active?.generation === generation
     && active.objectUrl === asset.objectUrl
+    && getActiveLocalProjectBindingId() === projectBindingId
     && useMediaStore.getState().assets.get(asset.id)?.objectUrl === asset.objectUrl
 }
 
@@ -278,7 +292,7 @@ function offlineItem(assetId: string): ProxyAssetState {
 }
 
 async function probeConnectedAsset(asset: MediaAsset, generation: number): Promise<void> {
-  const entry = currentEntry(asset.id)
+  let entry = currentEntry(asset.id)
   if (
     asset.kind !== 'video'
     || !asset.frameRate
@@ -350,6 +364,31 @@ async function probeConnectedAsset(asset: MediaAsset, generation: number): Promi
     }
     const fingerprint = await fingerprintProxyOriginal(blob, asset)
     if (state.probeGenerations.get(asset.id) !== generation) return
+    const projectBindingId = getActiveLocalProjectBindingId()
+    const legacy = entry ? null : state.unownedEntries.get(asset.id) ?? null
+    if (
+      projectBindingId
+      && legacy
+      && proxyFingerprintMatches(legacy, fingerprint)
+    ) {
+      const adopted: ProxyCacheEntry = {
+        ...legacy,
+        projectBindingId,
+      }
+      const transaction = await state.deps.storage.commitEntry(adopted)
+      if (
+        state.probeGenerations.get(asset.id) !== generation
+        || getActiveLocalProjectBindingId() !== projectBindingId
+      ) {
+        await transaction.rollback()
+        return
+      }
+      await transaction.finalize()
+      state.unownedEntries.delete(asset.id)
+      state.entries.set(entryKey(projectBindingId, asset.id), adopted)
+      entry = adopted
+      await refreshStorageState()
+    }
     const fresh = entry ? proxyFingerprintMatches(entry, fingerprint) : false
     publish({
       assetId: asset.id,
@@ -408,6 +447,7 @@ function scan(): void {
 
 async function runGeneration(
   asset: MediaAsset,
+  projectBindingId: string,
   generation: number,
   lifecycleGeneration: number,
   context: MediaJobContext,
@@ -428,7 +468,7 @@ async function runGeneration(
     })
     const blob = await state.deps.fetchBlob(asset.objectUrl, context.signal)
     const fingerprint = await fingerprintProxyOriginal(blob, asset)
-    pendingCacheKey = await proxyCacheKey(asset.id, fingerprint)
+    pendingCacheKey = await proxyCacheKey(projectBindingId, asset.id, fingerprint)
     const videoBounds = exactVideoBounds(asset)
     if (!videoBounds) {
       throw new Error('The connected video is missing exact source timestamp bounds')
@@ -436,7 +476,7 @@ async function runGeneration(
     const videoDurationMicroseconds = videoBounds.endTimestampUs - videoBounds.firstTimestampUs
     await state.deps.storage.ensureCapacity(
       estimateProxyBytes(videoDurationMicroseconds),
-      asset.id,
+      { projectBindingId, assetId: asset.id },
     )
     if (!asset.frameRate || !asset.width || !asset.height) {
       throw new Error('The connected video is missing proxy timing or geometry facts')
@@ -473,12 +513,19 @@ async function runGeneration(
       },
       onDecoderCount: context.setActiveDecoderCount,
     })
-    if (!generationIsCurrent(asset, generation, lifecycleGeneration, context.signal)) {
+    if (!generationIsCurrent(
+      asset,
+      projectBindingId,
+      generation,
+      lifecycleGeneration,
+      context.signal,
+    )) {
       throw new Error('Proxy generation was superseded by a source replacement')
     }
     const now = state.deps.now()
     const entry: ProxyCacheEntry = {
       cacheKey: pendingCacheKey,
+      projectBindingId,
       assetId: asset.id,
       original: fingerprint,
       parameters: DEFAULT_PROXY_PARAMETERS,
@@ -494,15 +541,21 @@ async function runGeneration(
       lastUsedAt: now,
     }
     committedTransaction = await state.deps.storage.commitEntry(entry)
-    if (!generationIsCurrent(asset, generation, lifecycleGeneration, context.signal)) {
+    if (!generationIsCurrent(
+      asset,
+      projectBindingId,
+      generation,
+      lifecycleGeneration,
+      context.signal,
+    )) {
       await committedTransaction.rollback()
       committedTransaction = null
       pendingFileName = null
       throw new Error('Proxy generation was canceled before its cache commit became visible')
     }
     pendingFileName = null
-    state.entries.set(asset.id, entry)
-    state.previewTokens.delete(asset.id)
+    state.entries.set(entryKey(projectBindingId, asset.id), entry)
+    state.previewTokens.delete(entryKey(projectBindingId, asset.id))
     publish({
       assetId: asset.id,
       phase: 'ready',
@@ -592,7 +645,16 @@ async function initializeProxyController(deps: ProxyControllerDeps): Promise<voi
   try {
     const manifest = await deps.storage.readManifest()
     if (state.lifecycleGeneration !== lifecycleGeneration) return
-    state.entries = new Map(manifest.entries.map((entry) => [entry.assetId, entry]))
+    state.entries = new Map(manifest.entries.flatMap((entry) => (
+      entry.projectBindingId
+        ? [[entryKey(entry.projectBindingId, entry.assetId), entry] as const]
+        : []
+    )))
+    state.unownedEntries = new Map(manifest.entries.flatMap((entry) => (
+      entry.projectBindingId === null
+        ? [[entry.assetId, entry] as const]
+        : []
+    )))
   } catch (cause) {
     if (state.lifecycleGeneration !== lifecycleGeneration) return
     if (!(cause instanceof ProxyStorageUnavailableError)) {
@@ -607,6 +669,7 @@ async function initializeProxyController(deps: ProxyControllerDeps): Promise<voi
       })
     }
     state.entries = new Map()
+    state.unownedEntries = new Map()
   }
   if (state.lifecycleGeneration !== lifecycleGeneration) return
   await refreshStorageState(lifecycleGeneration)
@@ -662,7 +725,14 @@ export function requestProxyGeneration(assetId: string): boolean {
   const scheduler = state.scheduler
   const asset = useMediaStore.getState().assets.get(assetId)
   const item = useProxyStore.getState().assets.get(assetId)
-  if (!scheduler || !asset || state.clearing || state.quiescingAssets.has(assetId)) {
+  const projectBindingId = getActiveLocalProjectBindingId()
+  if (
+    !scheduler
+    || !asset
+    || !projectBindingId
+    || state.clearing
+    || state.quiescingAssets.has(assetId)
+  ) {
     if (item) {
       publish({
         ...item,
@@ -695,7 +765,13 @@ export function requestProxyGeneration(assetId: string): boolean {
     generation,
     priority: 'selected',
     resources: { decoderSlots: 1 },
-    run: (context) => runGeneration(asset, generation, lifecycleGeneration, context),
+    run: (context) => runGeneration(
+      asset,
+      projectBindingId,
+      generation,
+      lifecycleGeneration,
+      context,
+    ),
   })
   return true
 }
@@ -725,6 +801,8 @@ export function cancelProxyGeneration(assetId: string): boolean {
 }
 
 export async function removeProxy(assetId: string): Promise<void> {
+  const projectBindingId = getActiveLocalProjectBindingId()
+  if (!projectBindingId) return
   beginAssetMutation(assetId)
   state.probeGenerations.set(assetId, ++state.nextGeneration)
   state.activeSources.delete(assetId)
@@ -733,9 +811,9 @@ export async function removeProxy(assetId: string): Promise<void> {
   await serializeCacheMutation(async () => {
     try {
       await scheduler?.whenIdle()
-      await state.deps.storage.removeAsset(assetId)
-      state.entries.delete(assetId)
-      state.previewTokens.delete(assetId)
+      await state.deps.storage.removeAsset(projectBindingId, assetId)
+      state.entries.delete(entryKey(projectBindingId, assetId))
+      state.previewTokens.delete(entryKey(projectBindingId, assetId))
     } finally {
       endAssetMutation(assetId)
     }
@@ -763,6 +841,7 @@ export async function clearAllProxies(): Promise<void> {
       await scheduler?.whenIdle()
       await state.deps.storage.clear()
       state.entries.clear()
+      state.unownedEntries.clear()
       state.previewTokens.clear()
     } finally {
       pendingClearCount--
@@ -786,15 +865,18 @@ export function previewRepresentationDecision(assetId: string): MediaRepresentat
 
 export async function getProxyPreviewSource(assetId: string): Promise<ProxyPreviewSource | null> {
   if (previewRepresentationDecision(assetId).representation !== 'proxy') return null
+  const projectBindingId = getActiveLocalProjectBindingId()
+  if (!projectBindingId) return null
   const entry = currentEntry(assetId)
   if (!entry) return null
   try {
     const blob = await state.deps.storage.readEntryFile(entry)
-    const currentToken = state.previewTokens.get(assetId)
+    const tokenKey = entryKey(projectBindingId, assetId)
+    const currentToken = state.previewTokens.get(tokenKey)
     const token = currentToken?.cacheKey === entry.cacheKey
       ? currentToken.token
       : {}
-    state.previewTokens.set(assetId, { cacheKey: entry.cacheKey, token })
+    state.previewTokens.set(tokenKey, { cacheKey: entry.cacheKey, token })
     void state.deps.storage.touch(entry.cacheKey).catch(() => undefined)
     return {
       blob,
@@ -829,7 +911,10 @@ export function reportProxyPreviewFailure(assetId: string, cause: unknown): void
 }
 
 export function isProxyPreviewToken(assetId: string, token: object): boolean {
-  return state.previewTokens.get(assetId)?.token === token
+  const projectBindingId = getActiveLocalProjectBindingId()
+  return projectBindingId
+    ? state.previewTokens.get(entryKey(projectBindingId, assetId))?.token === token
+    : false
 }
 
 export function getProxySchedulerSnapshot(): MediaJobSchedulerSnapshot | null {
@@ -853,6 +938,7 @@ async function disposeControllerRuntime(): Promise<void> {
     await scheduler?.whenIdle()
     await cacheMutationTail
     state.entries.clear()
+    state.unownedEntries.clear()
     state.previewTokens.clear()
     state.probeGenerations.clear()
     state.activeSources.clear()

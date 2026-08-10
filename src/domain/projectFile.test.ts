@@ -1215,6 +1215,16 @@ describe('portable project file', () => {
     expect(() => validateProjectFile(tooManyTracks)).toThrow(/tracks.*exceeds|exceeds.*entries/)
   })
 
+  test('rejects a canvas allocation that exceeds the render memory budget', () => {
+    const unsafe = makeProject()
+    unsafe.document.width = PROJECT_FILE_LIMITS.maxDimension
+    unsafe.document.height = PROJECT_FILE_LIMITS.maxDimension
+
+    expect(() => parseProjectFile(JSON.stringify(unsafe))).toThrow(
+      /render surface|render memory|pixel limit/i,
+    )
+  })
+
   test('bounds aggregate effect, parameter, parameter-string, and text validation work', () => {
     const tooManyEffects = makeProject()
     const effectClipCount = Math.floor(

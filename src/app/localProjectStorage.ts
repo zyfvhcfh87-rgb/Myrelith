@@ -17,6 +17,10 @@ import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
 } from '../domain/projectLimits'
+import {
+  legacyLocalProjectBindingId,
+} from './localProjectProvenance'
+import { isLocalProjectBindingId } from '../domain/localProjectBinding'
 
 export const LOCAL_PROJECT_RECORD_VERSION = 1 as const
 
@@ -72,6 +76,8 @@ export interface RecentProjectRecord {
   fileName: string
   lastOpenedAt: number
   handle: LocalProjectFileHandle
+  /** Origin-local capability namespace; legacy raw records gain one on read. */
+  projectBindingId: string
 }
 
 export interface RecoveryGeneration {
@@ -88,6 +94,8 @@ export interface RecoveryJournalRecord {
   projectFileName: string | null
   updatedAt: number
   generations: RecoveryGeneration[]
+  /** Origin-local capability namespace; legacy raw records gain one on read. */
+  projectBindingId: string
 }
 
 export interface RecoverySnapshotInput {
@@ -99,6 +107,7 @@ export interface RecoverySnapshotInput {
   serializedProject: string
   /** Defaults to the adapter clock. Primarily injectable for deterministic tests. */
   capturedAt?: number
+  projectBindingId: string
 }
 
 export interface LocalProjectStorage {
@@ -210,6 +219,12 @@ function normalizeRecentProject(value: unknown): RecentProjectRecord | null {
   if (!isBoundedString(value.fileName, MAX_FILE_NAME_CHARACTERS)) return null
   if (!isTimestamp(value.lastOpenedAt)) return null
   if (!isProjectFileHandle(value.handle)) return null
+  const projectBindingId = value.projectBindingId === undefined
+    ? legacyLocalProjectBindingId(value.documentId)
+    : isLocalProjectBindingId(value.projectBindingId)
+      ? value.projectBindingId
+      : null
+  if (!projectBindingId) return null
   return {
     version: LOCAL_PROJECT_RECORD_VERSION,
     documentId: value.documentId,
@@ -217,6 +232,7 @@ function normalizeRecentProject(value: unknown): RecentProjectRecord | null {
     fileName: value.fileName,
     lastOpenedAt: value.lastOpenedAt,
     handle: value.handle,
+    projectBindingId,
   }
 }
 
@@ -303,6 +319,13 @@ function normalizeRecoveryJournal(
     return null
   }
 
+  const projectBindingId = value.projectBindingId === undefined
+    ? legacyLocalProjectBindingId(value.documentId)
+    : isLocalProjectBindingId(value.projectBindingId)
+      ? value.projectBindingId
+      : null
+  if (!projectBindingId) return null
+
   return {
     version: LOCAL_PROJECT_RECORD_VERSION,
     journalId: value.journalId,
@@ -311,6 +334,7 @@ function normalizeRecoveryJournal(
     projectFileName: value.projectFileName,
     updatedAt: latest.capturedAt,
     generations,
+    projectBindingId,
   }
 }
 
@@ -354,6 +378,10 @@ function validateSnapshotInput(
   if (!isTimestamp(capturedAt)) {
     throw new TypeError('Recovery snapshot timestamp is invalid')
   }
+  const projectBindingId = input.projectBindingId
+  if (!isLocalProjectBindingId(projectBindingId)) {
+    throw new TypeError('Recovery project binding is invalid')
+  }
 
   let project
   try {
@@ -369,7 +397,7 @@ function validateSnapshotInput(
   if (project.document.name !== input.projectName) {
     throw new TypeError('Recovery snapshot project name does not match its metadata')
   }
-  return { ...input, capturedAt }
+  return { ...input, capturedAt, projectBindingId }
 }
 
 function recoveryCharacterCount(record: RecoveryJournalRecord): number {
@@ -611,6 +639,7 @@ export function createLocalProjectStorage(
           projectFileName: snapshot.projectFileName,
           updatedAt: capturedAt,
           generations,
+          projectBindingId: snapshot.projectBindingId,
         }
 
         // One put stores the complete bounded generation array. IndexedDB

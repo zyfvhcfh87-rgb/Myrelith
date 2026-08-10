@@ -3001,3 +3001,30 @@ zero misses). Browser diagnostics were clean and the port was released. The
 full production benchmark completed with clean console/resource restoration;
 its repository-wide proposed thresholds remain advisory rather than Issue #70
 acceptance claims.
+
+## Security hardening - six audit findings
+
+**COMPLETE LOCALLY (2026-08-10).**
+
+- [x] Bind remembered local media handles to opaque origin-local project
+  identity, preserve exact-handle and legacy-record migration, and prevent a
+  copied portable document id from inheriting the original's grants.
+- [x] Owner-scope OPFS proxy manifests, runtime tokens, mutation, and offline
+  selection; quarantine schema-1 entries until a connected source proves the
+  fingerprint required for adoption.
+- [x] Replace unbounded remembered-handle fan-out with an ordered,
+  cancellation-aware pool of at most eight IndexedDB reads.
+- [x] Enforce shared dimension, pixel, and aggregate compositor-memory limits
+  before portable-project use, worker canvas resizing, and export allocation.
+- [x] Reject excessive export frame counts, durations, and bitrate-derived
+  output estimates before creating an encoder, sink, or frame lease.
+- [x] Replace Docker's denylist context with an exact production-input
+  allowlist. Keep Cloudflare Pages unchanged: it continues to deploy only the
+  Vite `dist` artifact and does not use Docker.
+- [x] Pass 2,205 Vitest cases across 159 files, all 16 benchmark-runner cases,
+  build/typecheck, oxlint, the production audit at 0 vulnerabilities, and a
+  strict-port real-Chromium editor smoke with zero warnings/errors or
+  non-static requests. Preserve the independently reproduced `master` browser
+  baseline failure for the undersized audio-overload reset target as separate
+  work; Docker image execution remains unverified because the local Linux
+  daemon was not running.

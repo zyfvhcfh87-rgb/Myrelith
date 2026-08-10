@@ -2577,6 +2577,48 @@ surface; it is not a second zoom and never enters document history.
   coordinator owns the requested #45, then #69, then #70 rebase/squash-merge
   sequence; this branch does not merge or close the issue itself.
 
+## Security hardening - six audit findings (2026-08-10)
+
+**IMPLEMENTATION COMPLETE LOCALLY.**
+
+- Origin-local file capabilities now use an opaque local-project binding plus
+  asset id. Reopening the exact remembered project handle keeps its binding;
+  selecting a copied project with the same portable document id receives a new
+  one and cannot replay the original's media handles. Historical Recent and
+  recovery records migrate through a narrowly scoped legacy binding without
+  changing the stable IndexedDB database names.
+- Proxy-cache schema 2 carries the same local owner. Offline proxies are
+  visible only to that owner; schema-1 entries stay quarantined until a
+  connected original proves their fingerprint and adopts them. Runtime proxy
+  tokens, replacement, rollback, removal, and quota protection use the same
+  owner boundary. Portable projects, recovery payloads, and export preferences
+  remain unchanged.
+- Remembered-handle loading uses at most eight concurrent IndexedDB reads,
+  preserves descriptor order, and stops scheduling after a project-open
+  cancellation. Render allocation is bounded before parsed projects, worker
+  canvas resizing, or export can allocate compositor surfaces. Export rejects
+  work beyond five million frames, 24 hours, or the destination-specific
+  output estimate before it creates a sink or requests a frame.
+- Docker remains an optional alternate package, not part of Cloudflare Pages.
+  Pages still publishes only the normal Vite `dist` output. `.dockerignore` is
+  now an exact production-input allowlist, so repository metadata, worktrees,
+  temporary evidence, local environment files, logs, and unrelated workspace
+  files are not sent as Docker build context.
+- Validation passed all 2,205 Vitest cases across 159 files plus all 16
+  benchmark-runner cases, production typecheck/build, oxlint, the exact Docker
+  allowlist regression, and the production dependency audit with 0
+  vulnerabilities. The complete browser suite passed recovery; its command-
+  palette accessibility spec retained the independently reproduced `master`
+  baseline failure for the existing 23 x 20 px audio-overload reset target.
+  A separate real-Chromium create-project/editor smoke used only strict port
+  41879, made no non-static network requests, reported zero warnings/errors,
+  and released the port. Docker CLI 29.5.2 was present, but the local Docker
+  Desktop Linux daemon was not running, so a real image build was unavailable.
+- The all-dependency audit retains the base branch's two dev-only high
+  advisories in `nanoid` and `undici`; neither is in the production dependency
+  audit or the deployed static bundle. They are separate dependency-maintenance
+  work, not hidden inside this six-finding change.
+
 ## Working agreements (the user's explicit preferences)
 
 - Changes may span every module needed for one complete fix. Keep dependency

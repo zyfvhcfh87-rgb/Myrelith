@@ -31,6 +31,7 @@ function recent(): RecentProjectRecord {
     fileName: 'Recent.myrelith',
     lastOpenedAt: 200,
     handle: handle(),
+    projectBindingId: 'local-project:recent',
   }
 }
 
@@ -47,6 +48,7 @@ function recovery(): RecoveryJournalRecord {
       capturedAt: 100,
       serializedProject: '{}',
     }],
+    projectBindingId: 'local-project:recovery',
   }
 }
 

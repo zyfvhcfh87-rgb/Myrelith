@@ -484,6 +484,30 @@ describe('exportTimeline validation', () => {
     expect(h.closeMedia).toHaveBeenCalledOnce()
   })
 
+  test('rejects a billion-frame caption extent before creating export resources', async () => {
+    const h = makeHarness()
+    const doc = makeDoc(1)
+    doc.captionTracks = [{
+      id: 'captions',
+      name: 'Captions',
+      language: 'en',
+      role: 'captions',
+      stylePreset: 'classic',
+      hidden: false,
+      items: [{
+        id: 'far-future',
+        range: { startFrame: 999_999_999, durationFrames: 1 },
+        text: 'Still here',
+      }],
+    }]
+    const generator = exportTimeline(doc, SETTINGS, h.media, h.deps)
+
+    await expect(generator.next()).rejects.toThrow('frame limit')
+    expect(h.createVideoSink).not.toHaveBeenCalled()
+    expect(h.openFrame).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
   test('rejects invalid frame timing before creating a sink', async () => {
     const h = makeHarness()
     const generator = exportTimeline(
