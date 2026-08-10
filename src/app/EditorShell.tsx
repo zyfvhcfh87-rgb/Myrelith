@@ -34,6 +34,7 @@ import { useEditShortcuts } from './useEditShortcuts'
 import { initMediaVisuals } from './mediaVisualsController'
 import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
 import { initSelectionReconciliation } from './selectionReconciliationController'
+import { initProxyController } from './proxyController'
 
 export interface EditorShellProps {
   closing: boolean
@@ -49,6 +50,9 @@ export default function EditorShell({ closing }: EditorShellProps) {
   useEditShortcuts()
   useEffect(() => initMediaCapabilityLifecycle(), [])
   useEffect(() => initSelectionReconciliation(), [])
+  useEffect(() => {
+    void initProxyController()
+  }, [])
   useEffect(() => {
     initMediaVisuals()
   }, [])

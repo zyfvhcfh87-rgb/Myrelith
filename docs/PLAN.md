@@ -2938,3 +2938,39 @@ tests + manual QA. E2E: manual + browser-driven pointer synthesis.
 - [x] Publish the exact committed branch as a ready PR targeting `master` with
   `Closes #69`; rebase it after Issue #45 so effects remain schema 10 and
   retiming becomes schema 11, then leave merge and closure to the coordinator.
+## Post-MVP issue #70 - OPFS editing proxies
+
+**IMPLEMENTATION COMPLETE (2026-08-10).**
+
+- [x] Publish the exact browser-native input/output codec matrix and keep the
+  Generate action disabled until the current source decoder plus exact AVC MP4
+  output configuration pass fresh runtime probes.
+- [x] Add a strict versioned origin-local OPFS manifest with stable asset
+  identity, sampled source fingerprint, full profile/generator provenance,
+  bytes, creation/last-use timestamps, manifest-first replacement, and bounded
+  LRU eviction against honest browser origin estimates.
+- [x] Keep proxy facts out of `TimelineDoc`, portable project/recovery formats,
+  remembered media, and export preferences. Share one pure representation
+  policy: Preview prefers only a fresh proxy; final export always revalidates
+  and requires the original.
+- [x] Add Media Pool quota/usage/persistence facts, per-video generation
+  progress, cancel/retry/regenerate/remove, and explicit clear-all UX. Offline,
+  stale, unsupported, quota, source replacement/removal, worker/decode, and OPFS
+  failures remain recoverable and never silently become project truth.
+- [x] Bound conversion to one scheduler job and one active decoder with
+  sequential canvases, awaited encoder/OPFS backpressure, and explicit cleanup
+  of Input, output, staged file, and decoder telemetry on every exit.
+- [x] Record focused/full tests, build, lint, audit, diff/fingerprint, real
+  Chromium generation/cancel/regeneration/offline/export gates, useful stress
+  benefit, clean diagnostics, and exclusive port 41870 release.
+- [x] Publish the exact commit as a ready PR targeting `master` with
+  `Closes #70`; leave ordered integration to the milestone coordinator.
+
+Validation: 147 focused tests; 2,104 complete Vitest cases plus 16 benchmark
+runner cases; build/typecheck; oxlint; clean production high audit and diff
+checks. Real Chromium converted a 50,948,082-byte 3840x2160 12-second H.264
+long-GOP source to a reported 3.0 MiB 1280x720 proxy in 2.9 seconds, preserved
+the committed proxy through regeneration cancellation, rendered it offline,
+blocked final export until original relink, then completed original-backed
+1920x1080 MP4 export in 4.413 seconds. Console warnings/errors and Vite overlays
+were zero; only strict port 41870 was used and released.

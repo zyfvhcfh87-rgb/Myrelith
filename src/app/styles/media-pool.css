@@ -654,6 +654,115 @@
   margin-top: 7px;
 }
 
+.proxy-storage {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 10px 0;
+  padding: 8px 10px;
+  color: #9aa9bc;
+  font-size: 9px;
+  line-height: 1.35;
+  background: rgb(31 42 57 / 62%);
+  border: 1px solid #36465a;
+  border-radius: 6px;
+}
+
+.proxy-storage > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.proxy-storage strong {
+  color: #d7e6fa;
+  font-size: 10px;
+}
+
+.proxy-storage button,
+.media-proxy-actions button {
+  min-height: 24px;
+  padding: 0 8px;
+  color: #c7d8ee;
+  font: 650 9px/1 inherit;
+  white-space: nowrap;
+  background: #273548;
+  border: 1px solid #455a73;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.proxy-storage button:hover:not(:disabled),
+.media-proxy-actions button:hover:not(:disabled) {
+  color: #f4f8ff;
+  background: #32465f;
+  border-color: #6380a0;
+}
+
+.proxy-storage button:disabled,
+.media-proxy-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.media-proxy {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #2d3947;
+}
+
+.media-proxy-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #a7c5e7;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.media-proxy[data-phase='ready'] .media-proxy-heading {
+  color: #9ed0ab;
+}
+
+.media-proxy[data-phase='stale'] .media-proxy-heading,
+.media-proxy[data-phase='error'] .media-proxy-heading {
+  color: #e4b879;
+}
+
+.media-proxy p {
+  margin: 0;
+  color: #8998aa;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.media-proxy progress {
+  width: 100%;
+  height: 5px;
+  accent-color: #7ea6d7;
+}
+
+.media-proxy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.media-proxy-actions button {
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  padding-block: 5px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .media-connection-badge {
   width: max-content;
   color: #9bcea9;
@@ -1240,6 +1349,19 @@
 .media-details {
   overflow: hidden;
   padding: 0 2px 2px;
+}
+
+/* Proxy state and actions need readable width; keep these video cards as one
+   full media-pool row instead of squeezing them into the thumbnail grid. */
+.media-item:has(.media-proxy) {
+  grid-column: 1 / -1;
+  grid-template-columns: 112px minmax(0, 1fr) 22px;
+  grid-template-areas: 'thumbnail details remove';
+}
+
+.media-item:has(.media-proxy) .media-thumbnail {
+  width: 112px;
+  height: auto;
 }
 
 .media-name {

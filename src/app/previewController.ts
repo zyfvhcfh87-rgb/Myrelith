@@ -59,6 +59,7 @@ import {
 } from '../engine/render-bridge'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useProxyStore } from '../state/proxyStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import {
@@ -78,6 +79,12 @@ import {
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
 import { projectPreviewEffectStatuses } from './previewEffectStatus'
+import {
+  getProxyPreviewSource,
+  isProxyPreviewToken,
+  previewRepresentationDecision,
+  reportProxyPreviewFailure,
+} from './proxyController'
 
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
@@ -201,7 +208,7 @@ interface ControllerState {
   /** Per-asset pipeline status. Absent = not started (or failed: retried
    * on the next mediaStore change). Removal releases the worker source. */
   assetStates: Map<AssetId, {
-    objectUrl: string
+    sourceKey: string
     status: 'loading' | 'ready' | 'failed'
   }>
   unsubscribes: Array<() => void>
@@ -388,6 +395,7 @@ function scheduleRender(deps: PreviewDeps): void {
         !seen.has(id)
         && media.descriptors.has(id)
         && !media.assets.has(id)
+        && previewRepresentationDecision(id).representation !== 'proxy'
       ) {
         seen.add(id)
         offlineIds.push(id)
@@ -443,53 +451,86 @@ function scheduleRender(deps: PreviewDeps): void {
   })
 }
 
-/** Hand one already-analyzed asset's Blob to the render worker. */
-async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void> {
+function desiredVideoSourceKey(assetId: AssetId, asset: MediaAsset | undefined): string | null {
+  const decision = previewRepresentationDecision(assetId)
+  if (decision.representation === 'proxy') {
+    const entry = useProxyStore.getState().assets.get(assetId)?.entry
+    return entry ? `proxy:${entry.cacheKey}` : null
+  }
+  return decision.representation === 'original' && asset
+    ? `original:${asset.objectUrl}`
+    : null
+}
+
+/** Hand one selected original-or-proxy Blob to the render worker. */
+async function loadOneVideoAsset(
+  deps: PreviewDeps,
+  assetId: AssetId,
+  asset: MediaAsset | undefined,
+  sourceKey: string,
+): Promise<void> {
   const bridge = state.bridge
   if (!bridge) return
-  const guard = captureMediaRuntimeGuard(asset.id)
-  if (!guard || guard.objectUrl !== asset.objectUrl) return
   const pipelineState = {
-    objectUrl: asset.objectUrl,
+    sourceKey,
     status: 'loading' as const,
   }
-  state.assetStates.set(asset.id, pipelineState)
+  state.assetStates.set(assetId, pipelineState)
   let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
   let failureTrackKind: 'video' | null = null
+  let proxySelected = false
+  let guard: MediaRuntimeGuard | null = null
   try {
-    const blob = await deps.fetchBlob(asset.objectUrl)
-    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) {
+    const proxy = sourceKey.startsWith('proxy:')
+      ? await getProxyPreviewSource(assetId)
+      : null
+    proxySelected = proxy !== null
+    let blob: Blob
+    let rate: FrameRate
+    let budget: LocalDecoderBudget
+    let runtimeToken: object
+    if (proxy) {
+      blob = proxy.blob
+      rate = proxy.entry.frameRate
+      budget = mediaAssetDecoderBudget({
+        size: proxy.entry.byteSize,
+        durationMicroseconds: proxy.entry.durationMicroseconds,
+        frameRate: proxy.entry.frameRate,
+        width: proxy.entry.width,
+        height: proxy.entry.height,
+        audioSampleRate: null,
+        audioChannels: null,
+      }, proxy.blob.size)
+      runtimeToken = proxy.runtimeToken
+    } else {
+      if (!asset) throw new Error('The original source is offline and the proxy is unavailable')
+      guard = captureMediaRuntimeGuard(asset.id)
+      if (!guard || guard.objectUrl !== asset.objectUrl) return
+      blob = await deps.fetchBlob(asset.objectUrl)
+      if (!asset.frameRate) throw new Error(`"${asset.fileName}": missing frame rate`)
+      rate = asset.frameRate
+      budget = mediaAssetDecoderBudget(asset, blob.size)
+      runtimeToken = guard
+    }
+    if (state.bridge !== bridge || state.assetStates.get(assetId) !== pipelineState) {
       return
     }
     failureReason = 'decode-failed'
-    if (asset.kind === 'image') {
-      await bridge.openImage(asset.id, blob, guard)
-    } else {
-      failureTrackKind = 'video'
-      if (!asset.frameRate) {
-        throw new Error(`"${asset.fileName}": missing frame rate`)
-      }
-      await bridge.openAsset(
-        asset.id,
-        blob,
-        asset.frameRate,
-        mediaAssetDecoderBudget(asset, blob.size),
-        guard,
-      )
-    }
-    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) {
+    failureTrackKind = 'video'
+    await bridge.openAsset(assetId, blob, rate, budget, runtimeToken)
+    if (state.bridge !== bridge || state.assetStates.get(assetId) !== pipelineState) {
       return
     }
-    state.assetStates.set(asset.id, {
-      objectUrl: asset.objectUrl,
+    state.assetStates.set(assetId, {
+      sourceKey,
       status: 'ready',
     })
   } catch (e) {
-    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) {
+    if (state.bridge !== bridge || state.assetStates.get(assetId) !== pipelineState) {
       return
     }
-    state.assetStates.set(asset.id, {
-      objectUrl: asset.objectUrl,
+    state.assetStates.set(assetId, {
+      sourceKey,
       status: 'failed',
     })
     if (e instanceof RenderAssetOpenError) {
@@ -497,12 +538,43 @@ async function loadOneAsset(deps: PreviewDeps, asset: MediaAsset): Promise<void>
       failureTrackKind = e.failure.trackKind
     }
     console.warn(
-      `[previewController] loading "${asset.fileName}" failed:`,
+      `[previewController] loading "${asset?.fileName ?? assetId}" failed:`,
       e instanceof Error ? e.message : e,
     )
+    if (proxySelected) {
+      reportProxyPreviewFailure(assetId, e)
+    } else if (guard) {
+      reportMediaRuntimeFailure(
+        guard,
+        mediaRuntimeFailure('preview', failureTrackKind, e, failureReason),
+      )
+    }
+  }
+}
+
+async function loadOneImage(deps: PreviewDeps, asset: MediaAsset): Promise<void> {
+  const bridge = state.bridge
+  if (!bridge) return
+  const guard = captureMediaRuntimeGuard(asset.id)
+  if (!guard || guard.objectUrl !== asset.objectUrl) return
+  const sourceKey = `original:${asset.objectUrl}`
+  const pipelineState = { sourceKey, status: 'loading' as const }
+  state.assetStates.set(asset.id, pipelineState)
+  let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
+  try {
+    const blob = await deps.fetchBlob(asset.objectUrl)
+    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) return
+    failureReason = 'decode-failed'
+    await bridge.openImage(asset.id, blob, guard)
+    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) return
+    state.assetStates.set(asset.id, { sourceKey, status: 'ready' })
+  } catch (cause) {
+    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) return
+    state.assetStates.set(asset.id, { sourceKey, status: 'failed' })
+    if (cause instanceof RenderAssetOpenError) failureReason = cause.failure.reason
     reportMediaRuntimeFailure(
       guard,
-      mediaRuntimeFailure('preview', failureTrackKind, e, failureReason),
+      mediaRuntimeFailure('preview', null, cause, failureReason),
     )
   }
 }
@@ -524,23 +596,37 @@ function documentAssetIds(doc: TimelineDoc): Set<AssetId> {
 function syncAssets(deps: PreviewDeps): void {
   const bridge = state.bridge
   if (!bridge) return
-  const assets = useMediaStore.getState().assets
+  const media = useMediaStore.getState()
+  const assets = media.assets
   const referencedIds = documentAssetIds(useDocumentStore.getState().doc)
   const desiredIds = new Set<AssetId>()
 
+  for (const [assetId, descriptor] of media.descriptors) {
+    if (descriptor.kind !== 'video') continue
+    const asset = assets.get(assetId)
+    const sourceKey = desiredVideoSourceKey(assetId, asset)
+    if (!sourceKey) continue
+    desiredIds.add(assetId)
+    const current = state.assetStates.get(assetId)
+    if (current?.sourceKey === sourceKey) continue
+    if (current) {
+      state.assetStates.delete(assetId)
+      bridge.releaseAsset(assetId)
+    }
+    void loadOneVideoAsset(deps, assetId, asset, sourceKey)
+  }
+
   for (const asset of assets.values()) {
-    if (asset.kind !== 'video' && asset.kind !== 'image') continue
-    // Timed-video behavior stays unchanged: connected videos are kept warm.
-    // A still owns a retained worker source only while the document uses it.
-    if (asset.kind === 'image' && !referencedIds.has(asset.id)) continue
+    if (asset.kind !== 'image' || !referencedIds.has(asset.id)) continue
     desiredIds.add(asset.id)
+    const sourceKey = `original:${asset.objectUrl}`
     const current = state.assetStates.get(asset.id)
-    if (current?.objectUrl === asset.objectUrl) continue
+    if (current?.sourceKey === sourceKey) continue
     if (current) {
       state.assetStates.delete(asset.id)
       bridge.releaseAsset(asset.id)
     }
-    void loadOneAsset(deps, asset)
+    void loadOneImage(deps, asset)
   }
 
   for (const id of [...state.assetStates.keys()]) {
@@ -578,6 +664,10 @@ export function initPreview(
   bridge.onWorkerError = (message) =>
     console.warn('[previewController] worker error:', message)
   bridge.onAssetError = (assetId, runtimeToken, trackKind, message) => {
+    if (isProxyPreviewToken(assetId, runtimeToken)) {
+      reportProxyPreviewFailure(assetId, message)
+      return
+    }
     const guard = runtimeToken as MediaRuntimeGuard
     if (guard.assetId !== assetId) return
     reportMediaRuntimeFailure(
@@ -636,6 +726,11 @@ export function initPreview(
         bounds,
       )
       bridge.setSourceBoundsCatalog(bounds)
+      syncAssets(deps)
+      scheduleRender(deps)
+    }),
+    useProxyStore.subscribe((current, previous) => {
+      if (current.assets === previous.assets) return
       syncAssets(deps)
       scheduleRender(deps)
     }),

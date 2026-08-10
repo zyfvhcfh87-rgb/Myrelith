@@ -315,6 +315,27 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   capability and must not be approximated with divergent browser playbackRate
   behavior. The Inspector exposes this policy whenever a non-1× speed is set.
 
+## Editing-proxy representation and cache
+
+- `domain/proxyCache.ts` is the browser-free authority for proxy provenance,
+  profile parameters, strict manifest parsing, and preview/export representation
+  selection. Preview may select only a fresh proxy; final export always selects
+  and revalidates the original. A proxy is never project truth.
+- `app/proxyStorage.ts` owns the versioned origin-local OPFS sidecar and
+  manifest-first replacement/LRU transactions. Its registry entry is the only
+  derived-storage clearing capability. Project files, recovery, media handles,
+  and portable schemas cannot reference or clear through this boundary.
+- `app/proxyController.ts` composes exact source/output capability probes, a
+  one-job/one-decoder `MediaJobScheduler`, provenance checks, serializable UI
+  facts, source replacement/removal cancellation, and representation facades.
+  `pipeline/proxyGeneration.ts` alone owns the temporary Input/decoder,
+  CanvasSource/encoder, muxer, direct OPFS writer, and their exact cleanup.
+- `previewController.ts` and `exportController.ts` both call the shared pure
+  representation policy. Preview worker runtime tokens distinguish proxy
+  failures from original-media failures; export cannot resolve a proxy when an
+  original is offline. The exact supported codec/profile matrix is published in
+  `docs/PROXY_CODEC_SUPPORT.md` and is runtime-probed before generation enables.
+
 ## Export profile and delivery contracts
 
 - `domain/exportProfile.ts` is the sole browser-free authority for allowed

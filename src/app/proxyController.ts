@@ -1,0 +1,720 @@
+import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
+import {
+  DEFAULT_PROXY_PARAMETERS,
+  PROXY_GENERATOR_VERSION,
+  estimateProxyBytes,
+  proxyDescriptorCouldMatch,
+  proxyFingerprintMatches,
+  selectMediaRepresentation,
+  type MediaRepresentationDecision,
+  type ProxyCacheEntry,
+  type ProxyOriginalFingerprint,
+} from '../domain/proxyCache'
+import type { MediaAsset } from '../domain/schema'
+import {
+  generateEditingProxy,
+  probeProxyEncoderSupport,
+  probeProxyInputSupport,
+} from '../pipeline/proxyGeneration'
+import { useMediaStore } from '../state/mediaStore'
+import { useProxyStore, type ProxyAssetState } from '../state/proxyStore'
+import {
+  MediaJobExecutionError,
+  MediaJobScheduler,
+  type MediaJobContext,
+  type MediaJobSchedulerSnapshot,
+} from './mediaJobScheduler'
+import {
+  ProxyQuotaError,
+  ProxyStorage,
+  ProxyStorageUnavailableError,
+  proxyStorage,
+} from './proxyStorage'
+
+const FINGERPRINT_SAMPLE_BYTES = 64 * 1024
+const PROXY_JOB_PREFIX = 'proxy:'
+
+export interface ProxyPreviewSource {
+  readonly blob: File
+  readonly entry: ProxyCacheEntry
+  readonly sourceKey: string
+  readonly runtimeToken: object
+}
+
+export interface ProxyControllerDeps {
+  readonly storage: ProxyStorage
+  fetchBlob(url: string, signal?: AbortSignal): Promise<Blob>
+  now(): number
+}
+
+const realDeps: ProxyControllerDeps = {
+  storage: proxyStorage,
+  fetchBlob: async (url, signal) => {
+    const response = await fetch(url, { signal })
+    if (!response.ok) throw new Error(`Media source returned HTTP ${response.status}`)
+    return response.blob()
+  },
+  now: () => Date.now(),
+}
+
+interface ControllerState {
+  deps: ProxyControllerDeps
+  scheduler: MediaJobScheduler | null
+  entries: Map<string, ProxyCacheEntry>
+  previewTokens: Map<string, { cacheKey: string; token: object }>
+  activeSources: Map<string, { objectUrl: string; generation: number }>
+  probeGenerations: Map<string, number>
+  unsubscribeMedia: (() => void) | null
+  nextGeneration: number
+  lifecycleGeneration: number
+  initialized: boolean
+}
+
+const state: ControllerState = {
+  deps: realDeps,
+  scheduler: null,
+  entries: new Map(),
+  previewTokens: new Map(),
+  activeSources: new Map(),
+  probeGenerations: new Map(),
+  unsubscribeMedia: null,
+  nextGeneration: 0,
+  lifecycleGeneration: 0,
+  initialized: false,
+}
+
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause)
+}
+
+function bytesToHex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+async function sha256(bytes: BufferSource): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error('SHA-256 is unavailable in this browser')
+  return bytesToHex(await crypto.subtle.digest('SHA-256', bytes))
+}
+
+/**
+ * Bounded content fingerprint: metadata plus first/middle/last 64 KiB samples.
+ * The algorithm name is explicit so it is never misrepresented as a full-file
+ * digest and a future stronger version cannot silently compare as equivalent.
+ */
+export async function fingerprintProxyOriginal(
+  blob: Blob,
+  identity: Pick<MediaAsset, 'fileName' | 'size' | 'lastModified'>,
+): Promise<ProxyOriginalFingerprint> {
+  const offsets = [
+    0,
+    Math.max(0, Math.floor((blob.size - FINGERPRINT_SAMPLE_BYTES) / 2)),
+    Math.max(0, blob.size - FINGERPRINT_SAMPLE_BYTES),
+  ]
+  const metadata = new TextEncoder().encode(JSON.stringify({
+    algorithm: 'sha256-sampled-v1',
+    fileName: identity.fileName,
+    size: identity.size,
+    lastModified: identity.lastModified,
+    liveSize: blob.size,
+    offsets,
+  }))
+  const samples = await Promise.all(offsets.map(async (offset) => (
+    new Uint8Array(await blob.slice(offset, offset + FINGERPRINT_SAMPLE_BYTES).arrayBuffer())
+  )))
+  const total = metadata.byteLength + samples.reduce((sum, sample) => sum + sample.byteLength, 0)
+  const joined = new Uint8Array(total)
+  joined.set(metadata)
+  let cursor = metadata.byteLength
+  for (const sample of samples) {
+    joined.set(sample, cursor)
+    cursor += sample.byteLength
+  }
+  return {
+    algorithm: 'sha256-sampled-v1',
+    digest: await sha256(joined),
+    fileName: identity.fileName,
+    size: identity.size,
+    lastModified: identity.lastModified,
+  }
+}
+
+async function proxyCacheKey(
+  assetId: string,
+  fingerprint: ProxyOriginalFingerprint,
+): Promise<string> {
+  return sha256(new TextEncoder().encode(JSON.stringify({
+    assetId,
+    fingerprint,
+    parameters: DEFAULT_PROXY_PARAMETERS,
+    generatorVersion: PROXY_GENERATOR_VERSION,
+  })))
+}
+
+function jobId(assetId: string): string {
+  return `${PROXY_JOB_PREFIX}${assetId}`
+}
+
+function currentEntry(assetId: string): ProxyCacheEntry | null {
+  return state.entries.get(assetId) ?? null
+}
+
+function publish(item: ProxyAssetState): void {
+  useProxyStore.getState().setAsset(item)
+}
+
+function entryFreshForDescriptor(
+  entry: ProxyCacheEntry | null,
+  descriptor: { fileName: string; size: number; lastModified: number },
+): boolean {
+  return entry !== null && proxyDescriptorCouldMatch(entry, descriptor)
+}
+
+async function refreshStorageState(lifecycleGeneration = state.lifecycleGeneration): Promise<void> {
+  try {
+    const estimate = await state.deps.storage.estimate()
+    if (state.lifecycleGeneration !== lifecycleGeneration) return
+    useProxyStore.getState().setStorage({
+      supported: true,
+      ...estimate,
+      error: null,
+    })
+  } catch (cause) {
+    if (state.lifecycleGeneration !== lifecycleGeneration) return
+    useProxyStore.getState().setStorage({
+      supported: false,
+      cacheBytes: 0,
+      itemCount: 0,
+      originUsageBytes: null,
+      originQuotaBytes: null,
+      persisted: null,
+      error: errorMessage(cause),
+    })
+  }
+}
+
+function offlineItem(assetId: string): ProxyAssetState {
+  const descriptor = useMediaStore.getState().descriptors.get(assetId)
+  const entry = currentEntry(assetId)
+  const fresh = descriptor ? entryFreshForDescriptor(entry, descriptor) : false
+  return {
+    assetId,
+    phase: entry ? (fresh ? 'ready' : 'stale') : 'unavailable',
+    progress: 0,
+    detail: entry
+      ? (fresh
+          ? 'Proxy ready for preview. Original offline; final export is unavailable until relinked.'
+          : 'Cached proxy is stale and the original is offline. Relink before regenerating or exporting.')
+      : 'Original offline. Relink it before generating a proxy.',
+    canGenerate: false,
+    originalAvailable: false,
+    entry,
+  }
+}
+
+async function probeConnectedAsset(asset: MediaAsset, generation: number): Promise<void> {
+  const entry = currentEntry(asset.id)
+  if (
+    asset.kind !== 'video'
+    || !asset.frameRate
+    || !asset.width
+    || !asset.height
+  ) {
+    publish({
+      assetId: asset.id,
+      phase: 'unavailable',
+      progress: 0,
+      detail: 'Editing proxies require a connected video track with known dimensions and frame rate.',
+      canGenerate: false,
+      originalAvailable: true,
+      entry,
+    })
+    return
+  }
+  publish({
+    assetId: asset.id,
+    phase: 'checking',
+    progress: 0,
+    detail: 'Checking the browser AVC encoder and cached provenance…',
+    canGenerate: false,
+    originalAvailable: true,
+    entry,
+  })
+  try {
+    const [encoder, blob] = await Promise.all([
+      probeProxyEncoderSupport(asset.width, asset.height, asset.frameRate),
+      state.deps.fetchBlob(asset.objectUrl),
+    ])
+    if (
+      state.probeGenerations.get(asset.id) !== generation
+      || useMediaStore.getState().assets.get(asset.id)?.objectUrl !== asset.objectUrl
+    ) return
+    if (!encoder.supported) {
+      publish({
+        assetId: asset.id,
+        phase: entry ? 'stale' : 'unavailable',
+        progress: 0,
+        detail: encoder.reason,
+        canGenerate: false,
+        originalAvailable: true,
+        entry,
+      })
+      return
+    }
+    const input = await probeProxyInputSupport(
+      blob,
+      asset.id,
+      mediaAssetDecoderBudget(asset, blob.size),
+    )
+    if (
+      state.probeGenerations.get(asset.id) !== generation
+      || useMediaStore.getState().assets.get(asset.id)?.objectUrl !== asset.objectUrl
+    ) return
+    if (!input.supported) {
+      publish({
+        assetId: asset.id,
+        phase: entry ? 'stale' : 'unavailable',
+        progress: 0,
+        detail: input.reason,
+        canGenerate: false,
+        originalAvailable: true,
+        entry,
+      })
+      return
+    }
+    const fingerprint = await fingerprintProxyOriginal(blob, asset)
+    if (state.probeGenerations.get(asset.id) !== generation) return
+    const fresh = entry ? proxyFingerprintMatches(entry, fingerprint) : false
+    publish({
+      assetId: asset.id,
+      phase: entry ? (fresh ? 'ready' : 'stale') : 'available',
+      progress: 0,
+      detail: entry
+        ? (fresh
+            ? `Proxy ready · ${entry.width}×${entry.height} AVC MP4 · original verified.`
+            : 'The original fingerprint changed. Preview uses the original until regeneration finishes.')
+        : `${input.reason} ${encoder.reason} Generate a disposable local editing proxy.`,
+      canGenerate: true,
+      originalAvailable: true,
+      entry,
+    })
+  } catch (cause) {
+    if (state.probeGenerations.get(asset.id) !== generation) return
+    publish({
+      assetId: asset.id,
+      phase: 'error',
+      progress: 0,
+      detail: `Proxy capability check failed: ${errorMessage(cause)}`,
+      canGenerate: true,
+      originalAvailable: true,
+      entry,
+    })
+  }
+}
+
+function scan(): void {
+  const media = useMediaStore.getState()
+  const ids = new Set(media.descriptors.keys())
+  for (const assetId of [...useProxyStore.getState().assets.keys()]) {
+    if (!ids.has(assetId)) useProxyStore.getState().removeAsset(assetId)
+  }
+  for (const [assetId, descriptor] of media.descriptors) {
+    if (descriptor.kind !== 'video') {
+      useProxyStore.getState().removeAsset(assetId)
+      continue
+    }
+    const asset = media.assets.get(assetId)
+    if (!asset) {
+      state.probeGenerations.set(assetId, ++state.nextGeneration)
+      publish(offlineItem(assetId))
+      continue
+    }
+    const existing = useProxyStore.getState().assets.get(assetId)
+    if (
+      (existing?.phase === 'queued' || existing?.phase === 'generating')
+      && state.activeSources.has(assetId)
+    ) continue
+    const generation = ++state.nextGeneration
+    state.probeGenerations.set(assetId, generation)
+    void probeConnectedAsset(asset, generation)
+  }
+}
+
+async function runGeneration(
+  asset: MediaAsset,
+  generation: number,
+  lifecycleGeneration: number,
+  context: MediaJobContext,
+): Promise<void> {
+  let pendingCacheKey: string | null = null
+  let pendingFileName: string | null = null
+  const previousEntry = currentEntry(asset.id)
+  try {
+    publish({
+      assetId: asset.id,
+      phase: 'generating',
+      progress: 0,
+      detail: 'Verifying the original and preparing a browser-native proxy…',
+      canGenerate: false,
+      originalAvailable: true,
+      entry: previousEntry,
+    })
+    const blob = await state.deps.fetchBlob(asset.objectUrl, context.signal)
+    const fingerprint = await fingerprintProxyOriginal(blob, asset)
+    pendingCacheKey = await proxyCacheKey(asset.id, fingerprint)
+    await state.deps.storage.ensureCapacity(
+      estimateProxyBytes(asset.durationMicroseconds),
+      asset.id,
+    )
+    if (!asset.frameRate || !asset.width || !asset.height) {
+      throw new Error('The connected video is missing proxy timing or geometry facts')
+    }
+    const result = await generateEditingProxy({
+      source: blob,
+      asset: {
+        id: asset.id,
+        fileName: asset.fileName,
+        size: asset.size,
+        durationMicroseconds: asset.durationMicroseconds,
+        frameRate: asset.frameRate,
+        width: asset.width,
+        height: asset.height,
+      },
+      budget: mediaAssetDecoderBudget(asset, blob.size),
+      parameters: DEFAULT_PROXY_PARAMETERS,
+      signal: context.signal,
+      openDestination: async () => {
+        const capability = await state.deps.storage.prepareFileCapability(pendingCacheKey!)
+        pendingFileName = capability.fileName
+        return capability
+      },
+      onProgress: (progress) => {
+        context.reportProgress(progress)
+        if (state.lifecycleGeneration !== lifecycleGeneration) return
+        const current = useProxyStore.getState().assets.get(asset.id)
+        if (current?.phase !== 'generating') return
+        publish({
+          ...current,
+          progress: Math.max(current.progress, Math.min(1, progress)),
+          detail: `Generating proxy… ${Math.round(progress * 100)}%`,
+        })
+      },
+      onDecoderCount: context.setActiveDecoderCount,
+    })
+    if (
+      context.signal.aborted
+      || state.lifecycleGeneration !== lifecycleGeneration
+      || useMediaStore.getState().assets.get(asset.id)?.objectUrl !== asset.objectUrl
+    ) throw new Error('Proxy generation was superseded by a source replacement')
+    const now = state.deps.now()
+    const entry: ProxyCacheEntry = {
+      cacheKey: pendingCacheKey,
+      assetId: asset.id,
+      original: fingerprint,
+      parameters: DEFAULT_PROXY_PARAMETERS,
+      generatorVersion: PROXY_GENERATOR_VERSION,
+      fileName: result.fileName,
+      mimeType: 'video/mp4',
+      byteSize: result.byteLength,
+      width: result.width,
+      height: result.height,
+      frameRate: result.frameRate,
+      durationMicroseconds: result.durationMicroseconds,
+      createdAt: now,
+      lastUsedAt: now,
+    }
+    await state.deps.storage.commitEntry(entry)
+    if (state.lifecycleGeneration !== lifecycleGeneration) return
+    state.entries.set(asset.id, entry)
+    state.previewTokens.delete(asset.id)
+    publish({
+      assetId: asset.id,
+      phase: 'ready',
+      progress: 1,
+      detail: `Proxy ready · ${entry.width}×${entry.height} AVC MP4 · ${formatBytes(entry.byteSize)}.`,
+      canGenerate: true,
+      originalAvailable: true,
+      entry,
+    })
+    await refreshStorageState()
+  } catch (cause) {
+    if (pendingFileName) {
+      try {
+        await state.deps.storage.discardFile(pendingFileName)
+      } catch {
+        // The staged output was never added to the manifest; orphan cleanup can retry later.
+      }
+    }
+    if (state.lifecycleGeneration !== lifecycleGeneration) throw cause
+    if (context.signal.aborted) {
+      publish(previousEntry
+        ? {
+            assetId: asset.id,
+            phase: 'ready',
+            progress: 0,
+            detail: 'Proxy generation canceled. The previous proxy is still available.',
+            canGenerate: true,
+            originalAvailable: true,
+            entry: previousEntry,
+          }
+        : {
+            assetId: asset.id,
+            phase: 'available',
+            progress: 0,
+            detail: 'Proxy generation canceled cleanly. No proxy bytes were kept.',
+            canGenerate: true,
+            originalAvailable: true,
+            entry: null,
+          })
+      throw cause
+    }
+    const detail = cause instanceof ProxyQuotaError
+      ? cause.message
+      : `Proxy generation failed: ${errorMessage(cause)}. Retry is safe.`
+    publish({
+      assetId: asset.id,
+      phase: 'error',
+      progress: 0,
+      detail,
+      canGenerate: true,
+      originalAvailable: true,
+      entry: previousEntry,
+    })
+    throw new MediaJobExecutionError(
+      cause instanceof ProxyQuotaError ? 'resource-limit' : 'decode-failed',
+      detail,
+      cause,
+    )
+  } finally {
+    if (state.activeSources.get(asset.id)?.generation === generation) {
+      state.activeSources.delete(asset.id)
+    }
+    if (state.probeGenerations.get(asset.id) === generation) {
+      state.probeGenerations.delete(asset.id)
+    }
+  }
+}
+
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return 'unknown size'
+  if (bytes < 1024) return `${Math.round(bytes)} B`
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`
+  return `${(bytes / 1024 ** 3).toFixed(2)} GiB`
+}
+
+export async function initProxyController(
+  deps: ProxyControllerDeps = realDeps,
+): Promise<() => void> {
+  if (state.initialized) return disposeProxyController
+  state.initialized = true
+  const lifecycleGeneration = ++state.lifecycleGeneration
+  state.deps = deps
+  state.scheduler = new MediaJobScheduler({
+    budget: { maxConcurrentJobs: 1, maxDecoderSlots: 1 },
+  })
+  try {
+    const manifest = await deps.storage.readManifest()
+    if (state.lifecycleGeneration !== lifecycleGeneration) return disposeProxyController
+    state.entries = new Map(manifest.entries.map((entry) => [entry.assetId, entry]))
+  } catch (cause) {
+    if (state.lifecycleGeneration !== lifecycleGeneration) return disposeProxyController
+    if (!(cause instanceof ProxyStorageUnavailableError)) {
+      useProxyStore.getState().setStorage({
+        supported: false,
+        cacheBytes: 0,
+        itemCount: 0,
+        originUsageBytes: null,
+        originQuotaBytes: null,
+        persisted: null,
+        error: errorMessage(cause),
+      })
+    }
+    state.entries = new Map()
+  }
+  if (state.lifecycleGeneration !== lifecycleGeneration) return disposeProxyController
+  await refreshStorageState(lifecycleGeneration)
+  if (state.lifecycleGeneration !== lifecycleGeneration) return disposeProxyController
+  state.unsubscribeMedia = useMediaStore.subscribe((current, previous) => {
+    if (current.assets !== previous.assets || current.descriptors !== previous.descriptors) {
+      for (const [assetId, source] of state.activeSources) {
+        if (current.assets.get(assetId)?.objectUrl === source.objectUrl) continue
+        state.scheduler?.cancel(jobId(assetId), current.assets.has(assetId) ? 'replaced' : 'removed')
+        state.activeSources.delete(assetId)
+      }
+      scan()
+    }
+  })
+  scan()
+  return disposeProxyController
+}
+
+export function requestProxyGeneration(assetId: string): boolean {
+  const scheduler = state.scheduler
+  const asset = useMediaStore.getState().assets.get(assetId)
+  const item = useProxyStore.getState().assets.get(assetId)
+  if (!scheduler || !asset) {
+    if (item) {
+      publish({
+        ...item,
+        phase: 'error',
+        detail: scheduler
+          ? 'The original source went offline before proxy generation could start.'
+          : 'The proxy scheduler is unavailable. Reopen the editor and retry.',
+        canGenerate: false,
+        originalAvailable: asset !== undefined,
+      })
+    }
+    return false
+  }
+  if (asset.kind !== 'video' || !item?.canGenerate) return false
+  const generation = ++state.nextGeneration
+  const lifecycleGeneration = state.lifecycleGeneration
+  state.probeGenerations.set(assetId, generation)
+  state.activeSources.set(assetId, { objectUrl: asset.objectUrl, generation })
+  publish({
+    ...item,
+    phase: 'queued',
+    progress: 0,
+    detail: 'Proxy queued. One decoder and one generator may run at a time.',
+    canGenerate: false,
+  })
+  scheduler.enqueue({
+    id: jobId(assetId),
+    generation,
+    priority: 'selected',
+    resources: { decoderSlots: 1 },
+    run: (context) => runGeneration(asset, generation, lifecycleGeneration, context),
+  })
+  return true
+}
+
+export function cancelProxyGeneration(assetId: string): boolean {
+  const canceled = state.scheduler?.cancel(jobId(assetId), 'aborted') ?? false
+  if (canceled) {
+    state.activeSources.delete(assetId)
+    const item = useProxyStore.getState().assets.get(assetId)
+    if (item?.phase === 'queued') {
+      publish(item.entry
+        ? {
+            ...item,
+            phase: 'ready',
+            detail: 'Proxy generation canceled before it started. The previous proxy is still available.',
+            canGenerate: item.originalAvailable,
+          }
+        : {
+            ...item,
+            phase: 'available',
+            detail: 'Proxy generation canceled before it started. No proxy bytes were created.',
+            canGenerate: item.originalAvailable,
+          })
+    }
+  }
+  return canceled
+}
+
+export async function removeProxy(assetId: string): Promise<void> {
+  state.scheduler?.cancel(jobId(assetId), 'removed')
+  state.activeSources.delete(assetId)
+  await state.deps.storage.removeAsset(assetId)
+  state.entries.delete(assetId)
+  state.previewTokens.delete(assetId)
+  const asset = useMediaStore.getState().assets.get(assetId)
+  if (asset) {
+    const generation = ++state.nextGeneration
+    state.probeGenerations.set(assetId, generation)
+    await probeConnectedAsset(asset, generation)
+  } else {
+    publish(offlineItem(assetId))
+  }
+  await refreshStorageState()
+}
+
+export async function clearAllProxies(): Promise<void> {
+  state.scheduler?.cancelAll('removed')
+  state.activeSources.clear()
+  await state.deps.storage.clear()
+  state.entries.clear()
+  state.previewTokens.clear()
+  scan()
+  await refreshStorageState()
+}
+
+export function previewRepresentationDecision(assetId: string): MediaRepresentationDecision {
+  const item = useProxyStore.getState().assets.get(assetId)
+  return selectMediaRepresentation({
+    purpose: 'preview',
+    originalAvailable: useMediaStore.getState().assets.has(assetId),
+    proxy: item?.entry
+      ? (item.phase === 'ready' ? 'fresh' : 'stale')
+      : 'missing',
+  })
+}
+
+export async function getProxyPreviewSource(assetId: string): Promise<ProxyPreviewSource | null> {
+  if (previewRepresentationDecision(assetId).representation !== 'proxy') return null
+  const entry = currentEntry(assetId)
+  if (!entry) return null
+  try {
+    const blob = await state.deps.storage.readEntryFile(entry)
+    const currentToken = state.previewTokens.get(assetId)
+    const token = currentToken?.cacheKey === entry.cacheKey
+      ? currentToken.token
+      : {}
+    state.previewTokens.set(assetId, { cacheKey: entry.cacheKey, token })
+    void state.deps.storage.touch(entry.cacheKey).catch(() => undefined)
+    return {
+      blob,
+      entry,
+      sourceKey: `proxy:${entry.cacheKey}`,
+      runtimeToken: token,
+    }
+  } catch (cause) {
+    publish({
+      assetId,
+      phase: 'error',
+      progress: 0,
+      detail: `Cached proxy is unavailable: ${errorMessage(cause)}. Regenerate it from the original.`,
+      canGenerate: useMediaStore.getState().assets.has(assetId),
+      originalAvailable: useMediaStore.getState().assets.has(assetId),
+      entry,
+    })
+    return null
+  }
+}
+
+export function reportProxyPreviewFailure(assetId: string, cause: unknown): void {
+  const item = useProxyStore.getState().assets.get(assetId)
+  if (!item?.entry) return
+  publish({
+    ...item,
+    phase: 'error',
+    progress: 0,
+    detail: `Proxy preview failed: ${errorMessage(cause)}. Preview fell back to the original when available.`,
+    canGenerate: item.originalAvailable,
+  })
+}
+
+export function isProxyPreviewToken(assetId: string, token: object): boolean {
+  return state.previewTokens.get(assetId)?.token === token
+}
+
+export function getProxySchedulerSnapshot(): MediaJobSchedulerSnapshot | null {
+  return state.scheduler?.snapshot() ?? null
+}
+
+export function waitForProxyIdle(): Promise<MediaJobSchedulerSnapshot | null> {
+  return state.scheduler?.whenIdle() ?? Promise.resolve(null)
+}
+
+export function disposeProxyController(): void {
+  state.lifecycleGeneration++
+  state.unsubscribeMedia?.()
+  state.unsubscribeMedia = null
+  state.scheduler?.dispose()
+  state.scheduler = null
+  state.entries.clear()
+  state.previewTokens.clear()
+  state.probeGenerations.clear()
+  state.initialized = false
+  useProxyStore.getState().reset()
+}

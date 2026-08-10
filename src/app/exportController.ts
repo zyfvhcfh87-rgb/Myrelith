@@ -17,6 +17,7 @@ import {
 } from '../domain/crossfadePlan'
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
+import { selectMediaRepresentation } from '../domain/proxyCache'
 import { audibleTracks, outputMediaAssetIds } from '../domain/selectors'
 import { sourceTimeAudioPolicy } from '../domain/sourceTimeMap'
 import {
@@ -166,7 +167,14 @@ function createAssetResolver(
     if (cached) return cached
 
     const asset = assets.get(assetId)
-    if (!asset) {
+    const representation = selectMediaRepresentation({
+      purpose: 'export',
+      originalAvailable: asset !== undefined,
+      // Export deliberately does not inspect cache state: a fresh proxy is
+      // never eligible for this boundary.
+      proxy: 'missing',
+    })
+    if (!asset || representation.representation !== 'original') {
       throw new Error(
         `Export media asset "${assetId}" is missing from the media pool`,
       )

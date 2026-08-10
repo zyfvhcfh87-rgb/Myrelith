@@ -117,6 +117,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #46 — minimal blend modes** | ✅ implementation complete | explicit normal/multiply/screen/overlay intent; schema-9 migration preserving schema-8 captions and unknown blend intent; isolated Canvas2D composition plus capability fallback seam; accessible Inspector/history; clean preview/export/reload Chromium gate on exclusive port 41846 |
 | **Post-MVP #69 — constant-speed retiming** | ✅ implementation complete | schema-11 exact rational `SourceTimeMap` after the schema-10 effect stack; deterministic linked trim/split/move/transition/keyframe/thumbnail/seek/composition behavior; shared preview/export audio-mute and output-resource policy outside exact 1×; accessible Inspector timing controls; complete automated gates and clean in-app Chromium QA on exclusive port 41869 |
 | **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
+| **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 147 focused + 2,104 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -992,11 +993,17 @@ surface; it is not a second zoom and never enters document history.
   6 for canonical scalar animation tracks. Older
   snapshots migrate conservatively; Issue #18's image-media migration still
   produces `still` `[0, 1)` without changing timed media or text semantics.
+- `src/domain/proxyCache.ts` — Issue #70's browser-free versioned manifest,
+  sampled-fingerprint/provenance/profile validation, even 720p geometry, size
+  estimate, and shared preview-versus-final-export representation policy.
 - `src/state/projectSessionStore.ts` — serializable launch/editor screen,
   active-project labels, operation phase, relink status, and separate
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
   handles, or recovery payloads. `src/state/projectLibraryStore.ts` holds only
   serializable Recent/recovery summaries for Home.
+- `src/state/proxyStore.ts` — serializable per-asset capability/progress/error
+  facts plus honest cache/origin quota and persistence estimates; it owns no
+  Blob, file handle, worker, scheduler, or project truth.
 - `src/state/transportStore.ts` — ephemeral playback/tool/selection state,
   including ordered unique `selectedClipIds` plus primary `selectedClipId`, and
   document-agnostic `reconcileClipSelection(existingIds)` for stable stale-id
@@ -1010,6 +1017,12 @@ surface; it is not a second zoom and never enters document history.
   composition seam: observes document-reference changes, supplies the current
   clip-id set to transport, and keeps selection consistent without either store
   importing the other or selection entering history/persistence.
+- `src/app/proxyController.ts` + `proxyStorage.ts` + `localDerivedStorage.ts`
+  — Issue #70 composition boundary: stable provenance keys, per-attempt OPFS
+  files, manifest-first replacement/LRU, one-job/one-decoder scheduling,
+  source-change cancellation, fresh preview capabilities, and narrowly scoped
+  derived-data clearing. The files remain disposable and never enter portable
+  project/recovery schemas.
 - `src/ui/Inspector.tsx` — original Issue #12 Slice 6 shared Link/Unlink command
   group: focusable `aria-disabled` controls, visible described availability,
   exact rendered-intent/latest-state race checks, live rejection announcements,
@@ -1051,6 +1064,10 @@ surface; it is not a second zoom and never enters document history.
   candidate-dimension, decoded-allocation, and animation facts plus stable
   unsupported, malformed, and resource-limit failures; it imports no UI or
   state.
+- `src/pipeline/proxyGeneration.ts` — Issue #70's exact source decoder plus
+  AVC/MP4 encoder revalidation, sequential pool-size-one CanvasSink conversion,
+  awaited encoder/OPFS backpressure, and success-only output commit with
+  cancellation/failure cleanup.
 - `src/pipeline/static-image.ts` — atomic browser/worker first-frame decode
   seam. It reinspects the exact Blob, canonicalizes the sniffed MIME, transfers
   one caller-owned `ImageBitmap` or `VideoFrame`, validates orientation-aware
@@ -1164,6 +1181,8 @@ surface; it is not a second zoom and never enters document history.
   Slice 2 adds multi-file fallback import, still dimensions/duration/first-frame
   disclosure, and contained one-tile thumbnails. Slice 3 enables Ready image
   rows through both drag guards now that the still-clip domain contract exists.
+  Issue #70 adds `ProxyControls.tsx` for exact support reasons, progress,
+  cancel/retry/regenerate/remove, and local proxy usage/quota/persistence.
 - `src/ui/timeline/ClipView.tsx` + `gestureBounds.ts` — Slice 3 repeats one
   bounded still tile across the complete timeline duration, exposes a clear
   still-image accessible name/Slip explanation, gives still trims unbounded
@@ -2453,6 +2472,72 @@ surface; it is not a second zoom and never enters document history.
   to `00966aed3643a50ad08fcd5da8977a9cb295ebc65d5a86a05032a1fc6c3a10f0`.
   The final console had 0 warnings/errors, no error overlay appeared, and port
   41845 was released.
+## Post-MVP issue #70 - OPFS editing proxies
+
+**IMPLEMENTATION COMPLETE (2026-08-10).**
+
+- The published matrix in `PROXY_CODEC_SUPPORT.md` is the shipped contract:
+  pinned Mediabunny 1.50.9 must open the source, its exact video config must
+  pass the existing `proxy-generation` decoder revalidation boundary, and the
+  browser must prove exact AVC/MP4 output geometry and bitrate before Generate
+  enables. The shipped 720p/2 Mbit/s proxy is video-only; audio stays on the
+  original path.
+- Schema-1 cache truth lives only under
+  `myrelith-derived/proxy-cache-v1`. Entries record stable asset id, explicit
+  sampled-SHA-256 fingerprint algorithm, original identity, complete profile
+  and generator version, per-attempt filename, output facts/bytes, and
+  creation/last-use times. Replacement commits the new manifest before
+  deleting the old physical file, so same-provenance regeneration cancellation
+  cannot truncate the committed proxy. Quota eviction is LRU, protects the
+  asset being regenerated, and targets both 80% origin usage and 64 MiB
+  headroom when the browser supplies estimates.
+- `MediaJobScheduler` allows one proxy job and one decoder. CanvasSink uses a
+  pool of one, every CanvasSource add and OPFS write is awaited, and cancel,
+  replacement/removal, unsupported input, quota, worker/decode, manifest, and
+  output failures release Input/output/staged-file ownership. Generate,
+  queued/running cancel, retry, regenerate, remove, clear-all, progress, bytes,
+  whole-origin quota, and persistence state are exposed without claiming
+  durable project data. A failed/corrupt estimate still leaves the narrow
+  disposable-clear recovery action available.
+- Preview and final export call one browser-free selection policy. Preview may
+  open only a fresh proxy and can keep displaying it while the original is
+  offline; proxy open/decode failure becomes a proxy error and falls back to a
+  connected original. Final export always selects and revalidates the original
+  and explicitly blocks while it is offline. No proxy field was added to
+  `TimelineDoc`, `.myrelith`, recovery, descriptors, remembered handles, or
+  export preferences.
+- Focused validation passed 147 tests across the proxy/domain/storage,
+  preview/export, Media Pool/Preview, launcher, and architecture surfaces. The
+  complete gate passed all 2,104 Vitest cases across 150 files plus all 16
+  benchmark-runner cases. TypeScript/production Vite build and oxlint pass;
+  Vite retains only the existing advisory large-chunk warning. The production
+  high-severity audit reports 0 vulnerabilities; the all-dependency audit
+  retains the unchanged two dev-only highs in `nanoid` and `undici`, with
+  package manifests unchanged from the base.
+- Real in-app Chromium used only
+  `npm run dev -- --port 41870 --strictPort`. The generated H.264 stress source
+  was 50,948,082 bytes, 3840x2160, 30 fps, 12.000 seconds, and a 300-frame GOP.
+  The exact input/output preflight enabled generation; cancel left no bytes;
+  success took 2.9 seconds and reported a 1280x720 3.0 MiB proxy (about 16.2x
+  smaller / 93.8% fewer bytes and 88.9% fewer pixels). A later same-source
+  regeneration cancel preserved the committed proxy. Reopening the portable
+  project with the original offline rendered and played the cached proxy;
+  Export named and refused the offline original. Relinking revalidated the
+  proxy fingerprint and produced an original-backed 1920x1080 H.264/AAC MP4
+  Export-ready result in 4.413 seconds. The final warning/error log and Vite
+  overlay count were both zero, screenshots covered offline proxy playback and
+  connected Export-ready state, and port 41870 was released.
+- Source evidence: clean base `718c0d28e3611e2bad3b511d45ce1e3adcba0270`
+  had tree SHA-256
+  `47e1f912b11b21a3cf4e7db082f7e9807b9d2b1bbff258b75b2ddb1e2b7dc8e4`
+  and benchmark-style clean fingerprint
+  `sha256:f19f13ad8edaf45d414b2429a5ac0150748be745819e1d1d046f64ea9f8d61d1`.
+  The completed implementation checkpoint before this evidence log was
+  `sha256:7e99874165d746522fa419469ae3f81a769f03a3a38c3647eaef1b9b390639dd`;
+  the final commit SHA is authoritative.
+- Delivery is a ready PR targeting `master` with `Closes #70`. The milestone
+  coordinator owns the requested #45, then #69, then #70 rebase/squash-merge
+  sequence; this branch does not merge or close the issue itself.
 
 ## Working agreements (the user's explicit preferences)
 
