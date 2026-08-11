@@ -178,7 +178,7 @@ At frame 18 the object disappears in the negative fixture; tracking stops.
 | Box center mean error | 2.534 px | ≤ 3 px |
 | Box mean relative scale error | 2.9% | ≤ 8% |
 | Full occlusion rejected | yes | required |
-| Complete worker experiment | 341.5 ms | descriptive, host-specific |
+| Complete worker experiment | 225.9 ms | descriptive, host-specific |
 
 The zero point error is intentionally narrow: it is the exact integer-motion
 positive fixture, not a subpixel or real-footage claim. #110 adds textured,
@@ -242,7 +242,7 @@ Chromium 151.0.7922.34 on the recorded Windows host passed dedicated module
 worker creation, OffscreenCanvas 2D readback, RGBA `VideoFrame.copyTo()`,
 observable `VideoFrame.close()`, OPFS create/write/read/remove, SubtleCrypto
 digest, and native `scheduler.yield()`. Active cancellation completed with
-`AbortError` in 69 ms. The cancelled worker and successful worker both
+`AbortError` in 50.4 ms. The cancelled worker and successful worker both
 terminated; final active workers were zero. One support `VideoFrame` was
 created/closed and one OPFS probe file was created/removed. Console warnings and
 errors were zero, and strict port 41844 was released.
@@ -252,10 +252,11 @@ Ignored raw and visual evidence:
 - `output/playwright/issue-44-motion-analysis/motion-analysis.json`
 - `output/playwright/issue-44-motion-analysis/motion-analysis.png`
 
-The captured source identity was base commit `00daac79cd26b2e0a503477d629635f0d15da853`
-on branch `zyfvhcfh87-rgb/part-10a-research-motion-analysis-stabilization`, with
-dirty-tree fingerprint
-`sha256:33bda85373adc4dc8d24033faad20b15d1290c63cdb7731191212d3b28fae33b`.
+The captured source identity was clean commit
+`a2275d6381611a912de1f0c0f0e03f2617099223` on branch
+`zyfvhcfh87-rgb/part-10a-research-motion-analysis-stabilization`, with
+fingerprint
+`sha256:73ceabbad37fca6b739c1376c157c924445c73bed8f2f0e5566abc6a0c20e39b`.
 The evidence runner refuses source drift while measuring.
 
 ## Final boundaries
