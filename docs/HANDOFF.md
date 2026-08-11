@@ -2959,3 +2959,46 @@ surface; it is not a second zoom and never enters document history.
   The integration smoke reused one uncropped, unrotated still and did not repeat
   the earlier recovery/export matrix; deterministic tests and the original
   issue-74 Chromium evidence continue to cover those claims.
+
+## Milestone 4 issue #74 - signed-flip and accessible-status follow-up (2026-08-11)
+
+**REVIEW BLOCKERS RESOLVED LOCALLY.**
+
+- The framing solver now composes horizontal and vertical reflection signs
+  around the authored anchor before static rotation, matching the compositor's
+  signed-scale order. Safe extents remain reflection-invariant, while the
+  cropped visible-source center receives the signed transform needed to avoid
+  uncovered canvas at off-center anchors. Focused tests include the exact
+  square-source, Anchor X 20%, horizontal-flip counterexample plus horizontal,
+  vertical, and combined flips with asymmetric anchors, crop, rotation,
+  centered-anchor regressions, and eased interior integer frames.
+- Apply and Reset now return explicit domain/store outcomes that distinguish a
+  rejected edit from a valid identity-preserving repeat. The shared dynamic-
+  zoom budget helper computes the same planned-minus-replaced key growth for
+  both readiness and commit, so an exact-cap rejection says it exceeded the
+  document keyframe budget and creates no history entry.
+- Current lock, dimensions, duration, focus, zoom, rotation-animation, and
+  budget reasons outrank prior load/success feedback. Editing any draft field
+  clears stale operation feedback. Apply and Reverse remain directly described
+  by the live status; disabled Reset uses its own stable reason for locked and
+  no-framing-track states, then returns to the destructive-scope note when
+  enabled. The safe-zoom explanation now explicitly includes flips.
+- Final focused validation passed 22 tests across the framing math, document
+  operations, store history/outcomes, and React editor. The full gate passed all
+  2,304 Vitest cases across 167 files plus all 16 benchmark-runner checks.
+- Real Chrome QA used exactly `http://localhost:5182/` from
+  `npm run dev -- --port 5182 --strictPort`. A real 1672x941 still on a
+  1080x1080 canvas used Anchor X 20% plus horizontal flip. Invalid duration,
+  no-track Reset, and locked-track controls exposed their current described
+  reasons; correction/unlock returned to Ready. Apply authored Position X
+  1650.9736450584485 to 733.8918172157279 and the eased interior scrub retained
+  full-canvas coverage. Reverse, Reset, Ctrl+Z restoration, and lock/unlock all
+  behaved as expected. Console evidence was 3 messages, 0 warnings, and 0
+  errors; port 5182 was released. Ignored evidence:
+  `flipped-apply-interior.png`
+  (`FA9FB733E3286EB1DB2A1009AA15E0970830A4D3901C626A9B380B4FCA86773D`)
+  and `flipped-reverse-before-reset.png`
+  (`0C2553F8C63CB606CAD3BDDA0D17E81F3C73C0CB4F46934D8416728DC64D65F2`).
+  The browser-control cleanup handshake timed out after evidence capture on two
+  attempts; the app console stayed clean and the verified Vite process/port was
+  stopped directly.

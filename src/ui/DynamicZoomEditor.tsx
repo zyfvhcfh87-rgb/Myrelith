@@ -6,6 +6,7 @@ import {
   DYNAMIC_ZOOM_FRAMING_PROPERTIES,
   DYNAMIC_ZOOM_PRESETS,
   dynamicZoomAvailabilityReason,
+  dynamicZoomKeyframeBudgetReason,
   dynamicZoomPreset,
   reverseDynamicZoomRequest,
   type DynamicZoomFraming,
@@ -216,17 +217,54 @@ export default function DynamicZoomEditor({
   const draftResult = unavailable
     ? { ok: false as const, reason: unavailable }
     : createDynamicZoomPlan(doc, clip, source, request)
-  const disabled = locked || !draftResult.ok
+  const budgetReason = draftResult.ok
+    ? dynamicZoomKeyframeBudgetReason(doc, clip, draftResult.plan)
+    : null
+  const lockedReason = 'Unlock this video track to apply or reset framing.'
+  const applyReason = locked
+    ? lockedReason
+    : !draftResult.ok
+      ? draftResult.reason
+      : budgetReason
+  const disabled = applyReason !== null
   const hasFramingTracks = clip.animation?.tracks.some(({ property }) => (
     DYNAMIC_ZOOM_FRAMING_PROPERTIES.includes(
       property as (typeof DYNAMIC_ZOOM_FRAMING_PROPERTIES)[number],
     )
   )) ?? false
-  const statusText = message || (locked
-    ? 'Unlock this video track to apply or reset framing.'
-    : draftResult.ok
-      ? `Ready: ${draftResult.plan.durationFrames} frames${draftResult.plan.durationClamped ? ' (clamped to clip)' : ''}.`
-      : draftResult.reason)
+  const resetReason = locked
+    ? lockedReason
+    : !hasFramingTracks
+      ? 'No Position X/Y or Scale X/Y tracks are available to reset.'
+      : null
+  const readyText = draftResult.ok
+    ? `Ready: ${draftResult.plan.durationFrames} frames${draftResult.plan.durationClamped ? ' (clamped to clip)' : ''}.`
+    : ''
+  const statusText = applyReason ?? (message || readyText)
+
+  useEffect(() => {
+    if (applyReason) setMessage('')
+  }, [applyReason])
+
+  const reviseDuration = (value: number): void => {
+    setDurationFrames(value)
+    setMessage('')
+  }
+
+  const reviseStart = (value: FramingDraft): void => {
+    setStart(value)
+    setMessage('')
+  }
+
+  const reviseEnd = (value: FramingDraft): void => {
+    setEnd(value)
+    setMessage('')
+  }
+
+  const reviseEasing = (value: EasingChoice): void => {
+    setEasing(value)
+    setMessage('')
+  }
 
   const selectPreset = (id: DynamicZoomPresetId): void => {
     const preset = dynamicZoomPreset(id)
@@ -246,14 +284,39 @@ export default function DynamicZoomEditor({
       return
     }
     const nextRequest = reverse ? reverseDynamicZoomRequest(request) : request
+    const latestUnavailable = dynamicZoomAvailabilityReason(
+      latestDoc,
+      latestClip,
+      latestSource,
+    )
+    if (latestUnavailable) {
+      setMessage(latestUnavailable)
+      return
+    }
     const preflight = createDynamicZoomPlan(latestDoc, latestClip, latestSource, nextRequest)
     if (!preflight.ok || !latestSource) {
       setMessage(preflight.ok ? 'Source dimensions are no longer available.' : preflight.reason)
       return
     }
-    const before = latestDoc
-    useDocumentStore.getState().applyDynamicZoom(latestClip.id, latestSource, nextRequest)
-    if (useDocumentStore.getState().doc === before) {
+    const preflightBudgetReason = dynamicZoomKeyframeBudgetReason(
+      latestDoc,
+      latestClip,
+      preflight.plan,
+    )
+    if (preflightBudgetReason) {
+      setMessage(preflightBudgetReason)
+      return
+    }
+    const result = useDocumentStore.getState().applyDynamicZoom(
+      latestClip.id,
+      latestSource,
+      nextRequest,
+    )
+    if (!result.ok) {
+      setMessage(result.reason)
+      return
+    }
+    if (!result.changed) {
       setMessage('Those framing keyframes are already applied.')
       return
     }
@@ -266,11 +329,14 @@ export default function DynamicZoomEditor({
   }
 
   const reset = (): void => {
-    const before = useDocumentStore.getState().doc
-    useDocumentStore.getState().resetClipFramingAnimation(clip.id)
-    setMessage(useDocumentStore.getState().doc === before
-      ? 'No position or scale animation was present.'
-      : 'All Position X/Y and Scale X/Y tracks were removed; static transform, Rotation, and Opacity are unchanged.')
+    const result = useDocumentStore.getState().resetClipFramingAnimation(clip.id)
+    if (!result.ok) {
+      setMessage(result.reason)
+      return
+    }
+    setMessage(result.changed
+      ? 'All Position X/Y and Scale X/Y tracks were removed; static transform, Rotation, and Opacity are unchanged.'
+      : 'No position or scale animation was present.')
   }
 
   return (
@@ -300,16 +366,16 @@ export default function DynamicZoomEditor({
         max={1_000_000_000}
         step={1}
         disabled={locked}
-        onChange={setDurationFrames}
+        onChange={reviseDuration}
       />
-      <FramingFields legend="Start framing" value={start} disabled={locked} onChange={setStart} />
-      <FramingFields legend="End framing" value={end} disabled={locked} onChange={setEnd} />
+      <FramingFields legend="Start framing" value={start} disabled={locked} onChange={reviseStart} />
+      <FramingFields legend="End framing" value={end} disabled={locked} onChange={reviseEnd} />
       <label className="animation-number-field">
         <span>Easing</span>
         <select
           value={easing}
           disabled={locked}
-          onChange={(event) => setEasing(event.target.value as EasingChoice)}
+          onChange={(event) => reviseEasing(event.target.value as EasingChoice)}
         >
           {EASING_OPTIONS.map((option) => (
             <option key={option.id} value={option.id}>{option.label}</option>
@@ -336,7 +402,9 @@ export default function DynamicZoomEditor({
         <button
           type="button"
           disabled={locked || !hasFramingTracks}
-          aria-describedby="dynamic-zoom-reset-note"
+          aria-describedby={resetReason
+            ? 'dynamic-zoom-reset-reason'
+            : 'dynamic-zoom-reset-note'}
           onClick={reset}
         >
           Reset framing tracks
@@ -345,8 +413,13 @@ export default function DynamicZoomEditor({
       <p id="dynamic-zoom-reset-note" className="inspector-note">
         Apply replaces, and Reset removes, every Position X/Y and Scale X/Y track—including later manual edits on those tracks. Rotation, Opacity, crop, and the static transform remain untouched.
       </p>
+      {resetReason && (
+        <p id="dynamic-zoom-reset-reason" className="animation-status">
+          {resetReason}
+        </p>
+      )}
       <p className="inspector-note">
-        Safe zoom is relative to the minimum cover scale for the current project aspect, source size, crop, anchor, and static rotation. Focus values run from -100 (left/top) to 100 (right/bottom).
+        Safe zoom is relative to the minimum cover scale for the current project aspect, source size, crop, anchor, flips, and static rotation. Focus values run from -100 (left/top) to 100 (right/bottom).
       </p>
       <p
         id="dynamic-zoom-status"

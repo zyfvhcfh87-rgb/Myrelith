@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { defaultClipAnimation } from '../domain/clipAnimation'
@@ -8,6 +8,7 @@ import type { Clip, MediaAsset, TimelineDoc } from '../domain/schema'
 import { findClip } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
 import DynamicZoomEditor from './DynamicZoomEditor'
 
 function clip(overrides: Partial<Clip> = {}): Clip {
@@ -196,6 +197,106 @@ describe('DynamicZoomEditor', () => {
     rerender(<Harness />)
     expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
     expect(screen.getByRole('status')).toHaveTextContent('Reset Rotation animation')
+  })
+
+  test('prioritizes current draft, source, and lock reasons over stale feedback', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<Harness />)
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Preset' }),
+      'reframe-left-right',
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('loaded')
+
+    const duration = screen.getByRole('spinbutton', { name: 'Duration (frames)' })
+    await user.clear(duration)
+    await user.type(duration, '1')
+    const apply = screen.getByRole('button', { name: 'Apply' })
+    const reverse = screen.getByRole('button', { name: 'Reverse & apply' })
+    expect(apply).toBeDisabled()
+    expect(reverse).toBeDisabled()
+    expect(apply).toHaveAccessibleDescription(/at least 2 frames/)
+    expect(reverse).toHaveAccessibleDescription(/at least 2 frames/)
+    expect(screen.getByRole('status')).not.toHaveTextContent('loaded')
+
+    await user.clear(duration)
+    await user.type(duration, '30')
+    expect(screen.getByRole('status')).toHaveTextContent('Ready: 30 frames')
+
+    const horizontal = screen.getAllByRole('spinbutton', { name: 'Horizontal focus (%)' })
+    await user.clear(horizontal[0])
+    await user.type(horizontal[0], '101')
+    expect(apply).toBeDisabled()
+    expect(apply).toHaveAccessibleDescription(/Start focusX must be from -1 to 1/)
+    await user.clear(horizontal[0])
+    await user.type(horizontal[0], '-75')
+
+    const zoom = screen.getAllByRole('spinbutton', { name: 'Safe zoom (%)' })
+    await user.clear(zoom[1])
+    await user.type(zoom[1], '99')
+    expect(reverse).toBeDisabled()
+    expect(reverse).toHaveAccessibleDescription(/End zoom must be from 1 to 4/)
+    await user.clear(zoom[1])
+    await user.type(zoom[1], '120')
+    expect(screen.getByRole('status')).toHaveTextContent('Ready: 30 frames')
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Preset' }),
+      'gentle-out',
+    )
+    act(() => useMediaStore.setState({ descriptors: new Map() }))
+    expect(apply).toBeDisabled()
+    expect(apply).toHaveAccessibleDescription(/known positive source dimensions/)
+    expect(screen.getByRole('status')).not.toHaveTextContent('loaded')
+    act(() => useMediaStore.setState({
+      descriptors: new Map([[descriptor.id, descriptor]]),
+    }))
+    expect(screen.getByRole('status')).toHaveTextContent('Ready: 30 frames')
+
+    await user.click(apply)
+    expect(screen.getByRole('status')).toHaveTextContent('Applied as four ordinary')
+    rerender(<Harness locked />)
+    expect(apply).toBeDisabled()
+    expect(apply).toHaveAccessibleDescription(/Unlock this video track/)
+    expect(screen.getByRole('status')).not.toHaveTextContent('Applied as four ordinary')
+    rerender(<Harness />)
+    expect(screen.getByRole('status')).toHaveTextContent('Ready: 30 frames')
+  })
+
+  test('describes the actual disabled Reset reason independently from Apply', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<Harness />)
+    const reset = screen.getByRole('button', { name: 'Reset framing tracks' })
+
+    expect(reset).toBeDisabled()
+    expect(reset).toHaveAttribute('aria-describedby', 'dynamic-zoom-reset-reason')
+    expect(reset).toHaveAccessibleDescription(/No Position X\/Y or Scale X\/Y tracks/)
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(reset).toBeEnabled()
+    expect(reset).toHaveAttribute('aria-describedby', 'dynamic-zoom-reset-note')
+
+    rerender(<Harness locked />)
+    expect(reset).toBeDisabled()
+    expect(reset).toHaveAttribute('aria-describedby', 'dynamic-zoom-reset-reason')
+    expect(reset).toHaveAccessibleDescription(/Unlock this video track/)
+  })
+
+  test('exposes the document keyframe budget as the current disabled reason', () => {
+    useDocumentStore.getState().setDoc(doc(clipWithAnimationKeyframeCount(clip())))
+    render(<Harness />)
+
+    const apply = screen.getByRole('button', { name: 'Apply' })
+    const reverse = screen.getByRole('button', { name: 'Reverse & apply' })
+    expect(apply).toBeDisabled()
+    expect(reverse).toBeDisabled()
+    expect(apply).toHaveAccessibleDescription(/document keyframe budget/)
+    expect(reverse).toHaveAccessibleDescription(/document keyframe budget/)
+    expect(screen.getByRole('status')).toHaveTextContent('document keyframe budget')
+    expect(screen.getByRole('status')).not.toHaveTextContent('already applied')
+    expect(useDocumentStore.getState().past).toHaveLength(0)
   })
 
   test('uses the portable descriptor before connected-session dimensions at render and apply time', async () => {

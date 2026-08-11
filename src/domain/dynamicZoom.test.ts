@@ -79,13 +79,15 @@ function expectCanvasCovered(
   const angle = item.transform.rotation * Math.PI / 180
   const cosine = Math.cos(angle)
   const sine = Math.sin(angle)
+  const flipX = visual.flipHorizontal ? -1 : 1
+  const flipY = visual.flipVertical ? -1 : 1
 
   for (const canvasX of [0, document.width]) {
     for (const canvasY of [0, document.height]) {
       const x = canvasX - canvasAnchorX
       const y = canvasY - canvasAnchorY
-      const localX = (cosine * x + sine * y) / frame.scale + anchorX
-      const localY = (-sine * x + cosine * y) / frame.scale + anchorY
+      const localX = flipX * (cosine * x + sine * y) / frame.scale + anchorX
+      const localY = flipY * (-sine * x + cosine * y) / frame.scale + anchorY
       expect(localX).toBeGreaterThanOrEqual(sourceLeft - 1e-7)
       expect(localX).toBeLessThanOrEqual(sourceRight + 1e-7)
       expect(localY).toBeGreaterThanOrEqual(sourceTop - 1e-7)
@@ -172,6 +174,105 @@ describe('dynamic zoom preset planning', () => {
       expectCanvasCovered(document, item, entry.source, result.plan.start)
       expectCanvasCovered(document, item, entry.source, result.plan.end)
       for (const frame of [1, 17, 39, 63, 78]) {
+        const [x, y, scaleX, scaleY] = result.plan.tracks.map((track) => (
+          evaluateAnimationTrack(track, frame, Number.NaN)
+        ))
+        expect(scaleY).toBeCloseTo(scaleX, 12)
+        expectCanvasCovered(document, item, entry.source, { x, y, scale: scaleX })
+      }
+    }
+  })
+
+  test('keeps off-center horizontal, vertical, and combined flips safe', () => {
+    const exact = clip({
+      transform: {
+        ...clip().transform,
+        anchorX: 0.2,
+      },
+      visual: {
+        ...defaultClipVisualSettings(),
+        flipHorizontal: true,
+      },
+    })
+    const exactDocument = doc(exact, 1_000, 1_000)
+    const exactSource = { width: 1_000, height: 1_000 }
+    const exactResult = createDynamicZoomPlan(
+      exactDocument,
+      exact,
+      exactSource,
+      dynamicZoomRequestFromPreset('gentle-in', 90),
+    )
+    expect(exactResult.ok).toBe(true)
+    if (!exactResult.ok) return
+    expect(exactResult.plan.start.x).toBeCloseTo(600, 12)
+    expectCanvasCovered(exactDocument, exact, exactSource, exactResult.plan.start)
+
+    const cases = [
+      {
+        canvas: [1_400, 900],
+        source: { width: 1_920, height: 1_080 },
+        anchor: [0.17, 0.76],
+        rotation: 0,
+        crop: { left: 0, right: 0, top: 0, bottom: 0 },
+        flipHorizontal: true,
+        flipVertical: false,
+      },
+      {
+        canvas: [900, 1_400],
+        source: { width: 1_080, height: 1_920 },
+        anchor: [0.78, 0.23],
+        rotation: 0,
+        crop: { left: 0, right: 0, top: 0, bottom: 0 },
+        flipHorizontal: false,
+        flipVertical: true,
+      },
+      {
+        canvas: [1_440, 1_080],
+        source: { width: 2_048, height: 1_536 },
+        anchor: [0.18, 0.82],
+        rotation: 31,
+        crop: { left: 0.13, right: 0.04, top: 0.08, bottom: 0.17 },
+        flipHorizontal: true,
+        flipVertical: true,
+      },
+      {
+        canvas: [1_080, 1_080],
+        source: { width: 1_920, height: 1_080 },
+        anchor: [0.5, 0.5],
+        rotation: -27,
+        crop: { left: 0.07, right: 0.11, top: 0.03, bottom: 0.16 },
+        flipHorizontal: true,
+        flipVertical: false,
+      },
+    ] as const
+
+    for (const entry of cases) {
+      const item = clip({
+        transform: {
+          ...clip().transform,
+          rotation: entry.rotation,
+          anchorX: entry.anchor[0],
+          anchorY: entry.anchor[1],
+        },
+        visual: {
+          ...defaultClipVisualSettings(),
+          crop: entry.crop,
+          flipHorizontal: entry.flipHorizontal,
+          flipVertical: entry.flipVertical,
+        },
+      })
+      const document = doc(item, entry.canvas[0], entry.canvas[1])
+      const request = {
+        ...dynamicZoomRequestFromPreset('reframe-left-right', 80),
+        start: { focusX: -0.9, focusY: 0.75, zoom: 1.6 },
+        end: { focusX: 0.85, focusY: -0.8, zoom: 2.1 },
+      }
+      const result = createDynamicZoomPlan(document, item, entry.source, request)
+      expect(result.ok).toBe(true)
+      if (!result.ok) continue
+      expectCanvasCovered(document, item, entry.source, result.plan.start)
+      expectCanvasCovered(document, item, entry.source, result.plan.end)
+      for (const frame of [1, 13, 37, 58, 78]) {
         const [x, y, scaleX, scaleY] = result.plan.tracks.map((track) => (
           evaluateAnimationTrack(track, frame, Number.NaN)
         ))

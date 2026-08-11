@@ -12,6 +12,7 @@ import {
   animationEasingValidationError,
   clipAnimation,
   clipAnimationValidationError,
+  documentAnimationKeyframeGrowthAllowed,
   isClipPropertyAnimated,
   LINEAR_ANIMATION_EASING,
 } from './clipAnimation'
@@ -94,6 +95,9 @@ export interface DynamicZoomPlan {
 export type DynamicZoomPlanResult =
   | { ok: true; plan: DynamicZoomPlan }
   | { ok: false; reason: string }
+
+export const DYNAMIC_ZOOM_KEYFRAME_BUDGET_REASON =
+  'dynamic zoom would exceed the document keyframe budget'
 
 const EASE_IN_OUT: ClipAnimationEasing = {
   type: 'cubic-bezier',
@@ -340,13 +344,15 @@ function resolveFraming(
   const anchorY = clip.transform.anchorY * source.height
   const localCenterX = sourceCenterX - anchorX
   const localCenterY = sourceCenterY - anchorY
+  const flipX = visual.flipHorizontal ? -1 : 1
+  const flipY = visual.flipVertical ? -1 : 1
   const signedCosine = Math.cos(angle)
   const signedSine = Math.sin(angle)
   const rotatedCenterX = scale * (
-    signedCosine * localCenterX - signedSine * localCenterY
+    signedCosine * flipX * localCenterX - signedSine * flipY * localCenterY
   )
   const rotatedCenterY = scale * (
-    signedSine * localCenterX + signedCosine * localCenterY
+    signedSine * flipX * localCenterX + signedCosine * flipY * localCenterY
   )
 
   return {
@@ -427,6 +433,27 @@ export function createDynamicZoomPlan(
       tracks,
     },
   }
+}
+
+/** The exact net-growth guard shared by readiness UI and the document edit. */
+export function dynamicZoomKeyframeBudgetReason(
+  doc: TimelineDoc,
+  clip: Clip,
+  plan: DynamicZoomPlan,
+): string | null {
+  const replacedKeyframes = clipAnimation(clip).tracks
+    .filter(({ property }) => isDynamicZoomFramingProperty(property))
+    .reduce((total, track) => total + track.keyframes.length, 0)
+  const plannedKeyframes = plan.tracks.reduce(
+    (total, track) => total + track.keyframes.length,
+    0,
+  )
+  return documentAnimationKeyframeGrowthAllowed(
+    doc,
+    Math.max(0, plannedKeyframes - replacedKeyframes),
+  )
+    ? null
+    : DYNAMIC_ZOOM_KEYFRAME_BUDGET_REASON
 }
 
 export function isDynamicZoomFramingProperty(

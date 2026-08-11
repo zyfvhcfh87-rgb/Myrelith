@@ -8,6 +8,7 @@ import {
 import type { Clip, TimelineDoc } from '../domain/schema'
 import { useDocumentStore } from './documentStore'
 import { useTransportStore } from './transportStore'
+import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
 
 function makeClip(): Clip {
   return {
@@ -105,19 +106,48 @@ describe('dynamic zoom store history', () => {
     useDocumentStore.getState().undo()
     const before = useDocumentStore.getState()
 
-    useDocumentStore.getState().applyDynamicZoom(
+    const missing = useDocumentStore.getState().applyDynamicZoom(
       'missing',
       source,
       request,
     )
+    expect(missing).toMatchObject({
+      ok: false,
+      changed: false,
+      reason: 'clip missing not found',
+    })
     expect(useDocumentStore.getState().doc).toBe(before.doc)
     expect(useDocumentStore.getState().past).toBe(before.past)
     expect(useDocumentStore.getState().future).toBe(before.future)
 
     useDocumentStore.getState().redo()
     const afterRedo = useDocumentStore.getState()
-    useDocumentStore.getState().applyDynamicZoom('clip-1', source, request)
+    const unchanged = useDocumentStore.getState().applyDynamicZoom('clip-1', source, request)
+    expect(unchanged).toMatchObject({ ok: true, changed: false })
     expect(useDocumentStore.getState().doc).toBe(afterRedo.doc)
     expect(useDocumentStore.getState().past).toBe(afterRedo.past)
+  })
+
+  test('reports budget rejection authoritatively without changing identity or history', () => {
+    const capped = makeDoc()
+    capped.tracks[0].clips[0] = clipWithAnimationKeyframeCount(capped.tracks[0].clips[0])
+    useDocumentStore.getState().setDoc(capped)
+    const before = useDocumentStore.getState()
+
+    const result = useDocumentStore.getState().applyDynamicZoom(
+      'clip-1',
+      { width: 1920, height: 1080 },
+      dynamicZoomRequestFromPreset('gentle-in', 90),
+    )
+
+    expect(result).toMatchObject({
+      ok: false,
+      changed: false,
+      reason: 'dynamic zoom would exceed the document keyframe budget',
+    })
+    expect(result.doc).toBe(before.doc)
+    expect(useDocumentStore.getState().doc).toBe(before.doc)
+    expect(useDocumentStore.getState().past).toBe(before.past)
+    expect(useDocumentStore.getState().future).toBe(before.future)
   })
 })

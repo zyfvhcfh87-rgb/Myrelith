@@ -72,6 +72,7 @@ import {
 } from './clipAnimation'
 import {
   createDynamicZoomPlan,
+  dynamicZoomKeyframeBudgetReason,
   isDynamicZoomFramingProperty,
   type DynamicZoomRequest,
   type DynamicZoomSourceDimensions,
@@ -1912,20 +1913,34 @@ function animationEditLocation(
   clipId: ClipId,
   operation: string,
 ): ClipLocation | null {
-  const loc = locateClip(doc, clipId)
-  if (!loc) {
-    reject(doc, operation, `clip ${clipId} not found`)
+  const result = animationEditLocationResult(doc, clipId)
+  if (!result.ok) {
+    reject(doc, operation, result.reason)
     return null
   }
+  return result.loc
+}
+
+type AnimationEditLocationResult =
+  | { readonly ok: true; readonly loc: ClipLocation }
+  | { readonly ok: false; readonly reason: string }
+
+function animationEditLocationResult(
+  doc: TimelineDoc,
+  clipId: ClipId,
+): AnimationEditLocationResult {
+  const loc = locateClip(doc, clipId)
+  if (!loc) return { ok: false, reason: `clip ${clipId} not found` }
   if (loc.track.locked) {
-    reject(doc, operation, `track ${loc.track.id} is locked`)
-    return null
+    return { ok: false, reason: `track ${loc.track.id} is locked` }
   }
   if (loc.track.kind !== 'video' || loc.clip.text !== undefined) {
-    reject(doc, operation, 'keyframes are supported only on visual media clips')
-    return null
+    return {
+      ok: false,
+      reason: 'keyframes are supported only on visual media clips',
+    }
   }
-  return loc
+  return { ok: true, loc }
 }
 
 function replaceClipAnimation(
@@ -2190,33 +2205,49 @@ export function resetEffectAnimationTrack(
  * Replace the four ordinary position/scale tracks with one dynamic-zoom plan.
  * Rotation/opacity and future animation-container fields remain untouched.
  */
-export function applyDynamicZoom(
+export type ClipFramingOperationResult =
+  | {
+    readonly ok: true
+    readonly changed: boolean
+    readonly doc: TimelineDoc
+  }
+  | {
+    readonly ok: false
+    readonly changed: false
+    readonly doc: TimelineDoc
+    readonly reason: string
+  }
+
+function rejectClipFramingOperation(
+  doc: TimelineDoc,
+  operation: string,
+  reason: string,
+): ClipFramingOperationResult {
+  reject(doc, operation, reason)
+  return { ok: false, changed: false, doc, reason }
+}
+
+export function applyDynamicZoomWithResult(
   doc: TimelineDoc,
   clipId: ClipId,
   source: DynamicZoomSourceDimensions,
   request: DynamicZoomRequest,
-): TimelineDoc {
+): ClipFramingOperationResult {
   const op = 'applyDynamicZoom'
-  const loc = animationEditLocation(doc, clipId, op)
-  if (!loc) return doc
+  const location = animationEditLocationResult(doc, clipId)
+  if (!location.ok) {
+    return rejectClipFramingOperation(doc, op, location.reason)
+  }
+  const loc = location.loc
   const result = createDynamicZoomPlan(doc, loc.clip, source, request)
-  if (!result.ok) return reject(doc, op, result.reason)
+  if (!result.ok) return rejectClipFramingOperation(doc, op, result.reason)
 
   const current = clipAnimation(loc.clip)
   const retainedTracks = current.tracks.filter(
     ({ property }) => !isDynamicZoomFramingProperty(property),
   )
-  const replacedKeyframes = current.tracks
-    .filter(({ property }) => isDynamicZoomFramingProperty(property))
-    .reduce((total, track) => total + track.keyframes.length, 0)
-  const plannedKeyframes = result.plan.tracks.reduce(
-    (total, track) => total + track.keyframes.length,
-    0,
-  )
-  if (!documentAnimationKeyframeGrowthAllowed(
-    doc,
-    Math.max(0, plannedKeyframes - replacedKeyframes),
-  )) return reject(doc, op, 'dynamic zoom would exceed the document keyframe budget')
+  const budgetReason = dynamicZoomKeyframeBudgetReason(doc, loc.clip, result.plan)
+  if (budgetReason) return rejectClipFramingOperation(doc, op, budgetReason)
   let plannedTracks: typeof result.plan.tracks
   try {
     plannedTracks = result.plan.tracks.map((track) => ({
@@ -2230,7 +2261,11 @@ export function applyDynamicZoom(
       })),
     }))
   } catch {
-    return reject(doc, op, 'dynamic zoom keyframe source time exceeds safe integer bounds')
+    return rejectClipFramingOperation(
+      doc,
+      op,
+      'dynamic zoom keyframe source time exceeds safe integer bounds',
+    )
   }
   const tracks = [...retainedTracks, ...plannedTracks]
   tracks.sort(
@@ -2239,9 +2274,24 @@ export function applyDynamicZoom(
   )
   const animation = { ...current, tracks }
   const animationError = clipAnimationValidationError(animation)
-  if (animationError) return reject(doc, op, animationError)
-  if (JSON.stringify(animation) === JSON.stringify(current)) return doc
-  return replaceClipAnimation(doc, loc, animation)
+  if (animationError) return rejectClipFramingOperation(doc, op, animationError)
+  if (JSON.stringify(animation) === JSON.stringify(current)) {
+    return { ok: true, changed: false, doc }
+  }
+  return {
+    ok: true,
+    changed: true,
+    doc: replaceClipAnimation(doc, loc, animation),
+  }
+}
+
+export function applyDynamicZoom(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  source: DynamicZoomSourceDimensions,
+  request: DynamicZoomRequest,
+): TimelineDoc {
+  return applyDynamicZoomWithResult(doc, clipId, source, request).doc
 }
 
 /**
@@ -2249,19 +2299,35 @@ export function applyDynamicZoom(
  * preset provenance this also removes later manual edits on those tracks;
  * rotation, opacity, and static transform values remain unchanged.
  */
-export function resetClipFramingAnimation(
+export function resetClipFramingAnimationWithResult(
   doc: TimelineDoc,
   clipId: ClipId,
-): TimelineDoc {
+): ClipFramingOperationResult {
   const op = 'resetClipFramingAnimation'
-  const loc = animationEditLocation(doc, clipId, op)
-  if (!loc) return doc
+  const location = animationEditLocationResult(doc, clipId)
+  if (!location.ok) {
+    return rejectClipFramingOperation(doc, op, location.reason)
+  }
+  const loc = location.loc
   const current = clipAnimation(loc.clip)
   const tracks = current.tracks.filter(
     ({ property }) => !isDynamicZoomFramingProperty(property),
   )
-  if (tracks.length === current.tracks.length) return doc
-  return replaceClipAnimation(doc, loc, { ...current, tracks })
+  if (tracks.length === current.tracks.length) {
+    return { ok: true, changed: false, doc }
+  }
+  return {
+    ok: true,
+    changed: true,
+    doc: replaceClipAnimation(doc, loc, { ...current, tracks }),
+  }
+}
+
+export function resetClipFramingAnimation(
+  doc: TimelineDoc,
+  clipId: ClipId,
+): TimelineDoc {
+  return resetClipFramingAnimationWithResult(doc, clipId).doc
 }
 
 function staticVisualPatchDiffers(
