@@ -15,9 +15,12 @@ import {
   type SimilarityTransform,
 } from './motionAnalysis'
 import {
+  evaluateTrackingResearchGates,
   researchFixtureIdentityIsExact,
   runMotionAnalysisResearch,
+  trackingLossIsPrompt,
 } from './motionAnalysisResearch'
+import type { BoxTrackingResult } from './motionTrackingResearch'
 
 function flatFrame(value: number): GrayFrame {
   return {
@@ -57,6 +60,25 @@ function estimate(transform: SimilarityTransform): GlobalMotionEstimate {
     inlierRatio: 0.9,
     meanInlierError: 0.2,
     confidence: 0.8,
+  }
+}
+
+function boxLoss(frameIndex: number, lastAcceptedFrame: number): BoxTrackingResult {
+  return {
+    ok: false,
+    samples: [{
+      frameIndex: lastAcceptedFrame,
+      x: 10,
+      y: 12,
+      width: 20,
+      height: 16,
+      confidence: 0.9,
+    }],
+    failure: {
+      frameIndex,
+      code: 'lost-box',
+      detail: 'synthetic loss',
+    },
   }
 }
 
@@ -123,6 +145,29 @@ describe('motion analysis research', () => {
     )).toThrow(/reviewed work bounds/)
   })
 
+  test('accepts occlusion loss only on the first fully occluded frame', () => {
+    expect(trackingLossIsPrompt(boxLoss(18, 17), 18)).toBe(true)
+    expect(trackingLossIsPrompt(boxLoss(19, 18), 18)).toBe(false)
+    expect(trackingLossIsPrompt(boxLoss(17, 16), 18)).toBe(false)
+  })
+
+  test('evaluates point and box research gates independently', () => {
+    expect(evaluateTrackingResearchGates({
+      pointMeanErrorPixels: 1,
+      pointMaximumErrorPixels: 3,
+      boxCenterMeanErrorPixels: 2,
+      boxScaleMeanRelativeError: 0.09,
+      occlusionRejected: true,
+    })).toEqual({ pointPassed: true, boxPassed: false })
+    expect(evaluateTrackingResearchGates({
+      pointMeanErrorPixels: 1,
+      pointMaximumErrorPixels: 5,
+      boxCenterMeanErrorPixels: 2,
+      boxScaleMeanRelativeError: 0.05,
+      occlusionRejected: true,
+    })).toEqual({ pointPassed: false, boxPassed: true })
+  })
+
   test('passes deterministic positive and negative stabilization/tracking fixtures', () => {
     const evidence = runMotionAnalysisResearch()
     expect(evidence.stabilization, JSON.stringify(evidence.stabilization)).toMatchObject({
@@ -131,6 +176,10 @@ describe('motion analysis research', () => {
     })
     expect(evidence.tracking, JSON.stringify(evidence.tracking)).toMatchObject({
       occlusionRejected: true,
+      occlusionFailureFrame: 18,
+      occlusionLastAcceptedFrame: 17,
+      pointPassed: true,
+      boxPassed: true,
       passed: true,
       mappedAnimationProperties: [
         'position-x',

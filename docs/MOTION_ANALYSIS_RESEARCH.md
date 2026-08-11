@@ -176,7 +176,9 @@ The point fixture moves a discriminative texture by bounded whole analysis
 pixels. The box fixture translates and grows a textured 44×32 object over 34
 frames. Point matching is sequential and forward/backward checked. The box
 tracks sixteen interior points and retains only a consistent similarity model.
-At frame 18 the object disappears in the negative fixture; tracking stops.
+At frame 18 the object disappears in the negative fixture. The occlusion gate
+requires failure on that exact first fully occluded frame, with every accepted
+sample strictly before it; accepting even one recovery frame is a failure.
 
 | Metric | Result | Research gate |
 |---|---:|---:|
@@ -185,6 +187,7 @@ At frame 18 the object disappears in the negative fixture; tracking stops.
 | Box center mean error | 2.534 px | ≤ 3 px |
 | Box mean relative scale error | 2.9% | ≤ 8% |
 | Full occlusion rejected | yes | required |
+| Occlusion loss latency | 0 frames (failure 18, accepted through 17) | required |
 | Complete worker experiment | 217.7 ms | descriptive, host-specific |
 
 The zero point error is intentionally narrow: it is the exact integer-motion
@@ -202,6 +205,11 @@ cropped visible center using its dimensions, flip, rotation, and authored anchor
 so scaling cannot pull the attachment away from the tracked project point. The
 canonical `SourceTimeMap` supplies strict clip-local integer frames. A duplicate/
 non-monotonic projection rejects rather than dropping samples.
+
+Point and box quality decisions are independent: point thresholds alone decide
+point feasibility, while box geometry, scale, and prompt occlusion loss decide
+box feasibility. The aggregate tracking result remains a convenience summary,
+not an input to either public go/no-go decision.
 
 The child tolerance is at most 0.5 project pixels for position and 0.5% for
 scale at every analyzed integer frame after bounded simplification. Preview and

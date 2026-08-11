@@ -3657,7 +3657,13 @@ surface; it is not a second zoom and never enters document history.
   under target rotation, flips, and an off-center anchor. Per-sample source
   transform changes and ordinary preview/export animation evaluation remain
   covered without introducing another evaluator.
-- The gate passed 22 focused research tests, all 2,326 Vitest cases across 172
+- The occlusion fixture now passes only when the box tracker fails on the exact
+  first fully occluded frame (18), after accepting frame 17. A later false-
+  positive recovery or an earlier unrelated loss fails the research gate.
+- Point and box feasibility are calculated independently. Point error cannot
+  veto an otherwise passing box result, and box geometry/scale/occlusion cannot
+  veto an otherwise passing point result; the combined flag is summary only.
+- The gate passed 24 focused research tests, all 2,328 Vitest cases across 172
   files, all 16 benchmark-runner checks, production build/typecheck, oxlint,
   clean diff checks, and the production audit with 0 vulnerabilities.
 - Real Chromium reran only on strict port 41844 against exact clean

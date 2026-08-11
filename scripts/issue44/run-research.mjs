@@ -135,7 +135,8 @@ function reportHtml(artifact) {
       </section>
       <section><h2>Failure and ownership checks</h2><ul>
         <li>Scene cut rejected: ${stabilization.sceneCutRejected}</li>
-        <li>Tracking occlusion rejected: ${tracking.occlusionRejected}</li>
+        <li>Tracking gates: point ${tracking.pointPassed} / box ${tracking.boxPassed}</li>
+        <li>Occlusion loss: frame ${tracking.occlusionFailureFrame}, after accepted frame ${tracking.occlusionLastAcceptedFrame}</li>
         <li>Cancellation: ${artifact.cancellation.errorName}</li>
         <li>Overlapping run: ${artifact.admission.errorCode}</li>
         <li>Workers active after drain: ${artifact.finalDiagnostics.activeWorkers}</li>
@@ -252,11 +253,15 @@ async function main() {
       success.evidence.decision.stabilization !== 'go'
       || success.evidence.decision.pointTracking !== 'go'
       || success.evidence.decision.boxTracking !== 'go'
+      || success.evidence.tracking.pointPassed !== true
+      || success.evidence.tracking.boxPassed !== true
+      || success.evidence.tracking.occlusionFailureFrame !== 18
+      || success.evidence.tracking.occlusionLastAcceptedFrame !== 17
     ) throw new Error('One or more motion-analysis quality decisions failed')
 
     const artifact = {
-      schemaVersion: 2,
-      scenario: 'issue-44-motion-analysis-v2',
+      schemaVersion: 3,
+      scenario: 'issue-44-motion-analysis-v3',
       generatedAt: new Date().toISOString(),
       source: initialSource,
       host: hostIdentity(browser.version(), options),

@@ -20,6 +20,7 @@ import {
   trackBoxSequence,
   trackPointSequence,
   trackingSamplesToAnimationTracks,
+  type BoxTrackingResult,
   type TrackingBox,
 } from './motionTrackingResearch'
 import type { Transform } from './schema'
@@ -53,9 +54,21 @@ export interface TrackingResearchEvidence {
   readonly boxCenterMeanErrorPixels: number
   readonly boxScaleMeanRelativeError: number
   readonly occlusionRejected: boolean
+  readonly occlusionFailureFrame: number | null
+  readonly occlusionLastAcceptedFrame: number | null
   readonly mappedAnimationProperties: readonly string[]
   readonly failure: string | null
+  readonly pointPassed: boolean
+  readonly boxPassed: boolean
   readonly passed: boolean
+}
+
+export interface TrackingResearchGateInput {
+  readonly pointMeanErrorPixels: number
+  readonly pointMaximumErrorPixels: number
+  readonly boxCenterMeanErrorPixels: number
+  readonly boxScaleMeanRelativeError: number
+  readonly occlusionRejected: boolean
 }
 
 export interface MotionAnalysisResearchEvidence {
@@ -84,6 +97,8 @@ interface TrackingFixture {
   readonly boxes: readonly TrackingBox[]
   readonly points: readonly { readonly x: number; readonly y: number }[]
 }
+
+const TRACKING_OCCLUSION_FIRST_FRAME = 18
 
 function lcg(seed: number): () => number {
   let value = seed >>> 0
@@ -277,6 +292,30 @@ function mean(values: readonly number[]): number {
     : values.reduce((total, value) => total + value, 0) / values.length
 }
 
+export function trackingLossIsPrompt(
+  result: BoxTrackingResult,
+  firstOccludedFrame: number,
+): boolean {
+  if (!Number.isSafeInteger(firstOccludedFrame) || firstOccludedFrame < 1) {
+    throw new RangeError('firstOccludedFrame must be a positive safe integer')
+  }
+  return !result.ok
+    && result.failure.frameIndex === firstOccludedFrame
+    && result.samples.every((sample) => sample.frameIndex < firstOccludedFrame)
+}
+
+export function evaluateTrackingResearchGates(
+  input: TrackingResearchGateInput,
+): { readonly pointPassed: boolean; readonly boxPassed: boolean } {
+  return {
+    pointPassed: input.pointMeanErrorPixels <= 2
+      && input.pointMaximumErrorPixels <= 4,
+    boxPassed: input.boxCenterMeanErrorPixels <= 3
+      && input.boxScaleMeanRelativeError <= 0.08
+      && input.occlusionRejected,
+  }
+}
+
 function transformError(
   actual: SimilarityTransform,
   expected: SimilarityTransform,
@@ -384,48 +423,36 @@ function trackingEvidence(
       progress: 0.45 + completed / total * 0.45,
     }),
   )
-  if (!point.ok || !box.ok) {
-    return {
-      frameCount: fixture.frames.length,
-      pointMeanErrorPixels: Number.POSITIVE_INFINITY,
-      pointMaximumErrorPixels: Number.POSITIVE_INFINITY,
-      boxCenterMeanErrorPixels: Number.POSITIVE_INFINITY,
-      boxScaleMeanRelativeError: Number.POSITIVE_INFINITY,
-      occlusionRejected: false,
-      mappedAnimationProperties: [],
-      failure: !point.ok
-        ? `point:${point.failure.frameIndex}:${point.failure.code}`
-        : box.ok
-          ? 'unknown-tracking-fixture-failure'
-          : `box:${box.failure.frameIndex}:${box.failure.code}`,
-      passed: false,
-    }
-  }
-  const pointErrors = point.samples.map((sample) => {
+  const pointErrors = point.ok ? point.samples.map((sample) => {
     const truth = fixture.points[sample.frameIndex]!
     return Math.hypot(
       sample.x - truth.x,
       sample.y - truth.y,
     )
-  })
-  const boxCenterErrors = box.samples.map((sample) => {
+  }) : []
+  const boxCenterErrors = box.ok ? box.samples.map((sample) => {
     const truth = fixture.boxes[sample.frameIndex]!
     return Math.hypot(
       sample.x + sample.width / 2 - (truth.x + truth.width / 2),
       sample.y + sample.height / 2 - (truth.y + truth.height / 2),
     )
-  })
-  const boxScaleErrors = box.samples.map((sample) => {
+  }) : []
+  const boxScaleErrors = box.ok ? box.samples.map((sample) => {
     const truth = fixture.boxes[sample.frameIndex]!
     return Math.abs(sample.width / truth.width - 1)
-  })
+  }) : []
   const occluded = trackBoxSequence(
     fixture.occludedFrames,
     fixture.boxes[0]!,
     DEFAULT_MOTION_ANALYSIS_BUDGET,
     cancelled,
   )
-  const occlusionRejected = !occluded.ok && occluded.failure.frameIndex >= 17
+  const occlusionRejected = trackingLossIsPrompt(
+    occluded,
+    TRACKING_OCCLUSION_FIRST_FRAME,
+  )
+  const occlusionFailureFrame = occluded.ok ? null : occluded.failure.frameIndex
+  const occlusionLastAcceptedFrame = occluded.samples.at(-1)?.frameIndex ?? null
   const baseTransform: Transform = {
     x: 0,
     y: 0,
@@ -445,34 +472,67 @@ function trackingEvidence(
       flipVertical: false,
     },
   }
-  const tracks = trackingSamplesToAnimationTracks(
-    box.samples.map((sample) => ({
-      frame: sample.frameIndex,
-      centerX: sample.x + sample.width / 2,
-      centerY: sample.y + sample.height / 2,
-      width: sample.width,
-      height: sample.height,
-      source: sourceProjection,
-    })),
-    baseTransform,
-    {
-      includeScale: true,
-      target: {
-        width: fixture.frames[0]!.width,
-        height: fixture.frames[0]!.height,
-        visual: {
-          crop: { left: 0, right: 0, top: 0, bottom: 0 },
-          flipHorizontal: false,
-          flipVertical: false,
+  const tracks = box.ok
+    ? trackingSamplesToAnimationTracks(
+        box.samples.map((sample) => ({
+          frame: sample.frameIndex,
+          centerX: sample.x + sample.width / 2,
+          centerY: sample.y + sample.height / 2,
+          width: sample.width,
+          height: sample.height,
+          source: sourceProjection,
+        })),
+        baseTransform,
+        {
+          includeScale: true,
+          target: {
+            width: fixture.frames[0]!.width,
+            height: fixture.frames[0]!.height,
+            visual: {
+              crop: { left: 0, right: 0, top: 0, bottom: 0 },
+              flipHorizontal: false,
+              flipVertical: false,
+            },
+          },
         },
-      },
-    },
-  )
+      )
+    : []
   onProgress?.({ stage: 'tracking', progress: 1 })
-  const pointMeanErrorPixels = mean(pointErrors)
-  const pointMaximumErrorPixels = Math.max(...pointErrors)
-  const boxCenterMeanErrorPixels = mean(boxCenterErrors)
-  const boxScaleMeanRelativeError = mean(boxScaleErrors)
+  const pointMeanErrorPixels = point.ok
+    ? mean(pointErrors)
+    : Number.POSITIVE_INFINITY
+  const pointMaximumErrorPixels = point.ok
+    ? Math.max(...pointErrors)
+    : Number.POSITIVE_INFINITY
+  const boxCenterMeanErrorPixels = box.ok
+    ? mean(boxCenterErrors)
+    : Number.POSITIVE_INFINITY
+  const boxScaleMeanRelativeError = box.ok
+    ? mean(boxScaleErrors)
+    : Number.POSITIVE_INFINITY
+  const { pointPassed, boxPassed } = evaluateTrackingResearchGates({
+    pointMeanErrorPixels,
+    pointMaximumErrorPixels,
+    boxCenterMeanErrorPixels,
+    boxScaleMeanRelativeError,
+    occlusionRejected,
+  })
+  const failures: string[] = []
+  if (!point.ok) {
+    failures.push(`point:${point.failure.frameIndex}:${point.failure.code}`)
+  } else if (!pointPassed) {
+    failures.push('point:quality-threshold')
+  }
+  if (!box.ok) {
+    failures.push(`box:${box.failure.frameIndex}:${box.failure.code}`)
+  } else if (boxCenterMeanErrorPixels > 3 || boxScaleMeanRelativeError > 0.08) {
+    failures.push('box:quality-threshold')
+  }
+  if (!occlusionRejected) {
+    failures.push(occluded.ok
+      ? 'occlusion:not-rejected'
+      : `occlusion:${occluded.failure.frameIndex}:unexpected-loss-frame`)
+  }
   return {
     frameCount: fixture.frames.length,
     pointMeanErrorPixels,
@@ -480,13 +540,13 @@ function trackingEvidence(
     boxCenterMeanErrorPixels,
     boxScaleMeanRelativeError,
     occlusionRejected,
+    occlusionFailureFrame,
+    occlusionLastAcceptedFrame,
     mappedAnimationProperties: tracks.map((track) => track.property),
-    failure: null,
-    passed: pointMeanErrorPixels <= 2
-      && pointMaximumErrorPixels <= 4
-      && boxCenterMeanErrorPixels <= 3
-      && boxScaleMeanRelativeError <= 0.08
-      && occlusionRejected,
+    failure: failures.length > 0 ? failures.join(';') : null,
+    pointPassed,
+    boxPassed,
+    passed: pointPassed && boxPassed,
   }
 }
 
@@ -505,8 +565,8 @@ export function runMotionAnalysisResearch(
     tracking,
     decision: {
       stabilization: stabilization.passed ? 'go' : 'no-go',
-      pointTracking: tracking.passed ? 'go' : 'no-go',
-      boxTracking: tracking.passed ? 'go' : 'no-go',
+      pointTracking: tracking.pointPassed ? 'go' : 'no-go',
+      boxTracking: tracking.boxPassed ? 'go' : 'no-go',
     },
   }
 }

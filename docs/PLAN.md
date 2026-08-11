@@ -3820,7 +3820,12 @@ acceptance claims.
   including rotation/flip cross-axis terms and per-sample changes; compensate
   target scaling around its cropped visible center, rotation, flips, and
   authored anchor while emitting only ordinary Position X/Y and Scale X/Y keys.
-- [x] Pass 22 focused research tests, all 2,326 Vitest cases across 172 files,
+- [x] Require box loss on the exact first fully occluded frame, with no accepted
+  recovery frames after disappearance; expose the failure and last accepted
+  frame in evidence.
+- [x] Evaluate point and box quality independently and derive their public
+  go/no-go decisions from their own thresholds rather than the combined flag.
+- [x] Pass 24 focused research tests, all 2,328 Vitest cases across 172 files,
   all 16 benchmark-runner checks, production build/typecheck, oxlint, clean diff
   checks, and `npm audit --omit=dev` with 0 vulnerabilities.
 - [x] Rerun real Chromium at strict port 41844 against exact clean implementation
