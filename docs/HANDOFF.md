@@ -120,7 +120,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
 | **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
-| **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model with renderer no-go; delivery split into #108–#111; 18 focused tests and source-bound Chromium evidence on exclusive port 41844 |
+| **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model with renderer no-go; delivery split into #108–#111; 22 focused tests and source-bound Chromium evidence on exclusive port 41844 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -3638,3 +3638,34 @@ surface; it is not a second zoom and never enters document history.
   runner checks, production build/typecheck, oxlint, clean diff checks, and the
   production audit with 0 vulnerabilities. The build retained only the
   established large-chunk advisory.
+
+## Milestone 5 Part 10a / issue #44 - review hardening (2026-08-11)
+
+**REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The hard-cut gate now keeps two independently seeded textured scenes and
+  requires at least 50% forward/backward-consistent feature coverage before
+  similarity fitting. Fixture and algorithm versions advanced to v2; the
+  regression rejects coincidental cross-scene RANSAC agreement rather than
+  passing through an insufficient-texture shortcut.
+- Controller-scoped admission is acquired before support probing or scheduler
+  construction. A concurrent caller receives the typed `resource-unavailable`
+  result and cannot create a second worker or reserve a second decoder slot.
+- Tracking samples now carry their exact resolved source geometry. Full
+  source-space scale/rotation/flip/anchor projection supplies project motion;
+  target Position X/Y compensates Scale X/Y around the cropped visible center
+  under target rotation, flips, and an off-center anchor. Per-sample source
+  transform changes and ordinary preview/export animation evaluation remain
+  covered without introducing another evaluator.
+- The gate passed 22 focused research tests, all 2,326 Vitest cases across 172
+  files, all 16 benchmark-runner checks, production build/typecheck, oxlint,
+  clean diff checks, and the production audit with 0 vulnerabilities.
+- Real Chromium reran only on strict port 41844 against exact clean
+  implementation commit `9f45e44a514d7540637ab466d48516593b59a404` and
+  fingerprint
+  `sha256:14cde3fa5a470a15cdc1f5b18835eb2b0ac6284990b16e2baceeb8adc4addc5c`.
+  It rejected the textured hard cut and overlapping run, completed analysis in
+  217.7 ms, cancelled in 47.8 ms, drained workers 2/2, closed support frames 1/1,
+  removed OPFS probes 1/1, reported zero console problems, and released the
+  port. The ignored screenshot SHA-256 is
+  `AF04F0EDD9044183700263D102740C19C0D1368F8570A6AAA35BEDB358D13AF6`.

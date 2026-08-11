@@ -185,7 +185,7 @@ At frame 18 the object disappears in the negative fixture; tracking stops.
 | Box center mean error | 2.534 px | ≤ 3 px |
 | Box mean relative scale error | 2.9% | ≤ 8% |
 | Full occlusion rejected | yes | required |
-| Complete worker experiment | 225.9 ms | descriptive, host-specific |
+| Complete worker experiment | 217.7 ms | descriptive, host-specific |
 
 The zero point error is intentionally narrow: it is the exact integer-motion
 positive fixture, not a subpixel or real-footage claim. #110 adds textured,
@@ -269,6 +269,19 @@ The captured source identity was clean commit
 fingerprint
 `sha256:73ceabbad37fca6b739c1376c157c924445c73bed8f2f0e5566abc6a0c20e39b`.
 The evidence runner refuses source drift while measuring.
+
+The review-hardening rerun captured exact clean implementation commit
+`9f45e44a514d7540637ab466d48516593b59a404` with fingerprint
+`sha256:14cde3fa5a470a15cdc1f5b18835eb2b0ac6284990b16e2baceeb8adc4addc5c`.
+Fixture `issue-44-synthetic-v2` and algorithm
+`similarity-block-ransac-v2` rejected the independently textured hard cut. The
+controller rejected an overlapping invocation as
+`MediaJobExecutionError/resource-unavailable` while creating exactly one worker
+for the admitted run. Successful analysis completed in 217.7 ms, cancellation
+settled with `AbortError` in 47.8 ms, workers drained 2/2, support frames closed
+1/1, OPFS probes removed 1/1, console problems remained zero, and port 41844 was
+released. The visual evidence SHA-256 is
+`AF04F0EDD9044183700263D102740C19C0D1368F8570A6AAA35BEDB358D13AF6`.
 
 ## Final boundaries
 

@@ -3805,3 +3805,25 @@ acceptance claims.
   benchmark-runner checks, production build/typecheck, oxlint, clean diff
   checks, and `npm audit --omit=dev` with 0 vulnerabilities; the build retained
   only its established large-chunk advisory.
+
+## Milestone 5 Part 10a / issue #44 - review hardening
+
+**COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Replace the flat scene-cut shortcut with independently seeded textured
+  scenes and a versioned 50% feature-match-coverage discontinuity gate before
+  similarity fitting.
+- [x] Acquire one controller-scoped admission slot before support probing or
+  scheduler construction; reject overlapping callers without a second worker
+  or decoder reservation and release the slot on every terminal path.
+- [x] Project every tracker sample through its resolved source transform,
+  including rotation/flip cross-axis terms and per-sample changes; compensate
+  target scaling around its cropped visible center, rotation, flips, and
+  authored anchor while emitting only ordinary Position X/Y and Scale X/Y keys.
+- [x] Pass 22 focused research tests, all 2,326 Vitest cases across 172 files,
+  all 16 benchmark-runner checks, production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities.
+- [x] Rerun real Chromium at strict port 41844 against exact clean implementation
+  commit `9f45e44a514d7540637ab466d48516593b59a404`: textured hard-cut rejection,
+  typed overlapping-run denial, successful analysis, cancellation, exact
+  worker/frame/OPFS parity, zero console problems, and released port.
