@@ -548,6 +548,34 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   original is offline. The exact supported codec/profile matrix is published in
   `docs/PROXY_CODEC_SUPPORT.md` and is runtime-probed before generation enables.
 
+## Motion-analysis research boundary
+
+- Issue #44 is build-unreferenced feasibility work only. The browser runtime is
+  owned by `app/motionAnalysisResearchController.ts`; its disposable dedicated
+  worker imports only browser-free domain modules. Production/editor entry
+  graphs do not import it, React and Zustand do not observe it, and the research
+  adds no portable project schema, effect descriptor, or document mutation.
+- `domain/motionAnalysis.ts` owns bounded grayscale feature detection, patch
+  matching, deterministic similarity fitting, stabilization smoothing, and
+  conservative crop estimates. `domain/motionTrackingResearch.ts` owns bounded
+  point and similarity-box tracking plus conversion to existing Position X/Y
+  and Scale X/Y tracks. `domain/lensCorrection.ts` owns only the versioned,
+  normalized manual lens model and its fixed-grid safety validation.
+- `domain/analysisCache.ts` is a proposed derived-cache contract, not project
+  truth or a storage implementation. Its keys bind project, asset, sampled
+  source fingerprint, stream/geometry/rate, source range and sampling, clip
+  mapping/projection, algorithm/version, and parameters; stale entries are
+  rejected rather than adopted silently.
+- The research controller admits at most one analysis job and reserves at most
+  one decoder slot. Each child operation must own and close every VideoFrame,
+  decoder, temporary surface, worker, and OPFS handle it creates. Cancellation
+  terminates the disposable worker and drains scheduler counters before the
+  caller receives settlement.
+- Analysis results remain preview-only until an explicit Apply operation writes
+  ordinary canonical tracks through normal history. Lens remapping remains a
+  no-go for production until issue #111 proves a bounded renderer with exact
+  preview/export parity; bundled camera-profile catalogs are out of scope.
+
 ## Export profile and delivery contracts
 
 - `domain/exportProfile.ts` is the sole browser-free authority for allowed

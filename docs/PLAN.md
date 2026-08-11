@@ -3775,3 +3775,33 @@ acceptance claims.
   four existing Mediabunny AC-3/ProRes chunks. Retain only the existing >500 kB
   advisory. Do not repeat the full suite for this docs-only correction after an
   already-green exact-head suite; browser QA remains not applicable.
+## Milestone 5 Part 10a / issue #44 - motion-analysis research
+
+**RESEARCH COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Establish a browser-local, build-unreferenced analysis boundary with one
+  admitted job, one reserved decoder slot, disposable workers, exact capability
+  probes, abort settlement, and diagnostic proof that all child resources close.
+- [x] Specify a strict bounded derived-cache schema keyed by project binding,
+  asset, sampled source fingerprint, stream geometry/rate, source range and
+  sampling, clip mapping/projection, algorithm/version, and parameters. Reject
+  stale entries; do not make analysis output portable project truth.
+- [x] Prototype deterministic bounded feature detection, patch tracking,
+  similarity RANSAC/refinement, stabilization smoothing/crop estimation, point
+  tracking, and similarity-box tracking with explicit scene-cut/occlusion loss.
+- [x] Map accepted tracker samples to existing Position X/Y and optional Scale
+  X/Y curves only after an explicit future Apply action; keep running analysis
+  outside React, Zustand, document mutation, history, preview, and export.
+- [x] Validate a versioned normalized manual Brown-Conrady lens model and fixed-
+  grid invertibility guard. Record production rendering as no-go pending #111's
+  bounded remap and exact preview/export parity proof; reject profile catalogs.
+- [x] Split delivery into #108 analysis/cache, #109 stabilization, #110 point/
+  box tracking, and #111 lens-renderer feasibility, each with its own limits,
+  cleanup, negative cases, parity obligations, and acceptance gates.
+- [x] Pass 18 focused tests and real source-bound Playwright Chromium at strict
+  port 41844 with exact primitive probes, cancellation, successful execution,
+  resource parity, zero active counters, zero console problems, and released
+  port. The full gate passed all 2,322 Vitest cases across 172 files, all 16
+  benchmark-runner checks, production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities; the build retained
+  only its established large-chunk advisory.

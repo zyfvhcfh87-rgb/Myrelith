@@ -120,6 +120,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
 | **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
+| **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model with renderer no-go; delivery split into #108–#111; 18 focused tests and source-bound Chromium evidence on exclusive port 41844 |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -998,6 +999,17 @@ surface; it is not a second zoom and never enters document history.
 - `src/domain/proxyCache.ts` — Issue #70's browser-free versioned manifest,
   sampled-fingerprint/provenance/profile validation, even 720p geometry, size
   estimate, and shared preview-versus-final-export representation policy.
+- `src/domain/motionAnalysis.ts` + `motionTrackingResearch.ts` — Issue #44's
+  browser-free, deterministic, bounded similarity stabilization and point/box
+  tracking feasibility core. Accepted tracking samples map only to existing
+  Position X/Y and optional Scale X/Y tracks.
+- `src/domain/analysisCache.ts` + `lensCorrection.ts` — strict proposed
+  analysis-cache provenance/staleness contract and versioned normalized manual
+  lens model. Neither is durable project state or an enabled renderer effect.
+- `src/app/motionAnalysisResearchController.ts` +
+  `src/workers/motion-analysis-research.worker.ts` — build-unreferenced Issue
+  #44 probe/runtime seam: one queued job, one reserved decoder slot, disposable
+  workers, exact support probes, abort settlement, and resource diagnostics.
 - `src/state/projectSessionStore.ts` — serializable launch/editor screen,
   active-project labels, operation phase, relink status, and separate
   save/recovery status; no Files, Blobs, URLs, parsed candidates, browser
@@ -3594,3 +3606,35 @@ surface; it is not a second zoom and never enters document history.
   runtime. The build retained only the existing >500 kB chunk advisory. A new
   full suite was intentionally not repeated for this docs-only correction after
   the exact-head test suite had already passed; browser QA remains not applicable.
+## Milestone 5 Part 10a / issue #44 - motion-analysis research
+
+**RESEARCH COMPLETE LOCALLY (2026-08-11).**
+
+- The bounded proof keeps analysis outside React, Zustand, portable documents,
+  and production entry graphs. A disposable dedicated worker owns each run;
+  the app controller admits one job, reserves one decoder slot, probes the exact
+  browser primitives, and proves cancellation drains all worker/scheduler
+  counters. The proposed derived-cache schema rejects stale provenance and is
+  capped at 1,024 entries, 256 MiB per entry, and a 512 MiB target budget.
+- Deterministic 320x180 synthetic fixtures support follow-up implementation of
+  similarity-transform stabilization and bounded point/similarity-box tracking.
+  Scene cuts and occlusion reject explicitly. Tracking output is defined as
+  ordinary Position X/Y and optional Scale X/Y keyframes; analysis never edits
+  the document until a later explicit Apply operation.
+- The normalized Brown-Conrady manual lens parameter model and fixed-grid
+  invertibility guard are viable, but production lens correction remains a
+  deliberate no-go until #111 proves a bounded remap backend and exact
+  preview/export parity. Shipping or downloading camera/lens profile catalogs
+  is out of scope.
+- Delivery is split into bounded children: #108 analysis jobs/cache, #109
+  stabilization, #110 point/box tracking, and #111 lens-renderer feasibility.
+  The complete decisions, provenance key, algorithms, tolerances, and browser
+  measurements live in `docs/MOTION_ANALYSIS_RESEARCH.md`.
+- The focused gate passed 18 tests. Real Playwright Chromium on strict
+  port 41844 proved module workers, OffscreenCanvas, VideoFrame RGBA copy/close,
+  OPFS create/read/remove, crypto digest, cancellation, a successful run, exact
+  resource parity, zero active counters, and zero console problems. Final full
+  validation passed all 2,322 Vitest cases across 172 files, all 16 benchmark-
+  runner checks, production build/typecheck, oxlint, clean diff checks, and the
+  production audit with 0 vulnerabilities. The build retained only the
+  established large-chunk advisory.
