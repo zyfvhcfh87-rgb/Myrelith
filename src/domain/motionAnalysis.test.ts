@@ -6,6 +6,7 @@ import {
   applySimilarityTransform,
   composeSimilarityTransforms,
   createStabilizationPlan,
+  estimateGlobalMotion,
   estimateGlobalMotionSequence,
   invertSimilarityTransform,
   validateMotionAnalysisBudget,
@@ -24,6 +25,28 @@ function flatFrame(value: number): GrayFrame {
     height: 24,
     data: new Uint8Array(32 * 24).fill(value),
   }
+}
+
+function texturedFrame(seed: number): GrayFrame {
+  let value = seed >>> 0
+  const random = () => {
+    value = (Math.imul(value, 1_664_525) + 1_013_904_223) >>> 0
+    return value / 0x1_0000_0000
+  }
+  const width = 96
+  const height = 64
+  const data = new Uint8Array(width * height)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const checker = ((Math.floor(x / 9) + Math.floor(y / 7)) & 1) * 42
+      const wave = 28 * Math.sin(x * 0.31) + 22 * Math.cos(y * 0.27)
+      data[y * width + x] = Math.max(0, Math.min(
+        255,
+        Math.round(75 + checker + wave + random() * 90),
+      ))
+    }
+  }
+  return { width, height, data }
 }
 
 function estimate(transform: SimilarityTransform): GlobalMotionEstimate {
@@ -72,6 +95,13 @@ describe('motion analysis research', () => {
       { ...DEFAULT_MOTION_ANALYSIS_BUDGET, maxWidth: 32, maxHeight: 24 },
       () => true,
     )).toThrow(MotionAnalysisCancelledError)
+  })
+
+  test('rejects a hard cut between two independently textured frames', () => {
+    expect(estimateGlobalMotion(
+      texturedFrame(0x44a11ce),
+      texturedFrame(0xbadc0de),
+    )).toBeNull()
   })
 
   test('rejects caller budgets above every reviewed work ceiling', () => {

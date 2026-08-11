@@ -137,6 +137,7 @@ function reportHtml(artifact) {
         <li>Scene cut rejected: ${stabilization.sceneCutRejected}</li>
         <li>Tracking occlusion rejected: ${tracking.occlusionRejected}</li>
         <li>Cancellation: ${artifact.cancellation.errorName}</li>
+        <li>Overlapping run: ${artifact.admission.errorCode}</li>
         <li>Workers active after drain: ${artifact.finalDiagnostics.activeWorkers}</li>
         <li>OPFS probe files: ${artifact.finalDiagnostics.opfsProbeFilesCreated}/${artifact.finalDiagnostics.opfsProbeFilesRemoved} removed</li>
         <li>VideoFrames: ${artifact.finalDiagnostics.supportFramesCreated}/${artifact.finalDiagnostics.supportFramesClosed} closed</li>
@@ -207,10 +208,36 @@ async function main() {
       || cancellation.after.workersTerminated - cancellation.before.workersTerminated !== 1
     ) throw new Error('Active cancellation did not terminate and drain exactly one worker')
 
-    const success = await page.evaluate(async () => {
+    const admission = await page.evaluate(async () => {
       const module = await import('/src/app/motionAnalysisResearchController.ts')
-      return module.runBrowserMotionAnalysisResearch({ skipSupportProbe: true })
+      const before = module.motionAnalysisResearchDiagnostics()
+      const firstRun = module.runBrowserMotionAnalysisResearch({ skipSupportProbe: true })
+      let errorName = null
+      let errorCode = null
+      try {
+        await module.runBrowserMotionAnalysisResearch({ skipSupportProbe: true })
+      } catch (error) {
+        errorName = error instanceof Error ? error.name : String(error)
+        errorCode = error && typeof error === 'object' && 'code' in error
+          ? error.code
+          : null
+      }
+      return {
+        errorName,
+        errorCode,
+        success: await firstRun,
+        before,
+        after: module.motionAnalysisResearchDiagnostics(),
+      }
     })
+    if (
+      admission.errorName !== 'MediaJobExecutionError'
+      || admission.errorCode !== 'resource-unavailable'
+      || admission.after.workersCreated - admission.before.workersCreated !== 1
+      || admission.after.workersTerminated - admission.before.workersTerminated !== 1
+      || admission.after.activeWorkers !== 0
+    ) throw new Error('Shared motion-analysis admission did not reject the overlapping run')
+    const success = admission.success
     const finalDiagnostics = await page.evaluate(async () => {
       const module = await import('/src/app/motionAnalysisResearchController.ts')
       return module.motionAnalysisResearchDiagnostics()
@@ -228,13 +255,19 @@ async function main() {
     ) throw new Error('One or more motion-analysis quality decisions failed')
 
     const artifact = {
-      schemaVersion: 1,
-      scenario: 'issue-44-motion-analysis-v1',
+      schemaVersion: 2,
+      scenario: 'issue-44-motion-analysis-v2',
       generatedAt: new Date().toISOString(),
       source: initialSource,
       host: hostIdentity(browser.version(), options),
       support,
       cancellation,
+      admission: {
+        errorName: admission.errorName,
+        errorCode: admission.errorCode,
+        before: admission.before,
+        after: admission.after,
+      },
       success,
       finalDiagnostics,
       consoleProblems: [],

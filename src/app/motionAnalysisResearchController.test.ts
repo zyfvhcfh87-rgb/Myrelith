@@ -113,6 +113,38 @@ describe('motion analysis research controller', () => {
     expect(after.activeWorkers).toBe(0)
   })
 
+  test('rejects a second controller run while the shared admission slot is active', async () => {
+    installWorker('pending')
+    const controller = new AbortController()
+    let observeProgress!: () => void
+    const progress = new Promise<void>((resolve) => {
+      observeProgress = resolve
+    })
+    const firstRun = runBrowserMotionAnalysisResearch({
+      skipSupportProbe: true,
+      signal: controller.signal,
+      onProgress: observeProgress,
+    })
+    await progress
+    const beforeSecondRun = motionAnalysisResearchDiagnostics()
+
+    await expect(runBrowserMotionAnalysisResearch({
+      skipSupportProbe: true,
+    })).rejects.toMatchObject({
+      name: 'MediaJobExecutionError',
+      code: 'resource-unavailable',
+      message: 'A motion-analysis research run is already active.',
+    })
+    expect(motionAnalysisResearchDiagnostics()).toMatchObject({
+      workersCreated: beforeSecondRun.workersCreated,
+      activeWorkers: 1,
+    })
+
+    controller.abort()
+    await expect(firstRun).rejects.toMatchObject({ name: 'AbortError' })
+    expect(motionAnalysisResearchDiagnostics().activeWorkers).toBe(0)
+  })
+
   test('preserves a typed quality failure and still terminates the worker', async () => {
     installWorker('failure')
     const before = motionAnalysisResearchDiagnostics()

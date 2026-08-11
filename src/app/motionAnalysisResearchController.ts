@@ -61,6 +61,7 @@ const diagnostics = {
 }
 
 let requestId = 0
+let researchRunActive = false
 
 export function motionAnalysisResearchDiagnostics(): MotionResearchRuntimeDiagnostics {
   return { ...diagnostics }
@@ -254,7 +255,7 @@ function runResearchWorker(
   })
 }
 
-export async function runBrowserMotionAnalysisResearch(
+async function runAdmittedBrowserMotionAnalysisResearch(
   options: BrowserMotionResearchOptions = {},
 ): Promise<BrowserMotionResearchResult> {
   const support = options.skipSupportProbe
@@ -341,5 +342,22 @@ export async function runBrowserMotionAnalysisResearch(
     options.signal?.removeEventListener('abort', abortScheduler)
     scheduler.dispose()
     await scheduler.whenIdle()
+  }
+}
+
+export async function runBrowserMotionAnalysisResearch(
+  options: BrowserMotionResearchOptions = {},
+): Promise<BrowserMotionResearchResult> {
+  if (researchRunActive) {
+    throw new MediaJobExecutionError(
+      'resource-unavailable',
+      'A motion-analysis research run is already active.',
+    )
+  }
+  researchRunActive = true
+  try {
+    return await runAdmittedBrowserMotionAnalysisResearch(options)
+  } finally {
+    researchRunActive = false
   }
 }

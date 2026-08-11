@@ -24,7 +24,7 @@ import {
 } from './motionTrackingResearch'
 import type { Transform } from './schema'
 
-export const MOTION_RESEARCH_FIXTURE_VERSION = 'issue-44-synthetic-v1'
+export const MOTION_RESEARCH_FIXTURE_VERSION = 'issue-44-synthetic-v2'
 
 export interface MotionResearchProgress {
   readonly stage: 'stabilization' | 'tracking' | 'negative-fixtures'
@@ -173,7 +173,6 @@ function createStabilizationFixture(): StabilizationFixture {
     ))
   }
   const sceneCutFrame = texturedFrame(width, height, 0xbadc0de)
-  sceneCutFrame.data.fill(230)
   return {
     frames: poses.map((pose) => warpFrame(base, pose)),
     pairTransforms: poses.slice(1).map((pose, index) => composeSimilarityTransforms(
@@ -436,6 +435,16 @@ function trackingEvidence(
     anchorX: 0.5,
     anchorY: 0.5,
   }
+  const sourceProjection = {
+    width: fixture.frames[0]!.width,
+    height: fixture.frames[0]!.height,
+    transform: baseTransform,
+    visual: {
+      crop: { left: 0, right: 0, top: 0, bottom: 0 },
+      flipHorizontal: false,
+      flipVertical: false,
+    },
+  }
   const tracks = trackingSamplesToAnimationTracks(
     box.samples.map((sample) => ({
       frame: sample.frameIndex,
@@ -443,12 +452,20 @@ function trackingEvidence(
       centerY: sample.y + sample.height / 2,
       width: sample.width,
       height: sample.height,
+      source: sourceProjection,
     })),
     baseTransform,
     {
-      projectUnitsPerSourceX: 1,
-      projectUnitsPerSourceY: 1,
       includeScale: true,
+      target: {
+        width: fixture.frames[0]!.width,
+        height: fixture.frames[0]!.height,
+        visual: {
+          crop: { left: 0, right: 0, top: 0, bottom: 0 },
+          flipHorizontal: false,
+          flipVertical: false,
+        },
+      },
     },
   )
   onProgress?.({ stage: 'tracking', progress: 1 })

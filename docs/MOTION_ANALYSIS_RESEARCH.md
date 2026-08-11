@@ -78,7 +78,11 @@ dedicated analysis worker ── pure grayscale analysis
 
 The feasibility worker is terminated for cancellation; this makes cancellation
 observable even while synchronous numeric code owns its worker event loop. The
-product child must also abort the decoder/source/storage owner and await
+controller acquires its single shared admission slot before any support probe or
+scheduler construction and rejects an overlapping invocation with the typed
+`resource-unavailable` result. Separate callers therefore cannot each create a
+private one-job scheduler and exceed the controller-wide worker/decoder envelope.
+The product child must also abort the decoder/source/storage owner and await
 scheduler/storage quiescence. Queued pre-abort, active abort, typed failure,
 successful completion, replacement, source removal, clip removal, project
 replacement, and final disposal all converge on the same rules:
@@ -135,13 +139,16 @@ jitter. Each pair:
 
 1. selects spaced minimum-eigenvalue features;
 2. performs bounded forward/backward 5×5 patch matching;
-3. fits `q = [a -b; b a]p + t` from deterministic two-point hypotheses;
-4. accepts inliers within 1.75 analysis pixels and refines the similarity fit;
-5. accumulates the camera path, smooths translation/angle/log-scale over a
+3. rejects discontinuities unless at least half of the textured features retain
+   distinct forward/backward-consistent patch matches;
+4. fits `q = [a -b; b a]p + t` from deterministic two-point hypotheses;
+5. accepts inliers within 1.75 analysis pixels and refines the similarity fit;
+6. accumulates the camera path, smooths translation/angle/log-scale over a
    four-frame radius, and blends the correction by strength.
 
-A deliberately unrelated/flat frame is the negative scene-cut/insufficient-
-texture fixture. It is rejected instead of yielding a correction.
+A second independently seeded textured scene is the negative hard-cut fixture.
+It is rejected on match coverage instead of allowing either a coincidental
+similarity fit or an insufficient-texture shortcut to satisfy the scene-cut gate.
 
 ### Chromium result
 
@@ -188,9 +195,13 @@ exit footage before product acceptance.
 Accepted samples do not mutate a document. A later confirmed Apply may project
 point motion to ordinary Position X/Y tracks and box motion to Position X/Y +
 Scale X/Y on a separately selected overlapping visual target. The source clip's
-resolved crop/flip/anchor/transform maps source coordinates into project space.
-The canonical `SourceTimeMap` supplies strict clip-local integer frames. A
-duplicate/non-monotonic projection rejects rather than dropping samples.
+resolved crop/flip/anchor/transform maps each full-source sample into project
+space, including rotation/flip cross-axis terms and per-sample source-transform
+changes. When box scale changes, Position X/Y compensates around the target's
+cropped visible center using its dimensions, flip, rotation, and authored anchor,
+so scaling cannot pull the attachment away from the tracked project point. The
+canonical `SourceTimeMap` supplies strict clip-local integer frames. A duplicate/
+non-monotonic projection rejects rather than dropping samples.
 
 The child tolerance is at most 0.5 project pixels for position and 0.5% for
 scale at every analyzed integer frame after bounded simplification. Preview and

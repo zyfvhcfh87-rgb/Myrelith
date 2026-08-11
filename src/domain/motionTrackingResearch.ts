@@ -15,7 +15,12 @@ import {
   LINEAR_ANIMATION_EASING,
   MAX_KEYFRAMES_PER_TRACK,
 } from './clipAnimation'
-import type { ClipAnimationTrack, Transform } from './schema'
+import { cropInsetsValidationError } from './clipInspector'
+import type {
+  ClipAnimationTrack,
+  ClipVisualSettings,
+  Transform,
+} from './schema'
 
 export interface PointTrackingSample extends MotionPoint {
   readonly frameIndex: number
@@ -243,22 +248,144 @@ export interface TrackingAnimationSample {
   readonly centerY: number
   readonly width?: number
   readonly height?: number
+  /** Resolved source geometry for this exact accepted sample. */
+  readonly source: TrackingSourceProjection
+}
+
+type TrackingVisualProjection = Pick<
+  ClipVisualSettings,
+  'crop' | 'flipHorizontal' | 'flipVertical'
+>
+
+export interface TrackingSourceProjection {
+  /** Full source dimensions; sample centers use this same pixel space. */
+  readonly width: number
+  readonly height: number
+  readonly transform: Transform
+  readonly visual: TrackingVisualProjection
+}
+
+export interface TrackingAnimationTarget {
+  /** Full target dimensions used to locate its cropped visible center. */
+  readonly width: number
+  readonly height: number
+  readonly visual: TrackingVisualProjection
 }
 
 export interface TrackingAnimationMapping {
-  readonly projectUnitsPerSourceX: number
-  readonly projectUnitsPerSourceY: number
   readonly includeScale: boolean
+  readonly target: TrackingAnimationTarget
 }
 
 function linearKeyframe(frame: number, value: number) {
   return { frame, value, easing: { ...LINEAR_ANIMATION_EASING } }
 }
 
+function positiveDimension(value: number, label: string): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${label} must be a positive safe integer`)
+  }
+}
+
+function projectionValidationError(
+  projection: TrackingSourceProjection | TrackingAnimationTarget,
+): string | null {
+  if (!Number.isSafeInteger(projection.width) || projection.width <= 0) {
+    return 'width must be a positive safe integer'
+  }
+  if (!Number.isSafeInteger(projection.height) || projection.height <= 0) {
+    return 'height must be a positive safe integer'
+  }
+  const cropError = cropInsetsValidationError(projection.visual.crop)
+  if (cropError) return cropError
+  if (typeof projection.visual.flipHorizontal !== 'boolean') {
+    return 'flipHorizontal must be a boolean'
+  }
+  if (typeof projection.visual.flipVertical !== 'boolean') {
+    return 'flipVertical must be a boolean'
+  }
+  return null
+}
+
+function transformProjectionValidationError(transform: Transform): string | null {
+  for (const key of ['x', 'y', 'scaleX', 'scaleY', 'rotation'] as const) {
+    if (!Number.isFinite(transform[key])) return `transform.${key} must be finite`
+  }
+  if (transform.scaleX <= 0 || transform.scaleY <= 0) {
+    return 'transform scales must be positive'
+  }
+  for (const key of ['anchorX', 'anchorY'] as const) {
+    if (!Number.isFinite(transform[key]) || transform[key] < 0 || transform[key] > 1) {
+      return `transform.${key} must be finite from 0 to 1`
+    }
+  }
+  return null
+}
+
+function projectSourceCenter(sample: TrackingAnimationSample): {
+  readonly x: number
+  readonly y: number
+} {
+  const { source } = sample
+  const transformError = transformProjectionValidationError(source.transform)
+  if (transformError) throw new RangeError(`Tracking source ${transformError}`)
+  const projectionError = projectionValidationError(source)
+  if (projectionError) throw new RangeError(`Tracking source ${projectionError}`)
+  const anchorX = source.transform.anchorX * source.width
+  const anchorY = source.transform.anchorY * source.height
+  const localX = (sample.centerX - anchorX)
+    * source.transform.scaleX
+    * (source.visual.flipHorizontal ? -1 : 1)
+  const localY = (sample.centerY - anchorY)
+    * source.transform.scaleY
+    * (source.visual.flipVertical ? -1 : 1)
+  const angle = source.transform.rotation * Math.PI / 180
+  const cosine = Math.cos(angle)
+  const sine = Math.sin(angle)
+  return {
+    x: -source.width / 2 + anchorX + source.transform.x
+      + cosine * localX - sine * localY,
+    y: -source.height / 2 + anchorY + source.transform.y
+      + sine * localX + cosine * localY,
+  }
+}
+
+function targetVisibleCenterOffset(
+  base: Transform,
+  target: TrackingAnimationTarget,
+  scaleX: number,
+  scaleY: number,
+): { readonly x: number; readonly y: number } {
+  const visibleCenterX = target.width * (
+    target.visual.crop.left
+    + (1 - target.visual.crop.left - target.visual.crop.right) / 2
+  )
+  const visibleCenterY = target.height * (
+    target.visual.crop.top
+    + (1 - target.visual.crop.top - target.visual.crop.bottom) / 2
+  )
+  const localX = (visibleCenterX - base.anchorX * target.width)
+    * scaleX
+    * (target.visual.flipHorizontal ? -1 : 1)
+  const localY = (visibleCenterY - base.anchorY * target.height)
+    * scaleY
+    * (target.visual.flipVertical ? -1 : 1)
+  const angle = base.rotation * Math.PI / 180
+  const cosine = Math.cos(angle)
+  const sine = Math.sin(angle)
+  return {
+    x: cosine * localX - sine * localY,
+    y: sine * localX + cosine * localY,
+  }
+}
+
 /**
  * Projects accepted, clip-local tracking samples onto the existing scalar
- * animation vocabulary. The caller owns source-time -> clip-frame mapping and
- * must invoke this only after analysis has completed and passed review.
+ * animation vocabulary. Each center is mapped through the source clip's exact
+ * resolved transform. When box scale is included, Position X/Y compensates for
+ * scaling the target's cropped visible center around its authored anchor. The
+ * caller owns source-time -> clip-frame mapping and must invoke this only after
+ * analysis has completed and passed review.
  */
 export function trackingSamplesToAnimationTracks(
   samples: readonly TrackingAnimationSample[],
@@ -268,13 +395,14 @@ export function trackingSamplesToAnimationTracks(
   if (samples.length < 2 || samples.length > MAX_KEYFRAMES_PER_TRACK) {
     throw new RangeError(`Tracking needs 2 to ${MAX_KEYFRAMES_PER_TRACK} mapped samples`)
   }
-  if (
-    !Number.isFinite(mapping.projectUnitsPerSourceX)
-    || mapping.projectUnitsPerSourceX <= 0
-    || !Number.isFinite(mapping.projectUnitsPerSourceY)
-    || mapping.projectUnitsPerSourceY <= 0
-  ) throw new RangeError('Tracking source/project mapping must be finite and positive')
+  positiveDimension(mapping.target.width, 'Tracking target width')
+  positiveDimension(mapping.target.height, 'Tracking target height')
+  const targetError = projectionValidationError(mapping.target)
+  if (targetError) throw new RangeError(`Tracking target ${targetError}`)
+  const baseError = transformProjectionValidationError(base)
+  if (baseError) throw new RangeError(`Tracking target ${baseError}`)
   const first = samples[0]!
+  const firstProjectCenter = projectSourceCenter(first)
   let previousFrame = -1
   for (const sample of samples) {
     if (!Number.isSafeInteger(sample.frame) || sample.frame < 0 || sample.frame <= previousFrame) {
@@ -283,50 +411,88 @@ export function trackingSamplesToAnimationTracks(
     if (!Number.isFinite(sample.centerX) || !Number.isFinite(sample.centerY)) {
       throw new RangeError('Tracking sample centers must be finite')
     }
+    projectSourceCenter(sample)
     previousFrame = sample.frame
   }
+  let scales: readonly { readonly x: number; readonly y: number }[] | null = null
+  if (mapping.includeScale) {
+    if (
+      !Number.isFinite(first.width)
+      || !Number.isFinite(first.height)
+      || first.width! <= 0
+      || first.height! <= 0
+      || samples.some((sample) => (
+        !Number.isFinite(sample.width)
+        || !Number.isFinite(sample.height)
+        || sample.width! <= 0
+        || sample.height! <= 0
+      ))
+    ) throw new RangeError('Box tracking scale mapping needs positive finite sample sizes')
+    const firstProjectedWidth = first.width! * first.source.transform.scaleX
+    const firstProjectedHeight = first.height! * first.source.transform.scaleY
+    scales = samples.map((sample) => ({
+      x: base.scaleX
+        * sample.width!
+        * sample.source.transform.scaleX
+        / firstProjectedWidth,
+      y: base.scaleY
+        * sample.height!
+        * sample.source.transform.scaleY
+        / firstProjectedHeight,
+    }))
+  }
+  const baseTargetOffset = targetVisibleCenterOffset(
+    base,
+    mapping.target,
+    base.scaleX,
+    base.scaleY,
+  )
+  const positions = samples.map((sample, index) => {
+    const projectCenter = projectSourceCenter(sample)
+    const scale = scales?.[index] ?? { x: base.scaleX, y: base.scaleY }
+    const targetOffset = targetVisibleCenterOffset(
+      base,
+      mapping.target,
+      scale.x,
+      scale.y,
+    )
+    return {
+      x: base.x + projectCenter.x - firstProjectCenter.x
+        + baseTargetOffset.x - targetOffset.x,
+      y: base.y + projectCenter.y - firstProjectCenter.y
+        + baseTargetOffset.y - targetOffset.y,
+    }
+  })
   const tracks: ClipAnimationTrack[] = [
     {
       property: 'position-x',
-      keyframes: samples.map((sample) => linearKeyframe(
+      keyframes: samples.map((sample, index) => linearKeyframe(
         sample.frame,
-        base.x + (sample.centerX - first.centerX) * mapping.projectUnitsPerSourceX,
+        positions[index]!.x,
       )),
     },
     {
       property: 'position-y',
-      keyframes: samples.map((sample) => linearKeyframe(
+      keyframes: samples.map((sample, index) => linearKeyframe(
         sample.frame,
-        base.y + (sample.centerY - first.centerY) * mapping.projectUnitsPerSourceY,
+        positions[index]!.y,
       )),
     },
   ]
   if (!mapping.includeScale) return tracks
-  if (
-    !Number.isFinite(first.width)
-    || !Number.isFinite(first.height)
-    || first.width! <= 0
-    || first.height! <= 0
-    || samples.some((sample) => (
-      !Number.isFinite(sample.width)
-      || !Number.isFinite(sample.height)
-      || sample.width! <= 0
-      || sample.height! <= 0
-    ))
-  ) throw new RangeError('Box tracking scale mapping needs positive finite sample sizes')
   tracks.push(
     {
       property: 'scale-x',
-      keyframes: samples.map((sample) => linearKeyframe(
+      keyframes: samples.map((sample, index) => linearKeyframe(
         sample.frame,
-        base.scaleX * sample.width! / first.width!,
+        scales![index]!.x,
       )),
     },
     {
       property: 'scale-y',
-      keyframes: samples.map((sample) => linearKeyframe(
+      keyframes: samples.map((sample, index) => linearKeyframe(
         sample.frame,
-        base.scaleY * sample.height! / first.height!,
+        scales![index]!.y,
       )),
     },
   )

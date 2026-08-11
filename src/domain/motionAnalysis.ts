@@ -52,7 +52,7 @@ export interface MotionAnalysisBudget {
   readonly maxRetainedBytes: number
 }
 
-export const MOTION_ANALYSIS_ALGORITHM_VERSION = 'similarity-block-ransac-v1'
+export const MOTION_ANALYSIS_ALGORITHM_VERSION = 'similarity-block-ransac-v2'
 
 export const DEFAULT_MOTION_ANALYSIS_BUDGET = Object.freeze({
   maxWidth: 320,
@@ -80,6 +80,7 @@ const MIN_FEATURE_RESPONSE = 256
 const MAX_PATCH_ERROR = 48
 const MAX_BACKTRACK_ERROR = 1.5
 const MIN_DISTINCT_PATCH_ERROR = 0.5
+const MIN_FEATURE_MATCH_RATIO = 0.5
 
 export class MotionAnalysisCancelledError extends Error {
   constructor() {
@@ -490,6 +491,10 @@ export function estimateGlobalMotion(
 ): GlobalMotionEstimate | null {
   const features = detectMotionFeatures(from, budget, cancelled)
   const matches = matchMotionFeatures(from, to, features, budget, cancelled)
+  if (
+    features.length < MIN_GLOBAL_MATCHES
+    || matches.length / features.length < MIN_FEATURE_MATCH_RATIO
+  ) return null
   return estimateSimilarityFromMatches(matches, budget, cancelled)
 }
 
