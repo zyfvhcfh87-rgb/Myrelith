@@ -98,6 +98,11 @@ function createFixture(): Uint8ClampedArray {
   for (let pixel = 0; pixel < rgba.length / 4; pixel += 23) {
     rgba[pixel * 4 + 3] = 0
   }
+  rgba.set([
+    13, 163, 113, 241,
+    0, 13, 142, 150,
+    0, 35, 190, 102,
+  ])
   return rgba
 }
 

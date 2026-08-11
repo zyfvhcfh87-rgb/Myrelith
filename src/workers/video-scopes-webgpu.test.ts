@@ -7,6 +7,7 @@ import {
 } from '../domain/videoScopes'
 import {
   createOptionalVideoScopeAnalyzer,
+  expandVideoScopeWebGpuInput,
   VIDEO_SCOPE_WEBGPU_ACTIVE_BUFFER_BYTES,
   type VideoScopeWebGpuSession,
 } from './video-scopes-webgpu'
@@ -62,6 +63,18 @@ function fakeSession(options: {
 }
 
 describe('optional WebGPU video scope adapter', () => {
+  test('marks only legacy luma midpoint-down samples in the expanded upload', () => {
+    const expanded = expandVideoScopeWebGpuInput(new Uint8ClampedArray([
+      13, 163, 113, 241,
+      0, 13, 142, 150,
+      0, 35, 190, 102,
+    ]))
+
+    expect(expanded[3]).toBe(241 | 0x100)
+    expect(expanded[7]).toBe(150)
+    expect(expanded[11]).toBe(102)
+  })
+
   test('keeps CPU as the default without probing WebGPU', async () => {
     const requestSession = vi.fn()
     const analyzer = createOptionalVideoScopeAnalyzer({ requestSession })

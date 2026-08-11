@@ -7,6 +7,7 @@ import {
   VIDEO_SCOPE_SAMPLE_WIDTH,
   VIDEO_SCOPE_VECTOR_SIZE,
   VIDEO_SCOPE_WAVEFORM_HEIGHT,
+  videoScopeLegacyLumaTieRoundsDown,
   type VideoScopeAnalysis,
 } from '../domain/videoScopes'
 
@@ -111,6 +112,8 @@ const GPU_BUFFER_USAGE = {
   storage: 0x0080,
 } as const
 const GPU_MAP_READ = 0x0001
+const INPUT_ALPHA_MASK = 0xff
+const INPUT_LEGACY_LUMA_TIE_DOWN_FLAG = 0x100
 
 export const VIDEO_SCOPE_WEBGPU_ACTIVE_BUFFER_BYTES =
   INPUT_U32_COUNT * Uint32Array.BYTES_PER_ELEMENT
@@ -146,6 +149,8 @@ const VECTOR_SIZE: u32 = ${VIDEO_SCOPE_VECTOR_SIZE}u;
 const WAVEFORM_OFFSET: u32 = ${WAVEFORM_OFFSET}u;
 const VECTOR_OFFSET: u32 = ${VECTOR_OFFSET}u;
 const SAMPLE_COUNT_OFFSET: u32 = ${SAMPLE_COUNT_OFFSET}u;
+const INPUT_ALPHA_MASK: u32 = ${INPUT_ALPHA_MASK}u;
+const INPUT_LEGACY_LUMA_TIE_DOWN_FLAG: u32 = ${INPUT_LEGACY_LUMA_TIE_DOWN_FLAG}u;
 const WAVEFORM_THRESHOLDS = array<u32, 63>(${WAVEFORM_THRESHOLDS});
 const CB_THRESHOLDS = array<u32, 63>(${CB_THRESHOLDS});
 const CR_THRESHOLDS = array<u32, 63>(${CR_THRESHOLDS});
@@ -207,7 +212,8 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   }
 
   let offset = pixel * 4u;
-  let alpha = rgba[offset + 3u];
+  let packed_alpha = rgba[offset + 3u];
+  let alpha = packed_alpha & INPUT_ALPHA_MASK;
   if (alpha == 0u) {
     return;
   }
@@ -220,7 +226,10 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   let blue = displayed_channel(source_blue, alpha);
   let weighted_luma = source_red * 2126u + source_green * 7152u + source_blue * 722u;
   let luma_numerator = alpha * weighted_luma;
-  let luma = round_div(luma_numerator, 2550000u);
+  var luma = round_div(luma_numerator, 2550000u);
+  if ((packed_alpha & INPUT_LEGACY_LUMA_TIE_DOWN_FLAG) != 0u) {
+    luma -= 1u;
+  }
 
   atomicAdd(&output[red], 1u);
   atomicAdd(&output[HISTOGRAM_BINS + green], 1u);
@@ -290,6 +299,21 @@ function assertExperimentShape(rgba: Uint8ClampedArray, width: number, height: n
   if (rgba.length !== width * height * 4) {
     throw new RangeError('Scope RGBA input does not match its dimensions')
   }
+}
+
+export function expandVideoScopeWebGpuInput(rgba: Uint8ClampedArray): Uint32Array {
+  const expanded = Uint32Array.from(rgba)
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    if (videoScopeLegacyLumaTieRoundsDown(
+      rgba[offset],
+      rgba[offset + 1],
+      rgba[offset + 2],
+      rgba[offset + 3],
+    )) {
+      expanded[offset + 3] |= INPUT_LEGACY_LUMA_TIE_DOWN_FLAG
+    }
+  }
+  return expanded
 }
 
 async function createBrowserWebGpuSession(): Promise<VideoScopeWebGpuSessionRequest> {
@@ -393,7 +417,7 @@ async function createBrowserWebGpuSession(): Promise<VideoScopeWebGpuSessionRequ
     assertExperimentShape(rgba, width, height)
     if (released) throw new DOMException('WebGPU scope session was released', 'AbortError')
     const requestLifecycle = lifecycle
-    const expanded = Uint32Array.from(rgba)
+    const expanded = expandVideoScopeWebGpuInput(rgba)
     const parameters = new Uint32Array([width, height, width * height, 0])
     const ownedBuffers: GPUBuffer[] = []
     let readback: GPUBuffer | null = null
@@ -488,6 +512,11 @@ function createSelfTestFixture(): Uint8ClampedArray {
     rgba[offset + 2] = (pixel * 131 + 7) % 256
     rgba[offset + 3] = pixel % 19 === 0 ? 0 : (pixel * 29 + 13) % 256
   }
+  rgba.set([
+    13, 163, 113, 241,
+    0, 13, 142, 150,
+    0, 35, 190, 102,
+  ])
   return rgba
 }
 

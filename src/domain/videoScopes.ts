@@ -56,6 +56,66 @@ function weightedLuma(red: number, green: number, blue: number): number {
     + blue * VIDEO_SCOPE_LUMA_BLUE
 }
 
+function legacyFloatLumaByte(
+  red: number,
+  green: number,
+  blue: number,
+  alpha: number,
+): number {
+  const displayedAlpha = alpha / 255
+  const displayedRed = red / 255 * displayedAlpha
+  const displayedGreen = green / 255 * displayedAlpha
+  const displayedBlue = blue / 255 * displayedAlpha
+  return Math.round((
+    displayedRed * 0.2126
+    + displayedGreen * 0.7152
+    + displayedBlue * 0.0722
+  ) * 255)
+}
+
+function legacyLumaTieRoundsDown(
+  red: number,
+  green: number,
+  blue: number,
+  alpha: number,
+  numerator: number,
+): boolean {
+  if ((numerator % VIDEO_SCOPE_LUMA_BYTE_DIVISOR) * 2
+    !== VIDEO_SCOPE_LUMA_BYTE_DIVISOR) {
+    return false
+  }
+  return legacyFloatLumaByte(red, green, blue, alpha)
+    < roundUnsignedDivision(numerator, VIDEO_SCOPE_LUMA_BYTE_DIVISOR)
+}
+
+export function videoScopeLegacyLumaTieRoundsDown(
+  red: number,
+  green: number,
+  blue: number,
+  alpha: number,
+): boolean {
+  return legacyLumaTieRoundsDown(
+    red,
+    green,
+    blue,
+    alpha,
+    alpha * weightedLuma(red, green, blue),
+  )
+}
+
+function lumaByte(
+  red: number,
+  green: number,
+  blue: number,
+  alpha: number,
+  numerator: number,
+): number {
+  const rounded = roundUnsignedDivision(numerator, VIDEO_SCOPE_LUMA_BYTE_DIVISOR)
+  return legacyLumaTieRoundsDown(red, green, blue, alpha, numerator)
+    ? rounded - 1
+    : rounded
+}
+
 function chromaBin(delta: number, divisor: number): number {
   const numerator = Math.min(
     divisor * 2,
@@ -107,7 +167,13 @@ export function analyzeVideoScopes(
     const blue = displayedChannel(sourceBlue, alpha)
     const weighted = weightedLuma(sourceRed, sourceGreen, sourceBlue)
     const lumaNumerator = alpha * weighted
-    const luma = roundUnsignedDivision(lumaNumerator, VIDEO_SCOPE_LUMA_BYTE_DIVISOR)
+    const luma = lumaByte(
+      sourceRed,
+      sourceGreen,
+      sourceBlue,
+      alpha,
+      lumaNumerator,
+    )
 
     increment(redBins, red)
     increment(greenBins, green)

@@ -108,6 +108,23 @@ describe('bounded SDR video scope fixtures', () => {
     expect(result.sampleCount).toBe(3)
   })
 
+  test('preserves shipped Float64 luma direction at exact half bins', () => {
+    const rgba = new Uint8ClampedArray([
+      13, 163, 113, 241,
+      0, 13, 142, 150,
+      0, 35, 190, 102,
+    ])
+    const actual = analyzeVideoScopes(rgba, 3, 1)
+    const legacy = legacyFloatAnalysis(rgba, 3, 1)
+
+    expect([...actual.histogram.luma.entries()].filter(([, count]) => count)).toEqual([
+      [12, 1],
+      [16, 1],
+      [120, 1],
+    ])
+    expect(actual.histogram.luma).toEqual(legacy.luma)
+  })
+
   test('preserves the shipped float64 scope bins on a complete seeded sample', () => {
     const rgba = new Uint8ClampedArray(VIDEO_SCOPE_MAX_PIXELS * 4)
     let state = 0x71_75_10_ba
