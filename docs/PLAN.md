@@ -3185,3 +3185,92 @@ acceptance claims.
   oxlint, and the production audit with
   0 vulnerabilities. Publish the Aryel-only follow-up commit and verify its exact
   remote SHA and fresh CI on draft PR #107 before handoff.
+
+## Milestone 4 Part 9b / issue #74 - dynamic zoom and reframe presets
+
+**COMPLETE (2026-08-10).**
+
+- [x] Add four bounded, editable framing presets that compile into normal
+  Position X/Y and Scale X/Y keyframes only, with no procedural durable state,
+  second evaluator, or schema bump.
+- [x] Accept editable start/end horizontal and vertical focus, safe zoom,
+  integer-frame duration, and existing easing; support reverse by swapping
+  endpoints and reversing cubic-bezier timing.
+- [x] Use portable descriptor dimensions first, with a connected-asset fallback,
+  and solve full-canvas coverage from project aspect, source size, crop, anchor,
+  and static rotation in compositor transform order.
+- [x] Clamp requested duration to clips of at least two frames; support stills,
+  reject one-frame clips and text with an accessible reason, support static crop
+  and rotation, reject animated Rotation, and leave transition evaluation on the
+  shared ordinary clip resolver.
+- [x] Make Apply, Reverse, and Reset deliberate one-entry history operations.
+  Replace/remove only all four framing properties, preserve static and unrelated
+  curves/container fields, avoid pointer-move document writes, and state Reset's
+  no-hidden-provenance boundary in the UI.
+- [x] Keep the Inspector, monitor, scrub, recovery, and export on
+  `resolveClipAnimationAtFrame`; expose labeled native controls, fieldsets,
+  keyboard tab navigation, a live status, and direct disabled-reason descriptions.
+- [x] Cover safety math, eased interior frames, resolver parity, source-time ticks,
+  persistence, still/text/short/locked/rotation behavior, transitions through the
+  existing composition tests, history/idempotence, descriptor priority, reset,
+  and accessible keyboard/screen-reader UI.
+- [x] Pass the final gate: 2,261 Vitest cases across 166 files plus 16 benchmark-
+  runner cases, build/typecheck, oxlint, clean diff checks, and production audit
+  with 0 vulnerabilities.
+- [x] Verify real headed Chromium only at `http://localhost:5182/` using
+  `npm run dev -- --port 5182 --strictPort`: real still import, keyboard access,
+  200-to-150-frame clamp, exact local frames 0/75/149, Reverse, Reset, undo,
+  720x800 overflow, recovery while offline, relink, and a downloaded 1080x1920
+  H.264 export with 180 frames at 30 fps. Record local artifacts/hashes, confirm
+  zero console warnings/errors, and release port 5182.
+- [x] Publish a draft PR targeting `master` with `Closes #74`; do not merge or
+  manually close the issue. Rebase after #73 only when the milestone coordinator
+  integrates the schema-13 effect-track work.
+
+## Milestone 4 Part 9b / issue #74 - schema-13 integration follow-up
+
+**COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Rebase the exact old issue-74 head `e9fdbbd` onto the merged issue-73 head
+  `e0778ab`; resolve only `domain/operations.ts` and `docs/PLAN.md` semantically,
+  retaining schema-13 `effectTracks`, effect APIs, compositor ordering, budget
+  authorities, and both issue records.
+- [x] Keep dynamic zoom as four ordinary transform tracks, preserve the complete
+  animation container on Apply/Reset, and preflight its net key growth against
+  the shared 100,000-key document budget without rejected history entries.
+- [x] Add schema-13 focused coverage proving Apply and Reset retain effect tracks
+  and exact-cap rejection is a no-op; confirm the old/new range-diff contains
+  only the expected integration changes.
+- [x] Pass 17 narrow issue-74 tests, the 177-test dynamic/schema/effects/
+  compositor focus, all 2,299 Vitest cases across 167 files plus 16 benchmark
+  checks, production build/typecheck, oxlint, clean diff checks, and the
+  production audit with 0 vulnerabilities.
+- [x] Verify real headed Chromium only at `http://localhost:5182/` using the
+  required strict-port command: real still import/drop, a rectangle-mask effect
+  key, Apply, exact interior scrub, Reverse, Reset, Ctrl+Z restoration, and
+  effect-track survival. Record five ignored screenshot hashes, confirm zero
+  console warnings/errors, and release port 5182.
+- [x] Force-push only with the exact old-head lease, update draft PR #106 with
+  the rebased evidence, and wait for exact-head CI. Do not merge or manually
+  close issue #74.
+
+## Milestone 4 Part 9b / issue #74 - signed-flip and accessible-status follow-up
+
+**COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Match compositor signed-scale geometry for horizontal, vertical, and
+  combined flips around arbitrary anchors while retaining crop, rotation,
+  centered-anchor, endpoint, and eased-interior safety.
+- [x] Share exact net-key growth between readiness and Apply; expose explicit
+  changed/unchanged/rejected domain/store outcomes so budget rejection cannot
+  be mistaken for idempotence and history remains untouched.
+- [x] Make current invalid draft, missing dimensions, track lock, animated
+  rotation, and budget reasons outrank stale feedback; clear feedback on draft
+  edits and give disabled Reset its own directly associated lock/no-track reason.
+- [x] Pass 22 focused tests, all 2,304 Vitest cases across 167 files plus 16
+  benchmark checks, production build/typecheck, oxlint, clean diff checks, and
+  the production audit with 0 vulnerabilities.
+- [x] Verify real Chrome at strict port 5182 with a 1672x941 still on a square
+  canvas, Anchor X 20%, horizontal flip, disabled-reason transitions, Apply,
+  eased interior scrub with full coverage, Reverse, Reset, Ctrl+Z, lock/unlock,
+  two hashed screenshots, and 0 console warnings/errors; release the port.

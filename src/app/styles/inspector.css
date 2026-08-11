@@ -294,6 +294,28 @@
   min-width: 0;
 }
 
+.dynamic-zoom-editor {
+  margin-bottom: 10px;
+}
+
+.dynamic-zoom-framing {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #2f4053;
+  border-radius: 6px;
+}
+
+.dynamic-zoom-framing legend {
+  padding: 0 4px;
+  color: #a9bbcf;
+  font-size: 10px;
+  font-weight: 650;
+}
+
 .animation-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -419,6 +441,12 @@
   color: #8f9ba7;
   font-size: 10px;
   line-height: 1.35;
+}
+
+@media (max-width: 760px) {
+  .dynamic-zoom-framing {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Soft Studio contextual Inspector. */

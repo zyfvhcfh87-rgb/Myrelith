@@ -61,6 +61,7 @@ import {
 } from '../domain/timelineMarkers'
 import type {
   ClipAudioPatch,
+  ClipFramingOperationResult,
   ClipTransformPatch,
   ClipVisualPatch,
   CrossfadeSettings,
@@ -69,10 +70,15 @@ import type {
   TrimEdge,
 } from '../domain/operations'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
+import type {
+  DynamicZoomRequest,
+  DynamicZoomSourceDimensions,
+} from '../domain/dynamicZoom'
 import {
   addCrossfade,
   addCrossfadeWithSourceBounds as addExactCrossfade,
   addEffect,
+  applyDynamicZoomWithResult,
   addTrack,
   insertClip,
   removeTransition,
@@ -100,6 +106,7 @@ import {
   moveClipKeyframe,
   removeClipKeyframe,
   resetClipAnimationTrack,
+  resetClipFramingAnimationWithResult,
   updateTextClip,
 } from '../domain/operations'
 import {
@@ -295,6 +302,14 @@ export interface DocumentState {
     clipId: ClipId,
     property: ClipAnimationProperty,
   ) => void
+  /** Replace Position X/Y and Scale X/Y with one ordinary-keyframe preset. */
+  applyDynamicZoom: (
+    clipId: ClipId,
+    source: DynamicZoomSourceDimensions,
+    request: DynamicZoomRequest,
+  ) => ClipFramingOperationResult
+  /** Explicitly remove all four position/scale animation tracks. */
+  resetClipFramingAnimation: (clipId: ClipId) => ClipFramingOperationResult
   /** Update one text payload atomically; invalid/unchanged patches add no history. */
   updateTextClip: (clipId: ClipId, patch: TextPropsPatch) => void
   /**
@@ -635,6 +650,24 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       state,
       resetClipAnimationTrack(state.doc, clipId, property),
     )),
+
+  applyDynamicZoom: (clipId, source, request) => {
+    let result: ClipFramingOperationResult | undefined
+    set((state) => {
+      result = applyDynamicZoomWithResult(state.doc, clipId, source, request)
+      return commit(state, result.doc)
+    })
+    return result!
+  },
+
+  resetClipFramingAnimation: (clipId) => {
+    let result: ClipFramingOperationResult | undefined
+    set((state) => {
+      result = resetClipFramingAnimationWithResult(state.doc, clipId)
+      return commit(state, result.doc)
+    })
+    return result!
+  },
 
   updateTextClip: (clipId, patch) =>
     set((state) => commit(state, updateTextClip(state.doc, clipId, patch))),

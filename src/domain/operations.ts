@@ -47,6 +47,7 @@ import type {
   Transform,
 } from './schema'
 import {
+  ANIMATABLE_CLIP_PROPERTIES,
   clipAnimation,
   clipAnimationKeyframeCount,
   clipAnimationValidationError,
@@ -69,6 +70,13 @@ import {
   upsertAnimationKeyframe,
   upsertEffectAnimationKeyframe,
 } from './clipAnimation'
+import {
+  createDynamicZoomPlan,
+  dynamicZoomKeyframeBudgetReason,
+  isDynamicZoomFramingProperty,
+  type DynamicZoomRequest,
+  type DynamicZoomSourceDimensions,
+} from './dynamicZoom'
 import {
   clipAudioSettings,
   clipAudioSettingsValidationError,
@@ -1905,20 +1913,34 @@ function animationEditLocation(
   clipId: ClipId,
   operation: string,
 ): ClipLocation | null {
-  const loc = locateClip(doc, clipId)
-  if (!loc) {
-    reject(doc, operation, `clip ${clipId} not found`)
+  const result = animationEditLocationResult(doc, clipId)
+  if (!result.ok) {
+    reject(doc, operation, result.reason)
     return null
   }
+  return result.loc
+}
+
+type AnimationEditLocationResult =
+  | { readonly ok: true; readonly loc: ClipLocation }
+  | { readonly ok: false; readonly reason: string }
+
+function animationEditLocationResult(
+  doc: TimelineDoc,
+  clipId: ClipId,
+): AnimationEditLocationResult {
+  const loc = locateClip(doc, clipId)
+  if (!loc) return { ok: false, reason: `clip ${clipId} not found` }
   if (loc.track.locked) {
-    reject(doc, operation, `track ${loc.track.id} is locked`)
-    return null
+    return { ok: false, reason: `track ${loc.track.id} is locked` }
   }
   if (loc.track.kind !== 'video' || loc.clip.text !== undefined) {
-    reject(doc, operation, 'keyframes are supported only on visual media clips')
-    return null
+    return {
+      ok: false,
+      reason: 'keyframes are supported only on visual media clips',
+    }
   }
-  return loc
+  return { ok: true, loc }
 }
 
 function replaceClipAnimation(
@@ -2177,6 +2199,135 @@ export function resetEffectAnimationTrack(
       new Set([parameter]),
     ),
   )
+}
+
+/**
+ * Replace the four ordinary position/scale tracks with one dynamic-zoom plan.
+ * Rotation/opacity and future animation-container fields remain untouched.
+ */
+export type ClipFramingOperationResult =
+  | {
+    readonly ok: true
+    readonly changed: boolean
+    readonly doc: TimelineDoc
+  }
+  | {
+    readonly ok: false
+    readonly changed: false
+    readonly doc: TimelineDoc
+    readonly reason: string
+  }
+
+function rejectClipFramingOperation(
+  doc: TimelineDoc,
+  operation: string,
+  reason: string,
+): ClipFramingOperationResult {
+  reject(doc, operation, reason)
+  return { ok: false, changed: false, doc, reason }
+}
+
+export function applyDynamicZoomWithResult(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  source: DynamicZoomSourceDimensions,
+  request: DynamicZoomRequest,
+): ClipFramingOperationResult {
+  const op = 'applyDynamicZoom'
+  const location = animationEditLocationResult(doc, clipId)
+  if (!location.ok) {
+    return rejectClipFramingOperation(doc, op, location.reason)
+  }
+  const loc = location.loc
+  const result = createDynamicZoomPlan(doc, loc.clip, source, request)
+  if (!result.ok) return rejectClipFramingOperation(doc, op, result.reason)
+
+  const current = clipAnimation(loc.clip)
+  const retainedTracks = current.tracks.filter(
+    ({ property }) => !isDynamicZoomFramingProperty(property),
+  )
+  const budgetReason = dynamicZoomKeyframeBudgetReason(doc, loc.clip, result.plan)
+  if (budgetReason) return rejectClipFramingOperation(doc, op, budgetReason)
+  let plannedTracks: typeof result.plan.tracks
+  try {
+    plannedTracks = result.plan.tracks.map((track) => ({
+      property: track.property,
+      keyframes: track.keyframes.map((keyframe) => ({
+        ...keyframe,
+        sourceTimeTicks: sourceTicksAtTimelineOffset(
+          clipSourceTimeMap(loc.clip),
+          keyframe.frame,
+        ),
+      })),
+    }))
+  } catch {
+    return rejectClipFramingOperation(
+      doc,
+      op,
+      'dynamic zoom keyframe source time exceeds safe integer bounds',
+    )
+  }
+  const tracks = [...retainedTracks, ...plannedTracks]
+  tracks.sort(
+    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property)
+      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property),
+  )
+  const animation = { ...current, tracks }
+  const animationError = clipAnimationValidationError(animation)
+  if (animationError) return rejectClipFramingOperation(doc, op, animationError)
+  if (JSON.stringify(animation) === JSON.stringify(current)) {
+    return { ok: true, changed: false, doc }
+  }
+  return {
+    ok: true,
+    changed: true,
+    doc: replaceClipAnimation(doc, loc, animation),
+  }
+}
+
+export function applyDynamicZoom(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  source: DynamicZoomSourceDimensions,
+  request: DynamicZoomRequest,
+): TimelineDoc {
+  return applyDynamicZoomWithResult(doc, clipId, source, request).doc
+}
+
+/**
+ * Explicitly remove every Position X/Y and Scale X/Y track. With no hidden
+ * preset provenance this also removes later manual edits on those tracks;
+ * rotation, opacity, and static transform values remain unchanged.
+ */
+export function resetClipFramingAnimationWithResult(
+  doc: TimelineDoc,
+  clipId: ClipId,
+): ClipFramingOperationResult {
+  const op = 'resetClipFramingAnimation'
+  const location = animationEditLocationResult(doc, clipId)
+  if (!location.ok) {
+    return rejectClipFramingOperation(doc, op, location.reason)
+  }
+  const loc = location.loc
+  const current = clipAnimation(loc.clip)
+  const tracks = current.tracks.filter(
+    ({ property }) => !isDynamicZoomFramingProperty(property),
+  )
+  if (tracks.length === current.tracks.length) {
+    return { ok: true, changed: false, doc }
+  }
+  return {
+    ok: true,
+    changed: true,
+    doc: replaceClipAnimation(doc, loc, { ...current, tracks }),
+  }
+}
+
+export function resetClipFramingAnimation(
+  doc: TimelineDoc,
+  clipId: ClipId,
+): TimelineDoc {
+  return resetClipFramingAnimationWithResult(doc, clipId).doc
 }
 
 function staticVisualPatchDiffers(

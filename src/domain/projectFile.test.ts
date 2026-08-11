@@ -38,7 +38,8 @@ import {
   validateProjectFile,
 } from './projectFile'
 import { EFFECT_STACK_LIMITS } from './effectBounds'
-import { addEffect, updateEffectParams } from './operations'
+import { dynamicZoomRequestFromPreset } from './dynamicZoom'
+import { addEffect, applyDynamicZoom, updateEffectParams } from './operations'
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -805,6 +806,27 @@ describe('portable project file', () => {
 
     expect(parsed.document.tracks[0].clips[0].animation)
       .toEqual(original.document.tracks[0].clips[0].animation)
+  })
+
+  test('round-trips dynamic zoom output as ordinary transform keyframes', () => {
+    const original = makeProject()
+    original.document = applyDynamicZoom(
+      original.document,
+      'clip-a',
+      { width: 3_840, height: 2_160 },
+      dynamicZoomRequestFromPreset('reframe-left-right', 90),
+    )
+    const authored = original.document.tracks[0].clips[0].animation
+
+    const parsed = parseProjectFile(serializeProjectFile(original))
+
+    expect(authored?.tracks.map(({ property }) => property)).toEqual([
+      'position-x',
+      'position-y',
+      'scale-x',
+      'scale-y',
+    ])
+    expect(parsed.document.tracks[0].clips[0].animation).toEqual(authored)
   })
 
   test('migrates schema-5 clips to canonical empty animation tracks', () => {

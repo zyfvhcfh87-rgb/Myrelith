@@ -2731,6 +2731,70 @@ surface; it is not a second zoom and never enters document history.
   audit or the deployed static bundle. They are separate dependency-maintenance
   work, not hidden inside this six-finding change.
 
+## Milestone 4 Part 9b / issue #74 - dynamic zoom and reframe presets
+
+**IMPLEMENTATION COMPLETE (2026-08-10).**
+
+- `domain/dynamicZoom.ts` is a pure authoring helper, not a second animation
+  engine. Four small presets (gentle in/out and horizontal/vertical reframe)
+  resolve editable start/end focus, safe zoom, duration, and existing easing
+  into exactly two ordinary keyframes on each of Position X/Y and Scale X/Y.
+  Apply replaces only those four properties, Reverse swaps the endpoints and
+  reverses cubic-bezier timing, and Reset deliberately removes every authored
+  curve on those four properties. Rotation, Opacity, crop, static transform,
+  and any other animation-container fields remain untouched.
+- Portable asset descriptors are the primary immutable source of width/height;
+  a connected session asset is an explicit fallback only when descriptor
+  dimensions are unavailable. The bounded framing math combines source size,
+  project aspect, asymmetric crop, authored anchor, and static rotation in the
+  same transform order as the compositor. Requested focus is projected into
+  the feasible full-coverage region at both endpoints; convex interpolation of
+  those safe endpoints retains coverage at interior frames.
+- Stills use their authored timeline duration and are supported. A requested
+  duration longer than a clip clamps to that clip; one-frame clips are rejected
+  because two distinct keys cannot exist. Text is explicitly unavailable because
+  the current ordinary clip-animation contract does not animate text geometry.
+  Static crop and rotation are supported by the safety solver; a Rotation curve
+  is rejected because one static bound cannot guarantee every animated angle.
+  Transitions continue to evaluate the same normal clip animation on each
+  composition leg, so there is no transition-specific preset state.
+- The lazy Animation-tab editor keeps preset drafts local until Apply/Reverse.
+  Every committed apply, reverse, or reset is one normal document-history entry;
+  rejected/idempotent requests do not grow history and pointer movement never
+  mutates the document. Inspector fields, monitor gestures, scrub, recovery, and
+  export therefore stay synchronized through `resolveClipAnimationAtFrame`.
+  Native labels, fieldsets, tab keyboard navigation, live status, and direct
+  Apply/Reverse `aria-describedby` links expose every configuration value and
+  disabled reason to keyboard and screen-reader users.
+- Focused tests cover safe endpoints and eased interior frames across landscape,
+  portrait, square, asymmetric-crop, off-center-anchor, and rotated inputs;
+  normal resolver use at an interior integer frame; source-time ticks; still,
+  text, lock, rotation-animation, and short-clip rules; exact persistence;
+  one-entry undo/redo; reset boundaries; portable-descriptor priority; and the
+  accessible UI. The final gate passed 2,261 Vitest cases across 166 files plus
+  all 16 benchmark-runner cases, production typecheck/build, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities. Vite retained only
+  its existing advisory large-chunk warning.
+- Real headed Chromium used exactly `http://localhost:5182/` via
+  `npm run dev -- --port 5182 --strictPort`. A real 1672x941 still in a
+  1080x1920/30 fps project produced four visible ordinary tracks; a requested
+  200 frames clamped to 150. Exact clip-local frames 0, 75, and 149 showed
+  distinct full-coverage reframes. Reverse swapped the visible Position X
+  endpoint values and timing curve; Reset removed the tracks; Ctrl+Z restored
+  them. A 720x800 pass had no dynamic-panel horizontal overflow. Recovery reload
+  retained exact keys while the source was offline, descriptor dimensions kept
+  the editor ready, relink succeeded, and Chromium exported a 1080x1920 H.264
+  MP4 with 180 decoded frames at 30 fps. Extracted output frames 30, 105, and
+  179 visually retained the recovered reversed reframe. Final console evidence
+  reported 0 warnings and 0 errors; artifacts and hashes are recorded in
+  `output/playwright/issue-74-browser-evidence.txt`; port 5182 was released.
+- Browser QA used one uncropped, unrotated still; the crop/anchor/rotation matrix
+  is covered by pure and composition tests rather than additional browser
+  fixtures. Subject tracking and AI reframing remain intentionally out of scope.
+  No schema version changed. Issue #73 may touch the shared operations/store/
+  Inspector/persistence-test/docs seams during rebase, but this work preserves
+  the full animation container and does not own effect-stack or Effects-tab code.
+
 ## Working agreements (the user's explicit preferences)
 
 - Changes may span every module needed for one complete fix. Keep dependency
@@ -2851,3 +2915,90 @@ surface; it is not a second zoom and never enters document history.
   TypeScript, production build/typecheck, oxlint, and
   `npm audit --omit=dev` also passed; the audit found 0 vulnerabilities and the
   build emitted only the established large-chunk advisory.
+
+## Milestone 4 issue #74 - schema-13 integration follow-up (2026-08-11)
+
+**INTEGRATION COMPLETE LOCALLY.**
+
+- The published issue-74 commit was rebased from `ddc26f3`/`e9fdbbd` onto the
+  issue-73 merge commit `e0778ab`. The only textual conflicts were
+  `src/domain/operations.ts` and `docs/PLAN.md`; both were resolved semantically.
+  Schema-13 `effectTracks`, the effect edit APIs, compositor contracts, and the
+  issue-73 hardening record remain intact while dynamic zoom still writes only
+  the four ordinary Position X/Y and Scale X/Y tracks and spreads the complete
+  animation container.
+- Apply now preflights the net growth from its planned eight-key replacement
+  against the shared 100,000-key document budget introduced by issue #73.
+  Exact-cap rejection is identity- and history-neutral. Focused operations
+  tests prove Apply and Reset
+  retain existing effect descriptors and `effectTracks`; schema-13 persistence
+  fixtures include the canonical empty effect-track array. The old-versus-new
+  `git range-diff` contains only those expected schema, preservation, budget,
+  test, and append-only documentation adjustments.
+- Rebased-tree validation passed 17 issue-74 tests, a 177-test dynamic/schema/
+  effects/compositor focus, all 2,299 Vitest cases across 167 files, and all 16
+  benchmark-runner checks. Production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` also passed; the audit found 0
+  vulnerabilities and the build retained only its established large-chunk
+  advisory.
+- Real headed Chromium ran at exactly `http://localhost:5182/` from
+  `npm run dev -- --port 5182 --strictPort`. A real 1672x941 still on V1 first
+  received a rectangle-mask Left effect key at clip frame 0. Dynamic Apply,
+  exact clip-frame-75 scrub, Reverse, Reset, and Ctrl+Z all worked; the normal
+  framing tracks disappeared and restored as expected, while the Mask card and
+  Left effect key remained visible after every operation. The monitor retained
+  full-canvas coverage. Final console evidence was 3 messages, 0 errors, and 0
+  warnings, and port 5182 was released.
+- Rebase screenshots are ignored local QA evidence:
+  `issue-74-rebase-apply.png` (`B43F993EC9ECED990F8590CE89D4EFAC91E9164F11B6DC12156D7B6805F73ABE`),
+  `issue-74-rebase-scrub-middle.png` (`3D73A49AA813ED891EA1DD949CF275B3B84DF5C1E3736F87A05086E39B928842`),
+  `issue-74-rebase-reverse.png` (`2C2A3806A8EA7688FDEA2F6BFA4569161BCC093473BCD612FE381277DCACCE58`),
+  `issue-74-rebase-undo-restored.png` (`34D96B246454E9ACDD6EF39EDDC8F8E737792C73E0A94A0D19F5595F0D9DF8E2`),
+  and `issue-74-rebase-effect-track-survives.png`
+  (`8FDFE3EA2A3F5AC061FDE573225DEA3B4DD8652E3C403A3BF9ABCA0B27489786`).
+  The integration smoke reused one uncropped, unrotated still and did not repeat
+  the earlier recovery/export matrix; deterministic tests and the original
+  issue-74 Chromium evidence continue to cover those claims.
+
+## Milestone 4 issue #74 - signed-flip and accessible-status follow-up (2026-08-11)
+
+**REVIEW BLOCKERS RESOLVED LOCALLY.**
+
+- The framing solver now composes horizontal and vertical reflection signs
+  around the authored anchor before static rotation, matching the compositor's
+  signed-scale order. Safe extents remain reflection-invariant, while the
+  cropped visible-source center receives the signed transform needed to avoid
+  uncovered canvas at off-center anchors. Focused tests include the exact
+  square-source, Anchor X 20%, horizontal-flip counterexample plus horizontal,
+  vertical, and combined flips with asymmetric anchors, crop, rotation,
+  centered-anchor regressions, and eased interior integer frames.
+- Apply and Reset now return explicit domain/store outcomes that distinguish a
+  rejected edit from a valid identity-preserving repeat. The shared dynamic-
+  zoom budget helper computes the same planned-minus-replaced key growth for
+  both readiness and commit, so an exact-cap rejection says it exceeded the
+  document keyframe budget and creates no history entry.
+- Current lock, dimensions, duration, focus, zoom, rotation-animation, and
+  budget reasons outrank prior load/success feedback. Editing any draft field
+  clears stale operation feedback. Apply and Reverse remain directly described
+  by the live status; disabled Reset uses its own stable reason for locked and
+  no-framing-track states, then returns to the destructive-scope note when
+  enabled. The safe-zoom explanation now explicitly includes flips.
+- Final focused validation passed 22 tests across the framing math, document
+  operations, store history/outcomes, and React editor. The full gate passed all
+  2,304 Vitest cases across 167 files plus all 16 benchmark-runner checks.
+- Real Chrome QA used exactly `http://localhost:5182/` from
+  `npm run dev -- --port 5182 --strictPort`. A real 1672x941 still on a
+  1080x1080 canvas used Anchor X 20% plus horizontal flip. Invalid duration,
+  no-track Reset, and locked-track controls exposed their current described
+  reasons; correction/unlock returned to Ready. Apply authored Position X
+  1650.9736450584485 to 733.8918172157279 and the eased interior scrub retained
+  full-canvas coverage. Reverse, Reset, Ctrl+Z restoration, and lock/unlock all
+  behaved as expected. Console evidence was 3 messages, 0 warnings, and 0
+  errors; port 5182 was released. Ignored evidence:
+  `flipped-apply-interior.png`
+  (`FA9FB733E3286EB1DB2A1009AA15E0970830A4D3901C626A9B380B4FCA86773D`)
+  and `flipped-reverse-before-reset.png`
+  (`0C2553F8C63CB606CAD3BDDA0D17E81F3C73C0CB4F46934D8416728DC64D65F2`).
+  The browser-control cleanup handshake timed out after evidence capture on two
+  attempts; the app console stayed clean and the verified Vite process/port was
+  stopped directly.
