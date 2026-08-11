@@ -188,7 +188,7 @@ sample strictly before it; accepting even one recovery frame is a failure.
 | Box mean relative scale error | 2.9% | ≤ 8% |
 | Full occlusion rejected | yes | required |
 | Occlusion loss latency | 0 frames (failure 18, accepted through 17) | required |
-| Complete worker experiment | 217.7 ms | descriptive, host-specific |
+| Complete worker experiment | 237.2 ms | descriptive, host-specific |
 
 The zero point error is intentionally narrow: it is the exact integer-motion
 positive fixture, not a subpixel or real-footage claim. #110 adds textured,
@@ -290,6 +290,17 @@ settled with `AbortError` in 47.8 ms, workers drained 2/2, support frames closed
 1/1, OPFS probes removed 1/1, console problems remained zero, and port 41844 was
 released. The visual evidence SHA-256 is
 `AF04F0EDD9044183700263D102740C19C0D1368F8570A6AAA35BEDB358D13AF6`.
+
+The five-group completion rerun advanced the artifact to schema 3 /
+`issue-44-motion-analysis-v3` and captured exact clean implementation commit
+`3e632ab6dd0b24cc26ff61e38cf812ef4764f470` with fingerprint
+`sha256:0d12c3d9a76f3a4c6c5b922d57b2e5612a76fb8c217d3e6abb45667ba14a6af1`.
+Point and box independently reported `go`; the occlusion fixture failed exactly
+on frame 18 after accepting through frame 17. Analysis completed in 237.2 ms,
+cancellation settled in 52.8 ms, workers drained 2/2, support frames closed 1/1,
+OPFS probes removed 1/1, console problems remained zero, and port 41844 was
+released. The visual evidence SHA-256 is
+`2018D6738F26D35FD4E0DB23B8649AD49C96EE9412D4452A6CEED56BBDAEFDEF`.
 
 ## Final boundaries
 

@@ -3675,3 +3675,13 @@ surface; it is not a second zoom and never enters document history.
   removed OPFS probes 1/1, reported zero console problems, and released the
   port. The ignored screenshot SHA-256 is
   `AF04F0EDD9044183700263D102740C19C0D1368F8570A6AAA35BEDB358D13AF6`.
+- The five-group completion reran artifact schema 3 /
+  `issue-44-motion-analysis-v3` on strict port 41844 against exact clean commit
+  `3e632ab6dd0b24cc26ff61e38cf812ef4764f470`, fingerprint
+  `sha256:0d12c3d9a76f3a4c6c5b922d57b2e5612a76fb8c217d3e6abb45667ba14a6af1`.
+  Point and box independently reported go, occlusion failed on frame 18 after
+  accepted frame 17, analysis completed in 237.2 ms, and cancellation settled
+  in 52.8 ms. Workers drained 2/2, support frames closed 1/1, OPFS probes removed
+  1/1, console problems stayed zero, and the port was released. The ignored
+  screenshot SHA-256 is
+  `2018D6738F26D35FD4E0DB23B8649AD49C96EE9412D4452A6CEED56BBDAEFDEF`.

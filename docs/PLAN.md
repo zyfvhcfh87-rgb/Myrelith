@@ -3832,3 +3832,8 @@ acceptance claims.
   commit `9f45e44a514d7540637ab466d48516593b59a404`: textured hard-cut rejection,
   typed overlapping-run denial, successful analysis, cancellation, exact
   worker/frame/OPFS parity, zero console problems, and released port.
+- [x] Advance the artifact to schema 3 / `issue-44-motion-analysis-v3` and rerun
+  strict-port Chromium against exact clean commit
+  `3e632ab6dd0b24cc26ff61e38cf812ef4764f470`: independent point/box go results,
+  loss on occlusion frame 18 after accepted frame 17, exact worker/frame/OPFS
+  parity, zero console problems, and released port.
