@@ -175,6 +175,22 @@ screen-reader label and native keyboard activation. Add is disabled with a
 visible/accessibly-associated reason whenever the selected clip or document
 has no remaining effect budget.
 
+## Proposed third-party plugin descriptors
+
+Issue #76 reserves `plugin:<reverse-dns-plugin-id>/<contribution-id>` as the
+durable namespace for future plugin effects. The descriptor remains this exact
+bounded `EffectDescriptor`; projects never embed a package, URL, signature,
+trust decision, permission grant, sandbox state, or executable code. On the
+current tree every such type is intentionally unknown, preserved, reported as
+unsupported, and bypassed. Issue #76 adds only a pure non-executing manifest
+validator; no plugin registry or runtime is present.
+
+The gated package, capability, compatibility, isolation, recovery, and failure
+contract is in [PLUGINS.md](PLUGINS.md), with threats and residual risk in
+[PLUGIN_THREAT_MODEL.md](PLUGIN_THREAT_MODEL.md). A future Issue #77 runtime must
+retain the existing authored stack order and shared preview/export path rather
+than create a second effect model.
+
 ## Issue #73 review hardening
 
 Program Monitor support status resolves animated effect parameters at the

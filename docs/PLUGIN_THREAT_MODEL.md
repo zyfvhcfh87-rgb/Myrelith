@@ -1,0 +1,365 @@
+# Plugin threat model
+
+Status: Issue #76 design. Scope is the proposed third-party plugin boundary,
+not a claim that a runtime exists. The complete ABI, packaging, compatibility,
+failure, and unsupported-capability contract is in [PLUGINS.md](PLUGINS.md).
+
+## Overview
+
+Myrelith is a local-first browser video editor. It handles user-selected media,
+portable project JSON, origin-local recovery and file-handle sidecars, preview
+pixels, and encoded output. Third-party effects would process sensitive frame
+pixels and could otherwise threaten the editor's origin storage, local file
+capabilities, network privacy, output integrity, and availability.
+
+The proposed first runtime accepts only locally selected, signed offline
+packages. Package code is WebAssembly, not JavaScript. It runs behind an
+opaque-origin iframe broker in a dedicated worker, with one bounded imported
+memory and no callable imports. The host copies one isolated RGBA8 layer into
+that memory and copies an exact validated result back. The plugin receives no
+ambient browser API and no project, file, network, storage, DOM, audio, codec,
+or export-sink capability.
+
+This design assumes plugin packages and plugin-bearing projects may be actively
+malicious. A valid signature identifies byte continuity for one key; it does
+not make a package safe. User consent does not replace isolation, bounds, or
+failure containment.
+
+## Threat Model, Trust Boundaries, and Assumptions
+
+### Assets and security invariants
+
+| Asset | Required invariant |
+| --- | --- |
+| User media and frame pixels | A plugin sees only pixels for an effect instance the user enabled; it cannot read source bytes, paths, unrelated layers, audio, or later frames without separate calls. |
+| Local file capabilities | `File` and `FileSystemHandle` objects never cross the app/controller boundary into a manifest, store, sandbox, message, or project. |
+| Origin storage | Plugins cannot access Myrelith IndexedDB, OPFS, Cache Storage, local/session storage, cookies, recovery, Recents, remembered media, proxy manifests, or trust records. |
+| Network privacy | No plugin-controlled request, socket, beacon, WebRTC channel, navigation, form, popup, or download is possible. |
+| Project truth | Projects contain only bounded primitive descriptors. They cannot carry code, grants, package locations, trust, revocation changes, or an instruction to install/execute. |
+| Preview/export integrity | Authored stack order is shared. Missing/failing plugins are visible; export aborts by default instead of silently dropping an effect. |
+| Editor availability | Package parsing, decompression, memory, queues, calls, diagnostics, and retries are bounded. A parent-realm watchdog can terminate a non-cooperative sandbox. |
+| Supply-chain identity | Every executed byte is covered by the verified package integrity table and Ed25519 signature; signer and digest changes cannot inherit trust/grants silently. |
+| Recovery | Missing, denied, revoked, incompatible, crashed, and safe-mode plugin descriptors remain ordered, editable, saveable, and recoverable without execution. |
+
+### Actors
+
+- **Project author:** may craft a syntactically valid `.myrelith` file with
+  hostile plugin descriptor ids, versions, values, counts, or animation targets.
+- **Package author:** controls every package byte, manifest value, signature key,
+  WebAssembly instruction, export behavior, return code, runtime duration, and
+  output pixel.
+- **Supply-chain attacker:** may replace an unsigned download, compromise a
+  publisher build system or signing key, replay an old signed version, or trick a
+  user with a look-alike id/name/key.
+- **Local operator:** chooses packages, reviews signer fingerprints and
+  permissions, applies effects, enables bypass, imports revocations, and may make
+  an unsafe trust decision.
+- **Myrelith release developer:** controls built-in trust/revocation keys, host
+  policy, ABI implementation, CSP, package parser, compositor, and UI copy.
+- **Browser/OS:** enforces WebAssembly memory safety, workers, iframe sandboxing,
+  CSP, Web Crypto, storage origins, and process termination. It is trusted to
+  enforce its documented boundary but is still probed at runtime.
+
+### Trust boundaries
+
+1. **Local file to package parser.** All bytes are untrusted. No allocation,
+   path use, decompression, JSON parse, or hash may occur beyond a checked bound.
+2. **Parser to integrity/signature verifier.** Normalized paths, byte lengths,
+   and exact entry bytes must match one signed canonical table. Parser ambiguity
+   is a verification failure.
+3. **Verified package to local trust policy.** Cryptographic validity is not
+   user trust. Signer continuity, revocation, downgrade, and permissions are
+   independent checks.
+4. **Trust policy to compatibility registry.** A trusted package is still inert
+   until required host API, permissions, contribution kind, descriptor version,
+   and runtime features match exactly.
+5. **App window to opaque-origin broker.** The app sends only a verified module,
+   bounded metadata, and a private port. The broker has no same-origin access.
+6. **Broker to worker/WebAssembly.** Only host-authored JavaScript runs. The
+   untrusted module receives imported bounded memory but no callable imports.
+7. **Compositor to plugin frame call.** The host copies one exact pixel buffer
+   and minimal integer metadata, applies a watchdog, validates the complete
+   response, and accepts no partial result.
+8. **Session registry to portable project.** Installed package/trust/grant facts
+   may explain a descriptor but can never mutate or disappear it implicitly.
+9. **Preview to export.** Both consume the same effect plan, but export separately
+   preflights its exact plugin availability and fails transactionally.
+
+### Attacker-controlled inputs
+
+- archive headers, compression ratios, names, case/Unicode forms, sizes, counts,
+  overlaps, trailing bytes, and compressed payloads;
+- manifest JSON bytes, duplicate keys, ids, labels, semantic versions, API and
+  permission ranges, entry path, memory request, contribution/parameter schema;
+- signature envelope, public key, fingerprint text, integrity table, signature,
+  digest, version ordering, and signer changes;
+- WebAssembly binary sections, features, imports, exports, memory/table limits,
+  code, traps, loops, output bytes, return values, and timing;
+- project effect descriptors, parameter primitives, versions, enable state,
+  order, counts, string lengths, ids, and animation targets;
+- plugin-provided diagnostic codes/text and message ordering;
+- local revocation-bundle bytes before their Myrelith signature is verified.
+
+User/operator-controlled inputs are package selection, explicit trust and
+permission decisions, effect application, retry, bypass, disable/uninstall,
+offline revocation import, migration, export-with-bypass confirmation, and safe
+mode. Developer-controlled inputs are shipped keys, host limits, CSP, ABI,
+policy reason strings, and built-in revocations.
+
+### Assumptions and residual trust
+
+- The browser and OS are not already compromised. A browser sandbox,
+  WebAssembly engine, JIT, or process-isolation vulnerability may defeat this
+  design and must be handled through browser updates and disabling plugins.
+- Myrelith's release artifacts and built-in release/revocation keys are trusted.
+  Compromise of that supply chain can authorize malicious host code and is
+  outside a plugin-only containment proof.
+- A plugin granted frame access is allowed to learn and transform those frame
+  pixels. Isolation prevents expanding that grant; it cannot make the granted
+  pixels non-sensitive.
+- CPU/cache timing, total call count, dimensions, and coarse watchdog behavior
+  can leak limited information within the sandbox. No cross-origin secrets are
+  intentionally co-resident, but hardware side channels are residual risk.
+- Removing an iframe/terminating a worker must remain responsive in supported
+  browsers. Issue #77 must prove this with hostile infinite-loop fixtures; a
+  browser that cannot contain them is unsupported for plugins.
+- Signature fingerprints establish key continuity, not legal identity or
+  reputation. Look-alike names remain a user-interface/social-engineering risk.
+
+## Attack Surface, Mitigations, and Attacker Stories
+
+### Package parsing and decompression
+
+**Attacker story:** a package uses traversal, duplicate/colliding names, ZIP64,
+overlapping entries, forged sizes, symlinks, or a decompression bomb to overwrite
+data or exhaust memory before verification.
+
+**Controls:** parse a deterministic in-memory ZIP subset; reject every ambiguous
+or unsupported feature; normalize and validate names before use; never extract
+to disk; enforce archive, entry, module, manifest, count, and running expanded
+budgets before allocation; require the signed table to list every exact entry.
+
+**Residual risk:** parser bugs and decompressor vulnerabilities. Hostile archive
+fixtures, fuzzing, locked dependencies, and production dependency audit are
+required. Package parsing remains outside the plugin sandbox, so this is one of
+the highest-risk implementation surfaces.
+
+### Signature, identity, downgrade, and revocation
+
+**Attacker story:** a malicious download reuses a trusted name, swaps a module
+after manifest inspection, changes signer on update, replays an older vulnerable
+version, or relies on signature-valid but revoked bytes.
+
+**Controls:** sign the complete sorted integrity table; verify exact bytes before
+trust UI; bind installation and grants to plugin id + signer fingerprint +
+package digest; treat signer changes and widened permissions as new decisions;
+prompt on downgrade; consult local built-in/user/imported revocations before
+registration and every activation.
+
+**Residual risk:** compromised publisher keys and convincing look-alike names.
+Offline revocation cannot learn a newly announced incident until the app or user
+imports an updated signed deny set. UI must say “signed by this key,” never
+“safe” or “verified publisher.”
+
+### Manifest ambiguity and compatibility confusion
+
+**Attacker story:** duplicate JSON keys, unknown fields, overlong labels,
+prototype-looking parameter keys, version-range tricks, optional-permission
+downgrades, or URL-shaped entry paths cause different reviewers/components to
+interpret one package differently.
+
+**Controls:** byte limit and duplicate-key rejection before parse; canonical
+JSON; exact keys at every object; ASCII-bounded ids/paths/entrypoints; finite
+numeric bounds; unique ids/parameter keys/options; inclusive integer version
+ranges; required-unavailable is incompatible; optional-unavailable remains
+explicit and unselected; no compatibility substitution.
+
+**Residual risk:** future schema evolution can create confused-deputy behavior
+if old and new code disagree. Each manifest/API/capability/contribution schema is
+independently versioned and old implementations must remain exact.
+
+### Remote loading and data exfiltration
+
+**Attacker story:** a project points at attacker JavaScript, a package fetches a
+second stage, pixels are sent through fetch/WebSocket/WebRTC/beacons/images/forms,
+or navigation/downloads encode data.
+
+**Controls:** project schema contains no package URL; installation begins only
+from a user-selected local `File`; manifest runtime entry is a safe relative
+`.wasm` path; package JavaScript is rejected; WebAssembly has no callable
+imports; iframe has an opaque origin and strict CSP; no navigation/form/popup/
+download tokens; network APIs receive no reference; negative real-browser probes
+must fail closed.
+
+**Residual risk:** browser CSP/sandbox bypasses, side channels, and newly added
+web request primitives not covered by old CSP behavior. `default-src 'none'`,
+explicit `connect-src 'none'`, current browser support gates, and repeated
+negative probes reduce but do not eliminate browser-engine risk.
+
+### Local file/media overreach
+
+**Attacker story:** an effect reads source containers, filenames/paths, offline
+media, hidden tracks, unrelated layers, future frames, audio, clipboard, or
+remembered directory capabilities.
+
+**Controls:** only a copied isolated RGBA8 layer crosses the call boundary;
+metadata is width/height/stride, exact frame, rational rate, contribution/schema,
+and the effect's own bounded params. App controllers retain all file/handle/URL
+ownership. The module has no browser imports. Permission copy explicitly names
+the frame access grant.
+
+**Residual risk:** the granted frame itself may reveal faces, documents, or other
+sensitive content. A malicious effect may encode previous frames into later
+output while its sandbox remains alive. Version 1 should reset module memory on
+effect removal/project replacement and isolate each plugin identity, but temporal
+state within an actively enabled effect is part of the granted computation.
+
+### Origin storage and project crossover
+
+**Attacker story:** a plugin reads recovery snapshots, proxy bytes, recent file
+handles, another project's plugin state, or leaves durable tracking data.
+
+**Controls:** opaque-origin broker; no storage/network imports; first version has
+no plugin storage capability; packages/grants are host-owned records; project
+copy does not carry them; safe mode avoids activation; sandbox and memory are
+destroyed on project replacement.
+
+**Residual risk:** browser bugs or inadvertent host messages. Message schemas
+must reject unknown fields and use exact project/sandbox generations. Future
+persistent storage is a new capability and threat-model review, not an extension
+of frame access.
+
+### WebAssembly/JIT escape and import smuggling
+
+**Attacker story:** a module imports JS/WASI functions, declares shared or
+unbounded memory, exploits an unsupported feature/parser discrepancy, creates
+huge tables, traps the engine, or exploits a browser JIT vulnerability.
+
+**Controls:** parse the binary policy before `WebAssembly.validate` and
+instantiation; allow one imported non-shared bounded memory and no other imports;
+reject additional memory, threads/shared memory, relaxed SIMD, WASI, unknown
+features, unbounded/large tables, unexpected entrypoint types, and oversized
+sections; instantiate only in the sandbox worker; runtime-probe and fail closed.
+
+**Residual risk:** browser-engine vulnerabilities and binary-parser mistakes.
+Keeping browsers current and shipping an emergency local revocation are required.
+Defense does not claim WebAssembly alone is a complete security boundary.
+
+### Denial of service and resource exhaustion
+
+**Attacker story:** infinite loops, deep recursion, repeated traps, memory/table
+growth, huge output messages, queue floods, diagnostic spam, slow decompression,
+or crash/retry loops freeze the editor or exhaust memory.
+
+**Controls:** fixed package/manifest/module/memory/table/count limits; one active
+call per sandbox, two globally, bounded/coalesced queue; trusted parent watchdog;
+whole-sandbox termination; exact response sizes; bounded diagnostics; three
+consecutive failures disable for the session; no background activation; safe
+mode and stale-activation sentinel.
+
+**Residual risk:** termination may briefly consume a CPU core or renderer memory,
+and browser scheduling/process sharing can still degrade the tab. Preview
+deadlines trade effect availability for editor responsiveness. A sandbox escape
+is not required for a meaningful availability attack.
+
+### Message confusion, stale responses, and output corruption
+
+**Attacker story:** plugin replays an old result after seek/project replacement,
+sends a response for another instance, returns partial/oversized pixels, detaches
+buffers, races cancellation, or injects diagnostic HTML.
+
+**Controls:** private port, exact protocol version/type/keys, sandbox generation,
+project generation, instance id, monotonic request id, exact lengths, one in
+flight, latest-wins preview, abort/close settlement, late-response rejection,
+copy-in/copy-out ownership, cleared reusable memory, escaped bounded plain-text
+diagnostics.
+
+**Residual risk:** host lifecycle bugs. Tests must cover cancel/retry/revoke/
+update/project replacement/close at every awaited boundary.
+
+### Project portability, migration, and data loss
+
+**Attacker story:** opening a project auto-installs or executes code; an older
+host drops unknown descriptors; a failing migration corrupts params/animation;
+revocation removes authored data; export silently omits an effect.
+
+**Controls:** project stores only bounded descriptors; unknown types/versions/
+keys/animation targets preserve and bypass; open never installs/prompts/migrates/
+executes; migration is explicit, sandboxed, cloned, bounded, and one-entry only
+after validation; failure retains original; revoke/disable/safe mode never delete
+descriptors; export blocks by default and names every unavailable instance.
+
+**Residual risk:** a user can deliberately remove an opaque effect or explicitly
+export with reviewed bypass. Those are visible user edits, not silent recovery.
+
+### Permission fatigue and social engineering
+
+**Attacker story:** a package uses a trustworthy name, verbose labels, repeated
+prompts, fake warnings, or an “optional” permission that changes behavior to
+pressure acceptance.
+
+**Controls:** host-authored bounded labels and prompt layout; display stable id,
+signer fingerprint, digest, requested access, memory, update/downgrade state, and
+failure policy; no prompts during project open/playback/export; deny by default;
+one explicit Manage Plugins action; plugin text cannot create dialogs/HTML.
+
+**Residual risk:** users can approve malicious code. The narrow first permission
+limits consequence but still reveals applied frame pixels and permits visual
+output tampering.
+
+## Severity Calibration (Critical, High, Medium, Low)
+
+Severity assumes a malicious project or package can reach the stated surface in
+a supported browser without prior browser/OS compromise.
+
+### Critical
+
+- sandbox or browser-engine escape that executes in the Myrelith/app origin or
+  native OS context and can read arbitrary local file capabilities;
+- plugin access to remembered directory/file handles, recovery media, or other
+  origin secrets without a user grant;
+- automatic project-driven remote code loading or unsandboxed JavaScript
+  execution;
+- compromise of a Myrelith built-in signing/revocation key combined with an
+  automatic trusted-code path.
+
+### High
+
+- network exfiltration of granted frame pixels or project/media metadata;
+- persistent same-origin storage access enabling cross-project secret theft;
+- signature/integrity/parser confusion that executes bytes different from those
+  shown and approved;
+- silent export corruption or omission affecting many frames without an
+  actionable warning;
+- archive/parser memory corruption or a reliable tab/browser compromise;
+- a package update inheriting trust/grants across an unapproved signer change.
+
+### Medium
+
+- reliable editor/tab denial of service that requires package installation but
+  survives watchdog/restart or defeats safe mode;
+- cross-instance/stale-response confusion that places pixels on the wrong frame
+  or project but does not disclose them externally;
+- permission-prompt spoofing or repeated background prompting that materially
+  changes a user's decision;
+- data-loss bugs that delete unknown plugin descriptors, params, order, or
+  animation during save/recovery/migration;
+- local revocation bypass that requires an already installed, explicitly trusted
+  package but no browser exploit.
+
+### Low
+
+- bounded single-call crashes/timeouts with clear bypass/retry and no data loss;
+- incorrect or ugly pixel output from an effect the user explicitly applied,
+  when export detects or clearly reports the failure;
+- bounded diagnostic spoofing rendered as escaped plugin-attributed text;
+- package compatibility or install failures that preserve the previous version
+  and project data;
+- coarse timing leakage such as dimensions, call count, or watchdog class when
+  no unrelated secret is exposed.
+
+Out of scope for a plugin-only finding are a malicious local user with direct
+filesystem/browser-profile access, an already compromised browser/OS, and visual
+misbehavior that is exactly the granted effect's declared operation with no
+boundary expansion. Those may still be product-quality issues, but they do not
+demonstrate a plugin trust-boundary failure.

@@ -3090,3 +3090,59 @@ surface; it is not a second zoom and never enters document history.
   artifact, and publish its fingerprints plus parity/device-loss/cleanup/
   diagnostics/port results in PR evidence. Do not modify tracked docs after
   that run, because doing so would invalidate its exact source fingerprint.
+## Part 10c issue #76 - sandboxed plugin capability design (2026-08-11)
+
+**DESIGN AND NON-EXECUTING PROTOTYPE COMPLETE LOCALLY.**
+
+- `docs/PLUGINS.md` is the normative gated contract. Packages are local-only,
+  deterministic, completely hashed, Ed25519-signed, trust/revocation checked,
+  and permission gated. First execution is WebAssembly only: one host-authored
+  opaque-origin iframe broker, one dedicated worker, one bounded imported memory,
+  no callable imports, and parent-owned watchdog/termination. Arbitrary remote
+  URLs and package JavaScript are rejected rather than sandboxed optimistically.
+- The only first contribution is a host-rendered ordered video effect. It may
+  receive one isolated RGBA8 layer plus exact integer-frame/rational-rate facts
+  and its own bounded params. It receives no files/handles/source bytes, network,
+  origin storage, DOM/custom UI, audio, codecs, project mutation, export sink,
+  clock/random source, thread/shared memory, or background execution. Every
+  broader surface requires a separately versioned capability and security review.
+- `docs/PLUGIN_THREAT_MODEL.md` maps assets, actors, nine trust boundaries,
+  hostile inputs, mitigations, realistic attacker stories, residual browser/
+  signer/side-channel risk, and Critical/High/Medium/Low calibration. Signed does
+  not mean safe; the displayed fingerprint proves key continuity only. Offline
+  revocation comes from app releases, user disable/uninstall, or imported signed
+  bundles—never an automatic network request or remote kill switch.
+- `src/domain/pluginManifest.ts` is deliberately data-only. It strictly validates
+  an already-parsed version-1 value, bounds ids/version ranges/relative Wasm path/
+  64 MiB requested memory/permissions/contributions/host-rendered parameters,
+  negotiates exact host versions without granting consent, and derives stable
+  `plugin:<plugin-id>/<contribution-id>` descriptor types. It does no package I/O,
+  byte-level JSON/ZIP/signature work, trust mutation, registration, import, or
+  WebAssembly instantiation; all of that remains Issue #77 work after review.
+- Portable projects keep only the existing bounded `EffectDescriptor` plus
+  ordinary animation intent. A focused test proves a disabled plugin descriptor
+  round-trips without a URL or Wasm path. Missing, incompatible, denied, revoked,
+  crashed, and safe-mode plugins remain preserved, bypassed, reorderable,
+  removable, saveable, recoverable, and inert. Project open never installs,
+  prompts, migrates, enables, or executes a package.
+- Validation passed 99 focused manifest/project/effect/architecture tests, all
+  2,317 Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities. The first focused command honestly
+  could not start because this fresh worktree lacked `node_modules`; `npm ci`
+  restored the lockfile environment. The first 98-test run then found one
+  architecture-guard false positive because it read plugin `schemaVersion: 1` as
+  a stale timeline fixture; using the named plugin schema constant resolved it,
+  and the unchanged 98-test set passed.
+- Real Chromium behavior is intentionally not claimed: the design-only prototype
+  has no production import, registry, UI, worker, iframe, package parser, or
+  execution path, and its identifying strings are absent from `dist`. Issue #77
+  is gated on real-browser negative probes for network, storage, DOM, navigation,
+  worker, cancellation, watchdog, crash, safe-mode, and preview/export behavior.
+- Source identity started at clean
+  `00daac79cd26b2e0a503477d629635f0d15da853` /
+  `sha256:058d3e740f1c760a7349e78299f3e3cb6d97649f4e18a5192ec9ad0fe89d89ee`
+  and reached the initial pre-evidence checkpoint
+  `sha256:994caa4e793d1e57d2f45e97fbc86107866e3a1dba72a3311b3bf1dd112d4f4b`.
+  Final review then added independently versioned contribution negotiation; the
+  final commit id is the authoritative delivery identity.

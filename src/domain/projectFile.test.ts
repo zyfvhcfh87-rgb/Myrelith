@@ -38,6 +38,7 @@ import {
   validateProjectFile,
 } from './projectFile'
 import { EFFECT_STACK_LIMITS } from './effectBounds'
+import { pluginEffectType } from './pluginManifest'
 import { dynamicZoomRequestFromPreset } from './dynamicZoom'
 import { addEffect, applyDynamicZoom, updateEffectParams } from './operations'
 
@@ -639,6 +640,24 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(serializeProjectFile(original))
     expect(parsed.document.tracks[0].clips[0].effects).toEqual(effects)
+  })
+
+  test('preserves a disabled plugin descriptor without installing or executing it', () => {
+    const original = makeProject()
+    const descriptor: EffectDescriptor = {
+      id: 'plugin-effect-sparkle',
+      type: pluginEffectType('com.example.sparkle', 'sparkle'),
+      version: 7,
+      enabled: false,
+      params: { strength: 0.5, mode: 'soft', preserveAlpha: true },
+    }
+    original.document.tracks[0].clips[0].effects = [descriptor]
+
+    const serialized = serializeProjectFile(original)
+    const parsed = parseProjectFile(serialized)
+    expect(parsed.document.tracks[0].clips[0].effects).toEqual([descriptor])
+    expect(serialized).not.toContain('https://')
+    expect(serialized).not.toContain('.wasm')
   })
 
   test('keeps existing version-1 color descriptors valid without inventing new fields', () => {

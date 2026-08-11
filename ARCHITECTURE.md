@@ -211,6 +211,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   their current version. Unknown types, versions, and parameter keys must remain
   ordered and serializable, while evaluation reports and bypasses anything it
   cannot safely execute. The normative contract is in `docs/EFFECTS.md`.
+- `domain/pluginManifest.ts` is the pure, non-executing structural validator and
+  compatibility negotiator for the proposed plugin manifest. It may define only
+  serializable facts and must never read packages, verify signatures, mutate
+  trust/permission state, register runtime code, or instantiate WebAssembly.
+  Plugin packages, sandboxes, ports, workers, watchdogs, grants, and revocations
+  remain future app-owned Issue #77 resources. Projects may retain only bounded
+  namespaced effect descriptors; package bytes, URLs, trust, grants, and runtime
+  state never enter `TimelineDoc`, Zustand, recovery, or portable saves. The
+  reviewed design and complete boundary are normative in `docs/PLUGINS.md` and
+  `docs/PLUGIN_THREAT_MODEL.md`; this Issue #76 prototype executes nothing.
 - Clips on one track are sorted by `timelineRange.startFrame` and pairwise
   non-overlapping; `operations.ts` rejects violations.
 - `TimelineDoc.tracks[0]` composites first (bottom layer).

@@ -3348,3 +3348,51 @@ acceptance claims.
   the ignored `.tmp/issue-75-webgpu/` JSON/Markdown artifact, and publish its
   source/fixture fingerprints plus parity, device-loss, cleanup, diagnostics,
   and strict-port results in PR evidence. Make no tracked-doc edit afterward.
+## Part 10c / issue #76 - sandboxed plugin capability and security design
+
+**DESIGN AND NON-EXECUTING PROTOTYPE COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Publish the complete review boundary in `docs/PLUGINS.md`: strict versioned
+  manifest and compatibility negotiation; deterministic offline package shape;
+  complete-entry integrity; Ed25519 signer continuity; local trust, permission,
+  update, rollback, downgrade, revocation, and safe-mode behavior.
+- [x] Constrain the first implementation to signed WebAssembly behind a
+  host-authored opaque-origin iframe broker and dedicated worker. Supply one
+  bounded imported memory and no callable imports; reject package JavaScript,
+  remote URLs, network, files/handles, storage, DOM/custom UI, audio, codecs,
+  project mutation, export sinks, threads, shared memory, and background work.
+- [x] Define only one first contribution/capability: a host-rendered ordered
+  video effect that receives one isolated RGBA8 layer plus exact integer-frame/
+  rational-rate facts and bounded primitive parameters. Preserve shared authored
+  preview/export stack order and fail export rather than silently omit effects.
+- [x] Threat-model hostile archives/manifests/projects/modules, supply-chain and
+  signer compromise, file/media overreach, network/storage exfiltration, Wasm
+  escape/import smuggling, denial of service, stale messages, output integrity,
+  permission fatigue, migration/data loss, revocation, and residual browser/
+  side-channel risk in `docs/PLUGIN_THREAT_MODEL.md` with severity calibration.
+- [x] Add pure `domain/pluginManifest.ts` validation/negotiation only: exact
+  keys, bounded identities/ranges/paths/memory/contributions/parameters, Wasm-
+  only runtime, required frame permission, exact version selection, and stable
+  namespaced descriptor types. It performs no I/O, trust mutation, registration,
+  package loading, or execution; byte-level ZIP/JSON/signature work stays gated
+  on Issue #77.
+- [x] Prove unknown plugin descriptors round-trip disabled through the existing
+  portable project/effect contract without URLs, Wasm paths, installation, or
+  execution. Missing, incompatible, denied, revoked, crashed, and safe-mode
+  plugins preserve authored data and remain bypass/reorder/remove/save capable.
+- [x] Pass 99 focused manifest/project/effect/architecture tests, all 2,317
+  Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, `git diff --check`, and
+  `npm audit --omit=dev --audit-level=high` with 0 vulnerabilities.
+- [x] Record browser verification as not applicable to this design-only slice:
+  the prototype has no production import, registry, UI, worker, sandbox, package
+  parser, or execution path, and its identifying strings are absent from the
+  production bundle. Real hostile-sandbox Chromium gates are explicit Issue #77
+  prerequisites rather than fabricated Issue #76 runtime evidence.
+- [x] Bind evidence to clean base
+  `00daac79cd26b2e0a503477d629635f0d15da853` /
+  `sha256:058d3e740f1c760a7349e78299f3e3cb6d97649f4e18a5192ec9ad0fe89d89ee`
+  and initial pre-evidence checkpoint
+  `sha256:994caa4e793d1e57d2f45e97fbc86107866e3a1dba72a3311b3bf1dd112d4f4b`.
+  Final review then added independently versioned contribution negotiation;
+  the final commit SHA is the authoritative delivered identity.
