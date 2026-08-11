@@ -2915,3 +2915,47 @@ surface; it is not a second zoom and never enters document history.
   TypeScript, production build/typecheck, oxlint, and
   `npm audit --omit=dev` also passed; the audit found 0 vulnerabilities and the
   build emitted only the established large-chunk advisory.
+
+## Milestone 4 issue #74 - schema-13 integration follow-up (2026-08-11)
+
+**INTEGRATION COMPLETE LOCALLY.**
+
+- The published issue-74 commit was rebased from `ddc26f3`/`e9fdbbd` onto the
+  issue-73 merge commit `e0778ab`. The only textual conflicts were
+  `src/domain/operations.ts` and `docs/PLAN.md`; both were resolved semantically.
+  Schema-13 `effectTracks`, the effect edit APIs, compositor contracts, and the
+  issue-73 hardening record remain intact while dynamic zoom still writes only
+  the four ordinary Position X/Y and Scale X/Y tracks and spreads the complete
+  animation container.
+- Apply now preflights the net growth from its planned eight-key replacement
+  against the shared 100,000-key document budget introduced by issue #73.
+  Exact-cap rejection is identity- and history-neutral. Focused operations
+  tests prove Apply and Reset
+  retain existing effect descriptors and `effectTracks`; schema-13 persistence
+  fixtures include the canonical empty effect-track array. The old-versus-new
+  `git range-diff` contains only those expected schema, preservation, budget,
+  test, and append-only documentation adjustments.
+- Rebased-tree validation passed 17 issue-74 tests, a 177-test dynamic/schema/
+  effects/compositor focus, all 2,299 Vitest cases across 167 files, and all 16
+  benchmark-runner checks. Production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` also passed; the audit found 0
+  vulnerabilities and the build retained only its established large-chunk
+  advisory.
+- Real headed Chromium ran at exactly `http://localhost:5182/` from
+  `npm run dev -- --port 5182 --strictPort`. A real 1672x941 still on V1 first
+  received a rectangle-mask Left effect key at clip frame 0. Dynamic Apply,
+  exact clip-frame-75 scrub, Reverse, Reset, and Ctrl+Z all worked; the normal
+  framing tracks disappeared and restored as expected, while the Mask card and
+  Left effect key remained visible after every operation. The monitor retained
+  full-canvas coverage. Final console evidence was 3 messages, 0 errors, and 0
+  warnings, and port 5182 was released.
+- Rebase screenshots are ignored local QA evidence:
+  `issue-74-rebase-apply.png` (`B43F993EC9ECED990F8590CE89D4EFAC91E9164F11B6DC12156D7B6805F73ABE`),
+  `issue-74-rebase-scrub-middle.png` (`3D73A49AA813ED891EA1DD949CF275B3B84DF5C1E3736F87A05086E39B928842`),
+  `issue-74-rebase-reverse.png` (`2C2A3806A8EA7688FDEA2F6BFA4569161BCC093473BCD612FE381277DCACCE58`),
+  `issue-74-rebase-undo-restored.png` (`34D96B246454E9ACDD6EF39EDDC8F8E737792C73E0A94A0D19F5595F0D9DF8E2`),
+  and `issue-74-rebase-effect-track-survives.png`
+  (`8FDFE3EA2A3F5AC061FDE573225DEA3B4DD8652E3C403A3BF9ABCA0B27489786`).
+  The integration smoke reused one uncropped, unrotated still and did not repeat
+  the earlier recovery/export matrix; deterministic tests and the original
+  issue-74 Chromium evidence continue to cover those claims.

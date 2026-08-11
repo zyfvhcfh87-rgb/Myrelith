@@ -3226,3 +3226,30 @@ acceptance claims.
 - [x] Publish a draft PR targeting `master` with `Closes #74`; do not merge or
   manually close the issue. Rebase after #73 only when the milestone coordinator
   integrates the schema-13 effect-track work.
+
+## Milestone 4 Part 9b / issue #74 - schema-13 integration follow-up
+
+**COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Rebase the exact old issue-74 head `e9fdbbd` onto the merged issue-73 head
+  `e0778ab`; resolve only `domain/operations.ts` and `docs/PLAN.md` semantically,
+  retaining schema-13 `effectTracks`, effect APIs, compositor ordering, budget
+  authorities, and both issue records.
+- [x] Keep dynamic zoom as four ordinary transform tracks, preserve the complete
+  animation container on Apply/Reset, and preflight its net key growth against
+  the shared 100,000-key document budget without rejected history entries.
+- [x] Add schema-13 focused coverage proving Apply and Reset retain effect tracks
+  and exact-cap rejection is a no-op; confirm the old/new range-diff contains
+  only the expected integration changes.
+- [x] Pass 17 narrow issue-74 tests, the 177-test dynamic/schema/effects/
+  compositor focus, all 2,299 Vitest cases across 167 files plus 16 benchmark
+  checks, production build/typecheck, oxlint, clean diff checks, and the
+  production audit with 0 vulnerabilities.
+- [x] Verify real headed Chromium only at `http://localhost:5182/` using the
+  required strict-port command: real still import/drop, a rectangle-mask effect
+  key, Apply, exact interior scrub, Reverse, Reset, Ctrl+Z restoration, and
+  effect-track survival. Record five ignored screenshot hashes, confirm zero
+  console warnings/errors, and release port 5182.
+- [x] Force-push only with the exact old-head lease, update draft PR #106 with
+  the rebased evidence, and wait for exact-head CI. Do not merge or manually
+  close issue #74.
