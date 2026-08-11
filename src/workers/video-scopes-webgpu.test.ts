@@ -1,0 +1,251 @@
+import { describe, expect, test, vi } from 'vitest'
+import {
+  analyzeVideoScopes,
+  VIDEO_SCOPE_SAMPLE_HEIGHT,
+  VIDEO_SCOPE_SAMPLE_WIDTH,
+  type VideoScopeAnalysis,
+} from '../domain/videoScopes'
+import {
+  createOptionalVideoScopeAnalyzer,
+  VIDEO_SCOPE_WEBGPU_ACTIVE_BUFFER_BYTES,
+  type VideoScopeWebGpuSession,
+} from './video-scopes-webgpu'
+
+function deferred<T>(): {
+  promise: Promise<T>
+  resolve(value: T): void
+} {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((settle) => { resolve = settle })
+  return { promise, resolve }
+}
+
+function fixture(): Uint8ClampedArray {
+  const rgba = new Uint8ClampedArray(
+    VIDEO_SCOPE_SAMPLE_WIDTH * VIDEO_SCOPE_SAMPLE_HEIGHT * 4,
+  )
+  rgba.set([255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0])
+  return rgba
+}
+
+function fakeSession(options: {
+  analyze?: (rgba: Uint8ClampedArray, width: number, height: number) => Promise<VideoScopeAnalysis>
+} = {}): {
+  session: VideoScopeWebGpuSession
+  release: ReturnType<typeof vi.fn>
+  lose: (detail: string) => void
+} {
+  const lost = deferred<string>()
+  const release = vi.fn()
+  return {
+    session: {
+      lost: lost.promise,
+      analyze: options.analyze ?? (async (rgba, width, height) =>
+        analyzeVideoScopes(rgba, width, height)),
+      snapshot: () => ({
+        adapterInfo: {
+          vendor: 'test-vendor',
+          architecture: 'test-architecture',
+          device: 'test-device',
+          description: 'test-adapter',
+        },
+        activeBufferBytes: 0,
+        peakBufferBytes: VIDEO_SCOPE_WEBGPU_ACTIVE_BUFFER_BYTES,
+        released: release.mock.calls.length > 0,
+      }),
+      loseForExperiment: () => lost.promise,
+      release,
+    },
+    release,
+    lose: lost.resolve,
+  }
+}
+
+describe('optional WebGPU video scope adapter', () => {
+  test('keeps CPU as the default without probing WebGPU', async () => {
+    const requestSession = vi.fn()
+    const analyzer = createOptionalVideoScopeAnalyzer({ requestSession })
+
+    const result = await analyzer.analyze(
+      fixture(),
+      VIDEO_SCOPE_SAMPLE_WIDTH,
+      VIDEO_SCOPE_SAMPLE_HEIGHT,
+    )
+
+    expect(result.backend).toBe('cpu')
+    expect(result.fallbackReason).toBe('not-requested')
+    expect(requestSession).not.toHaveBeenCalled()
+  })
+
+  test('runs a parity self-test before using and explicitly releasing WebGPU', async () => {
+    const gpu = fakeSession()
+    const analyzer = createOptionalVideoScopeAnalyzer({
+      preferWebGpu: true,
+      requestSession: async () => ({ status: 'ready', session: gpu.session }),
+    })
+
+    const result = await analyzer.analyze(
+      fixture(),
+      VIDEO_SCOPE_SAMPLE_WIDTH,
+      VIDEO_SCOPE_SAMPLE_HEIGHT,
+    )
+
+    expect(result.backend).toBe('webgpu')
+    expect(result.fallbackReason).toBeNull()
+    expect(analyzer.snapshot()).toMatchObject({
+      state: 'ready',
+      fallbackReason: null,
+      adapterInfo: { vendor: 'test-vendor' },
+      activeBufferBytes: 0,
+      peakBufferBytes: VIDEO_SCOPE_WEBGPU_ACTIVE_BUFFER_BYTES,
+    })
+    analyzer.release()
+    analyzer.release()
+    expect(gpu.release).toHaveBeenCalledOnce()
+    expect(analyzer.snapshot().state).toBe('released')
+  })
+
+  test('falls back for unsupported and failed initialization', async () => {
+    for (const request of [
+      {
+        status: 'unavailable' as const,
+        reason: 'api-unavailable' as const,
+        detail: 'navigator.gpu is unavailable',
+      },
+      {
+        status: 'unavailable' as const,
+        reason: 'initialization-failed' as const,
+        detail: 'pipeline compilation failed',
+      },
+    ]) {
+      const analyzer = createOptionalVideoScopeAnalyzer({
+        preferWebGpu: true,
+        requestSession: async () => request,
+      })
+      const result = await analyzer.analyze(
+        fixture(),
+        VIDEO_SCOPE_SAMPLE_WIDTH,
+        VIDEO_SCOPE_SAMPLE_HEIGHT,
+      )
+      expect(result.backend).toBe('cpu')
+      expect(result.fallbackReason).toBe(request.reason)
+      expect(analyzer.snapshot()).toMatchObject({
+        state: 'fallback',
+        fallbackDetail: request.detail,
+      })
+    }
+  })
+
+  test('rejects a mismatched shader oracle and keeps CPU output', async () => {
+    const gpu = fakeSession({
+      analyze: async (rgba, width, height) => {
+        const analysis = analyzeVideoScopes(rgba, width, height)
+        analysis.histogram.red[0]++
+        return analysis
+      },
+    })
+    const analyzer = createOptionalVideoScopeAnalyzer({
+      preferWebGpu: true,
+      requestSession: async () => ({ status: 'ready', session: gpu.session }),
+    })
+
+    const result = await analyzer.analyze(
+      fixture(),
+      VIDEO_SCOPE_SAMPLE_WIDTH,
+      VIDEO_SCOPE_SAMPLE_HEIGHT,
+    )
+
+    expect(result.backend).toBe('cpu')
+    expect(result.fallbackReason).toBe('self-test-mismatch')
+    expect(gpu.release).toHaveBeenCalledOnce()
+  })
+
+  test('falls back after execution failure and device loss without retaining the session', async () => {
+    let calls = 0
+    const failing = fakeSession({
+      analyze: async (rgba, width, height) => {
+        calls++
+        if (calls > 1) throw new Error('dispatch failed')
+        return analyzeVideoScopes(rgba, width, height)
+      },
+    })
+    const analyzer = createOptionalVideoScopeAnalyzer({
+      preferWebGpu: true,
+      requestSession: async () => ({ status: 'ready', session: failing.session }),
+    })
+    const executionFallback = await analyzer.analyze(
+      fixture(),
+      VIDEO_SCOPE_SAMPLE_WIDTH,
+      VIDEO_SCOPE_SAMPLE_HEIGHT,
+    )
+    expect(executionFallback).toMatchObject({
+      backend: 'cpu',
+      fallbackReason: 'execution-failed',
+    })
+    expect(failing.release).toHaveBeenCalledOnce()
+
+    const lost = fakeSession()
+    const lossAnalyzer = createOptionalVideoScopeAnalyzer({
+      preferWebGpu: true,
+      requestSession: async () => ({ status: 'ready', session: lost.session }),
+    })
+    expect((await lossAnalyzer.analyze(
+      fixture(),
+      VIDEO_SCOPE_SAMPLE_WIDTH,
+      VIDEO_SCOPE_SAMPLE_HEIGHT,
+    )).backend).toBe('webgpu')
+    lost.lose('destroyed: test loss')
+    await Promise.resolve()
+    const lossFallback = await lossAnalyzer.analyze(
+      fixture(),
+      VIDEO_SCOPE_SAMPLE_WIDTH,
+      VIDEO_SCOPE_SAMPLE_HEIGHT,
+    )
+    expect(lossFallback).toMatchObject({
+      backend: 'cpu',
+      fallbackReason: 'device-lost',
+    })
+    expect(lost.release).toHaveBeenCalledOnce()
+  })
+
+  test('uses CPU for non-production sample geometry without creating a device', async () => {
+    const requestSession = vi.fn()
+    const analyzer = createOptionalVideoScopeAnalyzer({
+      preferWebGpu: true,
+      requestSession,
+    })
+    const result = await analyzer.analyze(new Uint8ClampedArray(4), 1, 1)
+    expect(result).toMatchObject({
+      backend: 'cpu',
+      fallbackReason: 'unsupported-input-shape',
+    })
+    expect(requestSession).not.toHaveBeenCalled()
+  })
+
+  test('releases a session that arrives after shutdown without producing a late result', async () => {
+    const requested = deferred<{
+      status: 'ready'
+      session: VideoScopeWebGpuSession
+    }>()
+    const gpu = fakeSession()
+    const analyzer = createOptionalVideoScopeAnalyzer({
+      preferWebGpu: true,
+      requestSession: () => requested.promise,
+    })
+    const result = analyzer.analyze(
+      fixture(),
+      VIDEO_SCOPE_SAMPLE_WIDTH,
+      VIDEO_SCOPE_SAMPLE_HEIGHT,
+    )
+
+    analyzer.release()
+    requested.resolve({ status: 'ready', session: gpu.session })
+
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' })
+    expect(gpu.release).toHaveBeenCalledOnce()
+    expect(analyzer.snapshot()).toMatchObject({
+      state: 'released',
+      activeBufferBytes: 0,
+    })
+  })
+})

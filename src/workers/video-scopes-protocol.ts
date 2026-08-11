@@ -8,6 +8,12 @@ export interface VideoScopeAnalyzeMessage {
   readonly height: number
 }
 
+export interface VideoScopeReleaseMessage {
+  readonly type: 'release'
+}
+
+export type VideoScopeWorkerMessage = VideoScopeAnalyzeMessage | VideoScopeReleaseMessage
+
 export type VideoScopeWorkerReply =
   | {
       readonly type: 'analysis'
@@ -18,4 +24,7 @@ export type VideoScopeWorkerReply =
       readonly type: 'error'
       readonly requestId: number
       readonly message: string
+    }
+  | {
+      readonly type: 'released'
     }

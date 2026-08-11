@@ -2154,7 +2154,9 @@ function createVideoScopeAnalyzer(): {
 } {
   let worker: Worker | null = null
   let requestId = 0
+  const retiring = new Map<Worker, ReturnType<typeof setTimeout>>()
   const pending = new Map<number, {
+    worker: Worker
     resolve(analysis: VideoScopeAnalysis): void
     reject(error: Error): void
   }>()
@@ -2163,32 +2165,54 @@ function createVideoScopeAnalyzer(): {
     for (const request of pending.values()) request.reject(new Error(message))
     pending.clear()
   }
+  const rejectWorkerPending = (ownedWorker: Worker, message: string): void => {
+    for (const [id, request] of pending) {
+      if (request.worker !== ownedWorker) continue
+      request.reject(new Error(message))
+      pending.delete(id)
+    }
+  }
+  const finishRetiringWorker = (ownedWorker: Worker): void => {
+    const timeout = retiring.get(ownedWorker)
+    if (timeout !== undefined) clearTimeout(timeout)
+    retiring.delete(ownedWorker)
+    ownedWorker.terminate()
+  }
   const ensureWorker = (): Worker => {
     if (worker) return worker
-    worker = new Worker(new URL('./video-scopes.worker.ts', import.meta.url), {
+    const created = new Worker(new URL('./video-scopes.worker.ts', import.meta.url), {
       type: 'module',
       name: 'myrelith-video-scopes',
     })
-    worker.onmessage = (event: MessageEvent<VideoScopeWorkerReply>) => {
+    worker = created
+    created.onmessage = (event: MessageEvent<VideoScopeWorkerReply>) => {
       const message = event.data
+      if (message.type === 'released') {
+        finishRetiringWorker(created)
+        return
+      }
       const request = pending.get(message.requestId)
-      if (!request) return
+      if (!request || request.worker !== created) return
       pending.delete(message.requestId)
       if (message.type === 'analysis') request.resolve(message.analysis)
       else request.reject(new Error(message.message))
     }
-    worker.onerror = (event) => {
+    created.onerror = (event) => {
       event.preventDefault()
-      rejectPending(event.message || 'Video scope analysis worker failed')
-      worker?.terminate()
-      worker = null
+      rejectWorkerPending(created, event.message || 'Video scope analysis worker failed')
+      if (worker === created) worker = null
+      finishRetiringWorker(created)
     }
-    return worker
+    return created
   }
   const release = (): void => {
-    worker?.terminate()
+    const ownedWorker = worker
     worker = null
     rejectPending('Video scope analysis was released')
+    if (!ownedWorker) return
+    const timeout = setTimeout(() => finishRetiringWorker(ownedWorker), 250)
+    retiring.set(ownedWorker, timeout)
+    ownedWorker.postMessage({ type: 'release' })
   }
   return {
     analyze: (rgba, width, height) => {
@@ -2207,9 +2231,9 @@ function createVideoScopeAnalyzer(): {
         height,
       }
       const result = new Promise<VideoScopeAnalysis>((resolve, reject) => {
-        pending.set(id, { resolve, reject })
+        pending.set(id, { worker: ensureWorker(), resolve, reject })
       })
-      ensureWorker().postMessage(message, [copy.buffer])
+      pending.get(id)?.worker.postMessage(message, [copy.buffer])
       return result
     },
     release,

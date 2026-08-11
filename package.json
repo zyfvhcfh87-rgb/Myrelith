@@ -20,6 +20,7 @@
   "scripts": {
     "benchmark": "node scripts/performance/run-benchmark.mjs",
     "benchmark:smoke": "node scripts/performance/run-benchmark.mjs --smoke",
+    "benchmark:webgpu-scopes": "node scripts/webgpu/run-video-scopes-benchmark.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",

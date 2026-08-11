@@ -3274,3 +3274,39 @@ acceptance claims.
   canvas, Anchor X 20%, horizontal flip, disabled-reason transitions, Apply,
   eased interior scrub with full coverage, Reverse, Reset, Ctrl+Z, lock/unlock,
   two hashed screenshots, and 0 console warnings/errors; release the port.
+
+## Milestone 4 Part 10b / issue #75 - optional WebGPU acceleration evaluation
+
+**COMPLETE LOCALLY (2026-08-11): NO-GO FOR PRODUCTION SELECTION.**
+
+- [x] Select the existing fixed 160x90, four-Hz completed-frame video-scope
+  analysis as the bounded Part 8a workload. Keep Canvas2D sampling plus the
+  dedicated CPU analysis worker as the supported/default path.
+- [x] Define one exact integer/fixed-point CPU/WGSL contract and gate WebGPU
+  initialization with a complete deterministic parity self-test.
+- [x] Add an internal-build-only dynamic adapter with explicit API/adapter/
+  initialization probing, one device/pipeline owner, 353,304-byte maximum
+  request buffer budget, `finally` destruction, device-loss observation,
+  CPU fallback, idempotent release, and child-worker release acknowledgment.
+- [x] Keep ordinary production output free of the WebGPU adapter/shader chunk;
+  an explicitly enabled build emits one separate 10.14 kB experiment chunk.
+- [x] Add a repeatable strict-port Chrome runner with source/fixture fingerprint,
+  exact correctness, latency, startup, explicit buffer memory, adapter/CDP GPU,
+  device-loss, console, cleanup, and port-release evidence.
+- [x] Measure headed Chrome 151 on Windows 11 / Radeon RX 6600: 71 exact parity
+  comparisons; CPU 0.500 ms median / 0.800 ms p95 versus WebGPU 3.500 / 4.600
+  ms; 200.400 ms WebGPU startup; 30,720 versus 353,304 explicit bytes; exact
+  CPU recovery after real device destruction; zero remaining buffers, browser
+  warnings/errors, or occupied port.
+- [x] Verify the flagged real app on the same strict port: create a text clip,
+  load the opt-in module through the actual analysis worker, publish 14,400
+  visible samples at frame 0, move scope tabs by keyboard, disable/release, save
+  screenshot hash evidence, keep 0 warnings/errors, and release the port.
+- [x] Record the no-go recommendation and unmeasured support-matrix boundaries
+  in `docs/WEBGPU_EXPERIMENT.md`. Reconsider only if a future design removes
+  the CPU readback/upload round trip or materially increases useful compute,
+  followed by exact multi-browser/device evidence before any default change.
+- [x] Pass 75 final narrow tests, the earlier 169-test integration focus, all
+  2,313 Vitest cases across 168 files plus 16 benchmark-runner checks,
+  production build/typecheck, oxlint, diff checks, and the production high
+  audit with 0 vulnerabilities.

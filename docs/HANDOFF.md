@@ -3002,3 +3002,38 @@ surface; it is not a second zoom and never enters document history.
   The browser-control cleanup handshake timed out after evidence capture on two
   attempts; the app console stayed clean and the verified Vite process/port was
   stopped directly.
+
+## Milestone 4 Part 10b / issue #75 - optional WebGPU acceleration evaluation
+
+**COMPLETE LOCALLY (2026-08-11): NO-GO.**
+
+- The bounded candidate is Issue #71's completed-frame histogram/waveform/
+  vectorscope analysis: Canvas2D still downsamples to 160x90 at four Hz with
+  one pending job, and the dedicated CPU worker remains the production default.
+- `domain/videoScopes.ts` now gives CPU and WGSL one exact integer/fixed-point
+  binning contract. The optional adapter requires complete startup parity,
+  supports only the production sample shape, owns one device/pipeline, allocates
+  at most 353,304 request-buffer bytes, destroys them in `finally`, observes
+  device loss, and returns CPU output for unsupported/init/runtime/loss paths.
+- Only `VITE_MYRELITH_WEBGPU_SCOPES_EXPERIMENT=1` lets the analysis child
+  dynamically import WebGPU. Normal production builds contain no adapter/shader
+  chunk; enabled builds add one 10.14 kB chunk. Disable/close sends an explicit
+  release message, destroys the device, acknowledges cleanup, and retains a
+  bounded parent termination fallback.
+- `npm run benchmark:webgpu-scopes -- --warmup 10 --iterations 60` runs headed
+  system Chrome on strict port 41875 and writes ignored source-bound evidence.
+  Chrome 151 / Windows 11 / RX 6600 produced exact output across 71 comparisons,
+  recovered from real device destruction through exact CPU output, ended at
+  zero active buffers, logged 0 warnings/errors, and released the port.
+- A separate flagged-app pass created a text clip, loaded the adapter through
+  the real scope-worker boundary, published 14,400 samples at frame 0, exercised
+  keyboard tabs and disable/release, captured the documented screenshot hash,
+  retained 0 warnings/errors, and released strict port 41875.
+- CPU measured 0.500 ms median / 0.800 ms p95; WebGPU measured 3.500 / 4.600 ms,
+  plus 200.400 ms startup and 353,304 explicit transient bytes versus 30,720
+  CPU output bytes. WebGPU was 7.0 times slower at the actual workload.
+  Keep CPU as the production choice. Full contracts, support limits, commands,
+  fingerprints, and reconsideration criteria are in `docs/WEBGPU_EXPERIMENT.md`.
+- Final gates: 75 narrow tests, the earlier 169-test integration focus, all
+  2,313 Vitest cases across 168 files plus 16 benchmark checks, build/typecheck,
+  oxlint, clean diff checks, and the production audit at 0 vulnerabilities.
