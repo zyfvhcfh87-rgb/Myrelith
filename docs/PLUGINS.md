@@ -86,7 +86,7 @@ An accepted manifest has exactly these fields:
   "runtime": {
     "kind": "wasm",
     "entry": "runtime/sparkle.wasm",
-    "memoryMaximumPages": 512
+    "memoryMaximumPages": 1025
   },
   "permissions": [
     {
@@ -104,6 +104,7 @@ An accepted manifest has exactly these fields:
       "name": "Sparkle",
       "descriptorVersion": 1,
       "entrypoint": "myrelith_effect_sparkle",
+      "migrations": [],
       "parameters": [
         {
           "key": "strength",
@@ -149,6 +150,10 @@ An accepted manifest has exactly these fields:
 - every contribution id is unique within the package;
 - `contributionVersion` versions that contribution point's host ABI;
 - `descriptorVersion` versions that contribution's durable parameter schema;
+- `migrations` declares at most 64 deterministic descriptor-version steps. Each
+  exact `{ fromVersion, toVersion, entrypoint }` object names a reviewed Wasm
+  export; declarations are sorted by `fromVersion`, move only forward, and every
+  declared starting version must lead to the current `descriptorVersion`;
 - a plugin effect's project type is
   `plugin:<plugin-id>/<contribution-id>`, for example
   `plugin:com.example.sparkle/sparkle`.
@@ -164,9 +169,12 @@ icons containing active content, event handlers, or an iframe panel.
 
 Version 1 supports bounded number, boolean, and enum parameters. Number
 parameters carry a finite range, finite default, positive step, and explicit
-animation eligibility. Enum values are stable machine ids with host-rendered
-labels. Parameter keys are unique within one contribution. Current portable
-effect bounds remain authoritative over the resulting descriptor.
+animation eligibility. Every declared minimum, maximum, and default stays within
+the shared durable effect magnitude of +/-1,000,000,000. Enum values are stable
+machine ids with host-rendered labels. Parameter keys are unique within one
+contribution; reserved durable-record keys such as `constructor`, `prototype`,
+and `__proto__` are rejected. Current portable effect bounds remain authoritative
+over the resulting descriptor.
 
 String inputs, rich text, file pickers, URLs, colors, curves, arbitrary JSON,
 and custom editors are not part of the first parameter schema.
@@ -201,7 +209,7 @@ Package budgets for the first implementation are:
 | `manifest.json` | 64 KiB |
 | `signature.json` | 64 KiB |
 | WebAssembly module | 32 MiB |
-| WebAssembly memory | 1,024 pages / 64 MiB |
+| WebAssembly memory | 1,025 pages / 64 MiB + 64 KiB |
 
 Every limit is checked before the corresponding allocation. Decompression
 tracks the running expanded total and aborts on the first overflow.
@@ -297,16 +305,22 @@ Descriptor compatibility is separate from package compatibility:
 
 1. the namespaced contribution must be installed and trusted;
 2. the package/host API and permission contracts must negotiate;
-3. the contribution must declare a migration chain from the saved descriptor
-   version to its current version;
-4. migration runs in the sandbox against a cloned bounded descriptor;
+3. when the versions differ, the contribution must have an exact declared
+   `fromVersion` step and every following step must terminate at its current
+   `descriptorVersion`;
+4. each declared migration export runs in the sandbox against cloned canonical
+   parameter bytes; no plugin code runs merely to discover a chain;
 5. the host validates the returned primitive parameter record and budgets before
    one deliberate document/history commit;
 6. rejection retains the original descriptor byte-for-byte at the JSON value
    level and leaves it bypassed.
 
 Migration never runs merely because a project was opened. It requires an
-explicit user action after package trust and permissions are satisfied.
+explicit user action after package trust and permissions are satisfied. Version
+1 migrations may change only the cloned parameter record. Effect identity,
+enabled state, stack order, and animation stay host-owned and unchanged; if the
+current manifest cannot validate every retained animated parameter target, the
+whole migration rejects and preserves the original authored state.
 
 ## First contribution: bounded video effect
 
@@ -352,11 +366,16 @@ ABI contract is:
 - the module imports exactly one non-shared memory named
   `myrelith.memory` and no functions, globals, tables, tags, or other memories;
 - the module defines no additional memory. Its declared maximum is present and
-  no greater than both the manifest request and the host's 1,024-page ceiling;
+  no greater than both the manifest request and the host's 1,025-page ceiling;
+- canonical render parameters occupy at most 65,536 bytes. The host always
+  reserves one complete 64 KiB page beyond the RGBA region. A smaller manifest
+  memory request makes frames that do not fit unavailable with an explicit
+  reason; the 1,025-page ceiling lets the legal 16,777,216-pixel maximum frame
+  and its parameter block fit simultaneously;
 - internal tables must declare a maximum no greater than 4,096 entries;
 - threads, shared memory, relaxed SIMD, component-model imports, WASI, and JS
   builtins are rejected;
-- each contribution entrypoint is an exported function with signature
+- each contribution render entrypoint is an exported function with signature
   `(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32) -> i32`;
 - arguments are pixel pointer, width, height, stride, frame low/high 32-bit
   words, frame-rate numerator/denominator, UTF-8 canonical-parameter pointer,
@@ -366,8 +385,20 @@ ABI contract is:
   memory;
 - return `0` means success, `1` means deliberate identity/no-op, and every other
   value is a stable plugin failure code. Unknown codes are failures;
+- each declared migration entrypoint is an exported function with signature
+  `(i32, i32, i32, i32, i32, i32) -> i32`. Its arguments are canonical input
+  pointer/length, zeroed output pointer/capacity, and declared from/to versions;
+  input and output are non-overlapping, each is capped at 65,536 bytes, a
+  positive return is the exact output length, and zero or a negative value is a
+  migration failure. A contribution with migrations must request at least two
+  memory pages, and a migration export name must differ from its render export;
+- a migration output must be canonical JSON for one primitive parameter record,
+  match the target manifest schema exactly, and pass the shared descriptor and
+  document budgets before commit. Migration calls carry no frame bytes and run
+  one declared step at a time under the same watchdog;
 - the host copies input into the bounded memory, invokes once, copies the exact
-  byte range out, then clears the pixel and parameter regions before reuse;
+  byte range out, then clears every pixel, parameter, or migration input/output
+  region before reuse;
 - no pointer, view, buffer, or module instance crosses into Zustand, React, a
   project file, or another plugin instance.
 

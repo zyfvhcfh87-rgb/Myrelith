@@ -3114,7 +3114,8 @@ surface; it is not a second zoom and never enters document history.
   bundles—never an automatic network request or remote kill switch.
 - `src/domain/pluginManifest.ts` is deliberately data-only. It strictly validates
   an already-parsed version-1 value, bounds ids/version ranges/relative Wasm path/
-  64 MiB requested memory/permissions/contributions/host-rendered parameters,
+  64 MiB-plus-one-page requested memory/permissions/contributions/host-rendered
+  parameters and descriptor-migration declarations,
   negotiates exact host versions without granting consent, and derives stable
   `plugin:<plugin-id>/<contribution-id>` descriptor types. It does no package I/O,
   byte-level JSON/ZIP/signature work, trust mutation, registration, import, or
@@ -3146,3 +3147,29 @@ surface; it is not a second zoom and never enters document history.
   `sha256:994caa4e793d1e57d2f45e97fbc86107866e3a1dba72a3311b3bf1dd112d4f4b`.
   Final review then added independently versioned contribution negotiation; the
   final commit id is the authoritative delivery identity.
+
+## Part 10c issue #76 - PR #112 review hardening (2026-08-11)
+
+**COMPLETE LOCALLY.**
+
+- Manifest numeric ranges now reuse the durable +/-1,000,000,000 effect bound,
+  and parameter keys reuse the portable/live reserved-record-key guard. Accepted
+  host-rendered values can therefore seed and save ordinary effect descriptors.
+- The imported-memory ceiling is 1,025 WebAssembly pages: the maximum legal
+  64 MiB RGBA frame plus one non-overlapping 64 KiB canonical-parameter page.
+  Smaller manifest requests remain legal but make a frame that does not fit
+  explicitly unavailable. Migration declarations require at least two pages for
+  their bounded non-overlapping input/output buffers.
+- Every contribution now carries a bounded `migrations` array. Sorted forward
+  `{ fromVersion, toVersion, entrypoint }` steps must all terminate at the current
+  descriptor version; a version above one must declare at least one chain, and a
+  migration export cannot collide with the differently typed render export.
+- The normative ABI now specifies the migration call signature, exact buffer/
+  return rules, canonical output validation, watchdog, memory clearing, and the
+  host-owned identity/order/enabled/animation boundary. Failed or animation-
+  incompatible migration keeps the original descriptor and history untouched.
+- Validation passed 109 focused manifest/project/effect/architecture tests, all
+  2,323 Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities. Browser verification remains not
+  applicable because no production runtime or observable surface was added.

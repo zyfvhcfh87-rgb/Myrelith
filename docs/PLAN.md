@@ -3396,3 +3396,28 @@ acceptance claims.
   `sha256:994caa4e793d1e57d2f45e97fbc86107866e3a1dba72a3311b3bf1dd112d4f4b`.
   Final review then added independently versioned contribution negotiation;
   the final commit SHA is the authoritative delivered identity.
+
+## Part 10c / issue #76 - PR #112 review hardening
+
+**COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Keep every accepted numeric parameter range inside the shared durable
+  effect magnitude and reject the same reserved record keys as portable/live
+  effect validation.
+- [x] Raise the bounded imported-memory ceiling to 1,025 pages so the maximum
+  legal 64 MiB RGBA frame retains one non-overlapping 64 KiB canonical-parameter
+  page; keep smaller declarations explicitly unavailable when a call will not
+  fit.
+- [x] Add exact bounded migration declarations to the version-1 contribution
+  schema, validate deterministic forward chains, require distinct render and
+  migration exports, and publish the typed migration call/cleanup contract.
+- [x] Keep migration explicit, sandboxed, cloned, and history-atomic; preserve
+  host-owned identity/order/enabled/animation state and reject instead of
+  dropping an animated parameter target the current manifest cannot validate.
+- [x] Pass 109 focused manifest/project/effect/architecture tests, all 2,323
+  Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities.
+- [x] Retain the original browser-verification decision: this remains a pure
+  design/non-executing prototype with no production plugin runtime or observable
+  browser behavior. Issue #77 still owns hostile-sandbox Chromium gates.

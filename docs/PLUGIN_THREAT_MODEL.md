@@ -169,10 +169,12 @@ downgrades, or URL-shaped entry paths cause different reviewers/components to
 interpret one package differently.
 
 **Controls:** byte limit and duplicate-key rejection before parse; canonical
-JSON; exact keys at every object; ASCII-bounded ids/paths/entrypoints; finite
-numeric bounds; unique ids/parameter keys/options; inclusive integer version
-ranges; required-unavailable is incompatible; optional-unavailable remains
-explicit and unselected; no compatibility substitution.
+JSON; exact keys at every object; ASCII-bounded ids/paths/entrypoints; shared
+durable numeric bounds and reserved-key rejection; unique ids/parameter keys/
+options; bounded forward-only migration declarations whose explicit exports all
+lead to the current descriptor version; inclusive integer version ranges;
+required-unavailable is incompatible; optional-unavailable remains explicit and
+unselected; no compatibility substitution.
 
 **Residual risk:** future schema evolution can create confused-deputy behavior
 if old and new code disagree. Each manifest/API/capability/contribution schema is
@@ -285,9 +287,11 @@ revocation removes authored data; export silently omits an effect.
 
 **Controls:** project stores only bounded descriptors; unknown types/versions/
 keys/animation targets preserve and bypass; open never installs/prompts/migrates/
-executes; migration is explicit, sandboxed, cloned, bounded, and one-entry only
-after validation; failure retains original; revoke/disable/safe mode never delete
-descriptors; export blocks by default and names every unavailable instance.
+executes; migration follows only manifest-declared version steps and typed Wasm
+exports, is explicit, sandboxed, cloned, bounded, and one-entry only after output
+and retained-animation validation; failure retains original; revoke/disable/safe
+mode never delete descriptors; export blocks by default and names every
+unavailable instance.
 
 **Residual risk:** a user can deliberately remove an opaque effect or explicitly
 export with reviewed bypass. Those are visible user edits, not silent recovery.

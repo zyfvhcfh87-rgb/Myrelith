@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest'
+import { EFFECT_STACK_LIMITS } from './effectBounds'
 import {
   PLUGIN_HOST_PROFILE_V1,
+  PLUGIN_MANIFEST_LIMITS,
   PLUGIN_MANIFEST_SCHEMA_VERSION,
   VIDEO_EFFECT_FRAME_CAPABILITY,
   negotiatePluginCompatibility,
@@ -33,6 +35,7 @@ function manifest(): Record<string, unknown> {
       name: 'Sparkle',
       descriptorVersion: 1,
       entrypoint: 'myrelith_effect_sparkle',
+      migrations: [],
       parameters: [
         {
           key: 'strength',
@@ -96,7 +99,11 @@ describe('plugin manifest', () => {
       value.runtime = { kind: 'wasm', entry: '../plugin.wasm', memoryMaximumPages: 1 }
     }, '$.runtime.entry'],
     ['unbounded memory', (value: Record<string, unknown>) => {
-      value.runtime = { kind: 'wasm', entry: 'plugin.wasm', memoryMaximumPages: 1025 }
+      value.runtime = {
+        kind: 'wasm',
+        entry: 'plugin.wasm',
+        memoryMaximumPages: PLUGIN_MANIFEST_LIMITS.maxWasmMemoryPages + 1,
+      }
     }, '$.runtime.memoryMaximumPages'],
   ])('rejects %s before compatibility or execution', (_name, mutate, path) => {
     const value = manifest()
@@ -121,6 +128,106 @@ describe('plugin manifest', () => {
     expect(validatePluginManifest(malformed)).toMatchObject({
       ok: false,
       problem: { path: '$.contributions[0].parameters[2].default' },
+    })
+  })
+
+  test('keeps declared numeric values inside the shared durable effect bound', () => {
+    for (const field of ['min', 'max', 'default'] as const) {
+      const value = manifest()
+      const contribution = (value.contributions as Record<string, unknown>[])[0]
+      const parameter = (contribution.parameters as Record<string, unknown>[])[0]
+      parameter[field] = field === 'min'
+        ? -(EFFECT_STACK_LIMITS.maxFiniteMagnitude + 1)
+        : EFFECT_STACK_LIMITS.maxFiniteMagnitude + 1
+      const result = validatePluginManifest(value)
+      expect(result).toMatchObject({
+        ok: false,
+        problem: { path: `$.contributions[0].parameters[0].${field}` },
+      })
+    }
+  })
+
+  test.each(['constructor', 'prototype'])(
+    'rejects reserved durable parameter key %s',
+    (key) => {
+      const value = manifest()
+      const contribution = (value.contributions as Record<string, unknown>[])[0]
+      const parameter = (contribution.parameters as Record<string, unknown>[])[0]
+      parameter.key = key
+      expect(validatePluginManifest(value)).toMatchObject({
+        ok: false,
+        problem: { path: '$.contributions[0].parameters[0].key' },
+      })
+    },
+  )
+
+  test('reserves one parameter page beyond the largest legal RGBA frame', () => {
+    expect(PLUGIN_MANIFEST_LIMITS.maxCanonicalParameterBytes).toBe(65_536)
+    expect(PLUGIN_MANIFEST_LIMITS.maxWasmMemoryPages).toBe(1_025)
+    const value = manifest()
+    const runtime = value.runtime as Record<string, unknown>
+    runtime.memoryMaximumPages = PLUGIN_MANIFEST_LIMITS.maxWasmMemoryPages
+    expect(validatePluginManifest(value)).toMatchObject({ ok: true })
+  })
+
+  test('validates explicit descriptor migration chains and entrypoints', () => {
+    const value = manifest()
+    const contribution = (value.contributions as Record<string, unknown>[])[0]
+    contribution.descriptorVersion = 3
+    contribution.migrations = [
+      { fromVersion: 1, toVersion: 2, entrypoint: 'migrate_sparkle_v1_to_v2' },
+      { fromVersion: 2, toVersion: 3, entrypoint: 'migrate_sparkle_v2_to_v3' },
+    ]
+    expect(validatePluginManifest(value)).toMatchObject({
+      ok: true,
+      manifest: {
+        contributions: [{
+          descriptorVersion: 3,
+          migrations: [
+            { fromVersion: 1, toVersion: 2, entrypoint: 'migrate_sparkle_v1_to_v2' },
+            { fromVersion: 2, toVersion: 3, entrypoint: 'migrate_sparkle_v2_to_v3' },
+          ],
+        }],
+      },
+    })
+
+    contribution.migrations = [
+      { fromVersion: 1, toVersion: 2, entrypoint: 'migrate_sparkle_v1_to_v2' },
+    ]
+    expect(validatePluginManifest(value)).toMatchObject({
+      ok: false,
+      problem: { path: '$.contributions[0].migrations[0].toVersion' },
+    })
+
+    contribution.descriptorVersion = 2
+    contribution.migrations = []
+    expect(validatePluginManifest(value)).toMatchObject({
+      ok: false,
+      problem: { path: '$.contributions[0].migrations' },
+    })
+  })
+
+  test('requires distinct migration buffers and a non-render export', () => {
+    const value = manifest()
+    const contribution = (value.contributions as Record<string, unknown>[])[0]
+    contribution.descriptorVersion = 2
+    contribution.migrations = [{
+      fromVersion: 1,
+      toVersion: 2,
+      entrypoint: 'myrelith_effect_sparkle',
+    }]
+    expect(validatePluginManifest(value)).toMatchObject({
+      ok: false,
+      problem: { path: '$.contributions[0].migrations[0].entrypoint' },
+    })
+
+    const migrations = contribution.migrations as Record<string, unknown>[]
+    migrations[0].entrypoint = 'migrate_sparkle_v1_to_v2'
+    const runtime = value.runtime as Record<string, unknown>
+    runtime.memoryMaximumPages = 1
+    expect(validatePluginManifest(value)).toMatchObject({
+      ok: false,
+      problem: { path: '$.runtime.memoryMaximumPages' },
     })
   })
 

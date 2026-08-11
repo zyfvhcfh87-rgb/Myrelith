@@ -1,8 +1,24 @@
 /** Pure, non-executing validation and compatibility negotiation for plugin manifests. */
 
+import {
+  EFFECT_STACK_LIMITS,
+  isUnsafeEffectParamKey,
+} from './effectBounds'
+import {
+  MAX_RENDER_SURFACE_PIXELS,
+  RENDER_SURFACE_BYTES_PER_PIXEL,
+} from './renderSurfaceBudget'
+
 export const PLUGIN_MANIFEST_SCHEMA_VERSION = 1 as const
 export const PLUGIN_HOST_API_VERSION = 1 as const
 export const VIDEO_EFFECT_FRAME_CAPABILITY = 'myrelith.effect.video-frame.rgba8' as const
+
+const WEBASSEMBLY_PAGE_BYTES = 65_536
+const MAX_PLUGIN_FRAME_BYTES = MAX_RENDER_SURFACE_PIXELS * RENDER_SURFACE_BYTES_PER_PIXEL
+const MAX_CANONICAL_PARAMETER_BYTES = WEBASSEMBLY_PAGE_BYTES
+const MAX_PLUGIN_MEMORY_PAGES = Math.ceil(
+  (MAX_PLUGIN_FRAME_BYTES + MAX_CANONICAL_PARAMETER_BYTES) / WEBASSEMBLY_PAGE_BYTES,
+)
 
 export const PLUGIN_MANIFEST_LIMITS = Object.freeze({
   maxManifestBytes: 65_536,
@@ -13,10 +29,12 @@ export const PLUGIN_MANIFEST_LIMITS = Object.freeze({
   maxPermissions: 32,
   maxContributions: 64,
   maxParametersPerContribution: 64,
+  maxMigrationsPerContribution: 64,
   maxEnumOptions: 32,
   maxIdentifierCharacters: 64,
   maxEntrypointCharacters: 128,
-  maxWasmMemoryPages: 1_024,
+  maxCanonicalParameterBytes: MAX_CANONICAL_PARAMETER_BYTES,
+  maxWasmMemoryPages: MAX_PLUGIN_MEMORY_PAGES,
   maxApiVersion: 65_535,
   maxDescriptorVersion: 65_535,
 })
@@ -74,6 +92,12 @@ export type PluginParameter =
   | PluginBooleanParameter
   | PluginEnumParameter
 
+export interface PluginDescriptorMigration {
+  readonly fromVersion: number
+  readonly toVersion: number
+  readonly entrypoint: string
+}
+
 export interface PluginVideoEffectContribution {
   readonly kind: 'video-effect'
   readonly contributionVersion: number
@@ -81,6 +105,7 @@ export interface PluginVideoEffectContribution {
   readonly name: string
   readonly descriptorVersion: number
   readonly entrypoint: string
+  readonly migrations: readonly PluginDescriptorMigration[]
   readonly parameters: readonly PluginParameter[]
 }
 
@@ -174,8 +199,10 @@ const CONTRIBUTION_KEYS = new Set([
   'name',
   'descriptorVersion',
   'entrypoint',
+  'migrations',
   'parameters',
 ])
+const MIGRATION_KEYS = new Set(['fromVersion', 'toVersion', 'entrypoint'])
 const NUMBER_PARAMETER_KEYS = new Set([
   'key',
   'name',
@@ -286,6 +313,12 @@ function localIdentifier(value: unknown, path: string): string {
   return id
 }
 
+function parameterKey(value: unknown, path: string): string {
+  const key = localIdentifier(value, path)
+  if (isUnsafeEffectParamKey(key)) fail(path, 'must not be a reserved object key')
+  return key
+}
+
 function capabilityId(value: unknown, path: string): string {
   const id = boundedText(value, path, PLUGIN_MANIFEST_LIMITS.maxPluginIdCharacters)
   if (!DOTTED_CAPABILITY_ID.test(id)) fail(path, 'must be a lowercase dotted capability identifier')
@@ -308,6 +341,27 @@ function semanticVersion(value: unknown, path: string): string {
   const version = boundedText(value, path, PLUGIN_MANIFEST_LIMITS.maxVersionCharacters)
   if (!SEMANTIC_VERSION.test(version)) fail(path, 'must be a valid semantic version')
   return version
+}
+
+function wasmEntrypoint(value: unknown, path: string): string {
+  const entrypoint = boundedText(
+    value,
+    path,
+    PLUGIN_MANIFEST_LIMITS.maxEntrypointCharacters,
+  )
+  if (!ENTRYPOINT.test(entrypoint)) fail(path, 'must be a WebAssembly export name')
+  return entrypoint
+}
+
+function boundedEffectNumber(value: unknown, path: string): number {
+  const number = finiteNumber(value, path)
+  if (Math.abs(number) > EFFECT_STACK_LIMITS.maxFiniteMagnitude) {
+    fail(
+      path,
+      `must be between -${EFFECT_STACK_LIMITS.maxFiniteMagnitude} and ${EFFECT_STACK_LIMITS.maxFiniteMagnitude}`,
+    )
+  }
+  return number
 }
 
 function permission(value: unknown, path: string): PluginPermissionRequest {
@@ -333,19 +387,40 @@ function enumOption(value: unknown, path: string): PluginEnumOption {
   }
 }
 
+function migration(value: unknown, path: string): PluginDescriptorMigration {
+  const item = record(value, path)
+  exactKeys(item, MIGRATION_KEYS, path)
+  return {
+    fromVersion: safeInteger(
+      item.fromVersion,
+      `${path}.fromVersion`,
+      1,
+      PLUGIN_MANIFEST_LIMITS.maxDescriptorVersion,
+    ),
+    toVersion: safeInteger(
+      item.toVersion,
+      `${path}.toVersion`,
+      1,
+      PLUGIN_MANIFEST_LIMITS.maxDescriptorVersion,
+    ),
+    entrypoint: wasmEntrypoint(item.entrypoint, `${path}.entrypoint`),
+  }
+}
+
 function parameter(value: unknown, path: string): PluginParameter {
   const item = record(value, path)
   if (item.kind === 'number') {
     exactKeys(item, NUMBER_PARAMETER_KEYS, path)
-    const minimum = finiteNumber(item.min, `${path}.min`)
-    const maximum = finiteNumber(item.max, `${path}.max`)
-    const defaultValue = finiteNumber(item.default, `${path}.default`)
+    const key = parameterKey(item.key, `${path}.key`)
+    const minimum = boundedEffectNumber(item.min, `${path}.min`)
+    const maximum = boundedEffectNumber(item.max, `${path}.max`)
+    const defaultValue = boundedEffectNumber(item.default, `${path}.default`)
     const step = finiteNumber(item.step, `${path}.step`)
     if (minimum >= maximum) fail(path, 'number parameter min must be less than max')
     if (defaultValue < minimum || defaultValue > maximum) fail(`${path}.default`, 'must be inside the declared range')
     if (step <= 0 || step > maximum - minimum) fail(`${path}.step`, 'must be positive and no larger than the declared range')
     return {
-      key: localIdentifier(item.key, `${path}.key`),
+      key,
       name: boundedText(item.name, `${path}.name`, PLUGIN_MANIFEST_LIMITS.maxNameCharacters),
       kind: 'number',
       default: defaultValue,
@@ -358,7 +433,7 @@ function parameter(value: unknown, path: string): PluginParameter {
   if (item.kind === 'boolean') {
     exactKeys(item, BOOLEAN_PARAMETER_KEYS, path)
     return {
-      key: localIdentifier(item.key, `${path}.key`),
+      key: parameterKey(item.key, `${path}.key`),
       name: boundedText(item.name, `${path}.name`, PLUGIN_MANIFEST_LIMITS.maxNameCharacters),
       kind: 'boolean',
       default: booleanValue(item.default, `${path}.default`),
@@ -366,6 +441,7 @@ function parameter(value: unknown, path: string): PluginParameter {
   }
   if (item.kind === 'enum') {
     exactKeys(item, ENUM_PARAMETER_KEYS, path)
+    const key = parameterKey(item.key, `${path}.key`)
     const options = arrayValue(item.options, `${path}.options`, PLUGIN_MANIFEST_LIMITS.maxEnumOptions)
       .map((option, index) => enumOption(option, `${path}.options[${index}]`))
     if (options.length === 0) fail(`${path}.options`, 'must contain at least one option')
@@ -377,7 +453,7 @@ function parameter(value: unknown, path: string): PluginParameter {
     const defaultValue = localIdentifier(item.default, `${path}.default`)
     if (!values.has(defaultValue)) fail(`${path}.default`, 'must match a declared option')
     return {
-      key: localIdentifier(item.key, `${path}.key`),
+      key,
       name: boundedText(item.name, `${path}.name`, PLUGIN_MANIFEST_LIMITS.maxNameCharacters),
       kind: 'enum',
       default: defaultValue,
@@ -401,12 +477,56 @@ function contribution(value: unknown, path: string): PluginVideoEffectContributi
     if (parameterKeys.has(definition.key)) fail(`${path}.parameters[${index}].key`, 'must be unique')
     parameterKeys.add(definition.key)
   }
-  const entrypoint = boundedText(
-    item.entrypoint,
-    `${path}.entrypoint`,
-    PLUGIN_MANIFEST_LIMITS.maxEntrypointCharacters,
+  const descriptorVersion = safeInteger(
+    item.descriptorVersion,
+    `${path}.descriptorVersion`,
+    1,
+    PLUGIN_MANIFEST_LIMITS.maxDescriptorVersion,
   )
-  if (!ENTRYPOINT.test(entrypoint)) fail(`${path}.entrypoint`, 'must be a WebAssembly export name')
+  const migrations = arrayValue(
+    item.migrations,
+    `${path}.migrations`,
+    PLUGIN_MANIFEST_LIMITS.maxMigrationsPerContribution,
+  ).map((entry, index) => migration(entry, `${path}.migrations[${index}]`))
+  if (descriptorVersion > 1 && migrations.length === 0) {
+    fail(`${path}.migrations`, 'must declare a chain to the current descriptor version')
+  }
+  const migrationsByFromVersion = new Map<number, PluginDescriptorMigration>()
+  for (const [index, step] of migrations.entries()) {
+    if (index > 0 && migrations[index - 1].fromVersion >= step.fromVersion) {
+      fail(`${path}.migrations[${index}].fromVersion`, 'must be strictly increasing')
+    }
+    if (step.fromVersion >= step.toVersion) {
+      fail(`${path}.migrations[${index}]`, 'fromVersion must be less than toVersion')
+    }
+    if (step.toVersion > descriptorVersion) {
+      fail(`${path}.migrations[${index}].toVersion`, 'must not exceed descriptorVersion')
+    }
+    migrationsByFromVersion.set(step.fromVersion, step)
+  }
+  for (const [index, firstStep] of migrations.entries()) {
+    let step = firstStep
+    while (step.toVersion !== descriptorVersion) {
+      const nextStep = migrationsByFromVersion.get(step.toVersion)
+      if (!nextStep) {
+        fail(
+          `${path}.migrations[${index}].toVersion`,
+          'must lead through a declared chain to descriptorVersion',
+        )
+      }
+      step = nextStep
+    }
+  }
+  const entrypoint = wasmEntrypoint(item.entrypoint, `${path}.entrypoint`)
+  const collidingMigrationIndex = migrations.findIndex(
+    (step) => step.entrypoint === entrypoint,
+  )
+  if (collidingMigrationIndex >= 0) {
+    fail(
+      `${path}.migrations[${collidingMigrationIndex}].entrypoint`,
+      'must differ from the render entrypoint',
+    )
+  }
   return {
     kind: 'video-effect',
     contributionVersion: safeInteger(
@@ -417,13 +537,9 @@ function contribution(value: unknown, path: string): PluginVideoEffectContributi
     ),
     id: localIdentifier(item.id, `${path}.id`),
     name: boundedText(item.name, `${path}.name`, PLUGIN_MANIFEST_LIMITS.maxNameCharacters),
-    descriptorVersion: safeInteger(
-      item.descriptorVersion,
-      `${path}.descriptorVersion`,
-      1,
-      PLUGIN_MANIFEST_LIMITS.maxDescriptorVersion,
-    ),
+    descriptorVersion,
     entrypoint,
+    migrations,
     parameters,
   }
 }
@@ -466,6 +582,15 @@ export function validatePluginManifest(value: unknown): PluginManifestValidation
       PLUGIN_MANIFEST_LIMITS.maxContributions,
     ).map((item, index) => contribution(item, `$.contributions[${index}]`))
     if (contributions.length === 0) fail('$.contributions', 'must contain at least one contribution')
+    if (
+      runtime.memoryMaximumPages < 2
+      && contributions.some((item) => item.migrations.length > 0)
+    ) {
+      fail(
+        '$.runtime.memoryMaximumPages',
+        'must provide at least two pages for non-overlapping migration buffers',
+      )
+    }
     const contributionIds = new Set<string>()
     for (const [index, item] of contributions.entries()) {
       if (contributionIds.has(item.id)) fail(`$.contributions[${index}].id`, 'must be unique')
