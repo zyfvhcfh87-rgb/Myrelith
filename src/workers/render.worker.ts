@@ -161,8 +161,8 @@ export interface RenderWorkerEnv extends LegacyRenderWorkerEnv {
     width: number,
     height: number,
   ): Promise<VideoScopeAnalysis>
-  /** Terminate analysis resources and reject any pending request. */
-  releaseVideoScopes?(): void
+  /** Terminate analysis resources and settle after the child worker retires. */
+  releaseVideoScopes?(): Promise<void>
 }
 
 /* ------------------------------------------------------------------ */
@@ -537,7 +537,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     lastVideoScopeAnalysisAt = Number.NEGATIVE_INFINITY
     if (!enabled) {
       releaseVideoScopeSurface()
-      env.releaseVideoScopes?.()
+      void env.releaseVideoScopes?.()
     }
   }
 
@@ -2018,7 +2018,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         videoScopesEnabled = false
         videoScopeGeneration++
         releaseVideoScopeSurface()
-        env.releaseVideoScopes?.()
+        const videoScopeRelease = env.releaseVideoScopes?.()
         env.invalidateDecoderRuntime()
         supersede()
         assetRevisions.clear()
@@ -2039,6 +2039,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         ]
         const results = await Promise.allSettled(
           [
+            ...(videoScopeRelease ? [videoScopeRelease] : []),
             ...streaming.map((state) => teardownStreamingAsset(state)),
             ...staticRetirements,
             ...pendingImageOpens.map((pending) => pending.done),
@@ -2144,17 +2145,24 @@ export async function createOrientedStreamingBitmap(
   return canvas.transferToImageBitmap()
 }
 
-function createVideoScopeAnalyzer(): {
+interface RetiringVideoScopeWorker {
+  readonly completion: Promise<void>
+  readonly resolve: () => void
+  readonly timeout: ReturnType<typeof setTimeout>
+}
+
+export function createVideoScopeAnalyzer(): {
   analyze(
     rgba: Uint8ClampedArray,
     width: number,
     height: number,
   ): Promise<VideoScopeAnalysis>
-  release(): void
+  release(): Promise<void>
 } {
   let worker: Worker | null = null
   let requestId = 0
-  const retiring = new Map<Worker, ReturnType<typeof setTimeout>>()
+  const retiring = new Map<Worker, RetiringVideoScopeWorker>()
+  const terminated = new WeakSet<Worker>()
   const pending = new Map<number, {
     worker: Worker
     resolve(analysis: VideoScopeAnalysis): void
@@ -2172,11 +2180,38 @@ function createVideoScopeAnalyzer(): {
       pending.delete(id)
     }
   }
-  const finishRetiringWorker = (ownedWorker: Worker): void => {
-    const timeout = retiring.get(ownedWorker)
-    if (timeout !== undefined) clearTimeout(timeout)
-    retiring.delete(ownedWorker)
+  const terminateWorker = (ownedWorker: Worker): void => {
+    if (terminated.has(ownedWorker)) return
+    terminated.add(ownedWorker)
     ownedWorker.terminate()
+  }
+  const finishRetiringWorker = (ownedWorker: Worker): boolean => {
+    const retirement = retiring.get(ownedWorker)
+    if (!retirement) return false
+    clearTimeout(retirement.timeout)
+    retiring.delete(ownedWorker)
+    try {
+      terminateWorker(ownedWorker)
+    } finally {
+      retirement.resolve()
+    }
+    return true
+  }
+  const startRetiringWorker = (ownedWorker: Worker): void => {
+    if (retiring.has(ownedWorker) || terminated.has(ownedWorker)) return
+    let resolve = (): void => undefined
+    const completion = new Promise<void>((done) => {
+      resolve = done
+    })
+    const timeout = setTimeout(() => {
+      finishRetiringWorker(ownedWorker)
+    }, 250)
+    retiring.set(ownedWorker, { completion, resolve, timeout })
+    try {
+      ownedWorker.postMessage({ type: 'release' })
+    } catch {
+      finishRetiringWorker(ownedWorker)
+    }
   }
   const ensureWorker = (): Worker => {
     if (worker) return worker
@@ -2201,24 +2236,24 @@ function createVideoScopeAnalyzer(): {
       event.preventDefault()
       rejectWorkerPending(created, event.message || 'Video scope analysis worker failed')
       if (worker === created) worker = null
-      finishRetiringWorker(created)
+      if (!finishRetiringWorker(created)) terminateWorker(created)
     }
     return created
   }
-  const release = (): void => {
+  const release = (): Promise<void> => {
     const ownedWorker = worker
     worker = null
     rejectPending('Video scope analysis was released')
-    if (!ownedWorker) return
-    const timeout = setTimeout(() => finishRetiringWorker(ownedWorker), 250)
-    retiring.set(ownedWorker, timeout)
-    ownedWorker.postMessage({ type: 'release' })
+    if (ownedWorker) startRetiringWorker(ownedWorker)
+    return Promise.all(
+      [...retiring.values()].map((retirement) => retirement.completion),
+    ).then(() => undefined)
   }
   return {
     analyze: (rgba, width, height) => {
       requestId++
       if (!Number.isSafeInteger(requestId)) {
-        release()
+        void release()
         requestId = 1
       }
       const id = requestId

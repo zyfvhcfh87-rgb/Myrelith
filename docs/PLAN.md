@@ -3291,13 +3291,13 @@ acceptance claims.
   request buffer budget, `finally` destruction, device-loss observation,
   CPU fallback, idempotent release, and child-worker release acknowledgment.
 - [x] Keep ordinary production output free of the WebGPU adapter/shader chunk;
-  an explicitly enabled build emits one separate 11.16 kB experiment chunk.
+  an explicitly enabled build emits one separate 11.27 kB experiment chunk.
 - [x] Add a repeatable strict-port Chrome runner with source/fixture fingerprint,
   exact correctness, latency, startup, explicit buffer memory, adapter/CDP GPU,
   device-loss, console, cleanup, and port-release evidence.
 - [x] Measure headed Chrome 151 on Windows 11 / Radeon RX 6600: 71 exact parity
-  comparisons; CPU 1.200 ms median / 1.600 ms p95 versus WebGPU 4.500 / 5.100
-  ms; 153.200 ms WebGPU startup; 30,720 versus 353,304 explicit bytes; exact
+  comparisons; CPU 1.000 ms median / 1.400 ms p95 versus WebGPU 4.400 / 5.100
+  ms; 418.400 ms WebGPU startup; 30,720 versus 353,304 explicit bytes; exact
   CPU recovery after real device destruction; zero remaining buffers, browser
   warnings/errors, or occupied port.
 - [x] Verify the flagged real app on the same strict port: create a text clip,
@@ -3308,7 +3308,28 @@ acceptance claims.
   in `docs/WEBGPU_EXPERIMENT.md`. Reconsider only if a future design removes
   the CPU readback/upload round trip or materially increases useful compute,
   followed by exact multi-browser/device evidence before any default change.
-- [x] Pass 79 final narrow tests, the final 182-test integration focus, all
-  2,317 Vitest cases across 168 files plus 16 benchmark-runner checks,
-  production build/typecheck, oxlint, diff checks, and the production high
-  audit with 0 vulnerabilities.
+- [x] Pass 118 focused lifecycle/integration tests, all 2,321 Vitest cases
+  across 169 files plus 16 benchmark-runner checks, normal and opt-in production
+  build/typecheck, oxlint, diff checks, and the production high audit with
+  0 vulnerabilities.
+
+## Milestone 4 Part 10b / issue #75 - shutdown-handshake review follow-up
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Make the child scope-worker release operation expose a completion promise
+  covering both the active child and every earlier retirement, with exact-once
+  acknowledgment/error/post-failure/timeout settlement.
+- [x] Await that completion during render-worker close before publishing
+  `closed`; retain the 250 ms child fallback and independent 1,000 ms bridge
+  fallback, while ordinary scope disable remains non-blocking.
+- [x] Prevent a delayed opt-in module import from creating a WebGPU analyzer
+  after the child has already acknowledged release.
+- [x] Cover idle close, disable-then-close, repeated release, acknowledgment,
+  exact timeout, late acknowledgment, and delayed-import races. Pass 118 focused
+  tests, all 2,321 Vitest cases across 169 files, and all 16 benchmark checks.
+- [x] Pass normal and opt-in production build/typecheck, preserve the ordinary
+  WebGPU-free graph and flagged 11.27 kB experiment chunk, pass oxlint and the
+  production high audit at 0 vulnerabilities, and refresh the complete headed
+  Chrome evidence with exact parity, device-loss fallback, zero live buffers,
+  clean diagnostics, and strict-port release. Keep the production no-go.

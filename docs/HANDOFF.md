@@ -3021,7 +3021,7 @@ surface; it is not a second zoom and never enters document history.
   device loss, and returns CPU output for unsupported/init/runtime/loss paths.
 - Only `VITE_MYRELITH_WEBGPU_SCOPES_EXPERIMENT=1` lets the analysis child
   dynamically import WebGPU. Normal production builds contain no adapter/shader
-  chunk; enabled builds add one 11.16 kB chunk. Disable/close sends an explicit
+  chunk; enabled builds add one 11.27 kB chunk. Disable/close sends an explicit
   release message, destroys the device, acknowledges cleanup, and retains a
   bounded parent termination fallback.
 - `npm run benchmark:webgpu-scopes -- --warmup 10 --iterations 60` runs headed
@@ -3033,11 +3033,42 @@ surface; it is not a second zoom and never enters document history.
   the real scope-worker boundary, published 14,400 samples at frame 0, exercised
   keyboard tabs and disable/release, captured the documented screenshot hash,
   retained 0 warnings/errors, and released strict port 41875.
-- CPU measured 1.200 ms median / 1.600 ms p95; WebGPU measured 4.500 / 5.100 ms,
-  plus 153.200 ms startup and 353,304 explicit transient bytes versus 30,720
-  CPU output bytes. WebGPU was 3.8 times slower at the actual workload.
+- CPU measured 1.000 ms median / 1.400 ms p95; WebGPU measured 4.400 / 5.100 ms,
+  plus 418.400 ms startup and 353,304 explicit transient bytes versus 30,720
+  CPU output bytes. WebGPU was 4.4 times slower at the actual workload.
   Keep CPU as the production choice. Full contracts, support limits, commands,
   fingerprints, and reconsideration criteria are in `docs/WEBGPU_EXPERIMENT.md`.
-- Final gates: 79 narrow tests, the final 182-test integration focus, all
-  2,317 Vitest cases across 168 files plus 16 benchmark checks, build/typecheck,
+- Final gates: 118 focused lifecycle/integration tests, all 2,321 Vitest cases
+  across 169 files plus 16 benchmark checks, normal and opt-in build/typecheck,
   oxlint, clean diff checks, and the production audit at 0 vulnerabilities.
+
+## Milestone 4 Part 10b / issue #75 - shutdown-handshake review follow-up
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- Render-worker close now awaits the scope child worker's explicit `released`
+  acknowledgment before publishing `closed`. The existing 250 ms child
+  termination fallback and independent 1,000 ms page-bridge fallback remain
+  bounded, so an unresponsive child cannot deadlock editor teardown.
+- The analyzer manager owns a completion promise for every retiring child.
+  Disable followed immediately by close still drains the earlier retirement;
+  acknowledgment, worker error, synchronous post failure, timeout, and late
+  acknowledgment converge on exact-once termination and settlement.
+- A release received while the opt-in WebGPU module is still loading now
+  invalidates that import before analyzer creation. The child cannot publish
+  `released` and then resurrect a device-backed analyzer in the same realm.
+- Regression coverage holds an otherwise-idle close behind a deferred child
+  release, proves repeated release waits on the same retirement, exercises the
+  exact 250 ms fallback and late acknowledgment, and reproduces the dynamic-
+  import race. The focused gate passed 118 tests; the full gate passed all
+  2,321 Vitest cases across 169 files plus all 16 benchmark-runner checks.
+- Normal and opt-in production builds/typecheck passed: the normal graph has no
+  WebGPU adapter chunk, while the flagged graph emits one separate 11.27 kB
+  chunk. Oxlint and the production high audit passed with 0 vulnerabilities.
+- The refreshed headed Chrome 151 / RX 6600 benchmark retained exact parity in
+  71 comparisons, CPU fallback after device destruction, zero active buffers,
+  0 warnings/errors, and strict-port release. CPU measured 1.000 / 1.400 ms
+  median/p95 versus WebGPU 4.400 / 5.100 ms, with 418.400 ms startup. Source
+  fingerprint is
+  `sha256:b37ec7c43331995499dc2396b298e069c69686718bac94283b2838360e6813dc`;
+  the production no-go decision is unchanged.

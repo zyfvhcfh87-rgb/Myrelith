@@ -37,11 +37,11 @@ The adapter follows this contract:
 | Execute | Allow only the production 160 x 90 shape. Allocate four request-owned buffers, submit once, map/copy the result, then unmap and destroy every buffer in `finally`. |
 | Unsupported/init failure | Return the CPU result and retain a typed reason; do not retry that adapter instance. |
 | Runtime failure/device loss | Resolve the current or next analysis through CPU, release the failed session, and never mutate project or render state. `GPUDevice.lost` is observed explicitly. |
-| Disable/close | The render worker sends its analysis child an explicit release message. The child destroys the device and acknowledges release; the parent has a bounded termination fallback. |
+| Disable/close | The render worker sends its analysis child an explicit release message. The child destroys the device and acknowledges release; render-worker close waits for that acknowledgment or the 250 ms child fallback before replying `closed`, while the page bridge retains its independent 1,000 ms fallback. |
 
 The default production build contains no WebGPU shader/adapter chunk or
 `navigator.gpu` reference. An enabled build emits the adapter as a separate
-11.16 kB uncompressed chunk. Disabling the flag therefore preserves both
+11.27 kB uncompressed chunk. Disabling the flag therefore preserves both
 runtime selection and the ordinary production module graph.
 
 ## Exact output contract
@@ -103,23 +103,23 @@ loss, checks cleanup, writes ignored JSON/Markdown under
 The complete headed run on 2026-08-12 used Chrome 151 on Windows 11, an AMD
 Radeon RX 6600 (driver 32.0.21045.1000), and the hardware WebGPU adapter
 reported as AMD RDNA 2. Source fingerprint was
-`sha256:ba422e38df24f27437ecaa001c3508e484285824c298d822be20a67f82bee192`;
+`sha256:b37ec7c43331995499dc2396b298e069c69686718bac94283b2838360e6813dc`;
 fixture fingerprint was
 `sha256:90e8d7bb64eed2143b3282238fe1dcfd5622fc9627d9d3df0ea55416fd78d533`.
 
 | Current 160 x 90 workload | CPU | WebGPU |
 |---|---:|---:|
-| Median, 60 measured iterations | 1.200 ms | 4.500 ms |
-| p95 | 1.600 ms | 5.100 ms |
+| Median, 60 measured iterations | 1.000 ms | 4.400 ms |
+| p95 | 1.400 ms | 5.100 ms |
 | Explicit per-analysis output/transient buffers | 30,720 B | 353,304 B |
-| Startup (adapter + device + pipeline + parity self-test) | none | 153.200 ms |
-| First opt-in call wall time | n/a | 155.900 ms |
+| Startup (adapter + device + pipeline + parity self-test) | none | 418.400 ms |
+| First opt-in call wall time | n/a | 420.900 ms |
 
 WebGPU produced exact output in all 71 comparisons, released every request
 buffer before the next sample, recovered from an intentional device destroy
 through exact CPU output, ended with zero active buffer bytes, emitted zero
 browser warnings/errors, and released the strict port. Its median was only
-0.267 times CPU throughput: equivalently, it took 3.8 times as long.
+0.227 times CPU throughput: equivalently, it took 4.4 times as long.
 
 A separate flagged-app pass created a normal text clip, enabled Program Monitor
 scopes, loaded both the analysis worker and opt-in WebGPU module, and reported
@@ -145,9 +145,9 @@ CPU readback/upload round trip or increases the useful compute workload, then
 repeat exact parity, device-loss, memory, startup, and multi-device/browser
 measurements before changing any default.
 
-Final validation passed 79 narrow scope/adapter/render-worker tests, the final
-182-test integration focus, all 2,317 Vitest cases across 168 files, all 16
-Node benchmark-runner checks, production TypeScript/build, oxlint, and
+Final review-hardening validation passed 118 focused child/adapter/render-worker/
+bridge tests, all 2,321 Vitest cases across 169 files, all 16 Node benchmark-
+runner checks, normal and opt-in production TypeScript/builds, oxlint, and
 `npm audit --omit=dev --audit-level=high` with zero vulnerabilities. The normal
 build emitted only its established large-chunk advisory and retained the
 WebGPU-free worker graph described above.

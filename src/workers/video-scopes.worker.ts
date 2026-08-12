@@ -5,30 +5,43 @@ import type {
   VideoScopeWorkerMessage,
   VideoScopeWorkerReply,
 } from './video-scopes-protocol'
+import type { OptionalVideoScopeAnalyzer } from './video-scopes-webgpu'
 
 const WEBGPU_EXPERIMENT_ENABLED =
   import.meta.env.VITE_MYRELITH_WEBGPU_SCOPES_EXPERIMENT === '1'
 
-let lifecycle = 0
-let optionalAnalyzer: import('./video-scopes-webgpu').OptionalVideoScopeAnalyzer | null = null
+type VideoScopeWebGpuModule = Pick<
+  typeof import('./video-scopes-webgpu'),
+  'createOptionalVideoScopeAnalyzer'
+>
 
-self.addEventListener('message', (event: MessageEvent<VideoScopeWorkerMessage>) => {
-  const message = event.data
-  if (message.type === 'release') {
-    lifecycle++
-    optionalAnalyzer?.release()
-    optionalAnalyzer = null
-    const reply: VideoScopeWorkerReply = { type: 'released' }
-    self.postMessage(reply)
-    return
-  }
+export interface VideoScopeWorkerEnv {
+  readonly experimentEnabled: boolean
+  loadWebGpu(): Promise<VideoScopeWebGpuModule>
+  post(message: VideoScopeWorkerReply): void
+}
 
-  const requestLifecycle = lifecycle
-  const run = async (): Promise<void> => {
+export function createVideoScopeWorkerCore(env: VideoScopeWorkerEnv): {
+  handleMessage(message: VideoScopeWorkerMessage): Promise<void>
+} {
+  let lifecycle = 0
+  let optionalAnalyzer: OptionalVideoScopeAnalyzer | null = null
+
+  const handleMessage = async (message: VideoScopeWorkerMessage): Promise<void> => {
+    if (message.type === 'release') {
+      lifecycle++
+      optionalAnalyzer?.release()
+      optionalAnalyzer = null
+      env.post({ type: 'released' })
+      return
+    }
+
+    const requestLifecycle = lifecycle
     try {
       let analysis
-      if (WEBGPU_EXPERIMENT_ENABLED) {
-        const webGpu = await import('./video-scopes-webgpu')
+      if (env.experimentEnabled) {
+        const webGpu = await env.loadWebGpu()
+        if (lifecycle !== requestLifecycle) return
         optionalAnalyzer ??= webGpu.createOptionalVideoScopeAnalyzer({ preferWebGpu: true })
         analysis = (await optionalAnalyzer.analyze(
           message.rgba,
@@ -39,21 +52,35 @@ self.addEventListener('message', (event: MessageEvent<VideoScopeWorkerMessage>) 
         analysis = analyzeVideoScopes(message.rgba, message.width, message.height)
       }
       if (lifecycle !== requestLifecycle) return
-      const reply: VideoScopeWorkerReply = {
+      env.post({
         type: 'analysis',
         requestId: message.requestId,
         analysis,
-      }
-      self.postMessage(reply)
+      })
     } catch (error) {
       if (lifecycle !== requestLifecycle) return
-      const reply: VideoScopeWorkerReply = {
+      env.post({
         type: 'error',
         requestId: message.requestId,
         message: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      }
-      self.postMessage(reply)
+      })
     }
   }
-  void run()
-})
+
+  return { handleMessage }
+}
+
+declare const WorkerGlobalScope: unknown
+
+if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
+  const core = createVideoScopeWorkerCore({
+    experimentEnabled: WEBGPU_EXPERIMENT_ENABLED,
+    loadWebGpu: WEBGPU_EXPERIMENT_ENABLED
+      ? () => import('./video-scopes-webgpu')
+      : () => Promise.reject(new Error('WebGPU scope experiment is disabled')),
+    post: (message) => self.postMessage(message),
+  })
+  self.addEventListener('message', (event: MessageEvent<VideoScopeWorkerMessage>) => {
+    void core.handleMessage(event.data)
+  })
+}
