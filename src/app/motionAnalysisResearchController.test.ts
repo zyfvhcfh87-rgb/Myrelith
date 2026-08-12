@@ -12,6 +12,7 @@ import {
 class ResearchWorkerStub extends EventTarget {
   readonly behavior: ResearchWorkerBehavior
   readonly messages: MotionResearchWorkerMessage[] = []
+  readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>()
   terminated = false
 
   constructor(behavior: ResearchWorkerBehavior) {
@@ -21,6 +22,9 @@ class ResearchWorkerStub extends EventTarget {
 
   postMessage(message: MotionResearchWorkerMessage): void {
     this.messages.push(message)
+    if (this.behavior === 'post-throw' && message.type === 'run') {
+      throw new DOMException('Synthetic postMessage failure', 'InvalidStateError')
+    }
     queueMicrotask(() => {
       if (this.terminated) return
       if (message.type === 'probe') {
@@ -64,12 +68,42 @@ class ResearchWorkerStub extends EventTarget {
   terminate(): void {
     this.terminated = true
   }
+
+  override addEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: AddEventListenerOptions | boolean,
+  ): void {
+    super.addEventListener(type, callback, options)
+    if (!callback) return
+    const listeners = this.listeners.get(type) ?? new Set()
+    listeners.add(callback)
+    this.listeners.set(type, listeners)
+  }
+
+  override removeEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: EventListenerOptions | boolean,
+  ): void {
+    super.removeEventListener(type, callback, options)
+    if (!callback) return
+    this.listeners.get(type)?.delete(callback)
+  }
+
+  activeListenerCount(): number {
+    return [...this.listeners.values()].reduce(
+      (total, listeners) => total + listeners.size,
+      0,
+    )
+  }
 }
 
 type ResearchWorkerBehavior =
   | 'success'
   | 'pending'
   | 'failure'
+  | 'post-throw'
   | 'probe-pending'
   | 'module-error'
 
@@ -720,6 +754,53 @@ describe('motion analysis research controller', () => {
       await flushMicrotasks()
       timeoutSpy.mockRestore()
     }
+  })
+
+  test('terminates and releases admission when initial worker postMessage throws', async () => {
+    const workers = installWorker('post-throw')
+    const before = motionAnalysisResearchDiagnostics()
+    const firstOutcome = runBrowserMotionAnalysisResearch({
+      skipSupportProbe: true,
+    }).then(
+      () => ({ status: 'fulfilled' as const, cause: null, diagnostics: null }),
+      (cause: unknown) => ({
+        status: 'rejected' as const,
+        cause,
+        diagnostics: motionAnalysisResearchDiagnostics(),
+      }),
+    )
+
+    await expect(firstOutcome).resolves.toMatchObject({
+      status: 'rejected',
+      cause: {
+        name: 'InvalidStateError',
+        message: 'Synthetic postMessage failure',
+      },
+      diagnostics: {
+        workersCreated: before.workersCreated + 1,
+        workersTerminated: before.workersTerminated + 1,
+        activeWorkers: 0,
+      },
+    })
+    expect(workers).toHaveLength(1)
+    expect(workers[0]).toMatchObject({ terminated: true })
+    expect(workers[0]!.messages).toHaveLength(1)
+    expect(workers[0]!.activeListenerCount()).toBe(0)
+
+    const retryWorkers = installWorker('success')
+    await expect(runBrowserMotionAnalysisResearch({
+      skipSupportProbe: true,
+    })).resolves.toMatchObject({
+      evidence: { decision: { stabilization: 'go' } },
+    })
+
+    const afterRetry = motionAnalysisResearchDiagnostics()
+    expect(afterRetry.workersCreated - before.workersCreated).toBe(2)
+    expect(afterRetry.workersTerminated - before.workersTerminated).toBe(2)
+    expect(afterRetry.activeWorkers).toBe(0)
+    expect(retryWorkers).toHaveLength(1)
+    expect(retryWorkers[0]).toMatchObject({ terminated: true })
+    expect(retryWorkers[0]!.activeListenerCount()).toBe(0)
   })
 
   test('preserves a typed quality failure and still terminates the worker', async () => {

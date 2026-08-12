@@ -3947,3 +3947,16 @@ acceptance claims.
   late resolve/reject, zero-offset and nonzero-offset oversized backing rejection,
   and valid tightly sized buffers; pass 42/42 focused controller/matcher/tracking
   tests, all 16 benchmark-runner checks, and the standalone TypeScript gate.
+
+## Milestone 5 Part 10a / issue #44 - worker-send cleanup follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Catch a synchronous failure from the initial research-worker `postMessage`
+  and reject through the existing idempotent finish path instead of bypassing
+  termination and leaving shared worker diagnostics active.
+- [x] Detach the run worker's message/error and abort listeners before terminating
+  it, preserve the original send exception, and release controller-wide
+  admission only after the worker counters are balanced.
+- [x] Prove deterministic synchronous-send failure cleanup, rejection-time 1/1
+  worker parity, zero active listeners/workers, and a successful admitted retry.

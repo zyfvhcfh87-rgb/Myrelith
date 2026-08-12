@@ -3828,3 +3828,20 @@ surface; it is not a second zoom and never enters document history.
   single-close diagnostics, and no post-settlement drift. The controller,
   matcher, and tracking group passed 42/42 tests plus all 16 benchmark-runner
   checks; the standalone TypeScript gate also passed.
+
+## Milestone 5 Part 10a / issue #44 - worker-send cleanup hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of exact head
+  `74c6ac6b2cb517b9bf4249754ec7fb6eabc8d670` found that a synchronous failure
+  from the initial research-worker `postMessage()` rejected its Promise without
+  reaching the worker cleanup owner.
+- The initial send now catches that failure and rejects through the same
+  idempotent terminal path as worker results, errors, and cancellation. That
+  path removes signal/worker listeners, terminates exactly once, balances
+  created/terminated/active diagnostics before caller settlement, and preserves
+  the original send exception for the caller.
+- A deterministic throwing-worker regression proves the first run drains before
+  rejection, leaves no registered worker listeners, releases shared admission,
+  and allows a second successful run with exact cumulative resource parity.

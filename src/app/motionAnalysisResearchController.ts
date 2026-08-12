@@ -419,15 +419,18 @@ function runResearchWorker(
       if (settled) return
       settled = true
       signal.removeEventListener('abort', abort)
+      worker.removeEventListener('message', onMessage)
+      worker.removeEventListener('error', onError)
       terminate()
       action()
     }
-    const abort = () => finish(() => reject(new DOMException(
-      'Motion analysis was cancelled',
-      'AbortError',
-    )))
-    signal.addEventListener('abort', abort, { once: true })
-    worker.addEventListener('message', (event: MessageEvent<MotionResearchRunReply>) => {
+    function abort(): void {
+      finish(() => reject(new DOMException(
+        'Motion analysis was cancelled',
+        'AbortError',
+      )))
+    }
+    function onMessage(event: MessageEvent<MotionResearchRunReply>): void {
       const reply = event.data
       if (reply.requestId !== currentRequestId || settled) return
       if (reply.type === 'progress') {
@@ -442,10 +445,16 @@ function runResearchWorker(
         reply.code === 'quality-fixture-failed' ? 'resource-limit' : 'unexpected',
         reply.message,
       )))
-    })
-    worker.addEventListener('error', (event) => finish(() => reject(
-      new MediaJobExecutionError('unexpected', event.message || 'Motion worker failed'),
-    )), { once: true })
+    }
+    function onError(event: ErrorEvent): void {
+      finish(() => reject(new MediaJobExecutionError(
+        'unexpected',
+        event.message || 'Motion worker failed',
+      )))
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    worker.addEventListener('message', onMessage)
+    worker.addEventListener('error', onError, { once: true })
     if (signal.aborted) {
       abort()
       return
@@ -454,7 +463,11 @@ function runResearchWorker(
       type: 'run',
       requestId: currentRequestId,
     }
-    worker.postMessage(message)
+    try {
+      worker.postMessage(message)
+    } catch (cause) {
+      finish(() => reject(cause))
+    }
   })
 }
 
