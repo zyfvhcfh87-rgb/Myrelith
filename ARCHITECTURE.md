@@ -213,10 +213,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   cannot safely execute. The normative contract is in `docs/EFFECTS.md`.
 - `domain/pluginManifest.ts` is the pure, non-executing structural validator and
   compatibility negotiator for the proposed plugin manifest. It reuses the
-  durable effect-number/key bounds and declares bounded descriptor-migration ABI
-  facts, but may define only serializable data and must never read packages,
-  verify signatures, mutate trust/permission state, register runtime code, or
-  instantiate WebAssembly.
+  durable effect-number/key bounds, requires one package-unique render export per
+  contribution as the WebAssembly-call discriminator, keeps those render names
+  disjoint from differently typed migration exports, and declares bounded
+  descriptor-migration ABI facts. It may define only serializable data and must
+  never read packages, verify signatures, mutate trust/permission state, register
+  runtime code, or instantiate WebAssembly.
   Plugin packages, sandboxes, ports, workers, watchdogs, grants, and revocations
   remain future app-owned Issue #77 resources. Projects may retain only bounded
   namespaced effect descriptors; package bytes, URLs, trust, grants, and runtime

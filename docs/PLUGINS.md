@@ -147,7 +147,9 @@ An accepted manifest has exactly these fields:
 - `api.minVersion` and `api.maxVersion` bound the host message/Wasm ABI.
 - every permission independently declares an inclusive compatible version
   range and whether it is required;
-- every contribution id is unique within the package;
+- every contribution id and render `entrypoint` is unique within the package.
+  The unique render export is the WebAssembly-call contribution discriminator,
+  and no migration `entrypoint` may reuse any render export;
 - `contributionVersion` versions that contribution point's host ABI;
 - `descriptorVersion` versions that contribution's durable parameter schema;
 - `migrations` declares at most 64 deterministic descriptor-version steps. Each
@@ -334,8 +336,9 @@ whole migration rejects and preserves the original authored state.
   destination blending;
 - mutate that same-sized RGBA8 buffer in place;
 - receive exact integer timeline frame, exact rational document rate, project
-  width/height, row stride, contribution id, descriptor version, and bounded
-  primitive parameters;
+  width/height, row stride, and bounded primitive parameters. Invocation of the
+  manifest-unique render export identifies the contribution and its current
+  descriptor schema without copying another selector into plugin memory;
 - receive no lower/upper tracks, unrelated clips, source file bytes, filenames,
   paths, asset descriptors, audio, project name, project id, markers, captions,
   handles, URLs, clocks, randomness, storage, or network capability.
@@ -380,6 +383,9 @@ ABI contract is:
   compilation or instantiation;
 - threads, shared memory, relaxed SIMD, component-model imports, WASI, and JS
   builtins are rejected;
+- every contribution names a package-unique render entrypoint. Invoking that
+  export is the contribution discriminator; no contribution-id string or numeric
+  selector is copied into untrusted memory;
 - each contribution render entrypoint is an exported function with signature
   `(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32) -> i32`;
 - arguments are pixel pointer, width, height, stride, frame low/high 32-bit
@@ -396,7 +402,8 @@ ABI contract is:
   input and output are non-overlapping, each is capped at 65,536 bytes, a
   positive return is the exact output length, and zero or a negative value is a
   migration failure. A contribution with migrations must request at least two
-  memory pages, and a migration export name must differ from its render export;
+  memory pages, and a migration export name must differ from every render export
+  in the package;
 - a migration output must be canonical JSON for one primitive parameter record,
   match the target manifest schema exactly, and pass the shared descriptor and
   document budgets before commit. Migration calls carry no frame bytes and run

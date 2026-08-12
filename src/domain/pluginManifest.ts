@@ -518,15 +518,6 @@ function contribution(value: unknown, path: string): PluginVideoEffectContributi
     }
   }
   const entrypoint = wasmEntrypoint(item.entrypoint, `${path}.entrypoint`)
-  const collidingMigrationIndex = migrations.findIndex(
-    (step) => step.entrypoint === entrypoint,
-  )
-  if (collidingMigrationIndex >= 0) {
-    fail(
-      `${path}.migrations[${collidingMigrationIndex}].entrypoint`,
-      'must differ from the render entrypoint',
-    )
-  }
   return {
     kind: 'video-effect',
     contributionVersion: safeInteger(
@@ -592,9 +583,27 @@ export function validatePluginManifest(value: unknown): PluginManifestValidation
       )
     }
     const contributionIds = new Set<string>()
+    const renderEntrypoints = new Set<string>()
     for (const [index, item] of contributions.entries()) {
       if (contributionIds.has(item.id)) fail(`$.contributions[${index}].id`, 'must be unique')
       contributionIds.add(item.id)
+      if (renderEntrypoints.has(item.entrypoint)) {
+        fail(
+          `$.contributions[${index}].entrypoint`,
+          'must be unique across contributions',
+        )
+      }
+      renderEntrypoints.add(item.entrypoint)
+    }
+    for (const [contributionIndex, item] of contributions.entries()) {
+      for (const [migrationIndex, migration] of item.migrations.entries()) {
+        if (renderEntrypoints.has(migration.entrypoint)) {
+          fail(
+            `$.contributions[${contributionIndex}].migrations[${migrationIndex}].entrypoint`,
+            'must differ from every render entrypoint',
+          )
+        }
+      }
     }
     const framePermission = permissions.find((request) => request.id === VIDEO_EFFECT_FRAME_CAPABILITY)
     if (!framePermission?.required) {

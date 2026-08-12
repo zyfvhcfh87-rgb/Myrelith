@@ -164,17 +164,18 @@ imports an updated signed deny set. UI must say “signed by this key,” never
 ### Manifest ambiguity and compatibility confusion
 
 **Attacker story:** duplicate JSON keys, unknown fields, overlong labels,
-prototype-looking parameter keys, version-range tricks, optional-permission
-downgrades, or URL-shaped entry paths cause different reviewers/components to
-interpret one package differently.
+prototype-looking parameter keys, reused render exports, version-range tricks,
+optional-permission downgrades, or URL-shaped entry paths cause different
+reviewers/components to interpret one package differently.
 
 **Controls:** byte limit and duplicate-key rejection before parse; canonical
 JSON; exact keys at every object; ASCII-bounded ids/paths/entrypoints; shared
-durable numeric bounds and reserved-key rejection; unique ids/parameter keys/
-options; bounded forward-only migration declarations whose explicit exports all
-lead to the current descriptor version; inclusive integer version ranges;
-required-unavailable is incompatible; optional-unavailable remains explicit and
-unselected; no compatibility substitution.
+durable numeric bounds and reserved-key rejection; unique ids/render entrypoints/
+parameter keys/options; disjoint render/migration export names; bounded forward-
+only migration declarations whose explicit exports all lead to the current
+descriptor version; inclusive integer version ranges; required-unavailable is
+incompatible; optional-unavailable remains explicit and unselected; no
+compatibility substitution.
 
 **Residual risk:** future schema evolution can create confused-deputy behavior
 if old and new code disagree. Each manifest/API/capability/contribution schema is
@@ -204,11 +205,11 @@ negative probes reduce but do not eliminate browser-engine risk.
 media, hidden tracks, unrelated layers, future frames, audio, clipboard, or
 remembered directory capabilities.
 
-**Controls:** only a copied isolated RGBA8 layer crosses the call boundary;
-metadata is width/height/stride, exact frame, rational rate, contribution/schema,
-and the effect's own bounded params. App controllers retain all file/handle/URL
-ownership. The module has no browser imports. Permission copy explicitly names
-the frame access grant.
+**Controls:** only a copied isolated RGBA8 layer crosses the call boundary. The
+manifest-unique render export is the contribution discriminator; arguments carry
+only width/height/stride, exact frame, rational rate, and the effect's own bounded
+params. App controllers retain all file/handle/URL ownership. The module has no
+browser imports. Permission copy explicitly names the frame access grant.
 
 **Residual risk:** the granted frame itself may reveal faces, documents, or other
 sensitive content. A malicious effect may encode previous frames into later

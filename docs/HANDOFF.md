@@ -3197,3 +3197,24 @@ surface; it is not a second zoom and never enters document history.
 - Browser verification remains not applicable: this is still a design-only,
   non-executing contract with no production plugin parser, runtime, or observable
   browser surface. Issue #77 owns the real hostile-module boundary fixtures.
+
+## Part 10c issue #76 - PR #112 contribution-dispatch follow-up (2026-08-12)
+
+**COMPLETE LOCALLY.**
+
+- Every accepted contribution now owns a package-unique render entrypoint, and
+  the complete render-name set is disjoint from every differently typed migration
+  export. Validation is order-independent and points at the colliding declaration.
+- The selected render export is the WebAssembly-call contribution discriminator.
+  The ten-integer render signature stays unchanged, and no contribution-id string
+  or extra selector is copied into untrusted memory.
+- The normative plugin contract, threat model, and architecture boundary now say
+  the same thing, so Issue #77 can map one contribution to one typed export before
+  compilation or instantiation without inventing a dispatch convention.
+- Validation passed 111 focused manifest/project/effect/architecture tests, all
+  2,325 Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities.
+- Browser verification remains not applicable because this follow-up changes
+  only the pure non-executing validator and design contract. Issue #77 still owns
+  real hostile-module dispatch fixtures.

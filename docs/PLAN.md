@@ -3443,3 +3443,22 @@ acceptance claims.
   five seconds; the immediate full rerun passed.
 - [x] Keep browser verification explicitly not applicable to this non-executing
   design slice. Issue #77 retains the hostile-module browser gates.
+
+## Part 10c / issue #76 - PR #112 contribution-dispatch follow-up
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Require every contribution to name a package-unique render entrypoint and
+  keep the complete render-name set disjoint from differently typed migration
+  exports regardless of contribution declaration order.
+- [x] Use the selected render export itself as the WebAssembly-call contribution
+  discriminator, retaining the ten-integer ABI without copying a contribution-id
+  string or another selector into untrusted memory.
+- [x] Align the normative plugin contract, threat model, architecture boundary,
+  and focused validator coverage so Issue #77 has one explicit dispatch rule.
+- [x] Pass 111 focused manifest/project/effect/architecture tests, all 2,325
+  Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities.
+- [x] Keep browser verification not applicable to this pure non-executing
+  validator/design follow-up; Issue #77 owns hostile-module dispatch fixtures.

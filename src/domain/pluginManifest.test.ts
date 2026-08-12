@@ -131,6 +131,55 @@ describe('plugin manifest', () => {
     })
   })
 
+  test('requires each contribution to own a unique render entrypoint', () => {
+    const value = manifest()
+    const contributions = value.contributions as Record<string, unknown>[]
+    const secondContribution = structuredClone(contributions[0])
+    secondContribution.id = 'glow'
+    secondContribution.name = 'Glow'
+    contributions.push(secondContribution)
+
+    expect(validatePluginManifest(value)).toMatchObject({
+      ok: false,
+      problem: { path: '$.contributions[1].entrypoint' },
+    })
+
+    secondContribution.entrypoint = 'myrelith_effect_glow'
+    expect(validatePluginManifest(value)).toMatchObject({ ok: true })
+  })
+
+  test('keeps migration exports disjoint from every render entrypoint', () => {
+    const value = manifest()
+    const contributions = value.contributions as Record<string, unknown>[]
+    const migratingContribution = contributions[0]
+    migratingContribution.descriptorVersion = 2
+    migratingContribution.migrations = [{
+      fromVersion: 1,
+      toVersion: 2,
+      entrypoint: 'myrelith_effect_glow',
+    }]
+    const glowContribution = structuredClone(migratingContribution)
+    glowContribution.id = 'glow'
+    glowContribution.name = 'Glow'
+    glowContribution.descriptorVersion = 1
+    glowContribution.entrypoint = 'myrelith_effect_glow'
+    glowContribution.migrations = []
+
+    for (const orderedContributions of [
+      [migratingContribution, glowContribution],
+      [glowContribution, migratingContribution],
+    ]) {
+      value.contributions = orderedContributions
+      const migrationIndex = orderedContributions.indexOf(migratingContribution)
+      expect(validatePluginManifest(value)).toMatchObject({
+        ok: false,
+        problem: {
+          path: `$.contributions[${migrationIndex}].migrations[0].entrypoint`,
+        },
+      })
+    }
+  })
+
   test('keeps declared numeric values inside the shared durable effect bound', () => {
     for (const field of ['min', 'max', 'default'] as const) {
       const value = manifest()
