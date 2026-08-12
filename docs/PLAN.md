@@ -3878,3 +3878,20 @@ acceptance claims.
   independent stabilization/point/box go, occlusion loss at frame 18 after frame
   17, cancellation, typed overlap rejection, exact worker/frame/OPFS parity,
   zero console problems, and a released port.
+
+## Milestone 5 Part 10a / issue #44 - concurrent OPFS-probe follow-up
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Give every support invocation a distinct origin-wide OPFS filename backed
+  by a 128-bit Web Crypto nonce, and remove only the name owned by that call.
+- [x] Cover two overlapping probes with deterministic nonces, distinct filenames,
+  two successful support results, exact cleanup ownership, and balanced created/
+  removed diagnostics.
+- [x] Pass all 2,337 Vitest cases across 172 files plus 16 benchmark-runner checks,
+  production build/typecheck, oxlint, clean diff checks, production audit at 0
+  vulnerabilities, and a normal-bundle scan with no motion-research identifiers.
+- [x] Rerun real headed Chromium only on strict port 41844; retain the complete
+  capability matrix, three `go` decisions, exact frame-18 occlusion loss,
+  cancellation and admission outcomes, 2/2 workers, 1/1 frames, 1/1 OPFS files,
+  zero console problems, and a released port.

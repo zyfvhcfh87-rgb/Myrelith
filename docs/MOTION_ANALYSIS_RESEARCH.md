@@ -93,6 +93,9 @@ support contract: a failed `removeEntry()` resolves to a cleanup-specific
 unsupported result rather than escaping the probe, starting analysis, or being
 counted as a successful removal. The injected failure regression preserves the
 created-versus-removed diagnostic mismatch so cleanup uncertainty stays visible.
+Every invocation owns a distinct origin-wide temporary name with a 128-bit
+Web Crypto nonce, so overlapping calls or tabs cannot remove, overwrite, or
+invalidate another probe's file. Each invocation removes only its owned name.
 The product child must also abort the decoder/source/storage owner and await
 scheduler/storage quiescence. Queued pre-abort, active abort, typed failure,
 successful completion, replacement, source removal, clip removal, project

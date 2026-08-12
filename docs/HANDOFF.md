@@ -3739,3 +3739,25 @@ surface; it is not a second zoom and never enters document history.
   frames closed 1/1, OPFS probes removed 1/1, console problems stayed zero, and
   the port was released. The ignored screenshot SHA-256 is
   `202AD63A8E7F035D87C826874D6FB2CCAA4D73F73BB1F1E4932A4BBB9115F07F`.
+
+## Milestone 5 Part 10a / issue #44 - concurrent OPFS-probe hardening (2026-08-12)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- Every support invocation now owns a distinct origin-wide OPFS filename with a
+  128-bit Web Crypto nonce. Overlapping calls or tabs cannot remove, overwrite,
+  or invalidate another probe, and each invocation removes only its owned name.
+- A deterministic overlapping-probe regression runs two support calls together,
+  proves distinct filenames, successful capability results, exact owned cleanup,
+  and matching created/removed diagnostics.
+- The full gate passed all 2,337 Vitest cases across 172 files plus all 16
+  benchmark-runner checks, production build/typecheck, oxlint, clean diff checks,
+  and the production audit with 0 vulnerabilities. The normal production bundle
+  retained no motion-research controller, worker, cache, or probe identifiers.
+- Real headed Chromium reran on strict port 41844. The support matrix was fully
+  available; stabilization, point tracking, and box tracking reported `go`;
+  occlusion failed on frame 18 after frame 17; cancellation and overlapping-run
+  rejection stayed typed; workers drained 2/2, frames closed 1/1, OPFS probes
+  removed 1/1, console problems stayed zero, and the port was released. The
+  dirty exact-tree fingerprint was
+  `sha256:58114f711222b3f9575717388d14adcdd654431855e0aa0e1c47d222378b3934`.

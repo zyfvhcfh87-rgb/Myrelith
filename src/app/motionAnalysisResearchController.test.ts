@@ -320,6 +320,58 @@ describe('motion analysis research controller', () => {
     expect(removeEntry).toHaveBeenCalledTimes(2)
   })
 
+  test('uses distinct OPFS files for overlapping support probes', async () => {
+    installWorker('success')
+    let nonce = 0
+    vi.stubGlobal('crypto', {
+      getRandomValues: (values: Uint32Array) => {
+        values.fill(0)
+        values[values.length - 1] = ++nonce
+        return values
+      },
+      subtle: { digest: vi.fn() },
+    })
+    const fileNames: string[] = []
+    const removedNames: string[] = []
+    const getFileHandle = vi.fn(async (fileName: string) => {
+      fileNames.push(fileName)
+      return {
+        createWritable: vi.fn().mockResolvedValue({
+          write: vi.fn().mockResolvedValue(undefined),
+          close: vi.fn().mockResolvedValue(undefined),
+        }),
+        getFile: vi.fn().mockResolvedValue({ size: 2 }),
+      }
+    })
+    const removeEntry = vi.fn(async (fileName: string) => {
+      removedNames.push(fileName)
+    })
+    vi.stubGlobal('navigator', {
+      storage: {
+        getDirectory: vi.fn().mockResolvedValue({ getFileHandle, removeEntry }),
+      },
+    })
+    const before = motionAnalysisResearchDiagnostics()
+
+    const results = await Promise.all([
+      probeMotionAnalysisSupport(),
+      probeMotionAnalysisSupport(),
+    ])
+
+    expect(results.map((result) => result.opfs)).toEqual([true, true])
+    expect(fileNames).toHaveLength(2)
+    expect(new Set(fileNames)).toHaveLength(2)
+    expect(fileNames.every((fileName) => (
+      fileName.startsWith('issue-44-motion-analysis-support-probe-')
+      && fileName.endsWith('.tmp')
+    ))).toBe(true)
+    expect(removedNames).toEqual(expect.arrayContaining(fileNames))
+    expect(new Set(removedNames)).toEqual(new Set(fileNames))
+    const after = motionAnalysisResearchDiagnostics()
+    expect(after.opfsProbeFilesCreated - before.opfsProbeFilesCreated).toBe(2)
+    expect(after.opfsProbeFilesRemoved - before.opfsProbeFilesRemoved).toBe(2)
+  })
+
   test('preserves a typed quality failure and still terminates the worker', async () => {
     installWorker('failure')
     const before = motionAnalysisResearchDiagnostics()

@@ -196,17 +196,29 @@ interface OpfsProbeResult {
 
 const OPFS_UNAVAILABLE_FAILURE = 'Origin-private file storage is unavailable.'
 const OPFS_CLEANUP_FAILURE = 'Origin-private file storage probe cleanup failed.'
+const OPFS_PROBE_FILE_PREFIX = 'issue-44-motion-analysis-support-probe-'
+
+function createOpfsProbeFileName(): string {
+  const nonce = new Uint32Array(4)
+  crypto.getRandomValues(nonce)
+  const suffix = Array.from(
+    nonce,
+    (value) => value.toString(16).padStart(8, '0'),
+  ).join('')
+  return `${OPFS_PROBE_FILE_PREFIX}${suffix}.tmp`
+}
 
 async function probeOpfs(): Promise<OpfsProbeResult> {
   if (typeof navigator.storage?.getDirectory !== 'function') {
     return { supported: false, failure: OPFS_UNAVAILABLE_FAILURE }
   }
-  const fileName = 'issue-44-motion-analysis-support-probe.tmp'
+  let fileName: string | null = null
   let root: FileSystemDirectoryHandle | null = null
   let created = false
   let supported = false
   let cleanupFailed = false
   try {
+    fileName = createOpfsProbeFileName()
     root = await navigator.storage.getDirectory()
     const handle = await root.getFileHandle(fileName, { create: true })
     created = true
@@ -222,7 +234,7 @@ async function probeOpfs(): Promise<OpfsProbeResult> {
   } catch {
     supported = false
   } finally {
-    if (root && created) {
+    if (root && created && fileName) {
       try {
         await root.removeEntry(fileName)
         diagnostics.opfsProbeFilesRemoved++
