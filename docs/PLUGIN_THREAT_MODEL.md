@@ -165,15 +165,17 @@ imports an updated signed deny set. UI must say “signed by this key,” never
 
 **Attacker story:** duplicate JSON keys, unknown fields, overlong labels,
 prototype-looking parameter keys, reused render exports, version-range tricks,
-optional-permission downgrades, or URL-shaped entry paths cause different
-reviewers/components to interpret one package differently.
+an unverifiable intermediate migration schema, optional-permission downgrades,
+or URL-shaped entry paths cause different reviewers/components to interpret one
+package differently.
 
 **Controls:** byte limit and duplicate-key rejection before parse; canonical
 JSON; exact keys at every object; ASCII-bounded ids/paths/entrypoints; shared
 durable numeric bounds and reserved-key rejection; unique ids/render entrypoints/
 parameter keys/options; disjoint render/migration export names; bounded forward-
 only migration declarations whose explicit exports all lead to the current
-descriptor version; inclusive integer version ranges; required-unavailable is
+descriptor version; generic non-final migration outputs instead of invented
+historical schemas; inclusive integer version ranges; required-unavailable is
 incompatible; optional-unavailable remains explicit and unselected; no
 compatibility substitution.
 
@@ -288,16 +290,31 @@ update/project replacement/close at every awaited boundary.
 ### Project portability, migration, and data loss
 
 **Attacker story:** opening a project auto-installs or executes code; an older
-host drops unknown descriptors; a failing migration corrupts params/animation;
-revocation removes authored data; export silently omits an effect.
+host drops unknown descriptors; a non-final migration feeds oversized, nested,
+or ambiguous data into the next step; a changed schema or unit silently
+reinterprets retained effect keyframes; a failing migration corrupts params/
+animation; revocation removes authored data; export silently omits an effect.
 
 **Controls:** project stores only bounded descriptors; unknown types/versions/
 keys/animation targets preserve and bypass; open never installs/prompts/migrates/
 executes; migration follows only manifest-declared version steps and typed Wasm
-exports, is explicit, sandboxed, cloned, bounded, and one-entry only after output
-and retained-animation validation; failure retains original; revoke/disable/safe
-mode never delete descriptors; export blocks by default and names every
-unavailable instance.
+exports, is explicit, sandboxed, and cloned. Before another step can run, every
+non-final output must be strict UTF-8 canonical JSON no larger than 65,536 bytes:
+one object with at most 64 entries, keys and string values using the bounded
+manifest-v1 local-identifier grammar, the three reserved record keys excluded,
+and only booleans, finite +/-1,000,000,000 numbers, or those bounded strings. Only
+static effect instances are eligible under descriptor migration ABI version 1:
+before any migration export runs, the host rejects the entire chain if an entry
+in the owning clip's `ClipAnimation.effectTracks` targets that effect id. It does
+not attempt key-range-only validation because a future, separately versioned
+contract must define how animated parameters change schema or unit. The final
+output must exactly match the current contribution schema and pass durable
+descriptor and whole-document replacement budgets; one history entry occurs
+only after all validation. Failure retains the original descriptor and complete
+animation; revoke/disable/safe mode never delete descriptors; export blocks by
+default and names every unavailable instance. Issue #77 must implement and
+fixture these byte-level and static-instance gates before any migration export
+can execute.
 
 **Residual risk:** a user can deliberately remove an opaque effect or explicitly
 export with reviewed bypass. Those are visible user edits, not silent recovery.

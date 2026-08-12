@@ -3411,9 +3411,10 @@ acceptance claims.
 - [x] Add exact bounded migration declarations to the version-1 contribution
   schema, validate deterministic forward chains, require distinct render and
   migration exports, and publish the typed migration call/cleanup contract.
-- [x] Keep migration explicit, sandboxed, cloned, and history-atomic; preserve
-  host-owned identity/order/enabled/animation state and reject instead of
-  dropping an animated parameter target the current manifest cannot validate.
+- [x] Keep migration explicit, sandboxed, cloned, and history-atomic. Descriptor
+  migration ABI version 1 rejects an instance targeted by any effect-animation
+  track before plugin code runs and preserves the original descriptor plus
+  complete animation; animated migration requires a future versioned contract.
 - [x] Pass 109 focused manifest/project/effect/architecture tests, all 2,323
   Vitest cases across 168 files, all 16 benchmark-runner checks, production
   build/typecheck, warning-free oxlint, clean diff checks, and the production
@@ -3462,3 +3463,30 @@ acceptance claims.
   high-severity audit with 0 vulnerabilities.
 - [x] Keep browser verification not applicable to this pure non-executing
   validator/design follow-up; Issue #77 owns hostile-module dispatch fixtures.
+
+## Part 10c / issue #76 - PR #112 intermediate-migration follow-up
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Make multi-step migration verification implementable without adding
+  undeclared historical schemas: validate every non-final result as canonical
+  bounded primitive parameter data, then validate only the final result against
+  the current contribution parameter schema.
+- [x] Bound every intermediate to one strict UTF-8 canonical JSON object of at
+  most 65,536 bytes and 64 entries. Reuse the 1-to-64-character ASCII local-
+  identifier grammar for keys and string values, exclude the three reserved
+  record keys, bound finite numbers to +/-1,000,000,000, and reject nulls,
+  arrays, nested objects, duplicate keys, and noncanonical bytes before another
+  step.
+- [x] Apply shared durable descriptor and whole-document replacement budgets only
+  to the final candidate, with no intermediate document or history mutation.
+- [x] Close the latest exact-head Codex P2 by making descriptor migration ABI
+  version 1 static-instance-only. Before any migration export runs, reject the
+  entire chain if an owning `ClipAnimation.effectTracks` entry targets that
+  effect instance id, preserving the original descriptor and complete animation.
+  Do not use key-range-only validation; animated schema or unit migration needs
+  a future, separately versioned contract.
+- [x] Keep all parser, package, sandbox, and migration execution work gated on
+  Issue #77; this follow-up adds no production plugin runtime or browser surface.
+- [x] Pass all 20 focused plugin-manifest tests, the test wrapper's 16 benchmark-
+  runner checks, and `git diff --check`.

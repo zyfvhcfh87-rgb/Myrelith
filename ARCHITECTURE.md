@@ -218,7 +218,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   disjoint from differently typed migration exports, and declares bounded
   descriptor-migration ABI facts. It may define only serializable data and must
   never read packages, verify signatures, mutate trust/permission state, register
-  runtime code, or instantiate WebAssembly.
+  runtime code, or instantiate WebAssembly. Descriptor migration ABI version 1
+  is static-instance-only: before any migration export runs, the future host must
+  reject an instance targeted by any owning `ClipAnimation.effectTracks` entry
+  and preserve its original descriptor plus complete animation. Existing keys
+  that happen to fit new ranges are not proof of schema or unit compatibility;
+  animated migration requires a future, separately versioned contract.
   Plugin packages, sandboxes, ports, workers, watchdogs, grants, and revocations
   remain future app-owned Issue #77 resources. Projects may retain only bounded
   namespaced effect descriptors; package bytes, URLs, trust, grants, and runtime

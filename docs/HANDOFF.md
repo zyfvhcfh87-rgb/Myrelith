@@ -3166,8 +3166,10 @@ surface; it is not a second zoom and never enters document history.
   migration export cannot collide with the differently typed render export.
 - The normative ABI now specifies the migration call signature, exact buffer/
   return rules, canonical output validation, watchdog, memory clearing, and the
-  host-owned identity/order/enabled/animation boundary. Failed or animation-
-  incompatible migration keeps the original descriptor and history untouched.
+  host-owned identity/order/enabled/animation boundary. Version 1 rejects any
+  instance targeted by an effect-animation track before migration code runs;
+  failure keeps the original descriptor, complete animation, and history
+  untouched.
 - Validation passed 109 focused manifest/project/effect/architecture tests, all
   2,323 Vitest cases across 168 files, all 16 benchmark-runner checks, production
   build/typecheck, warning-free oxlint, clean diff checks, and the production
@@ -3218,3 +3220,31 @@ surface; it is not a second zoom and never enters document history.
 - Browser verification remains not applicable because this follow-up changes
   only the pure non-executing validator and design contract. Issue #77 still owns
   real hostile-module dispatch fixtures.
+
+## Part 10c issue #76 - PR #112 intermediate-migration follow-up (2026-08-12)
+
+**COMPLETE LOCALLY.**
+
+- Version-1 manifests do not invent schemas for intermediate descriptor versions.
+  After each non-final step, the host instead requires strict UTF-8 canonical
+  JSON for one primitive record before any following export may run.
+- The intermediate record is capped at 65,536 encoded bytes and 64 entries.
+  Keys and string values reuse the 1-to-64-character ASCII local-identifier
+  grammar; keys also exclude `__proto__`, `prototype`, and `constructor`.
+  Values are booleans, finite +/-1,000,000,000 numbers, or those bounded
+  strings, with no null, array, or nested-object values.
+- Only the final step must exactly match the current manifest parameter schema
+  and pass durable descriptor and whole-document replacement budgets.
+  Intermediate records never enter the document or history.
+- The latest exact-head Codex P2 found that retaining effect animation across a
+  plugin-controlled schema or unit change would silently reinterpret authored
+  keyframes. Descriptor migration ABI version 1 is therefore static-instance-
+  only: before any migration export runs, the host rejects the entire chain if
+  any owning `ClipAnimation.effectTracks` entry targets that effect instance id.
+  Key-range-only validation is explicitly insufficient; animated migration
+  requires a future, separately versioned contract. Every rejection preserves
+  the original descriptor and complete animation.
+- This remains a non-executing contract clarification. Issue #77 still owns the
+  parser, canonical byte checks, migration runtime, and hostile fixtures.
+- Validation passed all 20 focused plugin-manifest tests, the test wrapper's 16
+  benchmark-runner checks, and `git diff --check`.

@@ -311,19 +311,32 @@ Descriptor compatibility is separate from package compatibility:
 3. when the versions differ, the contribution must have an exact declared
    `fromVersion` step and every following step must terminate at its current
    `descriptorVersion`;
-4. each declared migration export runs in the sandbox against cloned canonical
+4. before any migration export runs, the host rejects the whole migration when
+   any entry in the owning clip's `ClipAnimation.effectTracks` targets that
+   effect instance id;
+5. each declared migration export runs in the sandbox against cloned canonical
    parameter bytes; no plugin code runs merely to discover a chain;
-5. the host validates the returned primitive parameter record and budgets before
-   one deliberate document/history commit;
-6. rejection retains the original descriptor byte-for-byte at the JSON value
-   level and leaves it bypassed.
+6. after every non-final step, the host accepts only the canonical bounded
+   primitive parameter record defined by ABI version 1, then uses those exact
+   validated bytes as the next step's input; it does not infer or claim to
+   validate an absent historical contribution schema;
+7. only the final step must exactly match the current contribution's
+   `parameters` schema and pass the shared durable descriptor and whole-document
+   replacement budgets before one deliberate history commit;
+8. rejection retains the original descriptor and complete clip animation
+   byte-for-byte at the JSON value level and leaves the descriptor bypassed.
 
 Migration never runs merely because a project was opened. It requires an
 explicit user action after package trust and permissions are satisfied. Version
-1 migrations may change only the cloned parameter record. Effect identity,
-enabled state, stack order, and animation stay host-owned and unchanged; if the
-current manifest cannot validate every retained animated parameter target, the
-whole migration rejects and preserves the original authored state.
+1 descriptor migration is static-instance-only. Before the first migration
+export can run, the host inspects the owning clip's complete
+`ClipAnimation.effectTracks` list and rejects the whole chain if any entry's
+`effectId` targets that instance. It does not treat currently in-range keyframe
+values as proof of compatibility: a schema change may also change a parameter's
+meaning or unit. Migrating animated effect parameters requires a future,
+separately versioned contract that can transform those tracks. Version 1 may
+change only the cloned static parameter record; effect identity, enabled state,
+stack order, and the complete animation object stay host-owned and unchanged.
 
 ## First contribution: bounded video effect
 
@@ -396,6 +409,12 @@ ABI contract is:
   memory;
 - return `0` means success, `1` means deliberate identity/no-op, and every other
   value is a stable plugin failure code. Unknown codes are failures;
+- descriptor migration ABI version 1 is static-instance-only. Before copying a
+  migration input or invoking the first migration export, the host rejects the
+  entire chain if any `ClipAnimation.effectTracks` entry on the owning clip
+  targets the effect instance id. The host does not attempt key-range-only
+  validation or reinterpret an existing curve under a changed schema or unit;
+  animated migration requires a future, separately versioned contract;
 - each declared migration entrypoint is an exported function with signature
   `(i32, i32, i32, i32, i32, i32) -> i32`. Its arguments are canonical input
   pointer/length, zeroed output pointer/capacity, and declared from/to versions;
@@ -404,10 +423,29 @@ ABI contract is:
   migration failure. A contribution with migrations must request at least two
   memory pages, and a migration export name must differ from every render export
   in the package;
-- a migration output must be canonical JSON for one primitive parameter record,
-  match the target manifest schema exactly, and pass the shared descriptor and
-  document budgets before commit. Migration calls carry no frame bytes and run
-  one declared step at a time under the same watchdog;
+- every step output, including a non-final output, must be strict UTF-8 JSON
+  Canonicalization Scheme bytes for one object. The host rejects a byte-order
+  mark, malformed UTF-8, duplicate keys before parse, or bytes that differ from
+  the canonical re-encoding. The canonical byte length, including JSON syntax,
+  is at most 65,536 bytes;
+- the generic intermediate object has at most 64 own entries, matching the
+  manifest-v1 parameter-count ceiling. Every key and string value must use the
+  same 1-to-64-character ASCII local-identifier grammar as manifest parameter
+  keys and enum values; keys also reject `__proto__`, `prototype`, and
+  `constructor`. Every value is exactly a boolean, a finite number from
+  -1,000,000,000 through 1,000,000,000 inclusive, or such a bounded identifier
+  string. Nulls, arrays, and nested objects are rejected;
+- the host applies that generic byte/shape/value validation after every step
+  before invoking the next export. A non-final output is not checked against a
+  historical parameter schema because version 1 manifests do not declare one.
+  Only the final output must have exactly the current `parameters` keys and
+  declared value kinds/ranges/options; the candidate descriptor must then pass
+  the shared durable bounds, and its atomic document replacement must stay
+  within 10,000 total effects, 50,000 total effect parameters, and 10,000,000
+  total effect-string characters. No temporary intermediate record enters the
+  document or history;
+- migration calls carry no frame bytes and run one declared step at a time under
+  the same watchdog;
 - the host copies input into the bounded memory, invokes once, copies the exact
   byte range out, then clears every pixel, parameter, or migration input/output
   region before reuse;
@@ -506,7 +544,8 @@ Failure policy is context-specific:
 - explicit “Export with listed plugins bypassed”: allowed only after a second
   confirmation naming exact instances and package/reason. The exported result
   records a bounded local diagnostic, not project data;
-- migration failure: retain the original descriptor and document history;
+- migration rejection or failure: retain the original descriptor, complete clip
+  animation, and document history;
 - package/update failure: retain the previous committed installation;
 - crash during activation: retain an origin-local activation sentinel so the
   next launch offers safe mode before initializing plugins.
@@ -594,7 +633,8 @@ green:
 4. watchdog, termination, queue, memory, project replacement, cancellation,
    crash, late-message, and safe-mode tests;
 5. unknown/disabled/revoked descriptor round trips through save, recovery,
-   undo/redo, reorder, remove, and migration rejection;
+   undo/redo, reorder, remove, and migration rejection, including the version-1
+   static-instance gate for every effect targeted by an animation track;
 6. authored built-in/plugin stack-order pixels shared by preview and export;
 7. actionable install, permission, incompatibility, crash, retry, export-block,
    bypass-confirmation, disable, uninstall, and safe-mode accessibility;

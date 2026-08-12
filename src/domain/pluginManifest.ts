@@ -93,6 +93,11 @@ export type PluginParameter =
   | PluginEnumParameter
 
 export interface PluginDescriptorMigration {
+  /**
+   * Declares one data-only step for a static effect instance. The v1 host
+   * rejects matching `ClipAnimation.effectTracks` before invoking the chain;
+   * non-final outputs are bounded records and only the final matches `parameters`.
+   */
   readonly fromVersion: number
   readonly toVersion: number
   readonly entrypoint: string
