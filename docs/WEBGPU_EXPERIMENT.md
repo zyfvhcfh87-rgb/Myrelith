@@ -39,6 +39,12 @@ The adapter follows this contract:
 | Runtime failure/device loss | Resolve the current or next analysis through CPU, release the failed session, and never mutate project or render state. `GPUDevice.lost` is observed explicitly. |
 | Disable/close | The render worker sends its analysis child an explicit release message. The child destroys the device and acknowledges release; render-worker close waits for that acknowledgment or the 250 ms child fallback before replying `closed`, while the page bridge retains its independent 1,000 ms fallback. |
 
+Release is terminal across every awaited initialization boundary. The child
+rechecks its lifecycle after the opt-in module import; the adapter rechecks it
+after the session request and after both resolution and rejection of the parity
+self-test. Any late candidate session is released. An in-flight or later
+analysis aborts after release and must never return a CPU fallback result.
+
 The default production build contains no WebGPU shader/adapter chunk or
 `navigator.gpu` reference. An enabled build emits the adapter as a separate
 11.27 kB uncompressed chunk. Disabling the flag therefore preserves both
@@ -100,14 +106,16 @@ loss, checks cleanup, writes ignored JSON/Markdown under
 `.tmp/issue-75-webgpu/`, closes Chrome/Vite, and verifies the port was released.
 `--headless` is available for a quick harness smoke.
 
-The complete headed run on 2026-08-12 used Chrome 151 on Windows 11, an AMD
-Radeon RX 6600 (driver 32.0.21045.1000), and the hardware WebGPU adapter
-reported as AMD RDNA 2. Source fingerprint was
+A headed decision run captured on 2026-08-12, before the final self-test
+release-race fix, used Chrome 151 on Windows 11, an AMD Radeon RX 6600 (driver
+32.0.21045.1000), and the hardware WebGPU adapter reported as AMD RDNA 2. This
+run is historical decision context only, not exact-head acceptance evidence.
+Its source fingerprint was
 `sha256:b37ec7c43331995499dc2396b298e069c69686718bac94283b2838360e6813dc`;
 fixture fingerprint was
 `sha256:90e8d7bb64eed2143b3282238fe1dcfd5622fc9627d9d3df0ea55416fd78d533`.
 
-| Current 160 x 90 workload | CPU | WebGPU |
+| Historical 160 x 90 decision run | CPU | WebGPU |
 |---|---:|---:|
 | Median, 60 measured iterations | 1.000 ms | 4.400 ms |
 | p95 | 1.400 ms | 5.100 ms |
@@ -115,19 +123,28 @@ fixture fingerprint was
 | Startup (adapter + device + pipeline + parity self-test) | none | 418.400 ms |
 | First opt-in call wall time | n/a | 420.900 ms |
 
-WebGPU produced exact output in all 71 comparisons, released every request
-buffer before the next sample, recovered from an intentional device destroy
-through exact CPU output, ended with zero active buffer bytes, emitted zero
-browser warnings/errors, and released the strict port. Its median was only
-0.227 times CPU throughput: equivalently, it took 4.4 times as long.
+In that historical run, WebGPU produced exact output in all 71 comparisons,
+released every request buffer before the next sample, recovered from an
+intentional device destroy through exact CPU output, ended with zero active
+buffer bytes, emitted zero browser warnings/errors, and released the strict
+port. Its median was only 0.227 times CPU throughput: equivalently, it took 4.4
+times as long.
 
-A separate flagged-app pass created a normal text clip, enabled Program Monitor
-scopes, loaded both the analysis worker and opt-in WebGPU module, and reported
-14,400 visible samples at frame 0. Keyboard scope-tab movement and disabling
-the panel preserved clean diagnostics; the explicit release handshake completed
-and strict port 41875 was released. Ignored screenshot
+That historical evidence set also included a flagged-app pass that created a
+normal text clip, enabled Program Monitor scopes, loaded both the analysis
+worker and opt-in WebGPU module, and reported 14,400 visible samples at frame
+0. Keyboard scope-tab movement and disabling the panel preserved clean
+diagnostics; the explicit release handshake completed and strict port 41875 was
+released. Ignored screenshot
 `output/playwright/issue-75-webgpu-scopes.png` has SHA-256
 `7C5A6F5FF9AFDC57BFAD8900DE8DE042721B6AB1459CD8FEC91584AE6505FE7E`.
+
+Final acceptance requires rerunning the headed command above with 10 warmups
+and 60 measured iterations from the final clean committed head. Preserve its
+ignored JSON/Markdown artifact under `.tmp/issue-75-webgpu/` and publish the
+artifact path, source/fixture fingerprints, parity, device-loss, cleanup,
+diagnostic, and strict-port results as PR evidence. Do not edit a tracked file
+after that run; doing so would make the recorded source fingerprint stale.
 
 ## Support findings and decision
 
@@ -145,9 +162,11 @@ CPU readback/upload round trip or increases the useful compute workload, then
 repeat exact parity, device-loss, memory, startup, and multi-device/browser
 measurements before changing any default.
 
-Final review-hardening validation passed 118 focused child/adapter/render-worker/
-bridge tests, all 2,321 Vitest cases across 169 files, all 16 Node benchmark-
-runner checks, normal and opt-in production TypeScript/builds, oxlint, and
-`npm audit --omit=dev --audit-level=high` with zero vulnerabilities. The normal
+Before the final self-test release-race fix, review-hardening validation passed
+118 focused child/adapter/render-worker/bridge tests, all 2,321 Vitest cases
+across 169 files, all 16 Node benchmark-runner checks, normal and opt-in
+production TypeScript/builds, oxlint, and
+`npm audit --omit=dev --audit-level=high` with zero vulnerabilities. Those
+counts are historical rather than final-head acceptance evidence. The normal
 build emitted only its established large-chunk advisory and retained the
 WebGPU-free worker graph described above.

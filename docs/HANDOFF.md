@@ -3026,25 +3026,30 @@ surface; it is not a second zoom and never enters document history.
   bounded parent termination fallback.
 - `npm run benchmark:webgpu-scopes -- --warmup 10 --iterations 60` runs headed
   system Chrome on strict port 41875 and writes ignored source-bound evidence.
-  Chrome 151 / Windows 11 / RX 6600 produced exact output across 71 comparisons,
-  recovered from real device destruction through exact CPU output, ended at
-  zero active buffers, logged 0 warnings/errors, and released the port.
-- A separate flagged-app pass created a text clip, loaded the adapter through
-  the real scope-worker boundary, published 14,400 samples at frame 0, exercised
-  keyboard tabs and disable/release, captured the documented screenshot hash,
-  retained 0 warnings/errors, and released strict port 41875.
-- CPU measured 1.000 ms median / 1.400 ms p95; WebGPU measured 4.400 / 5.100 ms,
-  plus 418.400 ms startup and 353,304 explicit transient bytes versus 30,720
-  CPU output bytes. WebGPU was 4.4 times slower at the actual workload.
+  The original decision run, captured before the final self-test release-race
+  fix, produced exact output across 71 comparisons on Chrome 151 / Windows 11 /
+  RX 6600, recovered from real device destruction through exact CPU output,
+  ended at zero active buffers, logged 0 warnings/errors, and released the
+  port. It is historical decision context, not exact-head acceptance evidence.
+- That historical evidence set also included a flagged-app pass that created a
+  text clip, loaded the adapter through the real scope-worker boundary,
+  published 14,400 samples at frame 0, exercised keyboard tabs and disable/
+  release, captured the documented screenshot hash, retained 0 warnings/errors,
+  and released strict port 41875.
+- That historical run measured CPU at 1.000 ms median / 1.400 ms p95 and
+  WebGPU at 4.400 / 5.100 ms, plus 418.400 ms startup and 353,304 explicit
+  transient bytes versus 30,720 CPU output bytes. WebGPU was 4.4 times slower
+  at the actual workload.
   Keep CPU as the production choice. Full contracts, support limits, commands,
   fingerprints, and reconsideration criteria are in `docs/WEBGPU_EXPERIMENT.md`.
-- Final gates: 118 focused lifecycle/integration tests, all 2,321 Vitest cases
-  across 169 files plus 16 benchmark checks, normal and opt-in build/typecheck,
-  oxlint, clean diff checks, and the production audit at 0 vulnerabilities.
+- Before the later shutdown follow-ups, the gates passed 118 focused lifecycle/
+  integration tests, all 2,321 Vitest cases across 169 files plus 16 benchmark
+  checks, normal and opt-in build/typecheck, oxlint, clean diff checks, and the
+  production audit at 0 vulnerabilities. These are historical counts.
 
 ## Milestone 4 Part 10b / issue #75 - shutdown-handshake review follow-up
 
-**COMPLETE LOCALLY (2026-08-12).**
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-12); THE FINAL EXACT-HEAD BENCHMARK IS A PR-RECORDED MERGE GATE.**
 
 - Render-worker close now awaits the scope child worker's explicit `released`
   acknowledgment before publishing `closed`. The existing 250 ms child
@@ -3057,18 +3062,31 @@ surface; it is not a second zoom and never enters document history.
 - A release received while the opt-in WebGPU module is still loading now
   invalidates that import before analyzer creation. The child cannot publish
   `released` and then resurrect a device-backed analyzer in the same realm.
+- Release also remains terminal across the awaited session request and both
+  outcomes of the candidate parity self-test. If that self-test rejects after
+  release, the candidate is released without changing `released` to fallback;
+  the in-flight request and every later analysis abort instead of returning CPU
+  output. Deterministic coverage holds that self-test at the exact race point.
 - Regression coverage holds an otherwise-idle close behind a deferred child
   release, proves repeated release waits on the same retirement, exercises the
   exact 250 ms fallback and late acknowledgment, and reproduces the dynamic-
-  import race. The focused gate passed 118 tests; the full gate passed all
-  2,321 Vitest cases across 169 files plus all 16 benchmark-runner checks.
+  import race. Before the final self-test race case was added, the focused gate
+  passed 118 tests and the full gate passed all 2,321 Vitest cases across 169
+  files plus all 16 benchmark-runner checks; those counts are historical.
 - Normal and opt-in production builds/typecheck passed: the normal graph has no
   WebGPU adapter chunk, while the flagged graph emits one separate 11.27 kB
   chunk. Oxlint and the production high audit passed with 0 vulnerabilities.
-- The refreshed headed Chrome 151 / RX 6600 benchmark retained exact parity in
-  71 comparisons, CPU fallback after device destruction, zero active buffers,
-  0 warnings/errors, and strict-port release. CPU measured 1.000 / 1.400 ms
-  median/p95 versus WebGPU 4.400 / 5.100 ms, with 418.400 ms startup. Source
+- The headed Chrome 151 / RX 6600 benchmark captured before the final
+  self-test release-race fix retained exact parity in 71 comparisons, CPU
+  fallback after device destruction, zero active buffers, 0 warnings/errors,
+  and strict-port release. CPU measured 1.000 / 1.400 ms median/p95 versus
+  WebGPU 4.400 / 5.100 ms, with 418.400 ms startup. Its historical source
   fingerprint is
   `sha256:b37ec7c43331995499dc2396b298e069c69686718bac94283b2838360e6813dc`;
-  the production no-go decision is unchanged.
+  it is decision context rather than exact-head acceptance evidence. The
+  production no-go decision is unchanged.
+- From the final clean committed head, rerun the headed 10-warmup/60-iteration
+  benchmark, preserve its ignored `.tmp/issue-75-webgpu/` JSON/Markdown
+  artifact, and publish its fingerprints plus parity/device-loss/cleanup/
+  diagnostics/port results in PR evidence. Do not modify tracked docs after
+  that run, because doing so would invalidate its exact source fingerprint.

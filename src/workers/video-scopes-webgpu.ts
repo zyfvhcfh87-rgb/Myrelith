@@ -637,12 +637,20 @@ export function createOptionalVideoScopeAnalyzer(
           VIDEO_SCOPE_SAMPLE_WIDTH,
           VIDEO_SCOPE_SAMPLE_HEIGHT,
         )
+        if (isReleased() || lifecycle !== initializationLifecycle) {
+          candidate.release()
+          return null
+        }
         if (!videoScopeAnalysesEqual(actual, expected)) {
           startupMs = now() - startedAt
           fallBack('self-test-mismatch', 'WebGPU output differed from the CPU oracle', candidate)
           return null
         }
       } catch (error) {
+        if (isReleased() || lifecycle !== initializationLifecycle) {
+          candidate.release()
+          return null
+        }
         startupMs = now() - startedAt
         fallBack(
           'initialization-failed',

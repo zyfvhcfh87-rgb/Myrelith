@@ -15,10 +15,15 @@ import {
 function deferred<T>(): {
   promise: Promise<T>
   resolve(value: T): void
+  reject(error: unknown): void
 } {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((settle) => { resolve = settle })
-  return { promise, resolve }
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((settle, fail) => {
+    resolve = settle
+    reject = fail
+  })
+  return { promise, resolve, reject }
 }
 
 function fixture(): Uint8ClampedArray {
@@ -284,5 +289,59 @@ describe('optional WebGPU video scope adapter', () => {
       state: 'released',
       activeBufferBytes: 0,
     })
+  })
+
+  test('keeps release terminal however a pending parity self-test settles', async () => {
+    for (const outcome of ['reject', 'mismatch'] as const) {
+      const selfTestStarted = deferred<void>()
+      const selfTest = deferred<VideoScopeAnalysis>()
+      const gpu = fakeSession({
+        analyze: () => {
+          selfTestStarted.resolve(undefined)
+          return selfTest.promise
+        },
+      })
+      const cpuAnalyze = vi.fn(analyzeVideoScopes)
+      const analyzer = createOptionalVideoScopeAnalyzer({
+        preferWebGpu: true,
+        requestSession: async () => ({ status: 'ready', session: gpu.session }),
+        cpuAnalyze,
+      })
+      const inFlight = analyzer.analyze(
+        fixture(),
+        VIDEO_SCOPE_SAMPLE_WIDTH,
+        VIDEO_SCOPE_SAMPLE_HEIGHT,
+      )
+      const inFlightRejection = expect(inFlight).rejects.toMatchObject({ name: 'AbortError' })
+
+      await selfTestStarted.promise
+      analyzer.release()
+      if (outcome === 'reject') {
+        selfTest.reject(new Error('self-test failed after shutdown'))
+      } else {
+        const mismatched = analyzeVideoScopes(
+          fixture(),
+          VIDEO_SCOPE_SAMPLE_WIDTH,
+          VIDEO_SCOPE_SAMPLE_HEIGHT,
+        )
+        mismatched.histogram.red[0]++
+        selfTest.resolve(mismatched)
+      }
+
+      await inFlightRejection
+      expect(gpu.release).toHaveBeenCalledOnce()
+      expect(analyzer.snapshot()).toMatchObject({
+        state: 'released',
+        fallbackReason: null,
+        fallbackDetail: null,
+      })
+      await expect(analyzer.analyze(
+        fixture(),
+        VIDEO_SCOPE_SAMPLE_WIDTH,
+        VIDEO_SCOPE_SAMPLE_HEIGHT,
+      )).rejects.toMatchObject({ name: 'AbortError' })
+      expect(cpuAnalyze).toHaveBeenCalledOnce()
+      expect(gpu.release).toHaveBeenCalledOnce()
+    }
   })
 })
