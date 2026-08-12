@@ -3275,3 +3275,25 @@ surface; it is not a second zoom and never enters document history.
 - Validation passed 111 focused manifest/project/effect/architecture tests
   across five files, the test wrapper's 16 benchmark-runner checks, and
   `git diff --check`. Browser verification remains intentionally not applicable.
+
+## Part 10c issue #76 - PR #112 RGBA color-encoding follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found that `display-referred` did not fix the plugin
+  frame transfer function or primaries, so a conforming module could interpret
+  the same bytes as linear-light or Display-P3 and disagree with Myrelith's sRGB
+  effect path.
+- Capability version 1 now defines both input and successful output as four
+  `R, G, B, A` bytes: nonlinear IEC sRGB OETF code values using sRGB/Rec.709
+  primaries and D65, plus independent straight/unassociated 8-bit alpha. It is
+  explicitly not linear-light, Display-P3, or premultiplied RGBA.
+- The host converts the isolated compositor layer into that exact encoding
+  before copy-in and interprets/converts output identically after copy-out.
+  Preview and export share the boundary, and no ICC/profile or other gamut
+  metadata reaches plugin memory.
+- This is a design-only contract clarification. Issue #77 still owns the actual
+  conversion/runtime and cross-browser byte fixtures.
+- Validation passed 111 focused manifest/project/effect/architecture tests
+  across five files, the test wrapper's 16 benchmark-runner checks, and
+  `git diff --check`. Browser verification remains intentionally not applicable.

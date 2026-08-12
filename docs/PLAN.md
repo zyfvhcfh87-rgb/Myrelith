@@ -3514,3 +3514,23 @@ acceptance claims.
 - [x] Pass 111 focused manifest/project/effect/architecture tests across five
   files, the test wrapper's 16 benchmark-runner checks, and `git diff --check`;
   keep browser verification intentionally not applicable.
+
+## Part 10c / issue #76 - PR #112 RGBA color-encoding follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Close the exact-head Codex color-interpretation P2 by defining capability
+  version 1 input and successful output as display-referred IEC sRGB: nonlinear
+  sRGB OETF code values, sRGB/Rec.709 primaries, D65 white point, and explicitly
+  not linear-light or Display-P3.
+- [x] Define each pixel as four `R, G, B, A` bytes with independent, linearly
+  quantized straight/unassociated alpha; RGB is never premultiplied by alpha,
+  including when alpha is zero.
+- [x] Make the host responsible for exact conversion before plugin copy-in and
+  identical interpretation/conversion after copy-out. Share that boundary across
+  preview/export and pass no ICC/profile or other gamut metadata to the plugin.
+- [x] Keep the clarification non-executing; Issue #77 retains implementation and
+  cross-browser ABI byte fixtures.
+- [x] Pass 111 focused manifest/project/effect/architecture tests across five
+  files, the test wrapper's 16 benchmark-runner checks, and `git diff --check`;
+  keep browser verification intentionally not applicable.

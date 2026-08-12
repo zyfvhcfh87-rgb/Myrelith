@@ -36,7 +36,7 @@ failure containment.
 | Origin storage | Plugins cannot access Myrelith IndexedDB, OPFS, Cache Storage, local/session storage, cookies, recovery, Recents, remembered media, proxy manifests, or trust records. |
 | Network privacy | No plugin-controlled request, socket, beacon, WebRTC channel, navigation, form, popup, or download is possible. |
 | Project truth | Projects contain only bounded primitive descriptors. They cannot carry code, grants, package locations, trust, revocation changes, or an instruction to install/execute. |
-| Preview/export integrity | Authored stack order is shared. Missing/failing plugins are visible; export aborts by default instead of silently dropping an effect. |
+| Preview/export integrity | Authored stack order and the exact v1 display-referred sRGB RGBA encoding are shared. Missing/failing plugins are visible; export aborts by default instead of silently dropping an effect. |
 | Editor availability | Package parsing, decompression, WebAssembly declarations/activation, memory, queues, calls, diagnostics, and retries are bounded. Parent-realm deadlines can terminate a non-cooperative activation or runtime sandbox. |
 | Supply-chain identity | Every executed byte is covered by the verified package integrity table and Ed25519 signature; signer and digest changes cannot inherit trust/grants silently. |
 | Recovery | Missing, denied, revoked, incompatible, crashed, and safe-mode plugin descriptors remain ordered, editable, saveable, and recoverable without execution. |
@@ -217,8 +217,14 @@ remembered directory capabilities.
 **Controls:** only a copied isolated RGBA8 layer crosses the call boundary. The
 manifest-unique render export is the contribution discriminator; arguments carry
 only width/height/stride, exact frame, rational rate, and the effect's own bounded
-params. App controllers retain all file/handle/URL ownership. The module has no
-browser imports. Permission copy explicitly names the frame access grant.
+params. Every input and successful output pixel is four `R, G, B, A` bytes:
+nonlinear IEC sRGB OETF code values over sRGB/Rec.709 primaries and D65, plus
+independent straight/unassociated 8-bit alpha. Linear-light, Display-P3, and
+premultiplied interpretations are outside version 1. The host converts before
+copy-in and after copy-out; preview and export share that conversion. No ICC or
+other profile/gamut metadata enters the sandbox. App controllers retain all
+file/handle/URL ownership. The module has no browser imports. Permission copy
+explicitly names the frame access grant.
 
 **Residual risk:** the granted frame itself may reveal faces, documents, or other
 sensitive content. A malicious effect may encode previous frames into later
@@ -297,13 +303,16 @@ availability attack.
 
 **Attacker story:** plugin replays an old result after seek/project replacement,
 sends a response for another instance, returns partial/oversized pixels, detaches
-buffers, races cancellation, or injects diagnostic HTML.
+buffers, interprets nonlinear sRGB bytes as linear-light or Display-P3, races
+cancellation, or injects diagnostic HTML.
 
 **Controls:** private port, exact protocol version/type/keys, sandbox generation,
 project generation, instance id, monotonic request id, exact lengths, one in
 flight, latest-wins preview, abort/close settlement, late-response rejection,
-copy-in/copy-out ownership, cleared reusable memory, escaped bounded plain-text
-diagnostics.
+copy-in/copy-out ownership, one exact IEC sRGB/Rec.709-primary and D65 nonlinear
+RGBA encoding in both directions, straight alpha, shared preview/export host
+conversion, no ICC/profile metadata, cleared reusable memory, and escaped
+bounded plain-text diagnostics.
 
 **Residual risk:** host lifecycle bugs. Tests must cover cancel/retry/revoke/
 update/project replacement/close at every awaited boundary.

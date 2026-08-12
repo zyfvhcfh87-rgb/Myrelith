@@ -372,9 +372,9 @@ stack order, and the complete animation object stay host-owned and unchanged.
 
 `myrelith.effect.video-frame.rgba8` version 1 means:
 
-- receive one complete, isolated, display-referred unpremultiplied RGBA8 layer
-  after crop/transform and before clip opacity, transition weighting, and
-  destination blending;
+- receive one complete, isolated RGBA8 layer in the exact display-referred sRGB
+  representation below, after crop/transform and before clip opacity,
+  transition weighting, and destination blending;
 - mutate that same-sized RGBA8 buffer in place;
 - receive exact integer timeline frame, exact rational document rate, project
   width/height, row stride, and bounded primitive parameters. Invocation of the
@@ -383,6 +383,23 @@ stack order, and the complete animation object stay host-owned and unchanged.
 - receive no lower/upper tracks, unrelated clips, source file bytes, filenames,
   paths, asset descriptors, audio, project name, project id, markers, captions,
   handles, URLs, clocks, randomness, storage, or network capability.
+
+The color representation is normative in both directions. Each pixel is four
+consecutive bytes in `R, G, B, A` order. The R/G/B bytes are nonlinear code
+values encoded with the IEC 61966-2-1 sRGB opto-electronic transfer function,
+using the sRGB/Rec.709 primaries and D65 white point. They are not linear-light
+values and are not Display-P3. The A byte is an independently and linearly
+quantized 8-bit coverage value. RGB is straight/unassociated and is never
+premultiplied by A, including when A is zero. A successful output uses this
+identical representation; the plugin may not change its interpretation.
+
+Before every call, the host converts the isolated compositor layer from its
+internal representation into this exact ABI encoding. After a successful call,
+the host interprets the returned bytes in the same encoding and converts them
+back to the compositor representation when needed. Preview and export use the
+same conversion and interpretation, including the same boundary fixtures. No
+ICC profile, source color-space tag, mastering metadata, or other profile/gamut
+metadata crosses into plugin memory; version 1 has no color-space negotiation.
 
 The permission prompt says that an enabled effect can read and change the pixels
 of every frame to which the user applies it. It names the affected contributions,
@@ -444,6 +461,11 @@ ABI contract is:
 - the pixel region is exactly `stride * height` bytes, `stride` is exactly
   `width * 4`, and the ranges must be non-overlapping and inside imported
   memory;
+- input and successful output pixels both use the permission's exact
+  display-referred IEC sRGB/Rec.709-primary, D65, nonlinear sRGB-OETF encoding
+  with straight/unassociated 8-bit alpha. The host owns conversion before
+  copy-in and after copy-out; no ICC/profile metadata or alternate encoding is
+  passed or inferred;
 - return `0` means success, `1` means deliberate identity/no-op, and every other
   value is a stable plugin failure code. Unknown codes are failures;
 - descriptor migration ABI version 1 is static-instance-only. Before copying a

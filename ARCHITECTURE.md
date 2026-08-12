@@ -224,6 +224,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   and preserve its original descriptor plus complete animation. Existing keys
   that happen to fit new ranges are not proof of schema or unit compatibility;
   animated migration requires a future, separately versioned contract.
+  Frame capability version 1 has one input/output representation: four-byte
+  straight RGBA with nonlinear IEC sRGB OETF code values, sRGB/Rec.709 primaries,
+  D65 white, and independent 8-bit alpha; it is neither linear-light nor
+  Display-P3. The future host owns conversion into and out of that encoding,
+  preview/export share the boundary, and no ICC/profile metadata enters plugin
+  memory.
   Before any WebAssembly engine API sees package bytes, the future trusted host
   must reject every start section and enforce the exact per-module declaration,
   segment, memory, and table ceilings in `docs/PLUGINS.md`. Validation,
