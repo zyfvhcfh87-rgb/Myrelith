@@ -3258,11 +3258,11 @@ surface; it is not a second zoom and never enters document history.
   watchdog existed, and the 32 MiB module cap did not bound cheap, high-count
   declarations or segment payload expansion before compilation.
 - The trusted-parent byte policy now rejects every start section before any
-  WebAssembly engine call. A fresh disposable activation-candidate worker owns validation,
-  asynchronous compilation, and instantiation under one non-resetting five-
-  second parent wall-clock deadline; success promotes that worker to the
-  sandbox's dedicated runtime worker, while timeout/failure destroys it and the
-  sandbox without blocking the UI.
+  WebAssembly engine call. A fresh, disposable activation-candidate worker owns
+  validation, asynchronous compilation, and instantiation under one parent
+  wall-clock deadline that never resets and expires after five seconds. Success
+  promotes it to the sandbox's dedicated runtime worker; timeout or failure
+  destroys it and the sandbox without blocking the UI.
 - The first implementation now caps each module at 1,024 types; 8,192 imported
   plus defined functions; 16 tables with 4,096 aggregate entries; one imported
   memory with a 1,025-page maximum; 2,048 globals; 8,192 exports; 1,024 element

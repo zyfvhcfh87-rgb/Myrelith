@@ -3499,9 +3499,10 @@ acceptance claims.
   start section during trusted-parent byte parsing, before validation,
   compilation, or instantiation can execute package code.
 - [x] Run engine validation, asynchronous compilation, and instantiation in a
-  fresh disposable activation-candidate worker under one non-resetting five-second parent
-  wall-clock deadline. Promote it to the dedicated runtime worker only after an
-  instance-ready acknowledgement; otherwise terminate it and the sandbox.
+  fresh, disposable activation-candidate worker under one parent wall-clock
+  deadline that never resets and expires after five seconds. Promote it to the
+  dedicated runtime worker only after an instance-ready acknowledgement;
+  otherwise terminate it and the sandbox.
 - [x] Close the exact-head Codex declaration-bomb P2 with explicit pre-engine
   ceilings: 1,024 types; 8,192 imported-plus-defined functions; 16 tables/4,096
   aggregate entries; one imported memory/1,025 pages; 2,048 globals; 8,192

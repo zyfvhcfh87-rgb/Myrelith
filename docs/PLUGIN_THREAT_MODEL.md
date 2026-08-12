@@ -260,9 +260,10 @@ Require every table maximum, cap each and both aggregate initial and maximum
 table entries at 4,096, and cap memory at 1,025 pages. Reject checked-addition
 overflow, noncanonical encodings, duplicate singleton sections, additional
 memory, threads/shared memory, relaxed SIMD, WASI, unknown features, unexpected
-entrypoint types, and oversized sections. A fresh disposable activation-candidate worker
-performs engine validation, asynchronous compilation, and instantiation under a
-non-resetting five-second trusted-parent wall-clock deadline. A successful
+entrypoint types, and oversized sections. A fresh, disposable activation-
+candidate worker performs engine validation, asynchronous compilation, and
+instantiation under a non-resetting five-second trusted-parent wall-clock
+deadline. A successful
 candidate becomes the dedicated runtime worker; timeout or failure destroys the
 candidate and sandbox. Runtime-probe and fail closed.
 
