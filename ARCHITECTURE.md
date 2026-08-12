@@ -557,7 +557,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   adds no portable project schema, effect descriptor, or document mutation.
 - `domain/motionAnalysis.ts` owns bounded grayscale feature detection, patch
   matching, deterministic similarity fitting, stabilization smoothing, and
-  conservative crop estimates. `domain/motionTrackingResearch.ts` owns bounded
+  conservative crop estimates. Every retained grayscale `Uint8Array` must be a
+  zero-offset view covering its complete backing buffer, so the reviewed byte
+  gate accounts for the allocation actually pinned by each frame rather than
+  only a smaller visible view. `domain/motionTrackingResearch.ts` owns bounded
   point and similarity-box tracking plus conversion to existing Position X/Y
   and Scale X/Y tracks. `domain/lensCorrection.ts` owns only the versioned,
   normalized manual lens model and its fixed-grid safety validation.
@@ -569,8 +572,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - The research controller admits at most one analysis job and reserves at most
   one decoder slot. Each child operation must own and close every VideoFrame,
   decoder, temporary surface, worker, and OPFS handle it creates. Cancellation
-  terminates the disposable worker and drains scheduler counters before the
-  caller receives settlement.
+  or the bounded support-readback deadline closes the probe VideoFrame before
+  the caller receives settlement and shared admission is released; the original
+  readback promise remains observed after late resolution or rejection.
 - Analysis results remain preview-only until an explicit Apply operation writes
   ordinary canonical tracks through normal history. Lens remapping remains a
   no-go for production until issue #111 proves a bounded renderer with exact

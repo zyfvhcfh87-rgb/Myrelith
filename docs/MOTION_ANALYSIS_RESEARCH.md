@@ -69,7 +69,7 @@ dedicated analysis worker ── pure grayscale analysis
 | Live decoded `VideoFrame`s | 1 | Extract bounded grayscale data, then close immediately in `finally`; no decoded frame crosses into React, Zustand, or OPFS. |
 | Analysis dimensions | 320 × 180 | Fixed CPU/memory envelope; source/project coordinates are carried separately. |
 | Frames per retained window | 300 | At most 17,280,000 grayscale bytes at the maximum geometry. Longer work advances overlapping bounded windows. |
-| Retained analysis buffers | 32 MiB | Includes grayscale windows and scratch; typed result paths are much smaller. |
+| Retained analysis buffers | 32 MiB | Each grayscale view starts at offset zero and covers its complete backing buffer, so accounting cannot hide a larger pinned allocation; typed result paths are much smaller. |
 | Features per frame | 64 | Deterministic corner selection with minimum spacing. |
 | Patch/search radii | 2 / 6 px | A 5×5 patch and ±6 px bounded search at analysis resolution. |
 | Robust hypotheses | 256 per pair | Deterministic upper bound, followed by inlier refinement. |
@@ -88,6 +88,14 @@ asynchronous module-load error, message failure, synchronous post failure, or
 five-second timeout reports the worker unsupported and terminates the probe.
 An admitted run also threads cancellation through readiness probing, so abort
 terminates a pending probe immediately and releases the shared admission slot.
+The disposable `VideoFrame.copyTo()` readback uses the same bounded five-second
+support-step deadline and races the admitted run's signal. Abort or timeout uses
+one idempotent owner to close the frame before the caller settles and admission
+is released. The original readback promise stays observed after that boundary,
+so a late resolve or rejection cannot create an unhandled promise, re-close the
+frame, or change successful diagnostics. Grayscale frames are accepted only as
+zero-offset `Uint8Array` views over their complete backing allocation; oversized
+zero-offset and nonzero-offset views reject before retained-byte accounting.
 OPFS capability probing also treats removal of its temporary file as part of the
 support contract: a failed `removeEntry()` resolves to a cleanup-specific
 unsupported result rather than escaping the probe, starting analysis, or being

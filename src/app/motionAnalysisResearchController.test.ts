@@ -73,6 +73,17 @@ type ResearchWorkerBehavior =
   | 'probe-pending'
   | 'module-error'
 
+interface Deferred<Value> {
+  readonly promise: Promise<Value>
+  readonly resolve: (value: Value | PromiseLike<Value>) => void
+  readonly reject: (cause?: unknown) => void
+}
+
+interface DeferredVideoFrameState {
+  closed: boolean
+  closeCalls: number
+}
+
 type OpfsProbeStep =
   | 'getDirectory'
   | 'getFileHandle'
@@ -101,6 +112,51 @@ function installWorker(behavior: ResearchWorkerBehavior): ResearchWorkerStub[] {
     }
   })
   return workers
+}
+
+function deferred<Value>(): Deferred<Value> {
+  let resolve!: (value: Value | PromiseLike<Value>) => void
+  let reject!: (cause?: unknown) => void
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+function installDeferredVideoFrame(copy: Deferred<unknown>): {
+  readonly copyStarted: Promise<void>
+  readonly frames: DeferredVideoFrameState[]
+} {
+  let observeCopyStarted!: () => void
+  const copyStarted = new Promise<void>((resolve) => {
+    observeCopyStarted = resolve
+  })
+  const frames: DeferredVideoFrameState[] = []
+  vi.stubGlobal('VideoFrame', class {
+    readonly state: DeferredVideoFrameState
+
+    constructor() {
+      this.state = { closed: false, closeCalls: 0 }
+      frames.push(this.state)
+    }
+
+    allocationSize(): number {
+      if (this.state.closed) throw new DOMException('Frame is closed', 'InvalidStateError')
+      return 16
+    }
+
+    copyTo(): Promise<unknown> {
+      observeCopyStarted()
+      return copy.promise
+    }
+
+    close(): void {
+      this.state.closeCalls++
+      this.state.closed = true
+    }
+  })
+  return { copyStarted, frames }
 }
 
 async function flushMicrotasks(count = 12): Promise<void> {
@@ -535,6 +591,136 @@ describe('motion analysis research controller', () => {
       }
     },
   )
+
+  test.each(['resolve', 'reject'] as const)(
+    'aborts stalled VideoFrame copyTo before settlement and observes a late %s',
+    async (lateSettlement) => {
+      const copy = deferred<unknown>()
+      let copyReleased = false
+      const controller = new AbortController()
+      try {
+        installWorker('success')
+        const videoFrames = installDeferredVideoFrame(copy)
+        const before = motionAnalysisResearchDiagnostics()
+        const firstRun = runBrowserMotionAnalysisResearch({ signal: controller.signal })
+        const firstOutcome = firstRun.then(
+          () => ({ status: 'fulfilled' as const, cause: null, closed: false }),
+          (cause: unknown) => ({
+            status: 'rejected' as const,
+            cause,
+            closed: videoFrames.frames[0]?.closed ?? false,
+          }),
+        )
+
+        await videoFrames.copyStarted
+        expect(videoFrames.frames).toHaveLength(1)
+        expect(videoFrames.frames[0]).toEqual({ closed: false, closeCalls: 0 })
+
+        controller.abort()
+
+        expect(videoFrames.frames[0]).toEqual({ closed: true, closeCalls: 1 })
+        await expect(firstOutcome).resolves.toMatchObject({
+          status: 'rejected',
+          cause: { name: 'AbortError' },
+          closed: true,
+        })
+        expect(copyReleased).toBe(false)
+        const afterAbort = motionAnalysisResearchDiagnostics()
+        expect(afterAbort.supportFramesCreated - before.supportFramesCreated).toBe(1)
+        expect(afterAbort.supportFramesClosed - before.supportFramesClosed).toBe(1)
+
+        await expect(runBrowserMotionAnalysisResearch({
+          skipSupportProbe: true,
+        })).resolves.toMatchObject({
+          evidence: { decision: { stabilization: 'go' } },
+        })
+
+        const beforeLateSettlement = motionAnalysisResearchDiagnostics()
+        copyReleased = true
+        if (lateSettlement === 'resolve') copy.resolve([])
+        else copy.reject(new DOMException('Synthetic late copy failure', 'OperationError'))
+        await flushMicrotasks()
+
+        expect(videoFrames.frames[0]).toEqual({ closed: true, closeCalls: 1 })
+        expect(motionAnalysisResearchDiagnostics()).toEqual(beforeLateSettlement)
+      } finally {
+        controller.abort()
+        if (!copyReleased) copy.resolve([])
+        await flushMicrotasks()
+      }
+    },
+    2_000,
+  )
+
+  test('bounds stalled VideoFrame copyTo and observes its late rejection', async () => {
+    const copy = deferred<unknown>()
+    let copyReleased = false
+    const actualSetTimeout = globalThis.setTimeout
+    const supportDeadlines: Array<() => void> = []
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler, timeout) => {
+      if (timeout === 5_000 && typeof handler === 'function') {
+        supportDeadlines.push(() => handler())
+      }
+      return actualSetTimeout(handler, timeout)
+    })
+    try {
+      installWorker('success')
+      const videoFrames = installDeferredVideoFrame(copy)
+      const before = motionAnalysisResearchDiagnostics()
+      let settleCount = 0
+      const run = runBrowserMotionAnalysisResearch()
+      const outcome = run.then(
+        () => ({ status: 'fulfilled' as const, cause: null, closed: false }),
+        (cause: unknown) => {
+          settleCount++
+          return {
+            status: 'rejected' as const,
+            cause,
+            closed: videoFrames.frames[0]?.closed ?? false,
+          }
+        },
+      )
+
+      await videoFrames.copyStarted
+      expect(settleCount).toBe(0)
+      expect(videoFrames.frames[0]).toEqual({ closed: false, closeCalls: 0 })
+      expect(supportDeadlines).toHaveLength(2)
+
+      supportDeadlines[1]!()
+      await expect(outcome).resolves.toMatchObject({
+        status: 'rejected',
+        cause: {
+          name: 'MediaJobExecutionError',
+          code: 'resource-unavailable',
+          message: expect.stringContaining('VideoFrame RGBA copyTo is unavailable.'),
+        },
+        closed: true,
+      })
+      expect(settleCount).toBe(1)
+      expect(videoFrames.frames[0]).toEqual({ closed: true, closeCalls: 1 })
+      const afterTimeout = motionAnalysisResearchDiagnostics()
+      expect(afterTimeout.supportFramesCreated - before.supportFramesCreated).toBe(1)
+      expect(afterTimeout.supportFramesClosed - before.supportFramesClosed).toBe(1)
+
+      await expect(runBrowserMotionAnalysisResearch({
+        skipSupportProbe: true,
+      })).resolves.toMatchObject({
+        evidence: { decision: { stabilization: 'go' } },
+      })
+
+      const beforeLateSettlement = motionAnalysisResearchDiagnostics()
+      copyReleased = true
+      copy.reject(new DOMException('Synthetic late timeout failure', 'OperationError'))
+      await flushMicrotasks()
+      expect(settleCount).toBe(1)
+      expect(videoFrames.frames[0]).toEqual({ closed: true, closeCalls: 1 })
+      expect(motionAnalysisResearchDiagnostics()).toEqual(beforeLateSettlement)
+    } finally {
+      if (!copyReleased) copy.resolve([])
+      await flushMicrotasks()
+      timeoutSpy.mockRestore()
+    }
+  })
 
   test('preserves a typed quality failure and still terminates the worker', async () => {
     installWorker('failure')

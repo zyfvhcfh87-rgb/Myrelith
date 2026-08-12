@@ -3804,3 +3804,27 @@ surface; it is not a second zoom and never enters document history.
 - The controller passed 18/18 tests. The controller, matcher, and tracking group
   passed 36/36 tests plus all 16 benchmark-runner checks; the TypeScript build
   gate, oxlint, and `git diff --check` also passed.
+
+## Milestone 5 Part 10a / issue #44 - readback and retained-memory hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of exact rebased head
+  `bc17e540405b952ec5574278a83628855e6ee38d` found that a stalled support
+  `VideoFrame.copyTo()` could ignore cancellation, retain its frame and shared
+  research admission indefinitely, and that a small grayscale view could pin a
+  backing allocation larger than the advertised 32 MiB retained-memory gate.
+- Support readback now races the admitted run's signal and a finite five-second
+  deadline. One idempotent owner closes the frame before abort or timeout settles
+  and releases admission; the original readback promise remains observed, so a
+  late resolve or rejection cannot re-close the frame, drift diagnostics, or
+  become an unhandled rejection.
+- Every grayscale `Uint8Array` must start at offset zero and cover its complete
+  backing buffer. Both zero-offset and nonzero-offset views into oversized
+  allocations reject before retained-byte summation, while tightly sized frames
+  remain valid and are counted by their full backing allocation.
+- Deterministic deferred readback regressions cover prompt abort, close-before-
+  settlement, second-run admission, bounded timeout, late resolve and rejection,
+  single-close diagnostics, and no post-settlement drift. The controller,
+  matcher, and tracking group passed 42/42 tests plus all 16 benchmark-runner
+  checks; the standalone TypeScript gate also passed.

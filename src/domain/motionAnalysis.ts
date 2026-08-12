@@ -147,12 +147,25 @@ export function validateGrayFrame(
   if (!Number.isSafeInteger(pixels) || frame.data.length !== pixels) {
     throw new RangeError('Motion-analysis frame data does not match its dimensions')
   }
+  grayFrameBackingBytes(frame)
+}
+
+function grayFrameBackingBytes(frame: GrayFrame): number {
+  if (
+    frame.data.byteOffset !== 0
+    || frame.data.byteLength !== frame.data.buffer.byteLength
+  ) {
+    throw new RangeError(
+      'Motion-analysis frame data must cover its entire backing buffer',
+    )
+  }
+  return frame.data.buffer.byteLength
 }
 
 export function motionAnalysisRetainedBytes(frames: readonly GrayFrame[]): number {
   let total = 0
   for (const frame of frames) {
-    total += frame.data.byteLength
+    total += grayFrameBackingBytes(frame)
     if (!Number.isSafeInteger(total)) {
       throw new RangeError('Motion-analysis retained bytes exceed the safe integer range')
     }

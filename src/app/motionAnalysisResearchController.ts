@@ -65,7 +65,7 @@ const diagnostics = {
 let requestId = 0
 let researchRunActive = false
 
-const WORKER_READY_TIMEOUT_MS = 5_000
+const SUPPORT_PROBE_STEP_TIMEOUT_MS = 5_000
 
 export function motionAnalysisResearchDiagnostics(): MotionResearchRuntimeDiagnostics {
   return { ...diagnostics }
@@ -127,7 +127,7 @@ async function probeWorker(signal?: AbortSignal): Promise<boolean> {
       abort()
       return
     }
-    timeout = setTimeout(() => finish(false), WORKER_READY_TIMEOUT_MS)
+    timeout = setTimeout(() => finish(false), SUPPORT_PROBE_STEP_TIMEOUT_MS)
     const message: MotionResearchProbeMessage = {
       type: 'probe',
       requestId: currentRequestId,
@@ -149,14 +149,67 @@ function probeOffscreenCanvas(): boolean {
   }
 }
 
-async function probeVideoFrame(): Promise<{
+function raceVideoFrameCopy(
+  operation: Promise<unknown>,
+  signal: AbortSignal | undefined,
+  closeFrame: () => void,
+): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    const settle = (action: () => void) => {
+      if (settled) return
+      settled = true
+      if (timeout !== null) clearTimeout(timeout)
+      signal?.removeEventListener('abort', onAbort)
+      action()
+    }
+    const onAbort = () => {
+      closeFrame()
+      settle(() => reject(motionAnalysisAbortError()))
+    }
+    const onTimeout = () => {
+      closeFrame()
+      settle(() => resolve(false))
+    }
+    operation.then(
+      () => settle(() => resolve(true)),
+      (cause) => settle(() => reject(cause)),
+    )
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    timeout = setTimeout(onTimeout, SUPPORT_PROBE_STEP_TIMEOUT_MS)
+  })
+}
+
+async function probeVideoFrame(signal?: AbortSignal): Promise<{
   readonly copied: boolean
   readonly closed: boolean
 }> {
+  if (signal?.aborted) throw motionAnalysisAbortError()
   if (typeof VideoFrame !== 'function') return { copied: false, closed: false }
   let frame: VideoFrame | null = null
   let copied = false
   let closed = false
+  let closeAttempted = false
+  const closeFrame = () => {
+    if (!frame || closeAttempted) return
+    closeAttempted = true
+    try {
+      frame.close()
+      diagnostics.supportFramesClosed++
+      try {
+        frame.allocationSize()
+      } catch {
+        closed = true
+      }
+    } catch {
+      closed = false
+    }
+  }
   try {
     frame = new VideoFrame(new Uint8Array([
       255, 0, 0, 255,
@@ -171,20 +224,14 @@ async function probeVideoFrame(): Promise<{
     })
     diagnostics.supportFramesCreated++
     const output = new Uint8Array(frame.allocationSize({ format: 'RGBA' }))
-    await frame.copyTo(output, { format: 'RGBA' })
-    copied = output[0] === 255 && output[15] === 255
+    const copyOperation = frame.copyTo(output, { format: 'RGBA' })
+    const completed = await raceVideoFrameCopy(copyOperation, signal, closeFrame)
+    copied = completed && output[0] === 255 && output[15] === 255
   } catch {
+    if (signal?.aborted) throw motionAnalysisAbortError()
     copied = false
   } finally {
-    if (frame) {
-      frame.close()
-      diagnostics.supportFramesClosed++
-      try {
-        frame.allocationSize()
-      } catch {
-        closed = true
-      }
-    }
+    closeFrame()
   }
   return { copied, closed }
 }
@@ -324,7 +371,7 @@ export async function probeMotionAnalysisSupport(
   if (!worker) failures.push('Dedicated module workers are unavailable.')
   const offscreenCanvas2d = probeOffscreenCanvas()
   if (!offscreenCanvas2d) failures.push('OffscreenCanvas 2D readback is unavailable.')
-  const videoFrame = await probeVideoFrame()
+  const videoFrame = await probeVideoFrame(signal)
   if (signal?.aborted) throw motionAnalysisAbortError()
   if (!videoFrame.copied) failures.push('VideoFrame RGBA copyTo is unavailable.')
   if (!videoFrame.closed) failures.push('VideoFrame close could not be observed.')

@@ -9,7 +9,10 @@ import {
   estimateGlobalMotion,
   estimateGlobalMotionSequence,
   invertSimilarityTransform,
+  motionAnalysisRetainedBytes,
+  validateGrayFrame,
   validateMotionAnalysisBudget,
+  validateMotionFrameSequence,
   type GlobalMotionEstimate,
   type GrayFrame,
   type SimilarityTransform,
@@ -143,6 +146,45 @@ describe('motion analysis research', () => {
       1,
       4,
     )).toThrow(/reviewed work bounds/)
+  })
+
+  test.each([
+    ['zero-offset', 0],
+    ['nonzero-offset', 64],
+  ] as const)(
+    'rejects a %s grayscale view into an oversized backing allocation',
+    (_label, byteOffset) => {
+      const pixels = 32 * 24
+      const backing = new ArrayBuffer(
+        DEFAULT_MOTION_ANALYSIS_BUDGET.maxRetainedBytes + pixels + byteOffset,
+      )
+      const frame: GrayFrame = {
+        width: 32,
+        height: 24,
+        data: new Uint8Array(backing, byteOffset, pixels),
+      }
+      const message = /must cover its entire backing buffer/
+
+      expect(() => validateGrayFrame(frame)).toThrow(message)
+      expect(() => motionAnalysisRetainedBytes([frame])).toThrow(message)
+      expect(() => validateMotionFrameSequence([frame, flatFrame(0)])).toThrow(message)
+    },
+  )
+
+  test('accepts tightly sized grayscale backing buffers and counts them exactly', () => {
+    const frames = [flatFrame(10), flatFrame(20)]
+
+    expect(frames.every((frame) => (
+      frame.data.byteOffset === 0
+      && frame.data.byteLength === frame.data.buffer.byteLength
+    ))).toBe(true)
+    expect(() => frames.forEach((frame) => validateGrayFrame(frame))).not.toThrow()
+    expect(motionAnalysisRetainedBytes(frames)).toBe(2 * 32 * 24)
+    expect(() => validateMotionFrameSequence(frames, {
+      ...DEFAULT_MOTION_ANALYSIS_BUDGET,
+      maxWidth: 32,
+      maxHeight: 24,
+    })).not.toThrow()
   })
 
   test('accepts occlusion loss only on the first fully occluded frame', () => {

@@ -3929,3 +3929,21 @@ acceptance claims.
 - [x] Pass 18/18 controller tests, 36/36 controller/matcher/tracking tests, all
   16 benchmark-runner checks, the TypeScript build gate, oxlint, and
   `git diff --check`.
+
+## Milestone 5 Part 10a / issue #44 - readback and retained-memory follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Race support `VideoFrame.copyTo()` against both the admitted run's
+  `AbortSignal` and a finite five-second deadline; close its frame exactly once
+  before abort/timeout settles and shared research admission is released.
+- [x] Keep the original readback promise observed after caller settlement, so
+  late resolution or rejection cannot re-close the frame, mutate diagnostics,
+  or surface as an unhandled promise rejection.
+- [x] Require every grayscale `Uint8Array` to be a zero-offset full view of its
+  backing buffer, preventing a small visible plane from hiding a larger retained
+  allocation from the reviewed 32 MiB gate.
+- [x] Cover deferred abort, deadline, second-run admission, close ordering, safe
+  late resolve/reject, zero-offset and nonzero-offset oversized backing rejection,
+  and valid tightly sized buffers; pass 42/42 focused controller/matcher/tracking
+  tests, all 16 benchmark-runner checks, and the standalone TypeScript gate.
