@@ -3421,3 +3421,25 @@ acceptance claims.
 - [x] Retain the original browser-verification decision: this remains a pure
   design/non-executing prototype with no production plugin runtime or observable
   browser behavior. Issue #77 still owns hostile-sandbox Chromium gates.
+
+## Part 10c / issue #76 - PR #112 aggregate table-budget follow-up
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Bound the WebAssembly module to at most 16 defined tables, require every
+  table to declare a maximum no greater than 4,096 entries, and cap both aggregate
+  initial entries and aggregate declared maxima at 4,096.
+- [x] Enforce all three module-wide table limits during Issue #77 binary-policy
+  parsing before compilation or instantiation, and add exact count/initial/max
+  boundary fixtures to that implementation gate.
+- [x] Mirror the same numbers in package budgets and the threat model while
+  retaining the existing prohibition on table imports and all other ambient
+  imports except the one host-supplied bounded memory.
+- [x] Pass 103 focused manifest/project/effect/architecture tests, all 2,323
+  Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities. Exclude the first full-suite launch
+  from evidence because an accidentally short command timeout stopped it after
+  five seconds; the immediate full rerun passed.
+- [x] Keep browser verification explicitly not applicable to this non-executing
+  design slice. Issue #77 retains the hostile-module browser gates.

@@ -210,6 +210,7 @@ Package budgets for the first implementation are:
 | `signature.json` | 64 KiB |
 | WebAssembly module | 32 MiB |
 | WebAssembly memory | 1,025 pages / 64 MiB + 64 KiB |
+| WebAssembly tables | 16 total; 4,096 aggregate initial and maximum entries |
 
 Every limit is checked before the corresponding allocation. Decompression
 tracks the running expanded total and aborts on the first overflow.
@@ -372,7 +373,11 @@ ABI contract is:
   memory request makes frames that do not fit unavailable with an explicit
   reason; the 1,025-page ceiling lets the legal 16,777,216-pixel maximum frame
   and its parameter block fit simultaneously;
-- internal tables must declare a maximum no greater than 4,096 entries;
+- the module defines at most 16 internal tables. Every table declares a maximum,
+  each table's maximum is at most 4,096 entries, and both the sum of all declared
+  initial sizes and the sum of all declared maxima are at most 4,096 entries.
+  The binary-policy parser checks these count and aggregate limits before
+  compilation or instantiation;
 - threads, shared memory, relaxed SIMD, component-model imports, WASI, and JS
   builtins are rejected;
 - each contribution render entrypoint is an exported function with signature
@@ -575,7 +580,8 @@ green:
 1. byte-level ZIP, canonical JSON, integrity, Ed25519, trust, update, rollback,
    and revocation fixtures including hostile archives;
 2. WebAssembly binary policy parser and exact ABI fixtures across supported
-   browsers;
+   browsers, including table-count, aggregate-initial-entry, and aggregate-
+   maximum-entry boundaries;
 3. CSP/opaque-origin negative probes for network, storage, navigation, DOM, and
    worker escape attempts;
 4. watchdog, termination, queue, memory, project replacement, cancellation,

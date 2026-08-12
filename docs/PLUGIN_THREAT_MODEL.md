@@ -240,8 +240,12 @@ huge tables, traps the engine, or exploits a browser JIT vulnerability.
 **Controls:** parse the binary policy before `WebAssembly.validate` and
 instantiation; allow one imported non-shared bounded memory and no other imports;
 reject additional memory, threads/shared memory, relaxed SIMD, WASI, unknown
-features, unbounded/large tables, unexpected entrypoint types, and oversized
-sections; instantiate only in the sandbox worker; runtime-probe and fail closed.
+features, unexpected entrypoint types, and oversized sections. Permit at most 16
+defined tables; require a declared maximum for each; cap every individual maximum
+at 4,096 entries; and separately cap aggregate initial entries and aggregate
+declared maxima at 4,096. Enforce the count and both sums while parsing, before
+compilation or instantiation; instantiate only in the sandbox worker;
+runtime-probe and fail closed.
 
 **Residual risk:** browser-engine vulnerabilities and binary-parser mistakes.
 Keeping browsers current and shipping an emergency local revocation are required.
@@ -253,11 +257,12 @@ Defense does not claim WebAssembly alone is a complete security boundary.
 growth, huge output messages, queue floods, diagnostic spam, slow decompression,
 or crash/retry loops freeze the editor or exhaust memory.
 
-**Controls:** fixed package/manifest/module/memory/table/count limits; one active
-call per sandbox, two globally, bounded/coalesced queue; trusted parent watchdog;
-whole-sandbox termination; exact response sizes; bounded diagnostics; three
-consecutive failures disable for the session; no background activation; safe
-mode and stale-activation sentinel.
+**Controls:** fixed package/manifest/module/memory limits plus the 16-table,
+4,096-aggregate-initial-entry, and 4,096-aggregate-maximum-entry module limits;
+one active call per sandbox, two globally, bounded/coalesced queue; trusted parent
+watchdog; whole-sandbox termination; exact response sizes; bounded diagnostics;
+three consecutive failures disable for the session; no background activation;
+safe mode and stale-activation sentinel.
 
 **Residual risk:** termination may briefly consume a CPU core or renderer memory,
 and browser scheduling/process sharing can still degrade the tab. Preview

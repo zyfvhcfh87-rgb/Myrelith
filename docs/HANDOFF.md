@@ -3173,3 +3173,27 @@ surface; it is not a second zoom and never enters document history.
   build/typecheck, warning-free oxlint, clean diff checks, and the production
   high-severity audit with 0 vulnerabilities. Browser verification remains not
   applicable because no production runtime or observable surface was added.
+
+## Part 10c issue #76 - PR #112 aggregate table-budget follow-up (2026-08-12)
+
+**COMPLETE LOCALLY.**
+
+- Replace the per-table-only WebAssembly rule with an exact module-wide gate:
+  at most 16 defined tables, an explicit maximum no greater than 4,096 for each,
+  at most 4,096 declared initial entries in aggregate, and at most 4,096 declared
+  maximum entries in aggregate. Table imports remain forbidden by the existing
+  one-memory-only import contract.
+- Require the Issue #77 binary-policy parser to enforce the table count and both
+  aggregate sums before compilation or instantiation, and require exact boundary
+  fixtures across supported browsers. Mirror those budgets in the package table
+  and denial-of-service threat controls so the normative and security contracts
+  cannot drift.
+- Validation passed 103 focused manifest/project/effect/architecture tests, all
+  2,323 Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities. The first full-suite launch used an
+  accidentally short command timeout and was stopped after five seconds; it is
+  not counted as evidence, and the immediate full rerun passed.
+- Browser verification remains not applicable: this is still a design-only,
+  non-executing contract with no production plugin parser, runtime, or observable
+  browser surface. Issue #77 owns the real hostile-module boundary fixtures.
