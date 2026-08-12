@@ -3837,3 +3837,24 @@ acceptance claims.
   `3e632ab6dd0b24cc26ff61e38cf812ef4764f470`: independent point/box go results,
   loss on occlusion frame 18 after accepted frame 17, exact worker/frame/OPFS
   parity, zero console problems, and released port.
+
+## Milestone 5 Part 10a / issue #44 - follow-up review hardening
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Contain OPFS probe-file removal failures as a cleanup-specific unsupported
+  result; preserve honest created/removed diagnostics and route a research run
+  through typed `resource-unavailable` before scheduler or worker allocation.
+- [x] Validate every generated tracking Position X/Y and Scale X/Y track through
+  the canonical animation validator; reject mapped frame overflow, derived
+  finite-position overflow, and scale overflow instead of returning tracks that
+  a future Apply or portable validator must reject.
+- [x] Pass 28 focused research tests, all 2,332 Vitest cases across 172 files,
+  all 16 benchmark-runner checks, production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities.
+- [x] Rerun artifact schema 3 / `issue-44-motion-analysis-v3` in real Chromium
+  on strict port 41844 against exact clean implementation commit
+  `3632e47c4cd3bf136b6c35d698ffa6ebcc009e76`: independent point/box go,
+  occlusion loss at frame 18 after frame 17, typed overlap rejection,
+  cancellation, exact worker/frame/OPFS parity, zero console problems, and a
+  released port.

@@ -82,6 +82,11 @@ controller acquires its single shared admission slot before any support probe or
 scheduler construction and rejects an overlapping invocation with the typed
 `resource-unavailable` result. Separate callers therefore cannot each create a
 private one-job scheduler and exceed the controller-wide worker/decoder envelope.
+OPFS capability probing also treats removal of its temporary file as part of the
+support contract: a failed `removeEntry()` resolves to a cleanup-specific
+unsupported result rather than escaping the probe, starting analysis, or being
+counted as a successful removal. The injected failure regression preserves the
+created-versus-removed diagnostic mismatch so cleanup uncertainty stays visible.
 The product child must also abort the decoder/source/storage owner and await
 scheduler/storage quiescence. Queued pre-abort, active abort, typed failure,
 successful completion, replacement, source removal, clip removal, project
@@ -204,7 +209,11 @@ changes. When box scale changes, Position X/Y compensates around the target's
 cropped visible center using its dimensions, flip, rotation, and authored anchor,
 so scaling cannot pull the attachment away from the tracked project point. The
 canonical `SourceTimeMap` supplies strict clip-local integer frames. A duplicate/
-non-monotonic projection rejects rather than dropping samples.
+non-monotonic projection rejects rather than dropping samples. Before returning,
+every generated Position X/Y and Scale X/Y track passes the canonical animation
+validator. A mapped frame beyond the keyframe ceiling, a derived position beyond
+the finite project bound, or a box scale outside the clip-scale range fails
+closed instead of reaching a future Apply or portable document validator.
 
 Point and box quality decisions are independent: point thresholds alone decide
 point feasibility, while box geometry, scale, and prompt occlusion loss decide
@@ -301,6 +310,19 @@ cancellation settled in 52.8 ms, workers drained 2/2, support frames closed 1/1,
 OPFS probes removed 1/1, console problems remained zero, and port 41844 was
 released. The visual evidence SHA-256 is
 `2018D6738F26D35FD4E0DB23B8649AD49C96EE9412D4452A6CEED56BBDAEFDEF`.
+
+The follow-up review-hardening rerun retained artifact schema 3 /
+`issue-44-motion-analysis-v3` and captured exact clean implementation commit
+`3632e47c4cd3bf136b6c35d698ffa6ebcc009e76` with fingerprint
+`sha256:33df94dc420d8dc97422108473f7b89298557fe9ae72453bc9b6f092315fad67`.
+Point and box independently reported `go`; occlusion failed exactly on frame 18
+after accepting through frame 17. Analysis completed in 226.9 ms, cancellation
+settled in 51.9 ms, and overlapping admission remained typed
+`resource-unavailable`. Workers drained 2/2, support frames closed 1/1, OPFS
+probes removed 1/1, console problems remained zero, and port 41844 was released.
+The cleanup-failure and canonical-bound negative paths are covered by the 28
+focused tests. The visual evidence SHA-256 is
+`7B35B9668FE5096F570C868FAAB3CF3BDDBC200B078E2909462107F5A57B03D5`.
 
 ## Final boundaries
 

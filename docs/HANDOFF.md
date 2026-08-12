@@ -3685,3 +3685,30 @@ surface; it is not a second zoom and never enters document history.
   1/1, console problems stayed zero, and the port was released. The ignored
   screenshot SHA-256 is
   `2018D6738F26D35FD4E0DB23B8649AD49C96EE9412D4452A6CEED56BBDAEFDEF`.
+
+## Milestone 5 Part 10a / issue #44 - follow-up review hardening (2026-08-12)
+
+**FOLLOW-UP REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- OPFS support probing now contains `removeEntry()` failure as a named cleanup
+  outcome. The support result reports OPFS unsupported, the admitted research
+  run rejects through typed `resource-unavailable` before scheduler/worker
+  allocation, and diagnostics do not falsely count a failed removal as cleaned.
+- Tracking-to-animation projection now validates every generated Position X/Y
+  and Scale X/Y track with the canonical animation validator before returning.
+  Mapped frames beyond the keyframe ceiling, derived project positions beyond
+  the finite bound, and box growth beyond the clip-scale bound fail closed.
+- The gate passed 28 focused research tests, all 2,332 Vitest cases across 172
+  files, all 16 benchmark-runner checks, production build/typecheck, oxlint,
+  clean diff checks, and the production audit with 0 vulnerabilities. The build
+  retained only the established large-chunk advisory.
+- Real Chromium reran artifact schema 3 / `issue-44-motion-analysis-v3` on
+  strict port 41844 against exact clean implementation commit
+  `3632e47c4cd3bf136b6c35d698ffa6ebcc009e76`, fingerprint
+  `sha256:33df94dc420d8dc97422108473f7b89298557fe9ae72453bc9b6f092315fad67`.
+  Point and box independently reported go, occlusion failed on frame 18 after
+  accepted frame 17, analysis completed in 226.9 ms, and cancellation settled
+  in 51.9 ms. Workers drained 2/2, support frames closed 1/1, OPFS probes
+  removed 1/1, console problems stayed zero, and the port was released. The
+  ignored screenshot SHA-256 is
+  `7B35B9668FE5096F570C868FAAB3CF3BDDBC200B078E2909462107F5A57B03D5`.
