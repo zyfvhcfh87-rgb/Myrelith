@@ -125,6 +125,39 @@ describe('bounded SDR video scope fixtures', () => {
     expect(actual.histogram.luma).toEqual(legacy.luma)
   })
 
+  test('preserves shipped Float64 waveform direction at exact half bins', () => {
+    const rgba = new Uint8ClampedArray([
+      13, 163, 113, 255,
+      47, 143, 211, 255,
+    ])
+    const actual = analyzeVideoScopes(rgba, 2, 1)
+    const legacy = legacyFloatAnalysis(rgba, 2, 1)
+
+    expect([...actual.waveform.density.entries()].filter(([, count]) => count)).toEqual([
+      [63, 1],
+      [64, 1],
+    ])
+    expect(actual.histogram.luma).toEqual(legacy.luma)
+    expect(actual.waveform.density).toEqual(legacy.waveform)
+  })
+
+  test('preserves shipped Float64 vectorscope direction at exact half bins', () => {
+    for (const { rgba, expectedIndex } of [
+      { rgba: [0, 0, 255, 170], expectedIndex: 2_164 },
+      { rgba: [255, 0, 0, 170], expectedIndex: 731 },
+      { rgba: [2, 2, 172, 255], expectedIndex: 2_165 },
+      { rgba: [172, 2, 2, 255], expectedIndex: 667 },
+    ]) {
+      const input = new Uint8ClampedArray(rgba)
+      const actual = analyzeVideoScopes(input, 1, 1)
+      const legacy = legacyFloatAnalysis(input, 1, 1)
+
+      expect([...actual.vectorscope.density.entries()].filter(([, count]) => count))
+        .toEqual([[expectedIndex, 1]])
+      expect(actual.vectorscope.density).toEqual(legacy.vectorscope)
+    }
+  })
+
   test('preserves the shipped float64 scope bins on a complete seeded sample', () => {
     const rgba = new Uint8ClampedArray(VIDEO_SCOPE_MAX_PIXELS * 4)
     let state = 0x71_75_10_ba

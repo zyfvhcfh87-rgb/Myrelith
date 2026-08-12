@@ -63,16 +63,40 @@ function fakeSession(options: {
 }
 
 describe('optional WebGPU video scope adapter', () => {
-  test('marks only legacy luma midpoint-down samples in the expanded upload', () => {
+  test('marks only legacy midpoint-down bins in the expanded upload', () => {
     const expanded = expandVideoScopeWebGpuInput(new Uint8ClampedArray([
       13, 163, 113, 241,
       0, 13, 142, 150,
       0, 35, 190, 102,
+      13, 163, 113, 255,
+      0, 0, 255, 170,
+      255, 0, 0, 170,
+      47, 143, 211, 255,
+      2, 2, 172, 255,
+      172, 2, 2, 255,
     ]))
 
-    expect(expanded[3]).toBe(241 | 0x100)
-    expect(expanded[7]).toBe(150)
-    expect(expanded[11]).toBe(102)
+    expect([
+      expanded[3],
+      expanded[7],
+      expanded[11],
+      expanded[15],
+      expanded[19],
+      expanded[23],
+      expanded[27],
+      expanded[31],
+      expanded[35],
+    ]).toEqual([
+      241 | 0x100,
+      150,
+      102,
+      0x3ff,
+      0x4aa,
+      0x8aa,
+      255,
+      255,
+      255,
+    ])
   })
 
   test('keeps CPU as the default without probing WebGPU', async () => {

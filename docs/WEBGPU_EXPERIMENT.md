@@ -41,7 +41,7 @@ The adapter follows this contract:
 
 The default production build contains no WebGPU shader/adapter chunk or
 `navigator.gpu` reference. An enabled build emits the adapter as a separate
-10.52 kB uncompressed chunk. Disabling the flag therefore preserves both
+11.16 kB uncompressed chunk. Disabling the flag therefore preserves both
 runtime selection and the ordinary production module graph.
 
 ## Exact output contract
@@ -51,10 +51,11 @@ CPU and WGSL share one non-negative integer/fixed-point definition:
 - alpha zero is ignored; displayed RGB channels are rounded after
   display-over-black multiplication;
 - luma and chroma retain source-channel precision while applying alpha through
-  integer Rec.709 weights 2126/7152/722 over 10,000; exact luma half bins replay
-  the shipped Float64 tie direction, and the expanded GPU upload marks only the
-  midpoint-down samples in an otherwise-unused alpha bit so WGSL stays exact;
-- waveform and Cb/Cr bins use explicit round-half-up integer division; and
+  integer Rec.709 weights 2126/7152/722 over 10,000;
+- luma, waveform, Cb, and Cr use explicit round-half-up integer division except
+  at exact half bins where the shipped Float64 expression landed just below the
+  midpoint; the expanded GPU upload marks those four independent facts in
+  otherwise-unused upper alpha bits so WGSL replays the same direction; and
 - every counter remains below 65,535 within the fixed 14,400-sample ceiling.
 
 The WebGPU adapter refuses itself if its startup self-test differs anywhere in
@@ -99,26 +100,26 @@ loss, checks cleanup, writes ignored JSON/Markdown under
 `.tmp/issue-75-webgpu/`, closes Chrome/Vite, and verifies the port was released.
 `--headless` is available for a quick harness smoke.
 
-The complete headed run on 2026-08-11 used Chrome 151 on Windows 11, an AMD
+The complete headed run on 2026-08-12 used Chrome 151 on Windows 11, an AMD
 Radeon RX 6600 (driver 32.0.21045.1000), and the hardware WebGPU adapter
 reported as AMD RDNA 2. Source fingerprint was
-`sha256:64089ab18615329ffc9b9cb7a7c2ba0811e92fe0aef9dc75a51211a239fe8a71`;
+`sha256:ba422e38df24f27437ecaa001c3508e484285824c298d822be20a67f82bee192`;
 fixture fingerprint was
-`sha256:cf84c5a97a5b15008c36ae68fe91ce33b616dda96a7427f4bdea3cf14a3933cd`.
+`sha256:90e8d7bb64eed2143b3282238fe1dcfd5622fc9627d9d3df0ea55416fd78d533`.
 
 | Current 160 x 90 workload | CPU | WebGPU |
 |---|---:|---:|
-| Median, 60 measured iterations | 0.500 ms | 3.300 ms |
-| p95 | 1.200 ms | 4.300 ms |
+| Median, 60 measured iterations | 1.200 ms | 4.500 ms |
+| p95 | 1.600 ms | 5.100 ms |
 | Explicit per-analysis output/transient buffers | 30,720 B | 353,304 B |
-| Startup (adapter + device + pipeline + parity self-test) | none | 193.800 ms |
-| First opt-in call wall time | n/a | 195.800 ms |
+| Startup (adapter + device + pipeline + parity self-test) | none | 153.200 ms |
+| First opt-in call wall time | n/a | 155.900 ms |
 
 WebGPU produced exact output in all 71 comparisons, released every request
 buffer before the next sample, recovered from an intentional device destroy
 through exact CPU output, ended with zero active buffer bytes, emitted zero
 browser warnings/errors, and released the strict port. Its median was only
-0.152 times CPU throughput: equivalently, it took 6.6 times as long.
+0.267 times CPU throughput: equivalently, it took 3.8 times as long.
 
 A separate flagged-app pass created a normal text clip, enabled Program Monitor
 scopes, loaded both the analysis worker and opt-in WebGPU module, and reported
@@ -144,8 +145,8 @@ CPU readback/upload round trip or increases the useful compute workload, then
 repeat exact parity, device-loss, memory, startup, and multi-device/browser
 measurements before changing any default.
 
-Final validation passed 77 narrow scope/adapter/render-worker tests, the final
-180-test integration focus, all 2,315 Vitest cases across 168 files, all 16
+Final validation passed 79 narrow scope/adapter/render-worker tests, the final
+182-test integration focus, all 2,317 Vitest cases across 168 files, all 16
 Node benchmark-runner checks, production TypeScript/build, oxlint, and
 `npm audit --omit=dev --audit-level=high` with zero vulnerabilities. The normal
 build emitted only its established large-chunk advisory and retained the

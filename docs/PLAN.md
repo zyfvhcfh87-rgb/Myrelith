@@ -3277,26 +3277,27 @@ acceptance claims.
 
 ## Milestone 4 Part 10b / issue #75 - optional WebGPU acceleration evaluation
 
-**COMPLETE LOCALLY (2026-08-11): NO-GO FOR PRODUCTION SELECTION.**
+**COMPLETE LOCALLY (2026-08-12): NO-GO FOR PRODUCTION SELECTION.**
 
 - [x] Select the existing fixed 160x90, four-Hz completed-frame video-scope
   analysis as the bounded Part 8a workload. Keep Canvas2D sampling plus the
   dedicated CPU analysis worker as the supported/default path.
 - [x] Define one exact integer/fixed-point CPU/WGSL contract, preserve shipped
-  Float64 direction at exact luma half bins through one upload correction bit,
-  and gate WebGPU initialization with a complete deterministic parity self-test.
+  Float64 direction at exact luma, waveform, Cb, and Cr half bins through four
+  upload correction bits, and gate WebGPU initialization with a complete
+  deterministic parity self-test containing both midpoint directions.
 - [x] Add an internal-build-only dynamic adapter with explicit API/adapter/
   initialization probing, one device/pipeline owner, 353,304-byte maximum
   request buffer budget, `finally` destruction, device-loss observation,
   CPU fallback, idempotent release, and child-worker release acknowledgment.
 - [x] Keep ordinary production output free of the WebGPU adapter/shader chunk;
-  an explicitly enabled build emits one separate 10.52 kB experiment chunk.
+  an explicitly enabled build emits one separate 11.16 kB experiment chunk.
 - [x] Add a repeatable strict-port Chrome runner with source/fixture fingerprint,
   exact correctness, latency, startup, explicit buffer memory, adapter/CDP GPU,
   device-loss, console, cleanup, and port-release evidence.
 - [x] Measure headed Chrome 151 on Windows 11 / Radeon RX 6600: 71 exact parity
-  comparisons; CPU 0.500 ms median / 1.200 ms p95 versus WebGPU 3.300 / 4.300
-  ms; 193.800 ms WebGPU startup; 30,720 versus 353,304 explicit bytes; exact
+  comparisons; CPU 1.200 ms median / 1.600 ms p95 versus WebGPU 4.500 / 5.100
+  ms; 153.200 ms WebGPU startup; 30,720 versus 353,304 explicit bytes; exact
   CPU recovery after real device destruction; zero remaining buffers, browser
   warnings/errors, or occupied port.
 - [x] Verify the flagged real app on the same strict port: create a text clip,
@@ -3307,7 +3308,7 @@ acceptance claims.
   in `docs/WEBGPU_EXPERIMENT.md`. Reconsider only if a future design removes
   the CPU readback/upload round trip or materially increases useful compute,
   followed by exact multi-browser/device evidence before any default change.
-- [x] Pass 77 final narrow tests, the final 180-test integration focus, all
-  2,315 Vitest cases across 168 files plus 16 benchmark-runner checks,
+- [x] Pass 79 final narrow tests, the final 182-test integration focus, all
+  2,317 Vitest cases across 168 files plus 16 benchmark-runner checks,
   production build/typecheck, oxlint, diff checks, and the production high
   audit with 0 vulnerabilities.

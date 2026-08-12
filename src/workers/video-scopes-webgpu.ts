@@ -3,11 +3,12 @@
 import {
   analyzeVideoScopes,
   VIDEO_SCOPE_HISTOGRAM_BINS,
+  VIDEO_SCOPE_LEGACY_TIE_DOWN,
   VIDEO_SCOPE_SAMPLE_HEIGHT,
   VIDEO_SCOPE_SAMPLE_WIDTH,
   VIDEO_SCOPE_VECTOR_SIZE,
   VIDEO_SCOPE_WAVEFORM_HEIGHT,
-  videoScopeLegacyLumaTieRoundsDown,
+  videoScopeLegacyTieDownMask,
   type VideoScopeAnalysis,
 } from '../domain/videoScopes'
 
@@ -113,7 +114,15 @@ const GPU_BUFFER_USAGE = {
 } as const
 const GPU_MAP_READ = 0x0001
 const INPUT_ALPHA_MASK = 0xff
-const INPUT_LEGACY_LUMA_TIE_DOWN_FLAG = 0x100
+const INPUT_TIE_DOWN_SHIFT = 8
+const INPUT_LEGACY_LUMA_TIE_DOWN_FLAG = VIDEO_SCOPE_LEGACY_TIE_DOWN.luma
+  << INPUT_TIE_DOWN_SHIFT
+const INPUT_LEGACY_WAVEFORM_TIE_DOWN_FLAG = VIDEO_SCOPE_LEGACY_TIE_DOWN.waveform
+  << INPUT_TIE_DOWN_SHIFT
+const INPUT_LEGACY_CB_TIE_DOWN_FLAG = VIDEO_SCOPE_LEGACY_TIE_DOWN.cb
+  << INPUT_TIE_DOWN_SHIFT
+const INPUT_LEGACY_CR_TIE_DOWN_FLAG = VIDEO_SCOPE_LEGACY_TIE_DOWN.cr
+  << INPUT_TIE_DOWN_SHIFT
 
 export const VIDEO_SCOPE_WEBGPU_ACTIVE_BUFFER_BYTES =
   INPUT_U32_COUNT * Uint32Array.BYTES_PER_ELEMENT
@@ -151,6 +160,9 @@ const VECTOR_OFFSET: u32 = ${VECTOR_OFFSET}u;
 const SAMPLE_COUNT_OFFSET: u32 = ${SAMPLE_COUNT_OFFSET}u;
 const INPUT_ALPHA_MASK: u32 = ${INPUT_ALPHA_MASK}u;
 const INPUT_LEGACY_LUMA_TIE_DOWN_FLAG: u32 = ${INPUT_LEGACY_LUMA_TIE_DOWN_FLAG}u;
+const INPUT_LEGACY_WAVEFORM_TIE_DOWN_FLAG: u32 = ${INPUT_LEGACY_WAVEFORM_TIE_DOWN_FLAG}u;
+const INPUT_LEGACY_CB_TIE_DOWN_FLAG: u32 = ${INPUT_LEGACY_CB_TIE_DOWN_FLAG}u;
+const INPUT_LEGACY_CR_TIE_DOWN_FLAG: u32 = ${INPUT_LEGACY_CR_TIE_DOWN_FLAG}u;
 const WAVEFORM_THRESHOLDS = array<u32, 63>(${WAVEFORM_THRESHOLDS});
 const CB_THRESHOLDS = array<u32, 63>(${CB_THRESHOLDS});
 const CR_THRESHOLDS = array<u32, 63>(${CR_THRESHOLDS});
@@ -237,13 +249,24 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   atomicAdd(&output[HISTOGRAM_BINS * 3u + luma], 1u);
 
   let source_x = pixel % params.width;
-  let waveform_y = WAVEFORM_HEIGHT - 1u - waveform_level(luma_numerator);
+  var waveform_bin = waveform_level(luma_numerator);
+  if ((packed_alpha & INPUT_LEGACY_WAVEFORM_TIE_DOWN_FLAG) != 0u) {
+    waveform_bin -= 1u;
+  }
+  let waveform_y = WAVEFORM_HEIGHT - 1u - waveform_bin;
   atomicAdd(&output[WAVEFORM_OFFSET + waveform_y * params.width + source_x], 1u);
 
   let cb_delta = i32(alpha) * (i32(source_blue * 10000u) - i32(weighted_luma));
   let cr_delta = i32(alpha) * (i32(source_red * 10000u) - i32(weighted_luma));
-  let vector_x = cb_bin(chroma_numerator(cb_delta, 1206603900u));
-  let vector_y = VECTOR_SIZE - 1u - cr_bin(chroma_numerator(cr_delta, 1024013700u));
+  var vector_x = cb_bin(chroma_numerator(cb_delta, 1206603900u));
+  if ((packed_alpha & INPUT_LEGACY_CB_TIE_DOWN_FLAG) != 0u) {
+    vector_x -= 1u;
+  }
+  var cr_bin_value = cr_bin(chroma_numerator(cr_delta, 1024013700u));
+  if ((packed_alpha & INPUT_LEGACY_CR_TIE_DOWN_FLAG) != 0u) {
+    cr_bin_value -= 1u;
+  }
+  let vector_y = VECTOR_SIZE - 1u - cr_bin_value;
   atomicAdd(&output[VECTOR_OFFSET + vector_y * VECTOR_SIZE + vector_x], 1u);
   atomicAdd(&output[SAMPLE_COUNT_OFFSET], 1u);
 }
@@ -304,14 +327,13 @@ function assertExperimentShape(rgba: Uint8ClampedArray, width: number, height: n
 export function expandVideoScopeWebGpuInput(rgba: Uint8ClampedArray): Uint32Array {
   const expanded = Uint32Array.from(rgba)
   for (let offset = 0; offset < rgba.length; offset += 4) {
-    if (videoScopeLegacyLumaTieRoundsDown(
+    const tieDownMask = videoScopeLegacyTieDownMask(
       rgba[offset],
       rgba[offset + 1],
       rgba[offset + 2],
       rgba[offset + 3],
-    )) {
-      expanded[offset + 3] |= INPUT_LEGACY_LUMA_TIE_DOWN_FLAG
-    }
+    )
+    expanded[offset + 3] |= tieDownMask << INPUT_TIE_DOWN_SHIFT
   }
   return expanded
 }
@@ -516,6 +538,12 @@ function createSelfTestFixture(): Uint8ClampedArray {
     13, 163, 113, 241,
     0, 13, 142, 150,
     0, 35, 190, 102,
+    13, 163, 113, 255,
+    0, 0, 255, 170,
+    255, 0, 0, 170,
+    47, 143, 211, 255,
+    2, 2, 172, 255,
+    172, 2, 2, 255,
   ])
   return rgba
 }
