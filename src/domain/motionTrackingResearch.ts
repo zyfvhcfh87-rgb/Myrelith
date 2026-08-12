@@ -12,6 +12,7 @@ import {
   type MotionPoint,
 } from './motionAnalysis'
 import {
+  animationTrackValidationError,
   LINEAR_ANIMATION_EASING,
   MAX_KEYFRAMES_PER_TRACK,
 } from './clipAnimation'
@@ -281,6 +282,16 @@ function linearKeyframe(frame: number, value: number) {
   return { frame, value, easing: { ...LINEAR_ANIMATION_EASING } }
 }
 
+function validateGeneratedTracks(tracks: ClipAnimationTrack[]): ClipAnimationTrack[] {
+  for (const track of tracks) {
+    const error = animationTrackValidationError(track)
+    if (error) {
+      throw new RangeError(`Generated ${track.property} tracking track is invalid: ${error}`)
+    }
+  }
+  return tracks
+}
+
 function positiveDimension(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${label} must be a positive safe integer`)
@@ -479,7 +490,7 @@ export function trackingSamplesToAnimationTracks(
       )),
     },
   ]
-  if (!mapping.includeScale) return tracks
+  if (!mapping.includeScale) return validateGeneratedTracks(tracks)
   tracks.push(
     {
       property: 'scale-x',
@@ -496,5 +507,5 @@ export function trackingSamplesToAnimationTracks(
       )),
     },
   )
-  return tracks
+  return validateGeneratedTracks(tracks)
 }

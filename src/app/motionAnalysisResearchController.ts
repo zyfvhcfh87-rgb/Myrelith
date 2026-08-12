@@ -136,11 +136,23 @@ async function probeVideoFrame(): Promise<{
   return { copied, closed }
 }
 
-async function probeOpfs(): Promise<boolean> {
-  if (typeof navigator.storage?.getDirectory !== 'function') return false
+interface OpfsProbeResult {
+  readonly supported: boolean
+  readonly failure: string | null
+}
+
+const OPFS_UNAVAILABLE_FAILURE = 'Origin-private file storage is unavailable.'
+const OPFS_CLEANUP_FAILURE = 'Origin-private file storage probe cleanup failed.'
+
+async function probeOpfs(): Promise<OpfsProbeResult> {
+  if (typeof navigator.storage?.getDirectory !== 'function') {
+    return { supported: false, failure: OPFS_UNAVAILABLE_FAILURE }
+  }
   const fileName = 'issue-44-motion-analysis-support-probe.tmp'
   let root: FileSystemDirectoryHandle | null = null
   let created = false
+  let supported = false
+  let cleanupFailed = false
   try {
     root = await navigator.storage.getDirectory()
     const handle = await root.getFileHandle(fileName, { create: true })
@@ -153,14 +165,23 @@ async function probeOpfs(): Promise<boolean> {
       await writer.close()
     }
     const file = await handle.getFile()
-    return file.size === 2
+    supported = file.size === 2
   } catch {
-    return false
+    supported = false
   } finally {
     if (root && created) {
-      await root.removeEntry(fileName)
-      diagnostics.opfsProbeFilesRemoved++
+      try {
+        await root.removeEntry(fileName)
+        diagnostics.opfsProbeFilesRemoved++
+      } catch {
+        cleanupFailed = true
+      }
     }
+  }
+  if (cleanupFailed) return { supported: false, failure: OPFS_CLEANUP_FAILURE }
+  return {
+    supported,
+    failure: supported ? null : OPFS_UNAVAILABLE_FAILURE,
   }
 }
 
@@ -174,7 +195,7 @@ export async function probeMotionAnalysisSupport(): Promise<MotionAnalysisSuppor
   if (!videoFrame.copied) failures.push('VideoFrame RGBA copyTo is unavailable.')
   if (!videoFrame.closed) failures.push('VideoFrame close could not be observed.')
   const opfs = await probeOpfs()
-  if (!opfs) failures.push('Origin-private file storage is unavailable.')
+  if (opfs.failure) failures.push(opfs.failure)
   const cryptoDigest = typeof crypto?.subtle?.digest === 'function'
   if (!cryptoDigest) failures.push('SubtleCrypto digest is unavailable.')
   return {
@@ -183,7 +204,7 @@ export async function probeMotionAnalysisSupport(): Promise<MotionAnalysisSuppor
     offscreenCanvas2d,
     videoFrameRgbaCopy: videoFrame.copied,
     videoFrameClosed: videoFrame.closed,
-    opfs,
+    opfs: opfs.supported,
     cryptoDigest,
     cooperativeYield: typeof (globalThis as {
       scheduler?: { yield?: unknown }

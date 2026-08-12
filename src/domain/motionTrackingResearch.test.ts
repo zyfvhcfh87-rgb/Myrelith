@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { resolveClipAnimationAtFrame } from './clipAnimation'
+import {
+  MAX_ANIMATED_FINITE_MAGNITUDE,
+  MAX_KEYFRAME_FRAME,
+  resolveClipAnimationAtFrame,
+} from './clipAnimation'
+import { MAX_CLIP_SCALE } from './clipInspector'
 import {
   trackingSamplesToAnimationTracks,
   type TrackingAnimationSample,
@@ -212,5 +217,47 @@ describe('tracking keyframe projection', () => {
       includeScale: false,
       target: centeredTarget,
     })).toThrow(/strictly increasing/)
+  })
+
+  test('rejects mapped frames above the canonical animation ceiling', () => {
+    expect(() => trackingSamplesToAnimationTracks([
+      sample(0, 100, 50),
+      sample(MAX_KEYFRAME_FRAME + 1, 101, 50),
+    ], base, {
+      includeScale: false,
+      target: centeredTarget,
+    })).toThrow(/Generated position-x tracking track.*keyframe frame must be/)
+  })
+
+  test('rejects box growth above the canonical clip-scale bound', () => {
+    const maximumScaleBase = {
+      ...base,
+      scaleX: MAX_CLIP_SCALE,
+      scaleY: MAX_CLIP_SCALE,
+    }
+    expect(() => trackingSamplesToAnimationTracks([
+      sample(0, 100, 50, identitySource, { width: 20, height: 20 }),
+      sample(10, 100, 50, identitySource, { width: 20, height: 40 }),
+    ], maximumScaleBase, {
+      includeScale: true,
+      target: centeredTarget,
+    })).toThrow(/Generated scale-y tracking track.*keyframe value must be from/)
+  })
+
+  test('rejects projected position above the canonical finite bound', () => {
+    const distantSource = {
+      ...identitySource,
+      transform: {
+        ...identitySource.transform,
+        y: MAX_ANIMATED_FINITE_MAGNITUDE,
+      },
+    }
+    expect(() => trackingSamplesToAnimationTracks([
+      sample(0, 100, 50),
+      sample(10, 100, 50, distantSource),
+    ], base, {
+      includeScale: false,
+      target: centeredTarget,
+    })).toThrow(/Generated position-y tracking track.*finite project bound/)
   })
 })

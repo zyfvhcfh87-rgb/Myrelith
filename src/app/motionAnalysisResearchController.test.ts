@@ -3,6 +3,7 @@ import { runMotionAnalysisResearch } from '../domain/motionAnalysisResearch'
 import type { MotionResearchRunMessage } from '../workers/motion-analysis-research-protocol'
 import {
   motionAnalysisResearchDiagnostics,
+  probeMotionAnalysisSupport,
   runBrowserMotionAnalysisResearch,
 } from './motionAnalysisResearchController'
 
@@ -143,6 +144,47 @@ describe('motion analysis research controller', () => {
     controller.abort()
     await expect(firstRun).rejects.toMatchObject({ name: 'AbortError' })
     expect(motionAnalysisResearchDiagnostics().activeWorkers).toBe(0)
+  })
+
+  test('reports OPFS probe cleanup failure through the typed unsupported path', async () => {
+    installWorker('success')
+    const removeEntry = vi.fn().mockRejectedValue(new DOMException(
+      'Synthetic removal failure',
+      'OperationError',
+    ))
+    const getFileHandle = vi.fn().mockResolvedValue({
+      createWritable: vi.fn().mockResolvedValue({
+        write: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+      }),
+      getFile: vi.fn().mockResolvedValue({ size: 2 }),
+    })
+    vi.stubGlobal('navigator', {
+      storage: {
+        getDirectory: vi.fn().mockResolvedValue({ getFileHandle, removeEntry }),
+      },
+    })
+    const before = motionAnalysisResearchDiagnostics()
+
+    const support = await probeMotionAnalysisSupport()
+    expect(support).toMatchObject({ supported: false, opfs: false })
+    expect(support.failures).toContain(
+      'Origin-private file storage probe cleanup failed.',
+    )
+    await expect(runBrowserMotionAnalysisResearch()).rejects.toMatchObject({
+      name: 'MediaJobExecutionError',
+      code: 'resource-unavailable',
+      message: expect.stringContaining(
+        'Origin-private file storage probe cleanup failed.',
+      ),
+    })
+
+    const after = motionAnalysisResearchDiagnostics()
+    expect(after.opfsProbeFilesCreated - before.opfsProbeFilesCreated).toBe(2)
+    expect(after.opfsProbeFilesRemoved).toBe(before.opfsProbeFilesRemoved)
+    expect(after.workersCreated).toBe(before.workersCreated)
+    expect(after.activeWorkers).toBe(0)
+    expect(removeEntry).toHaveBeenCalledTimes(2)
   })
 
   test('preserves a typed quality failure and still terminates the worker', async () => {
