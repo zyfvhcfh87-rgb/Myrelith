@@ -4,21 +4,28 @@ import {
   EFFECT_STACK_LIMITS,
   isUnsafeEffectParamKey,
 } from './effectBounds'
-import {
-  MAX_RENDER_SURFACE_PIXELS,
-  RENDER_SURFACE_BYTES_PER_PIXEL,
-} from './renderSurfaceBudget'
+import { RENDER_SURFACE_BYTES_PER_PIXEL } from './renderSurfaceBudget'
 
 export const PLUGIN_MANIFEST_SCHEMA_VERSION = 1 as const
 export const PLUGIN_HOST_API_VERSION = 1 as const
 export const VIDEO_EFFECT_FRAME_CAPABILITY = 'myrelith.effect.video-frame.rgba8' as const
 
 const WEBASSEMBLY_PAGE_BYTES = 65_536
-const MAX_PLUGIN_FRAME_BYTES = MAX_RENDER_SURFACE_PIXELS * RENDER_SURFACE_BYTES_PER_PIXEL
+const MEBIBYTE_BYTES = 1024 * 1024
+const MODULE_DATA_REGION_BYTES = 8 * MEBIBYTE_BYTES
+const MODULE_WORKSPACE_REGION_BYTES = 8 * MEBIBYTE_BYTES
 const MAX_CANONICAL_PARAMETER_BYTES = WEBASSEMBLY_PAGE_BYTES
-const MAX_PLUGIN_MEMORY_PAGES = Math.ceil(
-  (MAX_PLUGIN_FRAME_BYTES + MAX_CANONICAL_PARAMETER_BYTES) / WEBASSEMBLY_PAGE_BYTES,
-)
+const PARAMETER_REGION_OFFSET_BYTES = MODULE_DATA_REGION_BYTES + MODULE_WORKSPACE_REGION_BYTES
+const PIXEL_REGION_OFFSET_BYTES = PARAMETER_REGION_OFFSET_BYTES + MAX_CANONICAL_PARAMETER_BYTES
+const PIXEL_REGION_OFFSET_PAGES = PIXEL_REGION_OFFSET_BYTES / WEBASSEMBLY_PAGE_BYTES
+const MIN_PLUGIN_MEMORY_PAGES = PIXEL_REGION_OFFSET_PAGES + 1
+const MIN_PLUGIN_MEMORY_BYTES = MIN_PLUGIN_MEMORY_PAGES * WEBASSEMBLY_PAGE_BYTES
+const MAX_PLUGIN_MEMORY_PAGES = 1_025
+const MAX_PLUGIN_MEMORY_BYTES = MAX_PLUGIN_MEMORY_PAGES * WEBASSEMBLY_PAGE_BYTES
+const MAX_PIXEL_REGION_BYTES = MAX_PLUGIN_MEMORY_BYTES - PIXEL_REGION_OFFSET_BYTES
+const MAX_PLUGIN_FRAME_BYTES = MAX_PIXEL_REGION_BYTES
+const MAX_PLUGIN_FRAME_PIXELS = Math.floor(MAX_PLUGIN_FRAME_BYTES / RENDER_SURFACE_BYTES_PER_PIXEL)
+const PLUGIN_FRAME_PIXELS_PER_MEMORY_PAGE = WEBASSEMBLY_PAGE_BYTES / RENDER_SURFACE_BYTES_PER_PIXEL
 
 export const PLUGIN_MANIFEST_LIMITS = Object.freeze({
   maxManifestBytes: 65_536,
@@ -33,8 +40,21 @@ export const PLUGIN_MANIFEST_LIMITS = Object.freeze({
   maxEnumOptions: 32,
   maxIdentifierCharacters: 64,
   maxEntrypointCharacters: 128,
+  wasmPageBytes: WEBASSEMBLY_PAGE_BYTES,
+  moduleDataRegionBytes: MODULE_DATA_REGION_BYTES,
+  moduleWorkspaceRegionBytes: MODULE_WORKSPACE_REGION_BYTES,
   maxCanonicalParameterBytes: MAX_CANONICAL_PARAMETER_BYTES,
+  parameterRegionOffsetBytes: PARAMETER_REGION_OFFSET_BYTES,
+  pixelRegionOffsetBytes: PIXEL_REGION_OFFSET_BYTES,
+  pixelRegionOffsetPages: PIXEL_REGION_OFFSET_PAGES,
+  maxPixelRegionBytes: MAX_PIXEL_REGION_BYTES,
+  maxPluginFrameBytes: MAX_PLUGIN_FRAME_BYTES,
+  maxPluginFramePixels: MAX_PLUGIN_FRAME_PIXELS,
+  pluginFramePixelsPerMemoryPage: PLUGIN_FRAME_PIXELS_PER_MEMORY_PAGE,
+  minWasmMemoryPages: MIN_PLUGIN_MEMORY_PAGES,
+  minWasmMemoryBytes: MIN_PLUGIN_MEMORY_BYTES,
   maxWasmMemoryPages: MAX_PLUGIN_MEMORY_PAGES,
+  maxWasmMemoryBytes: MAX_PLUGIN_MEMORY_BYTES,
   maxApiVersion: 65_535,
   maxDescriptorVersion: 65_535,
 })
@@ -52,7 +72,7 @@ export interface PluginPermissionRequest extends PluginVersionRange {
 export interface PluginWasmRuntime {
   readonly kind: 'wasm'
   readonly entry: string
-  /** One WebAssembly page is 64 KiB. The host supplies the bounded memory. */
+  /** One WebAssembly page is 64 KiB. The host supplies fixed-size bounded memory. */
   readonly memoryMaximumPages: number
 }
 
@@ -561,7 +581,7 @@ export function validatePluginManifest(value: unknown): PluginManifestValidation
       memoryMaximumPages: safeInteger(
         runtimeValue.memoryMaximumPages,
         '$.runtime.memoryMaximumPages',
-        1,
+        PLUGIN_MANIFEST_LIMITS.minWasmMemoryPages,
         PLUGIN_MANIFEST_LIMITS.maxWasmMemoryPages,
       ),
     }
@@ -581,15 +601,6 @@ export function validatePluginManifest(value: unknown): PluginManifestValidation
       PLUGIN_MANIFEST_LIMITS.maxContributions,
     ).map((item, index) => contribution(item, `$.contributions[${index}]`))
     if (contributions.length === 0) fail('$.contributions', 'must contain at least one contribution')
-    if (
-      runtime.memoryMaximumPages < 2
-      && contributions.some((item) => item.migrations.length > 0)
-    ) {
-      fail(
-        '$.runtime.memoryMaximumPages',
-        'must provide at least two pages for non-overlapping migration buffers',
-      )
-    }
     const contributionIds = new Set<string>()
     const renderEntrypoints = new Set<string>()
     for (const [index, item] of contributions.entries()) {

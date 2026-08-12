@@ -37,7 +37,7 @@ failure containment.
 | Network privacy | No plugin-controlled request, socket, beacon, WebRTC channel, navigation, form, popup, or download is possible. |
 | Project truth | Projects contain only bounded primitive descriptors. They cannot carry code, grants, package locations, trust, revocation changes, or an instruction to install/execute. |
 | Preview/export integrity | Authored stack order and the exact v1 display-referred sRGB RGBA encoding are shared. Every export starts in a newly instantiated export-owned worker/memory, receives only deterministically ordered export calls, and shares no mutable state with preview/scrub. Missing/failing plugins are visible; export aborts by default instead of silently dropping an effect. |
-| Editor availability | Package parsing, decompression, WebAssembly declarations/activation, memory, queues, calls, diagnostics, and retries are bounded. Parent-realm deadlines can terminate a non-cooperative activation or runtime sandbox. |
+| Editor availability | Package parsing, decompression, expanded WebAssembly signatures/locals/activation, fixed memory regions, queues, calls, diagnostics, and retries are bounded. Parent-realm deadlines can terminate a non-cooperative activation or runtime sandbox. |
 | Supply-chain identity | Every executed byte is covered by the verified package integrity table and Ed25519 signature; signer and digest changes cannot inherit trust/grants silently. |
 | Recovery | Missing, denied, revoked, incompatible, crashed, and safe-mode plugin descriptors remain ordered, editable, saveable, and recoverable without execution. |
 
@@ -102,7 +102,8 @@ failure containment.
   permission ranges, entry path, memory request, contribution/parameter schema;
 - signature envelope, public key, fingerprint text, integrity table, signature,
   digest, version ordering, and signer changes;
-- WebAssembly binary sections, declaration counts, start section, features,
+- WebAssembly binary sections, compressed signature/local multiplicities,
+  declaration counts, start section, active/passive data modes, features,
   imports, exports, memory/table limits, segment payloads, code, traps, loops,
   output bytes, return values, and timing;
 - project effect descriptors, parameter primitives, versions, enable state,
@@ -264,16 +265,40 @@ huge tables, traps the engine, or exploits a browser JIT vulnerability.
 `WebAssembly.validate`, compilation, or instantiation and rejects every start
 section. Allow exactly one import, the non-shared bounded host memory, and reject
 all function/global/table/tag imports plus defined memories and tags. Enforce at
-most 1,024 types; 8,192 imported-plus-defined functions; 16 imported-plus-defined
-tables; one imported-plus-defined memory; 2,048 imported-plus-defined globals;
-8,192 exports; 1,024 element segments and 4,096 aggregate element initializers;
-1,024 data segments and 8 MiB aggregate data payload; and 16,384 aggregate raw
-type/import/function/table/memory/global/export/element/data/tag section entries.
+most 1,024 types, 128 parameters and 16 results per function type, and 16,384
+expanded signature fields; 8,192 imported-plus-defined functions; 2,048
+expanded code locals per defined function and 16,384 per module; 2,048
+parameters-plus-locals per defined function and 16,384 aggregate defined-
+function runtime slots after charging the referenced parameter vector for every
+function that reuses it; 16 imported-plus-defined tables; one imported-plus-
+defined memory; 2,048 imported-plus-defined globals; 8,192 exports; 1,024
+element segments and 4,096 aggregate element initializers; 1,024 passive data
+segments and 8 MiB aggregate data payload; 16,384 aggregate raw type/import/
+function/table/memory/global/export/element/data/tag section entries; and a
+32,768 checked sum of raw entries, expanded signature fields, and defined-
+function runtime slots.
 Require every table maximum, cap each and both aggregate initial and maximum
-table entries at 4,096, and cap memory at 1,025 pages. Reject checked-addition
-overflow, noncanonical encodings, duplicate singleton sections, additional
-memory, threads/shared memory, relaxed SIMD, WASI, unknown features, unexpected
-entrypoint types, and oversized sections. A fresh, disposable activation-
+table entries at 4,096, and require one fixed-size host memory from 258 through
+1,025 pages. Pages 0-127 are the module's 8 MiB passive-data reserve, 128-255
+its 8 MiB stack/heap workspace, page 256 the host parameter/migration-input
+page, and pages 257 onward the host pixel/migration-output region. At 1,025
+pages that final region is 48 MiB/12,582,912 RGBA pixels; a request `P` supports
+only `(P - 257) * 16,384` pixels. Reject every active data segment, require the
+data-count value to equal the data-section count, and allow only passive
+segments plus lazy `memory.init`/`data.drop` into the data reserve during a
+watchdog-bounded call; the engine bounds-checks dynamic copy ranges. Reject zero
+local-group multiplicity, checked-addition overflow,
+noncanonical encoding, duplicate singleton section, function/code count
+mismatch, body/section overrun, additional memory, threads/shared memory,
+relaxed SIMD, WASI, unknown value types/features, unexpected entrypoint types,
+and oversized sections before an engine call. The imported minimum and maximum
+and host initial/maximum all equal the manifest request, preventing growth. The
+module can corrupt its own imported memory, so the host rewrites fixed input
+regions before a call and copies/validates only its exact output afterward; the
+layout prevents conforming toolchain regions from colliding but is not an
+intra-module security boundary. A larger valid project surface remains valid,
+but the plugin is unavailable in preview and blocks export unless the user
+accepts the existing reviewed bypass. A fresh, disposable activation-
 candidate worker performs engine validation, asynchronous compilation, and
 instantiation under a non-resetting five-second trusted-parent wall-clock
 deadline. A successful candidate becomes the dedicated runtime worker for its
@@ -290,13 +315,19 @@ Defense does not claim WebAssembly alone is a complete security boundary.
 ### Denial of service and resource exhaustion
 
 **Attacker story:** a start function or pathological compiler input monopolizes
-activation; huge declaration/segment vectors exhaust compiler memory; infinite
-loops, deep recursion, repeated traps, memory/table growth, huge output messages,
-queue floods, diagnostic spam, slow decompression, or crash/retry loops freeze
-the editor or exhaust memory.
+activation; compact type/local vectors expand to millions of compiler slots;
+huge declaration/segment vectors exhaust compiler memory; active data or a
+module allocator collides with host I/O; infinite loops, deep recursion,
+repeated traps, memory/table growth, huge output messages, queue floods,
+diagnostic spam, slow decompression, or crash/retry loops freeze the editor or
+exhaust memory.
 
-**Controls:** fixed package/manifest/module, declaration, segment, memory, and
-table limits; byte-level start-section rejection before engine work; a fresh
+**Controls:** fixed package/manifest/module, raw/expanded/combined declaration,
+segment, memory-region, and table limits; byte-level start-section and active-
+data rejection before engine work; canonical body-bounded parsing with checked
+per-type, per-function, repeated-signature, module, and combined accounting;
+fixed-size imported memory with separately budgeted passive-data, workspace,
+parameter, and pixel ranges; a fresh
 activation-candidate worker under the non-resetting five-second trusted-parent
 deadline; one active call per sandbox, two globally, bounded/coalesced queue;
 trusted-parent call watchdogs; whole-sandbox termination; atomic export-slot

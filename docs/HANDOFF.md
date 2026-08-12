@@ -3322,3 +3322,44 @@ surface; it is not a second zoom and never enters document history.
 - This remains a design-only lifecycle clarification plus pure manifest
   validation; Issue #77 still owns the runtime and hostile stateful-module
   browser fixtures. Browser verification remains intentionally not applicable.
+
+## Part 10c issue #76 - PR #112 memory-layout and expanded-declaration follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found that the former 1,025-page arithmetic consumed
+  every page with pixels and parameters, leaving no feasible module data,
+  stack, heap, or allocator space. It also found that raw section-entry counts
+  did not expand compressed code-local multiplicities.
+- Version 1 keeps the 1,025-page resident ceiling but now accepts manifest
+  requests only from 258 pages upward and fixes one non-overlapping layout:
+  8 MiB passive-data reserve, 8 MiB module stack/heap workspace, one 64 KiB
+  host parameter/migration-input page, then the pixel/migration-output region.
+  Both imported limits and host memory limits equal the manifest request, so
+  growth is impossible. At the maximum, 48 MiB holds 12,582,912 RGBA pixels;
+  a `P`-page request holds `(P - 257) * 16,384` pixels.
+- Active data segments are rejected before engine work. A consistent data-count
+  section and passive segments may use bounded bulk-memory `memory.init`/
+  `data.drop` lazily during a watchdog-protected call, with conforming module
+  data confined to pages 0-127 and allocator state to pages 128-255. This is a
+  module-private ABI convention, not isolation from its own imported memory;
+  the host refreshes inputs and validates/copies only exact owned outputs.
+- The trusted-parent parser now has explicit compressed-declaration gates:
+  128 parameters/16 results per function type, 16,384 expanded signature fields,
+  2,048 expanded locals per defined function and 16,384 per module, 2,048
+  parameters-plus-locals per defined function and 16,384 after charging reused
+  parameter vectors across defined functions, and a 32,768 checked combined
+  raw-entry/signature/runtime-slot ceiling. Canonical body bounds, positive
+  local groups, code/function count parity, supported value types, and every
+  overflow are checked before validation, compilation, or instantiation.
+- Larger ordinary render surfaces remain valid projects. A plugin that cannot
+  hold one is visibly unavailable in preview and blocks export under the
+  existing explicit reviewed-bypass policy. Issue #77 still owns the byte
+  parser, runtime, and hostile cross-browser fixtures; this follow-up adds no
+  production plugin execution.
+- Validation passed 119 focused manifest/project/effect/architecture tests
+  across five files, all 2,351 Vitest cases across 170 files, all 16 benchmark-
+  runner checks, production build/typecheck, warning-free oxlint, clean diff
+  checks, and the production high-severity audit with 0 vulnerabilities.
+  Browser verification remains intentionally not applicable because the change
+  adds no production plugin runtime or observable browser surface.

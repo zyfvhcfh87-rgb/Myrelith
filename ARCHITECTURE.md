@@ -232,7 +232,29 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   memory.
   Before any WebAssembly engine API sees package bytes, the future trusted host
   must reject every start section and enforce the exact per-module declaration,
-  segment, memory, and table ceilings in `docs/PLUGINS.md`. Validation,
+  segment, memory, and table ceilings in `docs/PLUGINS.md`. Compressed function
+  signatures and code-local groups are charged by expanded multiplicity,
+  including each defined function's reused parameter vector; raw declarations,
+  expanded signatures, expanded runtime slots, and their combined checked sum
+  are all bounded before engine work. Unsupported value types/features fail at
+  this parser boundary.
+  The imported memory is fixed-size from 258 through 1,025 pages. Its first
+  8 MiB is reserved for passive-data materialization, the next 8 MiB for the
+  module stack/heap, page 256 for host parameters or migration input, and pages
+  257 onward for host pixels or migration output. Active data segments are
+  forbidden before instantiation; the only accepted initialization is bounded
+  lazy `memory.init`/`data.drop` from consistent passive data into the first
+  region during a watchdog-protected call. Both imported limits and both host
+  memory limits equal the manifest request, so growth is impossible. A request
+  of `P` pages supports at most
+  `(P - 257) * 16,384` RGBA pixels; the maximum is 48 MiB or
+  12,582,912 pixels at 1,025 pages. A larger compositor surface remains valid
+  project/render input but makes that plugin stage preview-unavailable and
+  export-blocking under the existing explicit bypass policy. The host refreshes
+  and validates its fixed I/O regions for every call; these regions constrain
+  conforming module allocation but do not pretend to isolate an untrusted
+  module from its own imported memory.
+  Validation,
   compilation, and instantiation then run in a fresh, disposable activation-
   candidate worker under one trusted-parent wall-clock deadline that never
   resets and expires after five seconds. A ready candidate becomes the sandbox's

@@ -214,24 +214,52 @@ Package budgets for the first implementation are:
 | `signature.json` | 64 KiB |
 | WebAssembly module | 32 MiB |
 | WebAssembly imports | exactly 1: the host-supplied memory |
-| WebAssembly types | 1,024 type entries |
+| WebAssembly types | 1,024 type entries; at most 128 parameters and 16 results per function type |
+| WebAssembly signature fields | 16,384 aggregate expanded function-type parameters + results |
 | WebAssembly functions | 8,192 total across imported + defined |
+| WebAssembly code locals | 2,048 expanded locals per defined function and 16,384 per module; parameters + locals are at most 2,048 per defined function and 16,384 across defined functions |
 | WebAssembly tables | 16 total across imported + defined; 4,096 aggregate initial and maximum entries |
-| WebAssembly memories | 1 total across imported + defined: the host memory; 1,025 pages / 64 MiB + 64 KiB |
+| WebAssembly memories | 1 total across imported + defined: fixed-size host memory; manifest request 258-1,025 pages / 16 MiB + 128 KiB through 64 MiB + 64 KiB |
 | WebAssembly globals | 2,048 total across imported + defined |
 | WebAssembly exports | 8,192 |
 | WebAssembly element segments | 1,024 segments; 4,096 aggregate elements |
-| WebAssembly data segments | 1,024 segments; 8 MiB aggregate payload bytes |
+| WebAssembly data segments | 1,024 passive segments only; 8 MiB aggregate payload bytes; active segments forbidden; exact data-count section required when nonempty |
 | WebAssembly tags | 0 |
-| WebAssembly declarations | 16,384 aggregate section entries |
+| WebAssembly declarations | 16,384 aggregate raw section entries; 32,768 combined raw-entry + expanded-signature-field + defined-function-runtime-slot charge |
 | WebAssembly start section | forbidden |
 
 The declaration total is the sum of the raw vector counts in the type, import,
 function, table, memory, global, export, element, data, and tag sections. An
 import therefore contributes one import entry rather than being counted again
-as a defined declaration. Element initializers and data payload bytes have the
-separate aggregate ceilings above. The trusted host's byte-level policy parser
-checks every WebAssembly ceiling and rejects any start section before calling
+as a defined declaration. The expanded-signature total adds every parameter and
+result vector length across the type section. The expanded-local total adds each
+code-section local-group multiplicity, not merely the number of groups. Raw
+entries remain capped at 16,384, signatures and locals retain their separate
+16,384 ceilings. The defined-function runtime-slot total adds each function's
+referenced type parameter count again, plus its expanded code locals, so reusing
+one compressed signature cannot evade the module budget; it is capped at 16,384.
+Checked addition must also keep
+`raw entries + signature fields + defined-function runtime slots` at or below
+32,768. Element
+initializers and data payload bytes have the separate aggregate ceilings above.
+
+Before iterating or allocating, the trusted-parent byte parser canonical-decodes
+each type vector, function body size, local-group vector count, and local
+multiplicity and proves that it fits the exact enclosing section/body bytes. It
+requires the code-body count to equal the defined-function count, rejects a
+zero-sized local group, and checked-adds each positive multiplicity against the
+per-function, module, and combined ceilings. It resolves every defined
+function's type index and requires parameters plus code locals to stay within
+2,048 value slots per function and 16,384 across all defined functions. Function
+imports are rejected by the earlier exactly-one-memory import gate before this
+accounting. Function parameters, results, and locals may use only `i32`,
+`i64`, `f32`, `f64`, or `v128`; tables use the separately bounded `funcref`
+contract. Unsupported reference, GC, exception, component-model, or other value
+types/features fail policy before an engine call. No declared count may drive an
+allocation before these byte-containment and policy checks succeed.
+
+The trusted host checks every WebAssembly ceiling, rejects every active data
+segment and start section, and accepts only passive data segments before calling
 `WebAssembly.validate()`, `WebAssembly.compile()`, or
 `WebAssembly.instantiate()`. Every other package limit is checked before the
 corresponding allocation. Decompression tracks the running expanded total and
@@ -242,10 +270,12 @@ browser-engine limit. A maximum-size version-1 manifest can reference 4,160
 render/migration entrypoint names (64 contributions, each with one render and up
 to 64 migration declarations); 8,192 function/export entries leave room for
 internal helpers while the 16,384 declaration total prevents all per-kind maxima
-from stacking. The 4,096 element ceiling equals the complete table-entry budget,
-and the 8 MiB data payload ceiling is one quarter of the already bounded module.
-These are version-1 policy choices, not ambient capabilities or promises that a
-module below every ceiling will be accepted.
+from stacking. The 32,768 combined charge prevents compressed signatures or
+locals, including signature reuse across many defined functions, from bypassing
+that raw-entry bound. The 4,096 element ceiling equals the complete table-entry
+budget, and the 8 MiB passive-data payload ceiling is one quarter of the already
+bounded module. These are version-1 policy choices, not ambient capabilities or
+promises that a module below every ceiling will be accepted.
 
 ### Signature envelope
 
@@ -429,13 +459,42 @@ ABI contract is:
 
 - the module imports exactly one non-shared memory named
   `myrelith.memory` and no functions, globals, tables, tags, or other memories;
-- the module defines no additional memory. Its declared maximum is present and
-  no greater than both the manifest request and the host's 1,025-page ceiling;
-- canonical render parameters occupy at most 65,536 bytes. The host always
-  reserves one complete 64 KiB page beyond the RGBA region. A smaller manifest
-  memory request makes frames that do not fit unavailable with an explicit
-  reason; the 1,025-page ceiling lets the legal 16,777,216-pixel maximum frame
-  and its parameter block fit simultaneously;
+- the module defines no additional memory. For manifest request `P`, its import
+  declares both minimum and maximum exactly equal to `P`, and the host constructs
+  `myrelith.memory` with `initial == maximum == P`. Version 1
+  accepts only `258 <= P <= 1,025`, so `memory.grow` cannot blur region ownership;
+- linear memory uses this fixed, non-overlapping byte map:
+
+  | Owner/use | Pages | Byte range |
+  | --- | ---: | --- |
+  | Module passive-data materialization | 0-127 | `[0x00000000, 0x00800000)` (8 MiB) |
+  | Module stack/heap/allocator workspace | 128-255 | `[0x00800000, 0x01000000)` (8 MiB) |
+  | Host canonical parameters / migration input | 256 | `[0x01000000, 0x01010000)` (64 KiB) |
+  | Host RGBA pixels / migration output | 257 through `P - 1` | `[0x01010000, P * 65,536)` |
+
+  Canonical render parameters occupy at most 65,536 bytes at the fixed parameter
+  pointer. The host passes the fixed pixel pointer `0x01010000`. A request of
+  `P` pages supports exactly `(P - 257) * 16,384` RGBA pixels. At 1,025 pages
+  the pixel region is exactly 48 MiB, or 12,582,912 pixels; frames above that
+  version-1 plugin limit are explicitly unavailable even when the ordinary
+  compositor can render them;
+- every data segment is passive. Aggregate payload remains capped at 8 MiB. The
+  standard data-count section plus bulk-memory `memory.init` and `data.drop`
+  forms are the only accepted data-initialization mechanism; the binary parser
+  requires the data-count value to equal the data-section count, canonical and
+  in-range static segment indexes, and the exact allowed opcodes/features before
+  engine work. The engine still bounds-checks each dynamic `memory.init` source
+  and destination. During an already watchdog-bounded render or migration call,
+  a conforming module lazily copies passive bytes only into
+  `[0x00000000, 0x00800000)` and then drops them. No package code runs before
+  that call. Its stack pointer, heap, and allocator outputs remain within pages
+  128-255. Active data segments are
+  rejected from raw bytes before engine work, so instantiation cannot overwrite
+  host I/O. These partitions are a conforming module-private ABI convention,
+  not an isolation boundary inside the already-untrusted module. The module can
+  corrupt its own imported memory, so the host refreshes parameters and pixels
+  before every call, copies/validates only the exact successful host-owned
+  output afterward, and clears host I/O ranges before reuse;
 - the module defines at most 16 internal tables. Every table declares a maximum,
   each table's maximum is at most 4,096 entries, and both the sum of all declared
   initial sizes and the sum of all declared maxima are at most 4,096 entries.
@@ -446,10 +505,13 @@ ABI contract is:
   instantiation, so package code cannot run synchronously during activation;
 - the parser enforces the package-budget ceilings for types, imported plus
   defined functions/tables/memories/globals, exports, element segments and
-  initializers, data segments and payload bytes, imports, tags, and aggregate
-  declarations before any engine call. Counts use checked addition and reject
-  an overflow, a noncanonical encoding, a duplicate singleton section, or a
-  section whose declared vector cannot fit inside its exact byte range;
+  initializers, passive data segments and payload bytes, imports, tags, expanded
+  function-type fields, expanded code locals, defined-function runtime slots,
+  raw declarations, and the combined declaration-resource charge before any
+  engine call. Counts use checked
+  addition and reject an overflow, a noncanonical encoding, a duplicate
+  singleton section, a function/code count mismatch, or a section/body whose
+  declared vector cannot fit inside its exact byte range;
 - threads, shared memory, relaxed SIMD, component-model imports, WASI, and JS
   builtins are rejected;
 - every contribution names a package-unique render entrypoint. Invoking that
@@ -457,12 +519,18 @@ ABI contract is:
   selector is copied into untrusted memory;
 - each contribution render entrypoint is an exported function with signature
   `(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32) -> i32`;
-- arguments are pixel pointer, width, height, stride, frame low/high 32-bit
-  words, frame-rate numerator/denominator, UTF-8 canonical-parameter pointer,
-  and parameter byte length;
+- arguments are the fixed pixel pointer `0x01010000`, width, height, stride,
+  frame low/high 32-bit words, frame-rate numerator/denominator, UTF-8 canonical-
+  parameter pointer, and parameter byte length. The parameter pointer is always
+  `0x01000000`;
 - the pixel region is exactly `stride * height` bytes, `stride` is exactly
-  `width * 4`, and the ranges must be non-overlapping and inside imported
-  memory;
+  `width * 4`, `width * height` does not exceed the `P`-page capacity above,
+  and every checked range stays inside fixed-size imported memory;
+- a larger surface that satisfies Myrelith's ordinary render-surface budget
+  remains a valid project. When it exceeds the selected package's plugin-memory
+  capacity, preview reports that plugin stage unavailable and visibly bypasses
+  it; export blocks by default and uses the existing explicit reviewed-bypass
+  flow. The plugin ceiling never narrows project parsing or built-in rendering;
 - input and successful output pixels both use the permission's exact
   display-referred IEC sRGB/Rec.709-primary, D65, nonlinear sRGB-OETF encoding
   with straight/unassociated 8-bit alpha. The host owns conversion before
@@ -478,12 +546,13 @@ ABI contract is:
   animated migration requires a future, separately versioned contract;
 - each declared migration entrypoint is an exported function with signature
   `(i32, i32, i32, i32, i32, i32) -> i32`. Its arguments are canonical input
-  pointer/length, zeroed output pointer/capacity, and declared from/to versions;
-  input and output are non-overlapping, each is capped at 65,536 bytes, a
-  positive return is the exact output length, and zero or a negative value is a
-  migration failure. A contribution with migrations must request at least two
-  memory pages, and a migration export name must differ from every render export
-  in the package;
+  pointer/length, zeroed output pointer/capacity, and declared from/to versions.
+  Input uses `0x01000000` and output uses `0x01010000`; no frame call is active
+  concurrently. The fixed regions are non-overlapping, each is capped at 65,536
+  bytes, a positive return is the exact output length, and zero or a negative
+  value is a migration failure. The universal 258-page manifest minimum makes
+  both pages available, and a migration export name must differ from every
+  render export in the package;
 - every step output, including a non-final output, must be strict UTF-8 JSON
   Canonicalization Scheme bytes for one object. The host rejects a byte-order
   mark, malformed UTF-8, duplicate keys before parse, or bytes that differ from
@@ -767,8 +836,15 @@ green:
 1. byte-level ZIP, canonical JSON, integrity, Ed25519, trust, update, rollback,
    and revocation fixtures including hostile archives;
 2. WebAssembly binary policy parser and exact ABI fixtures across supported
-   browsers, including start-section rejection and every per-kind, payload, and
-   aggregate declaration boundary in the package-budget table;
+   browsers, including start-section and active-data-segment rejection; fixed
+   memory-offset/capacity arithmetic and exact-cap-plus-one behavior; passive
+   data-count/segment/index/range consistency plus allowed `memory.init`/
+   `data.drop` behavior; exact signature-field and code-local boundaries;
+   near-`u32` local multiplicities; zero local groups;
+   repeated type-index parameter amplification; checked per-function/module/
+   combined overflow; truncated body/local vectors; function/code count
+   mismatch; and every other per-kind, payload, and aggregate declaration
+   boundary in the package-budget table;
 3. CSP/opaque-origin negative probes for network, storage, navigation, DOM, and
    worker escape attempts;
 4. activation-worker promotion, five-second parent deadline, compile/instantiate

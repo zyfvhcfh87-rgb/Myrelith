@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { EFFECT_STACK_LIMITS } from './effectBounds'
+import { RENDER_SURFACE_BYTES_PER_PIXEL } from './renderSurfaceBudget'
 import {
   PLUGIN_HOST_PROFILE_V1,
   PLUGIN_MANIFEST_LIMITS,
@@ -248,13 +249,65 @@ describe('plugin manifest', () => {
     },
   )
 
-  test('reserves one parameter page beyond the largest legal RGBA frame', () => {
+  test('pins the fixed module-owned and host I/O memory regions', () => {
+    expect(PLUGIN_MANIFEST_LIMITS.wasmPageBytes).toBe(65_536)
+    expect(PLUGIN_MANIFEST_LIMITS.moduleDataRegionBytes).toBe(8 * 1024 * 1024)
+    expect(PLUGIN_MANIFEST_LIMITS.moduleWorkspaceRegionBytes).toBe(8 * 1024 * 1024)
     expect(PLUGIN_MANIFEST_LIMITS.maxCanonicalParameterBytes).toBe(65_536)
+    expect(PLUGIN_MANIFEST_LIMITS.parameterRegionOffsetBytes).toBe(16 * 1024 * 1024)
+    expect(PLUGIN_MANIFEST_LIMITS.pixelRegionOffsetBytes).toBe(16 * 1024 * 1024 + 65_536)
+    expect(PLUGIN_MANIFEST_LIMITS.pixelRegionOffsetPages).toBe(257)
+    expect(PLUGIN_MANIFEST_LIMITS.minWasmMemoryPages).toBe(258)
+    expect(PLUGIN_MANIFEST_LIMITS.minWasmMemoryBytes).toBe(16 * 1024 * 1024 + 128 * 1024)
     expect(PLUGIN_MANIFEST_LIMITS.maxWasmMemoryPages).toBe(1_025)
+    expect(PLUGIN_MANIFEST_LIMITS.maxWasmMemoryBytes).toBe(64 * 1024 * 1024 + 65_536)
+    expect(PLUGIN_MANIFEST_LIMITS.maxPixelRegionBytes).toBe(48 * 1024 * 1024)
+    expect(PLUGIN_MANIFEST_LIMITS.maxPluginFrameBytes).toBe(48 * 1024 * 1024)
+    expect(PLUGIN_MANIFEST_LIMITS.maxPluginFramePixels).toBe(12_582_912)
+    expect(PLUGIN_MANIFEST_LIMITS.pluginFramePixelsPerMemoryPage).toBe(16_384)
+    expect(
+      (PLUGIN_MANIFEST_LIMITS.maxWasmMemoryPages
+        - PLUGIN_MANIFEST_LIMITS.pixelRegionOffsetPages)
+        * PLUGIN_MANIFEST_LIMITS.pluginFramePixelsPerMemoryPage,
+    ).toBe(PLUGIN_MANIFEST_LIMITS.maxPluginFramePixels)
+    expect(
+      PLUGIN_MANIFEST_LIMITS.maxPluginFramePixels
+        * RENDER_SURFACE_BYTES_PER_PIXEL,
+    ).toBe(PLUGIN_MANIFEST_LIMITS.maxPluginFrameBytes)
+    expect(
+      (PLUGIN_MANIFEST_LIMITS.maxPluginFramePixels + 1)
+        * RENDER_SURFACE_BYTES_PER_PIXEL,
+    ).toBe(PLUGIN_MANIFEST_LIMITS.maxPluginFrameBytes + 4)
+
     const value = manifest()
     const runtime = value.runtime as Record<string, unknown>
     runtime.memoryMaximumPages = PLUGIN_MANIFEST_LIMITS.maxWasmMemoryPages
     expect(validatePluginManifest(value)).toMatchObject({ ok: true })
+  })
+
+  test('rejects memory requests below the fixed-layout minimum', () => {
+    const value = manifest()
+    const runtime = value.runtime as Record<string, unknown>
+    runtime.memoryMaximumPages = PLUGIN_MANIFEST_LIMITS.minWasmMemoryPages - 1
+    expect(validatePluginManifest(value)).toMatchObject({
+      ok: false,
+      problem: {
+        path: '$.runtime.memoryMaximumPages',
+        message: `must be a safe integer between ${PLUGIN_MANIFEST_LIMITS.minWasmMemoryPages} and ${PLUGIN_MANIFEST_LIMITS.maxWasmMemoryPages}`,
+      },
+    })
+  })
+
+  test('the minimum memory request exposes exactly one RGBA page', () => {
+    const value = manifest()
+    const runtime = value.runtime as Record<string, unknown>
+    runtime.memoryMaximumPages = PLUGIN_MANIFEST_LIMITS.minWasmMemoryPages
+    expect(validatePluginManifest(value)).toMatchObject({ ok: true })
+    expect(
+      (PLUGIN_MANIFEST_LIMITS.minWasmMemoryPages
+        - PLUGIN_MANIFEST_LIMITS.pixelRegionOffsetPages)
+        * PLUGIN_MANIFEST_LIMITS.pluginFramePixelsPerMemoryPage,
+    ).toBe(16_384)
   })
 
   test('validates explicit descriptor migration chains and entrypoints', () => {
@@ -311,7 +364,7 @@ describe('plugin manifest', () => {
     const migrations = contribution.migrations as Record<string, unknown>[]
     migrations[0].entrypoint = 'migrate_sparkle_v1_to_v2'
     const runtime = value.runtime as Record<string, unknown>
-    runtime.memoryMaximumPages = 1
+    runtime.memoryMaximumPages = PLUGIN_MANIFEST_LIMITS.minWasmMemoryPages - 1
     expect(validatePluginManifest(value)).toMatchObject({
       ok: false,
       problem: { path: '$.runtime.memoryMaximumPages' },

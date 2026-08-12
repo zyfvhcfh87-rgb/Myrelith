@@ -3557,3 +3557,34 @@ acceptance claims.
 - [x] Keep the change design-only except for pure manifest validation/tests;
   Issue #77 retains runtime implementation and hostile stateful-module browser
   fixtures, so browser verification remains intentionally not applicable.
+
+## Part 10c / issue #76 - PR #112 memory-layout and expanded-declaration follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Replace the infeasible pixel-plus-parameter-only calculation with one
+  fixed 258-to-1,025-page v1 layout: 8 MiB passive data, 8 MiB stack/heap,
+  64 KiB host parameters/migration input, and all remaining pages for host
+  pixels/migration output. Require imported and host initial/maximum limits to
+  equal the manifest request so memory cannot grow.
+- [x] Expose and test the pure manifest arithmetic: page 257 pixel offset,
+  `(P - 257) * 16,384` RGBA-pixel capacity, 48 MiB/12,582,912 pixels at 1,025
+  pages, exact 258-page acceptance, 257-page rejection, and max-plus-one bytes.
+- [x] Reject active data segments before engine work. Require exact data-count
+  consistency and permit only passive lazy `memory.init`/`data.drop` into the
+  module's first 8 MiB during a watchdog-bounded call; retain a separate 8 MiB
+  allocator workspace and refresh/validate host-owned I/O every call.
+- [x] Expand compressed function signatures and code-local group multiplicities
+  before allocation. Enforce 128 parameters/16 results per type, 16,384
+  aggregate signature fields, 2,048 locals per function/16,384 per module,
+  2,048 parameters-plus-locals per function/16,384 after repeated type reuse,
+  and a checked 32,768 raw-entry/signature/runtime-slot combined charge.
+- [x] Keep larger ordinary compositor surfaces valid while making an
+  insufficient plugin explicitly preview-unavailable and export-blocking under
+  the reviewed bypass flow. Keep implementation of the parser/runtime and all
+  hostile binary/browser fixtures gated on Issue #77.
+- [x] Pass 119 focused manifest/project/effect/architecture tests across five
+  files, all 2,351 Vitest cases across 170 files, all 16 benchmark-runner checks,
+  production build/typecheck, warning-free oxlint, clean diff checks, and the
+  production high-severity audit with 0 vulnerabilities. Keep browser
+  verification intentionally not applicable to this non-executing follow-up.
