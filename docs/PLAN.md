@@ -3858,3 +3858,23 @@ acceptance claims.
   occlusion loss at frame 18 after frame 17, typed overlap rejection,
   cancellation, exact worker/frame/OPFS parity, zero console problems, and a
   released port.
+
+## Milestone 5 Part 10a / issue #44 - worker-readiness review hardening
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Require an explicit matching `probe`/`ready` handshake before declaring
+  dedicated module-worker support; fail closed on async load/message errors,
+  synchronous post failure, or a bounded five-second timeout.
+- [x] Thread admitted-run cancellation through readiness probing; terminate and
+  clean the pending worker immediately, release shared admission, settle every
+  race once, and validate unknown messages at the worker boundary.
+- [x] Pass 32 focused research tests, all 2,336 Vitest cases across 172 files,
+  all 16 benchmark-runner checks, production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities.
+- [x] Rerun artifact schema 3 / `issue-44-motion-analysis-v3` in real Chromium
+  on strict port 41844 against exact clean implementation commit
+  `ac555ca6a085f4093b9490107cddfaa79b961c71`: successful worker readiness,
+  independent stabilization/point/box go, occlusion loss at frame 18 after frame
+  17, cancellation, typed overlap rejection, exact worker/frame/OPFS parity,
+  zero console problems, and a released port.

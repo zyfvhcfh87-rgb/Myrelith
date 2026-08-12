@@ -82,6 +82,12 @@ controller acquires its single shared admission slot before any support probe or
 scheduler construction and rejects an overlapping invocation with the typed
 `resource-unavailable` result. Separate callers therefore cannot each create a
 private one-job scheduler and exceed the controller-wide worker/decoder envelope.
+Dedicated module-worker support is declared only after the loaded worker answers
+an explicit version-local `probe` request with its matching `ready` reply. An
+asynchronous module-load error, message failure, synchronous post failure, or
+five-second timeout reports the worker unsupported and terminates the probe.
+An admitted run also threads cancellation through readiness probing, so abort
+terminates a pending probe immediately and releases the shared admission slot.
 OPFS capability probing also treats removal of its temporary file as part of the
 support contract: a failed `removeEntry()` resolves to a cleanup-specific
 unsupported result rather than escaping the probe, starting analysis, or being
@@ -323,6 +329,21 @@ probes removed 1/1, console problems remained zero, and port 41844 was released.
 The cleanup-failure and canonical-bound negative paths are covered by the 28
 focused tests. The visual evidence SHA-256 is
 `7B35B9668FE5096F570C868FAAB3CF3BDDBC200B078E2909462107F5A57B03D5`.
+
+The worker-readiness review rerun retained artifact schema 3 /
+`issue-44-motion-analysis-v3` and captured exact clean implementation commit
+`ac555ca6a085f4093b9490107cddfaa79b961c71` with fingerprint
+`sha256:c8ca431438e60d0bae33cdd3df7dc23a2dfd10865284410953c07f60b7455e52`.
+The real module worker completed its explicit readiness handshake before the
+support result became true. Point, box, and stabilization independently reported
+`go`; occlusion failed on frame 18 after frame 17. Analysis completed in 207.5
+ms, cancellation settled in 46.3 ms, and overlapping admission remained typed
+`resource-unavailable`. Workers drained 2/2, support frames closed 1/1, OPFS
+probes removed 1/1, console problems remained zero, and port 41844 was released.
+Async load failure, bounded timeout, late-event single settlement, and
+abort-during-readiness are covered by the 32 focused tests. The visual evidence
+SHA-256 is
+`202AD63A8E7F035D87C826874D6FB2CCAA4D73F73BB1F1E4932A4BBB9115F07F`.
 
 ## Final boundaries
 

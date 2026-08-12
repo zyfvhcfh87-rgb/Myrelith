@@ -3712,3 +3712,30 @@ surface; it is not a second zoom and never enters document history.
   removed 1/1, console problems stayed zero, and the port was released. The
   ignored screenshot SHA-256 is
   `7B35B9668FE5096F570C868FAAB3CF3BDDBC200B078E2909462107F5A57B03D5`.
+
+## Milestone 5 Part 10a / issue #44 - worker-readiness review hardening (2026-08-12)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- Dedicated module-worker support now requires an explicit matching
+  `probe`/`ready` handshake after the worker graph loads. Async load or message
+  failure, synchronous post failure, and a bounded five-second non-response all
+  report the worker unsupported and terminate the disposable probe.
+- The admitted run threads its abort signal through readiness probing. Abort
+  terminates the pending worker immediately, clears the timeout/listeners, and
+  releases controller-wide admission. Every terminal race settles once; the
+  worker also ignores malformed structured-clone messages at its boundary.
+- The gate passed 32 focused research tests, all 2,336 Vitest cases across 172
+  files, all 16 benchmark-runner checks, production build/typecheck, oxlint,
+  clean diff checks, and the production audit with 0 vulnerabilities. The build
+  retained only the established large-chunk advisory.
+- Real Chromium reran artifact schema 3 / `issue-44-motion-analysis-v3` on
+  strict port 41844 against exact clean implementation commit
+  `ac555ca6a085f4093b9490107cddfaa79b961c71`, fingerprint
+  `sha256:c8ca431438e60d0bae33cdd3df7dc23a2dfd10865284410953c07f60b7455e52`.
+  The module-worker readiness handshake passed; analysis completed in 207.5 ms
+  and cancellation settled in 46.3 ms. Point, box, and stabilization reported
+  go, occlusion failed on frame 18 after frame 17, workers drained 2/2, support
+  frames closed 1/1, OPFS probes removed 1/1, console problems stayed zero, and
+  the port was released. The ignored screenshot SHA-256 is
+  `202AD63A8E7F035D87C826874D6FB2CCAA4D73F73BB1F1E4932A4BBB9115F07F`.
