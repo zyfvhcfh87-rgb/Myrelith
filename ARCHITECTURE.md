@@ -224,6 +224,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   and preserve its original descriptor plus complete animation. Existing keys
   that happen to fit new ranges are not proof of schema or unit compatibility;
   animated migration requires a future, separately versioned contract.
+  Before any WebAssembly engine API sees package bytes, the future trusted host
+  must reject every start section and enforce the exact per-module declaration,
+  segment, memory, and table ceilings in `docs/PLUGINS.md`. Validation,
+  compilation, and instantiation then run in a fresh disposable activation-candidate worker
+  under one non-resetting five-second trusted-parent wall-clock deadline. A ready
+  candidate becomes the sandbox's dedicated runtime worker; every timeout or
+  failure destroys the candidate and sandbox so activation cannot block the UI.
   Plugin packages, sandboxes, ports, workers, watchdogs, grants, and revocations
   remain future app-owned Issue #77 resources. Projects may retain only bounded
   namespaced effect descriptors; package bytes, URLs, trust, grants, and runtime

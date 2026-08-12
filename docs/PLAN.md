@@ -3490,3 +3490,26 @@ acceptance claims.
   Issue #77; this follow-up adds no production plugin runtime or browser surface.
 - [x] Pass all 20 focused plugin-manifest tests, the test wrapper's 16 benchmark-
   runner checks, and `git diff --check`.
+
+## Part 10c / issue #76 - PR #112 activation and declaration-budget follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Close the exact-head Codex start-function P2 by rejecting every WebAssembly
+  start section during trusted-parent byte parsing, before validation,
+  compilation, or instantiation can execute package code.
+- [x] Run engine validation, asynchronous compilation, and instantiation in a
+  fresh disposable activation-candidate worker under one non-resetting five-second parent
+  wall-clock deadline. Promote it to the dedicated runtime worker only after an
+  instance-ready acknowledgement; otherwise terminate it and the sandbox.
+- [x] Close the exact-head Codex declaration-bomb P2 with explicit pre-engine
+  ceilings: 1,024 types; 8,192 imported-plus-defined functions; 16 tables/4,096
+  aggregate entries; one imported memory/1,025 pages; 2,048 globals; 8,192
+  exports; 1,024 element segments/4,096 elements; 1,024 data segments/8 MiB;
+  exactly one import; zero tags; and 16,384 aggregate declaration entries.
+- [x] Keep this follow-up design-only and non-executing. Issue #77 retains the
+  byte parser, activation worker, browser deadlines, and hostile-module boundary
+  fixtures.
+- [x] Pass 111 focused manifest/project/effect/architecture tests across five
+  files, the test wrapper's 16 benchmark-runner checks, and `git diff --check`;
+  keep browser verification intentionally not applicable.

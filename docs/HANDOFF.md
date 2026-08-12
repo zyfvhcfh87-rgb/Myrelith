@@ -3248,3 +3248,30 @@ surface; it is not a second zoom and never enters document history.
   parser, canonical byte checks, migration runtime, and hostile fixtures.
 - Validation passed all 20 focused plugin-manifest tests, the test wrapper's 16
   benchmark-runner checks, and `git diff --check`.
+
+## Part 10c issue #76 - PR #112 activation and declaration-budget follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found two remaining pre-runtime availability gaps: a
+  start function could run synchronously during instantiation before a call
+  watchdog existed, and the 32 MiB module cap did not bound cheap, high-count
+  declarations or segment payload expansion before compilation.
+- The trusted-parent byte policy now rejects every start section before any
+  WebAssembly engine call. A fresh disposable activation-candidate worker owns validation,
+  asynchronous compilation, and instantiation under one non-resetting five-
+  second parent wall-clock deadline; success promotes that worker to the
+  sandbox's dedicated runtime worker, while timeout/failure destroys it and the
+  sandbox without blocking the UI.
+- The first implementation now caps each module at 1,024 types; 8,192 imported
+  plus defined functions; 16 tables with 4,096 aggregate entries; one imported
+  memory with a 1,025-page maximum; 2,048 globals; 8,192 exports; 1,024 element
+  segments/4,096 elements; 1,024 data segments/8 MiB payload; exactly one import;
+  zero tags; and 16,384 aggregate declaration entries. Checked byte parsing
+  enforces every count, sum, and payload limit before validation or compilation.
+- This remains a design-only Issue #76 clarification. No package parser,
+  WebAssembly activation path, sandbox, worker, or browser-visible behavior was
+  added; Issue #77 owns implementation and hostile cross-browser fixtures.
+- Validation passed 111 focused manifest/project/effect/architecture tests
+  across five files, the test wrapper's 16 benchmark-runner checks, and
+  `git diff --check`. Browser verification remains intentionally not applicable.

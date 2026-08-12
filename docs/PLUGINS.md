@@ -211,11 +211,39 @@ Package budgets for the first implementation are:
 | `manifest.json` | 64 KiB |
 | `signature.json` | 64 KiB |
 | WebAssembly module | 32 MiB |
-| WebAssembly memory | 1,025 pages / 64 MiB + 64 KiB |
-| WebAssembly tables | 16 total; 4,096 aggregate initial and maximum entries |
+| WebAssembly imports | exactly 1: the host-supplied memory |
+| WebAssembly types | 1,024 type entries |
+| WebAssembly functions | 8,192 total across imported + defined |
+| WebAssembly tables | 16 total across imported + defined; 4,096 aggregate initial and maximum entries |
+| WebAssembly memories | 1 total across imported + defined: the host memory; 1,025 pages / 64 MiB + 64 KiB |
+| WebAssembly globals | 2,048 total across imported + defined |
+| WebAssembly exports | 8,192 |
+| WebAssembly element segments | 1,024 segments; 4,096 aggregate elements |
+| WebAssembly data segments | 1,024 segments; 8 MiB aggregate payload bytes |
+| WebAssembly tags | 0 |
+| WebAssembly declarations | 16,384 aggregate section entries |
+| WebAssembly start section | forbidden |
 
-Every limit is checked before the corresponding allocation. Decompression
-tracks the running expanded total and aborts on the first overflow.
+The declaration total is the sum of the raw vector counts in the type, import,
+function, table, memory, global, export, element, data, and tag sections. An
+import therefore contributes one import entry rather than being counted again
+as a defined declaration. Element initializers and data payload bytes have the
+separate aggregate ceilings above. The trusted host's byte-level policy parser
+checks every WebAssembly ceiling and rejects any start section before calling
+`WebAssembly.validate()`, `WebAssembly.compile()`, or
+`WebAssembly.instantiate()`. Every other package limit is checked before the
+corresponding allocation. Decompression tracks the running expanded total and
+aborts on the first overflow.
+
+The numbers leave bounded implementation headroom without inheriting a
+browser-engine limit. A maximum-size version-1 manifest can reference 4,160
+render/migration entrypoint names (64 contributions, each with one render and up
+to 64 migration declarations); 8,192 function/export entries leave room for
+internal helpers while the 16,384 declaration total prevents all per-kind maxima
+from stacking. The 4,096 element ceiling equals the complete table-entry budget,
+and the 8 MiB data payload ceiling is one quarter of the already bounded module.
+These are version-1 policy choices, not ambient capabilities or promises that a
+module below every ceiling will be accepted.
 
 ### Signature envelope
 
@@ -394,6 +422,15 @@ ABI contract is:
   initial sizes and the sum of all declared maxima are at most 4,096 entries.
   The binary-policy parser checks these count and aggregate limits before
   compilation or instantiation;
+- the module contains no start section. The trusted host rejects its presence
+  from the raw section stream before any engine validation, compilation, or
+  instantiation, so package code cannot run synchronously during activation;
+- the parser enforces the package-budget ceilings for types, imported plus
+  defined functions/tables/memories/globals, exports, element segments and
+  initializers, data segments and payload bytes, imports, tags, and aggregate
+  declarations before any engine call. Counts use checked addition and reject
+  an overflow, a noncanonical encoding, a duplicate singleton section, or a
+  section whose declared vector cannot fit inside its exact byte range;
 - threads, shared memory, relaxed SIMD, component-model imports, WASI, and JS
   builtins are rejected;
 - every contribution names a package-unique render entrypoint. Invoking that
@@ -452,11 +489,10 @@ ABI contract is:
 - no pointer, view, buffer, or module instance crosses into Zustand, React, a
   project file, or another plugin instance.
 
-The module binary must be parsed before instantiation to enforce imports,
-exports, features, section counts/sizes, memory/table maxima, and entrypoint
-types. `WebAssembly.validate()` alone is necessary but insufficient for policy.
-The WebAssembly standard explicitly permits embedder resource limits and
-module rejection; memory maxima are expressed in pages. See
+The module binary must pass the complete trusted-host byte policy before any
+WebAssembly engine API sees it. `WebAssembly.validate()` is necessary but
+insufficient for policy. The WebAssembly standard explicitly permits embedder
+resource limits and module rejection; memory maxima are expressed in pages. See
 [module memories](https://webassembly.github.io/spec/core/syntax/modules.html#memories)
 and [implementation limits](https://webassembly.github.io/spec/core/appendix/implementation.html).
 
@@ -487,9 +523,15 @@ base-uri 'none';
 form-action 'none';
 ```
 
-The broker creates one dedicated worker from host-authored bytes and passes the
-verified WebAssembly bytes and a private `MessagePort`. Package bytes are never
-interpreted as JavaScript. CSP `worker-src` governs worker loads and
+After the trusted parent has accepted the complete byte policy, the broker
+creates a fresh, disposable activation-candidate worker from host-authored bytes
+and passes the verified WebAssembly bytes and a private `MessagePort`. That
+worker performs `WebAssembly.validate()`, asynchronous compilation, and
+instantiation. It sends an instance-ready acknowledgement only after all three
+steps finish. On success the same worker becomes that sandbox's dedicated
+runtime worker, retaining sole ownership of the instance; on every failure or
+timeout the worker is terminated instead of being reused. Package bytes are
+never interpreted as JavaScript. CSP `worker-src` governs worker loads and
 `connect-src` is the fallback for connection-like fetch destinations under the
 [Content Security Policy specification](https://w3c.github.io/webappsec-csp/).
 
@@ -515,17 +557,23 @@ memory. Different plugins never share memory, ports, or workers.
 | Sandboxes | at most 8 resident; least-recently-used idle instance closes first |
 | Active calls | one per sandbox, at most 2 globally |
 | Queued calls | at most 32 globally; preview may coalesce latest-wins |
+| Validate/compile/instantiate activation | 5 seconds total wall-clock |
 | Configure/migrate call | 1 second watchdog |
 | Preview frame call | 500 ms watchdog |
 | Export frame call | 5 second watchdog |
 | Diagnostics | latest 100 events per plugin, 512 characters each |
 | Consecutive runtime failures | 3 disables that plugin for the editor session |
 
-The watchdog lives in the trusted parent realm. Timeout removes the iframe and
-terminates its worker; it never waits for plugin cooperation. Abort, project
-replacement, source replacement, effect removal, safe-mode entry, revocation,
-update, and app teardown close the sandbox and settle every pending request.
-Late messages fail generation/request matching and are ignored.
+Every deadline lives in the trusted parent realm. The activation deadline is
+one non-resetting wall-clock interval that starts before the candidate worker is
+created and ends only when its instance-ready acknowledgement is accepted; it
+therefore covers synchronous validation plus asynchronous compilation and
+instantiation without blocking the app/UI thread. Timeout removes the iframe
+and terminates its candidate or runtime worker; it never waits for plugin
+cooperation. Abort, project replacement, source replacement, effect removal,
+safe-mode entry, revocation, update, and app teardown close the sandbox and
+settle every pending request. Late messages fail generation/request matching
+and are ignored.
 
 Output must match the requested byte length and metadata exactly. A detached,
 short, oversized, malformed, late, duplicated, or wrong-generation response is
@@ -626,11 +674,12 @@ green:
 1. byte-level ZIP, canonical JSON, integrity, Ed25519, trust, update, rollback,
    and revocation fixtures including hostile archives;
 2. WebAssembly binary policy parser and exact ABI fixtures across supported
-   browsers, including table-count, aggregate-initial-entry, and aggregate-
-   maximum-entry boundaries;
+   browsers, including start-section rejection and every per-kind, payload, and
+   aggregate declaration boundary in the package-budget table;
 3. CSP/opaque-origin negative probes for network, storage, navigation, DOM, and
    worker escape attempts;
-4. watchdog, termination, queue, memory, project replacement, cancellation,
+4. activation-worker promotion, five-second parent deadline, compile/instantiate
+   termination, call watchdog, queue, memory, project replacement, cancellation,
    crash, late-message, and safe-mode tests;
 5. unknown/disabled/revoked descriptor round trips through save, recovery,
    undo/redo, reorder, remove, and migration rejection, including the version-1

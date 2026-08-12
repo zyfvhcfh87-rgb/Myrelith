@@ -37,7 +37,7 @@ failure containment.
 | Network privacy | No plugin-controlled request, socket, beacon, WebRTC channel, navigation, form, popup, or download is possible. |
 | Project truth | Projects contain only bounded primitive descriptors. They cannot carry code, grants, package locations, trust, revocation changes, or an instruction to install/execute. |
 | Preview/export integrity | Authored stack order is shared. Missing/failing plugins are visible; export aborts by default instead of silently dropping an effect. |
-| Editor availability | Package parsing, decompression, memory, queues, calls, diagnostics, and retries are bounded. A parent-realm watchdog can terminate a non-cooperative sandbox. |
+| Editor availability | Package parsing, decompression, WebAssembly declarations/activation, memory, queues, calls, diagnostics, and retries are bounded. Parent-realm deadlines can terminate a non-cooperative activation or runtime sandbox. |
 | Supply-chain identity | Every executed byte is covered by the verified package integrity table and Ed25519 signature; signer and digest changes cannot inherit trust/grants silently. |
 | Recovery | Missing, denied, revoked, incompatible, crashed, and safe-mode plugin descriptors remain ordered, editable, saveable, and recoverable without execution. |
 
@@ -73,10 +73,16 @@ failure containment.
 4. **Trust policy to compatibility registry.** A trusted package is still inert
    until required host API, permissions, contribution kind, descriptor version,
    and runtime features match exactly.
-5. **App window to opaque-origin broker.** The app sends only a verified module,
-   bounded metadata, and a private port. The broker has no same-origin access.
-6. **Broker to worker/WebAssembly.** Only host-authored JavaScript runs. The
-   untrusted module receives imported bounded memory but no callable imports.
+5. **App window to opaque-origin broker.** The app sends only verified module
+   bytes, bounded metadata, and a private port. The broker has no same-origin
+   access.
+6. **Broker to worker/WebAssembly.** Only host-authored JavaScript runs. Before
+   an engine API sees the module, trusted-parent byte validation rejects a start
+   section and enforces every declaration/payload ceiling. A fresh disposable
+   worker owns validation, compilation, and instantiation under one non-resetting
+   parent deadline; if ready it becomes the sandbox's runtime worker, otherwise
+   it is terminated. The untrusted module receives imported bounded memory but
+   no callable imports.
 7. **Compositor to plugin frame call.** The host copies one exact pixel buffer
    and minimal integer metadata, applies a watchdog, validates the complete
    response, and accepts no partial result.
@@ -93,8 +99,9 @@ failure containment.
   permission ranges, entry path, memory request, contribution/parameter schema;
 - signature envelope, public key, fingerprint text, integrity table, signature,
   digest, version ordering, and signer changes;
-- WebAssembly binary sections, features, imports, exports, memory/table limits,
-  code, traps, loops, output bytes, return values, and timing;
+- WebAssembly binary sections, declaration counts, start section, features,
+  imports, exports, memory/table limits, segment payloads, code, traps, loops,
+  output bytes, return values, and timing;
 - project effect descriptors, parameter primitives, versions, enable state,
   order, counts, string lengths, ids, and animation targets;
 - plugin-provided diagnostic codes/text and message ordering;
@@ -240,15 +247,24 @@ of frame access.
 unbounded memory, exploits an unsupported feature/parser discrepancy, creates
 huge tables, traps the engine, or exploits a browser JIT vulnerability.
 
-**Controls:** parse the binary policy before `WebAssembly.validate` and
-instantiation; allow one imported non-shared bounded memory and no other imports;
-reject additional memory, threads/shared memory, relaxed SIMD, WASI, unknown
-features, unexpected entrypoint types, and oversized sections. Permit at most 16
-defined tables; require a declared maximum for each; cap every individual maximum
-at 4,096 entries; and separately cap aggregate initial entries and aggregate
-declared maxima at 4,096. Enforce the count and both sums while parsing, before
-compilation or instantiation; instantiate only in the sandbox worker;
-runtime-probe and fail closed.
+**Controls:** the trusted parent parses the raw binary before
+`WebAssembly.validate`, compilation, or instantiation and rejects every start
+section. Allow exactly one import, the non-shared bounded host memory, and reject
+all function/global/table/tag imports plus defined memories and tags. Enforce at
+most 1,024 types; 8,192 imported-plus-defined functions; 16 imported-plus-defined
+tables; one imported-plus-defined memory; 2,048 imported-plus-defined globals;
+8,192 exports; 1,024 element segments and 4,096 aggregate element initializers;
+1,024 data segments and 8 MiB aggregate data payload; and 16,384 aggregate raw
+type/import/function/table/memory/global/export/element/data/tag section entries.
+Require every table maximum, cap each and both aggregate initial and maximum
+table entries at 4,096, and cap memory at 1,025 pages. Reject checked-addition
+overflow, noncanonical encodings, duplicate singleton sections, additional
+memory, threads/shared memory, relaxed SIMD, WASI, unknown features, unexpected
+entrypoint types, and oversized sections. A fresh disposable activation-candidate worker
+performs engine validation, asynchronous compilation, and instantiation under a
+non-resetting five-second trusted-parent wall-clock deadline. A successful
+candidate becomes the dedicated runtime worker; timeout or failure destroys the
+candidate and sandbox. Runtime-probe and fail closed.
 
 **Residual risk:** browser-engine vulnerabilities and binary-parser mistakes.
 Keeping browsers current and shipping an emergency local revocation are required.
@@ -256,21 +272,25 @@ Defense does not claim WebAssembly alone is a complete security boundary.
 
 ### Denial of service and resource exhaustion
 
-**Attacker story:** infinite loops, deep recursion, repeated traps, memory/table
-growth, huge output messages, queue floods, diagnostic spam, slow decompression,
-or crash/retry loops freeze the editor or exhaust memory.
+**Attacker story:** a start function or pathological compiler input monopolizes
+activation; huge declaration/segment vectors exhaust compiler memory; infinite
+loops, deep recursion, repeated traps, memory/table growth, huge output messages,
+queue floods, diagnostic spam, slow decompression, or crash/retry loops freeze
+the editor or exhaust memory.
 
-**Controls:** fixed package/manifest/module/memory limits plus the 16-table,
-4,096-aggregate-initial-entry, and 4,096-aggregate-maximum-entry module limits;
-one active call per sandbox, two globally, bounded/coalesced queue; trusted parent
-watchdog; whole-sandbox termination; exact response sizes; bounded diagnostics;
-three consecutive failures disable for the session; no background activation;
-safe mode and stale-activation sentinel.
+**Controls:** fixed package/manifest/module, declaration, segment, memory, and
+table limits; byte-level start-section rejection before engine work; a fresh
+activation-candidate worker under the non-resetting five-second trusted-parent
+deadline; one active call per sandbox, two globally, bounded/coalesced queue;
+trusted-parent call watchdogs; whole-sandbox termination; exact response sizes;
+bounded diagnostics; three consecutive failures disable for the session; no
+background activation; safe mode and stale-activation sentinel.
 
-**Residual risk:** termination may briefly consume a CPU core or renderer memory,
-and browser scheduling/process sharing can still degrade the tab. Preview
-deadlines trade effect availability for editor responsiveness. A sandbox escape
-is not required for a meaningful availability attack.
+**Residual risk:** terminating an activation or runtime worker may briefly
+consume a CPU core or renderer memory, and browser scheduling/process sharing can
+still degrade the tab. Activation and preview deadlines trade effect availability
+for editor responsiveness. A sandbox escape is not required for a meaningful
+availability attack.
 
 ### Message confusion, stale responses, and output corruption
 
