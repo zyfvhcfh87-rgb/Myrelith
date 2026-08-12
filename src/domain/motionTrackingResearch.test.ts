@@ -5,7 +5,9 @@ import {
   resolveClipAnimationAtFrame,
 } from './clipAnimation'
 import { MAX_CLIP_SCALE } from './clipInspector'
+import type { GrayFrame } from './motionAnalysis'
 import {
+  trackPointSequence,
   trackingSamplesToAnimationTracks,
   type TrackingAnimationSample,
   type TrackingAnimationTarget,
@@ -90,6 +92,62 @@ function targetVisibleCenter(
     y: transform.y + Math.sin(angle) * localX + Math.cos(angle) * localY,
   }
 }
+
+function translatedTexturedFrames(): readonly GrayFrame[] {
+  const width = 64
+  const height = 48
+  const texture = new Uint8Array(width * height)
+  let state = 0x44a11ce
+  for (let index = 0; index < texture.length; index++) {
+    state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0
+    texture[index] = state >>> 24
+  }
+  return [
+    { x: 0, y: 0 },
+    { x: 2, y: 1 },
+    { x: 4, y: 2 },
+  ].map((offset) => {
+    const data = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const targetX = x + offset.x
+        const targetY = y + offset.y
+        if (targetX < width && targetY < height) {
+          data[targetY * width + targetX] = texture[y * width + x]!
+        }
+      }
+    }
+    return { width, height, data }
+  })
+}
+
+describe('integer-pixel point tracking', () => {
+  test('rejects fractional seeds distinctly from integer bounds failures', () => {
+    const frames = translatedTexturedFrames()
+
+    expect(() => trackPointSequence(frames, { x: 32.5, y: 24 })).toThrowError(
+      new RangeError('Initial tracking point must use safe integer pixel coordinates'),
+    )
+    expect(() => trackPointSequence(frames, { x: 8, y: 24 })).toThrowError(
+      new RangeError('Initial tracking point is outside the analyzable frame region'),
+    )
+  })
+
+  test('tracks a translated textured target through integral internal matches', () => {
+    const result = trackPointSequence(translatedTexturedFrames(), { x: 32, y: 24 })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(`Unexpected point-tracking failure: ${result.failure.code}`)
+    expect(result.samples.map(({ frameIndex, x, y }) => ({ frameIndex, x, y }))).toEqual([
+      { frameIndex: 0, x: 32, y: 24 },
+      { frameIndex: 1, x: 34, y: 25 },
+      { frameIndex: 2, x: 36, y: 26 },
+    ])
+    expect(result.samples.every((sample) => (
+      Number.isSafeInteger(sample.x) && Number.isSafeInteger(sample.y)
+    ))).toBe(true)
+  })
+})
 
 describe('tracking keyframe projection', () => {
   test('maps point/box deltas only to the existing transform animation vocabulary', () => {

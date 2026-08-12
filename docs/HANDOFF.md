@@ -3761,3 +3761,22 @@ surface; it is not a second zoom and never enters document history.
   removed 1/1, console problems stayed zero, and the port was released. The
   dirty exact-tree fingerprint was
   `sha256:58114f711222b3f9575717388d14adcdd654431855e0aa0e1c47d222378b3934`.
+
+## Milestone 5 Part 10a / issue #44 - integer-pixel tracking hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of exact head
+  `8979fa1015360f53b6a7fcc859b3f6907025114b` found that a fractional point seed
+  could reach direct grayscale typed-array lookup. `trackPointSequence()` now
+  rejects either non-safe-integer coordinate before bounds checking with a
+  dedicated `RangeError`; this bounded matcher intentionally remains an integer
+  patch search rather than adding an unreviewed subpixel interpolation contract.
+- Integer search offsets preserve integral point matches, and regenerated box
+  seeds remain explicitly rounded. A deterministic three-frame textured fixture
+  rejects a fractional seed, distinguishes the existing bounds failure, and
+  follows the valid integer seed exactly from `(32, 24)` through `(34, 25)` to
+  `(36, 26)` without a false `lost-point`.
+- The focused tracking file passed 10/10 tests. The domain matcher, tracking,
+  and controller trio passed 29/29 tests, plus all 16 benchmark-runner checks;
+  oxlint and `git diff --check` also passed.

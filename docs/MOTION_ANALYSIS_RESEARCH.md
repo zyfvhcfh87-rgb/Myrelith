@@ -187,9 +187,15 @@ not generalized beyond its fixture.
 ## Point/box tracking experiment
 
 The point fixture moves a discriminative texture by bounded whole analysis
-pixels. The box fixture translates and grows a textured 44×32 object over 34
-frames. Point matching is sequential and forward/backward checked. The box
-tracks sixteen interior points and retains only a consistent similarity model.
+pixels. The point tracker accepts only safe-integer analysis-pixel seed
+coordinates and rejects a fractional seed with a distinct `RangeError` before
+bounds checking; callers must quantize deliberately rather than receiving an
+implicit truncation or an accidental zero-valued typed-array lookup. Its bounded
+search adds only integer offsets, and the box tracker rounds every regenerated
+interior seed, so internal patch lookup coordinates remain integral. The box
+fixture translates and grows a textured 44×32 object over 34 frames. Point
+matching is sequential and forward/backward checked. The box tracks sixteen
+interior points and retains only a consistent similarity model.
 At frame 18 the object disappears in the negative fixture. The occlusion gate
 requires failure on that exact first fully occluded frame, with every accepted
 sample strictly before it; accepting even one recovery frame is a failure.

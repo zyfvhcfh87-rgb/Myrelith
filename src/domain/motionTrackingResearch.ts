@@ -62,9 +62,12 @@ export type BoxTrackingResult =
       readonly failure: TrackingFailure
     }
 
+function isIntegerPixelPoint(point: MotionPoint): boolean {
+  return Number.isSafeInteger(point.x) && Number.isSafeInteger(point.y)
+}
+
 function validPointInFrame(frame: GrayFrame, point: MotionPoint, margin: number): boolean {
-  return Number.isFinite(point.x)
-    && Number.isFinite(point.y)
+  return isIntegerPixelPoint(point)
     && point.x >= margin
     && point.y >= margin
     && point.x < frame.width - margin
@@ -83,6 +86,9 @@ export function trackPointSequence(
   onProgress?: (completedFrames: number, totalFrames: number) => void,
 ): PointTrackingResult {
   validateMotionFrameSequence(frames, budget)
+  if (!isIntegerPixelPoint(initialPoint)) {
+    throw new RangeError('Initial tracking point must use safe integer pixel coordinates')
+  }
   const margin = budget.patchRadius + budget.searchRadius + 1
   if (!validPointInFrame(frames[0]!, initialPoint, margin)) {
     throw new RangeError('Initial tracking point is outside the analyzable frame region')

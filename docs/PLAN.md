@@ -3895,3 +3895,19 @@ acceptance claims.
   capability matrix, three `go` decisions, exact frame-18 occlusion loss,
   cancellation and admission outcomes, 2/2 workers, 1/1 frames, 1/1 OPFS files,
   zero console problems, and a released port.
+
+## Milestone 5 Part 10a / issue #44 - integer-pixel tracking follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Reject a point-tracking seed unless both coordinates are safe integers,
+  before the separate analyzable-frame bounds gate, so fractional typed-array
+  indices cannot silently read as zero-valued pixels.
+- [x] Keep the reviewed matcher bounded to integer patch search: integer offsets
+  preserve integral point matches, while every regenerated box seed remains
+  rounded. Do not introduce subpixel interpolation in this research change.
+- [x] Add a deterministic translated-texture regression that rejects a
+  fractional seed distinctly and proves the valid integer target tracks across
+  three frames without a false `lost-point`.
+- [x] Pass 10/10 focused tracking tests, 29/29 domain matcher/tracking/controller
+  tests, all 16 benchmark-runner checks, oxlint, and `git diff --check`.
