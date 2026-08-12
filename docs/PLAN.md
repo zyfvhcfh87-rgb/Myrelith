@@ -3534,3 +3534,26 @@ acceptance claims.
 - [x] Pass 111 focused manifest/project/effect/architecture tests across five
   files, the test wrapper's 16 benchmark-runner checks, and `git diff --check`;
   keep browser verification intentionally not applicable.
+
+## Part 10c / issue #76 - PR #112 export-instance and numeric-step follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Give each export attempt fresh export-owned mutable runtime state: worker,
+  Wasm instance, imported memory, private port, queue, and generation. Reuse only
+  immutable code bound to the accepted digest/policy/ABI.
+- [x] Bound that session-only code cache to eight entries and a 64 MiB aggregate
+  accepted-raw-byte charge with checked accounting, deterministic idle LRU,
+  leased-code pinning, and lifecycle/trust/revocation/update invalidation.
+- [x] Serialize planned plugin calls by ascending requested frame and authored
+  plan order, isolate them from preview/scrub messages, destroy export state on
+  every terminal outcome, and restart a retry from its first requested frame.
+- [x] Reserve all required package sandboxes during preflight under the hard
+  eight-resident ceiling, failing before sink/encoder acquisition rather than
+  evicting and reinstantiating stateful modules during export.
+- [x] Reject positive finite numeric steps that cannot make representable
+  IEEE-754 progress from either declared endpoint; cover asymmetric magnitudes,
+  the reported huge-endpoint/subnormal case, and ordinary accepted steps.
+- [x] Keep the change design-only except for pure manifest validation/tests;
+  Issue #77 retains runtime implementation and hostile stateful-module browser
+  fixtures, so browser verification remains intentionally not applicable.

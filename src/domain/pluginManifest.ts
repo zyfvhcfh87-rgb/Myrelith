@@ -424,6 +424,9 @@ function parameter(value: unknown, path: string): PluginParameter {
     if (minimum >= maximum) fail(path, 'number parameter min must be less than max')
     if (defaultValue < minimum || defaultValue > maximum) fail(`${path}.default`, 'must be inside the declared range')
     if (step <= 0 || step > maximum - minimum) fail(`${path}.step`, 'must be positive and no larger than the declared range')
+    if (!(minimum + step > minimum) || !(maximum - step < maximum)) {
+      fail(`${path}.step`, 'must make representable progress from both declared endpoints')
+    }
     return {
       key,
       name: boundedText(item.name, `${path}.name`, PLUGIN_MANIFEST_LIMITS.maxNameCharacters),

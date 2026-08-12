@@ -3297,3 +3297,28 @@ surface; it is not a second zoom and never enters document history.
 - Validation passed 111 focused manifest/project/effect/architecture tests
   across five files, the test wrapper's 16 benchmark-runner checks, and
   `git diff --check`. Browser verification remains intentionally not applicable.
+
+## Part 10c issue #76 - PR #112 export-instance and numeric-step follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found that a promoted editor runtime could retain
+  mutable preview/scrub state into export, and that a positive numeric parameter
+  step could be smaller than IEEE-754 spacing at a declared endpoint.
+- Every export attempt now owns a freshly instantiated worker, Wasm instance,
+  imported memory, port, queue, and request generation. No mutable editor state
+  is shared. Planned calls run in deterministic frame/plan order, every terminal
+  outcome destroys the export runtime, and retry restarts from the first frame.
+- The optional immutable-code cache is exact digest/policy/ABI keyed, session-
+  only, limited to eight entries and a 64 MiB aggregate raw-module-byte charge,
+  and uses deterministic idle LRU with leased-code pinning and lifecycle/trust/
+  revocation/update invalidation.
+- Export preflight reserves every required package slot under the hard eight-
+  sandbox ceiling or fails before acquiring a sink/encoder; it never evicts and
+  reinstantiates stateful modules midway through an export.
+- Number parameters must now satisfy both `min + step > min` and
+  `max - step < max`, rejecting steps that cannot move a host control at either
+  declared endpoint while retaining ordinary valid steps.
+- This remains a design-only lifecycle clarification plus pure manifest
+  validation; Issue #77 still owns the runtime and hostile stateful-module
+  browser fixtures. Browser verification remains intentionally not applicable.

@@ -201,6 +201,11 @@ contract is in [PLUGINS.md](PLUGINS.md), with threats and residual risk in
 retain the existing authored stack order and shared preview/export path rather
 than create a second effect model.
 
+Shared planning and pixel semantics do not permit shared mutable plugin runtime
+state. Every export attempt must use a fresh export-owned worker, instance, and
+memory, receive calls in deterministic frame/plan order, and be destroyed at its
+terminal outcome; preview/scrub state can never enter or mutate it.
+
 ## Issue #73 review hardening
 
 Program Monitor support status resolves animated effect parameters at the

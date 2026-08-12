@@ -238,6 +238,23 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   resets and expires after five seconds. A ready candidate becomes the sandbox's
   dedicated runtime worker; every timeout or failure destroys the candidate and
   sandbox so activation cannot block the UI.
+  Editor preview/scrub may reuse only its editor-owned runtime instance. Every
+  export attempt, including a retry, must instead create a fresh export-owned
+  worker, `WebAssembly.Instance`, and imported memory. It may reuse only
+  digest-bound, policy-accepted immutable module bytes or immutable compiled
+  code; it shares no worker, instance, memory, port, queue, request generation,
+  or other mutable plugin state with preview/scrub. Calls to one export sandbox
+  are serialized by ascending requested timeline frame and authored plan order.
+  Terminal success destroys that sandbox; failure, cancellation, or watchdog
+  expiry makes the trusted parent terminate it without waiting for plugin
+  cooperation. A retry begins at the first requested frame with another fresh
+  instance.
+  An optional trusted-parent compiled-module cache is session-only and may hold
+  at most eight exact digest/policy/ABI-keyed entries charged by at most 64 MiB
+  of accepted raw module bytes in aggregate. Checked insertion evicts idle
+  entries by deterministic LRU; leased code is never evicted. Revocation,
+  disable/uninstall, package replacement, policy/ABI change, and app teardown
+  invalidate the relevant entries. The cache never owns mutable runtime state.
   Plugin packages, sandboxes, ports, workers, watchdogs, grants, and revocations
   remain future app-owned Issue #77 resources. Projects may retain only bounded
   namespaced effect descriptors; package bytes, URLs, trust, grants, and runtime

@@ -36,7 +36,7 @@ failure containment.
 | Origin storage | Plugins cannot access Myrelith IndexedDB, OPFS, Cache Storage, local/session storage, cookies, recovery, Recents, remembered media, proxy manifests, or trust records. |
 | Network privacy | No plugin-controlled request, socket, beacon, WebRTC channel, navigation, form, popup, or download is possible. |
 | Project truth | Projects contain only bounded primitive descriptors. They cannot carry code, grants, package locations, trust, revocation changes, or an instruction to install/execute. |
-| Preview/export integrity | Authored stack order and the exact v1 display-referred sRGB RGBA encoding are shared. Missing/failing plugins are visible; export aborts by default instead of silently dropping an effect. |
+| Preview/export integrity | Authored stack order and the exact v1 display-referred sRGB RGBA encoding are shared. Every export starts in a newly instantiated export-owned worker/memory, receives only deterministically ordered export calls, and shares no mutable state with preview/scrub. Missing/failing plugins are visible; export aborts by default instead of silently dropping an effect. |
 | Editor availability | Package parsing, decompression, WebAssembly declarations/activation, memory, queues, calls, diagnostics, and retries are bounded. Parent-realm deadlines can terminate a non-cooperative activation or runtime sandbox. |
 | Supply-chain identity | Every executed byte is covered by the verified package integrity table and Ed25519 signature; signer and digest changes cannot inherit trust/grants silently. |
 | Recovery | Missing, denied, revoked, incompatible, crashed, and safe-mode plugin descriptors remain ordered, editable, saveable, and recoverable without execution. |
@@ -89,7 +89,10 @@ failure containment.
 8. **Session registry to portable project.** Installed package/trust/grant facts
    may explain a descriptor but can never mutate or disappear it implicitly.
 9. **Preview to export.** Both consume the same effect plan, but export separately
-   preflights its exact plugin availability and fails transactionally.
+   preflights fresh export-owned instances and fails transactionally. Only
+   digest-bound immutable module bytes or compiled code may be reused; no worker,
+   instance, memory, port, queue, request generation, or mutable module state
+   crosses from preview/scrub into export.
 
 ### Attacker-controlled inputs
 
@@ -171,20 +174,21 @@ imports an updated signed deny set. UI must say “signed by this key,” never
 ### Manifest ambiguity and compatibility confusion
 
 **Attacker story:** duplicate JSON keys, unknown fields, overlong labels,
-prototype-looking parameter keys, reused render exports, version-range tricks,
-an unverifiable intermediate migration schema, optional-permission downgrades,
-or URL-shaped entry paths cause different reviewers/components to interpret one
-package differently.
+prototype-looking parameter keys, numeric steps smaller than local binary64
+spacing, reused render exports, version-range tricks, an unverifiable intermediate
+migration schema, optional-permission downgrades, or URL-shaped entry paths cause
+different reviewers/components to interpret one package differently.
 
 **Controls:** byte limit and duplicate-key rejection before parse; canonical
 JSON; exact keys at every object; ASCII-bounded ids/paths/entrypoints; shared
-durable numeric bounds and reserved-key rejection; unique ids/render entrypoints/
-parameter keys/options; disjoint render/migration export names; bounded forward-
-only migration declarations whose explicit exports all lead to the current
-descriptor version; generic non-final migration outputs instead of invented
-historical schemas; inclusive integer version ranges; required-unavailable is
-incompatible; optional-unavailable remains explicit and unselected; no
-compatibility substitution.
+durable numeric bounds, a positive step that makes representable progress from
+both declared range endpoints, and reserved-key rejection; unique ids/render
+entrypoints/parameter keys/options; disjoint render/migration export names;
+bounded forward-only migration declarations whose explicit exports all lead to
+the current descriptor version; generic non-final migration outputs instead of
+invented historical schemas; inclusive integer version ranges; required-
+unavailable is incompatible; optional-unavailable remains explicit and
+unselected; no compatibility substitution.
 
 **Residual risk:** future schema evolution can create confused-deputy behavior
 if old and new code disagree. Each manifest/API/capability/contribution schema is
@@ -227,10 +231,13 @@ file/handle/URL ownership. The module has no browser imports. Permission copy
 explicitly names the frame access grant.
 
 **Residual risk:** the granted frame itself may reveal faces, documents, or other
-sensitive content. A malicious effect may encode previous frames into later
-output while its sandbox remains alive. Version 1 should reset module memory on
-effect removal/project replacement and isolate each plugin identity, but temporal
-state within an actively enabled effect is part of the granted computation.
+sensitive content. A malicious effect may encode earlier frames into later output
+while one editor or export sandbox remains alive. That temporal state is part of
+the granted computation within one owner lifecycle; deterministic export order
+makes it reproducible, not pure. Version 1 destroys editor state on effect
+removal/project replacement and destroys export state at every terminal outcome.
+State never transfers between those lifecycles: each export attempt uses a fresh
+export-owned worker, instance, and memory.
 
 ### Origin storage and project crossover
 
@@ -269,9 +276,12 @@ memory, threads/shared memory, relaxed SIMD, WASI, unknown features, unexpected
 entrypoint types, and oversized sections. A fresh, disposable activation-
 candidate worker performs engine validation, asynchronous compilation, and
 instantiation under a non-resetting five-second trusted-parent wall-clock
-deadline. A successful
-candidate becomes the dedicated runtime worker; timeout or failure destroys the
-candidate and sandbox. Runtime-probe and fail closed.
+deadline. A successful candidate becomes the dedicated runtime worker for its
+requesting lifecycle; timeout or failure destroys the candidate and sandbox. An
+editor runtime is never reused for export. Every export preflight creates a new
+export-owned worker, instance, and imported memory; only digest-bound immutable
+module bytes or compiled code may be cached across lifecycles. Runtime-probe and
+fail closed.
 
 **Residual risk:** browser-engine vulnerabilities and binary-parser mistakes.
 Keeping browsers current and shipping an emergency local revocation are required.
@@ -289,9 +299,14 @@ the editor or exhaust memory.
 table limits; byte-level start-section rejection before engine work; a fresh
 activation-candidate worker under the non-resetting five-second trusted-parent
 deadline; one active call per sandbox, two globally, bounded/coalesced queue;
-trusted-parent call watchdogs; whole-sandbox termination; exact response sizes;
-bounded diagnostics; three consecutive failures disable for the session; no
-background activation; safe mode and stale-activation sentinel.
+trusted-parent call watchdogs; whole-sandbox termination; atomic export-slot
+reservation under the hard eight-resident ceiling with no mid-export eviction or
+batch reinstantiation; a session-only compiled-code cache capped at eight entries
+and a 64 MiB accepted-raw-module-byte charge, with checked accounting,
+deterministic idle LRU eviction, in-use leases, and trust/revocation/update/
+policy/app-teardown invalidation; exact response sizes; bounded diagnostics;
+three consecutive failures disable for the session; no background activation;
+safe mode and stale-activation sentinel.
 
 **Residual risk:** terminating an activation or runtime worker may briefly
 consume a CPU core or renderer memory, and browser scheduling/process sharing can
@@ -308,11 +323,14 @@ cancellation, or injects diagnostic HTML.
 
 **Controls:** private port, exact protocol version/type/keys, sandbox generation,
 project generation, instance id, monotonic request id, exact lengths, one in
-flight, latest-wins preview, abort/close settlement, late-response rejection,
-copy-in/copy-out ownership, one exact IEC sRGB/Rec.709-primary and D65 nonlinear
-RGBA encoding in both directions, straight alpha, shared preview/export host
-conversion, no ICC/profile metadata, cleared reusable memory, and escaped
-bounded plain-text diagnostics.
+flight, latest-wins preview, deterministic non-coalesced export ordering,
+separate editor/export ports and mutable instances, abort/close settlement,
+late-response rejection, copy-in/copy-out ownership, one exact IEC
+sRGB/Rec.709-primary and D65 nonlinear RGBA encoding in both directions,
+straight alpha, shared preview/export host conversion, no ICC/profile metadata,
+cleared reusable memory, and escaped bounded plain-text diagnostics. Every
+terminal export outcome destroys its instance; retry starts from the first
+requested frame in another fresh sandbox instead of restoring a checkpoint.
 
 **Residual risk:** host lifecycle bugs. Tests must cover cancel/retry/revoke/
 update/project replacement/close at every awaited boundary.

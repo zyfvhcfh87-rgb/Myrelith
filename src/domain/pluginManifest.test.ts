@@ -196,6 +196,44 @@ describe('plugin manifest', () => {
     }
   })
 
+  test.each([
+    ['minimum', -EFFECT_STACK_LIMITS.maxFiniteMagnitude, 0, 1e-9],
+    ['maximum', 0, EFFECT_STACK_LIMITS.maxFiniteMagnitude, 1e-9],
+    ['both large positive', 999_999_999, 1_000_000_000, Number.MIN_VALUE],
+  ])('rejects a numeric step that cannot advance from the %s endpoint', (_name, minimum, maximum, step) => {
+    const value = manifest()
+    const contribution = (value.contributions as Record<string, unknown>[])[0]
+    const parameter = (contribution.parameters as Record<string, unknown>[])[0]
+    parameter.min = minimum
+    parameter.max = maximum
+    parameter.default = minimum
+    parameter.step = step
+
+    expect(validatePluginManifest(value)).toMatchObject({
+      ok: false,
+      problem: {
+        path: '$.contributions[0].parameters[0].step',
+        message: 'must make representable progress from both declared endpoints',
+      },
+    })
+  })
+
+  test.each([
+    [-EFFECT_STACK_LIMITS.maxFiniteMagnitude, 0, 0.25],
+    [0, EFFECT_STACK_LIMITS.maxFiniteMagnitude, 0.25],
+    [999_999_999, 1_000_000_000, 0.25],
+  ])('accepts a numeric step that advances both endpoints in [%s, %s]', (minimum, maximum, step) => {
+    const value = manifest()
+    const contribution = (value.contributions as Record<string, unknown>[])[0]
+    const parameter = (contribution.parameters as Record<string, unknown>[])[0]
+    parameter.min = minimum
+    parameter.max = maximum
+    parameter.default = minimum
+    parameter.step = step
+
+    expect(validatePluginManifest(value)).toMatchObject({ ok: true })
+  })
+
   test.each(['constructor', 'prototype'])(
     'rejects reserved durable parameter key %s',
     (key) => {

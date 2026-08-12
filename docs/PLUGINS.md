@@ -171,12 +171,14 @@ icons containing active content, event handlers, or an iframe panel.
 
 Version 1 supports bounded number, boolean, and enum parameters. Number
 parameters carry a finite range, finite default, positive step, and explicit
-animation eligibility. Every declared minimum, maximum, and default stays within
-the shared durable effect magnitude of +/-1,000,000,000. Enum values are stable
-machine ids with host-rendered labels. Parameter keys are unique within one
-contribution; reserved durable-record keys such as `constructor`, `prototype`,
-and `__proto__` are rejected. Current portable effect bounds remain authoritative
-over the resulting descriptor.
+animation eligibility. The step is no larger than the range and must make
+representable IEEE-754 binary64 progress from both declared endpoints: validation
+requires `min + step > min` and `max - step < max`. Every declared minimum,
+maximum, and default stays within the shared durable effect magnitude of
++/-1,000,000,000. Enum values are stable machine ids with host-rendered labels.
+Parameter keys are unique within one contribution; reserved durable-record keys
+such as `constructor`, `prototype`, and `__proto__` are rejected. Current portable
+effect bounds remain authoritative over the resulting descriptor.
 
 String inputs, rich text, file pickers, URLs, colors, curves, arbitrary JSON,
 and custom editors are not part of the first parameter schema.
@@ -547,14 +549,19 @@ form-action 'none';
 
 After the trusted parent has accepted the complete byte policy, the broker
 creates a fresh, disposable activation-candidate worker from host-authored bytes
-and passes the verified WebAssembly bytes and a private `MessagePort`. That
-worker performs `WebAssembly.validate()`, asynchronous compilation, and
-instantiation. It sends an instance-ready acknowledgement only after all three
-steps finish. On success the same worker becomes that sandbox's dedicated
-runtime worker, retaining sole ownership of the instance; on every failure or
-timeout the worker is terminated instead of being reused. Package bytes are
-never interpreted as JavaScript. CSP `worker-src` governs worker loads and
-`connect-src` is the fallback for connection-like fetch destinations under the
+and passes a private `MessagePort`. It also passes either the verified
+WebAssembly bytes or immutable compiled code bound to the exact accepted package
+digest, negotiated ABI, and binary-policy version. Raw-byte validation and
+asynchronous compilation run on the byte path; a cache hit may skip only those
+engine steps after the requesting lifecycle's preflight rechecks current trust,
+revocation, availability, and the exact cache binding. Both paths allocate new
+imported memory and instantiate a fresh `WebAssembly.Instance`. The worker
+sends an instance-ready acknowledgement only after its path finishes. On success
+the same worker becomes the dedicated runtime worker for the lifecycle that
+requested it, retaining sole ownership of the instance; on every failure or
+timeout it is terminated instead of being reused. Package bytes are never
+interpreted as JavaScript. CSP `worker-src` governs worker loads and `connect-src`
+is the fallback for connection-like fetch destinations under the
 [Content Security Policy specification](https://w3c.github.io/webappsec-csp/).
 
 Issue #77 must run negative browser probes in every supported engine before
@@ -569,16 +576,80 @@ request ids, bounded payload lengths, and a private origin-checked port. Window
 `message` traffic is used only for the one-time host-authored broker handshake;
 plugin requests never travel on a wildcard ambient channel.
 
+### Runtime instance lifetimes
+
+The ordinary editor sandbox may reuse its dedicated runtime worker,
+`WebAssembly.Instance`, and imported memory across preview and scrub calls until
+a lifecycle event below destroys it. Version 1 does not require render purity or
+expose a reset ABI. Any temporal module state is therefore confined to that
+editor lifecycle; it is never durable project truth and never becomes export
+input.
+
+As part of every export attempt's exact plugin preflight, before a sink or encoder
+is acquired, the host creates a separate export-owned sandbox and fresh
+activation-candidate worker for every required package. It instantiates a new
+`WebAssembly.Instance` with newly allocated imported memory. The host may reuse
+only verified digest-bound immutable module bytes or a digest-bound,
+policy-accepted immutable compiled `WebAssembly.Module`/engine code cache. It
+must not reuse or share the editor worker, instance, memory, tables, globals,
+port, queue, request generation, or any other mutable module state. The export
+port accepts export calls only; preview, scrub, Inspector, migration, and other
+editor-session messages never enter its queue. Concurrent editor preview cannot
+mutate export state.
+
+The optional compiled-module cache has one trusted-parent, session-only owner.
+Its exact key contains plugin id, signer fingerprint, package digest, signed
+module path and hash, every negotiated host/capability/contribution ABI version,
+and the binary-policy version. The first implementation holds at most eight
+entries and charges each entry by its accepted raw module byte length; checked
+addition caps the aggregate charge at 64 MiB. An insertion evicts idle entries
+until both limits fit, ordered deterministically by oldest host access sequence
+and then lexicographic cache key. Activation/export code under an explicit lease
+is never evicted. If idle eviction cannot make room, activation may continue from
+the verified bytes but does not retain the compiled result; cache pressure never
+weakens a gate or makes execution necessary for project recovery.
+
+A cache entry contains only immutable compiled code plus its key/accounting
+facts—never an instance, imported memory, table, global, worker, port, queue, or
+request state. Every lease first rechecks current trust, revocation, package
+availability, and the complete key. Disable, uninstall, revocation, package
+replacement/update, signer/digest/hash mismatch, or binary-policy/ABI version
+change removes matching idle entries and makes leased entries non-reusable after
+their owner is terminated. App teardown clears the entire cache. No entry is
+persisted to IndexedDB, OPFS, recovery, or a project.
+
+Calls delivered to one export sandbox are serialized in ascending requested
+timeline-frame order and, within a frame, the authored composition/effect-plan
+order. The host never coalesces, skips, or replays a planned plugin call from a
+checkpoint.
+Terminal success destroys every export-owned worker, instance, and memory after
+the final planned call and output transaction complete. Failure, cancellation,
+or watchdog expiry makes the trusted parent terminate outstanding export workers
+and settle their host-side requests without waiting for plugin acknowledgement.
+Retrying or restarting an export is a new attempt: it starts again at the first
+requested frame with another fresh instance, so no partial or prior export state
+is inherited.
+
 ## Resource and failure containment
 
-Each plugin id + signer + package digest receives its own sandbox and bounded
-memory. Different plugins never share memory, ports, or workers.
+Each plugin id + signer + package digest + lifecycle receives its own sandbox and
+bounded memory. Editor and export lifecycles, like different plugins, never share
+instances, memory, ports, or workers.
+
+Before export activation, preflight atomically reserves one resident-sandbox slot
+for every distinct required package identity, closing least-recently-used idle
+editor sandboxes first. If the required export set plus non-idle editor sandboxes
+cannot fit the hard eight-resident ceiling, preflight lists the resource failure
+and stops before acquiring a sink or encoder. Export sandboxes stay pinned until
+that attempt ends; the host never evicts, batches, or reinstantiates them midway
+through an export to work around the ceiling.
 
 | Resource | First implementation policy |
 | --- | --- |
-| Sandboxes | at most 8 resident; least-recently-used idle instance closes first |
+| Sandboxes | at most 8 resident across editor/export; least-recently-used idle editor instance closes first, and every export instance closes terminally |
+| Immutable compiled-module cache | session-only; at most 8 exact-keyed entries and 64 MiB aggregate accepted-raw-byte charge; deterministic idle LRU; leased code is pinned |
 | Active calls | one per sandbox, at most 2 globally |
-| Queued calls | at most 32 globally; preview may coalesce latest-wins |
+| Queued calls | at most 32 globally; preview may coalesce latest-wins, while export never coalesces and stays deterministically serialized |
 | Validate/compile/instantiate activation | 5 seconds total wall-clock |
 | Configure/migrate call | 1 second watchdog |
 | Preview frame call | 500 ms watchdog |
@@ -607,8 +678,8 @@ Failure policy is context-specific:
   reason and retry/disable controls, and continue the remaining stack;
 - repeated preview failure: disable that package for the session and require an
   explicit Retry action to recreate it;
-- export preflight: list every unavailable plugin descriptor before acquiring a
-  sink or encoder;
+- export preflight: create and validate every fresh export-owned instance and
+  list every unavailable plugin descriptor before acquiring a sink or encoder;
 - export runtime failure: abort the output transaction. Do not silently produce
   a file with a missing effect;
 - explicit “Export with listed plugins bypassed”: allowed only after a second
@@ -702,11 +773,15 @@ green:
    worker escape attempts;
 4. activation-worker promotion, five-second parent deadline, compile/instantiate
    termination, call watchdog, queue, memory, project replacement, cancellation,
-   crash, late-message, and safe-mode tests;
+   crash, late-message, safe-mode, and compiled-cache count/byte accounting,
+   deterministic idle eviction, lease pinning, invalidation, and teardown tests;
 5. unknown/disabled/revoked descriptor round trips through save, recovery,
    undo/redo, reorder, remove, and migration rejection, including the version-1
    static-instance gate for every effect targeted by an animation track;
-6. authored built-in/plugin stack-order pixels shared by preview and export;
+6. authored built-in/plugin stack-order pixels shared by preview and export,
+   plus stateful-module fixtures proving that every export starts from a fresh
+   instance/memory, follows deterministic call order, and cannot inherit prior
+   or concurrent preview, canceled export, or retried export state;
 7. actionable install, permission, incompatibility, crash, retry, export-block,
    bypass-confirmation, disable, uninstall, and safe-mode accessibility;
 8. focused/full tests, production build/typecheck, lint, production dependency
