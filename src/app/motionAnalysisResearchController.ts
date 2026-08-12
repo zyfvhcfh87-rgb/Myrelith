@@ -10,6 +10,8 @@ import type {
   MotionResearchProgress,
 } from '../domain/motionAnalysisResearch'
 import type {
+  MotionResearchProbeMessage,
+  MotionResearchRunReply,
   MotionResearchRunMessage,
   MotionResearchWorkerReply,
 } from '../workers/motion-analysis-research-protocol'
@@ -63,6 +65,8 @@ const diagnostics = {
 let requestId = 0
 let researchRunActive = false
 
+const WORKER_READY_TIMEOUT_MS = 5_000
+
 export function motionAnalysisResearchDiagnostics(): MotionResearchRuntimeDiagnostics {
   return { ...diagnostics }
 }
@@ -71,20 +75,69 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause)
 }
 
-async function probeWorker(): Promise<boolean> {
+function motionAnalysisAbortError(): DOMException {
+  return new DOMException('Motion analysis was cancelled', 'AbortError')
+}
+
+async function probeWorker(signal?: AbortSignal): Promise<boolean> {
+  if (signal?.aborted) throw motionAnalysisAbortError()
   if (typeof Worker !== 'function') return false
-  let worker: Worker | null = null
+  let worker: Worker
   try {
     worker = new Worker(
       new URL('../workers/motion-analysis-research.worker.ts', import.meta.url),
       { type: 'module' },
     )
-    return true
   } catch {
     return false
-  } finally {
-    worker?.terminate()
   }
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    const settle = (action: () => void) => {
+      if (settled) return
+      settled = true
+      if (timeout !== null) clearTimeout(timeout)
+      worker.removeEventListener('message', onMessage)
+      worker.removeEventListener('error', onError)
+      worker.removeEventListener('messageerror', onMessageError)
+      signal?.removeEventListener('abort', onAbort)
+      worker.terminate()
+      action()
+    }
+    const finish = (supported: boolean) => settle(() => resolve(supported))
+    const abort = () => settle(() => reject(motionAnalysisAbortError()))
+    const currentRequestId = ++requestId
+    const onMessage = (event: MessageEvent<MotionResearchWorkerReply>) => {
+      if (event.data.type === 'ready' && event.data.requestId === currentRequestId) {
+        finish(true)
+      }
+    }
+    const onError = (event: ErrorEvent) => {
+      event.preventDefault()
+      finish(false)
+    }
+    const onMessageError = () => finish(false)
+    const onAbort = () => abort()
+    worker.addEventListener('message', onMessage)
+    worker.addEventListener('error', onError)
+    worker.addEventListener('messageerror', onMessageError)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) {
+      abort()
+      return
+    }
+    timeout = setTimeout(() => finish(false), WORKER_READY_TIMEOUT_MS)
+    const message: MotionResearchProbeMessage = {
+      type: 'probe',
+      requestId: currentRequestId,
+    }
+    try {
+      worker.postMessage(message)
+    } catch {
+      finish(false)
+    }
+  })
 }
 
 function probeOffscreenCanvas(): boolean {
@@ -185,16 +238,21 @@ async function probeOpfs(): Promise<OpfsProbeResult> {
   }
 }
 
-export async function probeMotionAnalysisSupport(): Promise<MotionAnalysisSupportProbe> {
+export async function probeMotionAnalysisSupport(
+  signal?: AbortSignal,
+): Promise<MotionAnalysisSupportProbe> {
   const failures: string[] = []
-  const worker = await probeWorker()
+  const worker = await probeWorker(signal)
+  if (signal?.aborted) throw motionAnalysisAbortError()
   if (!worker) failures.push('Dedicated module workers are unavailable.')
   const offscreenCanvas2d = probeOffscreenCanvas()
   if (!offscreenCanvas2d) failures.push('OffscreenCanvas 2D readback is unavailable.')
   const videoFrame = await probeVideoFrame()
+  if (signal?.aborted) throw motionAnalysisAbortError()
   if (!videoFrame.copied) failures.push('VideoFrame RGBA copyTo is unavailable.')
   if (!videoFrame.closed) failures.push('VideoFrame close could not be observed.')
   const opfs = await probeOpfs()
+  if (signal?.aborted) throw motionAnalysisAbortError()
   if (opfs.failure) failures.push(opfs.failure)
   const cryptoDigest = typeof crypto?.subtle?.digest === 'function'
   if (!cryptoDigest) failures.push('SubtleCrypto digest is unavailable.')
@@ -245,7 +303,7 @@ function runResearchWorker(
       'AbortError',
     )))
     signal.addEventListener('abort', abort, { once: true })
-    worker.addEventListener('message', (event: MessageEvent<MotionResearchWorkerReply>) => {
+    worker.addEventListener('message', (event: MessageEvent<MotionResearchRunReply>) => {
       const reply = event.data
       if (reply.requestId !== currentRequestId || settled) return
       if (reply.type === 'progress') {
@@ -291,7 +349,7 @@ async function runAdmittedBrowserMotionAnalysisResearch(
         cooperativeYield: 'set-timeout',
         failures: [],
       } satisfies MotionAnalysisSupportProbe
-    : await probeMotionAnalysisSupport()
+    : await probeMotionAnalysisSupport(options.signal)
   if (!support.supported) {
     throw new MediaJobExecutionError(
       'resource-unavailable',

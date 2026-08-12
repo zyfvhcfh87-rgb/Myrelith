@@ -2,16 +2,34 @@
 
 import { runMotionAnalysisResearch } from '../domain/motionAnalysisResearch'
 import type {
-  MotionResearchRunMessage,
-  MotionResearchWorkerReply,
+  MotionResearchReadyReply,
+  MotionResearchRunReply,
+  MotionResearchWorkerMessage,
 } from './motion-analysis-research-protocol'
 
-self.addEventListener('message', (event: MessageEvent<MotionResearchRunMessage>) => {
+function isMotionResearchWorkerMessage(
+  value: unknown,
+): value is MotionResearchWorkerMessage {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as { readonly type?: unknown; readonly requestId?: unknown }
+  return (candidate.type === 'probe' || candidate.type === 'run')
+    && Number.isSafeInteger(candidate.requestId)
+}
+
+self.addEventListener('message', (event: MessageEvent<unknown>) => {
   const message = event.data
-  if (message.type !== 'run') return
+  if (!isMotionResearchWorkerMessage(message)) return
+  if (message.type === 'probe') {
+    const reply: MotionResearchReadyReply = {
+      type: 'ready',
+      requestId: message.requestId,
+    }
+    self.postMessage(reply)
+    return
+  }
   try {
     const evidence = runMotionAnalysisResearch(undefined, (progress) => {
-      const reply: MotionResearchWorkerReply = {
+      const reply: MotionResearchRunReply = {
         type: 'progress',
         requestId: message.requestId,
         progress,
@@ -23,7 +41,7 @@ self.addEventListener('message', (event: MessageEvent<MotionResearchRunMessage>)
       || evidence.decision.pointTracking !== 'go'
       || evidence.decision.boxTracking !== 'go'
     ) {
-      const reply: MotionResearchWorkerReply = {
+      const reply: MotionResearchRunReply = {
         type: 'error',
         requestId: message.requestId,
         code: 'quality-fixture-failed',
@@ -32,14 +50,14 @@ self.addEventListener('message', (event: MessageEvent<MotionResearchRunMessage>)
       self.postMessage(reply)
       return
     }
-    const reply: MotionResearchWorkerReply = {
+    const reply: MotionResearchRunReply = {
       type: 'result',
       requestId: message.requestId,
       evidence,
     }
     self.postMessage(reply)
   } catch (error) {
-    const reply: MotionResearchWorkerReply = {
+    const reply: MotionResearchRunReply = {
       type: 'error',
       requestId: message.requestId,
       code: 'unexpected',

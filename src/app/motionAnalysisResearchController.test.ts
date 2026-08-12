@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { runMotionAnalysisResearch } from '../domain/motionAnalysisResearch'
-import type { MotionResearchRunMessage } from '../workers/motion-analysis-research-protocol'
+import type {
+  MotionResearchWorkerMessage,
+} from '../workers/motion-analysis-research-protocol'
 import {
   motionAnalysisResearchDiagnostics,
   probeMotionAnalysisSupport,
@@ -8,17 +10,34 @@ import {
 } from './motionAnalysisResearchController'
 
 class ResearchWorkerStub extends EventTarget {
-  readonly behavior: 'success' | 'pending' | 'failure'
+  readonly behavior: ResearchWorkerBehavior
+  readonly messages: MotionResearchWorkerMessage[] = []
   terminated = false
 
-  constructor(behavior: 'success' | 'pending' | 'failure') {
+  constructor(behavior: ResearchWorkerBehavior) {
     super()
     this.behavior = behavior
   }
 
-  postMessage(message: MotionResearchRunMessage): void {
+  postMessage(message: MotionResearchWorkerMessage): void {
+    this.messages.push(message)
     queueMicrotask(() => {
       if (this.terminated) return
+      if (message.type === 'probe') {
+        if (this.behavior === 'probe-pending') return
+        if (this.behavior === 'module-error') {
+          this.dispatchEvent(new ErrorEvent('error', {
+            message: 'Synthetic module worker load failure',
+            cancelable: true,
+          }))
+          return
+        }
+        this.dispatchEvent(new MessageEvent('message', { data: {
+          type: 'ready',
+          requestId: message.requestId,
+        } }))
+        return
+      }
       this.dispatchEvent(new MessageEvent('message', { data: {
         type: 'progress',
         requestId: message.requestId,
@@ -47,12 +66,22 @@ class ResearchWorkerStub extends EventTarget {
   }
 }
 
-function installWorker(behavior: 'success' | 'pending' | 'failure'): void {
+type ResearchWorkerBehavior =
+  | 'success'
+  | 'pending'
+  | 'failure'
+  | 'probe-pending'
+  | 'module-error'
+
+function installWorker(behavior: ResearchWorkerBehavior): ResearchWorkerStub[] {
+  const workers: ResearchWorkerStub[] = []
   vi.stubGlobal('Worker', class extends ResearchWorkerStub {
     constructor() {
       super(behavior)
+      workers.push(this)
     }
   })
+  return workers
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -144,6 +173,110 @@ describe('motion analysis research controller', () => {
     controller.abort()
     await expect(firstRun).rejects.toMatchObject({ name: 'AbortError' })
     expect(motionAnalysisResearchDiagnostics().activeWorkers).toBe(0)
+  })
+
+  test('waits for the module worker ready handshake before reporting support', async () => {
+    const workers = installWorker('probe-pending')
+    let settled = false
+    const supportPromise = probeMotionAnalysisSupport().then((support) => {
+      settled = true
+      return support
+    })
+    await Promise.resolve()
+
+    expect(workers).toHaveLength(1)
+    expect(workers[0]!.messages).toHaveLength(1)
+    expect(workers[0]!.messages[0]).toMatchObject({ type: 'probe' })
+    expect(settled).toBe(false)
+
+    const probe = workers[0]!.messages[0]!
+    workers[0]!.dispatchEvent(new MessageEvent('message', { data: {
+      type: 'ready',
+      requestId: probe.requestId,
+    } }))
+    const support = await supportPromise
+
+    expect(support.worker).toBe(true)
+    expect(workers[0]!.terminated).toBe(true)
+  })
+
+  test('times out and terminates a module worker that never becomes ready', async () => {
+    vi.useFakeTimers()
+    try {
+      const workers = installWorker('probe-pending')
+      let settleCount = 0
+      const supportPromise = probeMotionAnalysisSupport().then((support) => {
+        settleCount++
+        return support
+      })
+
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(settleCount).toBe(0)
+      expect(workers[0]!.terminated).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1)
+      const support = await supportPromise
+      expect(support.worker).toBe(false)
+      expect(workers[0]!.terminated).toBe(true)
+
+      const probe = workers[0]!.messages[0]!
+      workers[0]!.dispatchEvent(new MessageEvent('message', { data: {
+        type: 'ready',
+        requestId: probe.requestId,
+      } }))
+      workers[0]!.dispatchEvent(new ErrorEvent('error', { cancelable: true }))
+      await Promise.resolve()
+      expect(settleCount).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('aborts a pending worker probe immediately and releases run admission', async () => {
+    vi.useFakeTimers()
+    try {
+      const workers = installWorker('probe-pending')
+      const controller = new AbortController()
+      const run = runBrowserMotionAnalysisResearch({ signal: controller.signal })
+      await Promise.resolve()
+
+      expect(workers).toHaveLength(1)
+      expect(workers[0]!.terminated).toBe(false)
+      controller.abort()
+
+      await expect(run).rejects.toMatchObject({ name: 'AbortError' })
+      expect(workers[0]!.terminated).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+
+    await expect(runBrowserMotionAnalysisResearch({
+      skipSupportProbe: true,
+    })).resolves.toMatchObject({
+      evidence: { decision: { stabilization: 'go' } },
+    })
+  })
+
+  test('reports asynchronous module worker load failure through the typed unsupported path', async () => {
+    const workers = installWorker('module-error')
+    const before = motionAnalysisResearchDiagnostics()
+
+    const support = await probeMotionAnalysisSupport()
+    expect(support.worker).toBe(false)
+    expect(support.failures).toContain('Dedicated module workers are unavailable.')
+    await expect(runBrowserMotionAnalysisResearch()).rejects.toMatchObject({
+      name: 'MediaJobExecutionError',
+      code: 'resource-unavailable',
+      message: expect.stringContaining('Dedicated module workers are unavailable.'),
+    })
+
+    expect(workers).toHaveLength(2)
+    expect(workers.every((worker) => worker.terminated)).toBe(true)
+    expect(motionAnalysisResearchDiagnostics()).toMatchObject({
+      workersCreated: before.workersCreated,
+      activeWorkers: 0,
+    })
   })
 
   test('reports OPFS probe cleanup failure through the typed unsupported path', async () => {

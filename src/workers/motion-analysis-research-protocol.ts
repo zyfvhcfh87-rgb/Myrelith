@@ -8,7 +8,21 @@ export interface MotionResearchRunMessage {
   readonly requestId: number
 }
 
-export type MotionResearchWorkerReply =
+export interface MotionResearchProbeMessage {
+  readonly type: 'probe'
+  readonly requestId: number
+}
+
+export type MotionResearchWorkerMessage =
+  | MotionResearchProbeMessage
+  | MotionResearchRunMessage
+
+export interface MotionResearchReadyReply {
+  readonly type: 'ready'
+  readonly requestId: number
+}
+
+export type MotionResearchRunReply =
   | {
       readonly type: 'progress'
       readonly requestId: number
@@ -25,3 +39,7 @@ export type MotionResearchWorkerReply =
       readonly code: 'quality-fixture-failed' | 'unexpected'
       readonly message: string
     }
+
+export type MotionResearchWorkerReply =
+  | MotionResearchReadyReply
+  | MotionResearchRunReply
