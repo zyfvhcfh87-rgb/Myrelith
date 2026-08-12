@@ -3780,3 +3780,27 @@ surface; it is not a second zoom and never enters document history.
 - The focused tracking file passed 10/10 tests. The domain matcher, tracking,
   and controller trio passed 29/29 tests, plus all 16 benchmark-runner checks;
   oxlint and `git diff --check` also passed.
+
+## Milestone 5 Part 10a / issue #44 - OPFS cancellation hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of exact head
+  `bf79f187d6fbe0fd95c6fd23248dc264d1944b8c` found that abort could remain
+  blocked behind any pending OPFS capability promise, leaving controller-wide
+  research admission occupied indefinitely.
+- The OPFS probe now races its complete owned operation against the admitted
+  run's signal. Abort returns `AbortError` and releases admission immediately;
+  the observed late continuation stops between capability steps, closes a late
+  writer, and removes only its invocation's 128-bit name when browser work
+  settles. Abandoned work cannot publish successful diagnostics after caller
+  settlement, while ordinary removal uncertainty remains a cleanup-specific
+  unsupported result.
+- Seven deterministic deferred regressions cover stalls in `getDirectory`,
+  `getFileHandle`, `createWritable`, `write`, `close`, `getFile`, and
+  `removeEntry`. Each proves prompt abort, admission of a second run, exact
+  overlapping-name cleanup after late settlement, balanced resources, and no
+  diagnostic drift or cross-removal.
+- The controller passed 18/18 tests. The controller, matcher, and tracking group
+  passed 36/36 tests plus all 16 benchmark-runner checks; the TypeScript build
+  gate, oxlint, and `git diff --check` also passed.

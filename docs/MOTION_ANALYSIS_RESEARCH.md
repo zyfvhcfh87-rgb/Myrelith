@@ -96,6 +96,16 @@ created-versus-removed diagnostic mismatch so cleanup uncertainty stays visible.
 Every invocation owns a distinct origin-wide temporary name with a 128-bit
 Web Crypto nonce, so overlapping calls or tabs cannot remove, overwrite, or
 invalidate another probe's file. Each invocation removes only its owned name.
+The complete OPFS chain is also raced against the admitted run's `AbortSignal`.
+Abort settles the caller and releases shared admission without waiting for a
+stalled `getDirectory`, `getFileHandle`, `createWritable`, `write`, `close`,
+`getFile`, or `removeEntry`. The abandoned operation remains privately observed,
+checks cancellation between steps, closes any writer that arrives late, and
+removes only its owned name when the pending browser promise settles. That late
+continuation cannot publish successful created/removed diagnostics after its
+caller has settled. A non-aborted removal failure still produces the named
+cleanup-specific unsupported result; cancellation never reclassifies uncertain
+cleanup as support.
 The product child must also abort the decoder/source/storage owner and await
 scheduler/storage quiescence. Queued pre-abort, active abort, typed failure,
 successful completion, replacement, source removal, clip removal, project
@@ -353,6 +363,15 @@ Async load failure, bounded timeout, late-event single settlement, and
 abort-during-readiness are covered by the 32 focused tests. The visual evidence
 SHA-256 is
 `202AD63A8E7F035D87C826874D6FB2CCAA4D73F73BB1F1E4932A4BBB9115F07F`.
+
+The OPFS-cancellation review regression defers each of the seven browser storage
+steps independently. While the chosen step remains unresolved, abort returns a
+typed `AbortError` and a second research run is admitted. A concurrent support
+probe uses a different deterministic 128-bit name and removes it first; once the
+abandoned step is released, the late continuation drains its own file without
+cross-removal, unhandled rejection, or post-settlement diagnostic drift. The
+controller, matcher, and tracking group passes 36/36 tests, plus all 16
+benchmark-runner checks.
 
 ## Final boundaries
 

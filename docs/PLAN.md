@@ -3911,3 +3911,21 @@ acceptance claims.
   three frames without a false `lost-point`.
 - [x] Pass 10/10 focused tracking tests, 29/29 domain matcher/tracking/controller
   tests, all 16 benchmark-runner checks, oxlint, and `git diff --check`.
+
+## Milestone 5 Part 10a / issue #44 - OPFS cancellation follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Race the entire owned OPFS capability operation against the admitted run's
+  `AbortSignal`, returning typed `AbortError` and releasing controller-wide
+  admission without waiting for a stalled browser storage promise.
+- [x] Keep the abandoned operation observed through late settlement; stop
+  between capability steps, close any late writer, remove only the invocation's
+  128-bit name, suppress post-settlement success diagnostics, and retain the
+  cleanup-specific unsupported result for an ordinary uncertain removal.
+- [x] Defer all seven OPFS steps deterministically and prove prompt cancellation,
+  a newly admitted run, balanced late cleanup, exact overlapping filename
+  ownership, no cross-removal, and no late diagnostic drift.
+- [x] Pass 18/18 controller tests, 36/36 controller/matcher/tracking tests, all
+  16 benchmark-runner checks, the TypeScript build gate, oxlint, and
+  `git diff --check`.

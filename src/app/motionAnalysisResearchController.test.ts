@@ -73,6 +73,25 @@ type ResearchWorkerBehavior =
   | 'probe-pending'
   | 'module-error'
 
+type OpfsProbeStep =
+  | 'getDirectory'
+  | 'getFileHandle'
+  | 'createWritable'
+  | 'write'
+  | 'close'
+  | 'getFile'
+  | 'removeEntry'
+
+const OPFS_PROBE_STEPS: readonly OpfsProbeStep[] = [
+  'getDirectory',
+  'getFileHandle',
+  'createWritable',
+  'write',
+  'close',
+  'getFile',
+  'removeEntry',
+]
+
 function installWorker(behavior: ResearchWorkerBehavior): ResearchWorkerStub[] {
   const workers: ResearchWorkerStub[] = []
   vi.stubGlobal('Worker', class extends ResearchWorkerStub {
@@ -82,6 +101,10 @@ function installWorker(behavior: ResearchWorkerBehavior): ResearchWorkerStub[] {
     }
   })
   return workers
+}
+
+async function flushMicrotasks(count = 12): Promise<void> {
+  for (let index = 0; index < count; index++) await Promise.resolve()
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -371,6 +394,147 @@ describe('motion analysis research controller', () => {
     expect(after.opfsProbeFilesCreated - before.opfsProbeFilesCreated).toBe(2)
     expect(after.opfsProbeFilesRemoved - before.opfsProbeFilesRemoved).toBe(2)
   })
+
+  test.each(OPFS_PROBE_STEPS)(
+    'aborts promptly during stalled OPFS %s and retires only its owned late work',
+    async (stalledStep) => {
+      installWorker('success')
+      let nonce = 0
+      const issuedNames: string[] = []
+      vi.stubGlobal('crypto', {
+        getRandomValues: (values: Uint32Array) => {
+          values.fill(0)
+          values[values.length - 1] = ++nonce
+          const suffix = Array.from(
+            values,
+            (value) => value.toString(16).padStart(8, '0'),
+          ).join('')
+          issuedNames.push(`issue-44-motion-analysis-support-probe-${suffix}.tmp`)
+          return values
+        },
+        subtle: { digest: vi.fn() },
+      })
+
+      let observeStall!: () => void
+      const stallReached = new Promise<void>((resolve) => {
+        observeStall = resolve
+      })
+      let releaseStall!: () => void
+      const stallGate = new Promise<void>((resolve) => {
+        releaseStall = resolve
+      })
+      let stalled = false
+      let released = false
+      const pause = async <Value>(step: OpfsProbeStep, value: Value): Promise<Value> => {
+        if (!stalled && step === stalledStep) {
+          stalled = true
+          observeStall()
+          await stallGate
+        }
+        return value
+      }
+
+      const openedNames: string[] = []
+      const removalAttempts: string[] = []
+      const removedNames: string[] = []
+      const activeNames = new Set<string>()
+      const getFileHandle = vi.fn(async (fileName: string) => {
+        openedNames.push(fileName)
+        const handle = {
+          createWritable: vi.fn(async () => pause('createWritable', {
+            write: vi.fn(async () => pause('write', undefined)),
+            close: vi.fn(async () => pause('close', undefined)),
+          })),
+          getFile: vi.fn(async () => pause('getFile', { size: 2 })),
+        }
+        const resolvedHandle = await pause('getFileHandle', handle)
+        activeNames.add(fileName)
+        return resolvedHandle
+      })
+      const removeEntry = vi.fn(async (fileName: string) => {
+        removalAttempts.push(fileName)
+        await pause('removeEntry', undefined)
+        if (!activeNames.delete(fileName)) {
+          throw new DOMException('Synthetic missing probe file', 'NotFoundError')
+        }
+        removedNames.push(fileName)
+      })
+      const root = { getFileHandle, removeEntry }
+      vi.stubGlobal('navigator', {
+        storage: {
+          getDirectory: vi.fn(async () => pause('getDirectory', root)),
+        },
+      })
+
+      const controller = new AbortController()
+      const before = motionAnalysisResearchDiagnostics()
+      const firstRun = runBrowserMotionAnalysisResearch({ signal: controller.signal })
+      const firstOutcome = firstRun.then(
+        () => ({ status: 'fulfilled' as const, cause: null }),
+        (cause: unknown) => ({ status: 'rejected' as const, cause }),
+      )
+
+      try {
+        await stallReached
+        controller.abort()
+
+        await expect(firstOutcome).resolves.toMatchObject({
+          status: 'rejected',
+          cause: { name: 'AbortError' },
+        })
+        expect(released).toBe(false)
+        await expect(runBrowserMotionAnalysisResearch({
+          skipSupportProbe: true,
+        })).resolves.toMatchObject({
+          evidence: { decision: { stabilization: 'go' } },
+        })
+
+        const overlappingSupport = await probeMotionAnalysisSupport()
+        expect(overlappingSupport.opfs).toBe(true)
+        expect(issuedNames).toHaveLength(2)
+        const [firstName, secondName] = issuedNames as [string, string]
+        expect(firstName).not.toBe(secondName)
+        expect(openedNames).toEqual(stalledStep === 'getDirectory'
+          ? [secondName]
+          : [firstName, secondName])
+        expect(removalAttempts).toEqual(stalledStep === 'removeEntry'
+          ? [firstName, secondName]
+          : [secondName])
+        expect(removedNames).toEqual([secondName])
+
+        const beforeLateSettlement = motionAnalysisResearchDiagnostics()
+        expect(
+          beforeLateSettlement.opfsProbeFilesCreated - before.opfsProbeFilesCreated,
+        ).toBe(1)
+        expect(
+          beforeLateSettlement.opfsProbeFilesRemoved - before.opfsProbeFilesRemoved,
+        ).toBe(1)
+
+        released = true
+        releaseStall()
+        await flushMicrotasks()
+        await vi.waitFor(() => {
+          expect(activeNames.size).toBe(0)
+          expect(removedNames).toEqual(stalledStep === 'getDirectory'
+            ? [secondName]
+            : [secondName, firstName])
+        })
+
+        const afterLateSettlement = motionAnalysisResearchDiagnostics()
+        expect(afterLateSettlement.opfsProbeFilesCreated).toBe(
+          beforeLateSettlement.opfsProbeFilesCreated,
+        )
+        expect(afterLateSettlement.opfsProbeFilesRemoved).toBe(
+          beforeLateSettlement.opfsProbeFilesRemoved,
+        )
+        expect(new Set(removalAttempts)).toEqual(new Set(removedNames))
+      } finally {
+        controller.abort()
+        if (!released) releaseStall()
+        await flushMicrotasks()
+      }
+    },
+  )
 
   test('preserves a typed quality failure and still terminates the worker', async () => {
     installWorker('failure')
