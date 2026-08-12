@@ -53,7 +53,9 @@ import type { RenderCanvasLike, RenderWorkerEnv } from './render.worker'
 import {
   createOrientedStreamingBitmap,
   createRenderWorkerCore,
+  createVideoScopeAnalyzer,
 } from './render.worker'
+import type { VideoScopeWorkerReply } from './video-scopes-protocol'
 import type {
   DecodedVideoFrame,
   PlaybackLaneOptions,
@@ -108,7 +110,7 @@ interface FakeOptions {
     width: number,
     height: number,
   ) => Promise<VideoScopeAnalysis>
-  releaseVideoScopes?: () => void
+  releaseVideoScopes?: () => Promise<void>
   /** Drain one queue slot per microtask after each decode, like a live decoder. */
   autoDrain?: boolean
   /** decode() of the chunk at this timestamp fires the error callback. */
@@ -1073,7 +1075,7 @@ describe('composite happy path', () => {
   test('samples scopes after presentation, caps cadence, and drops stale analysis', async () => {
     let now = 0
     const scheduled: Array<() => void> = []
-    const releaseVideoScopes = vi.fn()
+    const releaseVideoScopes = vi.fn(async () => undefined)
     const firstAnalysis = vi.fn(async (
       rgba: Uint8ClampedArray,
       width: number,
@@ -1132,6 +1134,127 @@ describe('composite happy path', () => {
     await microtasks()
     expect(delayed.posts.some((post) => post.type === 'videoScopes')).toBe(false)
     expect(releaseVideoScopes).toHaveBeenCalled()
+  })
+
+  test('worker close awaits a scope release already started by disable', async () => {
+    const releaseGate = deferredVoid()
+    const releaseVideoScopes = vi.fn(() => releaseGate.promise)
+    const h = makeHarness({ releaseVideoScopes })
+    await h.core.handleMessage({ type: 'setVideoScopes', enabled: true, generation: 1 })
+    await h.core.handleMessage({ type: 'setVideoScopes', enabled: false, generation: 2 })
+
+    const closing = h.core.handleMessage({ type: 'close' })
+    await microtasks()
+
+    expect(releaseVideoScopes).toHaveBeenCalledTimes(2)
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(0)
+
+    releaseGate.resolve()
+    await closing
+
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(1)
+  })
+
+  test('scope release drains an existing retirement through one child acknowledgement', async () => {
+    const workers: FakeVideoScopeWorker[] = []
+    class FakeVideoScopeWorker {
+      onmessage: ((event: MessageEvent<VideoScopeWorkerReply>) => void) | null = null
+      onerror: ((event: ErrorEvent) => unknown) | null = null
+      readonly posted: unknown[] = []
+      terminateCount = 0
+
+      constructor() {
+        workers.push(this)
+      }
+
+      postMessage(message: unknown): void {
+        this.posted.push(message)
+      }
+
+      terminate(): void {
+        this.terminateCount++
+      }
+
+      emit(message: VideoScopeWorkerReply): void {
+        this.onmessage?.({ data: message } as MessageEvent<VideoScopeWorkerReply>)
+      }
+    }
+    vi.stubGlobal('Worker', FakeVideoScopeWorker)
+
+    try {
+      const analyzer = createVideoScopeAnalyzer()
+      const analysis = analyzer.analyze(new Uint8ClampedArray(4), 1, 1)
+      const rejected = expect(analysis).rejects.toThrow('Video scope analysis was released')
+      const firstRelease = analyzer.release()
+      const secondRelease = analyzer.release()
+      let released = false
+      void secondRelease.then(() => { released = true })
+
+      await rejected
+      await microtasks()
+      expect(released).toBe(false)
+      expect(workers).toHaveLength(1)
+      expect(workers[0].posted.at(-1)).toEqual({ type: 'release' })
+      expect(workers[0].terminateCount).toBe(0)
+
+      workers[0].emit({ type: 'released' })
+      await Promise.all([firstRelease, secondRelease])
+
+      expect(released).toBe(true)
+      expect(workers[0].terminateCount).toBe(1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('scope release falls back to exact-once termination after 250 ms', async () => {
+    const workers: FakeVideoScopeWorker[] = []
+    class FakeVideoScopeWorker {
+      onmessage: ((event: MessageEvent<VideoScopeWorkerReply>) => void) | null = null
+      onerror: ((event: ErrorEvent) => unknown) | null = null
+      terminateCount = 0
+
+      constructor() {
+        workers.push(this)
+      }
+
+      postMessage(): void {}
+
+      terminate(): void {
+        this.terminateCount++
+      }
+
+      emit(message: VideoScopeWorkerReply): void {
+        this.onmessage?.({ data: message } as MessageEvent<VideoScopeWorkerReply>)
+      }
+    }
+    vi.stubGlobal('Worker', FakeVideoScopeWorker)
+    vi.useFakeTimers()
+
+    try {
+      const analyzer = createVideoScopeAnalyzer()
+      const analysis = analyzer.analyze(new Uint8ClampedArray(4), 1, 1)
+      const rejected = expect(analysis).rejects.toThrow('Video scope analysis was released')
+      const release = analyzer.release()
+      let released = false
+      void release.then(() => { released = true })
+
+      await rejected
+      await vi.advanceTimersByTimeAsync(249)
+      expect(released).toBe(false)
+      expect(workers[0].terminateCount).toBe(0)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await release
+      expect(released).toBe(true)
+      expect(workers[0].terminateCount).toBe(1)
+
+      workers[0].emit({ type: 'released' })
+      expect(workers[0].terminateCount).toBe(1)
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
   })
 
   test('two assets decode in their own decoders, draw bottom-to-top, blit once', async () => {

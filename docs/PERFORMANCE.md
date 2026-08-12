@@ -6,6 +6,11 @@ document-memory telemetry to that same harness. It records trends; it does not
 declare Myrelith fast or enforce release or memory budgets from one machine or
 one run.
 
+Issue #75's smaller source-addressable video-scope compute comparison is
+documented separately in [WEBGPU_EXPERIMENT.md](WEBGPU_EXPERIMENT.md). It keeps
+the CPU path as the production default and uses its own strict-port command so
+the general stress harness remains unchanged.
+
 ## Issue #55 bundle-split evidence
 
 Issue #55 uses this harness plus the ordinary production build graph to prove

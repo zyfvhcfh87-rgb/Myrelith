@@ -3274,3 +3274,77 @@ acceptance claims.
   canvas, Anchor X 20%, horizontal flip, disabled-reason transitions, Apply,
   eased interior scrub with full coverage, Reverse, Reset, Ctrl+Z, lock/unlock,
   two hashed screenshots, and 0 console warnings/errors; release the port.
+
+## Milestone 4 Part 10b / issue #75 - optional WebGPU acceleration evaluation
+
+**COMPLETE LOCALLY (2026-08-12): NO-GO FOR PRODUCTION SELECTION.**
+
+- [x] Select the existing fixed 160x90, four-Hz completed-frame video-scope
+  analysis as the bounded Part 8a workload. Keep Canvas2D sampling plus the
+  dedicated CPU analysis worker as the supported/default path.
+- [x] Define one exact integer/fixed-point CPU/WGSL contract, preserve shipped
+  Float64 direction at exact luma, waveform, Cb, and Cr half bins through four
+  upload correction bits, and gate WebGPU initialization with a complete
+  deterministic parity self-test containing both midpoint directions.
+- [x] Add an internal-build-only dynamic adapter with explicit API/adapter/
+  initialization probing, one device/pipeline owner, 353,304-byte maximum
+  request buffer budget, `finally` destruction, device-loss observation,
+  CPU fallback, idempotent release, and child-worker release acknowledgment.
+- [x] Keep ordinary production output free of the WebGPU adapter/shader chunk;
+  an explicitly enabled build emits one separate 11.27 kB experiment chunk.
+- [x] Add a repeatable strict-port Chrome runner with source/fixture fingerprint,
+  exact correctness, latency, startup, explicit buffer memory, adapter/CDP GPU,
+  device-loss, console, cleanup, and port-release evidence.
+- [x] Capture the historical headed decision run on Chrome 151 / Windows 11 /
+  Radeon RX 6600: 71 exact parity comparisons; CPU 1.000 ms median / 1.400 ms
+  p95 versus WebGPU 4.400 / 5.100 ms; 418.400 ms WebGPU startup; 30,720 versus
+  353,304 explicit bytes; exact CPU recovery after real device destruction;
+  zero remaining buffers, browser warnings/errors, or occupied port. This run
+  predates the final self-test release-race fix and is not exact-head evidence.
+- [x] Include in that historical decision evidence a flagged real-app pass on
+  the same strict port: create a text clip, load the opt-in module through the
+  actual analysis worker, publish 14,400 visible samples at frame 0, move scope
+  tabs by keyboard, disable/release, save screenshot hash evidence, keep 0
+  warnings/errors, and release the port.
+- [x] Record the no-go recommendation and unmeasured support-matrix boundaries
+  in `docs/WEBGPU_EXPERIMENT.md`. Reconsider only if a future design removes
+  the CPU readback/upload round trip or materially increases useful compute,
+  followed by exact multi-browser/device evidence before any default change.
+- [x] Before the later shutdown follow-ups, pass 118 focused lifecycle/
+  integration tests, all 2,321 Vitest cases across 169 files plus 16 benchmark-
+  runner checks, normal and opt-in production build/typecheck, oxlint, diff
+  checks, and the production high audit with 0 vulnerabilities.
+
+## Milestone 4 Part 10b / issue #75 - shutdown-handshake review follow-up
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-12); THE FINAL EXACT-HEAD BENCHMARK IS A PR-RECORDED MERGE GATE.**
+
+- [x] Make the child scope-worker release operation expose a completion promise
+  covering both the active child and every earlier retirement, with exact-once
+  acknowledgment/error/post-failure/timeout settlement.
+- [x] Await that completion during render-worker close before publishing
+  `closed`; retain the 250 ms child fallback and independent 1,000 ms bridge
+  fallback, while ordinary scope disable remains non-blocking.
+- [x] Prevent a delayed opt-in module import from creating a WebGPU analyzer
+  after the child has already acknowledged release.
+- [x] Keep release terminal after every awaited session/self-test boundary.
+  A candidate self-test rejection after release must release that candidate,
+  preserve `released`, abort the in-flight request, and prevent every later
+  analysis from returning CPU fallback; cover the race deterministically.
+- [x] Cover idle close, disable-then-close, repeated release, acknowledgment,
+  exact timeout, late acknowledgment, and delayed-import races. Before the
+  final self-test race case was added, pass 118 focused tests, all 2,321 Vitest
+  cases across 169 files, and all 16 benchmark checks.
+- [x] Pass normal and opt-in production build/typecheck, preserve the ordinary
+  WebGPU-free graph and flagged 11.27 kB experiment chunk, pass oxlint and the
+  production high audit at 0 vulnerabilities. The headed Chrome run with exact
+  parity, device-loss fallback, zero live buffers, clean diagnostics, strict-
+  port release, and source fingerprint
+  `sha256:b37ec7c43331995499dc2396b298e069c69686718bac94283b2838360e6813dc`
+  predates the final race fix and is historical decision context only. Keep the
+  production no-go.
+- **External merge gate:** From the final clean committed head, rerun
+  `npm run benchmark:webgpu-scopes -- --warmup 10 --iterations 60`, preserve
+  the ignored `.tmp/issue-75-webgpu/` JSON/Markdown artifact, and publish its
+  source/fixture fingerprints plus parity, device-loss, cleanup, diagnostics,
+  and strict-port results in PR evidence. Make no tracked-doc edit afterward.

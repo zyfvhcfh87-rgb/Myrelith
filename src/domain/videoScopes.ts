@@ -7,6 +7,24 @@ export const VIDEO_SCOPE_HISTOGRAM_BINS = 256
 export const VIDEO_SCOPE_WAVEFORM_HEIGHT = 64
 export const VIDEO_SCOPE_VECTOR_SIZE = 64
 
+const VIDEO_SCOPE_LUMA_RED = 2_126
+const VIDEO_SCOPE_LUMA_GREEN = 7_152
+const VIDEO_SCOPE_LUMA_BLUE = 722
+const VIDEO_SCOPE_LUMA_DIVISOR = 10_000
+const VIDEO_SCOPE_CB_DIVISOR = 18_556
+const VIDEO_SCOPE_CR_DIVISOR = 15_748
+const VIDEO_SCOPE_SIGNAL_DIVISOR = 255 * 255 * VIDEO_SCOPE_LUMA_DIVISOR
+const VIDEO_SCOPE_LUMA_BYTE_DIVISOR = 255 * VIDEO_SCOPE_LUMA_DIVISOR
+const VIDEO_SCOPE_CB_SIGNAL_DIVISOR = 255 * 255 * VIDEO_SCOPE_CB_DIVISOR
+const VIDEO_SCOPE_CR_SIGNAL_DIVISOR = 255 * 255 * VIDEO_SCOPE_CR_DIVISOR
+
+export const VIDEO_SCOPE_LEGACY_TIE_DOWN = {
+  luma: 1 << 0,
+  waveform: 1 << 1,
+  cb: 1 << 2,
+  cr: 1 << 3,
+} as const
+
 export interface VideoScopeAnalysis {
   readonly sourceWidth: number
   readonly sourceHeight: number
@@ -33,8 +51,153 @@ function increment(array: Uint16Array, index: number): void {
   if (array[index] < 65_535) array[index]++
 }
 
-function byte(value: number): number {
-  return Math.min(255, Math.max(0, Math.round(value * 255)))
+function roundUnsignedDivision(numerator: number, divisor: number): number {
+  return Math.floor((numerator + Math.floor(divisor / 2)) / divisor)
+}
+
+function displayedChannel(channel: number, alpha: number): number {
+  return roundUnsignedDivision(channel * alpha, 255)
+}
+
+function weightedLuma(red: number, green: number, blue: number): number {
+  return red * VIDEO_SCOPE_LUMA_RED
+    + green * VIDEO_SCOPE_LUMA_GREEN
+    + blue * VIDEO_SCOPE_LUMA_BLUE
+}
+
+function isExactHalf(numerator: number, divisor: number): boolean {
+  return (numerator % divisor) * 2 === divisor
+}
+
+function chromaNumerator(delta: number, divisor: number): number {
+  return Math.min(
+    divisor * 2,
+    Math.max(0, divisor + delta * 2),
+  )
+}
+
+function legacyTieRoundsDown(
+  numerator: number,
+  divisor: number,
+  legacyRounded: number,
+): boolean {
+  return isExactHalf(numerator, divisor)
+    && legacyRounded < roundUnsignedDivision(numerator, divisor)
+}
+
+function legacyScopeTieDownMask(
+  red: number,
+  green: number,
+  blue: number,
+  alpha: number,
+  lumaNumerator: number,
+  cbNumerator: number,
+  crNumerator: number,
+): number {
+  if (alpha === 0) return 0
+  const waveformNumerator = lumaNumerator * (VIDEO_SCOPE_WAVEFORM_HEIGHT - 1)
+
+  const lumaIsHalf = isExactHalf(lumaNumerator, VIDEO_SCOPE_LUMA_BYTE_DIVISOR)
+  const waveformIsHalf = isExactHalf(waveformNumerator, VIDEO_SCOPE_SIGNAL_DIVISOR)
+  const cbIsHalf = isExactHalf(cbNumerator, VIDEO_SCOPE_CB_SIGNAL_DIVISOR * 2)
+  const crIsHalf = isExactHalf(crNumerator, VIDEO_SCOPE_CR_SIGNAL_DIVISOR * 2)
+  if (!lumaIsHalf && !waveformIsHalf && !cbIsHalf && !crIsHalf) return 0
+
+  // Keep this evaluation order byte-for-byte aligned with the shipped Float64 path.
+  const displayedAlpha = alpha / 255
+  const displayedRed = red / 255 * displayedAlpha
+  const displayedGreen = green / 255 * displayedAlpha
+  const displayedBlue = blue / 255 * displayedAlpha
+  const displayedLuma = (
+    displayedRed * 0.2126
+    + displayedGreen * 0.7152
+    + displayedBlue * 0.0722
+  )
+  const displayedCb = Math.min(
+    1,
+    Math.max(0, 0.5 + (displayedBlue - displayedLuma) / 1.8556),
+  )
+  const displayedCr = Math.min(
+    1,
+    Math.max(0, 0.5 + (displayedRed - displayedLuma) / 1.5748),
+  )
+
+  let mask = 0
+  if (lumaIsHalf && legacyTieRoundsDown(
+    lumaNumerator,
+    VIDEO_SCOPE_LUMA_BYTE_DIVISOR,
+    Math.round(displayedLuma * 255),
+  )) {
+    mask |= VIDEO_SCOPE_LEGACY_TIE_DOWN.luma
+  }
+  if (waveformIsHalf && legacyTieRoundsDown(
+    waveformNumerator,
+    VIDEO_SCOPE_SIGNAL_DIVISOR,
+    Math.round(displayedLuma * (VIDEO_SCOPE_WAVEFORM_HEIGHT - 1)),
+  )) {
+    mask |= VIDEO_SCOPE_LEGACY_TIE_DOWN.waveform
+  }
+  if (cbIsHalf && legacyTieRoundsDown(
+    cbNumerator,
+    VIDEO_SCOPE_CB_SIGNAL_DIVISOR * 2,
+    Math.round(displayedCb * (VIDEO_SCOPE_VECTOR_SIZE - 1)),
+  )) {
+    mask |= VIDEO_SCOPE_LEGACY_TIE_DOWN.cb
+  }
+  if (crIsHalf && legacyTieRoundsDown(
+    crNumerator,
+    VIDEO_SCOPE_CR_SIGNAL_DIVISOR * 2,
+    Math.round(displayedCr * (VIDEO_SCOPE_VECTOR_SIZE - 1)),
+  )) {
+    mask |= VIDEO_SCOPE_LEGACY_TIE_DOWN.cr
+  }
+  return mask
+}
+
+export function videoScopeLegacyTieDownMask(
+  red: number,
+  green: number,
+  blue: number,
+  alpha: number,
+): number {
+  const weighted = weightedLuma(red, green, blue)
+  const cbNumerator = chromaNumerator(
+    alpha * (blue * VIDEO_SCOPE_LUMA_DIVISOR - weighted),
+    VIDEO_SCOPE_CB_SIGNAL_DIVISOR,
+  ) * (VIDEO_SCOPE_VECTOR_SIZE - 1)
+  const crNumerator = chromaNumerator(
+    alpha * (red * VIDEO_SCOPE_LUMA_DIVISOR - weighted),
+    VIDEO_SCOPE_CR_SIGNAL_DIVISOR,
+  ) * (VIDEO_SCOPE_VECTOR_SIZE - 1)
+  return legacyScopeTieDownMask(
+    red,
+    green,
+    blue,
+    alpha,
+    alpha * weighted,
+    cbNumerator,
+    crNumerator,
+  )
+}
+
+function chromaBin(
+  numerator: number,
+  divisor: number,
+  tieRoundsDown: boolean,
+): number {
+  const rounded = roundUnsignedDivision(
+    numerator,
+    divisor * 2,
+  )
+  return tieRoundsDown ? rounded - 1 : rounded
+}
+
+function waveformLevel(lumaNumerator: number, tieRoundsDown: boolean): number {
+  const rounded = roundUnsignedDivision(
+    lumaNumerator * (VIDEO_SCOPE_WAVEFORM_HEIGHT - 1),
+    VIDEO_SCOPE_SIGNAL_DIVISOR,
+  )
+  return tieRoundsDown ? rounded - 1 : rounded
 }
 
 /** Analyze at most the fixed 160 x 90 worker sample budget. */
@@ -67,28 +230,61 @@ export function analyzeVideoScopes(
 
   for (let pixel = 0; pixel < pixels; pixel++) {
     const offset = pixel * 4
-    const alpha = rgba[offset + 3] / 255
+    const sourceRed = rgba[offset]
+    const sourceGreen = rgba[offset + 1]
+    const sourceBlue = rgba[offset + 2]
+    const alpha = rgba[offset + 3]
     if (alpha === 0) continue
-    const red = rgba[offset] / 255 * alpha
-    const green = rgba[offset + 1] / 255 * alpha
-    const blue = rgba[offset + 2] / 255 * alpha
-    const luma = red * 0.2126 + green * 0.7152 + blue * 0.0722
+    const red = displayedChannel(sourceRed, alpha)
+    const green = displayedChannel(sourceGreen, alpha)
+    const blue = displayedChannel(sourceBlue, alpha)
+    const weighted = weightedLuma(sourceRed, sourceGreen, sourceBlue)
+    const lumaNumerator = alpha * weighted
+    const cbNumerator = chromaNumerator(
+      alpha * (sourceBlue * VIDEO_SCOPE_LUMA_DIVISOR - weighted),
+      VIDEO_SCOPE_CB_SIGNAL_DIVISOR,
+    ) * (VIDEO_SCOPE_VECTOR_SIZE - 1)
+    const crNumerator = chromaNumerator(
+      alpha * (sourceRed * VIDEO_SCOPE_LUMA_DIVISOR - weighted),
+      VIDEO_SCOPE_CR_SIGNAL_DIVISOR,
+    ) * (VIDEO_SCOPE_VECTOR_SIZE - 1)
+    const legacyTieDownMask = legacyScopeTieDownMask(
+      sourceRed,
+      sourceGreen,
+      sourceBlue,
+      alpha,
+      lumaNumerator,
+      cbNumerator,
+      crNumerator,
+    )
+    const luma = roundUnsignedDivision(lumaNumerator, VIDEO_SCOPE_LUMA_BYTE_DIVISOR)
+      - (legacyTieDownMask & VIDEO_SCOPE_LEGACY_TIE_DOWN.luma ? 1 : 0)
 
-    increment(redBins, byte(red))
-    increment(greenBins, byte(green))
-    increment(blueBins, byte(blue))
-    increment(lumaBins, byte(luma))
+    increment(redBins, red)
+    increment(greenBins, green)
+    increment(blueBins, blue)
+    increment(lumaBins, luma)
 
     const sourceX = pixel % width
+    const waveformBin = waveformLevel(
+      lumaNumerator,
+      Boolean(legacyTieDownMask & VIDEO_SCOPE_LEGACY_TIE_DOWN.waveform),
+    )
     const waveformY = VIDEO_SCOPE_WAVEFORM_HEIGHT - 1
-      - Math.round(luma * (VIDEO_SCOPE_WAVEFORM_HEIGHT - 1))
+      - waveformBin
     increment(waveform, waveformY * width + sourceX)
 
-    const cb = Math.min(1, Math.max(0, 0.5 + (blue - luma) / 1.8556))
-    const cr = Math.min(1, Math.max(0, 0.5 + (red - luma) / 1.5748))
-    const vectorX = Math.round(cb * (VIDEO_SCOPE_VECTOR_SIZE - 1))
+    const vectorX = chromaBin(
+      cbNumerator,
+      VIDEO_SCOPE_CB_SIGNAL_DIVISOR,
+      Boolean(legacyTieDownMask & VIDEO_SCOPE_LEGACY_TIE_DOWN.cb),
+    )
     const vectorY = VIDEO_SCOPE_VECTOR_SIZE - 1
-      - Math.round(cr * (VIDEO_SCOPE_VECTOR_SIZE - 1))
+      - chromaBin(
+        crNumerator,
+        VIDEO_SCOPE_CR_SIGNAL_DIVISOR,
+        Boolean(legacyTieDownMask & VIDEO_SCOPE_LEGACY_TIE_DOWN.cr),
+      )
     increment(vectorscope, vectorY * VIDEO_SCOPE_VECTOR_SIZE + vectorX)
     sampleCount++
   }

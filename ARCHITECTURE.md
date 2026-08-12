@@ -319,6 +319,20 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   the Inspector only reads it. Export uses the same compositor but separately
   probes its own export-owned context, so preview and export capability status
   may differ without either path inventing support.
+- Issue #75 keeps video-scope compute behind the existing post-presentation
+  analysis boundary. `domain/videoScopes.ts` is the browser-free integer/fixed-
+  point CPU oracle. The ordinary dedicated analysis worker calls it directly;
+  only a build explicitly marked with the internal WebGPU experiment flag may
+  dynamically import `workers/video-scopes-webgpu.ts`. That adapter owns one
+  device/pipeline plus request-scoped buffers, parity-checks itself before use,
+  observes device loss, falls back to CPU on every unsupported/failure path,
+  and releases through the child-worker shutdown handshake. Release is terminal
+  across every awaited opt-in module, session-request, and parity-self-test
+  boundary: late candidates are released, and neither self-test resolution nor
+  rejection may restore ready/fallback state or permit a later CPU result. The
+  render worker does not acknowledge its own close until that child acknowledges
+  release or reaches its bounded termination fallback. It never changes
+  preview/export composition, state, project data, or the production default.
 - `domain/audioMixPlan.ts` is the shared live/export audible-contributor and
   envelope contract. Valid linked fades open real virtual handle ranges and
   apply clip volume with an absolute linear or equal-power envelope. Web Audio
