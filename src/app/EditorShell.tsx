@@ -36,6 +36,7 @@ import { initMediaVisuals } from './mediaVisualsController'
 import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
 import { initSelectionReconciliation } from './selectionReconciliationController'
 import { initProxyController } from './proxyController'
+import { initMotionAnalysisRuntime } from './motionAnalysisRuntime'
 
 export interface EditorShellProps {
   closing: boolean
@@ -82,6 +83,27 @@ export default function EditorShell({ closing }: EditorShellProps) {
       if (release) {
         void release().catch((cause) => {
           console.warn('[EditorShell] proxy controller cleanup failed:', cause)
+        })
+      }
+    }
+  }, [])
+  useEffect(() => {
+    let unmounted = false
+    let release: (() => Promise<void>) | null = null
+    void initMotionAnalysisRuntime().then((acquiredRelease) => {
+      if (unmounted) {
+        void acquiredRelease().catch((cause) => {
+          console.warn('[EditorShell] motion analysis cleanup failed:', cause)
+        })
+      } else release = acquiredRelease
+    }, (cause) => {
+      console.warn('[EditorShell] motion analysis initialization failed:', cause)
+    })
+    return () => {
+      unmounted = true
+      if (release) {
+        void release().catch((cause) => {
+          console.warn('[EditorShell] motion analysis cleanup failed:', cause)
         })
       }
     }

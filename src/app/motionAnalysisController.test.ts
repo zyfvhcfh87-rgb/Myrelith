@@ -1,0 +1,397 @@
+import { describe, expect, it, vi } from 'vitest'
+import type { AnalysisCacheEntry } from '../domain/analysisCache'
+import type { MediaAsset } from '../domain/schema'
+import type {
+  MotionAnalysisWorkerMessage,
+  MotionAnalysisWorkerReply,
+} from '../pipeline/motionAnalysisProtocol'
+import { AnalysisStorage } from './analysisStorage'
+import { MediaJobScheduler } from './mediaJobScheduler'
+import {
+  MotionAnalysisController,
+  type MotionAnalysisControllerDeps,
+  type MotionAnalysisRunRequest,
+} from './motionAnalysisController'
+import type { MotionAnalysisWorkerLike } from './motionAnalysisWorkerBridge'
+
+class FakeWorker implements MotionAnalysisWorkerLike {
+  readonly listeners = new Map<string, Set<(event: never) => void>>()
+  readonly messages: MotionAnalysisWorkerMessage[] = []
+  terminated = false
+  holdCompletion = false
+
+  addEventListener(type: string, listener: (event: never) => void): void {
+    const listeners = this.listeners.get(type) ?? new Set()
+    listeners.add(listener)
+    this.listeners.set(type, listeners)
+  }
+
+  removeEventListener(type: string, listener: (event: never) => void): void {
+    this.listeners.get(type)?.delete(listener)
+  }
+
+  postMessage(message: MotionAnalysisWorkerMessage): void {
+    this.messages.push(message)
+    if (message.type === 'run') {
+      queueMicrotask(() => this.dispatch({
+        type: 'window',
+        requestId: message.requestId,
+        windowIndex: 0,
+        sampleOffset: 0,
+        frames: [{
+          timestampUs: 0,
+          width: 2,
+          height: 2,
+          pixels: new Uint8Array(new ArrayBuffer(4)).fill(3),
+        }],
+        retainedBytes: 4,
+      }))
+    } else if (!this.holdCompletion) {
+      queueMicrotask(() => this.complete(message.requestId))
+    }
+  }
+
+  complete(requestId = 1): void {
+    this.dispatch({
+      type: 'complete',
+      requestId,
+      decodedFrameCount: 1,
+      sampledFrameCount: 1,
+      windowCount: 1,
+      maxRetainedFrames: 1,
+      maxRetainedBytes: 4,
+    })
+  }
+
+  terminate(): void {
+    this.terminated = true
+  }
+
+  dispatch(reply: MotionAnalysisWorkerReply): void {
+    const event = new MessageEvent('message', { data: reply })
+    for (const listener of this.listeners.get('message') ?? []) listener(event as never)
+  }
+}
+
+function asset(id = 'asset-1'): MediaAsset {
+  return {
+    id,
+    fileName: `${id}.mp4`,
+    mimeType: 'video/mp4',
+    size: 5,
+    lastModified: 10,
+    objectUrl: `blob:${id}`,
+    kind: 'video',
+    durationFrames: 30,
+    durationMicroseconds: 1_000_000,
+    sourceBounds: {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 1_000_000 },
+      audio: null,
+    },
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    hasAudio: false,
+    audioSampleRate: null,
+    audioChannels: null,
+    decoderConfigB64: null,
+  }
+}
+
+function request(
+  currentFailure: MotionAnalysisRunRequest['currentFailure'] = () => null,
+  assetValue = asset(),
+  clipId = 'clip-1',
+): MotionAnalysisRunRequest {
+  return {
+    projectBindingId: 'local-project:test',
+    asset: assetValue,
+    source: {
+      videoStreamIndex: 0,
+      width: 1920,
+      height: 1080,
+      frameRate: { num: 30, den: 1 },
+      sourceStartMicroseconds: 0,
+      sourceEndMicroseconds: 1_000_000,
+      samplingIntervalFrames: 1,
+    },
+    attachment: {
+      clipId,
+      sourceMappingDigest: 'c'.repeat(64),
+      projectionDigest: 'd'.repeat(64),
+    },
+    algorithm: {
+      kind: 'stabilization',
+      algorithmId: 'test',
+      algorithmVersion: 'v1',
+      parametersDigest: 'e'.repeat(64),
+    },
+    processor: {
+      consumeWindow: vi.fn(async () => undefined),
+      finish: vi.fn(async () => new TextEncoder().encode('{"ok":true}')),
+    },
+    currentFailure,
+  }
+}
+
+function storageFixture(cached: AnalysisCacheEntry | null = null) {
+  const staged = {
+    fileName: `${'a'.repeat(64)}.${'f'.repeat(32)}.bin`,
+    discard: vi.fn(async () => undefined),
+  }
+  const transaction = {
+    finalize: vi.fn(async () => undefined),
+    rollback: vi.fn(async () => undefined),
+  }
+  const stageResult = vi.fn(async () => staged)
+  const commitEntry = vi.fn(async () => transaction)
+  const storage = {
+    findFreshEntry: vi.fn(async () => cached),
+    readResult: vi.fn(async () => new TextEncoder().encode('{"cached":true}')),
+    touch: vi.fn(async () => undefined),
+    stageResult,
+    commitEntry,
+    removeAttachment: vi.fn(async () => undefined),
+    removeAsset: vi.fn(async () => undefined),
+  } as unknown as AnalysisStorage
+  return { commitEntry, staged, stageResult, storage, transaction }
+}
+
+function deps(
+  storage: AnalysisStorage,
+  workerFactory: () => FakeWorker,
+): MotionAnalysisControllerDeps {
+  return {
+    storage,
+    scheduler: new MediaJobScheduler({
+      budget: { maxConcurrentJobs: 1, maxDecoderSlots: 1 },
+      yieldControl: async () => undefined,
+    }),
+    fetchBlob: vi.fn(async () => new Blob(['video'])),
+    fingerprint: vi.fn(async (_blob, identity) => ({
+      algorithm: 'sha256-sampled-v1' as const,
+      digest: 'b'.repeat(64),
+      fileName: identity.fileName,
+      size: identity.size,
+      lastModified: identity.lastModified,
+    })),
+    workerFactory,
+    now: () => 1_000,
+  }
+}
+
+function cachedEntry(): AnalysisCacheEntry {
+  return {
+    cacheKey: 'a'.repeat(64),
+    projectBindingId: 'local-project:test',
+    assetId: 'asset-1',
+    source: {
+      fingerprint: {
+        algorithm: 'sha256-sampled-v1',
+        digest: 'b'.repeat(64),
+        fileName: 'asset-1.mp4',
+        size: 5,
+        lastModified: 10,
+      },
+      videoStreamIndex: 0,
+      width: 1920,
+      height: 1080,
+      frameRate: { num: 30, den: 1 },
+      sourceStartMicroseconds: 0,
+      sourceEndMicroseconds: 1_000_000,
+      samplingIntervalFrames: 1,
+    },
+    attachment: {
+      clipId: 'clip-1',
+      sourceMappingDigest: 'c'.repeat(64),
+      projectionDigest: 'd'.repeat(64),
+    },
+    algorithm: {
+      kind: 'stabilization',
+      algorithmId: 'test',
+      algorithmVersion: 'v1',
+      parametersDigest: 'e'.repeat(64),
+    },
+    resultFileName: `${'a'.repeat(64)}.${'f'.repeat(32)}.bin`,
+    resultBytes: 15,
+    sampleCount: 1,
+    createdAt: 1_000,
+    lastUsedAt: 1_000,
+  }
+}
+
+describe('MotionAnalysisController', () => {
+  it('streams a worker result through result-first/manifest-last commit', async () => {
+    const storage = storageFixture()
+    const workers: FakeWorker[] = []
+    const controller = new MotionAnalysisController(deps(storage.storage, () => {
+      const worker = new FakeWorker()
+      workers.push(worker)
+      return worker
+    }))
+    const snapshots: ReturnType<MotionAnalysisController['snapshot']>[] = []
+    controller.subscribe((snapshot) => snapshots.push(snapshot))
+    const analysis = request()
+
+    const result = await controller.analyze(analysis)
+
+    expect(result.fromCache).toBe(false)
+    expect(result.completion).toMatchObject({ sampledFrameCount: 1 })
+    expect(analysis.processor.consumeWindow).toHaveBeenCalledOnce()
+    expect(storage.stageResult).toHaveBeenCalledBefore(storage.commitEntry)
+    expect(storage.transaction.finalize).toHaveBeenCalledOnce()
+    expect(storage.transaction.rollback).not.toHaveBeenCalled()
+    expect(workers).toHaveLength(1)
+    expect(workers[0]?.terminated).toBe(true)
+    expect(snapshots.at(-1)?.jobs[0]).toMatchObject({ phase: 'ready', progress: 1 })
+    expect(snapshots.at(-1)?.scheduler.maxActiveJobCount).toBe(1)
+    expect(snapshots.at(-1)?.scheduler.maxActiveDecoderCount).toBe(1)
+  })
+
+  it('returns an exact fresh cache entry without creating a worker', async () => {
+    const cached = cachedEntry()
+    const storage = storageFixture(cached)
+    const workerFactory = vi.fn(() => new FakeWorker())
+    const controller = new MotionAnalysisController(deps(storage.storage, workerFactory))
+
+    const result = await controller.analyze(request())
+
+    expect(result).toMatchObject({ entry: cached, fromCache: true, completion: null })
+    expect(workerFactory).not.toHaveBeenCalled()
+    expect(storage.storage.readResult).toHaveBeenCalledWith(cached)
+    expect(storage.storage.touch).toHaveBeenCalledWith(cached.cacheKey)
+    expect(storage.storage.stageResult).not.toHaveBeenCalled()
+  })
+
+  it('does not cancel a completed generation when the same analysis starts again', async () => {
+    const storage = storageFixture()
+    const workers: FakeWorker[] = []
+    const controller = new MotionAnalysisController(deps(storage.storage, () => {
+      const worker = new FakeWorker()
+      workers.push(worker)
+      return worker
+    }))
+
+    await controller.analyze(request())
+    await controller.analyze(request())
+    await controller.removeAttachment('local-project:test', 'clip-1')
+
+    expect(workers).toHaveLength(2)
+    expect(controller.snapshot().scheduler).toMatchObject({
+      queueDepth: 0,
+      activeJobCount: 0,
+      activeDecoderCount: 0,
+      completedCount: 2,
+      cancelledCount: 0,
+      failedCount: 0,
+      jobs: [],
+    })
+  })
+
+  it('rolls back a manifest commit when the clip changes at the late recheck', async () => {
+    const storage = storageFixture()
+    let checks = 0
+    const analysis = request(() => (++checks >= 8 ? 'replaced-source' : null))
+    const controller = new MotionAnalysisController(deps(storage.storage, () => new FakeWorker()))
+
+    await expect(controller.analyze(analysis)).rejects.toMatchObject({
+      code: 'replaced-source',
+    })
+    expect(storage.storage.commitEntry).toHaveBeenCalledOnce()
+    expect(storage.transaction.rollback).toHaveBeenCalledOnce()
+    expect(storage.transaction.finalize).not.toHaveBeenCalled()
+  })
+
+  it('cancels a running source promptly and allows the next clip to run', async () => {
+    const firstStorage = storageFixture()
+    let failure: 'offline-source' | null = null
+    const firstWorker = new FakeWorker()
+    firstWorker.holdCompletion = true
+    const secondWorker = new FakeWorker()
+    const workers = [firstWorker, secondWorker]
+    const controller = new MotionAnalysisController(deps(
+      firstStorage.storage,
+      () => workers.shift()!,
+    ))
+    const first = controller.analyze(request(() => failure))
+    await vi.waitFor(() => expect(firstWorker.messages[0]?.type).toBe('run'))
+    failure = 'offline-source'
+    controller.reconcile()
+    await expect(first).rejects.toMatchObject({ code: 'offline-source' })
+    expect(firstWorker.terminated).toBe(true)
+
+    const second = request(() => null, asset('asset-2'), 'clip-2')
+    const result = await controller.analyze(second)
+    expect(result.fromCache).toBe(false)
+    expect(secondWorker.terminated).toBe(true)
+    expect(controller.snapshot().scheduler.maxActiveJobCount).toBe(1)
+    expect(controller.snapshot().scheduler.maxActiveDecoderCount).toBe(1)
+  })
+
+  it('drains the worker before removing an attachment sidecar', async () => {
+    const storage = storageFixture()
+    const worker = new FakeWorker()
+    worker.holdCompletion = true
+    const controller = new MotionAnalysisController(deps(storage.storage, () => worker))
+    const pending = controller.analyze(request())
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'cancelled' })
+    await vi.waitFor(() => expect(worker.messages[0]?.type).toBe('run'))
+
+    await controller.removeAttachment('local-project:test', 'clip-1')
+    await rejected
+
+    expect(worker.terminated).toBe(true)
+    expect(storage.storage.removeAttachment).toHaveBeenCalledWith(
+      'local-project:test',
+      'clip-1',
+    )
+    expect(controller.snapshot().scheduler).toMatchObject({
+      queueDepth: 0,
+      activeJobCount: 0,
+      activeDecoderCount: 0,
+      jobs: [],
+    })
+    expect(controller.snapshot().jobs).toEqual([])
+  })
+
+  it('drains a running worker and scheduler during controller disposal', async () => {
+    const storage = storageFixture()
+    const worker = new FakeWorker()
+    worker.holdCompletion = true
+    const controller = new MotionAnalysisController(deps(storage.storage, () => worker))
+    const pending = controller.analyze(request())
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'cancelled' })
+    await vi.waitFor(() => expect(worker.messages[0]?.type).toBe('run'))
+
+    await controller.dispose()
+    await rejected
+
+    expect(worker.terminated).toBe(true)
+    expect(controller.snapshot().scheduler).toMatchObject({
+      queueDepth: 0,
+      activeJobCount: 0,
+      activeDecoderCount: 0,
+      jobs: [],
+    })
+  })
+
+  it('discards a staged result that arrives after source replacement cancellation', async () => {
+    const storage = storageFixture()
+    let resolveStage!: (value: typeof storage.staged) => void
+    const lateStage = new Promise<typeof storage.staged>((resolve) => {
+      resolveStage = resolve
+    })
+    storage.stageResult.mockImplementation(async () => lateStage)
+    let failure: 'replaced-source' | null = null
+    const controller = new MotionAnalysisController(deps(storage.storage, () => new FakeWorker()))
+    const pending = controller.analyze(request(() => failure))
+    await vi.waitFor(() => expect(storage.stageResult).toHaveBeenCalledOnce())
+
+    failure = 'replaced-source'
+    controller.reconcile()
+    await expect(pending).rejects.toMatchObject({ code: 'replaced-source' })
+    resolveStage(storage.staged)
+    await vi.waitFor(() => expect(storage.staged.discard).toHaveBeenCalledOnce())
+    expect(storage.commitEntry).not.toHaveBeenCalled()
+  })
+})

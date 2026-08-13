@@ -121,6 +121,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
 | **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model with renderer no-go; delivery split into #108–#111; 22 focused tests and source-bound Chromium evidence on exclusive port 41844 |
+| **Post-MVP #108 — motion-analysis job/cache foundation** | 🚧 implementation complete locally | production one-job/one-decoder controller; worker-owned real-source decode/downsample with exact frame closure; strict schema-1 OPFS derived cache; source/currentness rollback; focused/full/build/browser gates green; clean-commit publication gate remains |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -1003,9 +1004,23 @@ surface; it is not a second zoom and never enters document history.
   browser-free, deterministic, bounded similarity stabilization and point/box
   tracking feasibility core. Accepted tracking samples map only to existing
   Position X/Y and optional Scale X/Y tracks.
-- `src/domain/analysisCache.ts` + `lensCorrection.ts` — strict proposed
-  analysis-cache provenance/staleness contract and versioned normalized manual
-  lens model. Neither is durable project state or an enabled renderer effect.
+- `src/domain/analysisCache.ts` + `lensCorrection.ts` — strict analysis-cache
+  provenance/staleness contract and versioned normalized manual lens model.
+  The former is implemented by Issue #108's origin-local derived sidecar; the
+  latter remains research-only and is not an enabled renderer effect.
+- `src/app/motionAnalysisController.ts` + `motionAnalysisRuntime.ts` +
+  `motionAnalysisWorkerBridge.ts` — Issue #108's production one-job/
+  one-decoder admission, source/currentness ownership, worker lifecycle,
+  serializable status, and editor-lifecycle integration. The controller returns
+  derived bytes only and never edits the timeline document.
+- `src/pipeline/motionAnalysisDecode.ts` +
+  `src/workers/motion-analysis.worker.ts` — real-source sequential decode,
+  grayscale downsample, exact `VideoFrame` closure, and acknowledged bounded
+  windows of at most 300 retained frames / 32 MiB.
+- `src/app/analysisStorage.ts` — strict schema-1 OPFS analysis sidecar with
+  result-first/manifest-last publication, late-commit rollback, exact
+  provenance lookup, bounded LRU eviction, and recoverable corruption/quota/
+  unavailability behavior.
 - `src/app/motionAnalysisResearchController.ts` +
   `src/workers/motion-analysis-research.worker.ts` — build-unreferenced Issue
   #44 probe/runtime seam: one queued job, one reserved decoder slot, disposable
@@ -4059,3 +4074,49 @@ surface; it is not a second zoom and never enters document history.
   existing Mediabunny AC-3/ProRes codec chunks. The source-bound headed browser
   rerun must wait for the exact tree to be committed and must prove schema 4,
   fixture v2, and algorithm v3.
+
+## Milestone 5 Part 10a.1 / issue #108 - motion-analysis job/cache foundation (2026-08-13)
+
+**IMPLEMENTATION COMPLETE LOCALLY.**
+
+- Production motion analysis now has a StrictMode-safe editor lifecycle and an
+  app-owned controller over a dedicated `MediaJobScheduler` budget of one job,
+  one decoder, and one worker. Generation-specific scheduler ids prevent a new
+  request from cancelling a completed generation during the scheduler's final
+  bookkeeping turn. UI-facing snapshots contain only bounded serializable
+  progress, status, cache-hit, and typed failure facts; no analysis path edits
+  the timeline document.
+- The dedicated production worker opens the real source through the reviewed
+  Mediabunny worker owner, decodes sequentially, downsamples to at most 320x180
+  grayscale, closes every `VideoFrame` immediately, and streams acknowledged
+  windows. The transport retains at most 300 frames / 32 MiB including the
+  two-frame overlap. The app bridge independently validates progress, window
+  order/offsets, tight buffers, sample totals, and terminal peak facts before a
+  result can become cache provenance, then detaches every transferred plane as
+  soon as its consumer settles so retained references cannot pin old windows.
+  The exact browser preflight also proves transferable-buffer ownership before
+  enabling the foundation.
+- The strict schema-1 OPFS sidecar lives under
+  `myrelith-derived/analysis-cache-v1`. Exact keys bind local project, source
+  fingerprint and stream/range/rate/sampling, clip mapping/projection, and
+  algorithm/version/parameters. Result bytes stage before the bounded manifest;
+  a post-commit currentness check either publishes or rolls back. Missing or
+  malformed bytes/manifests, unavailable OPFS, quota pressure, stale provenance,
+  cancellation, replacement, removal, and disposal remain recoverable and
+  cannot become portable project truth.
+- The shared sampled SHA-256 implementation is factored from the existing proxy
+  path without changing proxy fingerprints. The exact analysis cache joins the
+  derived-storage clear/estimate registry; project files, recovery, handles,
+  and undo history remain outside that registry.
+- Focused controller/storage/bridge/decode/provenance/architecture coverage
+  passes 39/39 tests plus all 17 Node runner checks. The authoritative full
+  suite passes 179/179 files and 2,480/2,480 tests plus those 17 checks.
+  TypeScript/Vite build, oxlint, the production high-severity dependency audit
+  with 0 vulnerabilities, runner syntax, and `git diff --check` pass. The build
+  retains only the established large-chunk advisory.
+- In-app Chromium decoded a generated 160x90 H.264 MP4 with 12 frames through
+  the production worker, retained 12 frames / 172,800 bytes at peak, committed
+  a 269-byte result, read the identical bytes from cache on the second request,
+  and drained with scheduler jobs 2/2 complete, 0 cancelled/failed, one worker
+  created/terminated, and no console or page problems. The reproducible
+  `qa:issue108:foundation` clean-commit artifact is the publication gate.

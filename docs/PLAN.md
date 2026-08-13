@@ -4108,3 +4108,33 @@ acceptance claims.
   `WebAssembly.instantiate` calls remain only in four established Mediabunny
   codec chunks. Run the source-bound headed browser artifact after the exact
   tree is committed, proving schema 4 / fixture v2 / algorithm v3.
+
+## Milestone 5 Part 10a.1 / issue #108 - motion-analysis job/cache foundation
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Add the production one-job/one-decoder motion-analysis controller and
+  StrictMode-safe editor lifecycle without adding document mutation or browser
+  resource ownership to React/Zustand state.
+- [x] Decode real sources sequentially in one dedicated worker, close each
+  `VideoFrame` immediately after bounded 320x180 grayscale extraction, and
+  stream acknowledged two-frame-overlap windows within 300 frames / 32 MiB.
+- [x] Validate worker progress, window order/offsets, tight frame ownership,
+  sample totals, peak facts, errors, deserialization, synchronous sends, abort,
+  terminal cleanup, and post-consumer buffer detachment independently in the
+  app bridge.
+- [x] Implement the strict schema-1 origin-local analysis sidecar with exact
+  provenance, result-first/manifest-last transactions, final currentness
+  recheck, rollback, 1,024-entry/256-MiB-entry limits, origin-aware LRU, exact
+  remove/clear, and recoverable unavailable/quota/corruption behavior.
+- [x] Reuse the proxy sampled SHA-256 byte contract and register only the exact
+  analysis cache with disposable derived-storage estimates and clearing.
+- [x] Pass 39/39 focused tests plus all 17 runner checks; pass 179/179 files and
+  2,480/2,480 full-suite tests plus those checks; pass TypeScript/Vite build,
+  oxlint, production audit at 0 vulnerabilities, runner syntax, architecture
+  boundaries, and `git diff --check`.
+- [x] Pass an in-app Chromium real-source gate: 12/12 generated H.264 frames,
+  12 retained frames / 172,800 bytes, exact 269-byte miss-to-hit cache round
+  trip, scheduler 2 completed / 0 cancelled / 0 failed, worker 1/1 with zero
+  active resources, and no browser problems. Publish the reproducible
+  clean-commit `qa:issue108:foundation` artifact after commit.

@@ -548,13 +548,35 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   original is offline. The exact supported codec/profile matrix is published in
   `docs/PROXY_CODEC_SUPPORT.md` and is runtime-probed before generation enables.
 
-## Motion-analysis research boundary
+## Motion-analysis foundation and research boundary
 
-- Issue #44 is build-unreferenced feasibility work only. The browser runtime is
-  owned by `app/motionAnalysisResearchController.ts`; its disposable dedicated
-  worker imports only browser-free domain modules. Production/editor entry
-  graphs do not import it, React and Zustand do not observe it, and the research
-  adds no portable project schema, effect descriptor, or document mutation.
+- Issue #108 is the production motion-analysis job, decode, and derived-cache
+  foundation. `app/motionAnalysisRuntime.ts` is leased from `EditorShell` and
+  composes `app/motionAnalysisController.ts`, which alone owns the one-job/
+  one-decoder `MediaJobScheduler`, support facts, source/document-currentness
+  checks, cancellation, and serializable status snapshots. React and Zustand
+  never receive `File`, `Blob`, `VideoFrame`, worker, decoder, OPFS, or result
+  byte ownership, and the controller never mutates the timeline document.
+- `pipeline/motionAnalysisDecode.ts` owns sequential source decode and grayscale
+  downsampling. Its dedicated `workers/motion-analysis.worker.ts` closes every
+  decoded `VideoFrame` in the same operation that acquired it, streams at most
+  300 tightly owned grayscale planes / 32 MiB through one acknowledged window,
+  and closes its cursor/source before terminal settlement. The app bridge owns
+  abort/error/messageerror/send failure, terminates the worker exactly once,
+  detaches every transferred plane when its consumer settles, and releases
+  scheduler admission only after local ownership is balanced.
+- `app/analysisStorage.ts` implements the strict schema-1 origin-local OPFS
+  sidecar under `myrelith-derived/analysis-cache-v1`. `domain/analysisCache.ts`
+  owns the exact key, provenance, freshness, and stale-rejection policy. Writes
+  stage result bytes before the manifest, publish only after a final currentness
+  check, and roll back late commits; corrupt, unavailable, quota-exhausted, or
+  stale entries are recoverable derived-data failures rather than project loss.
+- Issue #44 remains build-unreferenced feasibility work for the algorithms and
+  quality gates. Its browser runtime is owned by
+  `app/motionAnalysisResearchController.ts`; its disposable dedicated worker
+  imports only browser-free domain modules. Production/editor entry graphs do
+  not import the research controller, and the research adds no portable project
+  schema, effect descriptor, or document mutation.
 - `domain/motionAnalysis.ts` owns bounded grayscale feature detection, patch
   matching, deterministic similarity fitting, stabilization smoothing, and
   conservative crop estimates. Every retained grayscale `Uint8Array` must be a
@@ -564,17 +586,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   point and similarity-box tracking plus conversion to existing Position X/Y
   and Scale X/Y tracks. `domain/lensCorrection.ts` owns only the versioned,
   normalized manual lens model and its fixed-grid safety validation.
-- `domain/analysisCache.ts` is a proposed derived-cache contract, not project
-  truth or a storage implementation. Its keys bind project, asset, sampled
-  source fingerprint, stream/geometry/rate, source range and sampling, clip
-  mapping/projection, algorithm/version, and parameters; stale entries are
-  rejected rather than adopted silently.
-- The research controller admits at most one analysis job and reserves at most
-  one decoder slot. Each child operation must own and close every VideoFrame,
-  decoder, temporary surface, worker, and OPFS handle it creates. Cancellation
-  or the bounded support-readback deadline closes the probe VideoFrame before
-  the caller receives settlement and shared admission is released; the original
-  readback promise remains observed after late resolution or rejection.
+- Both the production controller and research controller admit at most one
+  analysis job and reserve at most one decoder slot. Each child operation must
+  own and close every VideoFrame, decoder, temporary surface, worker, and OPFS
+  handle it creates. Cancellation and bounded support/storage deadlines settle
+  the caller without abandoning late ownership; original promises remain
+  observed and late-created resources are cleaned without publishing results.
 - Analysis results remain preview-only until an explicit Apply operation writes
   ordinary canonical tracks through normal history. Lens remapping remains a
   no-go for production until issue #111 proves a bounded renderer with exact
