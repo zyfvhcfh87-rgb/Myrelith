@@ -18,11 +18,10 @@ import type { Clip, ClipId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
 import {
   clipSourceTimeMap,
-  sourceTicksAtTimelineOffset,
 } from '../domain/sourceTimeMap'
 import {
   createVideoStabilizationPlan,
-  sourceTicksToTimestamp,
+  createVideoStabilizationSamplePlan,
   videoStabilizationAvailabilityReason,
   VIDEO_STABILIZATION_ALGORITHM_ID,
   VIDEO_STABILIZATION_ALGORITHM_VERSION,
@@ -60,6 +59,13 @@ export const MAX_VIDEO_STABILIZATION_SAMPLES = Math.floor(
   (MAX_VIDEO_STABILIZATION_RESULT_BYTES - VIDEO_STABILIZATION_RESULT_ENVELOPE_BYTES)
   / MAX_VIDEO_STABILIZATION_SERIALIZED_SAMPLE_BYTES,
 )
+const VIDEO_STABILIZATION_MAX_PAIRS_PER_YIELD = 16
+const VIDEO_STABILIZATION_YIELD_BUDGET_MS = 8
+
+export interface VideoStabilizationProcessorScheduling {
+  readonly now?: () => number
+  readonly yieldControl?: () => Promise<void>
+}
 
 export interface VideoStabilizationSession {
   readonly clipId: ClipId
@@ -160,19 +166,27 @@ export function parseVideoStabilizationAnalysis(
   for (let index = 0; index < value.samples.length; index++) {
     const sample = value.samples[index]
     const timestampUs = record(sample) ? sample.timestampUs : null
+    const sourceTimeTicks = record(sample) ? sample.sourceTimeTicks : null
     if (
       !record(sample)
-      || !exactKeys(sample, ['timestampUs', 'estimateFromPrevious'])
+      || !exactKeys(sample, ['timestampUs', 'sourceTimeTicks', 'estimateFromPrevious'])
       || typeof timestampUs !== 'number'
       || !Number.isSafeInteger(timestampUs)
-      || timestampUs <= previousTimestamp
+      || timestampUs < previousTimestamp
+      || typeof sourceTimeTicks !== 'number'
+      || !Number.isSafeInteger(sourceTimeTicks)
+      || sourceTimeTicks < 0
+      || (index > 0 && sourceTimeTicks <= samples[index - 1]!.sourceTimeTicks)
       || (index === 0
         ? sample.estimateFromPrevious !== null
-        : !estimate(sample.estimateFromPrevious))
+        : timestampUs === samples[index - 1]!.timestampUs
+          ? sample.estimateFromPrevious !== null
+          : !estimate(sample.estimateFromPrevious))
     ) throw new MotionAnalysisError('storage-corrupt', 'Stabilization cache samples are invalid')
     previousTimestamp = timestampUs
     samples.push({
       timestampUs,
+      sourceTimeTicks,
       estimateFromPrevious: index === 0
         ? null
         : sample.estimateFromPrevious as unknown as GlobalMotionEstimate,
@@ -199,22 +213,58 @@ function meanAbsoluteFrameDifference(from: GrayFrame, to: GrayFrame): number {
 }
 
 function yieldToBrowser(): Promise<void> {
+  const scheduler = (globalThis as {
+    scheduler?: { yield?: () => Promise<void> }
+  }).scheduler
+  if (typeof scheduler?.yield === 'function') return scheduler.yield()
+  if (typeof MessageChannel === 'function') {
+    return new Promise((resolve) => {
+      const channel = new MessageChannel()
+      channel.port1.onmessage = () => {
+        channel.port1.close()
+        channel.port2.close()
+        resolve()
+      }
+      channel.port2.postMessage(undefined)
+    })
+  }
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+function monotonicNow(): number {
+  return typeof globalThis.performance?.now === 'function'
+    ? globalThis.performance.now()
+    : Date.now()
+}
+
 export function createVideoStabilizationProcessor(
+  sampleSourceTimeTicks: readonly number[],
   maximumSamples = MAX_VIDEO_STABILIZATION_SAMPLES,
+  scheduling: VideoStabilizationProcessorScheduling = {},
 ): MotionAnalysisResultProcessor {
   if (
     !Number.isSafeInteger(maximumSamples)
     || maximumSamples < 2
     || maximumSamples > MAX_VIDEO_STABILIZATION_SAMPLES
   ) throw new RangeError('Stabilization sample limit is outside the reviewed product envelope')
+  if (
+    sampleSourceTimeTicks.length < 2
+    || sampleSourceTimeTicks.length > maximumSamples
+    || sampleSourceTimeTicks.some((ticks, index) => (
+      !Number.isSafeInteger(ticks)
+      || ticks < 0
+      || (index > 0 && ticks <= sampleSourceTimeTicks[index - 1]!)
+    ))
+  ) throw new RangeError('Stabilization sample source-time schedule is invalid')
   const samples: VideoStabilizationAnalysisSample[] = []
   let serializedSampleBytes = 0
   let width = 0
   let height = 0
   let nextPairEndIndex = 1
+  let pairBatchStartedAt = 0
+  let pairsSinceYield = 0
+  const now = scheduling.now ?? monotonicNow
+  const yieldControl = scheduling.yieldControl ?? yieldToBrowser
   const appendSample = (sample: VideoStabilizationAnalysisSample): void => {
     const sampleBytes = JSON.stringify(sample).length + 1
     if (
@@ -236,7 +286,11 @@ export function createVideoStabilizationProcessor(
       if (samples.length === 0) {
         width = first.width
         height = first.height
-        appendSample({ timestampUs: first.timestampUs, estimateFromPrevious: null })
+        appendSample({
+          timestampUs: first.timestampUs,
+          sourceTimeTicks: sampleSourceTimeTicks[0]!,
+          estimateFromPrevious: null,
+        })
       }
       if (first.width !== width || first.height !== height) {
         throw new MotionAnalysisError('decode-readback', 'Stabilization frames changed dimensions during analysis')
@@ -265,12 +319,24 @@ export function createVideoStabilizationProcessor(
           'decode-readback',
           'Stabilization frames changed dimensions during analysis',
         )
-        // Release the browser event loop between bounded pairs so Cancel and
-        // source replacement can be observed while the bridge retains this window.
-        await yieldToBrowser()
-        if (signal.aborted) throw new DOMException('Motion analysis was cancelled', 'AbortError')
+        if (pairsSinceYield === 0) pairBatchStartedAt = now()
         const from = { width, height, data: fromWorker.pixels } satisfies GrayFrame
         const to = { width, height, data: toWorker.pixels } satisfies GrayFrame
+        if (toWorker.timestampUs < fromWorker.timestampUs) {
+          throw new MotionAnalysisError(
+            'decode-readback',
+            'Stabilization decoder timestamps moved backwards',
+          )
+        }
+        if (toWorker.timestampUs === fromWorker.timestampUs) {
+          appendSample({
+            timestampUs: toWorker.timestampUs,
+            sourceTimeTicks: sampleSourceTimeTicks[globalEnd]!,
+            estimateFromPrevious: null,
+          })
+          nextPairEndIndex++
+          continue
+        }
         let motion: GlobalMotionEstimate | null
         try {
           motion = estimateGlobalMotion(
@@ -300,13 +366,33 @@ export function createVideoStabilizationProcessor(
             `Parallax or residual motion exceeded the reviewed envelope at analyzed frame ${globalEnd}.`,
           )
         }
-        appendSample({ timestampUs: toWorker.timestampUs, estimateFromPrevious: motion })
+        appendSample({
+          timestampUs: toWorker.timestampUs,
+          sourceTimeTicks: sampleSourceTimeTicks[globalEnd]!,
+          estimateFromPrevious: motion,
+        })
         nextPairEndIndex++
+        pairsSinceYield++
+        const batchDeadlineReached = now() - pairBatchStartedAt >= VIDEO_STABILIZATION_YIELD_BUDGET_MS
+        if (
+          pairsSinceYield >= VIDEO_STABILIZATION_MAX_PAIRS_PER_YIELD
+          || batchDeadlineReached
+        ) {
+          // scheduler.yield or MessageChannel avoids nested-timer clamping;
+          // the timer fallback is never unconditional per-pair work and still
+          // runs only after a bounded batch/deadline.
+          await yieldControl()
+          pairsSinceYield = 0
+          if (signal.aborted) throw new DOMException('Motion analysis was cancelled', 'AbortError')
+        }
       }
     },
     finish: async (completion, signal) => {
       if (signal.aborted) throw new DOMException('Motion analysis was cancelled', 'AbortError')
-      if (samples.length !== completion.sampledFrameCount || samples.length < 2) {
+      if (
+        samples.length !== completion.sampledFrameCount
+        || samples.length !== sampleSourceTimeTicks.length
+      ) {
         throw new MotionAnalysisError('decode-readback', 'Stabilization analysis result is incomplete')
       }
       const bytes = encoder.encode(JSON.stringify({
@@ -343,18 +429,6 @@ function sourceFor(asset: MediaAsset): VideoStabilizationSource | null {
     firstTimestampUs: bounds.firstTimestampUs,
     frameRate: { ...asset.frameRate },
   }
-}
-
-function maximumSourceRate(clip: Clip): number {
-  const map = clipSourceTimeMap(clip)
-  const rates = [map.rate, ...(map.speedCurve?.points.map((point) => point.rate) ?? [])]
-  return Math.max(...rates.map((rate) => rate.numerator / rate.denominator))
-}
-
-function samplingInterval(doc: TimelineDoc, clip: Clip, source: VideoStabilizationSource): number {
-  const nativePerDocument = source.frameRate.num * doc.frameRate.den
-    / (source.frameRate.den * doc.frameRate.num)
-  return Math.max(1, Math.ceil(nativePerDocument * maximumSourceRate(clip)))
 }
 
 function projectionFacts(doc: TimelineDoc, clip: Clip, source: VideoStabilizationSource) {
@@ -424,18 +498,21 @@ export async function analyzeVideoStabilization(clipId: ClipId): Promise<VideoSt
   if (!videoBounds || videoBounds.status !== 'exact') {
     throw new MotionAnalysisError('unsupported-runtime', 'The video source has no exact timestamp bounds')
   }
-  const startTicks = sourceTicksAtTimelineOffset(map, 0)
-  const endTicks = sourceTicksAtTimelineOffset(map, clip.timelineRange.durationFrames)
-  const sourceStartMicroseconds = Math.max(
-    videoBounds.firstTimestampUs,
-    sourceTicksToTimestamp(startTicks, source, doc.frameRate, 'floor'),
-  )
-  const sourceEndMicroseconds = Math.min(
-    videoBounds.endTimestampUs,
-    sourceTicksToTimestamp(endTicks, source, doc.frameRate, 'ceil'),
-  )
-  if (sourceEndMicroseconds <= sourceStartMicroseconds) {
-    throw new MotionAnalysisError('unsupported-runtime', 'The clip maps to an empty video source range')
+  let samplePlan
+  try {
+    samplePlan = createVideoStabilizationSamplePlan(
+      doc,
+      clip,
+      source,
+      videoBounds,
+      MAX_VIDEO_STABILIZATION_SAMPLES,
+    )
+  } catch (cause) {
+    throw new MotionAnalysisError(
+      'unsupported-runtime',
+      cause instanceof Error ? cause.message : String(cause),
+      cause,
+    )
   }
   const sourceMappingDigest = await jsonDigest(map)
   const projectionDigest = await jsonDigest(projectionFacts(doc, clip, source))
@@ -458,9 +535,9 @@ export async function analyzeVideoStabilization(clipId: ClipId): Promise<VideoSt
         width: source.width,
         height: source.height,
         frameRate: { ...source.frameRate },
-        sourceStartMicroseconds,
-        sourceEndMicroseconds,
-        samplingIntervalFrames: samplingInterval(doc, clip, source),
+        sourceStartMicroseconds: samplePlan.sourceStartMicroseconds,
+        sourceEndMicroseconds: samplePlan.sourceEndMicroseconds,
+        samplingIntervalFrames: 1,
       } satisfies Omit<AnalysisSourceProvenance, 'fingerprint'>,
       attachment,
       algorithm: {
@@ -469,7 +546,8 @@ export async function analyzeVideoStabilization(clipId: ClipId): Promise<VideoSt
         algorithmVersion: VIDEO_STABILIZATION_ALGORITHM_VERSION,
         parametersDigest,
       },
-      processor: createVideoStabilizationProcessor(),
+      sampleTimestampsUs: samplePlan.sampleTimestampsUs,
+      processor: createVideoStabilizationProcessor(samplePlan.sampleSourceTimeTicks),
       currentFailure: () => currentFailureFor(
         bindingId,
         clipId,
@@ -480,6 +558,17 @@ export async function analyzeVideoStabilization(clipId: ClipId): Promise<VideoSt
   })
   try {
     const analysis = parseVideoStabilizationAnalysis(run.bytes)
+    if (
+      analysis.samples.length !== samplePlan.sampleSourceTimeTicks.length
+      || analysis.samples.some((sample, index) => (
+        sample.sourceTimeTicks !== samplePlan.sampleSourceTimeTicks[index]
+      ))
+    ) {
+      throw new MotionAnalysisError(
+        run.fromCache ? 'storage-corrupt' : 'decode-readback',
+        'Stabilization result does not match the exact rendered-frame schedule',
+      )
+    }
     return {
       clipId,
       analysis,

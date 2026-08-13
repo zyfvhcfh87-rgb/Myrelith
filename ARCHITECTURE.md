@@ -625,17 +625,42 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   silently authored. Safe zoom is solved after simplification against the
   interpolated transform at every integer clip frame; its displayed crop is
   the total cropped span `1 - 1 / safeZoom`, and the shared envelope is at most
-  1.35x. Product runs admit at most 1,000,000 clip frames, 65,534 retained
+  1.35x. Coverage interpolation is a single-pass stream that accumulates the
+  reciprocal crop interval and maximum scale together; it must never retain an
+  array with one transform object per admitted clip frame. Product runs admit
+  at most 1,000,000 clip frames, 65,534 retained
   analysis samples, 1,024 keys per transform track, four million simplification
   comparisons, and 100,000 document keys. Before retaining each sample, the
   adapter enforces a 512-byte serialized-sample ceiling inside a 32 MiB working
   result budget derived from the shared 256 MiB cache-entry envelope; cached
   bytes are rejected before decode when they exceed the same product ceiling.
-  SourceTimeMap ticks are conformed project-frame units: request bounds convert
-  ticks to WebCodecs microseconds with the document frame rate, and analyzed
-  timestamps convert back with that same document rate. The connected asset's
-  native frame rate is used only to choose the bounded decoder sampling stride.
-  This distinction is mandatory when native and project rates differ.
+  Pair estimation checks cancellation before every pair and cooperatively yields
+  after at most 16 pairs or eight milliseconds of synchronous pair work.
+  `scheduler.yield()` is preferred, with a non-clamped `MessageChannel` task
+  fallback; the zero-delay timer fallback is reached only when neither browser
+  primitive exists and is batch/deadline-driven rather than unconditional per
+  retained sample.
+  SourceTimeMap ticks are conformed project-frame units. Product analysis walks
+  the bounded clip timeline with the same canonical selector as preview:
+  containing conformed project frame first, then that frame's direct
+  project-rate timestamp. Preview, export, and analysis all submit this same
+  time and let the decoder select the containing native media sample; none may
+  round to or deduplicate with an average native frame rate first. Analysis
+  submits every distinct conformed request through one sparse
+  `samplesAtTimestamps` decode lane and uses the returned sample timestamp as
+  the only displayed-media identity, including when a container's first
+  presentation timestamp is positive or negative. Exact
+  container bounds are normalized to their checked duration; the first PTS is
+  never added to render requests. The half-open admitted bounds encompass the
+  first through last direct request timestamps, including fractional trim
+  starts; they are never raw fractional SourceTimeMap tick conversions. Result
+  schema 3 stores every submitted request's exact SourceTimeMap tick and
+  returned sample timestamp. Equal adjacent returned timestamps are explicit
+  null-motion identity steps; every later distinct timestamp retains its
+  measured motion. Planning indexes corrections and repeated-run `hold`
+  boundaries through the complete request-to-returned-timestamp map. This is
+  mandatory for variable and mismatched native/project rates, slow conforming
+  repeats, and fast retiming that skips nonuniform native-frame counts.
 - Stabilization Apply is one immutable document operation and one history
   entry. It writes only ordinary Position X/Y, Rotation, and equal Scale X/Y
   tracks, preserves unrelated tracks, and requires explicit consent before

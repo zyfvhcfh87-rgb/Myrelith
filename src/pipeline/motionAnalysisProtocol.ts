@@ -1,4 +1,5 @@
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
+import { MAX_ANALYSIS_SAMPLES } from '../domain/analysisCache'
 
 /** Shared serializable contract between the app bridge and analysis worker. */
 
@@ -18,6 +19,7 @@ export interface MotionAnalysisWorkerRunMessage {
   readonly startTimestampUs: number
   readonly endTimestampUs: number
   readonly samplingIntervalFrames: number
+  readonly sampleTimestampsUs?: readonly number[]
 }
 
 function assertSafeInteger(value: number, label: string, minimum?: number): void {
@@ -43,6 +45,22 @@ export function validateMotionAnalysisWorkerRunMessage(
   }
   if (!(message.blob instanceof Blob) || message.blob.size <= 0) {
     throw new TypeError('Analysis source must be a non-empty Blob')
+  }
+  if (message.sampleTimestampsUs !== undefined) {
+    if (
+      message.sampleTimestampsUs.length < 1
+      || message.sampleTimestampsUs.length > MAX_ANALYSIS_SAMPLES
+      || message.samplingIntervalFrames !== 1
+    ) throw new RangeError('Sparse analysis timestamps exceed the reviewed sample envelope')
+    for (let index = 0; index < message.sampleTimestampsUs.length; index++) {
+      const timestampUs = message.sampleTimestampsUs[index]!
+      assertSafeInteger(timestampUs, `sampleTimestampsUs[${index}]`)
+      if (
+        timestampUs < message.startTimestampUs
+        || timestampUs >= message.endTimestampUs
+        || (index > 0 && timestampUs <= message.sampleTimestampsUs[index - 1]!)
+      ) throw new RangeError('Sparse analysis timestamps must be strictly increasing within the source range')
+    }
   }
 }
 

@@ -4430,3 +4430,124 @@ acceptance claims.
   2,535/2,535 tests, all 17 evidence-runner checks, build/typecheck, warning-
   free lint, the production audit with 0 vulnerabilities, and diff checks.
   Refresh clean Chromium, CI, and exact-head Codex review before merge.
+
+## Milestone 5 Part 10a.2 / issue #109 - sixth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Replace fractional tick request bounds and fixed sampling strides with a
+  bounded render-parity schedule: containing conformed project frame, shared
+  nearest project-to-native rescaling, unique native images, and one sparse
+  ordered `samplesAtTimestamps` lane. Bound the half-open decoder range to the
+  first through last selected native images.
+- [x] Version stabilization results and product provenance to schema 2 /
+  `similarity-product-v2`. Store the first exact displayed SourceTimeMap tick
+  beside every analyzed sample, verify that schedule again after fresh/cache
+  parsing, and use both logical native identity and nondecreasing actual decoded
+  timestamp for correction lookup and repeated-run `hold` boundaries.
+- [x] Validate and copy sparse timestamps at controller, protocol, worker, and
+  source-cursor boundaries; retain signed exact stream support; reject an empty,
+  unordered, out-of-range, non-unit-stride, or over-budget schedule before
+  decoder allocation or sample 65,535 retention.
+- [x] Add deterministic fractional-bound, 24-to-30 fps 1x repeat, 24-to-30 fps
+  4x retime, sparse decode/protocol, signed cursor, product-version, duplicate
+  decoded-timestamp, and early-cap regressions. The first clean headed-Chromium
+  run on local commit `450da854fc` exposed the legitimate equal-timestamp
+  Mediabunny result; after the correction, the complete dirty-tree flow passed
+  with exact cache reuse, one history entry, balanced resources, and no console
+  problems. Pass 8/8 focused files with 78/78 tests plus 17/17 runner checks;
+  pass 184/184 full-suite files with 2,542/2,542 tests plus the same runner;
+  pass the 4,810-module TypeScript/Vite build, warning-free lint, production
+  audit with 0 vulnerabilities, and diff checks. Refresh clean-tree Chromium,
+  CI, and exact-head Codex review on the amended commit.
+
+## Milestone 5 Part 10a.2 / issue #109 - seventh exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Replace the duration-sized coverage-transform array with a lazy iterable
+  over every admitted integer clip frame. Accumulate exact reciprocal crop
+  constraints and maximum scale in the same traversal, retaining only the
+  already bounded simplified keyframes plus one transient transform.
+- [x] Keep `requiredVideoStabilizationSafeZoom` iterable-based and add a
+  deterministic single-use stream regression that fails on a second traversal.
+  Pass 9/9 focused files with 83/83 tests plus 17/17 runner checks and 184/184
+  full-suite files with 2,543/2,543 tests plus the same runner. Pass TypeScript,
+  build, warning-free lint, the production audit with 0 vulnerabilities, and
+  diff checks; refresh clean headed Chromium, CI, and exact-head Codex review
+  after commit.
+
+## Milestone 5 Part 10a.2 / issue #109 - eighth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Remove the container first-PTS offset from stabilization's source-tick,
+  native-frame, sparse request, and inverse mappings so they match preview and
+  export's zero-relative rendered-source timeline. Normalize exact bounds to a
+  checked duration and reject mismatched connected-source timestamp facts.
+- [x] Advance product provenance to `similarity-product-v3` and add positive
+  plus negative first-presentation-timestamp regressions with identical target
+  timestamps, source ticks, and half-open decode bounds. Pass 9/9 focused files
+  with 85/85 tests plus 17/17 runner checks and 184/184 full-suite files with
+  2,545/2,545 tests plus the same runner. Pass TypeScript, build, warning-free
+  lint, the production audit with 0 vulnerabilities, and diff checks; refresh
+  clean headed Chromium, CI, and exact-head Codex review after commit.
+
+## Milestone 5 Part 10a.2 / issue #109 - ninth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Replace the per-pair zero-delay timer with a bounded cooperative-yield
+  schedule: check cancellation before every pair, then yield after at most 16
+  pairs or eight milliseconds of synchronous work.
+- [x] Prefer `scheduler.yield()`, otherwise deliver one non-clamped
+  `MessageChannel` task and close both ports. Retain a zero-delay timer only for
+  environments without either primitive, driven by the same bounded
+  batch/deadline rather than unconditionally after every pair.
+- [x] Add deterministic batching and deadline-cancellation regressions. Pass
+  9/9 focused files with 87/87 tests plus 17/17 runner checks and 184/184
+  full-suite files with 2,547/2,547 tests plus the same runner. Pass the
+  4,810-module TypeScript/Vite build, warning-free lint, production audit with
+  0 vulnerabilities, and diff checks; refresh clean headed Chromium, CI, and
+  exact-head Codex review on the final tree.
+
+## Milestone 5 Part 10a.2 / issue #109 - tenth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Keep every video `sourceFrame` at its conformed document-rate timestamp
+  through streaming preview, legacy preview, export, and stabilization
+  analysis. Let the decoder select the containing native media sample instead
+  of rounding to a nearest native frame before decode.
+- [x] Use native rate only for decode tolerance and deterministic containing-
+  sample deduplication. Store the first direct request timestamp and exact
+  SourceTimeMap tick that display each retained native sample.
+- [x] Advance stabilization provenance to `similarity-product-v4` and add a
+  mismatched 24 fps source / 30 fps project regression proving source frame 2
+  stays at 66,667 µs across both preview protocols, export, and analysis. Pass
+  11/11 focused files with 152/152 tests plus 17/17 runner checks and 184/184
+  full-suite files with 2,548/2,548 tests plus the same runner. Pass the
+  4,810-module TypeScript/Vite build, warning-free lint, production audit with
+  0 vulnerabilities, and diff checks; refresh clean headed Chromium, CI, and
+  exact-head Codex review on the final tree.
+
+## Milestone 5 Part 10a.2 / issue #109 - eleventh exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Remove average-native-rate sample deduplication. Submit every distinct
+  conformed document-rate render request and use only the sparse decoder's
+  returned sample timestamp as displayed-media identity.
+- [x] Encode equal returned timestamps as explicit null-motion holds, retain
+  motion for every later distinct timestamp, and protect repeated runs by the
+  request-to-returned-timestamp map. Advance result schema to 3 and product
+  cache provenance to `similarity-product-v5`.
+- [x] Pin the hostile VFR 0/33 ms request -> 0/25 ms sample case plus true
+  repeats. Pass 11/11 focused files with 154/154 tests plus 17/17 runner checks
+  and 184/184 full-suite files with 2,550/2,550 tests plus the same runner. Pass
+  the 4,810-module TypeScript/Vite build, warning-free lint, production audit
+  with 0 vulnerabilities, and diff checks. Pass clean headed Chromium on code
+  commit `c6005ca437` and strict port 41883 with 32 samples/keys, exact cache
+  reuse, 1.0232x safe zoom, one history entry, balanced worker/cache cleanup,
+  zero console/page problems, and complete port release; refresh exact-head CI
+  and fresh Codex review after the final docs-only amend.

@@ -44,4 +44,22 @@ describe('validateMotionAnalysisWorkerRunMessage', () => {
       endTimestampUs: -2,
     }))).toThrow('Analysis source range must be non-empty')
   })
+
+  it('accepts only bounded strictly increasing sparse timestamps inside the lane', () => {
+    expect(() => validateMotionAnalysisWorkerRunMessage(runMessage({
+      samplingIntervalFrames: 1,
+      sampleTimestampsUs: [0, 41_667, 125_000],
+    }))).not.toThrow()
+    expect(() => validateMotionAnalysisWorkerRunMessage(runMessage({
+      sampleTimestampsUs: [0, 41_667],
+    }))).toThrow(/sample envelope/)
+    expect(() => validateMotionAnalysisWorkerRunMessage(runMessage({
+      samplingIntervalFrames: 1,
+      sampleTimestampsUs: [0, 0],
+    }))).toThrow(/strictly increasing/)
+    expect(() => validateMotionAnalysisWorkerRunMessage(runMessage({
+      samplingIntervalFrames: 1,
+      sampleTimestampsUs: [1_000_000],
+    }))).toThrow(/within the source range/)
+  })
 })

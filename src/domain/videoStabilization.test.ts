@@ -4,10 +4,12 @@ import { defaultClipVisualSettings } from './clipInspector'
 import type { GlobalMotionEstimate, SimilarityTransform } from './motionAnalysis'
 import type { Clip, TimelineDoc } from './schema'
 import {
+  createVideoStabilizationSamplePlan,
   createVideoStabilizationPlan,
   requiredVideoStabilizationSafeZoom,
   sourceTicksToTimestamp,
   timestampToSourceTicks,
+  VIDEO_STABILIZATION_ALGORITHM_VERSION,
   VIDEO_STABILIZATION_PROPERTIES,
   type VideoStabilizationAnalysis,
   type VideoStabilizationSource,
@@ -88,13 +90,14 @@ function analysis(
   ],
 ): VideoStabilizationAnalysis {
   return {
-    version: 1,
+    version: 3,
     width: 320,
     height: 180,
     samples: [
-      { timestampUs: 0, estimateFromPrevious: null },
+      { timestampUs: 0, sourceTimeTicks: 0, estimateFromPrevious: null },
       ...transforms.map((transform, index) => ({
         timestampUs: Math.ceil((index + 1) * 1_000_000 / 30),
+        sourceTimeTicks: (index + 1) * 1_000_000,
         estimateFromPrevious: estimate(transform),
       })),
     ],
@@ -103,26 +106,179 @@ function analysis(
 
 describe('video stabilization product planning', () => {
   test('maps source timestamps with integer source-time arithmetic', () => {
-    expect(timestampToSourceTicks(0, source, doc().frameRate)).toBe(0)
-    expect(timestampToSourceTicks(33_333, source, doc().frameRate)).toBe(1_000_000)
-    expect(timestampToSourceTicks(33_334, source, doc().frameRate)).toBe(1_000_000)
-    expect(timestampToSourceTicks(1_000_000, source, doc().frameRate)).toBe(30_000_000)
+    expect(timestampToSourceTicks(0, doc().frameRate)).toBe(0)
+    expect(timestampToSourceTicks(33_333, doc().frameRate)).toBe(1_000_000)
+    expect(timestampToSourceTicks(33_334, doc().frameRate)).toBe(1_000_000)
+    expect(timestampToSourceTicks(1_000_000, doc().frameRate)).toBe(30_000_000)
   })
 
   test('converts conformed source ticks at the project rate instead of the native rate', () => {
-    const native60: VideoStabilizationSource = {
-      ...source,
-      firstTimestampUs: 7_000,
-      frameRate: { num: 60, den: 1 },
-    }
     const project30 = { num: 30, den: 1 }
 
-    expect(sourceTicksToTimestamp(30_000_000, native60, project30, 'floor'))
-      .toBe(1_007_000)
-    expect(timestampToSourceTicks(1_007_000, native60, project30))
+    expect(sourceTicksToTimestamp(30_000_000, project30, 'floor'))
+      .toBe(1_000_000)
+    expect(timestampToSourceTicks(1_000_000, project30))
       .toBe(30_000_000)
-    expect(sourceTicksToTimestamp(1, native60, project30, 'floor')).toBe(7_000)
-    expect(sourceTicksToTimestamp(1, native60, project30, 'ceil')).toBe(7_001)
+    expect(sourceTicksToTimestamp(1, project30, 'floor')).toBe(0)
+    expect(sourceTicksToTimestamp(1, project30, 'ceil')).toBe(1)
+    expect(() => timestampToSourceTicks(-1, project30))
+      .toThrow('outside the connected source')
+  })
+
+  test.each([7_000, -7_000])(
+    'normalizes first presentation timestamp %i to the rendered zero-relative timeline',
+    (firstTimestampUs) => {
+      const native24: VideoStabilizationSource = {
+        ...source,
+        firstTimestampUs,
+        frameRate: { num: 24, den: 1 },
+      }
+      const item = clip({ timelineRange: { startFrame: 10, durationFrames: 3 } })
+      const plan = createVideoStabilizationSamplePlan(
+        doc(item),
+        item,
+        native24,
+        { firstTimestampUs, endTimestampUs: firstTimestampUs + 1_000_000 },
+      )
+
+      expect(plan.sampleTimestampsUs).toEqual([0, 33_333, 66_667])
+      expect(plan.sampleSourceTimeTicks).toEqual([0, 1_000_000, 2_000_000])
+      expect(plan.sourceStartMicroseconds).toBe(0)
+      expect(plan.sourceEndMicroseconds).toBe(100_000)
+      expect(VIDEO_STABILIZATION_ALGORITHM_VERSION).toBe('similarity-product-v5')
+    },
+  )
+
+  test('selects the exact rendered native-frame sequence for fractional bounds and retiming', () => {
+    const native24: VideoStabilizationSource = {
+      ...source,
+      frameRate: { num: 24, den: 1 },
+    }
+    const ordinary = clip({
+      sourceTimeMap: {
+        sourceStartTicks: 500_000,
+        sourceDurationTicks: 90_000_000,
+        rate: { numerator: 1, denominator: 1 },
+      },
+      timelineRange: { startFrame: 10, durationFrames: 6 },
+    })
+    const ordinaryPlan = createVideoStabilizationSamplePlan(
+      doc(ordinary),
+      ordinary,
+      native24,
+      { firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+    )
+
+    expect(ordinaryPlan.sampleTimestampsUs).toEqual([0, 33_333, 66_667, 100_000, 133_333, 166_667])
+    expect(ordinaryPlan.sampleSourceTimeTicks).toEqual([
+      500_000,
+      1_500_000,
+      2_500_000,
+      3_500_000,
+      4_500_000,
+      5_500_000,
+    ])
+    expect(ordinaryPlan.sourceStartMicroseconds).toBe(0)
+    expect(ordinaryPlan.sourceEndMicroseconds).toBe(200_000)
+
+    const fast = clip({
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 90_000_000,
+        rate: { numerator: 4, denominator: 1 },
+      },
+      timelineRange: { startFrame: 10, durationFrames: 3 },
+    })
+    const fastPlan = createVideoStabilizationSamplePlan(
+      doc(fast),
+      fast,
+      native24,
+      { firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+    )
+    expect(fastPlan.sampleTimestampsUs).toEqual([0, 133_333, 266_667])
+    expect(fastPlan.sampleSourceTimeTicks).toEqual([0, 4_000_000, 8_000_000])
+    expect(() => createVideoStabilizationSamplePlan(
+      doc(fast),
+      fast,
+      native24,
+      { firstTimestampUs: 0, endTimestampUs: 2_000_000 },
+      2,
+    )).toThrow('sample plan exceeds the reviewed product envelope')
+  })
+
+  test('holds corrections when native-rate conforming repeats a rendered image at 1x', () => {
+    const native24: VideoStabilizationSource = {
+      ...source,
+      frameRate: { num: 24, den: 1 },
+    }
+    const item = clip({ timelineRange: { startFrame: 10, durationFrames: 6 } })
+    const analyzed = analysis([
+      { a: 1, b: 0, tx: 1, ty: 0 },
+      { a: 1, b: 0, tx: -2, ty: 1 },
+      { a: 1, b: 0, tx: 3, ty: -1 },
+      { a: 1, b: 0, tx: -1, ty: 2 },
+      { a: 1, b: 0, tx: 2, ty: -2 },
+    ])
+    const nativeSamples: VideoStabilizationAnalysis = {
+      ...analyzed,
+      samples: analyzed.samples.map((sample, index) => ({
+        ...sample,
+        timestampUs: [0, 0, 66_667, 100_000, 133_333, 166_667][index]!,
+        sourceTimeTicks: [0, 1_000_000, 2_000_000, 3_000_000, 4_000_000, 5_000_000][index]!,
+        estimateFromPrevious: index === 1 ? null : sample.estimateFromPrevious,
+      })),
+    }
+    const result = createVideoStabilizationPlan(
+      doc(item),
+      item,
+      native24,
+      nativeSamples,
+      { strengthPercent: 50, smoothingRadiusFrames: 2 },
+    )
+
+    if (!result.ok) throw new Error(result.reason)
+    for (const track of result.plan.tracks) {
+      expect(evaluateAnimationTrack(track, 0, -1)).toBe(
+        evaluateAnimationTrack(track, 1, -1),
+      )
+      expect(track.keyframes.find((key) => key.frame === 0)?.easing)
+        .toEqual({ type: 'hold' })
+    }
+  })
+
+  test('holds corrections when adjacent render targets decode the same media sample', () => {
+    const item = clip({ timelineRange: { startFrame: 10, durationFrames: 6 } })
+    const decoded = analysis([
+      { a: 1, b: 0, tx: 1, ty: 0 },
+      { a: 1, b: 0, tx: -2, ty: 1 },
+      { a: 1, b: 0, tx: 3, ty: -1 },
+      { a: 1, b: 0, tx: -1, ty: 2 },
+      { a: 1, b: 0, tx: 2, ty: -2 },
+    ])
+    const duplicateSample: VideoStabilizationAnalysis = {
+      ...decoded,
+      samples: decoded.samples.map((sample, index) => ({
+        ...sample,
+        timestampUs: [0, 0, 66_667, 100_000, 133_333, 166_667][index]!,
+        estimateFromPrevious: index === 1 ? null : sample.estimateFromPrevious,
+      })),
+    }
+    const result = createVideoStabilizationPlan(
+      doc(item),
+      item,
+      source,
+      duplicateSample,
+      { strengthPercent: 50, smoothingRadiusFrames: 2 },
+    )
+
+    if (!result.ok) throw new Error(result.reason)
+    for (const track of result.plan.tracks) {
+      expect(evaluateAnimationTrack(track, 0, -1)).toBe(
+        evaluateAnimationTrack(track, 1, -1),
+      )
+      expect(track.keyframes.find((key) => key.frame === 0)?.easing)
+        .toEqual({ type: 'hold' })
+    }
   })
 
   test('authors only five ordinary equal-scale tracks with explicit safe zoom', () => {
@@ -341,6 +497,26 @@ describe('video stabilization product planning', () => {
     )
     expect(zoom).not.toBeNull()
     expect(zoom!).toBeGreaterThanOrEqual(1)
+  })
+
+  test('reviews exact coverage from a single-pass transform stream', () => {
+    const item = clip()
+    const transforms = [
+      item.transform,
+      { ...item.transform, x: 12, y: -7, rotation: 1.5, scaleX: 1.02, scaleY: 1.02 },
+    ]
+    let iteratorCount = 0
+    const singlePass = {
+      [Symbol.iterator](): Iterator<Clip['transform']> {
+        iteratorCount++
+        if (iteratorCount > 1) throw new Error('coverage stream was consumed more than once')
+        return transforms[Symbol.iterator]()
+      },
+    }
+
+    expect(requiredVideoStabilizationSafeZoom(doc(item), item, source, singlePass))
+      .toBeGreaterThanOrEqual(1)
+    expect(iteratorCount).toBe(1)
   })
 
   test('rejects duplicate retime projections before authoring', () => {

@@ -9,8 +9,9 @@
  *   canonical grouped VideoCompositionPlan over the SAME document
  *   snapshot it last posted (setDoc stores it, satisfying the protocol's
  *   ordering contract);
- * - all µs math: doc frame → asset frame (rescaleFrames) → target/
- *   tolerance microseconds (frame↔seconds only at this boundary, rule 2);
+ * - all µs math: conformed document-rate source frame → target microseconds,
+ *   while the native rate owns only decode tolerance (frame↔time conversion
+ *   stays at this boundary, rule 2);
  * - handing each asset Blob to the worker once, then posting lightweight
  *   frame requests with explicit playback/seek intent;
  * - preserving the old transferred-chunk overload through the isolated
@@ -35,7 +36,7 @@ import {
   type VideoCompositionPlan,
   type VideoCompositionPlanner,
 } from '../domain/videoCompositionPlan'
-import { framesToSeconds, rescaleFrames } from '../domain/time'
+import { framesToMicroseconds } from '../domain/time'
 import type {
   FromRenderWorker,
   RenderMode,
@@ -453,12 +454,7 @@ export class RenderWorkerBridge {
           clipId: clip.id,
           assetId: clip.assetId,
           sourceFrame: request.sourceFrame,
-          targetTimestampUs: Math.round(
-            framesToSeconds(
-              rescaleFrames(request.sourceFrame, doc.frameRate, source.rate),
-              source.rate,
-            ) * 1e6,
-          ),
+          targetTimestampUs: framesToMicroseconds(request.sourceFrame, doc.frameRate),
         })
       }
     }

@@ -81,6 +81,7 @@ async function run(message: MotionAnalysisWorkerRunMessage): Promise<void> {
     startTimestampUs: message.startTimestampUs,
     endTimestampUs: message.endTimestampUs,
     samplingIntervalFrames: message.samplingIntervalFrames,
+    sampleTimestampsUs: message.sampleTimestampsUs,
     extractGrayFrame: extractMotionAnalysisGrayFrame,
     sendWindow: (window) => sendWindow(
       message.requestId,

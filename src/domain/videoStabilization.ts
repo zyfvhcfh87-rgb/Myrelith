@@ -34,16 +34,14 @@ import type {
 import {
   clipSourceTimeMap,
   SOURCE_TIME_TICKS_PER_FRAME,
-  sourceFrameAtTimelineOffset,
   sourceTicksAtTimelineOffset,
-  sourceTimeSpeedPointsAtClip,
   timelineOffsetAtSourceTicks,
 } from './sourceTimeMap'
-import { microsecondsToFrames } from './time'
+import { framesToMicroseconds, microsecondsToFrames } from './time'
 
-export const VIDEO_STABILIZATION_RESULT_VERSION = 1
+export const VIDEO_STABILIZATION_RESULT_VERSION = 3
 export const VIDEO_STABILIZATION_ALGORITHM_ID = 'builtin.video-stabilization'
-export const VIDEO_STABILIZATION_ALGORITHM_VERSION = 'similarity-product-v1'
+export const VIDEO_STABILIZATION_ALGORITHM_VERSION = 'similarity-product-v5'
 export const MAX_STABILIZATION_SAFE_ZOOM = 1.35
 export const STABILIZATION_CORNER_TOLERANCE_PX = 0.5
 export const STABILIZATION_SOURCE_PROJECTION_TOLERANCE_PX = 0.25
@@ -63,6 +61,7 @@ export const VIDEO_STABILIZATION_PROPERTIES = [
 
 export interface VideoStabilizationAnalysisSample {
   readonly timestampUs: number
+  readonly sourceTimeTicks: number
   readonly estimateFromPrevious: GlobalMotionEstimate | null
 }
 
@@ -83,6 +82,13 @@ export interface VideoStabilizationSource {
   readonly height: number
   readonly firstTimestampUs: number
   readonly frameRate: FrameRate
+}
+
+export interface VideoStabilizationSamplePlan {
+  readonly sourceStartMicroseconds: number
+  readonly sourceEndMicroseconds: number
+  readonly sampleTimestampsUs: readonly number[]
+  readonly sampleSourceTimeTicks: readonly number[]
 }
 
 export interface VideoStabilizationFrame {
@@ -164,17 +170,17 @@ function safeBigIntNumber(value: bigint, label: string): number {
 
 export function timestampToSourceTicks(
   timestampUs: number,
-  source: Pick<VideoStabilizationSource, 'firstTimestampUs'>,
   projectFrameRate: FrameRate,
 ): number {
-  if (!Number.isSafeInteger(timestampUs) || timestampUs < source.firstTimestampUs) {
+  if (!Number.isSafeInteger(timestampUs) || timestampUs < 0) {
     throw new RangeError('Analysis timestamp is outside the connected source')
   }
   // WebCodecs timestamps are integer microseconds, so exact CFR boundaries
-  // such as 1/30 s may arrive one microsecond below their rational value.
-  // Re-enter the editor through its canonical nearest-frame time adapter.
+  // such as 1/30 s may arrive one microsecond below their rational value. The
+  // decoder/render contract is zero-relative even when the container's first
+  // presentation timestamp is not zero.
   const sourceFrame = microsecondsToFrames(
-    timestampUs - source.firstTimestampUs,
+    timestampUs,
     projectFrameRate,
   )
   const ticks = BigInt(sourceFrame) * BigInt(SOURCE_TIME_TICKS_PER_FRAME)
@@ -183,15 +189,11 @@ export function timestampToSourceTicks(
 
 export function sourceTicksToTimestamp(
   sourceTimeTicks: number,
-  source: Pick<VideoStabilizationSource, 'firstTimestampUs'>,
   projectFrameRate: FrameRate,
   rounding: 'floor' | 'ceil',
 ): number {
   if (!Number.isSafeInteger(sourceTimeTicks) || sourceTimeTicks < 0) {
     throw new RangeError('Mapped source time must be a non-negative safe integer')
-  }
-  if (!Number.isSafeInteger(source.firstTimestampUs)) {
-    throw new RangeError('Connected source timestamp exceeds the safe integer range')
   }
   if (!positiveSafeInteger(projectFrameRate.num) || !positiveSafeInteger(projectFrameRate.den)) {
     throw new RangeError('Project frame rate must be a positive rational')
@@ -202,9 +204,94 @@ export function sourceTicksToTimestamp(
     ? numerator / denominator
     : (numerator + denominator - 1n) / denominator
   return safeBigIntNumber(
-    BigInt(source.firstTimestampUs) + offset,
+    offset,
     'Stabilization source timestamp',
   )
+}
+
+function conformedRequestTimestamp(
+  sourceTimeTicks: number,
+  projectFrameRate: FrameRate,
+): number {
+  if (!Number.isSafeInteger(sourceTimeTicks) || sourceTimeTicks < 0) {
+    throw new RangeError('Rendered source time must be a non-negative safe integer')
+  }
+  if (
+    !positiveSafeInteger(projectFrameRate.num)
+    || !positiveSafeInteger(projectFrameRate.den)
+  ) throw new RangeError('Rendered source frame rate must be a positive rational')
+  const conformedFrame = Math.floor(sourceTimeTicks / SOURCE_TIME_TICKS_PER_FRAME)
+  return framesToMicroseconds(conformedFrame, projectFrameRate)
+}
+
+export function createVideoStabilizationSamplePlan(
+  doc: Pick<TimelineDoc, 'frameRate'>,
+  clip: Clip,
+  source: VideoStabilizationSource,
+  bounds: Readonly<{ firstTimestampUs: number; endTimestampUs: number }>,
+  maximumSamples = MAX_ANALYSIS_SAMPLES,
+): VideoStabilizationSamplePlan {
+  if (
+    !Number.isSafeInteger(bounds.firstTimestampUs)
+    || !Number.isSafeInteger(bounds.endTimestampUs)
+    || bounds.endTimestampUs <= bounds.firstTimestampUs
+  ) throw new RangeError('Video source timestamp bounds are invalid')
+  if (source.firstTimestampUs !== bounds.firstTimestampUs) {
+    throw new RangeError('Connected source timestamp facts do not match the exact video bounds')
+  }
+  const normalizedEndTimestampUs = safeBigIntNumber(
+    BigInt(bounds.endTimestampUs) - BigInt(bounds.firstTimestampUs),
+    'Normalized video duration',
+  )
+  if (
+    !Number.isSafeInteger(maximumSamples)
+    || maximumSamples < 2
+    || maximumSamples > MAX_ANALYSIS_SAMPLES
+  ) throw new RangeError('Stabilization sample-plan limit is invalid')
+  const map = clipSourceTimeMap(clip)
+  const sampleTimestampsUs: number[] = []
+  const sampleSourceTimeTicks: number[] = []
+  let previousConformedFrame = -1
+  for (let timelineOffset = 0; timelineOffset < clip.timelineRange.durationFrames; timelineOffset++) {
+    const sourceTimeTicks = sourceTicksAtTimelineOffset(map, timelineOffset)
+    const conformedFrame = Math.floor(sourceTimeTicks / SOURCE_TIME_TICKS_PER_FRAME)
+    if (conformedFrame < previousConformedFrame) {
+      throw new RangeError('Stabilization requires non-decreasing conformed source frames')
+    }
+    if (conformedFrame === previousConformedFrame) continue
+    const timestampUs = conformedRequestTimestamp(sourceTimeTicks, doc.frameRate)
+    if (timestampUs < 0 || timestampUs >= normalizedEndTimestampUs) {
+      throw new RangeError('Rendered source frame is outside the exact video bounds')
+    }
+    if (sampleTimestampsUs.length > 0 && timestampUs <= sampleTimestampsUs.at(-1)!) {
+      throw new RangeError('Rendered source-frame timestamps must be strictly increasing')
+    }
+    if (sampleTimestampsUs.length >= maximumSamples) {
+      throw new RangeError('Stabilization sample plan exceeds the reviewed product envelope')
+    }
+    sampleTimestampsUs.push(timestampUs)
+    sampleSourceTimeTicks.push(sourceTimeTicks)
+    previousConformedFrame = conformedFrame
+  }
+  if (sampleTimestampsUs.length < 2) {
+    throw new RangeError('Stabilization needs at least two distinct rendered source frames')
+  }
+  const sourceStartMicroseconds = sampleTimestampsUs[0]!
+  const lastTimestampUs = sampleTimestampsUs.at(-1)!
+  const nextConformedTimestamp = framesToMicroseconds(previousConformedFrame + 1, doc.frameRate)
+  const sourceEndMicroseconds = Math.min(
+    normalizedEndTimestampUs,
+    Math.max(lastTimestampUs + 1, nextConformedTimestamp),
+  )
+  if (sourceEndMicroseconds <= lastTimestampUs) {
+    throw new RangeError('The last rendered source frame is outside the exact video bounds')
+  }
+  return {
+    sourceStartMicroseconds,
+    sourceEndMicroseconds,
+    sampleTimestampsUs,
+    sampleSourceTimeTicks,
+  }
 }
 
 interface SourceCorrectionProjection {
@@ -303,20 +390,20 @@ function pathJitter(samples: readonly SimilarityPathSample[]): number {
 
 /** O(n) product smoother; unlike the 300-frame research helper it spans windows. */
 function createProductStabilizationPath(
-  estimates: readonly GlobalMotionEstimate[],
+  stepTransforms: readonly SimilarityTransform[],
   strength: number,
   radius: number,
 ): ProductStabilizationPath {
-  if (estimates.length < 1 || estimates.length >= MAX_ANALYSIS_SAMPLES) {
+  if (stepTransforms.length < 1 || stepTransforms.length >= MAX_ANALYSIS_SAMPLES) {
     throw new RangeError('Stabilization result exceeds the product sample envelope')
   }
   const cameraPath: SimilarityTransform[] = [{ a: 1, b: 0, tx: 0, ty: 0 }]
-  for (const estimate of estimates) {
-    if (Object.values(estimate.transform).some((value) => !Number.isFinite(value))) {
+  for (const transform of stepTransforms) {
+    if (Object.values(transform).some((value) => !Number.isFinite(value))) {
       throw new RangeError('Stabilization estimate contains a non-finite transform')
     }
     cameraPath.push(composeSimilarityTransforms(
-      estimate.transform,
+      transform,
       cameraPath[cameraPath.length - 1]!,
     ))
   }
@@ -420,6 +507,11 @@ interface ReciprocalZoomInterval {
   maximum: number
 }
 
+interface VideoStabilizationCoverageReview {
+  safeZoom: number
+  maximumScale: number
+}
+
 function constrainReciprocalZoom(
   interval: ReciprocalZoomInterval,
   coefficient: number,
@@ -434,13 +526,12 @@ function constrainReciprocalZoom(
   return interval.maximum >= interval.minimum
 }
 
-/** Minimum shared extra zoom whose exact transformed crop covers the project. */
-export function requiredVideoStabilizationSafeZoom(
+function reviewVideoStabilizationCoverage(
   doc: TimelineDoc,
   clip: Clip,
   source: Pick<VideoStabilizationSource, 'width' | 'height'>,
-  transforms: readonly Transform[],
-): number | null {
+  transforms: Iterable<Transform>,
+): VideoStabilizationCoverageReview | null {
   const visual = clipVisualSettings(clip)
   const cropLeft = source.width * visual.crop.left
   const cropRight = source.width * (1 - visual.crop.right)
@@ -457,10 +548,12 @@ export function requiredVideoStabilizationSafeZoom(
     { x: doc.width, y: doc.height },
   ]
   const interval = { minimum: 0, maximum: 1 }
+  let maximumScale = 0
   for (const transform of transforms) {
     if (!finiteTransform(transform) || transform.scaleX <= 0 || transform.scaleX !== transform.scaleY) {
       return null
     }
+    maximumScale = Math.max(maximumScale, transform.scaleX)
     const angle = transform.rotation * Math.PI / 180
     const cosine = Math.cos(angle)
     const sine = Math.sin(angle)
@@ -488,7 +581,19 @@ export function requiredVideoStabilizationSafeZoom(
   const reciprocal = Math.min(1, interval.maximum)
   if (!Number.isFinite(reciprocal) || reciprocal <= 0 || reciprocal < interval.minimum) return null
   const zoom = 1 / reciprocal
-  return Number.isFinite(zoom) && zoom >= 1 ? zoom : null
+  return Number.isFinite(zoom) && zoom >= 1
+    ? { safeZoom: zoom, maximumScale }
+    : null
+}
+
+/** Minimum shared extra zoom whose exact transformed crop covers the project. */
+export function requiredVideoStabilizationSafeZoom(
+  doc: TimelineDoc,
+  clip: Clip,
+  source: Pick<VideoStabilizationSource, 'width' | 'height'>,
+  transforms: Iterable<Transform>,
+): number | null {
+  return reviewVideoStabilizationCoverage(doc, clip, source, transforms)?.safeZoom ?? null
 }
 
 function visibleSourceCorners(
@@ -566,34 +671,50 @@ function transformAtMappedFrame(
 function preserveRepeatedSourceFrameBoundaries(
   durationFrames: number,
   map: ReturnType<typeof clipSourceTimeMap>,
+  projectFrameRate: FrameRate,
+  samples: readonly VideoStabilizationAnalysisSample[],
   frames: readonly VideoStabilizationFrame[],
 ): VideoStabilizationFrame[] | null {
-  const speedPoints = sourceTimeSpeedPointsAtClip(map)
-  const canRepeatSourceFrames = speedPoints.length > 0
-    ? speedPoints.some((point) => point.rate.numerator < point.rate.denominator)
-    : map.rate.numerator < map.rate.denominator
-  if (!canRepeatSourceFrames) {
-    return frames.map((frame) => ({ ...frame, transform: { ...frame.transform } }))
-  }
   const byFrame = new Map<number, VideoStabilizationFrame>()
-  const transformBySourceFrame = new Map<number, Transform>()
+  const displayTimestampByRequest = new Map<number, number>()
+  for (const sample of samples) {
+    const requestTimestamp = conformedRequestTimestamp(
+      sample.sourceTimeTicks,
+      projectFrameRate,
+    )
+    if (displayTimestampByRequest.has(requestTimestamp)) {
+      throw new RangeError('Stabilization analysis has duplicate conformed render requests')
+    }
+    displayTimestampByRequest.set(requestTimestamp, sample.timestampUs)
+  }
+  const displayIdentity = (sourceTimeTicks: number): string => {
+    const requestTimestamp = conformedRequestTimestamp(sourceTimeTicks, projectFrameRate)
+    const timestamp = displayTimestampByRequest.get(requestTimestamp)
+    return timestamp === undefined
+      ? `request:${requestTimestamp}`
+      : `decoded:${timestamp}`
+  }
+  const transformByDisplayIdentity = new Map<string, Transform>()
   for (const mapped of frames) {
-    const sourceFrame = Math.floor(mapped.sourceTimeTicks / SOURCE_TIME_TICKS_PER_FRAME)
-    if (!transformBySourceFrame.has(sourceFrame)) {
-      transformBySourceFrame.set(sourceFrame, mapped.transform)
+    const identity = displayIdentity(mapped.sourceTimeTicks)
+    if (!transformByDisplayIdentity.has(identity)) {
+      transformByDisplayIdentity.set(identity, mapped.transform)
     }
   }
+  const displayIdentityAtTimelineOffset = (timelineOffset: number): string => displayIdentity(
+    sourceTicksAtTimelineOffset(map, timelineOffset),
+  )
   const protectedFrames = new Set<number>()
   let frame = 0
   while (frame < durationFrames) {
-    const sourceFrame = sourceFrameAtTimelineOffset(map, frame)
+    const identity = displayIdentityAtTimelineOffset(frame)
     const start = frame
     let end = frame
     while (
       end < durationFrames - 1
-      && sourceFrameAtTimelineOffset(map, end + 1) === sourceFrame
+      && displayIdentityAtTimelineOffset(end + 1) === identity
     ) end++
-    const exactTransform = transformBySourceFrame.get(sourceFrame)
+    const exactTransform = transformByDisplayIdentity.get(identity)
     if (end > start) {
       protectedFrames.add(start)
       protectedFrames.add(end)
@@ -693,30 +814,32 @@ export function simplifyVideoStabilizationFrames(
 function transformsAtEveryClipFrame(
   durationFrames: number,
   frames: readonly VideoStabilizationFrame[],
-): Transform[] {
+): Iterable<Transform> {
   if (frames.length < 1 || durationFrames < 1 || durationFrames > MAX_ANALYSIS_SAMPLES) {
     throw new RangeError('Stabilization coverage exceeds the product frame envelope')
   }
-  const transforms: Transform[] = []
-  let rightIndex = 0
-  for (let frame = 0; frame < durationFrames; frame++) {
-    while (rightIndex < frames.length && frames[rightIndex]!.frame < frame) rightIndex++
-    if (rightIndex === 0) {
-      transforms.push({ ...frames[0]!.transform })
-      continue
-    }
-    if (rightIndex >= frames.length) {
-      transforms.push({ ...frames[frames.length - 1]!.transform })
-      continue
-    }
-    const right = frames[rightIndex]!
-    if (right.frame === frame) {
-      transforms.push({ ...right.transform })
-      continue
-    }
-    transforms.push(interpolateTransform(frames[rightIndex - 1]!, right, frame))
+  return {
+    *[Symbol.iterator](): Iterator<Transform> {
+      let rightIndex = 0
+      for (let frame = 0; frame < durationFrames; frame++) {
+        while (rightIndex < frames.length && frames[rightIndex]!.frame < frame) rightIndex++
+        if (rightIndex === 0) {
+          yield frames[0]!.transform
+          continue
+        }
+        if (rightIndex >= frames.length) {
+          yield frames[frames.length - 1]!.transform
+          continue
+        }
+        const right = frames[rightIndex]!
+        if (right.frame === frame) {
+          yield right.transform
+          continue
+        }
+        yield interpolateTransform(frames[rightIndex - 1]!, right, frame)
+      }
+    },
   }
-  return transforms
 }
 
 function trackFor(
@@ -757,7 +880,11 @@ export function createVideoStabilizationPlan(
     || !positiveSafeInteger(analysis.height)
     || analysis.samples.length < 2
     || analysis.samples[0]?.estimateFromPrevious !== null
-    || analysis.samples.slice(1).some((sample) => sample.estimateFromPrevious === null)
+    || analysis.samples.slice(1).some((sample, index) => (
+      sample.timestampUs === analysis.samples[index]!.timestampUs
+        ? sample.estimateFromPrevious !== null
+        : sample.estimateFromPrevious === null
+    ))
   ) return { ok: false, reason: 'The cached stabilization result is invalid or incomplete.' }
   if (
     !Number.isFinite(settings.strengthPercent)
@@ -771,13 +898,17 @@ export function createVideoStabilizationPlan(
     const sample = analysis.samples[index]!
     if (
       !Number.isSafeInteger(sample.timestampUs)
-      || (index > 0 && sample.timestampUs <= analysis.samples[index - 1]!.timestampUs)
-    ) return { ok: false, reason: 'Analysis timestamps must be strictly increasing safe integers.' }
+      || (index > 0 && sample.timestampUs < analysis.samples[index - 1]!.timestampUs)
+    ) return { ok: false, reason: 'Analysis timestamps must be nondecreasing safe integers.' }
   }
   let productPath
   try {
     productPath = createProductStabilizationPath(
-      analysis.samples.slice(1).map((sample) => sample.estimateFromPrevious!),
+      analysis.samples.slice(1).map((sample, index) => (
+        sample.timestampUs === analysis.samples[index]!.timestampUs
+          ? { a: 1, b: 0, tx: 0, ty: 0 }
+          : sample.estimateFromPrevious!.transform
+      )),
       settings.strengthPercent / 100,
       settings.smoothingRadiusFrames,
     )
@@ -789,11 +920,7 @@ export function createVideoStabilizationPlan(
   let previousFrame = -1
   try {
     for (let index = 0; index < analysis.samples.length; index++) {
-      const sourceTimeTicks = timestampToSourceTicks(
-        analysis.samples[index]!.timestampUs,
-        source,
-        doc.frameRate,
-      )
+      const sourceTimeTicks = analysis.samples[index]!.sourceTimeTicks
       const frame = timelineOffsetAtSourceTicks(
         map,
         sourceTimeTicks,
@@ -830,6 +957,8 @@ export function createVideoStabilizationPlan(
     repeatSafeFrames = preserveRepeatedSourceFrameBoundaries(
       clip.timelineRange.durationFrames,
       map,
+      doc.frameRate,
+      analysis.samples,
       frames,
     )
   } catch (cause) {
@@ -844,23 +973,25 @@ export function createVideoStabilizationPlan(
       reason: `Stabilization exceeds the bounded simplification envelope or ${MAX_KEYFRAMES_PER_TRACK} keys per track.`,
     }
   }
-  let coverageTransforms: Transform[]
+  let coverage: VideoStabilizationCoverageReview | null
   try {
-    coverageTransforms = transformsAtEveryClipFrame(
-      clip.timelineRange.durationFrames,
-      simplified,
+    coverage = reviewVideoStabilizationCoverage(
+      doc,
+      clip,
+      source,
+      transformsAtEveryClipFrame(clip.timelineRange.durationFrames, simplified),
     )
   } catch (cause) {
     return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
   }
-  const safeZoom = requiredVideoStabilizationSafeZoom(doc, clip, source, coverageTransforms)
-  if (safeZoom === null || safeZoom > MAX_STABILIZATION_SAFE_ZOOM) {
+  if (coverage === null || coverage.safeZoom > MAX_STABILIZATION_SAFE_ZOOM) {
     return {
       ok: false,
       reason: `Stabilization needs more than the reviewed ${MAX_STABILIZATION_SAFE_ZOOM.toFixed(2)}× safe-zoom envelope.`,
     }
   }
-  if (coverageTransforms.some((transform) => transform.scaleX * safeZoom > MAX_CLIP_SCALE)) {
+  const safeZoom = coverage.safeZoom
+  if (coverage.maximumScale * safeZoom > MAX_CLIP_SCALE) {
     return { ok: false, reason: 'Stabilization would exceed the clip scale limit.' }
   }
   for (const frame of simplified) {

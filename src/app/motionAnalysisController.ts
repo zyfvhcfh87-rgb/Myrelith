@@ -1,5 +1,6 @@
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import {
+  MAX_ANALYSIS_SAMPLES,
   MAX_ANALYSIS_RESULT_BYTES,
   type AnalysisAlgorithmProvenance,
   type AnalysisCacheEntry,
@@ -74,6 +75,8 @@ export interface MotionAnalysisRunRequest {
   readonly source: MotionAnalysisSourceRequest
   readonly attachment: AnalysisClipAttachment
   readonly algorithm: AnalysisAlgorithmProvenance
+  /** Optional bounded sparse timestamps derived from the exact product mapping. */
+  readonly sampleTimestampsUs?: readonly number[]
   readonly processor: MotionAnalysisResultProcessor
   readonly priority?: MediaJobPriority
   /** Returns null while this exact source/clip/projection snapshot remains current. */
@@ -251,6 +254,19 @@ function validateRequest(request: MotionAnalysisRunRequest): void {
     || !Number.isSafeInteger(request.source.samplingIntervalFrames)
     || request.source.samplingIntervalFrames <= 0
   ) throw new TypeError('Motion analysis source facts do not match the connected asset')
+  if (request.sampleTimestampsUs !== undefined) {
+    if (
+      request.sampleTimestampsUs.length < 1
+      || request.sampleTimestampsUs.length > MAX_ANALYSIS_SAMPLES
+      || request.source.samplingIntervalFrames !== 1
+      || request.sampleTimestampsUs.some((timestampUs, index) => (
+        !Number.isSafeInteger(timestampUs)
+        || timestampUs < request.source.sourceStartMicroseconds
+        || timestampUs >= request.source.sourceEndMicroseconds
+        || (index > 0 && timestampUs <= request.sampleTimestampsUs![index - 1]!)
+      ))
+    ) throw new TypeError('Motion analysis sparse sample timestamps are invalid')
+  }
 }
 
 function tightResult(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
@@ -526,6 +542,9 @@ export class MotionAnalysisController {
       startTimestampUs: request.source.sourceStartMicroseconds,
       endTimestampUs: request.source.sourceEndMicroseconds,
       samplingIntervalFrames: request.source.samplingIntervalFrames,
+      ...(request.sampleTimestampsUs === undefined
+        ? {}
+        : { sampleTimestampsUs: [...request.sampleTimestampsUs] }),
     }
     const completion = await runMotionAnalysisWorker(
       workerMessage,

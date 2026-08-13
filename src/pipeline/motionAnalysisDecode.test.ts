@@ -15,7 +15,11 @@ import { motionAnalysisSourceOpenFailureCode } from './motionAnalysisProtocol'
 
 afterEach(() => vi.unstubAllGlobals())
 
-function sourceFixture(frameCount: number, rotation: MotionAnalysisSourceRotation = 0) {
+function sourceFixture(
+  frameCount: number,
+  rotation: MotionAnalysisSourceRotation = 0,
+  timestampsUs?: readonly number[],
+) {
   let nextIndex = 0
   const closeCounts = Array.from({ length: frameCount }, () => 0)
   const cursorClose = vi.fn(async () => undefined)
@@ -25,7 +29,7 @@ function sourceFixture(frameCount: number, rotation: MotionAnalysisSourceRotatio
       if (nextIndex >= frameCount) return null
       const index = nextIndex++
       return {
-        timestampUs: index * 33_333,
+        timestampUs: timestampsUs?.[index] ?? index * 33_333,
         displayWidth: 320,
         displayHeight: 180,
         rotation,
@@ -170,6 +174,36 @@ describe('decodeMotionAnalysisWindows', () => {
     }])).toThrow(/tightly owned/)
     expect(motionAnalysisDisplaySize(3840, 2160)).toEqual({ width: 320, height: 180 })
     expect(motionAnalysisDisplaySize(100, 50)).toEqual({ width: 100, height: 50 })
+  })
+
+  it('samples the exact sparse rendered-frame timestamps without a fixed stride', async () => {
+    const timestamps: number[] = []
+    const sparse = [0, 125_000, 250_000]
+    const fixture = sourceFixture(3, 0, sparse)
+    fixture.source.openTimestampLane = vi.fn(() => fixture.cursor)
+    const completion = await decodeMotionAnalysisWindows({
+      source: fixture.source,
+      startTimestampUs: 0,
+      endTimestampUs: 291_667,
+      samplingIntervalFrames: 1,
+      sampleTimestampsUs: sparse,
+      extractGrayFrame: (_frame, timestampUs, _width, _height, _rotation) => ({
+        timestampUs,
+        width: 1,
+        height: 1,
+        pixels: new Uint8Array(new ArrayBuffer(1)),
+      }),
+      sendWindow: async (window) => {
+        timestamps.push(...window.frames.map((frame) => frame.timestampUs))
+      },
+      reportProgress: vi.fn(),
+    })
+
+    expect(fixture.source.openPlaybackLane).not.toHaveBeenCalled()
+    expect(fixture.source.openTimestampLane).toHaveBeenCalledWith(sparse)
+    expect(timestamps).toEqual(sparse)
+    expect(completion.sampledFrameCount).toBe(3)
+    expect(fixture.closeCounts).toEqual([1, 1, 1])
   })
 
   it('reports decoded-frame progress even when each progress frame is unsampled', async () => {
