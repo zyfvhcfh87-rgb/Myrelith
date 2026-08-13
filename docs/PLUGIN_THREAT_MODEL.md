@@ -234,7 +234,20 @@ remembered directory capabilities.
 **Controls:** only a copied isolated RGBA8 layer crosses the call boundary. The
 manifest-unique render export is the contribution discriminator; arguments carry
 only width/height/stride, exact frame, rational rate, and the effect's own bounded
-params. Every input and successful output pixel is four `R, G, B, A` bytes:
+params. Render params are one host-built RFC 8785 JCS object with exactly every
+declared key and no metadata or undeclared key. A missing declared value is
+ephemerally completed from its manifest default. A present wrong-kind/out-of-
+range declared value is invalid and fails/bypasses before invocation; an
+undeclared durable key is preserved, reports unsupported, and bypasses before
+invocation. The host
+resolves only declared animatable numbers through the shared pure effect-track
+authority at the exact requested global integer timeline frame, using the
+materialized base number (valid authored value, otherwise manifest default) as
+its static fallback and never applying control-step rounding.
+The immutable result is UTF-8 without BOM/whitespace/terminator/trailing bytes,
+bounded by the exact fixed pointer/length slice, and is byte-identical between
+preview and export given the same immutable snapshot and frame. Every input and
+successful output pixel is four `R, G, B, A` bytes:
 nonlinear IEC sRGB OETF code values over sRGB/Rec.709 primaries and D65, plus
 independent straight/unassociated 8-bit alpha. Linear-light, Display-P3, and
 premultiplied interpretations are outside version 1. The host converts before
@@ -406,7 +419,9 @@ availability attack.
 **Attacker story:** plugin replays an old result after seek/project replacement,
 sends a response for another instance, returns partial/oversized pixels, detaches
 buffers, interprets nonlinear sRGB bytes as linear-light or Display-P3, races
-cancellation, or injects diagnostic HTML.
+cancellation, exploits insertion-order JSON, omitted defaults, stale animation,
+alternate number spellings, or bytes outside the declared parameter slice, or
+injects diagnostic HTML.
 
 **Controls:** private port, exact protocol version/type/keys, sandbox generation,
 project generation, instance id, monotonic request id, exact lengths, one in
@@ -417,7 +432,11 @@ abort/close settlement,
 late-response rejection, copy-in/copy-out ownership, one exact IEC
 sRGB/Rec.709-primary and D65 nonlinear RGBA encoding in both directions,
 straight alpha, shared preview/export host conversion, no ICC/profile metadata,
-cleared reusable memory, and escaped bounded plain-text diagnostics. Every
+one RFC 8785 render-parameter object made from the immutable call snapshot after
+shared requested-frame animation resolution, exact declared keys/defaults/kinds/
+bounds, canonical UTF-8 bytes, an exact checked half-open parameter slice with no
+terminator, cleared reusable memory, and escaped bounded plain-text diagnostics.
+Every
 terminal export outcome destroys its instance; retry starts from the first
 requested frame in another fresh sandbox instead of restoring a checkpoint.
 
@@ -440,6 +459,8 @@ exports, is explicit, sandboxed, and cloned. The action freezes every original
 target and generation, resolves every chain, and rejects all targets before code
 if any fails the static-animation gate. Immediately before each chain, current
 trust/revocation/availability, cache binding, and target snapshot are rechecked.
+Migration accepts only its separately validated static descriptor record; it
+never receives the render ABI's ephemeral defaults or frame-resolved values.
 Every descriptor chain freshly owns a migration-only worker, instance, fixed
 imported memory, private port, queue, and generation. It can carry temporal state
 only across sequential steps of that one chain and receives no pixels or preview/

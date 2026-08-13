@@ -3443,3 +3443,45 @@ surface; it is not a second zoom and never enters document history.
   `WebAssembly.instantiate` references remain solely in the existing Mediabunny
   AC-3/ProRes codec chunks, not a plugin runtime. Build output retained only the
   existing >500 kB chunk advisory.
+
+## Part 10c issue #76 - PR #112 render-parameter ABI follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4922439329` found that the ten-argument render ABI
+  called its parameter buffer only “UTF-8 canonical,” leaving object shape,
+  canonicalization, defaults, and animated-value timing ambiguous between host
+  and plugin implementations.
+- Version 1 now passes exactly one top-level parameter object with every and only
+  the selected contribution's declared keys. A present value must match its
+  declared number/boolean/enum kind and bounds or the stage fails/bypasses
+  without a call; an absent declared value is completed ephemerally from the
+  manifest default without changing durable data. Undeclared durable keys remain
+  preserved but keep the descriptor unsupported and never cross the ABI.
+- The host resolves only manifest-declared animatable numbers through the shared
+  pure effect-track authority at the exact requested global integer timeline
+  frame before serialization. Its static fallback is the materialized base
+  number (valid authored value, otherwise manifest default), `step` never
+  quantizes rendering, and the same immutable snapshot/frame yields
+  byte-identical preview, scrub, playback, and export parameter bytes.
+- The wire format is now explicitly RFC 8785 JCS followed by UTF-8 without BOM,
+  whitespace, NUL termination, or trailing bytes. The JCS UTF-16 name sort is
+  ordinary bytewise ASCII order for version-1 local-identifier keys. The exact
+  half-open slice begins at `0x01000000`, is 2 through 65,536 bytes, and the host
+  clears the complete parameter page before copy and after settlement.
+- Migration retains its separate static canonical-record ABI and receives no
+  frame-resolved values or render-time default completion. Issue #77 is gated on
+  exact object/JCS/buffer/default/invalid-input, animation-frame, preview/export
+  parity, maximum-valid 8,577-byte records, synthetic 64 KiB buffer boundaries,
+  and render-versus-migration hostile fixtures. This remains design-only
+  with no production plugin runtime or browser-observable change; browser QA is
+  not applicable.
+- Final validation passed 119 focused manifest/project/effect/architecture tests
+  across five files plus all 16 benchmark-runner checks, production build/
+  typecheck, warning-free oxlint, the production audit with 0 vulnerabilities,
+  and clean diff/contradiction checks. The normal bundle has zero plugin
+  capability/manifest/candidate/instance/validate/compile/CSP canaries. Its six
+  generic `WebAssembly.instantiate` references are confined to four existing
+  Mediabunny AC-3/ProRes codec chunks (one in each AC-3 chunk and two in each
+  ProRes chunk), not a plugin runtime. Build output retained only the existing
+  >500 kB chunk advisory.

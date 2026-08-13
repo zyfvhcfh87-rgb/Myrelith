@@ -230,6 +230,23 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   Display-P3. The future host owns conversion into and out of that encoding,
   preview/export share the boundary, and no ICC/profile metadata enters plugin
   memory.
+  Each future render call also receives one immutable parameter record at the
+  fixed ABI parameter page: exactly one property per selected contribution
+  declaration and no other fields, serialized with RFC 8785 JCS and encoded as
+  UTF-8 without a BOM, whitespace, terminator, or trailing bytes. A present
+  authored value must match its declared number/boolean/enum kind and bounds;
+  invalid values fail/bypass without calling plugin code. An absent declared
+  value is completed ephemerally from the manifest default without mutating the
+  document, while an undeclared durable key keeps the descriptor unsupported
+  and never crosses the call boundary. Before serialization, the future Issue
+  #77 host must expose plugin `animatable: true` number declarations to the same
+  pure effect-track authority used by the composition plan, resolve them at the
+  exact requested global integer timeline frame, and use the materialized base
+  number (valid authored value, otherwise the manifest default) as the static
+  fallback; control `step` never quantizes render evaluation.
+  Preview/scrub/playback/export using the same immutable snapshot and frame must
+  produce byte-identical records. Descriptor migration remains a separate,
+  static-record ABI and never receives this frame-resolved render record.
   The future trusted parent owns bounded archive/manifest parsing, exact module-
   entry framing and the 32 MiB byte-length check, digest/signature/trust preflight,
   one non-resetting five-second activation deadline, and termination. It treats

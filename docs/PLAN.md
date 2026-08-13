@@ -3654,3 +3654,38 @@ acceptance claims.
   its four generic `WebAssembly.instantiate` references are confined to the
   existing Mediabunny AC-3/ProRes codec chunks. Retain only the existing >500 kB
   build advisory.
+
+## Part 10c / issue #76 - PR #112 render-parameter ABI follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Close exact-head Codex review `4922439329` by defining one versioned render-
+  parameter wire record instead of an ambiguous “UTF-8 canonical” buffer.
+- [x] Encode exactly every declared contribution key and no metadata/extra key.
+  Use a valid authored value, ephemerally complete an absent key from its manifest
+  default without document mutation, mark a present invalid declared value
+  invalid/fail+bypassed, and preserve an undeclared durable key as unsupported/
+  bypassed before calling plugin code.
+- [x] Resolve only declared animatable numbers through the shared pure effect-
+  track authority at the exact requested global integer timeline frame before
+  encoding. Use the materialized base number (valid authored value, otherwise
+  manifest default) as static fallback, never apply `step`
+  quantization, and require identical bytes for the same immutable preview/export
+  snapshot and frame.
+- [x] Pin the byte grammar to RFC 8785 JCS plus UTF-8 without BOM, whitespace,
+  terminator, or trailing bytes; pin JCS/ASCII key order, canonical primitive
+  serialization, the exact `0x01000000` half-open slice, 2..65,536-byte length,
+  and full-page pre/post-call clearing. Keep migration on its separate static
+  record ABI.
+- [x] Gate Issue #77 on exact and hostile object/JCS/default/validation/buffer,
+  requested-frame animation, preview/export parity, maximum-valid 8,577-byte
+  records, synthetic 64 KiB raw-buffer boundaries, and migration-separation
+  fixtures. Retain the design-only boundary and browser-QA N/A status.
+- [x] Pass 119 focused manifest/project/effect/architecture tests across five
+  files plus all 16 benchmark-runner checks, production build/typecheck,
+  warning-free oxlint, the production audit with 0 vulnerabilities, and clean
+  diff/contradiction checks. Confirm zero plugin capability/manifest/candidate/
+  instance/validate/compile/CSP bundle canaries; the six generic
+  `WebAssembly.instantiate` references remain confined to four existing
+  Mediabunny AC-3/ProRes codec chunks. Retain only the existing >500 kB chunk
+  advisory.

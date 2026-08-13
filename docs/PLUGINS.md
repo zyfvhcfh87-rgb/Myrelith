@@ -362,6 +362,11 @@ promises that a module below every ceiling will be accepted.
 
 ### Signature envelope
 
+Every reference in this contract to the JSON Canonicalization Scheme or `JCS`
+means [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785). Its I-JSON input,
+ECMAScript primitive serialization, UTF-16 property sorting, and final UTF-8
+encoding rules are part of the wire contract rather than implementation advice.
+
 `signature.json` has a separately versioned exact schema containing:
 
 - algorithm `Ed25519`;
@@ -610,9 +615,13 @@ ABI contract is:
 - each contribution render entrypoint is an exported function with signature
   `(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32) -> i32`;
 - arguments are the fixed pixel pointer `0x01010000`, width, height, stride,
-  frame low/high 32-bit words, frame-rate numerator/denominator, UTF-8 canonical-
-  parameter pointer, and parameter byte length. The parameter pointer is always
-  `0x01000000`;
+  requested timeline-frame low/high 32-bit words, frame-rate numerator/
+  denominator, RFC 8785 JCS render-parameter pointer, and exact parameter byte
+  length. The parameter pointer is always `0x01000000`; the frame words encode
+  the same non-negative global integer timeline frame used by the composition
+  plan and parameter-animation resolver, with language-neutral reconstruction
+  `frame = u32(low) + 2^32 * u32(high)`. The result must be no greater than
+  `2^53 - 1` before the host uses it;
 - the pixel region is exactly `stride * height` bytes, `stride` is exactly
   `width * 4`, `width * height` does not exceed the `P`-page capacity above,
   and every checked range stays inside fixed-size imported memory;
@@ -671,6 +680,80 @@ ABI contract is:
   region before reuse;
 - no pointer, view, buffer, or module instance crosses into Zustand, React, a
   project file, or another plugin instance.
+
+#### Canonical render-parameter record
+
+Each render call receives exactly one top-level `RenderParameterRecordV1` JSON
+object. It has one own property for every entry in the selected contribution's
+manifest `parameters` array and no other property. Each property name is that
+entry's `key`; each value is exactly the declared finite binary64 number,
+boolean, or enum machine-id string. The record has no nested object, array,
+`null`, contribution selector, descriptor id/type/version/enabled field,
+animation metadata, local/source frame, or host-only state.
+
+The host builds the record once from the immutable manifest, document/effect,
+and owning-clip animation snapshot used to plan that call:
+
+1. for each declared key, an own authored descriptor value is accepted only
+   when its kind and number range or enum option exactly match the manifest. A
+   present invalid value makes the stage `invalid` and follows the existing
+   visible preview-bypass/export-block policy without calling plugin code; the
+   default must not conceal it;
+2. when a declared key is absent, the host puts that declaration's manifest
+   default into this ephemeral record. Defaults seed creation/reset and this
+   render-time completion only; it does not mutate the durable
+   descriptor, history, recovery, or save data. Unknown forward-compatible
+   descriptor keys remain durable and preserved, make the descriptor
+   unsupported/bypassed under the existing rule, and never enter a version-1
+   call;
+3. after all static values/defaults are materialized, each valid effect track
+   targeting this effect instance and a manifest-declared animatable number key
+   resolves through the shared pure effect-animation evaluator at the exact
+   requested global integer timeline frame passed in the call. The evaluator
+   derives the existing clip-local frame, applies the existing boundary hold,
+   exact-key, left-key easing/interpolation, and static-fallback rules. Its
+   static fallback is the materialized base number: the valid authored value, or
+   the manifest default when the key was absent. It returns a finite value inside
+   the declared range. `step` is host-control
+   metadata and never rounds or quantizes a resolved render value. Unknown,
+   dangling, non-animatable, or invalid tracks/results retain the existing
+   ignore/preservation and materialized-base-fallback semantics. Only a declared
+   authored parameter that fails current contribution validation makes the stage
+   invalid/bypassed; plugin rendering may not invent a divergent fallback.
+
+Issue #77 must make plugin parameter declarations available to that same pure
+effect-track resolution authority; it may not invent a second interpolation
+path. Given the same immutable manifest/document snapshot and requested global
+frame, preview, scrub, playback, and export therefore produce byte-identical
+parameter records. An export uses its already-frozen export snapshot; mutable
+preview or plugin state cannot affect these call bytes.
+
+The complete object is serialized once with RFC 8785 JCS and then encoded as
+UTF-8 without a byte-order mark. JCS emits no inter-token whitespace and sorts
+raw property names by UTF-16 code units; because version-1 parameter keys use
+the ASCII local-identifier grammar, that order is also ascending bytewise ASCII
+order. JCS/ECMAScript string escaping and binary64 number serialization are
+normative (`-0` serializes as `0`); `NaN`, infinities, lone surrogates, duplicate
+keys, alternative number spellings, a trailing NUL, and any byte after the object
+are forbidden. No Unicode normalization is performed. Version-1 enum ids and
+keys already use the ASCII grammar, so their valid strings require no escape
+substitution.
+
+The resulting length is from 2 bytes (`{}`) through 65,536 bytes inclusive. The
+host uses checked addition to prove the half-open slice
+`[0x01000000, 0x01000000 + parameterByteLength)` stays within page 256, clears
+that complete 64 KiB page, copies exactly the canonical bytes at `0x01000000`,
+and passes their exact length with no terminator. A conforming module parses only
+that slice against its selected contribution schema; it neither scans for NUL
+nor supplies missing defaults. Parse/schema failure returns a failure code other
+than success/identity, and the host discards the output. After the request
+settles, the host clears the page again. Oversize or unencodable host input makes
+the stage unavailable/failing before invocation and is never truncated.
+
+This record is render-only. Migration continues to receive the separate cloned
+static descriptor-parameter record under the migration ABI below; it receives
+neither frame-resolved values nor render-time default materialization. Version 1
+still rejects migration of any descriptor targeted by effect animation.
 
 On every raw-byte path, the module binary must pass the complete host-authored
 byte policy inside its fresh candidate worker before that worker invokes any
@@ -1014,6 +1097,21 @@ green:
    isolation; deterministic serial multi-descriptor actions; terminal teardown;
    fresh retry; stale-generation rejection; and all-or-nothing final commit;
 6. authored built-in/plugin stack-order pixels shared by preview and export,
+   plus exact render-parameter ABI fixtures: `{}` at two bytes; declared-key
+   completeness and ASCII/JCS order independent of authored insertion order;
+   absent-key default materialization without document mutation; present wrong-
+   kind/range/enum invalid bypass and undeclared-key unsupported bypass with no
+   call; canonical escaping,
+   binary64 exponent/decimal forms and `-0` to `0`; BOM, whitespace, duplicate-
+   key, trailing-byte/NUL, and non-finite rejection; the maximum reachable valid
+   8,577-byte record (64 distinct 64-byte keys and 64-byte enum ids); lower-level
+   synthetic raw canonical-buffer 65,536-byte page-boundary and cap-plus-one
+   rejection; exact fixed pointer/half-open length/no-terminator/page-clear
+   behavior; requested-global-frame boundary/exact/interpolated animation with
+   authored and absent-key/default static fallbacks and no `step` quantization;
+   identical preview/export bytes from the same frozen
+   snapshot and frame; and proof that migration receives none of this render-
+   time materialization,
    plus stateful-module fixtures proving that every export starts from a fresh
    instance/memory, follows deterministic call order, and cannot inherit prior
    or concurrent preview, canceled export, or retried export state;
