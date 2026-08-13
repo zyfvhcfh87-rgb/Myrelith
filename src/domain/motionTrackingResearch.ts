@@ -396,13 +396,54 @@ function targetVisibleCenterOffset(
   }
 }
 
+function projectSourceBoxExtents(
+  sample: TrackingAnimationSample,
+  targetRotation: number,
+): { readonly x: number; readonly y: number } {
+  // Express the transformed source box's support extents in the target's
+  // rotation-local axes. Mirror signs disappear because size is unsigned.
+  const sourceWidth = sample.width! * sample.source.transform.scaleX
+  const sourceHeight = sample.height! * sample.source.transform.scaleY
+  const relativeRotation = ((
+    sample.source.transform.rotation % 360
+    - targetRotation % 360
+  ) % 360 + 360) % 360
+  let cosine: number
+  let sine: number
+  if (relativeRotation === 0 || relativeRotation === 180) {
+    cosine = 1
+    sine = 0
+  } else if (relativeRotation === 90 || relativeRotation === 270) {
+    cosine = 0
+    sine = 1
+  } else {
+    const relativeAngle = relativeRotation * Math.PI / 180
+    cosine = Math.abs(Math.cos(relativeAngle))
+    sine = Math.abs(Math.sin(relativeAngle))
+  }
+  const extents = {
+    x: cosine * sourceWidth + sine * sourceHeight,
+    y: sine * sourceWidth + cosine * sourceHeight,
+  }
+  if (
+    !Number.isFinite(extents.x)
+    || !Number.isFinite(extents.y)
+    || extents.x <= 0
+    || extents.y <= 0
+  ) {
+    throw new RangeError('Projected box tracking extents must be positive and finite')
+  }
+  return extents
+}
+
 /**
  * Projects accepted, clip-local tracking samples onto the existing scalar
  * animation vocabulary. Each center is mapped through the source clip's exact
- * resolved transform. When box scale is included, Position X/Y compensates for
- * scaling the target's cropped visible center around its authored anchor. The
- * caller owns source-time -> clip-frame mapping and must invoke this only after
- * analysis has completed and passed review.
+ * resolved transform. Box scale is projected onto target-local axes relative to
+ * the target rotation, then Position X/Y compensates for scaling the target's
+ * cropped visible center around its authored anchor. The caller owns source-time
+ * -> clip-frame mapping and must invoke this only after analysis has completed
+ * and passed review.
  */
 export function trackingSamplesToAnimationTracks(
   samples: readonly TrackingAnimationSample[],
@@ -445,18 +486,27 @@ export function trackingSamplesToAnimationTracks(
         || sample.height! <= 0
       ))
     ) throw new RangeError('Box tracking scale mapping needs positive finite sample sizes')
-    const firstProjectedWidth = first.width! * first.source.transform.scaleX
-    const firstProjectedHeight = first.height! * first.source.transform.scaleY
-    scales = samples.map((sample) => ({
-      x: base.scaleX
-        * sample.width!
-        * sample.source.transform.scaleX
-        / firstProjectedWidth,
-      y: base.scaleY
-        * sample.height!
-        * sample.source.transform.scaleY
-        / firstProjectedHeight,
-    }))
+    const projectedExtents = samples.map((sample) => (
+      projectSourceBoxExtents(sample, base.rotation)
+    ))
+    const firstProjectedExtents = projectedExtents[0]!
+    scales = projectedExtents.map((extents, index) => {
+      const scale = index === 0
+        ? { x: base.scaleX, y: base.scaleY }
+        : {
+            x: extents.x / firstProjectedExtents.x * base.scaleX,
+            y: extents.y / firstProjectedExtents.y * base.scaleY,
+          }
+      if (
+        !Number.isFinite(scale.x)
+        || !Number.isFinite(scale.y)
+        || scale.x <= 0
+        || scale.y <= 0
+      ) {
+        throw new RangeError('Projected box tracking scales must be positive and finite')
+      }
+      return scale
+    })
   }
   const baseTargetOffset = targetVisibleCenterOffset(
     base,

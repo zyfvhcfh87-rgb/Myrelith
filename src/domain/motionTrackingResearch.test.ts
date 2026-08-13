@@ -168,12 +168,87 @@ describe('tracking keyframe projection', () => {
       'scale-x',
       'scale-y',
     ])
-    expect(tracks.map((track) => track.keyframes[1]?.value)).toEqual([
-      30,
-      8,
-      2.2,
-      3.6,
-    ])
+    const values = tracks.map((track) => track.keyframes[1]?.value)
+    expect(values.slice(0, 2)).toEqual([30, 8])
+    expect(values[2]).toBeCloseTo(2.2, 12)
+    expect(values[3]).toBeCloseTo(3.6, 12)
+  })
+
+  test.each([
+    { label: '0 degrees', rotation: 0, mirrored: false, scaleX: 4, scaleY: 3 },
+    { label: '+90 degrees', rotation: 90, mirrored: false, scaleX: 2, scaleY: 6 },
+    { label: '-90 degrees with source and target mirrors', rotation: -90, mirrored: true, scaleX: 2, scaleY: 6 },
+  ])('projects anisotropic source scale at $label into target scale axes', ({
+    rotation,
+    mirrored,
+    scaleX,
+    scaleY,
+  }) => {
+    const source = {
+      ...identitySource,
+      transform: { ...identitySource.transform, rotation },
+      visual: {
+        ...visual,
+        flipHorizontal: mirrored,
+        flipVertical: mirrored,
+      },
+    }
+    const scaledSource = {
+      ...source,
+      transform: { ...source.transform, scaleX: 2 },
+    }
+    const target = {
+      ...centeredTarget,
+      visual: {
+        ...centeredTarget.visual,
+        flipHorizontal: mirrored,
+        flipVertical: mirrored,
+      },
+    }
+    const tracks = trackingSamplesToAnimationTracks([
+      sample(0, 100, 50, source, { width: 40, height: 20 }),
+      sample(10, 100, 50, scaledSource, { width: 40, height: 20 }),
+    ], base, { includeScale: true, target })
+    const clip = {
+      transform: base,
+      opacity: 1,
+      timelineRange: { startFrame: 0, durationFrames: 11 },
+      animation: { tracks, effectTracks: [] },
+    } as unknown as Clip
+    const resolved = resolveClipAnimationAtFrame(clip, 10)
+
+    expect(resolved.transform.scaleX).toBeCloseTo(scaleX, 12)
+    expect(resolved.transform.scaleY).toBeCloseTo(scaleY, 12)
+  })
+
+  test('uses target-relative axes for per-sample rotation and anisotropic source scale', () => {
+    const targetBase = { ...base, rotation: 30 }
+    const initialSource = {
+      ...identitySource,
+      transform: { ...identitySource.transform, rotation: 30 },
+    }
+    const changedSource = {
+      ...identitySource,
+      transform: {
+        ...identitySource.transform,
+        scaleX: 2,
+        rotation: 90,
+      },
+    }
+    const tracks = trackingSamplesToAnimationTracks([
+      sample(0, 100, 50, initialSource, { width: 40, height: 20 }),
+      sample(10, 100, 50, changedSource, { width: 40, height: 20 }),
+    ], targetBase, { includeScale: true, target: centeredTarget })
+    const clip = {
+      transform: targetBase,
+      opacity: 1,
+      timelineRange: { startFrame: 0, durationFrames: 11 },
+      animation: { tracks, effectTracks: [] },
+    } as unknown as Clip
+    const resolved = resolveClipAnimationAtFrame(clip, 10)
+
+    expect(resolved.transform.scaleX).toBeCloseTo(2 + Math.sqrt(3) / 2, 12)
+    expect(resolved.transform.scaleY).toBeCloseTo(1.5 + 6 * Math.sqrt(3), 12)
   })
 
   test('uses ordinary animation interpolation shared by preview and export planning', () => {
@@ -248,8 +323,14 @@ describe('tracking keyframe projection', () => {
     // R(90 degrees) * diag(-2, 3) * [10, -4] = [12, -20].
     expect(resolvedCenter.x - initialCenter.x).toBeCloseTo(12, 12)
     expect(resolvedCenter.y - initialCenter.y).toBeCloseTo(-20, 12)
-    expect(resolved.transform.scaleX).toBeCloseTo(2.2, 12)
-    expect(resolved.transform.scaleY).toBeCloseTo(3.6, 12)
+    expect(resolved.transform.scaleX).toBeCloseTo(
+      2 * (44 + 36 * Math.sqrt(3)) / (40 + 30 * Math.sqrt(3)),
+      12,
+    )
+    expect(resolved.transform.scaleY).toBeCloseTo(
+      3 * (44 * Math.sqrt(3) + 36) / (40 * Math.sqrt(3) + 30),
+      12,
+    )
   })
 
   test('uses the source transform resolved for each accepted sample', () => {
@@ -290,16 +371,151 @@ describe('tracking keyframe projection', () => {
   test('rejects box growth above the canonical clip-scale bound', () => {
     const maximumScaleBase = {
       ...base,
-      scaleX: MAX_CLIP_SCALE,
+      scaleX: 1,
       scaleY: MAX_CLIP_SCALE,
     }
+    const quarterTurnSource = {
+      ...identitySource,
+      transform: { ...identitySource.transform, rotation: 90 },
+    }
     expect(() => trackingSamplesToAnimationTracks([
-      sample(0, 100, 50, identitySource, { width: 20, height: 20 }),
-      sample(10, 100, 50, identitySource, { width: 20, height: 40 }),
+      sample(0, 100, 50, quarterTurnSource, { width: 20, height: 20 }),
+      sample(10, 100, 50, quarterTurnSource, { width: 40, height: 20 }),
     ], maximumScaleBase, {
       includeScale: true,
       target: centeredTarget,
     })).toThrow(/Generated scale-y tracking track.*keyframe value must be from/)
+  })
+
+  test('does not leak exact quarter-turn growth into an unchanged maximum-scale axis', () => {
+    const maximumXBase = {
+      ...base,
+      scaleX: MAX_CLIP_SCALE,
+      scaleY: 1,
+    }
+    const quarterTurnSource = {
+      ...identitySource,
+      transform: { ...identitySource.transform, rotation: 90 },
+    }
+    const tracks = trackingSamplesToAnimationTracks([
+      sample(0, 100, 50, quarterTurnSource, { width: 20, height: 20 }),
+      sample(10, 100, 50, quarterTurnSource, { width: 40, height: 20 }),
+    ], maximumXBase, {
+      includeScale: true,
+      target: centeredTarget,
+    })
+
+    expect(tracks.find((track) => track.property === 'scale-x')?.keyframes[1]?.value)
+      .toBe(MAX_CLIP_SCALE)
+    expect(tracks.find((track) => track.property === 'scale-y')?.keyframes[1]?.value)
+      .toBe(2)
+  })
+
+  test('retains the exact authored base scale before multiplying extreme extent ratios', () => {
+    const halfScaleSource = {
+      ...identitySource,
+      transform: {
+        ...identitySource.transform,
+        scaleX: 0.5,
+        scaleY: 0.5,
+      },
+    }
+    const tracks = trackingSamplesToAnimationTracks([
+      sample(0, 100, 50, halfScaleSource, {
+        width: Number.MAX_VALUE,
+        height: Number.MAX_VALUE,
+      }),
+      sample(10, 100, 50, halfScaleSource, {
+        width: Number.MAX_VALUE,
+        height: Number.MAX_VALUE,
+      }),
+    ], base, {
+      includeScale: true,
+      target: centeredTarget,
+    })
+
+    expect(tracks.find((track) => track.property === 'scale-x')?.keyframes[0]?.value)
+      .toBe(base.scaleX)
+    expect(tracks.find((track) => track.property === 'scale-y')?.keyframes[0]?.value)
+      .toBe(base.scaleY)
+  })
+
+  test.each([
+    {
+      label: 'non-finite',
+      source: {
+        ...identitySource,
+        transform: { ...identitySource.transform, scaleX: 2 },
+      },
+      size: { width: Number.MAX_VALUE, height: 20 },
+    },
+    {
+      label: 'zero after underflow',
+      source: {
+        ...identitySource,
+        transform: {
+          ...identitySource.transform,
+          scaleX: Number.MIN_VALUE,
+          scaleY: Number.MIN_VALUE,
+        },
+      },
+      size: { width: Number.MIN_VALUE, height: Number.MIN_VALUE },
+    },
+  ])('rejects $label projected box extents before scale ratios are emitted', ({
+    source,
+    size,
+  }) => {
+    expect(() => trackingSamplesToAnimationTracks([
+      sample(0, 100, 50, identitySource, { width: 20, height: 20 }),
+      sample(10, 100, 50, source, size),
+    ], base, {
+      includeScale: true,
+      target: centeredTarget,
+    })).toThrow(new RangeError('Projected box tracking extents must be positive and finite'))
+  })
+
+  test.each([
+    {
+      label: 'underflows to zero scale',
+      firstSource: {
+        ...identitySource,
+        transform: {
+          ...identitySource.transform,
+          scaleX: 0.5,
+          scaleY: 0.5,
+        },
+      },
+      firstSize: { width: Number.MAX_VALUE, height: Number.MAX_VALUE },
+      secondSource: identitySource,
+      secondSize: { width: Number.MIN_VALUE, height: Number.MIN_VALUE },
+    },
+    {
+      label: 'overflows to non-finite scale',
+      firstSource: identitySource,
+      firstSize: { width: Number.MIN_VALUE, height: Number.MIN_VALUE },
+      secondSource: {
+        ...identitySource,
+        transform: {
+          ...identitySource.transform,
+          scaleX: 0.5,
+          scaleY: 0.5,
+        },
+      },
+      secondSize: { width: Number.MAX_VALUE, height: Number.MAX_VALUE },
+    },
+  ])('rejects a positive extent ratio that $label', ({
+    firstSource,
+    firstSize,
+    secondSource,
+    secondSize,
+  }) => {
+    expect(() => trackingSamplesToAnimationTracks([
+      sample(0, 100, 50, firstSource, firstSize),
+      sample(10, 100, 50, secondSource, secondSize),
+    ], base, {
+      includeScale: true,
+      target: centeredTarget,
+    })).toThrow(new RangeError('Projected box tracking scales must be positive and finite'))
   })
 
   test('rejects projected position above the canonical finite bound', () => {

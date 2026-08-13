@@ -242,15 +242,26 @@ point motion to ordinary Position X/Y tracks and box motion to Position X/Y +
 Scale X/Y on a separately selected overlapping visual target. The source clip's
 resolved crop/flip/anchor/transform maps each full-source sample into project
 space, including rotation/flip cross-axis terms and per-sample source-transform
-changes. When box scale changes, Position X/Y compensates around the target's
+changes. Box width and height are transformed by each sample's anisotropic source
+scale and expressed in the target's rotation-local Scale X/Y axes. The absolute
+sine/cosine support extents at the source-minus-target relative angle swap axes
+at quarter turns, mix them at arbitrary angles, and make source or target mirror
+signs size-invariant. Ratios against the first sample retain the target's authored
+base scale exactly. Normalized 0/90/180/270-degree cases use semantic zero/one
+coefficients rather than floating approximations. Every other sample divides its
+extent by the first before multiplying by base scale; a non-positive or non-finite
+extent or derived scale fails closed. At non-quarter-turn relative angles this is
+the deterministic enclosing envelope representable by fixed target rotation plus
+Scale X/Y; exact rotated-box shape following would require a Rotation track and is
+outside this four-track contract. Position X/Y compensates around the target's
 cropped visible center using its dimensions, flip, rotation, and authored anchor,
 so scaling cannot pull the attachment away from the tracked project point. The
 canonical `SourceTimeMap` supplies strict clip-local integer frames. A duplicate/
 non-monotonic projection rejects rather than dropping samples. Before returning,
 every generated Position X/Y and Scale X/Y track passes the canonical animation
 validator. A mapped frame beyond the keyframe ceiling, a derived position beyond
-the finite project bound, or a box scale outside the clip-scale range fails
-closed instead of reaching a future Apply or portable document validator.
+the finite project bound, or a box scale outside the clip-scale range fails closed
+instead of reaching a future Apply or portable document validator.
 
 Point and box quality decisions are independent: point thresholds alone decide
 point feasibility, while box geometry, scale, and prompt occlusion loss decide

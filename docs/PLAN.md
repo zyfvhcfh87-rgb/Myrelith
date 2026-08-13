@@ -3978,3 +3978,26 @@ acceptance claims.
   resource parity, and normal timer/listener cleanup; pass 33/33 controller and
   54/54 focused tests, 174/174 files with 2,382/2,382 full-suite tests, all 16
   runner checks, build, oxlint, high-severity production audit, and diff check.
+
+## Milestone 5 Part 10a / issue #44 - tracking scale-axis follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Express every transformed source box in the target's rotation-local Scale
+  X/Y basis using support extents at the per-sample source-minus-target relative
+  angle; retain first-sample ratios and authored base-scale multiplication.
+- [x] Swap anisotropic growth at quarter turns, mix it at arbitrary angles, and
+  treat source/target flip signs as size-invariant. Keep the four-track contract
+  explicit: fixed target Rotation uses a deterministic enclosing envelope where
+  exact rotated or sheared geometry is not representable by Scale X/Y alone.
+- [x] Make exact quadrants use semantic zero/one coefficients, retain the first
+  sample's authored base scale exactly, divide later extent ratios before base
+  multiplication, and reject non-positive/non-finite extents or derived scales.
+- [x] Cover target rotation, relative 0/+90/-90/arbitrary angles, per-sample
+  rotation and anisotropy, mirrors, cropped-center compensation, finite extents,
+  extreme ratio arithmetic, and canonical scale overflow without adding another
+  runtime evaluator.
+- [x] Pass 20/20 tracking tests, 64/64 focused controller/domain/tracking tests,
+  174/174 files with 2,392/2,392 full-suite tests, all 16 runner checks,
+  TypeScript/Vite build, oxlint, high-severity production audit at 0
+  vulnerabilities, and `git diff --check`.

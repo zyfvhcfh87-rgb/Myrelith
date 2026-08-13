@@ -3872,3 +3872,32 @@ surface; it is not a second zoom and never enters document history.
   set passes 54/54 plus all 16 runner checks. The complete gate passes 174/174
   files and 2,382/2,382 Vitest tests plus those 16 runner checks; TypeScript/Vite
   build, oxlint, production audit at high severity, and `git diff --check` pass.
+
+## Milestone 5 Part 10a / issue #44 - tracking scale-axis hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of exact head
+  `05dc3bf8417a875187ea3286a16daa20e58e9b7f` found that anisotropic source-box
+  growth still mapped source width directly to target Scale X and source height
+  directly to Scale Y, even when the source and target axes were rotated apart.
+- Each accepted sample now projects its transformed box support extents into the
+  target's rotation-local axes. Absolute sine/cosine terms at the source-minus-
+  target relative angle swap quarter-turn axes, mix arbitrary angles, and keep
+  source/target mirror signs size-invariant; first-sample ratios preserve the
+  authored target base scale exactly. Exact quadrants use semantic zero/one
+  coefficients, and later samples divide before multiplying base scale so valid
+  extreme extents do not overflow an intermediate. Non-positive or non-finite
+  extents and derived ratios reject explicitly. A fixed target Rotation plus
+  Scale X/Y represents arbitrary relative angles as a deterministic enclosing
+  envelope rather than claiming exact independently rotating or sheared geometry.
+- Deterministic projection cases cover relative 0, +90, -90, arbitrary 60-degree
+  rotation, nonzero target rotation, per-sample rotation and anisotropic scale,
+  source and target mirrors, unchanged cropped-center attachment, exact maximum-
+  scale quadrant behavior, extent and ratio overflow/underflow, and rotated
+  canonical scale overflow.
+- The tracking file passes 20/20 tests. The controller/domain/tracking group
+  passes 64/64 plus all 16 runner checks; the complete gate passes 174/174 files
+  and 2,392/2,392 Vitest tests plus those 16 checks. TypeScript/Vite build, oxlint,
+  production audit at high severity with 0 vulnerabilities, and `git diff
+  --check` pass. The build retains only the established large-chunk advisory.
