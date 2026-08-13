@@ -12,7 +12,7 @@ Status: research complete; product behavior and portable schemas unchanged
 | Similarity stabilization | Go, bounded | [#109](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/109) may implement translation + rotation + uniform-scale stabilization with visible strength/crop trade-offs. Affine, perspective, mesh, rolling-shutter, depth, and AI methods remain out. |
 | Point tracking | Go, bounded | [#110](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/110) may implement forward/backward patch tracking with explicit confidence and loss. |
 | Similarity-box tracking | Go, bounded | #110 may add box translation + uniform scale from consistent interior patches. Rotation/deformation and semantic tracking remain out. |
-| Manual lens parameter model | Model validated; renderer not yet authorized | [#111](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/111) must prove source-space preview/export parity and performance before any implementation issue is opened. |
+| Manual lens parameter model | Go, bounded backend candidate | [#111](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/111) proves one source-space RGBA8 WebGL2 path against the CPU oracle. A separate implementation issue may add the product/document boundary only after #111's exact-head acceptance. |
 | Camera/lens profile catalog | No-go now | Identity ambiguity, licensing, update provenance, offline behavior, and silent-download policy are unresolved. No catalog or profile download is proposed. |
 
 The umbrella deliberately does not ship an editor button, document field,
@@ -347,13 +347,51 @@ below 0.05, preventing obvious foldovers/non-bijective mappings. The neutral
 model is identity; coverage sampling exposes overscan and demonstrates that an
 explicit crop can reduce it.
 
-This validates the model, not a product renderer. Lens remapping is source-space
-camera geometry before crop, transform, project-space masks/effects, opacity,
-and blending. Current Canvas2D effect execution does not automatically provide
-that ordering or an acceptable geometric remap. #111 must prove a bounded CPU
-or parity-safe WebGL2 backend at 720p/1080p/4K, context loss, transparency,
-preview/export tolerances, and unsupported fallbacks. Until then, lens
-implementation and every profile catalog remain no-go.
+Issue #111 now validates a backend candidate, not a product renderer. Lens
+remapping is source-space camera geometry before crop, transform, project-space
+masks/effects, opacity, blending, and transitions. The frozen order is decoded
+oriented source -> manual lens remap -> authored crop -> clip transform ->
+mask/chroma -> ordered color/effects -> opacity/blend -> transition group.
+
+The CPU/ImageData implementation is a bounded truth oracle only. The candidate
+runtime is one WebGL2 RGBA8/UNSIGNED_BYTE texture and default framebuffer with
+manual four-tap bilinear sampling in nonlinear sRGB code values, straight alpha,
+and transparent out-of-bounds taps. Preview draws and export readback use the
+same shader/program; there is no second export evaluator and no float-texture
+dependency. Seven versioned fixtures cover neutral, barrel, pincushion,
+tangential, off-center, strong-valid, and transparent-edge cases. Each is
+checked against the CPU oracle, while transform feedback compares a 33x33
+geometry grid directly with the domain mapper.
+
+The headed Chromium shakedown on the recorded AMD Radeon RX 6600 host measured
+maximum CPU/export and preview/export error of one byte per channel and maximum
+geometry error of 0.000035 source pixels. WebGL2 preview/export p95 was 7.2/6.3
+ms at 1280x720, 10.4/13.6 ms at 1920x1080, and 33.4/55.7 ms at 3840x2160. The
+CPU oracle took 101.4, 214.5, and 906.4 ms respectively. These timings are host
+evidence, not product guarantees; exact clean-head provenance is captured by
+the source-bound artifact before merge.
+
+Every selectable project preset fits the device's 16,384-pixel texture limit
+and the existing 256 MiB aggregate surface envelope. At 4K, four compositor
+surfaces plus two reusable remap surfaces and one request-scoped export readback
+peak at 232,243,200 bytes. The disposable worker owns its WebGL2 context and all
+candidate resources. Context loss is terminal for that owner and the current
+request; a fresh worker/context must re-probe and may retry. Cancellation is a
+typed `AbortError`, all workers terminate, and no retained candidate bytes
+remain after disposal.
+
+Unsupported WebGL2, RGBA8 upload/readback, context-loss observation,
+`MAX_TEXTURE_SIZE`, or surface-budget facts make manual lens correction
+explicitly unavailable. The CPU oracle is never a silent production fallback.
+Issue #111 makes only the bounded WebGL2 candidate a go; it adds no document
+field, editor control, render import, schema migration, or production bundle.
+The follow-up product issue must put one versioned manual source-geometry field
+before authored crop and share this exact path between preview/export.
+
+Camera/lens catalogs remain no-go. The research neither bundles nor downloads
+profiles, and it does not infer camera identity. A future, separately reviewed
+local profile import would need explicit licensing, provenance, ambiguity,
+offline, and update rules; it cannot be smuggled into the manual v1 work.
 
 ## Real Chromium support and lifecycle evidence
 
@@ -470,8 +508,9 @@ and point tracking at `maxFeatures: 1`.
   Apply may create one normal document history entry.
 - Stabilization and tracking reuse existing scalar animation; they do not add a
   second preview/export evaluator.
-- Lens correction remains research-only until #111 proves source-space
-  compositor ordering and performance.
+- Lens correction remains research-only after #111's backend go decision until
+  a separate issue owns its portable schema, editor workflow, and shared
+  production integration.
 - Every quality threshold is a bounded fixture gate, not a promise that all
   footage is trackable or stabilizable.
 

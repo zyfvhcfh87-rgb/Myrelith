@@ -120,10 +120,11 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #67 — snapping and alignment guides** | ✅ implementation complete | one browser-free resolver for playhead/clip/transition/marker anchors; zoom-stable 8px threshold, deterministic ties and eligibility, shared pointer/keyboard paths, persistent accessible preference + Alt bypass, ephemeral guide, and exact preview/one-commit history behavior; 136 focused + 2,023 total tests; clean Chromium gate on exclusive port 41867 |
 | **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
-| **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model with renderer no-go; delivery split into #108–#111; 22 focused tests and source-bound Chromium evidence on exclusive port 41844 |
+| **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model; delivery split into #108–#111; product lens renderer remains absent |
 | **Post-MVP #108 — motion-analysis job/cache foundation** | ✅ complete | production one-job/one-decoder controller; worker-owned real-source decode/downsample with exact frame closure; strict schema-1 OPFS derived cache; source/currentness rollback; PR #115 squash-merged as `73ceeea`; issue closed |
 | **Post-MVP #109 — bounded video stabilization** | ✅ complete | production #108 consumer; O(n) similarity smoothing; exact project-space safe coverage; ordinary Position/Rotation/equal-Scale tracks; PR #116 squash-merged as `2c9e35a`; issue closed |
-| **Post-MVP #110 — bounded point and box tracking** | 🚧 publication review pending | exact-frame Program Monitor selection; bounded forward/backward local tracking; explicit loss; ordinary Position and optional Scale authoring; clean Chromium product gate passed |
+| **Post-MVP #110 — bounded point and box tracking** | ✅ complete | exact-frame Program Monitor selection; bounded forward/backward local tracking; explicit loss; ordinary Position and optional Scale authoring; PR #117 squash-merged as `a91f1af`; issue closed |
+| **Post-MVP #111 — parity-safe manual lens remap** | 🚧 exact-head publication pending | build-unreferenced CPU oracle + RGBA8 WebGL2 candidate; seven-fixture pixel/geometry parity, 720p/1080p/4K timing, finite memory, cancellation, context-loss/fresh-owner proof; no schema/UI/catalog |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -4830,3 +4831,63 @@ surface; it is not a second zoom and never enters document history.
   4,817 modules, lint is warning-free, the production audit reports 0
   vulnerabilities, and diff checks pass. Refresh clean Chromium, CI, and
   exact-head review before merge.
+
+## Milestone 5 Part 10a.4 / issue #111 - manual lens-remap backend proof
+
+**IMPLEMENTED LOCALLY; CLEAN-COMMIT EVIDENCE/CI/REVIEW PENDING (2026-08-13).**
+
+- `domain/lensCorrection.ts` remains browser-free and owns the version-1
+  normalized Brown-Conrady model plus fixed 33x33/Jacobian safety gate. A
+  validated immutable mapper now lets a bounded frame loop pay that model gate
+  once without weakening per-point bounds.
+- `dev/issue111/` owns the complete build-unreferenced experiment: deterministic
+  RGBA fixtures and CPU oracle, one RGBA8 WebGL2/manual-bilinear candidate,
+  transform-feedback geometry audit, serializable evidence, disposable worker,
+  cancellation owner, and main-thread timeout/error/messageerror cleanup.
+- The frozen source order is decoded oriented source -> manual lens remap ->
+  authored crop -> clip transform -> mask/chroma -> ordered effects ->
+  opacity/blend -> transition. Both candidate preview and export use the same
+  program; export adds only the request-scoped RGBA8 readback.
+- The headed dirty-tree shakedown on the AMD Radeon RX 6600 returned `go` with
+  seven fixtures, maximum pixel delta 1 byte/channel, maximum geometry delta
+  0.000035 source pixels, and 1080p preview/export p95 10.4/13.6 ms. At 4K,
+  preview/export p95 was 33.4/55.7 ms and the full seven-surface envelope was
+  232,243,200 bytes. Exact clean-head artifact identity replaces this
+  preliminary provenance before publication.
+- Context loss fails the current owner; a fresh worker/context re-probes and
+  succeeds. CPU work cancels with `AbortError`; three workers terminate with
+  zero active. Unsupported
+  WebGL2/RGBA8/readback/texture/memory facts are explicit unavailability and
+  never silently substitute the CPU oracle.
+- No production entry imports the gate. There is no editor control, document
+  field, schema migration, profile catalog, profile download, auto-calibration,
+  cloud service, or AI path. A separate implementation issue may be opened only
+  after exact-head #111 acceptance.
+- Frozen focused validation passes 4 files / 20 tests plus all 17 runner
+  checks. The authoritative suite passes 192/192 files with 2,598/2,598 tests
+  plus 17/17 runner checks. TypeScript/Vite builds 4,817 modules with only the
+  established large-chunk advisory; lint is clean, the production audit reports
+  0 vulnerabilities, diff checks pass, and normal production output contains
+  zero Issue #111 canary files. Clean committed headed evidence, CI, and
+  exact-head Codex review remain.
+
+## Milestone 5 Part 10a.4 / issue #111 - first exact-head review follow-up
+
+**VALIDATED LOCALLY; CLEAN-HEAD PUBLICATION PENDING (2026-08-13).**
+
+- Exact-head Codex review `4930390362` on `072836a4b360f4333ae40b13788965822b4c182e`
+  found that context-loss retry used a fresh context in the same worker instead
+  of a fresh worker, and that row flipping temporarily retained a second full
+  readback frame outside the published memory budget.
+- The full proof worker now terminates after context loss. A separately owned
+  recovery worker starts from scratch, re-probes context-loss observation and
+  texture limits, renders one exact neutral RGBA8 frame, disposes, and terminates
+  before the cancellation worker starts. Lifecycle evidence is 3/3/0.
+- Readback now swaps top/bottom pixels in its original tightly owned buffer via
+  a same-buffer 32-bit view. There is no second frame-sized allocation, so the
+  seven-surface 4K peak remains exactly 232,243,200 bytes.
+- Focused 4-file validation remains 20/20 plus 17/17 runner checks. The
+  authoritative full suite passes 192/192 files and 2,598/2,598 tests plus the
+  same 17/17 runner checks; the 4,817-module build/typecheck, lint, production
+  audit (zero vulnerabilities), diff checks, and production-isolation canaries
+  are green. Clean committed headed evidence, CI, and exact-head review remain.

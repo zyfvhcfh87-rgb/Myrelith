@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8"><title>Issue 111 lens-remap gate</title></head>
+  <body>
+    <main>
+      <h1>Issue 111 lens-remap gate</h1>
+      <p role="status">Running</p>
+    </main>
+    <script type="module">
+      import { runLensRemapBrowserGate } from '/src/dev/issue111/lensRemapGate.ts'
+      try {
+        const evidence = await runLensRemapBrowserGate()
+        globalThis.__issue111LensRemapResult = evidence
+        document.querySelector('[role=status]').textContent = 'Passed'
+      } catch (error) {
+        const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+        globalThis.__issue111LensRemapError = detail
+        document.querySelector('[role=status]').textContent = `Failed: ${detail}`
+      }
+    </script>
+  </body>
+</html>
