@@ -4383,4 +4383,9 @@ acceptance claims.
   frame. Pass 5/5 focused files with 28/28 tests, 184/184 full-suite files with
   2,531/2,531 tests, all 17 evidence-runner checks, build/typecheck, warning-
   free lint, the production audit with 0 vulnerabilities, and diff checks.
-  Refresh clean Chromium, CI, and exact-head Codex review before merge.
+- [x] Pass headed Chromium on clean exact code commit `b9695cd6c2` and port
+  41870: 32 samples, 31 keys per track, 1.0224× safe zoom, exact cache hit,
+  worker 1/1/0, zero console/page problems, and complete port release. Keep the
+  direct 0× semantics in deterministic domain coverage because the broad
+  source-bound browser fixture uses ordinary 1× timing. Refresh CI and exact-
+  head Codex review before merge.

@@ -4446,5 +4446,9 @@ surface; it is not a second zoom and never enters document history.
   full, build, lint, audit, and diff gates pass: 5/5 focused files with 28/28
   tests, 184/184 full-suite files with 2,531/2,531 tests, 17/17 evidence-runner
   checks, TypeScript/Vite production build, warning-free lint, and 0 production
-  vulnerabilities. Clean-commit browser, CI, and fresh exact-head review
-  evidence follow after commit.
+  vulnerabilities. Headed Chromium on clean exact code commit `b9695cd6c2`
+  reproduces 32 analyzed samples, 31 keys per track, 1.0224× safe zoom, an
+  exact cache hit, balanced 1-created/1-terminated/0-active worker ownership,
+  zero console/page problems, and complete port 41870 release. That broad
+  source-bound flow uses ordinary 1× timing; the deterministic domain test is
+  the direct 0× freeze coverage. CI and fresh exact-head review follow.
