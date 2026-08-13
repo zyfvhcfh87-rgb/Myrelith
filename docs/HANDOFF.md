@@ -4010,3 +4010,52 @@ surface; it is not a second zoom and never enters document history.
   its established disabled-experiment error literal; an initially overbroad
   text canary caught that expected fallback and was narrowed to the actual API
   and chunk boundary.
+
+## Milestone 5 Part 10a / issue #44 - pair-schedule and seed-budget hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of rebased exact head
+  `86f17e6ac4b8e46b55617366dd5cbb79ddc2edd8` found two bounded-algorithm gaps:
+  the 256-hypothesis loop consumed only a lexicographic pair prefix, and box
+  tracking always generated sixteen seeds even under a valid smaller feature
+  budget.
+- `similarity-block-ransac-v3` now maps the exact hypothesis cap to unique,
+  evenly spaced ranks over the complete unordered-pair space. Full schedules
+  enumerate every pair, capped schedules with at least two hypotheses include
+  both endpoints, a one-hypothesis schedule selects the middle rank, and each
+  rank is un-ranked without materializing all pairs. Cancellation remains once
+  per evaluated hypothesis and the established first-winner tie order remains
+  deterministic. The v3 identity makes cached v2 results explicitly stale;
+  browser artifact schema 4 remains unchanged because its JSON shape did not
+  change. A separately testable runner contract pins fixture
+  `issue-44-synthetic-v2` and algorithm v3 before screenshot or artifact writes,
+  so stale or miswired worker evidence cannot publish a passing report.
+- The ordered review regression contains 29 translated foreground matches then
+  35 stationary background matches. Under 64 matches and the 256 cap, v3
+  samples 46 foreground-only, 134 cross-group, and 76 background-only pairs,
+  selects the 35-inlier majority, and retains that result after a deterministic
+  permutation.
+- Box tracking now rejects only its own unsupported budget below eight, selects
+  exactly `min(maxFeatures, 16)` spatially spread seeds for valid budgets 8-15,
+  and preserves the original sixteen-seed order at the default. Point tracking
+  still succeeds at `maxFeatures: 1`; the shared budget validator was not
+  narrowed.
+- The regression-first focused attempt failed all ten new behavior cases as
+  intended: the old prefix selected 29 inliers, budgets 8-15 exceeded the
+  feature cap, and budget 7 reached the old downstream error (50/60 passed).
+  After the fixes, the initial three-file corrected run passes 65/65 plus the
+  then-current 16 Node runner checks. The provenance guard raises that runner
+  set to 17/17. The final controller/motion/tracking/cache focused set passes
+  100/100 tests; the authoritative suite passes 175/175 files and 2,454/2,454
+  tests plus all 17 runner checks. TypeScript/Vite build, oxlint, both runner
+  syntax checks, the high-severity production audit with 0 vulnerabilities,
+  and `git diff --check` pass. The build retains only the established large-
+  chunk advisory.
+- The normal 32-file, 5,871,618-byte production artifact contains zero motion-
+  research/fixture/algorithm/cache/controller/worker canaries, zero WebGPU API
+  references or experiment chunks, and zero plugin-runtime/profile canaries.
+  The six generic `WebAssembly.instantiate` occurrences remain confined to four
+  existing Mediabunny AC-3/ProRes codec chunks. The source-bound headed browser
+  rerun must wait for the exact tree to be committed and must prove schema 4,
+  fixture v2, and algorithm v3.

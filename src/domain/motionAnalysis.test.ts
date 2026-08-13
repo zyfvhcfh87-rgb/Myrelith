@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
   IDENTITY_SIMILARITY_TRANSFORM,
+  MOTION_ANALYSIS_ALGORITHM_VERSION,
   MotionAnalysisCancelledError,
   applySimilarityTransform,
   composeSimilarityTransforms,
@@ -11,6 +12,7 @@ import {
   estimateSimilarityFromMatches,
   invertSimilarityTransform,
   motionAnalysisRetainedBytes,
+  motionHypothesisPairRanks,
   validateGrayFrame,
   validateMotionAnalysisBudget,
   validateMotionFrameSequence,
@@ -102,6 +104,23 @@ function similarityFixtureMatches(
     to: applySimilarityTransform(transform, from),
     meanAbsoluteError: 0,
   }))
+}
+
+function competingMotionMatches(): FeatureMatch[] {
+  return Array.from({ length: 64 }, (_, index) => {
+    const from = {
+      x: 12 + (index % 8) * 12,
+      y: 12 + Math.floor(index / 8) * 12,
+    }
+    return {
+      from,
+      to: {
+        x: from.x + (index < 29 ? 6 : 0),
+        y: from.y,
+      },
+      meanAbsoluteError: 0,
+    }
+  })
 }
 
 function translatedPlanForCropRatio(requiredCropRatio: number) {
@@ -283,6 +302,33 @@ describe('motion analysis research', () => {
       texturedFrame(0x44a11ce),
       texturedFrame(0xbadc0de),
     )).toBeNull()
+  })
+
+  test('finds the majority motion beyond a leading coherent foreground', () => {
+    const ordered = competingMotionMatches()
+    const permuted = ordered.map((_, index) => ordered[(index * 17) % ordered.length]!)
+
+    for (const matches of [ordered, permuted]) {
+      const result = estimateSimilarityFromMatches(matches)
+
+      expect(result).not.toBeNull()
+      expect(result!.inlierCount).toBe(35)
+      expect(result!.transform).toMatchObject({ a: 1, b: 0, tx: 0, ty: 0 })
+    }
+  })
+
+  test('spans the complete pair-rank space with an exact bounded schedule', () => {
+    const ranks = motionHypothesisPairRanks(64, 256)
+
+    expect(MOTION_ANALYSIS_ALGORITHM_VERSION).toBe('similarity-block-ransac-v3')
+    expect(ranks).toHaveLength(256)
+    expect(new Set(ranks).size).toBe(ranks.length)
+    expect(ranks[0]).toBe(0)
+    expect(ranks.at(-1)).toBe(2_015)
+    expect(motionHypothesisPairRanks(64, 1)).toEqual([1_007])
+    expect(motionHypothesisPairRanks(8, 256)).toEqual(
+      Array.from({ length: 28 }, (_, rank) => rank),
+    )
   })
 
   test('rejects a refined similarity transform outside the reviewed motion envelope', () => {

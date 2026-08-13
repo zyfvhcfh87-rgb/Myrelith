@@ -72,7 +72,7 @@ dedicated analysis worker ── pure grayscale analysis
 | Retained analysis buffers | 32 MiB | Each grayscale view starts at offset zero and covers its complete backing buffer, so accounting cannot hide a larger pinned allocation; typed result paths are much smaller. |
 | Features per frame | 64 | Deterministic corner selection with minimum spacing. |
 | Patch/search radii | 2 / 6 px | A 5×5 patch and ±6 px bounded search at analysis resolution. |
-| Robust hypotheses | 256 per pair | Deterministic upper bound, followed by inlier refinement. |
+| Robust hypotheses | 256 per pair | Algorithm v3 spreads the deterministic cap across the complete unordered-pair rank space, followed by inlier refinement. |
 | Cache entries/result | 1,024 / 256 MiB | Strict manifest and per-entry denial-of-service bound. |
 | Cache target/headroom | 512 MiB / 128 MiB | LRU aims below 70% origin usage when estimates exist; unavailable estimates never become false quota promises. |
 
@@ -161,6 +161,14 @@ fresh only when every field below still matches:
   inputs;
 - analysis kind, algorithm id/version, and parameter hash.
 
+The current `similarity-block-ransac-v3` identity records the complete-pair-
+space hypothesis schedule below. A cached v2 result is stale even when every
+source and parameter field still matches, because its prefix-biased schedule
+could select a different transform. The browser runner independently pins
+fixture `issue-44-synthetic-v2` and algorithm v3, and refuses to publish an
+artifact if the worker evidence reports either stale identity. Artifact schema
+4 remains current because the JSON shape did not change.
+
 Any individual mismatch returns a named stale reason. The clip id is an
 attachment lookup, not a durable reference from `TimelineDoc`. Cache keys,
 files, progress, confidence, failures, and result samples stay out of
@@ -183,12 +191,16 @@ jitter. Each pair:
 2. performs bounded forward/backward 5×5 patch matching;
 3. rejects discontinuities unless at least half of the textured features retain
    distinct forward/backward-consistent patch matches;
-4. fits `q = [a -b; b a]p + t` from deterministic two-point hypotheses and
-   admits only finite transforms with scale in the inclusive `[0.85, 1.15]`
+4. fits `q = [a -b; b a]p + t` from deterministic two-point hypotheses; v3
+   enumerates every unordered pair when it fits the cap, otherwise selects the
+   exact cap as unique, evenly spaced lexicographic ranks across the complete
+   pair space (including both endpoints, or the middle rank for a one-pair cap)
+   and un-ranks each selection without allocating all pairs;
+5. admits only finite transforms with scale in the inclusive `[0.85, 1.15]`
    interval and absolute rotation at most `pi / 12` radians;
-5. accepts inliers within 1.75 analysis pixels, refines the similarity fit, and
+6. accepts inliers within 1.75 analysis pixels, refines the similarity fit, and
    reapplies that same envelope before final-inlier filtering;
-6. accumulates the camera path, smooths translation/angle/log-scale over a
+7. accumulates the camera path, smooths translation/angle/log-scale over a
    four-frame radius, and blends the correction by strength.
 
 A second independently seeded textured scene is the negative hard-cut fixture.
@@ -249,8 +261,12 @@ implicit truncation or an accidental zero-valued typed-array lookup. Its bounded
 search adds only integer offsets, and the box tracker rounds every regenerated
 interior seed, so internal patch lookup coordinates remain integral. The box
 fixture translates and grows a textured 44×32 object over 34 frames. Point
-matching is sequential and forward/backward checked. The box tracks sixteen
-interior points and retains only a consistent similarity model.
+matching is sequential and forward/backward checked. Point tracking retains its
+valid one-feature budget. Box tracking requires at least eight features and
+tracks up to sixteen interior points: reduced budgets from 8 through 15 select
+exactly that many spatially distributed corner, center, and edge seeds, while
+the default budget preserves the original sixteen-seed order. Every accepted
+box estimate still retains only a consistent similarity model.
 At frame 18 the object disappears in the negative fixture. The occlusion gate
 requires failure on that exact first fully occluded frame, with every accepted
 sample strictly before it; accepting even one recovery frame is a failure.
@@ -434,9 +450,17 @@ below one half, exactly one half, and the immediately representable value above
 one half. It also covers a sustained 240-step pan at the maximum 120-frame
 smoothing radius, non-finite accumulated geometry, unchanged finite crop
 metrics, non-finite derived path metrics, JSON-safe result shapes, and downstream
-stabilization gate refusal. The
-headed report renders an unavailable crop's stable reason instead of formatting
-a missing zoom value.
+stabilization gate refusal. The headed report renders an unavailable crop's
+stable reason instead of formatting a missing zoom value.
+
+The full-pair schedule review regression orders 29 coherently translated
+foreground matches before 35 stationary background matches. The old capped
+lexicographic prefix chose the minority; v3 samples 46 foreground-only, 134
+cross-group, and 76 background-only hypotheses across all 2,016 pair ranks, so
+the 35-match motion wins in both the original and a deterministic permutation.
+The companion box regression covers every valid reduced budget from 8 through
+15, the explicit box-only lower boundary, the unchanged sixteen-seed default,
+and point tracking at `maxFeatures: 1`.
 
 ## Final boundaries
 

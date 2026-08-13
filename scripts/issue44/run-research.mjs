@@ -6,6 +6,7 @@ import { isAbsolute, join, resolve } from 'node:path'
 import { cwd } from 'node:process'
 import { createServer } from 'vite'
 import { dirtyFingerprint } from '../performance/run-benchmark.mjs'
+import { assertMotionResearchProvenance } from './research-evidence-contract.mjs'
 
 const DEFAULT_PORT = 41_844
 const DEFAULT_OUTPUT = 'output/playwright/issue-44-motion-analysis'
@@ -254,6 +255,7 @@ async function main() {
       || admission.after.activeWorkers !== 0
     ) throw new Error('Shared motion-analysis admission did not reject the overlapping run')
     const success = admission.success
+    assertMotionResearchProvenance(success.evidence)
     const stabilizationTradeoffs = success.evidence.stabilization.tradeoffs
     const requiredStrengthsHaveCrop = [0.5, 1].every((strength) => (
       stabilizationTradeoffs.some((tradeoff) => (

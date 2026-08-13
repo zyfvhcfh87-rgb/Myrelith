@@ -4077,3 +4077,34 @@ acceptance claims.
 - [x] Scan the normal 32-file, 5,871,592-byte artifact: zero motion-research
   canaries, zero WebGPU API references, and zero WebGPU experiment chunks. The
   clean-commit headed research run follows after the root commits the exact tree.
+
+## Milestone 5 Part 10a / issue #44 - pair-schedule and seed-budget follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Replace lexicographic prefix truncation with an exact, deterministic cap
+  distributed across the complete unordered-pair rank space; enumerate all
+  pairs when they fit, include both endpoints for cap >= 2, select the middle
+  rank for cap 1, un-rank without materializing all pairs, and retain one
+  cancellation check per hypothesis plus stable tie order.
+- [x] Advance deterministic algorithm provenance to
+  `similarity-block-ransac-v3`, keep artifact schema 4 because its shape is
+  unchanged, reject cached v2 analysis as stale by algorithm version, and make
+  the headed runner refuse to publish unless evidence reports the exact current
+  fixture v2 / algorithm v3 pair.
+- [x] Reproduce the ordered 29-match foreground / 35-match background review
+  fixture and a deterministic permutation; prove exact sampled-rank count,
+  uniqueness, endpoints, middle-rank behavior, and small-set all-pairs behavior.
+- [x] Cap box seeds to `min(maxFeatures, 16)` with spatially progressive
+  selection, explicitly reject box budgets below the eight-match estimator
+  minimum, preserve the default sixteen-seed result, and keep point tracking
+  valid at a one-feature budget.
+- [x] Pass the final 100/100 focused tests, 175/175 files with 2,454/2,454
+  full-suite tests, all 17 runner checks, build/typecheck, oxlint, runner syntax,
+  the high-severity production audit with 0 vulnerabilities, and `git diff
+  --check`; retain only the established large-chunk advisory.
+- [x] Scan the normal 32-file, 5,871,618-byte bundle: zero motion-research,
+  WebGPU, or plugin-runtime/profile canaries; six generic
+  `WebAssembly.instantiate` calls remain only in four established Mediabunny
+  codec chunks. Run the source-bound headed browser artifact after the exact
+  tree is committed, proving schema 4 / fixture v2 / algorithm v3.

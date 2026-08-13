@@ -2,6 +2,7 @@
 
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
+  MIN_SIMILARITY_MATCHES,
   applySimilarityTransform,
   estimateSimilarityFromMatches,
   matchMotionFeatures,
@@ -156,12 +157,23 @@ function validateTrackingBox(frame: GrayFrame, box: TrackingBox, margin: number)
   }
 }
 
-function boxSeedPoints(box: TrackingBox): MotionPoint[] {
+const REDUCED_BOX_SEED_PRIORITY = Object.freeze([
+  0, 3, 12, 15,
+  5, 6, 9, 10,
+  1, 2, 4, 7,
+  8, 11, 13, 14,
+])
+
+function boxSeedPoints(box: TrackingBox, maxFeatures: number): MotionPoint[] {
   const fractions = [0.2, 0.4, 0.6, 0.8]
-  return fractions.flatMap((vertical) => fractions.map((horizontal) => ({
+  const candidates = fractions.flatMap((vertical) => fractions.map((horizontal) => ({
     x: Math.round(box.x + box.width * horizontal),
     y: Math.round(box.y + box.height * vertical),
   })))
+  if (maxFeatures >= candidates.length) return candidates
+  return REDUCED_BOX_SEED_PRIORITY
+    .slice(0, maxFeatures)
+    .map((index) => candidates[index]!)
 }
 
 function transformBox(box: TrackingBox, a: number, b: number, tx: number, ty: number): TrackingBox {
@@ -188,6 +200,11 @@ export function trackBoxSequence(
   onProgress?: (completedFrames: number, totalFrames: number) => void,
 ): BoxTrackingResult {
   validateMotionFrameSequence(frames, budget)
+  if (budget.maxFeatures < MIN_SIMILARITY_MATCHES) {
+    throw new RangeError(
+      `Box tracking requires maxFeatures to be at least ${MIN_SIMILARITY_MATCHES}`,
+    )
+  }
   const margin = budget.patchRadius + budget.searchRadius + 1
   validateTrackingBox(frames[0]!, initialBox, margin)
   const samples: BoxTrackingSample[] = [{
@@ -196,7 +213,7 @@ export function trackBoxSequence(
     confidence: 1,
   }]
   let box = { ...initialBox }
-  let points = boxSeedPoints(initialBox)
+  let points = boxSeedPoints(initialBox, budget.maxFeatures)
   for (let index = 1; index < frames.length; index++) {
     const matches = matchMotionFeatures(
       frames[index - 1]!,
@@ -242,7 +259,7 @@ export function trackBoxSequence(
         },
       }
     }
-    points = boxSeedPoints(box)
+    points = boxSeedPoints(box, budget.maxFeatures)
     samples.push({ frameIndex: index, ...box, confidence: estimate.confidence })
     onProgress?.(index + 1, frames.length)
   }

@@ -52,7 +52,7 @@ export interface MotionAnalysisBudget {
   readonly maxRetainedBytes: number
 }
 
-export const MOTION_ANALYSIS_ALGORITHM_VERSION = 'similarity-block-ransac-v2'
+export const MOTION_ANALYSIS_ALGORITHM_VERSION = 'similarity-block-ransac-v3'
 
 export const DEFAULT_MOTION_ANALYSIS_BUDGET = Object.freeze({
   maxWidth: 320,
@@ -73,7 +73,7 @@ export const IDENTITY_SIMILARITY_TRANSFORM = Object.freeze({
   ty: 0,
 }) satisfies SimilarityTransform
 
-const MIN_GLOBAL_MATCHES = 8
+export const MIN_SIMILARITY_MATCHES = 8
 const MIN_GLOBAL_INLIERS = 6
 const MIN_FEATURE_SPACING = 7
 const MIN_FEATURE_RESPONSE = 256
@@ -134,6 +134,37 @@ export function validateMotionAnalysisBudget(budget: MotionAnalysisBudget): void
   ) {
     throw new RangeError('Motion-analysis budget exceeds the reviewed bounds')
   }
+}
+
+/** Deterministic bounded ranks into lexicographically ordered unordered pairs. */
+export function motionHypothesisPairRanks(
+  matchCount: number,
+  maxHypotheses: number,
+): number[] {
+  positiveSafeInteger(matchCount, 'matchCount')
+  positiveSafeInteger(maxHypotheses, 'maxHypotheses')
+  if (
+    matchCount > DEFAULT_MOTION_ANALYSIS_BUDGET.maxFeatures
+    || maxHypotheses > DEFAULT_MOTION_ANALYSIS_BUDGET.maxRansacHypotheses
+  ) {
+    throw new RangeError('Motion hypothesis schedule exceeds the reviewed bounds')
+  }
+  if (matchCount < 2) return []
+  const totalPairs = matchCount * (matchCount - 1) / 2
+  if (!Number.isSafeInteger(totalPairs)) {
+    throw new RangeError('Motion hypothesis pair count must be a safe integer')
+  }
+  const hypothesisCount = Math.min(totalPairs, maxHypotheses)
+  if (hypothesisCount === 1) return [Math.floor((totalPairs - 1) / 2)]
+  if (hypothesisCount === totalPairs) {
+    return Array.from({ length: totalPairs }, (_, rank) => rank)
+  }
+  return Array.from(
+    { length: hypothesisCount },
+    (_, index) => Math.floor(
+      index * (totalPairs - 1) / (hypothesisCount - 1),
+    ),
+  )
 }
 
 export function validateGrayFrame(
@@ -452,42 +483,59 @@ function refineSimilarity(
   }
 }
 
+function motionPairFromLexicographicRank(
+  matchCount: number,
+  rank: number,
+): readonly [left: number, right: number] {
+  let left = 0
+  let remaining = rank
+  while (left < matchCount - 1) {
+    const pairsAtLeft = matchCount - left - 1
+    if (remaining < pairsAtLeft) {
+      return [left, left + 1 + remaining]
+    }
+    remaining -= pairsAtLeft
+    left++
+  }
+  throw new RangeError('Motion hypothesis pair rank is outside the pair space')
+}
+
 export function estimateSimilarityFromMatches(
   matches: readonly FeatureMatch[],
   budget: MotionAnalysisBudget = DEFAULT_MOTION_ANALYSIS_BUDGET,
   cancelled?: MotionAnalysisCancellationCheck,
 ): GlobalMotionEstimate | null {
   validateMotionAnalysisBudget(budget)
-  if (matches.length < MIN_GLOBAL_MATCHES || matches.length > budget.maxFeatures) {
+  if (matches.length < MIN_SIMILARITY_MATCHES || matches.length > budget.maxFeatures) {
     return null
   }
   let bestTransform: SimilarityTransform | null = null
   let bestInliers: FeatureMatch[] = []
   let bestError = Number.POSITIVE_INFINITY
-  let hypotheses = 0
-  for (let left = 0; left < matches.length; left++) {
-    for (let right = left + 1; right < matches.length; right++) {
-      checkCancellation(cancelled)
-      if (hypotheses++ >= budget.maxRansacHypotheses) break
-      const candidate = transformFromPair(matches[left]!, matches[right]!)
-      if (!candidate) continue
-      const inliers = matches.filter(
-        (match) => reprojectionError(candidate, match) <= budget.inlierThreshold,
-      )
-      const error = inliers.reduce(
-        (total, match) => total + reprojectionError(candidate, match),
-        0,
-      )
-      if (
-        inliers.length > bestInliers.length
-        || (inliers.length === bestInliers.length && error < bestError)
-      ) {
-        bestTransform = candidate
-        bestInliers = inliers
-        bestError = error
-      }
+  const pairRanks = motionHypothesisPairRanks(
+    matches.length,
+    budget.maxRansacHypotheses,
+  )
+  for (const rank of pairRanks) {
+    checkCancellation(cancelled)
+    const [left, right] = motionPairFromLexicographicRank(matches.length, rank)
+    const candidate = transformFromPair(matches[left]!, matches[right]!)
+    if (!candidate) continue
+    const inliers = matches.filter(
+      (match) => reprojectionError(candidate, match) <= budget.inlierThreshold,
+    )
+    const error = inliers.reduce(
+      (total, match) => total + reprojectionError(candidate, match),
+      0,
+    )
+    if (
+      inliers.length > bestInliers.length
+      || (inliers.length === bestInliers.length && error < bestError)
+    ) {
+      bestTransform = candidate
+      bestInliers = inliers
+      bestError = error
     }
-    if (hypotheses >= budget.maxRansacHypotheses) break
   }
   if (!bestTransform || bestInliers.length < MIN_GLOBAL_INLIERS) return null
   const refined = refineSimilarity(bestInliers)
@@ -524,7 +572,7 @@ export function estimateGlobalMotion(
   const features = detectMotionFeatures(from, budget, cancelled)
   const matches = matchMotionFeatures(from, to, features, budget, cancelled)
   if (
-    features.length < MIN_GLOBAL_MATCHES
+    features.length < MIN_SIMILARITY_MATCHES
     || matches.length / features.length < MIN_FEATURE_MATCH_RATIO
   ) return null
   return estimateSimilarityFromMatches(matches, budget, cancelled)

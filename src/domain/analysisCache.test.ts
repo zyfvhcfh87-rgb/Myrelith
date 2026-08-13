@@ -5,6 +5,7 @@ import {
   parseAnalysisCacheManifest,
   type AnalysisCacheEntry,
 } from './analysisCache'
+import { MOTION_ANALYSIS_ALGORITHM_VERSION } from './motionAnalysis'
 
 function entry(): AnalysisCacheEntry {
   return {
@@ -35,7 +36,7 @@ function entry(): AnalysisCacheEntry {
     algorithm: {
       kind: 'stabilization',
       algorithmId: 'global-similarity',
-      algorithmVersion: '1',
+      algorithmVersion: MOTION_ANALYSIS_ALGORITHM_VERSION,
       parametersDigest: 'e'.repeat(64),
     },
     resultFileName: `${'a'.repeat(64)}.${'f'.repeat(32)}.bin`,
@@ -85,7 +86,7 @@ describe('analysis cache provenance', () => {
         samplingIntervalFrames: 2,
       },
       attachment: { ...cached.attachment, sourceMappingDigest: '1'.repeat(64) },
-      algorithm: { ...cached.algorithm, algorithmVersion: '2' },
+      algorithm: { ...cached.algorithm, algorithmVersion: 'similarity-block-ransac-v2' },
     })).toEqual({
       state: 'stale',
       reasons: [
@@ -94,6 +95,22 @@ describe('analysis cache provenance', () => {
         'source-mapping',
         'algorithm-version',
       ],
+    })
+  })
+
+  test('rejects cached v2 motion results under the v3 pair schedule', () => {
+    const current = entry()
+    const cachedV2 = {
+      ...current,
+      algorithm: {
+        ...current.algorithm,
+        algorithmVersion: 'similarity-block-ransac-v2',
+      },
+    }
+
+    expect(analysisCacheFreshness(cachedV2, current)).toEqual({
+      state: 'stale',
+      reasons: ['algorithm-version'],
     })
   })
 })

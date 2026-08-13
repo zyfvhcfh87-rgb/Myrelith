@@ -5,8 +5,9 @@ import {
   resolveClipAnimationAtFrame,
 } from './clipAnimation'
 import { MAX_CLIP_SCALE } from './clipInspector'
-import type { GrayFrame } from './motionAnalysis'
+import { DEFAULT_MOTION_ANALYSIS_BUDGET, type GrayFrame } from './motionAnalysis'
 import {
+  trackBoxSequence,
   trackPointSequence,
   trackingSamplesToAnimationTracks,
   type TrackingAnimationSample,
@@ -146,6 +147,52 @@ describe('integer-pixel point tracking', () => {
     expect(result.samples.every((sample) => (
       Number.isSafeInteger(sample.x) && Number.isSafeInteger(sample.y)
     ))).toBe(true)
+  })
+
+  test('retains the one-feature point-tracking budget contract', () => {
+    const result = trackPointSequence(
+      translatedTexturedFrames(),
+      { x: 32, y: 24 },
+      { ...DEFAULT_MOTION_ANALYSIS_BUDGET, maxFeatures: 1 },
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(`Unexpected point-tracking failure: ${result.failure.code}`)
+    expect(result.samples.at(-1)).toMatchObject({ frameIndex: 2, x: 36, y: 26 })
+  })
+})
+
+describe('bounded box tracking seeds', () => {
+  const initialBox = { x: 12, y: 12, width: 36, height: 20 }
+
+  test.each([8, 9, 10, 11, 12, 13, 14, 15])(
+    'supports a reduced maxFeatures budget of %i deterministically',
+    (maxFeatures) => {
+      const budget = { ...DEFAULT_MOTION_ANALYSIS_BUDGET, maxFeatures }
+      const first = trackBoxSequence(translatedTexturedFrames(), initialBox, budget)
+      const second = trackBoxSequence(translatedTexturedFrames(), initialBox, budget)
+
+      expect(first).toEqual(second)
+      expect(first.ok).toBe(true)
+      if (!first.ok) throw new Error(`Unexpected box-tracking failure: ${first.failure.code}`)
+      expect(first.samples).toHaveLength(3)
+    },
+  )
+
+  test('keeps the default result unchanged when all sixteen seeds are available', () => {
+    const frames = translatedTexturedFrames()
+    expect(trackBoxSequence(frames, initialBox, {
+      ...DEFAULT_MOTION_ANALYSIS_BUDGET,
+      maxFeatures: 16,
+    })).toEqual(trackBoxSequence(frames, initialBox))
+  })
+
+  test('rejects a box-tracking feature budget below the eight-match minimum', () => {
+    expect(() => trackBoxSequence(
+      translatedTexturedFrames(),
+      initialBox,
+      { ...DEFAULT_MOTION_ANALYSIS_BUDGET, maxFeatures: 7 },
+    )).toThrowError(new RangeError('Box tracking requires maxFeatures to be at least 8'))
   })
 })
 
