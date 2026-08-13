@@ -161,6 +161,7 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     ['dev/ProxyEditingBenchmarkPanel.tsx', new Set(['app', 'domain', 'state'])],
     ['dev/issue108/motionAnalysisFoundation.ts', new Set(['app', 'domain', 'pipeline'])],
     ['dev/issue109/videoStabilizationGate.ts', new Set(['app', 'domain', 'state'])],
+    ['dev/issue110/motionTrackingGate.ts', new Set(['app', 'domain', 'state'])],
     ['dev/performance/fixture.ts', new Set(['domain'])],
     ['dev/performance/framePlanningBenchmark.ts', new Set(['domain'])],
     ['dev/performance/runtime.ts', new Set(['app', 'domain', 'state'])],
@@ -378,6 +379,7 @@ describe('architecture guard', () => {
       'dev/ProxyEditingBenchmarkPanel.tsx',
       'dev/issue108/motionAnalysisFoundation.ts',
       'dev/issue109/videoStabilizationGate.ts',
+      'dev/issue110/motionTrackingGate.ts',
       'dev/performance/PerformanceBenchmarkApp.tsx',
       'dev/performance/runtime.ts',
     ]))

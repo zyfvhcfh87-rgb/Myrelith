@@ -648,5 +648,5 @@ export function applyVideoStabilization(
 }
 
 export function cancelVideoStabilization(clipId: ClipId): boolean {
-  return getMotionAnalysisController()?.cancelClip(clipId) ?? false
+  return getMotionAnalysisController()?.cancelClipKind(clipId, 'stabilization') ?? false
 }

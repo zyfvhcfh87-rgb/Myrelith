@@ -562,6 +562,53 @@ describe('MotionAnalysisController', () => {
     expect(controller.snapshot().scheduler.maxActiveDecoderCount).toBe(1)
   })
 
+  it('cancels only the requested analysis kind for a shared clip', async () => {
+    const storage = storageFixture()
+    const stabilizationWorker = new FakeWorker()
+    stabilizationWorker.holdCompletion = true
+    const workers = [stabilizationWorker]
+    const controller = new MotionAnalysisController(deps(
+      storage.storage,
+      () => workers.shift()!,
+    ))
+    const stabilization = controller.analyze(request())
+    await vi.waitFor(() => expect(stabilizationWorker.messages[0]?.type).toBe('run'))
+
+    const basePointRequest = request()
+    const pointRequest: MotionAnalysisRunRequest = {
+      ...basePointRequest,
+      algorithm: {
+        ...basePointRequest.algorithm,
+        kind: 'point-tracking',
+        algorithmId: 'point-test',
+      },
+    }
+    const point = controller.analyze(pointRequest)
+    const pointRejected = expect(point).rejects.toMatchObject({ code: 'cancelled' })
+    await vi.waitFor(() => expect(controller.snapshot().jobs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'stabilization', phase: 'running' }),
+      expect.objectContaining({ kind: 'point-tracking', phase: 'queued' }),
+    ])))
+
+    expect(controller.cancelClipKind('clip-1', 'point-tracking')).toBe(true)
+    await pointRejected
+    expect(controller.snapshot().jobs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'stabilization', phase: 'running' }),
+      expect.objectContaining({ kind: 'point-tracking', phase: 'cancelled' }),
+    ]))
+    expect(stabilizationWorker.terminated).toBe(false)
+    expect(workers).toHaveLength(0)
+
+    stabilizationWorker.complete()
+    await expect(stabilization).resolves.toMatchObject({ fromCache: false })
+    expect(stabilizationWorker.terminated).toBe(true)
+    expect(controller.snapshot().scheduler).toMatchObject({
+      queueDepth: 0,
+      activeJobCount: 0,
+      activeDecoderCount: 0,
+    })
+  })
+
   it('drains the worker before removing an attachment sidecar', async () => {
     const storage = storageFixture()
     const worker = new FakeWorker()

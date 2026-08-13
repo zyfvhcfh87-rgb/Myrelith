@@ -33,6 +33,59 @@
   pointer-events: none;
 }
 
+.motion-tracking-overlay {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.motion-tracking-pick-surface {
+  position: absolute;
+  padding: 0;
+  touch-action: none;
+  background: rgb(82 201 255 / 4%);
+  border: 1px dashed rgb(82 201 255 / 80%);
+  cursor: crosshair;
+  pointer-events: auto;
+}
+
+.motion-tracking-point {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #1ca9e6;
+  transform: translate(-50%, -50%);
+}
+
+.motion-tracking-point::before,
+.motion-tracking-point::after {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #1ca9e6;
+  content: '';
+  transform: translate(-50%, -50%);
+}
+
+.motion-tracking-point::before { width: 30px; height: 1px; }
+.motion-tracking-point::after { width: 1px; height: 30px; }
+
+.motion-tracking-box {
+  position: absolute;
+  overflow: visible;
+}
+
+.motion-tracking-box polygon {
+  fill: rgb(82 201 255 / 6%);
+  stroke: #52c9ff;
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
 .visual-overlay-control {
   position: absolute;
   box-sizing: border-box;

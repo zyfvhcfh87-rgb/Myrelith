@@ -474,3 +474,67 @@ and point tracking at `maxFeatures: 1`.
   compositor ordering and performance.
 - Every quality threshold is a bounded fixture gate, not a promise that all
   footage is trackable or stabilizable.
+
+## Issue #110 productization
+
+The accepted research primitives now have a bounded product adapter. A
+session-only normalized point or axis-aligned box is tied to one exact project
+frame, decoded forward or backward through #108's sparse lane, and processed
+with only the previous tightly owned grayscale frame retained. Each accepted
+sample carries confidence; the first failed agreement becomes an explicit
+loss record and later decoded frames are never converted into guessed samples.
+
+The source-bound Chromium product gate encodes a 160x90 translated texture and
+replaces it with a full occlusion at frame 18. The clean-commit run on
+`f278aa23594cd694213385469e02782d615408b7` and strict port 41886 accepted
+frames 0 through 17 for both point and box, then stopped both at frame 18.
+Point mean/max error was 0.333/1.000 px; box mean center error was 0.333 px and
+mean/max relative scale error was 0%. A second identical point request was an
+exact cache hit. Box Apply wrote only Position X/Y and Scale X/Y in one history
+entry. A second real decode walked the sparse request lane backward from frame
+17 through frame 0 at the same 0.333/1.000 px point error. Workers drained 3/3
+with zero active, the cache attachment was removed, Chromium reported no
+console/page problems, and the port was released. The source fingerprint was
+`sha256:799c29664da65cf40b75bc543e35ecd5f8a319d9201ba0d071bbe5a4f27e9010`;
+the JSON/PNG SHA-256 values were respectively
+`E9A4242F8AD80CB5F2FD72EA3D1F53F855838841A0B94F2D1DC5C77142EAD516` and
+`364F32294130A88BDBB1440CD77946B72E2184AA950F9BFF6CA15A59469CF02A`.
+This is synthetic bounded evidence, not a promise of arbitrary-footage
+tracking.
+
+The first exact-head product review on `4dbc2ced440084ab2a5e56f8de9ec9559e04e87b`
+found three integration gaps. Stabilization and tracking previews now carry
+explicit transport owners and clear only their own draft. Tracking progress
+selects the newest queued/running status for the active point or box kind
+instead of an older sibling result. Product mapping also resolves the target's
+preserved transform at every accepted frame; per-sample target rotation drives
+cropped/anchor position compensation and target-local box extents, while
+preserved Scale drives compensation whenever tracking does not author Scale.
+The 0-to-90-degree regression pins both off-center Position correction and the
+expected cross-axis box scale projection.
+
+The second exact-head product review on
+`85bdb090fa840a5784ee815e1c46508465639dee` found two remaining workflow
+collisions. Cancellation now targets the requested algorithm kind: tracking
+cancels only point/box jobs and stabilization cancels only stabilization, while
+attachment removal retains deliberate whole-clip cancellation. The target
+picker excludes the tracked source clip, and the domain planner independently
+rejects equal source/target identities before mapping any samples. This avoids
+both aborting unrelated analysis on the same clip and applying a clip's motion
+back onto itself as a doubled transform.
+
+The third exact-head product review on
+`36994b0ad4008ef2daebb7c93354b1d12d36771d` found that result width/height were
+only self-validated. Product analysis now derives the expected bounded grayscale
+size from the connected source through the same decode sizing authority and
+requires an exact match before constructing a session. A cached mismatch is
+`storage-corrupt`; a fresh worker mismatch is `decode-readback`. Coordinates
+therefore cannot be normalized through plausible but unrelated dimensions.
+
+The fourth exact-head product review on
+`9e853ca448a4c8b6d1237338196598735b4f11f0` found that preview used the target
+clip span, allowing ordinary endpoint hold to display tracking before the first
+or after the last accepted sample. Preview now requires the playhead to fall
+inside the inclusive first/last authored tracking-key range as well as the
+target span. Forward starts, backward starts, and explicit loss boundaries no
+longer leak draft motion into unaccepted frames.

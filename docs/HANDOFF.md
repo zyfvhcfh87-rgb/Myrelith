@@ -122,7 +122,8 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
 | **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model with renderer no-go; delivery split into #108–#111; 22 focused tests and source-bound Chromium evidence on exclusive port 41844 |
 | **Post-MVP #108 — motion-analysis job/cache foundation** | ✅ complete | production one-job/one-decoder controller; worker-owned real-source decode/downsample with exact frame closure; strict schema-1 OPFS derived cache; source/currentness rollback; PR #115 squash-merged as `73ceeea`; issue closed |
-| **Post-MVP #109 — bounded video stabilization** | 🚧 implementation complete locally | production #108 consumer; O(n) similarity smoothing; exact project-space safe coverage; ordinary Position/Rotation/equal-Scale tracks; accessible Analyze/Preview/Apply/Reset surface; publication gates pending |
+| **Post-MVP #109 — bounded video stabilization** | ✅ complete | production #108 consumer; O(n) similarity smoothing; exact project-space safe coverage; ordinary Position/Rotation/equal-Scale tracks; PR #116 squash-merged as `2c9e35a`; issue closed |
+| **Post-MVP #110 — bounded point and box tracking** | 🚧 publication review pending | exact-frame Program Monitor selection; bounded forward/backward local tracking; explicit loss; ordinary Position and optional Scale authoring; clean Chromium product gate passed |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -4674,3 +4675,158 @@ surface; it is not a second zoom and never enters document history.
   the visually inspected PNG is 381,065 bytes with SHA-256
   `5179DB3975EA83FB49D91EA134C8DBEEEE19B4CDC39EEF4BBCF14A5DF13B1957`.
   Exact-head CI and fresh Codex evidence follow after the final docs-only amend.
+
+## Milestone 5 Part 10a.3 / issue #110 - bounded point and box tracking (2026-08-13)
+
+**COMPLETE LOCALLY; CI/REVIEW PENDING.**
+
+- Added an accessible Program Monitor point/box picker and Inspector workflow
+  for exact-frame selection, forward/backward local analysis, cancel/retry,
+  confidence/loss status, target choice, optional box scale, non-mutating
+  preview, explicit replacement, one-step Apply, and disclosed Position/Scale
+  reset. The ephemeral selection is pinned to its pointer-up project frame and
+  rotated source boxes render as their real project-space polygon.
+- The app facade builds an exact SourceTimeMap schedule, reuses #108's bounded
+  cache/job/worker path, streams one previous tightly owned gray frame through
+  the proven point/similarity-box estimators, and records the first loss
+  without guessing through it. Sparse decode now accepts strict ascending or
+  descending timestamp lanes and reports direction-aware progress.
+- Cache parsing and preview/Apply revalidate the exact project/source/selection
+  snapshot, directional frame/tick schedule, geometry bounds, target
+  overlap/lock/dimensions, replacement, and animation budgets. Accepted motion
+  maps through per-frame source crop/flip/anchor/transform to ordinary target
+  Position X/Y and optional Scale X/Y tracks. Every accepted sample is retained,
+  which gives zero simplification error within the 1,024-key ceiling.
+- The clean-commit source-bound Chromium gate on exact code commit
+  `f278aa23594cd694213385469e02782d615408b7` and strict port 41886 passed a
+  160x90 encoded fixture: point mean/max error 0.333/1.000 px, box mean center
+  error 0.333 px, mean/max scale error 0%, explicit point and box loss on
+  occlusion frame 18 after 18 accepted samples, exact cache reuse, one history
+  entry, and zero console/page problems. A real reverse sparse lane also
+  accepted frames 17 through 0 at 0.333 px mean / 1.000 px max error. Worker
+  lifecycle finished 3/3/0, the cache attachment was removed, console/page
+  problems stayed at zero, and the port was released. The clean source
+  fingerprint was
+  `sha256:799c29664da65cf40b75bc543e35ecd5f8a319d9201ba0d071bbe5a4f27e9010`.
+  The JSON was 3,056 bytes with SHA-256
+  `E9A4242F8AD80CB5F2FD72EA3D1F53F855838841A0B94F2D1DC5C77142EAD516`;
+  the visually inspected PNG was 362,294 bytes with SHA-256
+  `364F32294130A88BDBB1440CD77946B72E2184AA950F9BFF6CA15A59469CF02A`.
+- The frozen focused matrix passes 12/12 files with 120/120 tests. The
+  authoritative suite passes 190/190 files with 2,575/2,575 tests plus all
+  17 evidence-runner checks. TypeScript/Vite builds 4,816 modules, lint is
+  warning-free, the production audit reports 0 vulnerabilities, and diff/
+  architecture checks pass. The normal 39-file / 7,710,072-byte build contains
+  the production tracking product but zero Issue #110 gate/fixture or WebGPU
+  experiment canaries. Exact-head CI and fresh Codex review are the remaining
+  publication gates.
+
+## Milestone 5 Part 10a.3 / issue #110 - first exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; CLEAN-COMMIT BROWSER/CI/REVIEW REFRESH PENDING.**
+
+- Codex review `4929530527` on exact head `4dbc2ced440084ab2a5e56f8de9ec9559e04e87b`
+  found three P2 gaps: the inactive tracking editor could clear stabilization's
+  shared visual preview; an older point/box status could mask current progress;
+  and preserved target Rotation was resolved only at the selection frame.
+- `clipVisualPreview` now carries a named stabilization or motion-tracking owner,
+  and each mounted editor clears only its own preview. Tracking progress filters
+  by the requested kind and chooses the newest queued/running job before any
+  retained terminal status.
+- Every accepted product sample now carries the target transform resolved at
+  that exact frame. Preserved Rotation drives target-local box extents and
+  cropped/anchor compensation; preserved Scale also drives compensation when
+  tracking does not author Scale. A deterministic 0-to-90-degree target
+  regression proves both off-center Position correction and cross-axis box
+  scaling.
+- The refreshed focused matrix passes 14/14 files with 135/135 tests. The
+  authoritative suite passes 190/190 files with 2,578/2,578 tests plus all
+  17 evidence-runner checks. TypeScript/Vite builds 4,816 modules, lint is
+  warning-free, the production audit reports 0 vulnerabilities, and diff
+  checks pass. Refresh clean Chromium, CI, and Codex review on the committed
+  follow-up head before merging.
+
+## Milestone 5 Part 10a.3 / issue #110 - second exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; CLEAN-COMMIT BROWSER/CI/REVIEW PENDING.**
+
+- Exact-head Codex review `4929629665` on
+  `85bdb090fa840a5784ee815e1c46508465639dee` found two P2 workflow gaps:
+  tracking Cancel used whole-clip cancellation and could abort simultaneous
+  stabilization; the target picker also offered the tracked source itself,
+  which would apply its motion back onto the same clip as a doubled transform.
+- The shared controller now exposes kind-scoped clip cancellation. Tracking
+  cancels point and box kinds separately, stabilization cancels only its own
+  kind, and attachment removal retains whole-clip cancellation. A one-slot
+  scheduler regression keeps stabilization alive while cancelling queued point
+  tracking on the same clip, then proves the survivor completes and drains.
+- The Inspector excludes the source from target choices and selects a separate
+  overlapping visual clip. The domain planner independently rejects equal
+  source/target IDs before mapping, so non-UI callers cannot bypass the rule.
+- The directly affected six-file matrix passes 53/53 tests. The authoritative
+  suite passes 190/190 files with 2,581/2,581 tests plus all 17 evidence-runner
+  checks. TypeScript/Vite builds 4,816 modules, lint is warning-free, the
+  production audit reports 0 vulnerabilities, and diff checks pass. The first
+  focused attempt exposed only a test accessibility-name mismatch, and the
+  first build exposed only a readonly test-fixture assignment; both were fixed
+  before the final green runs. Refresh clean Chromium, CI, and exact-head Codex
+  review on the committed tree before merging.
+
+## Milestone 5 Part 10a.3 / issue #110 - third exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING.**
+
+- Exact-head Codex review `4929757156` on
+  `36994b0ad4008ef2daebb7c93354b1d12d36771d` found that cached tracking
+  width/height could be internally valid but unrelated to the connected source,
+  causing product mapping to normalize through the wrong dimensions.
+- Tracking session admission now derives the expected bounded grayscale size
+  with the shared decode sizing authority and requires an exact result match.
+  Cache mismatch fails `storage-corrupt`; a fresh decode mismatch fails
+  `decode-readback`, both before returning a session or planning keyframes.
+- A direct regression pins exact 1920x1080-to-320x180 bounding, single-axis
+  mismatches, and an unscaled 160x90 source. The focused controller/domain
+  matrix passes 35/35 tests; the authoritative suite passes 190/190 files with
+  2,582/2,582 tests plus all 17 runner checks. The 4,817-module build/typecheck,
+  warning-free lint, production audit at 0 vulnerabilities, and diff checks
+  pass. Clean Chromium, CI, and exact-head review remain before merge.
+
+## Milestone 5 Part 10a.3 / issue #110 - fourth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING.**
+
+- Exact-head Codex review `4929832141` on
+  `9e853ca448a4c8b6d1237338196598735b4f11f0` found that preview checked the
+  target clip span but not the accepted tracking range. Ordinary endpoint hold
+  could therefore display draft motion before analysis began or after loss.
+- Preview now clears unless the playhead is inside both the target clip and the
+  inclusive first-to-last tracking-key range. A UI regression proves no preview
+  before the first key, preview on both accepted boundaries, and cleanup after
+  the final key. Its focused file passes 6/6 tests; the authoritative suite
+  passes 190/190 files with 2,583/2,583 tests plus all 17 runner checks. The
+  4,817-module build/typecheck, warning-free lint, production audit at 0
+  vulnerabilities, and diff checks pass. Publication refresh follows.
+
+## Milestone 5 Part 10a.3 / issue #110 - fifth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING.**
+
+- Exact-head Codex review `4929918750` on
+  `9fb68ca448a4c8b6d1237338196598735b4f11f0` found that releasing the visible
+  tracking preview left a still-enabled stabilization preview hidden because
+  the sibling effect had no dependency change that would republish it.
+- The transport store now arbitrates named stabilization, motion-tracking, and
+  direct-manipulation candidates. The newest activation is visible; updating a
+  hidden owner preserves its priority, and releasing the visible owner restores
+  the newest remaining candidate immediately. Project reset clears the entire
+  registry. Editor playhead updates no longer withdraw and reactivate their
+  candidate between renders.
+- Store and UI regressions prove hidden updates do not steal priority, tracking
+  disable restores stabilization, direct manipulation restores the editor it
+  covered, final release clears the slot, and transport reset cannot resurrect
+  a candidate. The focused transport/stabilization/tracking/overlay matrix
+  passes 43/43 tests. The authoritative suite passes 190/190 files with
+  2,586/2,586 tests plus all 17 evidence-runner checks. TypeScript/Vite builds
+  4,817 modules, lint is warning-free, the production audit reports 0
+  vulnerabilities, and diff checks pass. Refresh clean Chromium, CI, and
+  exact-head review before merge.

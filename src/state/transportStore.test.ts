@@ -8,6 +8,7 @@ import { INITIAL_TRANSPORT_STATE, useTransportStore } from './transportStore'
 const getState = () => useTransportStore.getState()
 
 beforeEach(() => {
+  useTransportStore.getState().setClipVisualPreview(null)
   useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
 })
 
@@ -359,5 +360,81 @@ describe('Phase 4.3.8 linked clip previews', () => {
 
     getState().setEditPreview(null)
     expect(getState().editPreview).toBeNull()
+  })
+})
+
+describe('owned clip visual preview arbitration', () => {
+  const visual = {
+    crop: { left: 0, right: 0, top: 0, bottom: 0 },
+    fit: 'cover' as const,
+    flipHorizontal: false,
+    flipVertical: false,
+    scaleLocked: true,
+  }
+  const transform = {
+    x: 0,
+    y: 0,
+    scaleX: 1,
+    scaleY: 1,
+    rotation: 0,
+    anchorX: 0.5,
+    anchorY: 0.5,
+  }
+
+  test('restores the previous live owner after the active owner releases', () => {
+    getState().setOwnedClipVisualPreview('stabilization', {
+      clipId: 'stabilized',
+      transform: { ...transform, x: 10 },
+      visual,
+    })
+    getState().setOwnedClipVisualPreview('motion-tracking', {
+      clipId: 'tracked',
+      transform: { ...transform, x: 20 },
+      visual,
+    })
+    expect(getState().clipVisualPreview).toMatchObject({
+      owner: 'motion-tracking',
+      clipId: 'tracked',
+      transform: { x: 20 },
+    })
+
+    getState().setOwnedClipVisualPreview('stabilization', {
+      clipId: 'stabilized',
+      transform: { ...transform, x: 11 },
+      visual,
+    })
+    expect(getState().clipVisualPreview?.owner).toBe('motion-tracking')
+
+    getState().setOwnedClipVisualPreview('motion-tracking', null)
+    expect(getState().clipVisualPreview).toMatchObject({
+      owner: 'stabilization',
+      clipId: 'stabilized',
+      transform: { x: 11 },
+    })
+
+    getState().setOwnedClipVisualPreview('stabilization', null)
+    expect(getState().clipVisualPreview).toBeNull()
+  })
+
+  test('restores an editor preview after direct manipulation and resets all candidates', () => {
+    getState().setOwnedClipVisualPreview('stabilization', {
+      clipId: 'stabilized',
+      transform,
+      visual,
+    })
+    getState().setOwnedClipVisualPreview('visual-gesture', {
+      clipId: 'gesture',
+      transform: { ...transform, y: 5 },
+      visual,
+    })
+    expect(getState().clipVisualPreview?.owner).toBe('visual-gesture')
+
+    getState().setOwnedClipVisualPreview('visual-gesture', null)
+    expect(getState().clipVisualPreview?.owner).toBe('stabilization')
+
+    getState().resetTransport()
+    expect(getState().clipVisualPreview).toBeNull()
+    getState().setOwnedClipVisualPreview('motion-tracking', null)
+    expect(getState().clipVisualPreview).toBeNull()
   })
 })

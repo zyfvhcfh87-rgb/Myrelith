@@ -447,7 +447,7 @@ describe('worker video source', () => {
   })
 
   test('validates integer source time before opening a sink', async () => {
-    const h = makeHarness()
+    const h = makeHarness([new FakeSink()])
     const source = await openHarness(h)
 
     expect(() => source.openPlaybackLane({ startTimestampUs: 1.5 })).toThrow(
@@ -464,12 +464,16 @@ describe('worker video source', () => {
       'timestampsUs must not be empty',
     )
     expect(() => source.openTimestampLane?.([0, 0])).toThrow(
-      'timestampsUs must be strictly increasing',
+      'timestampsUs must be strictly monotonic',
+    )
+    expect(() => source.openTimestampLane?.([2, 1, 0])).not.toThrow()
+    expect(() => source.openTimestampLane?.([0, 2, 1])).toThrow(
+      'timestampsUs must be strictly monotonic',
     )
     expect(() => source.openTimestampLane?.([0, 1.5])).toThrow(
       'timestampsUs[1] must be a safe integer',
     )
-    expect(h.createdSinkCount()).toBe(0)
+    expect(h.createdSinkCount()).toBe(1)
 
     await source.close()
     expect(() => source.openSeekLane(0)).toThrow('video source is closed')

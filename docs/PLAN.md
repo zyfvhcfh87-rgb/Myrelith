@@ -4551,3 +4551,120 @@ acceptance claims.
   reuse, 1.0232x safe zoom, one history entry, balanced worker/cache cleanup,
   zero console/page problems, and complete port release; refresh exact-head CI
   and fresh Codex review after the final docs-only amend.
+
+## Milestone 5 Part 10a.3 / issue #110 - bounded point and box tracking
+
+**COMPLETE LOCALLY; CI/REVIEW PENDING (2026-08-13).**
+
+- [x] Add exact-frame Program Monitor point/box selection and the accessible
+  Inspector analyze/cancel/retry/confidence/loss/preview/apply/reset workflow.
+- [x] Reuse #108 for bounded ascending/descending sparse decode, cache,
+  provenance, cancellation, cleanup, and scheduler ownership; retain only the
+  prior tight grayscale frame while tracking.
+- [x] Stop explicitly on failed point/box agreement with no extrapolation.
+  Revalidate cache geometry and the complete directional frame/tick schedule.
+- [x] Map accepted samples through resolved source crop/flip/anchor/transform
+  to ordinary target Position X/Y and optional Scale X/Y. Preserve unrelated
+  state, require replacement consent, reject overlap/lock/duplicate/key-budget
+  failures, and Apply in one undo entry.
+- [x] Add a source-bound Chromium product gate. The clean-commit run on
+  `f278aa23594cd694213385469e02782d615408b7` and strict port 41886 passed
+  point mean/max 0.333/1.000 px, box center mean
+  0.333 px, scale error 0%, loss at exact occlusion frame 18, exact cache reuse,
+  one history entry, a reverse 17-to-0 sparse lane, worker lifecycle 3/3/0,
+  cache cleanup, zero browser problems, and complete port release. The source
+  fingerprint was
+  `sha256:799c29664da65cf40b75bc543e35ecd5f8a319d9201ba0d071bbe5a4f27e9010`;
+  JSON/PNG SHA-256 values were
+  `E9A4242F8AD80CB5F2FD72EA3D1F53F855838841A0B94F2D1DC5C77142EAD516` /
+  `364F32294130A88BDBB1440CD77946B72E2184AA950F9BFF6CA15A59469CF02A`.
+- [x] Freeze the final source tree; pass 12 focused files / 120 tests, 190 full
+  files / 2,575 tests, all 17 runner checks, build/typecheck, lint, a production
+  audit with 0 vulnerabilities, diff/architecture checks, and normal-dist
+  canaries.
+- [ ] Pass exact-head CI, request fresh exact-head Codex review, and merge only
+  after its clean verdict.
+
+## Milestone 5 Part 10a.3 / issue #110 - first exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Give stabilization and motion-tracking transport previews explicit owners;
+  clear only the calling editor's preview so simultaneously mounted Inspector
+  surfaces cannot erase one another.
+- [x] Filter live progress by the requested point/box kind and select the newest
+  queued/running status ahead of retained terminal jobs.
+- [x] Resolve the target transform at every accepted frame. Use preserved
+  target Rotation for target-local box extents and crop/anchor compensation,
+  and preserved Scale for compensation whenever tracking does not author Scale.
+  Pin off-center Position and 0-to-90-degree box-scale regressions.
+- [x] Pass 14 focused files / 135 tests, 190 full files / 2,578 tests, all 17
+  evidence-runner checks, build/typecheck, lint, a production audit with 0
+  vulnerabilities, and diff checks.
+- [ ] Commit the exact follow-up tree, refresh clean headed Chromium, push, pass
+  exact-head CI, and request a new Codex review.
+
+## Milestone 5 Part 10a.3 / issue #110 - second exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Scope user cancellation by analysis kind: point/box tracking cannot abort
+  stabilization on the same source clip, and stabilization cannot abort
+  tracking. Preserve whole-clip cancellation only for attachment removal and
+  controller disposal.
+- [x] Prove a queued point job can be cancelled while same-clip stabilization
+  remains running, completes successfully, and drains the one-slot scheduler.
+- [x] Exclude the tracked source from the Inspector target list and independently
+  reject equal source/target clip identities in domain planning.
+- [x] Pass the directly affected six-file matrix at 53/53 tests and the
+  authoritative suite at 190/190 files / 2,581/2,581 tests plus all 17
+  evidence-runner checks. Pass the 4,816-module build/typecheck, warning-free
+  lint, production audit at 0 vulnerabilities, and diff checks.
+- [ ] Commit the exact tree, refresh clean headed Chromium, push, pass exact-head
+  CI, and request a fresh Codex review before merge.
+
+## Milestone 5 Part 10a.3 / issue #110 - third exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Derive the expected tracking-result width/height through the shared
+  bounded decode sizing rule and reject any result that does not exactly match
+  the connected source before product normalization.
+- [x] Preserve source-aware error provenance: cached geometry mismatch is
+  `storage-corrupt`, while a fresh worker mismatch is `decode-readback`.
+- [x] Pin exact bounded, one-axis-corrupt, and unscaled geometry regressions.
+- [x] Pass 35/35 focused controller/domain tests, 190/190 full-suite files and
+  2,582/2,582 tests plus 17/17 runner checks, the 4,817-module build/typecheck,
+  warning-free lint, production audit at 0 vulnerabilities, and diff checks.
+- [ ] Refresh clean Chromium, exact-head CI, and Codex review before merge.
+
+## Milestone 5 Part 10a.3 / issue #110 - fourth exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Bound transport preview to the inclusive first/last accepted tracking keys
+  as well as the target clip, so ordinary endpoint hold cannot display draft
+  motion on unaccepted frames.
+- [x] Pin preview absence before the first key, presence at both accepted
+  boundaries, and cleanup immediately after the last key.
+- [x] Pass 6/6 focused UI tests, 190/190 full-suite files and 2,583/2,583 tests
+  plus 17/17 runner checks, the 4,817-module build/typecheck, warning-free lint,
+  production audit at 0 vulnerabilities, and diff checks.
+- [ ] Refresh clean Chromium, exact-head CI, and Codex review before merge.
+
+## Milestone 5 Part 10a.3 / issue #110 - fifth exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Replace the single last-writer preview slot with transport-owned candidate
+  arbitration for stabilization, motion tracking, and direct Program Monitor
+  manipulation. Keep activation priority stable across hidden owner updates.
+- [x] Restore the newest still-live sibling immediately when the visible owner
+  releases; clear all candidates on project reset. Prove tracking-off restores
+  stabilization and gesture completion restores the editor it covered.
+- [x] Pass 43/43 focused transport/editor/overlay tests, 190/190 full-suite files
+  and 2,586/2,586 tests plus 17/17 runner checks, the 4,817-module
+  build/typecheck, warning-free lint, production audit at 0 vulnerabilities,
+  and diff checks.
+- [ ] Commit the exact tree, refresh clean headed Chromium, push, pass exact-head
+  CI, and request a fresh Codex review before merge.

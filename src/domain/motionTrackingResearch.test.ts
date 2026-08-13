@@ -197,6 +197,23 @@ describe('bounded box tracking seeds', () => {
 })
 
 describe('tracking keyframe projection', () => {
+  test('anchors backward-authored tracks to the explicit selection sample', () => {
+    const tracks = trackingSamplesToAnimationTracks([
+      sample(3, 90, 45),
+      sample(4, 95, 48),
+      sample(5, 100, 50),
+    ], base, {
+      includeScale: false,
+      referenceFrame: 5,
+      target: centeredTarget,
+    })
+
+    expect(tracks.map((track) => track.keyframes.map((keyframe) => keyframe.value))).toEqual([
+      [0, 5, 10],
+      [15, 18, 20],
+    ])
+  })
+
   test('maps point/box deltas only to the existing transform animation vocabulary', () => {
     const scaledSource = {
       ...identitySource,

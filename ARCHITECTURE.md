@@ -29,7 +29,7 @@ non-negotiable rules. Re-read it at the start of every coding session.
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
 - The opt-in Issue #54 and Issue #70 evidence panels plus the checked-in Issue
-  #108 and Issue #109 browser gates have narrow,
+  #108, Issue #109, and Issue #110 browser gates have narrow,
   architecture-guarded dev exceptions. `dev/performance/runtime.ts` may compose
   existing `app/` controllers with `state/` and its bounded Mediabunny fixture
   generator;
@@ -47,7 +47,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
   production stabilization `app/` facade, browser-free `domain/` facts, and
   document/media/provenance `state/` needed to install and verify its isolated
   encoded fixture; only `scripts/issue109/stabilization-gate.html` imports it.
-  No ordinary application entry may import either gate, and no other `dev/`
+  `dev/issue110/motionTrackingGate.ts` has the same narrow app/domain/state
+  composition exception for its isolated encoded point/box fixture; only
+  `scripts/issue110/motion-tracking-gate.html` imports it.
+  No ordinary application entry may import any gate, and no other `dev/`
   module may reach those layers. Only
   the build-gated exact route in `main.tsx` may import the Issue #54 UI, and
   only `EditorShell.tsx` may dynamically import the Issue #70 panel behind its
@@ -697,6 +700,45 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   point and similarity-box tracking plus conversion to existing Position X/Y
   and Scale X/Y tracks. `domain/lensCorrection.ts` owns only the versioned,
   normalized manual lens model and its fixed-grid safety validation.
+- Issue #110's production point/box workflow is composed only by
+  `app/motionTrackingController.ts`. The Program Monitor selection store is
+  session-only and pins the normalized source selection to the exact integer
+  project frame where pointer-up committed it. Forward and backward requests
+  use one strict monotonic sparse timestamp lane; a processor retains only the
+  previous tightly owned grayscale frame, checks cancellation before work and
+  after bounded cooperative yields, and stops on the first rejected pair
+  without extrapolation. Result schema 1 and `point-box-product-v1` cache
+  provenance bind the source clip, canonical SourceTimeMap, resolved projection,
+  direction, selection frame/geometry, shared estimator, and work budget.
+  Parsed cache samples must match the exact requested frame/tick schedule,
+  remain inside the decoded frame, and report the exact shared bounded decode
+  dimensions derived from the connected source. A mismatch fails as corrupt
+  cache or decode/readback before product-space normalization.
+- Tracking preview is transport-only and must clear outside the inclusive first
+  through last accepted sample keys; ordinary endpoint hold must never present
+  unaccepted frames as tracked. Planning rechecks the latest source,
+  media connection, project binding, target overlap/lock/dimensions, ordinary
+  animation validity, exact selection snapshot, and that source and target are
+  distinct clip identities. The Inspector must not offer the tracked source as
+  its own target; this prevents applying source motion back onto itself as a
+  doubled target transform. Accepted samples map
+  through each frame's resolved source crop, flips, anchor, and transform into
+  project space. Preserved target Rotation and, when Scale is not authored,
+  target Scale are resolved again at every accepted frame so cropped/anchored
+  compensation and box extents use the actual target-local axes. Point tracking
+  may author Position X/Y; box tracking may also author Scale X/Y, but never
+  Rotation. Backward analysis is reordered only
+  after directional validation and remains anchored to the selected sample.
+  Retaining every accepted sample is the zero-error simplification; duplicate
+  projected frames, non-finite/out-of-range values, per-track limits, and the
+  document aggregate key budget reject before mutation. Apply replaces only
+  the explicitly confirmed owned properties in one immutable history entry and
+  leaves unrelated clip/effect animation unchanged.
+- User cancellation is analysis-kind scoped. Motion tracking may cancel only
+  point- and box-tracking jobs for its source clip, and stabilization may
+  cancel only stabilization jobs. Whole-clip cancellation remains reserved for
+  attachment removal and controller disposal, where every child must drain
+  before storage ownership changes.
 - Both the production controller and research controller admit at most one
   analysis job and reserve at most one decoder slot. Each child operation must
   own and close every VideoFrame, decoder, temporary surface, worker, and OPFS
@@ -839,7 +881,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
   ghost a linked gesture live. `textOverlayPreview` and `clipVisualPreview`
   hold rAF-coalesced Program Monitor drafts for procedural text geometry and
-  visual-media transform/settings respectively. `app/previewController.ts`
+  visual-media transform/settings respectively. Every concurrently mounted
+  media-preview producer publishes a named candidate through transport-owned
+  arbitration. The most recently activated owner is visible; updating a hidden
+  candidate does not steal priority, and releasing the visible candidate
+  immediately restores the newest still-live sibling. Stabilization, motion
+  tracking, and direct Program Monitor manipulation therefore never erase or
+  strand one another's enabled draft. Project reset clears the complete
+  candidate registry. `app/previewController.ts`
   projects those drafts into the immutable document snapshot sent to the
   shared preview renderer; neither enters document history until the gesture
   owner dispatches its single pointerup mutation. `snapGuide`
