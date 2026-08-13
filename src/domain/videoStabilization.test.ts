@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { defaultClipAnimation } from './clipAnimation'
+import { defaultClipAnimation, evaluateAnimationTrack } from './clipAnimation'
 import { defaultClipVisualSettings } from './clipInspector'
 import type { GlobalMotionEstimate, SimilarityTransform } from './motionAnalysis'
 import type { Clip, TimelineDoc } from './schema'
@@ -134,6 +134,48 @@ describe('video stabilization product planning', () => {
       && Number.isSafeInteger(key.sourceTimeTicks)
       && key.easing.type === 'linear'
     )))).toBe(true)
+  })
+
+  test('pins both edges of a source-time freeze with hold keyframes', () => {
+    const item = clip({
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 90_000_000,
+        rate: { numerator: 1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+            { frame: 2, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+            { frame: 5, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+          ],
+        },
+      },
+      sourceRange: { startFrame: 0, durationFrames: 90 },
+      timelineRange: { startFrame: 10, durationFrames: 8 },
+    })
+    const result = createVideoStabilizationPlan(
+      doc(item),
+      item,
+      source,
+      analysis(),
+      { strengthPercent: 50, smoothingRadiusFrames: 2 },
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    for (const track of result.plan.tracks) {
+      const freezeStart = track.keyframes.find((keyframe) => keyframe.frame === 2)
+      const freezeEnd = track.keyframes.find((keyframe) => keyframe.frame === 5)
+      expect(freezeStart?.easing).toEqual({ type: 'hold' })
+      expect(freezeEnd?.value).toBe(freezeStart?.value)
+      const values = [2, 3, 4, 5].map((frame) => evaluateAnimationTrack(track, frame, -1))
+      expect(new Set(values).size).toBe(1)
+    }
+    const positionX = result.plan.tracks.find((track) => track.property === 'position-x')!
+    expect(evaluateAnimationTrack(positionX, 1, -1)).not.toBe(
+      evaluateAnimationTrack(positionX, 2, -1),
+    )
   })
 
   test('solves exact project coverage with crop, off-center anchor, flips, and rotation', () => {

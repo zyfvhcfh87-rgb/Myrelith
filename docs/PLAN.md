@@ -4367,3 +4367,20 @@ acceptance claims.
   plus all 17 evidence-runner checks, build/typecheck, warning-free lint, the
   high-severity production audit with 0 vulnerabilities, and diff checks.
   Re-run clean Chromium, CI, and exact-head Codex review after commit.
+
+## Milestone 5 Part 10a.2 / issue #109 - third exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Preserve every exact SourceTimeMap freeze by adding matching correction
+  keys at the first and last plateau frames, assigning ordinary `hold` easing
+  to the first key, and protecting both keys from simplification. Keep moving
+  spans linear and the shared ordinary preview/export evaluator canonical.
+- [x] Keep plateau boundaries inside the existing 1,024-key track budget;
+  reject the bounded plan instead of discarding a required freeze edge.
+- [x] Add a deterministic moving-then-0× speed-curve regression proving all
+  five authored transform properties remain constant at every frozen timeline
+  frame. Pass 5/5 focused files with 28/28 tests, 184/184 full-suite files with
+  2,531/2,531 tests, all 17 evidence-runner checks, build/typecheck, warning-
+  free lint, the production audit with 0 vulnerabilities, and diff checks.
+  Refresh clean Chromium, CI, and exact-head Codex review before merge.

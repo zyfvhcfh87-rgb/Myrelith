@@ -4425,3 +4425,26 @@ surface; it is not a second zoom and never enters document history.
   build/typecheck, warning-free lint, the high-severity production audit with
   0 vulnerabilities, and diff checks pass. Clean-commit Chromium, CI, and a
   fresh exact-head Codex verdict follow on the frozen fix.
+
+## Milestone 5 Part 10a.2 / issue #109 - third exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4927205703` on `07cc955d97` found that source-time
+  inversion correctly selects the latest frame of a 0x plateau, but ordinary
+  linear stabilization keys could then interpolate correction motion through
+  the earlier frozen frames.
+- Planning now detects every exact equal-source-time run over the bounded clip
+  duration, materializes matching first/last plateau corrections, gives the
+  first key ordinary `hold` easing, and protects both keys from simplification.
+  Moving spans remain linear; preview and export still use only the shared
+  ordinary animation evaluator. The existing 1,024-key ceiling rejects a plan
+  if the protected boundaries and simplified path cannot coexist.
+- A deterministic speed-curve regression moves before a three-frame freeze and
+  proves all five Position/Rotation/equal-Scale tracks stay byte-value constant
+  at every frozen timeline frame while the pre-freeze value differs. Focused,
+  full, build, lint, audit, and diff gates pass: 5/5 focused files with 28/28
+  tests, 184/184 full-suite files with 2,531/2,531 tests, 17/17 evidence-runner
+  checks, TypeScript/Vite production build, warning-free lint, and 0 production
+  vulnerabilities. Clean-commit browser, CI, and fresh exact-head review
+  evidence follow after commit.

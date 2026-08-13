@@ -81,8 +81,8 @@ function plan(replacementRequired = true): VideoStabilizationPlan {
     replacementRequired,
     jitterReductionRatio: 0.52,
     frames: [
-      { frame: 0, sourceTimeTicks: 0, transform },
-      { frame: 29, sourceTimeTicks: 29_000_000, transform: { ...transform, x: 8 } },
+      { frame: 0, sourceTimeTicks: 0, transform, easing: 'linear' },
+      { frame: 29, sourceTimeTicks: 29_000_000, transform: { ...transform, x: 8 }, easing: 'linear' },
     ],
     tracks: properties.map((property) => ({
       property,

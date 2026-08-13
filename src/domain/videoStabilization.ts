@@ -34,6 +34,8 @@ import type {
 import {
   clipSourceTimeMap,
   SOURCE_TIME_TICKS_PER_FRAME,
+  sourceTicksAtTimelineOffset,
+  sourceTimeSpeedPointsAtClip,
   timelineOffsetAtSourceTicks,
 } from './sourceTimeMap'
 import { microsecondsToFrames } from './time'
@@ -86,6 +88,7 @@ export interface VideoStabilizationFrame {
   readonly frame: number
   readonly sourceTimeTicks: number
   readonly transform: Transform
+  readonly easing: 'linear' | 'hold'
 }
 
 export interface VideoStabilizationPlan {
@@ -505,6 +508,7 @@ function interpolateTransform(
   right: VideoStabilizationFrame,
   frame: number,
 ): Transform {
+  if (left.easing === 'hold') return { ...left.transform }
   const ratio = (frame - left.frame) / (right.frame - left.frame)
   const interpolate = (a: number, b: number) => a + (b - a) * ratio
   return {
@@ -516,6 +520,62 @@ function interpolateTransform(
     anchorX: left.transform.anchorX,
     anchorY: left.transform.anchorY,
   }
+}
+
+function transformAtMappedFrame(
+  frames: readonly VideoStabilizationFrame[],
+  frame: number,
+): Transform {
+  let rightIndex = 0
+  while (rightIndex < frames.length && frames[rightIndex]!.frame < frame) rightIndex++
+  if (rightIndex === 0) return { ...frames[0]!.transform }
+  if (rightIndex >= frames.length) return { ...frames[frames.length - 1]!.transform }
+  const right = frames[rightIndex]!
+  if (right.frame === frame) return { ...right.transform }
+  return interpolateTransform(frames[rightIndex - 1]!, right, frame)
+}
+
+function preserveSourceFreezeBoundaries(
+  durationFrames: number,
+  map: ReturnType<typeof clipSourceTimeMap>,
+  frames: readonly VideoStabilizationFrame[],
+): VideoStabilizationFrame[] {
+  if (!sourceTimeSpeedPointsAtClip(map).some((point) => point.rate.numerator === 0)) {
+    return frames.map((frame) => ({ ...frame, transform: { ...frame.transform } }))
+  }
+  const byFrame = new Map(frames.map((frame) => [
+    frame.frame,
+    { ...frame, transform: { ...frame.transform } },
+  ]))
+  let frame = 0
+  while (frame < durationFrames - 1) {
+    const sourceTimeTicks = sourceTicksAtTimelineOffset(map, frame)
+    if (sourceTicksAtTimelineOffset(map, frame + 1) !== sourceTimeTicks) {
+      frame++
+      continue
+    }
+    const start = frame
+    let end = frame + 1
+    while (
+      end < durationFrames - 1
+      && sourceTicksAtTimelineOffset(map, end + 1) === sourceTimeTicks
+    ) end++
+    const transform = transformAtMappedFrame(frames, end)
+    byFrame.set(start, {
+      frame: start,
+      sourceTimeTicks,
+      transform: { ...transform },
+      easing: 'hold',
+    })
+    byFrame.set(end, {
+      frame: end,
+      sourceTimeTicks,
+      transform: { ...transform },
+      easing: 'linear',
+    })
+    frame = end
+  }
+  return [...byFrame.values()].sort((left, right) => left.frame - right.frame)
 }
 
 function normalizedFitError(
@@ -551,7 +611,17 @@ export function simplifyVideoStabilizationFrames(
 ): VideoStabilizationFrame[] | null {
   if (frames.length <= 2) return frames.map((frame) => ({ ...frame, transform: { ...frame.transform } }))
   const retained = new Set([0, frames.length - 1])
-  const segments: Array<readonly [number, number]> = [[0, frames.length - 1]]
+  for (let index = 0; index < frames.length; index++) {
+    if (frames[index]!.easing !== 'hold') continue
+    retained.add(index)
+    if (index + 1 < frames.length) retained.add(index + 1)
+  }
+  if (retained.size > MAX_KEYFRAMES_PER_TRACK) return null
+  const protectedIndices = [...retained].sort((left, right) => left - right)
+  const segments: Array<readonly [number, number]> = []
+  for (let index = 1; index < protectedIndices.length; index++) {
+    segments.push([protectedIndices[index - 1]!, protectedIndices[index]!])
+  }
   let comparisons = 0
   while (segments.length > 0) {
     const [start, end] = segments.pop()!
@@ -623,7 +693,7 @@ function trackFor(
       frame: frame.frame,
       sourceTimeTicks: frame.sourceTimeTicks,
       value: value(frame),
-      easing: { type: 'linear' },
+      easing: { type: frame.easing },
     })),
   }
 }
@@ -699,6 +769,7 @@ export function createVideoStabilizationPlan(
           analysis.width,
           analysis.height,
         ),
+        easing: 'linear',
       })
     }
   } catch (cause) {
@@ -707,7 +778,17 @@ export function createVideoStabilizationPlan(
   if (frames.length < 2) {
     return { ok: false, reason: 'The analyzed source does not map to at least two unique clip frames.' }
   }
-  const simplified = simplifyVideoStabilizationFrames(doc, clip, source, frames)
+  let freezeSafeFrames: VideoStabilizationFrame[]
+  try {
+    freezeSafeFrames = preserveSourceFreezeBoundaries(
+      clip.timelineRange.durationFrames,
+      map,
+      frames,
+    )
+  } catch (cause) {
+    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+  }
+  const simplified = simplifyVideoStabilizationFrames(doc, clip, source, freezeSafeFrames)
   if (!simplified) {
     return {
       ok: false,
