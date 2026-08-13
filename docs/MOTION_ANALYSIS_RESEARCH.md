@@ -183,14 +183,24 @@ jitter. Each pair:
 2. performs bounded forward/backward 5×5 patch matching;
 3. rejects discontinuities unless at least half of the textured features retain
    distinct forward/backward-consistent patch matches;
-4. fits `q = [a -b; b a]p + t` from deterministic two-point hypotheses;
-5. accepts inliers within 1.75 analysis pixels and refines the similarity fit;
+4. fits `q = [a -b; b a]p + t` from deterministic two-point hypotheses and
+   admits only finite transforms with scale in the inclusive `[0.85, 1.15]`
+   interval and absolute rotation at most `pi / 12` radians;
+5. accepts inliers within 1.75 analysis pixels, refines the similarity fit, and
+   reapplies that same envelope before final-inlier filtering;
 6. accumulates the camera path, smooths translation/angle/log-scale over a
    four-frame radius, and blends the correction by strength.
 
 A second independently seeded textured scene is the negative hard-cut fixture.
 It is rejected on match coverage instead of allowing either a coincidental
 similarity fit or an insufficient-texture shortcut to satisfy the scene-cut gate.
+
+The least-squares refinement is never clamped back into the research envelope.
+If refinement produces a non-finite field, a scale outside `[0.85, 1.15]`, or
+an absolute rotation above `pi / 12`, the complete estimate fails. Stabilization
+and similarity-box tracking both consume this shared estimator: stabilization
+reports the failed frame pair, while box tracking reports explicit loss before
+applying the rejected transform to its box.
 
 ### Chromium result
 

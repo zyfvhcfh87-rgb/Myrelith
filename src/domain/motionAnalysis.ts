@@ -81,6 +81,9 @@ const MAX_PATCH_ERROR = 48
 const MAX_BACKTRACK_ERROR = 1.5
 const MIN_DISTINCT_PATCH_ERROR = 0.5
 const MIN_FEATURE_MATCH_RATIO = 0.5
+const MIN_SIMILARITY_SCALE = 0.85
+const MAX_SIMILARITY_SCALE = 1.15
+const MAX_SIMILARITY_ROTATION_RADIANS = Math.PI / 12
 
 export class MotionAnalysisCancelledError extends Error {
   constructor() {
@@ -351,6 +354,24 @@ export function matchMotionFeatures(
   return matches
 }
 
+function isSimilarityWithinMotionEnvelope(
+  transform: SimilarityTransform,
+): boolean {
+  if (
+    !Number.isFinite(transform.a)
+    || !Number.isFinite(transform.b)
+    || !Number.isFinite(transform.tx)
+    || !Number.isFinite(transform.ty)
+  ) return false
+  const scale = Math.hypot(transform.a, transform.b)
+  const rotation = Math.abs(Math.atan2(transform.b, transform.a))
+  return (
+    scale >= MIN_SIMILARITY_SCALE
+    && scale <= MAX_SIMILARITY_SCALE
+    && rotation <= MAX_SIMILARITY_ROTATION_RADIANS
+  )
+}
+
 function transformFromPair(
   first: FeatureMatch,
   second: FeatureMatch,
@@ -363,15 +384,13 @@ function transformFromPair(
   if (denominator < 64) return null
   const a = (px * qx + py * qy) / denominator
   const b = (px * qy - py * qx) / denominator
-  const scale = Math.hypot(a, b)
-  const angle = Math.abs(Math.atan2(b, a))
-  if (scale < 0.85 || scale > 1.15 || angle > Math.PI / 12) return null
-  return {
+  const transform = {
     a,
     b,
     tx: first.to.x - a * first.from.x + b * first.from.y,
     ty: first.to.y - b * first.from.x - a * first.from.y,
   }
+  return isSimilarityWithinMotionEnvelope(transform) ? transform : null
 }
 
 export function applySimilarityTransform(
@@ -472,7 +491,7 @@ export function estimateSimilarityFromMatches(
   }
   if (!bestTransform || bestInliers.length < MIN_GLOBAL_INLIERS) return null
   const refined = refineSimilarity(bestInliers)
-  if (!refined) return null
+  if (!refined || !isSimilarityWithinMotionEnvelope(refined)) return null
   const finalInliers = matches.filter(
     (match) => reprojectionError(refined, match) <= budget.inlierThreshold,
   )

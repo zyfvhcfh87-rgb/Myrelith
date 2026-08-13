@@ -8,11 +8,13 @@ import {
   createStabilizationPlan,
   estimateGlobalMotion,
   estimateGlobalMotionSequence,
+  estimateSimilarityFromMatches,
   invertSimilarityTransform,
   motionAnalysisRetainedBytes,
   validateGrayFrame,
   validateMotionAnalysisBudget,
   validateMotionFrameSequence,
+  type FeatureMatch,
   type GlobalMotionEstimate,
   type GrayFrame,
   type SimilarityTransform,
@@ -65,6 +67,41 @@ function estimate(transform: SimilarityTransform): GlobalMotionEstimate {
     meanInlierError: 0.2,
     confidence: 0.8,
   }
+}
+
+const SIMILARITY_FIXTURE_CENTER = Object.freeze({ x: 64, y: 64 })
+const SIMILARITY_FIXTURE_POINTS = Object.freeze([
+  { x: 44, y: 44 },
+  { x: 84, y: 84 },
+  { x: 44, y: 84 },
+  { x: 84, y: 44 },
+  { x: 64, y: 44 },
+  { x: 64, y: 84 },
+  { x: 44, y: 64 },
+  { x: 84, y: 64 },
+])
+
+function similarityFixtureMatches(
+  scale: number,
+  rotationRadians: number,
+): FeatureMatch[] {
+  const a = scale * Math.cos(rotationRadians)
+  const b = scale * Math.sin(rotationRadians)
+  const transform = {
+    a,
+    b,
+    tx: SIMILARITY_FIXTURE_CENTER.x
+      - a * SIMILARITY_FIXTURE_CENTER.x
+      + b * SIMILARITY_FIXTURE_CENTER.y,
+    ty: SIMILARITY_FIXTURE_CENTER.y
+      - b * SIMILARITY_FIXTURE_CENTER.x
+      - a * SIMILARITY_FIXTURE_CENTER.y,
+  }
+  return SIMILARITY_FIXTURE_POINTS.map((from) => ({
+    from,
+    to: applySimilarityTransform(transform, from),
+    meanAbsoluteError: 0,
+  }))
 }
 
 function translatedPlanForCropRatio(requiredCropRatio: number) {
@@ -246,6 +283,68 @@ describe('motion analysis research', () => {
       texturedFrame(0x44a11ce),
       texturedFrame(0xbadc0de),
     )).toBeNull()
+  })
+
+  test('rejects a refined similarity transform outside the reviewed motion envelope', () => {
+    const matches: FeatureMatch[] = [
+      [{ x: 60, y: 64 }, { x: 60, y: 64 }],
+      [{ x: 68, y: 64 }, { x: 68, y: 64 }],
+      [{ x: 64, y: 61 }, { x: 64, y: 62 }],
+      [{ x: 64, y: 67 }, { x: 64, y: 66 }],
+      [{ x: 61, y: 61 }, { x: 62, y: 62 }],
+      [{ x: 67, y: 61 }, { x: 66, y: 62 }],
+      [{ x: 61, y: 67 }, { x: 62, y: 66 }],
+      [{ x: 67, y: 67 }, { x: 66, y: 66 }],
+    ].map(([from, to]) => ({ from, to, meanAbsoluteError: 0 }))
+
+    expect(matches.every(({ from, to }) => (
+      Math.hypot(from.x - to.x, from.y - to.y)
+        <= DEFAULT_MOTION_ANALYSIS_BUDGET.inlierThreshold
+    ))).toBe(true)
+    expect(92 / 122).toBeCloseTo(0.754098, 6)
+    expect(estimateSimilarityFromMatches(matches)).toBeNull()
+  })
+
+  test.each([
+    ['inside the reviewed envelope', 1, 0],
+    ['at the minimum scale boundary', 0.85, 0],
+    ['at the maximum scale boundary', 1.15, 0],
+    ['at the maximum positive rotation boundary', 1, Math.PI / 12],
+    ['at the maximum negative rotation boundary', 1, -Math.PI / 12],
+  ] as const)('accepts similarity motion %s', (_label, scale, angle) => {
+    const result = estimateSimilarityFromMatches(
+      similarityFixtureMatches(scale, angle),
+    )
+
+    expect(result).not.toBeNull()
+    expect(Math.hypot(result!.transform.a, result!.transform.b)).toBeCloseTo(
+      scale,
+      12,
+    )
+    expect(Math.atan2(result!.transform.b, result!.transform.a)).toBeCloseTo(
+      angle,
+      12,
+    )
+  })
+
+  test.each([
+    ['below minimum scale', 0.85 - 1e-12, 0],
+    ['above maximum scale', 1.15 + 1e-12, 0],
+    ['above maximum positive rotation', 1, Math.PI / 12 + 1e-12],
+    ['below maximum negative rotation', 1, -Math.PI / 12 - 1e-12],
+  ] as const)('rejects similarity motion %s', (_label, scale, angle) => {
+    expect(estimateSimilarityFromMatches(
+      similarityFixtureMatches(scale, angle),
+    )).toBeNull()
+  })
+
+  test('rejects non-finite similarity geometry', () => {
+    const matches = similarityFixtureMatches(1, 0).map((match) => ({
+      ...match,
+      to: { ...match.to, x: Number.POSITIVE_INFINITY },
+    }))
+
+    expect(estimateSimilarityFromMatches(matches)).toBeNull()
   })
 
   test('rejects caller budgets above every reviewed work ceiling', () => {

@@ -4052,3 +4052,28 @@ acceptance claims.
   canary scan, and `git diff --check`. Do not repeat the unchanged
   2,400-case production-TypeScript suite or dependency audit; retain the
   clean-commit v4 Chromium artifact as the next source-bound gate.
+
+## Milestone 5 Part 10a / issue #44 - refined-similarity envelope follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Centralize the research similarity envelope: every transform field must
+  be finite, scale must remain in inclusive `[0.85, 1.15]`, and absolute
+  rotation must remain at or below `pi / 12` radians.
+- [x] Apply the same envelope to deterministic pair hypotheses and the
+  least-squares refined transform before final-inlier filtering. Reject rather
+  than clamp an escaped refinement.
+- [x] Reproduce the eight-match review fixture whose identity hypothesis keeps
+  every match but whose refinement contracts to `92 / 122`, approximately
+  `0.754098`; cover interior, exact-boundary, immediately exterior, and
+  non-finite transforms.
+- [x] Audit both consumers of refined similarity acceptance: stabilization
+  rejects the failed frame pair and similarity-box tracking reports loss before
+  applying a rejected transform.
+- [x] Pass 29/29 motion-analysis cases, 83/83 focused controller/domain/tracking
+  tests, 174/174 files with 2,411/2,411 full-suite tests, all 16 Node runner
+  checks, build/typecheck, oxlint, Issue #44 runner syntax, the production audit
+  at 0 vulnerabilities, and `git diff --check`.
+- [x] Scan the normal 32-file, 5,871,592-byte artifact: zero motion-research
+  canaries, zero WebGPU API references, and zero WebGPU experiment chunks. The
+  clean-commit headed research run follows after the root commits the exact tree.

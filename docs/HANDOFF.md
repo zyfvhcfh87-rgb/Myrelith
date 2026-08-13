@@ -3974,3 +3974,39 @@ surface; it is not a second zoom and never enters document history.
   TypeScript, test, or dependency semantics changed, so the 2,400-case full
   suite and zero-vulnerability dependency audit above were not repeated. The
   clean-commit v4 Chromium artifact remains the next source-bound gate.
+
+## Milestone 5 Part 10a / issue #44 - refined-similarity envelope hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of exact head
+  `ffbd92b3b5df976cae931f0b487bef2cabf5d853` found that deterministic pair
+  hypotheses enforced the bounded similarity model, but the least-squares
+  inlier refinement could escape it before final-inlier acceptance.
+- One shared motion-envelope guard now requires every transform field to be
+  finite, scale to remain in the inclusive `[0.85, 1.15]` interval, and
+  absolute rotation to remain at or below `pi / 12`. Both pair hypotheses and
+  the refined transform use it; nothing is clamped back into range.
+- The reviewer geometry with two stationary matches and six inward-shifted
+  matches keeps all eight within the identity inlier threshold but refines to
+  scale `92 / 122`, approximately `0.754098`; it now rejects before final-inlier
+  filtering. Exact and interior scale/rotation boundaries remain accepted,
+  just-outside values reject, and non-finite geometry fails closed.
+- Stabilization and similarity-box tracking both consume the guarded estimator.
+  Stabilization treats a rejected pair as confidence failure, and box tracking
+  reports loss before transforming the box; neither consumer needed a parallel
+  envelope or a separate refactor.
+- The regression-first motion-analysis run failed exactly the five newly added
+  out-of-envelope cases (24/29 passed), including the review fixture returning
+  scale `0.7540983606557377`. After the guard, the file passes 29/29 plus all 16
+  Node runner checks. The controller/domain/tracking set passes 83/83 tests;
+  the complete suite passes 174/174 files and 2,411/2,411 tests plus those 16
+  checks. TypeScript/Vite build, oxlint, Issue #44 runner syntax, production
+  high-severity audit with 0 vulnerabilities, and `git diff --check` pass. The
+  build retains only the established large-chunk advisory.
+- The normal 32-file, 5,871,592-byte production artifact contains zero motion-
+  research/cache/version canaries, zero `navigator.gpu` or `requestAdapter`
+  references, and zero WebGPU experiment chunks. The CPU scope worker retains
+  its established disabled-experiment error literal; an initially overbroad
+  text canary caught that expected fallback and was narrowed to the actual API
+  and chunk boundary.
