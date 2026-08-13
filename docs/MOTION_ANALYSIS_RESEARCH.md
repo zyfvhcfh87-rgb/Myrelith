@@ -530,3 +530,11 @@ size from the connected source through the same decode sizing authority and
 requires an exact match before constructing a session. A cached mismatch is
 `storage-corrupt`; a fresh worker mismatch is `decode-readback`. Coordinates
 therefore cannot be normalized through plausible but unrelated dimensions.
+
+The fourth exact-head product review on
+`9e853ca448a4c8b6d1237338196598735b4f11f0` found that preview used the target
+clip span, allowing ordinary endpoint hold to display tracking before the first
+or after the last accepted sample. Preview now requires the playhead to fall
+inside the inclusive first/last authored tracking-key range as well as the
+target span. Forward starts, backward starts, and explicit loss boundaries no
+longer leak draft motion into unaccepted frames.

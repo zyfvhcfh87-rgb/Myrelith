@@ -4790,3 +4790,19 @@ surface; it is not a second zoom and never enters document history.
   2,582/2,582 tests plus all 17 runner checks. The 4,817-module build/typecheck,
   warning-free lint, production audit at 0 vulnerabilities, and diff checks
   pass. Clean Chromium, CI, and exact-head review remain before merge.
+
+## Milestone 5 Part 10a.3 / issue #110 - fourth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING.**
+
+- Exact-head Codex review `4929832141` on
+  `9e853ca448a4c8b6d1237338196598735b4f11f0` found that preview checked the
+  target clip span but not the accepted tracking range. Ordinary endpoint hold
+  could therefore display draft motion before analysis began or after loss.
+- Preview now clears unless the playhead is inside both the target clip and the
+  inclusive first-to-last tracking-key range. A UI regression proves no preview
+  before the first key, preview on both accepted boundaries, and cleanup after
+  the final key. Its focused file passes 6/6 tests; the authoritative suite
+  passes 190/190 files with 2,583/2,583 tests plus all 17 runner checks. The
+  4,817-module build/typecheck, warning-free lint, production audit at 0
+  vulnerabilities, and diff checks pass. Publication refresh follows.

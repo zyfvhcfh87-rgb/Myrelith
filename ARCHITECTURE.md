@@ -714,7 +714,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   remain inside the decoded frame, and report the exact shared bounded decode
   dimensions derived from the connected source. A mismatch fails as corrupt
   cache or decode/readback before product-space normalization.
-- Tracking preview is transport-only. Planning rechecks the latest source,
+- Tracking preview is transport-only and must clear outside the inclusive first
+  through last accepted sample keys; ordinary endpoint hold must never present
+  unaccepted frames as tracked. Planning rechecks the latest source,
   media connection, project binding, target overlap/lock/dimensions, ordinary
   animation validity, exact selection snapshot, and that source and target are
   distinct clip identities. The Inspector must not offer the tracked source as

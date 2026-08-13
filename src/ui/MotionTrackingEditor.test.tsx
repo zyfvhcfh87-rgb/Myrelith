@@ -202,6 +202,34 @@ describe('MotionTrackingEditor', () => {
     expect(screen.getByRole('status')).toHaveTextContent('one undo step')
   })
 
+  test('previews only between the first and last accepted tracking keyframes', async () => {
+    const user = userEvent.setup()
+    const item = clip()
+    const { rerender } = render(
+      <MotionTrackingEditor clip={item} locked={false} playheadFrame={11} />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Pick point' }))
+    act(() => useMotionTrackingSelectionStore.getState().setSelection(
+      item.id,
+      { kind: 'point', point: { x: 0.5, y: 0.5 } },
+      12,
+    ))
+    await user.click(screen.getByRole('button', { name: 'Analyze' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('local cache'))
+    await user.click(screen.getByRole('checkbox', { name: 'Preview accepted tracking at the playhead' }))
+
+    expect(useTransportStore.getState().clipVisualPreview).toBeNull()
+    rerender(<MotionTrackingEditor clip={item} locked={false} playheadFrame={12} />)
+    await waitFor(() => expect(useTransportStore.getState().clipVisualPreview).toMatchObject({
+      owner: 'motion-tracking',
+      clipId: 'target',
+    }))
+    rerender(<MotionTrackingEditor clip={item} locked={false} playheadFrame={13} />)
+    await waitFor(() => expect(useTransportStore.getState().clipVisualPreview?.clipId).toBe('target'))
+    rerender(<MotionTrackingEditor clip={item} locked={false} playheadFrame={14} />)
+    await waitFor(() => expect(useTransportStore.getState().clipVisualPreview).toBeNull())
+  })
+
   test('invalidates a ready result when the requested direction changes', async () => {
     const user = userEvent.setup()
     const item = clip()

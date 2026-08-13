@@ -155,7 +155,26 @@ export default function MotionTrackingEditor({
       return
     }
     const target = findClip(doc, planned.plan.targetClipId)
-    if (!target || playheadFrame < target.timelineRange.startFrame || playheadFrame >= rangeEnd(target.timelineRange)) {
+    if (!target) {
+      clearOwnedPreview()
+      return
+    }
+    const rangeTrack = planned.plan.tracks.find((track) => track.property === 'position-x')
+      ?? planned.plan.tracks[0]
+    const firstKey = rangeTrack?.keyframes[0]
+    const lastKey = rangeTrack?.keyframes.at(-1)
+    if (!firstKey || !lastKey) {
+      clearOwnedPreview()
+      return
+    }
+    const acceptedStart = target.timelineRange.startFrame + firstKey.frame
+    const acceptedEnd = target.timelineRange.startFrame + lastKey.frame
+    if (
+      playheadFrame < acceptedStart
+      || playheadFrame > acceptedEnd
+      || playheadFrame < target.timelineRange.startFrame
+      || playheadFrame >= rangeEnd(target.timelineRange)
+    ) {
       clearOwnedPreview()
       return
     }

@@ -4637,3 +4637,17 @@ acceptance claims.
   2,582/2,582 tests plus 17/17 runner checks, the 4,817-module build/typecheck,
   warning-free lint, production audit at 0 vulnerabilities, and diff checks.
 - [ ] Refresh clean Chromium, exact-head CI, and Codex review before merge.
+
+## Milestone 5 Part 10a.3 / issue #110 - fourth exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Bound transport preview to the inclusive first/last accepted tracking keys
+  as well as the target clip, so ordinary endpoint hold cannot display draft
+  motion on unaccepted frames.
+- [x] Pin preview absence before the first key, presence at both accepted
+  boundaries, and cleanup immediately after the last key.
+- [x] Pass 6/6 focused UI tests, 190/190 full-suite files and 2,583/2,583 tests
+  plus 17/17 runner checks, the 4,817-module build/typecheck, warning-free lint,
+  production audit at 0 vulnerabilities, and diff checks.
+- [ ] Refresh clean Chromium, exact-head CI, and Codex review before merge.
