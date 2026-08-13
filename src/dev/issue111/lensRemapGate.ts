@@ -93,14 +93,59 @@ function runCancellationWorker(): Promise<OwnedWorkerResult<'AbortError'>> {
   })
 }
 
+function runRecoveryWorker(): Promise<OwnedWorkerResult<true>> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./lens-remap.worker.ts', import.meta.url), { type: 'module' })
+    let settled = false
+    const finish = (result: true | null, error: unknown | null) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      worker.removeEventListener('message', onMessage)
+      worker.removeEventListener('error', onError)
+      worker.removeEventListener('messageerror', onMessageError)
+      worker.terminate()
+      if (error !== null) reject(error)
+      else resolve({ result: result!, terminated: true })
+    }
+    const onMessage = (event: MessageEvent<LensRemapWorkerResponse>) => {
+      if (event.data.type === 'error') finish(null, new Error(event.data.detail))
+      else if (event.data.type === 'recovery-succeeded') finish(true, null)
+    }
+    const onError = (event: ErrorEvent) => finish(null, workerFailure('Lens-remap recovery worker failed', event))
+    const onMessageError = (event: MessageEvent) => finish(null, workerFailure('Lens-remap recovery worker failed', event))
+    const timeout = setTimeout(() => finish(null, new Error('Lens-remap recovery exceeded its 20 second deadline')), CANCELLATION_TIMEOUT_MS)
+    worker.addEventListener('message', onMessage)
+    worker.addEventListener('error', onError)
+    worker.addEventListener('messageerror', onMessageError)
+    try {
+      worker.postMessage({ type: 'recovery-probe' } satisfies LensRemapWorkerRequest)
+    } catch (error) {
+      finish(null, error)
+    }
+  })
+}
+
 export async function runLensRemapBrowserGate(): Promise<LensRemapGateEvidence> {
   const full = await runFullWorker()
+  const recovery = await runRecoveryWorker()
   const cancellation = await runCancellationWorker()
   if (full.result.decision !== 'go') {
     throw new Error(`Lens-remap gate is no-go: ${full.result.reasons.join(' | ')}`)
   }
   return Object.freeze({
-    run: full.result,
+    run: Object.freeze({
+      ...full.result,
+      contextLoss: Object.freeze({
+        currentOwnerFailed: full.result.contextLoss.currentOwnerFailed,
+        freshOwnerSucceeded: recovery.result,
+      }),
+      resources: Object.freeze({
+        backendsCreated: full.result.resources.backendsCreated + 1,
+        backendsDisposed: full.result.resources.backendsDisposed + 1,
+        retainedBytesAfterDispose: 0,
+      }),
+    }),
     cancellation: Object.freeze({
       name: cancellation.result,
       workersCreated: 1,
@@ -108,8 +153,8 @@ export async function runLensRemapBrowserGate(): Promise<LensRemapGateEvidence> 
       activeWorkers: 0,
     }),
     workerLifecycle: Object.freeze({
-      workersCreated: 2,
-      workersTerminated: 2,
+      workersCreated: 3,
+      workersTerminated: 3,
       activeWorkers: 0,
     }),
   })

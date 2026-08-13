@@ -67,19 +67,21 @@ export interface LensRemapGateEvidence {
   readonly run: LensRemapRunEvidence
   readonly cancellation: LensRemapCancellationEvidence
   readonly workerLifecycle: {
-    readonly workersCreated: 2
-    readonly workersTerminated: 2
+    readonly workersCreated: 3
+    readonly workersTerminated: 3
     readonly activeWorkers: 0
   }
 }
 
 export type LensRemapWorkerRequest =
   | { readonly type: 'run' }
+  | { readonly type: 'recovery-probe' }
   | { readonly type: 'cancel-probe' }
   | { readonly type: 'cancel' }
 
 export type LensRemapWorkerResponse =
   | { readonly type: 'result'; readonly evidence: LensRemapRunEvidence }
+  | { readonly type: 'recovery-succeeded' }
   | { readonly type: 'cancel-ready' }
   | { readonly type: 'cancelled'; readonly name: string }
   | { readonly type: 'error'; readonly detail: string }

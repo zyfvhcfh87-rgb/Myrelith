@@ -140,13 +140,23 @@ function applyModel(
   gl.uniform1f(uniform(gl, program, 'uOutputScale'), model.outputScale)
 }
 
-function flipReadback(rows: Uint8Array, width: number, height: number): Uint8ClampedArray {
-  const rowBytes = width * RENDER_SURFACE_BYTES_PER_PIXEL
-  const topDown = new Uint8ClampedArray(rows.byteLength)
-  for (let y = 0; y < height; y++) {
-    topDown.set(rows.subarray((height - 1 - y) * rowBytes, (height - y) * rowBytes), y * rowBytes)
+function flipReadbackInPlace(
+  rows: Uint8Array,
+  width: number,
+  height: number,
+): Uint8ClampedArray {
+  const pixels = new Uint32Array(rows.buffer, rows.byteOffset, rows.byteLength / 4)
+  for (let y = 0; y < Math.floor(height / 2); y++) {
+    const oppositeY = height - 1 - y
+    for (let x = 0; x < width; x++) {
+      const top = y * width + x
+      const bottom = oppositeY * width + x
+      const swap = pixels[top]!
+      pixels[top] = pixels[bottom]!
+      pixels[bottom] = swap
+    }
   }
-  return topDown
+  return new Uint8ClampedArray(rows.buffer, rows.byteOffset, rows.byteLength)
 }
 
 export class WebGl2LensRemapBackend {
@@ -289,7 +299,7 @@ export class WebGl2LensRemapBackend {
     this.gl.readPixels(0, 0, this.width, this.height, this.gl.RGBA, this.gl.UNSIGNED_BYTE, rows)
     const error = this.gl.getError()
     if (error !== this.gl.NO_ERROR) throw new Error(`Lens-remap RGBA8 readback failed with error ${error}`)
-    return flipReadback(rows, this.width, this.height)
+    return flipReadbackInPlace(rows, this.width, this.height)
   }
 
   maximumGeometryDeltaPixels(

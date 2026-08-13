@@ -4854,8 +4854,9 @@ surface; it is not a second zoom and never enters document history.
   preview/export p95 was 33.4/55.7 ms and the full seven-surface envelope was
   232,243,200 bytes. Exact clean-head artifact identity replaces this
   preliminary provenance before publication.
-- Context loss fails the current owner; a fresh context succeeds. CPU work
-  cancels with `AbortError`; two workers terminate with zero active. Unsupported
+- Context loss fails the current owner; a fresh worker/context re-probes and
+  succeeds. CPU work cancels with `AbortError`; three workers terminate with
+  zero active. Unsupported
   WebGL2/RGBA8/readback/texture/memory facts are explicit unavailability and
   never silently substitute the CPU oracle.
 - No production entry imports the gate. There is no editor control, document
@@ -4869,3 +4870,24 @@ surface; it is not a second zoom and never enters document history.
   0 vulnerabilities, diff checks pass, and normal production output contains
   zero Issue #111 canary files. Clean committed headed evidence, CI, and
   exact-head Codex review remain.
+
+## Milestone 5 Part 10a.4 / issue #111 - first exact-head review follow-up
+
+**VALIDATED LOCALLY; CLEAN-HEAD PUBLICATION PENDING (2026-08-13).**
+
+- Exact-head Codex review `4930390362` on `072836a4b360f4333ae40b13788965822b4c182e`
+  found that context-loss retry used a fresh context in the same worker instead
+  of a fresh worker, and that row flipping temporarily retained a second full
+  readback frame outside the published memory budget.
+- The full proof worker now terminates after context loss. A separately owned
+  recovery worker starts from scratch, re-probes context-loss observation and
+  texture limits, renders one exact neutral RGBA8 frame, disposes, and terminates
+  before the cancellation worker starts. Lifecycle evidence is 3/3/0.
+- Readback now swaps top/bottom pixels in its original tightly owned buffer via
+  a same-buffer 32-bit view. There is no second frame-sized allocation, so the
+  seven-surface 4K peak remains exactly 232,243,200 bytes.
+- Focused 4-file validation remains 20/20 plus 17/17 runner checks. The
+  authoritative full suite passes 192/192 files and 2,598/2,598 tests plus the
+  same 17/17 runner checks; the 4,817-module build/typecheck, lint, production
+  audit (zero vulnerabilities), diff checks, and production-isolation canaries
+  are green. Clean committed headed evidence, CI, and exact-head review remain.

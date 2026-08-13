@@ -4691,8 +4691,8 @@ acceptance claims.
   measured 1080p preview/export p95 10.4/13.6 ms, 4K 33.4/55.7 ms, maximum
   pixel delta 1, geometry delta 0.000035 px, and 232,243,200-byte combined 4K
   peak. Treat timings as host evidence, not universal guarantees.
-- [x] Make context loss terminal for the disposable owner, prove a fresh-owner
-  retry, cooperatively abort the CPU probe, terminate both workers, observe
+- [x] Make context loss terminal for the disposable owner, prove a fresh-worker
+  retry, cooperatively abort the CPU probe, terminate all three workers, observe
   `error`/`messageerror`, and retain zero candidate bytes after disposal.
 - [x] Specify explicit unavailability with no CPU substitution. Keep product
   schema/UI/render imports and every bundled/downloaded/automatic profile
@@ -4705,3 +4705,21 @@ acceptance claims.
   evidence, pass CI, request `@codex review`, and merge only after Codex reports
   no major issues. On that clean go decision, open a separate bounded product
   implementation issue.
+
+## Milestone 5 Part 10a.4 / issue #111 - first exact-head review follow-up
+
+**VALIDATED LOCALLY; CLEAN-HEAD PUBLICATION PENDING (2026-08-13).**
+
+- [x] End the context-loss worker after its terminal result. Start a separately
+  owned recovery worker, re-probe WebGL2 context-loss/texture facts, render and
+  dispose one exact frame, then terminate before starting cancellation.
+- [x] Flip RGBA8 readback rows in the original frame buffer. Do not retain a
+  second frame-sized output while the raw readback is live; preserve the exact
+  seven-surface / 232,243,200-byte 4K envelope.
+- [x] Update lifecycle/result/runner contracts and deterministic gate tests for
+  three created, three terminated, and zero active workers.
+- [x] Refresh the authoritative full suite: 192/192 files, 2,598/2,598 tests,
+  and 17/17 runner checks. Build/typecheck, lint, production audit, diff checks,
+  and production-isolation canaries are green.
+- [ ] Publish a clean exact-head Chromium artifact, pass CI, and receive a clean
+  Codex review before merge.

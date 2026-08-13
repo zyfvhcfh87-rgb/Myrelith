@@ -205,23 +205,6 @@ async function runResearch(): Promise<LensRemapRunEvidence> {
     if (!currentOwnerFailed) reasons.push('Context loss did not fail the current backend owner')
     backend.dispose()
     backendsDisposed++
-    const fresh = new WebGl2LensRemapBackend()
-    backendsCreated++
-    let freshOwnerSucceeded = false
-    try {
-      const input = createLensRemapFixtureRgba(32, 18, false)
-      freshOwnerSucceeded = fresh.render(
-        input,
-        32,
-        18,
-        LENS_REMAP_FIXTURES[0].model,
-        true,
-      )?.byteLength === input.byteLength
-    } finally {
-      fresh.dispose()
-      backendsDisposed++
-    }
-    if (!freshOwnerSucceeded) reasons.push('Fresh WebGL2 owner did not recover after context loss')
 
     return Object.freeze({
       fixtureVersion: LENS_REMAP_FIXTURE_VERSION,
@@ -241,7 +224,7 @@ async function runResearch(): Promise<LensRemapRunEvidence> {
       parity: Object.freeze(parity),
       timings: Object.freeze(timings),
       invalidFoldingRejected,
-      contextLoss: Object.freeze({ currentOwnerFailed, freshOwnerSucceeded }),
+      contextLoss: Object.freeze({ currentOwnerFailed, freshOwnerSucceeded: false }),
       resources: Object.freeze({
         backendsCreated,
         backendsDisposed,
@@ -256,6 +239,33 @@ async function runResearch(): Promise<LensRemapRunEvidence> {
       backendsDisposed++
     }
   }
+}
+
+function runRecoveryProbe(): void {
+  const backend = new WebGl2LensRemapBackend()
+  try {
+    if (!backend.contextLossExtension) {
+      throw new Error('Fresh-worker WebGL2 recovery lacks context-loss observation')
+    }
+    if (PROJECT_RESOLUTION_PRESETS.some((preset) => (
+      preset.width > backend.maximumTextureSize
+      || preset.height > backend.maximumTextureSize
+    ))) throw new Error('Fresh-worker WebGL2 recovery has an insufficient texture limit')
+    const input = createLensRemapFixtureRgba(32, 18, false)
+    const output = backend.render(
+      input,
+      32,
+      18,
+      LENS_REMAP_FIXTURES[0].model,
+      true,
+    )
+    if (output?.byteLength !== input.byteLength) {
+      throw new Error('Fresh-worker WebGL2 recovery returned an invalid frame')
+    }
+  } finally {
+    backend.dispose()
+  }
+  post({ type: 'recovery-succeeded' })
 }
 
 async function runCancellationProbe(): Promise<void> {
@@ -291,6 +301,14 @@ scope.addEventListener('message', (event: MessageEvent<LensRemapWorkerRequest>) 
       (evidence) => post({ type: 'result', evidence }),
       (error) => post({ type: 'error', detail: errorDetail(error) }),
     )
+    return
+  }
+  if (event.data.type === 'recovery-probe') {
+    try {
+      runRecoveryProbe()
+    } catch (error) {
+      post({ type: 'error', detail: errorDetail(error) })
+    }
     return
   }
   void runCancellationProbe().catch((error) => post({ type: 'error', detail: errorDetail(error) }))

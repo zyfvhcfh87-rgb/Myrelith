@@ -44,6 +44,8 @@ class SuccessfulWorker extends EventTarget {
     this.messages.push(message)
     if (message.type === 'run') {
       queueMicrotask(() => this.reply({ type: 'result', evidence: goEvidence }))
+    } else if (message.type === 'recovery-probe') {
+      queueMicrotask(() => this.reply({ type: 'recovery-succeeded' }))
     } else if (message.type === 'cancel-probe') {
       queueMicrotask(() => this.reply({ type: 'cancel-ready' }))
     } else {
@@ -71,15 +73,16 @@ describe('Issue #111 lens-remap gate worker ownership', () => {
     const evidence = await runLensRemapBrowserGate()
 
     expect(evidence.workerLifecycle).toEqual({
-      workersCreated: 2,
-      workersTerminated: 2,
+      workersCreated: 3,
+      workersTerminated: 3,
       activeWorkers: 0,
     })
     expect(evidence.cancellation.name).toBe('AbortError')
-    expect(SuccessfulWorker.instances).toHaveLength(2)
-    expect(SuccessfulWorker.instances.map((worker) => worker.terminateCalls)).toEqual([1, 1])
+    expect(SuccessfulWorker.instances).toHaveLength(3)
+    expect(SuccessfulWorker.instances.map((worker) => worker.terminateCalls)).toEqual([1, 1, 1])
     expect(SuccessfulWorker.instances[0]?.messages).toEqual([{ type: 'run' }])
-    expect(SuccessfulWorker.instances[1]?.messages).toEqual([
+    expect(SuccessfulWorker.instances[1]?.messages).toEqual([{ type: 'recovery-probe' }])
+    expect(SuccessfulWorker.instances[2]?.messages).toEqual([
       { type: 'cancel-probe' },
       { type: 'cancel' },
     ])

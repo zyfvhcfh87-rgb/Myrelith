@@ -166,8 +166,8 @@ function validateGateResult(result) {
     || run.resources.backendsDisposed !== 2
     || run.resources.retainedBytesAfterDispose !== 0
     || result.cancellation?.name !== 'AbortError'
-    || result.workerLifecycle?.workersCreated !== 2
-    || result.workerLifecycle?.workersTerminated !== 2
+    || result.workerLifecycle?.workersCreated !== 3
+    || result.workerLifecycle?.workersTerminated !== 3
     || result.workerLifecycle?.activeWorkers !== 0
   ) throw new Error('Issue #111 lifecycle, safety, or 1080p preview gate failed')
 }
