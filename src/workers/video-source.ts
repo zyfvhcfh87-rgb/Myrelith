@@ -171,8 +171,12 @@ function assertTimestampUs(value: number, label: string, allowNegative: boolean)
   }
 }
 
-function timestampUsToSeconds(value: number, label: string): number {
-  assertTimestampUs(value, label, false)
+function timestampUsToSeconds(
+  value: number,
+  label: string,
+  allowNegative = false,
+): number {
+  assertTimestampUs(value, label, allowNegative)
   return value / MICROSECONDS_PER_SECOND
 }
 
@@ -323,10 +327,11 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
     const startSeconds = timestampUsToSeconds(
       options.startTimestampUs,
       'startTimestampUs',
+      true,
     )
     const endSeconds = options.endTimestampUs === undefined
       ? undefined
-      : timestampUsToSeconds(options.endTimestampUs, 'endTimestampUs')
+      : timestampUsToSeconds(options.endTimestampUs, 'endTimestampUs', true)
     if (
       options.endTimestampUs !== undefined
       && options.endTimestampUs < options.startTimestampUs

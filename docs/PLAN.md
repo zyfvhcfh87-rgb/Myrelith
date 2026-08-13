@@ -4236,3 +4236,22 @@ acceptance claims.
   runner syntax, and the diff check; confirm 0 high-severity production
   vulnerabilities. Clean-commit Chromium, CI, and exact-head Codex review
   follow on the final committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - sixth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Emit periodic progress from decoded-frame cadence before skipping an
+  unsampled frame, so every sampling interval reports at decoded counts 8, 16,
+  and onward with the exact retained-sample count.
+- [x] Preserve signed safe-integer exact primary-video start/end timestamps
+  through worker validation and playback-lane conversion while keeping seek
+  targets non-negative and rejecting reversed ranges.
+- [x] Attempt both decoder-owner close paths, reject an otherwise successful
+  run when either close fails, and aggregate the primary operation failure with
+  every synchronous or asynchronous cleanup failure when both phases fail.
+- [x] Add deterministic progress, signed-bound, and cleanup regressions; pass
+  67/67 focused tests, 180/180 files and 2,500/2,500 full-suite tests, plus all
+  17 runner checks. Pass build/typecheck, warning-free lint, production audit
+  at 0 vulnerabilities, runner syntax, and the diff check. Clean-commit
+  Chromium evidence follows before the next exact-head review request.

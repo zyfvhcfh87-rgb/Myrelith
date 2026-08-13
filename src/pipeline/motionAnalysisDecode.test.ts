@@ -172,6 +172,98 @@ describe('decodeMotionAnalysisWindows', () => {
     expect(motionAnalysisDisplaySize(100, 50)).toEqual({ width: 100, height: 50 })
   })
 
+  it('reports decoded-frame progress even when each progress frame is unsampled', async () => {
+    const fixture = sourceFixture(17)
+    const reportProgress = vi.fn()
+
+    await decodeMotionAnalysisWindows({
+      source: fixture.source,
+      startTimestampUs: 0,
+      endTimestampUs: 1_000_000,
+      samplingIntervalFrames: 2,
+      extractGrayFrame: (_frame, timestampUs) => ({
+        timestampUs,
+        width: 1,
+        height: 1,
+        pixels: new Uint8Array(new ArrayBuffer(1)),
+      }),
+      sendWindow: vi.fn(async () => undefined),
+      reportProgress,
+    })
+
+    expect(reportProgress.mock.calls.map(([decoded, sampled]) => ({
+      decoded,
+      sampled,
+    }))).toEqual([
+      { decoded: 8, sampled: 4 },
+      { decoded: 16, sampled: 8 },
+    ])
+  })
+
+  it('attempts both decoder-owner closes and rejects a successful decode on cleanup failure', async () => {
+    const fixture = sourceFixture(1)
+    fixture.cursorClose.mockRejectedValueOnce(new Error('cursor-close-failed'))
+    fixture.sourceClose.mockRejectedValueOnce(new Error('source-close-failed'))
+
+    const pending = decodeMotionAnalysisWindows({
+      source: fixture.source,
+      startTimestampUs: 0,
+      endTimestampUs: 1_000_000,
+      samplingIntervalFrames: 1,
+      extractGrayFrame: (_frame, timestampUs) => ({
+        timestampUs,
+        width: 1,
+        height: 1,
+        pixels: new Uint8Array(new ArrayBuffer(1)),
+      }),
+      sendWindow: vi.fn(async () => undefined),
+      reportProgress: vi.fn(),
+    })
+
+    await expect(pending).rejects.toThrow('Failed to close motion analysis decoder owners')
+    expect(fixture.cursorClose).toHaveBeenCalledOnce()
+    expect(fixture.sourceClose).toHaveBeenCalledOnce()
+    await expect(pending).rejects.toMatchObject({
+      errors: [
+        expect.objectContaining({ message: 'cursor-close-failed' }),
+        expect.objectContaining({ message: 'source-close-failed' }),
+      ],
+    })
+  })
+
+  it('preserves operation and cleanup failures while still attempting both closes', async () => {
+    const fixture = sourceFixture(1)
+    fixture.cursorClose.mockImplementationOnce(() => {
+      throw new Error('cursor-close-threw')
+    })
+    fixture.sourceClose.mockRejectedValueOnce(new Error('source-close-failed'))
+
+    const pending = decodeMotionAnalysisWindows({
+      source: fixture.source,
+      startTimestampUs: 0,
+      endTimestampUs: 1_000_000,
+      samplingIntervalFrames: 1,
+      extractGrayFrame: () => {
+        throw new Error('extract-failed')
+      },
+      sendWindow: vi.fn(),
+      reportProgress: vi.fn(),
+    })
+
+    await expect(pending).rejects.toMatchObject({
+      message: 'Motion analysis decode and decoder-owner cleanup failed',
+      cause: expect.objectContaining({ message: 'extract-failed' }),
+      errors: [
+        expect.objectContaining({ message: 'extract-failed' }),
+        expect.objectContaining({ message: 'cursor-close-threw' }),
+        expect.objectContaining({ message: 'source-close-failed' }),
+      ],
+    })
+    expect(fixture.closeCounts).toEqual([1])
+    expect(fixture.cursorClose).toHaveBeenCalledOnce()
+    expect(fixture.sourceClose).toHaveBeenCalledOnce()
+  })
+
   it('maps every source rotation into oriented display-space draw geometry', () => {
     expect(motionAnalysisOrientationPlan(320, 180, 0)).toEqual({
       sourceWidth: 320,

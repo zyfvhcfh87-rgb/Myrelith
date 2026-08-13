@@ -189,6 +189,8 @@ export async function decodeMotionAnalysisWindows(
   request: MotionAnalysisDecodeRequest,
 ): Promise<MotionAnalysisDecodeCompletion> {
   let cursor: MotionAnalysisFrameCursor | null = null
+  let operationFailure: { readonly cause: unknown } | null = null
+  let completion: MotionAnalysisDecodeCompletion | null = null
   let decodedFrameCount = 0
   let sampledFrameCount = 0
   let windowCount = 0
@@ -220,12 +222,22 @@ export async function decodeMotionAnalysisWindows(
       } finally {
         decoded.frame.close()
       }
-      if (!sampled) continue
-      window.push(sampled)
-      sampledFrameCount++
-      if (sampledFrameCount > MAX_ANALYSIS_SAMPLES) {
-        throw new RangeError('Analysis exceeded the maximum serializable sample count')
+      if (sampled) {
+        window.push(sampled)
+        sampledFrameCount++
+        if (sampledFrameCount > MAX_ANALYSIS_SAMPLES) {
+          throw new RangeError('Analysis exceeded the maximum serializable sample count')
+        }
       }
+      if (decodedFrameCount % 8 === 0) {
+        const span = request.endTimestampUs - request.startTimestampUs
+        request.reportProgress(
+          decodedFrameCount,
+          sampledFrameCount,
+          Math.max(0, Math.min(0.99, (decoded.timestampUs - request.startTimestampUs) / span)),
+        )
+      }
+      if (!sampled) continue
       const currentBytes = motionAnalysisRetainedBytes(window)
       maxRetainedFrames = Math.max(maxRetainedFrames, window.length)
       maxRetainedBytes = Math.max(maxRetainedBytes, currentBytes)
@@ -243,14 +255,6 @@ export async function decodeMotionAnalysisWindows(
         sampleOffset += window.length - overlap.length
         window = overlap
       }
-      if (decodedFrameCount % 8 === 0) {
-        const span = request.endTimestampUs - request.startTimestampUs
-        request.reportProgress(
-          decodedFrameCount,
-          sampledFrameCount,
-          Math.max(0, Math.min(0.99, (decoded.timestampUs - request.startTimestampUs) / span)),
-        )
-      }
     }
     if (window.length > 0) {
       const currentBytes = motionAnalysisRetainedBytes(window)
@@ -263,17 +267,38 @@ export async function decodeMotionAnalysisWindows(
         retainedBytes: currentBytes,
       })
     }
-    return {
+    completion = {
       decodedFrameCount,
       sampledFrameCount,
       windowCount,
       maxRetainedFrames,
       maxRetainedBytes,
     }
-  } finally {
-    await Promise.allSettled([
-      cursor?.close() ?? Promise.resolve(),
-      request.source.close(),
-    ])
+  } catch (cause) {
+    operationFailure = { cause }
   }
+
+  const closeResults = await Promise.allSettled([
+    Promise.resolve().then(() => cursor?.close()),
+    Promise.resolve().then(() => request.source.close()),
+  ])
+  const closeFailures = closeResults
+    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    .map((result) => result.reason)
+  if (closeFailures.length > 0) {
+    if (operationFailure) {
+      throw new AggregateError(
+        [operationFailure.cause, ...closeFailures],
+        'Motion analysis decode and decoder-owner cleanup failed',
+        { cause: operationFailure.cause },
+      )
+    }
+    throw new AggregateError(
+      closeFailures,
+      'Failed to close motion analysis decoder owners',
+    )
+  }
+  if (operationFailure) throw operationFailure.cause
+  if (!completion) throw new Error('Motion analysis decode did not settle')
+  return completion
 }

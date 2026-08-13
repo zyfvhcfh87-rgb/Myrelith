@@ -4252,3 +4252,31 @@ surface; it is not a second zoom and never enters document history.
   runner syntax, and `git diff --check` pass; the high-severity production audit
   finds 0 vulnerabilities. Clean-commit Chromium, CI, and fresh exact-head
   Codex evidence follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - sixth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4926084336` on `0a5335a0f2` found three remaining
+  decode-lifecycle gaps: periodic progress was skipped whenever the eighth
+  decoded frame was not sampled, signed exact primary-stream starts were
+  rejected by both the worker message gate and playback lane, and cursor/source
+  close rejections were discarded after an otherwise successful decode.
+- Decoded-frame progress now runs every eight decoded frames before the
+  unsampled-frame branch, with the sampled count reflecting every sample
+  retained so far. Exact primary-stream start/end values remain signed safe
+  integers through worker validation and the Mediabunny playback lane; seek
+  targets remain non-negative.
+- Decoder teardown now invokes both cursor and source close paths even when one
+  throws or rejects. Any cleanup failure prevents successful completion; if
+  decode and cleanup both fail, one `AggregateError` retains the primary cause
+  plus every owner-close failure.
+- Deterministic regressions prove progress at decoded frames 8 and 16 with a
+  two-frame sampling interval, negative playback bounds reaching the sink
+  unchanged, successful decode rejected by dual close failures, and primary
+  decode failure retained alongside synchronous/asynchronous cleanup failures.
+  The refreshed focused gate passes 67/67 tests plus 17/17 runner checks; the
+  authoritative full suite passes 180/180 files and 2,500/2,500 tests plus the
+  runner checks. TypeScript/Vite build, warning-free oxlint, the high-severity
+  production audit with 0 vulnerabilities, runner syntax, and `git diff
+  --check` pass. Clean-commit browser evidence follows on the committed tree.

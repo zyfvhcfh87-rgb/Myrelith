@@ -574,7 +574,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   same operation that acquired it, streams at most 300 tightly owned grayscale
   planes / 32 MiB through one acknowledged window, preserves source-open codec,
   resource-limit, resource-unavailable, and decode-readback failure classes,
-  and closes its cursor/source before terminal settlement. The app bridge owns
+  accepts the signed exact primary-stream timestamp bounds carried by project
+  metadata, and reports decoded-frame progress independently of whether the
+  current frame is sampled. It attempts both cursor and source closure before
+  terminal settlement; any close rejection makes the run fail, and a decode
+  plus cleanup failure preserves both causes in one aggregate. The app bridge owns
   abort/error/messageerror/send failure, terminates the worker exactly once,
   detaches every identifiable transferred plane before rejecting a malformed
   window or mismatched request identity, detaches accepted planes when their

@@ -14,6 +14,7 @@ import {
   type MotionAnalysisWorkerWindowReply,
   type MotionAnalysisGrayFrame,
   motionAnalysisSourceOpenFailureCode,
+  validateMotionAnalysisWorkerRunMessage,
 } from '../pipeline/motionAnalysisProtocol'
 
 interface PendingWindow {
@@ -23,29 +24,6 @@ interface PendingWindow {
 
 let activeRequestId: number | null = null
 let pendingWindow: PendingWindow | null = null
-
-function safeInteger(value: number, label: string, minimum = 0): void {
-  if (!Number.isSafeInteger(value) || value < minimum) {
-    throw new TypeError(`${label} must be a safe integer >= ${minimum}`)
-  }
-}
-
-function validateRun(message: MotionAnalysisWorkerRunMessage): void {
-  safeInteger(message.requestId, 'requestId')
-  safeInteger(message.videoStreamIndex, 'videoStreamIndex')
-  if (message.videoStreamIndex !== 0) {
-    throw new RangeError('Only primary video stream index 0 is supported')
-  }
-  safeInteger(message.startTimestampUs, 'startTimestampUs')
-  safeInteger(message.endTimestampUs, 'endTimestampUs')
-  safeInteger(message.samplingIntervalFrames, 'samplingIntervalFrames', 1)
-  if (message.endTimestampUs <= message.startTimestampUs) {
-    throw new RangeError('Analysis source range must be non-empty')
-  }
-  if (!(message.blob instanceof Blob) || message.blob.size <= 0) {
-    throw new TypeError('Analysis source must be a non-empty Blob')
-  }
-}
 
 function waitForContinue(windowIndex: number): Promise<void> {
   if (pendingWindow) throw new Error('Only one analysis window may be in flight')
@@ -93,7 +71,7 @@ function detail(cause: unknown): string {
 }
 
 async function run(message: MotionAnalysisWorkerRunMessage): Promise<void> {
-  validateRun(message)
+  validateMotionAnalysisWorkerRunMessage(message)
   const source = await openWorkerVideoSource(message.blob, {
     sourceId: message.sourceId,
     budget: message.budget,

@@ -20,6 +20,32 @@ export interface MotionAnalysisWorkerRunMessage {
   readonly samplingIntervalFrames: number
 }
 
+function assertSafeInteger(value: number, label: string, minimum?: number): void {
+  if (!Number.isSafeInteger(value) || (minimum !== undefined && value < minimum)) {
+    const range = minimum === undefined ? '' : ` >= ${minimum}`
+    throw new TypeError(`${label} must be a safe integer${range}`)
+  }
+}
+
+export function validateMotionAnalysisWorkerRunMessage(
+  message: MotionAnalysisWorkerRunMessage,
+): void {
+  assertSafeInteger(message.requestId, 'requestId', 0)
+  assertSafeInteger(message.videoStreamIndex, 'videoStreamIndex', 0)
+  if (message.videoStreamIndex !== 0) {
+    throw new RangeError('Only primary video stream index 0 is supported')
+  }
+  assertSafeInteger(message.startTimestampUs, 'startTimestampUs')
+  assertSafeInteger(message.endTimestampUs, 'endTimestampUs')
+  assertSafeInteger(message.samplingIntervalFrames, 'samplingIntervalFrames', 1)
+  if (message.endTimestampUs <= message.startTimestampUs) {
+    throw new RangeError('Analysis source range must be non-empty')
+  }
+  if (!(message.blob instanceof Blob) || message.blob.size <= 0) {
+    throw new TypeError('Analysis source must be a non-empty Blob')
+  }
+}
+
 export interface MotionAnalysisWorkerProbeMessage {
   readonly type: 'probe'
   readonly requestId: number
