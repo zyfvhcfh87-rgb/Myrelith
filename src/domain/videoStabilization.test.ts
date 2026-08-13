@@ -6,6 +6,7 @@ import type { Clip, TimelineDoc } from './schema'
 import {
   createVideoStabilizationPlan,
   requiredVideoStabilizationSafeZoom,
+  sourceTicksToTimestamp,
   timestampToSourceTicks,
   VIDEO_STABILIZATION_PROPERTIES,
   type VideoStabilizationAnalysis,
@@ -102,10 +103,26 @@ function analysis(
 
 describe('video stabilization product planning', () => {
   test('maps source timestamps with integer source-time arithmetic', () => {
-    expect(timestampToSourceTicks(0, source)).toBe(0)
-    expect(timestampToSourceTicks(33_333, source)).toBe(1_000_000)
-    expect(timestampToSourceTicks(33_334, source)).toBe(1_000_000)
-    expect(timestampToSourceTicks(1_000_000, source)).toBe(30_000_000)
+    expect(timestampToSourceTicks(0, source, doc().frameRate)).toBe(0)
+    expect(timestampToSourceTicks(33_333, source, doc().frameRate)).toBe(1_000_000)
+    expect(timestampToSourceTicks(33_334, source, doc().frameRate)).toBe(1_000_000)
+    expect(timestampToSourceTicks(1_000_000, source, doc().frameRate)).toBe(30_000_000)
+  })
+
+  test('converts conformed source ticks at the project rate instead of the native rate', () => {
+    const native60: VideoStabilizationSource = {
+      ...source,
+      firstTimestampUs: 7_000,
+      frameRate: { num: 60, den: 1 },
+    }
+    const project30 = { num: 30, den: 1 }
+
+    expect(sourceTicksToTimestamp(30_000_000, native60, project30, 'floor'))
+      .toBe(1_007_000)
+    expect(timestampToSourceTicks(1_007_000, native60, project30))
+      .toBe(30_000_000)
+    expect(sourceTicksToTimestamp(1, native60, project30, 'floor')).toBe(7_000)
+    expect(sourceTicksToTimestamp(1, native60, project30, 'ceil')).toBe(7_001)
   })
 
   test('authors only five ordinary equal-scale tracks with explicit safe zoom', () => {

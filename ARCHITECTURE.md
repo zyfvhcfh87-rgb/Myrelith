@@ -631,6 +631,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   adapter enforces a 512-byte serialized-sample ceiling inside a 32 MiB working
   result budget derived from the shared 256 MiB cache-entry envelope; cached
   bytes are rejected before decode when they exceed the same product ceiling.
+  SourceTimeMap ticks are conformed project-frame units: request bounds convert
+  ticks to WebCodecs microseconds with the document frame rate, and analyzed
+  timestamps convert back with that same document rate. The connected asset's
+  native frame rate is used only to choose the bounded decoder sampling stride.
+  This distinction is mandatory when native and project rates differ.
 - Stabilization Apply is one immutable document operation and one history
   entry. It writes only ordinary Position X/Y, Rotation, and equal Scale X/Y
   tracks, preserves unrelated tracks, and requires explicit consent before

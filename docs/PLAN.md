@@ -4412,3 +4412,21 @@ acceptance claims.
   2,534/2,534 tests, all 17 evidence-runner checks, build/typecheck, warning-
   free lint, the production audit with 0 vulnerabilities, and diff checks.
   Refresh clean Chromium, CI, and exact-head Codex review before merge.
+
+## Milestone 5 Part 10a.2 / issue #109 - fifth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Convert conformed SourceTimeMap ticks to WebCodecs request microseconds
+  with the document frame rate, not the connected asset's native frame rate;
+  retain floor/ceil half-open request-bound rounding.
+- [x] Convert analyzed WebCodecs timestamps back to source ticks with the same
+  document frame rate and canonical nearest-frame adapter. Keep the native rate
+  only for bounded decoder sampling, including the 60 fps source / 30 fps
+  project stride of two native frames.
+- [x] Add a deterministic 60 fps native / 30 fps project regression covering
+  both directions, a nonzero source timestamp, and floor/ceil subframe edges.
+  Pass 5/5 focused files with 32/32 tests, 184/184 full-suite files with
+  2,535/2,535 tests, all 17 evidence-runner checks, build/typecheck, warning-
+  free lint, the production audit with 0 vulnerabilities, and diff checks.
+  Refresh clean Chromium, CI, and exact-head Codex review before merge.

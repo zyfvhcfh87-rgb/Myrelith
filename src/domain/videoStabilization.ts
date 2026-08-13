@@ -164,7 +164,8 @@ function safeBigIntNumber(value: bigint, label: string): number {
 
 export function timestampToSourceTicks(
   timestampUs: number,
-  source: Pick<VideoStabilizationSource, 'firstTimestampUs' | 'frameRate'>,
+  source: Pick<VideoStabilizationSource, 'firstTimestampUs'>,
+  projectFrameRate: FrameRate,
 ): number {
   if (!Number.isSafeInteger(timestampUs) || timestampUs < source.firstTimestampUs) {
     throw new RangeError('Analysis timestamp is outside the connected source')
@@ -174,10 +175,36 @@ export function timestampToSourceTicks(
   // Re-enter the editor through its canonical nearest-frame time adapter.
   const sourceFrame = microsecondsToFrames(
     timestampUs - source.firstTimestampUs,
-    source.frameRate,
+    projectFrameRate,
   )
   const ticks = BigInt(sourceFrame) * BigInt(SOURCE_TIME_TICKS_PER_FRAME)
   return safeBigIntNumber(ticks, 'Analysis source time')
+}
+
+export function sourceTicksToTimestamp(
+  sourceTimeTicks: number,
+  source: Pick<VideoStabilizationSource, 'firstTimestampUs'>,
+  projectFrameRate: FrameRate,
+  rounding: 'floor' | 'ceil',
+): number {
+  if (!Number.isSafeInteger(sourceTimeTicks) || sourceTimeTicks < 0) {
+    throw new RangeError('Mapped source time must be a non-negative safe integer')
+  }
+  if (!Number.isSafeInteger(source.firstTimestampUs)) {
+    throw new RangeError('Connected source timestamp exceeds the safe integer range')
+  }
+  if (!positiveSafeInteger(projectFrameRate.num) || !positiveSafeInteger(projectFrameRate.den)) {
+    throw new RangeError('Project frame rate must be a positive rational')
+  }
+  const numerator = BigInt(sourceTimeTicks) * BigInt(projectFrameRate.den)
+  const denominator = BigInt(projectFrameRate.num)
+  const offset = rounding === 'floor'
+    ? numerator / denominator
+    : (numerator + denominator - 1n) / denominator
+  return safeBigIntNumber(
+    BigInt(source.firstTimestampUs) + offset,
+    'Stabilization source timestamp',
+  )
 }
 
 interface SourceCorrectionProjection {
@@ -762,7 +789,11 @@ export function createVideoStabilizationPlan(
   let previousFrame = -1
   try {
     for (let index = 0; index < analysis.samples.length; index++) {
-      const sourceTimeTicks = timestampToSourceTicks(analysis.samples[index]!.timestampUs, source)
+      const sourceTimeTicks = timestampToSourceTicks(
+        analysis.samples[index]!.timestampUs,
+        source,
+        doc.frameRate,
+      )
       const frame = timelineOffsetAtSourceTicks(
         map,
         sourceTimeTicks,

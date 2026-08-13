@@ -22,6 +22,7 @@ import {
 } from '../domain/sourceTimeMap'
 import {
   createVideoStabilizationPlan,
+  sourceTicksToTimestamp,
   videoStabilizationAvailabilityReason,
   VIDEO_STABILIZATION_ALGORITHM_ID,
   VIDEO_STABILIZATION_ALGORITHM_VERSION,
@@ -344,24 +345,6 @@ function sourceFor(asset: MediaAsset): VideoStabilizationSource | null {
   }
 }
 
-function sourceMicroseconds(
-  ticks: number,
-  firstTimestampUs: number,
-  rate: VideoStabilizationSource['frameRate'],
-  rounding: 'floor' | 'ceil',
-): number {
-  const numerator = BigInt(ticks) * BigInt(rate.den)
-  const denominator = BigInt(rate.num)
-  const quotient = rounding === 'floor'
-    ? numerator / denominator
-    : (numerator + denominator - 1n) / denominator
-  const result = BigInt(firstTimestampUs) + quotient
-  if (result < BigInt(Number.MIN_SAFE_INTEGER) || result > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new RangeError('Stabilization source timestamp exceeds the safe integer range')
-  }
-  return Number(result)
-}
-
 function maximumSourceRate(clip: Clip): number {
   const map = clipSourceTimeMap(clip)
   const rates = [map.rate, ...(map.speedCurve?.points.map((point) => point.rate) ?? [])]
@@ -445,11 +428,11 @@ export async function analyzeVideoStabilization(clipId: ClipId): Promise<VideoSt
   const endTicks = sourceTicksAtTimelineOffset(map, clip.timelineRange.durationFrames)
   const sourceStartMicroseconds = Math.max(
     videoBounds.firstTimestampUs,
-    sourceMicroseconds(startTicks, source.firstTimestampUs, source.frameRate, 'floor'),
+    sourceTicksToTimestamp(startTicks, source, doc.frameRate, 'floor'),
   )
   const sourceEndMicroseconds = Math.min(
     videoBounds.endTimestampUs,
-    sourceMicroseconds(endTicks, source.firstTimestampUs, source.frameRate, 'ceil'),
+    sourceTicksToTimestamp(endTicks, source, doc.frameRate, 'ceil'),
   )
   if (sourceEndMicroseconds <= sourceStartMicroseconds) {
     throw new MotionAnalysisError('unsupported-runtime', 'The clip maps to an empty video source range')

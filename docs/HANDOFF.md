@@ -4481,3 +4481,26 @@ surface; it is not a second zoom and never enters document history.
   TypeScript/Vite build, warning-free lint, the production audit with 0
   vulnerabilities, and clean diff checks. Clean browser, CI, and exact-head
   review follow after commit.
+
+## Milestone 5 Part 10a.2 / issue #109 - fifth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4927600566` on `2b30caa41c` found that analysis
+  request bounds and result timestamps converted conformed SourceTimeMap ticks
+  with the connected asset's native frame rate. With 60 fps media in a 30 fps
+  project, that could analyze only half of a one-second clip and then spread
+  the returned corrections across the wrong timeline frames.
+- Both boundaries now use the document frame rate: conformed source ticks map
+  to WebCodecs microseconds with floor/ceil request-bound rounding, and sampled
+  timestamps return through the canonical nearest-project-frame adapter. The
+  native source rate remains authoritative only for the decoder sampling
+  interval, so a 60 fps source in a 30 fps project samples every two native
+  frames without changing the clip's conformed source-time scale.
+- A deterministic mismatched-rate regression pins both conversion directions,
+  the nonzero first source timestamp, and floor/ceil subframe boundaries. The
+  final focused gate passes 5/5 files and 32/32 tests plus 17/17 runner checks;
+  the authoritative suite passes 184/184 files and 2,535/2,535 tests plus the
+  same runner. Build/typecheck, warning-free lint, the high-severity production
+  audit with 0 vulnerabilities, and diff checks pass. Clean Chromium, CI, and
+  fresh exact-head review follow on the committed fix.
