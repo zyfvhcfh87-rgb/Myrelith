@@ -40,6 +40,10 @@ class FakeWorker implements MotionAnalysisWorkerLike {
   }
 
   dispatch(reply: MotionAnalysisWorkerReply): void {
+    this.dispatchRaw(reply)
+  }
+
+  dispatchRaw(reply: unknown): void {
     const event = new MessageEvent('message', { data: reply })
     for (const listener of this.listeners.get('message') ?? []) listener(event as never)
   }
@@ -313,6 +317,59 @@ describe('runMotionAnalysisWorker', () => {
       activeWorkers: 0,
       maxActiveWorkers: 1,
     })
+  })
+
+  it.each([
+    null,
+    undefined,
+    17,
+    { type: 'unknown-reply', requestId: 1 },
+  ])('rejects malformed worker reply value %j through common cleanup', async (reply) => {
+    const worker = new FakeWorker()
+    const h = context()
+    const pending = runMotionAnalysisWorker(
+      request(),
+      vi.fn(async () => undefined),
+      h.mediaContext,
+      () => worker,
+    )
+
+    worker.dispatchRaw(reply)
+
+    await expect(pending).rejects.toMatchObject({
+      code: 'unexpected',
+      message: 'Motion-analysis worker returned a malformed reply',
+    })
+    expect(worker.terminated).toBe(true)
+    expect(worker.listenerCount()).toBe(0)
+    expect(h.activeDecoderCount()).toBe(0)
+    expect(getMotionAnalysisWorkerDiagnostics()).toMatchObject({
+      workersCreated: 1,
+      workersTerminated: 1,
+      activeWorkers: 0,
+    })
+  })
+
+  it('releases identifiable buffers embedded in a malformed reply', async () => {
+    const worker = new FakeWorker()
+    const pixels = new Uint8Array(new ArrayBuffer(4)).fill(11)
+    const pending = runMotionAnalysisWorker(
+      request(),
+      vi.fn(async () => undefined),
+      context().mediaContext,
+      () => worker,
+    )
+
+    worker.dispatchRaw({
+      type: 'unknown-reply',
+      requestId: 1,
+      frames: [{ pixels }],
+    })
+
+    await expect(pending).rejects.toMatchObject({ code: 'unexpected' })
+    expect(pixels.byteLength).toBe(0)
+    expect(worker.terminated).toBe(true)
+    expect(getMotionAnalysisWorkerDiagnostics().activeWorkers).toBe(0)
   })
 
   it('rejects inconsistent progress, overlap, and completion facts', async () => {

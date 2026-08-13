@@ -18,6 +18,14 @@ import {
 const MOTION_ANALYSIS_TRANSPORT_WINDOW_FRAMES = MOTION_ANALYSIS_MAX_WINDOW_FRAMES
   - MOTION_ANALYSIS_WINDOW_OVERLAP
 
+const MOTION_ANALYSIS_REPLY_TYPES = new Set([
+  'ready',
+  'progress',
+  'window',
+  'complete',
+  'failure',
+])
+
 export interface MotionAnalysisWorkerLike {
   addEventListener(type: 'message', listener: (event: MessageEvent<MotionAnalysisWorkerReply>) => void): void
   addEventListener(type: 'error', listener: (event: ErrorEvent) => void, options?: AddEventListenerOptions): void
@@ -45,6 +53,16 @@ export interface MotionAnalysisWorkerDiagnostics {
   readonly workersTerminated: number
   readonly activeWorkers: number
   readonly maxActiveWorkers: number
+}
+
+function isMotionAnalysisWorkerReply(value: unknown): value is MotionAnalysisWorkerReply {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const candidate = value as { readonly type?: unknown; readonly requestId?: unknown }
+  return typeof candidate.type === 'string'
+    && MOTION_ANALYSIS_REPLY_TYPES.has(candidate.type)
+    && typeof candidate.requestId === 'number'
+    && Number.isSafeInteger(candidate.requestId)
+    && candidate.requestId >= 0
 }
 
 const diagnostics = {
@@ -88,6 +106,10 @@ export function probeMotionAnalysisWorker(
     }
     const onAbort = () => finish(() => reject(abortError()))
     const onMessage = (event: MessageEvent<MotionAnalysisWorkerReply>) => {
+      if (!isMotionAnalysisWorkerReply(event.data)) {
+        finish(() => resolve(false))
+        return
+      }
       if (event.data.type === 'ready' && event.data.requestId === requestId) {
         finish(() => resolve(true))
       }
@@ -374,18 +396,34 @@ export function runMotionAnalysisWorker(
       }
     }
     const onMessage = (event: MessageEvent<MotionAnalysisWorkerReply>) => {
-      const reply = event.data
+      const value: unknown = event.data
       if (settled) {
-        if (reply.type === 'window') {
-          try {
-            releaseIdentifiableWindowBuffers(reply)
-          } catch {
-            // The admitted run has already settled; best-effort release is the
-            // only remaining safe action for a queued late worker message.
-          }
+        try {
+          releaseIdentifiableWindowBuffers(value)
+        } catch {
+          // The admitted run has already settled; best-effort release is the
+          // only remaining safe action for a queued late worker message.
         }
         return
       }
+      if (!isMotionAnalysisWorkerReply(value)) {
+        try {
+          releaseIdentifiableWindowBuffers(value)
+        } catch (cause) {
+          finish(() => reject(new MediaJobExecutionError(
+            'resource-unavailable',
+            'Malformed motion-analysis reply ownership could not be released',
+            cause,
+          )))
+          return
+        }
+        finish(() => reject(new MediaJobExecutionError(
+          'unexpected',
+          'Motion-analysis worker returned a malformed reply',
+        )))
+        return
+      }
+      const reply = value
       if (reply.requestId !== message.requestId) {
         try {
           if (reply.type === 'window') releaseIdentifiableWindowBuffers(reply)

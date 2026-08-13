@@ -4224,3 +4224,31 @@ surface; it is not a second zoom and never enters document history.
   syntax, and `git diff --check` pass; the high-severity production audit finds
   0 vulnerabilities. Clean-commit Chromium, CI, and fresh exact-head Codex
   evidence follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - fifth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925934732` on `8520255ea9` found two final
+  boundary gaps: the architecture guard's two motion-worker-to-pipeline imports
+  were not named in canonical architecture, and a structured-cloneable
+  non-object or unknown-discriminator reply could throw outside common worker
+  cleanup.
+- Canonical architecture now sanctions only
+  `workers/motion-analysis.worker.ts` importing the bounded decode core and its
+  serializable protocol. No broader worker-to-pipeline exception is implied.
+- Both the support probe and admitted run validate that every reply is a
+  non-array object with a known discriminator and a non-negative safe-integer
+  request ID before reading it. An admitted malformed value is rejected through
+  common cleanup; any identifiable embedded buffers are released first, and
+  release failure remains a typed resource-unavailable result.
+- Deterministic regressions cover `null`, `undefined`, a primitive number, and
+  an unknown discriminator, proving exact termination, listener removal, and
+  balanced decoder/worker diagnostics. An additional hostile-value regression
+  proves identifiable buffers nested in a malformed discriminator detach
+  before rejection. The refreshed focused gate passes 69/69
+  tests plus 17/17 runner checks; the authoritative full suite passes 179/179
+  files and 2,494/2,494 tests plus those checks. TypeScript/Vite build, oxlint,
+  runner syntax, and `git diff --check` pass; the high-severity production audit
+  finds 0 vulnerabilities. Clean-commit Chromium, CI, and fresh exact-head
+  Codex evidence follow on the committed tree.

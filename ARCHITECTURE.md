@@ -59,6 +59,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
     its runtime host, as `export.ts` is the finite export host),
     `pipeline/static-image.ts` (the bounded browser/worker-safe still-image
     inspection + decode boundary),
+  - `workers/motion-analysis.worker.ts` may import only
+    `pipeline/motionAnalysisDecode.ts` (the bounded sequential decode and
+    grayscale core) and `pipeline/motionAnalysisProtocol.ts` (its serializable
+    worker contract); the worker is their sole production runtime host,
   - `engine/worker-bridge.ts` references the worker FILE via
     `new Worker(new URL(...))` — a URL, not a module import; the pipeline
     chunk source reaches the bridge by injection, never by import.

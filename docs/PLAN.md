@@ -4214,3 +4214,25 @@ acceptance claims.
   syntax, and the diff check; confirm 0 high-severity production
   vulnerabilities. Clean-commit Chromium, CI, and exact-head Codex review
   follow on the final committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - fifth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Add the exact motion-analysis worker imports of the bounded pipeline
+  decode core and serializable protocol to canonical architecture, matching the
+  already-narrow architecture guard without permitting any other cross-layer
+  runtime dependency.
+- [x] Validate worker reply values as non-array objects with a recognized
+  discriminator and non-negative safe-integer request ID before reading them;
+  reject malformed values through common cleanup and release any identifiable
+  embedded ownership first.
+- [x] Cover `null`, `undefined`, primitive, and unknown-discriminator replies
+  with deterministic termination/listener/decoder/worker-balance regressions;
+  prove identifiable buffers embedded in an unknown-discriminator reply
+  detach; pass 69/69 focused tests plus 17/17 runner checks and the
+  authoritative 179-file / 2,494-test suite plus those checks. Pass
+  build/typecheck, lint,
+  runner syntax, and the diff check; confirm 0 high-severity production
+  vulnerabilities. Clean-commit Chromium, CI, and exact-head Codex review
+  follow on the final committed tree.
