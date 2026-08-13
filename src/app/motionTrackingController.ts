@@ -39,6 +39,7 @@ import {
 import type { Clip, ClipId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
 import { clipSourceTimeMap } from '../domain/sourceTimeMap'
+import { motionAnalysisDisplaySize } from '../pipeline/motionAnalysisDecode'
 import type { MotionAnalysisWorkerWindowReply } from '../pipeline/motionAnalysisProtocol'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -214,6 +215,14 @@ export function parseMotionTrackingAnalysis(
     samples,
     failure,
   } as MotionTrackingAnalysis
+}
+
+export function motionTrackingAnalysisMatchesSource(
+  analysis: Pick<MotionTrackingAnalysis, 'width' | 'height'>,
+  source: Pick<MotionTrackingSource, 'width' | 'height'>,
+): boolean {
+  const expected = motionAnalysisDisplaySize(source.width, source.height)
+  return analysis.width === expected.width && analysis.height === expected.height
 }
 
 function ownedGrayFrame(frame: MotionAnalysisWorkerWindowReply['frames'][number]): GrayFrame {
@@ -604,7 +613,8 @@ export async function analyzeMotionTracking(
   try {
     const analysis = parseMotionTrackingAnalysis(run.bytes)
     if (
-      analysis.direction !== request.direction
+      !motionTrackingAnalysisMatchesSource(analysis, source)
+      || analysis.direction !== request.direction
       || analysis.kind !== request.selection.kind
       || analysis.selectionLocalFrame !== samplePlan.selectionLocalFrame
       || (analysis.failure === null
@@ -619,7 +629,7 @@ export async function analyzeMotionTracking(
       ))
     ) throw new MotionAnalysisError(
       run.fromCache ? 'storage-corrupt' : 'decode-readback',
-      'Tracking result does not match the exact rendered-frame schedule',
+      'Tracking result does not match the exact source geometry and rendered-frame schedule',
     )
     return {
       ...sessionFacts,

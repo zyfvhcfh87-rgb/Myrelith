@@ -710,8 +710,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   without extrapolation. Result schema 1 and `point-box-product-v1` cache
   provenance bind the source clip, canonical SourceTimeMap, resolved projection,
   direction, selection frame/geometry, shared estimator, and work budget.
-  Parsed cache samples must match the exact requested frame/tick schedule and
-  remain inside the decoded frame.
+  Parsed cache samples must match the exact requested frame/tick schedule,
+  remain inside the decoded frame, and report the exact shared bounded decode
+  dimensions derived from the connected source. A mismatch fails as corrupt
+  cache or decode/readback before product-space normalization.
 - Tracking preview is transport-only. Planning rechecks the latest source,
   media connection, project binding, target overlap/lock/dimensions, ordinary
   animation validity, exact selection snapshot, and that source and target are

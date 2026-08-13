@@ -4771,3 +4771,22 @@ surface; it is not a second zoom and never enters document history.
   first build exposed only a readonly test-fixture assignment; both were fixed
   before the final green runs. Refresh clean Chromium, CI, and exact-head Codex
   review on the committed tree before merging.
+
+## Milestone 5 Part 10a.3 / issue #110 - third exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING.**
+
+- Exact-head Codex review `4929757156` on
+  `36994b0ad4008ef2daebb7c93354b1d12d36771d` found that cached tracking
+  width/height could be internally valid but unrelated to the connected source,
+  causing product mapping to normalize through the wrong dimensions.
+- Tracking session admission now derives the expected bounded grayscale size
+  with the shared decode sizing authority and requires an exact result match.
+  Cache mismatch fails `storage-corrupt`; a fresh decode mismatch fails
+  `decode-readback`, both before returning a session or planning keyframes.
+- A direct regression pins exact 1920x1080-to-320x180 bounding, single-axis
+  mismatches, and an unscaled 160x90 source. The focused controller/domain
+  matrix passes 35/35 tests; the authoritative suite passes 190/190 files with
+  2,582/2,582 tests plus all 17 runner checks. The 4,817-module build/typecheck,
+  warning-free lint, production audit at 0 vulnerabilities, and diff checks
+  pass. Clean Chromium, CI, and exact-head review remain before merge.

@@ -522,3 +522,11 @@ picker excludes the tracked source clip, and the domain planner independently
 rejects equal source/target identities before mapping any samples. This avoids
 both aborting unrelated analysis on the same clip and applying a clip's motion
 back onto itself as a doubled transform.
+
+The third exact-head product review on
+`36994b0ad4008ef2daebb7c93354b1d12d36771d` found that result width/height were
+only self-validated. Product analysis now derives the expected bounded grayscale
+size from the connected source through the same decode sizing authority and
+requires an exact match before constructing a session. A cached mismatch is
+`storage-corrupt`; a fresh worker mismatch is `decode-readback`. Coordinates
+therefore cannot be normalized through plausible but unrelated dimensions.

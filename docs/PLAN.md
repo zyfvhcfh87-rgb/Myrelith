@@ -4622,3 +4622,18 @@ acceptance claims.
   lint, production audit at 0 vulnerabilities, and diff checks.
 - [ ] Commit the exact tree, refresh clean headed Chromium, push, pass exact-head
   CI, and request a fresh Codex review before merge.
+
+## Milestone 5 Part 10a.3 / issue #110 - third exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Derive the expected tracking-result width/height through the shared
+  bounded decode sizing rule and reject any result that does not exactly match
+  the connected source before product normalization.
+- [x] Preserve source-aware error provenance: cached geometry mismatch is
+  `storage-corrupt`, while a fresh worker mismatch is `decode-readback`.
+- [x] Pin exact bounded, one-axis-corrupt, and unscaled geometry regressions.
+- [x] Pass 35/35 focused controller/domain tests, 190/190 full-suite files and
+  2,582/2,582 tests plus 17/17 runner checks, the 4,817-module build/typecheck,
+  warning-free lint, production audit at 0 vulnerabilities, and diff checks.
+- [ ] Refresh clean Chromium, exact-head CI, and Codex review before merge.

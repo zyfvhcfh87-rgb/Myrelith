@@ -3,6 +3,7 @@ import { MOTION_TRACKING_RESULT_VERSION } from '../domain/motionTracking'
 import type { MotionAnalysisWorkerWindowReply } from '../pipeline/motionAnalysisProtocol'
 import {
   createMotionTrackingProcessor,
+  motionTrackingAnalysisMatchesSource,
   parseMotionTrackingAnalysis,
 } from './motionTrackingController'
 
@@ -175,5 +176,16 @@ describe('motion-tracking result processor', () => {
         x: 50, y: 20, width: 15, height: 10, confidence: 1,
       }],
     }))).toThrow(/samples are invalid/)
+  })
+
+  test('matches result geometry to the exact bounded connected-source size', () => {
+    const source = { width: 1_920, height: 1_080 }
+    expect(motionTrackingAnalysisMatchesSource({ width: 320, height: 180 }, source)).toBe(true)
+    expect(motionTrackingAnalysisMatchesSource({ width: 319, height: 180 }, source)).toBe(false)
+    expect(motionTrackingAnalysisMatchesSource({ width: 320, height: 179 }, source)).toBe(false)
+    expect(motionTrackingAnalysisMatchesSource(
+      { width: 160, height: 90 },
+      { width: 160, height: 90 },
+    )).toBe(true)
   })
 })
