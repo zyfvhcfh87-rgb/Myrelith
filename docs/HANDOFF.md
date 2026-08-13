@@ -3310,10 +3310,12 @@ surface; it is not a second zoom and never enters document history.
   imported memory, port, queue, and request generation. No mutable editor state
   is shared. Planned calls run in deterministic frame/plan order, every terminal
   outcome destroys the export runtime, and retry restarts from the first frame.
-- The optional immutable-code cache is exact digest/policy/ABI keyed, session-
-  only, limited to eight entries and a 64 MiB aggregate raw-module-byte charge,
-  and uses deterministic idle LRU with leased-code pinning and lifecycle/trust/
-  revocation/update invalidation.
+- The later exact-head cache correction supersedes the original immutable-code
+  design: Myrelith retains no compiled/engine artifact across lifecycles. Its
+  optional session cache holds only private verified raw-byte copies, capped at
+  eight entries and 64 MiB actual retained bytes, with deterministic LRU and
+  lifecycle/trust/revocation/update invalidation; every activation repeats all
+  parser and engine gates from a fresh byte copy.
 - Export preflight reserves every required package slot under the hard eight-
   sandbox ceiling or fails before acquiring a sink/encoder; it never evicts and
   reinstantiates stateful modules midway through an export.
@@ -3386,7 +3388,9 @@ surface; it is not a second zoom and never enters document history.
   budget succeeds against unchanged starting values/generation. Every other
   terminal outcome destroys outstanding work without plugin cooperation,
   discards all staging, and preserves every original descriptor plus animation;
-  retry is fresh and only exact-key immutable compiled code can survive.
+  retry is fresh. The later exact-head cache correction allows only a parent-
+  owned verified raw-byte entry to remain, never compiled/engine code, and retry
+  repeats all activation gates from a fresh copy.
 - Host-authored binary policy now independently caps defined-function payloads
   at 256 KiB each/16 MiB per module, decoded instructions at 65,536 each/
   1,048,576 per module, explicit structured-control depth at 256, and `br_table`
@@ -3420,7 +3424,8 @@ surface; it is not a second zoom and never enters document history.
   limit module block the app/UI before the disposable-worker watchdog could
   terminate it.
 - The trusted parent now owns only bounded package/manifest work, exact Wasm
-  entry framing and byte length, integrity/signature/trust/cache preflight, the
+  entry framing and byte length, integrity/signature/trust/raw-byte-cache
+  preflight, the
   one activation deadline, and termination. It treats the framed module bytes
   as opaque and never iterates attacker-driven Wasm sections, bodies,
   instructions, immediates, or initializer expressions synchronously.
@@ -3485,3 +3490,51 @@ surface; it is not a second zoom and never enters document history.
   Mediabunny AC-3/ProRes codec chunks (one in each AC-3 chunk and two in each
   ProRes chunk), not a plugin runtime. Build output retained only the existing
   >500 kB chunk advisory.
+
+## Part 10c issue #76 - PR #112 signature-envelope and raw-byte-cache follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4922582697` found two version-1 specification gaps:
+  `signature.json` did not define one interoperable signed byte grammar/package-
+  digest formula, and the compiled-module cache charged only raw Wasm length
+  while retaining engine-native allocations of unknown size.
+- `SignatureEnvelopeV1` now has closed exact keys and literals, canonical RFC
+  8785 JCS bytes, strict unpadded-base64url Ed25519 key/signature encodings,
+  lowercase-hex SHA-256 fields, exactly two normalized/path-sorted expanded-
+  entry records, and explicit byte-length bounds. The Ed25519 message is the JCS
+  envelope without `signature`; the package digest is a domain-separated,
+  big-endian-`u32`-length-framed SHA-256 over that message and the decoded
+  signature, represented as `sha256:` plus lowercase hex.
+- The normative complete-package golden fixture pins a 496-byte canonical
+  manifest, a valid 91-byte Wasm module, a 469-byte signed payload, a verified
+  64-byte Ed25519 signature, a 570-byte canonical envelope, and package digest
+  `sha256:cb47299284c74ad83fce88a8c2d50af97e9de6f6d56513f9e07ac7dac2851d97`.
+- Version 1 retains no `WebAssembly.Module`, compiled/JIT/native/engine artifact,
+  or engine reference across lifecycles. The optional trusted-parent session
+  cache stores at most eight private write-once verified raw `Uint8Array` copies
+  totaling at most 64 MiB actual retained `byteLength`; each activation gets a
+  fresh copy. Deterministic access/key LRU needs no in-use lease, and pressure may
+  bypass insertion. Cold and hit paths both reparse, validate, asynchronously
+  compile, and freshly instantiate under the same non-resetting deadline.
+- Issue #77 is gated on exact/+1 hostile signature forms, independent golden-
+  vector crypto/hash verification, raw-byte ownership/mutation/transfer tests,
+  exact key/count/byte/LRU/invalidation checks, engine-artifact non-retention,
+  and spies proving no activation gate is skipped. This remains design-only, so
+  browser QA is not applicable.
+- Independent Node classic/Web Crypto and Python `cryptography` checks reproduced
+  the exact public key/signature; Python separately reproduced every documented
+  artifact length/hash, canonical JSON byte comparison, 575-byte framed input,
+  and package digest. Node also validated/instantiated the fixture Wasm with its
+  fixed 258-page import and confirmed the declared ten-`i32` export returns zero.
+- Final frozen validation passed 119 focused manifest/project/effect/architecture
+  tests across five files plus all 16 benchmark-runner checks, production build/
+  typecheck, warning-free oxlint, the production audit with 0 vulnerabilities,
+  clean diff and contradiction checks, and exact HEAD/upstream alignment. The
+  normal bundle has zero plugin capability/signature/manifest/candidate/validate/
+  compile/module/CSP canaries. Its six generic `WebAssembly.instantiate`
+  references remain confined to four existing Mediabunny AC-3/ProRes codec
+  chunks (one in each AC-3 chunk and two in each ProRes chunk), not a plugin
+  runtime. The build retained only the existing >500 kB chunk advisory. A new
+  full suite was intentionally not repeated for this docs-only correction; the
+  exact-head suite was already green before these non-executing contract edits.

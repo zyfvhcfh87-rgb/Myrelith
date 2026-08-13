@@ -94,10 +94,11 @@ failure containment.
    may explain a descriptor but can never mutate or disappear it implicitly.
 9. **Preview, migration, and export.** Preview and export consume the same effect
    plan, but export separately preflights fresh export-owned instances and fails
-   transactionally. Only
-   digest-bound immutable module bytes or compiled code may be reused; no worker,
-   instance, memory, port, queue, request generation, or mutable module state
-   crosses from preview/scrub into export.
+   transactionally. A fresh copy of exact-key verified raw module bytes may be
+   reused, but every lifecycle repeats parse, validate, compile, and instantiate;
+   no `WebAssembly.Module`, engine artifact, worker, instance, memory, port,
+   queue, request generation, or mutable module state crosses from preview/scrub
+   into export.
    Explicit descriptor migration is a third boundary: each descriptor chain is
    freshly activated with its own mutable owner and migration-only port, and no
    preview, export, or other descriptor-chain state crosses it.
@@ -171,13 +172,23 @@ disposable activation candidate described below.
 
 **Attacker story:** a malicious download reuses a trusted name, swaps a module
 after manifest inspection, changes signer on update, replays an older vulnerable
-version, or relies on signature-valid but revoked bytes.
+version, relies on signature-valid but revoked bytes, or exploits ambiguous JSON,
+digest spelling, entry ordering, signed-member selection, or unframed
+concatenation so two components verify different bytes.
 
-**Controls:** sign the complete sorted integrity table; verify exact bytes before
-trust UI; bind installation and grants to plugin id + signer fingerprint +
-package digest; treat signer changes and widened permissions as new decisions;
+**Controls:** accept only the closed JCS `myrelith-plugin-signature` version-1
+envelope and its exact Ed25519/base64url/lowercase-hex encodings. Its strictly
+ASCII-path-sorted two-entry table covers exactly canonical `manifest.json` and
+the normalized Wasm entry with expanded lengths and byte hashes. Reject duplicate
+keys/paths, missing/extra members or files, noncanonical source bytes, wrong
+member types/literals/bounds, and alternate encodings before trust UI. Verify
+Ed25519 over the exact JCS envelope-without-signature bytes; compute the package
+digest from the separately domain-tagged, `u32`-length-framed message and decoded
+signature bytes. Bind installation and grants to plugin id, signer fingerprint,
+and package digest; treat signer changes and widened permissions as new decisions;
 prompt on downgrade; consult local built-in/user/imported revocations before
-registration and every activation.
+registration and every activation. The complete self-verifying golden vector and
+hostile exact/+1 forms in `PLUGINS.md` are required fixtures.
 
 **Residual risk:** compromised publisher keys and convincing look-alike names.
 Offline revocation cannot learn a newly announced incident until the app or user
@@ -284,10 +295,12 @@ of frame access.
 
 **Attacker story:** a module imports JS/WASI functions, declares shared or
 unbounded memory, exploits an unsupported feature/parser discrepancy, creates
-huge tables, traps the engine, or exploits a browser JIT vulnerability.
+huge tables, traps the engine, exploits a browser JIT vulnerability, or makes a
+small signed module expand into unaccounted compiled/native cache memory across
+many activations.
 
 **Controls:** the trusted parent checks the framed module byte length, digest,
-signature, trust, revocation, and cache binding while treating the raw
+signature, trust, revocation, and raw-cache identity while treating the raw
 WebAssembly string as opaque. Before creating a fresh candidate worker it starts
 one non-resetting five-second wall-clock deadline. Inside that candidate, the
 host-authored parser scans the raw binary and rejects every start section before
@@ -366,8 +379,11 @@ editor runtime is never reused for export or migration. Every export preflight
 creates a new export-owned worker, instance, and imported memory. Every explicit
 migration action creates a new migration-only owner per descriptor chain; a
 multi-descriptor action runs those distinct owners serially and stages one final
-atomic commit. Only digest-bound immutable module bytes or compiled code may be
-cached across lifecycles. Runtime-probe and fail closed.
+atomic commit. Only private verified raw bytes may be cached across lifecycles;
+each activation receives a fresh copy and repeats byte-policy parsing, validation,
+asynchronous compilation, and fresh instantiation under the same deadline.
+Myrelith retains no `WebAssembly.Module`, compiled/JIT/native/engine artifact, or
+cross-lifecycle engine reference. Runtime-probe and fail closed.
 
 **Residual risk:** browser-engine vulnerabilities and candidate-worker binary-
 parser mistakes. Keeping browsers current and shipping an emergency local
@@ -401,10 +417,14 @@ per sandbox, two globally, bounded/coalesced queue;
 trusted-parent call watchdogs; whole-sandbox termination; atomic export-slot
 reservation under the hard eight-resident ceiling with no mid-export eviction or
 batch reinstantiation; one pinned serial migration slot with a fresh terminal
-owner per descriptor chain; a session-only compiled-code cache capped at eight
-entries and a 64 MiB accepted-raw-module-byte charge, with checked accounting,
-deterministic idle LRU eviction, in-use leases, and trust/revocation/update/
-policy/app-teardown invalidation; exact response sizes; bounded diagnostics;
+owner per descriptor chain; a session-only verified-raw-byte cache capped at
+eight private entries and 64 MiB actual retained `byteLength`, with checked
+accounting, fresh-copy isolation, deterministic access/key LRU, pressure bypass,
+and trust/revocation/update/policy/app-teardown invalidation; no compiled/engine
+artifact retention and no cache-hit gate skipping; exact response sizes; bounded
+diagnostics. The raw-cache ceiling charges retained buffers only; module,
+activation-copy, parser/compiler, and runtime pressure remains independently
+bounded by module/complexity/concurrency/deadline/termination controls;
 three consecutive failures disable for the session; no background activation;
 safe mode and stale-activation sentinel.
 
@@ -458,7 +478,7 @@ executes; migration follows only manifest-declared version steps and typed Wasm
 exports, is explicit, sandboxed, and cloned. The action freezes every original
 target and generation, resolves every chain, and rejects all targets before code
 if any fails the static-animation gate. Immediately before each chain, current
-trust/revocation/availability, cache binding, and target snapshot are rechecked.
+trust/revocation/availability, raw-cache identity, and target snapshot are rechecked.
 Migration accepts only its separately validated static descriptor record; it
 never receives the render ABI's ephemeral defaults or frame-resolved values.
 Every descriptor chain freshly owns a migration-only worker, instance, fixed
@@ -485,7 +505,8 @@ watchdog expiry, trust/revocation change, project replacement, stale state, or
 commit rejection settles outstanding host work and destroys the current owner
 without waiting for plugin acknowledgement. Any non-success discards every
 staged candidate and retains every original descriptor plus complete animation;
-retry is fresh, and only exact-key immutable compiled code may survive. Revoke/
+retry is fresh, and only the parent-owned verified raw-byte entry may remain;
+retry receives a new copy and repeats all activation gates. Revoke/
 disable/safe mode never delete descriptors; export blocks by default and names
 every unavailable instance. Issue #77 must implement and fixture these byte-level,
 static-instance, fresh-owner, terminal-cleanup, and action-atomicity gates before

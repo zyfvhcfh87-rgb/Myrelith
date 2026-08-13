@@ -247,6 +247,19 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   Preview/scrub/playback/export using the same immutable snapshot and frame must
   produce byte-identical records. Descriptor migration remains a separate,
   static-record ABI and never receives this frame-resolved render record.
+  Package-signature version 1 is one closed RFC 8785 JCS envelope with exact
+  `format: "myrelith-plugin-signature"`, `formatVersion: 1`, and
+  `algorithm: "Ed25519"` literals; a canonical unpadded-base64url 32-byte public
+  key and 64-byte signature; a `sha256:` plus lowercase-hex public-key
+  fingerprint; and exactly two strictly ASCII-path-sorted expanded-entry
+  records for `manifest.json` and the manifest's normalized Wasm entry. The
+  Ed25519 message is the UTF-8 JCS encoding of that exact envelope without its
+  `signature` member. The package digest is a separately domain-separated,
+  `u32`-length-framed SHA-256 over those message bytes and the decoded signature
+  bytes, represented as `sha256:` plus lowercase hex. Exact member sets, entry
+  length bounds, digest encodings, framing bytes, and the self-verifying golden
+  vector in `docs/PLUGINS.md` are the authoritative wire contract; duplicate
+  keys, noncanonical bytes, extra entries/members, or alternate encodings fail.
   The future trusted parent owns bounded archive/manifest parsing, exact module-
   entry framing and the 32 MiB byte-length check, digest/signature/trust preflight,
   one non-resetting five-second activation deadline, and termination. It treats
@@ -305,28 +318,34 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   all chains and final document budgets pass against the unchanged starting
   generation. Every success, failure, cancellation, watchdog, or stale-state
   path terminates the owner and preserves all originals unless that final atomic
-  commit succeeds; retry is fresh. Only exact-key immutable compiled code may be
-  reused.
+  commit succeeds; retry is fresh. An activation may receive a fresh copy of
+  exact-key verified raw module bytes, but it always repeats candidate parsing,
+  engine validation, asynchronous compilation, and fresh instantiation.
   Editor preview/scrub may reuse only its editor-owned runtime instance. Every
   export attempt, including a retry, must instead create a fresh export-owned
-  worker, `WebAssembly.Instance`, and imported memory. It may reuse only
-  digest-bound, policy-accepted immutable module bytes or immutable compiled
-  code; it shares no worker, instance, memory, port, queue, request generation,
+  worker, `WebAssembly.Instance`, and imported memory. It may receive only a
+  private fresh copy of digest-bound verified raw module bytes; it shares no
+  worker, instance, compiled artifact, memory, port, queue, request generation,
   or other mutable plugin state with preview/scrub. Calls to one export sandbox
   are serialized by ascending requested timeline frame and authored plan order.
   Terminal success destroys that sandbox; failure, cancellation, or watchdog
   expiry makes the trusted parent terminate it without waiting for plugin
   cooperation. A retry begins at the first requested frame with another fresh
   instance.
-  An optional trusted-parent compiled-module cache is session-only and may hold
-  at most eight exact digest/policy/ABI-keyed entries charged by at most 64 MiB
-  of accepted raw module bytes in aggregate. Each key records successful prior
-  candidate-worker byte-policy acceptance; an exact cache hit may skip repeated
-  parsing/validation/compilation without moving a WebAssembly parser into the
-  parent. Checked insertion evicts idle entries by deterministic LRU; leased
-  code is never evicted. Revocation,
-  disable/uninstall, package replacement, policy/ABI change, and app teardown
-  invalidate the relevant entries. The cache never owns mutable runtime state.
+  An optional trusted-parent session cache may retain only verified raw module
+  bytes: at most eight private, write-once `Uint8Array` entries and at most
+  64 MiB of their actual checked `byteLength` sum. Its exact identity binds the
+  plugin/signing/package/module facts plus every negotiated ABI and binary-policy
+  fact. The retained backing buffer is never exposed, shared, transferred, or
+  detached; each activation receives another fresh copy. Consequently an entry
+  has no in-use lease, and deterministic oldest-access-sequence then key LRU may
+  evict it after that copy is made. A hit skips no candidate-worker parse,
+  `WebAssembly.validate`, compilation, or instantiation gate. Myrelith retains
+  no `WebAssembly.Module`, compiled/JIT/native/engine artifact, instance, memory,
+  table, global, worker, port, queue, or request state across lifecycles.
+  Revocation, disable/uninstall, package replacement, policy/ABI change, and app
+  teardown invalidate the relevant raw-byte entries; cache pressure may bypass
+  insertion without weakening activation.
   Plugin packages, sandboxes, ports, workers, watchdogs, grants, and revocations
   remain future app-owned Issue #77 resources. Projects may retain only bounded
   namespaced effect descriptors; package bytes, URLs, trust, grants, and runtime

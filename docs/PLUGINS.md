@@ -293,8 +293,9 @@ in this document and adds no threads/atomics, shared memory, relaxed SIMD, tail
 calls, exceptions/tags, typed function references, GC, memory64, multi-memory,
 component-model features, or other proposal. The initializer-only Core 3.0
 subset below does not expand the function-body table. The normative table
-artifact and its digest are fixtures of the binary-policy version and compiled-
-cache key; unknown/reserved or unlisted primary/prefixed opcodes fail policy.
+artifact and its digest are fixtures of the binary-policy version and exact raw-
+module cache identity; unknown/reserved or unlisted primary/prefixed opcodes fail
+policy.
 
 The parser canonical-decodes every opcode, subopcode, index, lane, memory
 argument, block type, numeric literal, and other immediate. Truncated,
@@ -367,22 +368,136 @@ means [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785). Its I-JSON input,
 ECMAScript primitive serialization, UTF-16 property sorting, and final UTF-8
 encoding rules are part of the wire contract rather than implementation advice.
 
-`signature.json` has a separately versioned exact schema containing:
+Version 1 `signature.json` is one closed `SignatureEnvelopeV1` object with
+exactly these members and types:
 
-- algorithm `Ed25519`;
-- the raw 32-byte public key encoded as unpadded base64url;
-- a display fingerprint equal to base64url SHA-256 of that raw public key;
-- sorted entries containing normalized path, exact byte length, and SHA-256;
-- an Ed25519 signature over UTF-8 JSON Canonicalization Scheme bytes for
-  `{ format, publicKey, entries }`.
+| Member | Version-1 value |
+| --- | --- |
+| `format` | exact string `myrelith-plugin-signature` |
+| `formatVersion` | exact JSON integer `1` |
+| `algorithm` | exact string `Ed25519` |
+| `publicKey` | canonical unpadded base64url, exactly 43 ASCII characters decoding to the 32 raw Ed25519 public-key bytes |
+| `fingerprint` | exact `sha256:` followed by 64 lowercase hexadecimal characters equal to SHA-256 of those 32 public-key bytes |
+| `entries` | exactly two closed `IntegrityEntryV1` objects, ordered as specified below |
+| `signature` | canonical unpadded base64url, exactly 86 ASCII characters decoding to 64 raw Ed25519 signature bytes |
 
-The integrity table includes `manifest.json` and every entry except
-`signature.json`; no unlisted file is legal. The package digest is SHA-256 of
-the same canonical signed payload plus the signature bytes. Signature
-verification must runtime-probe the browser's Web Crypto Ed25519 support and
-fail closed when unavailable. Ed25519 is defined by the current
+Each `IntegrityEntryV1` has exactly `length`, `path`, and `sha256`. `length` is
+an exact non-negative JSON safe integer equal to the expanded entry byte length:
+`manifest.json` is 1 through 65,536 bytes and the Wasm entry is 8 through
+33,554,432 bytes. `sha256` is exactly 64 lowercase hexadecimal characters for
+SHA-256 of those expanded bytes, with no prefix. `path` is ASCII and the two
+paths are exactly `manifest.json` and the parsed manifest's `runtime.entry`.
+The runtime path is 1 through 240 characters, relative, slash-delimited, ends in
+`.wasm`, and every nonempty segment matches
+`[A-Za-z0-9][A-Za-z0-9._-]*`; `.`, `..`, a leading or trailing slash,
+backslash, drive/absolute form, NUL, or any alternate spelling is invalid.
+`signature.json` is never an integrity entry, and version 1 accepts no asset or
+other package entry.
+
+The entries array is strictly ascending by the raw ASCII/UTF-8 bytes of `path`;
+duplicate paths are invalid. That array order is a schema rule. Object member
+order is not: RFC 8785 supplies the serialized UTF-16 property order. Before an
+ordinary JSON parse, the package verifier rejects a BOM, invalid UTF-8,
+duplicate keys, or bytes beyond the one JSON value. It then requires exact
+top-level/nested member sets, types, literals, bounds, and canonical base64url/
+hex spellings, and finally requires the original `signature.json` bytes to equal
+the RFC 8785 JCS UTF-8 re-encoding byte-for-byte. Thus whitespace, a trailing
+newline, alternate escapes/numbers, padding, or differently cased hex fails.
+
+The signed payload is the exact closed object containing `algorithm`, `entries`,
+`fingerprint`, `format`, `formatVersion`, and `publicKey` from the accepted
+envelope, excluding only `signature`. The Ed25519 message is exactly that
+object's RFC 8785 JCS UTF-8 bytes. Decode/re-encode equality is required for the
+public key and signature before Web Crypto verifies the decoded raw public key,
+algorithm `Ed25519`, decoded signature, and exact message bytes. Ed25519 is
+defined by the current
 [Web Cryptography API](https://w3c.github.io/webcrypto/#ed25519-operations);
 support is still treated as runtime fact rather than assumed.
+
+The package digest uses independent framing rather than ambiguous
+concatenation. Let `message` be the exact signed-payload bytes, `sig` the decoded
+64 signature bytes, `U32BE(n)` the four-byte unsigned big-endian encoding, and
+`domain` the ASCII bytes for `myrelith-plugin-package-digest-v1` followed by one
+`00` byte. Then:
+
+```text
+packageDigestBytes = SHA-256(
+  domain || U32BE(message.byteLength) || message ||
+  U32BE(sig.byteLength) || sig
+)
+packageDigest = "sha256:" || lowercaseHex(packageDigestBytes)
+```
+
+Every stored, displayed, granted, revoked, and cache-key package digest uses
+that exact 71-character text. Lengths are checked before framing.
+
+#### Canonical signature golden vector
+
+This deterministic complete-package vector uses the 32-byte seed from RFC 8032
+test vector 1 only as fixture key material; the message and signature below are
+Myrelith-specific and were independently verified with Node classic crypto and
+Web Crypto. Each JSON code block is one exact UTF-8 line with no BOM or trailing
+newline.
+
+Seed (test-only, never shipped as a trusted key):
+
+```text
+9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60
+```
+
+Raw public key, canonical `publicKey`, and fingerprint:
+
+```text
+d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a
+11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo
+sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9
+```
+
+Exact 496-byte canonical `manifest.json`:
+
+```json
+{"api":{"maxVersion":1,"minVersion":1},"contributions":[{"contributionVersion":1,"descriptorVersion":1,"entrypoint":"myrelith_effect_fixture","id":"fixture","kind":"video-effect","migrations":[],"name":"Fixture","parameters":[]}],"id":"com.example.fixture","name":"Fixture","permissions":[{"id":"myrelith.effect.video-frame.rgba8","maxVersion":1,"minVersion":1,"required":true}],"runtime":{"entry":"runtime/plugin.wasm","kind":"wasm","memoryMaximumPages":258},"schemaVersion":1,"version":"1.0.0"}
+```
+
+Its SHA-256 is
+`4e0895870d15157857e53bbd261230b8d3cffad62d7d2fb8a5be1bd65c8b59b7`.
+The exact 91-byte Wasm entry is this hexadecimal byte string; it validates as a
+minimal module importing fixed 258-page `myrelith.memory` and exporting the
+declared ten-`i32` render function:
+
+```text
+0061736d01000000010f01600a7f7f7f7f7f7f7f7f7f7f017f021701086d7972656c697468066d656d6f727902018202820203020100071b01176d7972656c6974685f6566666563745f6669787475726500000a0601040041000b
+```
+
+Its SHA-256 is
+`a14d35d3869f4460413d414bef13e060c7e20c9a37f27a91a2cab8a6d8e79915`.
+
+Exact 469-byte signed-payload JCS:
+
+```json
+{"algorithm":"Ed25519","entries":[{"length":496,"path":"manifest.json","sha256":"4e0895870d15157857e53bbd261230b8d3cffad62d7d2fb8a5be1bd65c8b59b7"},{"length":91,"path":"runtime/plugin.wasm","sha256":"a14d35d3869f4460413d414bef13e060c7e20c9a37f27a91a2cab8a6d8e79915"}],"fingerprint":"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9","format":"myrelith-plugin-signature","formatVersion":1,"publicKey":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}
+```
+
+Its SHA-256 is
+`a99cac0e2462fd36cb0c329b7e33dc97bbeeaaffe2f8a3ff3fa24c6bfb71876a`.
+The canonical 64-byte Ed25519 signature is:
+
+```text
+mGj9h_CF_9V9S01ClcHESESk0QxSo-HM1Dxxpo98lo3UA-R9zRGjIXuv8XoLmBAFti0625yjz-UbiktJmpQJDg
+```
+
+Exact 570-byte canonical `signature.json`:
+
+```json
+{"algorithm":"Ed25519","entries":[{"length":496,"path":"manifest.json","sha256":"4e0895870d15157857e53bbd261230b8d3cffad62d7d2fb8a5be1bd65c8b59b7"},{"length":91,"path":"runtime/plugin.wasm","sha256":"a14d35d3869f4460413d414bef13e060c7e20c9a37f27a91a2cab8a6d8e79915"}],"fingerprint":"sha256:21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9","format":"myrelith-plugin-signature","formatVersion":1,"publicKey":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo","signature":"mGj9h_CF_9V9S01ClcHESESk0QxSo-HM1Dxxpo98lo3UA-R9zRGjIXuv8XoLmBAFti0625yjz-UbiktJmpQJDg"}
+```
+
+The envelope SHA-256 is
+`04881c8c0d9c0e3094d2be3a03708db61ad4ef4e5b792c576b682f1ec687ac4d`.
+The domain byte string is
+`6d7972656c6974682d706c7567696e2d7061636b6167652d6469676573742d763100`;
+the complete framed package-digest input is 575 bytes and yields
+`sha256:cb47299284c74ad83fce88a8c2d50af97e9de6f6d56513f9e07ac7dac2851d97`.
 
 Signing proves that package bytes match one key. It does not certify the human
 publisher, code quality, privacy, or safety.
@@ -794,20 +909,18 @@ After bounded package framing and lifecycle preflight, the trusted parent starts
 one non-resetting five-second wall-clock deadline before asking the broker to
 create a fresh, disposable activation-candidate worker from host-authored code
 and pass a private `MessagePort`. The parent then supplies either the verified,
-bounded WebAssembly byte string or immutable compiled code bound to the exact
-accepted package digest, negotiated ABI, and binary-policy version. On the raw-
-byte path, the candidate worker first runs the complete host-authored byte-policy
-parser without invoking an engine API; only after parse success does that same
-worker call validation, asynchronous compilation, and instantiation. The parent
+bounded WebAssembly byte string or a fresh copy from the optional exact-key raw-
+module cache. The candidate worker always runs the complete host-authored byte-
+policy parser without invoking an engine API; only after parse success does that
+same worker call `WebAssembly.validate`, asynchronous compilation, and fresh
+instantiation. The parent
 does not synchronously iterate any attacker-driven WebAssembly section,
 instruction, or initializer structure, and the deadline does not reset when
-parsing or any later activation phase completes. A cache hit may skip repeated
-byte parsing, validation, and compilation only when the requesting lifecycle's
-preflight rechecks current trust, revocation, availability, and an exact cache
-binding that records prior candidate-worker policy acceptance. Both paths
-allocate new imported memory and instantiate a fresh `WebAssembly.Instance` in
-the candidate. The worker sends an instance-ready acknowledgement only after its
-path finishes. On success the same worker becomes the dedicated runtime worker
+parsing or any later activation phase completes. A raw-byte cache hit skips no
+parse, validation, compilation, or instantiation gate. Every path allocates new
+imported memory and creates a fresh `WebAssembly.Instance` in the candidate. The
+worker sends an instance-ready acknowledgement only after all phases finish. On
+success the same worker becomes the dedicated runtime worker
 for the lifecycle that requested it, retaining sole ownership of the instance;
 on every parse failure, engine failure, or timeout the parent terminates it
 instead of reusing it. Package bytes are never interpreted as JavaScript. CSP
@@ -843,7 +956,7 @@ target list. Before any plugin migration code runs, it resolves every complete
 chain and rejects the whole action if any target fails the version-1 static-
 animation gate. Immediately before each chain activation, it rechecks current
 trust, revocation, package availability, the unchanged starting target snapshot,
-and any requested immutable-code cache lease's exact binding. For exactly one
+and any requested raw-module cache entry's exact identity. For exactly one
 descriptor chain it then freshly activates a worker, `WebAssembly.Instance`,
 fixed imported memory,
 private port, queue, request sequence, and generation. The port accepts only
@@ -864,43 +977,54 @@ commit rejection discards all staged candidates and preserves every original
 descriptor and complete animation. Success also terminates the final owner.
 Every terminal path settles outstanding host requests and destroys the worker,
 instance, memory, port, and queue without waiting for plugin acknowledgement;
-retry creates fresh owners. Only exact-key immutable compiled code may survive.
+retry creates fresh owners. Only a parent-owned verified raw-byte cache entry
+may remain, and retry still repeats every activation gate from a fresh copy.
 
 As part of every export attempt's exact plugin preflight, before a sink or encoder
 is acquired, the host creates a separate export-owned sandbox and fresh
 activation-candidate worker for every required package. It instantiates a new
 `WebAssembly.Instance` with newly allocated imported memory. The host may reuse
-only verified digest-bound immutable module bytes or a digest-bound,
-policy-accepted immutable compiled `WebAssembly.Module`/engine code cache. It
-must not reuse or share the editor worker, instance, memory, tables, globals,
-port, queue, request generation, or any other mutable module state. The export
+only a fresh copy of exact-key verified raw module bytes. It must not reuse or
+share an editor `WebAssembly.Module`, compiled/JIT/engine artifact, worker,
+instance, memory, tables, globals, port, queue, request generation, or any other
+mutable module state. The export
 port accepts export calls only; preview, scrub, Inspector, migration, and other
 editor-session messages never enter its queue. Concurrent editor preview cannot
 mutate export state.
 
-The optional compiled-module cache has one trusted-parent, session-only owner.
-Its exact key contains plugin id, signer fingerprint, package digest, signed
-module path and hash, every negotiated host/capability/contribution ABI version,
-and the binary-policy version. The first implementation holds at most eight
-entries and charges each entry by its accepted raw module byte length; checked
-addition caps the aggregate charge at 64 MiB. An insertion evicts idle entries
-until both limits fit, ordered deterministically by oldest host access sequence
-and then lexicographic cache key. Activation/export/migration code under an
-explicit lease is never evicted. If idle eviction cannot make room, activation
-may continue from
-the verified bytes but does not retain the compiled result; cache pressure never
-weakens a gate or makes execution necessary for project recovery.
+The optional raw-module cache has one trusted-parent, session-only owner. Its
+exact key contains plugin id, signer fingerprint, package digest, normalized
+signed module path, signed expanded module length and SHA-256, negotiated host
+API version, sorted selected capability id/version pairs, sorted selected
+contribution id/kind/version pairs, binary-policy version, and normative opcode/
+immediate-table digest. The first implementation holds at most eight entries and
+charges each by the actual retained raw `Uint8Array.byteLength`; checked addition
+caps the aggregate at 64 MiB. Insertion clones verified bytes into a private
+write-once host-owned buffer whose reference/backing store is never exposed,
+shared, transferred, or detached. Each activation receives a separate fresh
+copy, so the retained entry has no in-use lease and may be evicted after copying.
 
-A cache entry contains only immutable compiled code plus its key/accounting facts
-and the fact that its exact bytes were accepted by the candidate-worker parser
-under that binary-policy version—never an instance, imported memory, table,
-global, worker, port, queue, or request state. Every lease first rechecks current
-trust, revocation, package
-availability, and the complete key. Disable, uninstall, revocation, package
-replacement/update, signer/digest/hash mismatch, or binary-policy/ABI version
-change removes matching idle entries and makes leased entries non-reusable after
-their owner is terminated. App teardown clears the entire cache. No entry is
-persisted to IndexedDB, OPFS, recovery, or a project.
+Insertion evicts entries until both bounds fit, ordered deterministically by
+oldest host access sequence and then lexicographic complete key. If eviction
+cannot make room, activation may continue from a fresh copy of the verified
+package bytes without insertion. A hit still rechecks current trust, revocation,
+package availability, and the complete key, then repeats candidate-worker byte-
+policy parsing, `WebAssembly.validate`, asynchronous compilation, and fresh
+instantiation under the one non-resetting deadline. Cache pressure and a hit
+never weaken or skip a gate or make execution necessary for project recovery.
+
+Myrelith retains no `WebAssembly.Module`, compiled/JIT/native/engine code or
+metadata, instance, imported memory, table, global, worker, port, queue, request
+generation, or other mutable runtime state across lifecycles. A transient engine
+artifact belongs only to its activation worker and becomes unreachable when that
+worker terminates; browser-internal opaque engine caching is outside Myrelith's
+ownership guarantee. Disable, uninstall, revocation, package replacement/update,
+signer/digest/hash mismatch, binary-policy/ABI version change, and app teardown
+remove matching raw-byte entries. Nothing is persisted to IndexedDB, OPFS,
+recovery, or a project. The 64 MiB ceiling accounts only actual retained cache
+buffers; fresh activation copies and transient parser/compiler allocations remain
+bounded separately by the 32 MiB module limit, declaration/complexity ceilings,
+sandbox/candidate concurrency, the non-resetting deadline, and termination.
 
 Calls delivered to one export sandbox are serialized in ascending requested
 timeline-frame order and, within a frame, the authored composition/effect-plan
@@ -940,7 +1064,7 @@ ceilings.
 | Resource | First implementation policy |
 | --- | --- |
 | Sandboxes | at most 8 resident across editor/export/migration; least-recently-used idle editor instance closes first, every export instance closes terminally, and a migration action reserves one serial slot while creating a fresh terminal instance per descriptor chain |
-| Immutable compiled-module cache | session-only; at most 8 exact-keyed entries and 64 MiB aggregate accepted-raw-byte charge; deterministic idle LRU; leased code is pinned |
+| Verified raw-module-byte cache | session-only; at most 8 private exact-keyed entries and 64 MiB aggregate actual retained `byteLength`; fresh copy per activation; deterministic oldest-access/key LRU; no compiled artifact or lease |
 | Active calls | one per sandbox, at most 2 globally |
 | Queued calls | at most 32 globally; preview may coalesce latest-wins, while export and migration never coalesce and stay deterministically serialized |
 | Candidate create/parse/validate/compile/instantiate activation | 5 seconds total wall-clock |
@@ -1059,7 +1183,12 @@ Execution remains disabled until all of these are independently reviewed and
 green:
 
 1. byte-level ZIP, canonical JSON, integrity, Ed25519, trust, update, rollback,
-   and revocation fixtures including hostile archives;
+   and revocation fixtures including hostile archives; exact/+1 envelope/member/
+   entry/path/length/base64url/lowercase-hex boundaries; duplicate/missing/extra
+   keys and entries; wrong array order; noncanonical JSON/encoding; alternate
+   payload or package-digest framing; and the complete canonical golden vector's
+   exact manifest/Wasm/envelope lengths and hashes, message bytes, public key,
+   signature verification, domain bytes, framed input, and package digest;
 2. WebAssembly binary policy parser and exact ABI fixtures across supported
    browsers, including proof that raw-byte parsing runs only after candidate-
    worker creation, inside that worker, under the already-running parent
@@ -1087,8 +1216,12 @@ green:
    parse-failure proof that no engine API ran; same-worker parse-to-promotion
    identity; compile/instantiate termination, call watchdog, queue, memory,
    project replacement, cancellation,
-   crash, late-message, safe-mode, and compiled-cache count/byte accounting,
-   deterministic idle eviction, lease pinning, invalidation, and teardown tests;
+   crash, late-message, and safe-mode tests; raw-module cache exact-key/count/
+   actual-byte accounting, insertion/activation copy isolation, attempted
+   mutation/transfer/detachment isolation, deterministic access/key LRU,
+   pressure bypass, invalidation, and teardown; spies proving cold and hit paths
+   both parse, validate, compile, and instantiate; and proof that no
+   `WebAssembly.Module` or engine artifact enters or survives through the cache;
 5. unknown/disabled/revoked descriptor round trips through save, recovery,
    undo/redo, reorder, remove, and migration rejection, including the version-1
    static-instance gate for every effect targeted by an animation track; fresh

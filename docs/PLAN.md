@@ -3541,11 +3541,14 @@ acceptance claims.
 **COMPLETE LOCALLY (2026-08-13).**
 
 - [x] Give each export attempt fresh export-owned mutable runtime state: worker,
-  Wasm instance, imported memory, private port, queue, and generation. Reuse only
-  immutable code bound to the accepted digest/policy/ABI.
-- [x] Bound that session-only code cache to eight entries and a 64 MiB aggregate
-  accepted-raw-byte charge with checked accounting, deterministic idle LRU,
-  leased-code pinning, and lifecycle/trust/revocation/update invalidation.
+  Wasm instance, imported memory, private port, queue, and generation. The later
+  exact-head correction permits only a fresh copy of exact-key verified raw Wasm
+  bytes and requires every activation gate to repeat; compiled/engine artifacts
+  never cross lifecycles.
+- [x] Bound that session-only raw-byte cache to eight private entries and 64 MiB
+  actual retained bytes with checked accounting, fresh-copy ownership,
+  deterministic access/key LRU, and lifecycle/trust/revocation/update
+  invalidation; remove compiled-code leasing entirely.
 - [x] Serialize planned plugin calls by ascending requested frame and authored
   plan order, isolate them from preview/scrub messages, destroy export state on
   every terminal outcome, and restart a retry from its first requested frame.
@@ -3604,7 +3607,9 @@ acceptance claims.
   result, and commit once only after all chains and final whole-document budgets
   pass against unchanged starting values and generation. Destroy the current
   owner on every terminal path, discard all staging on non-success, preserve all
-  originals/animations, and make retry fresh. Reuse only exact-key immutable code.
+  originals/animations, and make retry fresh. The later exact-head cache
+  correction permits only a parent-owned verified raw-byte entry to remain;
+  retry uses a fresh copy and repeats parse/validate/compile/instantiate.
 - [x] Add independent pre-engine executable ceilings: 256 KiB per defined-
   function payload and 16 MiB aggregate; 65,536 decoded instructions per body and
   1,048,576 per module; 256 simultaneously open explicit control constructs;
@@ -3689,3 +3694,41 @@ acceptance claims.
   `WebAssembly.instantiate` references remain confined to four existing
   Mediabunny AC-3/ProRes codec chunks. Retain only the existing >500 kB chunk
   advisory.
+
+## Part 10c / issue #76 - PR #112 signature-envelope and raw-byte-cache follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Close exact-head Codex review `4922582697` with one closed version-1
+  signature envelope: exact `format`/version/algorithm literals, exact nested
+  member sets and types, RFC 8785 JCS source-byte equality, canonical raw-key/
+  signature base64url, lowercase-hex hashes, normalized paths, expanded integer
+  lengths, exactly two strict path-sorted entries, and duplicate/extra rejection.
+- [x] Define the Ed25519 message as the exact JCS envelope excluding only
+  `signature`. Define the package digest as SHA-256 of an ASCII+NUL v1 domain and
+  big-endian-`u32`-length-framed message plus decoded 64-byte signature, with
+  `sha256:` lowercase-hex text everywhere.
+- [x] Pin a self-consistent complete golden package: exact 496-byte manifest,
+  valid 91-byte Wasm, 469-byte signed message, fixed RFC 8032-seed-derived public
+  key/signature, 570-byte canonical envelope, every component hash, exact domain/
+  framed length, and final package digest. Require independent crypto and hostile
+  exact/+1 fixture verification before Issue #77 execution.
+- [x] Retain no `WebAssembly.Module`, compiled/JIT/native/engine artifact, or
+  engine reference across lifecycles. If enabled, cache only private write-once
+  verified raw `Uint8Array` copies: at most eight entries/64 MiB actual retained
+  `byteLength`, exact identity, fresh activation copy, deterministic access/key
+  LRU, pressure bypass, and complete invalidation. A hit skips no parse,
+  validation, compilation, or instantiation phase.
+- [x] Keep the correction design-only; no package verifier/cache/runtime or
+  browser-observable behavior exists yet, so browser QA remains not applicable.
+- [x] Independently reproduce the fixed-seed public key/signature and every
+  documented length/hash/canonical byte string/framed digest with Node classic
+  crypto, Web Crypto, and Python `cryptography`; validate and instantiate the
+  exact Wasm fixture with the fixed 258-page memory import.
+- [x] Pass the final frozen 119 focused tests across five files plus all 16
+  runner checks, build/typecheck, warning-free lint, production audit with 0
+  vulnerabilities, clean diff/contradiction/alignment checks, and production
+  canary scan. Confirm zero plugin-runtime canaries and six generic instantiate
+  calls only in four existing AC-3/ProRes codec chunks. Retain only the existing
+  >500 kB advisory; do not repeat the full suite for a docs-only correction that
+  follows an already-green exact-head suite.
