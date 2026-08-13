@@ -3775,3 +3775,336 @@ acceptance claims.
   four existing Mediabunny AC-3/ProRes chunks. Retain only the existing >500 kB
   advisory. Do not repeat the full suite for this docs-only correction after an
   already-green exact-head suite; browser QA remains not applicable.
+## Milestone 5 Part 10a / issue #44 - motion-analysis research
+
+**RESEARCH COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Establish a browser-local, build-unreferenced analysis boundary with one
+  admitted job, one reserved decoder slot, disposable workers, exact capability
+  probes, abort settlement, and diagnostic proof that all child resources close.
+- [x] Specify a strict bounded derived-cache schema keyed by project binding,
+  asset, sampled source fingerprint, stream geometry/rate, source range and
+  sampling, clip mapping/projection, algorithm/version, and parameters. Reject
+  stale entries; do not make analysis output portable project truth.
+- [x] Prototype deterministic bounded feature detection, patch tracking,
+  similarity RANSAC/refinement, stabilization smoothing/crop estimation, point
+  tracking, and similarity-box tracking with explicit scene-cut/occlusion loss.
+- [x] Map accepted tracker samples to existing Position X/Y and optional Scale
+  X/Y curves only after an explicit future Apply action; keep running analysis
+  outside React, Zustand, document mutation, history, preview, and export.
+- [x] Validate a versioned normalized manual Brown-Conrady lens model and fixed-
+  grid invertibility guard. Record production rendering as no-go pending #111's
+  bounded remap and exact preview/export parity proof; reject profile catalogs.
+- [x] Split delivery into #108 analysis/cache, #109 stabilization, #110 point/
+  box tracking, and #111 lens-renderer feasibility, each with its own limits,
+  cleanup, negative cases, parity obligations, and acceptance gates.
+- [x] Pass 18 focused tests and real source-bound Playwright Chromium at strict
+  port 41844 with exact primitive probes, cancellation, successful execution,
+  resource parity, zero active counters, zero console problems, and released
+  port. The full gate passed all 2,322 Vitest cases across 172 files, all 16
+  benchmark-runner checks, production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities; the build retained
+  only its established large-chunk advisory.
+
+## Milestone 5 Part 10a / issue #44 - review hardening
+
+**COMPLETE LOCALLY (2026-08-11).**
+
+- [x] Replace the flat scene-cut shortcut with independently seeded textured
+  scenes and a versioned 50% feature-match-coverage discontinuity gate before
+  similarity fitting.
+- [x] Acquire one controller-scoped admission slot before support probing or
+  scheduler construction; reject overlapping callers without a second worker
+  or decoder reservation and release the slot on every terminal path.
+- [x] Project every tracker sample through its resolved source transform,
+  including rotation/flip cross-axis terms and per-sample changes; compensate
+  target scaling around its cropped visible center, rotation, flips, and
+  authored anchor while emitting only ordinary Position X/Y and Scale X/Y keys.
+- [x] Require box loss on the exact first fully occluded frame, with no accepted
+  recovery frames after disappearance; expose the failure and last accepted
+  frame in evidence.
+- [x] Evaluate point and box quality independently and derive their public
+  go/no-go decisions from their own thresholds rather than the combined flag.
+- [x] Pass 24 focused research tests, all 2,328 Vitest cases across 172 files,
+  all 16 benchmark-runner checks, production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities.
+- [x] Rerun real Chromium at strict port 41844 against exact clean implementation
+  commit `9f45e44a514d7540637ab466d48516593b59a404`: textured hard-cut rejection,
+  typed overlapping-run denial, successful analysis, cancellation, exact
+  worker/frame/OPFS parity, zero console problems, and released port.
+- [x] Advance the artifact to schema 3 / `issue-44-motion-analysis-v3` and rerun
+  strict-port Chromium against exact clean commit
+  `3e632ab6dd0b24cc26ff61e38cf812ef4764f470`: independent point/box go results,
+  loss on occlusion frame 18 after accepted frame 17, exact worker/frame/OPFS
+  parity, zero console problems, and released port.
+
+## Milestone 5 Part 10a / issue #44 - follow-up review hardening
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Contain OPFS probe-file removal failures as a cleanup-specific unsupported
+  result; preserve honest created/removed diagnostics and route a research run
+  through typed `resource-unavailable` before scheduler or worker allocation.
+- [x] Validate every generated tracking Position X/Y and Scale X/Y track through
+  the canonical animation validator; reject mapped frame overflow, derived
+  finite-position overflow, and scale overflow instead of returning tracks that
+  a future Apply or portable validator must reject.
+- [x] Pass 28 focused research tests, all 2,332 Vitest cases across 172 files,
+  all 16 benchmark-runner checks, production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities.
+- [x] Rerun artifact schema 3 / `issue-44-motion-analysis-v3` in real Chromium
+  on strict port 41844 against exact clean implementation commit
+  `3632e47c4cd3bf136b6c35d698ffa6ebcc009e76`: independent point/box go,
+  occlusion loss at frame 18 after frame 17, typed overlap rejection,
+  cancellation, exact worker/frame/OPFS parity, zero console problems, and a
+  released port.
+
+## Milestone 5 Part 10a / issue #44 - worker-readiness review hardening
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Require an explicit matching `probe`/`ready` handshake before declaring
+  dedicated module-worker support; fail closed on async load/message errors,
+  synchronous post failure, or a bounded five-second timeout.
+- [x] Thread admitted-run cancellation through readiness probing; terminate and
+  clean the pending worker immediately, release shared admission, settle every
+  race once, and validate unknown messages at the worker boundary.
+- [x] Pass 32 focused research tests, all 2,336 Vitest cases across 172 files,
+  all 16 benchmark-runner checks, production build/typecheck, oxlint, clean diff
+  checks, and `npm audit --omit=dev` with 0 vulnerabilities.
+- [x] Rerun artifact schema 3 / `issue-44-motion-analysis-v3` in real Chromium
+  on strict port 41844 against exact clean implementation commit
+  `ac555ca6a085f4093b9490107cddfaa79b961c71`: successful worker readiness,
+  independent stabilization/point/box go, occlusion loss at frame 18 after frame
+  17, cancellation, typed overlap rejection, exact worker/frame/OPFS parity,
+  zero console problems, and a released port.
+
+## Milestone 5 Part 10a / issue #44 - concurrent OPFS-probe follow-up
+
+**COMPLETE LOCALLY (2026-08-12).**
+
+- [x] Give every support invocation a distinct origin-wide OPFS filename backed
+  by a 128-bit Web Crypto nonce, and remove only the name owned by that call.
+- [x] Cover two overlapping probes with deterministic nonces, distinct filenames,
+  two successful support results, exact cleanup ownership, and balanced created/
+  removed diagnostics.
+- [x] Pass all 2,337 Vitest cases across 172 files plus 16 benchmark-runner checks,
+  production build/typecheck, oxlint, clean diff checks, production audit at 0
+  vulnerabilities, and a normal-bundle scan with no motion-research identifiers.
+- [x] Rerun real headed Chromium only on strict port 41844; retain the complete
+  capability matrix, three `go` decisions, exact frame-18 occlusion loss,
+  cancellation and admission outcomes, 2/2 workers, 1/1 frames, 1/1 OPFS files,
+  zero console problems, and a released port.
+
+## Milestone 5 Part 10a / issue #44 - integer-pixel tracking follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Reject a point-tracking seed unless both coordinates are safe integers,
+  before the separate analyzable-frame bounds gate, so fractional typed-array
+  indices cannot silently read as zero-valued pixels.
+- [x] Keep the reviewed matcher bounded to integer patch search: integer offsets
+  preserve integral point matches, while every regenerated box seed remains
+  rounded. Do not introduce subpixel interpolation in this research change.
+- [x] Add a deterministic translated-texture regression that rejects a
+  fractional seed distinctly and proves the valid integer target tracks across
+  three frames without a false `lost-point`.
+- [x] Pass 10/10 focused tracking tests, 29/29 domain matcher/tracking/controller
+  tests, all 16 benchmark-runner checks, oxlint, and `git diff --check`.
+
+## Milestone 5 Part 10a / issue #44 - OPFS cancellation follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Race the entire owned OPFS capability operation against the admitted run's
+  `AbortSignal`, returning typed `AbortError` and releasing controller-wide
+  admission without waiting for a stalled browser storage promise.
+- [x] Keep the abandoned operation observed through late settlement; stop
+  between capability steps, close any late writer, remove only the invocation's
+  128-bit name, suppress post-settlement success diagnostics, and retain the
+  cleanup-specific unsupported result for an ordinary uncertain removal.
+- [x] Defer all seven OPFS steps deterministically and prove prompt cancellation,
+  a newly admitted run, balanced late cleanup, exact overlapping filename
+  ownership, no cross-removal, and no late diagnostic drift.
+- [x] Pass 18/18 controller tests, 36/36 controller/matcher/tracking tests, all
+  16 benchmark-runner checks, the TypeScript build gate, oxlint, and
+  `git diff --check`.
+
+## Milestone 5 Part 10a / issue #44 - readback and retained-memory follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Race support `VideoFrame.copyTo()` against both the admitted run's
+  `AbortSignal` and a finite five-second deadline; close its frame exactly once
+  before abort/timeout settles and shared research admission is released.
+- [x] Keep the original readback promise observed after caller settlement, so
+  late resolution or rejection cannot re-close the frame, mutate diagnostics,
+  or surface as an unhandled promise rejection.
+- [x] Require every grayscale `Uint8Array` to be a zero-offset full view of its
+  backing buffer, preventing a small visible plane from hiding a larger retained
+  allocation from the reviewed 32 MiB gate.
+- [x] Cover deferred abort, deadline, second-run admission, close ordering, safe
+  late resolve/reject, zero-offset and nonzero-offset oversized backing rejection,
+  and valid tightly sized buffers; pass 42/42 focused controller/matcher/tracking
+  tests, all 16 benchmark-runner checks, and the standalone TypeScript gate.
+
+## Milestone 5 Part 10a / issue #44 - worker-send cleanup follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Catch a synchronous failure from the initial research-worker `postMessage`
+  and reject through the existing idempotent finish path instead of bypassing
+  termination and leaving shared worker diagnostics active.
+- [x] Detach the run worker's message/error and abort listeners before terminating
+  it, preserve the original send exception, and release controller-wide
+  admission only after the worker counters are balanced.
+- [x] Prove deterministic synchronous-send failure cleanup, rejection-time 1/1
+  worker parity, zero active listeners/workers, and a successful admitted retry.
+
+## Milestone 5 Part 10a / issue #44 - OPFS deadline follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Apply one non-resetting five-second deadline to the complete owned OPFS
+  support-probe chain, including default calls without an external signal.
+- [x] Preserve first-winner semantics: external abort returns `AbortError`, while
+  an internal deadline reports a distinct unsupported reason through the typed
+  `resource-unavailable` research path and promptly releases shared admission.
+- [x] Keep abandoned browser work observed for late progress and owned cleanup;
+  close a late writer, remove only the invocation's 128-bit nonce file, and
+  suppress successful diagnostics after caller settlement.
+- [x] Cover all seven deferred OPFS boundaries, deadline-versus-abort ordering,
+  admitted retry before late release, exact cross-probe filename isolation,
+  resource parity, and normal timer/listener cleanup; pass 33/33 controller and
+  54/54 focused tests, 174/174 files with 2,382/2,382 full-suite tests, all 16
+  runner checks, build, oxlint, high-severity production audit, and diff check.
+
+## Milestone 5 Part 10a / issue #44 - tracking scale-axis follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Express every transformed source box in the target's rotation-local Scale
+  X/Y basis using support extents at the per-sample source-minus-target relative
+  angle; retain first-sample ratios and authored base-scale multiplication.
+- [x] Swap anisotropic growth at quarter turns, mix it at arbitrary angles, and
+  treat source/target flip signs as size-invariant. Keep the four-track contract
+  explicit: fixed target Rotation uses a deterministic enclosing envelope where
+  exact rotated or sheared geometry is not representable by Scale X/Y alone.
+- [x] Make exact quadrants use semantic zero/one coefficients, retain the first
+  sample's authored base scale exactly, divide later extent ratios before base
+  multiplication, and reject non-positive/non-finite extents or derived scales.
+- [x] Cover target rotation, relative 0/+90/-90/arbitrary angles, per-sample
+  rotation and anisotropy, mirrors, cropped-center compensation, finite extents,
+  extreme ratio arithmetic, and canonical scale overflow without adding another
+  runtime evaluator.
+- [x] Pass 20/20 tracking tests, 64/64 focused controller/domain/tracking tests,
+  174/174 files with 2,392/2,392 full-suite tests, all 16 runner checks,
+  TypeScript/Vite build, oxlint, high-severity production audit at 0
+  vulnerabilities, and `git diff --check`.
+
+## Milestone 5 Part 10a / issue #44 - worker-response cleanup follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Register the admitted research worker's `messageerror` listener before its
+  initial post and reject deserialization failure as a typed `unexpected`
+  terminal result through the existing idempotent cleanup owner.
+- [x] Remove abort, message, error, and messageerror listeners before terminating
+  exactly once; balance worker diagnostics before caller settlement and release
+  scheduler/controller admission for a retry.
+- [x] Prove deterministic response-deserialization cleanup, rejection-time 1/1
+  worker parity, zero active listeners/workers, late competing-event immunity,
+  and a successful admitted retry. Audit the support-probe worker and retain its
+  already-complete messageerror lifecycle without a broad refactor.
+- [x] Pass 34/34 controller tests, 65/65 focused controller/domain/tracking
+  tests, 174/174 files with 2,393/2,393 full-suite tests, all 16 runner checks,
+  TypeScript/Vite build, oxlint, high-severity production audit at 0
+  vulnerabilities, and `git diff --check`.
+
+## Milestone 5 Part 10a / issue #44 - crop-feasibility follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Replace the saturated 49% crop estimate with an explicit finite-centered-
+  zoom result: preserve exact feasible ratios below one half, and return
+  `finite-centered-zoom-unavailable` at or above half the shorter frame
+  dimension without fabricating a ratio or zoom.
+- [x] Keep path/correction/jitter diagnostics on crop failure, use the exact
+  half-open boundary without an epsilon dead zone, measure direct similarity
+  corner deltas, and reject non-finite accumulation or crop geometry before it
+  can leak `Infinity` or `NaN` into evidence.
+- [x] Require available 50% and 100% crop results in the stabilization quality
+  gate, propagate a stable failure reason into evidence, and render unavailable
+  browser evidence without numeric formatting errors.
+- [x] Advance the incompatible nested-crop evidence contract to schema 4 /
+  `issue-44-motion-analysis-v4`; preserve earlier schema 3 / v3 browser records
+  as history and require the next clean-commit evidence run to emit v4.
+- [x] Cover immediately-below/exact/immediately-above boundary geometry,
+  sustained pan with the maximum smoothing radius, ordinary finite plans,
+  non-finite transforms/path metrics, JSON safety, and stabilization `no-go`
+  refusal.
+- [x] Pass 18/18 motion-analysis cases, 72/72 focused controller/domain/tracking
+  tests, 174/174 files with 2,400/2,400 full-suite tests, all 16 runner checks,
+  TypeScript/Vite build, oxlint, high-severity production audit at 0
+  vulnerabilities, normal-bundle canary scan, and `git diff --check`.
+- [x] After the schema-only v4 correction, rerun 72/72 focused cases, all 16 Node
+  runner checks, TypeScript/Vite build, oxlint, runner syntax, the normal-bundle
+  canary scan, and `git diff --check`. Do not repeat the unchanged
+  2,400-case production-TypeScript suite or dependency audit; retain the
+  clean-commit v4 Chromium artifact as the next source-bound gate.
+
+## Milestone 5 Part 10a / issue #44 - refined-similarity envelope follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Centralize the research similarity envelope: every transform field must
+  be finite, scale must remain in inclusive `[0.85, 1.15]`, and absolute
+  rotation must remain at or below `pi / 12` radians.
+- [x] Apply the same envelope to deterministic pair hypotheses and the
+  least-squares refined transform before final-inlier filtering. Reject rather
+  than clamp an escaped refinement.
+- [x] Reproduce the eight-match review fixture whose identity hypothesis keeps
+  every match but whose refinement contracts to `92 / 122`, approximately
+  `0.754098`; cover interior, exact-boundary, immediately exterior, and
+  non-finite transforms.
+- [x] Audit both consumers of refined similarity acceptance: stabilization
+  rejects the failed frame pair and similarity-box tracking reports loss before
+  applying a rejected transform.
+- [x] Pass 29/29 motion-analysis cases, 83/83 focused controller/domain/tracking
+  tests, 174/174 files with 2,411/2,411 full-suite tests, all 16 Node runner
+  checks, build/typecheck, oxlint, Issue #44 runner syntax, the production audit
+  at 0 vulnerabilities, and `git diff --check`.
+- [x] Scan the normal 32-file, 5,871,592-byte artifact: zero motion-research
+  canaries, zero WebGPU API references, and zero WebGPU experiment chunks. The
+  clean-commit headed research run follows after the root commits the exact tree.
+
+## Milestone 5 Part 10a / issue #44 - pair-schedule and seed-budget follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Replace lexicographic prefix truncation with an exact, deterministic cap
+  distributed across the complete unordered-pair rank space; enumerate all
+  pairs when they fit, include both endpoints for cap >= 2, select the middle
+  rank for cap 1, un-rank without materializing all pairs, and retain one
+  cancellation check per hypothesis plus stable tie order.
+- [x] Advance deterministic algorithm provenance to
+  `similarity-block-ransac-v3`, keep artifact schema 4 because its shape is
+  unchanged, reject cached v2 analysis as stale by algorithm version, and make
+  the headed runner refuse to publish unless evidence reports the exact current
+  fixture v2 / algorithm v3 pair.
+- [x] Reproduce the ordered 29-match foreground / 35-match background review
+  fixture and a deterministic permutation; prove exact sampled-rank count,
+  uniqueness, endpoints, middle-rank behavior, and small-set all-pairs behavior.
+- [x] Cap box seeds to `min(maxFeatures, 16)` with spatially progressive
+  selection, explicitly reject box budgets below the eight-match estimator
+  minimum, preserve the default sixteen-seed result, and keep point tracking
+  valid at a one-feature budget.
+- [x] Pass the final 100/100 focused tests, 175/175 files with 2,454/2,454
+  full-suite tests, all 17 runner checks, build/typecheck, oxlint, runner syntax,
+  the high-severity production audit with 0 vulnerabilities, and `git diff
+  --check`; retain only the established large-chunk advisory.
+- [x] Scan the normal 32-file, 5,871,618-byte bundle: zero motion-research,
+  WebGPU, or plugin-runtime/profile canaries; six generic
+  `WebAssembly.instantiate` calls remain only in four established Mediabunny
+  codec chunks. Run the source-bound headed browser artifact after the exact
+  tree is committed, proving schema 4 / fixture v2 / algorithm v3.

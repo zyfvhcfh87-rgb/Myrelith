@@ -18,6 +18,11 @@ import {
   sampleHostProcessMemory,
   startBenchmarkPreview,
 } from './run-benchmark.mjs'
+import {
+  assertMotionResearchProvenance,
+  EXPECTED_MOTION_ANALYSIS_ALGORITHM_VERSION,
+  EXPECTED_MOTION_RESEARCH_FIXTURE_VERSION,
+} from '../issue44/research-evidence-contract.mjs'
 import { execFileSync } from 'node:child_process'
 import {
   createReadStream,
@@ -540,6 +545,42 @@ test('runner rejects durations beyond the continuously encoded source plan', () 
   assert.equal(parseArguments([]).options.memoryBatches, 7)
   assert.equal(parseArguments(['--memory-batches', '9']).options.memoryBatches, 9)
   assert.equal(parseArguments(['--smoke']).options.memoryBatches, 2)
+})
+
+test('Issue #44 evidence pins the current fixture and algorithm provenance', () => {
+  const motionAnalysis = readFileSync(
+    new URL('../../src/domain/motionAnalysis.ts', import.meta.url),
+    'utf8',
+  )
+  const motionResearch = readFileSync(
+    new URL('../../src/domain/motionAnalysisResearch.ts', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(
+    motionAnalysis,
+    new RegExp(
+      `MOTION_ANALYSIS_ALGORITHM_VERSION = '${EXPECTED_MOTION_ANALYSIS_ALGORITHM_VERSION}'`,
+    ),
+  )
+  assert.match(
+    motionResearch,
+    new RegExp(
+      `MOTION_RESEARCH_FIXTURE_VERSION = '${EXPECTED_MOTION_RESEARCH_FIXTURE_VERSION}'`,
+    ),
+  )
+  assert.doesNotThrow(() => assertMotionResearchProvenance({
+    fixtureVersion: EXPECTED_MOTION_RESEARCH_FIXTURE_VERSION,
+    algorithmVersion: EXPECTED_MOTION_ANALYSIS_ALGORITHM_VERSION,
+  }))
+  assert.throws(() => assertMotionResearchProvenance({
+    fixtureVersion: EXPECTED_MOTION_RESEARCH_FIXTURE_VERSION,
+    algorithmVersion: 'similarity-block-ransac-v2',
+  }), /evidence provenance did not match the runner contract/)
+  assert.throws(() => assertMotionResearchProvenance({
+    fixtureVersion: 'issue-44-synthetic-v1',
+    algorithmVersion: EXPECTED_MOTION_ANALYSIS_ALGORITHM_VERSION,
+  }), /evidence provenance did not match the runner contract/)
 })
 
 test('final browser evidence includes problems raised during screenshot, settling, and result formatting', async () => {

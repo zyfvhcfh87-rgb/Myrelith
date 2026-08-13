@@ -26,6 +26,7 @@
     "lint": "oxlint",
     "qa:issue18:fixtures": "node scripts/issue18/generate-fixtures.mjs",
     "qa:issue19:fixtures": "node scripts/generate-issue-19-fixtures.mjs",
+    "qa:issue44:research": "node scripts/issue44/run-research.mjs",
     "postinstall": "patch-package",
     "test": "node scripts/run-vitest.mjs",
     "test:browser": "playwright test",
