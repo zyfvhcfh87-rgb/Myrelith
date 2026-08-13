@@ -86,14 +86,18 @@ export default function MotionTrackingEditor({
     track.kind !== 'video' || track.hidden
       ? []
       : track.clips.filter((candidate) => {
-          if (candidate.text || !rangeOverlap(candidate.timelineRange, clip.timelineRange)) return false
+          if (
+            candidate.id === clip.id
+            || candidate.text
+            || !rangeOverlap(candidate.timelineRange, clip.timelineRange)
+          ) return false
           const descriptor = descriptors.get(candidate.assetId)
           return descriptor?.width !== null && descriptor?.height !== null
         }).map((candidate) => ({
           id: candidate.id,
           label: `${candidate.name}${track.locked ? ' (locked)' : ''}`,
         }))
-  )), [clip.timelineRange, descriptors, doc.tracks])
+  )), [clip.id, clip.timelineRange, descriptors, doc.tracks])
 
   useEffect(() => {
     invalidate()

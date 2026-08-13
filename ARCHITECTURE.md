@@ -714,7 +714,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   remain inside the decoded frame.
 - Tracking preview is transport-only. Planning rechecks the latest source,
   media connection, project binding, target overlap/lock/dimensions, ordinary
-  animation validity, and exact selection snapshot. Accepted samples map
+  animation validity, exact selection snapshot, and that source and target are
+  distinct clip identities. The Inspector must not offer the tracked source as
+  its own target; this prevents applying source motion back onto itself as a
+  doubled target transform. Accepted samples map
   through each frame's resolved source crop, flips, anchor, and transform into
   project space. Preserved target Rotation and, when Scale is not authored,
   target Scale are resolved again at every accepted frame so cropped/anchored
@@ -727,6 +730,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   document aggregate key budget reject before mutation. Apply replaces only
   the explicitly confirmed owned properties in one immutable history entry and
   leaves unrelated clip/effect animation unchanged.
+- User cancellation is analysis-kind scoped. Motion tracking may cancel only
+  point- and box-tracking jobs for its source clip, and stabilization may
+  cancel only stabilization jobs. Whole-clip cancellation remains reserved for
+  attachment removal and controller disposal, where every child must drain
+  before storage ownership changes.
 - Both the production controller and research controller admit at most one
   analysis job and reserve at most one decoder slot. Each child operation must
   own and close every VideoFrame, decoder, temporary surface, worker, and OPFS

@@ -4745,3 +4745,29 @@ surface; it is not a second zoom and never enters document history.
   warning-free, the production audit reports 0 vulnerabilities, and diff
   checks pass. Refresh clean Chromium, CI, and Codex review on the committed
   follow-up head before merging.
+
+## Milestone 5 Part 10a.3 / issue #110 - second exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; CLEAN-COMMIT BROWSER/CI/REVIEW PENDING.**
+
+- Exact-head Codex review `4929629665` on
+  `85bdb090fa840a5784ee815e1c46508465639dee` found two P2 workflow gaps:
+  tracking Cancel used whole-clip cancellation and could abort simultaneous
+  stabilization; the target picker also offered the tracked source itself,
+  which would apply its motion back onto the same clip as a doubled transform.
+- The shared controller now exposes kind-scoped clip cancellation. Tracking
+  cancels point and box kinds separately, stabilization cancels only its own
+  kind, and attachment removal retains whole-clip cancellation. A one-slot
+  scheduler regression keeps stabilization alive while cancelling queued point
+  tracking on the same clip, then proves the survivor completes and drains.
+- The Inspector excludes the source from target choices and selects a separate
+  overlapping visual clip. The domain planner independently rejects equal
+  source/target IDs before mapping, so non-UI callers cannot bypass the rule.
+- The directly affected six-file matrix passes 53/53 tests. The authoritative
+  suite passes 190/190 files with 2,581/2,581 tests plus all 17 evidence-runner
+  checks. TypeScript/Vite builds 4,816 modules, lint is warning-free, the
+  production audit reports 0 vulnerabilities, and diff checks pass. The first
+  focused attempt exposed only a test accessibility-name mismatch, and the
+  first build exposed only a readonly test-fixture assignment; both were fixed
+  before the final green runs. Refresh clean Chromium, CI, and exact-head Codex
+  review on the committed tree before merging.

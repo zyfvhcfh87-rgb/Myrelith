@@ -512,3 +512,13 @@ cropped/anchor position compensation and target-local box extents, while
 preserved Scale drives compensation whenever tracking does not author Scale.
 The 0-to-90-degree regression pins both off-center Position correction and the
 expected cross-axis box scale projection.
+
+The second exact-head product review on
+`85bdb090fa840a5784ee815e1c46508465639dee` found two remaining workflow
+collisions. Cancellation now targets the requested algorithm kind: tracking
+cancels only point/box jobs and stabilization cancels only stabilization, while
+attachment removal retains deliberate whole-clip cancellation. The target
+picker excludes the tracked source clip, and the domain planner independently
+rejects equal source/target identities before mapping any samples. This avoids
+both aborting unrelated analysis on the same clip and applying a clip's motion
+back onto itself as a doubled transform.

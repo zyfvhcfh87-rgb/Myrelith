@@ -438,6 +438,18 @@ export class MotionAnalysisController {
     return cancelled
   }
 
+  cancelClipKind(clipId: string, kind: MotionAnalysisStatus['kind']): boolean {
+    let cancelled = false
+    for (const [id, pending] of this.pending) {
+      if (
+        pending.request.attachment.clipId !== clipId
+        || pending.request.algorithm.kind !== kind
+      ) continue
+      cancelled = this.cancelJob(id, 'cancelled') || cancelled
+    }
+    return cancelled
+  }
+
   reconcile(): void {
     for (const [id, pending] of this.pending) {
       const currentFailure = pending.request.currentFailure()

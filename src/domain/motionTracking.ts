@@ -324,6 +324,9 @@ export function createMotionTrackingPlan(
   analysis: MotionTrackingAnalysis,
   includeScale: boolean,
 ): MotionTrackingPlanResult {
+  if (sourceClip.id === targetClip.id) {
+    return { ok: false, reason: 'Choose a separate visual clip as the tracking target.' }
+  }
   const targetReason = targetAvailabilityReason(doc, targetClip)
   if (targetReason) return { ok: false, reason: targetReason }
   if (analysis.samples.length < 2) {

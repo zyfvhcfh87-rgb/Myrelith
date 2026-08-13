@@ -49,6 +49,14 @@ function clip(): Clip {
   }
 }
 
+function targetClip(): Clip {
+  return {
+    ...clip(),
+    id: 'target',
+    name: 'Target',
+  }
+}
+
 function doc(item: Clip): TimelineDoc {
   return {
     schemaVersion: 13,
@@ -58,17 +66,30 @@ function doc(item: Clip): TimelineDoc {
     width: 1_920,
     height: 1_080,
     audioSampleRate: 48_000,
-    tracks: [{
-      id: 'video',
-      kind: 'video',
-      name: 'Video',
-      clips: [item],
-      transitions: [],
-      hidden: false,
-      muted: false,
-      solo: false,
-      locked: false,
-    }],
+    tracks: [
+      {
+        id: 'video',
+        kind: 'video',
+        name: 'Video',
+        clips: [item],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      },
+      {
+        id: 'target-video',
+        kind: 'video',
+        name: 'Target video',
+        clips: [targetClip()],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      },
+    ],
   }
 }
 
@@ -95,7 +116,7 @@ const descriptor: PortableAssetDescriptor = {
 function plan(): MotionTrackingPlan {
   return {
     sourceClipId: 'source',
-    targetClipId: 'source',
+    targetClipId: 'target',
     kind: 'point',
     includeScale: false,
     direction: 'forward',
@@ -142,6 +163,16 @@ beforeEach(() => {
 })
 
 describe('MotionTrackingEditor', () => {
+  test('offers only separate visual clips as tracking targets', async () => {
+    const item = clip()
+    render(<MotionTrackingEditor clip={item} locked={false} playheadFrame={12} />)
+
+    const target = await screen.findByRole('combobox', { name: 'Motion tracking target clip' })
+    expect(target).toHaveValue('target')
+    expect(screen.getByRole('option', { name: 'Target' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Source' })).not.toBeInTheDocument()
+  })
+
   test('pins the Program Monitor selection frame through analyze and apply', async () => {
     const user = userEvent.setup()
     const item = clip()
@@ -167,7 +198,7 @@ describe('MotionTrackingEditor', () => {
     expect(screen.getByRole('status')).toHaveTextContent('local cache')
 
     await user.click(screen.getByRole('button', { name: 'Apply' }))
-    expect(mocks.apply).toHaveBeenCalledWith(expect.anything(), item.id, false, false)
+    expect(mocks.apply).toHaveBeenCalledWith(expect.anything(), 'target', false, false)
     expect(screen.getByRole('status')).toHaveTextContent('one undo step')
   })
 

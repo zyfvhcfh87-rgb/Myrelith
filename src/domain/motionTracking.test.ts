@@ -121,6 +121,32 @@ describe('motion-tracking sample planning', () => {
 })
 
 describe('motion-tracking product planning', () => {
+  test('rejects using the tracked source clip as its own target', () => {
+    const sourceClip = clip('source', 10, 10)
+    const analysis: MotionTrackingPointAnalysis = {
+      version: MOTION_TRACKING_RESULT_VERSION,
+      kind: 'point',
+      direction: 'forward',
+      selectionLocalFrame: 2,
+      width: 100,
+      height: 50,
+      failure: null,
+      samples: [
+        { timestampUs: 0, sourceTimeTicks: 2_000_000, localFrame: 2, x: 50, y: 25, confidence: 1 },
+      ],
+    }
+
+    expect(createMotionTrackingPlan(
+      doc(sourceClip, sourceClip),
+      sourceClip,
+      sourceClip,
+      source,
+      { width: 200, height: 100 },
+      analysis,
+      false,
+    )).toEqual({ ok: false, reason: 'Choose a separate visual clip as the tracking target.' })
+  })
+
   test('maps box samples to ordinary target Position/Scale tracks anchored at the selection frame', () => {
     const sourceClip = clip('source', 10, 10)
     const target = clip('target', 8, 20)

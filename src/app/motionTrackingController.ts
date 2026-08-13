@@ -689,5 +689,9 @@ export function applyMotionTracking(
 }
 
 export function cancelMotionTracking(sourceClipId: ClipId): boolean {
-  return getMotionAnalysisController()?.cancelClip(sourceClipId) ?? false
+  const controller = getMotionAnalysisController()
+  if (!controller) return false
+  const pointCancelled = controller.cancelClipKind(sourceClipId, 'point-tracking')
+  const boxCancelled = controller.cancelClipKind(sourceClipId, 'box-tracking')
+  return pointCancelled || boxCancelled
 }

@@ -4603,3 +4603,22 @@ acceptance claims.
   vulnerabilities, and diff checks.
 - [ ] Commit the exact follow-up tree, refresh clean headed Chromium, push, pass
   exact-head CI, and request a new Codex review.
+
+## Milestone 5 Part 10a.3 / issue #110 - second exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Scope user cancellation by analysis kind: point/box tracking cannot abort
+  stabilization on the same source clip, and stabilization cannot abort
+  tracking. Preserve whole-clip cancellation only for attachment removal and
+  controller disposal.
+- [x] Prove a queued point job can be cancelled while same-clip stabilization
+  remains running, completes successfully, and drains the one-slot scheduler.
+- [x] Exclude the tracked source from the Inspector target list and independently
+  reject equal source/target clip identities in domain planning.
+- [x] Pass the directly affected six-file matrix at 53/53 tests and the
+  authoritative suite at 190/190 files / 2,581/2,581 tests plus all 17
+  evidence-runner checks. Pass the 4,816-module build/typecheck, warning-free
+  lint, production audit at 0 vulnerabilities, and diff checks.
+- [ ] Commit the exact tree, refresh clean headed Chromium, push, pass exact-head
+  CI, and request a fresh Codex review before merge.
