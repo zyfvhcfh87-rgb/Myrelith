@@ -3257,12 +3257,13 @@ surface; it is not a second zoom and never enters document history.
   start function could run synchronously during instantiation before a call
   watchdog existed, and the 32 MiB module cap did not bound cheap, high-count
   declarations or segment payload expansion before compilation.
-- The trusted-parent byte policy now rejects every start section before any
-  WebAssembly engine call. A fresh, disposable activation-candidate worker owns
-  validation, asynchronous compilation, and instantiation under one parent
-  wall-clock deadline that never resets and expires after five seconds. Success
-  promotes it to the sandbox's dedicated runtime worker; timeout or failure
-  destroys it and the sandbox without blocking the UI.
+- The host-authored byte policy now rejects every start section before any
+  WebAssembly engine call. The later worker-ordering correction below makes the
+  parser itself candidate-owned. That fresh, disposable activation-candidate
+  worker also owns validation, asynchronous compilation, and instantiation under
+  one parent wall-clock deadline that never resets and expires after five
+  seconds. Success promotes it to the sandbox's dedicated runtime worker;
+  timeout or failure destroys it and the sandbox without blocking the UI.
 - The first implementation now caps each module at 1,024 types; 8,192 imported
   plus defined functions; 16 tables with 4,096 aggregate entries; one imported
   memory with a 1,025-page maximum; 2,048 globals; 8,192 exports; 1,024 element
@@ -3344,7 +3345,9 @@ surface; it is not a second zoom and never enters document history.
   data confined to pages 0-127 and allocator state to pages 128-255. This is a
   module-private ABI convention, not isolation from its own imported memory;
   the host refreshes inputs and validates/copies only exact owned outputs.
-- The trusted-parent parser now has explicit compressed-declaration gates:
+- The host-authored byte-policy parser now has explicit compressed-declaration
+  gates (and, per the later worker-ordering correction below, runs inside the
+  disposable activation candidate rather than synchronously in the parent):
   128 parameters/16 results per function type, 16,384 expanded signature fields,
   2,048 expanded locals per defined function and 16,384 per module, 2,048
   parameters-plus-locals per defined function and 16,384 after charging reused
@@ -3384,7 +3387,7 @@ surface; it is not a second zoom and never enters document history.
   terminal outcome destroys outstanding work without plugin cooperation,
   discards all staging, and preserves every original descriptor plus animation;
   retry is fresh and only exact-key immutable compiled code can survive.
-- Trusted-parent binary policy now independently caps defined-function payloads
+- Host-authored binary policy now independently caps defined-function payloads
   at 256 KiB each/16 MiB per module, decoded instructions at 65,536 each/
   1,048,576 per module, explicit structured-control depth at 256, and `br_table`
   vector labels at 1,024 per instruction/16,384 per body/65,536 per module.
@@ -3407,3 +3410,36 @@ surface; it is not a second zoom and never enters document history.
 - Browser verification remains intentionally not applicable: this is still a
   design-only contract with no production binary parser, migration runtime, or
   observable browser surface. Issue #77 owns hostile-module browser fixtures.
+
+## Part 10c issue #76 - PR #112 candidate-worker parser follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4922271431` found that placing the bounded Wasm byte-
+  policy parser synchronously in the trusted parent still let a hostile near-
+  limit module block the app/UI before the disposable-worker watchdog could
+  terminate it.
+- The trusted parent now owns only bounded package/manifest work, exact Wasm
+  entry framing and byte length, integrity/signature/trust/cache preflight, the
+  one activation deadline, and termination. It treats the framed module bytes
+  as opaque and never iterates attacker-driven Wasm sections, bodies,
+  instructions, immediates, or initializer expressions synchronously.
+- That non-resetting five-second wall-clock deadline starts before candidate
+  creation. The complete host-authored byte-policy parser runs inside the fresh
+  disposable candidate worker under the existing static ceilings. Only after
+  parse success may the same worker validate, compile, and instantiate; parse
+  rejection invokes no engine API. Ready promotion retains worker identity, and
+  any parse/engine failure or timeout lets the parent terminate the candidate.
+- Issue #77 is now gated on parent responsiveness during near-limit parsing,
+  deadline coverage across create/parse/validate/compile/instantiate, parse-
+  failure proof that no engine API ran, and same-worker parse-to-promotion
+  identity. This remains a design-only clarification with no production plugin
+  parser/runtime or observable browser surface, so browser QA is not applicable.
+- Final validation passed 119 focused manifest/project/effect/architecture tests
+  across five files plus all 16 benchmark-runner checks, production build/
+  typecheck, warning-free oxlint, and `git diff --check`. The ordinary bundle
+  contains none of the plugin capability id, manifest authority, candidate-
+  worker, Wasm-instance/validation, or `wasm-unsafe-eval` canaries. Four generic
+  `WebAssembly.instantiate` references remain solely in the existing Mediabunny
+  AC-3/ProRes codec chunks, not a plugin runtime. Build output retained only the
+  existing >500 kB chunk advisory.

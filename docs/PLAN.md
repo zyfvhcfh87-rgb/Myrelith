@@ -3496,8 +3496,9 @@ acceptance claims.
 **COMPLETE LOCALLY (2026-08-13).**
 
 - [x] Close the exact-head Codex start-function P2 by rejecting every WebAssembly
-  start section during trusted-parent byte parsing, before validation,
-  compilation, or instantiation can execute package code.
+  start section during host-authored byte-policy parsing, before validation,
+  compilation, or instantiation can execute package code. The later candidate-
+  worker parser follow-up below corrects the parser's realm/ordering.
 - [x] Run engine validation, asynchronous compilation, and instantiation in a
   fresh, disposable activation-candidate worker under one parent wall-clock
   deadline that never resets and expires after five seconds. Promote it to the
@@ -3625,3 +3626,31 @@ acceptance claims.
   the first full-suite attempt's one known five-second Inspector timing flake,
   its isolated 1/1 pass, and the immediate authoritative full rerun's clean pass;
   retain only the existing >500 kB build advisory.
+
+## Part 10c / issue #76 - PR #112 candidate-worker parser follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Close exact-head Codex review `4922271431`: the trusted parent must never
+  synchronously iterate attacker-driven WebAssembly sections, bodies,
+  instructions, immediates, or initializer expressions. It owns bounded package
+  framing/preflight, the activation deadline, and candidate termination only.
+- [x] Start one non-resetting five-second parent wall-clock deadline before fresh
+  candidate-worker creation. Run the complete host-authored byte-policy parser
+  inside that disposable candidate under all static resource ceilings, and only
+  after parse success let the same worker validate, compile, and instantiate.
+- [x] Require parse rejection to invoke no engine API, keep the deadline running
+  continuously across create/parse/validate/compile/instantiate, promote the
+  ready candidate without changing worker identity, and terminate it on every
+  parse/engine failure or timeout.
+- [x] Gate Issue #77 on near-limit parser responsiveness/termination, exact
+  deadline ordering, no-engine-on-rejection, and same-worker promotion fixtures.
+  Retain the design-only boundary: no production parser/runtime or browser-
+  observable change is added, so browser QA remains not applicable.
+- [x] Pass 119 focused manifest/project/effect/architecture tests across five
+  files plus all 16 benchmark-runner checks, production build/typecheck,
+  warning-free oxlint, and clean diff checks. Confirm the ordinary bundle has
+  zero plugin capability/manifest/candidate/instance/validation/CSP canaries;
+  its four generic `WebAssembly.instantiate` references are confined to the
+  existing Mediabunny AC-3/ProRes codec chunks. Retain only the existing >500 kB
+  build advisory.

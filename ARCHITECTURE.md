@@ -230,14 +230,20 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   Display-P3. The future host owns conversion into and out of that encoding,
   preview/export share the boundary, and no ICC/profile metadata enters plugin
   memory.
-  Before any WebAssembly engine API sees package bytes, the future trusted host
-  must reject every start section and enforce the exact per-module declaration,
-  segment, memory, and table ceilings in `docs/PLUGINS.md`. Compressed function
-  signatures and code-local groups are charged by expanded multiplicity,
-  including each defined function's reused parameter vector; raw declarations,
-  expanded signatures, expanded runtime slots, and their combined checked sum
-  are all bounded before engine work. Unsupported value types/features fail at
-  this parser boundary.
+  The future trusted parent owns bounded archive/manifest parsing, exact module-
+  entry framing and the 32 MiB byte-length check, digest/signature/trust preflight,
+  one non-resetting five-second activation deadline, and termination. It treats
+  the framed WebAssembly bytes as opaque and never synchronously iterates
+  attacker-driven sections, bodies, instructions, or initializer expressions.
+  The parent starts that deadline before creating a fresh disposable activation-
+  candidate worker. Entirely inside the candidate, the host-authored byte-policy
+  parser rejects every start section and enforces the exact per-module
+  declaration, segment, memory, and table ceilings in `docs/PLUGINS.md` before
+  any engine API. Compressed function signatures and code-local groups are
+  charged by expanded multiplicity, including each defined function's reused
+  parameter vector; raw declarations, expanded signatures, expanded runtime
+  slots, and their combined checked sum are all bounded before engine work.
+  Unsupported value types/features fail at this candidate-worker parser boundary.
   Executable bytes are independently bounded too: a defined-function body is at
   most 256 KiB and all bodies total at most 16 MiB; canonical instruction
   decoding admits at most 65,536 opcodes per body and 1,048,576 per module,
@@ -265,12 +271,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   and validates its fixed I/O regions for every call; these regions constrain
   conforming module allocation but do not pretend to isolate an untrusted
   module from its own imported memory.
-  Validation,
-  compilation, and instantiation then run in a fresh, disposable activation-
-  candidate worker under one trusted-parent wall-clock deadline that never
-  resets and expires after five seconds. A ready candidate becomes the sandbox's
-  dedicated runtime worker; every timeout or failure destroys the candidate and
-  sandbox so activation cannot block the UI.
+  Only after the complete byte-policy parse succeeds may that same candidate
+  worker perform engine validation, compilation, and instantiation. The parent
+  deadline was already running before worker creation, never resets between
+  those phases, and expires after five seconds. Parse rejection invokes no
+  engine API; every parse/engine failure or timeout destroys the candidate and
+  sandbox. A ready candidate promotes in place to the lifecycle's dedicated
+  runtime worker, so attacker-driven parsing cannot block the app/UI realm.
   Every explicit descriptor migration separately activates one fresh migration-
   owned worker, instance, imported memory, private port, queue, and generation
   for exactly one descriptor chain after current trust/revocation/static-target
@@ -296,8 +303,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   instance.
   An optional trusted-parent compiled-module cache is session-only and may hold
   at most eight exact digest/policy/ABI-keyed entries charged by at most 64 MiB
-  of accepted raw module bytes in aggregate. Checked insertion evicts idle
-  entries by deterministic LRU; leased code is never evicted. Revocation,
+  of accepted raw module bytes in aggregate. Each key records successful prior
+  candidate-worker byte-policy acceptance; an exact cache hit may skip repeated
+  parsing/validation/compilation without moving a WebAssembly parser into the
+  parent. Checked insertion evicts idle entries by deterministic LRU; leased
+  code is never evicted. Revocation,
   disable/uninstall, package replacement, policy/ABI change, and app teardown
   invalidate the relevant entries. The cache never owns mutable runtime state.
   Plugin packages, sandboxes, ports, workers, watchdogs, grants, and revocations

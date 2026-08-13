@@ -37,7 +37,7 @@ failure containment.
 | Network privacy | No plugin-controlled request, socket, beacon, WebRTC channel, navigation, form, popup, or download is possible. |
 | Project truth | Projects contain only bounded primitive descriptors. They cannot carry code, grants, package locations, trust, revocation changes, or an instruction to install/execute. |
 | Preview/export integrity | Authored stack order and the exact v1 display-referred sRGB RGBA encoding are shared. Every export starts in a newly instantiated export-owned worker/memory, receives only deterministically ordered export calls, and shares no mutable state with preview/scrub. Missing/failing plugins are visible; export aborts by default instead of silently dropping an effect. |
-| Editor availability | Package parsing, decompression, expanded WebAssembly signatures/locals, code-body bytes, decoded instructions/immediates/control, activation, fixed memory regions, queues, calls, diagnostics, and retries are bounded. Parent-realm deadlines can terminate a non-cooperative activation or runtime sandbox. |
+| Editor availability | Archive/manifest parsing, decompression, expanded WebAssembly signatures/locals, code-body bytes, decoded instructions/immediates/control, activation, fixed memory regions, queues, calls, diagnostics, and retries are bounded. The parent treats framed Wasm bytes as opaque, while a fresh candidate worker performs byte-policy parsing and engine activation under one parent-realm deadline that can terminate it. |
 | Supply-chain identity | Every executed byte is covered by the verified package integrity table and Ed25519 signature; signer and digest changes cannot inherit trust/grants silently. |
 | Recovery | Missing, denied, revoked, incompatible, crashed, and safe-mode plugin descriptors remain ordered, editable, saveable, and recoverable without execution. |
 
@@ -76,15 +76,17 @@ failure containment.
 5. **App window to opaque-origin broker.** The app sends only verified module
    bytes, bounded metadata, and a private port. The broker has no same-origin
    access.
-6. **Broker to worker/WebAssembly.** Only host-authored JavaScript runs. Before
-   an engine API sees the module, trusted-parent byte validation rejects a start
-   section, canonically scans every policy-allowed body/initializer opcode and
-   immediate, and enforces every declaration/payload/decoded-complexity ceiling.
-   A fresh disposable worker owns validation, compilation, and instantiation
-   under one non-resetting
-   parent deadline; if ready it becomes the sandbox's runtime worker, otherwise
-   it is terminated. The untrusted module receives imported bounded memory but
-   no callable imports.
+6. **Broker to worker/WebAssembly.** Only host-authored JavaScript runs. The
+   trusted parent starts one non-resetting five-second wall-clock deadline before
+   creating a fresh disposable candidate worker and never synchronously walks
+   attacker-authored WebAssembly sections or instructions. Inside that worker,
+   the host-authored byte-policy parser rejects a start section, canonically
+   scans every policy-allowed body/initializer opcode and immediate, and
+   enforces every declaration/payload/decoded-complexity ceiling before any
+   engine API. Only after parse success may the same worker validate, compile,
+   and instantiate; if ready it becomes the sandbox's runtime worker, otherwise
+   the parent terminates it. The untrusted module receives imported bounded
+   memory but no callable imports.
 7. **Compositor to plugin frame call.** The host copies one exact pixel buffer
    and minimal integer metadata, applies a watchdog, validates the complete
    response, and accepts no partial result.
@@ -158,10 +160,12 @@ or unsupported feature; normalize and validate names before use; never extract
 to disk; enforce archive, entry, module, manifest, count, and running expanded
 budgets before allocation; require the signed table to list every exact entry.
 
-**Residual risk:** parser bugs and decompressor vulnerabilities. Hostile archive
+**Residual risk:** archive/manifest parser bugs and decompressor vulnerabilities. Hostile archive
 fixtures, fuzzing, locked dependencies, and production dependency audit are
-required. Package parsing remains outside the plugin sandbox, so this is one of
-the highest-risk implementation surfaces.
+required. Archive and manifest package parsing remains outside the plugin
+sandbox, so this is one of the highest-risk implementation surfaces. The
+separate attacker-driven WebAssembly section/instruction parser belongs to the
+disposable activation candidate described below.
 
 ### Signature, identity, downgrade, and revocation
 
@@ -269,9 +273,15 @@ of frame access.
 unbounded memory, exploits an unsupported feature/parser discrepancy, creates
 huge tables, traps the engine, or exploits a browser JIT vulnerability.
 
-**Controls:** the trusted parent parses the raw binary before
-`WebAssembly.validate`, compilation, or instantiation and rejects every start
-section. Allow exactly one import, the non-shared bounded host memory, and reject
+**Controls:** the trusted parent checks the framed module byte length, digest,
+signature, trust, revocation, and cache binding while treating the raw
+WebAssembly string as opaque. Before creating a fresh candidate worker it starts
+one non-resetting five-second wall-clock deadline. Inside that candidate, the
+host-authored parser scans the raw binary and rejects every start section before
+that same worker may call `WebAssembly.validate`, compile, or instantiate. The
+parent never synchronously iterates attacker-driven sections, bodies,
+instructions, immediates, or initializer expressions. Allow exactly one import,
+the non-shared bounded host memory, and reject
 all function/global/table/tag imports plus defined memories and tags. Enforce at
 most 1,024 types, 128 parameters and 16 results per function type, and 16,384
 expanded signature fields; 8,192 imported-plus-defined functions; 2,048
@@ -332,11 +342,13 @@ regions before a call and copies/validates only its exact output afterward; the
 layout prevents conforming toolchain regions from colliding but is not an
 intra-module security boundary. A larger valid project surface remains valid,
 but the plugin is unavailable in preview and blocks export unless the user
-accepts the existing reviewed bypass. A fresh, disposable activation-
-candidate worker performs engine validation, asynchronous compilation, and
-instantiation under a non-resetting five-second trusted-parent wall-clock
-deadline. A successful candidate becomes the dedicated runtime worker for its
-requesting lifecycle; timeout or failure destroys the candidate and sandbox. An
+accepts the existing reviewed bypass. The same fresh candidate worker performs
+the complete byte-policy parse and, only after it succeeds, engine validation,
+asynchronous compilation, and instantiation under the already-running parent
+deadline. That deadline starts before worker creation and never resets between
+activation phases. A successful candidate becomes the dedicated runtime worker
+for its requesting lifecycle; timeout or failure destroys the candidate and
+sandbox. An
 editor runtime is never reused for export or migration. Every export preflight
 creates a new export-owned worker, instance, and imported memory. Every explicit
 migration action creates a new migration-only owner per descriptor chain; a
@@ -344,9 +356,10 @@ multi-descriptor action runs those distinct owners serially and stages one final
 atomic commit. Only digest-bound immutable module bytes or compiled code may be
 cached across lifecycles. Runtime-probe and fail closed.
 
-**Residual risk:** browser-engine vulnerabilities and binary-parser mistakes.
-Keeping browsers current and shipping an emergency local revocation are required.
-Defense does not claim WebAssembly alone is a complete security boundary.
+**Residual risk:** browser-engine vulnerabilities and candidate-worker binary-
+parser mistakes. Keeping browsers current and shipping an emergency local
+revocation are required. Parent termination protects UI responsiveness but does
+not make WebAssembly alone a complete security boundary.
 
 ### Denial of service and resource exhaustion
 
@@ -367,9 +380,11 @@ data rejection before engine work; canonical closed-allowlist decoding of every
 opcode and immediate with exact body/expression termination, checked per-type,
 per-function, per-body, repeated-signature, and module accounting;
 fixed-size imported memory with separately budgeted passive-data, workspace,
-parameter, and pixel ranges; a fresh
-activation-candidate worker under the non-resetting five-second trusted-parent
-deadline; one active call per sandbox, two globally, bounded/coalesced queue;
+parameter, and pixel ranges; parent-side opaque module framing and no synchronous
+parent WebAssembly traversal; a fresh activation-candidate worker that performs
+the complete byte-policy parse before engine work under one non-resetting five-
+second trusted-parent deadline started before worker creation; one active call
+per sandbox, two globally, bounded/coalesced queue;
 trusted-parent call watchdogs; whole-sandbox termination; atomic export-slot
 reservation under the hard eight-resident ceiling with no mid-export eviction or
 batch reinstantiation; one pinned serial migration slot with a fresh terminal

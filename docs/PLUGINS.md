@@ -39,7 +39,9 @@ local package File
   -> strict manifest validation + compatibility negotiation
   -> explicit permission decision
   -> host-authored opaque-origin iframe broker
-  -> dedicated host-authored worker
+  -> parent-owned activation deadline + fresh host-authored candidate worker
+  -> candidate-worker WebAssembly byte-policy parser
+  -> candidate-worker validate/compile/instantiate
   -> imported bounded WebAssembly memory + no function imports
   -> validated request/response copies
   -> shared Myrelith preview/export compositor
@@ -233,6 +235,17 @@ Package budgets for the first implementation are:
 | WebAssembly declarations | 16,384 aggregate raw section entries; 32,768 combined raw-entry + expanded-signature-field + defined-function-runtime-slot charge |
 | WebAssembly start section | forbidden |
 
+The trusted parent owns archive/manifest parsing, exact module-entry framing,
+the 32 MiB raw byte-length check, integrity/signature verification, current
+trust/revocation preflight, and activation termination. It treats the framed
+WebAssembly byte string as opaque: no parent-realm loop may synchronously walk
+attacker-authored sections, declarations, bodies, instructions, immediates, or
+initializer expressions. Immediately before a raw-byte activation candidate is
+created, the parent starts the one non-resetting five-second wall-clock deadline.
+The host-authored WebAssembly byte-policy parser then runs entirely inside that
+fresh disposable candidate worker, where every attacker-driven loop and parser
+allocation remains subject to the static ceilings below and parent termination.
+
 The declaration total is the sum of the raw vector counts in the type, import,
 function, table, memory, global, export, element, data, and tag sections. An
 import therefore contributes one import entry rather than being counted again
@@ -251,10 +264,10 @@ bytes retain the separate ceilings above. Acceptance requires every independent
 gate; byte, opcode, and declaration-entry units are never added into one
 misleading counter.
 
-Before iterating or allocating from a declared vector or body, the trusted-
-parent byte parser canonical-decodes each type vector, function body size,
-local-group vector count, and local multiplicity and proves that it fits the
-exact enclosing section/body bytes. A body payload is the declared byte range
+Before iterating or allocating from a declared vector or body, the candidate-
+worker byte-policy parser canonical-decodes each type vector, function body
+size, local-group vector count, and local multiplicity and proves that it fits
+the exact enclosing section/body bytes. A body payload is the declared byte range
 after its size field, including the local-declaration vector and instruction
 expression. The parser rejects a payload above 256 KiB and checked-adds accepted
 payload lengths to the 16 MiB module ceiling. It requires the code-body count to
@@ -325,12 +338,15 @@ tables use the separately bounded `funcref` contract. No attacker
 count may drive an allocation before all byte-containment, decoding, feature,
 and resource checks succeed.
 
-The trusted host checks every WebAssembly ceiling, rejects every active data
-segment and start section, and accepts only passive data segments before calling
-`WebAssembly.validate()`, `WebAssembly.compile()`, or
-`WebAssembly.instantiate()`. Every other package limit is checked before the
-corresponding allocation. Decompression tracks the running expanded total and
-aborts on the first overflow.
+Inside the fresh candidate worker, the host-authored parser checks every
+WebAssembly ceiling, rejects every active data segment and start section, and
+accepts only passive data segments. Only after that complete parse succeeds may
+the same candidate worker call `WebAssembly.validate()`,
+`WebAssembly.compile()`, or `WebAssembly.instantiate()`. A parse rejection or
+parent deadline expiry calls no engine API and terminates the candidate. Every
+other package limit is checked before the corresponding allocation.
+Decompression tracks the running expanded total and aborts on the first
+overflow.
 
 The numbers leave bounded implementation headroom without inheriting a
 browser-engine limit. A maximum-size version-1 manifest can reference 4,160
@@ -571,11 +587,13 @@ ABI contract is:
   initial sizes and the sum of all declared maxima are at most 4,096 entries.
   The binary-policy parser checks these count and aggregate limits before
   compilation or instantiation;
-- the module contains no start section. The trusted host rejects its presence
-  from the raw section stream before any engine validation, compilation, or
-  instantiation, so package code cannot run synchronously during activation;
-- the parser enforces the package-budget ceilings for types, imported plus
-  defined functions/tables/memories/globals, exports, element segments and
+- the module contains no start section. The candidate-worker parser rejects its
+  presence from the raw section stream before that same worker performs engine
+  validation, compilation, or instantiation, so package code cannot run
+  synchronously during activation;
+- the candidate-worker parser enforces the package-budget ceilings for types,
+  imported plus defined functions, tables, memories, globals, exports, element
+  segments and
   initializers, passive data segments and payload bytes, imports, tags, expanded
   function-type fields, expanded code locals, defined-function runtime slots,
   raw declarations, the combined declaration-resource charge, code-body bytes,
@@ -654,10 +672,11 @@ ABI contract is:
 - no pointer, view, buffer, or module instance crosses into Zustand, React, a
   project file, or another plugin instance.
 
-The module binary must pass the complete trusted-host byte policy before any
-WebAssembly engine API sees it. `WebAssembly.validate()` is necessary but
-insufficient for policy. The WebAssembly standard explicitly permits embedder
-resource limits and module rejection; memory maxima are expressed in pages. See
+On every raw-byte path, the module binary must pass the complete host-authored
+byte policy inside its fresh candidate worker before that worker invokes any
+WebAssembly engine API. `WebAssembly.validate()` is necessary but insufficient
+for policy. The WebAssembly standard explicitly permits embedder resource
+limits and module rejection; memory maxima are expressed in pages. See
 [module memories](https://webassembly.github.io/spec/core/syntax/modules.html#memories)
 and [implementation limits](https://webassembly.github.io/spec/core/appendix/implementation.html).
 
@@ -688,21 +707,29 @@ base-uri 'none';
 form-action 'none';
 ```
 
-After the trusted parent has accepted the complete byte policy, the broker
-creates a fresh, disposable activation-candidate worker from host-authored bytes
-and passes a private `MessagePort`. It also passes either the verified
-WebAssembly bytes or immutable compiled code bound to the exact accepted package
-digest, negotiated ABI, and binary-policy version. Raw-byte validation and
-asynchronous compilation run on the byte path; a cache hit may skip only those
-engine steps after the requesting lifecycle's preflight rechecks current trust,
-revocation, availability, and the exact cache binding. Both paths allocate new
-imported memory and instantiate a fresh `WebAssembly.Instance`. The worker
-sends an instance-ready acknowledgement only after its path finishes. On success
-the same worker becomes the dedicated runtime worker for the lifecycle that
-requested it, retaining sole ownership of the instance; on every failure or
-timeout it is terminated instead of being reused. Package bytes are never
-interpreted as JavaScript. CSP `worker-src` governs worker loads and `connect-src`
-is the fallback for connection-like fetch destinations under the
+After bounded package framing and lifecycle preflight, the trusted parent starts
+one non-resetting five-second wall-clock deadline before asking the broker to
+create a fresh, disposable activation-candidate worker from host-authored code
+and pass a private `MessagePort`. The parent then supplies either the verified,
+bounded WebAssembly byte string or immutable compiled code bound to the exact
+accepted package digest, negotiated ABI, and binary-policy version. On the raw-
+byte path, the candidate worker first runs the complete host-authored byte-policy
+parser without invoking an engine API; only after parse success does that same
+worker call validation, asynchronous compilation, and instantiation. The parent
+does not synchronously iterate any attacker-driven WebAssembly section,
+instruction, or initializer structure, and the deadline does not reset when
+parsing or any later activation phase completes. A cache hit may skip repeated
+byte parsing, validation, and compilation only when the requesting lifecycle's
+preflight rechecks current trust, revocation, availability, and an exact cache
+binding that records prior candidate-worker policy acceptance. Both paths
+allocate new imported memory and instantiate a fresh `WebAssembly.Instance` in
+the candidate. The worker sends an instance-ready acknowledgement only after its
+path finishes. On success the same worker becomes the dedicated runtime worker
+for the lifecycle that requested it, retaining sole ownership of the instance;
+on every parse failure, engine failure, or timeout the parent terminates it
+instead of reusing it. Package bytes are never interpreted as JavaScript. CSP
+`worker-src` governs worker loads and `connect-src` is the fallback for
+connection-like fetch destinations under the
 [Content Security Policy specification](https://w3c.github.io/webappsec-csp/).
 
 Issue #77 must run negative browser probes in every supported engine before
@@ -781,9 +808,11 @@ may continue from
 the verified bytes but does not retain the compiled result; cache pressure never
 weakens a gate or makes execution necessary for project recovery.
 
-A cache entry contains only immutable compiled code plus its key/accounting
-facts—never an instance, imported memory, table, global, worker, port, queue, or
-request state. Every lease first rechecks current trust, revocation, package
+A cache entry contains only immutable compiled code plus its key/accounting facts
+and the fact that its exact bytes were accepted by the candidate-worker parser
+under that binary-policy version—never an instance, imported memory, table,
+global, worker, port, queue, or request state. Every lease first rechecks current
+trust, revocation, package
 availability, and the complete key. Disable, uninstall, revocation, package
 replacement/update, signer/digest/hash mismatch, or binary-policy/ABI version
 change removes matching idle entries and makes leased entries non-reusable after
@@ -831,7 +860,7 @@ ceilings.
 | Immutable compiled-module cache | session-only; at most 8 exact-keyed entries and 64 MiB aggregate accepted-raw-byte charge; deterministic idle LRU; leased code is pinned |
 | Active calls | one per sandbox, at most 2 globally |
 | Queued calls | at most 32 globally; preview may coalesce latest-wins, while export and migration never coalesce and stay deterministically serialized |
-| Validate/compile/instantiate activation | 5 seconds total wall-clock |
+| Candidate create/parse/validate/compile/instantiate activation | 5 seconds total wall-clock |
 | Configure/migrate call | 1 second watchdog |
 | Preview frame call | 500 ms watchdog |
 | Export frame call | 5 second watchdog |
@@ -841,10 +870,11 @@ ceilings.
 Every deadline lives in the trusted parent realm. The activation deadline is
 one non-resetting wall-clock interval that starts before the candidate worker is
 created and ends only when its instance-ready acknowledgement is accepted; it
-therefore covers synchronous validation plus asynchronous compilation and
-instantiation without blocking the app/UI thread. Timeout removes the iframe
-and terminates its candidate or runtime worker; it never waits for plugin
-cooperation. Abort, project replacement, source replacement, effect removal,
+therefore covers candidate-worker byte-policy parsing, engine validation,
+asynchronous compilation, and instantiation without running attacker-driven
+WebAssembly iteration on the app/UI thread. Timeout removes the iframe and
+terminates its candidate or runtime worker; it never waits for plugin cooperation.
+Abort, project replacement, source replacement, effect removal,
 safe-mode entry, revocation, update, and app teardown close the sandbox and
 settle every pending request. Late messages fail generation/request matching
 and are ignored.
@@ -948,7 +978,9 @@ green:
 1. byte-level ZIP, canonical JSON, integrity, Ed25519, trust, update, rollback,
    and revocation fixtures including hostile archives;
 2. WebAssembly binary policy parser and exact ABI fixtures across supported
-   browsers, including start-section and active-data-segment rejection; fixed
+   browsers, including proof that raw-byte parsing runs only after candidate-
+   worker creation, inside that worker, under the already-running parent
+   deadline; start-section and active-data-segment rejection; fixed
    memory-offset/capacity arithmetic and exact-cap-plus-one behavior; passive
    data-count/segment/index/range consistency plus allowed `memory.init`/
    `data.drop` behavior; exact signature-field and code-local boundaries;
@@ -966,8 +998,12 @@ green:
    and aggregate declaration boundary in the package-budget table;
 3. CSP/opaque-origin negative probes for network, storage, navigation, DOM, and
    worker escape attempts;
-4. activation-worker promotion, five-second parent deadline, compile/instantiate
-   termination, call watchdog, queue, memory, project replacement, cancellation,
+4. activation-worker promotion; a five-second parent deadline that begins
+   before worker creation and never resets across parse/validate/compile/
+   instantiate; parent responsiveness and termination during a near-limit parse;
+   parse-failure proof that no engine API ran; same-worker parse-to-promotion
+   identity; compile/instantiate termination, call watchdog, queue, memory,
+   project replacement, cancellation,
    crash, late-message, safe-mode, and compiled-cache count/byte accounting,
    deterministic idle eviction, lease pinning, invalidation, and teardown tests;
 5. unknown/disabled/revoked descriptor round trips through save, recovery,
