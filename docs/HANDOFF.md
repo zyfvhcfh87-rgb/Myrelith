@@ -4200,3 +4200,27 @@ surface; it is not a second zoom and never enters document history.
   0 vulnerabilities, runner syntax, and `git diff --check` pass. Clean-commit
   Chromium, CI, and fresh exact-head Codex evidence follows on the committed
   tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - fourth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925839848` on `c9fca850ce` found one remaining
+  malformed-protocol ownership gap: a worker window carrying a different
+  request ID was ignored without releasing its transferred planes or
+  terminating the dedicated worker.
+- Every mismatched reply now terminates the admitted run as an unexpected
+  protocol failure. A mismatched window first detaches every safely
+  identifiable `ArrayBuffer`; release failure preserves the typed
+  resource-unavailable classification. If a correct window is already being
+  consumed, scheduler settlement remains held until that separately owned
+  window is released.
+- The deterministic regression retains a mismatched plane and proves it is
+  detached before rejection, the consumer is never called, listeners are
+  removed, the worker is terminated exactly once, and decoder/worker
+  diagnostics return to zero. The refreshed focused gate passes 64/64 tests
+  plus 17/17 runner checks; the authoritative full suite passes 179/179 files
+  and 2,489/2,489 tests plus those checks. TypeScript/Vite build, oxlint, runner
+  syntax, and `git diff --check` pass; the high-severity production audit finds
+  0 vulnerabilities. Clean-commit Chromium, CI, and fresh exact-head Codex
+  evidence follow on the committed tree.

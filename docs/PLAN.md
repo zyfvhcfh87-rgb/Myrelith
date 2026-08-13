@@ -4195,3 +4195,22 @@ acceptance claims.
   typecheck, oxlint, the high-severity production audit with 0 vulnerabilities,
   runner syntax, and `git diff --check`. Clean-commit Chromium, CI, and exact-
   head Codex review follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - fourth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Treat every mismatched worker request ID as a terminal malformed-protocol
+  response rather than ignoring it; for mismatched windows, detach every
+  identifiable transferred plane before rejecting and terminating the worker.
+- [x] Preserve the existing consumer-ownership rule when a mismatched reply
+  arrives during an acknowledged window: stop the worker immediately but keep
+  scheduler settlement held until that independently owned window releases.
+- [x] Add a deterministic mismatched-window regression proving zero-length
+  transferred bytes, no consumer call, exact worker termination, listener
+  removal, and balanced decoder/worker diagnostics. Pass the refreshed 64/64
+  focused tests plus 17/17 runner checks and the authoritative 179-file /
+  2,489-test full suite plus those checks. Pass build/typecheck, lint, runner
+  syntax, and the diff check; confirm 0 high-severity production
+  vulnerabilities. Clean-commit Chromium, CI, and exact-head Codex review
+  follow on the final committed tree.

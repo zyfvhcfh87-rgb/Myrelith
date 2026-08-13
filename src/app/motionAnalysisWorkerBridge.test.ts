@@ -282,6 +282,39 @@ describe('runMotionAnalysisWorker', () => {
     })
   })
 
+  it('releases a mismatched worker window and rejects the admitted run', async () => {
+    const worker = new FakeWorker()
+    const pixels = new Uint8Array(new ArrayBuffer(4)).fill(9)
+    const consume = vi.fn(async () => undefined)
+    const h = context()
+    const pending = runMotionAnalysisWorker(request(), consume, h.mediaContext, () => worker)
+
+    worker.dispatch({
+      type: 'window',
+      requestId: 2,
+      windowIndex: 0,
+      sampleOffset: 0,
+      frames: [{ ...frame(), pixels }],
+      retainedBytes: 4,
+    })
+
+    await expect(pending).rejects.toMatchObject({
+      code: 'unexpected',
+      message: 'Motion-analysis worker returned a mismatched request identity',
+    })
+    expect(pixels.byteLength).toBe(0)
+    expect(consume).not.toHaveBeenCalled()
+    expect(worker.terminated).toBe(true)
+    expect(worker.listenerCount()).toBe(0)
+    expect(h.activeDecoderCount()).toBe(0)
+    expect(getMotionAnalysisWorkerDiagnostics()).toEqual({
+      workersCreated: 1,
+      workersTerminated: 1,
+      activeWorkers: 0,
+      maxActiveWorkers: 1,
+    })
+  })
+
   it('rejects inconsistent progress, overlap, and completion facts', async () => {
     const progressWorker = new FakeWorker()
     const invalidProgress = runMotionAnalysisWorker(

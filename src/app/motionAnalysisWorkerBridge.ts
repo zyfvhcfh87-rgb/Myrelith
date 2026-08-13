@@ -375,7 +375,34 @@ export function runMotionAnalysisWorker(
     }
     const onMessage = (event: MessageEvent<MotionAnalysisWorkerReply>) => {
       const reply = event.data
-      if (reply.requestId !== message.requestId || settled) return
+      if (settled) {
+        if (reply.type === 'window') {
+          try {
+            releaseIdentifiableWindowBuffers(reply)
+          } catch {
+            // The admitted run has already settled; best-effort release is the
+            // only remaining safe action for a queued late worker message.
+          }
+        }
+        return
+      }
+      if (reply.requestId !== message.requestId) {
+        try {
+          if (reply.type === 'window') releaseIdentifiableWindowBuffers(reply)
+        } catch (cause) {
+          finish(() => reject(new MediaJobExecutionError(
+            'resource-unavailable',
+            'Mismatched motion-analysis window ownership could not be released',
+            cause,
+          )))
+          return
+        }
+        finish(() => reject(new MediaJobExecutionError(
+          'unexpected',
+          'Motion-analysis worker returned a mismatched request identity',
+        )))
+        return
+      }
       if (reply.type === 'progress') {
         try {
           validateProgress(reply)

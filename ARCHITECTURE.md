@@ -573,7 +573,8 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   and closes its cursor/source before terminal settlement. The app bridge owns
   abort/error/messageerror/send failure, terminates the worker exactly once,
   detaches every identifiable transferred plane before rejecting a malformed
-  window, detaches accepted planes when their consumer settles, and does not
+  window or mismatched request identity, detaches accepted planes when their
+  consumer settles, and does not
   settle the run or release scheduler admission while an acknowledged window
   remains consumer-owned. A terminal completion with zero decoded samples is a
   typed decode/readback failure before processor finalization or cache staging;
