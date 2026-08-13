@@ -3090,3 +3090,507 @@ surface; it is not a second zoom and never enters document history.
   artifact, and publish its fingerprints plus parity/device-loss/cleanup/
   diagnostics/port results in PR evidence. Do not modify tracked docs after
   that run, because doing so would invalidate its exact source fingerprint.
+## Part 10c issue #76 - sandboxed plugin capability design (2026-08-11)
+
+**DESIGN AND NON-EXECUTING PROTOTYPE COMPLETE LOCALLY.**
+
+- `docs/PLUGINS.md` is the normative gated contract. Packages are local-only,
+  deterministic, completely hashed, Ed25519-signed, trust/revocation checked,
+  and permission gated. First execution is WebAssembly only: one host-authored
+  opaque-origin iframe broker, one dedicated worker, one bounded imported memory,
+  no callable imports, and parent-owned watchdog/termination. Arbitrary remote
+  URLs and package JavaScript are rejected rather than sandboxed optimistically.
+- The only first contribution is a host-rendered ordered video effect. It may
+  receive one isolated RGBA8 layer plus exact integer-frame/rational-rate facts
+  and its own bounded params. It receives no files/handles/source bytes, network,
+  origin storage, DOM/custom UI, audio, codecs, project mutation, export sink,
+  clock/random source, thread/shared memory, or background execution. Every
+  broader surface requires a separately versioned capability and security review.
+- `docs/PLUGIN_THREAT_MODEL.md` maps assets, actors, nine trust boundaries,
+  hostile inputs, mitigations, realistic attacker stories, residual browser/
+  signer/side-channel risk, and Critical/High/Medium/Low calibration. Signed does
+  not mean safe; the displayed fingerprint proves key continuity only. Offline
+  revocation comes from app releases, user disable/uninstall, or imported signed
+  bundles—never an automatic network request or remote kill switch.
+- `src/domain/pluginManifest.ts` is deliberately data-only. It strictly validates
+  an already-parsed version-1 value, bounds ids/version ranges/relative Wasm path/
+  64 MiB-plus-one-page requested memory/permissions/contributions/host-rendered
+  parameters and descriptor-migration declarations,
+  negotiates exact host versions without granting consent, and derives stable
+  `plugin:<plugin-id>/<contribution-id>` descriptor types. It does no package I/O,
+  byte-level JSON/ZIP/signature work, trust mutation, registration, import, or
+  WebAssembly instantiation; all of that remains Issue #77 work after review.
+- Portable projects keep only the existing bounded `EffectDescriptor` plus
+  ordinary animation intent. A focused test proves a disabled plugin descriptor
+  round-trips without a URL or Wasm path. Missing, incompatible, denied, revoked,
+  crashed, and safe-mode plugins remain preserved, bypassed, reorderable,
+  removable, saveable, recoverable, and inert. Project open never installs,
+  prompts, migrates, enables, or executes a package.
+- Validation passed 99 focused manifest/project/effect/architecture tests, all
+  2,317 Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities. The first focused command honestly
+  could not start because this fresh worktree lacked `node_modules`; `npm ci`
+  restored the lockfile environment. The first 98-test run then found one
+  architecture-guard false positive because it read plugin `schemaVersion: 1` as
+  a stale timeline fixture; using the named plugin schema constant resolved it,
+  and the unchanged 98-test set passed.
+- Real Chromium behavior is intentionally not claimed: the design-only prototype
+  has no production import, registry, UI, worker, iframe, package parser, or
+  execution path, and its identifying strings are absent from `dist`. Issue #77
+  is gated on real-browser negative probes for network, storage, DOM, navigation,
+  worker, cancellation, watchdog, crash, safe-mode, and preview/export behavior.
+- Source identity started at clean
+  `00daac79cd26b2e0a503477d629635f0d15da853` /
+  `sha256:058d3e740f1c760a7349e78299f3e3cb6d97649f4e18a5192ec9ad0fe89d89ee`
+  and reached the initial pre-evidence checkpoint
+  `sha256:994caa4e793d1e57d2f45e97fbc86107866e3a1dba72a3311b3bf1dd112d4f4b`.
+  Final review then added independently versioned contribution negotiation; the
+  final commit id is the authoritative delivery identity.
+
+## Part 10c issue #76 - PR #112 review hardening (2026-08-11)
+
+**COMPLETE LOCALLY.**
+
+- Manifest numeric ranges now reuse the durable +/-1,000,000,000 effect bound,
+  and parameter keys reuse the portable/live reserved-record-key guard. Accepted
+  host-rendered values can therefore seed and save ordinary effect descriptors.
+- The imported-memory ceiling is 1,025 WebAssembly pages: the maximum legal
+  64 MiB RGBA frame plus one non-overlapping 64 KiB canonical-parameter page.
+  Smaller manifest requests remain legal but make a frame that does not fit
+  explicitly unavailable. Migration declarations require at least two pages for
+  their bounded non-overlapping input/output buffers.
+- Every contribution now carries a bounded `migrations` array. Sorted forward
+  `{ fromVersion, toVersion, entrypoint }` steps must all terminate at the current
+  descriptor version; a version above one must declare at least one chain, and a
+  migration export cannot collide with the differently typed render export.
+- The normative ABI now specifies the migration call signature, exact buffer/
+  return rules, canonical output validation, watchdog, memory clearing, and the
+  host-owned identity/order/enabled/animation boundary. Version 1 rejects any
+  instance targeted by an effect-animation track before migration code runs;
+  failure keeps the original descriptor, complete animation, and history
+  untouched.
+- Validation passed 109 focused manifest/project/effect/architecture tests, all
+  2,323 Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities. Browser verification remains not
+  applicable because no production runtime or observable surface was added.
+
+## Part 10c issue #76 - PR #112 aggregate table-budget follow-up (2026-08-12)
+
+**COMPLETE LOCALLY.**
+
+- Replace the per-table-only WebAssembly rule with an exact module-wide gate:
+  at most 16 defined tables, an explicit maximum no greater than 4,096 for each,
+  at most 4,096 declared initial entries in aggregate, and at most 4,096 declared
+  maximum entries in aggregate. Table imports remain forbidden by the existing
+  one-memory-only import contract.
+- Require the Issue #77 binary-policy parser to enforce the table count and both
+  aggregate sums before compilation or instantiation, and require exact boundary
+  fixtures across supported browsers. Mirror those budgets in the package table
+  and denial-of-service threat controls so the normative and security contracts
+  cannot drift.
+- Validation passed 103 focused manifest/project/effect/architecture tests, all
+  2,323 Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities. The first full-suite launch used an
+  accidentally short command timeout and was stopped after five seconds; it is
+  not counted as evidence, and the immediate full rerun passed.
+- Browser verification remains not applicable: this is still a design-only,
+  non-executing contract with no production plugin parser, runtime, or observable
+  browser surface. Issue #77 owns the real hostile-module boundary fixtures.
+
+## Part 10c issue #76 - PR #112 contribution-dispatch follow-up (2026-08-12)
+
+**COMPLETE LOCALLY.**
+
+- Every accepted contribution now owns a package-unique render entrypoint, and
+  the complete render-name set is disjoint from every differently typed migration
+  export. Validation is order-independent and points at the colliding declaration.
+- The selected render export is the WebAssembly-call contribution discriminator.
+  The ten-integer render signature stays unchanged, and no contribution-id string
+  or extra selector is copied into untrusted memory.
+- The normative plugin contract, threat model, and architecture boundary now say
+  the same thing, so Issue #77 can map one contribution to one typed export before
+  compilation or instantiation without inventing a dispatch convention.
+- Validation passed 111 focused manifest/project/effect/architecture tests, all
+  2,325 Vitest cases across 168 files, all 16 benchmark-runner checks, production
+  build/typecheck, warning-free oxlint, clean diff checks, and the production
+  high-severity audit with 0 vulnerabilities.
+- Browser verification remains not applicable because this follow-up changes
+  only the pure non-executing validator and design contract. Issue #77 still owns
+  real hostile-module dispatch fixtures.
+
+## Part 10c issue #76 - PR #112 intermediate-migration follow-up (2026-08-12)
+
+**COMPLETE LOCALLY.**
+
+- Version-1 manifests do not invent schemas for intermediate descriptor versions.
+  After each non-final step, the host instead requires strict UTF-8 canonical
+  JSON for one primitive record before any following export may run.
+- The intermediate record is capped at 65,536 encoded bytes and 64 entries.
+  Keys and string values reuse the 1-to-64-character ASCII local-identifier
+  grammar; keys also exclude `__proto__`, `prototype`, and `constructor`.
+  Values are booleans, finite +/-1,000,000,000 numbers, or those bounded
+  strings, with no null, array, or nested-object values.
+- Only the final step must exactly match the current manifest parameter schema
+  and pass durable descriptor and whole-document replacement budgets.
+  Intermediate records never enter the document or history.
+- The latest exact-head Codex P2 found that retaining effect animation across a
+  plugin-controlled schema or unit change would silently reinterpret authored
+  keyframes. Descriptor migration ABI version 1 is therefore static-instance-
+  only: before any migration export runs, the host rejects the entire chain if
+  any owning `ClipAnimation.effectTracks` entry targets that effect instance id.
+  Key-range-only validation is explicitly insufficient; animated migration
+  requires a future, separately versioned contract. Every rejection preserves
+  the original descriptor and complete animation.
+- This remains a non-executing contract clarification. Issue #77 still owns the
+  parser, canonical byte checks, migration runtime, and hostile fixtures.
+- Validation passed all 20 focused plugin-manifest tests, the test wrapper's 16
+  benchmark-runner checks, and `git diff --check`.
+
+## Part 10c issue #76 - PR #112 activation and declaration-budget follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found two remaining pre-runtime availability gaps: a
+  start function could run synchronously during instantiation before a call
+  watchdog existed, and the 32 MiB module cap did not bound cheap, high-count
+  declarations or segment payload expansion before compilation.
+- The host-authored byte policy now rejects every start section before any
+  WebAssembly engine call. The later worker-ordering correction below makes the
+  parser itself candidate-owned. That fresh, disposable activation-candidate
+  worker also owns validation, asynchronous compilation, and instantiation under
+  one parent wall-clock deadline that never resets and expires after five
+  seconds. Success promotes it to the sandbox's dedicated runtime worker;
+  timeout or failure destroys it and the sandbox without blocking the UI.
+- The first implementation now caps each module at 1,024 types; 8,192 imported
+  plus defined functions; 16 tables with 4,096 aggregate entries; one imported
+  memory with a 1,025-page maximum; 2,048 globals; 8,192 exports; 1,024 element
+  segments/4,096 elements; 1,024 data segments/8 MiB payload; exactly one import;
+  zero tags; and 16,384 aggregate declaration entries. Checked byte parsing
+  enforces every count, sum, and payload limit before validation or compilation.
+- This remains a design-only Issue #76 clarification. No package parser,
+  WebAssembly activation path, sandbox, worker, or browser-visible behavior was
+  added; Issue #77 owns implementation and hostile cross-browser fixtures.
+- Validation passed 111 focused manifest/project/effect/architecture tests
+  across five files, the test wrapper's 16 benchmark-runner checks, and
+  `git diff --check`. Browser verification remains intentionally not applicable.
+
+## Part 10c issue #76 - PR #112 RGBA color-encoding follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found that `display-referred` did not fix the plugin
+  frame transfer function or primaries, so a conforming module could interpret
+  the same bytes as linear-light or Display-P3 and disagree with Myrelith's sRGB
+  effect path.
+- Capability version 1 now defines both input and successful output as four
+  `R, G, B, A` bytes: nonlinear IEC sRGB OETF code values using sRGB/Rec.709
+  primaries and D65, plus independent straight/unassociated 8-bit alpha. It is
+  explicitly not linear-light, Display-P3, or premultiplied RGBA.
+- The host converts the isolated compositor layer into that exact encoding
+  before copy-in and interprets/converts output identically after copy-out.
+  Preview and export share the boundary, and no ICC/profile or other gamut
+  metadata reaches plugin memory.
+- This is a design-only contract clarification. Issue #77 still owns the actual
+  conversion/runtime and cross-browser byte fixtures.
+- Validation passed 111 focused manifest/project/effect/architecture tests
+  across five files, the test wrapper's 16 benchmark-runner checks, and
+  `git diff --check`. Browser verification remains intentionally not applicable.
+
+## Part 10c issue #76 - PR #112 export-instance and numeric-step follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found that a promoted editor runtime could retain
+  mutable preview/scrub state into export, and that a positive numeric parameter
+  step could be smaller than IEEE-754 spacing at a declared endpoint.
+- Every export attempt now owns a freshly instantiated worker, Wasm instance,
+  imported memory, port, queue, and request generation. No mutable editor state
+  is shared. Planned calls run in deterministic frame/plan order, every terminal
+  outcome destroys the export runtime, and retry restarts from the first frame.
+- The later exact-head cache correction supersedes the original immutable-code
+  design: Myrelith retains no compiled/engine artifact across lifecycles. Its
+  optional session cache holds only private verified raw-byte copies, capped at
+  eight entries and 64 MiB actual retained bytes, with deterministic LRU and
+  lifecycle/trust/revocation/update invalidation; every activation repeats all
+  parser and engine gates from a fresh byte copy.
+- Export preflight reserves every required package slot under the hard eight-
+  sandbox ceiling or fails before acquiring a sink/encoder; it never evicts and
+  reinstantiates stateful modules midway through an export.
+- Number parameters must now satisfy both `min + step > min` and
+  `max - step < max`, rejecting steps that cannot move a host control at either
+  declared endpoint while retaining ordinary valid steps.
+- This remains a design-only lifecycle clarification plus pure manifest
+  validation; Issue #77 still owns the runtime and hostile stateful-module
+  browser fixtures. Browser verification remains intentionally not applicable.
+
+## Part 10c issue #76 - PR #112 memory-layout and expanded-declaration follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found that the former 1,025-page arithmetic consumed
+  every page with pixels and parameters, leaving no feasible module data,
+  stack, heap, or allocator space. It also found that raw section-entry counts
+  did not expand compressed code-local multiplicities.
+- Version 1 keeps the 1,025-page resident ceiling but now accepts manifest
+  requests only from 258 pages upward and fixes one non-overlapping layout:
+  8 MiB passive-data reserve, 8 MiB module stack/heap workspace, one 64 KiB
+  host parameter/migration-input page, then the pixel/migration-output region.
+  Both imported limits and host memory limits equal the manifest request, so
+  growth is impossible. At the maximum, 48 MiB holds 12,582,912 RGBA pixels;
+  a `P`-page request holds `(P - 257) * 16,384` pixels.
+- Active data segments are rejected before engine work. A consistent data-count
+  section and passive segments may use bounded bulk-memory `memory.init`/
+  `data.drop` lazily during a watchdog-protected call, with conforming module
+  data confined to pages 0-127 and allocator state to pages 128-255. This is a
+  module-private ABI convention, not isolation from its own imported memory;
+  the host refreshes inputs and validates/copies only exact owned outputs.
+- The host-authored byte-policy parser now has explicit compressed-declaration
+  gates (and, per the later worker-ordering correction below, runs inside the
+  disposable activation candidate rather than synchronously in the parent):
+  128 parameters/16 results per function type, 16,384 expanded signature fields,
+  2,048 expanded locals per defined function and 16,384 per module, 2,048
+  parameters-plus-locals per defined function and 16,384 after charging reused
+  parameter vectors across defined functions, and a 32,768 checked combined
+  raw-entry/signature/runtime-slot ceiling. Canonical body bounds, positive
+  local groups, code/function count parity, supported value types, and every
+  overflow are checked before validation, compilation, or instantiation.
+- Larger ordinary render surfaces remain valid projects. A plugin that cannot
+  hold one is visibly unavailable in preview and blocks export under the
+  existing explicit reviewed-bypass policy. Issue #77 still owns the byte
+  parser, runtime, and hostile cross-browser fixtures; this follow-up adds no
+  production plugin execution.
+- Validation passed 119 focused manifest/project/effect/architecture tests
+  across five files, all 2,351 Vitest cases across 170 files, all 16 benchmark-
+  runner checks, production build/typecheck, warning-free oxlint, clean diff
+  checks, and the production high-severity audit with 0 vulnerabilities.
+  Browser verification remains intentionally not applicable because the change
+  adds no production plugin runtime or observable browser surface.
+
+## Part 10c issue #76 - PR #112 migration-lifecycle and executable-budget follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found that descriptor migration had no owner lifecycle,
+  so an implementation could reuse mutable editor state, and that the 32 MiB
+  module/declaration ceilings still permitted compressed executable-code and
+  initializer-expression bombs before compilation.
+- Every descriptor chain now freshly owns its migration worker, Wasm instance,
+  fixed imported memory, private port, queue, request sequence, and generation
+  after current trust/revocation/static-target preflight. Its port accepts only
+  canonical migration traffic; sequential steps may share that chain owner, but
+  pixels, editor/export messages, and state from another descriptor cannot.
+- A multi-descriptor action reserves one sandbox slot, runs fresh chain owners
+  serially in immutable document order, destroys each before the next, and stages
+  bounded candidates. It commits once only after every chain and final document
+  budget succeeds against unchanged starting values/generation. Every other
+  terminal outcome destroys outstanding work without plugin cooperation,
+  discards all staging, and preserves every original descriptor plus animation;
+  retry is fresh. The later exact-head cache correction allows only a parent-
+  owned verified raw-byte entry to remain, never compiled/engine code, and retry
+  repeats all activation gates from a fresh copy.
+- Host-authored binary policy now independently caps defined-function payloads
+  at 256 KiB each/16 MiB per module, decoded instructions at 65,536 each/
+  1,048,576 per module, explicit structured-control depth at 256, and `br_table`
+  vector labels at 1,024 per instruction/16,384 per body/65,536 per module.
+  Constant/initializer expressions are capped at 64 opcodes each/16,384 per
+  module. These are independent of the existing checked declaration charges.
+- The future Issue #77 parser must use one closed versioned opcode/immediate
+  grammar, contain every immediate vector before allocation, validate control
+  and branch depth, and require an exact final `end` with no trailing byte.
+  Exact/+1 body, instruction, nesting, branch-table, and initializer fixtures,
+  plus malformed/truncated/noncanonical/unsupported encodings and migration-
+  lifecycle/atomicity fixtures, remain execution gates.
+- Validation passed 119 focused manifest/project/effect/architecture tests
+  across five files, all 2,351 Vitest cases across 170 files, all 16 benchmark-
+  runner checks, production build/typecheck, warning-free oxlint, clean diff and
+  source-marker checks, and the production high-severity audit with 0
+  vulnerabilities. The first full-suite attempt hit the known five-second
+  Inspector timing flake after 2,350 passing tests; that exact test passed 1/1
+  in isolation, and the immediate authoritative solo rerun passed completely.
+  The build retained only the existing >500 kB chunk advisory.
+- Browser verification remains intentionally not applicable: this is still a
+  design-only contract with no production binary parser, migration runtime, or
+  observable browser surface. Issue #77 owns hostile-module browser fixtures.
+
+## Part 10c issue #76 - PR #112 candidate-worker parser follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4922271431` found that placing the bounded Wasm byte-
+  policy parser synchronously in the trusted parent still let a hostile near-
+  limit module block the app/UI before the disposable-worker watchdog could
+  terminate it.
+- The trusted parent now owns only bounded package/manifest work, exact Wasm
+  entry framing and byte length, integrity/signature/trust/raw-byte-cache
+  preflight, the
+  one activation deadline, and termination. It treats the framed module bytes
+  as opaque and never iterates attacker-driven Wasm sections, bodies,
+  instructions, immediates, or initializer expressions synchronously.
+- That non-resetting five-second wall-clock deadline starts before candidate
+  creation. The complete host-authored byte-policy parser runs inside the fresh
+  disposable candidate worker under the existing static ceilings. Only after
+  parse success may the same worker validate, compile, and instantiate; parse
+  rejection invokes no engine API. Ready promotion retains worker identity, and
+  any parse/engine failure or timeout lets the parent terminate the candidate.
+- Issue #77 is now gated on parent responsiveness during near-limit parsing,
+  deadline coverage across create/parse/validate/compile/instantiate, parse-
+  failure proof that no engine API ran, and same-worker parse-to-promotion
+  identity. This remains a design-only clarification with no production plugin
+  parser/runtime or observable browser surface, so browser QA is not applicable.
+- Final validation passed 119 focused manifest/project/effect/architecture tests
+  across five files plus all 16 benchmark-runner checks, production build/
+  typecheck, warning-free oxlint, and `git diff --check`. The ordinary bundle
+  contains none of the plugin capability id, manifest authority, candidate-
+  worker, Wasm-instance/validation, or `wasm-unsafe-eval` canaries. Four generic
+  `WebAssembly.instantiate` references remain solely in the existing Mediabunny
+  AC-3/ProRes codec chunks, not a plugin runtime. Build output retained only the
+  existing >500 kB chunk advisory.
+
+## Part 10c issue #76 - PR #112 render-parameter ABI follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4922439329` found that the ten-argument render ABI
+  called its parameter buffer only “UTF-8 canonical,” leaving object shape,
+  canonicalization, defaults, and animated-value timing ambiguous between host
+  and plugin implementations.
+- Version 1 now passes exactly one top-level parameter object with every and only
+  the selected contribution's declared keys. A present value must match its
+  declared number/boolean/enum kind and bounds or the stage fails/bypasses
+  without a call; an absent declared value is completed ephemerally from the
+  manifest default without changing durable data. Undeclared durable keys remain
+  preserved but keep the descriptor unsupported and never cross the ABI.
+- The host resolves only manifest-declared animatable numbers through the shared
+  pure effect-track authority at the exact requested global integer timeline
+  frame before serialization. Its static fallback is the materialized base
+  number (valid authored value, otherwise manifest default), `step` never
+  quantizes rendering, and the same immutable snapshot/frame yields
+  byte-identical preview, scrub, playback, and export parameter bytes.
+- The wire format is now explicitly RFC 8785 JCS followed by UTF-8 without BOM,
+  whitespace, NUL termination, or trailing bytes. The JCS UTF-16 name sort is
+  ordinary bytewise ASCII order for version-1 local-identifier keys. The exact
+  half-open slice begins at `0x01000000`, is 2 through 65,536 bytes, and the host
+  clears the complete parameter page before copy and after settlement.
+- Migration retains its separate static canonical-record ABI and receives no
+  frame-resolved values or render-time default completion. Issue #77 is gated on
+  exact object/JCS/buffer/default/invalid-input, animation-frame, preview/export
+  parity, maximum-valid 8,577-byte records, synthetic 64 KiB buffer boundaries,
+  and render-versus-migration hostile fixtures. This remains design-only
+  with no production plugin runtime or browser-observable change; browser QA is
+  not applicable.
+- Final validation passed 119 focused manifest/project/effect/architecture tests
+  across five files plus all 16 benchmark-runner checks, production build/
+  typecheck, warning-free oxlint, the production audit with 0 vulnerabilities,
+  and clean diff/contradiction checks. The normal bundle has zero plugin
+  capability/manifest/candidate/instance/validate/compile/CSP canaries. Its six
+  generic `WebAssembly.instantiate` references are confined to four existing
+  Mediabunny AC-3/ProRes codec chunks (one in each AC-3 chunk and two in each
+  ProRes chunk), not a plugin runtime. Build output retained only the existing
+  >500 kB chunk advisory.
+
+## Part 10c issue #76 - PR #112 signature-envelope and raw-byte-cache follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4922582697` found two version-1 specification gaps:
+  `signature.json` did not define one interoperable signed byte grammar/package-
+  digest formula, and the compiled-module cache charged only raw Wasm length
+  while retaining engine-native allocations of unknown size.
+- `SignatureEnvelopeV1` now has closed exact keys and literals, canonical RFC
+  8785 JCS bytes, strict unpadded-base64url Ed25519 key/signature encodings,
+  lowercase-hex SHA-256 fields, exactly two normalized/path-sorted expanded-
+  entry records, and explicit byte-length bounds. The Ed25519 message is the JCS
+  envelope without `signature`; the package digest is a domain-separated,
+  big-endian-`u32`-length-framed SHA-256 over that message and the decoded
+  signature, represented as `sha256:` plus lowercase hex.
+- The normative complete-package golden fixture pins a 496-byte canonical
+  manifest, a valid 91-byte Wasm module, a 469-byte signed payload, a verified
+  64-byte Ed25519 signature, a 570-byte canonical envelope, and package digest
+  `sha256:cb47299284c74ad83fce88a8c2d50af97e9de6f6d56513f9e07ac7dac2851d97`.
+- Version 1 retains no `WebAssembly.Module`, compiled/JIT/native/engine artifact,
+  or engine reference across lifecycles. The optional trusted-parent session
+  cache stores at most eight private write-once verified raw `Uint8Array` copies
+  totaling at most 64 MiB actual retained `byteLength`; each activation gets a
+  fresh copy. Deterministic access/key LRU needs no in-use lease, and pressure may
+  bypass insertion. Cold and hit paths both reparse, validate, asynchronously
+  compile, and freshly instantiate under the same non-resetting deadline.
+- Issue #77 is gated on exact/+1 hostile signature forms, independent golden-
+  vector crypto/hash verification, raw-byte ownership/mutation/transfer tests,
+  exact key/count/byte/LRU/invalidation checks, engine-artifact non-retention,
+  and spies proving no activation gate is skipped. This remains design-only, so
+  browser QA is not applicable.
+- Independent Node classic/Web Crypto and Python `cryptography` checks reproduced
+  the exact public key/signature; Python separately reproduced every documented
+  artifact length/hash, canonical JSON byte comparison, 575-byte framed input,
+  and package digest. Node also validated/instantiated the fixture Wasm with its
+  fixed 258-page import and confirmed the declared ten-`i32` export returns zero.
+- Final frozen validation passed 119 focused manifest/project/effect/architecture
+  tests across five files plus all 16 benchmark-runner checks, production build/
+  typecheck, warning-free oxlint, the production audit with 0 vulnerabilities,
+  clean diff and contradiction checks, and exact HEAD/upstream alignment. The
+  normal bundle has zero plugin capability/signature/manifest/candidate/validate/
+  compile/module/CSP canaries. Its six generic `WebAssembly.instantiate`
+  references remain confined to four existing Mediabunny AC-3/ProRes codec
+  chunks (one in each AC-3 chunk and two in each ProRes chunk), not a plugin
+  runtime. The build retained only the existing >500 kB chunk advisory. A new
+  full suite was intentionally not repeated for this docs-only correction; the
+  exact-head suite was already green before these non-executing contract edits.
+
+## Part 10c issue #76 - PR #112 deterministic migration-profile follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4922748950` found that version 1 admitted scalar
+  floating-point and fixed-width SIMD throughout a module that could also export
+  descriptor migrations. A migration could therefore reinterpret or branch on
+  an implementation-selected NaN payload and commit different durable records
+  on different engines.
+- The candidate-worker parser now selects one closed binary-policy profile from
+  validated signed manifest facts before scanning or engine work. All-empty
+  contribution migration arrays select `myrelith-wasm-render-general-v1`; any
+  nonempty migration array selects `myrelith-wasm-migration-integer-v1` for the
+  complete signed module and every editor/export/migration activation.
+- Migration-integer rejects `f32`, `f64`, and `v128` in every signature, block
+  type, typed select, local, global, initializer, and body. It also rejects every
+  scalar-float constant/load/store/arithmetic/comparison/conversion/
+  reinterpretation form, float-related prefixed conversion, the complete `0xfd`
+  SIMD family, and resource-dependent `table.grow`. The closed remainder is the
+  deterministic `i32`/`i64`, control, variable, parametric, fixed-memory, bulk-
+  memory, and bounded `funcref` table subset with no callable or nondeterministic
+  host import.
+- Enforcement is intentionally whole-module: unreachable functions, element
+  targets, `ref.func`, mutable table dispatch, and `call_indirect` cannot escape
+  the profile. Consequently, render exports packaged beside a migration are
+  integer-only too. Render-only packages keep common scalar-float/fixed-SIMD
+  compatibility and performance, but version 1 does not promise bit-identical
+  third-party pixels across engines/hardware; exact host bytes, interpretation,
+  ordering, and lifecycle boundaries remain pinned.
+- The exact profile id and canonical opcode/immediate-table `sha256:` digest are
+  part of raw-module-cache identity. A prior general-profile acceptance or cache
+  hit cannot authorize migration-integer activation, and each candidate still
+  parses before validation, compilation, and fresh instantiation.
+- Migration input/output remains strict canonical JCS plus schema validation and
+  one all-or-nothing action commit. Given identical canonical input and declared
+  step order, every successful accepted migration must produce identical JCS
+  bytes across supported engines; traps, timeouts, malformed output, and budget
+  failure remain transactional failures rather than alternate output.
+- Issue #77 now requires exact hostile fixtures for every forbidden type position
+  and opcode category, `table.grow`, future features, unreachable/direct/indirect/
+  mutable-table dispatch, NaN-payload branch bombs, empty-versus-one-migration
+  profile selection, cache id/table-digest separation, and cross-engine canonical
+  output goldens. This is still a design-only correction with no runtime/parser or
+  browser-observable surface, so browser QA remains not applicable.
+- Final frozen validation passed 119 focused manifest/project/effect/architecture
+  tests across five files plus all 16 benchmark-runner checks, production build/
+  typecheck, warning-free oxlint, the production audit with 0 vulnerabilities,
+  and clean diff/contradiction/alignment checks. The ordinary bundle has zero
+  occurrences of the plugin capability id, either binary-profile id, signature
+  envelope/path, candidate-worker, plugin-manifest, validate, compile, module, or
+  CSP canaries. Its six generic `WebAssembly.instantiate` references remain
+  confined to four existing Mediabunny AC-3/ProRes codec chunks, not a plugin
+  runtime. The build retained only the existing >500 kB chunk advisory. A new
+  full suite was intentionally not repeated for this docs-only correction after
+  the exact-head test suite had already passed; browser QA remains not applicable.

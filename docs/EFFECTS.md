@@ -75,14 +75,24 @@ explicit pixel command in exact authored order. Noncontiguous color adjustments
 are never collapsed across a mask or key, and one stack never mixes filter and
 pixel precision.
 
-The pixel contract reads unpremultiplied 8-bit `ImageData` in the compositor's
-display-referred sRGB context. It uses float64 JavaScript intermediates in the
-table order for each descriptor, clamps RGB to `[0, 1]` after every descriptor,
-and rounds to nearest 8-bit only at the end. Alpha is copied byte-for-byte.
-Transparent RGB is still corrected, but unchanged zero alpha keeps it
-invisible. Ordinary media/stills, complete procedural-text layers, and each
-crossfade leg use the existing reusable isolation surfaces; correction happens
-before clip opacity, transition weighting, and destination blend mode.
+The pixel contract reads straight/unassociated 8-bit `ImageData` in the
+compositor's display-referred IEC sRGB context: sRGB/Rec.709 primaries, D65
+white point, and nonlinear sRGB OETF-encoded R/G/B bytes, never linear-light or
+Display-P3. Alpha is an independent linearly quantized 8-bit coverage byte; RGB
+is not premultiplied by it. The implementation uses float64 JavaScript
+intermediates in the table order for each descriptor, clamps RGB to `[0, 1]`
+after every descriptor, and rounds to nearest 8-bit only at the end. Alpha is
+copied byte-for-byte. Transparent RGB is still corrected, but unchanged zero
+alpha keeps it invisible. Ordinary media/stills, complete procedural-text
+layers, and each crossfade leg use the existing reusable isolation surfaces;
+correction happens before clip opacity, transition weighting, and destination
+blend mode.
+
+The proposed plugin-frame ABI version 1 uses that same exact byte encoding for
+both input and successful output. Its future host converts the isolated
+compositor layer into the ABI representation before copy-in and interprets and
+converts the result identically after copy-out. Preview and export share those
+boundary conversions. ICC/profile metadata never enters plugin memory.
 
 Preview, scrub/seek, and export consume the same composition plan and
 `pipeline/render.ts` implementation. A context without Canvas filter or pixel
@@ -174,6 +184,27 @@ Home, and End keys move across tabs; every stack action has an explicit
 screen-reader label and native keyboard activation. Add is disabled with a
 visible/accessibly-associated reason whenever the selected clip or document
 has no remaining effect budget.
+
+## Proposed third-party plugin descriptors
+
+Issue #76 reserves `plugin:<reverse-dns-plugin-id>/<contribution-id>` as the
+durable namespace for future plugin effects. The descriptor remains this exact
+bounded `EffectDescriptor`; projects never embed a package, URL, signature,
+trust decision, permission grant, sandbox state, or executable code. On the
+current tree every such type is intentionally unknown, preserved, reported as
+unsupported, and bypassed. Issue #76 adds only a pure non-executing manifest
+validator; no plugin registry or runtime is present.
+
+The gated package, capability, compatibility, isolation, recovery, and failure
+contract is in [PLUGINS.md](PLUGINS.md), with threats and residual risk in
+[PLUGIN_THREAT_MODEL.md](PLUGIN_THREAT_MODEL.md). A future Issue #77 runtime must
+retain the existing authored stack order and shared preview/export path rather
+than create a second effect model.
+
+Shared planning and pixel semantics do not permit shared mutable plugin runtime
+state. Every export attempt must use a fresh export-owned worker, instance, and
+memory, receive calls in deterministic frame/plan order, and be destroyed at its
+terminal outcome; preview/scrub state can never enter or mutate it.
 
 ## Issue #73 review hardening
 

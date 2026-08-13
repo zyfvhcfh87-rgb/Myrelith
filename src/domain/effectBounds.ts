@@ -28,6 +28,11 @@ const EFFECT_DESCRIPTOR_KEYS = Object.freeze([
 const EFFECT_DESCRIPTOR_KEY_SET = new Set<string>(EFFECT_DESCRIPTOR_KEYS)
 const UNSAFE_PARAM_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
 
+/** Shared guard for strings that must never become durable effect-record keys. */
+export function isUnsafeEffectParamKey(key: string): boolean {
+  return UNSAFE_PARAM_KEYS.has(key)
+}
+
 export interface EffectBudgetUsage {
   readonly effects: number
   readonly params: number
@@ -89,7 +94,7 @@ export function effectDescriptorBoundsError(value: unknown): string | null {
       EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters,
     )
     if (keyError) return keyError
-    if (UNSAFE_PARAM_KEYS.has(key)) return `unsafe parameter key ${key}`
+    if (isUnsafeEffectParamKey(key)) return `unsafe parameter key ${key}`
     const parameter = value.params[key]
     if (typeof parameter === 'number') {
       if (

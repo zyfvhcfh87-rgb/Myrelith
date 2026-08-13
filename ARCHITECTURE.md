@@ -211,6 +211,173 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   their current version. Unknown types, versions, and parameter keys must remain
   ordered and serializable, while evaluation reports and bypasses anything it
   cannot safely execute. The normative contract is in `docs/EFFECTS.md`.
+- `domain/pluginManifest.ts` is the pure, non-executing structural validator and
+  compatibility negotiator for the proposed plugin manifest. It reuses the
+  durable effect-number/key bounds, requires one package-unique render export per
+  contribution as the WebAssembly-call discriminator, keeps those render names
+  disjoint from differently typed migration exports, and declares bounded
+  descriptor-migration ABI facts. It may define only serializable data and must
+  never read packages, verify signatures, mutate trust/permission state, register
+  runtime code, or instantiate WebAssembly. Descriptor migration ABI version 1
+  is static-instance-only: before any migration export runs, the future host must
+  reject an instance targeted by any owning `ClipAnimation.effectTracks` entry
+  and preserve its original descriptor plus complete animation. Existing keys
+  that happen to fit new ranges are not proof of schema or unit compatibility;
+  animated migration requires a future, separately versioned contract.
+  Frame capability version 1 has one input/output representation: four-byte
+  straight RGBA with nonlinear IEC sRGB OETF code values, sRGB/Rec.709 primaries,
+  D65 white, and independent 8-bit alpha; it is neither linear-light nor
+  Display-P3. The future host owns conversion into and out of that encoding,
+  preview/export share the boundary, and no ICC/profile metadata enters plugin
+  memory.
+  Each future render call also receives one immutable parameter record at the
+  fixed ABI parameter page: exactly one property per selected contribution
+  declaration and no other fields, serialized with RFC 8785 JCS and encoded as
+  UTF-8 without a BOM, whitespace, terminator, or trailing bytes. A present
+  authored value must match its declared number/boolean/enum kind and bounds;
+  invalid values fail/bypass without calling plugin code. An absent declared
+  value is completed ephemerally from the manifest default without mutating the
+  document, while an undeclared durable key keeps the descriptor unsupported
+  and never crosses the call boundary. Before serialization, the future Issue
+  #77 host must expose plugin `animatable: true` number declarations to the same
+  pure effect-track authority used by the composition plan, resolve them at the
+  exact requested global integer timeline frame, and use the materialized base
+  number (valid authored value, otherwise the manifest default) as the static
+  fallback; control `step` never quantizes render evaluation.
+  Preview/scrub/playback/export using the same immutable snapshot and frame must
+  produce byte-identical records. Descriptor migration remains a separate,
+  static-record ABI and never receives this frame-resolved render record.
+  Package-signature version 1 is one closed RFC 8785 JCS envelope with exact
+  `format: "myrelith-plugin-signature"`, `formatVersion: 1`, and
+  `algorithm: "Ed25519"` literals; a canonical unpadded-base64url 32-byte public
+  key and 64-byte signature; a `sha256:` plus lowercase-hex public-key
+  fingerprint; and exactly two strictly ASCII-path-sorted expanded-entry
+  records for `manifest.json` and the manifest's normalized Wasm entry. The
+  Ed25519 message is the UTF-8 JCS encoding of that exact envelope without its
+  `signature` member. The package digest is a separately domain-separated,
+  `u32`-length-framed SHA-256 over those message bytes and the decoded signature
+  bytes, represented as `sha256:` plus lowercase hex. Exact member sets, entry
+  length bounds, digest encodings, framing bytes, and the self-verifying golden
+  vector in `docs/PLUGINS.md` are the authoritative wire contract; duplicate
+  keys, noncanonical bytes, extra entries/members, or alternate encodings fail.
+  The future trusted parent owns bounded archive/manifest parsing, exact module-
+  entry framing and the 32 MiB byte-length check, digest/signature/trust preflight,
+  one non-resetting five-second activation deadline, and termination. It treats
+  the framed WebAssembly bytes as opaque and never synchronously iterates
+  attacker-driven sections, bodies, instructions, or initializer expressions.
+  The parent starts that deadline before creating a fresh disposable activation-
+  candidate worker. Entirely inside the candidate, the host-authored byte-policy
+  parser rejects every start section and enforces the exact per-module
+  declaration, segment, memory, and table ceilings in `docs/PLUGINS.md` before
+  any engine API. Compressed function signatures and code-local groups are
+  charged by expanded multiplicity, including each defined function's reused
+  parameter vector; raw declarations, expanded signatures, expanded runtime
+  slots, and their combined checked sum are all bounded before engine work.
+  Unsupported value types/features fail at this candidate-worker parser boundary.
+  The candidate selects one exact binary-policy profile from the already-
+  validated signed manifest facts before it scans the module. A module whose
+  every contribution has an empty `migrations` array uses
+  `myrelith-wasm-render-general-v1`, the wider render-only profile described in
+  `docs/PLUGINS.md`. That wider profile preserves common render toolchains and
+  fixed-width-SIMD performance, but version 1 does not promise bit-identical
+  third-party plugin pixels across different browser engines or hardware; the
+  exact host input/parameter encoding, call ordering, and lifecycle boundaries
+  remain shared. If any contribution declares one or more migration steps,
+  the entire signed module instead uses
+  `myrelith-wasm-migration-integer-v1`: `f32`, `f64`, and `v128` types are
+  forbidden in every signature, block type, typed-`select` result, local, and
+  global. Every float
+  constant/load/store/arithmetic/comparison/conversion/reinterpretation form,
+  every float-related prefixed conversion, and the complete fixed-width SIMD
+  prefix/table are absent from its closed table. Only the existing deterministic
+  `i32`/`i64`, control, variable, parametric, fixed-memory, bulk-memory, and
+  bounded `funcref` table subset remains, except `table.grow` is forbidden so
+  allocation-dependent success cannot affect migration output; no host clock,
+  randomness, or callable import exists. This whole-module rule deliberately
+  constrains render exports in migration-bearing packages too, so an unreachable
+  helper, `call_indirect`, or table entry cannot evade deterministic migration policy.
+  Each profile has its own exact id and normative opcode/immediate-table digest;
+  both enter the raw-module cache identity, and a prior general-profile parse can
+  never authorize a migration-bearing activation.
+  Executable bytes are independently bounded too: a defined-function body is at
+  most 256 KiB and all bodies total at most 16 MiB; canonical instruction
+  decoding admits at most 65,536 opcodes per body and 1,048,576 per module,
+  256 simultaneously open explicit control constructs, and `br_table` vectors
+  of at most 1,024 labels/16,384 per body/65,536 per module. Constant and
+  initializer expressions admit 64 opcodes each and 16,384 per module. The
+  selected profile's binary-policy-versioned opcode/immediate table is closed;
+  the parser bounds
+  every immediate vector before allocation, validates branch/control structure,
+  and requires the final `end` to consume the exact body/expression with no
+  trailing bytes. These byte/opcode/depth gates and declaration charges all pass
+  independently before validation, compilation, or instantiation.
+  The imported memory is fixed-size from 258 through 1,025 pages. Its first
+  8 MiB is reserved for passive-data materialization, the next 8 MiB for the
+  module stack/heap, page 256 for host parameters or migration input, and pages
+  257 onward for host pixels or migration output. Active data segments are
+  forbidden before instantiation; the only accepted initialization is bounded
+  lazy `memory.init`/`data.drop` from consistent passive data into the first
+  region during a watchdog-protected call. Both imported limits and both host
+  memory limits equal the manifest request, so growth is impossible. A request
+  of `P` pages supports at most
+  `(P - 257) * 16,384` RGBA pixels; the maximum is 48 MiB or
+  12,582,912 pixels at 1,025 pages. A larger compositor surface remains valid
+  project/render input but makes that plugin stage preview-unavailable and
+  export-blocking under the existing explicit bypass policy. The host refreshes
+  and validates its fixed I/O regions for every call; these regions constrain
+  conforming module allocation but do not pretend to isolate an untrusted
+  module from its own imported memory.
+  Only after the complete byte-policy parse succeeds may that same candidate
+  worker perform engine validation, compilation, and instantiation. The parent
+  deadline was already running before worker creation, never resets between
+  those phases, and expires after five seconds. Parse rejection invokes no
+  engine API; every parse/engine failure or timeout destroys the candidate and
+  sandbox. A ready candidate promotes in place to the lifecycle's dedicated
+  runtime worker, so attacker-driven parsing cannot block the app/UI realm.
+  Every explicit descriptor migration separately activates one fresh migration-
+  owned worker, instance, imported memory, private port, queue, and generation
+  for exactly one descriptor chain after current trust/revocation/static-target
+  preflight. Steps in that chain may run serially in the same instance, but it
+  receives no pixel/editor/export traffic and shares no mutable state with any
+  other descriptor. A multi-descriptor action processes fresh owners serially in
+  stable document order, stages validated candidates, and commits once only if
+  all chains and final document budgets pass against the unchanged starting
+  generation. Every success, failure, cancellation, watchdog, or stale-state
+  path terminates the owner and preserves all originals unless that final atomic
+  commit succeeds; retry is fresh. An activation may receive a fresh copy of
+  exact-key verified raw module bytes, but it always repeats candidate parsing,
+  engine validation, asynchronous compilation, and fresh instantiation.
+  Editor preview/scrub may reuse only its editor-owned runtime instance. Every
+  export attempt, including a retry, must instead create a fresh export-owned
+  worker, `WebAssembly.Instance`, and imported memory. It may receive only a
+  private fresh copy of digest-bound verified raw module bytes; it shares no
+  worker, instance, compiled artifact, memory, port, queue, request generation,
+  or other mutable plugin state with preview/scrub. Calls to one export sandbox
+  are serialized by ascending requested timeline frame and authored plan order.
+  Terminal success destroys that sandbox; failure, cancellation, or watchdog
+  expiry makes the trusted parent terminate it without waiting for plugin
+  cooperation. A retry begins at the first requested frame with another fresh
+  instance.
+  An optional trusted-parent session cache may retain only verified raw module
+  bytes: at most eight private, write-once `Uint8Array` entries and at most
+  64 MiB of their actual checked `byteLength` sum. Its exact identity binds the
+  plugin/signing/package/module facts plus every negotiated ABI and binary-policy
+  fact. The retained backing buffer is never exposed, shared, transferred, or
+  detached; each activation receives another fresh copy. Consequently an entry
+  has no in-use lease, and deterministic oldest-access-sequence then key LRU may
+  evict it after that copy is made. A hit skips no candidate-worker parse,
+  `WebAssembly.validate`, compilation, or instantiation gate. Myrelith retains
+  no `WebAssembly.Module`, compiled/JIT/native/engine artifact, instance, memory,
+  table, global, worker, port, queue, or request state across lifecycles.
+  Revocation, disable/uninstall, package replacement, policy/ABI change, and app
+  teardown invalidate the relevant raw-byte entries; cache pressure may bypass
+  insertion without weakening activation.
+  Plugin packages, sandboxes, ports, workers, watchdogs, grants, and revocations
+  remain future app-owned Issue #77 resources. Projects may retain only bounded
+  namespaced effect descriptors; package bytes, URLs, trust, grants, and runtime
+  state never enter `TimelineDoc`, Zustand, recovery, or portable saves. The
+  reviewed design and complete boundary are normative in `docs/PLUGINS.md` and
+  `docs/PLUGIN_THREAT_MODEL.md`; this Issue #76 prototype executes nothing.
 - Clips on one track are sorted by `timelineRange.startFrame` and pairwise
   non-overlapping; `operations.ts` rejects violations.
 - `TimelineDoc.tracks[0]` composites first (bottom layer).
