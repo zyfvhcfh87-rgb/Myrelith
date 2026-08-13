@@ -13,6 +13,7 @@ import {
   type MotionAnalysisWorkerRunMessage,
   type MotionAnalysisWorkerWindowReply,
   type MotionAnalysisGrayFrame,
+  motionAnalysisSourceOpenFailureCode,
 } from '../pipeline/motionAnalysisProtocol'
 
 interface PendingWindow {
@@ -75,9 +76,7 @@ async function sendWindow(
 
 function failureCode(cause: unknown): MotionAnalysisWorkerFailureCode {
   if (cause instanceof WorkerVideoSourceOpenError) {
-    return cause.failure.reason === 'unsupported-codec'
-      ? 'unsupported-codec'
-      : 'decode-readback'
+    return motionAnalysisSourceOpenFailureCode(cause.failure.reason)
   }
   if (cause instanceof RangeError) return 'resource-limit'
   if (cause instanceof DOMException || cause instanceof Error) return 'decode-readback'

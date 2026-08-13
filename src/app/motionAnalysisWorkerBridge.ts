@@ -213,6 +213,8 @@ function failure(reply: Extract<MotionAnalysisWorkerReply, { type: 'failure' }>)
     ? 'unsupported-codec'
     : reply.code === 'resource-limit'
       ? 'resource-limit'
+      : reply.code === 'resource-unavailable'
+        ? 'resource-unavailable'
       : reply.code === 'decode-readback'
         ? 'decode-failed'
         : 'unexpected'
@@ -255,15 +257,17 @@ export function runMotionAnalysisWorker(
   return new Promise((resolve, reject) => {
     let settled = false
     let consuming = false
+    let workerStopped = false
+    let pendingTerminal: (() => void) | null = null
     let expectedWindowIndex = 0
     let expectedSampleOffset = 0
     let previousWindowLength = 0
     let observedSampleCount = 0
     let observedMaxWindowFrames = 0
     let observedMaxWindowBytes = 0
-    const finish = (action: () => void) => {
-      if (settled) return
-      settled = true
+    const stopWorker = () => {
+      if (workerStopped) return
+      workerStopped = true
       context.signal.removeEventListener('abort', onAbort)
       worker.removeEventListener('message', onMessage)
       worker.removeEventListener('error', onError)
@@ -272,7 +276,29 @@ export function runMotionAnalysisWorker(
       diagnostics.workersTerminated++
       diagnostics.activeWorkers--
       context.setActiveDecoderCount(0)
+    }
+    const settle = (action: () => void) => {
+      if (settled) return
+      settled = true
+      pendingTerminal = null
+      stopWorker()
       action()
+    }
+    const finish = (action: () => void) => {
+      if (settled || pendingTerminal) return
+      if (consuming) {
+        pendingTerminal = action
+        stopWorker()
+        return
+      }
+      settle(action)
+    }
+    const settlePendingTerminal = (): boolean => {
+      if (!pendingTerminal) return false
+      const action = pendingTerminal
+      pendingTerminal = null
+      settle(action)
+      return true
     }
     const onAbort = () => finish(() => reject(abortError()))
     const onError = (event: ErrorEvent) => {
@@ -287,30 +313,48 @@ export function runMotionAnalysisWorker(
       'Motion-analysis worker response could not be deserialized',
     )))
     const continueAfterWindow = async (window: MotionAnalysisWorkerWindowReply) => {
+      let consumerFailed = false
+      let consumerFailure: unknown
       try {
         await consumeWindow(window, context.signal)
-        if (context.signal.aborted) throw abortError()
-        if (settled) return
-        expectedWindowIndex++
-        consuming = false
-        const next: MotionAnalysisWorkerContinueMessage = {
-          type: 'continue',
-          requestId: message.requestId,
-          windowIndex: window.windowIndex,
-        }
+      } catch (cause) {
+        consumerFailed = true
+        consumerFailure = cause
+      }
+      let releaseFailure: unknown
+      try {
+        releaseWindow(window)
+      } catch (cause) {
+        releaseFailure = cause
+      }
+      consuming = false
+      if (settlePendingTerminal()) return
+      if (releaseFailure !== undefined) {
+        finish(() => reject(new MediaJobExecutionError(
+          'resource-unavailable',
+          'Motion-analysis window ownership could not be released',
+          releaseFailure,
+        )))
+        return
+      }
+      if (consumerFailed) {
+        finish(() => reject(consumerFailure))
+        return
+      }
+      if (context.signal.aborted) {
+        finish(() => reject(abortError()))
+        return
+      }
+      expectedWindowIndex++
+      const next: MotionAnalysisWorkerContinueMessage = {
+        type: 'continue',
+        requestId: message.requestId,
+        windowIndex: window.windowIndex,
+      }
+      try {
         worker.postMessage(next)
       } catch (cause) {
         finish(() => reject(cause))
-      } finally {
-        try {
-          releaseWindow(window)
-        } catch (cause) {
-          finish(() => reject(new MediaJobExecutionError(
-            'resource-unavailable',
-            'Motion-analysis window ownership could not be released',
-            cause,
-          )))
-        }
       }
     }
     const onMessage = (event: MessageEvent<MotionAnalysisWorkerReply>) => {

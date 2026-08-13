@@ -78,8 +78,18 @@ export interface MotionAnalysisWorkerCompleteReply {
 export type MotionAnalysisWorkerFailureCode =
   | 'unsupported-codec'
   | 'resource-limit'
+  | 'resource-unavailable'
   | 'decode-readback'
   | 'unexpected'
+
+export function motionAnalysisSourceOpenFailureCode(
+  reason: 'unsupported-codec' | 'resource-limit' | 'decode-failed' | 'resource-unavailable',
+): MotionAnalysisWorkerFailureCode {
+  if (reason === 'unsupported-codec') return 'unsupported-codec'
+  if (reason === 'resource-limit') return 'resource-limit'
+  if (reason === 'resource-unavailable') return 'resource-unavailable'
+  return 'decode-readback'
+}
 
 export interface MotionAnalysisWorkerFailureReply {
   readonly type: 'failure'

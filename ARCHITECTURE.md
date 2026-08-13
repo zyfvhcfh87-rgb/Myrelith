@@ -28,7 +28,8 @@ non-negotiable rules. Re-read it at the start of every coding session.
   (e.g. `app/previewController.ts`) may import state/ AND engine/pipeline
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
-- The opt-in Issue #54 and Issue #70 evidence panels have narrow,
+- The opt-in Issue #54 and Issue #70 evidence panels plus the checked-in Issue
+  #108 browser gate have narrow,
   architecture-guarded dev exceptions. `dev/performance/runtime.ts` may compose
   existing `app/` controllers with `state/` and its bounded Mediabunny fixture
   generator;
@@ -38,7 +39,12 @@ non-negotiable rules. Re-read it at the start of every coding session.
   `PerformanceBenchmarkApp.tsx` may reuse existing `ui/` surfaces.
   `ProxyEditingBenchmarkPanel.tsx` may read the selected document/media state
   and call the app-owned preview/proxy/transport facades solely to measure the
-  exact live source path. No other `dev/` module may reach those layers. Only
+  exact live source path. `dev/issue108/motionAnalysisFoundation.ts` may compose
+  only the production `app/` motion-analysis facade, browser-free `domain/`
+  cache constants, and the serializable `pipeline/` protocol to run the
+  source-bound Issue #108 gate; only `scripts/issue108/foundation-gate.html`
+  imports it, and no ordinary application entry may do so. No other `dev/`
+  module may reach those layers. Only
   the build-gated exact route in `main.tsx` may import the Issue #54 UI, and
   only `EditorShell.tsx` may dynamically import the Issue #70 panel behind its
   development-only query guard. Ordinary production builds remove both
@@ -558,13 +564,17 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   never receive `File`, `Blob`, `VideoFrame`, worker, decoder, OPFS, or result
   byte ownership, and the controller never mutates the timeline document.
 - `pipeline/motionAnalysisDecode.ts` owns sequential source decode and grayscale
-  downsampling. Its dedicated `workers/motion-analysis.worker.ts` closes every
-  decoded `VideoFrame` in the same operation that acquired it, streams at most
-  300 tightly owned grayscale planes / 32 MiB through one acknowledged window,
+  downsampling after applying each decoded frame's 0/90/180/270-degree source
+  orientation into display space. Its dedicated
+  `workers/motion-analysis.worker.ts` closes every decoded `VideoFrame` in the
+  same operation that acquired it, streams at most 300 tightly owned grayscale
+  planes / 32 MiB through one acknowledged window, preserves source-open codec,
+  resource-limit, resource-unavailable, and decode-readback failure classes,
   and closes its cursor/source before terminal settlement. The app bridge owns
   abort/error/messageerror/send failure, terminates the worker exactly once,
-  detaches every transferred plane when its consumer settles, and releases
-  scheduler admission only after local ownership is balanced.
+  detaches every transferred plane when its consumer settles, and does not
+  settle the run or release scheduler admission while an acknowledged window
+  remains consumer-owned.
 - `app/analysisStorage.ts` implements the strict schema-1 origin-local OPFS
   sidecar under `myrelith-derived/analysis-cache-v1`. `domain/analysisCache.ts`
   owns the exact key, provenance, freshness, and stale-rejection policy. Writes

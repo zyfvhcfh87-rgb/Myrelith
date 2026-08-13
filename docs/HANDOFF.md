@@ -4109,8 +4109,8 @@ surface; it is not a second zoom and never enters document history.
   derived-storage clear/estimate registry; project files, recovery, handles,
   and undo history remain outside that registry.
 - Focused controller/storage/bridge/decode/provenance/architecture coverage
-  passes 39/39 tests plus all 17 Node runner checks. The authoritative full
-  suite passes 179/179 files and 2,480/2,480 tests plus those 17 checks.
+  passes 44/44 tests plus all 17 Node runner checks. The authoritative full
+  suite passes 179/179 files and 2,485/2,485 tests plus those 17 checks.
   TypeScript/Vite build, oxlint, the production high-severity dependency audit
   with 0 vulnerabilities, runner syntax, and `git diff --check` pass. The build
   retains only the established large-chunk advisory.
@@ -4120,3 +4120,28 @@ surface; it is not a second zoom and never enters document history.
   and drained with scheduler jobs 2/2 complete, 0 cancelled/failed, one worker
   created/terminated, and no console or page problems. The reproducible
   `qa:issue108:foundation` clean-commit artifact is the publication gate.
+
+## Milestone 5 Part 10a.1 / issue #108 - first exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925391802` on `b5b6fb79c6` found four current
+  threads: cancellation could settle while an acknowledged window remained
+  attached, source rotation metadata was not applied before grayscale
+  extraction, the Issue #108 dev gate allowance existed only in the guard, and
+  source-open resource failures were flattened into decode-readback.
+- Cancellation now terminates the worker promptly but retains the admitted job
+  promise until the in-flight consumer settles and the window buffers detach.
+  A deterministic deferred-consumer regression proves cancellation stays
+  pending with the buffer attached, then rejects only after exact release.
+- The decode path threads 0/90/180/270-degree metadata into a tested
+  display-space orientation plan before downsampling. Worker protocol mapping
+  now preserves unsupported-codec, resource-limit, and resource-unavailable;
+  only genuine decode failure maps to decode-readback.
+- The canonical dependency rules now name the exact
+  `dev/issue108/motionAnalysisFoundation.ts` app/domain/pipeline exception and
+  its sole checked-in HTML importer, matching the narrow architecture guard.
+- The refreshed focused gate passes 44/44 tests plus 17/17 runner checks; the
+  authoritative full suite passes 179/179 files and 2,485/2,485 tests plus the
+  runner checks. Build/lint/audit/diff and clean-commit Chromium evidence are
+  refreshed before the follow-up commit is published.

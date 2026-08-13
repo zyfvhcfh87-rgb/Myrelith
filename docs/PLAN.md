@@ -4129,8 +4129,8 @@ acceptance claims.
   remove/clear, and recoverable unavailable/quota/corruption behavior.
 - [x] Reuse the proxy sampled SHA-256 byte contract and register only the exact
   analysis cache with disposable derived-storage estimates and clearing.
-- [x] Pass 39/39 focused tests plus all 17 runner checks; pass 179/179 files and
-  2,480/2,480 full-suite tests plus those checks; pass TypeScript/Vite build,
+- [x] Pass 44/44 focused tests plus all 17 runner checks; pass 179/179 files and
+  2,485/2,485 full-suite tests plus those checks; pass TypeScript/Vite build,
   oxlint, production audit at 0 vulnerabilities, runner syntax, architecture
   boundaries, and `git diff --check`.
 - [x] Pass an in-app Chromium real-source gate: 12/12 generated H.264 frames,
@@ -4138,3 +4138,23 @@ acceptance claims.
   trip, scheduler 2 completed / 0 cancelled / 0 failed, worker 1/1 with zero
   active resources, and no browser problems. Publish the reproducible
   clean-commit `qa:issue108:foundation` artifact after commit.
+
+## Milestone 5 Part 10a.1 / issue #108 - first exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Keep cancellation settlement and scheduler admission held while a
+  consumer still owns an acknowledged grayscale window; terminate the worker
+  promptly, then detach the window before rejecting the run.
+- [x] Normalize decoded 0/90/180/270-degree source rotation into display space
+  before grayscale extraction, with exact orientation-plan and threaded-frame
+  regressions.
+- [x] Add the Issue #108 evidence module's exact app/domain/pipeline exception
+  to canonical architecture rather than weakening only the test guard.
+- [x] Preserve source-open unsupported-codec, resource-limit, and
+  resource-unavailable remediation across the worker protocol; reserve
+  decode-readback for actual decode failure.
+- [x] Pass the refreshed 44/44 focused tests, all 17 runner checks, and the
+  authoritative 179-file / 2,485-test full suite. Refresh build, lint,
+  production audit, diff checks, and the exact clean-commit Chromium artifact
+  before requesting another Codex review.

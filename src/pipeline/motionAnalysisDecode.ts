@@ -30,7 +30,18 @@ export interface MotionAnalysisDecodedFrame {
   readonly timestampUs: number
   readonly displayWidth: number
   readonly displayHeight: number
+  readonly rotation: MotionAnalysisSourceRotation
   readonly frame: Pick<VideoFrame, 'close'>
+}
+
+export type MotionAnalysisSourceRotation = 0 | 90 | 180 | 270
+
+export interface MotionAnalysisOrientationPlan {
+  readonly sourceWidth: number
+  readonly sourceHeight: number
+  readonly translateX: number
+  readonly translateY: number
+  readonly radians: number
 }
 
 export interface MotionAnalysisFrameCursor {
@@ -56,6 +67,7 @@ export interface MotionAnalysisDecodeRequest {
     timestampUs: number,
     displayWidth: number,
     displayHeight: number,
+    rotation: MotionAnalysisSourceRotation,
   ) => MotionAnalysisGrayFrame
   readonly sendWindow: (window: MotionAnalysisDecodeWindow) => Promise<void>
   readonly reportProgress: (
@@ -80,18 +92,62 @@ export function motionAnalysisDisplaySize(
   }
 }
 
+export function motionAnalysisOrientationPlan(
+  outputWidth: number,
+  outputHeight: number,
+  rotation: MotionAnalysisSourceRotation,
+): MotionAnalysisOrientationPlan {
+  if (rotation === 90) return {
+    sourceWidth: outputHeight,
+    sourceHeight: outputWidth,
+    translateX: outputWidth,
+    translateY: 0,
+    radians: Math.PI / 2,
+  }
+  if (rotation === 180) return {
+    sourceWidth: outputWidth,
+    sourceHeight: outputHeight,
+    translateX: outputWidth,
+    translateY: outputHeight,
+    radians: Math.PI,
+  }
+  if (rotation === 270) return {
+    sourceWidth: outputHeight,
+    sourceHeight: outputWidth,
+    translateX: 0,
+    translateY: outputHeight,
+    radians: -Math.PI / 2,
+  }
+  return {
+    sourceWidth: outputWidth,
+    sourceHeight: outputHeight,
+    translateX: 0,
+    translateY: 0,
+    radians: 0,
+  }
+}
+
 export function extractMotionAnalysisGrayFrame(
   frame: VideoFrame,
   timestampUs: number,
   displayWidth: number,
   displayHeight: number,
+  rotation: MotionAnalysisSourceRotation,
 ): MotionAnalysisGrayFrame {
   if (typeof OffscreenCanvas !== 'function') throw new Error('OffscreenCanvas is unavailable')
   const size = motionAnalysisDisplaySize(displayWidth, displayHeight)
   const canvas = new OffscreenCanvas(size.width, size.height)
   const context = canvas.getContext('2d', { willReadFrequently: true })
   if (!context) throw new Error('OffscreenCanvas 2D readback is unavailable')
-  context.drawImage(frame, 0, 0, size.width, size.height)
+  const orientation = motionAnalysisOrientationPlan(size.width, size.height, rotation)
+  context.save()
+  try {
+    context.translate(orientation.translateX, orientation.translateY)
+    context.rotate(orientation.radians)
+    context.drawImage(frame, 0, 0, orientation.sourceWidth, orientation.sourceHeight)
+  } finally {
+    context.restore()
+  }
   const rgba = context.getImageData(0, 0, size.width, size.height).data
   const pixels = new Uint8Array(size.width * size.height)
   for (let source = 0, target = 0; target < pixels.length; source += 4, target++) {
@@ -158,6 +214,7 @@ export async function decodeMotionAnalysisWindows(
             decoded.timestampUs,
             decoded.displayWidth,
             decoded.displayHeight,
+            decoded.rotation,
           )
         }
       } finally {

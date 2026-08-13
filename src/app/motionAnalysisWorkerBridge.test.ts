@@ -184,6 +184,53 @@ describe('runMotionAnalysisWorker', () => {
     await expect(pending).resolves.toMatchObject({ sampledFrameCount: 1 })
   })
 
+  it('holds cancellation settlement until an in-flight window is released', async () => {
+    const worker = new FakeWorker()
+    const h = context()
+    let releaseConsumer!: () => void
+    const consumerGate = new Promise<void>((resolve) => {
+      releaseConsumer = resolve
+    })
+    let retained: Uint8Array<ArrayBuffer> | null = null
+    let settled = false
+    const pending = runMotionAnalysisWorker(
+      request(),
+      async (window) => {
+        retained = window.frames[0]!.pixels
+        await consumerGate
+      },
+      h.mediaContext,
+      () => worker,
+    )
+    void pending.then(
+      () => { settled = true },
+      () => { settled = true },
+    )
+    worker.dispatch({
+      type: 'window',
+      requestId: 1,
+      windowIndex: 0,
+      sampleOffset: 0,
+      frames: [frame()],
+      retainedBytes: 4,
+    })
+    await vi.waitFor(() => expect(retained).not.toBeNull())
+
+    h.controller.abort()
+    await Promise.resolve()
+    expect(worker.terminated).toBe(true)
+    expect(h.activeDecoderCount()).toBe(0)
+    expect(settled).toBe(false)
+    expect(retained!.byteLength).toBe(4)
+
+    releaseConsumer()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(settled).toBe(true)
+    expect(retained!.byteLength).toBe(0)
+    expect(worker.listenerCount()).toBe(0)
+    expect(getMotionAnalysisWorkerDiagnostics().activeWorkers).toBe(0)
+  })
+
   it('terminates and releases decoder ownership before cancellation settles', async () => {
     const worker = new FakeWorker()
     const h = context()
@@ -302,6 +349,28 @@ describe('runMotionAnalysisWorker', () => {
     })
     await expect(invalidCompletion).rejects.toMatchObject({ code: 'resource-limit' })
     expect(completionWorker.terminated).toBe(true)
+  })
+
+  it('preserves a source-open resource-unavailable worker failure', async () => {
+    const worker = new FakeWorker()
+    const pending = runMotionAnalysisWorker(
+      request(),
+      vi.fn(async () => undefined),
+      context().mediaContext,
+      () => worker,
+    )
+    worker.dispatch({
+      type: 'failure',
+      requestId: 1,
+      code: 'resource-unavailable',
+      detail: 'decoder service is unavailable',
+    })
+    await expect(pending).rejects.toMatchObject({
+      code: 'resource-unavailable',
+      message: 'decoder service is unavailable',
+    })
+    expect(worker.terminated).toBe(true)
+    expect(worker.listenerCount()).toBe(0)
   })
 
   it('cleans up a synchronous initial postMessage failure', async () => {
