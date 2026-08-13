@@ -15,6 +15,7 @@ import {
   type GrayFrame,
   type MotionAnalysisCancellationCheck,
   type SimilarityTransform,
+  type StabilizationCropResult,
 } from './motionAnalysis'
 import {
   trackBoxSequence,
@@ -32,19 +33,29 @@ export interface MotionResearchProgress {
   readonly progress: number
 }
 
+export interface StabilizationResearchTradeoff {
+  readonly strength: number
+  readonly jitterReductionRatio: number
+  readonly crop: StabilizationCropResult
+}
+
 export interface StabilizationResearchEvidence {
   readonly frameCount: number
   readonly meanPairTransformErrorPixels: number
   readonly p95PairTransformErrorPixels: number
   readonly meanConfidence: number
   readonly sceneCutRejected: boolean
-  readonly tradeoffs: readonly {
-    readonly strength: number
-    readonly jitterReductionRatio: number
-    readonly conservativeSafeZoom: number
-    readonly conservativeCropRatio: number
-  }[]
+  readonly tradeoffs: readonly StabilizationResearchTradeoff[]
+  readonly cropFailure: string | null
   readonly passed: boolean
+}
+
+export interface StabilizationResearchGateInput {
+  readonly meanPairTransformErrorPixels: number
+  readonly p95PairTransformErrorPixels: number
+  readonly meanConfidence: number
+  readonly sceneCutRejected: boolean
+  readonly tradeoffs: readonly StabilizationResearchTradeoff[]
 }
 
 export interface TrackingResearchEvidence {
@@ -316,6 +327,25 @@ export function evaluateTrackingResearchGates(
   }
 }
 
+export function evaluateStabilizationResearchGate(
+  input: StabilizationResearchGateInput,
+): boolean {
+  const halfStrength = input.tradeoffs.find((tradeoff) => tradeoff.strength === 0.5)
+  const fullStrength = input.tradeoffs.find((tradeoff) => tradeoff.strength === 1)
+  if (
+    halfStrength === undefined
+    || fullStrength === undefined
+    || !halfStrength.crop.ok
+    || !fullStrength.crop.ok
+  ) return false
+  return input.meanPairTransformErrorPixels <= 1.5
+    && input.p95PairTransformErrorPixels <= 2.5
+    && input.meanConfidence >= 0.35
+    && fullStrength.jitterReductionRatio >= 0.45
+    && fullStrength.crop.conservativeSafeZoom <= 1.35
+    && input.sceneCutRejected
+}
+
 function transformError(
   actual: SimilarityTransform,
   expected: SimilarityTransform,
@@ -367,8 +397,7 @@ function stabilizationEvidence(
     return {
       strength,
       jitterReductionRatio: plan.jitterReductionRatio,
-      conservativeSafeZoom: plan.conservativeSafeZoom,
-      conservativeCropRatio: plan.conservativeCropRatio,
+      crop: plan.crop,
     }
   })
   const sceneCutRejected = estimateGlobalMotion(
@@ -381,7 +410,10 @@ function stabilizationEvidence(
   const meanPairTransformErrorPixels = mean(errors)
   const p95PairTransformErrorPixels = percentile(errors, 0.95)
   const meanConfidence = mean(estimates.map((estimate) => estimate.confidence))
-  const fullStrength = tradeoffs[1]!
+  const failedCrop = tradeoffs.find((tradeoff) => !tradeoff.crop.ok)
+  const cropFailure = failedCrop !== undefined && !failedCrop.crop.ok
+    ? `crop:${failedCrop.strength}:${failedCrop.crop.failure.code}`
+    : null
   return {
     frameCount: fixture.frames.length,
     meanPairTransformErrorPixels,
@@ -389,12 +421,14 @@ function stabilizationEvidence(
     meanConfidence,
     sceneCutRejected,
     tradeoffs,
-    passed: meanPairTransformErrorPixels <= 1.5
-      && p95PairTransformErrorPixels <= 2.5
-      && meanConfidence >= 0.35
-      && fullStrength.jitterReductionRatio >= 0.45
-      && fullStrength.conservativeSafeZoom <= 1.35
-      && sceneCutRejected,
+    cropFailure,
+    passed: evaluateStabilizationResearchGate({
+      meanPairTransformErrorPixels,
+      p95PairTransformErrorPixels,
+      meanConfidence,
+      sceneCutRejected,
+      tradeoffs,
+    }),
   }
 }
 

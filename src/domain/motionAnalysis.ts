@@ -649,6 +649,21 @@ export function rootMeanSquareSecondDifference(
   return Math.sqrt(total / (values.length - 2))
 }
 
+export type StabilizationCropResult =
+  | {
+      readonly ok: true
+      readonly conservativeCropRatio: number
+      readonly conservativeSafeZoom: number
+    }
+  | {
+      readonly ok: false
+      readonly failure: {
+        readonly code: 'finite-centered-zoom-unavailable'
+        readonly requiredCropRatio: number
+        readonly detail: string
+      }
+    }
+
 export interface StabilizationPlan {
   readonly strength: number
   readonly smoothingRadius: number
@@ -659,8 +674,7 @@ export interface StabilizationPlan {
   readonly jitterAfter: number
   readonly jitterReductionRatio: number
   readonly maximumCornerDisplacementPixels: number
-  readonly conservativeCropRatio: number
-  readonly conservativeSafeZoom: number
+  readonly crop: StabilizationCropResult
 }
 
 function pathJitter(samples: readonly SimilarityPathSample[]): number {
@@ -713,10 +727,14 @@ export function createStabilizationPlan(
     if (Object.values(estimate.transform).some((value) => !Number.isFinite(value))) {
       throw new RangeError('Stabilization estimate contains a non-finite transform')
     }
-    cameraPath.push(composeSimilarityTransforms(
+    const accumulated = composeSimilarityTransforms(
       estimate.transform,
       cameraPath[cameraPath.length - 1]!,
-    ))
+    )
+    if (Object.values(accumulated).some((value) => !Number.isFinite(value))) {
+      throw new RangeError('Stabilization camera path contains a non-finite transform')
+    }
+    cameraPath.push(accumulated)
   }
   const originalSamples = cameraPath.map(similarityPathSample)
   const angles = unwrapAngles(originalSamples.map((sample) => sample.angleRadians))
@@ -749,23 +767,55 @@ export function createStabilizationPlan(
   let maximumCornerDisplacementPixels = 0
   for (const correction of corrections) {
     for (const corner of corners) {
-      const corrected = applySimilarityTransform(correction, corner)
-      maximumCornerDisplacementPixels = Math.max(
-        maximumCornerDisplacementPixels,
-        Math.hypot(corrected.x - corner.x, corrected.y - corner.y),
-      )
+      const deltaX = (correction.a - 1) * corner.x
+        - correction.b * corner.y
+        + correction.tx
+      const deltaY = correction.b * corner.x
+        + (correction.a - 1) * corner.y
+        + correction.ty
+      const displacement = Math.hypot(deltaX, deltaY)
+      if (!Number.isFinite(displacement)) {
+        throw new RangeError('Stabilization correction contains non-finite crop geometry')
+      }
+      maximumCornerDisplacementPixels = Math.max(maximumCornerDisplacementPixels, displacement)
     }
   }
-  const conservativeCropRatio = Math.min(
-    0.49,
-    maximumCornerDisplacementPixels / Math.min(width, height),
-  )
-  const conservativeSafeZoom = 1 / Math.max(0.02, 1 - 2 * conservativeCropRatio)
+  const requiredCropRatio = maximumCornerDisplacementPixels / Math.min(width, height)
+  if (!Number.isFinite(requiredCropRatio) || requiredCropRatio < 0) {
+    throw new RangeError('Stabilization crop requirement is not finite')
+  }
+  // Deliberately use the exact half-open geometric boundary without an epsilon
+  // band: every representable ratio below 0.5 has a positive finite denominator.
+  const finiteZoomDenominator = 1 - 2 * requiredCropRatio
+  const conservativeSafeZoom = finiteZoomDenominator > 0
+    ? 1 / finiteZoomDenominator
+    : null
+  const crop: StabilizationCropResult = conservativeSafeZoom !== null
+    && Number.isFinite(conservativeSafeZoom)
+    ? {
+        ok: true,
+        conservativeCropRatio: requiredCropRatio,
+        conservativeSafeZoom,
+      }
+    : {
+        ok: false,
+        failure: {
+          code: 'finite-centered-zoom-unavailable',
+          requiredCropRatio,
+          detail: 'The required centered inset must remain below half the shorter frame dimension.',
+        },
+      }
   const jitterBefore = pathJitter(originalSamples.map((sample, index) => ({
     ...sample,
     angleRadians: angles[index]!,
   })))
   const jitterAfter = pathJitter(stabilizedSamples)
+  const jitterReductionRatio = jitterBefore === 0 ? 0 : 1 - jitterAfter / jitterBefore
+  if (
+    !Number.isFinite(jitterBefore)
+    || !Number.isFinite(jitterAfter)
+    || !Number.isFinite(jitterReductionRatio)
+  ) throw new RangeError('Stabilization path metrics are not finite')
   return {
     strength,
     smoothingRadius,
@@ -774,9 +824,8 @@ export function createStabilizationPlan(
     corrections,
     jitterBefore,
     jitterAfter,
-    jitterReductionRatio: jitterBefore === 0 ? 0 : 1 - jitterAfter / jitterBefore,
+    jitterReductionRatio,
     maximumCornerDisplacementPixels,
-    conservativeCropRatio,
-    conservativeSafeZoom,
+    crop,
   }
 }

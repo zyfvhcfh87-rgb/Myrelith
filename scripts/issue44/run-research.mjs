@@ -9,6 +9,8 @@ import { dirtyFingerprint } from '../performance/run-benchmark.mjs'
 
 const DEFAULT_PORT = 41_844
 const DEFAULT_OUTPUT = 'output/playwright/issue-44-motion-analysis'
+const ARTIFACT_SCHEMA_VERSION = 4
+const ARTIFACT_SCENARIO = `issue-44-motion-analysis-v${ARTIFACT_SCHEMA_VERSION}`
 
 function positiveInteger(value, flag) {
   const parsed = Number(value)
@@ -84,6 +86,18 @@ function reportHtml(artifact) {
   const full = stabilization.tradeoffs.find((item) => item.strength === 1)
   const half = stabilization.tradeoffs.find((item) => item.strength === 0.5)
   const percent = (value) => `${(value * 100).toFixed(1)}%`
+  const jitterLabel = (item) => item === undefined
+    ? 'unavailable'
+    : percent(item.jitterReductionRatio)
+  const jitterBarWidth = (item) => item === undefined
+    ? 2
+    : Math.max(2, item.jitterReductionRatio * 100)
+  const cropZoomLabel = (item) => {
+    if (item === undefined) return 'unavailable (missing trade-off)'
+    return item.crop.ok
+      ? `${item.crop.conservativeSafeZoom.toFixed(3)}× conservative crop zoom`
+      : `unavailable (${item.crop.failure.code})`
+  }
   const metric = (label, value, note) => `
     <article class="metric">
       <span>${label}</span><strong>${value}</strong><small>${note}</small>
@@ -123,18 +137,19 @@ function reportHtml(artifact) {
     <div class="status">✓ support probe · quality gates · cancellation cleanup</div>
     <div class="grid">
       ${metric('Pair transform error', `${stabilization.meanPairTransformErrorPixels.toFixed(3)} px`, 'synthetic ground truth mean')}
-      ${metric('Full-strength jitter cut', percent(full.jitterReductionRatio), `${full.conservativeSafeZoom.toFixed(3)}× conservative crop zoom`)}
+      ${metric('Full-strength jitter cut', jitterLabel(full), cropZoomLabel(full))}
       ${metric('Point tracking error', `${tracking.pointMeanErrorPixels.toFixed(3)} px`, `${tracking.pointMaximumErrorPixels.toFixed(3)} px maximum`)}
       ${metric('Box center error', `${tracking.boxCenterMeanErrorPixels.toFixed(3)} px`, `${percent(tracking.boxScaleMeanRelativeError)} mean scale error`)}
     </div>
     <div class="panels">
       <section><h2>Strength ↔ crop trade-off</h2>
-        <div class="tradeoff"><b>50%</b><div class="bar"><i style="width:${Math.max(2, half.jitterReductionRatio * 100)}%"></i></div><span>${percent(half.jitterReductionRatio)}</span></div>
-        <div class="tradeoff"><b>100%</b><div class="bar"><i style="width:${Math.max(2, full.jitterReductionRatio * 100)}%"></i></div><span>${percent(full.jitterReductionRatio)}</span></div>
+        <div class="tradeoff"><b>50%</b><div class="bar"><i style="width:${jitterBarWidth(half)}%"></i></div><span>${jitterLabel(half)}</span></div>
+        <div class="tradeoff"><b>100%</b><div class="bar"><i style="width:${jitterBarWidth(full)}%"></i></div><span>${jitterLabel(full)}</span></div>
         <p class="lead">The crop estimate is conservative and must remain visible to the user; automatic stabilization never silently enlarges the frame.</p>
       </section>
       <section><h2>Failure and ownership checks</h2><ul>
         <li>Scene cut rejected: ${stabilization.sceneCutRejected}</li>
+        <li>Crop failure: ${stabilization.cropFailure ?? 'none'}</li>
         <li>Tracking gates: point ${tracking.pointPassed} / box ${tracking.boxPassed}</li>
         <li>Occlusion loss: frame ${tracking.occlusionFailureFrame}, after accepted frame ${tracking.occlusionLastAcceptedFrame}</li>
         <li>Cancellation: ${artifact.cancellation.errorName}</li>
@@ -239,6 +254,12 @@ async function main() {
       || admission.after.activeWorkers !== 0
     ) throw new Error('Shared motion-analysis admission did not reject the overlapping run')
     const success = admission.success
+    const stabilizationTradeoffs = success.evidence.stabilization.tradeoffs
+    const requiredStrengthsHaveCrop = [0.5, 1].every((strength) => (
+      stabilizationTradeoffs.some((tradeoff) => (
+        tradeoff.strength === strength && tradeoff.crop.ok === true
+      ))
+    ))
     const finalDiagnostics = await page.evaluate(async () => {
       const module = await import('/src/app/motionAnalysisResearchController.ts')
       return module.motionAnalysisResearchDiagnostics()
@@ -251,6 +272,9 @@ async function main() {
     ) throw new Error('Motion research resources did not drain exactly')
     if (
       success.evidence.decision.stabilization !== 'go'
+      || success.evidence.stabilization.passed !== true
+      || success.evidence.stabilization.cropFailure !== null
+      || !requiredStrengthsHaveCrop
       || success.evidence.decision.pointTracking !== 'go'
       || success.evidence.decision.boxTracking !== 'go'
       || success.evidence.tracking.pointPassed !== true
@@ -260,8 +284,8 @@ async function main() {
     ) throw new Error('One or more motion-analysis quality decisions failed')
 
     const artifact = {
-      schemaVersion: 3,
-      scenario: 'issue-44-motion-analysis-v3',
+      schemaVersion: ARTIFACT_SCHEMA_VERSION,
+      scenario: ARTIFACT_SCENARIO,
       generatedAt: new Date().toISOString(),
       source: initialSource,
       host: hostIdentity(browser.version(), options),

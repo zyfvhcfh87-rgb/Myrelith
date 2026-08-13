@@ -18,6 +18,7 @@ import {
   type SimilarityTransform,
 } from './motionAnalysis'
 import {
+  evaluateStabilizationResearchGate,
   evaluateTrackingResearchGates,
   researchFixtureIdentityIsExact,
   runMotionAnalysisResearch,
@@ -66,6 +67,23 @@ function estimate(transform: SimilarityTransform): GlobalMotionEstimate {
   }
 }
 
+function translatedPlanForCropRatio(requiredCropRatio: number) {
+  const width = 256
+  const height = 128
+  return createStabilizationPlan(
+    [estimate({
+      a: 1,
+      b: 0,
+      tx: requiredCropRatio * height * 2,
+      ty: 0,
+    })],
+    width,
+    height,
+    1,
+    1,
+  )
+}
+
 function boxLoss(frameIndex: number, lastAcceptedFrame: number): BoxTrackingResult {
   return {
     ok: false,
@@ -111,7 +129,108 @@ describe('motion analysis research', () => {
     ))).toBe(true)
     expect(off.jitterReductionRatio).toBeCloseTo(0, 10)
     expect(full.jitterReductionRatio).toBeGreaterThan(0)
-    expect(full.conservativeSafeZoom).toBeGreaterThan(1)
+    expect(full.crop.ok).toBe(true)
+    if (!full.crop.ok) throw new Error(full.crop.failure.detail)
+    expect(full.crop.conservativeCropRatio).toBe(
+      full.maximumCornerDisplacementPixels / 108,
+    )
+    expect(full.crop.conservativeSafeZoom).toBe(
+      1 / (1 - 2 * full.crop.conservativeCropRatio),
+    )
+    expect(translatedPlanForCropRatio(0.125).crop).toEqual({
+      ok: true,
+      conservativeCropRatio: 0.125,
+      conservativeSafeZoom: 4 / 3,
+    })
+  })
+
+  test.each([
+    ['the representable value immediately below half', 0.5 - Number.EPSILON / 4, true],
+    ['exactly half', 0.5, false],
+    ['the representable value immediately above half', 0.5 + Number.EPSILON / 2, false],
+  ] as const)('reports centered crop feasibility at %s', (_label, requiredRatio, ok) => {
+    const plan = translatedPlanForCropRatio(requiredRatio)
+
+    expect(plan.maximumCornerDisplacementPixels / 128).toBe(requiredRatio)
+    expect(plan.crop.ok).toBe(ok)
+    if (plan.crop.ok) {
+      expect(plan.crop.conservativeCropRatio).toBe(requiredRatio)
+      expect(plan.crop.conservativeSafeZoom).toBe(1 / (1 - 2 * requiredRatio))
+      return
+    }
+    expect(plan.crop.failure).toEqual({
+      code: 'finite-centered-zoom-unavailable',
+      requiredCropRatio: requiredRatio,
+      detail: 'The required centered inset must remain below half the shorter frame dimension.',
+    })
+    expect(JSON.stringify(plan.crop)).not.toMatch(/Infinity|NaN/)
+  })
+
+  test('fails crop planning for sustained pan at the maximum smoothing radius', () => {
+    const estimates = Array.from(
+      { length: 240 },
+      () => estimate({ a: 1, b: 0, tx: 1, ty: 0 }),
+    )
+    const plan = createStabilizationPlan(estimates, 200, 100, 1, 120)
+
+    expect(plan.cameraPath).toHaveLength(241)
+    expect(plan.corrections).toHaveLength(241)
+    expect(plan.maximumCornerDisplacementPixels).toBe(60)
+    expect(plan.crop).toMatchObject({
+      ok: false,
+      failure: {
+        code: 'finite-centered-zoom-unavailable',
+        requiredCropRatio: 0.6,
+      },
+    })
+  })
+
+  test('rejects non-finite accumulated stabilization geometry', () => {
+    expect(() => createStabilizationPlan(
+      [
+        estimate({ a: Number.MAX_VALUE, b: 0, tx: 0, ty: 0 }),
+        estimate({ a: Number.MAX_VALUE, b: 0, tx: 0, ty: 0 }),
+      ],
+      200,
+      100,
+      1,
+      1,
+    )).toThrow(/camera path contains a non-finite transform/)
+  })
+
+  test('rejects non-finite derived path metrics instead of leaking JSON-unsafe values', () => {
+    expect(() => createStabilizationPlan(
+      [
+        estimate({ a: 1, b: 0, tx: 1e200, ty: 0 }),
+        estimate({ a: 1, b: 0, tx: -1e200, ty: 0 }),
+        estimate({ a: 1, b: 0, tx: 1e200, ty: 0 }),
+      ],
+      200,
+      100,
+      0,
+      1,
+    )).toThrow(/path metrics are not finite/)
+  })
+
+  test('refuses the stabilization go gate when any required crop is unavailable', () => {
+    expect(evaluateStabilizationResearchGate({
+      meanPairTransformErrorPixels: 0,
+      p95PairTransformErrorPixels: 0,
+      meanConfidence: 1,
+      sceneCutRejected: true,
+      tradeoffs: [
+        {
+          strength: 0.5,
+          jitterReductionRatio: 0.5,
+          crop: translatedPlanForCropRatio(0.1).crop,
+        },
+        {
+          strength: 1,
+          jitterReductionRatio: 1,
+          crop: translatedPlanForCropRatio(0.5).crop,
+        },
+      ],
+    })).toBe(false)
   })
 
   test('honors cancellation before expensive frame matching', () => {
@@ -214,8 +333,22 @@ describe('motion analysis research', () => {
     const evidence = runMotionAnalysisResearch()
     expect(evidence.stabilization, JSON.stringify(evidence.stabilization)).toMatchObject({
       sceneCutRejected: true,
+      cropFailure: null,
       passed: true,
     })
+    expect(evidence.stabilization.tradeoffs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        strength: 0.5,
+        crop: expect.objectContaining({ ok: true }),
+      }),
+      expect.objectContaining({
+        strength: 1,
+        crop: expect.objectContaining({ ok: true }),
+      }),
+    ]))
+    expect(JSON.parse(JSON.stringify(evidence.stabilization))).toEqual(
+      evidence.stabilization,
+    )
     expect(evidence.tracking, JSON.stringify(evidence.tracking)).toMatchObject({
       occlusionRejected: true,
       occlusionFailureFrame: 18,

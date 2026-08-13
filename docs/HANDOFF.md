@@ -3931,3 +3931,46 @@ surface; it is not a second zoom and never enters document history.
   response-deserialization failure, so direct browser coverage is the focused
   lifecycle regression; a source-bound broad research rerun follows the clean
   commit.
+
+## Milestone 5 Part 10a / issue #44 - crop-feasibility hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of exact head
+  `87e6d8cbb5157ce53a7e4aa62995b98472bf92f8` found that the conservative crop
+  estimate clamped any required inset above 49% to a supposedly safe 50× zoom,
+  even though no finite centered zoom can cover an inset at or above half the
+  shorter frame dimension.
+- Stabilization plans now retain all camera-path, correction, jitter, and
+  maximum-displacement diagnostics while exposing crop feasibility as an
+  explicit result union. The exact `[0, 0.5)` interval remains available; at or
+  above one half returns `finite-centered-zoom-unavailable` with the measured
+  ratio and no fabricated zoom. There is deliberately no epsilon dead zone.
+- The quality gate requires available crop results at both reviewed strengths,
+  so unavailable geometry produces stabilization `no-go` and cannot reach a
+  future Apply path. The headed evidence renderer presents the stable failure
+  reason without dereferencing a missing numeric zoom.
+- Because the nested crop union and `cropFailure` field are incompatible with
+  the preceding artifact shape, the current runner advances to schema 4 /
+  `issue-44-motion-analysis-v4`. The schema 3 / v3 entries above remain exact
+  historical evidence; a new clean-commit browser run must publish v4.
+- Deterministic cases cover the representable values immediately below and
+  above one half, the exact boundary, a sustained pan at the maximum smoothing
+  radius, non-finite accumulated geometry, ordinary finite plans, JSON-safe
+  evidence, non-finite derived path metrics, and downstream gate refusal.
+- The first boundary-test attempt passed 15/17 cases but used decimal-sized
+  geometry that rounded adjacent representable ratios back to the boundary. A
+  power-of-two fixture then passed 16/17 and exposed cancellation in the old
+  transformed-corner subtraction. The final direct similarity-delta measurement
+  preserves the immediately-below value and passes all boundary cases.
+- The controller/domain/tracking group passes 72/72 tests plus all 16 runner
+  checks; the complete gate passes 174/174 files and 2,400/2,400 Vitest tests
+  plus those 16 checks. TypeScript/Vite build, oxlint, high-severity production
+  audit with 0 vulnerabilities, normal-bundle canary scan, and `git diff
+  --check` pass. The build retains only the established large-chunk advisory.
+- After the schema-only v4 correction, the 72/72 focused cases and all 16 Node
+  runner checks passed again, as did TypeScript/Vite build, oxlint, runner
+  syntax, the normal-bundle canary scan, and `git diff --check`. No production
+  TypeScript, test, or dependency semantics changed, so the 2,400-case full
+  suite and zero-vulnerability dependency audit above were not repeated. The
+  clean-commit v4 Chromium artifact remains the next source-bound gate.

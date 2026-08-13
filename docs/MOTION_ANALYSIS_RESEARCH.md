@@ -212,6 +212,23 @@ retained correction. Footage with parallax, rolling shutter, a scene cut,
 insufficient texture, or excessive crop may still fail; the synthetic result is
 not generalized beyond its fixture.
 
+The crop estimate is a discriminated result rather than an always-present
+number. A centered finite zoom exists only while the required inset is strictly
+below half the frame's shorter dimension. The feasibility check deliberately
+uses the exact half-open `[0, 0.5)` geometric interval with no epsilon band:
+every representable value below one half still has a positive finite
+denominator. A requirement at or above one half returns
+`finite-centered-zoom-unavailable`, retains the path/correction diagnostics, and
+cannot satisfy the stabilization `go` gate or a future Apply decision. It is
+never clamped to a smaller, falsely safe ratio. Corner displacement uses the
+direct similarity delta to avoid cancellation at the boundary, and non-finite
+accumulation, geometry, denominator, or zoom fails before evidence is emitted.
+
+This incompatible crop-result shape advances the current browser artifact
+contract to schema 4 / `issue-44-motion-analysis-v4`. Earlier schema 3 / v3
+entries below remain the exact historical record of the clean commits they
+describe; the next source-bound browser run must emit the v4 contract.
+
 ## Point/box tracking experiment
 
 The point fixture moves a discriminative texture by bounded whole analysis
@@ -401,6 +418,15 @@ abandoned step is released, the late continuation drains its own file without
 cross-removal, unhandled rejection, or post-settlement diagnostic drift. The
 controller, matcher, and tracking group passes 36/36 tests, plus all 16
 benchmark-runner checks.
+
+The crop-feasibility review regression pins the immediately representable value
+below one half, exactly one half, and the immediately representable value above
+one half. It also covers a sustained 240-step pan at the maximum 120-frame
+smoothing radius, non-finite accumulated geometry, unchanged finite crop
+metrics, non-finite derived path metrics, JSON-safe result shapes, and downstream
+stabilization gate refusal. The
+headed report renders an unavailable crop's stable reason instead of formatting
+a missing zoom value.
 
 ## Final boundaries
 

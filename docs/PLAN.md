@@ -4020,3 +4020,35 @@ acceptance claims.
   tests, 174/174 files with 2,393/2,393 full-suite tests, all 16 runner checks,
   TypeScript/Vite build, oxlint, high-severity production audit at 0
   vulnerabilities, and `git diff --check`.
+
+## Milestone 5 Part 10a / issue #44 - crop-feasibility follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Replace the saturated 49% crop estimate with an explicit finite-centered-
+  zoom result: preserve exact feasible ratios below one half, and return
+  `finite-centered-zoom-unavailable` at or above half the shorter frame
+  dimension without fabricating a ratio or zoom.
+- [x] Keep path/correction/jitter diagnostics on crop failure, use the exact
+  half-open boundary without an epsilon dead zone, measure direct similarity
+  corner deltas, and reject non-finite accumulation or crop geometry before it
+  can leak `Infinity` or `NaN` into evidence.
+- [x] Require available 50% and 100% crop results in the stabilization quality
+  gate, propagate a stable failure reason into evidence, and render unavailable
+  browser evidence without numeric formatting errors.
+- [x] Advance the incompatible nested-crop evidence contract to schema 4 /
+  `issue-44-motion-analysis-v4`; preserve earlier schema 3 / v3 browser records
+  as history and require the next clean-commit evidence run to emit v4.
+- [x] Cover immediately-below/exact/immediately-above boundary geometry,
+  sustained pan with the maximum smoothing radius, ordinary finite plans,
+  non-finite transforms/path metrics, JSON safety, and stabilization `no-go`
+  refusal.
+- [x] Pass 18/18 motion-analysis cases, 72/72 focused controller/domain/tracking
+  tests, 174/174 files with 2,400/2,400 full-suite tests, all 16 runner checks,
+  TypeScript/Vite build, oxlint, high-severity production audit at 0
+  vulnerabilities, normal-bundle canary scan, and `git diff --check`.
+- [x] After the schema-only v4 correction, rerun 72/72 focused cases, all 16 Node
+  runner checks, TypeScript/Vite build, oxlint, runner syntax, the normal-bundle
+  canary scan, and `git diff --check`. Do not repeat the unchanged
+  2,400-case production-TypeScript suite or dependency audit; retain the
+  clean-commit v4 Chromium artifact as the next source-bound gate.
