@@ -4275,3 +4275,19 @@ acceptance claims.
   17 runner checks. Pass build/typecheck, warning-free lint, production audit at
   0 vulnerabilities, runner syntax, conflict/diff checks, then refresh clean-
   commit Chromium, CI, and exact-head Codex evidence before merge.
+
+## Milestone 5 Part 10a.1 / issue #108 - eighth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Translate the motion-specific public failure into a
+  `MediaJobExecutionError` carrying the matching scheduler failure class before
+  it reaches bounded scheduler history.
+- [x] Preserve unsupported-codec and resource-limit exactly, map decode/readback
+  to decode-failed, map unsupported runtime/quota/cache corruption to resource-
+  unavailable, and leave only uncategorized analysis outcomes as unexpected.
+- [x] Add a five-case worker-failure matrix proving public status, scheduler
+  history, and worker teardown remain aligned. Pass 77/77 focused tests across
+  nine files, 180/180 files and 2,508/2,508 full-suite tests, plus all 17 runner
+  checks. Refresh build/typecheck, lint, production audit, static checks, clean-
+  commit Chromium, CI, and exact-head Codex evidence before merge.

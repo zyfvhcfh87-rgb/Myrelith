@@ -566,7 +566,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   one-decoder `MediaJobScheduler`, support facts, source/document-currentness
   checks, cancellation, and serializable status snapshots. React and Zustand
   never receive `File`, `Blob`, `VideoFrame`, worker, decoder, OPFS, or result
-  byte ownership, and the controller never mutates the timeline document.
+  byte ownership, and the controller never mutates the timeline document. The
+  controller status retains motion-specific remediation while scheduler failure
+  history uses the scheduler's matching canonical class: unsupported runtime,
+  quota, and cache corruption map to resource unavailable; decode/readback maps
+  to decode failed; unsupported codec and resource limit remain exact.
 - `pipeline/motionAnalysisDecode.ts` owns sequential source decode and grayscale
   downsampling after applying each decoded frame's 0/90/180/270-degree source
   orientation into display space. Its dedicated

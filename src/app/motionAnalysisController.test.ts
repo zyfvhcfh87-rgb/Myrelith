@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AnalysisCacheEntry } from '../domain/analysisCache'
 import type { MediaAsset } from '../domain/schema'
 import type {
+  MotionAnalysisWorkerFailureCode,
   MotionAnalysisWorkerMessage,
   MotionAnalysisWorkerReply,
 } from '../pipeline/motionAnalysisProtocol'
@@ -20,6 +21,7 @@ class FakeWorker implements MotionAnalysisWorkerLike {
   terminated = false
   holdCompletion = false
   emptyCompletion = false
+  failureCode: MotionAnalysisWorkerFailureCode | null = null
 
   addEventListener(type: string, listener: (event: never) => void): void {
     const listeners = this.listeners.get(type) ?? new Set()
@@ -34,7 +36,13 @@ class FakeWorker implements MotionAnalysisWorkerLike {
   postMessage(message: MotionAnalysisWorkerMessage): void {
     this.messages.push(message)
     if (message.type === 'run') {
-      if (this.emptyCompletion) queueMicrotask(() => this.dispatch({
+      if (this.failureCode) queueMicrotask(() => this.dispatch({
+        type: 'failure',
+        requestId: message.requestId,
+        code: this.failureCode!,
+        detail: `${this.failureCode} detail`,
+      }))
+      else if (this.emptyCompletion) queueMicrotask(() => this.dispatch({
         type: 'complete',
         requestId: message.requestId,
         decodedFrameCount: 0,
@@ -300,6 +308,40 @@ describe('MotionAnalysisController', () => {
       },
     })
   })
+
+  it.each([
+    ['unsupported-codec', 'unsupported-codec', 'unsupported-codec'],
+    ['resource-limit', 'resource-limit', 'resource-limit'],
+    ['resource-unavailable', 'unsupported-runtime', 'resource-unavailable'],
+    ['decode-readback', 'decode-readback', 'decode-failed'],
+    ['unexpected', 'unexpected', 'unexpected'],
+  ] as const)(
+    'keeps %s typed in public status and scheduler failure history',
+    async (workerCode, publicCode, schedulerCode) => {
+      const storage = storageFixture()
+      const worker = new FakeWorker()
+      worker.failureCode = workerCode
+      const controller = new MotionAnalysisController(deps(storage.storage, () => worker))
+
+      await expect(controller.analyze(request())).rejects.toMatchObject({ code: publicCode })
+      await vi.waitFor(() => expect(controller.snapshot().scheduler.activeJobCount).toBe(0))
+
+      expect(controller.snapshot()).toMatchObject({
+        jobs: [{
+          phase: 'error',
+          failure: { code: publicCode, detail: `${workerCode} detail` },
+        }],
+        scheduler: {
+          failedCount: 1,
+          lastFailures: [{
+            code: schedulerCode,
+            detail: `${workerCode} detail`,
+          }],
+        },
+      })
+      expect(worker.terminated).toBe(true)
+    },
+  )
 
   it('rejects non-primary stream provenance before worker or cache access', () => {
     const storage = storageFixture()

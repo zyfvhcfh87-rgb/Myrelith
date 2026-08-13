@@ -14,6 +14,7 @@ import type {
 import {
   MediaJobExecutionError,
   MediaJobScheduler,
+  type MediaJobFailureCode,
   type MediaJobPriority,
   type MediaJobSchedulerSnapshot,
 } from './mediaJobScheduler'
@@ -301,6 +302,21 @@ function publicError(cause: unknown): MotionAnalysisError {
   )
 }
 
+function schedulerError(failure: MotionAnalysisError): MediaJobExecutionError {
+  const code: MediaJobFailureCode = failure.code === 'unsupported-runtime'
+    || failure.code === 'quota'
+    || failure.code === 'storage-corrupt'
+    ? 'resource-unavailable'
+    : failure.code === 'unsupported-codec'
+      ? 'unsupported-codec'
+      : failure.code === 'resource-limit'
+        ? 'resource-limit'
+        : failure.code === 'decode-readback'
+          ? 'decode-failed'
+          : 'unexpected'
+  return new MediaJobExecutionError(code, failure.message, failure)
+}
+
 export class MotionAnalysisController {
   private readonly deps: MotionAnalysisControllerDeps
   private readonly pending = new Map<string, PendingRun>()
@@ -378,7 +394,7 @@ export class MotionAnalysisController {
               })
               reject(failure)
             }
-            throw failure
+            throw schedulerError(failure)
           }
         },
       })

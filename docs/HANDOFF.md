@@ -4307,3 +4307,25 @@ surface; it is not a second zoom and never enters document history.
   oxlint, runner syntax, `git diff --check`, and the high-severity production
   audit with 0 vulnerabilities pass. Clean-commit Chromium, CI, and another
   fresh exact-head Codex review follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - eighth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4926378868` on `f00a88b37f` found that the public
+  motion-analysis status preserved worker failure remediation, but the
+  scheduler history received the wrapper `MotionAnalysisError` and therefore
+  mislabeled every failure as `unexpected`.
+- The controller now converts its final public failure into the scheduler's
+  canonical taxonomy before rethrowing to scheduler diagnostics. Unsupported
+  codec and resource limit remain exact; decode/readback becomes decode failed;
+  unsupported runtime, quota, and cache corruption become resource unavailable;
+  only failures without a scheduler class remain unexpected. Aborted jobs still
+  use scheduler cancellation rather than failure history.
+- A five-case deterministic matrix proves each worker failure produces both the
+  intended motion-specific public status and the matching scheduler history,
+  with exact worker teardown. The refreshed focused gate passes 77/77 tests
+  across nine files plus 17/17 runner checks; the authoritative full suite
+  passes 180/180 files and 2,508/2,508 tests plus those checks. Build, lint,
+  production audit, static checks, clean-commit Chromium, CI, and one more exact-
+  head Codex review follow on the committed tree.
