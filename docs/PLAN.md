@@ -3732,3 +3732,46 @@ acceptance claims.
   calls only in four existing AC-3/ProRes codec chunks. Retain only the existing
   >500 kB advisory; do not repeat the full suite for a docs-only correction that
   follows an already-green exact-head suite.
+
+## Part 10c / issue #76 - PR #112 deterministic migration-profile follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Close exact-head Codex review `4922748950`: do not permit implementation-
+  selected scalar-float/SIMD NaN behavior to influence durable descriptor
+  migration output.
+- [x] Select `myrelith-wasm-render-general-v1` only when every contribution has
+  an empty migration chain; select `myrelith-wasm-migration-integer-v1` for the
+  entire signed module as soon as any contribution declares a migration.
+- [x] Reject `f32`, `f64`, and `v128` in every type position and reject every
+  scalar-float operation/conversion/reinterpretation, float-related prefixed
+  conversion, complete `0xfd` SIMD family, future/unlisted feature, and
+  resource-dependent `table.grow` under migration-integer before any engine API.
+  Future/unlisted features remain rejected by render-general too.
+  Retain only the closed deterministic integer/control/fixed-memory/bulk-memory/
+  bounded-`funcref` table subset without callable or nondeterministic imports.
+- [x] Scan the whole module rather than attempting reachable-function analysis;
+  cover unreachable helpers, element targets, `ref.func`, mutable-table dispatch,
+  and `call_indirect`. Accept that migration-bearing render exports are integer-
+  only in version 1.
+- [x] Keep scalar float/fixed SIMD in render-general for toolchain compatibility
+  and performance while explicitly declining cross-engine/hardware bit-identical
+  third-party pixel guarantees. Preserve exact host input bytes, color/parameter
+  interpretation, call ordering, and lifecycle separation.
+- [x] Bind the selected profile id and its normative opcode/immediate-table digest
+  into raw-cache identity, so a general parse/cache hit cannot authorize a
+  migration-integer activation and neither path skips candidate-worker parsing.
+- [x] Preserve canonical JCS/schema validation and atomic migration lifecycle;
+  require identical accepted JCS bytes for identical successful cross-engine
+  input/step sequences, with traps/timeouts remaining transactional failures.
+- [x] Gate Issue #77 on exact and hostile type/opcode/profile/cache/indirect-table/
+  NaN/`table.grow` cases plus cross-engine canonical migration goldens. Keep the
+  change design-only with browser QA not applicable.
+- [x] Pass the final frozen 119 focused tests across five files plus all 16 runner
+  checks, build/typecheck, warning-free lint, production audit with 0
+  vulnerabilities, and clean diff/contradiction/alignment checks. Confirm zero
+  ordinary-bundle plugin capability/profile/signature/candidate/manifest/
+  validate/compile/module/CSP canaries and only six generic instantiate calls in
+  four existing Mediabunny AC-3/ProRes chunks. Retain only the existing >500 kB
+  advisory. Do not repeat the full suite for this docs-only correction after an
+  already-green exact-head suite; browser QA remains not applicable.

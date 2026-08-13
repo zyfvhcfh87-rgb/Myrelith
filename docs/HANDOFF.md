@@ -3538,3 +3538,59 @@ surface; it is not a second zoom and never enters document history.
   runtime. The build retained only the existing >500 kB chunk advisory. A new
   full suite was intentionally not repeated for this docs-only correction; the
   exact-head suite was already green before these non-executing contract edits.
+
+## Part 10c issue #76 - PR #112 deterministic migration-profile follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4922748950` found that version 1 admitted scalar
+  floating-point and fixed-width SIMD throughout a module that could also export
+  descriptor migrations. A migration could therefore reinterpret or branch on
+  an implementation-selected NaN payload and commit different durable records
+  on different engines.
+- The candidate-worker parser now selects one closed binary-policy profile from
+  validated signed manifest facts before scanning or engine work. All-empty
+  contribution migration arrays select `myrelith-wasm-render-general-v1`; any
+  nonempty migration array selects `myrelith-wasm-migration-integer-v1` for the
+  complete signed module and every editor/export/migration activation.
+- Migration-integer rejects `f32`, `f64`, and `v128` in every signature, block
+  type, typed select, local, global, initializer, and body. It also rejects every
+  scalar-float constant/load/store/arithmetic/comparison/conversion/
+  reinterpretation form, float-related prefixed conversion, the complete `0xfd`
+  SIMD family, and resource-dependent `table.grow`. The closed remainder is the
+  deterministic `i32`/`i64`, control, variable, parametric, fixed-memory, bulk-
+  memory, and bounded `funcref` table subset with no callable or nondeterministic
+  host import.
+- Enforcement is intentionally whole-module: unreachable functions, element
+  targets, `ref.func`, mutable table dispatch, and `call_indirect` cannot escape
+  the profile. Consequently, render exports packaged beside a migration are
+  integer-only too. Render-only packages keep common scalar-float/fixed-SIMD
+  compatibility and performance, but version 1 does not promise bit-identical
+  third-party pixels across engines/hardware; exact host bytes, interpretation,
+  ordering, and lifecycle boundaries remain pinned.
+- The exact profile id and canonical opcode/immediate-table `sha256:` digest are
+  part of raw-module-cache identity. A prior general-profile acceptance or cache
+  hit cannot authorize migration-integer activation, and each candidate still
+  parses before validation, compilation, and fresh instantiation.
+- Migration input/output remains strict canonical JCS plus schema validation and
+  one all-or-nothing action commit. Given identical canonical input and declared
+  step order, every successful accepted migration must produce identical JCS
+  bytes across supported engines; traps, timeouts, malformed output, and budget
+  failure remain transactional failures rather than alternate output.
+- Issue #77 now requires exact hostile fixtures for every forbidden type position
+  and opcode category, `table.grow`, future features, unreachable/direct/indirect/
+  mutable-table dispatch, NaN-payload branch bombs, empty-versus-one-migration
+  profile selection, cache id/table-digest separation, and cross-engine canonical
+  output goldens. This is still a design-only correction with no runtime/parser or
+  browser-observable surface, so browser QA remains not applicable.
+- Final frozen validation passed 119 focused manifest/project/effect/architecture
+  tests across five files plus all 16 benchmark-runner checks, production build/
+  typecheck, warning-free oxlint, the production audit with 0 vulnerabilities,
+  and clean diff/contradiction/alignment checks. The ordinary bundle has zero
+  occurrences of the plugin capability id, either binary-profile id, signature
+  envelope/path, candidate-worker, plugin-manifest, validate, compile, module, or
+  CSP canaries. Its six generic `WebAssembly.instantiate` references remain
+  confined to four existing Mediabunny AC-3/ProRes codec chunks, not a plugin
+  runtime. The build retained only the existing >500 kB chunk advisory. A new
+  full suite was intentionally not repeated for this docs-only correction after
+  the exact-head test suite had already passed; browser QA remains not applicable.

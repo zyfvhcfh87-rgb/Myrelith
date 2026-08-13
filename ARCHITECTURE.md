@@ -274,13 +274,39 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   parameter vector; raw declarations, expanded signatures, expanded runtime
   slots, and their combined checked sum are all bounded before engine work.
   Unsupported value types/features fail at this candidate-worker parser boundary.
+  The candidate selects one exact binary-policy profile from the already-
+  validated signed manifest facts before it scans the module. A module whose
+  every contribution has an empty `migrations` array uses
+  `myrelith-wasm-render-general-v1`, the wider render-only profile described in
+  `docs/PLUGINS.md`. That wider profile preserves common render toolchains and
+  fixed-width-SIMD performance, but version 1 does not promise bit-identical
+  third-party plugin pixels across different browser engines or hardware; the
+  exact host input/parameter encoding, call ordering, and lifecycle boundaries
+  remain shared. If any contribution declares one or more migration steps,
+  the entire signed module instead uses
+  `myrelith-wasm-migration-integer-v1`: `f32`, `f64`, and `v128` types are
+  forbidden in every signature, block type, typed-`select` result, local, and
+  global. Every float
+  constant/load/store/arithmetic/comparison/conversion/reinterpretation form,
+  every float-related prefixed conversion, and the complete fixed-width SIMD
+  prefix/table are absent from its closed table. Only the existing deterministic
+  `i32`/`i64`, control, variable, parametric, fixed-memory, bulk-memory, and
+  bounded `funcref` table subset remains, except `table.grow` is forbidden so
+  allocation-dependent success cannot affect migration output; no host clock,
+  randomness, or callable import exists. This whole-module rule deliberately
+  constrains render exports in migration-bearing packages too, so an unreachable
+  helper, `call_indirect`, or table entry cannot evade deterministic migration policy.
+  Each profile has its own exact id and normative opcode/immediate-table digest;
+  both enter the raw-module cache identity, and a prior general-profile parse can
+  never authorize a migration-bearing activation.
   Executable bytes are independently bounded too: a defined-function body is at
   most 256 KiB and all bodies total at most 16 MiB; canonical instruction
   decoding admits at most 65,536 opcodes per body and 1,048,576 per module,
   256 simultaneously open explicit control constructs, and `br_table` vectors
   of at most 1,024 labels/16,384 per body/65,536 per module. Constant and
   initializer expressions admit 64 opcodes each and 16,384 per module. The
-  binary-policy-versioned opcode/immediate table is closed; the parser bounds
+  selected profile's binary-policy-versioned opcode/immediate table is closed;
+  the parser bounds
   every immediate vector before allocation, validates branch/control structure,
   and requires the final `end` to consume the exact body/expression with no
   trailing bytes. These byte/opcode/depth gates and declaration charges all pass

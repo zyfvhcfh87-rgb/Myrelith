@@ -80,8 +80,10 @@ failure containment.
    trusted parent starts one non-resetting five-second wall-clock deadline before
    creating a fresh disposable candidate worker and never synchronously walks
    attacker-authored WebAssembly sections or instructions. Inside that worker,
-   the host-authored byte-policy parser rejects a start section, canonically
-   scans every policy-allowed body/initializer opcode and immediate, and
+   validated signed manifest facts select the exact render-general or whole-
+   module migration-integer profile. The host-authored byte-policy parser rejects
+   a start section, canonically scans every selected-profile body/initializer
+   opcode and immediate, and
    enforces every declaration/payload/decoded-complexity ceiling before any
    engine API. Only after parse success may the same worker validate, compile,
    and instantiate; if ready it becomes the sandbox's runtime worker, otherwise
@@ -116,7 +118,8 @@ failure containment.
   instruction immediates/vectors, control depth, branch tables, initializer
   expressions, start section, active/passive data modes, features, imports,
   exports, memory/table limits, segment payloads, code, traps, loops, output
-  bytes, return values, and timing;
+  bytes, return values, timing, and the signed manifest fact that selects the
+  render-general or migration-integer whole-module profile;
 - project effect descriptors, parameter primitives, versions, enable state,
   order, counts, string lengths, ids, and animation targets;
 - plugin-provided diagnostic codes/text and message ordering;
@@ -297,7 +300,10 @@ of frame access.
 unbounded memory, exploits an unsupported feature/parser discrepancy, creates
 huge tables, traps the engine, exploits a browser JIT vulnerability, or makes a
 small signed module expand into unaccounted compiled/native cache memory across
-many activations.
+many activations. A migration-bearing module hides float/SIMD code in an
+apparently unreachable or table-only helper, creates an implementation-selected
+NaN payload, then reinterprets or branches on it so two conforming engines can
+commit different durable migration records.
 
 **Controls:** the trusted parent checks the framed module byte length, digest,
 signature, trust, revocation, and raw-cache identity while treating the raw
@@ -327,7 +333,30 @@ body and 1,048,576 per module; simultaneously open explicit `block`/`loop`/`if`
 constructs at 256; `br_table` vector labels at 1,024 per instruction, 16,384 per
 body, and 65,536 per module; and constant/initializer expressions at 64 opcodes
 each and 16,384 per module. Every opcode, prefix/subopcode, and immediate uses
-one closed binary-policy-versioned grammar. A prefixed opcode counts once;
+one closed selected-profile, binary-policy-versioned grammar. Before scanning a
+section, the candidate derives the exact profile from validated signed manifest
+facts: all-empty migration arrays select `myrelith-wasm-render-general-v1`; any
+nonempty migration array selects `myrelith-wasm-migration-integer-v1` for the
+entire module. The render-general profile keeps the bounded wider numeric and
+fixed-width SIMD table for common rendering toolchains/performance, without a
+version-1 promise of bit-identical third-party pixels across browser engines or
+hardware; exact host input/parameter encoding, color interpretation, call order,
+and lifecycle separation remain the portable contract. The migration-integer
+profile rejects `f32`, `f64`, and
+`v128` in every parameter/result/block type/typed-select/local/global position;
+every float constant/load/store/arithmetic/comparison/conversion/reinterpretation
+and float-related prefixed conversion; and the complete fixed-width SIMD `0xfd`
+prefix including integer-lane operators. It retains only allowed deterministic
+`i32`/`i64`, control, variable, parametric, fixed-memory, bulk-memory, and
+bounded `funcref` table forms, with resource-dependent `table.grow` explicitly
+forbidden. The only import remains fixed memory and no host clock/random/callable
+nondeterminism exists. Whole-module enforcement includes uncalled functions and
+functions referenced through element segments, `ref.func`, mutable
+`table.set`/`table.init`/`table.copy`/`table.fill` dispatch, or `call_indirect`; no
+reachability analysis can downgrade it. Migration-bearing render exports accept
+the same integer-only tradeoff. Each exact profile id and its canonical opcode/immediate-
+table `sha256:` digest enter the raw-cache identity, so general acceptance cannot
+authorize migration-integer activation. A prefixed opcode counts once;
 structural delimiters and each expression's final `end` count. The mandatory
 `br_table` default is decoded and depth-checked but is not a vector label.
 Vector immediates are contained and bounded before allocation; typed `select`
@@ -335,15 +364,18 @@ requires exactly one supported result type. Branch targets, `else` placement,
 and the fixed control stack must be valid, and one final `end` must consume the
 exact body/expression with no trailing byte.
 
-Initializer expressions admit type-matching numeric/vector constants for defined
-numeric globals, `global.get` of an earlier immutable defined numeric global,
+Render-general initializer expressions admit type-matching numeric/vector
+constants for defined numeric globals, `global.get` of an earlier immutable defined numeric global,
 and only integer `add`/`sub`/`mul` as extended-constant operators; the parser
 type-checks the small stack expression and its one declared result. Element
 offsets are exactly one `i32.const`; items use the exact legacy function-index or
 single `ref.func`/`ref.null funcref` forms. Indexes must be in range. Imported
 globals, every other extended-constant/reference form, malformed/truncated/
 overflowing/noncanonical immediates, and unlisted features/opcodes fail before
-engine work. The closed function-body table is derived from dated WebAssembly
+engine work. Migration-integer initializer expressions admit only the listed
+`i32`/`i64` constants, earlier immutable integer globals, and integer
+`add`/`sub`/`mul`; float/vector constants and types fail. The render-general
+closed function-body table is derived from dated WebAssembly
 Core 2.0 grammar, while only that explicitly listed Core 3.0 initializer subset
 is added. Threads/atomics, tail calls, exceptions, typed function references,
 GC, memory64, multi-memory, relaxed SIMD, and every unlisted proposal are rejected.
@@ -405,9 +437,12 @@ exhaust memory.
 **Controls:** fixed package/manifest/module, raw/expanded/combined declaration,
 body-byte, instruction, control-depth, branch-table, initializer-expression,
 segment, memory-region, and table limits; byte-level start-section and active-
-data rejection before engine work; canonical closed-allowlist decoding of every
-opcode and immediate with exact body/expression termination, checked per-type,
-per-function, per-body, repeated-signature, and module accounting;
+data rejection before engine work; canonical selected-profile closed-allowlist
+decoding of every opcode and immediate with exact body/expression termination,
+checked per-type, per-function, per-body, repeated-signature, and module
+accounting; whole-module migration-integer rejection of every float/SIMD type or
+operator and `table.grow`, including unreachable/table-only/mutable-table paths,
+before an engine API;
 fixed-size imported memory with separately budgeted passive-data, workspace,
 parameter, and pixel ranges; parent-side opaque module framing and no synchronous
 parent WebAssembly traversal; a fresh activation-candidate worker that performs
@@ -470,7 +505,8 @@ multi-descriptor migration and its one final generation-checked commit.
 host drops unknown descriptors; a non-final migration feeds oversized, nested,
 or ambiguous data into the next step; a changed schema or unit silently
 reinterprets retained effect keyframes; a failing migration corrupts params/
-animation; revocation removes authored data; export silently omits an effect.
+animation; a float NaN payload or SIMD path makes durable output differ by
+engine; revocation removes authored data; export silently omits an effect.
 
 **Controls:** project stores only bounded descriptors; unknown types/versions/
 keys/animation targets preserve and bypass; open never installs/prompts/migrates/
@@ -478,7 +514,14 @@ executes; migration follows only manifest-declared version steps and typed Wasm
 exports, is explicit, sandboxed, and cloned. The action freezes every original
 target and generation, resolves every chain, and rejects all targets before code
 if any fails the static-animation gate. Immediately before each chain, current
-trust/revocation/availability, raw-cache identity, and target snapshot are rechecked.
+trust/revocation/availability, raw-cache identity, and target snapshot are
+rechecked. Any package declaring at least one migration step uses the whole-
+module `myrelith-wasm-migration-integer-v1` profile on every activation. The
+candidate chooses it from validated signed manifest facts and rejects all float/
+SIMD types and operators plus `table.grow`—including unreachable/table-indirect
+code—before
+validation, compilation, or instantiation; the exact profile id and table digest
+also separate its raw-cache identity from render-general packages.
 Migration accepts only its separately validated static descriptor record; it
 never receives the render ABI's ephemeral defaults or frame-resolved values.
 Every descriptor chain freshly owns a migration-only worker, instance, fixed
@@ -500,7 +543,10 @@ contract must define how animated parameters change schema or unit. The final
 output must exactly match the current contribution schema and pass durable
 descriptor and whole-document replacement budgets. One action-wide history
 commit occurs only after all targets succeed and their exact starting values and
-generation still match. Success, failure, malformed output, trap, cancellation,
+generation still match. For identical canonical input and declared step order,
+every successful migration must yield identical accepted JCS bytes across
+supported engines; a trap or timeout remains a transactional failure rather than
+an alternate output. Success, failure, malformed output, trap, cancellation,
 watchdog expiry, trust/revocation change, project replacement, stale state, or
 commit rejection settles outstanding host work and destroys the current owner
 without waiting for plugin acknowledgement. Any non-success discards every

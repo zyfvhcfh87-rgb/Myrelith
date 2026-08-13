@@ -281,10 +281,20 @@ earlier exactly-one-memory import gate before this accounting.
 The same parser decodes the complete instruction expression rather than handing
 opaque body bytes to the engine. One decoded opcode, including a prefixed opcode,
 counts as one instruction; structural `block`, `loop`, `if`, `else`, and `end`
-opcodes count too. A closed, binary-policy-versioned table enumerates every
-accepted primary/prefixed opcode and its immediate grammar; an entry absent from
-that table is rejected instead of feature-sniffed through the browser engine.
-Version 1 derives that closed table from the dated
+opcodes count too. A closed, binary-policy-versioned profile table enumerates
+every accepted primary/prefixed opcode and its immediate grammar; an entry absent
+from the selected table is rejected instead of feature-sniffed through the
+browser engine.
+
+The candidate selects the profile once, before scanning any WebAssembly section,
+from the already-validated signed manifest facts supplied by the trusted parent:
+
+| Signed manifest fact | Exact binary-policy profile id |
+| --- | --- |
+| every contribution has an empty `migrations` array | `myrelith-wasm-render-general-v1` |
+| any contribution has one or more migration declarations | `myrelith-wasm-migration-integer-v1` |
+
+The render-general profile derives its closed table from the dated
 [WebAssembly Core 2.0 (2025-09-16)](https://webassembly.github.io/spec/versions/core/WebAssembly-2.0.pdf)
 binary instruction grammar for numeric, control, parametric, variable, table, memory,
 reference, fixed-width SIMD, sign-extension, nontrapping-conversion, multi-value,
@@ -292,10 +302,49 @@ and bulk-memory operators. It applies the type/import/memory/table restrictions
 in this document and adds no threads/atomics, shared memory, relaxed SIMD, tail
 calls, exceptions/tags, typed function references, GC, memory64, multi-memory,
 component-model features, or other proposal. The initializer-only Core 3.0
-subset below does not expand the function-body table. The normative table
-artifact and its digest are fixtures of the binary-policy version and exact raw-
-module cache identity; unknown/reserved or unlisted primary/prefixed opcodes fail
-policy.
+subset below does not expand the function-body table.
+
+Keeping scalar floating point and fixed-width SIMD in this render-only profile
+preserves common render toolchains and performance. Version 1 does not claim
+that third-party plugin output pixels are bit-identical across different browser
+engines or hardware: its portability contract pins the host's exact input and
+parameter bytes, color interpretation, requested-frame/order semantics, and
+lifecycle isolation. A future pixel-determinism capability would need its own
+numeric profile and conformance fixtures.
+
+The migration-integer profile is a strict whole-module subset. It rejects
+`f32`, `f64`, and `v128` in every function parameter/result, block signature,
+typed-`select` result, local declaration, and defined global. It omits every
+`f32`/`f64` constant, load, store, arithmetic, comparison, conversion, and
+reinterpretation form; every float-related nontrapping/prefixed conversion; and
+the complete fixed-width SIMD `0xfd` prefix, including integer-lane forms. Only
+the render-general table's deterministic `i32`/`i64` numeric, control, variable,
+parametric, fixed-memory, bulk-memory, and bounded `funcref` table forms remain,
+with `table.grow` explicitly omitted. Its allocation-dependent success/failure
+must not enter durable migration behavior; the declared table bounds and every
+other allowed table operation still receive the normal static and runtime
+checks. The only import is still the fixed host memory, and the migration port
+provides no time, randomness, pixels, editor/export messages, or other
+nondeterministic input.
+
+This stricter profile applies to every declaration, initializer, function body,
+export, and otherwise unreachable helper in the signed module, not only the
+declared migration exports. A function referenced by an element segment or
+`ref.func`, stored or moved with `table.set`/`table.init`/`table.copy`/`table.fill`,
+or invoked through `call_indirect` receives no exemption. Whole-module parsing is
+deliberate: version 1 performs no fallible reachable-function analysis and cannot
+let float/SIMD state flow indirectly into durable migration output. The
+tradeoff is explicit: render exports packaged beside any migration declaration
+are integer-only too. A publisher that needs the wider render-general profile
+must ship a version with no migration declarations; a future separately
+versioned package/runtime contract may define a narrower split safely.
+
+Each profile owns a canonical normative opcode/immediate-table artifact and an
+exact digest encoded as `sha256:` plus 64 lowercase hexadecimal characters. The
+profile id and that profile's table digest are fixtures of the binary-policy
+version and exact raw-module cache identity. Unknown profile ids, digest mismatch,
+reserved/unlisted primary or prefixed opcodes, and using general-profile
+acceptance for a migration-bearing manifest all fail before an engine call.
 
 The parser canonical-decodes every opcode, subopcode, index, lane, memory
 argument, block type, numeric literal, and other immediate. Truncated,
@@ -318,9 +367,9 @@ one final `end` must close the implicit function frame at the exact declared
 body boundary. An early or missing final `end`, control-stack underflow or
 overflow, or any trailing body byte is a policy failure.
 
-Constant and initializer expressions use the same canonical decoder. Each is
+Constant and initializer expressions use the same selected-profile canonical decoder. Each is
 capped at 64 opcodes, including its final `end`, and checked addition caps the
-module at 16,384 initializer-expression opcodes. Version 1 global initializers
+module at 16,384 initializer-expression opcodes. Render-general global initializers
 allow type-matching `i32.const`, `i64.const`, `f32.const`, `f64.const`, or
 `v128.const`; `global.get` of an earlier immutable defined numeric global; and
 only `i32.add`/`i32.sub`/`i32.mul` or `i64.add`/`i64.sub`/`i64.mul` as extended-
@@ -333,9 +382,13 @@ or `ref.null funcref`. Referenced global/function indexes must exist and satisfy
 those rules. Imported globals are already forbidden; every other extended-
 constant or reference form, an unsupported opcode, a missing final `end`, or
 trailing expression bytes fail before engine work. Active data is already
-forbidden, so it has no offset expression. Function parameters, results, locals,
-and all defined globals may use only `i32`, `i64`, `f32`, `f64`, or `v128`;
-tables use the separately bounded `funcref` contract. No attacker
+forbidden, so it has no offset expression. Under the migration-integer profile,
+global initializers are limited to the listed `i32`/`i64` constants, earlier
+immutable `i32`/`i64` globals, and integer `add`/`sub`/`mul`; `f32.const`,
+`f64.const`, and `v128.const` reject. Render-general function parameters,
+results, locals, and all defined globals may use only `i32`, `i64`, `f32`,
+`f64`, or `v128`; migration-integer narrows those positions to `i32`/`i64`.
+Both profiles use the separately bounded `funcref` table contract. No attacker
 count may drive an allocation before all byte-containment, decoding, feature,
 and resource checks succeed.
 
@@ -604,6 +657,20 @@ stack order, and the complete animation object stay host-owned and unchanged.
 The lifecycle and atomic multi-descriptor action rules are defined under
 **Runtime instance lifetimes**; no candidate enters project state or history
 before the final action-wide commit.
+
+Any nonempty contribution `migrations` array also selects the whole-module
+`myrelith-wasm-migration-integer-v1` binary-policy profile described above for
+every editor, migration, and export activation of that signed package. This is a
+compatibility gate, not a per-call switch: a float/SIMD type or opcode or
+`table.grow` anywhere in the module rejects before `WebAssembly.validate`, even
+when it is unreachable from the migration export or referenced only through a
+table. With one fresh
+initial state, canonical migration input, fixed sequential step order, integer-
+only Wasm semantics, no callable imports or host nondeterminism, and canonical
+JCS/schema validation after every step, every successful version-1 migration is
+required to produce the same accepted bytes across supported engines. The host
+still treats any trap, timeout, malformed/noncanonical output, or final schema/
+budget failure transactionally under the unchanged all-or-nothing lifecycle.
 
 ## First contribution: bounded video effect
 
@@ -910,10 +977,13 @@ one non-resetting five-second wall-clock deadline before asking the broker to
 create a fresh, disposable activation-candidate worker from host-authored code
 and pass a private `MessagePort`. The parent then supplies either the verified,
 bounded WebAssembly byte string or a fresh copy from the optional exact-key raw-
-module cache. The candidate worker always runs the complete host-authored byte-
-policy parser without invoking an engine API; only after parse success does that
-same worker call `WebAssembly.validate`, asynchronous compilation, and fresh
-instantiation. The parent
+module cache, plus the immutable validated manifest facts needed to distinguish
+empty from nonempty migration arrays. The candidate itself selects the exact
+render-general or migration-integer profile before scanning the module and
+requires its profile id and normative table digest to match the activation/cache
+identity. It always runs the complete selected-profile byte-policy parser without
+invoking an engine API; only after parse success does that same worker call
+`WebAssembly.validate`, asynchronous compilation, and fresh instantiation. The parent
 does not synchronously iterate any attacker-driven WebAssembly section,
 instruction, or initializer structure, and the deadline does not reset when
 parsing or any later activation phase completes. A raw-byte cache hit skips no
@@ -997,7 +1067,10 @@ exact key contains plugin id, signer fingerprint, package digest, normalized
 signed module path, signed expanded module length and SHA-256, negotiated host
 API version, sorted selected capability id/version pairs, sorted selected
 contribution id/kind/version pairs, binary-policy version, and normative opcode/
-immediate-table digest. The first implementation holds at most eight entries and
+immediate-table digest. That policy portion is specifically the exact selected
+profile id plus that profile's normative table digest; a render-general entry
+cannot satisfy a migration-integer activation even when the raw module bytes are
+identical. The first implementation holds at most eight entries and
 charges each by the actual retained raw `Uint8Array.byteLength`; checked addition
 caps the aggregate at 64 MiB. Insertion clones verified bytes into a private
 write-once host-owned buffer whose reference/backing store is never exposed,
@@ -1207,7 +1280,23 @@ green:
    typed-`select` and every other immediate vector; malformed, truncated,
    overflowing, noncanonical, reserved, and unsupported opcode/immediate
    encodings; function/code count mismatch; and every other per-kind, payload,
-   and aggregate declaration boundary in the package-budget table;
+   and aggregate declaration boundary in the package-budget table. Profile
+   fixtures must prove that any nonempty migration declaration selects
+   `myrelith-wasm-migration-integer-v1` for the complete module and rejects
+   `f32`, `f64`, and `v128` separately in parameters, results, block types,
+   typed-`select`, locals, and globals; every float/SIMD constant, load, store,
+   arithmetic, comparison, conversion, reinterpretation, float-related prefixed
+   conversion, the complete `0xfd` SIMD category, and migration-profile
+   `table.grow`; future/unlisted features must fail under both profiles.
+   Otherwise-identical render-only/no-migration fixtures for every scalar-float/
+   fixed-SIMD category and `table.grow` must remain accepted by
+   `myrelith-wasm-render-general-v1` when the form is in its wider closed table.
+   Uncalled functions,
+   element/table-only functions, `ref.func`, mutable-table dispatch through
+   `table.set`/`table.init`/`table.copy`/`table.fill`, and `call_indirect` must not
+   bypass whole-module rejection. NaN-payload/reinterpret/branch bombs and
+   resource-dependent `table.grow` variants must fail in the candidate parser
+   before any engine API;
 3. CSP/opaque-origin negative probes for network, storage, navigation, DOM, and
    worker escape attempts;
 4. activation-worker promotion; a five-second parent deadline that begins
@@ -1221,14 +1310,21 @@ green:
    mutation/transfer/detachment isolation, deterministic access/key LRU,
    pressure bypass, invalidation, and teardown; spies proving cold and hit paths
    both parse, validate, compile, and instantiate; and proof that no
-   `WebAssembly.Module` or engine artifact enters or survives through the cache;
+   `WebAssembly.Module` or engine artifact enters or survives through the cache.
+   Cache fixtures must bind the exact selected profile id and its canonical table
+   digest, separate general from migration-integer identities, and prove that a
+   prior general-profile acceptance never skips migration-integer rejection;
 5. unknown/disabled/revoked descriptor round trips through save, recovery,
    undo/redo, reorder, remove, and migration rejection, including the version-1
    static-instance gate for every effect targeted by an animation track; fresh
    per-descriptor-chain migration workers/instances/memories/ports/queues/
    generations; same-chain sequential steps; reciprocal editor/export message
    isolation; deterministic serial multi-descriptor actions; terminal teardown;
-   fresh retry; stale-generation rejection; and all-or-nothing final commit;
+   fresh retry; stale-generation rejection; and all-or-nothing final commit.
+   Cross-engine goldens must run identical canonical input/step sequences through
+   accepted integer-only migration modules and compare exact canonical output
+   bytes, while float-created NaN payload and payload-dependent branch variants
+   remain pre-engine rejection fixtures;
 6. authored built-in/plugin stack-order pixels shared by preview and export,
    plus exact render-parameter ABI fixtures: `{}` at two bytes; declared-key
    completeness and ASCII/JCS order independent of authored insertion order;
