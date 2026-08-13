@@ -155,10 +155,26 @@ function validateWindow(window: MotionAnalysisWorkerWindowReply): void {
   }
 }
 
+function releaseIdentifiableWindowBuffers(value: unknown): void {
+  if (!value || typeof value !== 'object') return
+  const frames = (value as { readonly frames?: unknown }).frames
+  if (!Array.isArray(frames)) return
+  const buffers: ArrayBuffer[] = []
+  const seen = new Set<ArrayBuffer>()
+  for (const candidate of frames) {
+    if (!candidate || typeof candidate !== 'object') continue
+    const pixels = (candidate as { readonly pixels?: unknown }).pixels
+    if (!ArrayBuffer.isView(pixels)) continue
+    const buffer = pixels.buffer
+    if (!(buffer instanceof ArrayBuffer) || buffer.byteLength === 0 || seen.has(buffer)) continue
+    seen.add(buffer)
+    buffers.push(buffer)
+  }
+  if (buffers.length > 0) structuredClone(null, { transfer: buffers })
+}
+
 function releaseWindow(window: MotionAnalysisWorkerWindowReply): void {
-  structuredClone(window.frames, {
-    transfer: window.frames.map((frame) => frame.pixels.buffer),
-  })
+  releaseIdentifiableWindowBuffers(window)
 }
 
 function validCount(value: number, maximum = Number.MAX_SAFE_INTEGER): boolean {
@@ -404,6 +420,16 @@ export function runMotionAnalysisWorker(
           consuming = true
           void continueAfterWindow(reply)
         } catch (cause) {
+          try {
+            releaseIdentifiableWindowBuffers(reply)
+          } catch (releaseCause) {
+            finish(() => reject(new MediaJobExecutionError(
+              'resource-unavailable',
+              'Rejected motion-analysis window ownership could not be released',
+              releaseCause,
+            )))
+            return
+          }
           finish(() => reject(cause))
         }
         return

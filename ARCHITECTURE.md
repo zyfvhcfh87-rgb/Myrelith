@@ -572,9 +572,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   resource-limit, resource-unavailable, and decode-readback failure classes,
   and closes its cursor/source before terminal settlement. The app bridge owns
   abort/error/messageerror/send failure, terminates the worker exactly once,
-  detaches every transferred plane when its consumer settles, and does not
+  detaches every identifiable transferred plane before rejecting a malformed
+  window, detaches accepted planes when their consumer settles, and does not
   settle the run or release scheduler admission while an acknowledged window
-  remains consumer-owned.
+  remains consumer-owned. A terminal completion with zero decoded samples is a
+  typed decode/readback failure before processor finalization or cache staging;
+  only positive-sample completions may become cache provenance.
 - `app/analysisStorage.ts` implements the strict schema-1 origin-local OPFS
   sidecar under `myrelith-derived/analysis-cache-v1`. `domain/analysisCache.ts`
   owns the exact key, provenance, freshness, and stale-rejection policy. Writes

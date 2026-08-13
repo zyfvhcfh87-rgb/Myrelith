@@ -19,6 +19,7 @@ class FakeWorker implements MotionAnalysisWorkerLike {
   readonly messages: MotionAnalysisWorkerMessage[] = []
   terminated = false
   holdCompletion = false
+  emptyCompletion = false
 
   addEventListener(type: string, listener: (event: never) => void): void {
     const listeners = this.listeners.get(type) ?? new Set()
@@ -33,7 +34,16 @@ class FakeWorker implements MotionAnalysisWorkerLike {
   postMessage(message: MotionAnalysisWorkerMessage): void {
     this.messages.push(message)
     if (message.type === 'run') {
-      queueMicrotask(() => this.dispatch({
+      if (this.emptyCompletion) queueMicrotask(() => this.dispatch({
+        type: 'complete',
+        requestId: message.requestId,
+        decodedFrameCount: 0,
+        sampledFrameCount: 0,
+        windowCount: 0,
+        maxRetainedFrames: 0,
+        maxRetainedBytes: 0,
+      }))
+      else queueMicrotask(() => this.dispatch({
         type: 'window',
         requestId: message.requestId,
         windowIndex: 0,
@@ -261,6 +271,32 @@ describe('MotionAnalysisController', () => {
     expect(storage.storage.readResult).toHaveBeenCalledWith(cached)
     expect(storage.storage.touch).toHaveBeenCalledWith(cached.cacheKey)
     expect(storage.storage.stageResult).not.toHaveBeenCalled()
+  })
+
+  it('rejects zero-sample completion before result finalization or cache staging', async () => {
+    const storage = storageFixture()
+    const worker = new FakeWorker()
+    worker.emptyCompletion = true
+    const controller = new MotionAnalysisController(deps(storage.storage, () => worker))
+    const analysis = request()
+
+    await expect(controller.analyze(analysis)).rejects.toMatchObject({
+      code: 'decode-readback',
+      message: 'Motion analysis decoded no samples for the requested source range',
+    })
+
+    expect(analysis.processor.consumeWindow).not.toHaveBeenCalled()
+    expect(analysis.processor.finish).not.toHaveBeenCalled()
+    expect(storage.stageResult).not.toHaveBeenCalled()
+    expect(storage.commitEntry).not.toHaveBeenCalled()
+    expect(worker.terminated).toBe(true)
+    expect(controller.snapshot().jobs[0]).toMatchObject({
+      phase: 'error',
+      failure: {
+        code: 'decode-readback',
+        detail: 'Motion analysis decoded no samples for the requested source range',
+      },
+    })
   })
 
   it('does not cancel a completed generation when the same analysis starts again', async () => {

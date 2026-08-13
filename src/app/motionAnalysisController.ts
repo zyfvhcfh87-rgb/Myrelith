@@ -457,6 +457,12 @@ export class MotionAnalysisController {
       this.deps.workerFactory,
     )
     this.throwIfStale(request, signal)
+    if (completion.sampledFrameCount === 0) {
+      throw new MotionAnalysisError(
+        'decode-readback',
+        'Motion analysis decoded no samples for the requested source range',
+      )
+    }
     const bytes = tightResult(await raceOwnedOperation(
       request.processor.finish(completion, signal),
       signal,

@@ -4158,3 +4158,22 @@ acceptance claims.
   authoritative 179-file / 2,485-test full suite. Refresh build, lint,
   production audit, diff checks, and the exact clean-commit Chromium artifact
   before requesting another Codex review.
+
+## Milestone 5 Part 10a.1 / issue #108 - second exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Detach every safely identifiable `ArrayBuffer`-backed grayscale plane
+  before rejecting a transferred window that fails order, frame, byte, or
+  sample-envelope validation; deduplicate shared backing buffers and preserve
+  exact worker/scheduler cleanup if detachment itself fails.
+- [x] Reject a terminal zero-sample completion as decode-readback before result
+  finalization, result staging, or manifest commit, so the cache's positive-
+  sample invariant is enforced at the decode boundary rather than surfacing as
+  an indirect storage error.
+- [x] Add deterministic ownership and zero-sample regressions; pass 61/61
+  focused tests plus 17/17 runner checks and the authoritative 179-file /
+  2,486-test suite plus those checks. Pass build/typecheck, oxlint, the
+  high-severity production audit with 0 vulnerabilities, runner syntax, and
+  `git diff --check`. Clean-commit Chromium, CI, and fresh exact-head Codex
+  review follow on the committed tree.

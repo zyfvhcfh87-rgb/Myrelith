@@ -245,6 +245,7 @@ describe('runMotionAnalysisWorker', () => {
 
   it('rejects invalid windows and message deserialization failures through common cleanup', async () => {
     const invalidWorker = new FakeWorker()
+    const invalidPixels = new Uint8Array(new ArrayBuffer(5))
     const invalid = runMotionAnalysisWorker(
       request(),
       vi.fn(async () => undefined),
@@ -256,10 +257,11 @@ describe('runMotionAnalysisWorker', () => {
       requestId: 1,
       windowIndex: 0,
       sampleOffset: 0,
-      frames: [{ ...frame(), pixels: new Uint8Array(new ArrayBuffer(5)) }],
+      frames: [{ ...frame(), pixels: invalidPixels }],
       retainedBytes: 5,
     })
     await expect(invalid).rejects.toMatchObject({ code: 'resource-limit' })
+    expect(invalidPixels.byteLength).toBe(0)
     expect(invalidWorker.terminated).toBe(true)
 
     const messageErrorWorker = new FakeWorker()

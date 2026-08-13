@@ -4145,3 +4145,30 @@ surface; it is not a second zoom and never enters document history.
   authoritative full suite passes 179/179 files and 2,485/2,485 tests plus the
   runner checks. Build/lint/audit/diff and clean-commit Chromium evidence are
   refreshed before the follow-up commit is published.
+
+## Milestone 5 Part 10a.1 / issue #108 - second exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925551773` on `567df2dcb6` found two remaining
+  ownership/provenance gaps: a transferred window rejected during app-side
+  validation retained its identifiable grayscale buffers, and a valid
+  zero-sample worker completion could reach result finalization and then fail
+  indirectly at the positive-sample cache-manifest boundary.
+- The bridge now gathers only actual `ArrayBuffer`-backed views from a rejected
+  window, deduplicates shared backing buffers, and detaches them before terminal
+  rejection. If that ownership release itself fails, the run reports a typed
+  resource-unavailable failure while still terminating the worker and balancing
+  scheduler diagnostics. The regression retains the rejected plane and proves
+  its byte length is zero at promise rejection.
+- The controller now classifies a zero-sample completion directly as
+  decode-readback before invoking the result processor or staging cache bytes.
+  The deterministic regression proves no window consumer, result finalizer,
+  result staging, or manifest commit runs, while the worker and scheduler still
+  settle into the typed error state.
+- The refreshed focused gate passes 61/61 tests plus 17/17 runner checks; the
+  authoritative suite passes 179/179 files and 2,486/2,486 tests plus those
+  runner checks. TypeScript/Vite build, oxlint, the high-severity production
+  audit with 0 vulnerabilities, runner syntax, and `git diff --check` pass.
+  Clean-commit Chromium, CI, and fresh exact-head Codex review evidence follows
+  on the final committed tree.
