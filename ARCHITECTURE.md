@@ -609,6 +609,28 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   before LRU mutation, so an impossible allocation cannot evict usable entries.
   Corrupt, unavailable, quota-exhausted, or stale entries are recoverable
   derived-data failures rather than project loss.
+- Issue #109 is the first production consumer of that foundation.
+  `app/videoStabilizationController.ts` binds one exact clip/source/project
+  snapshot to the production analysis request and cache identity, converts its
+  strict result bytes into browser-free facts, and rechecks the binding before
+  preview or Apply. `domain/videoStabilization.ts` alone owns SourceTimeMap
+  inversion, O(n) product smoothing, analysis-to-source similarity projection,
+  exact crop/anchor/flip/rotation project geometry, bounded key simplification,
+  and safe-zoom planning. Aspect-rounded downsampling that cannot be projected
+  back to a similarity within 0.25 project px is unavailable rather than
+  silently authored. Safe zoom is solved after simplification against the
+  interpolated transform at every integer clip frame; its displayed crop is
+  the total cropped span `1 - 1 / safeZoom`, and the shared envelope is at most
+  1.35x. Product runs admit at most 1,000,000 clip frames, 1,024 keys per owned
+  track, four million simplification comparisons, and 100,000 document keys.
+- Stabilization Apply is one immutable document operation and one history
+  entry. It writes only ordinary linear Position X/Y, Rotation, and equal
+  Scale X/Y tracks, preserves unrelated tracks, and requires explicit consent
+  before replacing any owned property. The operation independently rechecks
+  the document key budget. Preview is transport-only session state and never
+  mutates history; cancel, failure, cache hit, and parameter tuning likewise
+  do not mutate the project. Preview and export therefore continue through the
+  shared ordinary animation evaluator, with no stabilization-only render path.
 - Issue #44 remains build-unreferenced feasibility work for the algorithms and
   quality gates. Its browser runtime is owned by
   `app/motionAnalysisResearchController.ts`; its disposable dedicated worker

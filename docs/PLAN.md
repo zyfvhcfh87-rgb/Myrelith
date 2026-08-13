@@ -4291,3 +4291,39 @@ acceptance claims.
   nine files, 180/180 files and 2,508/2,508 full-suite tests, plus all 17 runner
   checks. Refresh build/typecheck, lint, production audit, static checks, clean-
   commit Chromium, CI, and exact-head Codex evidence before merge.
+
+## Milestone 5 Part 10a.2 / issue #109 - bounded video stabilization
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Build the first product consumer of Issue #108 with exact source/project/
+  SourceTimeMap/cache provenance, one bounded local job, typed failure and
+  cancellation behavior, strict result parsing, and stale-session rechecks.
+- [x] Implement a full-product O(n) global translation/rotation/uniform-scale
+  smoother with strength 0-100%, integer radius 1-120, canonical timestamp-to-
+  source-time conversion, and duplicate retime projection rejection.
+- [x] Project analysis corrections through crop, anchor, flips, rotation, and
+  uniform base scale. Reject aspect-rounded analysis geometry beyond 0.25
+  project px instead of silently treating an affine as a similarity.
+- [x] Simplify ordinary Position X/Y, Rotation, and equal Scale X/Y tracks under
+  pre-zoom tolerances that guarantee <=0.5 project-pixel corner, <=0.05 degree,
+  and <=0.05% scale error after the reviewed 1.35x maximum safe zoom. Solve
+  exact project coverage after simplification at every integer clip frame.
+- [x] Enforce 1,000,000 clip frames, 4,000,000 comparison attempts, 1,024 keys
+  per owned track, and the 100,000-document-key ceiling. Recheck the document
+  budget in the immutable Apply operation and require explicit replacement of
+  existing owned tracks.
+- [x] Add accessible Analyze/Retry/Cancel/progress, strength/radius, exact crop/
+  zoom/key/jitter evidence, playhead Preview, Apply, Reset, and disabled-control
+  explanations. Keep analysis, preview, parameter tuning, cache hits, cancel,
+  and failure out of project history.
+- [x] Add the reproducible Issue #109 real-source browser gate and package
+  command. Dirty-tree Chromium evidence is green for 32 H.264 samples, exact
+  cache hit, 31 keys per track, 1.0224x zoom / 2.20% total crop, balanced
+  workers/scheduler/cache removal, and zero console/page problems.
+- [x] Pass 135/135 focused tests, the authoritative 184-file / 2,527-test suite,
+  17/17 evidence-runner checks, build/typecheck, warning-free lint, the
+  high-severity production audit with 0 vulnerabilities, runner syntax, and
+  diff/conflict checks.
+- [ ] Pass the clean-commit Chromium gate, exact-head CI, and fresh no-major-
+  issues Codex review before squash merge.

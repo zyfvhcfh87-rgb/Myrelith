@@ -74,11 +74,13 @@ import type {
   DynamicZoomRequest,
   DynamicZoomSourceDimensions,
 } from '../domain/dynamicZoom'
+import type { VideoStabilizationPlan } from '../domain/videoStabilization'
 import {
   addCrossfade,
   addCrossfadeWithSourceBounds as addExactCrossfade,
   addEffect,
   applyDynamicZoomWithResult,
+  applyVideoStabilizationWithResult,
   addTrack,
   insertClip,
   removeTransition,
@@ -86,6 +88,7 @@ import {
   removeEffect,
   reorderEffect,
   resetEffect,
+  resetVideoStabilizationWithResult,
   renameTrack,
   setClipVolume,
   setEffectEnabled,
@@ -308,6 +311,14 @@ export interface DocumentState {
     source: DynamicZoomSourceDimensions,
     request: DynamicZoomRequest,
   ) => ClipFramingOperationResult
+  /** Replace Position/Rotation/Scale with an accepted stabilization plan. */
+  applyVideoStabilization: (
+    clipId: ClipId,
+    plan: VideoStabilizationPlan,
+    replaceExisting: boolean,
+  ) => ClipFramingOperationResult
+  /** Explicitly remove all five stabilization-owned tracks in one entry. */
+  resetVideoStabilization: (clipId: ClipId) => ClipFramingOperationResult
   /** Explicitly remove all four position/scale animation tracks. */
   resetClipFramingAnimation: (clipId: ClipId) => ClipFramingOperationResult
   /** Update one text payload atomically; invalid/unchanged patches add no history. */
@@ -655,6 +666,29 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     let result: ClipFramingOperationResult | undefined
     set((state) => {
       result = applyDynamicZoomWithResult(state.doc, clipId, source, request)
+      return commit(state, result.doc)
+    })
+    return result!
+  },
+
+  applyVideoStabilization: (clipId, plan, replaceExisting) => {
+    let result: ClipFramingOperationResult | undefined
+    set((state) => {
+      result = applyVideoStabilizationWithResult(
+        state.doc,
+        clipId,
+        plan,
+        replaceExisting,
+      )
+      return commit(state, result.doc)
+    })
+    return result!
+  },
+
+  resetVideoStabilization: (clipId) => {
+    let result: ClipFramingOperationResult | undefined
+    set((state) => {
+      result = resetVideoStabilizationWithResult(state.doc, clipId)
       return commit(state, result.doc)
     })
     return result!

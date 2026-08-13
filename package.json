@@ -28,6 +28,7 @@
     "qa:issue19:fixtures": "node scripts/generate-issue-19-fixtures.mjs",
     "qa:issue44:research": "node scripts/issue44/run-research.mjs",
     "qa:issue108:foundation": "node scripts/issue108/run-foundation.mjs",
+    "qa:issue109:stabilization": "node scripts/issue109/run-stabilization.mjs",
     "postinstall": "patch-package",
     "test": "node scripts/run-vitest.mjs",
     "test:browser": "playwright test",

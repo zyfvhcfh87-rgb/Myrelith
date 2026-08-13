@@ -42,6 +42,7 @@ export type MotionAnalysisFailureCode =
   | 'decode-readback'
   | 'low-confidence'
   | 'scene-cut'
+  | 'excessive-residual'
   | 'quota'
   | 'storage-corrupt'
   | 'cancelled'

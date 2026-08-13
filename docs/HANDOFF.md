@@ -121,7 +121,8 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
 | **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model with renderer no-go; delivery split into #108–#111; 22 focused tests and source-bound Chromium evidence on exclusive port 41844 |
-| **Post-MVP #108 — motion-analysis job/cache foundation** | 🚧 implementation complete locally | production one-job/one-decoder controller; worker-owned real-source decode/downsample with exact frame closure; strict schema-1 OPFS derived cache; source/currentness rollback; focused/full/build/browser gates green; clean-commit publication gate remains |
+| **Post-MVP #108 — motion-analysis job/cache foundation** | ✅ complete | production one-job/one-decoder controller; worker-owned real-source decode/downsample with exact frame closure; strict schema-1 OPFS derived cache; source/currentness rollback; PR #115 squash-merged as `73ceeea`; issue closed |
+| **Post-MVP #109 — bounded video stabilization** | 🚧 implementation complete locally | production #108 consumer; O(n) similarity smoothing; exact project-space safe coverage; ordinary Position/Rotation/equal-Scale tracks; accessible Analyze/Preview/Apply/Reset surface; publication gates pending |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -4329,3 +4330,45 @@ surface; it is not a second zoom and never enters document history.
   passes 180/180 files and 2,508/2,508 tests plus those checks. Build, lint,
   production audit, static checks, clean-commit Chromium, CI, and one more exact-
   head Codex review follow on the committed tree.
+
+## Milestone 5 Part 10a.2 / issue #109 - bounded video stabilization (2026-08-13)
+
+**IMPLEMENTATION COMPLETE LOCALLY.**
+
+- The Animation Inspector now exposes an accessible local Analyze, progress,
+  Cancel/Retry, strength, integer smoothing radius, exact required-crop/safe-
+  zoom evidence, playhead Preview, explicit replacement confirmation, Apply,
+  and Reset workflow. Preview is transport-only; only Apply or Reset creates a
+  single history entry.
+- `app/videoStabilizationController.ts` is the production adapter over Issue
+  #108. It uses the exact connected source, SourceTimeMap, project/clip
+  projection, algorithm, and parameter digests; consumes overlapping worker
+  windows once; preserves typed scene-cut, inlier/residual, source, cache, and
+  cancellation failures; detaches result bytes after strict parsing; and
+  rechecks the source/project snapshot before preview or Apply.
+- `domain/videoStabilization.ts` owns the O(n) full-product similarity smoother,
+  canonical source-time inversion, project-space correction for crop, anchor,
+  flips, rotation, and uniform scale, and exact safe-coverage planning. Analysis
+  aspect rounding must project back to a similarity within 0.25 project px.
+  Key simplification reserves the 0.5 px final-corner, 0.05 degree, and 0.05%
+  scale tolerances before the maximum 1.35x zoom, then safe coverage is solved
+  against the simplified path at every integer clip frame. Displayed required
+  crop is the total span `1 - 1 / safeZoom`.
+- Product bounds are 1,000,000 clip frames, 120 smoothing frames, 4,000,000
+  simplification comparisons, 1,024 keys per owned track, and 100,000 document
+  keys. The immutable operation rechecks the document-wide budget, replaces
+  only ordinary Position X/Y, Rotation, and equal Scale X/Y tracks after
+  explicit consent, and preserves opacity/effect animation. Shared ordinary
+  animation evaluation remains the only preview/export path.
+- Deterministic focused coverage passes 135/135 domain, operation, controller,
+  store, Inspector, UI, and architecture tests. The authoritative suite passes
+  184/184 files and 2,527/2,527 Vitest tests plus 17/17 evidence-runner checks.
+  TypeScript/Vite production build, warning-free oxlint, runner syntax, diff and
+  conflict checks, and the high-severity production audit with 0 vulnerabilities
+  pass.
+  A dirty-tree real Chromium source gate processed 32 generated H.264 samples,
+  produced 31 keys per track, solved 1.0224x safe zoom / 2.20% total crop,
+  proved an exact cache miss-to-hit, left worker and scheduler resources
+  balanced, removed the cache entry, and reported zero console/page problems.
+  Clean-commit Chromium, CI, and exact-head Codex evidence remain publication
+  gates.
