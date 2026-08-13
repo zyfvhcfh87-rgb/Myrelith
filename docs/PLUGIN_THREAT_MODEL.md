@@ -37,7 +37,7 @@ failure containment.
 | Network privacy | No plugin-controlled request, socket, beacon, WebRTC channel, navigation, form, popup, or download is possible. |
 | Project truth | Projects contain only bounded primitive descriptors. They cannot carry code, grants, package locations, trust, revocation changes, or an instruction to install/execute. |
 | Preview/export integrity | Authored stack order and the exact v1 display-referred sRGB RGBA encoding are shared. Every export starts in a newly instantiated export-owned worker/memory, receives only deterministically ordered export calls, and shares no mutable state with preview/scrub. Missing/failing plugins are visible; export aborts by default instead of silently dropping an effect. |
-| Editor availability | Package parsing, decompression, expanded WebAssembly signatures/locals/activation, fixed memory regions, queues, calls, diagnostics, and retries are bounded. Parent-realm deadlines can terminate a non-cooperative activation or runtime sandbox. |
+| Editor availability | Package parsing, decompression, expanded WebAssembly signatures/locals, code-body bytes, decoded instructions/immediates/control, activation, fixed memory regions, queues, calls, diagnostics, and retries are bounded. Parent-realm deadlines can terminate a non-cooperative activation or runtime sandbox. |
 | Supply-chain identity | Every executed byte is covered by the verified package integrity table and Ed25519 signature; signer and digest changes cannot inherit trust/grants silently. |
 | Recovery | Missing, denied, revoked, incompatible, crashed, and safe-mode plugin descriptors remain ordered, editable, saveable, and recoverable without execution. |
 
@@ -78,8 +78,10 @@ failure containment.
    access.
 6. **Broker to worker/WebAssembly.** Only host-authored JavaScript runs. Before
    an engine API sees the module, trusted-parent byte validation rejects a start
-   section and enforces every declaration/payload ceiling. A fresh disposable
-   worker owns validation, compilation, and instantiation under one non-resetting
+   section, canonically scans every policy-allowed body/initializer opcode and
+   immediate, and enforces every declaration/payload/decoded-complexity ceiling.
+   A fresh disposable worker owns validation, compilation, and instantiation
+   under one non-resetting
    parent deadline; if ready it becomes the sandbox's runtime worker, otherwise
    it is terminated. The untrusted module receives imported bounded memory but
    no callable imports.
@@ -88,11 +90,15 @@ failure containment.
    response, and accepts no partial result.
 8. **Session registry to portable project.** Installed package/trust/grant facts
    may explain a descriptor but can never mutate or disappear it implicitly.
-9. **Preview to export.** Both consume the same effect plan, but export separately
-   preflights fresh export-owned instances and fails transactionally. Only
+9. **Preview, migration, and export.** Preview and export consume the same effect
+   plan, but export separately preflights fresh export-owned instances and fails
+   transactionally. Only
    digest-bound immutable module bytes or compiled code may be reused; no worker,
    instance, memory, port, queue, request generation, or mutable module state
    crosses from preview/scrub into export.
+   Explicit descriptor migration is a third boundary: each descriptor chain is
+   freshly activated with its own mutable owner and migration-only port, and no
+   preview, export, or other descriptor-chain state crosses it.
 
 ### Attacker-controlled inputs
 
@@ -103,9 +109,11 @@ failure containment.
 - signature envelope, public key, fingerprint text, integrity table, signature,
   digest, version ordering, and signer changes;
 - WebAssembly binary sections, compressed signature/local multiplicities,
-  declaration counts, start section, active/passive data modes, features,
-  imports, exports, memory/table limits, segment payloads, code, traps, loops,
-  output bytes, return values, and timing;
+  declaration counts, body sizes, opcode streams, prefixed subopcodes,
+  instruction immediates/vectors, control depth, branch tables, initializer
+  expressions, start section, active/passive data modes, features, imports,
+  exports, memory/table limits, segment payloads, code, traps, loops, output
+  bytes, return values, and timing;
 - project effect descriptors, parameter primitives, versions, enable state,
   order, counts, string lengths, ids, and animation targets;
 - plugin-provided diagnostic codes/text and message ordering;
@@ -277,6 +285,32 @@ segments and 8 MiB aggregate data payload; 16,384 aggregate raw type/import/
 function/table/memory/global/export/element/data/tag section entries; and a
 32,768 checked sum of raw entries, expanded signature fields, and defined-
 function runtime slots.
+Independently cap each defined-function payload (locals plus expression) at
+256 KiB and their checked aggregate at 16 MiB; decoded opcodes at 65,536 per
+body and 1,048,576 per module; simultaneously open explicit `block`/`loop`/`if`
+constructs at 256; `br_table` vector labels at 1,024 per instruction, 16,384 per
+body, and 65,536 per module; and constant/initializer expressions at 64 opcodes
+each and 16,384 per module. Every opcode, prefix/subopcode, and immediate uses
+one closed binary-policy-versioned grammar. A prefixed opcode counts once;
+structural delimiters and each expression's final `end` count. The mandatory
+`br_table` default is decoded and depth-checked but is not a vector label.
+Vector immediates are contained and bounded before allocation; typed `select`
+requires exactly one supported result type. Branch targets, `else` placement,
+and the fixed control stack must be valid, and one final `end` must consume the
+exact body/expression with no trailing byte.
+
+Initializer expressions admit type-matching numeric/vector constants for defined
+numeric globals, `global.get` of an earlier immutable defined numeric global,
+and only integer `add`/`sub`/`mul` as extended-constant operators; the parser
+type-checks the small stack expression and its one declared result. Element
+offsets are exactly one `i32.const`; items use the exact legacy function-index or
+single `ref.func`/`ref.null funcref` forms. Indexes must be in range. Imported
+globals, every other extended-constant/reference form, malformed/truncated/
+overflowing/noncanonical immediates, and unlisted features/opcodes fail before
+engine work. The closed function-body table is derived from dated WebAssembly
+Core 2.0 grammar, while only that explicitly listed Core 3.0 initializer subset
+is added. Threads/atomics, tail calls, exceptions, typed function references,
+GC, memory64, multi-memory, relaxed SIMD, and every unlisted proposal are rejected.
 Require every table maximum, cap each and both aggregate initial and maximum
 table entries at 4,096, and require one fixed-size host memory from 258 through
 1,025 pages. Pages 0-127 are the module's 8 MiB passive-data reserve, 128-255
@@ -287,11 +321,11 @@ only `(P - 257) * 16,384` pixels. Reject every active data segment, require the
 data-count value to equal the data-section count, and allow only passive
 segments plus lazy `memory.init`/`data.drop` into the data reserve during a
 watchdog-bounded call; the engine bounds-checks dynamic copy ranges. Reject zero
-local-group multiplicity, checked-addition overflow,
-noncanonical encoding, duplicate singleton section, function/code count
-mismatch, body/section overrun, additional memory, threads/shared memory,
-relaxed SIMD, WASI, unknown value types/features, unexpected entrypoint types,
-and oversized sections before an engine call. The imported minimum and maximum
+local-group multiplicity, checked-addition overflow, noncanonical encoding,
+duplicate singleton section, function/code count mismatch, body/section overrun,
+missing or early final `end`, trailing bytes, additional memory, WASI, unknown
+value types/features, unexpected entrypoint types, and oversized sections before
+an engine call. The imported minimum and maximum
 and host initial/maximum all equal the manifest request, preventing growth. The
 module can corrupt its own imported memory, so the host rewrites fixed input
 regions before a call and copies/validates only its exact output afterward; the
@@ -303,10 +337,12 @@ candidate worker performs engine validation, asynchronous compilation, and
 instantiation under a non-resetting five-second trusted-parent wall-clock
 deadline. A successful candidate becomes the dedicated runtime worker for its
 requesting lifecycle; timeout or failure destroys the candidate and sandbox. An
-editor runtime is never reused for export. Every export preflight creates a new
-export-owned worker, instance, and imported memory; only digest-bound immutable
-module bytes or compiled code may be cached across lifecycles. Runtime-probe and
-fail closed.
+editor runtime is never reused for export or migration. Every export preflight
+creates a new export-owned worker, instance, and imported memory. Every explicit
+migration action creates a new migration-only owner per descriptor chain; a
+multi-descriptor action runs those distinct owners serially and stages one final
+atomic commit. Only digest-bound immutable module bytes or compiled code may be
+cached across lifecycles. Runtime-probe and fail closed.
 
 **Residual risk:** browser-engine vulnerabilities and binary-parser mistakes.
 Keeping browsers current and shipping an emergency local revocation are required.
@@ -316,24 +352,29 @@ Defense does not claim WebAssembly alone is a complete security boundary.
 
 **Attacker story:** a start function or pathological compiler input monopolizes
 activation; compact type/local vectors expand to millions of compiler slots;
-huge declaration/segment vectors exhaust compiler memory; active data or a
-module allocator collides with host I/O; infinite loops, deep recursion,
+huge bodies, dense instruction streams, deep control trees, `br_table` and
+typed-`select` vectors, or initializer expressions exhaust parser/compiler
+memory; huge declaration/segment vectors exhaust compiler memory; active data or
+a module allocator collides with host I/O; infinite loops, deep recursion,
 repeated traps, memory/table growth, huge output messages, queue floods,
 diagnostic spam, slow decompression, or crash/retry loops freeze the editor or
 exhaust memory.
 
 **Controls:** fixed package/manifest/module, raw/expanded/combined declaration,
+body-byte, instruction, control-depth, branch-table, initializer-expression,
 segment, memory-region, and table limits; byte-level start-section and active-
-data rejection before engine work; canonical body-bounded parsing with checked
-per-type, per-function, repeated-signature, module, and combined accounting;
+data rejection before engine work; canonical closed-allowlist decoding of every
+opcode and immediate with exact body/expression termination, checked per-type,
+per-function, per-body, repeated-signature, and module accounting;
 fixed-size imported memory with separately budgeted passive-data, workspace,
 parameter, and pixel ranges; a fresh
 activation-candidate worker under the non-resetting five-second trusted-parent
 deadline; one active call per sandbox, two globally, bounded/coalesced queue;
 trusted-parent call watchdogs; whole-sandbox termination; atomic export-slot
 reservation under the hard eight-resident ceiling with no mid-export eviction or
-batch reinstantiation; a session-only compiled-code cache capped at eight entries
-and a 64 MiB accepted-raw-module-byte charge, with checked accounting,
+batch reinstantiation; one pinned serial migration slot with a fresh terminal
+owner per descriptor chain; a session-only compiled-code cache capped at eight
+entries and a 64 MiB accepted-raw-module-byte charge, with checked accounting,
 deterministic idle LRU eviction, in-use leases, and trust/revocation/update/
 policy/app-teardown invalidation; exact response sizes; bounded diagnostics;
 three consecutive failures disable for the session; no background activation;
@@ -354,8 +395,10 @@ cancellation, or injects diagnostic HTML.
 
 **Controls:** private port, exact protocol version/type/keys, sandbox generation,
 project generation, instance id, monotonic request id, exact lengths, one in
-flight, latest-wins preview, deterministic non-coalesced export ordering,
-separate editor/export ports and mutable instances, abort/close settlement,
+flight, latest-wins preview, deterministic non-coalesced export/migration
+ordering, separate editor/export/per-descriptor-migration ports and mutable
+instances, migration-only messages with no frame/editor/export traffic,
+abort/close settlement,
 late-response rejection, copy-in/copy-out ownership, one exact IEC
 sRGB/Rec.709-primary and D65 nonlinear RGBA encoding in both directions,
 straight alpha, shared preview/export host conversion, no ICC/profile metadata,
@@ -364,7 +407,8 @@ terminal export outcome destroys its instance; retry starts from the first
 requested frame in another fresh sandbox instead of restoring a checkpoint.
 
 **Residual risk:** host lifecycle bugs. Tests must cover cancel/retry/revoke/
-update/project replacement/close at every awaited boundary.
+update/project replacement/close at every awaited boundary, including staged
+multi-descriptor migration and its one final generation-checked commit.
 
 ### Project portability, migration, and data loss
 
@@ -377,7 +421,17 @@ animation; revocation removes authored data; export silently omits an effect.
 **Controls:** project stores only bounded descriptors; unknown types/versions/
 keys/animation targets preserve and bypass; open never installs/prompts/migrates/
 executes; migration follows only manifest-declared version steps and typed Wasm
-exports, is explicit, sandboxed, and cloned. Before another step can run, every
+exports, is explicit, sandboxed, and cloned. The action freezes every original
+target and generation, resolves every chain, and rejects all targets before code
+if any fails the static-animation gate. Immediately before each chain, current
+trust/revocation/availability, cache binding, and target snapshot are rechecked.
+Every descriptor chain freshly owns a migration-only worker, instance, fixed
+imported memory, private port, queue, and generation. It can carry temporal state
+only across sequential steps of that one chain and receives no pixels or preview/
+scrub/Inspector/export messages. A multi-descriptor action runs distinct owners
+serially in immutable document order under one reserved sandbox slot, destroys
+each before activating the next, and stages all candidates outside the document/
+history. Before another step can run, every
 non-final output must be strict UTF-8 canonical JSON no larger than 65,536 bytes:
 one object with at most 64 entries, keys and string values using the bounded
 manifest-v1 local-identifier grammar, the three reserved record keys excluded,
@@ -388,12 +442,18 @@ in the owning clip's `ClipAnimation.effectTracks` targets that effect id. It doe
 not attempt key-range-only validation because a future, separately versioned
 contract must define how animated parameters change schema or unit. The final
 output must exactly match the current contribution schema and pass durable
-descriptor and whole-document replacement budgets; one history entry occurs
-only after all validation. Failure retains the original descriptor and complete
-animation; revoke/disable/safe mode never delete descriptors; export blocks by
-default and names every unavailable instance. Issue #77 must implement and
-fixture these byte-level and static-instance gates before any migration export
-can execute.
+descriptor and whole-document replacement budgets. One action-wide history
+commit occurs only after all targets succeed and their exact starting values and
+generation still match. Success, failure, malformed output, trap, cancellation,
+watchdog expiry, trust/revocation change, project replacement, stale state, or
+commit rejection settles outstanding host work and destroys the current owner
+without waiting for plugin acknowledgement. Any non-success discards every
+staged candidate and retains every original descriptor plus complete animation;
+retry is fresh, and only exact-key immutable compiled code may survive. Revoke/
+disable/safe mode never delete descriptors; export blocks by default and names
+every unavailable instance. Issue #77 must implement and fixture these byte-level,
+static-instance, fresh-owner, terminal-cleanup, and action-atomicity gates before
+any migration export can execute.
 
 **Residual risk:** a user can deliberately remove an opaque effect or explicitly
 export with reviewed bypass. Those are visible user edits, not silent recovery.

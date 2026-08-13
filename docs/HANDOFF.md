@@ -3363,3 +3363,47 @@ surface; it is not a second zoom and never enters document history.
   checks, and the production high-severity audit with 0 vulnerabilities.
   Browser verification remains intentionally not applicable because the change
   adds no production plugin runtime or observable browser surface.
+
+## Part 10c issue #76 - PR #112 migration-lifecycle and executable-budget follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review found that descriptor migration had no owner lifecycle,
+  so an implementation could reuse mutable editor state, and that the 32 MiB
+  module/declaration ceilings still permitted compressed executable-code and
+  initializer-expression bombs before compilation.
+- Every descriptor chain now freshly owns its migration worker, Wasm instance,
+  fixed imported memory, private port, queue, request sequence, and generation
+  after current trust/revocation/static-target preflight. Its port accepts only
+  canonical migration traffic; sequential steps may share that chain owner, but
+  pixels, editor/export messages, and state from another descriptor cannot.
+- A multi-descriptor action reserves one sandbox slot, runs fresh chain owners
+  serially in immutable document order, destroys each before the next, and stages
+  bounded candidates. It commits once only after every chain and final document
+  budget succeeds against unchanged starting values/generation. Every other
+  terminal outcome destroys outstanding work without plugin cooperation,
+  discards all staging, and preserves every original descriptor plus animation;
+  retry is fresh and only exact-key immutable compiled code can survive.
+- Trusted-parent binary policy now independently caps defined-function payloads
+  at 256 KiB each/16 MiB per module, decoded instructions at 65,536 each/
+  1,048,576 per module, explicit structured-control depth at 256, and `br_table`
+  vector labels at 1,024 per instruction/16,384 per body/65,536 per module.
+  Constant/initializer expressions are capped at 64 opcodes each/16,384 per
+  module. These are independent of the existing checked declaration charges.
+- The future Issue #77 parser must use one closed versioned opcode/immediate
+  grammar, contain every immediate vector before allocation, validate control
+  and branch depth, and require an exact final `end` with no trailing byte.
+  Exact/+1 body, instruction, nesting, branch-table, and initializer fixtures,
+  plus malformed/truncated/noncanonical/unsupported encodings and migration-
+  lifecycle/atomicity fixtures, remain execution gates.
+- Validation passed 119 focused manifest/project/effect/architecture tests
+  across five files, all 2,351 Vitest cases across 170 files, all 16 benchmark-
+  runner checks, production build/typecheck, warning-free oxlint, clean diff and
+  source-marker checks, and the production high-severity audit with 0
+  vulnerabilities. The first full-suite attempt hit the known five-second
+  Inspector timing flake after 2,350 passing tests; that exact test passed 1/1
+  in isolation, and the immediate authoritative solo rerun passed completely.
+  The build retained only the existing >500 kB chunk advisory.
+- Browser verification remains intentionally not applicable: this is still a
+  design-only contract with no production binary parser, migration runtime, or
+  observable browser surface. Issue #77 owns hostile-module browser fixtures.

@@ -224,6 +224,11 @@ Package budgets for the first implementation are:
 | WebAssembly exports | 8,192 |
 | WebAssembly element segments | 1,024 segments; 4,096 aggregate elements |
 | WebAssembly data segments | 1,024 passive segments only; 8 MiB aggregate payload bytes; active segments forbidden; exact data-count section required when nonempty |
+| WebAssembly code bodies | 256 KiB payload per defined function; 16 MiB aggregate payload bytes |
+| WebAssembly decoded instructions | 65,536 per defined-function body; 1,048,576 per module |
+| WebAssembly structured control | 256 simultaneously open explicit `block`/`loop`/`if` constructs per body; the implicit function frame is separate |
+| WebAssembly branch tables | 1,024 labels per `br_table`; 16,384 aggregate labels per body; 65,536 per module |
+| WebAssembly initializer expressions | 64 decoded opcodes per expression; 16,384 aggregate opcodes per module |
 | WebAssembly tags | 0 |
 | WebAssembly declarations | 16,384 aggregate raw section entries; 32,768 combined raw-entry + expanded-signature-field + defined-function-runtime-slot charge |
 | WebAssembly start section | forbidden |
@@ -240,23 +245,85 @@ referenced type parameter count again, plus its expanded code locals, so reusing
 one compressed signature cannot evade the module budget; it is capped at 16,384.
 Checked addition must also keep
 `raw entries + signature fields + defined-function runtime slots` at or below
-32,768. Element
-initializers and data payload bytes have the separate aggregate ceilings above.
+32,768. Code-body bytes, decoded instructions, control depth, branch-table
+labels, initializer-expression opcodes, element initializers, and data payload
+bytes retain the separate ceilings above. Acceptance requires every independent
+gate; byte, opcode, and declaration-entry units are never added into one
+misleading counter.
 
-Before iterating or allocating, the trusted-parent byte parser canonical-decodes
-each type vector, function body size, local-group vector count, and local
-multiplicity and proves that it fits the exact enclosing section/body bytes. It
-requires the code-body count to equal the defined-function count, rejects a
-zero-sized local group, and checked-adds each positive multiplicity against the
-per-function, module, and combined ceilings. It resolves every defined
-function's type index and requires parameters plus code locals to stay within
-2,048 value slots per function and 16,384 across all defined functions. Function
-imports are rejected by the earlier exactly-one-memory import gate before this
-accounting. Function parameters, results, and locals may use only `i32`,
-`i64`, `f32`, `f64`, or `v128`; tables use the separately bounded `funcref`
-contract. Unsupported reference, GC, exception, component-model, or other value
-types/features fail policy before an engine call. No declared count may drive an
-allocation before these byte-containment and policy checks succeed.
+Before iterating or allocating from a declared vector or body, the trusted-
+parent byte parser canonical-decodes each type vector, function body size,
+local-group vector count, and local multiplicity and proves that it fits the
+exact enclosing section/body bytes. A body payload is the declared byte range
+after its size field, including the local-declaration vector and instruction
+expression. The parser rejects a payload above 256 KiB and checked-adds accepted
+payload lengths to the 16 MiB module ceiling. It requires the code-body count to
+equal the defined-function count, rejects a zero-sized local group, and checked-
+adds each positive multiplicity against the per-function, module, and combined
+ceilings. It resolves every defined function's type index and requires
+parameters plus code locals to stay within 2,048 value slots per function and
+16,384 across all defined functions. Function imports are rejected by the
+earlier exactly-one-memory import gate before this accounting.
+
+The same parser decodes the complete instruction expression rather than handing
+opaque body bytes to the engine. One decoded opcode, including a prefixed opcode,
+counts as one instruction; structural `block`, `loop`, `if`, `else`, and `end`
+opcodes count too. A closed, binary-policy-versioned table enumerates every
+accepted primary/prefixed opcode and its immediate grammar; an entry absent from
+that table is rejected instead of feature-sniffed through the browser engine.
+Version 1 derives that closed table from the dated
+[WebAssembly Core 2.0 (2025-09-16)](https://webassembly.github.io/spec/versions/core/WebAssembly-2.0.pdf)
+binary instruction grammar for numeric, control, parametric, variable, table, memory,
+reference, fixed-width SIMD, sign-extension, nontrapping-conversion, multi-value,
+and bulk-memory operators. It applies the type/import/memory/table restrictions
+in this document and adds no threads/atomics, shared memory, relaxed SIMD, tail
+calls, exceptions/tags, typed function references, GC, memory64, multi-memory,
+component-model features, or other proposal. The initializer-only Core 3.0
+subset below does not expand the function-body table. The normative table
+artifact and its digest are fixtures of the binary-policy version and compiled-
+cache key; unknown/reserved or unlisted primary/prefixed opcodes fail policy.
+
+The parser canonical-decodes every opcode, subopcode, index, lane, memory
+argument, block type, numeric literal, and other immediate. Truncated,
+overflowing, noncanonical, or unsupported encodings fail. Any vector-valued
+immediate is contained and counted before allocation: `br_table` uses its
+dedicated limits, and typed `select` requires exactly one allowed value type.
+Every index immediate is range-checked against the already bounded type,
+function, table, memory, global, element, or data count; memory/table immediates
+must select resources accepted by this policy. Any reference-type immediate is
+exactly `funcref`; `externref` and every other heap/reference type are unlisted.
+The parser caps each body at 65,536 decoded instructions and the module at
+1,048,576. A fixed parser stack permits at most 256 simultaneously open explicit
+`block`/`loop`/`if` constructs, with the implicit function-expression frame held
+separately. `else` must match the current `if` and occur at most once. Every
+`br`, `br_if`, and `br_table` target, including the mandatory table default,
+must be within the current label depth. A `br_table` may contain at most 1,024
+vector labels; checked sums cap vector labels at 16,384 per body and 65,536 per
+module. The default is decoded and depth-checked but is not a vector label. The
+one final `end` must close the implicit function frame at the exact declared
+body boundary. An early or missing final `end`, control-stack underflow or
+overflow, or any trailing body byte is a policy failure.
+
+Constant and initializer expressions use the same canonical decoder. Each is
+capped at 64 opcodes, including its final `end`, and checked addition caps the
+module at 16,384 initializer-expression opcodes. Version 1 global initializers
+allow type-matching `i32.const`, `i64.const`, `f32.const`, `f64.const`, or
+`v128.const`; `global.get` of an earlier immutable defined numeric global; and
+only `i32.add`/`i32.sub`/`i32.mul` or `i64.add`/`i64.sub`/`i64.mul` as extended-
+constant operators. The decoder type-checks this small stack expression and
+requires exactly one value matching the declared global type. This permits a
+policy-valid 64-opcode boundary fixture without admitting the broader Core 3.0
+extended-constant/reference/GC grammar. Element offsets allow exactly one
+`i32.const`; element items use legacy function indexes or exactly one `ref.func`
+or `ref.null funcref`. Referenced global/function indexes must exist and satisfy
+those rules. Imported globals are already forbidden; every other extended-
+constant or reference form, an unsupported opcode, a missing final `end`, or
+trailing expression bytes fail before engine work. Active data is already
+forbidden, so it has no offset expression. Function parameters, results, locals,
+and all defined globals may use only `i32`, `i64`, `f32`, `f64`, or `v128`;
+tables use the separately bounded `funcref` contract. No attacker
+count may drive an allocation before all byte-containment, decoding, feature,
+and resource checks succeed.
 
 The trusted host checks every WebAssembly ceiling, rejects every active data
 segment and start section, and accepts only passive data segments before calling
@@ -374,8 +441,9 @@ Descriptor compatibility is separate from package compatibility:
 4. before any migration export runs, the host rejects the whole migration when
    any entry in the owning clip's `ClipAnimation.effectTracks` targets that
    effect instance id;
-5. each declared migration export runs in the sandbox against cloned canonical
-   parameter bytes; no plugin code runs merely to discover a chain;
+5. each declared migration export runs in a fresh migration-chain-owned sandbox
+   against cloned canonical parameter bytes; no plugin code runs merely to
+   discover a chain and no editor or export runtime is reused;
 6. after every non-final step, the host accepts only the canonical bounded
    primitive parameter record defined by ABI version 1, then uses those exact
    validated bytes as the next step's input; it does not infer or claim to
@@ -397,6 +465,9 @@ meaning or unit. Migrating animated effect parameters requires a future,
 separately versioned contract that can transform those tracks. Version 1 may
 change only the cloned static parameter record; effect identity, enabled state,
 stack order, and the complete animation object stay host-owned and unchanged.
+The lifecycle and atomic multi-descriptor action rules are defined under
+**Runtime instance lifetimes**; no candidate enters project state or history
+before the final action-wide commit.
 
 ## First contribution: bounded video effect
 
@@ -507,8 +578,9 @@ ABI contract is:
   defined functions/tables/memories/globals, exports, element segments and
   initializers, passive data segments and payload bytes, imports, tags, expanded
   function-type fields, expanded code locals, defined-function runtime slots,
-  raw declarations, and the combined declaration-resource charge before any
-  engine call. Counts use checked
+  raw declarations, the combined declaration-resource charge, code-body bytes,
+  decoded body instructions, structured-control depth, branch-table labels, and
+  initializer-expression opcodes before any engine call. Counts use checked
   addition and reject an overflow, a noncanonical encoding, a duplicate
   singleton section, a function/code count mismatch, or a section/body whose
   declared vector cannot fit inside its exact byte range;
@@ -654,6 +726,36 @@ expose a reset ABI. Any temporal module state is therefore confined to that
 editor lifecycle; it is never durable project truth and never becomes export
 input.
 
+Every explicit descriptor-migration action uses a migration-owned lifecycle,
+separate from editor and export state. The host first freezes the exact project
+generation, original target descriptors and animations, and a duplicate-free
+target list. Before any plugin migration code runs, it resolves every complete
+chain and rejects the whole action if any target fails the version-1 static-
+animation gate. Immediately before each chain activation, it rechecks current
+trust, revocation, package availability, the unchanged starting target snapshot,
+and any requested immutable-code cache lease's exact binding. For exactly one
+descriptor chain it then freshly activates a worker, `WebAssembly.Instance`,
+fixed imported memory,
+private port, queue, request sequence, and generation. The port accepts only
+that chain's canonical migration records and host control messages. Frame pixels
+and preview, scrub, Inspector, export, or other editor messages cannot enter its
+queue. All declared steps for that descriptor may run sequentially in the same
+chain-owned instance, but no mutable state, message, or intermediate value
+crosses to another descriptor chain or action.
+
+A user action targeting multiple descriptors processes them serially in the
+immutable starting document's track-array, clip-array, then effect-stack order.
+It destroys each chain owner before freshly activating the next. Validated final
+candidates remain bounded trusted-host staging only; the host makes one history/
+document commit after every chain succeeds, the final whole-document budgets
+pass, and the exact starting generation and target values still match. Failure,
+cancellation, watchdog expiry, trust or revocation change, stale state, or final
+commit rejection discards all staged candidates and preserves every original
+descriptor and complete animation. Success also terminates the final owner.
+Every terminal path settles outstanding host requests and destroys the worker,
+instance, memory, port, and queue without waiting for plugin acknowledgement;
+retry creates fresh owners. Only exact-key immutable compiled code may survive.
+
 As part of every export attempt's exact plugin preflight, before a sink or encoder
 is acquired, the host creates a separate export-owned sandbox and fresh
 activation-candidate worker for every required package. It instantiates a new
@@ -673,8 +775,9 @@ and the binary-policy version. The first implementation holds at most eight
 entries and charges each entry by its accepted raw module byte length; checked
 addition caps the aggregate charge at 64 MiB. An insertion evicts idle entries
 until both limits fit, ordered deterministically by oldest host access sequence
-and then lexicographic cache key. Activation/export code under an explicit lease
-is never evicted. If idle eviction cannot make room, activation may continue from
+and then lexicographic cache key. Activation/export/migration code under an
+explicit lease is never evicted. If idle eviction cannot make room, activation
+may continue from
 the verified bytes but does not retain the compiled result; cache pressure never
 weakens a gate or makes execution necessary for project recovery.
 
@@ -702,8 +805,8 @@ is inherited.
 ## Resource and failure containment
 
 Each plugin id + signer + package digest + lifecycle receives its own sandbox and
-bounded memory. Editor and export lifecycles, like different plugins, never share
-instances, memory, ports, or workers.
+bounded memory. Editor, export, and per-descriptor-chain migration lifecycles,
+like different plugins, never share instances, memory, ports, or workers.
 
 Before export activation, preflight atomically reserves one resident-sandbox slot
 for every distinct required package identity, closing least-recently-used idle
@@ -713,12 +816,21 @@ and stops before acquiring a sink or encoder. Export sandboxes stay pinned until
 that attempt ends; the host never evicts, batches, or reinstantiates them midway
 through an export to work around the ceiling.
 
+Before a migration action activates its first target, it atomically reserves one
+resident-sandbox slot for that action, closing a least-recently-used idle editor
+sandbox first when necessary. If no slot is available, the entire action fails
+before plugin code runs. The reservation stays pinned while chains are processed
+serially, but exactly one fresh migration sandbox occupies it at a time; terminal
+chain cleanup completes before the next activation. This reservation and every
+migration call still count toward the global sandbox, active-call, and queue
+ceilings.
+
 | Resource | First implementation policy |
 | --- | --- |
-| Sandboxes | at most 8 resident across editor/export; least-recently-used idle editor instance closes first, and every export instance closes terminally |
+| Sandboxes | at most 8 resident across editor/export/migration; least-recently-used idle editor instance closes first, every export instance closes terminally, and a migration action reserves one serial slot while creating a fresh terminal instance per descriptor chain |
 | Immutable compiled-module cache | session-only; at most 8 exact-keyed entries and 64 MiB aggregate accepted-raw-byte charge; deterministic idle LRU; leased code is pinned |
 | Active calls | one per sandbox, at most 2 globally |
-| Queued calls | at most 32 globally; preview may coalesce latest-wins, while export never coalesces and stays deterministically serialized |
+| Queued calls | at most 32 globally; preview may coalesce latest-wins, while export and migration never coalesce and stay deterministically serialized |
 | Validate/compile/instantiate activation | 5 seconds total wall-clock |
 | Configure/migrate call | 1 second watchdog |
 | Preview frame call | 500 ms watchdog |
@@ -755,7 +867,7 @@ Failure policy is context-specific:
   confirmation naming exact instances and package/reason. The exported result
   records a bounded local diagnostic, not project data;
 - migration rejection or failure: retain the original descriptor, complete clip
-  animation, and document history;
+  animation, every other descriptor in the same action, and document history;
 - package/update failure: retain the previous committed installation;
 - crash during activation: retain an origin-local activation sentinel so the
   next launch offers safe mode before initializing plugins.
@@ -842,9 +954,16 @@ green:
    `data.drop` behavior; exact signature-field and code-local boundaries;
    near-`u32` local multiplicities; zero local groups;
    repeated type-index parameter amplification; checked per-function/module/
-   combined overflow; truncated body/local vectors; function/code count
-   mismatch; and every other per-kind, payload, and aggregate declaration
-   boundary in the package-budget table;
+   combined overflow; 256 KiB/body and 16 MiB/module exact/+1 payload fixtures;
+   65,536/body and 1,048,576/module decoded-instruction exact/+1 bombs;
+   256-deep structured control; `else`, branch-depth, final-`end`, and trailing-
+   byte failures; 1,024/instruction, 16,384/body, and 65,536/module branch-table
+   label exact/+1 bombs; 64/expression and 16,384/module initializer-opcode
+   exact/+1 bombs; accepted and rejected initializer allowlist forms; bounded
+   typed-`select` and every other immediate vector; malformed, truncated,
+   overflowing, noncanonical, reserved, and unsupported opcode/immediate
+   encodings; function/code count mismatch; and every other per-kind, payload,
+   and aggregate declaration boundary in the package-budget table;
 3. CSP/opaque-origin negative probes for network, storage, navigation, DOM, and
    worker escape attempts;
 4. activation-worker promotion, five-second parent deadline, compile/instantiate
@@ -853,7 +972,11 @@ green:
    deterministic idle eviction, lease pinning, invalidation, and teardown tests;
 5. unknown/disabled/revoked descriptor round trips through save, recovery,
    undo/redo, reorder, remove, and migration rejection, including the version-1
-   static-instance gate for every effect targeted by an animation track;
+   static-instance gate for every effect targeted by an animation track; fresh
+   per-descriptor-chain migration workers/instances/memories/ports/queues/
+   generations; same-chain sequential steps; reciprocal editor/export message
+   isolation; deterministic serial multi-descriptor actions; terminal teardown;
+   fresh retry; stale-generation rejection; and all-or-nothing final commit;
 6. authored built-in/plugin stack-order pixels shared by preview and export,
    plus stateful-module fixtures proving that every export starts from a fresh
    instance/memory, follows deterministic call order, and cannot inherit prior

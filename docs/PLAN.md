@@ -3588,3 +3588,40 @@ acceptance claims.
   production build/typecheck, warning-free oxlint, clean diff checks, and the
   production high-severity audit with 0 vulnerabilities. Keep browser
   verification intentionally not applicable to this non-executing follow-up.
+
+## Part 10c / issue #76 - PR #112 migration-lifecycle and executable-budget follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Give every explicitly requested descriptor chain a fresh migration-owned
+  worker, Wasm instance, fixed imported memory, private port, queue, request
+  sequence, and generation after current trust/revocation/static-target preflight.
+  Allow only canonical migration traffic and same-chain sequential steps; share
+  no pixels, editor/export messages, or mutable state between descriptor chains.
+- [x] Make a multi-descriptor action reserve one global sandbox slot, process
+  fresh chain owners serially in immutable document order, stage every bounded
+  result, and commit once only after all chains and final whole-document budgets
+  pass against unchanged starting values and generation. Destroy the current
+  owner on every terminal path, discard all staging on non-success, preserve all
+  originals/animations, and make retry fresh. Reuse only exact-key immutable code.
+- [x] Add independent pre-engine executable ceilings: 256 KiB per defined-
+  function payload and 16 MiB aggregate; 65,536 decoded instructions per body and
+  1,048,576 per module; 256 simultaneously open explicit control constructs;
+  `br_table` vector labels capped at 1,024 per instruction, 16,384 per body, and
+  65,536 per module; initializer expressions capped at 64 opcodes each and 16,384
+  per module.
+- [x] Require a closed binary-policy-versioned opcode/immediate grammar,
+  canonical complete decoding, bounded typed-`select`/branch-table and every
+  other immediate vector before allocation, checked sums, valid control/branch
+  depth, and one exact final `end` with no trailing byte. Gate Issue #77 on
+  exact/+1 and malformed/truncated/noncanonical/unsupported hostile fixtures.
+- [x] Keep this follow-up design-only. No production package parser, migration
+  runtime, worker, sandbox, or browser surface is added; Issue #77 owns runtime
+  implementation and hostile cross-browser fixtures.
+- [x] Pass 119 focused manifest/project/effect/architecture tests across five
+  files, all 2,351 Vitest cases across 170 files, all 16 benchmark-runner checks,
+  production build/typecheck, warning-free oxlint, clean diff/source-marker
+  checks, and the production high-severity audit with 0 vulnerabilities. Record
+  the first full-suite attempt's one known five-second Inspector timing flake,
+  its isolated 1/1 pass, and the immediate authoritative full rerun's clean pass;
+  retain only the existing >500 kB build advisory.

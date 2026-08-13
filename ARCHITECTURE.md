@@ -238,6 +238,17 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   expanded signatures, expanded runtime slots, and their combined checked sum
   are all bounded before engine work. Unsupported value types/features fail at
   this parser boundary.
+  Executable bytes are independently bounded too: a defined-function body is at
+  most 256 KiB and all bodies total at most 16 MiB; canonical instruction
+  decoding admits at most 65,536 opcodes per body and 1,048,576 per module,
+  256 simultaneously open explicit control constructs, and `br_table` vectors
+  of at most 1,024 labels/16,384 per body/65,536 per module. Constant and
+  initializer expressions admit 64 opcodes each and 16,384 per module. The
+  binary-policy-versioned opcode/immediate table is closed; the parser bounds
+  every immediate vector before allocation, validates branch/control structure,
+  and requires the final `end` to consume the exact body/expression with no
+  trailing bytes. These byte/opcode/depth gates and declaration charges all pass
+  independently before validation, compilation, or instantiation.
   The imported memory is fixed-size from 258 through 1,025 pages. Its first
   8 MiB is reserved for passive-data materialization, the next 8 MiB for the
   module stack/heap, page 256 for host parameters or migration input, and pages
@@ -260,6 +271,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   resets and expires after five seconds. A ready candidate becomes the sandbox's
   dedicated runtime worker; every timeout or failure destroys the candidate and
   sandbox so activation cannot block the UI.
+  Every explicit descriptor migration separately activates one fresh migration-
+  owned worker, instance, imported memory, private port, queue, and generation
+  for exactly one descriptor chain after current trust/revocation/static-target
+  preflight. Steps in that chain may run serially in the same instance, but it
+  receives no pixel/editor/export traffic and shares no mutable state with any
+  other descriptor. A multi-descriptor action processes fresh owners serially in
+  stable document order, stages validated candidates, and commits once only if
+  all chains and final document budgets pass against the unchanged starting
+  generation. Every success, failure, cancellation, watchdog, or stale-state
+  path terminates the owner and preserves all originals unless that final atomic
+  commit succeeds; retry is fresh. Only exact-key immutable compiled code may be
+  reused.
   Editor preview/scrub may reuse only its editor-owned runtime instance. Every
   export attempt, including a retry, must instead create a fresh export-owned
   worker, `WebAssembly.Instance`, and imported memory. It may reuse only
