@@ -436,6 +436,11 @@ export class AnalysisStorage {
         quota - ANALYSIS_CACHE_MINIMUM_HEADROOM_BYTES - nonCacheUsage,
       ))
     }
+    if (requiredBytes > ceiling) {
+      throw new AnalysisStorageQuotaError(
+        'Not enough browser storage is available. Clear disposable analysis data or free site storage, then retry.',
+      )
+    }
     let reclaim = cacheBytes + requiredBytes - ceiling
     if (reclaim <= 0) return
 

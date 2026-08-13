@@ -597,8 +597,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   sidecar under `myrelith-derived/analysis-cache-v1`. `domain/analysisCache.ts`
   owns the exact key, provenance, freshness, and stale-rejection policy. Writes
   stage result bytes before the manifest, publish only after a final currentness
-  check, and roll back late commits; corrupt, unavailable, quota-exhausted, or
-  stale entries are recoverable derived-data failures rather than project loss.
+  check, and roll back late commits. Abort or the manifest-write deadline may
+  reject the caller, but the admitted scheduler operation continues to own the
+  staged sidecar until the underlying commit settles and any required rollback
+  finishes; no later job may observe an entry whose sidecar was discarded early.
+  Capacity checks reject a single result larger than the computed cache ceiling
+  before LRU mutation, so an impossible allocation cannot evict usable entries.
+  Corrupt, unavailable, quota-exhausted, or stale entries are recoverable
+  derived-data failures rather than project loss.
 - Issue #44 remains build-unreferenced feasibility work for the algorithms and
   quality gates. Its browser runtime is owned by
   `app/motionAnalysisResearchController.ts`; its disposable dedicated worker

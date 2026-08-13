@@ -184,6 +184,42 @@ function raceOwnedOperation<T>(
   })
 }
 
+interface SettledOwnedOperation<T> {
+  readonly value: T
+  readonly abandonment: MotionAnalysisError | null
+}
+
+async function settleOwnedOperation<T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+  label: string,
+  timeoutCode: MotionAnalysisFailureCode,
+  onTimeout: (cause: MotionAnalysisError) => void,
+): Promise<SettledOwnedOperation<T>> {
+  const ownership: { abandonment: MotionAnalysisError | null } = { abandonment: null }
+  const abandon = (cause: MotionAnalysisError) => {
+    if (ownership.abandonment) return false
+    ownership.abandonment ??= cause
+    return true
+  }
+  const onAbort = () => abandon(abortError())
+  const timeout = setTimeout(() => {
+    const cause = new MotionAnalysisError(timeoutCode, `${label} timed out`)
+    if (abandon(cause)) onTimeout(cause)
+  }, OWNED_OPERATION_TIMEOUT_MS)
+  signal.addEventListener('abort', onAbort, { once: true })
+  if (signal.aborted) onAbort()
+  try {
+    const value = await operation
+    return { value, abandonment: ownership.abandonment }
+  } catch (cause) {
+    throw ownership.abandonment ?? cause
+  } finally {
+    clearTimeout(timeout)
+    signal.removeEventListener('abort', onAbort)
+  }
+}
+
 function jobId(request: MotionAnalysisRunRequest): string {
   return `analysis:${request.attachment.clipId}:${request.algorithm.kind}`
 }
@@ -314,7 +350,7 @@ export class MotionAnalysisController {
               },
               setActiveDecoderCount: context.setActiveDecoderCount,
               signal: context.signal,
-            })
+            }, (failure) => this.rejectPending(id, generation, failure))
             if (!this.isPending(id, generation)) return
             this.pending.delete(id)
             this.setStatus({
@@ -413,6 +449,7 @@ export class MotionAnalysisController {
     request: MotionAnalysisRunRequest,
     signal: AbortSignal,
     context: Parameters<typeof runMotionAnalysisWorker>[2],
+    onOwnedTimeout: (failure: MotionAnalysisError) => void,
   ): Promise<MotionAnalysisRunResult> {
     this.throwIfStale(request, signal)
     const blob = await this.deps.fetchBlob(request.asset.objectUrl, signal)
@@ -516,19 +553,28 @@ export class MotionAnalysisController {
           createdAt: now,
           lastUsedAt: now,
         }
-        transaction = await raceOwnedOperation(
+        const committed = await settleOwnedOperation(
           this.deps.storage.commitEntry(entry),
           signal,
           'Analysis manifest commit',
           'storage-corrupt',
-          (late) => late.rollback(),
+          onOwnedTimeout,
         )
+        transaction = committed.value
+        if (committed.abandonment) throw committed.abandonment
         this.throwIfStale(request, signal)
         void transaction.finalize().catch(() => undefined)
         return { entry, bytes, fromCache: false, completion }
       } catch (cause) {
-        if (transaction) await transaction.rollback().catch(() => undefined)
-        else await staged.discard().catch(() => undefined)
+        try {
+          if (transaction) await transaction.rollback()
+          else await staged.discard()
+        } catch (cleanupCause) {
+          throw new AnalysisStorageCorruptError(
+            'Could not restore analysis cache after an interrupted manifest commit',
+            new AggregateError([cause, cleanupCause]),
+          )
+        }
         throw cause
       }
     } catch (cause) {
@@ -580,6 +626,26 @@ export class MotionAnalysisController {
     })
     pending.reject(error)
     return true
+  }
+
+  private rejectPending(
+    id: string,
+    generation: number,
+    failure: MotionAnalysisError,
+  ): void {
+    const pending = this.pending.get(id)
+    if (!pending || pending.generation !== generation) return
+    this.pending.delete(id)
+    this.setStatus({
+      id,
+      clipId: pending.request.attachment.clipId,
+      kind: pending.request.algorithm.kind,
+      phase: failure.code === 'cancelled' ? 'cancelled' : 'error',
+      progress: this.statuses.get(id)?.progress ?? 0,
+      failure: { code: failure.code, detail: failure.message },
+      fromCache: false,
+    })
+    pending.reject(failure)
   }
 
   private isPending(id: string, generation: number): boolean {

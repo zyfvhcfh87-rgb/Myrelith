@@ -4280,3 +4280,30 @@ surface; it is not a second zoom and never enters document history.
   runner checks. TypeScript/Vite build, warning-free oxlint, the high-severity
   production audit with 0 vulnerabilities, runner syntax, and `git diff
   --check` pass. Clean-commit browser evidence follows on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - seventh exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4926250834` on `deada8562d` found two remaining
+  cache-ownership gaps: cancellation or the ten-second deadline released the
+  admitted job before a pending manifest commit and its rollback settled, and
+  an individually impossible allocation evicted usable LRU entries before the
+  cache reported that it still could not fit.
+- A pending manifest commit now records the first abort/deadline cause while
+  continuing to own the staged result and scheduler slot until the underlying
+  write settles. Cancellation still rejects the public request immediately;
+  deadline expiry also publishes its typed failure immediately. A successful
+  late commit is then rolled back before admission releases, and cleanup
+  failure is no longer discarded.
+- Capacity admission now rejects `requiredBytes > computed ceiling` before any
+  manifest mutation or file removal. Deterministic regressions prove abort and
+  deadline both keep the next job queued until rollback, preserve exact one-job
+  concurrency, and leave an existing manifest entry plus result file untouched
+  after an impossible request.
+- The refreshed focused gate passes 72/72 tests across nine files plus all
+  17/17 runner checks. The authoritative full suite passes 180/180 files and
+  2,503/2,503 tests plus those runner checks. TypeScript/Vite build, warning-free
+  oxlint, runner syntax, `git diff --check`, and the high-severity production
+  audit with 0 vulnerabilities pass. Clean-commit Chromium, CI, and another
+  fresh exact-head Codex review follow on the committed tree.

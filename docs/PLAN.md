@@ -4255,3 +4255,23 @@ acceptance claims.
   17 runner checks. Pass build/typecheck, warning-free lint, production audit
   at 0 vulnerabilities, runner syntax, and the diff check. Clean-commit
   Chromium evidence follows before the next exact-head review request.
+
+## Milestone 5 Part 10a.1 / issue #108 - seventh exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Preserve immediate public abort/deadline settlement while retaining the
+  staged result and scheduler admission until a pending manifest commit settles
+  and any required rollback completes; do not admit the next job into that
+  unresolved transaction window.
+- [x] Surface rollback/discard failure as cache corruption instead of silently
+  dropping cleanup failure, while retaining the first interruption cause for a
+  successful rollback.
+- [x] Reject a result larger than the origin-aware computed cache ceiling before
+  LRU manifest mutation or result-file removal.
+- [x] Add deterministic cancellation, deadline, queued-retry, exact one-job,
+  and impossible-allocation preservation regressions. Pass 72/72 focused tests
+  across nine files, 180/180 files and 2,503/2,503 full-suite tests, plus all
+  17 runner checks. Pass build/typecheck, warning-free lint, production audit at
+  0 vulnerabilities, runner syntax, conflict/diff checks, then refresh clean-
+  commit Chromium, CI, and exact-head Codex evidence before merge.

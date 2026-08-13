@@ -288,6 +288,25 @@ describe('AnalysisStorage', () => {
     )
   })
 
+  it('rejects an impossible allocation before evicting usable cache entries', async () => {
+    const quota = 300 * 1024 * 1024
+    const { root, storage, setEstimate } = fixture()
+    const oldStage = await stage(storage, 'a')
+    const old = entry('a', oldStage.fileName, {
+      resultBytes: 80 * 1024 * 1024,
+      lastUsedAt: 1_000,
+    })
+    await (await storage.commitEntry(old)).finalize()
+    setEstimate(200 * 1024 * 1024, quota)
+
+    await expect(storage.ensureCapacity(90 * 1024 * 1024)).rejects.toBeInstanceOf(
+      AnalysisStorageQuotaError,
+    )
+
+    expect((await storage.readManifest()).entries).toEqual([old])
+    expect(directory(root).files.has(old.resultFileName)).toBe(true)
+  })
+
   it('removes exact clip and asset sidecars without touching sibling entries', async () => {
     const { storage } = fixture()
     const firstStage = await stage(storage, 'a')

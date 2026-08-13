@@ -399,6 +399,98 @@ describe('MotionAnalysisController', () => {
     expect(storage.transaction.finalize).not.toHaveBeenCalled()
   })
 
+  it('keeps manifest ownership and scheduler admission until a cancelled commit rolls back', async () => {
+    const storage = storageFixture()
+    let resolveCommit!: (value: typeof storage.transaction) => void
+    const pendingCommit = new Promise<typeof storage.transaction>((resolve) => {
+      resolveCommit = resolve
+    })
+    storage.commitEntry
+      .mockImplementationOnce(async () => pendingCommit)
+      .mockResolvedValue(storage.transaction)
+    const workers: FakeWorker[] = []
+    const controller = new MotionAnalysisController(deps(storage.storage, () => {
+      const worker = new FakeWorker()
+      workers.push(worker)
+      return worker
+    }))
+    const first = controller.analyze(request())
+    await vi.waitFor(() => expect(storage.commitEntry).toHaveBeenCalledOnce())
+
+    controller.cancelClip('clip-1')
+    await expect(first).rejects.toMatchObject({ code: 'cancelled' })
+    const second = controller.analyze(request(() => null, asset('asset-2'), 'clip-2'))
+    await Promise.resolve()
+
+    expect(storage.transaction.rollback).not.toHaveBeenCalled()
+    expect(storage.staged.discard).not.toHaveBeenCalled()
+    expect(workers).toHaveLength(1)
+    expect(controller.snapshot().scheduler).toMatchObject({
+      activeJobCount: 1,
+      queueDepth: 1,
+    })
+
+    resolveCommit(storage.transaction)
+    await expect(second).resolves.toMatchObject({ fromCache: false })
+
+    expect(storage.transaction.rollback).toHaveBeenCalledOnce()
+    expect(storage.transaction.finalize).toHaveBeenCalledOnce()
+    expect(storage.staged.discard).not.toHaveBeenCalled()
+    expect(workers).toHaveLength(2)
+    expect(controller.snapshot().scheduler).toMatchObject({
+      activeJobCount: 0,
+      queueDepth: 0,
+      maxActiveJobCount: 1,
+    })
+  })
+
+  it('keeps a timed-out manifest commit admitted until its rollback finishes', async () => {
+    vi.useFakeTimers()
+    try {
+      const storage = storageFixture()
+      let resolveCommit!: (value: typeof storage.transaction) => void
+      storage.commitEntry.mockImplementationOnce(() => new Promise((resolve) => {
+        resolveCommit = resolve
+      }))
+      const controller = new MotionAnalysisController(deps(
+        storage.storage,
+        () => new FakeWorker(),
+      ))
+      const pending = controller.analyze(request())
+      const rejected = expect(pending).rejects.toMatchObject({
+        code: 'storage-corrupt',
+        message: 'Analysis manifest commit timed out',
+      })
+      await vi.waitFor(() => expect(storage.commitEntry).toHaveBeenCalledOnce())
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await rejected
+      const second = controller.analyze(request(() => null, asset('asset-2'), 'clip-2'))
+      await Promise.resolve()
+
+      expect(storage.transaction.rollback).not.toHaveBeenCalled()
+      expect(storage.staged.discard).not.toHaveBeenCalled()
+      expect(controller.snapshot().scheduler).toMatchObject({
+        activeJobCount: 1,
+        queueDepth: 1,
+      })
+
+      resolveCommit(storage.transaction)
+      await expect(second).resolves.toMatchObject({ fromCache: false })
+
+      expect(storage.transaction.rollback).toHaveBeenCalledOnce()
+      expect(storage.transaction.finalize).toHaveBeenCalledOnce()
+      expect(storage.staged.discard).not.toHaveBeenCalled()
+      expect(controller.snapshot().scheduler).toMatchObject({
+        activeJobCount: 0,
+        queueDepth: 0,
+        maxActiveJobCount: 1,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('cancels a running source promptly and allows the next clip to run', async () => {
     const firstStorage = storageFixture()
     let failure: 'offline-source' | null = null
