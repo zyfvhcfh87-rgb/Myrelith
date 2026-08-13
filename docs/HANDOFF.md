@@ -4452,3 +4452,32 @@ surface; it is not a second zoom and never enters document history.
   zero console/page problems, and complete port 41870 release. That broad
   source-bound flow uses ordinary 1× timing; the deterministic domain test is
   the direct 0× freeze coverage. CI and fresh exact-head review follow.
+
+## Milestone 5 Part 10a.2 / issue #109 - fourth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4927432158` on `bbea2ed8c1` found that nonzero rates
+  below 1× also repeat a decoded source frame even though their exact source
+  ticks advance, so the zero-rate-only fast path could still author visible
+  correction drift over valid slow-motion footage.
+- Planning now uses the canonical decoded-source-frame selector. Any timeline
+  run that resolves to one source frame receives matching first/last correction
+  keys and `hold` easing at the first edge, whether repetition comes from 0× or
+  fractional speed. For every map that can repeat, analyzed corrections are
+  indexed by decoded source frame and rematerialized at the timeline frame that
+  actually displays that image, including singleton runs between repeats. An
+  exact correction therefore wins even when floor-style SourceTimeMap inversion
+  placed its sample on the preceding 0.75× image or the other 0× plateau edge.
+  Maps whose rates cannot repeat a decoded frame retain the zero-work fast path.
+- Structural repeated-frame edges are counted before retention and reject once
+  they exceed the existing 1,024-key envelope. Deterministic 0.25× coverage
+  proves three successive four-frame runs hold all five authored properties,
+  change only at the next decoded frame, and reject an over-budget 2,052-frame
+  case. A separate 0.75×/1× parity matrix proves all six analyzed source-frame
+  corrections land on the timeline frame that displays the same source image.
+  The final frozen refresh passes 5/5 focused files with 31/31 tests, 184/184
+  full-suite files with 2,534/2,534 tests, all 17 evidence-runner checks,
+  TypeScript/Vite build, warning-free lint, the production audit with 0
+  vulnerabilities, and clean diff checks. Clean browser, CI, and exact-head
+  review follow after commit.

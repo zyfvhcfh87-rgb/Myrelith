@@ -34,6 +34,7 @@ import type {
 import {
   clipSourceTimeMap,
   SOURCE_TIME_TICKS_PER_FRAME,
+  sourceFrameAtTimelineOffset,
   sourceTicksAtTimelineOffset,
   sourceTimeSpeedPointsAtClip,
   timelineOffsetAtSourceTicks,
@@ -535,45 +536,60 @@ function transformAtMappedFrame(
   return interpolateTransform(frames[rightIndex - 1]!, right, frame)
 }
 
-function preserveSourceFreezeBoundaries(
+function preserveRepeatedSourceFrameBoundaries(
   durationFrames: number,
   map: ReturnType<typeof clipSourceTimeMap>,
   frames: readonly VideoStabilizationFrame[],
-): VideoStabilizationFrame[] {
-  if (!sourceTimeSpeedPointsAtClip(map).some((point) => point.rate.numerator === 0)) {
+): VideoStabilizationFrame[] | null {
+  const speedPoints = sourceTimeSpeedPointsAtClip(map)
+  const canRepeatSourceFrames = speedPoints.length > 0
+    ? speedPoints.some((point) => point.rate.numerator < point.rate.denominator)
+    : map.rate.numerator < map.rate.denominator
+  if (!canRepeatSourceFrames) {
     return frames.map((frame) => ({ ...frame, transform: { ...frame.transform } }))
   }
-  const byFrame = new Map(frames.map((frame) => [
-    frame.frame,
-    { ...frame, transform: { ...frame.transform } },
-  ]))
-  let frame = 0
-  while (frame < durationFrames - 1) {
-    const sourceTimeTicks = sourceTicksAtTimelineOffset(map, frame)
-    if (sourceTicksAtTimelineOffset(map, frame + 1) !== sourceTimeTicks) {
-      frame++
-      continue
+  const byFrame = new Map<number, VideoStabilizationFrame>()
+  const transformBySourceFrame = new Map<number, Transform>()
+  for (const mapped of frames) {
+    const sourceFrame = Math.floor(mapped.sourceTimeTicks / SOURCE_TIME_TICKS_PER_FRAME)
+    if (!transformBySourceFrame.has(sourceFrame)) {
+      transformBySourceFrame.set(sourceFrame, mapped.transform)
     }
+  }
+  const protectedFrames = new Set<number>()
+  let frame = 0
+  while (frame < durationFrames) {
+    const sourceFrame = sourceFrameAtTimelineOffset(map, frame)
     const start = frame
-    let end = frame + 1
+    let end = frame
     while (
       end < durationFrames - 1
-      && sourceTicksAtTimelineOffset(map, end + 1) === sourceTimeTicks
+      && sourceFrameAtTimelineOffset(map, end + 1) === sourceFrame
     ) end++
-    const transform = transformAtMappedFrame(frames, end)
-    byFrame.set(start, {
-      frame: start,
-      sourceTimeTicks,
-      transform: { ...transform },
-      easing: 'hold',
-    })
-    byFrame.set(end, {
-      frame: end,
-      sourceTimeTicks,
-      transform: { ...transform },
-      easing: 'linear',
-    })
-    frame = end
+    const exactTransform = transformBySourceFrame.get(sourceFrame)
+    if (end > start) {
+      protectedFrames.add(start)
+      protectedFrames.add(end)
+      if (protectedFrames.size > MAX_KEYFRAMES_PER_TRACK) return null
+    }
+    if (exactTransform || end > start) {
+      const transform = exactTransform ?? transformAtMappedFrame(frames, start)
+      byFrame.set(start, {
+        frame: start,
+        sourceTimeTicks: sourceTicksAtTimelineOffset(map, start),
+        transform: { ...transform },
+        easing: end > start ? 'hold' : 'linear',
+      })
+      if (end > start) {
+        byFrame.set(end, {
+          frame: end,
+          sourceTimeTicks: sourceTicksAtTimelineOffset(map, end),
+          transform: { ...transform },
+          easing: 'linear',
+        })
+      }
+    }
+    frame = end + 1
   }
   return [...byFrame.values()].sort((left, right) => left.frame - right.frame)
 }
@@ -778,9 +794,9 @@ export function createVideoStabilizationPlan(
   if (frames.length < 2) {
     return { ok: false, reason: 'The analyzed source does not map to at least two unique clip frames.' }
   }
-  let freezeSafeFrames: VideoStabilizationFrame[]
+  let repeatSafeFrames: VideoStabilizationFrame[] | null
   try {
-    freezeSafeFrames = preserveSourceFreezeBoundaries(
+    repeatSafeFrames = preserveRepeatedSourceFrameBoundaries(
       clip.timelineRange.durationFrames,
       map,
       frames,
@@ -788,7 +804,9 @@ export function createVideoStabilizationPlan(
   } catch (cause) {
     return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
   }
-  const simplified = simplifyVideoStabilizationFrames(doc, clip, source, freezeSafeFrames)
+  const simplified = repeatSafeFrames
+    ? simplifyVideoStabilizationFrames(doc, clip, source, repeatSafeFrames)
+    : null
   if (!simplified) {
     return {
       ok: false,

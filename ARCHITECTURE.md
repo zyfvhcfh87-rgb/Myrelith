@@ -635,11 +635,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   entry. It writes only ordinary Position X/Y, Rotation, and equal Scale X/Y
   tracks, preserves unrelated tracks, and requires explicit consent before
   replacing any owned property. Moving spans use ordinary linear easing. Every
-  exact SourceTimeMap plateau receives matching keys at its first and last
-  timeline frames, with `hold` owned by the first key, so a 0× source freeze
-  cannot interpolate stabilization motion. Those boundaries are protected
-  from simplification and remain inside the same 1,024-key track envelope. The
-  operation independently rechecks the document key budget. Preview is
+  run of timeline frames that resolves to the same canonical decoded source
+  frame receives matching keys at its first and last frames, with `hold` owned
+  by the first key. That covers exact 0× plateaus and repeated frames below 1×,
+  so the displayed image cannot interpolate stabilization motion. On any map
+  that can repeat, analyzed corrections are indexed by decoded source frame and
+  rematerialized at the timeline frame that actually displays it; floor-style
+  timestamp inversion cannot place a 0.75× correction on the preceding image.
+  Repeated-run boundaries are protected from simplification and remain inside
+  the same 1,024-key track envelope; excess structural boundaries reject the
+  plan. The operation independently rechecks the document key budget. Preview is
   transport-only session state and never mutates history; cancel, failure,
   cache hit, and parameter tuning likewise do not mutate the project. Preview
   and export therefore continue through the shared ordinary animation

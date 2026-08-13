@@ -4389,3 +4389,26 @@ acceptance claims.
   direct 0× semantics in deterministic domain coverage because the broad
   source-bound browser fixture uses ordinary 1× timing. Refresh CI and exact-
   head Codex review before merge.
+
+## Milestone 5 Part 10a.2 / issue #109 - fourth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Replace zero-rate-only plateau detection with canonical decoded-source-
+  frame run detection. Pin matching corrections and `hold` easing at every
+  repeated run's first/last timeline frames for both exact 0× and fractional
+  speeds below 1×. On maps that can repeat, index analyzed corrections by
+  decoded source frame and rematerialize them at the timeline frame that
+  actually displays that image, including singleton runs between repeats; keep
+  the no-repeat path allocation- and scan-free.
+- [x] Count protected repeated-frame edges before retention and reject when
+  they exceed the existing 1,024-key track envelope.
+- [x] Add deterministic 0.25× regressions proving all five properties remain
+  constant over three consecutive four-frame runs, change only at decoded-
+  frame boundaries, and reject a 2,052-frame structural-key overflow. Add a
+  separate 0.75×/1× parity matrix proving six analyzed corrections align with
+  the same displayed source frames despite between-frame timestamp inversion.
+- [x] Pass 5/5 focused files with 31/31 tests, 184/184 full-suite files with
+  2,534/2,534 tests, all 17 evidence-runner checks, build/typecheck, warning-
+  free lint, the production audit with 0 vulnerabilities, and diff checks.
+  Refresh clean Chromium, CI, and exact-head Codex review before merge.

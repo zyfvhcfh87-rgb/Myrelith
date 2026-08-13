@@ -178,6 +178,122 @@ describe('video stabilization product planning', () => {
     )
   })
 
+  test('holds corrections while slow motion repeats each decoded source frame', () => {
+    const item = clip({
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 90_000_000,
+        rate: { numerator: 1, denominator: 4 },
+      },
+      sourceRange: { startFrame: 0, durationFrames: 90 },
+      timelineRange: { startFrame: 10, durationFrames: 12 },
+    })
+    const result = createVideoStabilizationPlan(
+      doc(item),
+      item,
+      source,
+      analysis(),
+      { strengthPercent: 50, smoothingRadiusFrames: 2 },
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    for (const track of result.plan.tracks) {
+      for (const [start, end] of [[0, 3], [4, 7], [8, 11]] as const) {
+        const first = track.keyframes.find((keyframe) => keyframe.frame === start)
+        const last = track.keyframes.find((keyframe) => keyframe.frame === end)
+        expect(first?.easing).toEqual({ type: 'hold' })
+        expect(last?.value).toBe(first?.value)
+        const values = Array.from(
+          { length: end - start + 1 },
+          (_, offset) => evaluateAnimationTrack(track, start + offset, -1),
+        )
+        expect(new Set(values).size).toBe(1)
+      }
+    }
+    const positionX = result.plan.tracks.find((track) => track.property === 'position-x')!
+    expect(evaluateAnimationTrack(positionX, 3, -1)).not.toBe(
+      evaluateAnimationTrack(positionX, 4, -1),
+    )
+  })
+
+  test('aligns fractional-speed corrections to the frame actually displayed', () => {
+    const analyzed = analysis([
+      { a: 1, b: 0, tx: 1, ty: 0 },
+      { a: 1, b: 0, tx: -2, ty: 1 },
+      { a: 1, b: 0, tx: 3, ty: -1 },
+      { a: 1, b: 0, tx: -1, ty: 2 },
+      { a: 1, b: 0, tx: 2, ty: -2 },
+    ])
+    const ordinary = clip({
+      sourceRange: { startFrame: 0, durationFrames: 90 },
+      timelineRange: { startFrame: 10, durationFrames: 6 },
+    })
+    const slow = clip({
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 90_000_000,
+        rate: { numerator: 3, denominator: 4 },
+      },
+      sourceRange: { startFrame: 0, durationFrames: 90 },
+      timelineRange: { startFrame: 10, durationFrames: 8 },
+    })
+    const ordinaryResult = createVideoStabilizationPlan(
+      doc(ordinary),
+      ordinary,
+      source,
+      analyzed,
+      { strengthPercent: 50, smoothingRadiusFrames: 2 },
+    )
+    const slowResult = createVideoStabilizationPlan(
+      doc(slow),
+      slow,
+      source,
+      analyzed,
+      { strengthPercent: 50, smoothingRadiusFrames: 2 },
+    )
+
+    expect(ordinaryResult.ok).toBe(true)
+    expect(slowResult.ok).toBe(true)
+    if (!ordinaryResult.ok || !slowResult.ok) return
+    const displayedAt = [0, 2, 3, 4, 6, 7]
+    for (const ordinaryTrack of ordinaryResult.plan.tracks) {
+      const slowTrack = slowResult.plan.tracks.find(
+        (track) => track.property === ordinaryTrack.property,
+      )!
+      for (let sourceFrame = 0; sourceFrame < displayedAt.length; sourceFrame++) {
+        expect(evaluateAnimationTrack(slowTrack, displayedAt[sourceFrame]!, -1)).toBeCloseTo(
+          evaluateAnimationTrack(ordinaryTrack, sourceFrame, -1),
+          10,
+        )
+      }
+    }
+  })
+
+  test('rejects repeated-frame boundaries beyond the keyframe envelope', () => {
+    const item = clip({
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 90_000_000,
+        rate: { numerator: 1, denominator: 4 },
+      },
+      sourceRange: { startFrame: 0, durationFrames: 90 },
+      timelineRange: { startFrame: 10, durationFrames: 2_052 },
+    })
+    const result = createVideoStabilizationPlan(
+      doc(item),
+      item,
+      source,
+      analysis(),
+      { strengthPercent: 50, smoothingRadiusFrames: 2 },
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'Stabilization exceeds the bounded simplification envelope or 1024 keys per track.',
+    })
+  })
+
   test('solves exact project coverage with crop, off-center anchor, flips, and rotation', () => {
     const item = clip({
       transform: {
