@@ -50,6 +50,11 @@ export interface LensCorrectionCoverage {
   readonly maximumOverscan: number
 }
 
+export interface ValidatedLensCorrectionMap {
+  readonly model: Readonly<ManualLensCorrectionModel>
+  map(output: NormalizedLensPoint): NormalizedLensPoint
+}
+
 const MIN_FOCAL_FRACTION = 0.1
 const MAX_FOCAL_FRACTION = 4
 const MAX_RADIAL_COEFFICIENT = 2
@@ -141,6 +146,29 @@ function basicLensCorrectionValidationError(
   return null
 }
 
+function mapValidatedLensCorrectionPoint(
+  model: ManualLensCorrectionModel,
+  output: NormalizedLensPoint,
+): NormalizedLensPoint {
+  if (
+    !Number.isFinite(output.x)
+    || !Number.isFinite(output.y)
+    || output.x < 0
+    || output.x > 1
+    || output.y < 0
+    || output.y > 1
+  ) throw new RangeError('Lens output point must be inside normalized output bounds')
+  const unscaledX = model.centerX + (output.x - model.centerX) / model.outputScale
+  const unscaledY = model.centerY + (output.y - model.centerY) / model.outputScale
+  const cameraX = (unscaledX - model.centerX) / model.focalX
+  const cameraY = (unscaledY - model.centerY) / model.focalY
+  const distorted = distortCameraPoint(model, cameraX, cameraY)
+  return {
+    x: model.centerX + distorted.x * model.focalX,
+    y: model.centerY + distorted.y * model.focalY,
+  }
+}
+
 /**
  * Rejects foldovers as well as obviously explosive mappings. A fixed grid is
  * intentional: validation cost is bounded and the accepted domain is explicit.
@@ -180,25 +208,26 @@ export function mapLensCorrectionPoint(
   model: ManualLensCorrectionModel,
   output: NormalizedLensPoint,
 ): NormalizedLensPoint {
+  return createValidatedLensCorrectionMap(model).map(output)
+}
+
+/**
+ * Validates one immutable model once for bounded per-pixel research hosts.
+ * Every mapped point is still range-checked, but the fixed 33x33 model safety
+ * grid is never repeated inside a frame loop.
+ */
+export function createValidatedLensCorrectionMap(
+  model: ManualLensCorrectionModel,
+): ValidatedLensCorrectionMap {
   const validationError = lensCorrectionValidationError(model)
   if (validationError) throw new RangeError(validationError)
-  if (
-    !Number.isFinite(output.x)
-    || !Number.isFinite(output.y)
-    || output.x < 0
-    || output.x > 1
-    || output.y < 0
-    || output.y > 1
-  ) throw new RangeError('Lens output point must be inside normalized output bounds')
-  const unscaledX = model.centerX + (output.x - model.centerX) / model.outputScale
-  const unscaledY = model.centerY + (output.y - model.centerY) / model.outputScale
-  const cameraX = (unscaledX - model.centerX) / model.focalX
-  const cameraY = (unscaledY - model.centerY) / model.focalY
-  const distorted = distortCameraPoint(model, cameraX, cameraY)
-  return {
-    x: model.centerX + distorted.x * model.focalX,
-    y: model.centerY + distorted.y * model.focalY,
-  }
+  const validated = Object.freeze({ ...model })
+  return Object.freeze({
+    model: validated,
+    map: (output: NormalizedLensPoint) => (
+      mapValidatedLensCorrectionPoint(validated, output)
+    ),
+  })
 }
 
 export function lensCorrectionCoverage(

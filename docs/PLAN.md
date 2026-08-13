@@ -4668,3 +4668,40 @@ acceptance claims.
   and diff checks.
 - [ ] Commit the exact tree, refresh clean headed Chromium, push, pass exact-head
   CI, and request a fresh Codex review before merge.
+
+## Milestone 5 Part 10a.4 / issue #111 - parity-safe manual lens remap
+
+**IMPLEMENTED LOCALLY; PUBLICATION GATES PENDING (2026-08-13).**
+
+- [x] Preserve the pure version-1 normalized Brown-Conrady model and fixed
+  33x33/Jacobian foldover gate; expose one immutable validated mapper so bounded
+  frame loops do not repeat model validation for every output pixel.
+- [x] Build seven deterministic RGBA fixtures covering neutral, barrel,
+  pincushion, tangential, off-center, strong-valid, and transparent-edge cases.
+  Keep the CPU/ImageData path as a cancelable truth oracle only.
+- [x] Implement one build-unreferenced WebGL2 RGBA8/UNSIGNED_BYTE candidate with
+  manual transparent-edge bilinear sampling. Share its shader/program between
+  preview draw and export readback; compare pixels within 1 byte/channel and a
+  33x33 transform-feedback geometry grid within 0.25 source pixel.
+- [x] Freeze source ordering before authored crop/transform/masks/effects/
+  opacity/blending/transitions. Reject the invalid-folding fixture before GPU
+  work and preserve the 256 MiB aggregate surface envelope at every selectable
+  project size.
+- [x] Measure CPU, preview, and export at 720p/1080p/4K. The headed shakedown
+  measured 1080p preview/export p95 10.4/13.6 ms, 4K 33.4/55.7 ms, maximum
+  pixel delta 1, geometry delta 0.000035 px, and 232,243,200-byte combined 4K
+  peak. Treat timings as host evidence, not universal guarantees.
+- [x] Make context loss terminal for the disposable owner, prove a fresh-owner
+  retry, cooperatively abort the CPU probe, terminate both workers, observe
+  `error`/`messageerror`, and retain zero candidate bytes after disposal.
+- [x] Specify explicit unavailability with no CPU substitution. Keep product
+  schema/UI/render imports and every bundled/downloaded/automatic profile
+  catalog outside #111.
+- [x] Freeze and validate the full tree: 4 focused files / 20 tests, 192 full
+  files / 2,598 tests, 17/17 runner checks, 4,817-module build/typecheck, clean
+  lint, production audit at 0 vulnerabilities, diff checks, and zero Issue #111
+  canary files in normal production output.
+- [ ] Commit/push, replace preliminary data with clean exact-head headed
+  evidence, pass CI, request `@codex review`, and merge only after Codex reports
+  no major issues. On that clean go decision, open a separate bounded product
+  implementation issue.

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  createValidatedLensCorrectionMap,
   DEFAULT_MANUAL_LENS_CORRECTION,
   lensCorrectionCoverage,
   lensCorrectionValidationError,
@@ -39,5 +40,22 @@ describe('manual lens correction model', () => {
     expect(uncropped.covered).toBe(false)
     expect(uncropped.maximumOverscan).toBeGreaterThan(0)
     expect(cropped.maximumOverscan).toBeLessThan(uncropped.maximumOverscan)
+  })
+
+  test('freezes one validated model for bounded frame loops', () => {
+    const authored = {
+      ...DEFAULT_MANUAL_LENS_CORRECTION,
+      centerX: 0.4,
+      k1: 0.12,
+      outputScale: 1.2,
+    }
+    const mapper = createValidatedLensCorrectionMap(authored)
+    const expected = mapLensCorrectionPoint(authored, { x: 0.2, y: 0.8 })
+    authored.k1 = 0
+
+    expect(mapper.map({ x: 0.2, y: 0.8 })).toEqual(expected)
+    expect(Object.isFrozen(mapper)).toBe(true)
+    expect(Object.isFrozen(mapper.model)).toBe(true)
+    expect(() => mapper.map({ x: -0.01, y: 0.5 })).toThrow(/output point/)
   })
 })

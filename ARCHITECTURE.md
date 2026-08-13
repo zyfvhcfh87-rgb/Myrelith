@@ -29,7 +29,7 @@ non-negotiable rules. Re-read it at the start of every coding session.
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
 - The opt-in Issue #54 and Issue #70 evidence panels plus the checked-in Issue
-  #108, Issue #109, and Issue #110 browser gates have narrow,
+  #108, Issue #109, Issue #110, and Issue #111 browser gates have narrow,
   architecture-guarded dev exceptions. `dev/performance/runtime.ts` may compose
   existing `app/` controllers with `state/` and its bounded Mediabunny fixture
   generator;
@@ -50,6 +50,11 @@ non-negotiable rules. Re-read it at the start of every coding session.
   `dev/issue110/motionTrackingGate.ts` has the same narrow app/domain/state
   composition exception for its isolated encoded point/box fixture; only
   `scripts/issue110/motion-tracking-gate.html` imports it.
+  Issue #111's disposable manual lens-remap gate is contained entirely under
+  `dev/issue111/`: its CPU oracle, WebGL2 candidate, worker, and serializable
+  contract may import browser-free `domain/` facts only, while its gate may
+  import only those sibling dev modules. Only
+  `scripts/issue111/lens-remap-gate.html` imports the gate.
   No ordinary application entry may import any gate, and no other `dev/`
   module may reach those layers. Only
   the build-gated exact route in `main.tsx` may import the Issue #54 UI, and
@@ -747,8 +752,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   observed and late-created resources are cleaned without publishing results.
 - Analysis results remain preview-only until an explicit Apply operation writes
   ordinary canonical tracks through normal history. Lens remapping remains a
-  no-go for production until issue #111 proves a bounded renderer with exact
-  preview/export parity; bundled camera-profile catalogs are out of scope.
+  build-unreferenced research surface. Issue #111 approves only the bounded
+  `webgl2-rgba8-manual-bilinear-v1` candidate: one shader/program must serve
+  preview and export, with the pure CPU implementation retained only as a
+  parity oracle. Unsupported WebGL2/RGBA8 readback, texture limits, surface
+  budgets, or context loss are explicit unavailability; there is no silent CPU
+  runtime substitution. A lost context fails its disposable owner and retry
+  requires a fresh worker/context probe. Any later product issue must add a
+  versioned manual source-geometry field before authored crop, preserve this
+  exact decoded-source -> lens -> crop -> transform -> mask/chroma -> ordered
+  effects -> opacity/blend -> transition order, and route preview/export through
+  the same candidate. Issue #111 itself changes no portable schema or product
+  entry graph. Bundled/downloaded camera-profile catalogs remain out of scope.
 
 ## Export profile and delivery contracts
 
