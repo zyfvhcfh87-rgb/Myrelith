@@ -1,6 +1,6 @@
 /** Accessible product surface for bounded local similarity stabilization. */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   analyzeVideoStabilization,
   applyVideoStabilization,
@@ -60,8 +60,13 @@ export default function StabilizationEditor({
   const [replaceExisting, setReplaceExisting] = useState(false)
   const [preview, setPreview] = useState(false)
   const [message, setMessage] = useState('Analyze this clip to calculate a safe correction path.')
+  const analysisGeneration = useRef(0)
+  const invalidateAnalysis = useCallback(() => {
+    analysisGeneration.current++
+  }, [])
 
   useEffect(() => {
+    invalidateAnalysis()
     setPhase('idle')
     setProgress(0)
     setSession(null)
@@ -69,8 +74,13 @@ export default function StabilizationEditor({
     setPreview(false)
     setMessage('Analyze this clip to calculate a safe correction path.')
     useTransportStore.getState().setClipVisualPreview(null)
-    return () => useTransportStore.getState().setClipVisualPreview(null)
-  }, [clip.id])
+    const analyzedClipId = clip.id
+    return () => {
+      invalidateAnalysis()
+      cancelVideoStabilization(analyzedClipId)
+      useTransportStore.getState().setClipVisualPreview(null)
+    }
+  }, [clip.id, invalidateAnalysis])
 
   useEffect(() => {
     const controller = getMotionAnalysisController()
@@ -112,24 +122,32 @@ export default function StabilizationEditor({
   }, [clip, planned, playheadFrame, preview])
 
   const analyze = async (): Promise<void> => {
+    const generation = ++analysisGeneration.current
+    const analyzedClipId = clip.id
     setPreview(false)
     setSession(null)
     setPhase('analyzing')
     setProgress(0)
     setMessage('Analyzing locally…')
     try {
-      const next = await analyzeVideoStabilization(clip.id)
+      const next = await analyzeVideoStabilization(analyzedClipId)
+      if (
+        generation !== analysisGeneration.current
+        || next.clipId !== analyzedClipId
+      ) return
       setSession(next)
       setPhase('ready')
       setProgress(1)
       setMessage(next.fromCache ? 'Ready from the local analysis cache.' : 'Analysis complete and cached locally.')
     } catch (cause) {
+      if (generation !== analysisGeneration.current) return
       setPhase('error')
       setMessage(failureMessage(cause))
     }
   }
 
   const cancel = (): void => {
+    invalidateAnalysis()
     cancelVideoStabilization(clip.id)
     setPreview(false)
     setPhase('idle')

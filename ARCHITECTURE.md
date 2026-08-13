@@ -29,7 +29,7 @@ non-negotiable rules. Re-read it at the start of every coding session.
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
 - The opt-in Issue #54 and Issue #70 evidence panels plus the checked-in Issue
-  #108 browser gate have narrow,
+  #108 and Issue #109 browser gates have narrow,
   architecture-guarded dev exceptions. `dev/performance/runtime.ts` may compose
   existing `app/` controllers with `state/` and its bounded Mediabunny fixture
   generator;
@@ -43,7 +43,11 @@ non-negotiable rules. Re-read it at the start of every coding session.
   only the production `app/` motion-analysis facade, browser-free `domain/`
   cache constants, and the serializable `pipeline/` protocol to run the
   source-bound Issue #108 gate; only `scripts/issue108/foundation-gate.html`
-  imports it, and no ordinary application entry may do so. No other `dev/`
+  imports it. `dev/issue109/videoStabilizationGate.ts` may compose only the
+  production stabilization `app/` facade, browser-free `domain/` facts, and
+  document/media/provenance `state/` needed to install and verify its isolated
+  encoded fixture; only `scripts/issue109/stabilization-gate.html` imports it.
+  No ordinary application entry may import either gate, and no other `dev/`
   module may reach those layers. Only
   the build-gated exact route in `main.tsx` may import the Issue #54 UI, and
   only `EditorShell.tsx` may dynamically import the Issue #70 panel behind its

@@ -4360,9 +4360,9 @@ surface; it is not a second zoom and never enters document history.
   only ordinary Position X/Y, Rotation, and equal Scale X/Y tracks after
   explicit consent, and preserves opacity/effect animation. Shared ordinary
   animation evaluation remains the only preview/export path.
-- Deterministic focused coverage passes 135/135 domain, operation, controller,
+- Deterministic focused coverage passes 136/136 domain, operation, controller,
   store, Inspector, UI, and architecture tests. The authoritative suite passes
-  184/184 files and 2,527/2,527 Vitest tests plus 17/17 evidence-runner checks.
+  184/184 files and 2,528/2,528 Vitest tests plus 17/17 evidence-runner checks.
   TypeScript/Vite production build, warning-free oxlint, runner syntax, diff and
   conflict checks, and the high-severity production audit with 0 vulnerabilities
   pass.
@@ -4374,3 +4374,28 @@ surface; it is not a second zoom and never enters document history.
   `cabd4202fc`, with source fingerprint `ad177dad…`, one clean cache round-trip,
   JSON/PNG artifacts, zero browser problems, and exclusive port 41866 fully
   released. Exact-head CI and Codex review remain publication gates.
+
+## Milestone 5 Part 10a.2 / issue #109 - first exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4926987766` on `e0492442ad` found two P1 gaps: a
+  completed analysis could repopulate the Inspector after selection moved to
+  another clip, and the architecture guard's new Issue #109 dev exception was
+  not named in canonical architecture.
+- The Inspector now owns an analysis-generation token. Starting a request
+  captures its token and clip ID; clip change, cancel, and unmount synchronously
+  invalidate the token and cancel the original clip's admitted job. Late success
+  or failure cannot install a session, preview the new selection, or apply to
+  the old clip. A deterministic deferred-result regression proves the new clip
+  remains idle, Apply stays disabled, no plan is built, and the old request is
+  cancelled.
+- Canonical architecture now grants only
+  `dev/issue109/videoStabilizationGate.ts` the exact `app`/`domain`/`state`
+  composition used by `scripts/issue109/stabilization-gate.html`; ordinary app
+  entries and every other dev module remain forbidden. The architecture guard
+  and documentation are aligned again.
+- The review-focused UI/architecture gate passes 8/8 tests; the authoritative
+  suite passes 184/184 files and 2,528/2,528 tests plus 17/17 runner checks.
+  Build/typecheck, warning-free lint, and `git diff --check` pass. Clean-commit
+  Chromium, CI, and a fresh exact-head Codex verdict follow on the fixed head.

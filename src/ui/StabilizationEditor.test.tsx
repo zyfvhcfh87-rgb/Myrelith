@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { defaultClipAnimation } from '../domain/clipAnimation'
@@ -151,5 +151,30 @@ describe('StabilizationEditor', () => {
     expect(mocks.cancel).toHaveBeenCalledWith('clip-2')
     expect(useDocumentStore.getState().past).toHaveLength(0)
     unmount()
+  })
+
+  test('invalidates an in-flight result when the inspected clip changes', async () => {
+    const user = userEvent.setup()
+    let resolveAnalysis: ((value: { clipId: string }) => void) | undefined
+    mocks.analyze.mockReturnValueOnce(new Promise((resolve) => {
+      resolveAnalysis = resolve
+    }))
+    const first = clip({ id: 'clip-a' })
+    const second = clip({ id: 'clip-b' })
+    const { rerender } = render(
+      <StabilizationEditor clip={first} locked={false} playheadFrame={20} />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Analyze' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Analyzing locally')
+    rerender(<StabilizationEditor clip={second} locked={false} playheadFrame={20} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Analyze this clip')
+
+    await act(async () => resolveAnalysis?.({ clipId: 'clip-a' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Analyze this clip')
+    expect(screen.queryByText('Safe zoom')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
+    expect(mocks.cancel).toHaveBeenCalledWith('clip-a')
+    expect(mocks.plan).not.toHaveBeenCalled()
   })
 })

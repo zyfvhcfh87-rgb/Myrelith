@@ -4321,7 +4321,7 @@ acceptance claims.
   command. Dirty-tree Chromium evidence is green for 32 H.264 samples, exact
   cache hit, 31 keys per track, 1.0224x zoom / 2.20% total crop, balanced
   workers/scheduler/cache removal, and zero console/page problems.
-- [x] Pass 135/135 focused tests, the authoritative 184-file / 2,527-test suite,
+- [x] Pass 136/136 focused tests, the authoritative 184-file / 2,528-test suite,
   17/17 evidence-runner checks, build/typecheck, warning-free lint, the
   high-severity production audit with 0 vulnerabilities, runner syntax, and
   diff/conflict checks.
@@ -4331,3 +4331,21 @@ acceptance claims.
   removal, zero console/page problems, and full port release.
 - [ ] Pass exact-head CI and a fresh no-major-issues Codex review before squash
   merge.
+
+## Milestone 5 Part 10a.2 / issue #109 - first exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Invalidate every in-flight Inspector analysis on clip change, Cancel, or
+  unmount with a request generation and the original clip ID. Ignore both late
+  success and late failure before they can install stale session/UI state.
+- [x] Add a deterministic deferred-result regression proving clip A is
+  cancelled, clip B stays idle, no plan/preview appears, and Apply remains
+  disabled after the old result arrives.
+- [x] Add the Issue #109 gate's exact `app`/`domain`/`state` composition to the
+  canonical dev-exception rules so the executable architecture guard no longer
+  weakens the written boundary.
+- [x] Pass the 8/8 review-focused tests and the refreshed 184-file / 2,528-test
+  suite plus 17/17 runner checks; refresh build/typecheck, warning-free lint,
+  and diff checks. Re-run clean Chromium, CI, and fresh exact-head Codex review
+  after committing the follow-up.
