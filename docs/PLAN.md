@@ -4325,5 +4325,9 @@ acceptance claims.
   17/17 evidence-runner checks, build/typecheck, warning-free lint, the
   high-severity production audit with 0 vulnerabilities, runner syntax, and
   diff/conflict checks.
-- [ ] Pass the clean-commit Chromium gate, exact-head CI, and fresh no-major-
-  issues Codex review before squash merge.
+- [x] Pass headed Chromium from clean exact commit `cabd4202fc` on exclusive
+  port 41866: 32/32 samples, 31 keys per track, 1.0224x safe zoom / 2.20% total
+  crop, exact cache hit, one worker created/terminated with zero active, cache
+  removal, zero console/page problems, and full port release.
+- [ ] Pass exact-head CI and a fresh no-major-issues Codex review before squash
+  merge.

@@ -4370,5 +4370,7 @@ surface; it is not a second zoom and never enters document history.
   produced 31 keys per track, solved 1.0224x safe zoom / 2.20% total crop,
   proved an exact cache miss-to-hit, left worker and scheduler resources
   balanced, removed the cache entry, and reported zero console/page problems.
-  Clean-commit Chromium, CI, and exact-head Codex evidence remain publication
-  gates.
+  Headed Chromium then reproduced the same result from clean exact commit
+  `cabd4202fc`, with source fingerprint `ad177dad…`, one clean cache round-trip,
+  JSON/PNG artifacts, zero browser problems, and exclusive port 41866 fully
+  released. Exact-head CI and Codex review remain publication gates.
