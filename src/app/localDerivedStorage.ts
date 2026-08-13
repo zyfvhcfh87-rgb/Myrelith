@@ -1,4 +1,5 @@
 import { proxyStorage } from './proxyStorage'
+import { analysisStorage } from './analysisStorage'
 
 /**
  * Strict registry for disposable origin-local artifacts.
@@ -82,6 +83,19 @@ export const localDerivedStorage = createDisposableStorageController([
     },
     async clear() {
       await proxyStorage.clear()
+    },
+  },
+  {
+    id: 'opfs-analysis-cache-v1',
+    async estimate() {
+      const estimate = await analysisStorage.estimate()
+      return {
+        bytes: estimate.cacheBytes,
+        itemCount: estimate.itemCount,
+      }
+    },
+    async clear() {
+      await analysisStorage.clear()
     },
   },
 ])

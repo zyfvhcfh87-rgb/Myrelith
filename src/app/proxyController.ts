@@ -31,8 +31,8 @@ import {
   proxyStorage,
 } from './proxyStorage'
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
+import { fingerprintLocalMediaSource, sha256Hex } from './sourceFingerprint'
 
-const FINGERPRINT_SAMPLE_BYTES = 64 * 1024
 const PROXY_JOB_PREFIX = 'proxy:'
 
 export interface ProxyPreviewSource {
@@ -129,55 +129,11 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
 }
 
-function bytesToHex(bytes: ArrayBuffer): string {
-  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
-async function sha256(bytes: BufferSource): Promise<string> {
-  if (!globalThis.crypto?.subtle) throw new Error('SHA-256 is unavailable in this browser')
-  return bytesToHex(await crypto.subtle.digest('SHA-256', bytes))
-}
-
-/**
- * Bounded content fingerprint: metadata plus first/middle/last 64 KiB samples.
- * The algorithm name is explicit so it is never misrepresented as a full-file
- * digest and a future stronger version cannot silently compare as equivalent.
- */
 export async function fingerprintProxyOriginal(
   blob: Blob,
   identity: Pick<MediaAsset, 'fileName' | 'size' | 'lastModified'>,
 ): Promise<ProxyOriginalFingerprint> {
-  const offsets = [
-    0,
-    Math.max(0, Math.floor((blob.size - FINGERPRINT_SAMPLE_BYTES) / 2)),
-    Math.max(0, blob.size - FINGERPRINT_SAMPLE_BYTES),
-  ]
-  const metadata = new TextEncoder().encode(JSON.stringify({
-    algorithm: 'sha256-sampled-v1',
-    fileName: identity.fileName,
-    size: identity.size,
-    lastModified: identity.lastModified,
-    liveSize: blob.size,
-    offsets,
-  }))
-  const samples = await Promise.all(offsets.map(async (offset) => (
-    new Uint8Array(await blob.slice(offset, offset + FINGERPRINT_SAMPLE_BYTES).arrayBuffer())
-  )))
-  const total = metadata.byteLength + samples.reduce((sum, sample) => sum + sample.byteLength, 0)
-  const joined = new Uint8Array(total)
-  joined.set(metadata)
-  let cursor = metadata.byteLength
-  for (const sample of samples) {
-    joined.set(sample, cursor)
-    cursor += sample.byteLength
-  }
-  return {
-    algorithm: 'sha256-sampled-v1',
-    digest: await sha256(joined),
-    fileName: identity.fileName,
-    size: identity.size,
-    lastModified: identity.lastModified,
-  }
+  return fingerprintLocalMediaSource(blob, identity)
 }
 
 async function proxyCacheKey(
@@ -185,7 +141,7 @@ async function proxyCacheKey(
   assetId: string,
   fingerprint: ProxyOriginalFingerprint,
 ): Promise<string> {
-  return sha256(new TextEncoder().encode(JSON.stringify({
+  return sha256Hex(new TextEncoder().encode(JSON.stringify({
     projectBindingId,
     assetId,
     fingerprint,

@@ -427,7 +427,7 @@ describe('worker video source', () => {
     const source = await openHarness(h)
 
     expect(() => source.openPlaybackLane({ startTimestampUs: 1.5 })).toThrow(
-      'startTimestampUs must be a non-negative safe integer',
+      'startTimestampUs must be a safe integer',
     )
     expect(() => source.openPlaybackLane({
       startTimestampUs: 10,
@@ -440,6 +440,21 @@ describe('worker video source', () => {
 
     await source.close()
     expect(() => source.openSeekLane(0)).toThrow('video source is closed')
+  })
+
+  test('preserves signed exact primary-stream bounds in a playback lane', async () => {
+    const sink = new FakeSink()
+    const h = makeHarness([sink])
+    const source = await openHarness(h)
+
+    const cursor = source.openPlaybackLane({
+      startTimestampUs: -250_000,
+      endTimestampUs: -1,
+    })
+
+    expect(sink.playbackCalls).toEqual([[-0.25, -0.000001]])
+    await cursor.close()
+    await source.close()
   })
 
   test('types pre-track Input construction as a file-level resource failure', async () => {

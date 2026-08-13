@@ -4108,3 +4108,186 @@ acceptance claims.
   `WebAssembly.instantiate` calls remain only in four established Mediabunny
   codec chunks. Run the source-bound headed browser artifact after the exact
   tree is committed, proving schema 4 / fixture v2 / algorithm v3.
+
+## Milestone 5 Part 10a.1 / issue #108 - motion-analysis job/cache foundation
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Add the production one-job/one-decoder motion-analysis controller and
+  StrictMode-safe editor lifecycle without adding document mutation or browser
+  resource ownership to React/Zustand state.
+- [x] Decode real sources sequentially in one dedicated worker, close each
+  `VideoFrame` immediately after bounded 320x180 grayscale extraction, and
+  stream acknowledged two-frame-overlap windows within 300 frames / 32 MiB.
+- [x] Validate worker progress, window order/offsets, tight frame ownership,
+  sample totals, peak facts, errors, deserialization, synchronous sends, abort,
+  terminal cleanup, and post-consumer buffer detachment independently in the
+  app bridge.
+- [x] Implement the strict schema-1 origin-local analysis sidecar with exact
+  provenance, result-first/manifest-last transactions, final currentness
+  recheck, rollback, 1,024-entry/256-MiB-entry limits, origin-aware LRU, exact
+  remove/clear, and recoverable unavailable/quota/corruption behavior.
+- [x] Reuse the proxy sampled SHA-256 byte contract and register only the exact
+  analysis cache with disposable derived-storage estimates and clearing.
+- [x] Pass 44/44 focused tests plus all 17 runner checks; pass 179/179 files and
+  2,485/2,485 full-suite tests plus those checks; pass TypeScript/Vite build,
+  oxlint, production audit at 0 vulnerabilities, runner syntax, architecture
+  boundaries, and `git diff --check`.
+- [x] Pass an in-app Chromium real-source gate: 12/12 generated H.264 frames,
+  12 retained frames / 172,800 bytes, exact 269-byte miss-to-hit cache round
+  trip, scheduler 2 completed / 0 cancelled / 0 failed, worker 1/1 with zero
+  active resources, and no browser problems. Publish the reproducible
+  clean-commit `qa:issue108:foundation` artifact after commit.
+
+## Milestone 5 Part 10a.1 / issue #108 - first exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Keep cancellation settlement and scheduler admission held while a
+  consumer still owns an acknowledged grayscale window; terminate the worker
+  promptly, then detach the window before rejecting the run.
+- [x] Normalize decoded 0/90/180/270-degree source rotation into display space
+  before grayscale extraction, with exact orientation-plan and threaded-frame
+  regressions.
+- [x] Add the Issue #108 evidence module's exact app/domain/pipeline exception
+  to canonical architecture rather than weakening only the test guard.
+- [x] Preserve source-open unsupported-codec, resource-limit, and
+  resource-unavailable remediation across the worker protocol; reserve
+  decode-readback for actual decode failure.
+- [x] Pass the refreshed 44/44 focused tests, all 17 runner checks, and the
+  authoritative 179-file / 2,485-test full suite. Refresh build, lint,
+  production audit, diff checks, and the exact clean-commit Chromium artifact
+  before requesting another Codex review.
+
+## Milestone 5 Part 10a.1 / issue #108 - second exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Detach every safely identifiable `ArrayBuffer`-backed grayscale plane
+  before rejecting a transferred window that fails order, frame, byte, or
+  sample-envelope validation; deduplicate shared backing buffers and preserve
+  exact worker/scheduler cleanup if detachment itself fails.
+- [x] Reject a terminal zero-sample completion as decode-readback before result
+  finalization, result staging, or manifest commit, so the cache's positive-
+  sample invariant is enforced at the decode boundary rather than surfacing as
+  an indirect storage error.
+- [x] Add deterministic ownership and zero-sample regressions; pass 61/61
+  focused tests plus 17/17 runner checks and the authoritative 179-file /
+  2,486-test suite plus those checks. Pass build/typecheck, oxlint, the
+  high-severity production audit with 0 vulnerabilities, runner syntax, and
+  `git diff --check`. Clean-commit Chromium, CI, and fresh exact-head Codex
+  review follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - third exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Detach cache-read and processor-result buffers that resolve after abort or
+  the owned-operation deadline, and detach accepted result ownership on every
+  unsuccessful stale/stage/commit path while preserving successful caller
+  ownership.
+- [x] Reject non-primary video stream indices before fingerprint, cache, or
+  worker work; carry accepted index `0` explicitly through the worker protocol
+  and validate it before opening the primary video track.
+- [x] Add deterministic deferred-result ownership and stream-provenance
+  regressions; pass 63/63 focused tests plus 17/17 runner checks and the
+  authoritative 179-file / 2,488-test suite plus those checks. Pass build/
+  typecheck, oxlint, the high-severity production audit with 0 vulnerabilities,
+  runner syntax, and `git diff --check`. Clean-commit Chromium, CI, and exact-
+  head Codex review follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - fourth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Treat every mismatched worker request ID as a terminal malformed-protocol
+  response rather than ignoring it; for mismatched windows, detach every
+  identifiable transferred plane before rejecting and terminating the worker.
+- [x] Preserve the existing consumer-ownership rule when a mismatched reply
+  arrives during an acknowledged window: stop the worker immediately but keep
+  scheduler settlement held until that independently owned window releases.
+- [x] Add a deterministic mismatched-window regression proving zero-length
+  transferred bytes, no consumer call, exact worker termination, listener
+  removal, and balanced decoder/worker diagnostics. Pass the refreshed 64/64
+  focused tests plus 17/17 runner checks and the authoritative 179-file /
+  2,489-test full suite plus those checks. Pass build/typecheck, lint, runner
+  syntax, and the diff check; confirm 0 high-severity production
+  vulnerabilities. Clean-commit Chromium, CI, and exact-head Codex review
+  follow on the final committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - fifth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Add the exact motion-analysis worker imports of the bounded pipeline
+  decode core and serializable protocol to canonical architecture, matching the
+  already-narrow architecture guard without permitting any other cross-layer
+  runtime dependency.
+- [x] Validate worker reply values as non-array objects with a recognized
+  discriminator and non-negative safe-integer request ID before reading them;
+  reject malformed values through common cleanup and release any identifiable
+  embedded ownership first.
+- [x] Cover `null`, `undefined`, primitive, and unknown-discriminator replies
+  with deterministic termination/listener/decoder/worker-balance regressions;
+  prove identifiable buffers embedded in an unknown-discriminator reply
+  detach; pass 69/69 focused tests plus 17/17 runner checks and the
+  authoritative 179-file / 2,494-test suite plus those checks. Pass
+  build/typecheck, lint,
+  runner syntax, and the diff check; confirm 0 high-severity production
+  vulnerabilities. Clean-commit Chromium, CI, and exact-head Codex review
+  follow on the final committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - sixth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Emit periodic progress from decoded-frame cadence before skipping an
+  unsampled frame, so every sampling interval reports at decoded counts 8, 16,
+  and onward with the exact retained-sample count.
+- [x] Preserve signed safe-integer exact primary-video start/end timestamps
+  through worker validation and playback-lane conversion while keeping seek
+  targets non-negative and rejecting reversed ranges.
+- [x] Attempt both decoder-owner close paths, reject an otherwise successful
+  run when either close fails, and aggregate the primary operation failure with
+  every synchronous or asynchronous cleanup failure when both phases fail.
+- [x] Add deterministic progress, signed-bound, and cleanup regressions; pass
+  67/67 focused tests, 180/180 files and 2,500/2,500 full-suite tests, plus all
+  17 runner checks. Pass build/typecheck, warning-free lint, production audit
+  at 0 vulnerabilities, runner syntax, and the diff check. Clean-commit
+  Chromium evidence follows before the next exact-head review request.
+
+## Milestone 5 Part 10a.1 / issue #108 - seventh exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Preserve immediate public abort/deadline settlement while retaining the
+  staged result and scheduler admission until a pending manifest commit settles
+  and any required rollback completes; do not admit the next job into that
+  unresolved transaction window.
+- [x] Surface rollback/discard failure as cache corruption instead of silently
+  dropping cleanup failure, while retaining the first interruption cause for a
+  successful rollback.
+- [x] Reject a result larger than the origin-aware computed cache ceiling before
+  LRU manifest mutation or result-file removal.
+- [x] Add deterministic cancellation, deadline, queued-retry, exact one-job,
+  and impossible-allocation preservation regressions. Pass 72/72 focused tests
+  across nine files, 180/180 files and 2,503/2,503 full-suite tests, plus all
+  17 runner checks. Pass build/typecheck, warning-free lint, production audit at
+  0 vulnerabilities, runner syntax, conflict/diff checks, then refresh clean-
+  commit Chromium, CI, and exact-head Codex evidence before merge.
+
+## Milestone 5 Part 10a.1 / issue #108 - eighth exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Translate the motion-specific public failure into a
+  `MediaJobExecutionError` carrying the matching scheduler failure class before
+  it reaches bounded scheduler history.
+- [x] Preserve unsupported-codec and resource-limit exactly, map decode/readback
+  to decode-failed, map unsupported runtime/quota/cache corruption to resource-
+  unavailable, and leave only uncategorized analysis outcomes as unexpected.
+- [x] Add a five-case worker-failure matrix proving public status, scheduler
+  history, and worker teardown remain aligned. Pass 77/77 focused tests across
+  nine files, 180/180 files and 2,508/2,508 full-suite tests, plus all 17 runner
+  checks. Refresh build/typecheck, lint, production audit, static checks, clean-
+  commit Chromium, CI, and exact-head Codex evidence before merge.

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Myrelith Issue 108 Foundation Gate</title>
+    <style>
+      :root { color-scheme: dark; font-family: ui-sans-serif, system-ui; }
+      body { margin: 0; background: #12101b; color: #f8f7ff; }
+      main { width: min(960px, calc(100% - 48px)); margin: 48px auto; }
+      .status { color: #d6b4ff; font-weight: 700; }
+      pre { overflow: auto; padding: 20px; border: 1px solid #ffffff1f;
+        border-radius: 14px; background: #ffffff0a; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Issue 108 motion-analysis foundation</h1>
+      <p id="status" class="status" role="status">Running real decoded-source gate…</p>
+      <pre id="result" aria-label="Foundation evidence"></pre>
+    </main>
+    <script type="module">
+      import { runMotionAnalysisFoundationBrowserGate } from '/src/dev/issue108/motionAnalysisFoundation.ts'
+
+      const status = document.querySelector('#status')
+      const result = document.querySelector('#result')
+      try {
+        const evidence = await runMotionAnalysisFoundationBrowserGate()
+        globalThis.__issue108FoundationResult = evidence
+        status.textContent = 'Passed'
+        result.textContent = JSON.stringify(evidence, null, 2)
+      } catch (error) {
+        const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+        globalThis.__issue108FoundationError = detail
+        status.textContent = 'Failed'
+        result.textContent = detail
+        throw error
+      }
+    </script>
+  </body>
+</html>

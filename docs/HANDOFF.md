@@ -121,6 +121,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
 | **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model with renderer no-go; delivery split into #108–#111; 22 focused tests and source-bound Chromium evidence on exclusive port 41844 |
+| **Post-MVP #108 — motion-analysis job/cache foundation** | 🚧 implementation complete locally | production one-job/one-decoder controller; worker-owned real-source decode/downsample with exact frame closure; strict schema-1 OPFS derived cache; source/currentness rollback; focused/full/build/browser gates green; clean-commit publication gate remains |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -1003,9 +1004,23 @@ surface; it is not a second zoom and never enters document history.
   browser-free, deterministic, bounded similarity stabilization and point/box
   tracking feasibility core. Accepted tracking samples map only to existing
   Position X/Y and optional Scale X/Y tracks.
-- `src/domain/analysisCache.ts` + `lensCorrection.ts` — strict proposed
-  analysis-cache provenance/staleness contract and versioned normalized manual
-  lens model. Neither is durable project state or an enabled renderer effect.
+- `src/domain/analysisCache.ts` + `lensCorrection.ts` — strict analysis-cache
+  provenance/staleness contract and versioned normalized manual lens model.
+  The former is implemented by Issue #108's origin-local derived sidecar; the
+  latter remains research-only and is not an enabled renderer effect.
+- `src/app/motionAnalysisController.ts` + `motionAnalysisRuntime.ts` +
+  `motionAnalysisWorkerBridge.ts` — Issue #108's production one-job/
+  one-decoder admission, source/currentness ownership, worker lifecycle,
+  serializable status, and editor-lifecycle integration. The controller returns
+  derived bytes only and never edits the timeline document.
+- `src/pipeline/motionAnalysisDecode.ts` +
+  `src/workers/motion-analysis.worker.ts` — real-source sequential decode,
+  grayscale downsample, exact `VideoFrame` closure, and acknowledged bounded
+  windows of at most 300 retained frames / 32 MiB.
+- `src/app/analysisStorage.ts` — strict schema-1 OPFS analysis sidecar with
+  result-first/manifest-last publication, late-commit rollback, exact
+  provenance lookup, bounded LRU eviction, and recoverable corruption/quota/
+  unavailability behavior.
 - `src/app/motionAnalysisResearchController.ts` +
   `src/workers/motion-analysis-research.worker.ts` — build-unreferenced Issue
   #44 probe/runtime seam: one queued job, one reserved decoder slot, disposable
@@ -4059,3 +4074,258 @@ surface; it is not a second zoom and never enters document history.
   existing Mediabunny AC-3/ProRes codec chunks. The source-bound headed browser
   rerun must wait for the exact tree to be committed and must prove schema 4,
   fixture v2, and algorithm v3.
+
+## Milestone 5 Part 10a.1 / issue #108 - motion-analysis job/cache foundation (2026-08-13)
+
+**IMPLEMENTATION COMPLETE LOCALLY.**
+
+- Production motion analysis now has a StrictMode-safe editor lifecycle and an
+  app-owned controller over a dedicated `MediaJobScheduler` budget of one job,
+  one decoder, and one worker. Generation-specific scheduler ids prevent a new
+  request from cancelling a completed generation during the scheduler's final
+  bookkeeping turn. UI-facing snapshots contain only bounded serializable
+  progress, status, cache-hit, and typed failure facts; no analysis path edits
+  the timeline document.
+- The dedicated production worker opens the real source through the reviewed
+  Mediabunny worker owner, decodes sequentially, downsamples to at most 320x180
+  grayscale, closes every `VideoFrame` immediately, and streams acknowledged
+  windows. The transport retains at most 300 frames / 32 MiB including the
+  two-frame overlap. The app bridge independently validates progress, window
+  order/offsets, tight buffers, sample totals, and terminal peak facts before a
+  result can become cache provenance, then detaches every transferred plane as
+  soon as its consumer settles so retained references cannot pin old windows.
+  The exact browser preflight also proves transferable-buffer ownership before
+  enabling the foundation.
+- The strict schema-1 OPFS sidecar lives under
+  `myrelith-derived/analysis-cache-v1`. Exact keys bind local project, source
+  fingerprint and stream/range/rate/sampling, clip mapping/projection, and
+  algorithm/version/parameters. Result bytes stage before the bounded manifest;
+  a post-commit currentness check either publishes or rolls back. Missing or
+  malformed bytes/manifests, unavailable OPFS, quota pressure, stale provenance,
+  cancellation, replacement, removal, and disposal remain recoverable and
+  cannot become portable project truth.
+- The shared sampled SHA-256 implementation is factored from the existing proxy
+  path without changing proxy fingerprints. The exact analysis cache joins the
+  derived-storage clear/estimate registry; project files, recovery, handles,
+  and undo history remain outside that registry.
+- Focused controller/storage/bridge/decode/provenance/architecture coverage
+  passes 44/44 tests plus all 17 Node runner checks. The authoritative full
+  suite passes 179/179 files and 2,485/2,485 tests plus those 17 checks.
+  TypeScript/Vite build, oxlint, the production high-severity dependency audit
+  with 0 vulnerabilities, runner syntax, and `git diff --check` pass. The build
+  retains only the established large-chunk advisory.
+- In-app Chromium decoded a generated 160x90 H.264 MP4 with 12 frames through
+  the production worker, retained 12 frames / 172,800 bytes at peak, committed
+  a 269-byte result, read the identical bytes from cache on the second request,
+  and drained with scheduler jobs 2/2 complete, 0 cancelled/failed, one worker
+  created/terminated, and no console or page problems. The reproducible
+  `qa:issue108:foundation` clean-commit artifact is the publication gate.
+
+## Milestone 5 Part 10a.1 / issue #108 - first exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925391802` on `b5b6fb79c6` found four current
+  threads: cancellation could settle while an acknowledged window remained
+  attached, source rotation metadata was not applied before grayscale
+  extraction, the Issue #108 dev gate allowance existed only in the guard, and
+  source-open resource failures were flattened into decode-readback.
+- Cancellation now terminates the worker promptly but retains the admitted job
+  promise until the in-flight consumer settles and the window buffers detach.
+  A deterministic deferred-consumer regression proves cancellation stays
+  pending with the buffer attached, then rejects only after exact release.
+- The decode path threads 0/90/180/270-degree metadata into a tested
+  display-space orientation plan before downsampling. Worker protocol mapping
+  now preserves unsupported-codec, resource-limit, and resource-unavailable;
+  only genuine decode failure maps to decode-readback.
+- The canonical dependency rules now name the exact
+  `dev/issue108/motionAnalysisFoundation.ts` app/domain/pipeline exception and
+  its sole checked-in HTML importer, matching the narrow architecture guard.
+- The refreshed focused gate passes 44/44 tests plus 17/17 runner checks; the
+  authoritative full suite passes 179/179 files and 2,485/2,485 tests plus the
+  runner checks. Build/lint/audit/diff and clean-commit Chromium evidence are
+  refreshed before the follow-up commit is published.
+
+## Milestone 5 Part 10a.1 / issue #108 - second exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925551773` on `567df2dcb6` found two remaining
+  ownership/provenance gaps: a transferred window rejected during app-side
+  validation retained its identifiable grayscale buffers, and a valid
+  zero-sample worker completion could reach result finalization and then fail
+  indirectly at the positive-sample cache-manifest boundary.
+- The bridge now gathers only actual `ArrayBuffer`-backed views from a rejected
+  window, deduplicates shared backing buffers, and detaches them before terminal
+  rejection. If that ownership release itself fails, the run reports a typed
+  resource-unavailable failure while still terminating the worker and balancing
+  scheduler diagnostics. The regression retains the rejected plane and proves
+  its byte length is zero at promise rejection.
+- The controller now classifies a zero-sample completion directly as
+  decode-readback before invoking the result processor or staging cache bytes.
+  The deterministic regression proves no window consumer, result finalizer,
+  result staging, or manifest commit runs, while the worker and scheduler still
+  settle into the typed error state.
+- The refreshed focused gate passes 61/61 tests plus 17/17 runner checks; the
+  authoritative suite passes 179/179 files and 2,486/2,486 tests plus those
+  runner checks. TypeScript/Vite build, oxlint, the high-severity production
+  audit with 0 vulnerabilities, runner syntax, and `git diff --check` pass.
+  Clean-commit Chromium, CI, and fresh exact-head Codex review evidence follows
+  on the final committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - third exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925687652` on `6a20378735` found two additional
+  ownership/identity gaps: cancelled or timed-out cache reads and processor
+  finalizers did not release result buffers that arrived after settlement, and
+  the cache identity accepted a non-primary video stream index while production
+  decode always selected the primary track.
+- Cache reads and processor results now register synchronous late-value cleanup
+  with the owned-operation race. Late buffers detach as soon as they resolve;
+  accepted result bytes also detach on stale-source, staging, commit, or final
+  validation failure, while successful callers retain the sole live result.
+  Deterministic deferred cache-read and processor-finalizer regressions prove
+  both late buffers reach zero length after cancellation and never reach cache
+  staging.
+- The production contract explicitly supports only primary video stream index
+  `0`. The controller rejects every other index before fingerprint/cache/worker
+  work; accepted index `0` is carried in the worker message and independently
+  validated before the worker opens the primary track. Cache provenance can no
+  longer claim bytes from an unrequested stream.
+- The refreshed focused gate passes 63/63 tests plus 17/17 runner checks; the
+  authoritative suite passes 179/179 files and 2,488/2,488 tests plus those
+  checks. TypeScript/Vite build, oxlint, the high-severity production audit with
+  0 vulnerabilities, runner syntax, and `git diff --check` pass. Clean-commit
+  Chromium, CI, and fresh exact-head Codex evidence follows on the committed
+  tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - fourth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925839848` on `c9fca850ce` found one remaining
+  malformed-protocol ownership gap: a worker window carrying a different
+  request ID was ignored without releasing its transferred planes or
+  terminating the dedicated worker.
+- Every mismatched reply now terminates the admitted run as an unexpected
+  protocol failure. A mismatched window first detaches every safely
+  identifiable `ArrayBuffer`; release failure preserves the typed
+  resource-unavailable classification. If a correct window is already being
+  consumed, scheduler settlement remains held until that separately owned
+  window is released.
+- The deterministic regression retains a mismatched plane and proves it is
+  detached before rejection, the consumer is never called, listeners are
+  removed, the worker is terminated exactly once, and decoder/worker
+  diagnostics return to zero. The refreshed focused gate passes 64/64 tests
+  plus 17/17 runner checks; the authoritative full suite passes 179/179 files
+  and 2,489/2,489 tests plus those checks. TypeScript/Vite build, oxlint, runner
+  syntax, and `git diff --check` pass; the high-severity production audit finds
+  0 vulnerabilities. Clean-commit Chromium, CI, and fresh exact-head Codex
+  evidence follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - fifth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925934732` on `8520255ea9` found two final
+  boundary gaps: the architecture guard's two motion-worker-to-pipeline imports
+  were not named in canonical architecture, and a structured-cloneable
+  non-object or unknown-discriminator reply could throw outside common worker
+  cleanup.
+- Canonical architecture now sanctions only
+  `workers/motion-analysis.worker.ts` importing the bounded decode core and its
+  serializable protocol. No broader worker-to-pipeline exception is implied.
+- Both the support probe and admitted run validate that every reply is a
+  non-array object with a known discriminator and a non-negative safe-integer
+  request ID before reading it. An admitted malformed value is rejected through
+  common cleanup; any identifiable embedded buffers are released first, and
+  release failure remains a typed resource-unavailable result.
+- Deterministic regressions cover `null`, `undefined`, a primitive number, and
+  an unknown discriminator, proving exact termination, listener removal, and
+  balanced decoder/worker diagnostics. An additional hostile-value regression
+  proves identifiable buffers nested in a malformed discriminator detach
+  before rejection. The refreshed focused gate passes 69/69
+  tests plus 17/17 runner checks; the authoritative full suite passes 179/179
+  files and 2,494/2,494 tests plus those checks. TypeScript/Vite build, oxlint,
+  runner syntax, and `git diff --check` pass; the high-severity production audit
+  finds 0 vulnerabilities. Clean-commit Chromium, CI, and fresh exact-head
+  Codex evidence follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - sixth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4926084336` on `0a5335a0f2` found three remaining
+  decode-lifecycle gaps: periodic progress was skipped whenever the eighth
+  decoded frame was not sampled, signed exact primary-stream starts were
+  rejected by both the worker message gate and playback lane, and cursor/source
+  close rejections were discarded after an otherwise successful decode.
+- Decoded-frame progress now runs every eight decoded frames before the
+  unsampled-frame branch, with the sampled count reflecting every sample
+  retained so far. Exact primary-stream start/end values remain signed safe
+  integers through worker validation and the Mediabunny playback lane; seek
+  targets remain non-negative.
+- Decoder teardown now invokes both cursor and source close paths even when one
+  throws or rejects. Any cleanup failure prevents successful completion; if
+  decode and cleanup both fail, one `AggregateError` retains the primary cause
+  plus every owner-close failure.
+- Deterministic regressions prove progress at decoded frames 8 and 16 with a
+  two-frame sampling interval, negative playback bounds reaching the sink
+  unchanged, successful decode rejected by dual close failures, and primary
+  decode failure retained alongside synchronous/asynchronous cleanup failures.
+  The refreshed focused gate passes 67/67 tests plus 17/17 runner checks; the
+  authoritative full suite passes 180/180 files and 2,500/2,500 tests plus the
+  runner checks. TypeScript/Vite build, warning-free oxlint, the high-severity
+  production audit with 0 vulnerabilities, runner syntax, and `git diff
+  --check` pass. Clean-commit browser evidence follows on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - seventh exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4926250834` on `deada8562d` found two remaining
+  cache-ownership gaps: cancellation or the ten-second deadline released the
+  admitted job before a pending manifest commit and its rollback settled, and
+  an individually impossible allocation evicted usable LRU entries before the
+  cache reported that it still could not fit.
+- A pending manifest commit now records the first abort/deadline cause while
+  continuing to own the staged result and scheduler slot until the underlying
+  write settles. Cancellation still rejects the public request immediately;
+  deadline expiry also publishes its typed failure immediately. A successful
+  late commit is then rolled back before admission releases, and cleanup
+  failure is no longer discarded.
+- Capacity admission now rejects `requiredBytes > computed ceiling` before any
+  manifest mutation or file removal. Deterministic regressions prove abort and
+  deadline both keep the next job queued until rollback, preserve exact one-job
+  concurrency, and leave an existing manifest entry plus result file untouched
+  after an impossible request.
+- The refreshed focused gate passes 72/72 tests across nine files plus all
+  17/17 runner checks. The authoritative full suite passes 180/180 files and
+  2,503/2,503 tests plus those runner checks. TypeScript/Vite build, warning-free
+  oxlint, runner syntax, `git diff --check`, and the high-severity production
+  audit with 0 vulnerabilities pass. Clean-commit Chromium, CI, and another
+  fresh exact-head Codex review follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - eighth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4926378868` on `f00a88b37f` found that the public
+  motion-analysis status preserved worker failure remediation, but the
+  scheduler history received the wrapper `MotionAnalysisError` and therefore
+  mislabeled every failure as `unexpected`.
+- The controller now converts its final public failure into the scheduler's
+  canonical taxonomy before rethrowing to scheduler diagnostics. Unsupported
+  codec and resource limit remain exact; decode/readback becomes decode failed;
+  unsupported runtime, quota, and cache corruption become resource unavailable;
+  only failures without a scheduler class remain unexpected. Aborted jobs still
+  use scheduler cancellation rather than failure history.
+- A five-case deterministic matrix proves each worker failure produces both the
+  intended motion-specific public status and the matching scheduler history,
+  with exact worker teardown. The refreshed focused gate passes 77/77 tests
+  across nine files plus 17/17 runner checks; the authoritative full suite
+  passes 180/180 files and 2,508/2,508 tests plus those checks. Build, lint,
+  production audit, static checks, clean-commit Chromium, CI, and one more exact-
+  head Codex review follow on the committed tree.

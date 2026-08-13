@@ -28,7 +28,8 @@ non-negotiable rules. Re-read it at the start of every coding session.
   (e.g. `app/previewController.ts`) may import state/ AND engine/pipeline
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
-- The opt-in Issue #54 and Issue #70 evidence panels have narrow,
+- The opt-in Issue #54 and Issue #70 evidence panels plus the checked-in Issue
+  #108 browser gate have narrow,
   architecture-guarded dev exceptions. `dev/performance/runtime.ts` may compose
   existing `app/` controllers with `state/` and its bounded Mediabunny fixture
   generator;
@@ -38,7 +39,12 @@ non-negotiable rules. Re-read it at the start of every coding session.
   `PerformanceBenchmarkApp.tsx` may reuse existing `ui/` surfaces.
   `ProxyEditingBenchmarkPanel.tsx` may read the selected document/media state
   and call the app-owned preview/proxy/transport facades solely to measure the
-  exact live source path. No other `dev/` module may reach those layers. Only
+  exact live source path. `dev/issue108/motionAnalysisFoundation.ts` may compose
+  only the production `app/` motion-analysis facade, browser-free `domain/`
+  cache constants, and the serializable `pipeline/` protocol to run the
+  source-bound Issue #108 gate; only `scripts/issue108/foundation-gate.html`
+  imports it, and no ordinary application entry may do so. No other `dev/`
+  module may reach those layers. Only
   the build-gated exact route in `main.tsx` may import the Issue #54 UI, and
   only `EditorShell.tsx` may dynamically import the Issue #70 panel behind its
   development-only query guard. Ordinary production builds remove both
@@ -53,6 +59,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
     its runtime host, as `export.ts` is the finite export host),
     `pipeline/static-image.ts` (the bounded browser/worker-safe still-image
     inspection + decode boundary),
+  - `workers/motion-analysis.worker.ts` may import only
+    `pipeline/motionAnalysisDecode.ts` (the bounded sequential decode and
+    grayscale core) and `pipeline/motionAnalysisProtocol.ts` (its serializable
+    worker contract); the worker is their sole production runtime host,
   - `engine/worker-bridge.ts` references the worker FILE via
     `new Worker(new URL(...))` — a URL, not a module import; the pipeline
     chunk source reaches the bridge by injection, never by import.
@@ -548,13 +558,63 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   original is offline. The exact supported codec/profile matrix is published in
   `docs/PROXY_CODEC_SUPPORT.md` and is runtime-probed before generation enables.
 
-## Motion-analysis research boundary
+## Motion-analysis foundation and research boundary
 
-- Issue #44 is build-unreferenced feasibility work only. The browser runtime is
-  owned by `app/motionAnalysisResearchController.ts`; its disposable dedicated
-  worker imports only browser-free domain modules. Production/editor entry
-  graphs do not import it, React and Zustand do not observe it, and the research
-  adds no portable project schema, effect descriptor, or document mutation.
+- Issue #108 is the production motion-analysis job, decode, and derived-cache
+  foundation. `app/motionAnalysisRuntime.ts` is leased from `EditorShell` and
+  composes `app/motionAnalysisController.ts`, which alone owns the one-job/
+  one-decoder `MediaJobScheduler`, support facts, source/document-currentness
+  checks, cancellation, and serializable status snapshots. React and Zustand
+  never receive `File`, `Blob`, `VideoFrame`, worker, decoder, OPFS, or result
+  byte ownership, and the controller never mutates the timeline document. The
+  controller status retains motion-specific remediation while scheduler failure
+  history uses the scheduler's matching canonical class: unsupported runtime,
+  quota, and cache corruption map to resource unavailable; decode/readback maps
+  to decode failed; unsupported codec and resource limit remain exact.
+- `pipeline/motionAnalysisDecode.ts` owns sequential source decode and grayscale
+  downsampling after applying each decoded frame's 0/90/180/270-degree source
+  orientation into display space. Its dedicated
+  `workers/motion-analysis.worker.ts` closes every decoded `VideoFrame` in the
+  same operation that acquired it, streams at most 300 tightly owned grayscale
+  planes / 32 MiB through one acknowledged window, preserves source-open codec,
+  resource-limit, resource-unavailable, and decode-readback failure classes,
+  accepts the signed exact primary-stream timestamp bounds carried by project
+  metadata, and reports decoded-frame progress independently of whether the
+  current frame is sampled. It attempts both cursor and source closure before
+  terminal settlement; any close rejection makes the run fail, and a decode
+  plus cleanup failure preserves both causes in one aggregate. The app bridge owns
+  abort/error/messageerror/send failure, terminates the worker exactly once,
+  detaches every identifiable transferred plane before rejecting a malformed
+  window or mismatched request identity, detaches accepted planes when their
+  consumer settles, and does not
+  settle the run or release scheduler admission while an acknowledged window
+  remains consumer-owned. A terminal completion with zero decoded samples is a
+  typed decode/readback failure before processor finalization or cache staging;
+  only positive-sample completions may become cache provenance. The production
+  contract currently admits only primary video stream index `0`, carries that
+  index explicitly through the worker protocol, and rejects any other stream
+  before cache lookup or worker creation. Cache reads and processor results are
+  app-owned transferable bytes: cancellation/deadline late arrivals detach
+  immediately, and every unsuccessful post-result path detaches before
+  scheduler admission can be reused.
+- `app/analysisStorage.ts` implements the strict schema-1 origin-local OPFS
+  sidecar under `myrelith-derived/analysis-cache-v1`. `domain/analysisCache.ts`
+  owns the exact key, provenance, freshness, and stale-rejection policy. Writes
+  stage result bytes before the manifest, publish only after a final currentness
+  check, and roll back late commits. Abort or the manifest-write deadline may
+  reject the caller, but the admitted scheduler operation continues to own the
+  staged sidecar until the underlying commit settles and any required rollback
+  finishes; no later job may observe an entry whose sidecar was discarded early.
+  Capacity checks reject a single result larger than the computed cache ceiling
+  before LRU mutation, so an impossible allocation cannot evict usable entries.
+  Corrupt, unavailable, quota-exhausted, or stale entries are recoverable
+  derived-data failures rather than project loss.
+- Issue #44 remains build-unreferenced feasibility work for the algorithms and
+  quality gates. Its browser runtime is owned by
+  `app/motionAnalysisResearchController.ts`; its disposable dedicated worker
+  imports only browser-free domain modules. Production/editor entry graphs do
+  not import the research controller, and the research adds no portable project
+  schema, effect descriptor, or document mutation.
 - `domain/motionAnalysis.ts` owns bounded grayscale feature detection, patch
   matching, deterministic similarity fitting, stabilization smoothing, and
   conservative crop estimates. Every retained grayscale `Uint8Array` must be a
@@ -564,17 +624,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   point and similarity-box tracking plus conversion to existing Position X/Y
   and Scale X/Y tracks. `domain/lensCorrection.ts` owns only the versioned,
   normalized manual lens model and its fixed-grid safety validation.
-- `domain/analysisCache.ts` is a proposed derived-cache contract, not project
-  truth or a storage implementation. Its keys bind project, asset, sampled
-  source fingerprint, stream/geometry/rate, source range and sampling, clip
-  mapping/projection, algorithm/version, and parameters; stale entries are
-  rejected rather than adopted silently.
-- The research controller admits at most one analysis job and reserves at most
-  one decoder slot. Each child operation must own and close every VideoFrame,
-  decoder, temporary surface, worker, and OPFS handle it creates. Cancellation
-  or the bounded support-readback deadline closes the probe VideoFrame before
-  the caller receives settlement and shared admission is released; the original
-  readback promise remains observed after late resolution or rejection.
+- Both the production controller and research controller admit at most one
+  analysis job and reserve at most one decoder slot. Each child operation must
+  own and close every VideoFrame, decoder, temporary surface, worker, and OPFS
+  handle it creates. Cancellation and bounded support/storage deadlines settle
+  the caller without abandoning late ownership; original promises remain
+  observed and late-created resources are cleaned without publishing results.
 - Analysis results remain preview-only until an explicit Apply operation writes
   ordinary canonical tracks through normal history. Lens remapping remains a
   no-go for production until issue #111 proves a bounded renderer with exact
