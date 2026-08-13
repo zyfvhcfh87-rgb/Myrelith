@@ -501,3 +501,14 @@ the JSON/PNG SHA-256 values were respectively
 `364F32294130A88BDBB1440CD77946B72E2184AA950F9BFF6CA15A59469CF02A`.
 This is synthetic bounded evidence, not a promise of arbitrary-footage
 tracking.
+
+The first exact-head product review on `4dbc2ced440084ab2a5e56f8de9ec9559e04e87b`
+found three integration gaps. Stabilization and tracking previews now carry
+explicit transport owners and clear only their own draft. Tracking progress
+selects the newest queued/running status for the active point or box kind
+instead of an older sibling result. Product mapping also resolves the target's
+preserved transform at every accepted frame; per-sample target rotation drives
+cropped/anchor position compensation and target-local box extents, while
+preserved Scale drives compensation whenever tracking does not author Scale.
+The 0-to-90-degree regression pins both off-center Position correction and the
+expected cross-axis box scale projection.

@@ -297,6 +297,8 @@ export interface TrackingAnimationSample {
   readonly height?: number
   /** Resolved source geometry for this exact accepted sample. */
   readonly source: TrackingSourceProjection
+  /** Resolved target transform for preserved per-frame rotation/scale. */
+  readonly targetTransform?: Transform
 }
 
 type TrackingVisualProjection = Pick<
@@ -532,7 +534,7 @@ export function trackingSamplesToAnimationTracks(
       ))
     ) throw new RangeError('Box tracking scale mapping needs positive finite sample sizes')
     const projectedExtents = samples.map((sample) => (
-      projectSourceBoxExtents(sample, base.rotation)
+      projectSourceBoxExtents(sample, sample.targetTransform?.rotation ?? base.rotation)
     ))
     const referenceIndex = samples.indexOf(reference)
     const referenceProjectedExtents = projectedExtents[referenceIndex]!
@@ -562,9 +564,15 @@ export function trackingSamplesToAnimationTracks(
   )
   const positions = samples.map((sample, index) => {
     const projectCenter = projectSourceCenter(sample)
-    const scale = scales?.[index] ?? { x: base.scaleX, y: base.scaleY }
+    const targetTransform = sample.targetTransform ?? base
+    const targetError = transformProjectionValidationError(targetTransform)
+    if (targetError) throw new RangeError(`Tracking target ${targetError}`)
+    const scale = scales?.[index] ?? {
+      x: targetTransform.scaleX,
+      y: targetTransform.scaleY,
+    }
     const targetOffset = targetVisibleCenterOffset(
-      base,
+      targetTransform,
       mapping.target,
       scale.x,
       scale.y,

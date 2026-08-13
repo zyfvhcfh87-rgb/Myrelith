@@ -21,6 +21,14 @@ import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 
 type Phase = 'idle' | 'analyzing' | 'ready' | 'error'
+const PREVIEW_OWNER = 'stabilization' as const
+
+function clearOwnedPreview(): void {
+  const transport = useTransportStore.getState()
+  if (transport.clipVisualPreview?.owner === PREVIEW_OWNER) {
+    transport.setClipVisualPreview(null)
+  }
+}
 
 function previewTransform(plan: VideoStabilizationPlan, localFrame: number): Transform {
   const first = plan.frames[0]!.transform
@@ -73,12 +81,12 @@ export default function StabilizationEditor({
     setReplaceExisting(false)
     setPreview(false)
     setMessage('Analyze this clip to calculate a safe correction path.')
-    useTransportStore.getState().setClipVisualPreview(null)
+    clearOwnedPreview()
     const analyzedClipId = clip.id
     return () => {
       invalidateAnalysis()
       cancelVideoStabilization(analyzedClipId)
-      useTransportStore.getState().setClipVisualPreview(null)
+      clearOwnedPreview()
     }
   }, [clip.id, invalidateAnalysis])
 
@@ -106,7 +114,7 @@ export default function StabilizationEditor({
 
   useEffect(() => {
     if (!preview || !planned?.ok) {
-      useTransportStore.getState().setClipVisualPreview(null)
+      clearOwnedPreview()
       return
     }
     const localFrame = Math.max(
@@ -114,11 +122,12 @@ export default function StabilizationEditor({
       Math.min(clip.timelineRange.durationFrames - 1, playheadFrame - clip.timelineRange.startFrame),
     )
     useTransportStore.getState().setClipVisualPreview({
+      owner: PREVIEW_OWNER,
       clipId: clip.id,
       transform: previewTransform(planned.plan, localFrame),
       visual: clipVisualSettings(clip),
     })
-    return () => useTransportStore.getState().setClipVisualPreview(null)
+    return clearOwnedPreview
   }, [clip, planned, playheadFrame, preview])
 
   const analyze = async (): Promise<void> => {

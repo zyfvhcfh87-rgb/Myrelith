@@ -353,6 +353,7 @@ export function createMotionTrackingPlan(
   const trackingSamples: TrackingAnimationSample[] = ordered.map((sample) => {
     const globalFrame = sourceClip.timelineRange.startFrame + sample.localFrame
     const resolvedSource = resolveClipAnimationAtFrame(sourceClip, globalFrame)
+    const resolvedTarget = resolveClipAnimationAtFrame(targetClip, globalFrame)
     const boxSample = analysis.kind === 'box'
       ? sample as MotionTrackingBoxSample
       : null
@@ -370,6 +371,7 @@ export function createMotionTrackingPlan(
         transform: { ...resolvedSource.transform },
         visual: clipVisualSettings(resolvedSource),
       },
+      targetTransform: { ...resolvedTarget.transform },
     }
     if (boxSample) {
       return {

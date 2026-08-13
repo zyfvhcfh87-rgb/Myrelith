@@ -21,6 +21,14 @@ import { useMotionTrackingSelectionStore } from '../state/motionTrackingSelectio
 import { useTransportStore } from '../state/transportStore'
 
 type Phase = 'idle' | 'analyzing' | 'ready' | 'error'
+const PREVIEW_OWNER = 'motion-tracking' as const
+
+function clearOwnedPreview(): void {
+  const transport = useTransportStore.getState()
+  if (transport.clipVisualPreview?.owner === PREVIEW_OWNER) {
+    transport.setClipVisualPreview(null)
+  }
+}
 
 function messageFrom(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
@@ -96,13 +104,13 @@ export default function MotionTrackingEditor({
     setReplaceExisting(false)
     setPreview(false)
     setMessage('Choose a point or box in the Program Monitor.')
-    useTransportStore.getState().setClipVisualPreview(null)
+    clearOwnedPreview()
     useMotionTrackingSelectionStore.getState().clear()
     const sourceClipId = clip.id
     return () => {
       invalidate()
       cancelMotionTracking(sourceClipId)
-      useTransportStore.getState().setClipVisualPreview(null)
+      clearOwnedPreview()
       useMotionTrackingSelectionStore.getState().clear()
     }
   }, [clip.id, invalidate])
@@ -118,13 +126,17 @@ export default function MotionTrackingEditor({
     const controller = getMotionAnalysisController()
     if (!controller || phase !== 'analyzing') return
     return controller.subscribe((snapshot) => {
-      const status = snapshot.jobs.find((job) => (
+      const expectedKind = kind === 'point' ? 'point-tracking' : 'box-tracking'
+      const candidates = snapshot.jobs.filter((job) => (
         job.clipId === clip.id
-        && (job.kind === 'point-tracking' || job.kind === 'box-tracking')
+        && job.kind === expectedKind
       ))
+      const status = [...candidates].reverse().find((job) => (
+        job.phase === 'queued' || job.phase === 'running'
+      )) ?? candidates.at(-1)
       if (status) setProgress(status.progress)
     })
-  }, [clip.id, phase])
+  }, [clip.id, kind, phase])
 
   const planned = useMemo(() => {
     void doc
@@ -135,20 +147,21 @@ export default function MotionTrackingEditor({
 
   useEffect(() => {
     if (!preview || !planned?.ok) {
-      useTransportStore.getState().setClipVisualPreview(null)
+      clearOwnedPreview()
       return
     }
     const target = findClip(doc, planned.plan.targetClipId)
     if (!target || playheadFrame < target.timelineRange.startFrame || playheadFrame >= rangeEnd(target.timelineRange)) {
-      useTransportStore.getState().setClipVisualPreview(null)
+      clearOwnedPreview()
       return
     }
     useTransportStore.getState().setClipVisualPreview({
+      owner: PREVIEW_OWNER,
       clipId: target.id,
       transform: previewTransform(target, planned.plan.tracks, playheadFrame),
       visual: clipVisualSettings(target),
     })
-    return () => useTransportStore.getState().setClipVisualPreview(null)
+    return clearOwnedPreview
   }, [doc, planned, playheadFrame, preview])
 
   const pick = (nextKind: MotionTrackingKind): void => {

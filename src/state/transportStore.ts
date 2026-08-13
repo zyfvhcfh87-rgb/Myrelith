@@ -86,6 +86,8 @@ export interface TextOverlayPreview {
 
 /** Live preview-only geometry for a media clip direct-manipulation gesture. */
 export interface ClipVisualPreview {
+  /** Named editor ownership prevents one mounted preview surface clearing another. */
+  owner?: 'stabilization' | 'motion-tracking'
   clipId: ClipId
   transform: Transform
   visual: ClipVisualSettings

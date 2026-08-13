@@ -716,8 +716,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   media connection, project binding, target overlap/lock/dimensions, ordinary
   animation validity, and exact selection snapshot. Accepted samples map
   through each frame's resolved source crop, flips, anchor, and transform into
-  project space. Point tracking may author Position X/Y; box tracking may also
-  author Scale X/Y, but never Rotation. Backward analysis is reordered only
+  project space. Preserved target Rotation and, when Scale is not authored,
+  target Scale are resolved again at every accepted frame so cropped/anchored
+  compensation and box extents use the actual target-local axes. Point tracking
+  may author Position X/Y; box tracking may also author Scale X/Y, but never
+  Rotation. Backward analysis is reordered only
   after directional validation and remains anchored to the selected sample.
   Retaining every accepted sample is the zero-error simplification; duplicate
   projected frames, non-finite/out-of-range values, per-track limits, and the
@@ -866,7 +869,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
   ghost a linked gesture live. `textOverlayPreview` and `clipVisualPreview`
   hold rAF-coalesced Program Monitor drafts for procedural text geometry and
-  visual-media transform/settings respectively. `app/previewController.ts`
+  visual-media transform/settings respectively. Analysis editors attach a
+  named owner to `clipVisualPreview` and may clear only their own preview, so
+  the simultaneously mounted stabilization and tracking surfaces cannot erase
+  one another's active draft. `app/previewController.ts`
   projects those drafts into the immutable document snapshot sent to the
   shared preview renderer; neither enters document history until the gesture
   owner dispatches its single pointerup mutation. `snapGuide`

@@ -220,6 +220,86 @@ describe('motion-tracking product planning', () => {
       ?.keyframes.map((keyframe) => keyframe.value)).toEqual([20, 20])
   })
 
+  test('resolves preserved target rotation for every position and box-scale sample', () => {
+    const sourceClip = clip('source', 10, 10)
+    const animatedTarget: Clip = {
+      ...clip('target', 8, 20),
+      visual: {
+        ...defaultClipVisualSettings(),
+        crop: { top: 0, right: 0, bottom: 0, left: 0.2 },
+      },
+      animation: {
+        tracks: [{
+          property: 'rotation',
+          keyframes: [
+            { frame: 4, sourceTimeTicks: 4_000_000, value: 0, easing: { type: 'linear' } },
+            { frame: 5, sourceTimeTicks: 5_000_000, value: 90, easing: { type: 'linear' } },
+          ],
+        }],
+        effectTracks: [],
+      },
+    }
+    const point: MotionTrackingPointAnalysis = {
+      version: MOTION_TRACKING_RESULT_VERSION,
+      kind: 'point',
+      direction: 'forward',
+      selectionLocalFrame: 2,
+      width: 100,
+      height: 50,
+      failure: null,
+      samples: [
+        { timestampUs: 0, sourceTimeTicks: 2_000_000, localFrame: 2, x: 50, y: 25, confidence: 1 },
+        { timestampUs: 1, sourceTimeTicks: 3_000_000, localFrame: 3, x: 50, y: 25, confidence: 1 },
+      ],
+    }
+    const pointPlan = createMotionTrackingPlan(
+      doc(sourceClip, animatedTarget),
+      sourceClip,
+      animatedTarget,
+      source,
+      { width: 200, height: 100 },
+      point,
+      false,
+    )
+
+    expect(pointPlan.ok).toBe(true)
+    if (!pointPlan.ok) return
+    const positionX = pointPlan.plan.tracks.find((track) => track.property === 'position-x')!
+    const positionY = pointPlan.plan.tracks.find((track) => track.property === 'position-y')!
+    expect(positionX.keyframes[0]?.value).toBeCloseTo(10, 12)
+    expect(positionX.keyframes[1]?.value).toBeCloseTo(50, 12)
+    expect(positionY.keyframes[0]?.value).toBeCloseTo(20, 12)
+    expect(positionY.keyframes[1]?.value).toBeCloseTo(-20, 12)
+
+    const box: MotionTrackingBoxAnalysis = {
+      ...point,
+      kind: 'box',
+      samples: point.samples.map((sample) => ({
+        ...sample,
+        x: 40,
+        y: 20,
+        width: 20,
+        height: 10,
+      })),
+    }
+    const boxPlan = createMotionTrackingPlan(
+      doc(sourceClip, animatedTarget),
+      sourceClip,
+      animatedTarget,
+      source,
+      { width: 200, height: 100 },
+      box,
+      true,
+    )
+
+    expect(boxPlan.ok).toBe(true)
+    if (!boxPlan.ok) return
+    expect(boxPlan.plan.tracks.find((track) => track.property === 'scale-x')
+      ?.keyframes.map((keyframe) => keyframe.value)).toEqual([2, 1.5])
+    expect(boxPlan.plan.tracks.find((track) => track.property === 'scale-y')
+      ?.keyframes.map((keyframe) => keyframe.value)).toEqual([3, 4])
+  })
+
   test('rejects targets that do not cover the complete accepted sample range', () => {
     const sourceClip = clip('source', 10, 10)
     const target = clip('target', 12, 2)

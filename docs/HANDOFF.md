@@ -4720,3 +4720,28 @@ surface; it is not a second zoom and never enters document history.
   the production tracking product but zero Issue #110 gate/fixture or WebGPU
   experiment canaries. Exact-head CI and fresh Codex review are the remaining
   publication gates.
+
+## Milestone 5 Part 10a.3 / issue #110 - first exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; CLEAN-COMMIT BROWSER/CI/REVIEW REFRESH PENDING.**
+
+- Codex review `4929530527` on exact head `4dbc2ced440084ab2a5e56f8de9ec9559e04e87b`
+  found three P2 gaps: the inactive tracking editor could clear stabilization's
+  shared visual preview; an older point/box status could mask current progress;
+  and preserved target Rotation was resolved only at the selection frame.
+- `clipVisualPreview` now carries a named stabilization or motion-tracking owner,
+  and each mounted editor clears only its own preview. Tracking progress filters
+  by the requested kind and chooses the newest queued/running job before any
+  retained terminal status.
+- Every accepted product sample now carries the target transform resolved at
+  that exact frame. Preserved Rotation drives target-local box extents and
+  cropped/anchor compensation; preserved Scale also drives compensation when
+  tracking does not author Scale. A deterministic 0-to-90-degree target
+  regression proves both off-center Position correction and cross-axis box
+  scaling.
+- The refreshed focused matrix passes 14/14 files with 135/135 tests. The
+  authoritative suite passes 190/190 files with 2,578/2,578 tests plus all
+  17 evidence-runner checks. TypeScript/Vite builds 4,816 modules, lint is
+  warning-free, the production audit reports 0 vulnerabilities, and diff
+  checks pass. Refresh clean Chromium, CI, and Codex review on the committed
+  follow-up head before merging.

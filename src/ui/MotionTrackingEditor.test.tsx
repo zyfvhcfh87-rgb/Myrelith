@@ -9,12 +9,14 @@ import type { Clip, TimelineDoc } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useMotionTrackingSelectionStore } from '../state/motionTrackingSelectionStore'
+import { useTransportStore } from '../state/transportStore'
 
 const mocks = vi.hoisted(() => ({
   analyze: vi.fn(),
   apply: vi.fn(),
   cancel: vi.fn(),
   plan: vi.fn(),
+  subscribe: vi.fn(),
 }))
 
 vi.mock('../app/motionTrackingController', () => ({
@@ -25,7 +27,7 @@ vi.mock('../app/motionTrackingController', () => ({
 }))
 
 vi.mock('../app/motionAnalysisRuntime', () => ({
-  getMotionAnalysisController: () => null,
+  getMotionAnalysisController: () => ({ subscribe: mocks.subscribe }),
 }))
 
 import MotionTrackingEditor from './MotionTrackingEditor'
@@ -126,6 +128,7 @@ beforeEach(() => {
   useDocumentStore.getState().setDoc(doc(item))
   useMediaStore.setState({ descriptors: new Map([[descriptor.id, descriptor]]) })
   useMotionTrackingSelectionStore.getState().clear()
+  useTransportStore.getState().setClipVisualPreview(null)
   const session = {
     sourceClipId: item.id,
     analysis: { kind: 'point', failure: null },
@@ -135,6 +138,7 @@ beforeEach(() => {
   mocks.plan.mockReset().mockReturnValue({ ok: true, plan: plan() })
   mocks.apply.mockReset().mockReturnValue({ ok: true, changed: true, plan: plan() })
   mocks.cancel.mockReset().mockReturnValue(true)
+  mocks.subscribe.mockReset().mockReturnValue(() => undefined)
 })
 
 describe('MotionTrackingEditor', () => {
@@ -189,5 +193,54 @@ describe('MotionTrackingEditor', () => {
       selectionGlobalFrame: 12,
       direction: 'backward',
     }))
+  })
+
+  test('does not clear a stabilization preview owned by the sibling editor', () => {
+    const item = clip()
+    useTransportStore.getState().setClipVisualPreview({
+      owner: 'stabilization',
+      clipId: item.id,
+      transform: { ...item.transform, x: 42 },
+      visual: defaultClipVisualSettings(),
+    })
+
+    const { rerender, unmount } = render(
+      <MotionTrackingEditor clip={item} locked={false} playheadFrame={12} />,
+    )
+    rerender(<MotionTrackingEditor clip={item} locked={false} playheadFrame={13} />)
+    expect(useTransportStore.getState().clipVisualPreview).toMatchObject({
+      owner: 'stabilization',
+      transform: { x: 42 },
+    })
+
+    unmount()
+    expect(useTransportStore.getState().clipVisualPreview?.owner).toBe('stabilization')
+  })
+
+  test('reads progress from the active tracking kind instead of an older sibling job', async () => {
+    const user = userEvent.setup()
+    const item = clip()
+    mocks.analyze.mockReset().mockReturnValue(new Promise(() => undefined))
+    mocks.subscribe.mockImplementation((listener: (snapshot: unknown) => void) => {
+      listener({
+        jobs: [
+          { id: 'old-point', clipId: item.id, kind: 'point-tracking', phase: 'ready', progress: 1 },
+          { id: 'active-box', clipId: item.id, kind: 'box-tracking', phase: 'running', progress: 0.25 },
+        ],
+        scheduler: {},
+      })
+      return () => undefined
+    })
+    render(<MotionTrackingEditor clip={item} locked={false} playheadFrame={12} />)
+
+    await user.click(screen.getByRole('button', { name: 'Draw box' }))
+    act(() => useMotionTrackingSelectionStore.getState().setSelection(
+      item.id,
+      { kind: 'box', box: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 } },
+      12,
+    ))
+    await user.click(screen.getByRole('button', { name: 'Analyze' }))
+
+    await waitFor(() => expect(screen.getByRole('progressbar')).toHaveValue(0.25))
   })
 })

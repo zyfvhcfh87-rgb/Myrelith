@@ -4584,3 +4584,22 @@ acceptance claims.
   canaries.
 - [ ] Pass exact-head CI, request fresh exact-head Codex review, and merge only
   after its clean verdict.
+
+## Milestone 5 Part 10a.3 / issue #110 - first exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Give stabilization and motion-tracking transport previews explicit owners;
+  clear only the calling editor's preview so simultaneously mounted Inspector
+  surfaces cannot erase one another.
+- [x] Filter live progress by the requested point/box kind and select the newest
+  queued/running status ahead of retained terminal jobs.
+- [x] Resolve the target transform at every accepted frame. Use preserved
+  target Rotation for target-local box extents and crop/anchor compensation,
+  and preserved Scale for compensation whenever tracking does not author Scale.
+  Pin off-center Position and 0-to-90-degree box-scale regressions.
+- [x] Pass 14 focused files / 135 tests, 190 full files / 2,578 tests, all 17
+  evidence-runner checks, build/typecheck, lint, a production audit with 0
+  vulnerabilities, and diff checks.
+- [ ] Commit the exact follow-up tree, refresh clean headed Chromium, push, pass
+  exact-head CI, and request a new Codex review.
