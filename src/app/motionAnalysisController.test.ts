@@ -155,16 +155,17 @@ function storageFixture(cached: AnalysisCacheEntry | null = null) {
   }
   const stageResult = vi.fn(async () => staged)
   const commitEntry = vi.fn(async () => transaction)
+  const readResult = vi.fn(async () => new TextEncoder().encode('{"cached":true}'))
   const storage = {
     findFreshEntry: vi.fn(async () => cached),
-    readResult: vi.fn(async () => new TextEncoder().encode('{"cached":true}')),
+    readResult,
     touch: vi.fn(async () => undefined),
     stageResult,
     commitEntry,
     removeAttachment: vi.fn(async () => undefined),
     removeAsset: vi.fn(async () => undefined),
   } as unknown as AnalysisStorage
-  return { commitEntry, staged, stageResult, storage, transaction }
+  return { commitEntry, readResult, staged, stageResult, storage, transaction }
 }
 
 function deps(
@@ -252,6 +253,7 @@ describe('MotionAnalysisController', () => {
     expect(storage.transaction.finalize).toHaveBeenCalledOnce()
     expect(storage.transaction.rollback).not.toHaveBeenCalled()
     expect(workers).toHaveLength(1)
+    expect(workers[0]?.messages[0]).toMatchObject({ videoStreamIndex: 0 })
     expect(workers[0]?.terminated).toBe(true)
     expect(snapshots.at(-1)?.jobs[0]).toMatchObject({ phase: 'ready', progress: 1 })
     expect(snapshots.at(-1)?.scheduler.maxActiveJobCount).toBe(1)
@@ -297,6 +299,65 @@ describe('MotionAnalysisController', () => {
         detail: 'Motion analysis decoded no samples for the requested source range',
       },
     })
+  })
+
+  it('rejects non-primary stream provenance before worker or cache access', () => {
+    const storage = storageFixture()
+    const workerFactory = vi.fn(() => new FakeWorker())
+    const controller = new MotionAnalysisController(deps(storage.storage, workerFactory))
+    const base = request()
+    const analysis: MotionAnalysisRunRequest = {
+      ...base,
+      source: { ...base.source, videoStreamIndex: 1 },
+    }
+
+    expect(() => controller.analyze(analysis)).toThrowError(expect.objectContaining({
+      code: 'unsupported-runtime',
+      message: 'Motion analysis currently supports only primary video stream index 0',
+    }))
+    expect(workerFactory).not.toHaveBeenCalled()
+    expect(storage.storage.findFreshEntry).not.toHaveBeenCalled()
+  })
+
+  it('detaches cache and processor result buffers that arrive after cancellation', async () => {
+    const cached = cachedEntry()
+    const cachedStorage = storageFixture(cached)
+    let resolveCached!: (value: Uint8Array<ArrayBuffer>) => void
+    cachedStorage.readResult.mockImplementation(() => new Promise((resolve) => {
+      resolveCached = resolve
+    }))
+    const cachedController = new MotionAnalysisController(deps(
+      cachedStorage.storage,
+      () => new FakeWorker(),
+    ))
+    const cachedPending = cachedController.analyze(request())
+    const cachedRejected = expect(cachedPending).rejects.toMatchObject({ code: 'cancelled' })
+    await vi.waitFor(() => expect(cachedStorage.readResult).toHaveBeenCalledOnce())
+    cachedController.cancelClip('clip-1')
+    await cachedRejected
+    const lateCachedBytes = new Uint8Array(new ArrayBuffer(32))
+    resolveCached(lateCachedBytes)
+    await vi.waitFor(() => expect(lateCachedBytes.byteLength).toBe(0))
+
+    const resultStorage = storageFixture()
+    const analysis = request()
+    let resolveResult!: (value: Uint8Array<ArrayBuffer>) => void
+    vi.mocked(analysis.processor.finish).mockImplementation(() => new Promise((resolve) => {
+      resolveResult = resolve
+    }))
+    const resultController = new MotionAnalysisController(deps(
+      resultStorage.storage,
+      () => new FakeWorker(),
+    ))
+    const resultPending = resultController.analyze(analysis)
+    const resultRejected = expect(resultPending).rejects.toMatchObject({ code: 'cancelled' })
+    await vi.waitFor(() => expect(analysis.processor.finish).toHaveBeenCalledOnce())
+    resultController.cancelClip('clip-1')
+    await resultRejected
+    const lateResultBytes = new Uint8Array(new ArrayBuffer(64))
+    resolveResult(lateResultBytes)
+    await vi.waitFor(() => expect(lateResultBytes.byteLength).toBe(0))
+    expect(resultStorage.stageResult).not.toHaveBeenCalled()
   })
 
   it('does not cancel a completed generation when the same analysis starts again', async () => {
@@ -411,7 +472,7 @@ describe('MotionAnalysisController', () => {
     })
   })
 
-  it('discards a staged result that arrives after source replacement cancellation', async () => {
+  it('detaches the result and discards a staged sidecar after source replacement', async () => {
     const storage = storageFixture()
     let resolveStage!: (value: typeof storage.staged) => void
     const lateStage = new Promise<typeof storage.staged>((resolve) => {
@@ -420,7 +481,10 @@ describe('MotionAnalysisController', () => {
     storage.stageResult.mockImplementation(async () => lateStage)
     let failure: 'replaced-source' | null = null
     const controller = new MotionAnalysisController(deps(storage.storage, () => new FakeWorker()))
-    const pending = controller.analyze(request(() => failure))
+    const analysis = request(() => failure)
+    const resultBytes = new Uint8Array(new ArrayBuffer(64))
+    vi.mocked(analysis.processor.finish).mockResolvedValue(resultBytes)
+    const pending = controller.analyze(analysis)
     await vi.waitFor(() => expect(storage.stageResult).toHaveBeenCalledOnce())
 
     failure = 'replaced-source'
@@ -428,6 +492,7 @@ describe('MotionAnalysisController', () => {
     await expect(pending).rejects.toMatchObject({ code: 'replaced-source' })
     resolveStage(storage.staged)
     await vi.waitFor(() => expect(storage.staged.discard).toHaveBeenCalledOnce())
+    expect(resultBytes.byteLength).toBe(0)
     expect(storage.commitEntry).not.toHaveBeenCalled()
   })
 })

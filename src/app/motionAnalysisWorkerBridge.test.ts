@@ -60,6 +60,7 @@ function request(): MotionAnalysisWorkerRunMessage {
     requestId: 1,
     blob: new Blob(['video']),
     sourceId: 'asset-1',
+    videoStreamIndex: 0,
     budget: {
       fileBytes: 5,
       durationMicroseconds: 1_000_000,

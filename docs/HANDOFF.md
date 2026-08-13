@@ -4172,3 +4172,31 @@ surface; it is not a second zoom and never enters document history.
   audit with 0 vulnerabilities, runner syntax, and `git diff --check` pass.
   Clean-commit Chromium, CI, and fresh exact-head Codex review evidence follows
   on the final committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - third exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4925687652` on `6a20378735` found two additional
+  ownership/identity gaps: cancelled or timed-out cache reads and processor
+  finalizers did not release result buffers that arrived after settlement, and
+  the cache identity accepted a non-primary video stream index while production
+  decode always selected the primary track.
+- Cache reads and processor results now register synchronous late-value cleanup
+  with the owned-operation race. Late buffers detach as soon as they resolve;
+  accepted result bytes also detach on stale-source, staging, commit, or final
+  validation failure, while successful callers retain the sole live result.
+  Deterministic deferred cache-read and processor-finalizer regressions prove
+  both late buffers reach zero length after cancellation and never reach cache
+  staging.
+- The production contract explicitly supports only primary video stream index
+  `0`. The controller rejects every other index before fingerprint/cache/worker
+  work; accepted index `0` is carried in the worker message and independently
+  validated before the worker opens the primary track. Cache provenance can no
+  longer claim bytes from an unrequested stream.
+- The refreshed focused gate passes 63/63 tests plus 17/17 runner checks; the
+  authoritative suite passes 179/179 files and 2,488/2,488 tests plus those
+  checks. TypeScript/Vite build, oxlint, the high-severity production audit with
+  0 vulnerabilities, runner syntax, and `git diff --check` pass. Clean-commit
+  Chromium, CI, and fresh exact-head Codex evidence follows on the committed
+  tree.

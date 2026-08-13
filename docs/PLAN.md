@@ -4177,3 +4177,21 @@ acceptance claims.
   high-severity production audit with 0 vulnerabilities, runner syntax, and
   `git diff --check`. Clean-commit Chromium, CI, and fresh exact-head Codex
   review follow on the committed tree.
+
+## Milestone 5 Part 10a.1 / issue #108 - third exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Detach cache-read and processor-result buffers that resolve after abort or
+  the owned-operation deadline, and detach accepted result ownership on every
+  unsuccessful stale/stage/commit path while preserving successful caller
+  ownership.
+- [x] Reject non-primary video stream indices before fingerprint, cache, or
+  worker work; carry accepted index `0` explicitly through the worker protocol
+  and validate it before opening the primary video track.
+- [x] Add deterministic deferred-result ownership and stream-provenance
+  regressions; pass 63/63 focused tests plus 17/17 runner checks and the
+  authoritative 179-file / 2,488-test suite plus those checks. Pass build/
+  typecheck, oxlint, the high-severity production audit with 0 vulnerabilities,
+  runner syntax, and `git diff --check`. Clean-commit Chromium, CI, and exact-
+  head Codex review follow on the committed tree.

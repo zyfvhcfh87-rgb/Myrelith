@@ -13,6 +13,7 @@ export interface MotionAnalysisWorkerRunMessage {
   readonly requestId: number
   readonly blob: Blob
   readonly sourceId: string
+  readonly videoStreamIndex: number
   readonly budget: LocalDecoderBudget
   readonly startTimestampUs: number
   readonly endTimestampUs: number

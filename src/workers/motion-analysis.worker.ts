@@ -32,6 +32,10 @@ function safeInteger(value: number, label: string, minimum = 0): void {
 
 function validateRun(message: MotionAnalysisWorkerRunMessage): void {
   safeInteger(message.requestId, 'requestId')
+  safeInteger(message.videoStreamIndex, 'videoStreamIndex')
+  if (message.videoStreamIndex !== 0) {
+    throw new RangeError('Only primary video stream index 0 is supported')
+  }
   safeInteger(message.startTimestampUs, 'startTimestampUs')
   safeInteger(message.endTimestampUs, 'endTimestampUs')
   safeInteger(message.samplingIntervalFrames, 'samplingIntervalFrames', 1)

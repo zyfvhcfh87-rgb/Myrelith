@@ -138,6 +138,15 @@ function abortError(): MotionAnalysisError {
   return new MotionAnalysisError('cancelled', 'Motion analysis was cancelled')
 }
 
+function releaseOwnedBytes(bytes: Uint8Array<ArrayBuffer>): void {
+  if (bytes.buffer.byteLength === 0) return
+  structuredClone(null, { transfer: [bytes.buffer] })
+}
+
+async function releaseLateOwnedBytes(bytes: Uint8Array<ArrayBuffer>): Promise<void> {
+  releaseOwnedBytes(bytes)
+}
+
 function raceOwnedOperation<T>(
   operation: Promise<T>,
   signal: AbortSignal,
@@ -191,6 +200,10 @@ function validateRequest(request: MotionAnalysisRunRequest): void {
     || request.asset.height === null
     || request.asset.frameRate === null
   ) throw new TypeError('Motion analysis requires one connected video asset and clip')
+  if (request.source.videoStreamIndex !== 0) throw new MotionAnalysisError(
+    'unsupported-runtime',
+    'Motion analysis currently supports only primary video stream index 0',
+  )
   if (
     request.source.width !== request.asset.width
     || request.source.height !== request.asset.height
@@ -202,17 +215,20 @@ function validateRequest(request: MotionAnalysisRunRequest): void {
   ) throw new TypeError('Motion analysis source facts do not match the connected asset')
 }
 
-function tightResult(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+function tightResult(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   if (
     bytes.byteOffset !== 0
     || bytes.byteLength !== bytes.buffer.byteLength
     || bytes.byteLength <= 0
     || bytes.byteLength > MAX_ANALYSIS_RESULT_BYTES
-  ) throw new MotionAnalysisError(
-    'resource-limit',
-    'Motion-analysis result exceeded the reviewed cache envelope',
-  )
-  return bytes as Uint8Array<ArrayBuffer>
+  ) {
+    releaseOwnedBytes(bytes)
+    throw new MotionAnalysisError(
+      'resource-limit',
+      'Motion-analysis result exceeded the reviewed cache envelope',
+    )
+  }
+  return bytes
 }
 
 function publicError(cause: unknown): MotionAnalysisError {
@@ -434,8 +450,14 @@ export class MotionAnalysisController {
         signal,
         'Analysis cache read',
         'storage-corrupt',
+        releaseLateOwnedBytes,
       )
-      this.throwIfStale(request, signal)
+      try {
+        this.throwIfStale(request, signal)
+      } catch (cause) {
+        releaseOwnedBytes(bytes)
+        throw cause
+      }
       void this.deps.storage.touch(cached.cacheKey).catch(() => undefined)
       return { entry: cached, bytes, fromCache: true, completion: null }
     }
@@ -445,6 +467,7 @@ export class MotionAnalysisController {
       requestId: ++this.requestId,
       blob,
       sourceId: request.asset.id,
+      videoStreamIndex: request.source.videoStreamIndex,
       budget: mediaAssetDecoderBudget(request.asset, blob.size),
       startTimestampUs: request.source.sourceStartMicroseconds,
       endTimestampUs: request.source.sourceEndMicroseconds,
@@ -463,46 +486,53 @@ export class MotionAnalysisController {
         'Motion analysis decoded no samples for the requested source range',
       )
     }
-    const bytes = tightResult(await raceOwnedOperation(
-      request.processor.finish(completion, signal),
-      signal,
-      'Motion-analysis result finalization',
-      'unexpected',
-    ))
-    this.throwIfStale(request, signal)
-    const staged = await raceOwnedOperation(
-      this.deps.storage.stageResult(cacheKey, bytes),
-      signal,
-      'Analysis result staging',
-      'storage-corrupt',
-      (late) => late.discard(),
-    )
-    let transaction: Awaited<ReturnType<AnalysisStorage['commitEntry']>> | null = null
+    let bytes: Uint8Array<ArrayBuffer> | null = null
     try {
-      this.throwIfStale(request, signal)
-      const now = this.deps.now()
-      const entry: AnalysisCacheEntry = {
-        ...identity,
-        cacheKey,
-        resultFileName: staged.fileName,
-        resultBytes: bytes.byteLength,
-        sampleCount: completion.sampledFrameCount,
-        createdAt: now,
-        lastUsedAt: now,
-      }
-      transaction = await raceOwnedOperation(
-        this.deps.storage.commitEntry(entry),
+      bytes = tightResult(await raceOwnedOperation(
+        request.processor.finish(completion, signal),
         signal,
-        'Analysis manifest commit',
-        'storage-corrupt',
-        (late) => late.rollback(),
-      )
+        'Motion-analysis result finalization',
+        'unexpected',
+        releaseLateOwnedBytes,
+      ))
       this.throwIfStale(request, signal)
-      void transaction.finalize().catch(() => undefined)
-      return { entry, bytes, fromCache: false, completion }
+      const staged = await raceOwnedOperation(
+        this.deps.storage.stageResult(cacheKey, bytes),
+        signal,
+        'Analysis result staging',
+        'storage-corrupt',
+        (late) => late.discard(),
+      )
+      let transaction: Awaited<ReturnType<AnalysisStorage['commitEntry']>> | null = null
+      try {
+        this.throwIfStale(request, signal)
+        const now = this.deps.now()
+        const entry: AnalysisCacheEntry = {
+          ...identity,
+          cacheKey,
+          resultFileName: staged.fileName,
+          resultBytes: bytes.byteLength,
+          sampleCount: completion.sampledFrameCount,
+          createdAt: now,
+          lastUsedAt: now,
+        }
+        transaction = await raceOwnedOperation(
+          this.deps.storage.commitEntry(entry),
+          signal,
+          'Analysis manifest commit',
+          'storage-corrupt',
+          (late) => late.rollback(),
+        )
+        this.throwIfStale(request, signal)
+        void transaction.finalize().catch(() => undefined)
+        return { entry, bytes, fromCache: false, completion }
+      } catch (cause) {
+        if (transaction) await transaction.rollback().catch(() => undefined)
+        else await staged.discard().catch(() => undefined)
+        throw cause
+      }
     } catch (cause) {
-      if (transaction) await transaction.rollback().catch(() => undefined)
-      else await staged.discard().catch(() => undefined)
+      if (bytes) releaseOwnedBytes(bytes)
       throw cause
     }
   }

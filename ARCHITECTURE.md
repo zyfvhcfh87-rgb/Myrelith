@@ -577,7 +577,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   settle the run or release scheduler admission while an acknowledged window
   remains consumer-owned. A terminal completion with zero decoded samples is a
   typed decode/readback failure before processor finalization or cache staging;
-  only positive-sample completions may become cache provenance.
+  only positive-sample completions may become cache provenance. The production
+  contract currently admits only primary video stream index `0`, carries that
+  index explicitly through the worker protocol, and rejects any other stream
+  before cache lookup or worker creation. Cache reads and processor results are
+  app-owned transferable bytes: cancellation/deadline late arrivals detach
+  immediately, and every unsuccessful post-result path detaches before
+  scheduler admission can be reused.
 - `app/analysisStorage.ts` implements the strict schema-1 origin-local OPFS
   sidecar under `myrelith-derived/analysis-cache-v1`. `domain/analysisCache.ts`
   owns the exact key, provenance, freshness, and stale-rejection policy. Writes
