@@ -344,6 +344,30 @@ describe('worker video source', () => {
     await source.close()
   })
 
+  test('one sparse timestamp lane uses one ordered signed sample cursor', async () => {
+    const samples = [
+      new TrackedSample(-250_000),
+      new TrackedSample(-1),
+      new TrackedSample(125_000),
+    ]
+    const iterator = new FakeIterator<VideoSampleLike | null>(samples)
+    const sink = new FakeSink(undefined, iterator)
+    const h = makeHarness([sink])
+    const source = await openHarness(h)
+    const cursor = source.openTimestampLane?.([-250_000, -1, 125_000])
+
+    expect(cursor).toBeDefined()
+    expect(sink.seekCalls).toEqual([[-0.25, -0.000001, 0.125]])
+    expect(h.createdSinkCount()).toBe(1)
+    const decoded = [await cursor!.next(), await cursor!.next(), await cursor!.next()]
+    expect(decoded.map((sample) => sample?.timestampUs)).toEqual([-250_000, -1, 125_000])
+    for (const sample of decoded) sample?.frame.close()
+
+    await cursor!.close()
+    expect(iterator.returnCount).toBe(1)
+    await source.close()
+  })
+
   test('conversion failure still closes the yielded sample exactly once', async () => {
     const sample = new TrackedSample(0)
     sample.conversionError = new Error('VideoFrame conversion failed')
@@ -435,6 +459,15 @@ describe('worker video source', () => {
     })).toThrow('endTimestampUs must be greater than or equal')
     expect(() => source.openSeekLane(-1)).toThrow(
       'targetTimestampUs must be a non-negative safe integer',
+    )
+    expect(() => source.openTimestampLane?.([])).toThrow(
+      'timestampsUs must not be empty',
+    )
+    expect(() => source.openTimestampLane?.([0, 0])).toThrow(
+      'timestampsUs must be strictly increasing',
+    )
+    expect(() => source.openTimestampLane?.([0, 1.5])).toThrow(
+      'timestampsUs[1] must be a safe integer',
     )
     expect(h.createdSinkCount()).toBe(0)
 

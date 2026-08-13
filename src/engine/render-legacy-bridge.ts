@@ -9,7 +9,7 @@ import {
   videoCompositionRequests,
   type VideoCompositionPlan,
 } from '../domain/videoCompositionPlan'
-import { framesToSeconds, rescaleFrames } from '../domain/time'
+import { framesToSeconds } from '../domain/time'
 import type { ChunkPayload } from '../workers/decode-types'
 import type { LegacyCompositeMessage } from '../workers/render-legacy-protocol'
 import type { ChunkProvider } from './worker-types'
@@ -73,8 +73,7 @@ export async function buildLegacyRenderRequest({
 
   const entries = await Promise.all(
     [...wants.values()].map(async ({ assetId, sourceFrame, source }) => {
-      const assetFrame = rescaleFrames(sourceFrame, doc.frameRate, source.rate)
-      const targetSec = framesToSeconds(assetFrame, source.rate)
+      const targetSec = framesToSeconds(sourceFrame, doc.frameRate)
       const toleranceSec = source.rate.den / source.rate.num / 2
       let chunks: ChunkPayload[] = []
       try {

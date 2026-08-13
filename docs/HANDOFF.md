@@ -121,7 +121,8 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #70 — OPFS editing proxies** | ✅ implementation complete | exact decoder/AVC-MP4 preflight; versioned provenance/LRU OPFS sidecar; cancellable one-job/one-decoder generation; fresh-proxy preview with original-only export; 170 post-rebase focused + 2,186 total tests; 4K long-GOP Chromium gate on exclusive port 41870 |
 | **Post-MVP #71 — basic color correction and video scopes** | ✅ implementation complete | stable version-1 exposure/contrast/saturation contract extended compatibly with temperature/tint; explicit unpremultiplied sRGB/alpha/clamp semantics; shared preview/export composition; dedicated 4 Hz histogram/waveform/vectorscope worker; accessible stack/scopes controls; 2,224 total tests and clean Chromium QA on exclusive port 41871 |
 | **Post-MVP #44 — motion-analysis and stabilization research** | ✅ research complete | bounded cancelable job/cache contracts; deterministic similarity stabilization and point/box tracking go gates; safe manual lens model with renderer no-go; delivery split into #108–#111; 22 focused tests and source-bound Chromium evidence on exclusive port 41844 |
-| **Post-MVP #108 — motion-analysis job/cache foundation** | 🚧 implementation complete locally | production one-job/one-decoder controller; worker-owned real-source decode/downsample with exact frame closure; strict schema-1 OPFS derived cache; source/currentness rollback; focused/full/build/browser gates green; clean-commit publication gate remains |
+| **Post-MVP #108 — motion-analysis job/cache foundation** | ✅ complete | production one-job/one-decoder controller; worker-owned real-source decode/downsample with exact frame closure; strict schema-1 OPFS derived cache; source/currentness rollback; PR #115 squash-merged as `73ceeea`; issue closed |
+| **Post-MVP #109 — bounded video stabilization** | 🚧 implementation complete locally | production #108 consumer; O(n) similarity smoothing; exact project-space safe coverage; ordinary Position/Rotation/equal-Scale tracks; accessible Analyze/Preview/Apply/Reset surface; publication gates pending |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -4329,3 +4330,347 @@ surface; it is not a second zoom and never enters document history.
   passes 180/180 files and 2,508/2,508 tests plus those checks. Build, lint,
   production audit, static checks, clean-commit Chromium, CI, and one more exact-
   head Codex review follow on the committed tree.
+
+## Milestone 5 Part 10a.2 / issue #109 - bounded video stabilization (2026-08-13)
+
+**IMPLEMENTATION COMPLETE LOCALLY.**
+
+- The Animation Inspector now exposes an accessible local Analyze, progress,
+  Cancel/Retry, strength, integer smoothing radius, exact required-crop/safe-
+  zoom evidence, playhead Preview, explicit replacement confirmation, Apply,
+  and Reset workflow. Preview is transport-only; only Apply or Reset creates a
+  single history entry.
+- `app/videoStabilizationController.ts` is the production adapter over Issue
+  #108. It uses the exact connected source, SourceTimeMap, project/clip
+  projection, algorithm, and parameter digests; consumes overlapping worker
+  windows once; preserves typed scene-cut, inlier/residual, source, cache, and
+  cancellation failures; detaches result bytes after strict parsing; and
+  rechecks the source/project snapshot before preview or Apply.
+- `domain/videoStabilization.ts` owns the O(n) full-product similarity smoother,
+  canonical source-time inversion, project-space correction for crop, anchor,
+  flips, rotation, and uniform scale, and exact safe-coverage planning. Analysis
+  aspect rounding must project back to a similarity within 0.25 project px.
+  Key simplification reserves the 0.5 px final-corner, 0.05 degree, and 0.05%
+  scale tolerances before the maximum 1.35x zoom, then safe coverage is solved
+  against the simplified path at every integer clip frame. Displayed required
+  crop is the total span `1 - 1 / safeZoom`.
+- Product bounds are 1,000,000 clip frames, 65,534 retained analysis samples,
+  120 smoothing frames, 4,000,000 simplification comparisons, 1,024 keys per
+  transform track, and 100,000 document keys. The immutable operation rechecks
+  the document-wide budget, replaces
+  only ordinary Position X/Y, Rotation, and equal Scale X/Y tracks after
+  explicit consent, and preserves opacity/effect animation. Shared ordinary
+  animation evaluation remains the only preview/export path.
+- Deterministic focused coverage passes 136/136 domain, operation, controller,
+  store, Inspector, UI, and architecture tests. The authoritative suite passes
+  184/184 files and 2,528/2,528 Vitest tests plus 17/17 evidence-runner checks.
+  TypeScript/Vite production build, warning-free oxlint, runner syntax, diff and
+  conflict checks, and the high-severity production audit with 0 vulnerabilities
+  pass.
+  A dirty-tree real Chromium source gate processed 32 generated H.264 samples,
+  produced 31 keys per track, solved 1.0224x safe zoom / 2.20% total crop,
+  proved an exact cache miss-to-hit, left worker and scheduler resources
+  balanced, removed the cache entry, and reported zero console/page problems.
+  Headed Chromium then reproduced the same result from clean exact commit
+  `cabd4202fc`, with source fingerprint `ad177dad…`, one clean cache round-trip,
+  JSON/PNG artifacts, zero browser problems, and exclusive port 41866 fully
+  released. Exact-head CI and Codex review remain publication gates.
+
+## Milestone 5 Part 10a.2 / issue #109 - first exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4926987766` on `e0492442ad` found two P1 gaps: a
+  completed analysis could repopulate the Inspector after selection moved to
+  another clip, and the architecture guard's new Issue #109 dev exception was
+  not named in canonical architecture.
+- The Inspector now owns an analysis-generation token. Starting a request
+  captures its token and clip ID; clip change, cancel, and unmount synchronously
+  invalidate the token and cancel the original clip's admitted job. Late success
+  or failure cannot install a session, preview the new selection, or apply to
+  the old clip. A deterministic deferred-result regression proves the new clip
+  remains idle, Apply stays disabled, no plan is built, and the old request is
+  cancelled.
+- Canonical architecture now grants only
+  `dev/issue109/videoStabilizationGate.ts` the exact `app`/`domain`/`state`
+  composition used by `scripts/issue109/stabilization-gate.html`; ordinary app
+  entries and every other dev module remain forbidden. The architecture guard
+  and documentation are aligned again.
+- The review-focused UI/architecture gate passes 8/8 tests; the authoritative
+  suite passes 184/184 files and 2,528/2,528 tests plus 17/17 runner checks.
+  Build/typecheck, warning-free lint, and `git diff --check` pass. Clean-commit
+  Chromium, CI, and a fresh exact-head Codex verdict follow on the fixed head.
+
+## Milestone 5 Part 10a.2 / issue #109 - second exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4927072774` on `0901322c43` found that a legitimate
+  million-sample result could exhaust memory or exceed the shared cache-entry
+  envelope only after the complete expensive run, and that Reset misleadingly
+  described ordinary transform tracks as stabilization-owned even though it
+  also removes manual or other-tool animation.
+- Stabilization now reserves a 32 MiB working-result ceiling derived from the
+  shared 256 MiB cache-entry limit, 1 KiB for the enclosing record, and at most
+  512 serialized bytes per retained sample. The resulting 65,534-sample cap is
+  checked before another pair is analyzed or retained; cached bytes are
+  rejected before UTF-8 decoding when they exceed the same product envelope.
+- Reset now discloses before action that it removes every ordinary Position,
+  Rotation, and Scale animation track, including keyframes created manually or
+  by another tool. The button's accessible description includes that warning,
+  and source comments no longer imply unavailable ownership provenance.
+- The review-focused refresh passes 18/18 tests across the adapter, UI,
+  operation, and architecture suites. The authoritative suite passes 184/184
+  files and 2,530/2,530 tests plus all 17 evidence-runner checks;
+  build/typecheck, warning-free lint, the high-severity production audit with
+  0 vulnerabilities, and diff checks pass. Clean-commit Chromium, CI, and a
+  fresh exact-head Codex verdict follow on the frozen fix.
+
+## Milestone 5 Part 10a.2 / issue #109 - third exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4927205703` on `07cc955d97` found that source-time
+  inversion correctly selects the latest frame of a 0x plateau, but ordinary
+  linear stabilization keys could then interpolate correction motion through
+  the earlier frozen frames.
+- Planning now detects every exact equal-source-time run over the bounded clip
+  duration, materializes matching first/last plateau corrections, gives the
+  first key ordinary `hold` easing, and protects both keys from simplification.
+  Moving spans remain linear; preview and export still use only the shared
+  ordinary animation evaluator. The existing 1,024-key ceiling rejects a plan
+  if the protected boundaries and simplified path cannot coexist.
+- A deterministic speed-curve regression moves before a three-frame freeze and
+  proves all five Position/Rotation/equal-Scale tracks stay byte-value constant
+  at every frozen timeline frame while the pre-freeze value differs. Focused,
+  full, build, lint, audit, and diff gates pass: 5/5 focused files with 28/28
+  tests, 184/184 full-suite files with 2,531/2,531 tests, 17/17 evidence-runner
+  checks, TypeScript/Vite production build, warning-free lint, and 0 production
+  vulnerabilities. Headed Chromium on clean exact code commit `b9695cd6c2`
+  reproduces 32 analyzed samples, 31 keys per track, 1.0224× safe zoom, an
+  exact cache hit, balanced 1-created/1-terminated/0-active worker ownership,
+  zero console/page problems, and complete port 41870 release. That broad
+  source-bound flow uses ordinary 1× timing; the deterministic domain test is
+  the direct 0× freeze coverage. CI and fresh exact-head review follow.
+
+## Milestone 5 Part 10a.2 / issue #109 - fourth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4927432158` on `bbea2ed8c1` found that nonzero rates
+  below 1× also repeat a decoded source frame even though their exact source
+  ticks advance, so the zero-rate-only fast path could still author visible
+  correction drift over valid slow-motion footage.
+- Planning now uses the canonical decoded-source-frame selector. Any timeline
+  run that resolves to one source frame receives matching first/last correction
+  keys and `hold` easing at the first edge, whether repetition comes from 0× or
+  fractional speed. For every map that can repeat, analyzed corrections are
+  indexed by decoded source frame and rematerialized at the timeline frame that
+  actually displays that image, including singleton runs between repeats. An
+  exact correction therefore wins even when floor-style SourceTimeMap inversion
+  placed its sample on the preceding 0.75× image or the other 0× plateau edge.
+  Maps whose rates cannot repeat a decoded frame retain the zero-work fast path.
+- Structural repeated-frame edges are counted before retention and reject once
+  they exceed the existing 1,024-key envelope. Deterministic 0.25× coverage
+  proves three successive four-frame runs hold all five authored properties,
+  change only at the next decoded frame, and reject an over-budget 2,052-frame
+  case. A separate 0.75×/1× parity matrix proves all six analyzed source-frame
+  corrections land on the timeline frame that displays the same source image.
+  The final frozen refresh passes 5/5 focused files with 31/31 tests, 184/184
+  full-suite files with 2,534/2,534 tests, all 17 evidence-runner checks,
+  TypeScript/Vite build, warning-free lint, the production audit with 0
+  vulnerabilities, and clean diff checks. Clean browser, CI, and exact-head
+  review follow after commit.
+
+## Milestone 5 Part 10a.2 / issue #109 - fifth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4927600566` on `2b30caa41c` found that analysis
+  request bounds and result timestamps converted conformed SourceTimeMap ticks
+  with the connected asset's native frame rate. With 60 fps media in a 30 fps
+  project, that could analyze only half of a one-second clip and then spread
+  the returned corrections across the wrong timeline frames.
+- Both boundaries now use the document frame rate: conformed source ticks map
+  to WebCodecs microseconds with floor/ceil request-bound rounding, and sampled
+  timestamps return through the canonical nearest-project-frame adapter. The
+  native source rate remains authoritative only for the decoder sampling
+  interval, so a 60 fps source in a 30 fps project samples every two native
+  frames without changing the clip's conformed source-time scale.
+- A deterministic mismatched-rate regression pins both conversion directions,
+  the nonzero first source timestamp, and floor/ceil subframe boundaries. The
+  final focused gate passes 5/5 files and 32/32 tests plus 17/17 runner checks;
+  the authoritative suite passes 184/184 files and 2,535/2,535 tests plus the
+  same runner. Build/typecheck, warning-free lint, the high-severity production
+  audit with 0 vulnerabilities, and diff checks pass. Clean Chromium, CI, and
+  fresh exact-head review follow on the committed fix.
+
+## Milestone 5 Part 10a.2 / issue #109 - sixth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4927745797` on `0c60753c6a` found three P1 gaps:
+  fractional conformed trim bounds could omit the containing first image or
+  include the image after the last displayed one; 24 fps media in a 30 fps
+  project could repeat a native image even at 1x; and a fixed fast-retime
+  stride could analyze native frames 0/4/8 while rendering requested 0/3/6.
+- Product analysis now walks every bounded clip timeline frame through the
+  canonical render selector: floor the exact SourceTimeMap tick to its
+  containing project-rate frame, then use the shared nearest project-to-native
+  frame rescaling. It retains only the first timeline tick for each distinct
+  native image and opens one sparse, ordered `samplesAtTimestamps` decoder lane
+  for those exact native-frame timestamps. The half-open decode range starts at
+  the first selected native image and ends after the last; fractional tick
+  boundaries are no longer passed directly to the sequential decoder.
+- Result schema 2 stores each sample's exact first displayed SourceTimeMap tick,
+  and product algorithm `similarity-product-v2` invalidates older cache entries.
+  Planning detects repeat runs by the logical native-frame identity and the
+  nondecreasing timestamp of the sample actually returned by the decoder, so
+  two adjacent render requests that resolve to one containing media sample also
+  receive protected first/last keys and ordinary `hold` easing. The controller
+  separately verifies every stored SourceTimeMap tick against the current exact
+  schedule before accepting fresh or cached analysis. The sparse schedule is
+  validated and copied at both controller and worker boundaries, accepts signed
+  exact stream timestamps, and rejects before retaining sample 65,535 under the
+  existing product envelope.
+- Deterministic regressions pin fractional 0.5-frame starts, the exact 24-to-30
+  fps native sequence, 4x retiming, 1x conformed repeats, sparse decode/protocol
+  propagation, one ordered signed Mediabunny cursor, and early schedule-budget
+  rejection, including the duplicate decoded-timestamp case discovered by the
+  first clean headed-Chromium integration run on local commit `450da854fc`.
+  After correcting that real Mediabunny behavior, the dirty-tree rerun passed
+  the complete product flow with 32 analyzed samples, an exact cache hit, one
+  history entry, balanced worker/cache cleanup, and zero console problems. The
+  frozen focused gate passes 8/8 files with 78/78 tests plus
+  17/17 evidence-runner checks. The authoritative suite passes 184/184 files
+  with 2,542/2,542 tests plus the same runner; TypeScript/Vite builds 4,810
+  modules, warning-free lint passes, the production audit reports 0
+  vulnerabilities, and diff checks pass. A clean-tree Chromium rerun, CI, and
+  fresh exact-head review follow on the amended commit.
+
+## Milestone 5 Part 10a.2 / issue #109 - seventh exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4928170019` on `088ecb325b` found that coverage
+  validation eagerly retained one seven-field transform object for every clip
+  frame. A valid run at the documented 1,000,000-frame ceiling could therefore
+  create substantial browser memory pressure while the Inspector called the
+  planner synchronously.
+- The per-frame interpolator is now a lazy single-pass iterable. One coverage
+  traversal accumulates the exact reciprocal crop constraints and maximum
+  pre-zoom scale together, then discards each interpolated transform before the
+  next frame. The retained simplification/keyframe path remains bounded to
+  1,024 entries; no duration-sized transform array exists.
+- A deterministic single-use iterable regression fails if exact coverage is
+  traversed twice. The frozen focused gate passes 9/9 files with 83/83 tests
+  plus 17/17 runner checks; the authoritative suite passes 184/184 files with
+  2,543/2,543 tests plus the same runner. TypeScript, build, warning-free lint,
+  the high-severity production audit with 0 vulnerabilities, and diff checks
+  pass. Clean headed Chromium, CI, and exact-head Codex evidence follow on the
+  committed fix.
+
+## Milestone 5 Part 10a.2 / issue #109 - eighth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4928304427` on `9c7a292312` found that sparse
+  stabilization requests added the container's exact first presentation
+  timestamp, while preview and export request the same rendered source frames
+  on a zero-relative timeline. Imported video with a positive or negative first
+  PTS could therefore analyze a different image than the one displayed.
+- Source-tick, native-frame, sparse-decode bounds, and inverse timestamp helpers
+  now share the preview/export zero-relative convention. Exact container bounds
+  are checked and normalized to their duration, the connected source must match
+  their first-PTS fact, and no first-PTS offset enters a decoder request.
+  Product provenance advances to `similarity-product-v3` so older cache entries
+  cannot satisfy the new mapping contract.
+- Deterministic positive- and negative-origin fixtures pin identical rendered
+  timestamps, source ticks, and half-open decode bounds. The frozen focused
+  gate passes 9/9 files with 85/85 tests plus 17/17 runner checks; the
+  authoritative suite passes 184/184 files with 2,545/2,545 tests plus the same
+  runner. TypeScript, build, warning-free lint, the high-severity production
+  audit with 0 vulnerabilities, and diff checks pass. Clean headed Chromium,
+  CI, and exact-head Codex evidence follow on the committed fix.
+
+## Milestone 5 Part 10a.2 / issue #109 - ninth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4928487561` on `81789285cc` found that the
+  stabilization adapter scheduled one zero-delay timer for every analyzed
+  frame pair. Nested-timer clamping could add roughly four minutes of waiting
+  to a valid 65,534-sample run before accounting for decode or estimation work.
+- Pair estimation still checks cancellation before every pair, but cooperative
+  event-loop release is now batched after at most 16 pairs or eight
+  milliseconds of synchronous work. Chromium uses `scheduler.yield()`; the
+  fallback uses a non-clamped, single-use `MessageChannel` task with both ports
+  closed on delivery. Only environments lacking both primitives use the timer
+  fallback, and that timer is batch/deadline-driven rather than unconditional
+  per retained sample.
+- Deterministic regressions prove 34 pair estimates schedule only two yields and
+  that a deadline-triggered yield observes cancellation before more work. The
+  frozen focused gate passes 9/9 files with 87/87 tests plus 17/17 runner
+  checks; the authoritative suite passes 184/184 files with 2,547/2,547 tests
+  plus the same runner. TypeScript/Vite builds 4,810 modules, warning-free lint
+  passes, the production audit reports 0 vulnerabilities, and diff checks
+  pass. Clean Chromium, CI, and fresh exact-head review are refreshed on the
+  final committed tree.
+
+## Milestone 5 Part 10a.2 / issue #109 - tenth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4928636794` on `104ee8ed4c` found that preview and
+  analysis rounded a conformed project-rate source frame to the nearest native
+  frame before decode, while export submitted the direct project-rate time.
+  For source frame 2 in a 30 fps project with 24 fps media, preview/analysis
+  requested 83,333 µs but export requested 66,667 µs and selected the earlier
+  containing sample.
+- Streaming preview, legacy preview, export, and stabilization now share the
+  same rule: `sourceFrame` remains a conformed document-rate time at the decode
+  boundary, and the decoder selects the containing native media sample. The
+  native frame rate owns tolerance and deterministic containing-sample
+  deduplication only; it never changes the requested source time. Stabilization
+  timestamps store the first direct project-rate request displaying each
+  distinct native sample. Product provenance advances to
+  `similarity-product-v4` so nearest-frame cache entries cannot be reused.
+- Direct parity regressions pin 66,667 µs across both preview protocols,
+  export, and analysis, including fractional trims, 24-to-30 fps repeats, and
+  4x retiming. The expanded frozen focused gate passes 11/11 files with
+  152/152 tests plus 17/17 runner checks; the authoritative suite passes
+  184/184 files with 2,548/2,548 tests plus the same runner. TypeScript/Vite
+  builds 4,810 modules, warning-free lint passes, the production audit reports
+  0 vulnerabilities, and diff checks pass. Clean Chromium, CI, and fresh
+  exact-head review are refreshed on the final committed tree.
+
+## Milestone 5 Part 10a.2 / issue #109 - eleventh exact-head review follow-up (2026-08-13)
+
+**IMPLEMENTED; VALIDATION PENDING.**
+
+- Exact-head Codex review `4928810404` on `ff68812e2c` found that the planner
+  still deduplicated sparse requests with the asset's average frame rate. On
+  variable-frame-rate media, project targets at 0 and 33 ms can select distinct
+  samples at 0 and 25 ms even though the average-rate calculation calls both
+  native frame zero, dropping real displayed motion.
+- The bounded plan now submits every distinct conformed document-rate request
+  and treats the sparse decoder's returned sample timestamp as the only media
+  identity. Equal returned timestamps append an explicit null-motion hold;
+  later distinct timestamps retain their measured motion. Repeated-run
+  protection keys every conformed request to that returned identity, with no
+  native-rate prediction. Result schema advances to 3 and product provenance
+  to `similarity-product-v5` so prior cache entries cannot satisfy this rule.
+- Deterministic VFR coverage pins requests at 0 and 33 ms resolving to samples
+  at 0 and 25 ms, alongside true repeated selections, cache parsing, and
+  protected hold boundaries. The final focused selector matrix passes 11/11
+  files with 154/154 tests plus 17/17 evidence-runner checks; the authoritative
+  suite passes 184/184 files with 2,550/2,550 tests plus the same runner.
+  TypeScript/Vite builds 4,810 modules, warning-free lint passes, the production
+  audit reports 0 vulnerabilities, and diff checks pass. Clean headed Chromium
+  on code commit `c6005ca437` and strict port 41883 passes with 32 samples/keys,
+  an exact second-run cache hit, 1.0232x safe zoom, one history entry, worker
+  1/1/0, cache removal, zero console/page problems, and complete port release.
+  The JSON is 2,832 bytes with SHA-256 `455712DC7B2F917FE50019E693B1DA9B52D228A8F43EE992988C1C752D5C41E9`;
+  the visually inspected PNG is 381,065 bytes with SHA-256
+  `5179DB3975EA83FB49D91EA134C8DBEEEE19B4CDC39EEF4BBCF14A5DF13B1957`.
+  Exact-head CI and fresh Codex evidence follow after the final docs-only amend.

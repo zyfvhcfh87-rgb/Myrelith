@@ -714,3 +714,40 @@
   background: #182636;
   border-color: #34475d;
 }
+.stabilization-progress {
+  inline-size: 100%;
+  block-size: 0.45rem;
+  accent-color: var(--accent, #8f7cff);
+}
+
+.stabilization-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.stabilization-summary div {
+  padding: 0.5rem;
+  border: 1px solid var(--border-subtle, rgb(255 255 255 / 10%));
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 3%);
+}
+
+.stabilization-summary dt {
+  color: var(--text-muted, #aaa);
+  font-size: 0.72rem;
+}
+
+.stabilization-summary dd {
+  margin: 0.15rem 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.stabilization-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}

@@ -29,7 +29,7 @@ non-negotiable rules. Re-read it at the start of every coding session.
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
 - The opt-in Issue #54 and Issue #70 evidence panels plus the checked-in Issue
-  #108 browser gate have narrow,
+  #108 and Issue #109 browser gates have narrow,
   architecture-guarded dev exceptions. `dev/performance/runtime.ts` may compose
   existing `app/` controllers with `state/` and its bounded Mediabunny fixture
   generator;
@@ -43,7 +43,11 @@ non-negotiable rules. Re-read it at the start of every coding session.
   only the production `app/` motion-analysis facade, browser-free `domain/`
   cache constants, and the serializable `pipeline/` protocol to run the
   source-bound Issue #108 gate; only `scripts/issue108/foundation-gate.html`
-  imports it, and no ordinary application entry may do so. No other `dev/`
+  imports it. `dev/issue109/videoStabilizationGate.ts` may compose only the
+  production stabilization `app/` facade, browser-free `domain/` facts, and
+  document/media/provenance `state/` needed to install and verify its isolated
+  encoded fixture; only `scripts/issue109/stabilization-gate.html` imports it.
+  No ordinary application entry may import either gate, and no other `dev/`
   module may reach those layers. Only
   the build-gated exact route in `main.tsx` may import the Issue #54 UI, and
   only `EditorShell.tsx` may dynamically import the Issue #70 panel behind its
@@ -609,6 +613,75 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   before LRU mutation, so an impossible allocation cannot evict usable entries.
   Corrupt, unavailable, quota-exhausted, or stale entries are recoverable
   derived-data failures rather than project loss.
+- Issue #109 is the first production consumer of that foundation.
+  `app/videoStabilizationController.ts` binds one exact clip/source/project
+  snapshot to the production analysis request and cache identity, converts its
+  strict result bytes into browser-free facts, and rechecks the binding before
+  preview or Apply. `domain/videoStabilization.ts` alone owns SourceTimeMap
+  inversion, O(n) product smoothing, analysis-to-source similarity projection,
+  exact crop/anchor/flip/rotation project geometry, bounded key simplification,
+  and safe-zoom planning. Aspect-rounded downsampling that cannot be projected
+  back to a similarity within 0.25 project px is unavailable rather than
+  silently authored. Safe zoom is solved after simplification against the
+  interpolated transform at every integer clip frame; its displayed crop is
+  the total cropped span `1 - 1 / safeZoom`, and the shared envelope is at most
+  1.35x. Coverage interpolation is a single-pass stream that accumulates the
+  reciprocal crop interval and maximum scale together; it must never retain an
+  array with one transform object per admitted clip frame. Product runs admit
+  at most 1,000,000 clip frames, 65,534 retained
+  analysis samples, 1,024 keys per transform track, four million simplification
+  comparisons, and 100,000 document keys. Before retaining each sample, the
+  adapter enforces a 512-byte serialized-sample ceiling inside a 32 MiB working
+  result budget derived from the shared 256 MiB cache-entry envelope; cached
+  bytes are rejected before decode when they exceed the same product ceiling.
+  Pair estimation checks cancellation before every pair and cooperatively yields
+  after at most 16 pairs or eight milliseconds of synchronous pair work.
+  `scheduler.yield()` is preferred, with a non-clamped `MessageChannel` task
+  fallback; the zero-delay timer fallback is reached only when neither browser
+  primitive exists and is batch/deadline-driven rather than unconditional per
+  retained sample.
+  SourceTimeMap ticks are conformed project-frame units. Product analysis walks
+  the bounded clip timeline with the same canonical selector as preview:
+  containing conformed project frame first, then that frame's direct
+  project-rate timestamp. Preview, export, and analysis all submit this same
+  time and let the decoder select the containing native media sample; none may
+  round to or deduplicate with an average native frame rate first. Analysis
+  submits every distinct conformed request through one sparse
+  `samplesAtTimestamps` decode lane and uses the returned sample timestamp as
+  the only displayed-media identity, including when a container's first
+  presentation timestamp is positive or negative. Exact
+  container bounds are normalized to their checked duration; the first PTS is
+  never added to render requests. The half-open admitted bounds encompass the
+  first through last direct request timestamps, including fractional trim
+  starts; they are never raw fractional SourceTimeMap tick conversions. Result
+  schema 3 stores every submitted request's exact SourceTimeMap tick and
+  returned sample timestamp. Equal adjacent returned timestamps are explicit
+  null-motion identity steps; every later distinct timestamp retains its
+  measured motion. Planning indexes corrections and repeated-run `hold`
+  boundaries through the complete request-to-returned-timestamp map. This is
+  mandatory for variable and mismatched native/project rates, slow conforming
+  repeats, and fast retiming that skips nonuniform native-frame counts.
+- Stabilization Apply is one immutable document operation and one history
+  entry. It writes only ordinary Position X/Y, Rotation, and equal Scale X/Y
+  tracks, preserves unrelated tracks, and requires explicit consent before
+  replacing any owned property. Moving spans use ordinary linear easing. Every
+  run of timeline frames that resolves to the same canonical decoded source
+  frame receives matching keys at its first and last frames, with `hold` owned
+  by the first key. That covers exact 0× plateaus and repeated frames below 1×,
+  so the displayed image cannot interpolate stabilization motion. On any map
+  that can repeat, analyzed corrections are indexed by decoded source frame and
+  rematerialized at the timeline frame that actually displays it; floor-style
+  timestamp inversion cannot place a 0.75× correction on the preceding image.
+  Repeated-run boundaries are protected from simplification and remain inside
+  the same 1,024-key track envelope; excess structural boundaries reject the
+  plan. The operation independently rechecks the document key budget. Preview is
+  transport-only session state and never mutates history; cancel, failure,
+  cache hit, and parameter tuning likewise do not mutate the project. Preview
+  and export therefore continue through the shared ordinary animation
+  evaluator, with no stabilization-only render path.
+  Reset has no hidden ownership provenance: it removes every ordinary Position,
+  Rotation, and Scale track on the clip, including manual or other-tool
+  animation, and the Inspector must disclose that complete scope before action.
 - Issue #44 remains build-unreferenced feasibility work for the algorithms and
   quality gates. Its browser runtime is owned by
   `app/motionAnalysisResearchController.ts`; its disposable dedicated worker

@@ -78,6 +78,10 @@ import {
   type DynamicZoomSourceDimensions,
 } from './dynamicZoom'
 import {
+  VIDEO_STABILIZATION_PROPERTIES,
+  type VideoStabilizationPlan,
+} from './videoStabilization'
+import {
   clipAudioSettings,
   clipAudioSettingsValidationError,
   clipVisualSettings,
@@ -2292,6 +2296,90 @@ export function applyDynamicZoom(
   request: DynamicZoomRequest,
 ): TimelineDoc {
   return applyDynamicZoomWithResult(doc, clipId, source, request).doc
+}
+
+/** Replace the five ordinary transform tracks with one reviewed stabilization plan. */
+export function applyVideoStabilizationWithResult(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  plan: VideoStabilizationPlan,
+  replaceExisting: boolean,
+): ClipFramingOperationResult {
+  const op = 'applyVideoStabilization'
+  const location = animationEditLocationResult(doc, clipId)
+  if (!location.ok) return rejectClipFramingOperation(doc, op, location.reason)
+  const owned = new Set<ClipAnimationProperty>(VIDEO_STABILIZATION_PROPERTIES)
+  const current = clipAnimation(location.loc.clip)
+  const existingOwned = current.tracks.some((track) => owned.has(track.property))
+  if (existingOwned && !replaceExisting) {
+    return rejectClipFramingOperation(
+      doc,
+      op,
+      'existing Position, Rotation, or Scale animation requires explicit replacement confirmation',
+    )
+  }
+  if (
+    plan.tracks.length !== VIDEO_STABILIZATION_PROPERTIES.length
+    || VIDEO_STABILIZATION_PROPERTIES.some((property) => (
+      plan.tracks.filter((track) => track.property === property).length !== 1
+    ))
+    || plan.tracks.some((track) => !owned.has(track.property))
+  ) {
+    return rejectClipFramingOperation(doc, op, 'stabilization plan has an invalid track set')
+  }
+  const tracks = [
+    ...current.tracks.filter((track) => !owned.has(track.property)),
+    ...plan.tracks.map((track) => ({
+      property: track.property,
+      keyframes: track.keyframes.map((keyframe) => ({
+        ...keyframe,
+        easing: keyframe.easing.type === 'cubic-bezier'
+          ? { ...keyframe.easing }
+          : { type: keyframe.easing.type },
+      })),
+    })),
+  ]
+  tracks.sort(
+    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property)
+      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property),
+  )
+  const animation = { ...current, tracks }
+  const animationError = clipAnimationValidationError(animation)
+  if (animationError) return rejectClipFramingOperation(doc, op, animationError)
+  const additionalKeyframes = Math.max(
+    0,
+    clipAnimationKeyframeCount(animation) - clipAnimationKeyframeCount(current),
+  )
+  if (!documentAnimationKeyframeGrowthAllowed(doc, additionalKeyframes)) {
+    return rejectClipFramingOperation(doc, op, 'stabilization would exceed the document keyframe budget')
+  }
+  if (JSON.stringify(animation) === JSON.stringify(current)) {
+    return { ok: true, changed: false, doc }
+  }
+  return {
+    ok: true,
+    changed: true,
+    doc: replaceClipAnimation(doc, location.loc, animation),
+  }
+}
+
+/** Explicit one-entry removal of every ordinary Position/Rotation/Scale track. */
+export function resetVideoStabilizationWithResult(
+  doc: TimelineDoc,
+  clipId: ClipId,
+): ClipFramingOperationResult {
+  const op = 'resetVideoStabilization'
+  const location = animationEditLocationResult(doc, clipId)
+  if (!location.ok) return rejectClipFramingOperation(doc, op, location.reason)
+  const owned = new Set<ClipAnimationProperty>(VIDEO_STABILIZATION_PROPERTIES)
+  const current = clipAnimation(location.loc.clip)
+  const tracks = current.tracks.filter((track) => !owned.has(track.property))
+  if (tracks.length === current.tracks.length) return { ok: true, changed: false, doc }
+  return {
+    ok: true,
+    changed: true,
+    doc: replaceClipAnimation(doc, location.loc, { ...current, tracks }),
+  }
 }
 
 /**

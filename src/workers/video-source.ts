@@ -66,6 +66,8 @@ export interface VideoFrameCursor {
 
 export interface WorkerVideoSource {
   openPlaybackLane(options: PlaybackLaneOptions): VideoFrameCursor
+  /** Opens one bounded sparse presentation-order lane for exact render targets. */
+  openTimestampLane?(timestampsUs: readonly number[]): VideoFrameCursor
   /** Opens a sparse, one-target cursor. The caller still closes it. */
   openSeekLane(targetTimestampUs: number): VideoFrameCursor
   /** Closes all child cursors before disposing the shared input. */
@@ -351,6 +353,25 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
     )
     const sink = this.env.createSampleSink(this.track)
     return this.addCursor(sink.samplesAtTimestamps([targetSeconds]))
+  }
+
+  openTimestampLane(timestampsUs: readonly number[]): VideoFrameCursor {
+    this.assertOpen()
+    if (timestampsUs.length < 1) throw new RangeError('timestampsUs must not be empty')
+    const timestampsSeconds: number[] = []
+    for (let index = 0; index < timestampsUs.length; index++) {
+      const timestampUs = timestampsUs[index]!
+      if (index > 0 && timestampUs <= timestampsUs[index - 1]!) {
+        throw new RangeError('timestampsUs must be strictly increasing')
+      }
+      timestampsSeconds.push(timestampUsToSeconds(
+        timestampUs,
+        `timestampsUs[${index}]`,
+        true,
+      ))
+    }
+    const sink = this.env.createSampleSink(this.track)
+    return this.addCursor(sink.samplesAtTimestamps(timestampsSeconds))
   }
 
   close(): Promise<void> {

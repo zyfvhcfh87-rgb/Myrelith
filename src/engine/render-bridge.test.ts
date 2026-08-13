@@ -32,6 +32,7 @@ import type { ChunkProvider, WorkerLike } from './worker-bridge'
 /* ------------------------------------------------------------------ */
 
 const R30: FrameRate = { num: 30, den: 1 }
+const R24: FrameRate = { num: 24, den: 1 }
 const R60: FrameRate = { num: 60, den: 1 }
 const R_NTSC: FrameRate = { num: 30_000, den: 1_001 }
 const BUDGET: LocalDecoderBudget = {
@@ -390,7 +391,7 @@ describe('renderFrame entry building', () => {
     expect(worker.composites()[0].sources).toHaveLength(1)
     expect(worker.composites()[0].sources[0].sourceFrame).toBe(1)
   })
-  test('per-asset µs math: doc frames rescale to each asset rate; buffers transfer', async () => {
+  test('keeps conformed source time while native rates own decode tolerance', async () => {
     const doc = makeDoc([
       makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)]), // 30fps asset
       makeTrack('V2', 'video', [makeClip('b', 'B', 0, 100, 30)]), // 60fps asset, trimmed
@@ -406,8 +407,8 @@ describe('renderFrame entry building', () => {
     const result = bridge.renderFrame(10)
     await flushMicrotasks()
 
-    // A: source frame 10 at 30fps → 1/3 s. B: source frame 40 → asset
-    // frame 80 at 60fps → 4/3 s. Tolerance = half a frame at each rate.
+    // A: source frame 10 at document 30fps → 1/3 s. B: source frame 40
+    // remains 4/3 s; native 60fps changes only the half-frame tolerance.
     expect(a.calls).toHaveLength(1)
     expect(a.calls[0].targetSec).toBeCloseTo(10 / 30, 9)
     expect(a.calls[0].toleranceSec).toBeCloseTo(1 / 60, 9)
@@ -451,6 +452,41 @@ describe('renderFrame entry building', () => {
       missingClipIds: [],
       renderMs: 3,
     })
+  })
+
+  test('keeps mismatched-rate preview requests at the conformed document timestamp', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 10)])])
+
+    const streaming = makeBridge(doc)
+    await openAcked(streaming, 'A', new Blob(['video']), R24)
+    const streamingResult = streaming.bridge.renderFrame(2, 'seek')
+    const streamingRequest = streaming.worker.renderFrames()[0]!
+    expect(streamingRequest.sources[0]?.targetTimestampUs).toBe(66_667)
+    streaming.worker.emit({
+      type: 'compositeDone',
+      requestId: streamingRequest.requestId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(streamingResult).resolves.toMatchObject({ status: 'drawn' })
+
+    const legacy = makeBridge(doc)
+    const provider = makeProvider()
+    await configureAcked(legacy, 'A', R24, provider.provider)
+    const legacyResult = legacy.bridge.renderFrame(2)
+    await flushMicrotasks()
+    expect(provider.calls[0]?.targetSec).toBeCloseTo(2 / 30, 9)
+    legacy.worker.emit({
+      type: 'compositeDone',
+      requestId: legacy.worker.composites()[0]!.requestId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(legacyResult).resolves.toMatchObject({ status: 'drawn' })
   })
 
   test('mirrors the compositor skip rules and never fetches for them', async () => {
@@ -670,7 +706,7 @@ describe('Blob-backed streaming path', () => {
     await expect(replacement).resolves.toBeUndefined()
   })
 
-  test('keeps same-frame clips as ordered lanes and forwards exact native timestamps and mode', async () => {
+  test('keeps same-frame clips as ordered lanes and forwards exact conformed timestamps and mode', async () => {
     const doc = makeDoc([
       makeTrack('V1', 'video', [makeClip('one', 'A', 0, 200)]),
       makeTrack('V2', 'video', [makeClip('two', 'A', 0, 200)]),
@@ -688,14 +724,14 @@ describe('Blob-backed streaming path', () => {
         clipId: 'one',
         assetId: 'A',
         sourceFrame: 100,
-        targetTimestampUs: 3_336_667,
+        targetTimestampUs: 3_333_333,
       },
       {
         kind: 'video',
         clipId: 'two',
         assetId: 'A',
         sourceFrame: 100,
-        targetTimestampUs: 3_336_667,
+        targetTimestampUs: 3_333_333,
       },
     ])
     expect(worker.posted.find((post) => post.msg === first)?.transfer).toEqual([])

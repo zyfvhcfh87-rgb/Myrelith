@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8"><title>Issue 109 stabilization gate</title></head>
+  <body>
+    <main>
+      <h1>Issue 109 stabilization gate</h1>
+      <p role="status">Running</p>
+    </main>
+    <script type="module">
+      import { runVideoStabilizationBrowserGate } from '/src/dev/issue109/videoStabilizationGate.ts'
+      try {
+        const evidence = await runVideoStabilizationBrowserGate()
+        globalThis.__issue109StabilizationResult = evidence
+        document.querySelector('[role=status]').textContent = 'Passed'
+      } catch (error) {
+        const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+        globalThis.__issue109StabilizationError = detail
+        document.querySelector('[role=status]').textContent = `Failed: ${detail}`
+      }
+    </script>
+  </body>
+</html>

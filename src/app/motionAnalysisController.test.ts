@@ -250,7 +250,7 @@ describe('MotionAnalysisController', () => {
     }))
     const snapshots: ReturnType<MotionAnalysisController['snapshot']>[] = []
     controller.subscribe((snapshot) => snapshots.push(snapshot))
-    const analysis = request()
+    const analysis = { ...request(), sampleTimestampsUs: [0] }
 
     const result = await controller.analyze(analysis)
 
@@ -261,7 +261,10 @@ describe('MotionAnalysisController', () => {
     expect(storage.transaction.finalize).toHaveBeenCalledOnce()
     expect(storage.transaction.rollback).not.toHaveBeenCalled()
     expect(workers).toHaveLength(1)
-    expect(workers[0]?.messages[0]).toMatchObject({ videoStreamIndex: 0 })
+    expect(workers[0]?.messages[0]).toMatchObject({
+      videoStreamIndex: 0,
+      sampleTimestampsUs: [0],
+    })
     expect(workers[0]?.terminated).toBe(true)
     expect(snapshots.at(-1)?.jobs[0]).toMatchObject({ phase: 'ready', progress: 1 })
     expect(snapshots.at(-1)?.scheduler.maxActiveJobCount).toBe(1)

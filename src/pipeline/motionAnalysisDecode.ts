@@ -54,6 +54,7 @@ export interface MotionAnalysisVideoSource {
     readonly startTimestampUs: number
     readonly endTimestampUs: number
   }): MotionAnalysisFrameCursor
+  openTimestampLane?(timestampsUs: readonly number[]): MotionAnalysisFrameCursor
   close(): Promise<void>
 }
 
@@ -62,6 +63,7 @@ export interface MotionAnalysisDecodeRequest {
   readonly startTimestampUs: number
   readonly endTimestampUs: number
   readonly samplingIntervalFrames: number
+  readonly sampleTimestampsUs?: readonly number[]
   readonly extractGrayFrame: (
     frame: VideoFrame,
     timestampUs: number,
@@ -199,16 +201,24 @@ export async function decodeMotionAnalysisWindows(
   let sampleOffset = 0
   let window: MotionAnalysisGrayFrame[] = []
   try {
-    cursor = request.source.openPlaybackLane({
-      startTimestampUs: request.startTimestampUs,
-      endTimestampUs: request.endTimestampUs,
-    })
+    if (request.sampleTimestampsUs === undefined) {
+      cursor = request.source.openPlaybackLane({
+        startTimestampUs: request.startTimestampUs,
+        endTimestampUs: request.endTimestampUs,
+      })
+    } else {
+      if (!request.source.openTimestampLane) {
+        throw new Error('Sparse motion-analysis sampling is unavailable')
+      }
+      cursor = request.source.openTimestampLane(request.sampleTimestampsUs)
+    }
     while (true) {
       const decoded = await cursor.next()
       if (!decoded) break
       let sampled: MotionAnalysisGrayFrame | null = null
       try {
-        const shouldSample = decodedFrameCount % request.samplingIntervalFrames === 0
+        const shouldSample = request.sampleTimestampsUs !== undefined
+          || decodedFrameCount % request.samplingIntervalFrames === 0
         decodedFrameCount++
         if (shouldSample) {
           sampled = request.extractGrayFrame(

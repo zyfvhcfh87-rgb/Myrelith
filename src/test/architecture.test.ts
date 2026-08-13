@@ -160,6 +160,7 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
   const benchmarkDevImportAllowances = new Map<string, ReadonlySet<string>>([
     ['dev/ProxyEditingBenchmarkPanel.tsx', new Set(['app', 'domain', 'state'])],
     ['dev/issue108/motionAnalysisFoundation.ts', new Set(['app', 'domain', 'pipeline'])],
+    ['dev/issue109/videoStabilizationGate.ts', new Set(['app', 'domain', 'state'])],
     ['dev/performance/fixture.ts', new Set(['domain'])],
     ['dev/performance/framePlanningBenchmark.ts', new Set(['domain'])],
     ['dev/performance/runtime.ts', new Set(['app', 'domain', 'state'])],
@@ -376,6 +377,7 @@ describe('architecture guard', () => {
     expect(privilegedImporters).toEqual(new Set([
       'dev/ProxyEditingBenchmarkPanel.tsx',
       'dev/issue108/motionAnalysisFoundation.ts',
+      'dev/issue109/videoStabilizationGate.ts',
       'dev/performance/PerformanceBenchmarkApp.tsx',
       'dev/performance/runtime.ts',
     ]))
