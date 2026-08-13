@@ -104,16 +104,20 @@ created-versus-removed diagnostic mismatch so cleanup uncertainty stays visible.
 Every invocation owns a distinct origin-wide temporary name with a 128-bit
 Web Crypto nonce, so overlapping calls or tabs cannot remove, overwrite, or
 invalidate another probe's file. Each invocation removes only its owned name.
-The complete OPFS chain is also raced against the admitted run's `AbortSignal`.
-Abort settles the caller and releases shared admission without waiting for a
-stalled `getDirectory`, `getFileHandle`, `createWritable`, `write`, `close`,
-`getFile`, or `removeEntry`. The abandoned operation remains privately observed,
-checks cancellation between steps, closes any writer that arrives late, and
-removes only its owned name when the pending browser promise settles. That late
-continuation cannot publish successful created/removed diagnostics after its
-caller has settled. A non-aborted removal failure still produces the named
-cleanup-specific unsupported result; cancellation never reclassifies uncertain
-cleanup as support.
+The complete OPFS chain is raced against both the admitted run's `AbortSignal`
+and one non-resetting five-second deadline, including when a caller supplies no
+signal. A signal that wins first returns `AbortError`; a deadline that wins first
+reports a distinct timed-out support failure and releases shared admission
+through the normal typed `resource-unavailable` path. Neither terminal result
+waits for a stalled `getDirectory`, `getFileHandle`, `createWritable`, `write`,
+`close`, `getFile`, or `removeEntry`, and normal completion clears the same timer
+and optional abort listener. The abandoned operation remains privately observed,
+checks its terminal reason between steps, closes any writer that arrives late,
+and removes only its owned name when the pending browser promise settles. That
+late continuation cannot publish successful created/removed diagnostics after
+its caller has settled. A non-aborted removal failure still produces the named
+cleanup-specific unsupported result; cancellation or deadline expiry never
+reclassifies uncertain cleanup as support.
 The product child must also abort the decoder/source/storage owner and await
 scheduler/storage quiescence. Queued pre-abort, active abort, typed failure,
 successful completion, replacement, source removal, clip removal, project

@@ -197,6 +197,105 @@ async function flushMicrotasks(count = 12): Promise<void> {
   for (let index = 0; index < count; index++) await Promise.resolve()
 }
 
+interface DeferredOpfsProbeHarness {
+  readonly stallReached: Promise<void>
+  readonly issuedNames: string[]
+  readonly openedNames: string[]
+  readonly removalAttempts: string[]
+  readonly removedNames: string[]
+  readonly activeNames: Set<string>
+  readonly writerCloseCalls: Map<string, number>
+  readonly releaseStall: () => void
+  readonly isReleased: () => boolean
+}
+
+function installDeferredOpfsProbe(stalledStep: OpfsProbeStep): DeferredOpfsProbeHarness {
+  let nonce = 0
+  const issuedNames: string[] = []
+  vi.stubGlobal('crypto', {
+    getRandomValues: (values: Uint32Array) => {
+      values.fill(0)
+      values[values.length - 1] = ++nonce
+      const suffix = Array.from(
+        values,
+        (value) => value.toString(16).padStart(8, '0'),
+      ).join('')
+      issuedNames.push(`issue-44-motion-analysis-support-probe-${suffix}.tmp`)
+      return values
+    },
+    subtle: { digest: vi.fn() },
+  })
+
+  const stall = deferred<void>()
+  let observeStall!: () => void
+  const stallReached = new Promise<void>((resolve) => {
+    observeStall = resolve
+  })
+  let stalled = false
+  let released = false
+  const pause = async <Value>(step: OpfsProbeStep, value: Value): Promise<Value> => {
+    if (!stalled && step === stalledStep) {
+      stalled = true
+      observeStall()
+      await stall.promise
+    }
+    return value
+  }
+
+  const openedNames: string[] = []
+  const removalAttempts: string[] = []
+  const removedNames: string[] = []
+  const activeNames = new Set<string>()
+  const writerCloseCalls = new Map<string, number>()
+  const getFileHandle = vi.fn(async (fileName: string) => {
+    openedNames.push(fileName)
+    const writer = {
+      write: vi.fn(async () => pause('write', undefined)),
+      close: vi.fn(async () => {
+        writerCloseCalls.set(fileName, (writerCloseCalls.get(fileName) ?? 0) + 1)
+        return pause('close', undefined)
+      }),
+    }
+    const handle = {
+      createWritable: vi.fn(async () => pause('createWritable', writer)),
+      getFile: vi.fn(async () => pause('getFile', { size: 2 })),
+    }
+    const resolvedHandle = await pause('getFileHandle', handle)
+    activeNames.add(fileName)
+    return resolvedHandle
+  })
+  const removeEntry = vi.fn(async (fileName: string) => {
+    removalAttempts.push(fileName)
+    await pause('removeEntry', undefined)
+    if (!activeNames.delete(fileName)) {
+      throw new DOMException('Synthetic missing probe file', 'NotFoundError')
+    }
+    removedNames.push(fileName)
+  })
+  const root = { getFileHandle, removeEntry }
+  vi.stubGlobal('navigator', {
+    storage: {
+      getDirectory: vi.fn(async () => pause('getDirectory', root)),
+    },
+  })
+
+  return {
+    stallReached,
+    issuedNames,
+    openedNames,
+    removalAttempts,
+    removedNames,
+    activeNames,
+    writerCloseCalls,
+    releaseStall: () => {
+      if (released) return
+      released = true
+      stall.resolve(undefined)
+    },
+    isReleased: () => released,
+  }
+}
+
 afterEach(() => vi.unstubAllGlobals())
 
 describe('motion analysis research controller', () => {
@@ -485,6 +584,46 @@ describe('motion analysis research controller', () => {
     expect(after.opfsProbeFilesRemoved - before.opfsProbeFilesRemoved).toBe(2)
   })
 
+  test('clears the whole-probe OPFS deadline and abort listener after normal support', async () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    const addListener = vi.spyOn(controller.signal, 'addEventListener')
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener')
+    try {
+      installWorker('success')
+      const removeEntry = vi.fn().mockResolvedValue(undefined)
+      vi.stubGlobal('navigator', {
+        storage: {
+          getDirectory: vi.fn().mockResolvedValue({
+            getFileHandle: vi.fn().mockResolvedValue({
+              createWritable: vi.fn().mockResolvedValue({
+                write: vi.fn().mockResolvedValue(undefined),
+                close: vi.fn().mockResolvedValue(undefined),
+              }),
+              getFile: vi.fn().mockResolvedValue({ size: 2 }),
+            }),
+            removeEntry,
+          }),
+        },
+      })
+
+      const support = await probeMotionAnalysisSupport(controller.signal)
+      expect(support.opfs).toBe(true)
+      expect(removeEntry).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(0)
+      expect(removeListener).toHaveBeenCalledTimes(addListener.mock.calls.length)
+
+      controller.abort()
+      expect(support.opfs).toBe(true)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      controller.abort()
+      addListener.mockRestore()
+      removeListener.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   test.each(OPFS_PROBE_STEPS)(
     'aborts promptly during stalled OPFS %s and retires only its owned late work',
     async (stalledStep) => {
@@ -624,6 +763,251 @@ describe('motion analysis research controller', () => {
         await flushMicrotasks()
       }
     },
+  )
+
+  test.each(OPFS_PROBE_STEPS)(
+    'bounds no-signal stalled OPFS %s with one deadline and retires owned late work',
+    async (stalledStep) => {
+      vi.useFakeTimers()
+      const opfs = installDeferredOpfsProbe(stalledStep)
+      try {
+        installWorker('success')
+        const before = motionAnalysisResearchDiagnostics()
+        let settleCount = 0
+        const firstRun = runBrowserMotionAnalysisResearch()
+        const firstOutcome = firstRun.then(
+          () => ({ status: 'fulfilled' as const, cause: null }),
+          (cause: unknown) => {
+            settleCount++
+            return { status: 'rejected' as const, cause }
+          },
+        )
+
+        await opfs.stallReached
+        expect(settleCount).toBe(0)
+        expect(vi.getTimerCount()).toBe(1)
+        await vi.advanceTimersByTimeAsync(4_999)
+        expect(settleCount).toBe(0)
+        expect(vi.getTimerCount()).toBe(1)
+
+        await vi.advanceTimersByTimeAsync(1)
+        await expect(firstOutcome).resolves.toMatchObject({
+          status: 'rejected',
+          cause: {
+            name: 'MediaJobExecutionError',
+            code: 'resource-unavailable',
+            message: expect.stringContaining(
+              'Origin-private file storage support probe timed out.',
+            ),
+          },
+        })
+        expect(settleCount).toBe(1)
+        expect(opfs.isReleased()).toBe(false)
+        expect(vi.getTimerCount()).toBe(0)
+        vi.useRealTimers()
+
+        await expect(runBrowserMotionAnalysisResearch({
+          skipSupportProbe: true,
+        })).resolves.toMatchObject({
+          evidence: { decision: { stabilization: 'go' } },
+        })
+
+        const overlappingSupport = await probeMotionAnalysisSupport()
+        expect(overlappingSupport.opfs).toBe(true)
+        expect(opfs.issuedNames).toHaveLength(2)
+        const [firstName, secondName] = opfs.issuedNames as [string, string]
+        expect(firstName).not.toBe(secondName)
+        expect(opfs.openedNames).toEqual(stalledStep === 'getDirectory'
+          ? [secondName]
+          : [firstName, secondName])
+        expect(opfs.removalAttempts).toEqual(stalledStep === 'removeEntry'
+          ? [firstName, secondName]
+          : [secondName])
+        expect(opfs.removedNames).toEqual([secondName])
+
+        const beforeLateSettlement = motionAnalysisResearchDiagnostics()
+        expect(beforeLateSettlement.activeWorkers).toBe(0)
+        expect(
+          beforeLateSettlement.opfsProbeFilesCreated - before.opfsProbeFilesCreated,
+        ).toBe(1)
+        expect(
+          beforeLateSettlement.opfsProbeFilesRemoved - before.opfsProbeFilesRemoved,
+        ).toBe(1)
+
+        opfs.releaseStall()
+        await flushMicrotasks()
+        await vi.waitFor(() => {
+          expect(opfs.activeNames.size).toBe(0)
+          expect(opfs.removedNames).toEqual(stalledStep === 'getDirectory'
+            ? [secondName]
+            : [secondName, firstName])
+        })
+
+        const afterLateSettlement = motionAnalysisResearchDiagnostics()
+        expect(afterLateSettlement).toEqual(beforeLateSettlement)
+        expect(new Set(opfs.removalAttempts)).toEqual(new Set(opfs.removedNames))
+        if (['createWritable', 'write', 'close', 'getFile', 'removeEntry'].includes(
+          stalledStep,
+        )) {
+          expect(opfs.writerCloseCalls.get(firstName)).toBe(1)
+        } else {
+          expect(opfs.writerCloseCalls.has(firstName)).toBe(false)
+        }
+      } finally {
+        opfs.releaseStall()
+        await flushMicrotasks()
+        vi.useRealTimers()
+      }
+    },
+    2_000,
+  )
+
+  test('observes late rejected OPFS work and still closes and removes its owned file', async () => {
+    vi.useFakeTimers()
+    const write = deferred<void>()
+    let writeReleased = false
+    let observeWriteStarted!: () => void
+    const writeStarted = new Promise<void>((resolve) => {
+      observeWriteStarted = resolve
+    })
+    const close = vi.fn().mockResolvedValue(undefined)
+    const removedNames: string[] = []
+    let issuedName = ''
+    try {
+      installWorker('success')
+      vi.stubGlobal('crypto', {
+        getRandomValues: (values: Uint32Array) => {
+          values.fill(0x1234_5678)
+          return values
+        },
+        subtle: { digest: vi.fn() },
+      })
+      vi.stubGlobal('navigator', {
+        storage: {
+          getDirectory: vi.fn().mockResolvedValue({
+            getFileHandle: vi.fn(async (fileName: string) => {
+              issuedName = fileName
+              return {
+                createWritable: vi.fn().mockResolvedValue({
+                  write: vi.fn(() => {
+                    observeWriteStarted()
+                    return write.promise
+                  }),
+                  close,
+                }),
+                getFile: vi.fn().mockResolvedValue({ size: 2 }),
+              }
+            }),
+            removeEntry: vi.fn(async (fileName: string) => {
+              removedNames.push(fileName)
+            }),
+          }),
+        },
+      })
+      const before = motionAnalysisResearchDiagnostics()
+      const outcome = runBrowserMotionAnalysisResearch().then(
+        () => ({ status: 'fulfilled' as const, cause: null }),
+        (cause: unknown) => ({ status: 'rejected' as const, cause }),
+      )
+
+      await writeStarted
+      expect(vi.getTimerCount()).toBe(1)
+      await vi.advanceTimersByTimeAsync(5_000)
+      await expect(outcome).resolves.toMatchObject({
+        status: 'rejected',
+        cause: {
+          name: 'MediaJobExecutionError',
+          code: 'resource-unavailable',
+          message: expect.stringContaining(
+            'Origin-private file storage support probe timed out.',
+          ),
+        },
+      })
+      expect(close).not.toHaveBeenCalled()
+      expect(removedNames).toEqual([])
+      expect(vi.getTimerCount()).toBe(0)
+
+      vi.useRealTimers()
+      const beforeLateSettlement = motionAnalysisResearchDiagnostics()
+      writeReleased = true
+      write.reject(new DOMException('Synthetic late OPFS write failure', 'OperationError'))
+      await flushMicrotasks()
+      await vi.waitFor(() => {
+        expect(close).toHaveBeenCalledTimes(1)
+        expect(removedNames).toEqual([issuedName])
+      })
+      expect(motionAnalysisResearchDiagnostics()).toEqual(beforeLateSettlement)
+      expect(beforeLateSettlement.opfsProbeFilesCreated).toBe(
+        before.opfsProbeFilesCreated,
+      )
+      expect(beforeLateSettlement.opfsProbeFilesRemoved).toBe(
+        before.opfsProbeFilesRemoved,
+      )
+    } finally {
+      if (!writeReleased) write.resolve(undefined)
+      await flushMicrotasks()
+      vi.useRealTimers()
+    }
+  })
+
+  test.each(['abort', 'deadline'] as const)(
+    'preserves the first %s terminal outcome during an OPFS deadline race',
+    async (firstTerminal) => {
+      vi.useFakeTimers()
+      const opfs = installDeferredOpfsProbe('getFile')
+      const controller = new AbortController()
+      const addListener = vi.spyOn(controller.signal, 'addEventListener')
+      const removeListener = vi.spyOn(controller.signal, 'removeEventListener')
+      try {
+        installWorker('success')
+        const firstRun = runBrowserMotionAnalysisResearch({ signal: controller.signal })
+        const firstOutcome = firstRun.then(
+          () => ({ status: 'fulfilled' as const, cause: null }),
+          (cause: unknown) => ({ status: 'rejected' as const, cause }),
+        )
+        await opfs.stallReached
+        expect(vi.getTimerCount()).toBe(1)
+
+        if (firstTerminal === 'abort') {
+          controller.abort()
+          vi.advanceTimersByTime(5_000)
+          await expect(firstOutcome).resolves.toMatchObject({
+            status: 'rejected',
+            cause: { name: 'AbortError' },
+          })
+        } else {
+          vi.advanceTimersByTime(5_000)
+          controller.abort()
+          await expect(firstOutcome).resolves.toMatchObject({
+            status: 'rejected',
+            cause: {
+              name: 'MediaJobExecutionError',
+              code: 'resource-unavailable',
+              message: expect.stringContaining(
+                'Origin-private file storage support probe timed out.',
+              ),
+            },
+          })
+        }
+
+        expect(vi.getTimerCount()).toBe(0)
+        expect(removeListener).toHaveBeenCalledTimes(addListener.mock.calls.length)
+        vi.useRealTimers()
+        await expect(runBrowserMotionAnalysisResearch({
+          skipSupportProbe: true,
+        })).resolves.toMatchObject({
+          evidence: { decision: { stabilization: 'go' } },
+        })
+      } finally {
+        controller.abort()
+        opfs.releaseStall()
+        await flushMicrotasks()
+        addListener.mockRestore()
+        removeListener.mockRestore()
+        vi.useRealTimers()
+      }
+    },
+    2_000,
   )
 
   test.each(['resolve', 'reject'] as const)(

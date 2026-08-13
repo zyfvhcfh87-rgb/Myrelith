@@ -3845,3 +3845,30 @@ surface; it is not a second zoom and never enters document history.
 - A deterministic throwing-worker regression proves the first run drains before
   rejection, leaves no registered worker listeners, releases shared admission,
   and allows a second successful run with exact cumulative resource parity.
+
+## Milestone 5 Part 10a / issue #44 - OPFS deadline hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of exact head
+  `7075cc4fc8d48b26f7cd428973b6c41861c777e2` found that the default no-signal
+  support and research calls could wait forever for a stalled OPFS capability
+  promise, retaining controller-wide research admission indefinitely.
+- Every OPFS probe now owns one non-resetting five-second deadline across its
+  complete seven-step chain, even without an external signal. Deadline expiry
+  reports a distinct unsupported reason through the typed `resource-unavailable`
+  research path and promptly releases admission. If external abort wins first,
+  the public terminal result remains `AbortError`; whichever terminal event wins
+  cannot be reclassified by the later one.
+- The original browser operation remains observed after caller settlement. Late
+  progress stops between steps, a writer that arrives late is closed exactly
+  once, and cleanup removes only that invocation's 128-bit nonce filename.
+  Abandoned work cannot publish successful OPFS diagnostics. Normal completion
+  clears the deadline and optional abort listener.
+- Seven deterministic no-signal deadline regressions cover `getDirectory`,
+  `getFileHandle`, `createWritable`, `write`, `close`, `getFile`, and
+  `removeEntry`; two first-winner regressions cover deadline-versus-abort order.
+  The controller passes 33/33 tests, and the focused controller/domain/tracking
+  set passes 54/54 plus all 16 runner checks. The complete gate passes 174/174
+  files and 2,382/2,382 Vitest tests plus those 16 runner checks; TypeScript/Vite
+  build, oxlint, production audit at high severity, and `git diff --check` pass.

@@ -3960,3 +3960,21 @@ acceptance claims.
   admission only after the worker counters are balanced.
 - [x] Prove deterministic synchronous-send failure cleanup, rejection-time 1/1
   worker parity, zero active listeners/workers, and a successful admitted retry.
+
+## Milestone 5 Part 10a / issue #44 - OPFS deadline follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Apply one non-resetting five-second deadline to the complete owned OPFS
+  support-probe chain, including default calls without an external signal.
+- [x] Preserve first-winner semantics: external abort returns `AbortError`, while
+  an internal deadline reports a distinct unsupported reason through the typed
+  `resource-unavailable` research path and promptly releases shared admission.
+- [x] Keep abandoned browser work observed for late progress and owned cleanup;
+  close a late writer, remove only the invocation's 128-bit nonce file, and
+  suppress successful diagnostics after caller settlement.
+- [x] Cover all seven deferred OPFS boundaries, deadline-versus-abort ordering,
+  admitted retry before late release, exact cross-probe filename isolation,
+  resource parity, and normal timer/listener cleanup; pass 33/33 controller and
+  54/54 focused tests, 174/174 files with 2,382/2,382 full-suite tests, all 16
+  runner checks, build, oxlint, high-severity production audit, and diff check.

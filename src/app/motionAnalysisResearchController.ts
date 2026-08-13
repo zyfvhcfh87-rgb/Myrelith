@@ -239,15 +239,18 @@ async function probeVideoFrame(signal?: AbortSignal): Promise<{
 interface OpfsProbeResult {
   readonly supported: boolean
   readonly failure: string | null
+  readonly deadlineExpired: boolean
 }
 
 interface OpfsProbeLifecycle {
-  abandoned: boolean
+  abandonment: 'abort' | 'deadline' | null
 }
 
 const OPFS_UNAVAILABLE_FAILURE = 'Origin-private file storage is unavailable.'
 const OPFS_CLEANUP_FAILURE = 'Origin-private file storage probe cleanup failed.'
+const OPFS_DEADLINE_FAILURE = 'Origin-private file storage support probe timed out.'
 const OPFS_PROBE_FILE_PREFIX = 'issue-44-motion-analysis-support-probe-'
+const OPFS_PROBE_ABANDONED = Symbol('OPFS_PROBE_ABANDONED')
 
 function createOpfsProbeFileName(): string {
   const nonce = new Uint32Array(4)
@@ -263,30 +266,59 @@ function throwIfMotionAnalysisAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw motionAnalysisAbortError()
 }
 
-function raceOpfsProbeWithAbort(
+function throwIfOpfsProbeAbandoned(
+  lifecycle: OpfsProbeLifecycle,
+  signal?: AbortSignal,
+): void {
+  if (signal?.aborted && lifecycle.abandonment === null) {
+    lifecycle.abandonment = 'abort'
+  }
+  if (lifecycle.abandonment !== null) throw OPFS_PROBE_ABANDONED
+}
+
+function raceOpfsProbe(
   operation: Promise<OpfsProbeResult>,
-  signal: AbortSignal,
+  signal: AbortSignal | undefined,
   lifecycle: OpfsProbeLifecycle,
 ): Promise<OpfsProbeResult> {
   return new Promise((resolve, reject) => {
     let settled = false
+    let timeout: ReturnType<typeof setTimeout> | null = null
     const settle = (action: () => void) => {
       if (settled) return
       settled = true
-      signal.removeEventListener('abort', onAbort)
+      if (timeout !== null) clearTimeout(timeout)
+      signal?.removeEventListener('abort', onAbort)
       action()
     }
     const onAbort = () => {
       if (settled) return
-      lifecycle.abandoned = true
+      lifecycle.abandonment = 'abort'
       settle(() => reject(motionAnalysisAbortError()))
+    }
+    const onTimeout = () => {
+      if (settled) return
+      if (signal?.aborted) {
+        onAbort()
+        return
+      }
+      lifecycle.abandonment = 'deadline'
+      settle(() => resolve({
+        supported: false,
+        failure: OPFS_DEADLINE_FAILURE,
+        deadlineExpired: true,
+      }))
     }
     operation.then(
       (result) => settle(() => resolve(result)),
       (cause) => settle(() => reject(cause)),
     )
-    signal.addEventListener('abort', onAbort, { once: true })
-    if (signal.aborted) onAbort()
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    timeout = setTimeout(onTimeout, SUPPORT_PROBE_STEP_TIMEOUT_MS)
   })
 }
 
@@ -304,21 +336,21 @@ async function runOwnedOpfsProbe(
   try {
     fileName = createOpfsProbeFileName()
     root = await getDirectory()
-    throwIfMotionAnalysisAborted(signal)
+    throwIfOpfsProbeAbandoned(lifecycle, signal)
     const handle = await root.getFileHandle(fileName, { create: true })
     created = true
-    throwIfMotionAnalysisAborted(signal)
+    throwIfOpfsProbeAbandoned(lifecycle, signal)
     const writer = await handle.createWritable()
     try {
-      throwIfMotionAnalysisAborted(signal)
+      throwIfOpfsProbeAbandoned(lifecycle, signal)
       await writer.write(new Uint8Array([0x44, 0x0a]))
-      throwIfMotionAnalysisAborted(signal)
+      throwIfOpfsProbeAbandoned(lifecycle, signal)
     } finally {
       await writer.close()
     }
-    throwIfMotionAnalysisAborted(signal)
+    throwIfOpfsProbeAbandoned(lifecycle, signal)
     const file = await handle.getFile()
-    throwIfMotionAnalysisAborted(signal)
+    throwIfOpfsProbeAbandoned(lifecycle, signal)
     supported = file.size === 2
   } catch {
     supported = false
@@ -332,16 +364,36 @@ async function runOwnedOpfsProbe(
       }
     }
   }
-  const abandoned = lifecycle.abandoned || signal?.aborted === true
+  const abandoned = lifecycle.abandonment !== null || signal?.aborted === true
   if (!abandoned) {
     if (created) diagnostics.opfsProbeFilesCreated++
     if (removed) diagnostics.opfsProbeFilesRemoved++
   }
-  if (abandoned) throw motionAnalysisAbortError()
-  if (cleanupFailed) return { supported: false, failure: OPFS_CLEANUP_FAILURE }
+  if (lifecycle.abandonment === 'deadline') {
+    return {
+      supported: false,
+      failure: OPFS_DEADLINE_FAILURE,
+      deadlineExpired: true,
+    }
+  }
+  if (abandoned) {
+    return {
+      supported: false,
+      failure: OPFS_UNAVAILABLE_FAILURE,
+      deadlineExpired: false,
+    }
+  }
+  if (cleanupFailed) {
+    return {
+      supported: false,
+      failure: OPFS_CLEANUP_FAILURE,
+      deadlineExpired: false,
+    }
+  }
   return {
     supported,
     failure: supported ? null : OPFS_UNAVAILABLE_FAILURE,
+    deadlineExpired: false,
   }
 }
 
@@ -349,17 +401,19 @@ async function probeOpfs(signal?: AbortSignal): Promise<OpfsProbeResult> {
   throwIfMotionAnalysisAborted(signal)
   const storage = navigator.storage
   if (typeof storage?.getDirectory !== 'function') {
-    return { supported: false, failure: OPFS_UNAVAILABLE_FAILURE }
+    return {
+      supported: false,
+      failure: OPFS_UNAVAILABLE_FAILURE,
+      deadlineExpired: false,
+    }
   }
-  const lifecycle: OpfsProbeLifecycle = { abandoned: false }
+  const lifecycle: OpfsProbeLifecycle = { abandonment: null }
   const operation = runOwnedOpfsProbe(
     () => storage.getDirectory(),
     signal,
     lifecycle,
   )
-  return signal
-    ? raceOpfsProbeWithAbort(operation, signal, lifecycle)
-    : operation
+  return raceOpfsProbe(operation, signal, lifecycle)
 }
 
 export async function probeMotionAnalysisSupport(
@@ -376,7 +430,7 @@ export async function probeMotionAnalysisSupport(
   if (!videoFrame.copied) failures.push('VideoFrame RGBA copyTo is unavailable.')
   if (!videoFrame.closed) failures.push('VideoFrame close could not be observed.')
   const opfs = await probeOpfs(signal)
-  if (signal?.aborted) throw motionAnalysisAbortError()
+  if (signal?.aborted && !opfs.deadlineExpired) throw motionAnalysisAbortError()
   if (opfs.failure) failures.push(opfs.failure)
   const cryptoDigest = typeof crypto?.subtle?.digest === 'function'
   if (!cryptoDigest) failures.push('SubtleCrypto digest is unavailable.')
