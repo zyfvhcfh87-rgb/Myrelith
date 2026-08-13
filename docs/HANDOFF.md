@@ -4354,9 +4354,10 @@ surface; it is not a second zoom and never enters document history.
   scale tolerances before the maximum 1.35x zoom, then safe coverage is solved
   against the simplified path at every integer clip frame. Displayed required
   crop is the total span `1 - 1 / safeZoom`.
-- Product bounds are 1,000,000 clip frames, 120 smoothing frames, 4,000,000
-  simplification comparisons, 1,024 keys per owned track, and 100,000 document
-  keys. The immutable operation rechecks the document-wide budget, replaces
+- Product bounds are 1,000,000 clip frames, 65,534 retained analysis samples,
+  120 smoothing frames, 4,000,000 simplification comparisons, 1,024 keys per
+  transform track, and 100,000 document keys. The immutable operation rechecks
+  the document-wide budget, replaces
   only ordinary Position X/Y, Rotation, and equal Scale X/Y tracks after
   explicit consent, and preserves opacity/effect animation. Shared ordinary
   animation evaluation remains the only preview/export path.
@@ -4399,3 +4400,28 @@ surface; it is not a second zoom and never enters document history.
   suite passes 184/184 files and 2,528/2,528 tests plus 17/17 runner checks.
   Build/typecheck, warning-free lint, and `git diff --check` pass. Clean-commit
   Chromium, CI, and a fresh exact-head Codex verdict follow on the fixed head.
+
+## Milestone 5 Part 10a.2 / issue #109 - second exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY.**
+
+- Exact-head Codex review `4927072774` on `0901322c43` found that a legitimate
+  million-sample result could exhaust memory or exceed the shared cache-entry
+  envelope only after the complete expensive run, and that Reset misleadingly
+  described ordinary transform tracks as stabilization-owned even though it
+  also removes manual or other-tool animation.
+- Stabilization now reserves a 32 MiB working-result ceiling derived from the
+  shared 256 MiB cache-entry limit, 1 KiB for the enclosing record, and at most
+  512 serialized bytes per retained sample. The resulting 65,534-sample cap is
+  checked before another pair is analyzed or retained; cached bytes are
+  rejected before UTF-8 decoding when they exceed the same product envelope.
+- Reset now discloses before action that it removes every ordinary Position,
+  Rotation, and Scale animation track, including keyframes created manually or
+  by another tool. The button's accessible description includes that warning,
+  and source comments no longer imply unavailable ownership provenance.
+- The review-focused refresh passes 18/18 tests across the adapter, UI,
+  operation, and architecture suites. The authoritative suite passes 184/184
+  files and 2,530/2,530 tests plus all 17 evidence-runner checks;
+  build/typecheck, warning-free lint, the high-severity production audit with
+  0 vulnerabilities, and diff checks pass. Clean-commit Chromium, CI, and a
+  fresh exact-head Codex verdict follow on the frozen fix.

@@ -317,7 +317,7 @@ export interface DocumentState {
     plan: VideoStabilizationPlan,
     replaceExisting: boolean,
   ) => ClipFramingOperationResult
-  /** Explicitly remove all five stabilization-owned tracks in one entry. */
+  /** Explicitly remove all ordinary Position/Rotation/Scale tracks in one entry. */
   resetVideoStabilization: (clipId: ClipId) => ClipFramingOperationResult
   /** Explicitly remove all four position/scale animation tracks. */
   resetClipFramingAnimation: (clipId: ClipId) => ClipFramingOperationResult

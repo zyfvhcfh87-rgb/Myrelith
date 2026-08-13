@@ -2298,7 +2298,7 @@ export function applyDynamicZoom(
   return applyDynamicZoomWithResult(doc, clipId, source, request).doc
 }
 
-/** Replace the five stabilization-owned tracks with one reviewed product plan. */
+/** Replace the five ordinary transform tracks with one reviewed stabilization plan. */
 export function applyVideoStabilizationWithResult(
   doc: TimelineDoc,
   clipId: ClipId,
@@ -2363,7 +2363,7 @@ export function applyVideoStabilizationWithResult(
   }
 }
 
-/** Explicit one-entry removal of every stabilization-owned ordinary track. */
+/** Explicit one-entry removal of every ordinary Position/Rotation/Scale track. */
 export function resetVideoStabilizationWithResult(
   doc: TimelineDoc,
   clipId: ClipId,

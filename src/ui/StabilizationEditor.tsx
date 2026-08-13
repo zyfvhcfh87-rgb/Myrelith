@@ -178,12 +178,12 @@ export default function StabilizationEditor({
     const result = useDocumentStore.getState().resetVideoStabilization(clip.id)
     setMessage(result.ok
       ? result.changed
-        ? 'Position, Rotation, and Scale tracks were removed in one undo step.'
-        : 'No stabilization-owned tracks were present.'
+        ? 'All Position, Rotation, and Scale animation tracks were removed in one undo step.'
+        : 'No Position, Rotation, or Scale animation tracks were present.'
       : result.reason)
   }
 
-  const hasOwnedTracks = clipAnimation(clip).tracks.some((track) => (
+  const hasResettableTracks = clipAnimation(clip).tracks.some((track) => (
     VIDEO_STABILIZATION_PROPERTIES.includes(
       track.property as (typeof VIDEO_STABILIZATION_PROPERTIES)[number],
     )
@@ -282,6 +282,10 @@ export default function StabilizationEditor({
         />
         <span>Preview at the playhead</span>
       </label>
+      <p id="stabilization-reset-warning" className="inspector-note">
+        Reset removes all Position, Rotation, and Scale animation on this clip,
+        including keyframes created manually or by another tool.
+      </p>
       <div className="animation-toolbar" aria-label="Stabilization operations">
         <button
           type="button"
@@ -291,11 +295,11 @@ export default function StabilizationEditor({
         >Apply</button>
         <button
           type="button"
-          disabled={locked || !hasOwnedTracks}
-          aria-describedby="stabilization-status"
+          disabled={locked || !hasResettableTracks}
+          aria-describedby="stabilization-reset-warning stabilization-status"
           onClick={reset}
         >
-          Reset tracks
+          Remove transform animation
         </button>
       </div>
       <p

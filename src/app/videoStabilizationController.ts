@@ -1,6 +1,10 @@
 /** App composition for Issue #109's browser-local stabilization workflow. */
 
-import type { AnalysisClipAttachment, AnalysisSourceProvenance } from '../domain/analysisCache'
+import {
+  MAX_ANALYSIS_RESULT_BYTES,
+  type AnalysisClipAttachment,
+  type AnalysisSourceProvenance,
+} from '../domain/analysisCache'
 import { clipVisualSettings } from '../domain/clipInspector'
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
@@ -42,6 +46,19 @@ import { sha256Hex } from './sourceFingerprint'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
+
+/**
+ * Stabilization keeps its live result far below the shared cache-entry ceiling
+ * so retained sample objects, JSON serialization, and the final byte buffer can
+ * coexist without approaching the browser's 256 MiB per-entry allowance.
+ */
+export const MAX_VIDEO_STABILIZATION_RESULT_BYTES = Math.floor(MAX_ANALYSIS_RESULT_BYTES / 8)
+const VIDEO_STABILIZATION_RESULT_ENVELOPE_BYTES = 1_024
+const MAX_VIDEO_STABILIZATION_SERIALIZED_SAMPLE_BYTES = 512
+export const MAX_VIDEO_STABILIZATION_SAMPLES = Math.floor(
+  (MAX_VIDEO_STABILIZATION_RESULT_BYTES - VIDEO_STABILIZATION_RESULT_ENVELOPE_BYTES)
+  / MAX_VIDEO_STABILIZATION_SERIALIZED_SAMPLE_BYTES,
+)
 
 export interface VideoStabilizationSession {
   readonly clipId: ClipId
@@ -111,6 +128,12 @@ function estimate(value: unknown): value is GlobalMotionEstimate {
 export function parseVideoStabilizationAnalysis(
   bytes: Uint8Array<ArrayBuffer>,
 ): VideoStabilizationAnalysis {
+  if (bytes.byteLength > MAX_VIDEO_STABILIZATION_RESULT_BYTES) {
+    throw new MotionAnalysisError(
+      'storage-corrupt',
+      'Stabilization cache result exceeds the product result envelope',
+    )
+  }
   let value: unknown
   try {
     value = JSON.parse(decoder.decode(bytes))
@@ -129,7 +152,7 @@ export function parseVideoStabilizationAnalysis(
     || value.height > DEFAULT_MOTION_ANALYSIS_BUDGET.maxHeight
     || !Array.isArray(value.samples)
     || value.samples.length < 2
-    || value.samples.length > 1_000_000
+    || value.samples.length > MAX_VIDEO_STABILIZATION_SAMPLES
   ) throw new MotionAnalysisError('storage-corrupt', 'Stabilization cache result has an invalid envelope')
   let previousTimestamp = Number.MIN_SAFE_INTEGER
   const samples: VideoStabilizationAnalysisSample[] = []
@@ -178,11 +201,33 @@ function yieldToBrowser(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-export function createVideoStabilizationProcessor(): MotionAnalysisResultProcessor {
+export function createVideoStabilizationProcessor(
+  maximumSamples = MAX_VIDEO_STABILIZATION_SAMPLES,
+): MotionAnalysisResultProcessor {
+  if (
+    !Number.isSafeInteger(maximumSamples)
+    || maximumSamples < 2
+    || maximumSamples > MAX_VIDEO_STABILIZATION_SAMPLES
+  ) throw new RangeError('Stabilization sample limit is outside the reviewed product envelope')
   const samples: VideoStabilizationAnalysisSample[] = []
+  let serializedSampleBytes = 0
   let width = 0
   let height = 0
   let nextPairEndIndex = 1
+  const appendSample = (sample: VideoStabilizationAnalysisSample): void => {
+    const sampleBytes = JSON.stringify(sample).length + 1
+    if (
+      samples.length >= maximumSamples
+      || sampleBytes > MAX_VIDEO_STABILIZATION_SERIALIZED_SAMPLE_BYTES
+      || serializedSampleBytes + sampleBytes
+        > MAX_VIDEO_STABILIZATION_RESULT_BYTES - VIDEO_STABILIZATION_RESULT_ENVELOPE_BYTES
+    ) throw new MotionAnalysisError(
+      'resource-limit',
+      `Stabilization analysis exceeds the ${maximumSamples.toLocaleString('en-US')}-sample result envelope`,
+    )
+    serializedSampleBytes += sampleBytes
+    samples.push(sample)
+  }
   return {
     consumeWindow: async (window: MotionAnalysisWorkerWindowReply, signal: AbortSignal) => {
       if (signal.aborted) throw new DOMException('Motion analysis was cancelled', 'AbortError')
@@ -190,7 +235,7 @@ export function createVideoStabilizationProcessor(): MotionAnalysisResultProcess
       if (samples.length === 0) {
         width = first.width
         height = first.height
-        samples.push({ timestampUs: first.timestampUs, estimateFromPrevious: null })
+        appendSample({ timestampUs: first.timestampUs, estimateFromPrevious: null })
       }
       if (first.width !== width || first.height !== height) {
         throw new MotionAnalysisError('decode-readback', 'Stabilization frames changed dimensions during analysis')
@@ -202,6 +247,12 @@ export function createVideoStabilizationProcessor(): MotionAnalysisResultProcess
           throw new MotionAnalysisError('decode-readback', 'Stabilization analysis received a frame gap')
         }
         if (signal.aborted) throw new DOMException('Motion analysis was cancelled', 'AbortError')
+        if (samples.length >= maximumSamples) {
+          throw new MotionAnalysisError(
+            'resource-limit',
+            `Stabilization analysis exceeds the ${maximumSamples.toLocaleString('en-US')}-sample result envelope`,
+          )
+        }
         const fromWorker = window.frames[localEnd - 1]!
         const toWorker = window.frames[localEnd]!
         if (
@@ -248,7 +299,7 @@ export function createVideoStabilizationProcessor(): MotionAnalysisResultProcess
             `Parallax or residual motion exceeded the reviewed envelope at analyzed frame ${globalEnd}.`,
           )
         }
-        samples.push({ timestampUs: toWorker.timestampUs, estimateFromPrevious: motion })
+        appendSample({ timestampUs: toWorker.timestampUs, estimateFromPrevious: motion })
         nextPairEndIndex++
       }
     },
@@ -257,12 +308,20 @@ export function createVideoStabilizationProcessor(): MotionAnalysisResultProcess
       if (samples.length !== completion.sampledFrameCount || samples.length < 2) {
         throw new MotionAnalysisError('decode-readback', 'Stabilization analysis result is incomplete')
       }
-      return encoder.encode(JSON.stringify({
+      const bytes = encoder.encode(JSON.stringify({
         version: VIDEO_STABILIZATION_RESULT_VERSION,
         width,
         height,
         samples,
       })) as Uint8Array<ArrayBuffer>
+      if (bytes.byteLength > MAX_VIDEO_STABILIZATION_RESULT_BYTES) {
+        releaseBytes(bytes)
+        throw new MotionAnalysisError(
+          'resource-limit',
+          'Stabilization analysis exceeds the product result envelope',
+        )
+      }
+      return bytes
     },
   }
 }

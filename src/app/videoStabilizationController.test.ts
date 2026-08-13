@@ -5,6 +5,8 @@ import {
 } from './motionAnalysisController'
 import {
   createVideoStabilizationProcessor,
+  MAX_VIDEO_STABILIZATION_RESULT_BYTES,
+  MAX_VIDEO_STABILIZATION_SAMPLES,
   parseVideoStabilizationAnalysis,
 } from './videoStabilizationController'
 
@@ -100,6 +102,25 @@ describe('video stabilization analysis adapter', () => {
         name: 'MotionAnalysisError',
         code: 'scene-cut',
       })
+  })
+
+  test('stops streaming before retaining a sample beyond the derived result envelope', async () => {
+    const first = randomPlane(96, 64, 0x109)
+    const second = shifted(first, 96, 64, 1, 0)
+    const third = shifted(first, 96, 64, 2, 0)
+    const processor = createVideoStabilizationProcessor(2)
+    const controller = new AbortController()
+
+    await expect(processor.consumeWindow(
+      window([first, second, third]),
+      controller.signal,
+    )).rejects.toMatchObject({
+      name: 'MotionAnalysisError',
+      code: 'resource-limit',
+      message: 'Stabilization analysis exceeds the 2-sample result envelope',
+    })
+    expect(MAX_VIDEO_STABILIZATION_RESULT_BYTES).toBe(32 * 1024 * 1024)
+    expect(MAX_VIDEO_STABILIZATION_SAMPLES).toBe(65_534)
   })
 
   test('rejects unknown members and malformed estimate values from cache', () => {

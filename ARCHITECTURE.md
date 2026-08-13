@@ -625,8 +625,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   silently authored. Safe zoom is solved after simplification against the
   interpolated transform at every integer clip frame; its displayed crop is
   the total cropped span `1 - 1 / safeZoom`, and the shared envelope is at most
-  1.35x. Product runs admit at most 1,000,000 clip frames, 1,024 keys per owned
-  track, four million simplification comparisons, and 100,000 document keys.
+  1.35x. Product runs admit at most 1,000,000 clip frames, 65,534 retained
+  analysis samples, 1,024 keys per transform track, four million simplification
+  comparisons, and 100,000 document keys. Before retaining each sample, the
+  adapter enforces a 512-byte serialized-sample ceiling inside a 32 MiB working
+  result budget derived from the shared 256 MiB cache-entry envelope; cached
+  bytes are rejected before decode when they exceed the same product ceiling.
 - Stabilization Apply is one immutable document operation and one history
   entry. It writes only ordinary linear Position X/Y, Rotation, and equal
   Scale X/Y tracks, preserves unrelated tracks, and requires explicit consent
@@ -635,6 +639,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   mutates history; cancel, failure, cache hit, and parameter tuning likewise
   do not mutate the project. Preview and export therefore continue through the
   shared ordinary animation evaluator, with no stabilization-only render path.
+  Reset has no hidden ownership provenance: it removes every ordinary Position,
+  Rotation, and Scale track on the clip, including manual or other-tool
+  animation, and the Inspector must disclose that complete scope before action.
 - Issue #44 remains build-unreferenced feasibility work for the algorithms and
   quality gates. Its browser runtime is owned by
   `app/motionAnalysisResearchController.ts`; its disposable dedicated worker

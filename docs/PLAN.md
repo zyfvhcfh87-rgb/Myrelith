@@ -4309,10 +4309,11 @@ acceptance claims.
   pre-zoom tolerances that guarantee <=0.5 project-pixel corner, <=0.05 degree,
   and <=0.05% scale error after the reviewed 1.35x maximum safe zoom. Solve
   exact project coverage after simplification at every integer clip frame.
-- [x] Enforce 1,000,000 clip frames, 4,000,000 comparison attempts, 1,024 keys
-  per owned track, and the 100,000-document-key ceiling. Recheck the document
-  budget in the immutable Apply operation and require explicit replacement of
-  existing owned tracks.
+- [x] Enforce 1,000,000 clip frames, 65,534 retained analysis samples,
+  4,000,000 comparison attempts, 1,024 keys per transform track, and the
+  100,000-document-key ceiling. Recheck the document budget in the immutable
+  Apply operation and require explicit replacement of existing transform
+  tracks.
 - [x] Add accessible Analyze/Retry/Cancel/progress, strength/radius, exact crop/
   zoom/key/jitter evidence, playhead Preview, Apply, Reset, and disabled-control
   explanations. Keep analysis, preview, parameter tuning, cache hits, cancel,
@@ -4349,3 +4350,20 @@ acceptance claims.
   suite plus 17/17 runner checks; refresh build/typecheck, warning-free lint,
   and diff checks. Re-run clean Chromium, CI, and fresh exact-head Codex review
   after committing the follow-up.
+
+## Milestone 5 Part 10a.2 / issue #109 - second exact-head review follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Derive a 32 MiB stabilization working-result budget from the shared
+  256 MiB cache-entry ceiling, reserve 1 KiB for the enclosing record, cap each
+  serialized sample at 512 bytes, and stop before analyzing or retaining sample
+  65,535. Reject an oversized cached stabilization result before UTF-8 decode.
+- [x] Remove false stabilization-ownership wording from ordinary transform
+  tracks. Disclose in visible and accessible UI that Reset removes all Position,
+  Rotation, and Scale animation, including manual and other-tool keyframes.
+- [x] Add deterministic streaming-cap and destructive-scope UI regressions;
+  pass 18/18 review-focused tests, the authoritative 184-file / 2,530-test suite
+  plus all 17 evidence-runner checks, build/typecheck, warning-free lint, the
+  high-severity production audit with 0 vulnerabilities, and diff checks.
+  Re-run clean Chromium, CI, and exact-head Codex review after commit.

@@ -153,6 +153,34 @@ describe('StabilizationEditor', () => {
     unmount()
   })
 
+  test('discloses that Reset removes manual and other-tool transform animation', async () => {
+    const user = userEvent.setup()
+    const animated = clip({
+      animation: {
+        ...defaultClipAnimation(),
+        tracks: [{
+          property: 'position-x',
+          keyframes: [
+            { frame: 0, value: 0, easing: { type: 'linear' } },
+            { frame: 10, value: 40, easing: { type: 'linear' } },
+          ],
+        }],
+      },
+    })
+    useDocumentStore.getState().setDoc(doc(animated))
+    render(<StabilizationEditor clip={animated} locked={false} playheadFrame={20} />)
+
+    const remove = screen.getByRole('button', { name: 'Remove transform animation' })
+    expect(remove).toHaveAccessibleDescription(
+      /removes all Position, Rotation, and Scale animation.*created manually or by another tool/i,
+    )
+    await user.click(remove)
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'All Position, Rotation, and Scale animation tracks were removed in one undo step.',
+    )
+    expect(useDocumentStore.getState().past).toHaveLength(1)
+  })
+
   test('invalidates an in-flight result when the inspected clip changes', async () => {
     const user = userEvent.setup()
     let resolveAnalysis: ((value: { clipId: string }) => void) | undefined
