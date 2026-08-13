@@ -84,10 +84,15 @@ export interface TextOverlayPreview {
   text?: TextProps
 }
 
+export type ClipVisualPreviewOwner =
+  | 'visual-gesture'
+  | 'stabilization'
+  | 'motion-tracking'
+
 /** Live preview-only geometry for a media clip direct-manipulation gesture. */
 export interface ClipVisualPreview {
   /** Named editor ownership prevents one mounted preview surface clearing another. */
-  owner?: 'stabilization' | 'motion-tracking'
+  owner?: ClipVisualPreviewOwner
   clipId: ClipId
   transform: Transform
   visual: ClipVisualSettings
@@ -191,6 +196,11 @@ export interface TransportState {
   setTextOverlayPreview: (preview: TextOverlayPreview | null) => void
   /** Update or clear one preview-only media manipulation. */
   setClipVisualPreview: (preview: ClipVisualPreview | null) => void
+  /** Publish or release one independently mounted media-preview candidate. */
+  setOwnedClipVisualPreview: (
+    owner: ClipVisualPreviewOwner,
+    preview: Omit<ClipVisualPreview, 'owner'> | null,
+  ) => void
   /** Clear every session-owned playback/navigation value for a new project. */
   resetTransport: () => void
 }
@@ -222,6 +232,47 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
 // this sequence outside Zustand so resetTransport can still restore the
 // complete public transport state to the exact deterministic initial values.
 let transportResetRevision = 0
+
+interface OwnedClipVisualPreview {
+  activationSequence: number
+  preview: ClipVisualPreview
+}
+
+const ownedClipVisualPreviews = new Map<
+  ClipVisualPreviewOwner,
+  OwnedClipVisualPreview
+>()
+let clipVisualPreviewActivationSequence = 0
+
+function cloneClipVisualPreview(
+  preview: ClipVisualPreview | null,
+): ClipVisualPreview | null {
+  return preview
+    ? {
+        ...preview,
+        transform: { ...preview.transform },
+        visual: {
+          ...preview.visual,
+          crop: { ...preview.visual.crop },
+        },
+      }
+    : null
+}
+
+function activeOwnedClipVisualPreview(): ClipVisualPreview | null {
+  let active: OwnedClipVisualPreview | null = null
+  for (const candidate of ownedClipVisualPreviews.values()) {
+    if (!active || candidate.activationSequence > active.activationSequence) {
+      active = candidate
+    }
+  }
+  return cloneClipVisualPreview(active?.preview ?? null)
+}
+
+function clearOwnedClipVisualPreviews(): void {
+  ownedClipVisualPreviews.clear()
+  clipVisualPreviewActivationSequence = 0
+}
 
 export function getTransportResetRevision(): number {
   return transportResetRevision
@@ -423,21 +474,26 @@ export const useTransportStore = create<TransportState>()((set) => ({
           }
         : null,
     }),
-  setClipVisualPreview: (clipVisualPreview) =>
-    set({
-      clipVisualPreview: clipVisualPreview
-        ? {
-            ...clipVisualPreview,
-            transform: { ...clipVisualPreview.transform },
-            visual: {
-              ...clipVisualPreview.visual,
-              crop: { ...clipVisualPreview.visual.crop },
-            },
-          }
-        : null,
-    }),
+  setClipVisualPreview: (clipVisualPreview) => {
+    clearOwnedClipVisualPreviews()
+    set({ clipVisualPreview: cloneClipVisualPreview(clipVisualPreview) })
+  },
+  setOwnedClipVisualPreview: (owner, preview) => {
+    if (preview) {
+      const current = ownedClipVisualPreviews.get(owner)
+      ownedClipVisualPreviews.set(owner, {
+        activationSequence:
+          current?.activationSequence ?? ++clipVisualPreviewActivationSequence,
+        preview: cloneClipVisualPreview({ ...preview, owner })!,
+      })
+    } else {
+      ownedClipVisualPreviews.delete(owner)
+    }
+    set({ clipVisualPreview: activeOwnedClipVisualPreview() })
+  },
   resetTransport: () => {
     transportResetRevision += 1
+    clearOwnedClipVisualPreviews()
     set({ ...INITIAL_TRANSPORT_STATE })
   },
 }))

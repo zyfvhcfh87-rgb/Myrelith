@@ -423,7 +423,7 @@ export default function VisualOverlayControls({
 
   useEffect(() => () => {
     if (previewFrameRef.current !== null) cancelAnimationFrame(previewFrameRef.current)
-    useTransportStore.getState().setClipVisualPreview(null)
+    useTransportStore.getState().setOwnedClipVisualPreview('visual-gesture', null)
   }, [])
 
   const publishPreview = (preview: ClipVisualPreview): void => {
@@ -432,7 +432,9 @@ export default function VisualOverlayControls({
     previewFrameRef.current = requestAnimationFrame(() => {
       previewFrameRef.current = null
       const pending = pendingPreviewRef.current
-      if (pending) useTransportStore.getState().setClipVisualPreview(pending)
+      if (pending) {
+        useTransportStore.getState().setOwnedClipVisualPreview('visual-gesture', pending)
+      }
     })
   }
 
@@ -442,7 +444,9 @@ export default function VisualOverlayControls({
       previewFrameRef.current = null
     }
     const pending = pendingPreviewRef.current
-    if (pending) useTransportStore.getState().setClipVisualPreview(pending)
+    if (pending) {
+      useTransportStore.getState().setOwnedClipVisualPreview('visual-gesture', pending)
+    }
   }
 
   const startGesture = (
@@ -534,7 +538,7 @@ export default function VisualOverlayControls({
         gestureCommitPatch(gesture),
       )
     }
-    useTransportStore.getState().setClipVisualPreview(null)
+    useTransportStore.getState().setOwnedClipVisualPreview('visual-gesture', null)
   }
 
   const keyboardMove = (

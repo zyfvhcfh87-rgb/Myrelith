@@ -881,10 +881,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   slip/slide gestures). The optional linkGroupId lets partner ClipViews
   ghost a linked gesture live. `textOverlayPreview` and `clipVisualPreview`
   hold rAF-coalesced Program Monitor drafts for procedural text geometry and
-  visual-media transform/settings respectively. Analysis editors attach a
-  named owner to `clipVisualPreview` and may clear only their own preview, so
-  the simultaneously mounted stabilization and tracking surfaces cannot erase
-  one another's active draft. `app/previewController.ts`
+  visual-media transform/settings respectively. Every concurrently mounted
+  media-preview producer publishes a named candidate through transport-owned
+  arbitration. The most recently activated owner is visible; updating a hidden
+  candidate does not steal priority, and releasing the visible candidate
+  immediately restores the newest still-live sibling. Stabilization, motion
+  tracking, and direct Program Monitor manipulation therefore never erase or
+  strand one another's enabled draft. Project reset clears the complete
+  candidate registry. `app/previewController.ts`
   projects those drafts into the immutable document snapshot sent to the
   shared preview renderer; neither enters document history until the gesture
   owner dispatches its single pointerup mutation. `snapGuide`

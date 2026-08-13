@@ -24,10 +24,7 @@ type Phase = 'idle' | 'analyzing' | 'ready' | 'error'
 const PREVIEW_OWNER = 'stabilization' as const
 
 function clearOwnedPreview(): void {
-  const transport = useTransportStore.getState()
-  if (transport.clipVisualPreview?.owner === PREVIEW_OWNER) {
-    transport.setClipVisualPreview(null)
-  }
+  useTransportStore.getState().setOwnedClipVisualPreview(PREVIEW_OWNER, null)
 }
 
 function previewTransform(plan: VideoStabilizationPlan, localFrame: number): Transform {
@@ -121,13 +118,11 @@ export default function StabilizationEditor({
       0,
       Math.min(clip.timelineRange.durationFrames - 1, playheadFrame - clip.timelineRange.startFrame),
     )
-    useTransportStore.getState().setClipVisualPreview({
-      owner: PREVIEW_OWNER,
+    useTransportStore.getState().setOwnedClipVisualPreview(PREVIEW_OWNER, {
       clipId: clip.id,
       transform: previewTransform(planned.plan, localFrame),
       visual: clipVisualSettings(clip),
     })
-    return clearOwnedPreview
   }, [clip, planned, playheadFrame, preview])
 
   const analyze = async (): Promise<void> => {

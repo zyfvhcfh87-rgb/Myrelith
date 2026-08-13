@@ -256,8 +256,7 @@ describe('MotionTrackingEditor', () => {
 
   test('does not clear a stabilization preview owned by the sibling editor', () => {
     const item = clip()
-    useTransportStore.getState().setClipVisualPreview({
-      owner: 'stabilization',
+    useTransportStore.getState().setOwnedClipVisualPreview('stabilization', {
       clipId: item.id,
       transform: { ...item.transform, x: 42 },
       visual: defaultClipVisualSettings(),
@@ -274,6 +273,38 @@ describe('MotionTrackingEditor', () => {
 
     unmount()
     expect(useTransportStore.getState().clipVisualPreview?.owner).toBe('stabilization')
+  })
+
+  test('restores an enabled stabilization preview after tracking preview turns off', async () => {
+    const user = userEvent.setup()
+    const item = clip()
+    useTransportStore.getState().setOwnedClipVisualPreview('stabilization', {
+      clipId: item.id,
+      transform: { ...item.transform, x: 42 },
+      visual: defaultClipVisualSettings(),
+    })
+    render(<MotionTrackingEditor clip={item} locked={false} playheadFrame={12} />)
+    await user.click(screen.getByRole('button', { name: 'Pick point' }))
+    act(() => useMotionTrackingSelectionStore.getState().setSelection(
+      item.id,
+      { kind: 'point', point: { x: 0.5, y: 0.5 } },
+      12,
+    ))
+    await user.click(screen.getByRole('button', { name: 'Analyze' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('local cache'))
+
+    const preview = screen.getByRole('checkbox', {
+      name: 'Preview accepted tracking at the playhead',
+    })
+    await user.click(preview)
+    await waitFor(() => expect(useTransportStore.getState().clipVisualPreview?.owner)
+      .toBe('motion-tracking'))
+
+    await user.click(preview)
+    await waitFor(() => expect(useTransportStore.getState().clipVisualPreview).toMatchObject({
+      owner: 'stabilization',
+      transform: { x: 42 },
+    }))
   })
 
   test('reads progress from the active tracking kind instead of an older sibling job', async () => {

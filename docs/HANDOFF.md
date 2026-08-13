@@ -4806,3 +4806,27 @@ surface; it is not a second zoom and never enters document history.
   passes 190/190 files with 2,583/2,583 tests plus all 17 runner checks. The
   4,817-module build/typecheck, warning-free lint, production audit at 0
   vulnerabilities, and diff checks pass. Publication refresh follows.
+
+## Milestone 5 Part 10a.3 / issue #110 - fifth exact-head review follow-up (2026-08-13)
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING.**
+
+- Exact-head Codex review `4929918750` on
+  `9fb68ca448a4c8b6d1237338196598735b4f11f0` found that releasing the visible
+  tracking preview left a still-enabled stabilization preview hidden because
+  the sibling effect had no dependency change that would republish it.
+- The transport store now arbitrates named stabilization, motion-tracking, and
+  direct-manipulation candidates. The newest activation is visible; updating a
+  hidden owner preserves its priority, and releasing the visible owner restores
+  the newest remaining candidate immediately. Project reset clears the entire
+  registry. Editor playhead updates no longer withdraw and reactivate their
+  candidate between renders.
+- Store and UI regressions prove hidden updates do not steal priority, tracking
+  disable restores stabilization, direct manipulation restores the editor it
+  covered, final release clears the slot, and transport reset cannot resurrect
+  a candidate. The focused transport/stabilization/tracking/overlay matrix
+  passes 43/43 tests. The authoritative suite passes 190/190 files with
+  2,586/2,586 tests plus all 17 evidence-runner checks. TypeScript/Vite builds
+  4,817 modules, lint is warning-free, the production audit reports 0
+  vulnerabilities, and diff checks pass. Refresh clean Chromium, CI, and
+  exact-head review before merge.

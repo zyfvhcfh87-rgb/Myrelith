@@ -4651,3 +4651,20 @@ acceptance claims.
   plus 17/17 runner checks, the 4,817-module build/typecheck, warning-free lint,
   production audit at 0 vulnerabilities, and diff checks.
 - [ ] Refresh clean Chromium, exact-head CI, and Codex review before merge.
+
+## Milestone 5 Part 10a.3 / issue #110 - fifth exact-head review follow-up
+
+**COMPLETE LOCALLY; PUBLICATION REFRESH PENDING (2026-08-13).**
+
+- [x] Replace the single last-writer preview slot with transport-owned candidate
+  arbitration for stabilization, motion tracking, and direct Program Monitor
+  manipulation. Keep activation priority stable across hidden owner updates.
+- [x] Restore the newest still-live sibling immediately when the visible owner
+  releases; clear all candidates on project reset. Prove tracking-off restores
+  stabilization and gesture completion restores the editor it covered.
+- [x] Pass 43/43 focused transport/editor/overlay tests, 190/190 full-suite files
+  and 2,586/2,586 tests plus 17/17 runner checks, the 4,817-module
+  build/typecheck, warning-free lint, production audit at 0 vulnerabilities,
+  and diff checks.
+- [ ] Commit the exact tree, refresh clean headed Chromium, push, pass exact-head
+  CI, and request a fresh Codex review before merge.

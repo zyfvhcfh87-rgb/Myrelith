@@ -24,10 +24,7 @@ type Phase = 'idle' | 'analyzing' | 'ready' | 'error'
 const PREVIEW_OWNER = 'motion-tracking' as const
 
 function clearOwnedPreview(): void {
-  const transport = useTransportStore.getState()
-  if (transport.clipVisualPreview?.owner === PREVIEW_OWNER) {
-    transport.setClipVisualPreview(null)
-  }
+  useTransportStore.getState().setOwnedClipVisualPreview(PREVIEW_OWNER, null)
 }
 
 function messageFrom(cause: unknown): string {
@@ -178,13 +175,11 @@ export default function MotionTrackingEditor({
       clearOwnedPreview()
       return
     }
-    useTransportStore.getState().setClipVisualPreview({
-      owner: PREVIEW_OWNER,
+    useTransportStore.getState().setOwnedClipVisualPreview(PREVIEW_OWNER, {
       clipId: target.id,
       transform: previewTransform(target, planned.plan.tracks, playheadFrame),
       visual: clipVisualSettings(target),
     })
-    return clearOwnedPreview
   }, [doc, planned, playheadFrame, preview])
 
   const pick = (nextKind: MotionTrackingKind): void => {
