@@ -475,6 +475,7 @@ function runResearchWorker(
       signal.removeEventListener('abort', abort)
       worker.removeEventListener('message', onMessage)
       worker.removeEventListener('error', onError)
+      worker.removeEventListener('messageerror', onMessageError)
       terminate()
       action()
     }
@@ -506,9 +507,16 @@ function runResearchWorker(
         event.message || 'Motion worker failed',
       )))
     }
+    function onMessageError(): void {
+      finish(() => reject(new MediaJobExecutionError(
+        'unexpected',
+        'Motion worker response could not be deserialized',
+      )))
+    }
     signal.addEventListener('abort', abort, { once: true })
     worker.addEventListener('message', onMessage)
     worker.addEventListener('error', onError, { once: true })
+    worker.addEventListener('messageerror', onMessageError, { once: true })
     if (signal.aborted) {
       abort()
       return

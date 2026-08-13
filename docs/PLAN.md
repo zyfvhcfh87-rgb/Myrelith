@@ -4001,3 +4001,22 @@ acceptance claims.
   174/174 files with 2,392/2,392 full-suite tests, all 16 runner checks,
   TypeScript/Vite build, oxlint, high-severity production audit at 0
   vulnerabilities, and `git diff --check`.
+
+## Milestone 5 Part 10a / issue #44 - worker-response cleanup follow-up
+
+**COMPLETE LOCALLY (2026-08-13).**
+
+- [x] Register the admitted research worker's `messageerror` listener before its
+  initial post and reject deserialization failure as a typed `unexpected`
+  terminal result through the existing idempotent cleanup owner.
+- [x] Remove abort, message, error, and messageerror listeners before terminating
+  exactly once; balance worker diagnostics before caller settlement and release
+  scheduler/controller admission for a retry.
+- [x] Prove deterministic response-deserialization cleanup, rejection-time 1/1
+  worker parity, zero active listeners/workers, late competing-event immunity,
+  and a successful admitted retry. Audit the support-probe worker and retain its
+  already-complete messageerror lifecycle without a broad refactor.
+- [x] Pass 34/34 controller tests, 65/65 focused controller/domain/tracking
+  tests, 174/174 files with 2,393/2,393 full-suite tests, all 16 runner checks,
+  TypeScript/Vite build, oxlint, high-severity production audit at 0
+  vulnerabilities, and `git diff --check`.

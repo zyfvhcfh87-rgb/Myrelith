@@ -3901,3 +3901,33 @@ surface; it is not a second zoom and never enters document history.
   and 2,392/2,392 Vitest tests plus those 16 checks. TypeScript/Vite build, oxlint,
   production audit at high severity with 0 vulnerabilities, and `git diff
   --check` pass. The build retains only the established large-chunk advisory.
+
+## Milestone 5 Part 10a / issue #44 - worker-response cleanup hardening (2026-08-13)
+
+**LATEST REVIEW FEEDBACK RESOLVED LOCALLY.**
+
+- The Codex review of exact head
+  `b3517c980d8f20e9752f7ec61e559179be275eaf` found that the admitted research
+  worker did not settle when the browser dispatched `messageerror` for a reply
+  it could not deserialize, retaining the worker, scheduler slot, and shared
+  research admission indefinitely.
+- The run worker now registers `messageerror` before its initial post and routes
+  it through the same idempotent terminal owner as results, runtime errors,
+  cancellation, and synchronous post failure. It returns a typed `unexpected`
+  failure only after removing every signal/worker listener, terminating once,
+  and balancing worker diagnostics; late competing events cannot settle or
+  mutate diagnostics again.
+- A deterministic regression dispatches `messageerror` after progress, proves
+  exact 1/1 created/terminated parity and zero active workers/listeners before
+  rejection, injects late result/error/messageerror events without drift, and
+  admits a successful retry. The support-probe worker lifecycle already handled
+  and removed `messageerror`, so it required no duplicate change.
+- The controller passes 34/34 tests. The focused controller/domain/tracking set
+  passes 65/65 plus all 16 runner checks; the complete gate passes 174/174 files
+  and 2,393/2,393 Vitest tests plus those 16 checks. TypeScript/Vite build,
+  oxlint, production audit at high severity with 0 vulnerabilities, and `git
+  diff --check` pass. The build retains only the established large-chunk
+  advisory. The headed research runner cannot synthesize a worker
+  response-deserialization failure, so direct browser coverage is the focused
+  lifecycle regression; a source-bound broad research rerun follows the clean
+  commit.

@@ -1187,6 +1187,90 @@ describe('motion analysis research controller', () => {
     expect(retryWorkers[0]!.activeListenerCount()).toBe(0)
   })
 
+  test('settles and releases admission when a worker response cannot be deserialized', async () => {
+    const workers = installWorker('pending')
+    const before = motionAnalysisResearchDiagnostics()
+    let observeProgress!: () => void
+    const progress = new Promise<void>((resolve) => {
+      observeProgress = resolve
+    })
+    let settleCount = 0
+    const firstOutcome = runBrowserMotionAnalysisResearch({
+      skipSupportProbe: true,
+      onProgress: observeProgress,
+    }).then(
+      () => {
+        settleCount++
+        return { status: 'fulfilled' as const, cause: null, diagnostics: null }
+      },
+      (cause: unknown) => {
+        settleCount++
+        return {
+          status: 'rejected' as const,
+          cause,
+          diagnostics: motionAnalysisResearchDiagnostics(),
+        }
+      },
+    )
+
+    await progress
+    expect(workers).toHaveLength(1)
+    expect(workers[0]).toMatchObject({ terminated: false })
+    expect(workers[0]!.activeListenerCount()).toBe(3)
+
+    workers[0]!.dispatchEvent(new MessageEvent('messageerror', {
+      data: 'Synthetic undecodable worker response',
+    }))
+
+    await expect(firstOutcome).resolves.toMatchObject({
+      status: 'rejected',
+      cause: {
+        name: 'MediaJobExecutionError',
+        code: 'unexpected',
+        message: 'Motion worker response could not be deserialized',
+      },
+      diagnostics: {
+        workersCreated: before.workersCreated + 1,
+        workersTerminated: before.workersTerminated + 1,
+        activeWorkers: 0,
+      },
+    })
+    expect(settleCount).toBe(1)
+    expect(workers[0]).toMatchObject({ terminated: true })
+    expect(workers[0]!.activeListenerCount()).toBe(0)
+
+    const afterFirst = motionAnalysisResearchDiagnostics()
+    const firstMessage = workers[0]!.messages[0]!
+    expect(firstMessage).toMatchObject({ type: 'run' })
+    workers[0]!.dispatchEvent(new MessageEvent('message', { data: {
+      type: 'result',
+      requestId: firstMessage.requestId,
+      evidence: runMotionAnalysisResearch(),
+    } }))
+    workers[0]!.dispatchEvent(new ErrorEvent('error', {
+      message: 'Synthetic late worker failure',
+    }))
+    workers[0]!.dispatchEvent(new MessageEvent('messageerror'))
+    await flushMicrotasks()
+    expect(settleCount).toBe(1)
+    expect(motionAnalysisResearchDiagnostics()).toEqual(afterFirst)
+
+    const retryWorkers = installWorker('success')
+    await expect(runBrowserMotionAnalysisResearch({
+      skipSupportProbe: true,
+    })).resolves.toMatchObject({
+      evidence: { decision: { stabilization: 'go' } },
+    })
+
+    const afterRetry = motionAnalysisResearchDiagnostics()
+    expect(afterRetry.workersCreated - before.workersCreated).toBe(2)
+    expect(afterRetry.workersTerminated - before.workersTerminated).toBe(2)
+    expect(afterRetry.activeWorkers).toBe(0)
+    expect(retryWorkers).toHaveLength(1)
+    expect(retryWorkers[0]).toMatchObject({ terminated: true })
+    expect(retryWorkers[0]!.activeListenerCount()).toBe(0)
+  })
+
   test('preserves a typed quality failure and still terminates the worker', async () => {
     installWorker('failure')
     const before = motionAnalysisResearchDiagnostics()

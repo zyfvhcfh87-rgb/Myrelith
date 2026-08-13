@@ -96,6 +96,12 @@ so a late resolve or rejection cannot create an unhandled promise, re-close the
 frame, or change successful diagnostics. Grayscale frames are accepted only as
 zero-offset `Uint8Array` views over their complete backing allocation; oversized
 zero-offset and nonzero-offset views reject before retained-byte accounting.
+The admitted research worker treats both runtime `error` and response
+`messageerror` events as typed `unexpected` failures. Both events converge on
+the same idempotent terminal owner, which removes every worker/signal listener,
+terminates and balances diagnostics before settlement, and releases scheduler
+and controller-wide admission for a retry. Late competing worker events cannot
+settle or mutate diagnostics again.
 OPFS capability probing also treats removal of its temporary file as part of the
 support contract: a failed `removeEntry()` resolves to a cleanup-specific
 unsupported result rather than escaping the probe, starting analysis, or being
