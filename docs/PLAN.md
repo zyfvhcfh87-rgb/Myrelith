@@ -4554,7 +4554,7 @@ acceptance claims.
 
 ## Milestone 5 Part 10a.3 / issue #110 - bounded point and box tracking
 
-**COMPLETE LOCALLY; CLEAN-COMMIT BROWSER/CI/REVIEW PENDING (2026-08-13).**
+**COMPLETE LOCALLY; CI/REVIEW PENDING (2026-08-13).**
 
 - [x] Add exact-frame Program Monitor point/box selection and the accessible
   Inspector analyze/cancel/retry/confidence/loss/preview/apply/reset workflow.
@@ -4567,14 +4567,20 @@ acceptance claims.
   to ordinary target Position X/Y and optional Scale X/Y. Preserve unrelated
   state, require replacement consent, reject overlap/lock/duplicate/key-budget
   failures, and Apply in one undo entry.
-- [x] Add a source-bound Chromium product gate. The dirty-tree calibration on
-  strict port 41885 passed point mean/max 0.333/1.000 px, box center mean
+- [x] Add a source-bound Chromium product gate. The clean-commit run on
+  `f278aa23594cd694213385469e02782d615408b7` and strict port 41886 passed
+  point mean/max 0.333/1.000 px, box center mean
   0.333 px, scale error 0%, loss at exact occlusion frame 18, exact cache reuse,
   one history entry, a reverse 17-to-0 sparse lane, worker lifecycle 3/3/0,
-  cache cleanup, and zero browser problems.
+  cache cleanup, zero browser problems, and complete port release. The source
+  fingerprint was
+  `sha256:799c29664da65cf40b75bc543e35ecd5f8a319d9201ba0d071bbe5a4f27e9010`;
+  JSON/PNG SHA-256 values were
+  `E9A4242F8AD80CB5F2FD72EA3D1F53F855838841A0B94F2D1DC5C77142EAD516` /
+  `364F32294130A88BDBB1440CD77946B72E2184AA950F9BFF6CA15A59469CF02A`.
 - [x] Freeze the final source tree; pass 12 focused files / 120 tests, 190 full
   files / 2,575 tests, all 17 runner checks, build/typecheck, lint, a production
   audit with 0 vulnerabilities, diff/architecture checks, and normal-dist
   canaries.
-- [ ] Refresh headed Chromium on the exact clean commit, then request fresh
-  exact-head Codex review and merge only after its clean verdict.
+- [ ] Pass exact-head CI, request fresh exact-head Codex review, and merge only
+  after its clean verdict.

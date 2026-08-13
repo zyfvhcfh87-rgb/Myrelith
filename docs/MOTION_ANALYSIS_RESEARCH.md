@@ -485,13 +485,19 @@ sample carries confidence; the first failed agreement becomes an explicit
 loss record and later decoded frames are never converted into guessed samples.
 
 The source-bound Chromium product gate encodes a 160x90 translated texture and
-replaces it with a full occlusion at frame 18. The dirty-tree calibration
-accepted frames 0 through 17 for both point and box, then stopped both at frame
-18. Point mean/max error was 0.333/1.000 px; box mean center error was 0.333 px
-and mean/max relative scale error was 0%. A second identical point request was
-an exact cache hit. Box Apply wrote only Position X/Y and Scale X/Y in one
-history entry. A second real decode walked the sparse request lane backward
-from frame 17 through frame 0 at the same 0.333/1.000 px point error. Workers
-drained 3/3 with zero active, the cache attachment was removed, and Chromium
-reported no console/page problems. This is synthetic bounded evidence, not a
-promise of arbitrary-footage tracking.
+replaces it with a full occlusion at frame 18. The clean-commit run on
+`f278aa23594cd694213385469e02782d615408b7` and strict port 41886 accepted
+frames 0 through 17 for both point and box, then stopped both at frame 18.
+Point mean/max error was 0.333/1.000 px; box mean center error was 0.333 px and
+mean/max relative scale error was 0%. A second identical point request was an
+exact cache hit. Box Apply wrote only Position X/Y and Scale X/Y in one history
+entry. A second real decode walked the sparse request lane backward from frame
+17 through frame 0 at the same 0.333/1.000 px point error. Workers drained 3/3
+with zero active, the cache attachment was removed, Chromium reported no
+console/page problems, and the port was released. The source fingerprint was
+`sha256:799c29664da65cf40b75bc543e35ecd5f8a319d9201ba0d071bbe5a4f27e9010`;
+the JSON/PNG SHA-256 values were respectively
+`E9A4242F8AD80CB5F2FD72EA3D1F53F855838841A0B94F2D1DC5C77142EAD516` and
+`364F32294130A88BDBB1440CD77946B72E2184AA950F9BFF6CA15A59469CF02A`.
+This is synthetic bounded evidence, not a promise of arbitrary-footage
+tracking.
