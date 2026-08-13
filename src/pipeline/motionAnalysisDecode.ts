@@ -241,10 +241,20 @@ export async function decodeMotionAnalysisWindows(
       }
       if (decodedFrameCount % 8 === 0) {
         const span = request.endTimestampUs - request.startTimestampUs
+        const sparse = request.sampleTimestampsUs
+        const descending = sparse !== undefined
+          && sparse.length > 1
+          && sparse[1]! < sparse[0]!
+        const completedSpan = descending
+          ? sparse[0]! - decoded.timestampUs
+          : decoded.timestampUs - request.startTimestampUs
+        const progressSpan = descending
+          ? sparse[0]! - sparse.at(-1)!
+          : span
         request.reportProgress(
           decodedFrameCount,
           sampledFrameCount,
-          Math.max(0, Math.min(0.99, (decoded.timestampUs - request.startTimestampUs) / span)),
+          Math.max(0, Math.min(0.99, completedSpan / Math.max(1, progressSpan))),
         )
       }
       if (!sampled) continue

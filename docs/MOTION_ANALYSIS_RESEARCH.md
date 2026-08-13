@@ -474,3 +474,24 @@ and point tracking at `maxFeatures: 1`.
   compositor ordering and performance.
 - Every quality threshold is a bounded fixture gate, not a promise that all
   footage is trackable or stabilizable.
+
+## Issue #110 productization
+
+The accepted research primitives now have a bounded product adapter. A
+session-only normalized point or axis-aligned box is tied to one exact project
+frame, decoded forward or backward through #108's sparse lane, and processed
+with only the previous tightly owned grayscale frame retained. Each accepted
+sample carries confidence; the first failed agreement becomes an explicit
+loss record and later decoded frames are never converted into guessed samples.
+
+The source-bound Chromium product gate encodes a 160x90 translated texture and
+replaces it with a full occlusion at frame 18. The dirty-tree calibration
+accepted frames 0 through 17 for both point and box, then stopped both at frame
+18. Point mean/max error was 0.333/1.000 px; box mean center error was 0.333 px
+and mean/max relative scale error was 0%. A second identical point request was
+an exact cache hit. Box Apply wrote only Position X/Y and Scale X/Y in one
+history entry. A second real decode walked the sparse request lane backward
+from frame 17 through frame 0 at the same 0.333/1.000 px point error. Workers
+drained 3/3 with zero active, the cache attachment was removed, and Chromium
+reported no console/page problems. This is synthetic bounded evidence, not a
+promise of arbitrary-footage tracking.

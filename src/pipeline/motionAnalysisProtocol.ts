@@ -52,14 +52,22 @@ export function validateMotionAnalysisWorkerRunMessage(
       || message.sampleTimestampsUs.length > MAX_ANALYSIS_SAMPLES
       || message.samplingIntervalFrames !== 1
     ) throw new RangeError('Sparse analysis timestamps exceed the reviewed sample envelope')
+    let direction = 0
     for (let index = 0; index < message.sampleTimestampsUs.length; index++) {
       const timestampUs = message.sampleTimestampsUs[index]!
       assertSafeInteger(timestampUs, `sampleTimestampsUs[${index}]`)
+      const delta = index === 0
+        ? 0
+        : timestampUs - message.sampleTimestampsUs[index - 1]!
       if (
         timestampUs < message.startTimestampUs
         || timestampUs >= message.endTimestampUs
-        || (index > 0 && timestampUs <= message.sampleTimestampsUs[index - 1]!)
-      ) throw new RangeError('Sparse analysis timestamps must be strictly increasing within the source range')
+        || (index > 0 && (
+          delta === 0
+          || (direction !== 0 && Math.sign(delta) !== direction)
+        ))
+      ) throw new RangeError('Sparse analysis timestamps must be strictly monotonic within the source range')
+      if (index > 0) direction ||= Math.sign(delta)
     }
   }
 }

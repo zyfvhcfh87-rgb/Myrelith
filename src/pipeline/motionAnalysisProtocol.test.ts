@@ -45,7 +45,7 @@ describe('validateMotionAnalysisWorkerRunMessage', () => {
     }))).toThrow('Analysis source range must be non-empty')
   })
 
-  it('accepts only bounded strictly increasing sparse timestamps inside the lane', () => {
+  it('accepts only bounded strictly monotonic sparse timestamps inside the lane', () => {
     expect(() => validateMotionAnalysisWorkerRunMessage(runMessage({
       samplingIntervalFrames: 1,
       sampleTimestampsUs: [0, 41_667, 125_000],
@@ -56,7 +56,15 @@ describe('validateMotionAnalysisWorkerRunMessage', () => {
     expect(() => validateMotionAnalysisWorkerRunMessage(runMessage({
       samplingIntervalFrames: 1,
       sampleTimestampsUs: [0, 0],
-    }))).toThrow(/strictly increasing/)
+    }))).toThrow(/strictly monotonic/)
+    expect(() => validateMotionAnalysisWorkerRunMessage(runMessage({
+      samplingIntervalFrames: 1,
+      sampleTimestampsUs: [125_000, 41_667, 0],
+    }))).not.toThrow()
+    expect(() => validateMotionAnalysisWorkerRunMessage(runMessage({
+      samplingIntervalFrames: 1,
+      sampleTimestampsUs: [0, 125_000, 41_667],
+    }))).toThrow(/strictly monotonic/)
     expect(() => validateMotionAnalysisWorkerRunMessage(runMessage({
       samplingIntervalFrames: 1,
       sampleTimestampsUs: [1_000_000],

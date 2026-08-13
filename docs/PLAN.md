@@ -4551,3 +4551,30 @@ acceptance claims.
   reuse, 1.0232x safe zoom, one history entry, balanced worker/cache cleanup,
   zero console/page problems, and complete port release; refresh exact-head CI
   and fresh Codex review after the final docs-only amend.
+
+## Milestone 5 Part 10a.3 / issue #110 - bounded point and box tracking
+
+**COMPLETE LOCALLY; CLEAN-COMMIT BROWSER/CI/REVIEW PENDING (2026-08-13).**
+
+- [x] Add exact-frame Program Monitor point/box selection and the accessible
+  Inspector analyze/cancel/retry/confidence/loss/preview/apply/reset workflow.
+- [x] Reuse #108 for bounded ascending/descending sparse decode, cache,
+  provenance, cancellation, cleanup, and scheduler ownership; retain only the
+  prior tight grayscale frame while tracking.
+- [x] Stop explicitly on failed point/box agreement with no extrapolation.
+  Revalidate cache geometry and the complete directional frame/tick schedule.
+- [x] Map accepted samples through resolved source crop/flip/anchor/transform
+  to ordinary target Position X/Y and optional Scale X/Y. Preserve unrelated
+  state, require replacement consent, reject overlap/lock/duplicate/key-budget
+  failures, and Apply in one undo entry.
+- [x] Add a source-bound Chromium product gate. The dirty-tree calibration on
+  strict port 41885 passed point mean/max 0.333/1.000 px, box center mean
+  0.333 px, scale error 0%, loss at exact occlusion frame 18, exact cache reuse,
+  one history entry, a reverse 17-to-0 sparse lane, worker lifecycle 3/3/0,
+  cache cleanup, and zero browser problems.
+- [x] Freeze the final source tree; pass 12 focused files / 120 tests, 190 full
+  files / 2,575 tests, all 17 runner checks, build/typecheck, lint, a production
+  audit with 0 vulnerabilities, diff/architecture checks, and normal-dist
+  canaries.
+- [ ] Refresh headed Chromium on the exact clean commit, then request fresh
+  exact-head Codex review and merge only after its clean verdict.

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8"><title>Issue 110 motion-tracking gate</title></head>
+  <body>
+    <main>
+      <h1>Issue 110 motion-tracking gate</h1>
+      <p role="status">Running</p>
+    </main>
+    <script type="module">
+      import { runMotionTrackingBrowserGate } from '/src/dev/issue110/motionTrackingGate.ts'
+      try {
+        const evidence = await runMotionTrackingBrowserGate()
+        globalThis.__issue110MotionTrackingResult = evidence
+        document.querySelector('[role=status]').textContent = 'Passed'
+      } catch (error) {
+        const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+        globalThis.__issue110MotionTrackingError = detail
+        document.querySelector('[role=status]').textContent = `Failed: ${detail}`
+      }
+    </script>
+  </body>
+</html>

@@ -25,6 +25,7 @@ import { useVideoScopesStore } from '../state/videoScopesStore'
 import TextOverlayControls from './TextOverlayControls'
 import VideoScopesPanel from './VideoScopesPanel'
 import VisualOverlayControls from './VisualOverlayControls'
+import MotionTrackingOverlay from './MotionTrackingOverlay'
 
 export default function Preview() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -155,6 +156,7 @@ export default function Preview() {
         data-testid="preview-canvas"
       />
       <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+      <MotionTrackingOverlay canvasRef={canvasRef} panelRef={panelRef} />
       <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
       {scopesEnabled ? <VideoScopesPanel /> : null}
       {offlineVisualAssetIds.length > 0 ? (

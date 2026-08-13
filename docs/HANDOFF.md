@@ -4674,3 +4674,39 @@ surface; it is not a second zoom and never enters document history.
   the visually inspected PNG is 381,065 bytes with SHA-256
   `5179DB3975EA83FB49D91EA134C8DBEEEE19B4CDC39EEF4BBCF14A5DF13B1957`.
   Exact-head CI and fresh Codex evidence follow after the final docs-only amend.
+
+## Milestone 5 Part 10a.3 / issue #110 - bounded point and box tracking (2026-08-13)
+
+**COMPLETE LOCALLY; CLEAN-COMMIT BROWSER/CI/REVIEW PENDING.**
+
+- Added an accessible Program Monitor point/box picker and Inspector workflow
+  for exact-frame selection, forward/backward local analysis, cancel/retry,
+  confidence/loss status, target choice, optional box scale, non-mutating
+  preview, explicit replacement, one-step Apply, and disclosed Position/Scale
+  reset. The ephemeral selection is pinned to its pointer-up project frame and
+  rotated source boxes render as their real project-space polygon.
+- The app facade builds an exact SourceTimeMap schedule, reuses #108's bounded
+  cache/job/worker path, streams one previous tightly owned gray frame through
+  the proven point/similarity-box estimators, and records the first loss
+  without guessing through it. Sparse decode now accepts strict ascending or
+  descending timestamp lanes and reports direction-aware progress.
+- Cache parsing and preview/Apply revalidate the exact project/source/selection
+  snapshot, directional frame/tick schedule, geometry bounds, target
+  overlap/lock/dimensions, replacement, and animation budgets. Accepted motion
+  maps through per-frame source crop/flip/anchor/transform to ordinary target
+  Position X/Y and optional Scale X/Y tracks. Every accepted sample is retained,
+  which gives zero simplification error within the 1,024-key ceiling.
+- The dirty-tree source-bound Chromium gate on strict port 41885 passed a
+  160x90 encoded fixture: point mean/max error 0.333/1.000 px, box mean center
+  error 0.333 px, mean/max scale error 0%, explicit point and box loss on
+  occlusion frame 18 after 18 accepted samples, exact cache reuse, one history
+  entry, and zero console/page problems. A real reverse sparse lane also
+  accepted frames 17 through 0 at 0.333 px mean / 1.000 px max error. Worker
+  lifecycle finished 3/3/0 and the cache attachment was removed.
+- The frozen focused matrix passes 12/12 files with 120/120 tests. The
+  authoritative suite passes 190/190 files with 2,575/2,575 tests plus all
+  17 evidence-runner checks. TypeScript/Vite builds 4,816 modules, lint is
+  warning-free, the production audit reports 0 vulnerabilities, and diff/
+  architecture checks pass. The normal 39-file / 7,710,072-byte build contains
+  the production tracking product but zero Issue #110 gate/fixture or WebGPU
+  experiment canaries. Refresh headed evidence on the exact clean commit.

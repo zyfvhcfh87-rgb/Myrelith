@@ -6,6 +6,8 @@ import {
   applySimilarityTransform,
   estimateSimilarityFromMatches,
   matchMotionFeatures,
+  validateGrayFrame,
+  validateMotionAnalysisBudget,
   validateMotionFrameSequence,
   type GrayFrame,
   type MotionAnalysisBudget,
@@ -75,6 +77,22 @@ function validPointInFrame(frame: GrayFrame, point: MotionPoint, margin: number)
     && point.y < frame.height - margin
 }
 
+export function validateInitialPointTrackingSelection(
+  frame: GrayFrame,
+  point: MotionPoint,
+  budget: MotionAnalysisBudget = DEFAULT_MOTION_ANALYSIS_BUDGET,
+): void {
+  validateMotionAnalysisBudget(budget)
+  validateGrayFrame(frame, budget)
+  if (!isIntegerPixelPoint(point)) {
+    throw new RangeError('Initial tracking point must use safe integer pixel coordinates')
+  }
+  const margin = budget.patchRadius + budget.searchRadius + 1
+  if (!validPointInFrame(frame, point, margin)) {
+    throw new RangeError('Initial tracking point is outside the analyzable frame region')
+  }
+}
+
 function pointConfidence(meanAbsoluteError: number): number {
   return Math.max(0, Math.min(1, 1 - meanAbsoluteError / 48))
 }
@@ -87,13 +105,8 @@ export function trackPointSequence(
   onProgress?: (completedFrames: number, totalFrames: number) => void,
 ): PointTrackingResult {
   validateMotionFrameSequence(frames, budget)
-  if (!isIntegerPixelPoint(initialPoint)) {
-    throw new RangeError('Initial tracking point must use safe integer pixel coordinates')
-  }
+  validateInitialPointTrackingSelection(frames[0]!, initialPoint, budget)
   const margin = budget.patchRadius + budget.searchRadius + 1
-  if (!validPointInFrame(frames[0]!, initialPoint, margin)) {
-    throw new RangeError('Initial tracking point is outside the analyzable frame region')
-  }
   const samples: PointTrackingSample[] = [{
     frameIndex: 0,
     x: initialPoint.x,
@@ -157,6 +170,21 @@ function validateTrackingBox(frame: GrayFrame, box: TrackingBox, margin: number)
   }
 }
 
+export function validateInitialBoxTrackingSelection(
+  frame: GrayFrame,
+  box: TrackingBox,
+  budget: MotionAnalysisBudget = DEFAULT_MOTION_ANALYSIS_BUDGET,
+): void {
+  validateMotionAnalysisBudget(budget)
+  validateGrayFrame(frame, budget)
+  if (budget.maxFeatures < MIN_SIMILARITY_MATCHES) {
+    throw new RangeError(
+      `Box tracking requires maxFeatures to be at least ${MIN_SIMILARITY_MATCHES}`,
+    )
+  }
+  validateTrackingBox(frame, box, budget.patchRadius + budget.searchRadius + 1)
+}
+
 const REDUCED_BOX_SEED_PRIORITY = Object.freeze([
   0, 3, 12, 15,
   5, 6, 9, 10,
@@ -200,13 +228,8 @@ export function trackBoxSequence(
   onProgress?: (completedFrames: number, totalFrames: number) => void,
 ): BoxTrackingResult {
   validateMotionFrameSequence(frames, budget)
-  if (budget.maxFeatures < MIN_SIMILARITY_MATCHES) {
-    throw new RangeError(
-      `Box tracking requires maxFeatures to be at least ${MIN_SIMILARITY_MATCHES}`,
-    )
-  }
+  validateInitialBoxTrackingSelection(frames[0]!, initialBox, budget)
   const margin = budget.patchRadius + budget.searchRadius + 1
-  validateTrackingBox(frames[0]!, initialBox, margin)
   const samples: BoxTrackingSample[] = [{
     frameIndex: 0,
     ...initialBox,
@@ -299,6 +322,8 @@ export interface TrackingAnimationTarget {
 export interface TrackingAnimationMapping {
   readonly includeScale: boolean
   readonly target: TrackingAnimationTarget
+  /** Sample whose source center/size is anchored to the authored target base. */
+  readonly referenceFrame?: number
 }
 
 function linearKeyframe(frame: number, value: number) {
@@ -476,8 +501,11 @@ export function trackingSamplesToAnimationTracks(
   if (targetError) throw new RangeError(`Tracking target ${targetError}`)
   const baseError = transformProjectionValidationError(base)
   if (baseError) throw new RangeError(`Tracking target ${baseError}`)
-  const first = samples[0]!
-  const firstProjectCenter = projectSourceCenter(first)
+  const reference = mapping.referenceFrame === undefined
+    ? samples[0]!
+    : samples.find((sample) => sample.frame === mapping.referenceFrame)
+  if (!reference) throw new RangeError('Tracking reference frame is not present in the sample set')
+  const referenceProjectCenter = projectSourceCenter(reference)
   let previousFrame = -1
   for (const sample of samples) {
     if (!Number.isSafeInteger(sample.frame) || sample.frame < 0 || sample.frame <= previousFrame) {
@@ -492,10 +520,10 @@ export function trackingSamplesToAnimationTracks(
   let scales: readonly { readonly x: number; readonly y: number }[] | null = null
   if (mapping.includeScale) {
     if (
-      !Number.isFinite(first.width)
-      || !Number.isFinite(first.height)
-      || first.width! <= 0
-      || first.height! <= 0
+      !Number.isFinite(reference.width)
+      || !Number.isFinite(reference.height)
+      || reference.width! <= 0
+      || reference.height! <= 0
       || samples.some((sample) => (
         !Number.isFinite(sample.width)
         || !Number.isFinite(sample.height)
@@ -506,13 +534,14 @@ export function trackingSamplesToAnimationTracks(
     const projectedExtents = samples.map((sample) => (
       projectSourceBoxExtents(sample, base.rotation)
     ))
-    const firstProjectedExtents = projectedExtents[0]!
+    const referenceIndex = samples.indexOf(reference)
+    const referenceProjectedExtents = projectedExtents[referenceIndex]!
     scales = projectedExtents.map((extents, index) => {
-      const scale = index === 0
+      const scale = index === referenceIndex
         ? { x: base.scaleX, y: base.scaleY }
         : {
-            x: extents.x / firstProjectedExtents.x * base.scaleX,
-            y: extents.y / firstProjectedExtents.y * base.scaleY,
+            x: extents.x / referenceProjectedExtents.x * base.scaleX,
+            y: extents.y / referenceProjectedExtents.y * base.scaleY,
           }
       if (
         !Number.isFinite(scale.x)
@@ -541,9 +570,9 @@ export function trackingSamplesToAnimationTracks(
       scale.y,
     )
     return {
-      x: base.x + projectCenter.x - firstProjectCenter.x
+      x: base.x + projectCenter.x - referenceProjectCenter.x
         + baseTargetOffset.x - targetOffset.x,
-      y: base.y + projectCenter.y - firstProjectCenter.y
+      y: base.y + projectCenter.y - referenceProjectCenter.y
         + baseTargetOffset.y - targetOffset.y,
     }
   })

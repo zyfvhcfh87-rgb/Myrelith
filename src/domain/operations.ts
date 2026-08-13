@@ -82,6 +82,11 @@ import {
   type VideoStabilizationPlan,
 } from './videoStabilization'
 import {
+  BOX_TRACKING_PROPERTIES,
+  POINT_TRACKING_PROPERTIES,
+  type MotionTrackingPlan,
+} from './motionTracking'
+import {
   clipAudioSettings,
   clipAudioSettingsValidationError,
   clipVisualSettings,
@@ -2352,6 +2357,68 @@ export function applyVideoStabilizationWithResult(
   )
   if (!documentAnimationKeyframeGrowthAllowed(doc, additionalKeyframes)) {
     return rejectClipFramingOperation(doc, op, 'stabilization would exceed the document keyframe budget')
+  }
+  if (JSON.stringify(animation) === JSON.stringify(current)) {
+    return { ok: true, changed: false, doc }
+  }
+  return {
+    ok: true,
+    changed: true,
+    doc: replaceClipAnimation(doc, location.loc, animation),
+  }
+}
+
+/** Replace the exact Position/Scale properties owned by one accepted tracking plan. */
+export function applyMotionTrackingWithResult(
+  doc: TimelineDoc,
+  plan: MotionTrackingPlan,
+  replaceExisting: boolean,
+): ClipFramingOperationResult {
+  const op = 'applyMotionTracking'
+  const location = animationEditLocationResult(doc, plan.targetClipId)
+  if (!location.ok) return rejectClipFramingOperation(doc, op, location.reason)
+  const expected = plan.kind === 'box' && plan.includeScale
+    ? BOX_TRACKING_PROPERTIES
+    : POINT_TRACKING_PROPERTIES
+  const owned = new Set<ClipAnimationProperty>(expected)
+  if (
+    plan.tracks.length !== expected.length
+    || expected.some((property) => plan.tracks.filter((track) => track.property === property).length !== 1)
+    || plan.tracks.some((track) => !owned.has(track.property))
+  ) return rejectClipFramingOperation(doc, op, 'motion-tracking plan has an invalid track set')
+  const current = clipAnimation(location.loc.clip)
+  if (current.tracks.some((track) => owned.has(track.property)) && !replaceExisting) {
+    return rejectClipFramingOperation(
+      doc,
+      op,
+      `existing ${plan.includeScale ? 'Position or Scale' : 'Position'} animation requires explicit replacement confirmation`,
+    )
+  }
+  const tracks = [
+    ...current.tracks.filter((track) => !owned.has(track.property)),
+    ...plan.tracks.map((track) => ({
+      property: track.property,
+      keyframes: track.keyframes.map((keyframe) => ({
+        ...keyframe,
+        easing: keyframe.easing.type === 'cubic-bezier'
+          ? { ...keyframe.easing }
+          : { type: keyframe.easing.type },
+      })),
+    })),
+  ]
+  tracks.sort((left, right) => (
+    ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property)
+      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property)
+  ))
+  const animation = { ...current, tracks }
+  const error = clipAnimationValidationError(animation)
+  if (error) return rejectClipFramingOperation(doc, op, error)
+  const additionalKeyframes = Math.max(
+    0,
+    clipAnimationKeyframeCount(animation) - clipAnimationKeyframeCount(current),
+  )
+  if (!documentAnimationKeyframeGrowthAllowed(doc, additionalKeyframes)) {
+    return rejectClipFramingOperation(doc, op, 'motion tracking would exceed the document keyframe budget')
   }
   if (JSON.stringify(animation) === JSON.stringify(current)) {
     return { ok: true, changed: false, doc }

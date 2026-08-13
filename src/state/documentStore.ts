@@ -75,12 +75,14 @@ import type {
   DynamicZoomSourceDimensions,
 } from '../domain/dynamicZoom'
 import type { VideoStabilizationPlan } from '../domain/videoStabilization'
+import type { MotionTrackingPlan } from '../domain/motionTracking'
 import {
   addCrossfade,
   addCrossfadeWithSourceBounds as addExactCrossfade,
   addEffect,
   applyDynamicZoomWithResult,
   applyVideoStabilizationWithResult,
+  applyMotionTrackingWithResult,
   addTrack,
   insertClip,
   removeTransition,
@@ -315,6 +317,11 @@ export interface DocumentState {
   applyVideoStabilization: (
     clipId: ClipId,
     plan: VideoStabilizationPlan,
+    replaceExisting: boolean,
+  ) => ClipFramingOperationResult
+  /** Replace one target's Position and optional Scale tracks in one history entry. */
+  applyMotionTracking: (
+    plan: MotionTrackingPlan,
     replaceExisting: boolean,
   ) => ClipFramingOperationResult
   /** Explicitly remove all ordinary Position/Rotation/Scale tracks in one entry. */
@@ -680,6 +687,15 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         plan,
         replaceExisting,
       )
+      return commit(state, result.doc)
+    })
+    return result!
+  },
+
+  applyMotionTracking: (plan, replaceExisting) => {
+    let result: ClipFramingOperationResult | undefined
+    set((state) => {
+      result = applyMotionTrackingWithResult(state.doc, plan, replaceExisting)
       return commit(state, result.doc)
     })
     return result!

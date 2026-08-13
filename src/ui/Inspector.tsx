@@ -79,6 +79,7 @@ import EffectStackInspector from './EffectStackInspector'
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
 const DynamicZoomEditor = lazy(() => import('./DynamicZoomEditor'))
 const StabilizationEditor = lazy(() => import('./StabilizationEditor'))
+const MotionTrackingEditor = lazy(() => import('./MotionTrackingEditor'))
 
 const BLEND_MODE_LABELS: Readonly<Record<BlendModeName, string>> = {
   normal: 'Normal',
@@ -1477,6 +1478,11 @@ export default function Inspector() {
                     locked={videoLocked}
                   />
                   <StabilizationEditor
+                    clip={videoClip}
+                    locked={videoLocked}
+                    playheadFrame={playheadFrame}
+                  />
+                  <MotionTrackingEditor
                     clip={videoClip}
                     locked={videoLocked}
                     playheadFrame={playheadFrame}

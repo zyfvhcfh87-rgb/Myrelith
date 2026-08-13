@@ -359,10 +359,15 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
     this.assertOpen()
     if (timestampsUs.length < 1) throw new RangeError('timestampsUs must not be empty')
     const timestampsSeconds: number[] = []
+    let direction = 0
     for (let index = 0; index < timestampsUs.length; index++) {
       const timestampUs = timestampsUs[index]!
-      if (index > 0 && timestampUs <= timestampsUs[index - 1]!) {
-        throw new RangeError('timestampsUs must be strictly increasing')
+      if (index > 0) {
+        const delta = timestampUs - timestampsUs[index - 1]!
+        if (delta === 0 || (direction !== 0 && Math.sign(delta) !== direction)) {
+          throw new RangeError('timestampsUs must be strictly monotonic')
+        }
+        direction ||= Math.sign(delta)
       }
       timestampsSeconds.push(timestampUsToSeconds(
         timestampUs,

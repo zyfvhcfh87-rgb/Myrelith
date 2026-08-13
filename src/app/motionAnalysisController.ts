@@ -229,6 +229,16 @@ function jobId(request: MotionAnalysisRunRequest): string {
   return `analysis:${request.attachment.clipId}:${request.algorithm.kind}`
 }
 
+function strictlyMonotonic(values: readonly number[]): boolean {
+  let direction = 0
+  for (let index = 1; index < values.length; index++) {
+    const delta = values[index]! - values[index - 1]!
+    if (delta === 0 || (direction !== 0 && Math.sign(delta) !== direction)) return false
+    direction ||= Math.sign(delta)
+  }
+  return true
+}
+
 function validateRequest(request: MotionAnalysisRunRequest): void {
   if (!request.projectBindingId.startsWith('local-project:')) {
     throw new TypeError('Motion analysis requires an opaque local-project binding')
@@ -259,11 +269,11 @@ function validateRequest(request: MotionAnalysisRunRequest): void {
       request.sampleTimestampsUs.length < 1
       || request.sampleTimestampsUs.length > MAX_ANALYSIS_SAMPLES
       || request.source.samplingIntervalFrames !== 1
-      || request.sampleTimestampsUs.some((timestampUs, index) => (
+      || !strictlyMonotonic(request.sampleTimestampsUs)
+      || request.sampleTimestampsUs.some((timestampUs) => (
         !Number.isSafeInteger(timestampUs)
         || timestampUs < request.source.sourceStartMicroseconds
         || timestampUs >= request.source.sourceEndMicroseconds
-        || (index > 0 && timestampUs <= request.sampleTimestampsUs![index - 1]!)
       ))
     ) throw new TypeError('Motion analysis sparse sample timestamps are invalid')
   }

@@ -206,6 +206,36 @@ describe('decodeMotionAnalysisWindows', () => {
     expect(fixture.closeCounts).toEqual([1, 1, 1])
   })
 
+  it('preserves descending sparse order and reports forward-moving reverse progress', async () => {
+    const sparse = Array.from({ length: 9 }, (_, index) => (8 - index) * 125_000)
+    const fixture = sourceFixture(sparse.length, 0, sparse)
+    fixture.source.openTimestampLane = vi.fn(() => fixture.cursor)
+    const reportProgress = vi.fn()
+    const timestamps: number[] = []
+
+    await decodeMotionAnalysisWindows({
+      source: fixture.source,
+      startTimestampUs: 0,
+      endTimestampUs: 1_000_001,
+      samplingIntervalFrames: 1,
+      sampleTimestampsUs: sparse,
+      extractGrayFrame: (_frame, timestampUs) => ({
+        timestampUs,
+        width: 1,
+        height: 1,
+        pixels: new Uint8Array(new ArrayBuffer(1)),
+      }),
+      sendWindow: async (window) => {
+        timestamps.push(...window.frames.map((frame) => frame.timestampUs))
+      },
+      reportProgress,
+    })
+
+    expect(timestamps).toEqual(sparse)
+    expect(reportProgress).toHaveBeenCalledWith(8, 8, 0.875)
+    expect(fixture.closeCounts).toEqual(Array(9).fill(1))
+  })
+
   it('reports decoded-frame progress even when each progress frame is unsampled', async () => {
     const fixture = sourceFixture(17)
     const reportProgress = vi.fn()
