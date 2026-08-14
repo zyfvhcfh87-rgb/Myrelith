@@ -271,11 +271,11 @@ describe('linked speed-ramp editing', () => {
     expect(members.map((clip) => sourceTimeSpeedPointsAtClip(clip.sourceTimeMap!)))
       .toEqual([
         [
-          { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'linear' },
+          { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
           { frame: 50, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
         ],
         [
-          { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'linear' },
+          { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
           { frame: 50, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
         ],
       ])

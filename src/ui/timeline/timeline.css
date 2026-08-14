@@ -539,6 +539,82 @@
   box-shadow: 0 0 0 1px rgb(255 255 255 / 20%);
 }
 
+.clip-keyframe-marker.effect-key {
+  background: #85dfbd;
+  border-color: #174936;
+}
+
+.clip-keyframe-marker.mixed-key {
+  background: #f6c6ff;
+  border-color: #5d2e68;
+}
+
+/* Resolve-style speed sections use the exact persisted SourceTimeMap curve.
+   They are presentation-only: authoring remains in the Inspector and every
+   visible boundary is still an integer clip-local frame. */
+.clip-view.has-speed-lane .clip-visual {
+  bottom: 13px;
+}
+
+.clip-view.has-speed-lane .clip-keyframe-marker {
+  bottom: 17px;
+}
+
+.clip-speed-lane {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 13px;
+  overflow: hidden;
+  border-top: 1px solid rgb(220 235 250 / 35%);
+  background: #21364f;
+  pointer-events: none;
+}
+
+.clip-speed-segment {
+  position: absolute;
+  inset-block: 0;
+  min-width: 1px;
+  overflow: hidden;
+  border-right: 1px solid rgb(225 237 250 / 38%);
+  color: #f1f7ff;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 70%);
+}
+
+.clip-speed-segment > span {
+  display: block;
+  min-width: max-content;
+  padding-inline: 3px;
+}
+
+.clip-speed-segment.speed-normal { background: #315779; }
+.clip-speed-segment.speed-slow { background: #5c4d91; }
+.clip-speed-segment.speed-fast { background: #8a5a2e; }
+.clip-speed-segment.speed-freeze { background: #873f61; }
+.clip-speed-segment.speed-mixed { background: #3e7180; }
+
+.clip-speed-boundary {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #f4f8fc;
+  box-shadow: 0 0 0 1px rgb(10 20 32 / 38%);
+}
+
+.clip-view.has-speed-lane .clip-offline-badge,
+.clip-view.has-speed-lane .clip-link-badge {
+  bottom: 15px;
+}
+
 /* ---------------- Phase 5.1e transition authoring ---------------- */
 
 /* Anchored at the exact cut frame. Only the tiny marker is persistent; its

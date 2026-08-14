@@ -12,6 +12,11 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import type { PortableAssetDescriptor } from '../../domain/projectFile'
 import type { Clip, MediaAsset } from '../../domain/schema'
 import type { AssetVisuals } from '../../state/mediaStore'
+import {
+  defaultSourceTimeMap,
+  sourceTimeMapWithSpeedPoint,
+  sourceTimeSpeedRateFromPercent,
+} from '../../domain/sourceTimeMap'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
 import {
@@ -158,6 +163,14 @@ describe('clip visuals', () => {
           ],
         },
       ],
+      effectTracks: [{
+        effectId: 'effect-1',
+        parameter: 'amount',
+        keyframes: [
+          { frame: 25, value: 0.5, easing: { type: 'linear' } },
+          { frame: 50, value: 1, easing: { type: 'linear' } },
+        ],
+      }],
     }
 
     const { container } = render(
@@ -165,8 +178,60 @@ describe('clip visuals', () => {
     )
     const markers = [...container.querySelectorAll<HTMLElement>('.clip-keyframe-marker')]
 
-    expect(markers).toHaveLength(3)
-    expect(markers.map((marker) => marker.style.left)).toEqual(['0px', '50px', '198px'])
+    expect(markers).toHaveLength(4)
+    expect(markers.map((marker) => marker.style.left)).toEqual(['0px', '50px', '100px', '198px'])
+    expect(markers[1]).toHaveClass('mixed-key')
+    expect(markers[2]).toHaveClass('effect-key')
+  })
+
+  test('shows exact speed sections and boundaries below a retimed clip', () => {
+    const ramped = makeClip('ramped', 25, 100)
+    let map = sourceTimeMapWithSpeedPoint(
+      defaultSourceTimeMap(0, 100),
+      20,
+      sourceTimeSpeedRateFromPercent(50),
+      'hold',
+    )
+    map = sourceTimeMapWithSpeedPoint(
+      map,
+      40,
+      sourceTimeSpeedRateFromPercent(100),
+      'hold',
+    )
+    ramped.sourceTimeMap = map
+
+    const { container } = render(
+      <ClipView clip={ramped} trackId="V1" trackKind="video" />,
+    )
+
+    expect(screen.getByTestId('clip-ramped')).toHaveClass('has-speed-lane')
+    expect(screen.getByTestId('clip-ramped-speed-lane')).toHaveAccessibleName(
+      /frames 20 to 40: 50%/,
+    )
+    const segments = [...container.querySelectorAll<HTMLElement>('.clip-speed-segment')]
+    expect(segments).toHaveLength(3)
+    expect(segments.map((segment) => [segment.style.left, segment.style.width])).toEqual([
+      ['0px', '40px'],
+      ['40px', '40px'],
+      ['80px', '120px'],
+    ])
+    expect(segments[1]).toHaveClass('speed-slow')
+    expect(container.querySelectorAll('.clip-speed-boundary')).toHaveLength(3)
+  })
+
+  test('keeps audio timing in its waveform instead of duplicating the video speed lane', () => {
+    const rampedAudio = makeClip('ramped-audio', 25, 100)
+    rampedAudio.sourceTimeMap = sourceTimeMapWithSpeedPoint(
+      defaultSourceTimeMap(0, 100),
+      20,
+      sourceTimeSpeedRateFromPercent(50),
+      'hold',
+    )
+
+    render(<ClipView clip={rampedAudio} trackId="A1" trackKind="audio" />)
+
+    expect(screen.getByTestId('clip-ramped-audio')).not.toHaveClass('has-speed-lane')
+    expect(screen.queryByTestId('clip-ramped-audio-speed-lane')).not.toBeInTheDocument()
   })
 
   test('a still repeats its one visual tile across live timeline extensions', () => {

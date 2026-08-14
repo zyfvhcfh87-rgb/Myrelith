@@ -515,12 +515,12 @@ function SpeedRampEditor({
                 Math.round(sourceTimeSpeedAtTimelineOffset(map, localPlayhead) * 4) * 25,
               ),
             )
-            commitPoint(localPlayhead, percent, 'linear')
+            commitPoint(localPlayhead, percent, 'hold')
           }}
         >
           {points.some((point) => point.frame === localPlayhead)
-            ? 'Select point at playhead'
-            : 'Add point at playhead'}
+            ? 'Select boundary at playhead'
+            : 'Add boundary at playhead'}
         </button>
         <button
           type="button"
@@ -571,7 +571,7 @@ function SpeedRampEditor({
         </>
       ) : (
         <p className="animation-empty">
-          Add a point at the playhead to start a ramp. The current constant speed becomes frame 0.
+          Choose a speed at the playhead or add a boundary to start a timed section. The current whole-clip speed becomes frame 0.
         </p>
       )}
 
@@ -656,8 +656,20 @@ function TimingInspectorSection({
   doc: TimelineDoc
 }) {
   const map = clipSourceTimeMap(clip)
-  const speedPercent = sourceTimeRatePercent(map.rate)
+  const wholeClipSpeedPercent = sourceTimeRatePercent(map.rate)
   const rampActive = sourceTimeMapUsesSpeedCurve(map)
+  const playheadFrame = useTransportStore((state) => state.playheadFrame)
+  const localPlayhead = playheadFrame - clip.timelineRange.startFrame
+  const playheadInside = localPlayhead >= 0
+    && localPlayhead < clip.timelineRange.durationFrames
+  const pointAtPlayhead = sourceTimeSpeedPointsAtClip(map)
+    .find((point) => point.frame === localPlayhead)
+  const playheadSpeedPercent = playheadInside
+    ? pointAtPlayhead
+      ? sourceTimeSpeedRatePercent(pointAtPlayhead.rate)
+      : Math.round(sourceTimeSpeedAtTimelineOffset(map, localPlayhead) * 10_000) / 100
+    : wholeClipSpeedPercent
+  const playheadSpeedIsPreset = RAMP_SPEED_PERCENT_OPTIONS.includes(playheadSpeedPercent)
   const members = [clip, ...linkedPartners(doc, clip.id)]
   const retimable = members.every(
     (member) => member.sourceMode === 'timed' && member.text === undefined,
@@ -671,7 +683,7 @@ function TimingInspectorSection({
     setMessage(null)
   }, [clip.id, map.rate.numerator, map.rate.denominator])
 
-  const commit = (percent: number): void => {
+  const commitWholeClip = (percent: number): void => {
     const store = useDocumentStore.getState()
     const before = store.doc
     const latest = findClip(before, clip.id)
@@ -690,8 +702,42 @@ function TimingInspectorSection({
     const updated = findClip(after, clip.id)
     setMessage(
       updated
-        ? `Speed changed to ${percent}%. Timeline duration is now ${updated.timelineRange.durationFrames} frames.`
-        : `Speed changed to ${percent}%.`,
+        ? `Whole-clip speed changed to ${percent}%. Timeline duration is now ${updated.timelineRange.durationFrames} frames.`
+        : `Whole-clip speed changed to ${percent}%.`,
+    )
+  }
+
+  const commitAtPlayhead = (percent: number): void => {
+    const store = useDocumentStore.getState()
+    const before = store.doc
+    const latest = findClip(before, clip.id)
+    if (!latest) {
+      setMessage('This clip is no longer available. Select it again and retry.')
+      return
+    }
+    const frame = useTransportStore.getState().playheadFrame - latest.timelineRange.startFrame
+    if (frame < 0 || frame >= latest.timelineRange.durationFrames) {
+      setMessage('Move the playhead inside this clip to create a speed boundary.')
+      return
+    }
+    const existing = sourceTimeSpeedPointsAtClip(clipSourceTimeMap(latest))
+      .find((point) => point.frame === frame)
+    store.setClipSpeedPoint(
+      clip.id,
+      frame,
+      sourceTimeSpeedRateFromPercent(percent),
+      existing?.easing ?? 'hold',
+    )
+    const after = useDocumentStore.getState().doc
+    if (after === before) {
+      setMessage(
+        'Speed boundary was not applied. Keep it inside every linked clip, unlock tracks, and make room beside the clip.',
+      )
+      return
+    }
+    const updated = findClip(after, clip.id)
+    setMessage(
+      `Speed at clip frame ${frame} is now ${percent}%. Move the playhead and choose another speed to end the section.${updated ? ` Timeline duration is now ${updated.timelineRange.durationFrames} frames.` : ''}`,
     )
   }
 
@@ -704,17 +750,41 @@ function TimingInspectorSection({
     <InspectorSection
       title="Timing"
       resetLabel="Reset clip speed"
-      disabled={locked || !retimable || (speedPercent === 100 && !rampActive)}
-      onReset={() => commit(100)}
+      disabled={locked || !retimable || (wholeClipSpeedPercent === 100 && !rampActive)}
+      onReset={() => commitWholeClip(100)}
     >
       <label className="inspector-field inspector-field-wide">
-        <span className="inspector-field-label">Speed</span>
+        <span className="inspector-field-label">Speed at playhead</span>
+        <select
+          aria-describedby="inspector-speed-playhead-detail inspector-speed-detail inspector-speed-audio inspector-speed-status"
+          data-testid="inspector-speed-at-playhead"
+          value={playheadSpeedPercent}
+          disabled={locked || !retimable || !playheadInside}
+          onChange={(event) => commitAtPlayhead(Number(event.target.value))}
+        >
+          {!playheadSpeedIsPreset && (
+            <option value={playheadSpeedPercent}>{playheadSpeedPercent}% (ramp value)</option>
+          )}
+          {RAMP_SPEED_PERCENT_OPTIONS.map((percent) => (
+            <option key={percent} value={percent}>
+              {percent === 0 ? '0% (Freeze)' : `${percent}%`}
+            </option>
+          ))}
+        </select>
+      </label>
+      <span id="inspector-speed-playhead-detail" className="inspector-note">
+        {playheadInside
+          ? `Clip frame ${localPlayhead}. Changing this creates or updates a boundary here; move the playhead and choose another speed to close the section.`
+          : 'Move the playhead inside this clip to author a timed speed section.'}
+      </span>
+      <label className="inspector-field inspector-field-wide">
+        <span className="inspector-field-label">Whole clip speed</span>
         <select
           aria-describedby="inspector-speed-detail inspector-speed-audio inspector-speed-status"
-          data-testid="inspector-speed"
-          value={speedPercent}
+          data-testid="inspector-whole-clip-speed"
+          value={wholeClipSpeedPercent}
           disabled={locked || !retimable}
-          onChange={(event) => commit(Number(event.target.value))}
+          onChange={(event) => commitWholeClip(Number(event.target.value))}
         >
           {SPEED_PERCENT_OPTIONS.map((percent) => (
             <option key={percent} value={percent}>{percent}%</option>

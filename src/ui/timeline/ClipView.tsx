@@ -27,11 +27,15 @@
 
 import { memo } from 'react'
 import type { Clip, TrackId, TrackKind } from '../../domain/schema'
-import { clipAnimation } from '../../domain/clipAnimation'
 import { microsecondsDurationToFrames } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
+import ClipAutomationLane from './ClipAutomationLane'
+import {
+  clipAutomationMarkers,
+  clipHasSpeedLane,
+} from './clipAutomationPlan'
 import { planClipPresentation } from './clipVisualPlan'
 import ClipVisualLayer from './ClipVisualLayer'
 import { useClipGestureSession } from './useClipGestureSession'
@@ -158,25 +162,23 @@ function ClipView({
     accessibleKind,
     interactionTitle,
   } = presentation
-  const allMarkerFrames = Array.from(new Set(
-    clipAnimation(clip).tracks.flatMap((track) =>
-      track.keyframes.map((keyframe) => clip.timelineRange.startFrame + keyframe.frame),
-    ),
-  ))
-    .filter((frame) =>
-      frame >= clip.timelineRange.startFrame
-      && frame < clip.timelineRange.startFrame + clip.timelineRange.durationFrames
-      && frame >= presentation.displayedStartFrame
-      && frame < presentation.displayedEndFrame,
+  const hasSpeedLane = trackKind === 'video' && clipHasSpeedLane(clip)
+  const allMarkers = clipAutomationMarkers(clip)
+    .map((marker) => ({
+      ...marker,
+      frame: clip.timelineRange.startFrame + marker.frame,
+    }))
+    .filter((marker) =>
+      marker.frame >= presentation.displayedStartFrame
+      && marker.frame < presentation.displayedEndFrame,
     )
-    .sort((left, right) => left - right)
-  const markerStride = Math.max(1, Math.ceil(allMarkerFrames.length / 128))
-  const markerFrames = allMarkerFrames.filter((_, index) => index % markerStride === 0)
+  const markerStride = Math.max(1, Math.ceil(allMarkers.length / 128))
+  const markers = allMarkers.filter((_, index) => index % markerStride === 0)
 
   return (
     <div
       ref={rootRef}
-      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isSelected && isPrimarySelection ? ' primary-selected' : ''}${isOffline ? ' offline' : ''}${hasVisibleSlice ? '' : ' virtual-gesture-host'}`}
+      className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isSelected && isPrimarySelection ? ' primary-selected' : ''}${isOffline ? ' offline' : ''}${hasSpeedLane ? ' has-speed-lane' : ''}${hasVisibleSlice ? '' : ' virtual-gesture-host'}`}
       data-testid={`clip-${clip.id}`}
       data-offline={isOffline ? 'true' : 'false'}
       data-source-mode={clip.sourceMode ?? 'timed'}
@@ -204,14 +206,22 @@ function ClipView({
       onLostPointerCapture={onLostPointerCapture}
     >
       <ClipVisualLayer clipId={clip.id} visual={presentation.visual} />
-      {hasVisibleSlice && markerFrames.length > 0 && (
+      {hasVisibleSlice && hasSpeedLane && (
+        <ClipAutomationLane
+          clip={clip}
+          displayedStartFrame={presentation.displayedStartFrame}
+          displayedEndFrame={presentation.displayedEndFrame}
+          zoom={zoom}
+        />
+      )}
+      {hasVisibleSlice && markers.length > 0 && (
         <span className="clip-keyframe-markers" aria-hidden="true">
-          {markerFrames.map((frame) => (
+          {markers.map((marker) => (
             <span
-              key={frame}
-              className="clip-keyframe-marker"
+              key={marker.frame}
+              className={`clip-keyframe-marker${marker.kinds.includes('effect') ? ' effect-key' : ''}${marker.kinds.length > 1 ? ' mixed-key' : ''}`}
               style={{
-                left: (frame - presentation.displayedStartFrame) * zoom,
+                left: (marker.frame - presentation.displayedStartFrame) * zoom,
               }}
             />
           ))}
