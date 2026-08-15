@@ -131,6 +131,8 @@ export interface ClipPresentationPlan {
   badge: string | null
   hasVisibleSlice: boolean
   previewedClipStartFrame: number
+  previewedClipDurationFrames: number
+  previewedSourceTimeMap: SourceTimeMap
   displayedStartFrame: number
   displayedEndFrame: number
   displayedDurationFrames: number
@@ -516,6 +518,8 @@ export function planClipPresentation({
     badge,
     hasVisibleSlice,
     previewedClipStartFrame: startFrame,
+    previewedClipDurationFrames: durationFrames,
+    previewedSourceTimeMap: sourceTimeMap,
     displayedStartFrame,
     displayedEndFrame,
     displayedDurationFrames,

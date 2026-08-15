@@ -1,12 +1,14 @@
 /** Timeline overlay for the persisted speed map; authoring remains Inspector-owned. */
 
-import type { Clip } from '../../domain/schema'
-import { clipSourceTimeMap, sourceTimeSpeedPointsAtClip } from '../../domain/sourceTimeMap'
-import { clipSpeedSegments } from './clipAutomationPlan'
+import type { Clip, SourceTimeMap } from '../../domain/schema'
+import { sourceTimeSpeedPointsAtClip } from '../../domain/sourceTimeMap'
+import { sourceTimeMapSpeedSegments } from './clipAutomationPlan'
 
 interface ClipAutomationLaneProps {
   clip: Clip
   previewedClipStartFrame: number
+  previewedClipDurationFrames: number
+  previewedSourceTimeMap: SourceTimeMap
   displayedStartFrame: number
   displayedEndFrame: number
   zoom: number
@@ -15,11 +17,16 @@ interface ClipAutomationLaneProps {
 export default function ClipAutomationLane({
   clip,
   previewedClipStartFrame,
+  previewedClipDurationFrames,
+  previewedSourceTimeMap,
   displayedStartFrame,
   displayedEndFrame,
   zoom,
 }: ClipAutomationLaneProps) {
-  const segments = clipSpeedSegments(clip)
+  const segments = sourceTimeMapSpeedSegments(
+    previewedSourceTimeMap,
+    previewedClipDurationFrames,
+  )
   if (segments.length === 0) return null
   const visibleStartLocal = displayedStartFrame - previewedClipStartFrame
   const visibleEndLocal = displayedEndFrame - previewedClipStartFrame
@@ -28,7 +35,7 @@ export default function ClipAutomationLane({
     const endFrame = Math.min(segment.endFrame, visibleEndLocal)
     return endFrame > startFrame ? [{ ...segment, startFrame, endFrame }] : []
   })
-  const visiblePoints = sourceTimeSpeedPointsAtClip(clipSourceTimeMap(clip))
+  const visiblePoints = sourceTimeSpeedPointsAtClip(previewedSourceTimeMap)
     .filter((point) => point.frame >= visibleStartLocal && point.frame < visibleEndLocal)
   const summary = segments.slice(0, 8).map((segment) =>
     `frames ${segment.startFrame} to ${segment.endFrame}: ${segment.label}`,

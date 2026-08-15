@@ -210,6 +210,8 @@ function ClipView({
         <ClipAutomationLane
           clip={clip}
           previewedClipStartFrame={presentation.previewedClipStartFrame}
+          previewedClipDurationFrames={presentation.previewedClipDurationFrames}
+          previewedSourceTimeMap={presentation.previewedSourceTimeMap}
           displayedStartFrame={presentation.displayedStartFrame}
           displayedEndFrame={presentation.displayedEndFrame}
           zoom={zoom}

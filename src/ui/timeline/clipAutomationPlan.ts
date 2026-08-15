@@ -1,7 +1,7 @@
 /** Pure, bounded presentation facts for clip animation shown on the timeline. */
 
 import { clipAnimation } from '../../domain/clipAnimation'
-import type { Clip } from '../../domain/schema'
+import type { Clip, SourceTimeMap } from '../../domain/schema'
 import {
   clipSourceTimeMap,
   sourceTimeMapUsesSpeedCurve,
@@ -75,10 +75,11 @@ export function clipAutomationMarkers(clip: Clip): ClipAutomationMarker[] {
  * and export. Points outside a trimmed clip still influence the boundary value,
  * while only clip-local visible boundaries become timeline sections.
  */
-export function clipSpeedSegments(clip: Clip): ClipSpeedSegment[] {
-  const map = clipSourceTimeMap(clip)
+export function sourceTimeMapSpeedSegments(
+  map: SourceTimeMap,
+  duration: number,
+): ClipSpeedSegment[] {
   if (!sourceTimeMapUsesSpeedCurve(map)) return []
-  const duration = clip.timelineRange.durationFrames
   const points = sourceTimeSpeedPointsAtClip(map)
   const boundaries = Array.from(new Set([
     0,
@@ -117,6 +118,13 @@ export function clipSpeedSegments(clip: Clip): ClipSpeedSegment[] {
     })
   }
   return segments
+}
+
+export function clipSpeedSegments(clip: Clip): ClipSpeedSegment[] {
+  return sourceTimeMapSpeedSegments(
+    clipSourceTimeMap(clip),
+    clip.timelineRange.durationFrames,
+  )
 }
 
 export function clipHasSpeedLane(clip: Clip): boolean {

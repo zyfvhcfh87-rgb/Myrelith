@@ -268,6 +268,52 @@ describe('clip visuals', () => {
     },
   )
 
+  test.each(['trim-start', 'ripple-start'] as const)(
+    'shifts speed sections with a live %s source preview',
+    (previewKind) => {
+      const ramped = makeClip(`ramped-${previewKind}`, 25, 100)
+      let map = sourceTimeMapWithSpeedPoint(
+        defaultSourceTimeMap(0, 100),
+        20,
+        sourceTimeSpeedRateFromPercent(50),
+        'hold',
+      )
+      map = sourceTimeMapWithSpeedPoint(
+        map,
+        40,
+        sourceTimeSpeedRateFromPercent(100),
+        'hold',
+      )
+      ramped.sourceTimeMap = map
+
+      const { container } = render(
+        <ClipView clip={ramped} trackId="V1" trackKind="video" />,
+      )
+      act(() => {
+        useTransportStore.getState().setEditPreview({
+          clipId: ramped.id,
+          kind: previewKind,
+          deltaFrames: 10,
+        })
+      })
+
+      expect(screen.getByTestId(`clip-ramped-${previewKind}`)).toHaveStyle({
+        transform: previewKind === 'trim-start' ? 'translateX(70px)' : 'translateX(50px)',
+        width: '180px',
+      })
+      expect(screen.getByTestId(`clip-ramped-${previewKind}-speed-lane`)).toHaveAccessibleName(
+        /frames 10 to 30: 50%/,
+      )
+      const segments = [...container.querySelectorAll<HTMLElement>('.clip-speed-segment')]
+      expect(segments.map((segment) => [segment.style.left, segment.style.width])).toEqual([
+        ['0px', '20px'],
+        ['20px', '40px'],
+        ['60px', '120px'],
+      ])
+      expect(container.querySelectorAll('.clip-speed-boundary')).toHaveLength(2)
+    },
+  )
+
   test('keeps audio timing in its waveform instead of duplicating the video speed lane', () => {
     const rampedAudio = makeClip('ramped-audio', 25, 100)
     rampedAudio.sourceTimeMap = sourceTimeMapWithSpeedPoint(
