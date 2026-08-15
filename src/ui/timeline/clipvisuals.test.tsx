@@ -219,6 +219,55 @@ describe('clip visuals', () => {
     expect(container.querySelectorAll('.clip-speed-boundary')).toHaveLength(3)
   })
 
+  test.each(['drag', 'slide'] as const)(
+    'keeps the complete speed lane aligned during a live %s preview',
+    (previewKind) => {
+      const ramped = makeClip('ramped-preview', 25, 100)
+      let map = sourceTimeMapWithSpeedPoint(
+        defaultSourceTimeMap(0, 100),
+        20,
+        sourceTimeSpeedRateFromPercent(50),
+        'hold',
+      )
+      map = sourceTimeMapWithSpeedPoint(
+        map,
+        40,
+        sourceTimeSpeedRateFromPercent(100),
+        'hold',
+      )
+      ramped.sourceTimeMap = map
+
+      const { container } = render(
+        <ClipView clip={ramped} trackId="V1" trackKind="video" />,
+      )
+      act(() => {
+        if (previewKind === 'drag') {
+          useTransportStore.getState().setDragPreview({
+            clipId: ramped.id,
+            deltaFrames: 60,
+          })
+        } else {
+          useTransportStore.getState().setEditPreview({
+            clipId: ramped.id,
+            kind: 'slide',
+            deltaFrames: 60,
+          })
+        }
+      })
+
+      expect(screen.getByTestId('clip-ramped-preview')).toHaveStyle({
+        transform: 'translateX(170px)',
+        width: '200px',
+      })
+      const segments = [...container.querySelectorAll<HTMLElement>('.clip-speed-segment')]
+      expect(segments.map((segment) => [segment.style.left, segment.style.width])).toEqual([
+        ['0px', '40px'],
+        ['40px', '40px'],
+        ['80px', '120px'],
+      ])
+    },
+  )
+
   test('keeps audio timing in its waveform instead of duplicating the video speed lane', () => {
     const rampedAudio = makeClip('ramped-audio', 25, 100)
     rampedAudio.sourceTimeMap = sourceTimeMapWithSpeedPoint(

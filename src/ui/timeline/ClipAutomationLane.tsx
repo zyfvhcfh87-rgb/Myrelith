@@ -6,6 +6,7 @@ import { clipSpeedSegments } from './clipAutomationPlan'
 
 interface ClipAutomationLaneProps {
   clip: Clip
+  previewedClipStartFrame: number
   displayedStartFrame: number
   displayedEndFrame: number
   zoom: number
@@ -13,14 +14,15 @@ interface ClipAutomationLaneProps {
 
 export default function ClipAutomationLane({
   clip,
+  previewedClipStartFrame,
   displayedStartFrame,
   displayedEndFrame,
   zoom,
 }: ClipAutomationLaneProps) {
   const segments = clipSpeedSegments(clip)
   if (segments.length === 0) return null
-  const visibleStartLocal = displayedStartFrame - clip.timelineRange.startFrame
-  const visibleEndLocal = displayedEndFrame - clip.timelineRange.startFrame
+  const visibleStartLocal = displayedStartFrame - previewedClipStartFrame
+  const visibleEndLocal = displayedEndFrame - previewedClipStartFrame
   const visibleSegments = segments.flatMap((segment) => {
     const startFrame = Math.max(segment.startFrame, visibleStartLocal)
     const endFrame = Math.min(segment.endFrame, visibleEndLocal)

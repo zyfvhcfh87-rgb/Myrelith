@@ -130,6 +130,7 @@ export interface ClipPresentationPlan {
   dragging: boolean
   badge: string | null
   hasVisibleSlice: boolean
+  previewedClipStartFrame: number
   displayedStartFrame: number
   displayedEndFrame: number
   displayedDurationFrames: number
@@ -514,6 +515,7 @@ export function planClipPresentation({
     dragging: movePreviewDelta !== null || editPreview !== null,
     badge,
     hasVisibleSlice,
+    previewedClipStartFrame: startFrame,
     displayedStartFrame,
     displayedEndFrame,
     displayedDurationFrames,

@@ -209,6 +209,7 @@ function ClipView({
       {hasVisibleSlice && hasSpeedLane && (
         <ClipAutomationLane
           clip={clip}
+          previewedClipStartFrame={presentation.previewedClipStartFrame}
           displayedStartFrame={presentation.displayedStartFrame}
           displayedEndFrame={presentation.displayedEndFrame}
           zoom={zoom}
