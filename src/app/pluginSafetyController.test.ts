@@ -96,4 +96,16 @@ describe('plugin activation safety', () => {
     expect(safety.thirdPartyInitializationAllowed()).toBe(false)
     expect(safety.isSafeMode()).toBe(true)
   })
+
+  test('rejects an unbounded activation id before touching durable storage', async () => {
+    const backing = storage([])
+
+    await expect(runPluginActivationBatch({
+      storage: backing,
+      batchId: 'x'.repeat(129),
+      activate: vi.fn(),
+    })).rejects.toThrow('must contain 1-128 characters')
+
+    expect(backing.setItem).not.toHaveBeenCalled()
+  })
 })

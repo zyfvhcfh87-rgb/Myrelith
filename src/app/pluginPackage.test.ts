@@ -222,7 +222,9 @@ describe('signed plugin package verification', () => {
     })
     expect([...verified.manifestBytes]).toEqual([...utf8(MANIFEST_JSON)])
     expect([...verified.moduleBytes]).toEqual([...hex(WASM_HEX)])
+    expect(verified.moduleByteLength).toBe(hex(WASM_HEX).byteLength)
     expect([...verified.signatureBytes]).toEqual([...utf8(SIGNATURE_JSON)])
+    expect([...verified.archiveBytes]).toEqual([...archive])
   })
 
   test('rejects a ZIP entry marked as a Unix symlink', async () => {
@@ -294,6 +296,30 @@ describe('signed plugin package verification', () => {
 
     expect([...verified.moduleBytes]).toEqual([...hex(WASM_HEX)])
     expect(verified.moduleBytes).not.toBe(callerCopy)
+  })
+
+  test('snapshots the archive before asynchronous verification yields', async () => {
+    const archive = storedZip(goldenEntries())
+    const original = archive.slice()
+    const verification = verifyPluginPackageArchive(archive)
+    archive.fill(0)
+
+    const verified = await verification
+    const callerCopy = verified.archiveBytes
+    callerCopy.fill(0xff)
+
+    expect([...verified.archiveBytes]).toEqual([...original])
+    expect(verified.archiveBytes).not.toBe(callerCopy)
+  })
+
+  test('rejects an oversized outer archive before copying caller bytes', async () => {
+    const archive = new Uint8Array(32 * 1024 * 1024 + 1)
+    const copy = vi.spyOn(archive, 'slice')
+
+    await expect(verifyPluginPackageArchive(archive)).rejects.toThrow(
+      'Plugin packages must not exceed 33554432 bytes.',
+    )
+    expect(copy).not.toHaveBeenCalled()
   })
 
   test('deep-freezes verified manifest and compatibility metadata', async () => {

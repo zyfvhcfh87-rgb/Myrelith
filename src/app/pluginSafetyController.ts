@@ -75,6 +75,9 @@ export function readPluginStartupSafety(storage: PluginSafetyStorage): PluginSta
 export async function runPluginActivationBatch<T>(
   options: RunPluginActivationBatchOptions<T>,
 ): Promise<T> {
+  if (options.batchId.length === 0 || options.batchId.length > 128) {
+    throw new TypeError('Plugin activation batch id must contain 1-128 characters')
+  }
   options.storage.setItem(
     PLUGIN_ACTIVATION_SENTINEL_KEY,
     JSON.stringify({ version: 1, batchId: options.batchId }),
