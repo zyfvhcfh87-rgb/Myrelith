@@ -65,6 +65,24 @@ const staticImageDecode = vi.hoisted(() => ({
   decode: vi.fn(),
 }))
 
+const lensBackends = vi.hoisted(() => [] as Array<{
+  dispose: Mock<() => void>
+}>)
+
+vi.mock('./lensRemapWebgl', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./lensRemapWebgl')>()
+  return {
+    ...actual,
+    WebGl2LensRemapBackend: class {
+      readonly dispose = vi.fn()
+
+      constructor() {
+        lensBackends.push(this)
+      }
+    },
+  }
+})
+
 vi.mock('./static-image', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./static-image')>()
   return {
@@ -1017,6 +1035,7 @@ beforeEach(() => {
   mb.formats.length = 0
   mb.canEncodeAudio.mockReset().mockResolvedValue(true)
   mb.canEncodeVideo.mockReset().mockResolvedValue(true)
+  lensBackends.length = 0
   fakeCanvases.length = 0
   fakeBitmaps.length = 0
   createBitmap.mockClear()
@@ -1063,6 +1082,7 @@ export {
   FakeOffscreenCanvas,
   inputAt,
   localDecoders,
+  lensBackends,
   makeAudioClip,
   makeAudioCrossfadeDoc,
   makeAudioDoc,

@@ -2185,7 +2185,12 @@ function cloneLensIntentValue(value: unknown): unknown {
   if (value !== null && typeof value === 'object') {
     const clone: JsonRecord = {}
     for (const [key, entry] of Object.entries(value as JsonRecord)) {
-      clone[key] = cloneLensIntentValue(entry)
+      Object.defineProperty(clone, key, {
+        configurable: true,
+        enumerable: true,
+        value: cloneLensIntentValue(entry),
+        writable: true,
+      })
     }
     return clone
   }

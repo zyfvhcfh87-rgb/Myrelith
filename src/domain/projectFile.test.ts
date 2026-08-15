@@ -41,7 +41,10 @@ import { EFFECT_STACK_LIMITS } from './effectBounds'
 import { pluginEffectType } from './pluginManifest'
 import { dynamicZoomRequestFromPreset } from './dynamicZoom'
 import { addEffect, applyDynamicZoom, updateEffectParams } from './operations'
-import { DEFAULT_MANUAL_LENS_CORRECTION } from './lensCorrection'
+import {
+  DEFAULT_MANUAL_LENS_CORRECTION,
+  type LensCorrectionIntent,
+} from './lensCorrection'
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -430,6 +433,21 @@ describe('portable project file', () => {
     expect(parsed.document.tracks[0].clips[0].lensCorrection).toEqual(futureIntent)
     expect(parsed.document.tracks[0].clips[0].lensCorrection)
       .not.toBe(future.document.tracks[0].clips[0].lensCorrection)
+  })
+
+  test('preserves magic keys in bounded future lens intent', () => {
+    const future = makeProject()
+    const futureIntent = JSON.parse(
+      '{"version":2,"__proto__":{"calibration":"future"}}',
+    ) as LensCorrectionIntent
+    future.document.tracks[0].clips[0].lensCorrection = futureIntent
+
+    const parsed = parseProjectFile(serializeProjectFile(future))
+    const parsedIntent = parsed.document.tracks[0].clips[0].lensCorrection as
+      Record<string, unknown>
+
+    expect(Object.prototype.hasOwnProperty.call(parsedIntent, '__proto__')).toBe(true)
+    expect(parsedIntent.__proto__).toEqual({ calibration: 'future' })
   })
 
   test('rejects invalid v1 and unbounded future lens intent', () => {

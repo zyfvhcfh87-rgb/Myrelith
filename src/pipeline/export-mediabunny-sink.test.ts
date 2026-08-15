@@ -14,6 +14,7 @@ import {
   encodedAudioSampleAt,
   fakeCanvases,
   inputAt,
+  lensBackends,
   localDecoders,
   makeAudioClip,
   makeAudioCrossfadeDoc,
@@ -354,6 +355,52 @@ describe('createMediabunnyExportSink selected profiles', () => {
     expect(close).toHaveBeenCalledOnce()
     expect(abort).not.toHaveBeenCalled()
     expect(mb.targets).toHaveLength(0)
+  })
+
+  test('releases lens resources when direct-file setup rejects', async () => {
+    const directFile = updateExportProfile(SETTINGS, { destination: 'file' })
+    const failure = new Error('file permission was revoked')
+    const doc = makeVideoDoc(
+      [{ assetId: 'asset-a', sourceStart: 0 }],
+      1,
+    )
+    doc.tracks[0].clips[0].lensCorrection = {
+      version: 1,
+      centerX: 0.5,
+      centerY: 0.5,
+      focalX: 0.5,
+      focalY: 0.5,
+      k1: 0.1,
+      k2: 0,
+      k3: 0,
+      p1: 0,
+      p2: 0,
+      strength: 1,
+      outputScale: 1.2,
+    }
+    const handle = {
+      name: 'rejected.mp4',
+      createWritable: vi.fn(async () => {
+        throw failure
+      }),
+    } as unknown as FileSystemFileHandle
+
+    await expect(createMediabunnyExportSink(
+      doc,
+      directFile,
+      async () => resolvedAsset(new Blob(['unused'])),
+      new Map(),
+      {
+        fileName: 'rejected.mp4',
+        takeFileHandle: vi.fn(() => handle),
+      },
+    )).rejects.toBe(failure)
+
+    expect(lensBackends).toHaveLength(1)
+    expect(lensBackends[0].dispose).toHaveBeenCalledOnce()
+    expect(fakeCanvases).toHaveLength(1)
+    expect(fakeCanvases[0]).toMatchObject({ width: 1, height: 1 })
+    expect(mb.outputs).toHaveLength(0)
   })
 
   test('cancels a direct-file sink exactly once without committing it', async () => {

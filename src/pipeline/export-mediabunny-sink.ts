@@ -232,9 +232,17 @@ export async function createMediabunnyExportSink(
   }
 
   const format = createMediabunnyOutputFormat(settings.container)
-  const fileTarget = fileDestination
-    ? await createDirectFileExportTarget(fileDestination)
-    : null
+  let fileTarget: DirectFileExportTarget | null
+  try {
+    fileTarget = fileDestination
+      ? await createDirectFileExportTarget(fileDestination)
+      : null
+  } catch (cause) {
+    lensBackend?.dispose()
+    canvas.width = 1
+    canvas.height = 1
+    throw cause
+  }
   let bufferTarget: BufferTarget | null = null
   const target = fileTarget?.target ?? (bufferTarget = new BufferTarget())
   let output: Output
