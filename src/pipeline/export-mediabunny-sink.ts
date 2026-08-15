@@ -37,6 +37,13 @@ import {
   mediabunnyExportImplementationUnavailableReason,
 } from './export-mediabunny-profile'
 import type { Composite2D, TransitionSurfaces } from './render'
+import {
+  createDocumentLensRemapProvider,
+  documentHasSupportedLensCorrection,
+  documentHasUnsupportedLensCorrection,
+  WebGl2LensRemapBackend,
+} from './lensRemapWebgl'
+import { LensRemapUnavailableError } from './lensRemap'
 
 const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
   colorSpace: 'srgb',
@@ -177,23 +184,78 @@ export async function createMediabunnyExportSink(
     throw new Error('OffscreenCanvas is not supported in this browser')
   }
 
-  const canvas = new OffscreenCanvas(doc.width, doc.height)
+  if (documentHasUnsupportedLensCorrection(doc)) {
+    throw new LensRemapUnavailableError(
+      'Export is blocked because this project contains a preserved future lens-correction version.',
+    )
+  }
+
+  let lensBackend: WebGl2LensRemapBackend | null = null
+  try {
+    if (documentHasSupportedLensCorrection(doc)) {
+      lensBackend = new WebGl2LensRemapBackend()
+    }
+  } catch (cause) {
+    throw new LensRemapUnavailableError(
+      `Export lens correction is unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
+      true,
+      cause,
+    )
+  }
+  let lensRemapProvider
+  try {
+    lensRemapProvider = createDocumentLensRemapProvider(
+      doc,
+      lensBackend,
+      doc.width,
+      doc.height,
+      true,
+    )
+  } catch (cause) {
+    lensBackend?.dispose()
+    throw cause
+  }
+
+  let canvas: OffscreenCanvas
+  try {
+    canvas = new OffscreenCanvas(doc.width, doc.height)
+  } catch (cause) {
+    lensBackend?.dispose()
+    throw cause
+  }
   const context = canvas.getContext('2d', SRGB_2D_CONTEXT)
   if (!context) {
+    lensBackend?.dispose()
+    canvas.width = 1
+    canvas.height = 1
     throw new Error('Could not create the export 2D context')
   }
 
   const format = createMediabunnyOutputFormat(settings.container)
-  const fileTarget = fileDestination
-    ? await createDirectFileExportTarget(fileDestination)
-    : null
+  let fileTarget: DirectFileExportTarget | null
+  try {
+    fileTarget = fileDestination
+      ? await createDirectFileExportTarget(fileDestination)
+      : null
+  } catch (cause) {
+    lensBackend?.dispose()
+    canvas.width = 1
+    canvas.height = 1
+    throw cause
+  }
   let bufferTarget: BufferTarget | null = null
   const target = fileTarget?.target ?? (bufferTarget = new BufferTarget())
   let output: Output
   try {
     output = new Output({ format, target })
   } catch (cause) {
-    await fileTarget?.abort(cause)
+    try {
+      await fileTarget?.abort(cause)
+    } finally {
+      lensBackend?.dispose()
+      canvas.width = 1
+      canvas.height = 1
+    }
     throw cause
   }
   let source: CanvasSource
@@ -235,7 +297,13 @@ export async function createMediabunnyExportSink(
     }
     await output.start()
   } catch (cause) {
-    return cancelSetup(output, mixer, fileTarget, cause)
+    try {
+      return await cancelSetup(output, mixer, fileTarget, cause)
+    } finally {
+      lensBackend?.dispose()
+      canvas.width = 1
+      canvas.height = 1
+    }
   }
 
   type SinkState =
@@ -248,6 +316,24 @@ export async function createMediabunnyExportSink(
   let cancelPromise: Promise<void> | null = null
   let nextFrame = 0
   let transitionSurfaces: TransitionSurfaces | null = null
+  let renderSurfacesReleased = false
+
+  const releaseRenderSurfaces = (): void => {
+    if (renderSurfacesReleased) return
+    renderSurfacesReleased = true
+    lensBackend?.dispose()
+    lensBackend = null
+    if (transitionSurfaces) {
+      for (const surface of [transitionSurfaces.leg.canvas, transitionSurfaces.group.canvas]) {
+        const owned = surface as OffscreenCanvas
+        owned.width = 1
+        owned.height = 1
+      }
+      transitionSurfaces = null
+    }
+    canvas.width = 1
+    canvas.height = 1
+  }
 
   const cancelWithReason = (reason?: unknown): Promise<void> => {
     if (state === 'finalized' || state === 'canceled') {
@@ -274,6 +360,7 @@ export async function createMediabunnyExportSink(
       } catch (cause) {
         failure ??= cause
       } finally {
+        releaseRenderSurfaces()
         state = 'canceled'
       }
       if (failure !== undefined) throw failure
@@ -351,6 +438,8 @@ export async function createMediabunnyExportSink(
       committedFile = fileTarget ? await fileTarget.commit() : null
     } catch (cause) {
       return failAfterCancel(cause)
+    } finally {
+      releaseRenderSurfaces()
     }
 
     state = 'finalized'
@@ -377,6 +466,10 @@ export async function createMediabunnyExportSink(
         const groupCanvas = new OffscreenCanvas(doc.width, doc.height)
         const groupContext = groupCanvas.getContext('2d', SRGB_2D_CONTEXT)
         if (!legContext || !groupContext) {
+          legCanvas.width = 1
+          legCanvas.height = 1
+          groupCanvas.width = 1
+          groupCanvas.height = 1
           throw new Error('Could not create export transition 2D contexts')
         }
         transitionSurfaces = {
@@ -392,6 +485,7 @@ export async function createMediabunnyExportSink(
         return transitionSurfaces
       },
     },
+    lensRemapProvider,
     addFrame,
     finalize,
     cancel,

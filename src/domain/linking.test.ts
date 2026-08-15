@@ -106,7 +106,7 @@ const PAIR4 = 'link_pair4'
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -155,7 +155,7 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'doc-transition-linked',
     name: 'Linked transition test doc',
     frameRate: { num: 30, den: 1 },
@@ -377,7 +377,7 @@ function makeManualLinkDoc(options: ManualLinkDocOptions = {}): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'doc-manual-link',
     name: 'Manual link test doc',
     frameRate: { num: 30, den: 1 },

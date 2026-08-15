@@ -119,6 +119,12 @@ import {
   SOURCE_TIME_TICKS_PER_FRAME,
 } from './sourceTimeMap'
 import { renderSurfaceBudget } from './renderSurfaceBudget'
+import {
+  LENS_CORRECTION_MODEL_VERSION,
+  lensCorrectionValidationError,
+  type LensCorrectionIntent,
+  type ManualLensCorrectionModel,
+} from './lensCorrection'
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
 /** Serialized format marker used by releases published before the rebrand. */
@@ -131,7 +137,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 13 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 14 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -154,6 +160,10 @@ export const PROJECT_FILE_LIMITS = {
   maxSpeedPointsPerClip: MAX_SOURCE_TIME_SPEED_POINTS,
   maxTotalSpeedPoints: 100_000,
   maxTotalTextCharacters: 10_000_000,
+  maxLensIntentDepth: 8,
+  maxLensIntentEntries: 256,
+  maxLensIntentKeyCharacters: 128,
+  maxLensIntentStringCharacters: 8_192,
   maxIdCharacters: MAX_DOCUMENT_ID_CHARACTERS,
   maxNameCharacters: MAX_PROJECT_NAME_CHARACTERS,
   maxFileNameCharacters: 4_096,
@@ -370,6 +380,90 @@ function finiteNumber(
   if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum || value > maximum) {
     fail(path, `expected a finite number from ${minimum} to ${maximum}`)
   }
+}
+
+interface LensIntentBudget {
+  entries: number
+  stringCharacters: number
+}
+
+function validateLensIntentJson(
+  value: unknown,
+  path: string,
+  depth: number,
+  budget: LensIntentBudget,
+): void {
+  if (depth > PROJECT_FILE_LIMITS.maxLensIntentDepth) {
+    fail(path, `exceeds ${PROJECT_FILE_LIMITS.maxLensIntentDepth} nested levels`)
+  }
+  if (value === null || typeof value === 'boolean') return
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) fail(path, 'expected a finite JSON number')
+    return
+  }
+  if (typeof value === 'string') {
+    budget.stringCharacters += value.length
+    if (budget.stringCharacters > PROJECT_FILE_LIMITS.maxLensIntentStringCharacters) {
+      fail(path, `exceeds ${PROJECT_FILE_LIMITS.maxLensIntentStringCharacters} string characters`)
+    }
+    return
+  }
+  if (Array.isArray(value)) {
+    budget.entries += value.length
+    if (budget.entries > PROJECT_FILE_LIMITS.maxLensIntentEntries) {
+      fail(path, `exceeds ${PROJECT_FILE_LIMITS.maxLensIntentEntries} entries`)
+    }
+    for (let index = 0; index < value.length; index++) {
+      validateLensIntentJson(value[index], `${path}[${index}]`, depth + 1, budget)
+    }
+    return
+  }
+  const object = record(value, path)
+  const keys = Object.keys(object)
+  budget.entries += keys.length
+  if (budget.entries > PROJECT_FILE_LIMITS.maxLensIntentEntries) {
+    fail(path, `exceeds ${PROJECT_FILE_LIMITS.maxLensIntentEntries} entries`)
+  }
+  for (const key of keys) {
+    if (key.length === 0 || key.length > PROJECT_FILE_LIMITS.maxLensIntentKeyCharacters) {
+      fail(`${path}.${key}`, 'lens intent key is empty or too long')
+    }
+    validateLensIntentJson(object[key], `${path}.${key}`, depth + 1, budget)
+  }
+}
+
+function validateLensCorrectionIntent(
+  value: unknown,
+  path: string,
+): asserts value is LensCorrectionIntent | null {
+  if (value === null) return
+  const intent = record(value, path)
+  safeInteger(intent.version, `${path}.version`, 1)
+  if (intent.version !== LENS_CORRECTION_MODEL_VERSION) {
+    validateLensIntentJson(intent, path, 0, { entries: 0, stringCharacters: 0 })
+    return
+  }
+  exactKeys(
+    intent,
+    [
+      'version',
+      'centerX',
+      'centerY',
+      'focalX',
+      'focalY',
+      'k1',
+      'k2',
+      'k3',
+      'p1',
+      'p2',
+      'strength',
+      'outputScale',
+    ],
+    [],
+    path,
+  )
+  const error = lensCorrectionValidationError(intent as unknown as ManualLensCorrectionModel)
+  if (error) fail(path, error)
 }
 
 function boundedArray(
@@ -1078,7 +1172,7 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   const clip = record(value, path)
   exactKeys(
     clip,
-    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'sourceTimeMap', 'timelineRange', 'transform', 'opacity', 'blendMode', 'volume', 'visual', 'audio', 'effects'],
+    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'sourceTimeMap', 'timelineRange', 'transform', 'opacity', 'blendMode', 'volume', 'lensCorrection', 'visual', 'audio', 'effects'],
     ['animation', 'text', 'linkGroupId'],
     path,
   )
@@ -1180,6 +1274,13 @@ function validateClip(value: unknown, path: string, trackKind: Track['kind'], co
   const blendModeError = blendModeIntentValidationError(clip.blendMode)
   if (blendModeError) fail(`${path}.blendMode`, blendModeError)
   finiteNumber(clip.volume, `${path}.volume`, 0, 2)
+  validateLensCorrectionIntent(clip.lensCorrection, `${path}.lensCorrection`)
+  if (
+    clip.lensCorrection !== null
+    && (trackKind !== 'video' || clip.text !== undefined)
+  ) {
+    fail(`${path}.lensCorrection`, 'manual lens correction requires a visual media clip')
+  }
   validateClipVisual(clip.visual, `${path}.visual`)
   validateClipAudio(
     clip.audio,
@@ -1885,6 +1986,25 @@ function migrateEffectAnimationTracks(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 13, tracks }
 }
 
+/** Upgrade schema-13 clips with explicit absent manual source geometry. */
+function migrateManualLensCorrection(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const trackPath = `$.document.tracks[${trackIndex}]`
+    const track = record(trackValue, trackPath)
+    boundedArray(track.clips, `${trackPath}.clips`, PROJECT_FILE_LIMITS.maxClips)
+    return {
+      ...track,
+      clips: track.clips.map((clipValue, clipIndex) => ({
+        ...record(clipValue, `${trackPath}.clips[${clipIndex}]`),
+        lensCorrection: null,
+      })),
+    }
+  })
+  return { ...document, schemaVersion: 14, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -1939,6 +2059,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 12) {
     migrated = migrateEffectAnimationTracks(migrated)
+  }
+  if (migrated.schemaVersion === 13) {
+    migrated = migrateManualLensCorrection(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
@@ -2057,6 +2180,31 @@ function cloneEffectParams(params: Effect['params']): Effect['params'] {
   return copy
 }
 
+function cloneLensIntentValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(cloneLensIntentValue)
+  if (value !== null && typeof value === 'object') {
+    const clone: JsonRecord = {}
+    for (const [key, entry] of Object.entries(value as JsonRecord)) {
+      Object.defineProperty(clone, key, {
+        configurable: true,
+        enumerable: true,
+        value: cloneLensIntentValue(entry),
+        writable: true,
+      })
+    }
+    return clone
+  }
+  return value
+}
+
+function cloneLensCorrectionIntent(
+  value: LensCorrectionIntent | null | undefined,
+): LensCorrectionIntent | null {
+  return value === undefined || value === null
+    ? null
+    : cloneLensIntentValue(value) as LensCorrectionIntent
+}
+
 function portableProjectSnapshot(project: ProjectFile): ProjectFile {
   const document = project.document
   return {
@@ -2091,6 +2239,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           opacity: clip.opacity,
           blendMode: clipBlendModeIntent(clip),
           volume: clip.volume,
+          lensCorrection: cloneLensCorrectionIntent(clip.lensCorrection),
           visual: {
             ...clipVisualSettings(clip),
             crop: { ...clipVisualSettings(clip).crop },

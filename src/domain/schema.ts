@@ -14,6 +14,8 @@
  * source below while their timeline duration is independently editable.
  */
 
+import type { LensCorrectionIntent } from './lensCorrection'
+
 /* ------------------------------------------------------------------ */
 /* Time primitives                                                      */
 /* ------------------------------------------------------------------ */
@@ -482,6 +484,14 @@ export interface Clip {
   blendMode?: string
   /** Linear audio gain, 0..1 (1 = unity). Ignored for silent assets. */
   volume: number
+  /**
+   * Versioned manual source-geometry intent, evaluated after decoded source
+   * orientation and before authored crop. `null` means no remap. Unknown
+   * future versions remain bounded opaque data and never render implicitly.
+   * Optional typing keeps historical pure fixtures source-compatible; current
+   * portable schema-14 files always include the field.
+   */
+  lensCorrection?: LensCorrectionIntent | null
   /**
    * Static visual Inspector settings. Current persisted documents always
    * include this object; optional typing keeps pure helpers tolerant of

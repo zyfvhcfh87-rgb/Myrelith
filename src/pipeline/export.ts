@@ -25,6 +25,7 @@ import {
   type FrameSource,
   type TransitionSurfaceProvider,
 } from './render'
+import type { LensRemapProvider } from './lensRemap'
 
 export type ExportSettings = ExportProfile
 
@@ -113,6 +114,7 @@ export interface ExportMediaSource {
 export interface ExportVideoSink {
   ctx: Composite2D
   transitionSurfaceProvider: TransitionSurfaceProvider
+  lensRemapProvider?: LensRemapProvider | null
   /** Adds all encoded media belonging to this document frame. */
   addFrame(timestampSec: number, durationSec: number): Promise<void>
   finalize(): Promise<ExportResult>
@@ -188,6 +190,7 @@ async function compositeAndCloseLease(
       observedSource,
       sink.transitionSurfaceProvider,
       fullResolutionPresentationProfile(doc, 'export'),
+      sink.lensRemapProvider,
     )
     // Preview intentionally softens source failures into `missing` so a later
     // repaint can recover. Export has no retry boundary: preserve the exact

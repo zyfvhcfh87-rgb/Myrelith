@@ -4747,3 +4747,35 @@ acceptance claims.
   and 180, verify linked timing and the video-only lane at Detail Zoom, compare
   directly with the supplied Resolve reference, and observe no console warnings
   or errors. `design-qa.md` records `final result: passed`.
+
+## Milestone 5 Part 10a.5 / issue #119 - ship bounded manual lens correction
+
+**COMPLETE LOCALLY; PUBLICATION PENDING (2026-08-15).**
+
+- [x] Advance timeline schema 13 -> 14 with nullable versioned lens intent,
+  bounded future-intent preservation, exact migration/round-trip validation,
+  and video-only ownership.
+- [x] Add the canonical immutable operation/store action and accessible Crop
+  Inspector controls for the complete manual model. Keep one history entry per
+  commit; provide enable/reset/keyboard/lock behavior and honest coverage plus
+  renderer capability status.
+- [x] Promote `webgl2-rgba8-manual-bilinear-v1` into production. Route preview
+  and export through the same source-space `compositeFrame` seam before crop,
+  transform, masks/chroma, effects, opacity/blend, and transitions. Never use
+  the CPU oracle as a product fallback.
+- [x] Make unsupported WebGL2/context/texture/readback/budget facts explicit,
+  make context loss terminal per owner with fresh-worker recovery, and prove
+  exact success/cancel/failure disposal.
+- [x] Fail motion-tracking authoring closed for lens-corrected sources until an
+  accepted inverse projection can map Program Monitor picks into decoded-source
+  coordinates.
+- [x] Admit two reusable remap surfaces and one finite export readback through
+  the shared budget. Keep the 4K seven-surface peak at exactly 232,243,200
+  bytes under 256 MiB.
+- [x] Pass 193/193 files and 2,613/2,613 tests plus 17/17 runner checks,
+  4,821-module build/typecheck, and warning-free lint. Pass source-bound in-app
+  Browser QA on strict port 41889: runtime backend/texture facts, 10.00%
+  overscan, 1.20x full coverage, exact undo/redo/reset, corrected 1080p MP4
+  Export ready, and zero console warnings/errors.
+- [ ] Push the exact commit, pass CI, request a fresh current-head Codex review,
+  and complete PR/issue closeout only when explicitly authorized.

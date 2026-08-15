@@ -63,7 +63,7 @@ function track(item: Clip, locked = false): Track {
 
 function doc(item = clip(), locked = false): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'doc-framing',
     name: 'Framing operation',
     frameRate: { num: 30, den: 1 },

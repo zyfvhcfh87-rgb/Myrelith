@@ -27,6 +27,7 @@
  */
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
+import type { LensRemapAvailability } from '../domain/lensCorrection'
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
@@ -55,6 +56,8 @@ export type RenderMode = 'playback' | 'seek'
 export interface RenderWorkerCapabilities {
   readonly canvasFilter: boolean
   readonly canvasPixelAccess: boolean
+  /** Absent until a document first requires manual lens remapping. */
+  readonly lensRemap?: LensRemapAvailability
 }
 
 /**

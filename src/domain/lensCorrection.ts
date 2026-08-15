@@ -1,7 +1,23 @@
-/** Pure, bounded manual lens-correction research model. */
+/** Pure, bounded manual lens-correction model shared by authoring and renderers. */
 
 export const LENS_CORRECTION_MODEL_VERSION = 1 as const
 export const LENS_CORRECTION_VALIDATION_GRID = 33
+export const LENS_REMAP_BACKEND_VERSION = 'webgl2-rgba8-manual-bilinear-v1'
+
+/** Serializable capability shared by worker protocol and UI state. */
+export type LensRemapAvailability =
+  | {
+      readonly status: 'available'
+      readonly backendVersion: typeof LENS_REMAP_BACKEND_VERSION
+      readonly maximumTextureSize: number
+      readonly reason: null
+    }
+  | {
+      readonly status: 'unavailable'
+      readonly backendVersion: typeof LENS_REMAP_BACKEND_VERSION
+      readonly maximumTextureSize: number | null
+      readonly reason: string
+    }
 
 export interface ManualLensCorrectionModel {
   readonly version: typeof LENS_CORRECTION_MODEL_VERSION
@@ -20,6 +36,34 @@ export interface ManualLensCorrectionModel {
   /** Explicit user crop/zoom used to hide undefined corrected edges. */
   readonly outputScale: number
 }
+
+/**
+ * Forward-compatible durable intent. Current code understands version 1 and
+ * keeps any bounded future object opaque so an older editor never erases it.
+ */
+export interface UnknownLensCorrectionIntent {
+  readonly version: number
+  readonly [key: string]: unknown
+}
+
+export type LensCorrectionIntent =
+  | ManualLensCorrectionModel
+  | UnknownLensCorrectionIntent
+
+export const MANUAL_LENS_CORRECTION_LIMITS = Object.freeze({
+  centerMinimum: 0,
+  centerMaximum: 1,
+  focalMinimum: 0.1,
+  focalMaximum: 4,
+  radialMinimum: -2,
+  radialMaximum: 2,
+  tangentialMinimum: -0.5,
+  tangentialMaximum: 0.5,
+  strengthMinimum: 0,
+  strengthMaximum: 1,
+  outputScaleMinimum: 1,
+  outputScaleMaximum: 4,
+})
 
 export const DEFAULT_MANUAL_LENS_CORRECTION = Object.freeze({
   version: LENS_CORRECTION_MODEL_VERSION,
@@ -55,13 +99,32 @@ export interface ValidatedLensCorrectionMap {
   map(output: NormalizedLensPoint): NormalizedLensPoint
 }
 
-const MIN_FOCAL_FRACTION = 0.1
-const MAX_FOCAL_FRACTION = 4
-const MAX_RADIAL_COEFFICIENT = 2
-const MAX_TANGENTIAL_COEFFICIENT = 0.5
-const MAX_OUTPUT_SCALE = 4
 const MIN_JACOBIAN_DETERMINANT = 0.05
 const MAX_NORMALIZED_MAPPING_MAGNITUDE = 8
+
+export function isManualLensCorrectionModel(
+  value: LensCorrectionIntent | null | undefined,
+): value is ManualLensCorrectionModel {
+  return value?.version === LENS_CORRECTION_MODEL_VERSION
+}
+
+export function sameManualLensCorrectionModel(
+  left: Readonly<ManualLensCorrectionModel>,
+  right: Readonly<ManualLensCorrectionModel>,
+): boolean {
+  return left.version === right.version
+    && left.centerX === right.centerX
+    && left.centerY === right.centerY
+    && left.focalX === right.focalX
+    && left.focalY === right.focalY
+    && left.k1 === right.k1
+    && left.k2 === right.k2
+    && left.k3 === right.k3
+    && left.p1 === right.p1
+    && left.p2 === right.p2
+    && left.strength === right.strength
+    && left.outputScale === right.outputScale
+}
 
 function finiteInRange(
   value: number,
@@ -120,28 +183,40 @@ function basicLensCorrectionValidationError(
     return 'Lens principal point must stay inside normalized source bounds'
   }
   if (
-    !finiteInRange(model.focalX, MIN_FOCAL_FRACTION, MAX_FOCAL_FRACTION)
-    || !finiteInRange(model.focalY, MIN_FOCAL_FRACTION, MAX_FOCAL_FRACTION)
+    !finiteInRange(
+      model.focalX,
+      MANUAL_LENS_CORRECTION_LIMITS.focalMinimum,
+      MANUAL_LENS_CORRECTION_LIMITS.focalMaximum,
+    )
+    || !finiteInRange(
+      model.focalY,
+      MANUAL_LENS_CORRECTION_LIMITS.focalMinimum,
+      MANUAL_LENS_CORRECTION_LIMITS.focalMaximum,
+    )
   ) return 'Lens focal fractions are outside the reviewed range'
   for (const coefficient of [model.k1, model.k2, model.k3]) {
     if (!finiteInRange(
       coefficient,
-      -MAX_RADIAL_COEFFICIENT,
-      MAX_RADIAL_COEFFICIENT,
+      MANUAL_LENS_CORRECTION_LIMITS.radialMinimum,
+      MANUAL_LENS_CORRECTION_LIMITS.radialMaximum,
     )) return 'Lens radial coefficient is outside the reviewed range'
   }
   for (const coefficient of [model.p1, model.p2]) {
     if (!finiteInRange(
       coefficient,
-      -MAX_TANGENTIAL_COEFFICIENT,
-      MAX_TANGENTIAL_COEFFICIENT,
+      MANUAL_LENS_CORRECTION_LIMITS.tangentialMinimum,
+      MANUAL_LENS_CORRECTION_LIMITS.tangentialMaximum,
     )) return 'Lens tangential coefficient is outside the reviewed range'
   }
   if (!finiteInRange(model.strength, 0, 1)) {
     return 'Lens correction strength must be from 0 to 1'
   }
-  if (!finiteInRange(model.outputScale, 1, MAX_OUTPUT_SCALE)) {
-    return `Lens correction output scale must be from 1 to ${MAX_OUTPUT_SCALE}`
+  if (!finiteInRange(
+    model.outputScale,
+    MANUAL_LENS_CORRECTION_LIMITS.outputScaleMinimum,
+    MANUAL_LENS_CORRECTION_LIMITS.outputScaleMaximum,
+  )) {
+    return `Lens correction output scale must be from 1 to ${MANUAL_LENS_CORRECTION_LIMITS.outputScaleMaximum}`
   }
   return null
 }
@@ -247,7 +322,8 @@ export function lensCorrectionCoverage(
       { x: 1, y: position },
     )
   }
-  const mapped = points.map((point) => mapLensCorrectionPoint(model, point))
+  const mapper = createValidatedLensCorrectionMap(model)
+  const mapped = points.map((point) => mapper.map(point))
   const minimumSourceX = Math.min(...mapped.map((point) => point.x))
   const maximumSourceX = Math.max(...mapped.map((point) => point.x))
   const minimumSourceY = Math.min(...mapped.map((point) => point.y))

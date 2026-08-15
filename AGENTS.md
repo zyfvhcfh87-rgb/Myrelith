@@ -31,8 +31,8 @@ explicitly selected issues and HANDOFF.md's open list.
 
 - Follow a change end-to-end across every module it genuinely needs. Keep
   dependency boundaries clear, then test → build/lint → browser-verify if
-  observable → commit (message file + `git commit -F`, author Aryel only;
-  never add AI co-author or attribution trailers).
+  observable → commit (message file + `git commit -F`, authored by Aryel and
+  including `Co-authored-by: Codex <codex@openai.com>` for Codex-assisted work).
 - Never skip a phase gate. Quality over speed, explicitly requested.
 - End-of-turn summaries: short, plain, low-jargon (see HANDOFF.md).
 - TypeScript `erasableSyntaxOnly`: no constructor parameter properties.

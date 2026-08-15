@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import type { EffectResolutionStatus } from '../domain/effectStack'
+import type { LensRemapAvailability } from '../domain/lensCorrection'
 import type { AssetId, EffectId } from '../domain/schema'
 
 export interface PreviewEffectStatus {
@@ -13,6 +14,7 @@ export interface PreviewEffectStatus {
 export interface PreviewRendererCapabilities {
   readonly canvasFilter: boolean
   readonly canvasPixelAccess: boolean
+  readonly lensRemap?: LensRemapAvailability
 }
 
 export interface PreviewStatusState {

@@ -183,6 +183,9 @@ export function motionTrackingAvailabilityReason(
   if (clip.text !== undefined || clip.sourceMode !== 'timed') {
     return 'Tracking is available only for timed video clips.'
   }
+  if ((clip.lensCorrection ?? null) !== null) {
+    return 'Motion tracking is unavailable while manual lens correction is enabled.'
+  }
   if (
     !Number.isSafeInteger(selectionGlobalFrame)
     || selectionGlobalFrame < clip.timelineRange.startFrame

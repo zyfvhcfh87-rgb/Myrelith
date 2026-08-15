@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { defaultClipAnimation } from '../domain/clipAnimation'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
+import { DEFAULT_MANUAL_LENS_CORRECTION } from '../domain/lensCorrection'
 import type { MotionTrackingPlan } from '../domain/motionTracking'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { Clip, TimelineDoc } from '../domain/schema'
@@ -59,7 +60,7 @@ function targetClip(): Clip {
 
 function doc(item: Clip): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'tracking-ui',
     name: 'Tracking UI',
     frameRate: { num: 30, den: 1 },
@@ -163,6 +164,30 @@ beforeEach(() => {
 })
 
 describe('MotionTrackingEditor', () => {
+  test('disables tracking authoring for a lens-corrected source', async () => {
+    const item = {
+      ...clip(),
+      lensCorrection: {
+        ...DEFAULT_MANUAL_LENS_CORRECTION,
+        k1: 0.1,
+      },
+    }
+    useDocumentStore.getState().setDoc(doc(item))
+    useMotionTrackingSelectionStore.getState().beginPicking(item.id, 'point')
+
+    render(<MotionTrackingEditor clip={item} locked={false} playheadFrame={12} />)
+
+    expect(screen.getByRole('button', { name: 'Pick point' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Draw box' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Analyze' })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Motion tracking is unavailable while manual lens correction is enabled.',
+    )
+    await waitFor(() => expect(useMotionTrackingSelectionStore.getState().pickingKind)
+      .toBeNull())
+    expect(mocks.analyze).not.toHaveBeenCalled()
+  })
+
   test('offers only separate visual clips as tracking targets', async () => {
     const item = clip()
     render(<MotionTrackingEditor clip={item} locked={false} playheadFrame={12} />)

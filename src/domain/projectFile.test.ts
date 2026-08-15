@@ -41,6 +41,10 @@ import { EFFECT_STACK_LIMITS } from './effectBounds'
 import { pluginEffectType } from './pluginManifest'
 import { dynamicZoomRequestFromPreset } from './dynamicZoom'
 import { addEffect, applyDynamicZoom, updateEffectParams } from './operations'
+import {
+  DEFAULT_MANUAL_LENS_CORRECTION,
+  type LensCorrectionIntent,
+} from './lensCorrection'
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -77,6 +81,7 @@ function mediaClip(
     opacity: 0.8,
     blendMode: 'normal',
     volume: 1.25,
+    lensCorrection: null,
     visual: {
       ...defaultClipVisualSettings(),
       crop: { left: 0.1, right: 0.05, top: 0.02, bottom: 0.03 },
@@ -383,12 +388,86 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(13)
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(parsed.document.tracks.flatMap((track) => track.clips).map((clip) => clip.animation))
       .toEqual(parsed.document.tracks.flatMap((track) => track.clips).map(() => ({
         tracks: [],
         effectTracks: [],
       })))
+  })
+
+  test('migrates schema-13 clips to explicit absent manual lens correction', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 13
+    for (const clip of legacy.document.tracks.flatMap((track) => track.clips)) {
+      Reflect.deleteProperty(clip, 'lensCorrection')
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.tracks.flatMap((track) => track.clips).map(
+      (clip) => clip.lensCorrection,
+    )).toEqual(parsed.document.tracks.flatMap((track) => track.clips).map(() => null))
+  })
+
+  test('round-trips supported and bounded future lens intent without substitution', () => {
+    const supported = makeProject()
+    supported.document.tracks[0].clips[0].lensCorrection = {
+      ...DEFAULT_MANUAL_LENS_CORRECTION,
+      k1: 0.16,
+      k2: 0.025,
+      outputScale: 1.24,
+    }
+    expect(parseProjectFile(serializeProjectFile(supported)).document.tracks[0]
+      .clips[0].lensCorrection).toEqual(supported.document.tracks[0].clips[0].lensCorrection)
+
+    const future = makeProject()
+    const futureIntent = {
+      version: 2,
+      solver: 'future-grid',
+      calibration: { points: [[0.1, 0.2], [0.8, 0.7]], exact: true },
+    }
+    future.document.tracks[0].clips[0].lensCorrection = futureIntent
+    const parsed = parseProjectFile(serializeProjectFile(future))
+    expect(parsed.document.tracks[0].clips[0].lensCorrection).toEqual(futureIntent)
+    expect(parsed.document.tracks[0].clips[0].lensCorrection)
+      .not.toBe(future.document.tracks[0].clips[0].lensCorrection)
+  })
+
+  test('preserves magic keys in bounded future lens intent', () => {
+    const future = makeProject()
+    const futureIntent = JSON.parse(
+      '{"version":2,"__proto__":{"calibration":"future"}}',
+    ) as LensCorrectionIntent
+    future.document.tracks[0].clips[0].lensCorrection = futureIntent
+
+    const parsed = parseProjectFile(serializeProjectFile(future))
+    const parsedIntent = parsed.document.tracks[0].clips[0].lensCorrection as
+      Record<string, unknown>
+
+    expect(Object.prototype.hasOwnProperty.call(parsedIntent, '__proto__')).toBe(true)
+    expect(parsedIntent.__proto__).toEqual({ calibration: 'future' })
+  })
+
+  test('rejects invalid v1 and unbounded future lens intent', () => {
+    const invalidV1 = makeProject()
+    invalidV1.document.tracks[0].clips[0].lensCorrection = {
+      ...DEFAULT_MANUAL_LENS_CORRECTION,
+      outputScale: 0.5,
+    }
+    expect(() => validateProjectFile(invalidV1)).toThrow(/output scale/i)
+
+    const tooDeep = makeProject()
+    let nested: Record<string, unknown> = { terminal: true }
+    for (let depth = 0; depth <= PROJECT_FILE_LIMITS.maxLensIntentDepth; depth++) {
+      nested = { nested }
+    }
+    tooDeep.document.tracks[0].clips[0].lensCorrection = {
+      version: 2,
+      nested,
+    }
+    expect(() => validateProjectFile(tooDeep)).toThrow(/nested levels/i)
   })
 
   test('requires bounded effect tracks in current saves while retaining dangling intent', () => {

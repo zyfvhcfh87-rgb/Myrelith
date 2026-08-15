@@ -82,7 +82,7 @@ function makeTrack(
 /** V1 (video, empty), A1 (audio, empty), VL (video, locked). */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'doc-mediadrop',
     name: 'media drop fixture',
     frameRate: { num: 30, den: 1 },

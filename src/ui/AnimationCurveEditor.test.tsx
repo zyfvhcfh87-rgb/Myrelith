@@ -37,7 +37,7 @@ function clip(): Clip {
 
 function doc(): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'animation-editor-doc',
     name: 'Animation editor',
     frameRate: { num: 30, den: 1 },

@@ -125,7 +125,8 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #108 — motion-analysis job/cache foundation** | ✅ complete | production one-job/one-decoder controller; worker-owned real-source decode/downsample with exact frame closure; strict schema-1 OPFS derived cache; source/currentness rollback; PR #115 squash-merged as `73ceeea`; issue closed |
 | **Post-MVP #109 — bounded video stabilization** | ✅ complete | production #108 consumer; O(n) similarity smoothing; exact project-space safe coverage; ordinary Position/Rotation/equal-Scale tracks; PR #116 squash-merged as `2c9e35a`; issue closed |
 | **Post-MVP #110 — bounded point and box tracking** | ✅ complete | exact-frame Program Monitor selection; bounded forward/backward local tracking; explicit loss; ordinary Position and optional Scale authoring; PR #117 squash-merged as `a91f1af`; issue closed |
-| **Post-MVP #111 — parity-safe manual lens remap** | 🚧 exact-head publication pending | build-unreferenced CPU oracle + RGBA8 WebGL2 candidate; seven-fixture pixel/geometry parity, 720p/1080p/4K timing, finite memory, cancellation, context-loss/fresh-owner proof; no schema/UI/catalog |
+| **Post-MVP #111 — parity-safe manual lens remap** | ✅ complete | build-unreferenced CPU oracle + accepted RGBA8 WebGL2 candidate; seven-fixture pixel/geometry parity, 720p/1080p/4K timing, finite memory, cancellation, context-loss/fresh-owner proof; PR #114 squash-merged as `56826a6` |
+| **Post-MVP #119 — bounded manual lens correction** | 🚧 implementation complete locally | schema-14 versioned intent; accessible Inspector/history controls; promoted source-space WebGL2 preview/export path; explicit coverage/unavailability; seven-surface 4K budget; local CI/review gates pending |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -2830,8 +2831,8 @@ surface; it is not a second zoom and never enters document history.
 
 - Changes may span every module needed for one complete fix. Keep dependency
   boundaries clear and verify logical steps separately; never skip a phase
-  gate; commit with the message file + `-F` pattern, authored as Aryel only;
-  never add AI co-author or attribution trailers.
+  gate; commit with the message file + `-F` pattern, authored by Aryel and add
+  `Co-authored-by: Codex <codex@openai.com>` for Codex-assisted work.
 - End-of-turn summaries: SHORT, plain words, low jargon (user has AuADHD —
   dense dumps fog them; they like emoji and warmth). Deep detail belongs in
   commits/docs, not the summary.
@@ -4892,3 +4893,46 @@ surface; it is not a second zoom and never enters document history.
   same 17/17 runner checks; the 4,817-module build/typecheck, lint, production
   audit (zero vulnerabilities), diff checks, and production-isolation canaries
   are green. Clean committed headed evidence, CI, and exact-head review remain.
+
+## Milestone 5 Part 10a.5 / issue #119 - bounded manual lens correction
+
+**IMPLEMENTED AND VALIDATED LOCALLY; PUBLICATION GATES PENDING (2026-08-15).**
+
+- Timeline schema 14 adds nullable, versioned `Clip.lensCorrection`. Schema-13
+  migration installs `null`; current version-1 values are bounded and
+  foldover-validated, while bounded future intent round-trips opaquely and is
+  refused instead of being substituted. Audio and procedural text cannot own
+  correction intent.
+- The Crop Inspector exposes principal point X/Y, focal X/Y, `k1`/`k2`/`k3`,
+  `p1`/`p2`, strength, and explicit output scale. Enable, reset, keyboard-ready
+  number inputs, undo/redo, locked-track behavior, validation feedback, runtime
+  capability, and transparent-edge/coverage facts all use ordinary document
+  history with one entry per committed gesture.
+- `webgl2-rgba8-manual-bilinear-v1` is now the one production source-space
+  backend shared by preview and export through `compositeFrame`. Ordering is
+  decoded/orientation-normalized source -> lens -> crop -> transform ->
+  masks/chroma -> effects -> opacity/blend -> transitions. There is no CPU
+  product fallback.
+- Preview owns one backend per render worker; context loss is terminal for that
+  owner and a fresh worker re-probes. Export owns a separate finite backend and
+  readback. WebGL2/context/texture/readback/budget failures are explicit, and
+  success/cancel/failure release GPU objects plus retained canvases
+  idempotently.
+- The browser-free budget proves four compositor surfaces + two reusable lens
+  surfaces + one export readback at 4K = 232,243,200 bytes, below 256 MiB.
+  Source and output dimensions are admitted independently.
+- Motion tracking fails closed for any source clip that owns manual or
+  preserved-future lens intent. The picker/marker overlay is suppressed and
+  analysis rejects until an accepted inverse lens projection can map corrected
+  Program Monitor geometry back into the decoded source.
+- Final local automation passes 193/193 files with 2,613/2,613 tests plus all
+  17 evidence-runner checks. TypeScript/Vite builds 4,821 modules with only the
+  established chunk advisory; lint is warning-free.
+- In-app Browser QA on strict port 41889 used a generated 320x180 AVC fixture
+  in a 1920x1080 project. The live worker reported the accepted backend and a
+  16,384px texture limit; `k1=0.1` disclosed 10.00% overscan, output scale 1.20
+  reported full coverage, undo/redo/reset were exact, and a corrected
+  Compatibility MP4 reached Export ready. Page identity/DOM/overlay checks and
+  console health were clean with zero warnings/errors.
+- Push, CI, current-head Codex review, PR delivery, merge, and issue closeout
+  remain outside this local implementation turn.

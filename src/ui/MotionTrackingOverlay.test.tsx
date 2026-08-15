@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { clipFromAsset, insertClip } from '../domain/operations'
+import { DEFAULT_MANUAL_LENS_CORRECTION } from '../domain/lensCorrection'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
 import type { MediaAsset } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
@@ -89,6 +90,20 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('MotionTrackingOverlay', () => {
+  test('does not expose decoded-source picks over lens-corrected preview pixels', () => {
+    const clipId = useDocumentStore.getState().doc.tracks[0]!.clips[0]!.id
+    useDocumentStore.getState().setManualLensCorrection(clipId, {
+      ...DEFAULT_MANUAL_LENS_CORRECTION,
+      k1: 0.1,
+    })
+    useMotionTrackingSelectionStore.getState().beginPicking(clipId, 'point')
+
+    render(<Harness />)
+
+    expect(screen.queryByRole('button', { name: /choose a point/i }))
+      .not.toBeInTheDocument()
+  })
+
   test('picks a normalized point and pins it to the exact displayed frame', () => {
     const clipId = useDocumentStore.getState().doc.tracks[0]!.clips[0]!.id
     useMotionTrackingSelectionStore.getState().beginPicking(clipId, 'point')

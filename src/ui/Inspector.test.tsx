@@ -49,7 +49,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -419,6 +419,68 @@ describe('Inspector', () => {
         scaleLocked: true,
       },
     })
+  })
+
+  test('authors manual lens correction as one history entry per control gesture', () => {
+    transport().setSelectedClip('clipA')
+    usePreviewStatusStore.setState({
+      rendererCapabilities: {
+        canvasFilter: true,
+        canvasPixelAccess: true,
+        lensRemap: {
+          status: 'available',
+          backendVersion: 'webgl2-rgba8-manual-bilinear-v1',
+          maximumTextureSize: 16_384,
+          reason: null,
+        },
+      },
+    })
+    render(<Inspector />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Crop' }))
+
+    fireEvent.click(screen.getByTestId('inspector-lens-enabled'))
+    expect(clipA().lensCorrection).toMatchObject({ version: 1, k1: 0 })
+    expect(doc().past).toHaveLength(1)
+    expect(screen.getByTestId('inspector-lens-capability')).toHaveTextContent(
+      'webgl2-rgba8-manual-bilinear-v1 is available',
+    )
+
+    const k1 = screen.getByTestId('inspector-lens-k1')
+    fireEvent.change(k1, { target: { value: '0.1' } })
+    fireEvent.keyDown(k1, { key: 'Enter' })
+    expect(clipA().lensCorrection).toMatchObject({ k1: 0.1 })
+    expect(doc().past).toHaveLength(2)
+    expect(screen.getByTestId('inspector-lens-coverage')).toHaveTextContent(
+      /transparent corrected edges/i,
+    )
+
+    act(() => doc().undo())
+    expect(clipA().lensCorrection).toMatchObject({ k1: 0 })
+    expect(screen.queryByText('Manual lens correction updated.')).not.toBeInTheDocument()
+    act(() => doc().undo())
+    expect(clipA().lensCorrection ?? null).toBeNull()
+  })
+
+  test('preserves future lens intent and exposes no editable fallback', () => {
+    const fixture = makeDoc()
+    fixture.tracks[0].clips[0].lensCorrection = {
+      version: 2,
+      profile: 'future-camera-profile',
+    }
+    doc().setDoc(fixture)
+    transport().setSelectedClip('clipA')
+    render(<Inspector />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Crop' }))
+
+    expect(screen.getByTestId('inspector-lens-unsupported')).toHaveTextContent(
+      /version 2 is preserved but unsupported/i,
+    )
+    expect(screen.queryByTestId('inspector-lens-enabled')).not.toBeInTheDocument()
+    expect(clipA().lensCorrection).toEqual({
+      version: 2,
+      profile: 'future-camera-profile',
+    })
+    expect(doc().past).toHaveLength(0)
   })
 
   test('edits, disables, and resets the complete audio surface', () => {

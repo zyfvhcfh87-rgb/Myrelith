@@ -19,6 +19,7 @@
 
 import { describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
+import { DEFAULT_MANUAL_LENS_CORRECTION } from '../domain/lensCorrection'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { resolvePresentationProfile } from '../domain/presentationProfile'
 import {
@@ -29,6 +30,8 @@ import {
 } from '../domain/videoScopes'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import type { Composite2D } from '../pipeline/render'
+import { LensRemapUnavailableError } from '../pipeline/lensRemap'
+import type { WebGl2LensRemapBackend } from '../pipeline/lensRemapWebgl'
 import {
   StaticImageDecodeError,
   type DecodedStaticImage,
@@ -125,6 +128,8 @@ interface FakeOptions {
   openSourceError?: Error
   /** Replaces the still decoder for ownership-contract regressions. */
   decodeImage?: RenderWorkerEnv['decodeImage']
+  /** Replaces the WebGL2 owner for lens capability and loss regressions. */
+  createLensRemapBackend?: RenderWorkerEnv['createLensRemapBackend']
 }
 
 /** Same real-semantics fake as decode.worker.test.ts, plus an error hook. */
@@ -625,6 +630,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     schedule: opts.schedule,
     analyzeVideoScopes: opts.analyzeVideoScopes,
     releaseVideoScopes: opts.releaseVideoScopes,
+    createLensRemapBackend: opts.createLensRemapBackend,
   }
 
   return {
@@ -685,6 +691,7 @@ function makeClip(
     opacity: 1,
     volume: 1,
     effects: [],
+    lensCorrection: null,
   }
 }
 
@@ -694,7 +701,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 10, den: 1 },
@@ -1071,6 +1078,112 @@ describe('composite happy path', () => {
       }])
     },
   )
+
+  test('publishes the promoted lens backend and disposes its owner exactly once', async () => {
+    const dispose = vi.fn()
+    const createLensRemapBackend = vi.fn(() => ({
+      maximumTextureSize: 8_192,
+      dispose,
+    } as unknown as WebGl2LensRemapBackend))
+    const h = makeHarness({ createLensRemapBackend })
+    const clip = makeClip('lens', 'A', 0, 10)
+    clip.lensCorrection = {
+      ...DEFAULT_MANUAL_LENS_CORRECTION,
+      k1: 0.1,
+    }
+    const doc = makeDoc([makeTrack('V1', [clip])])
+
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(doc))
+
+    expect(createLensRemapBackend).toHaveBeenCalledTimes(1)
+    expect(h.posts.filter((post) => post.type === 'rendererCapabilities').at(-1)).toEqual({
+      type: 'rendererCapabilities',
+      capabilities: {
+        canvasFilter: false,
+        canvasPixelAccess: false,
+        lensRemap: {
+          status: 'available',
+          backendVersion: 'webgl2-rgba8-manual-bilinear-v1',
+          maximumTextureSize: 8_192,
+          reason: null,
+        },
+      },
+    })
+
+    await h.core.handleMessage({ type: 'close' })
+    expect(dispose).toHaveBeenCalledTimes(1)
+  })
+
+  test('makes context loss terminal for one worker but allows a fresh worker retry', async () => {
+    const disposeLost = vi.fn()
+    const lostBackend = {
+      maximumTextureSize: 8_192,
+      dispose: disposeLost,
+      renderSource: vi.fn(() => {
+        throw new LensRemapUnavailableError(
+          'The WebGL2 lens-remap context was lost.',
+          true,
+        )
+      }),
+    } as unknown as WebGl2LensRemapBackend
+    const createLostBackend = vi.fn(() => lostBackend)
+    const h = makeHarness({ createLensRemapBackend: createLostBackend })
+    const clip = makeClip('lens', 'A', 0, 10)
+    clip.lensCorrection = {
+      ...DEFAULT_MANUAL_LENS_CORRECTION,
+      k1: 0.1,
+    }
+    const doc = makeDoc([makeTrack('V1', [clip])])
+    const source = new FakeVideoSource()
+    source.queuePlayback(new FakeStreamCursor([streamDecoded(h, 0)]))
+    await setupStreaming(h, doc, [['A', source]])
+
+    await h.core.handleMessage(renderMsg(1, 0, 'playback', [
+      streamEntry('lens', 'A', 0),
+    ]))
+
+    expect(h.posts.at(-2)).toMatchObject({
+      type: 'rendererCapabilities',
+      capabilities: {
+        lensRemap: {
+          status: 'unavailable',
+          reason: 'The WebGL2 lens-remap context was lost.',
+        },
+      },
+    })
+    expect(h.posts.at(-1)).toMatchObject({ type: 'error', requestId: 1 })
+    expect(disposeLost).toHaveBeenCalledTimes(1)
+
+    await h.core.handleMessage(docMsg(doc))
+    expect(createLostBackend).toHaveBeenCalledTimes(1)
+    expect(h.posts.filter((post) => post.type === 'rendererCapabilities').at(-1)).toMatchObject({
+      capabilities: {
+        lensRemap: {
+          status: 'unavailable',
+          reason: /fresh preview worker/i,
+        },
+      },
+    })
+
+    const freshDispose = vi.fn()
+    const fresh = makeHarness({
+      createLensRemapBackend: () => ({
+        maximumTextureSize: 8_192,
+        dispose: freshDispose,
+      } as unknown as WebGl2LensRemapBackend),
+    })
+    await fresh.core.handleMessage(initMsg(fresh))
+    await fresh.core.handleMessage(docMsg(doc))
+    expect(fresh.posts.filter((post) => post.type === 'rendererCapabilities').at(-1)).toMatchObject({
+      capabilities: { lensRemap: { status: 'available' } },
+    })
+
+    await h.core.handleMessage({ type: 'close' })
+    await fresh.core.handleMessage({ type: 'close' })
+    expect(disposeLost).toHaveBeenCalledTimes(1)
+    expect(freshDispose).toHaveBeenCalledTimes(1)
+  })
 
   test('samples scopes after presentation, caps cadence, and drops stale analysis', async () => {
     let now = 0
