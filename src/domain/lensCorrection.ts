@@ -322,7 +322,8 @@ export function lensCorrectionCoverage(
       { x: 1, y: position },
     )
   }
-  const mapped = points.map((point) => mapLensCorrectionPoint(model, point))
+  const mapper = createValidatedLensCorrectionMap(model)
+  const mapped = points.map((point) => mapper.map(point))
   const minimumSourceX = Math.min(...mapped.map((point) => point.x))
   const maximumSourceX = Math.max(...mapped.map((point) => point.x))
   const minimumSourceY = Math.min(...mapped.map((point) => point.y))

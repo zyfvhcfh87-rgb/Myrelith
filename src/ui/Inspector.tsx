@@ -884,7 +884,10 @@ function ManualLensCorrectionSection({
   const model: Readonly<ManualLensCorrectionModel> = enabled
     ? intent
     : DEFAULT_MANUAL_LENS_CORRECTION
-  const coverage = supported ? lensCorrectionCoverage(model) : null
+  const coverage = useMemo(
+    () => supported ? lensCorrectionCoverage(model) : null,
+    [model, supported],
+  )
   const controlsDisabled = locked || !enabled || !supported
 
   useEffect(() => {
