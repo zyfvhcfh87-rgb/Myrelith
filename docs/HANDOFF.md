@@ -2831,8 +2831,8 @@ surface; it is not a second zoom and never enters document history.
 
 - Changes may span every module needed for one complete fix. Keep dependency
   boundaries clear and verify logical steps separately; never skip a phase
-  gate; commit with the message file + `-F` pattern, authored as Aryel only;
-  never add AI co-author or attribution trailers.
+  gate; commit with the message file + `-F` pattern, authored by Aryel and add
+  `Co-authored-by: Codex <codex@openai.com>` for Codex-assisted work.
 - End-of-turn summaries: SHORT, plain words, low jargon (user has AuADHD —
   dense dumps fog them; they like emoji and warmth). Deep detail belongs in
   commits/docs, not the summary.
