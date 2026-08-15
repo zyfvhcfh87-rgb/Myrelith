@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest'
 import { defaultClipAnimation, evaluateAnimationTrack } from './clipAnimation'
 import { defaultClipVisualSettings } from './clipInspector'
+import { DEFAULT_MANUAL_LENS_CORRECTION } from './lensCorrection'
 import {
   createMotionTrackingPlan,
   createMotionTrackingSamplePlan,
   MOTION_TRACKING_RESULT_VERSION,
+  motionTrackingAvailabilityReason,
   type MotionTrackingBoxAnalysis,
   type MotionTrackingPointAnalysis,
   type MotionTrackingSource,
@@ -68,6 +70,17 @@ const source: MotionTrackingSource = {
 }
 
 describe('motion-tracking sample planning', () => {
+  test('rejects tracking against lens-corrected preview geometry', () => {
+    const item = clip('source', 10, 5)
+    item.lensCorrection = {
+      ...DEFAULT_MANUAL_LENS_CORRECTION,
+      k1: 0.1,
+    }
+
+    expect(motionTrackingAvailabilityReason(doc(item), item, source, 12))
+      .toBe('Motion tracking is unavailable while manual lens correction is enabled.')
+  })
+
   test('creates exact forward and backward monotonic sparse schedules from the playhead', () => {
     const item = clip('source', 10, 5)
     const bounds = { firstTimestampUs: 0, endTimestampUs: 166_667 }

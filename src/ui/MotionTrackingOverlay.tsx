@@ -52,6 +52,7 @@ function sourceFacts(
   if (
     !clip
     || clip.text
+    || (clip.lensCorrection ?? null) !== null
     || playheadFrame < clip.timelineRange.startFrame
     || playheadFrame >= rangeEnd(clip.timelineRange)
     || !descriptor

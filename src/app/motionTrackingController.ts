@@ -480,6 +480,7 @@ function sourceSnapshot(
       assetId: clip.assetId,
       timelineRange: clip.timelineRange,
       sourceTimeMap: clipSourceTimeMap(clip),
+      lensCorrection: clip.lensCorrection ?? null,
       transform: clip.transform,
       visual: clipVisualSettings(clip),
       animation: clip.animation,

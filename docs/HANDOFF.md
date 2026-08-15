@@ -4921,6 +4921,10 @@ surface; it is not a second zoom and never enters document history.
 - The browser-free budget proves four compositor surfaces + two reusable lens
   surfaces + one export readback at 4K = 232,243,200 bytes, below 256 MiB.
   Source and output dimensions are admitted independently.
+- Motion tracking fails closed for any source clip that owns manual or
+  preserved-future lens intent. The picker/marker overlay is suppressed and
+  analysis rejects until an accepted inverse lens projection can map corrected
+  Program Monitor geometry back into the decoded source.
 - Final local automation passes 193/193 files with 2,613/2,613 tests plus all
   17 evidence-runner checks. TypeScript/Vite builds 4,821 modules with only the
   established chunk advisory; lint is warning-free.

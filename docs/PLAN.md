@@ -4766,6 +4766,9 @@ acceptance claims.
 - [x] Make unsupported WebGL2/context/texture/readback/budget facts explicit,
   make context loss terminal per owner with fresh-worker recovery, and prove
   exact success/cancel/failure disposal.
+- [x] Fail motion-tracking authoring closed for lens-corrected sources until an
+  accepted inverse projection can map Program Monitor picks into decoded-source
+  coordinates.
 - [x] Admit two reusable remap surfaces and one finite export readback through
   the shared budget. Keep the 4K seven-surface peak at exactly 232,243,200
   bytes under 256 MiB.

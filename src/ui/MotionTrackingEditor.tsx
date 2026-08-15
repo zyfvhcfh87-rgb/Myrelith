@@ -78,6 +78,7 @@ export default function MotionTrackingEditor({
   const [message, setMessage] = useState('Choose a point or box in the Program Monitor.')
   const generation = useRef(0)
   const invalidate = useCallback(() => { generation.current++ }, [])
+  const lensCorrectionBlocksTracking = (clip.lensCorrection ?? null) !== null
 
   const targets = useMemo(() => doc.tracks.flatMap((track) => (
     track.kind !== 'video' || track.hidden
@@ -104,7 +105,9 @@ export default function MotionTrackingEditor({
     setTargetClipId(clip.id)
     setReplaceExisting(false)
     setPreview(false)
-    setMessage('Choose a point or box in the Program Monitor.')
+    setMessage(lensCorrectionBlocksTracking
+      ? 'Motion tracking is unavailable while manual lens correction is enabled.'
+      : 'Choose a point or box in the Program Monitor.')
     clearOwnedPreview()
     useMotionTrackingSelectionStore.getState().clear()
     const sourceClipId = clip.id
@@ -114,7 +117,7 @@ export default function MotionTrackingEditor({
       clearOwnedPreview()
       useMotionTrackingSelectionStore.getState().clear()
     }
-  }, [clip.id, invalidate])
+  }, [clip.id, invalidate, lensCorrectionBlocksTracking])
 
   useEffect(() => {
     if (targets.some((target) => target.id === targetClipId)) return
@@ -183,6 +186,10 @@ export default function MotionTrackingEditor({
   }, [doc, planned, playheadFrame, preview])
 
   const pick = (nextKind: MotionTrackingKind): void => {
+    if (lensCorrectionBlocksTracking) {
+      setMessage('Motion tracking is unavailable while manual lens correction is enabled.')
+      return
+    }
     invalidate()
     cancelMotionTracking(clip.id)
     setKind(nextKind)
@@ -197,6 +204,10 @@ export default function MotionTrackingEditor({
   }
 
   const analyze = async (): Promise<void> => {
+    if (lensCorrectionBlocksTracking) {
+      setMessage('Motion tracking is unavailable while manual lens correction is enabled.')
+      return
+    }
     if (!selection || selectionSourceClipId !== clip.id || selectionGlobalFrame === null) {
       setMessage('Choose a point or box in the Program Monitor first.')
       return
@@ -301,12 +312,14 @@ export default function MotionTrackingEditor({
 
   const selectionReady = selectionSourceClipId === clip.id && selection?.kind === kind
   const canAnalyze = !locked
+    && !lensCorrectionBlocksTracking
     && phase !== 'analyzing'
     && selectionReady
     && selectionGlobalFrame !== null
     && selectionGlobalFrame >= clip.timelineRange.startFrame
     && selectionGlobalFrame < rangeEnd(clip.timelineRange)
   const canApply = phase === 'ready'
+    && !lensCorrectionBlocksTracking
     && planned?.ok
     && (!planned.plan.replacementRequired || replaceExisting)
   const target = targetClipId ? findClip(doc, targetClipId) : null
@@ -328,10 +341,10 @@ export default function MotionTrackingEditor({
         <p className="inspector-note">Selection pinned to project frame {selectionGlobalFrame}.</p>
       ) : null}
       <div className="animation-toolbar" aria-label="Tracking selection">
-        <button type="button" disabled={locked} aria-pressed={pickingKind === 'point'} onClick={() => pick('point')}>
+        <button type="button" disabled={locked || lensCorrectionBlocksTracking} aria-pressed={pickingKind === 'point'} onClick={() => pick('point')}>
           Pick point
         </button>
-        <button type="button" disabled={locked} aria-pressed={pickingKind === 'box'} onClick={() => pick('box')}>
+        <button type="button" disabled={locked || lensCorrectionBlocksTracking} aria-pressed={pickingKind === 'box'} onClick={() => pick('box')}>
           Draw box
         </button>
       </div>
@@ -379,7 +392,7 @@ export default function MotionTrackingEditor({
         </label>
       ) : null}
       <label className="stabilization-confirm">
-        <input type="checkbox" checked={preview} disabled={!planned?.ok} onChange={(event) => setPreview(event.target.checked)} />
+        <input type="checkbox" checked={preview} disabled={lensCorrectionBlocksTracking || !planned?.ok} onChange={(event) => setPreview(event.target.checked)} />
         <span>Preview accepted tracking at the playhead</span>
       </label>
       <p id="motion-tracking-reset-warning" className="inspector-note">

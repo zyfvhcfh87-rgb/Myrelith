@@ -764,6 +764,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   document aggregate key budget reject before mutation. Apply replaces only
   the explicitly confirmed owned properties in one immutable history entry and
   leaves unrelated clip/effect animation unchanged.
+- Motion-tracking selection and analysis are unavailable while the source clip
+  owns any manual or preserved-future lens-correction intent. The picker and
+  marker overlay operate in decoded-source coordinates, so the UI suppresses
+  them and the domain/controller reject analysis until an accepted inverse lens
+  projection is implemented; tracking must never silently target a different
+  raw feature than the corrected Program Monitor pixel.
 - User cancellation is analysis-kind scoped. Motion tracking may cancel only
   point- and box-tracking jobs for its source clip, and stabilization may
   cancel only stabilization jobs. Whole-clip cancellation remains reserved for
