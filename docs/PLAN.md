@@ -4723,3 +4723,27 @@ acceptance claims.
   and production-isolation canaries are green.
 - [ ] Publish a clean exact-head Chromium artifact, pass CI, and receive a clean
   Codex review before merge.
+
+## Timeline automation follow-up - playhead-local speed sections
+
+**COMPLETE (2026-08-14).**
+
+- [x] Replace the ambiguous Inspector `Speed` action with `Speed at playhead`,
+  authoring or updating an exact integer-frame boundary inside the selected
+  timed clip. Keep `Whole clip speed` as a separate explicit fallback.
+- [x] Default newly introduced boundaries to held sections so a change begins
+  at the requested playhead frame instead of gradually affecting the untouched
+  prefix. Preserve explicit hold/linear/smooth editing in the ramp controls.
+- [x] Derive a presentation-only video speed lane from the same persisted
+  `SourceTimeMap` used by preview and export. Label normal, slow, fast, freeze,
+  and mixed sections and draw their exact boundaries without duplicating the
+  lane on linked audio.
+- [x] Include effect-parameter keys in the existing timeline marker surface and
+  de-duplicate frames shared with ordinary transform/opacity animation.
+- [x] Pass 130/130 focused tests and the authoritative 193-file / 2,603-test
+  suite. Pass build/typecheck, warning-free lint, and diff checks.
+- [x] In in-app Chromium on exclusive port 41892, import and place a real
+  H.264/AAC fixture, author 100% / 50% / 100% sections at clip frames 0, 60,
+  and 180, verify linked timing and the video-only lane at Detail Zoom, compare
+  directly with the supplied Resolve reference, and observe no console warnings
+  or errors. `design-qa.md` records `final result: passed`.

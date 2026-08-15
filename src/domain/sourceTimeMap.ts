@@ -754,7 +754,10 @@ export function sourceTimeMapWithSpeedPoint(
     curve.points.push({
       frame: 0,
       rate: { ...map.rate },
-      easing: 'linear',
+      // A newly authored speed boundary should begin at the requested frame,
+      // not gradually pull the untouched prefix toward it. Linear and Smooth
+      // remain explicit outgoing-section choices in the Inspector.
+      easing: 'hold',
     })
   }
   const curveFrame = curve.originFrame + localFrame
