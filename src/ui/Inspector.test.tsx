@@ -7,7 +7,7 @@
  * the doc changes under them (undo, canvas gestures, clip switching).
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
@@ -192,6 +192,40 @@ describe('Inspector', () => {
       { frame: 40, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
     ])
     expect(doc().past).toHaveLength(2)
+  })
+
+  test('requires a later positive boundary before authoring a freeze', async () => {
+    const user = userEvent.setup()
+    act(() => {
+      const fixture = makeDoc()
+      fixture.tracks[0]!.clips = [fixture.tracks[0]!.clips[0]!]
+      doc().setDoc(fixture)
+      transport().setSelectedClip('clipA')
+      transport().setPlayheadFrame(20)
+    })
+    const { rerender } = render(<Inspector />)
+
+    let speedAtPlayhead = screen.getByRole('combobox', { name: 'Speed at playhead' })
+    expect(within(speedAtPlayhead).getByRole('option', { name: '0% (Freeze)' }))
+      .toBeDisabled()
+    expect(screen.getByText(/Add a later positive speed boundary before choosing 0%/))
+      .toBeInTheDocument()
+
+    act(() => transport().setPlayheadFrame(40))
+    rerender(<Inspector />)
+    await user.click(screen.getByRole('button', { name: 'Add boundary at playhead' }))
+    act(() => transport().setPlayheadFrame(20))
+    rerender(<Inspector />)
+
+    speedAtPlayhead = screen.getByRole('combobox', { name: 'Speed at playhead' })
+    expect(within(speedAtPlayhead).getByRole('option', { name: '0% (Freeze)' }))
+      .toBeEnabled()
+    await user.selectOptions(speedAtPlayhead, '0')
+    expect(sourceTimeSpeedPointsAtClip(clipA().sourceTimeMap!)).toEqual([
+      { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+      { frame: 20, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+      { frame: 40, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+    ])
   })
 
   test('authors an accessible bounded ramp and freeze with exact undo', async () => {

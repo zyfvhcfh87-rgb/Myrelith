@@ -184,6 +184,50 @@ describe('clip visuals', () => {
     expect(markers[2]).toHaveClass('effect-key')
   })
 
+  test.each(['drag', 'slide'] as const)(
+    'keeps effect markers aligned during a live %s preview',
+    (previewKind) => {
+      const animated = makeClip('animated-preview', 25, 100, 60)
+      animated.animation = {
+        tracks: [],
+        effectTracks: [{
+          effectId: 'effect-1',
+          parameter: 'amount',
+          keyframes: [
+            { frame: 25, value: 0.5, easing: { type: 'linear' } },
+            { frame: 50, value: 1, easing: { type: 'linear' } },
+          ],
+        }],
+      }
+
+      const { container } = render(
+        <ClipView clip={animated} trackId="V1" trackKind="video" />,
+      )
+      act(() => {
+        if (previewKind === 'drag') {
+          useTransportStore.getState().setDragPreview({
+            clipId: animated.id,
+            deltaFrames: 60,
+          })
+        } else {
+          useTransportStore.getState().setEditPreview({
+            clipId: animated.id,
+            kind: 'slide',
+            deltaFrames: 60,
+          })
+        }
+      })
+
+      expect(screen.getByTestId('clip-animated-preview')).toHaveStyle({
+        transform: 'translateX(170px)',
+      })
+      const markers = [...container.querySelectorAll<HTMLElement>('.clip-keyframe-marker')]
+      expect(markers).toHaveLength(2)
+      expect(markers.map((marker) => marker.style.left)).toEqual(['50px', '100px'])
+      expect(markers.every((marker) => marker.classList.contains('effect-key'))).toBe(true)
+    },
+  )
+
   test('shows exact speed sections and boundaries below a retimed clip', () => {
     const ramped = makeClip('ramped', 25, 100)
     let map = sourceTimeMapWithSpeedPoint(

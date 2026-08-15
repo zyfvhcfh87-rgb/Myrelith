@@ -131,6 +131,7 @@ export interface ClipPresentationPlan {
   badge: string | null
   hasVisibleSlice: boolean
   previewedClipStartFrame: number
+  automationMarkerStartFrame: number
   previewedClipDurationFrames: number
   previewedSourceTimeMap: SourceTimeMap
   displayedStartFrame: number
@@ -420,6 +421,7 @@ export function planClipPresentation({
   const isStillSource = clip.sourceMode === 'still'
   const timelineRange = clip.timelineRange
   let startFrame = timelineRange.startFrame + (movePreviewDelta ?? 0)
+  let automationMarkerStartFrame = startFrame
   let durationFrames = timelineRange.durationFrames
   let badge: string | null = null
 
@@ -430,19 +432,24 @@ export function planClipPresentation({
     switch (editPreview.kind) {
       case 'trim-start':
         startFrame = timelineRange.startFrame + deltaFrames
+        automationMarkerStartFrame = timelineRange.startFrame
         durationFrames = timelineRange.durationFrames - deltaFrames
         break
       case 'ripple-start':
+        automationMarkerStartFrame = timelineRange.startFrame
         durationFrames = timelineRange.durationFrames - deltaFrames
         break
       case 'trim-end':
       case 'ripple-end':
+        automationMarkerStartFrame = timelineRange.startFrame
         durationFrames = timelineRange.durationFrames + deltaFrames
         break
       case 'slide':
         startFrame = timelineRange.startFrame + deltaFrames
+        automationMarkerStartFrame = startFrame
         break
       case 'slip':
+        automationMarkerStartFrame = timelineRange.startFrame
         break
     }
   }
@@ -518,6 +525,7 @@ export function planClipPresentation({
     badge,
     hasVisibleSlice,
     previewedClipStartFrame: startFrame,
+    automationMarkerStartFrame,
     previewedClipDurationFrames: durationFrames,
     previewedSourceTimeMap: sourceTimeMap,
     displayedStartFrame,

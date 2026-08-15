@@ -166,7 +166,7 @@ function ClipView({
   const allMarkers = clipAutomationMarkers(clip)
     .map((marker) => ({
       ...marker,
-      frame: clip.timelineRange.startFrame + marker.frame,
+      frame: presentation.automationMarkerStartFrame + marker.frame,
     }))
     .filter((marker) =>
       marker.frame >= presentation.displayedStartFrame

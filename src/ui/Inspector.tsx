@@ -43,6 +43,7 @@ import type {
   Clip,
   ClipId,
   SourceTimeSpeedEasing,
+  SourceTimeSpeedPoint,
   TextFontFamily,
   TimelineDoc,
 } from '../domain/schema'
@@ -410,6 +411,13 @@ const SPEED_PERCENT_OPTIONS = Object.freeze(
 )
 const RAMP_SPEED_PERCENT_OPTIONS = Object.freeze([0, ...SPEED_PERCENT_OPTIONS])
 
+function hasLaterPositiveSpeedPoint(
+  points: readonly SourceTimeSpeedPoint[],
+  frame: number,
+): boolean {
+  return points.some((point) => point.frame > frame && point.rate.numerator > 0)
+}
+
 const RAMP_EASING_LABELS: Readonly<Record<SourceTimeSpeedEasing, string>> = {
   hold: 'Hold',
   linear: 'Linear',
@@ -482,6 +490,10 @@ function SpeedRampEditor({
     percent: number,
     easing: SourceTimeSpeedEasing,
   ): void => {
+    if (percent === 0 && !hasLaterPositiveSpeedPoint(points, frame)) {
+      setMessage('Add a later positive speed boundary before choosing 0% (Freeze).')
+      return
+    }
     const store = useDocumentStore.getState()
     const before = store.doc
     store.setClipSpeedPoint(
@@ -593,7 +605,11 @@ function SpeedRampEditor({
               )}
             >
               {RAMP_SPEED_PERCENT_OPTIONS.map((percent) => (
-                <option key={percent} value={percent}>
+                <option
+                  key={percent}
+                  value={percent}
+                  disabled={percent === 0 && !hasLaterPositiveSpeedPoint(points, selected.frame)}
+                >
                   {percent === 0 ? '0% (Freeze)' : `${percent}%`}
                 </option>
               ))}
@@ -662,8 +678,10 @@ function TimingInspectorSection({
   const localPlayhead = playheadFrame - clip.timelineRange.startFrame
   const playheadInside = localPlayhead >= 0
     && localPlayhead < clip.timelineRange.durationFrames
-  const pointAtPlayhead = sourceTimeSpeedPointsAtClip(map)
+  const speedPoints = sourceTimeSpeedPointsAtClip(map)
+  const pointAtPlayhead = speedPoints
     .find((point) => point.frame === localPlayhead)
+  const canFreezeAtPlayhead = hasLaterPositiveSpeedPoint(speedPoints, localPlayhead)
   const playheadSpeedPercent = playheadInside
     ? pointAtPlayhead
       ? sourceTimeSpeedRatePercent(pointAtPlayhead.rate)
@@ -720,7 +738,12 @@ function TimingInspectorSection({
       setMessage('Move the playhead inside this clip to create a speed boundary.')
       return
     }
-    const existing = sourceTimeSpeedPointsAtClip(clipSourceTimeMap(latest))
+    const latestPoints = sourceTimeSpeedPointsAtClip(clipSourceTimeMap(latest))
+    if (percent === 0 && !hasLaterPositiveSpeedPoint(latestPoints, frame)) {
+      setMessage('Add a later positive speed boundary before choosing 0% (Freeze).')
+      return
+    }
+    const existing = latestPoints
       .find((point) => point.frame === frame)
     store.setClipSpeedPoint(
       clip.id,
@@ -766,7 +789,11 @@ function TimingInspectorSection({
             <option value={playheadSpeedPercent}>{playheadSpeedPercent}% (ramp value)</option>
           )}
           {RAMP_SPEED_PERCENT_OPTIONS.map((percent) => (
-            <option key={percent} value={percent}>
+            <option
+              key={percent}
+              value={percent}
+              disabled={percent === 0 && !canFreezeAtPlayhead}
+            >
               {percent === 0 ? '0% (Freeze)' : `${percent}%`}
             </option>
           ))}
@@ -774,7 +801,9 @@ function TimingInspectorSection({
       </label>
       <span id="inspector-speed-playhead-detail" className="inspector-note">
         {playheadInside
-          ? `Clip frame ${localPlayhead}. Changing this creates or updates a boundary here; move the playhead and choose another speed to close the section.`
+          ? canFreezeAtPlayhead
+            ? `Clip frame ${localPlayhead}. Changing this creates or updates a boundary here; move the playhead and choose another speed to close the section.`
+            : `Clip frame ${localPlayhead}. Add a later positive speed boundary before choosing 0% (Freeze).`
           : 'Move the playhead inside this clip to author a timed speed section.'}
       </span>
       <label className="inspector-field inspector-field-wide">
