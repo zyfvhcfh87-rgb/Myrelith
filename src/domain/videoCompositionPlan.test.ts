@@ -7,6 +7,8 @@ import type {
   Transition,
 } from './schema'
 import type { SourceBoundsCatalog } from './crossfadePlan'
+import { defaultTextProps } from './textOverlay'
+import { createPluginVideoEffectContributionSnapshot } from './pluginVideoEffectStagePlan'
 import {
   createVideoCompositionPlanner,
   videoCompositionRequests,
@@ -108,6 +110,45 @@ function catalog(
   entries: Array<[string, MediaSourceBounds]>,
 ): SourceBoundsCatalog {
   return new Map(entries)
+}
+
+const PLUGIN_EFFECT_TYPE = 'plugin:com.example.sparkle/sparkle'
+
+function pluginEffect(id: string, strength = 0.25): Clip['effects'][number] {
+  return {
+    id,
+    type: PLUGIN_EFFECT_TYPE,
+    version: 1,
+    enabled: true,
+    params: { strength },
+  }
+}
+
+function pluginSnapshot() {
+  return createPluginVideoEffectContributionSnapshot(4, [{
+    signerFingerprint: `sha256:${'1'.repeat(64)}`,
+    packageDigest: `sha256:${'2'.repeat(64)}`,
+    pluginId: 'com.example.sparkle',
+    pluginVersion: '1.0.0',
+    kind: 'video-effect',
+    contributionVersion: 1,
+    contributionId: 'sparkle',
+    contributionName: 'Sparkle',
+    descriptorVersion: 1,
+    entrypoint: 'myrelith_effect_sparkle',
+    parameters: [{
+      key: 'strength',
+      name: 'Strength',
+      kind: 'number',
+      default: 0,
+      min: 0,
+      max: 1,
+      step: 0.1,
+      animatable: true,
+    }],
+    availability: 'ready',
+    detail: 'Ready to render.',
+  }])
 }
 
 describe('video composition plan', () => {
@@ -387,5 +428,121 @@ describe('video composition plan', () => {
 
     expect(requests[0].clip.transform.rotation).toBe(20)
     expect(requests[1].clip.transform.y).toBe(0)
+  })
+
+  test('keeps the exact no-plugin plan shape with an empty plugin catalog', () => {
+    const ordinary = clip('ordinary', 'asset', 0, 0)
+    const document = doc([track('V1', [ordinary])])
+    const original = createVideoCompositionPlanner(document, new Map()).planFrame(2)
+    const withEmptyCatalog = createVideoCompositionPlanner(
+      document,
+      new Map(),
+      createPluginVideoEffectContributionSnapshot(1, []),
+    ).planFrame(2)
+
+    expect(withEmptyCatalog).toEqual(original)
+    expect(JSON.stringify(withEmptyCatalog)).toBe(JSON.stringify(original))
+    expect(withEmptyCatalog.items[0]).not.toHaveProperty('effectStagePlan')
+    expect(withEmptyCatalog.items[0]).not.toHaveProperty('request.effectStagePlan')
+  })
+
+  test('attaches plugin stages to ordinary media and text without creating text requests', () => {
+    const media = clip('media', 'media-asset', 0, 0)
+    media.effects = [pluginEffect('media-plugin')]
+    const text = clip('text', '__myrelith_text__:title', 0, 0, 1, 'still')
+    text.text = defaultTextProps(1920, 1080, 'Title')
+    text.effects = [pluginEffect('text-plugin')]
+    const plan = createVideoCompositionPlanner(
+      doc([track('V1', [media]), track('V2', [text])]),
+      new Map(),
+      pluginSnapshot(),
+    ).planFrame(2)
+
+    expect(plan.items).toHaveLength(2)
+    expect(plan.items[0]).toMatchObject({
+      kind: 'clip',
+      request: {
+        effectStagePlan: {
+          requiresOrderedPixelPath: true,
+          stages: [{ kind: 'plugin', effect: { id: 'media-plugin' }, status: 'ready' }],
+        },
+      },
+    })
+    expect(plan.items[1]).toMatchObject({
+      kind: 'text',
+      effectStagePlan: {
+        requiresOrderedPixelPath: true,
+        stages: [{ kind: 'plugin', effect: { id: 'text-plugin' }, status: 'ready' }],
+      },
+    })
+    expect(videoCompositionRequests(plan).map((request) => request.clip.id))
+      .toEqual(['media'])
+  })
+
+  test('plans animated plugin parameters independently on both crossfade legs', () => {
+    const from = clip('from', 'from-asset', 0, 20)
+    const to = clip('to', 'to-asset', 10, 60)
+    from.effects = [pluginEffect('from-plugin', 0)]
+    to.effects = [pluginEffect('to-plugin', 0)]
+    from.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: 'from-plugin',
+        parameter: 'strength',
+        keyframes: [
+          { frame: 10, value: 0, easing: { type: 'linear' } },
+          { frame: 12, value: 1, easing: { type: 'linear' } },
+        ],
+      }],
+    }
+    to.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: 'to-plugin',
+        parameter: 'strength',
+        keyframes: [
+          { frame: 0, value: 0, easing: { type: 'linear' } },
+          { frame: 2, value: 1, easing: { type: 'linear' } },
+        ],
+      }],
+    }
+    const document = doc([track('V1', [from, to], [crossfade(from.id, to.id)])])
+    const sources = catalog([['from-asset', exact()], ['to-asset', exact()]])
+    const baselineRequests = videoCompositionRequests(
+      createVideoCompositionPlanner(document, sources).planFrame(11),
+    )
+    const planned = createVideoCompositionPlanner(
+      document,
+      sources,
+      pluginSnapshot(),
+    ).planFrame(11)
+
+    expect(planned.items[0]).toMatchObject({
+      kind: 'crossfade',
+      requests: [
+        {
+          effectStagePlan: {
+            stages: [{
+              kind: 'plugin',
+              execution: { canonicalParameterJson: '{"strength":0.5}' },
+            }],
+          },
+        },
+        {
+          effectStagePlan: {
+            stages: [{
+              kind: 'plugin',
+              execution: { canonicalParameterJson: '{"strength":0.5}' },
+            }],
+          },
+        },
+      ],
+    })
+    const decodeRequests = videoCompositionRequests(planned)
+    expect(decodeRequests).toEqual(baselineRequests)
+    expect(decodeRequests.every((request) => !Object.prototype.hasOwnProperty.call(
+      request,
+      'effectStagePlan',
+    ))).toBe(true)
   })
 })

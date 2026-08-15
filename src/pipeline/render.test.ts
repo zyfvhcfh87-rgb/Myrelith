@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
-import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import type { Clip, EffectDescriptor, TimelineDoc, Track } from '../domain/schema'
 import {
   resolvePresentationProfile,
   type PresentationProfile,
@@ -16,6 +16,11 @@ import {
 import { defaultTextProps } from '../domain/textOverlay'
 import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
+import {
+  createPluginVideoEffectContributionSnapshot,
+  type PluginVideoEffectContributionAvailability,
+  type PluginVideoEffectContributionSnapshot,
+} from '../domain/pluginVideoEffectStagePlan'
 import type {
   Composite2D,
   FrameSource,
@@ -25,6 +30,10 @@ import type {
 import { compositeFrame as compositeFrameCore } from './render'
 import type { LensRemapProvider } from './lensRemap'
 import { DEFAULT_MANUAL_LENS_CORRECTION } from '../domain/lensCorrection'
+import {
+  VideoEffectStageExecutionError,
+  type VideoEffectStageExecutor,
+} from './videoEffectStageExecution'
 
 /* ------------------------------------------------------------------ */
 /* Builders                                                             */
@@ -94,6 +103,47 @@ function fakeVideoFrame(
   displayHeight: number,
 ): VideoFrame {
   return { displayWidth, displayHeight } as unknown as VideoFrame
+}
+
+const PLUGIN_EFFECT_TYPE = 'plugin:com.example.render-test/channel-shift'
+
+function pluginEffect(id = 'plugin-effect'): EffectDescriptor {
+  return {
+    id,
+    type: PLUGIN_EFFECT_TYPE,
+    version: 1,
+    enabled: true,
+    params: { amount: 1 },
+  }
+}
+
+function pluginSnapshot(
+  availability: PluginVideoEffectContributionAvailability = 'ready',
+): PluginVideoEffectContributionSnapshot {
+  return createPluginVideoEffectContributionSnapshot(4, [{
+    signerFingerprint: `sha256:${'1'.repeat(64)}`,
+    packageDigest: `sha256:${'2'.repeat(64)}`,
+    pluginId: 'com.example.render-test',
+    pluginVersion: '1.0.0',
+    kind: 'video-effect',
+    contributionVersion: 1,
+    contributionId: 'channel-shift',
+    contributionName: 'Channel Shift',
+    descriptorVersion: 1,
+    entrypoint: 'myrelith_effect_channel_shift',
+    parameters: [{
+      key: 'amount',
+      name: 'Amount',
+      kind: 'number',
+      default: 1,
+      min: 0,
+      max: 1,
+      step: 0.1,
+      animatable: false,
+    }],
+    availability,
+    detail: availability === 'ready' ? 'Ready.' : 'Disabled for this test.',
+  }])
 }
 
 /* ------------------------------------------------------------------ */
@@ -222,6 +272,7 @@ function makeCtx(opts: {
 }
 
 function makeTransitionSurfaceProvider(opts: {
+  supportsFilter?: boolean
   supportsPixels?: boolean
   pixelData?: Uint8ClampedArray
 } = {}) {
@@ -250,6 +301,8 @@ function compositeFrame(
   provider = makeTransitionSurfaceProvider().provider,
   presentation?: PresentationProfile,
   lensRemapProvider?: LensRemapProvider | null,
+  pluginContributions?: PluginVideoEffectContributionSnapshot,
+  videoEffectStageExecutor?: VideoEffectStageExecutor | null,
 ) {
   const catalog = new Map(
     doc.tracks.flatMap((track) => track.clips.map((clip) => [
@@ -266,12 +319,13 @@ function compositeFrame(
   )
   return compositeFrameCore(
     doc,
-    videoCompositionPlanAtFrame(doc, frame, catalog),
+    videoCompositionPlanAtFrame(doc, frame, catalog, pluginContributions),
     ctx,
     source,
     provider,
     presentation,
     lensRemapProvider,
+    videoEffectStageExecutor,
   )
 }
 
@@ -343,6 +397,151 @@ describe('compositeFrame — background & selection', () => {
     ])
     expect(state().filter).toBe('none')
     expect(result).toEqual({ drawn: ['graded'], missing: [] })
+  })
+
+  test('keeps a disabled plugin plan on the historical direct Canvas path', async () => {
+    const bitmap = fakeBitmap(640, 360)
+    const builtIn = createColorAdjustEffect('legacy-built-in')
+    builtIn.params.exposure = 1
+    const clip = makeClip('disabled-plugin', 0, 30, {
+      effects: [builtIn, pluginEffect()],
+    })
+    const doc = makeDoc([makeTrack('V1', 'video', [clip])])
+    const destination = makeCtx({ supportsFilter: true })
+    const surfaces = makeTransitionSurfaceProvider({ supportsPixels: true })
+
+    const result = await compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource({ 'asset-1@0': bitmap }).source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot('disabled'),
+    )
+
+    expect(destination.ops('drawImage')[0].args[0]).toBe(bitmap)
+    expect(destination.ops('filter').map((operation) => operation.args[0]))
+      .toEqual(['brightness(2) contrast(1) saturate(1)'])
+    expect(surfaces.gets()).toBe(0)
+    expect(result).toEqual({ drawn: ['disabled-plugin'], missing: [] })
+  })
+
+  test('visibly bypasses a ready plugin when scratch pixel access is unavailable', async () => {
+    const bitmap = fakeBitmap(640, 360)
+    const builtIn = createColorAdjustEffect('fallback-built-in')
+    builtIn.params.exposure = 1
+    const clip = makeClip('capability-fallback', 0, 30, {
+      effects: [builtIn, pluginEffect()],
+    })
+    const doc = makeDoc([makeTrack('V1', 'video', [clip])])
+    const destination = makeCtx({ supportsFilter: true })
+    const surfaces = makeTransitionSurfaceProvider()
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: vi.fn(async () => {
+        throw new Error('executor must not be reached without pixel access')
+      }),
+    }
+
+    const result = await compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource({ 'asset-1@0': bitmap }).source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot(),
+      executor,
+    )
+
+    expect(executor.applyPluginEffect).not.toHaveBeenCalled()
+    expect(destination.ops('drawImage')[0].args[0]).toBe(bitmap)
+    expect(destination.ops('filter').map((operation) => operation.args[0]))
+      .toEqual(['brightness(2) contrast(1) saturate(1)'])
+    expect(result).toEqual({ drawn: ['capability-fallback'], missing: [] })
+  })
+
+  test('awaits a mixed built-in/plugin stage transaction before painting the layer', async () => {
+    const builtIn = createColorAdjustEffect('warm-before-plugin')
+    builtIn.params.temperature = 1
+    const clip = makeClip('mixed-effects', 0, 30, {
+      effects: [builtIn, pluginEffect()],
+    })
+    const doc = makeDoc([makeTrack('V1', 'video', [clip])])
+    doc.width = 1
+    doc.height = 1
+    const destination = makeCtx({ supportsPixels: true })
+    const pixels = new Uint8ClampedArray([128, 128, 128, 128])
+    const surfaces = makeTransitionSurfaceProvider({ supportsPixels: true, pixelData: pixels })
+    const pluginGate = deferred<void>()
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: vi.fn(async (request) => {
+        expect([...request.rgba]).toEqual([181, 128, 91, 128])
+        await pluginGate.promise
+        const output = new Uint8Array(request.rgba)
+        output[0] = 7
+        return { status: 'applied' as const, rgba: output }
+      }),
+    }
+
+    const composite = compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource({ 'asset-1@0': fakeBitmap(1, 1) }).source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot(),
+      executor,
+    )
+    await vi.waitFor(() => expect(executor.applyPluginEffect).toHaveBeenCalledOnce())
+    expect(destination.ops('drawImage')).toHaveLength(0)
+
+    pluginGate.resolve()
+    const result = await composite
+
+    expect([...pixels]).toEqual([7, 128, 91, 128])
+    expect(destination.ops('drawImage')[0].args[0]).toBe(surfaces.legCanvas)
+    expect(result).toEqual({ drawn: ['mixed-effects'], missing: [] })
+  })
+
+  test('propagates a typed stage failure without publishing partial pixels', async () => {
+    const builtIn = createColorAdjustEffect('uncommitted-warmth')
+    builtIn.params.temperature = 1
+    const clip = makeClip('rejected-plugin', 0, 30, {
+      effects: [builtIn, pluginEffect()],
+    })
+    const doc = makeDoc([makeTrack('V1', 'video', [clip])])
+    doc.width = 1
+    doc.height = 1
+    const destination = makeCtx({ supportsPixels: true })
+    const pixels = new Uint8ClampedArray([128, 128, 128, 128])
+    const surfaces = makeTransitionSurfaceProvider({ supportsPixels: true, pixelData: pixels })
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: vi.fn(async () => {
+        throw new Error('sandbox rejected the stage')
+      }),
+    }
+
+    const composite = compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource({ 'asset-1@0': fakeBitmap(1, 1) }).source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot(),
+      executor,
+    )
+
+    await expect(composite).rejects.toBeInstanceOf(VideoEffectStageExecutionError)
+    expect([...pixels]).toEqual([128, 128, 128, 128])
+    expect(surfaces.leg.ops('putImageData')).toHaveLength(0)
+    expect(destination.ops('drawImage')).toHaveLength(0)
   })
 
   test('pixel-corrects a still on an isolated layer before compositing', async () => {
@@ -616,6 +815,132 @@ describe('compositeFrame — background & selection', () => {
     expect(result).toEqual({ drawn: ['tinted-text'], missing: [] })
   })
 
+  test('runs a text layer through its planned mixed built-in/plugin pixel order', async () => {
+    const builtIn = createColorAdjustEffect('text-warm-before-plugin')
+    builtIn.params.temperature = 1
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [
+        makeClip('plugin-text', 0, 30, {
+          effects: [builtIn, pluginEffect('text-plugin')],
+          text: {
+            ...defaultTextProps(1, 1),
+            content: 'T',
+          },
+        }),
+      ]),
+    ])
+    doc.width = 1
+    doc.height = 1
+    const pixels = new Uint8ClampedArray([128, 128, 128, 0])
+    const surfaces = makeTransitionSurfaceProvider({ supportsPixels: true, pixelData: pixels })
+    const destination = makeCtx({ supportsPixels: true })
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: vi.fn(async (request) => {
+        expect([...request.rgba]).toEqual([181, 128, 91, 0])
+        const output = new Uint8Array(request.rgba)
+        output[1] = 7
+        return { status: 'applied' as const, rgba: output }
+      }),
+    }
+
+    const result = await compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource().source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot(),
+      executor,
+    )
+
+    expect([...pixels]).toEqual([181, 7, 91, 0])
+    expect(surfaces.leg.ops('fillText')).toHaveLength(1)
+    expect(surfaces.leg.ops('putImageData')).toHaveLength(1)
+    expect(destination.ops('drawImage')[0].args[0]).toBe(surfaces.legCanvas)
+    expect(result).toEqual({ drawn: ['plugin-text'], missing: [] })
+  })
+
+  test('keeps legacy text effects when its ready plugin cannot access scratch pixels', async () => {
+    const builtIn = createColorAdjustEffect('text-fallback-built-in')
+    builtIn.params.exposure = 1
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [
+        makeClip('fallback-text', 0, 30, {
+          effects: [builtIn, pluginEffect('text-unavailable')],
+          text: {
+            ...defaultTextProps(1920, 1080),
+            content: 'Fallback',
+          },
+        }),
+      ]),
+    ])
+    const destination = makeCtx({ supportsFilter: true })
+    const surfaces = makeTransitionSurfaceProvider()
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: vi.fn(async () => {
+        throw new Error('executor must not be reached without pixel access')
+      }),
+    }
+
+    const result = await compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource().source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot(),
+      executor,
+    )
+
+    expect(executor.applyPluginEffect).not.toHaveBeenCalled()
+    expect(surfaces.leg.ops('fillText')).toHaveLength(1)
+    expect(destination.ops('filter').map((operation) => operation.args[0]))
+      .toEqual(['brightness(2) contrast(1) saturate(1)'])
+    expect(result).toEqual({ drawn: ['fallback-text'], missing: [] })
+  })
+
+  test('propagates typed stage failure from text composition', async () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [
+        makeClip('rejected-text', 0, 30, {
+          effects: [pluginEffect('rejected-text-plugin')],
+          text: { ...defaultTextProps(1, 1), content: 'T' },
+        }),
+      ]),
+    ])
+    doc.width = 1
+    doc.height = 1
+    const destination = makeCtx({ supportsPixels: true })
+    const surfaces = makeTransitionSurfaceProvider({
+      supportsPixels: true,
+      pixelData: new Uint8ClampedArray(4),
+    })
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: async () => {
+        throw new Error('text sandbox failed')
+      },
+    }
+
+    const composite = compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource().source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot(),
+      executor,
+    )
+
+    await expect(composite).rejects.toBeInstanceOf(VideoEffectStageExecutionError)
+    expect(destination.ops('drawImage')).toHaveLength(0)
+  })
+
   test('draws semantic captions through shared text layout without media requests', async () => {
     const doc = makeDoc([])
     doc.captionTracks = [{
@@ -799,6 +1124,115 @@ describe('compositeFrame — stacking order & concurrency', () => {
     expect(surfaces.group.ops('drawImage')).toHaveLength(2)
     expect(destination.ops('drawImage')[0].args[0]).toBe(surfaces.groupCanvas)
     expect(result).toEqual({ drawn: ['from-color', 'to-color'], missing: [] })
+  })
+
+  test('bypasses ready transition plugins when the shared leg has no pixel access', async () => {
+    const outgoingEffect = createColorAdjustEffect('outgoing-fallback')
+    outgoingEffect.params.exposure = 1
+    const incomingEffect = createColorAdjustEffect('incoming-fallback')
+    incomingEffect.params.exposure = -1
+    const from = makeClip('from-fallback', 0, 10, {
+      assetId: 'A',
+      effects: [outgoingEffect, pluginEffect('from-unavailable')],
+    })
+    const to = makeClip('to-fallback', 10, 10, {
+      assetId: 'B',
+      effects: [incomingEffect, pluginEffect('to-unavailable')],
+    })
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [from, to], {
+        transitions: [{
+          id: 'fallback-dissolve',
+          type: 'crossfade',
+          fromClipId: from.id,
+          toClipId: to.id,
+          durationFrames: 1,
+          audio: { enabled: true, curve: 'equal-power' },
+        }],
+      }),
+    ])
+    const destination = makeCtx()
+    const surfaces = makeTransitionSurfaceProvider({ supportsFilter: true })
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: vi.fn(async () => {
+        throw new Error('executor must not be reached without pixel access')
+      }),
+    }
+
+    const result = await compositeFrame(
+      doc,
+      10,
+      destination.ctx,
+      makeSource({
+        'A@10': fakeBitmap(100, 100),
+        'B@0': fakeBitmap(100, 100),
+      }).source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot(),
+      executor,
+    )
+
+    expect(executor.applyPluginEffect).not.toHaveBeenCalled()
+    expect(surfaces.leg.ops('filter').map((operation) => operation.args[0]))
+      .toEqual([
+        'brightness(2) contrast(1) saturate(1)',
+        'brightness(0.5) contrast(1) saturate(1)',
+      ])
+    expect(surfaces.group.ops('drawImage')).toHaveLength(2)
+    expect(result).toEqual({ drawn: ['from-fallback', 'to-fallback'], missing: [] })
+  })
+
+  test('propagates typed stage failure from an isolated transition leg', async () => {
+    const from = makeClip('from-rejected', 0, 10, {
+      assetId: 'A',
+      effects: [pluginEffect('rejected-transition-plugin')],
+    })
+    const to = makeClip('to-unreached', 10, 10, { assetId: 'B' })
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [from, to], {
+        transitions: [{
+          id: 'rejected-dissolve',
+          type: 'crossfade',
+          fromClipId: from.id,
+          toClipId: to.id,
+          durationFrames: 1,
+          audio: { enabled: true, curve: 'equal-power' },
+        }],
+      }),
+    ])
+    doc.width = 1
+    doc.height = 1
+    const destination = makeCtx({ supportsPixels: true })
+    const surfaces = makeTransitionSurfaceProvider({
+      supportsPixels: true,
+      pixelData: new Uint8ClampedArray(4),
+    })
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: async () => {
+        throw new Error('transition sandbox failed')
+      },
+    }
+
+    const composite = compositeFrame(
+      doc,
+      10,
+      destination.ctx,
+      makeSource({
+        'A@10': fakeBitmap(1, 1),
+        'B@0': fakeBitmap(1, 1),
+      }).source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot(),
+      executor,
+    )
+
+    await expect(composite).rejects.toBeInstanceOf(VideoEffectStageExecutionError)
+    expect(destination.ops('drawImage')).toHaveLength(0)
+    expect(surfaces.group.ops('drawImage')).toHaveLength(0)
   })
 
   test('keeps one missing crossfade leg isolated from the other', async () => {
