@@ -12,6 +12,12 @@ const EXTERNAL_MEMORY = 0x02
 const MAX_TYPE_COUNT = 1_024
 const MAX_FUNCTION_PARAMETERS = 128
 const MAX_FUNCTION_RESULTS = 16
+const MAX_FUNCTION_COUNT = 8_192
+const MAX_EXPORT_COUNT = 8_192
+const MAX_EXPANDED_SIGNATURE_FIELDS = 16_384
+const MAX_DEFINED_FUNCTION_RUNTIME_SLOTS = 16_384
+const MAX_RAW_DECLARATION_ENTRIES = 16_384
+const MAX_COMBINED_DECLARATION_CHARGE = 32_768
 
 export interface PluginWasmModuleExpectations {
   readonly policy: PluginWasmProfileSelection
@@ -119,15 +125,67 @@ interface FunctionExport {
   readonly functionIndex: number
 }
 
+interface WasmDeclarationBudget {
+  rawEntries: number
+  expandedSignatureFields: number
+  definedFunctionRuntimeSlots: number
+}
+
+function expectCombinedDeclarationBudget(budget: WasmDeclarationBudget): void {
+  const combinedCharge = budget.rawEntries
+    + budget.expandedSignatureFields
+    + budget.definedFunctionRuntimeSlots
+  if (combinedCharge > MAX_COMBINED_DECLARATION_CHARGE) {
+    fail(
+      `WebAssembly combined declaration charge exceeds ${MAX_COMBINED_DECLARATION_CHARGE}.`,
+    )
+  }
+}
+
+function chargeRawEntries(budget: WasmDeclarationBudget, count: number): void {
+  if (budget.rawEntries > MAX_RAW_DECLARATION_ENTRIES - count) {
+    fail(`WebAssembly raw declaration count exceeds ${MAX_RAW_DECLARATION_ENTRIES}.`)
+  }
+  budget.rawEntries += count
+  expectCombinedDeclarationBudget(budget)
+}
+
+function chargeSignatureFields(budget: WasmDeclarationBudget, count: number): void {
+  if (budget.expandedSignatureFields > MAX_EXPANDED_SIGNATURE_FIELDS - count) {
+    fail(`WebAssembly expanded signature field count exceeds ${MAX_EXPANDED_SIGNATURE_FIELDS}.`)
+  }
+  budget.expandedSignatureFields += count
+  expectCombinedDeclarationBudget(budget)
+}
+
+function chargeDefinedFunctionRuntimeSlots(
+  budget: WasmDeclarationBudget,
+  count: number,
+): void {
+  if (budget.definedFunctionRuntimeSlots > MAX_DEFINED_FUNCTION_RUNTIME_SLOTS - count) {
+    fail(
+      `WebAssembly defined-function runtime slot count exceeds ${MAX_DEFINED_FUNCTION_RUNTIME_SLOTS}.`,
+    )
+  }
+  budget.definedFunctionRuntimeSlots += count
+  expectCombinedDeclarationBudget(budget)
+}
+
 function expectBytes(reader: ByteReader, expected: readonly number[], label: string): void {
   for (const byte of expected) {
     if (reader.byte() !== byte) fail(`Invalid WebAssembly ${label}.`)
   }
 }
 
-function readValueTypes(reader: ByteReader, maximum: number, label: string): readonly number[] {
+function readValueTypes(
+  reader: ByteReader,
+  maximum: number,
+  label: string,
+  budget: WasmDeclarationBudget,
+): readonly number[] {
   const count = reader.u32()
   if (count > maximum) fail(`WebAssembly function ${label} count exceeds ${maximum}.`)
+  chargeSignatureFields(budget, count)
   const values: number[] = []
   for (let index = 0; index < count; index++) {
     const value = reader.byte()
@@ -137,15 +195,26 @@ function readValueTypes(reader: ByteReader, maximum: number, label: string): rea
   return Object.freeze(values)
 }
 
-function readTypes(reader: ByteReader): readonly FunctionType[] {
+function readTypes(
+  reader: ByteReader,
+  budget: WasmDeclarationBudget,
+): readonly FunctionType[] {
   const count = reader.u32()
   if (count > MAX_TYPE_COUNT) fail(`WebAssembly type count exceeds ${MAX_TYPE_COUNT}.`)
+  chargeRawEntries(budget, count)
   const types: FunctionType[] = []
   for (let index = 0; index < count; index++) {
     if (reader.byte() !== FUNCTION_TYPE) fail('Only WebAssembly function types are supported.')
+    const parameters = readValueTypes(
+      reader,
+      MAX_FUNCTION_PARAMETERS,
+      'parameter',
+      budget,
+    )
+    const results = readValueTypes(reader, MAX_FUNCTION_RESULTS, 'result', budget)
     types.push(Object.freeze({
-      parameters: readValueTypes(reader, MAX_FUNCTION_PARAMETERS, 'parameter'),
-      results: readValueTypes(reader, MAX_FUNCTION_RESULTS, 'result'),
+      parameters,
+      results,
     }))
   }
   reader.expectDone('type section')
@@ -155,8 +224,10 @@ function readTypes(reader: ByteReader): readonly FunctionType[] {
 function readFixedMemoryImport(
   reader: ByteReader,
   expectedPages: number,
+  budget: WasmDeclarationBudget,
 ): PluginWasmModuleFacts['importedMemory'] {
   if (reader.u32() !== 1) fail('Exactly one WebAssembly import is required.')
+  chargeRawEntries(budget, 1)
   if (reader.name() !== 'myrelith' || reader.name() !== 'memory') {
     fail('The only import must be myrelith.memory.')
   }
@@ -171,16 +242,33 @@ function readFixedMemoryImport(
   return Object.freeze({ minimumPages, maximumPages })
 }
 
-function readFunctionTypeIndexes(reader: ByteReader): readonly number[] {
+function readFunctionTypeIndexes(
+  reader: ByteReader,
+  budget: WasmDeclarationBudget,
+  types: readonly FunctionType[],
+): readonly number[] {
   const count = reader.u32()
+  if (count > MAX_FUNCTION_COUNT) fail(`WebAssembly function count exceeds ${MAX_FUNCTION_COUNT}.`)
+  chargeRawEntries(budget, count)
   const indexes: number[] = []
-  for (let index = 0; index < count; index++) indexes.push(reader.u32())
+  for (let index = 0; index < count; index++) {
+    const typeIndex = reader.u32()
+    const functionType = types[typeIndex]
+    if (!functionType) fail(`Defined function ${index} references missing type ${typeIndex}.`)
+    chargeDefinedFunctionRuntimeSlots(budget, functionType.parameters.length)
+    indexes.push(typeIndex)
+  }
   reader.expectDone('function section')
   return Object.freeze(indexes)
 }
 
-function readExports(reader: ByteReader): readonly FunctionExport[] {
+function readExports(
+  reader: ByteReader,
+  budget: WasmDeclarationBudget,
+): readonly FunctionExport[] {
   const count = reader.u32()
+  if (count > MAX_EXPORT_COUNT) fail(`WebAssembly export count exceeds ${MAX_EXPORT_COUNT}.`)
+  chargeRawEntries(budget, count)
   const exports: FunctionExport[] = []
   for (let index = 0; index < count; index++) {
     const name = reader.name()
@@ -239,6 +327,11 @@ export function parsePluginWasmModule(
   let functionTypeIndexes: readonly number[] | undefined
   let exports: readonly FunctionExport[] | undefined
   let sawCode = false
+  const declarationBudget: WasmDeclarationBudget = {
+    rawEntries: 0,
+    expandedSignatureFields: 0,
+    definedFunctionRuntimeSlots: 0,
+  }
 
   while (!reader.done) {
     const sectionId = reader.byte()
@@ -249,16 +342,21 @@ export function parsePluginWasmModule(
     const section = reader.subreader(reader.u32())
     switch (sectionId) {
       case 1:
-        types = readTypes(section)
+        types = readTypes(section, declarationBudget)
         break
       case 2:
-        importedMemory = readFixedMemoryImport(section, expectations.memoryMaximumPages)
+        importedMemory = readFixedMemoryImport(
+          section,
+          expectations.memoryMaximumPages,
+          declarationBudget,
+        )
         break
       case 3:
-        functionTypeIndexes = readFunctionTypeIndexes(section)
+        if (!types) fail('The type section must precede the function section.')
+        functionTypeIndexes = readFunctionTypeIndexes(section, declarationBudget, types)
         break
       case 7:
-        exports = readExports(section)
+        exports = readExports(section, declarationBudget)
         break
       case 10:
         if (!functionTypeIndexes) fail('The function section must precede code.')
@@ -273,11 +371,7 @@ export function parsePluginWasmModule(
   if (!types || !importedMemory || !functionTypeIndexes || !exports || !sawCode) {
     fail('The minimal render module is missing a required section.')
   }
-  for (const [functionIndex, typeIndex] of functionTypeIndexes.entries()) {
-    if (typeIndex >= types.length) {
-      fail(`Defined function ${functionIndex} references missing type ${typeIndex}.`)
-    }
-  }
+
   if (expectations.renderEntrypoints.length !== exports.length) {
     fail('Exported functions must exactly match signed render entrypoints.')
   }

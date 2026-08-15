@@ -9,6 +9,7 @@ import {
 const ARCHIVE_LIMIT_BYTES = 32 * 1024 * 1024
 const EXPANDED_LIMIT_BYTES = 64 * 1024 * 1024
 const SIGNATURE_LIMIT_BYTES = 65_536
+const WASM_MODULE_MIN_BYTES = 8
 const PACKAGE_ENTRY_COUNT = 3
 const PACKAGE_DIGEST_DOMAIN = 'myrelith-plugin-package-digest-v1\0'
 
@@ -191,6 +192,17 @@ function parseStoredZip(archiveBytes: Uint8Array): ReadonlyMap<string, ZipEntry>
     }
     if (flags !== 0 || method !== 0 || compressedSize !== uncompressedSize) {
       fail('archive-invalid', 'Plugin packages must use unencrypted stored ZIP entries.')
+    }
+    const [minimumSize, maximumSize] = path === 'manifest.json'
+      ? [1, PLUGIN_MANIFEST_LIMITS.maxManifestBytes]
+      : path === 'signature.json'
+        ? [1, SIGNATURE_LIMIT_BYTES]
+        : [WASM_MODULE_MIN_BYTES, ARCHIVE_LIMIT_BYTES]
+    if (uncompressedSize < minimumSize || uncompressedSize > maximumSize) {
+      fail(
+        'archive-invalid',
+        `Package entry ${path} must be between ${minimumSize} and ${maximumSize} bytes.`,
+      )
     }
     expandedBytes += uncompressedSize
     if (expandedBytes > EXPANDED_LIMIT_BYTES) {

@@ -32,11 +32,12 @@ export function createPluginCandidateCore(engine: PluginCandidateEngine): {
 } {
   return {
     async activate(input): Promise<PluginCandidateActivation> {
-      const facts = parsePluginWasmModule(input.moduleBytes, input.expectations)
-      if (!engine.validate(input.moduleBytes)) {
+      const moduleBytes = Uint8Array.from(input.moduleBytes)
+      const facts = parsePluginWasmModule(moduleBytes, input.expectations)
+      if (!engine.validate(moduleBytes)) {
         throw new Error('The policy-valid WebAssembly module failed engine validation.')
       }
-      const module = await engine.compile(input.moduleBytes)
+      const module = await engine.compile(moduleBytes)
       const memory = engine.createMemory({
         initial: facts.importedMemory.minimumPages,
         maximum: facts.importedMemory.maximumPages,

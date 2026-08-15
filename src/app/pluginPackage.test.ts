@@ -192,6 +192,16 @@ function markFirstEntryAsUnixSymlink(archive: Uint8Array): Uint8Array {
   return output
 }
 
+function corruptFirstEntryChecksum(archive: Uint8Array): Uint8Array {
+  const output = archive.slice()
+  const endOffset = output.byteLength - 22
+  const end = new DataView(output.buffer, output.byteOffset + endOffset, 22)
+  const centralOffset = end.getUint32(16, true)
+  new DataView(output.buffer, output.byteOffset, 30).setUint32(14, 0, true)
+  new DataView(output.buffer, output.byteOffset + centralOffset, 46).setUint32(16, 0, true)
+  return output
+}
+
 describe('signed plugin package verification', () => {
   test('accepts the complete canonical Ed25519 golden package', async () => {
     const archive = storedZip(goldenEntries())
@@ -223,6 +233,28 @@ describe('signed plugin package verification', () => {
         name: 'PluginPackageError',
         code: 'archive-invalid',
       }),
+    )
+  })
+
+  test('rejects an oversized manifest from central framing before payload CRC work', async () => {
+    const archive = corruptFirstEntryChecksum(storedZip(goldenEntries({
+      'manifest.json': new Uint8Array(65_537),
+    })))
+
+    await expect(verifyPluginPackageArchive(archive)).rejects.toThrow(
+      'Package entry manifest.json must be between 1 and 65536 bytes.',
+    )
+  })
+
+  test('rejects a correctly signed WebAssembly entry shorter than eight bytes', async () => {
+    const archive = await signedArchive(
+      MANIFEST_JSON,
+      'runtime/plugin.wasm',
+      new Uint8Array(7),
+    )
+
+    await expect(verifyPluginPackageArchive(archive)).rejects.toThrow(
+      'Package entry runtime/plugin.wasm must be between 8 and 33554432 bytes.',
     )
   })
 

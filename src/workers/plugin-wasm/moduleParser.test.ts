@@ -27,6 +27,99 @@ function u32(value: number): number[] {
   return bytes
 }
 
+function moduleWithDefinedFunctions(count: number): Uint8Array {
+  const original = hexBytes(MINIMAL_RENDER_MODULE_HEX)
+  const functionPayload = [...u32(count), ...Array<number>(count).fill(0)]
+  const codePayload = [
+    ...u32(count),
+    ...Array.from({ length: count }, () => [0x04, 0x00, 0x41, 0x00, 0x0b]).flat(),
+  ]
+  return Uint8Array.from([
+    ...original.subarray(0, 50),
+    0x03,
+    ...u32(functionPayload.length),
+    ...functionPayload,
+    ...original.subarray(54, 83),
+    0x0a,
+    ...u32(codePayload.length),
+    ...codePayload,
+  ])
+}
+
+function moduleWithMaximumFunctionsAndExports(): {
+  readonly bytes: Uint8Array
+  readonly entrypoints: readonly string[]
+} {
+  const original = hexBytes(MINIMAL_RENDER_MODULE_HEX)
+  const renderType = [0x60, 0x0a, ...Array<number>(10).fill(0x7f), 0x01, 0x7f]
+  const typePayload = [0x02, ...renderType, 0x60, 0x00, 0x00]
+  const functionPayload = [
+    ...u32(8_192),
+    0x00,
+    ...Array<number>(8_191).fill(0x01),
+  ]
+  const entrypoints = Array.from({ length: 8_192 }, (_unused, index) => `e${index}`)
+  const exportPayload = [
+    ...u32(entrypoints.length),
+    ...entrypoints.flatMap((name) => [
+      ...u32(name.length),
+      ...[...name].map((character) => character.charCodeAt(0)),
+      0x00,
+      0x00,
+    ]),
+  ]
+  const codePayload = [
+    ...u32(8_192),
+    ...Array.from({ length: 8_192 }, () => [0x04, 0x00, 0x41, 0x00, 0x0b]).flat(),
+  ]
+  return {
+    entrypoints,
+    bytes: Uint8Array.from([
+      ...original.subarray(0, 8),
+      0x01,
+      ...u32(typePayload.length),
+      ...typePayload,
+      ...original.subarray(25, 50),
+      0x03,
+      ...u32(functionPayload.length),
+      ...functionPayload,
+      0x07,
+      ...u32(exportPayload.length),
+      ...exportPayload,
+      0x0a,
+      ...u32(codePayload.length),
+      ...codePayload,
+    ]),
+  }
+}
+
+function moduleWithExports(count: number): {
+  readonly bytes: Uint8Array
+  readonly entrypoints: readonly string[]
+} {
+  const original = hexBytes(MINIMAL_RENDER_MODULE_HEX)
+  const entrypoints = Array.from({ length: count }, (_unused, index) => `e${index}`)
+  const payload = [
+    ...u32(count),
+    ...entrypoints.flatMap((name) => [
+      ...u32(name.length),
+      ...[...name].map((character) => character.charCodeAt(0)),
+      0x00,
+      0x00,
+    ]),
+  ]
+  return {
+    entrypoints,
+    bytes: Uint8Array.from([
+      ...original.subarray(0, 54),
+      0x07,
+      ...u32(payload.length),
+      ...payload,
+      ...original.subarray(83),
+    ]),
+  }
+}
+
 function moduleWithTypeCount(count: number): Uint8Array {
   const original = hexBytes(MINIMAL_RENDER_MODULE_HEX)
   const renderType = [0x60, 0x0a, ...Array<number>(10).fill(0x7f), 0x01, 0x7f]
@@ -57,6 +150,112 @@ function moduleWithPrimaryType(parameterCount: number, resultCount: number): Uin
     ...u32(payload.length),
     ...payload,
     ...original.subarray(25),
+  ])
+}
+
+function moduleWithExpandedSignatureFieldsAboveLimit(): Uint8Array {
+  const original = hexBytes(MINIMAL_RENDER_MODULE_HEX)
+  const renderType = [0x60, 0x0a, ...Array<number>(10).fill(0x7f), 0x01, 0x7f]
+  const fullTypes = Array.from({ length: 113 }, () => [
+    0x60,
+    ...u32(128),
+    ...Array<number>(128).fill(0x7f),
+    ...u32(16),
+    ...Array<number>(16).fill(0x7f),
+  ]).flat()
+  const partialType = [
+    0x60,
+    ...u32(102),
+    ...Array<number>(102).fill(0x7f),
+    0x00,
+  ]
+  const payload = [
+    ...u32(115),
+    ...renderType,
+    ...fullTypes,
+    ...partialType,
+  ]
+  return Uint8Array.from([
+    ...original.subarray(0, 8),
+    0x01,
+    ...u32(payload.length),
+    ...payload,
+    ...original.subarray(25),
+  ])
+}
+
+function moduleWithCombinedDeclarationChargeAboveLimit(): Uint8Array {
+  const original = hexBytes(MINIMAL_RENDER_MODULE_HEX)
+  const renderType = [0x60, 0x0a, ...Array<number>(10).fill(0x7f), 0x01, 0x7f]
+  const fullTypes = Array.from({ length: 113 }, () => [
+    0x60,
+    ...u32(128),
+    ...Array<number>(128).fill(0x7f),
+    ...u32(16),
+    ...Array<number>(16).fill(0x7f),
+  ]).flat()
+  const finalType = [
+    0x60,
+    ...u32(101),
+    ...Array<number>(101).fill(0x7f),
+    0x00,
+  ]
+  const typePayload = [
+    ...u32(115),
+    ...renderType,
+    ...fullTypes,
+    ...finalType,
+  ]
+  const functionPayload = [...u32(1_638), ...Array<number>(1_638).fill(0)]
+  const codePayload = [
+    ...u32(1_638),
+    ...Array.from({ length: 1_638 }, () => [0x04, 0x00, 0x41, 0x00, 0x0b]).flat(),
+  ]
+  return Uint8Array.from([
+    ...original.subarray(0, 8),
+    0x01,
+    ...u32(typePayload.length),
+    ...typePayload,
+    ...original.subarray(25, 50),
+    0x03,
+    ...u32(functionPayload.length),
+    ...functionPayload,
+    ...original.subarray(54, 83),
+    0x0a,
+    ...u32(codePayload.length),
+    ...codePayload,
+  ])
+}
+
+function moduleWithCrossingSignatureVectorWithoutPayload(): Uint8Array {
+  const original = hexBytes(MINIMAL_RENDER_MODULE_HEX)
+  const renderType = [0x60, 0x0a, ...Array<number>(10).fill(0x7f), 0x01, 0x7f]
+  const fullTypes = Array.from({ length: 113 }, () => [
+    0x60,
+    ...u32(128),
+    ...Array<number>(128).fill(0x7f),
+    ...u32(16),
+    ...Array<number>(16).fill(0x7f),
+  ]).flat()
+  const finalCompleteType = [
+    0x60,
+    ...u32(100),
+    ...Array<number>(100).fill(0x7f),
+    0x00,
+  ]
+  const payload = [
+    ...u32(116),
+    ...renderType,
+    ...fullTypes,
+    ...finalCompleteType,
+    0x60,
+    0x02,
+  ]
+  return Uint8Array.from([
+    ...original.subarray(0, 8),
+    0x01,
+    ...u32(payload.length),
+    ...payload,
   ])
 }
 
@@ -142,5 +341,79 @@ describe('plugin WebAssembly module policy', () => {
       renderEntrypoints: ['myrelith_effect_fixture'],
       migrationEntrypoints: [],
     })).toThrow('WebAssembly function result count exceeds 16.')
+  })
+
+  test('rejects more than 16,384 aggregate expanded signature fields', () => {
+    expect(() => parsePluginWasmModule(moduleWithExpandedSignatureFieldsAboveLimit(), {
+      policy: {
+        binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
+        profileId: 'myrelith-wasm-render-general-v1',
+      },
+      memoryMaximumPages: 258,
+      renderEntrypoints: ['myrelith_effect_fixture'],
+      migrationEntrypoints: [],
+    })).toThrow('WebAssembly expanded signature field count exceeds 16384.')
+  })
+
+  test('rejects an aggregate signature crossing before iterating its vector payload', () => {
+    expect(() => parsePluginWasmModule(moduleWithCrossingSignatureVectorWithoutPayload(), {
+      policy: {
+        binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
+        profileId: 'myrelith-wasm-render-general-v1',
+      },
+      memoryMaximumPages: 258,
+      renderEntrypoints: ['myrelith_effect_fixture'],
+      migrationEntrypoints: [],
+    })).toThrow('WebAssembly expanded signature field count exceeds 16384.')
+  })
+
+  test('charges reused parameter vectors to every defined function runtime slot', () => {
+    expect(() => parsePluginWasmModule(moduleWithDefinedFunctions(1_639), {
+      policy: {
+        binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
+        profileId: 'myrelith-wasm-render-general-v1',
+      },
+      memoryMaximumPages: 258,
+      renderEntrypoints: ['myrelith_effect_fixture'],
+      migrationEntrypoints: [],
+    })).toThrow('WebAssembly defined-function runtime slot count exceeds 16384.')
+  })
+
+  test('rejects more than 16,384 aggregate raw declaration entries', () => {
+    const fixture = moduleWithMaximumFunctionsAndExports()
+    expect(() => parsePluginWasmModule(fixture.bytes, {
+      policy: {
+        binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
+        profileId: 'myrelith-wasm-render-general-v1',
+      },
+      memoryMaximumPages: 258,
+      renderEntrypoints: fixture.entrypoints,
+      migrationEntrypoints: [],
+    })).toThrow('WebAssembly raw declaration count exceeds 16384.')
+  })
+
+  test('rejects a combined declaration charge above 32,768', () => {
+    expect(() => parsePluginWasmModule(moduleWithCombinedDeclarationChargeAboveLimit(), {
+      policy: {
+        binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
+        profileId: 'myrelith-wasm-render-general-v1',
+      },
+      memoryMaximumPages: 258,
+      renderEntrypoints: ['myrelith_effect_fixture'],
+      migrationEntrypoints: [],
+    })).toThrow('WebAssembly combined declaration charge exceeds 32768.')
+  })
+
+  test('rejects more than 8,192 exports before allocating the export vector', () => {
+    const fixture = moduleWithExports(8_193)
+    expect(() => parsePluginWasmModule(fixture.bytes, {
+      policy: {
+        binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
+        profileId: 'myrelith-wasm-render-general-v1',
+      },
+      memoryMaximumPages: 258,
+      renderEntrypoints: fixture.entrypoints,
+      migrationEntrypoints: [],
+    })).toThrow('WebAssembly export count exceeds 8192.')
   })
 })

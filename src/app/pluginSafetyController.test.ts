@@ -64,10 +64,14 @@ describe('plugin activation safety', () => {
     const backing = storage([])
     backing.values.set(PLUGIN_ACTIVATION_SENTINEL_KEY, '{broken')
 
-    expect(readPluginStartupSafety(backing)).toEqual({
+    const startupSafety = readPluginStartupSafety(backing)
+    expect(startupSafety).toEqual({
       status: 'invalid-sentinel',
       offerSafeMode: true,
     })
+    const sessionSafety = createPluginSessionSafety(startupSafety)
+    expect(sessionSafety.thirdPartyInitializationAllowed()).toBe(false)
+    expect(sessionSafety.isSafeMode()).toBe(true)
   })
 
   test('fails safe when activation-sentinel storage is unavailable', () => {
@@ -84,7 +88,7 @@ describe('plugin activation safety', () => {
   })
 
   test('safe mode suppresses third-party initialization for the complete session', () => {
-    const safety = createPluginSessionSafety()
+    const safety = createPluginSessionSafety(readPluginStartupSafety(storage([])))
     expect(safety.thirdPartyInitializationAllowed()).toBe(true)
 
     safety.enterSafeMode()

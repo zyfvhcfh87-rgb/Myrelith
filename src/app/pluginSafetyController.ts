@@ -28,8 +28,10 @@ export interface PluginSessionSafety {
   thirdPartyInitializationAllowed(): boolean
 }
 
-export function createPluginSessionSafety(): PluginSessionSafety {
-  let safeMode = false
+export function createPluginSessionSafety(
+  startupSafety: PluginStartupSafety,
+): PluginSessionSafety {
+  let safeMode = startupSafety.offerSafeMode
   return Object.freeze({
     enterSafeMode: () => { safeMode = true },
     isSafeMode: () => safeMode,
