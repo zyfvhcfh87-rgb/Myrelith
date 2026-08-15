@@ -164,7 +164,7 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     ['dev/issue110/motionTrackingGate.ts', new Set(['app', 'domain', 'state'])],
     ['dev/issue111/lensRemapContract.ts', new Set(['domain'])],
     ['dev/issue111/lensRemapCore.ts', new Set(['domain'])],
-    ['dev/issue111/lensRemapWebgl.ts', new Set(['domain'])],
+    ['dev/issue111/lensRemapWebgl.ts', new Set(['pipeline'])],
     ['dev/issue111/lens-remap.worker.ts', new Set(['domain'])],
     ['dev/performance/fixture.ts', new Set(['domain'])],
     ['dev/performance/framePlanningBenchmark.ts', new Set(['domain'])],
@@ -263,6 +263,8 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
         || (
           fromName === 'workers/render.worker.ts'
           && new Set([
+            'pipeline/lensRemap.ts',
+            'pipeline/lensRemapWebgl.ts',
             'pipeline/render.ts',
             'pipeline/static-image.ts',
           ]).has(toName)

@@ -161,7 +161,7 @@ function audioTrack(clips: Clip[]): Track {
 
 function doc(withContent = true): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'export-ui-doc',
     name: 'My / Rough: Cut.mp4',
     frameRate: { num: 30, den: 1 },

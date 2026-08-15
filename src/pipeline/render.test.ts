@@ -23,6 +23,8 @@ import type {
   TransitionSurfaceProvider,
 } from './render'
 import { compositeFrame as compositeFrameCore } from './render'
+import type { LensRemapProvider } from './lensRemap'
+import { DEFAULT_MANUAL_LENS_CORRECTION } from '../domain/lensCorrection'
 
 /* ------------------------------------------------------------------ */
 /* Builders                                                             */
@@ -71,7 +73,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -247,6 +249,7 @@ function compositeFrame(
   source: FrameSource,
   provider = makeTransitionSurfaceProvider().provider,
   presentation?: PresentationProfile,
+  lensRemapProvider?: LensRemapProvider | null,
 ) {
   const catalog = new Map(
     doc.tracks.flatMap((track) => track.clips.map((clip) => [
@@ -268,6 +271,7 @@ function compositeFrame(
     source,
     provider,
     presentation,
+    lensRemapProvider,
   )
 }
 
@@ -937,6 +941,64 @@ describe('compositeFrame — transform & opacity', () => {
     expect(drawArgs[4]).toBeCloseTo(360, 10)
     expect(drawArgs.slice(5, 8)).toEqual([-320, -180, 600])
     expect(drawArgs[8]).toBeCloseTo(360, 10)
+  })
+
+  test('manual lens correction replaces decoded source before crop and transform', async () => {
+    const clip = makeClip('lens', 0, 10, {
+      assetId: 'A',
+      lensCorrection: {
+        ...DEFAULT_MANUAL_LENS_CORRECTION,
+        k1: 0.16,
+        outputScale: 1.2,
+      },
+      visual: {
+        crop: { left: 0.1, right: 0, top: 0, bottom: 0 },
+        flipHorizontal: false,
+        flipVertical: false,
+        scaleLocked: true,
+      },
+    })
+    const decoded = fakeBitmap(800, 600)
+    const corrected = fakeBitmap(800, 600)
+    const remap = vi.fn(() => corrected)
+    const lensProvider: LensRemapProvider = { remap }
+    const { ctx, ops } = makeCtx()
+    const { source } = makeSource({ 'A@0': decoded })
+
+    await compositeFrame(
+      makeDoc([makeTrack('V1', 'video', [clip])]),
+      0,
+      ctx,
+      source,
+      makeTransitionSurfaceProvider().provider,
+      undefined,
+      lensProvider,
+    )
+
+    expect(remap).toHaveBeenCalledWith(clip, decoded)
+    expect(ops('drawImage')[0].args.slice(0, 5)).toEqual([
+      corrected,
+      80,
+      0,
+      720,
+      600,
+    ])
+  })
+
+  test('authored lens intent rejects when the renderer has no remap provider', async () => {
+    const clip = makeClip('lens', 0, 10, {
+      assetId: 'A',
+      lensCorrection: { ...DEFAULT_MANUAL_LENS_CORRECTION, k1: 0.1 },
+    })
+    const { ctx } = makeCtx()
+    const { source } = makeSource({ 'A@0': fakeBitmap(32, 18) })
+
+    await expect(compositeFrame(
+      makeDoc([makeTrack('V1', 'video', [clip])]),
+      0,
+      ctx,
+      source,
+    )).rejects.toMatchObject({ name: 'LensRemapUnavailableError' })
   })
 
   test('text crop and flips use the same normalized visual contract without media', async () => {

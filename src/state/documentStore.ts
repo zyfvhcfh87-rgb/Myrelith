@@ -134,6 +134,8 @@ import {
   createTimelineDoc,
   DEFAULT_PROJECT_SETTINGS,
 } from '../domain/projectSettings'
+import type { ManualLensCorrectionModel } from '../domain/lensCorrection'
+import { setManualLensCorrection } from '../domain/lensCorrectionOperations'
 
 /** Max undo levels; snapshots beyond this fall off the old end. */
 const HISTORY_LIMIT = 100
@@ -280,6 +282,11 @@ export interface DocumentState {
   updateClipTransform: (clipId: ClipId, patch: ClipTransformPatch) => void
   /** Atomically edit/reset the complete static visual Inspector surface. */
   updateClipVisual: (clipId: ClipId, patch: ClipVisualPatch) => void
+  /** Replace or clear the supported manual source-geometry model. */
+  setManualLensCorrection: (
+    clipId: ClipId,
+    model: Readonly<ManualLensCorrectionModel> | null,
+  ) => void
   /** Edit static fields or upsert active animation tracks at one playhead frame. */
   updateClipVisualAtFrame: (
     clipId: ClipId,
@@ -638,6 +645,12 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   updateClipVisual: (clipId, patch) =>
     set((state) => commit(state, updateClipVisual(state.doc, clipId, patch))),
+
+  setManualLensCorrection: (clipId, model) =>
+    set((state) => commit(
+      state,
+      setManualLensCorrection(state.doc, clipId, model),
+    )),
 
   updateClipVisualAtFrame: (clipId, timelineFrame, patch) =>
     set((state) => commit(

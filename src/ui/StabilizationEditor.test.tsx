@@ -48,7 +48,7 @@ function clip(overrides: Partial<Clip> = {}): Clip {
 
 function doc(item = clip()): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'doc',
     name: 'Doc',
     frameRate: { num: 30, den: 1 },

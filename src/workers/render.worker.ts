@@ -67,6 +67,18 @@ import type {
 } from '../pipeline/render'
 import { compositeFrame } from '../pipeline/render'
 import {
+  LensRemapUnavailableError,
+  LENS_REMAP_BACKEND_VERSION,
+  type LensRemapAvailability,
+  type LensRemapProvider,
+} from '../pipeline/lensRemap'
+import {
+  createDocumentLensRemapProvider,
+  documentHasLensCorrection,
+  documentHasSupportedLensCorrection,
+  WebGl2LensRemapBackend,
+} from '../pipeline/lensRemapWebgl'
+import {
   decodeStaticImage,
   staticImageDecodedByteLength,
   STATIC_IMAGE_RESIDENT_BUDGET_BYTES,
@@ -153,6 +165,8 @@ export interface RenderWorkerEnv extends LegacyRenderWorkerEnv {
   createStreamingBitmap(frame: DecodedVideoFrame): Promise<BitmapLike>
   /** Create the scratch compositing surface (new OffscreenCanvas). */
   createCanvas(width: number, height: number): RenderCanvasLike
+  /** Create this worker owner's one reusable manual lens-remap backend. */
+  createLensRemapBackend?(): WebGl2LensRemapBackend
   /** Yield non-critical analysis until after the current render task. */
   schedule?(callback: () => void): void
   /** Analyze the tiny scope sample away from the render worker when available. */
@@ -251,6 +265,11 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   let transitionGroupCtx: Composite2D | null = null
   let publishedCanvasFilterCapability: boolean | null = null
   let publishedCanvasPixelCapability: boolean | null = null
+  let publishedLensCapabilityKey: string | null = null
+  let lensBackend: WebGl2LensRemapBackend | null = null
+  let lensRemapProvider: LensRemapProvider | null = null
+  let lensRemapAvailability: LensRemapAvailability | undefined
+  let lensOwnerTerminal = false
   let videoScopeCanvas: RenderCanvasLike | null = null
   let videoScopeCtx: Composite2D | null = null
   let videoScopesEnabled = false
@@ -462,6 +481,82 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     return presentationProfile
   }
 
+  function lensUnavailable(reason: string): LensRemapAvailability {
+    return {
+      status: 'unavailable',
+      backendVersion: LENS_REMAP_BACKEND_VERSION,
+      maximumTextureSize: lensBackend?.maximumTextureSize ?? null,
+      reason,
+    }
+  }
+
+  function prepareLensRemap(nextDoc: TimelineDoc): void {
+    lensRemapProvider = null
+    lensRemapAvailability = undefined
+    if (!documentHasLensCorrection(nextDoc)) return
+
+    if (documentHasSupportedLensCorrection(nextDoc) && !lensBackend) {
+      if (lensOwnerTerminal) {
+        lensRemapAvailability = lensUnavailable(
+          'The lens-remap context was lost. Retry requires a fresh preview worker.',
+        )
+      } else if (!env.createLensRemapBackend) {
+        lensRemapAvailability = lensUnavailable(
+          'WebGL2 lens remapping is unavailable in this preview renderer.',
+        )
+      } else {
+        try {
+          lensBackend = env.createLensRemapBackend()
+        } catch (cause) {
+          lensOwnerTerminal = true
+          lensRemapAvailability = lensUnavailable(
+            cause instanceof Error ? cause.message : String(cause),
+          )
+        }
+      }
+    }
+
+    try {
+      const profile = currentPresentationProfile()
+      lensRemapProvider = createDocumentLensRemapProvider(
+        nextDoc,
+        lensBackend,
+        profile?.outputWidth ?? nextDoc.width,
+        profile?.outputHeight ?? nextDoc.height,
+        false,
+      )
+    } catch (cause) {
+      lensRemapProvider = null
+      lensRemapAvailability = lensUnavailable(
+        cause instanceof Error ? cause.message : String(cause),
+      )
+    }
+
+    if (lensBackend && !lensRemapAvailability) {
+      lensRemapAvailability = {
+        status: 'available',
+        backendVersion: LENS_REMAP_BACKEND_VERSION,
+        maximumTextureSize: lensBackend.maximumTextureSize,
+        reason: null,
+      }
+    } else if (!lensRemapAvailability) {
+      lensRemapAvailability = lensUnavailable(
+        'This document contains a preserved unsupported lens-correction version.',
+      )
+    }
+  }
+
+  function failLensOwner(error: LensRemapUnavailableError): void {
+    if (error.terminalOwner) {
+      lensOwnerTerminal = true
+      lensBackend?.dispose()
+      lensBackend = null
+      lensRemapProvider = null
+    }
+    lensRemapAvailability = lensUnavailable(error.message)
+    syncCanvases()
+  }
+
   /** Size every disposable canvas to the active presentation profile. */
   function syncCanvases(): void {
     const profile = currentPresentationProfile()
@@ -485,15 +580,27 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     if (scratchCtx) {
       const canvasFilter = supportsCanvasEffectFilter(scratchCtx)
       const canvasPixelAccess = supportsCanvasEffectPixels(scratchCtx)
+      lensRemapProvider?.setOutputSurface?.(
+        outputWidth,
+        outputHeight,
+        false,
+      )
+      const lensCapabilityKey = JSON.stringify(lensRemapAvailability ?? null)
       if (
         canvasFilter !== publishedCanvasFilterCapability
         || canvasPixelAccess !== publishedCanvasPixelCapability
+        || lensCapabilityKey !== publishedLensCapabilityKey
       ) {
         publishedCanvasFilterCapability = canvasFilter
         publishedCanvasPixelCapability = canvasPixelAccess
+        publishedLensCapabilityKey = lensCapabilityKey
         env.post({
           type: 'rendererCapabilities',
-          capabilities: { canvasFilter, canvasPixelAccess },
+          capabilities: {
+            canvasFilter,
+            canvasPixelAccess,
+            ...(lensRemapAvailability ? { lensRemap: lensRemapAvailability } : {}),
+          },
         })
       }
     }
@@ -685,6 +792,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         source as FrameSource,
         transitionSurfaceProvider,
         currentPresentationProfile() ?? undefined,
+        lensRemapProvider,
       )
     },
     present: () => {
@@ -1909,6 +2017,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           source,
           transitionSurfaceProvider,
           currentPresentationProfile() ?? undefined,
+          lensRemapProvider,
         )
       } finally {
         for (const loan of loans) loan.settle()
@@ -1935,6 +2044,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     enterRenderQueue()
     compositeChain = compositeChain.then(() =>
       run().catch((error) => {
+        if (error instanceof LensRemapUnavailableError) failLensOwner(error)
         env.post({
           type: 'error',
           requestId: msg.requestId,
@@ -1972,6 +2082,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         invalidatePlaybackPolicyForDoc(previousDoc, msg.doc)
         supersede() // an in-flight composite is rendering a stale doc
         doc = msg.doc
+        prepareLensRemap(msg.doc)
         syncCanvases()
         await prunePlaybackLanes(previousDoc, msg.doc)
         break
@@ -2018,6 +2129,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         videoScopesEnabled = false
         videoScopeGeneration++
         releaseVideoScopeSurface()
+        lensRemapProvider = null
+        lensBackend?.dispose()
+        lensBackend = null
         const videoScopeRelease = env.releaseVideoScopes?.()
         env.invalidateDecoderRuntime()
         supersede()
@@ -2306,6 +2420,7 @@ if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
     invalidateDecoderRuntime: invalidateMediaDecoderRuntime,
     createStreamingBitmap: createOrientedStreamingBitmap,
     createCanvas: (width, height) => new OffscreenCanvas(width, height),
+    createLensRemapBackend: () => new WebGl2LensRemapBackend(),
     now: () => performance.now(),
     schedule: (callback) => setTimeout(callback, 0),
     analyzeVideoScopes: (rgba, width, height) =>

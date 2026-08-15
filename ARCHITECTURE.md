@@ -50,10 +50,11 @@ non-negotiable rules. Re-read it at the start of every coding session.
   `dev/issue110/motionTrackingGate.ts` has the same narrow app/domain/state
   composition exception for its isolated encoded point/box fixture; only
   `scripts/issue110/motion-tracking-gate.html` imports it.
-  Issue #111's disposable manual lens-remap gate is contained entirely under
-  `dev/issue111/`: its CPU oracle, WebGL2 candidate, worker, and serializable
-  contract may import browser-free `domain/` facts only, while its gate may
-  import only those sibling dev modules. Only
+  Issue #111's disposable manual lens-remap gate remains contained under
+  `dev/issue111/`: its CPU oracle, worker, and serializable contract may import
+  browser-free `domain/` facts only, while the narrow WebGL test adapter may
+  re-export the promoted production backend from `pipeline/lensRemapWebgl.ts`.
+  Its gate may import only those sibling dev modules. Only
   `scripts/issue111/lens-remap-gate.html` imports the gate.
   No ordinary application entry may import any gate, and no other `dev/`
   module may reach those layers. Only
@@ -69,6 +70,8 @@ non-negotiable rules. Re-read it at the start of every coding session.
   - `workers/render.worker.ts` may import `pipeline/render.ts` (the pure
     compositing core: imports domain/ only, no browser I/O — the worker is
     its runtime host, as `export.ts` is the finite export host),
+    `pipeline/lensRemap.ts` and `pipeline/lensRemapWebgl.ts` (the bounded
+    source-space WebGL2 contract/backend owned by that worker),
     `pipeline/static-image.ts` (the bounded browser/worker-safe still-image
     inspection + decode boundary),
   - `workers/motion-analysis.worker.ts` may import only
@@ -233,6 +236,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   their current version. Unknown types, versions, and parameter keys must remain
   ordered and serializable, while evaluation reports and bypasses anything it
   cannot safely execute. The normative contract is in `docs/EFFECTS.md`.
+- `Clip.lensCorrection` is the nullable versioned source-geometry intent in
+  timeline schema 14. The current version-1 Brown-Conrady record stores
+  normalized principal point/focal values, radial `k1`/`k2`/`k3`, tangential
+  `p1`/`p2`, strength, and explicit output scale. Schema-13 migration installs
+  `null`. Current-version records are bounded and foldover-validated; bounded
+  future objects remain opaque durable intent and are never interpreted as
+  version 1. Audio and procedural-text clips cannot carry this field.
 - `domain/pluginManifest.ts` is the pure, non-executing structural validator and
   compatibility negotiator for the proposed plugin manifest. It reuses the
   durable effect-number/key bounds, requires one package-unique render export per
@@ -442,7 +452,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   bounds each dimension, total pixels, and the aggregate memory represented by
   the compositor's reusable RGBA surfaces before any canvas is resized or
   created. Creation presets stay inside that envelope; hostile portable files
-  fail closed instead of reaching a browser allocation.
+  fail closed instead of reaching a browser allocation. A source-space lens
+  remap adds exactly two reusable RGBA source surfaces; finite export adds one
+  output-sized readback surface. The reviewed 4K peak is therefore seven
+  surfaces / 232,243,200 bytes, still below the shared 256 MiB ceiling.
 - `domain/presentationProfile.ts` is the browser-free authority for disposable
   Program Monitor presentation. It resolves Auto/Full/Half/Quarter into one
   uniform project-to-output scale plus an explainable reason and device-pixel
@@ -501,6 +514,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   shader fallback. Canvas filters use the existing saved context and reusable
   text/transition surfaces; effects never allocate per-frame scratch resources.
   Preview and export share this exact plan/compositor path.
+- Manual lens correction is the first authored source-geometry operation. A
+  decoded, orientation-normalized visual source is remapped before crop,
+  transform, masks/chroma, ordered effects, opacity/blend, and transitions.
+  `pipeline/lensRemapWebgl.ts` owns one reusable
+  `webgl2-rgba8-manual-bilinear-v1` backend per render owner; preview and export
+  inject its provider into the same `compositeFrame` path. Transparent-edge
+  bilinear sampling and explicit output scale are the only coverage policy.
+  WebGL2/context/readback/texture/budget failures are explicit; authored intent
+  is never silently bypassed and the CPU oracle is never a product fallback.
+  Context loss is terminal for that owner, preview retries only with a fresh
+  worker, and dispose releases every GPU object and retained canvas exactly
+  once.
 - Preview capability is runtime fact, not a UI constant. The render worker
   probes its actual Program Monitor compositor context and reports the result
   through the worker protocol/bridge. `app/previewController.ts` evaluates the
@@ -751,19 +776,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   the caller without abandoning late ownership; original promises remain
   observed and late-created resources are cleaned without publishing results.
 - Analysis results remain preview-only until an explicit Apply operation writes
-  ordinary canonical tracks through normal history. Lens remapping remains a
-  build-unreferenced research surface. Issue #111 approves only the bounded
-  `webgl2-rgba8-manual-bilinear-v1` candidate: one shader/program must serve
-  preview and export, with the pure CPU implementation retained only as a
-  parity oracle. Unsupported WebGL2/RGBA8 readback, texture limits, surface
-  budgets, or context loss are explicit unavailability; there is no silent CPU
-  runtime substitution. A lost context fails its disposable owner and retry
-  requires a fresh worker/context probe. Any later product issue must add a
-  versioned manual source-geometry field before authored crop, preserve this
-  exact decoded-source -> lens -> crop -> transform -> mask/chroma -> ordered
-  effects -> opacity/blend -> transition order, and route preview/export through
-  the same candidate. Issue #111 itself changes no portable schema or product
-  entry graph. Bundled/downloaded camera-profile catalogs remain out of scope.
+  ordinary canonical tracks through normal history. Issue #119 promotes only
+  Issue #111's bounded `webgl2-rgba8-manual-bilinear-v1` candidate and retains
+  the pure CPU implementation as a build-unreferenced parity oracle. It adds no
+  bundled/downloaded camera-profile catalog, metadata auto-detection,
+  auto-calibration, cloud service, or AI path; those remain separate research
+  and product decisions.
 
 ## Export profile and delivery contracts
 

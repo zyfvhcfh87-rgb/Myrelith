@@ -216,6 +216,7 @@ function mediaClip(
     opacity: clipIndex % 8 === 0 ? 0.88 : 1,
     blendMode: 'normal',
     volume: clipIndex % 6 === 0 ? 0.82 : 1,
+    lensCorrection: null,
     visual: defaultClipVisualSettings(),
     audio: {
       ...defaultClipAudioSettings(),
@@ -261,6 +262,7 @@ function textClip(clipIndex: number): Clip {
     opacity: 0.96,
     blendMode: 'normal',
     volume: 1,
+    lensCorrection: null,
     visual: defaultClipVisualSettings(),
     audio: defaultClipAudioSettings(),
     animation: defaultClipAnimation(),

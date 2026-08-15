@@ -40,6 +40,26 @@ const {
 } = adapterTestSubject
 
 describe('createMediabunnyExportSink video behavior', () => {
+  test('refuses preserved future lens intent before allocating export resources', async () => {
+    const doc = makeVideoDoc(
+      [{ assetId: 'asset-a', sourceStart: 0 }],
+      1,
+    )
+    doc.tracks[0].clips[0].lensCorrection = {
+      version: 2,
+      profile: 'future-camera-profile',
+    }
+
+    await expect(createMediabunnyExportSink(
+      doc,
+      SETTINGS,
+      async () => resolvedAsset(new Blob(['unused'])),
+    )).rejects.toThrow(/preserved future lens-correction version/i)
+
+    expect(fakeCanvases).toHaveLength(0)
+    expect(mb.outputs).toHaveLength(0)
+  })
+
   test('wires an exact-rate MP4 canvas track without audio for a video-only document', async () => {
     const doc = makeDoc()
     const resolveAsset = vi.fn(async () => resolvedAsset(new Blob(['unused'])))

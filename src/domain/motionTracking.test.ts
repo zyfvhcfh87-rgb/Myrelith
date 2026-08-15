@@ -39,7 +39,7 @@ function clip(id: string, startFrame: number, durationFrames: number): Clip {
 
 function doc(source = clip('source', 10, 10), target = clip('target', 8, 20)): TimelineDoc {
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: 'tracking-doc',
     name: 'Tracking',
     frameRate: { num: 30, den: 1 },

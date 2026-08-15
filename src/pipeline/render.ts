@@ -56,6 +56,11 @@ import type {
 } from '../domain/crossfadePlan'
 import { clipVisualSettings } from '../domain/clipInspector'
 import {
+  LensRemapUnavailableError,
+  rethrowLensRemapUnavailable,
+  type LensRemapProvider,
+} from './lensRemap'
+import {
   DEFAULT_BLEND_MODE,
   resolveBlendMode,
   type BlendModeResolution,
@@ -202,6 +207,20 @@ export interface CompositeResult {
   missing: ClipId[]
 }
 
+function correctedSourceForClip(
+  clip: Readonly<Clip>,
+  source: CanvasImageSource,
+  provider: LensRemapProvider | null | undefined,
+): CanvasImageSource {
+  if ((clip.lensCorrection ?? null) === null) return source
+  if (!provider) {
+    throw new LensRemapUnavailableError(
+      'Manual lens correction is authored but unavailable in this renderer.',
+    )
+  }
+  return provider.remap(clip, source)
+}
+
 /**
  * Composite timeline `frame` of `doc` onto `ctx`: black background, then
  * each visible video track's active clip bottom-to-top (tracks[0] first),
@@ -215,6 +234,7 @@ export async function compositeFrame(
   source: FrameSource,
   transitionSurfaceProvider: TransitionSurfaceProvider,
   presentation?: PresentationProfile,
+  lensRemapProvider?: LensRemapProvider | null,
 ): Promise<CompositeResult> {
   // Phase 1 — collect what needs pixels, bottom-to-top.
   const requests = videoCompositionRequests(plan)
@@ -269,6 +289,7 @@ export async function compositeFrame(
           drawn,
           missing,
           presentationScale,
+          lensRemapProvider,
         )
         continue
       }
@@ -325,21 +346,23 @@ export async function compositeFrame(
         continue
       }
       try {
+        const correctedImage = correctedSourceForClip(clip, image, lensRemapProvider)
         if (requiresPixelEffects(ctx, clip)) {
           compositePixelCorrectedMediaLayer(
             doc,
             ctx,
             transitionSurfaceProvider,
             request,
-            image,
+            correctedImage,
             item.blendMode,
             presentationScale,
           )
         } else {
-          drawClip(ctx, doc, request, image, item.blendMode)
+          drawClip(ctx, doc, request, correctedImage, item.blendMode)
         }
         drawn.push(clip.id)
       } catch (e) {
+        rethrowLensRemapUnavailable(e)
         // e.g. the bitmap was closed under us — record and keep compositing.
         console.warn(
           `[render] drawing clip "${clip.id}" failed:`,
@@ -524,6 +547,7 @@ function compositeTransitionGroup(
   drawn: ClipId[],
   missing: ClipId[],
   presentationScale: { readonly x: number; readonly y: number },
+  lensRemapProvider: LensRemapProvider | null | undefined,
 ): void {
   const ready: ClipId[] = []
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
@@ -546,6 +570,11 @@ function compositeTransitionGroup(
       }
 
       try {
+        const correctedImage = correctedSourceForClip(
+          request.clip,
+          image,
+          lensRemapProvider,
+        )
         const pixelEffects = requiresPixelEffects(surfaces.leg.ctx, request.clip)
         inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
           clearSurface(surfaces.leg.ctx, doc)
@@ -553,7 +582,7 @@ function compositeTransitionGroup(
             surfaces.leg.ctx,
             doc,
             request,
-            image,
+            correctedImage,
             NORMAL_BLEND_MODE,
             !pixelEffects,
             pixelEffects ? 1 : request.opacity,
@@ -585,6 +614,7 @@ function compositeTransitionGroup(
         })
         ready.push(request.clip.id)
       } catch (e) {
+        rethrowLensRemapUnavailable(e)
         console.warn(
           `[render] drawing transition clip "${request.clip.id}" failed:`,
           e instanceof Error ? e.message : e,
@@ -615,6 +645,7 @@ function compositeTransitionGroup(
     }
     drawn.push(...ready)
   } catch (e) {
+    rethrowLensRemapUnavailable(e)
     console.warn(
       '[render] drawing isolated transition group failed:',
       e instanceof Error ? e.message : e,
@@ -669,7 +700,7 @@ function drawClip(
   ctx: Composite2D,
   doc: TimelineDoc,
   request: VideoFrameRequest,
-  image: RenderFrameSource,
+  image: CanvasImageSource,
   blendMode: BlendModeResolution,
   applyEffects = true,
   opacity = request.opacity,
@@ -677,8 +708,32 @@ function drawClip(
   const clip: Clip = request.clip
   const t = clip.transform
   const visual = clipVisualSettings(clip)
-  const imageWidth = 'displayWidth' in image ? image.displayWidth : image.width
-  const imageHeight = 'displayHeight' in image ? image.displayHeight : image.height
+  const dimensions = image as unknown as {
+    readonly displayWidth?: number
+    readonly displayHeight?: number
+    readonly width?: number
+    readonly height?: number
+    readonly videoWidth?: number
+    readonly videoHeight?: number
+    readonly naturalWidth?: number
+    readonly naturalHeight?: number
+  }
+  const imageWidth = dimensions.displayWidth
+    ?? dimensions.videoWidth
+    ?? dimensions.naturalWidth
+    ?? dimensions.width
+  const imageHeight = dimensions.displayHeight
+    ?? dimensions.videoHeight
+    ?? dimensions.naturalHeight
+    ?? dimensions.height
+  if (
+    typeof imageWidth !== 'number'
+    || typeof imageHeight !== 'number'
+    || !Number.isFinite(imageWidth)
+    || !Number.isFinite(imageHeight)
+  ) {
+    throw new Error('render source dimensions are unavailable')
+  }
   // Anchor point in image pixels.
   const anchorX = t.anchorX * imageWidth
   const anchorY = t.anchorY * imageHeight
@@ -727,7 +782,7 @@ function compositePixelCorrectedMediaLayer(
   destination: Composite2D,
   surfaceProvider: TransitionSurfaceProvider,
   request: VideoFrameRequest,
-  image: RenderFrameSource,
+  image: CanvasImageSource,
   blendMode: BlendModeResolution,
   presentationScale: { readonly x: number; readonly y: number },
 ): void {
