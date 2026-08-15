@@ -12,6 +12,14 @@ const SIGNATURE_LIMIT_BYTES = 65_536
 const WASM_MODULE_MIN_BYTES = 8
 const PACKAGE_ENTRY_COUNT = 3
 const PACKAGE_DIGEST_DOMAIN = 'myrelith-plugin-package-digest-v1\0'
+const CRC32_YIELD_BYTES = 1024 * 1024
+const CRC32_TABLE = Uint32Array.from({ length: 256 }, (_unused, index) => {
+  let value = index
+  for (let bit = 0; bit < 8; bit++) {
+    value = (value >>> 1) ^ ((value & 1) === 0 ? 0 : 0xedb8_8320)
+  }
+  return value >>> 0
+})
 
 type JsonValue =
   | null
@@ -118,18 +126,25 @@ function asciiPath(bytes: Uint8Array): string {
   return value
 }
 
-function crc32(bytes: Uint8Array): number {
+function yieldToHost(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function crc32(bytes: Uint8Array): Promise<number> {
   let value = 0xffff_ffff
-  for (const byte of bytes) {
-    value ^= byte
-    for (let bit = 0; bit < 8; bit++) {
-      value = (value >>> 1) ^ ((value & 1) === 0 ? 0 : 0xedb8_8320)
+  for (let start = 0; start < bytes.byteLength; start += CRC32_YIELD_BYTES) {
+    const end = Math.min(start + CRC32_YIELD_BYTES, bytes.byteLength)
+    for (let index = start; index < end; index++) {
+      value = (value >>> 8) ^ CRC32_TABLE[(value ^ bytes[index]) & 0xff]
     }
+    if (end < bytes.byteLength) await yieldToHost()
   }
   return (value ^ 0xffff_ffff) >>> 0
 }
 
-function parseStoredZip(archiveBytes: Uint8Array): ReadonlyMap<string, ZipEntry> {
+async function parseStoredZip(
+  archiveBytes: Uint8Array,
+): Promise<ReadonlyMap<string, ZipEntry>> {
   if (archiveBytes.byteLength > ARCHIVE_LIMIT_BYTES) {
     fail('archive-invalid', `Plugin packages must not exceed ${ARCHIVE_LIMIT_BYTES} bytes.`)
   }
@@ -225,7 +240,8 @@ function parseStoredZip(archiveBytes: Uint8Array): ReadonlyMap<string, ZipEntry>
     fail('archive-invalid', 'The ZIP central directory contains trailing or hidden records.')
   }
 
-  const parsedEntries: ZipEntry[] = centralEntries.map((entry) => {
+  const parsedEntries: ZipEntry[] = []
+  for (const entry of centralEntries) {
     const local = boundedView(archiveBytes, entry.localOffset, 30)
     if (local.getUint32(0, true) !== 0x0403_4b50) {
       fail('archive-invalid', `Package entry ${entry.path} has an invalid local header.`)
@@ -255,17 +271,17 @@ function parseStoredZip(archiveBytes: Uint8Array): ReadonlyMap<string, ZipEntry>
       fail('archive-invalid', `Package entry ${entry.path} overlaps the central directory.`)
     }
     const bytes = archiveBytes.slice(dataOffset, localEnd)
-    if (crc32(bytes) !== entry.checksum) {
+    if (await crc32(bytes) !== entry.checksum) {
       fail('archive-invalid', `Package entry ${entry.path} failed its ZIP checksum.`)
     }
-    return {
+    parsedEntries.push({
       path: entry.path,
       bytes,
       checksum: entry.checksum,
       localOffset: entry.localOffset,
       localEnd,
-    }
-  })
+    })
+  }
 
   const ranges = [...parsedEntries].sort((left, right) => left.localOffset - right.localOffset)
   let expectedOffset = 0
@@ -677,7 +693,7 @@ export async function verifyPluginPackageArchive(
 ): Promise<VerifiedPluginPackage> {
   const subtle = globalThis.crypto?.subtle
   if (!subtle) fail('crypto-unavailable', 'Web Crypto is required to verify plugin packages.')
-  const archive = parseStoredZip(archiveBytes)
+  const archive = await parseStoredZip(archiveBytes)
   const manifestEntry = archive.get('manifest.json')
   const signatureEntry = archive.get('signature.json')
   if (!manifestEntry || !signatureEntry) {

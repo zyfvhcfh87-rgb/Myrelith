@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import {
   PluginPackageError,
   verifyPluginPackageArchive,
@@ -256,6 +256,22 @@ describe('signed plugin package verification', () => {
     await expect(verifyPluginPackageArchive(archive)).rejects.toThrow(
       'Package entry runtime/plugin.wasm must be between 8 and 33554432 bytes.',
     )
+  })
+
+  test('yields to the host while checksumming a large package entry', async () => {
+    const timer = vi.spyOn(globalThis, 'setTimeout')
+    const archive = storedZip(goldenEntries({
+      'runtime/plugin.wasm': new Uint8Array(1024 * 1024 + 1),
+    }))
+
+    try {
+      await expect(verifyPluginPackageArchive(archive)).rejects.toThrow(
+        'The signed entry table does not exactly match the package entries.',
+      )
+      expect(timer).toHaveBeenCalled()
+    } finally {
+      timer.mockRestore()
+    }
   })
 
   test('accepts a canonically sorted runtime entry before manifest.json', async () => {
