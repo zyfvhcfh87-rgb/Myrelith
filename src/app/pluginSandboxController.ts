@@ -13,6 +13,7 @@ import type {
   PluginWasmModuleExpectations,
   PluginWasmModuleFacts,
 } from '../workers/plugin-wasm/moduleParser'
+import type { PluginRuntimeLifecycleObserver } from './pluginRuntimeLifecycleObserver'
 
 export const PLUGIN_SANDBOX_BROKER_MARKER = 'MYRELITH_PLUGIN_SANDBOX_BROKER_V1'
 export const PLUGIN_ACTIVATION_DEADLINE_MS = 5_000
@@ -86,7 +87,7 @@ export interface PluginSandboxController {
     request: PluginSandboxActivationRequest,
     signal?: AbortSignal,
   ): Promise<PluginSandboxSession>
-  teardown(reason: string): void
+  teardown(reason: string): Promise<void>
 }
 
 export class PluginSandboxError extends Error {
@@ -424,31 +425,81 @@ interface PendingRequest {
   readonly timer: ReturnType<typeof setTimeout>
   readonly signal?: AbortSignal
   readonly onAbort?: () => void
+  readonly countsAsRequest: boolean
 }
 
 export function createPluginSandboxController(options: {
   readonly brokerFactory?: PluginSandboxBrokerFactory
   readonly now?: () => number
+  readonly lifecycleObserver?: PluginRuntimeLifecycleObserver
 } = {}): PluginSandboxController {
   const brokerFactory = options.brokerFactory ?? createBrowserPluginSandboxBroker
   const now = options.now ?? (() => performance.now())
   const liveBrokers = new Set<PluginSandboxBroker>()
   const liveTerminals = new Set<(runtimeFailure: PluginRuntimeFailure) => void>()
   const pendingActivationAborts = new Set<AbortController>()
+  const pendingActivationSettlements = new Set<Promise<void>>()
+  const pendingBrokerSettlements = new Set<Promise<void>>()
   let generationSequence = 0
+  let watchdogCount = 0
+  let pendingRequestCount = 0
+  let sessionCount = 0
+  let tornDown = false
+  let terminalSnapshotEmitted = false
+  let teardownPromise: Promise<void> | null = null
+
+  const emitLifecycle = (terminal = false): void => {
+    if (!options.lifecycleObserver || (terminal && terminalSnapshotEmitted)) return
+    const snapshot = Object.freeze({
+      brokerIframeCount: liveBrokers.size,
+      candidateWorkerCount: liveBrokers.size,
+      privatePortCount: liveBrokers.size * 2,
+      watchdogCount,
+      pendingActivationCount: pendingActivationAborts.size,
+      pendingRequestCount,
+      sessionCount,
+      terminal,
+    })
+    if (terminal && Object.entries(snapshot).some(([key, value]) => (
+      key !== 'terminal' && value !== 0
+    ))) {
+      throw new Error('Plugin sandbox terminal lifecycle snapshot requires zero ownership')
+    }
+    if (terminal) terminalSnapshotEmitted = true
+    try {
+      options.lifecycleObserver.onSandboxSnapshot(snapshot)
+    } catch {
+      // An injection-only observer can never alter sandbox or cleanup outcomes.
+    }
+  }
+
+  emitLifecycle()
 
   const activate = async (
     activation: PluginSandboxActivationRequest,
     signal?: AbortSignal,
   ): Promise<PluginSandboxSession> => {
+    if (tornDown) throw new PluginSandboxError(failure('closed', 'Plugin sandbox controller is closed.'))
     if (signal?.aborted) throw new PluginSandboxError(failure('aborted', 'Plugin activation was cancelled.'))
     const activationAbort = new AbortController()
+    let resolveActivationSettlement!: () => void
+    const activationSettlement = new Promise<void>((resolve) => {
+      resolveActivationSettlement = resolve
+    })
+    pendingActivationSettlements.add(activationSettlement)
+    let activationCleaned = false
     const forwardAbort = (): void => activationAbort.abort()
     signal?.addEventListener('abort', forwardAbort, { once: true })
     pendingActivationAborts.add(activationAbort)
+    emitLifecycle()
     const cleanupActivation = (): void => {
+      if (activationCleaned) return
+      activationCleaned = true
       signal?.removeEventListener('abort', forwardAbort)
       pendingActivationAborts.delete(activationAbort)
+      pendingActivationSettlements.delete(activationSettlement)
+      resolveActivationSettlement()
+      emitLifecycle()
     }
     const generation = ++generationSequence
     const deadlineAt = now() + PLUGIN_ACTIVATION_DEADLINE_MS
@@ -458,7 +509,12 @@ export function createPluginSandboxController(options: {
       deadlineAt,
       signal: activationAbort.signal,
     })
+    const brokerSettlement = brokerPromise.then(() => undefined, () => undefined)
+    pendingBrokerSettlements.add(brokerSettlement)
+    void brokerSettlement.finally(() => pendingBrokerSettlements.delete(brokerSettlement))
     let broker: PluginSandboxBroker
+    watchdogCount++
+    emitLifecycle()
     try {
       broker = await new Promise<PluginSandboxBroker>((resolve, reject) => {
         let aborted = false
@@ -485,26 +541,46 @@ export function createPluginSandboxController(options: {
     } catch (cause) {
       cleanupActivation()
       throw cause
+    } finally {
+      watchdogCount--
+      emitLifecycle()
     }
     liveBrokers.add(broker)
+    emitLifecycle()
     const port = broker.runtimePort
     let requestSequence = 0
     let pending: PendingRequest | undefined
     let sessionClosed = false
+    let sessionAcquired = false
+
+    const releasePending = (current: PendingRequest): void => {
+      clearTimeout(current.timer)
+      watchdogCount--
+      if (current.countsAsRequest) pendingRequestCount--
+      if (current.signal && current.onAbort) {
+        current.signal.removeEventListener('abort', current.onAbort)
+      }
+      emitLifecycle()
+    }
 
     const terminal = (runtimeFailure: PluginRuntimeFailure): void => {
       if (sessionClosed) return
       sessionClosed = true
       if (pending) {
-        clearTimeout(pending.timer)
-        if (pending.signal && pending.onAbort) pending.signal.removeEventListener('abort', pending.onAbort)
-        pending.reject(new PluginSandboxError(runtimeFailure))
+        const current = pending
         pending = undefined
+        releasePending(current)
+        current.reject(new PluginSandboxError(runtimeFailure))
       }
       port.close()
       broker.terminate(runtimeFailure.code)
       liveBrokers.delete(broker)
       liveTerminals.delete(terminal)
+      if (sessionAcquired) {
+        sessionAcquired = false
+        sessionCount--
+      }
+      emitLifecycle()
     }
     liveTerminals.add(terminal)
     broker.setFatalHandler(terminal)
@@ -528,8 +604,7 @@ export function createPluginSandboxController(options: {
           return
         }
         pending = undefined
-        clearTimeout(current.timer)
-        if (current.signal && current.onAbort) current.signal.removeEventListener('abort', current.onAbort)
+        releasePending(current)
         const runtimeFailure = response.failure
         current.reject(new PluginSandboxError(runtimeFailure))
         if (runtimeFailure.terminal) terminal(runtimeFailure)
@@ -540,8 +615,7 @@ export function createPluginSandboxController(options: {
         return
       }
       pending = undefined
-      clearTimeout(current.timer)
-      if (current.signal && current.onAbort) current.signal.removeEventListener('abort', current.onAbort)
+      releasePending(current)
       current.resolve(response as unknown as PluginWorkerResponse)
     }
     port.start()
@@ -572,6 +646,9 @@ export function createPluginSandboxController(options: {
       return new Promise((resolve, reject) => {
         const onAbort = requestSignal ? (): void => terminal(failure('aborted', 'Plugin request was cancelled.')) : undefined
         const timer = setTimeout(() => terminal(failure('timeout', 'Plugin request exceeded its watchdog deadline.')), deadlineMs)
+        const countsAsRequest = request.kind !== 'activate'
+        watchdogCount++
+        if (countsAsRequest) pendingRequestCount++
         pending = {
           requestId,
           expectedKind,
@@ -580,7 +657,9 @@ export function createPluginSandboxController(options: {
           timer,
           signal: requestSignal,
           onAbort,
+          countsAsRequest,
         }
+        emitLifecycle()
         requestSignal?.addEventListener('abort', onAbort!, { once: true })
         try {
           port.postMessage({ ...request, requestId }, transfer)
@@ -624,6 +703,9 @@ export function createPluginSandboxController(options: {
     }
     const facts = ready.facts
     cleanupActivation()
+    sessionAcquired = true
+    sessionCount++
+    emitLifecycle()
 
     return {
       generation,
@@ -703,13 +785,26 @@ export function createPluginSandboxController(options: {
   return {
     activate,
     teardown(reason) {
-      const runtimeFailure = failure('closed', reason)
-      for (const activationAbort of pendingActivationAborts) activationAbort.abort()
-      pendingActivationAborts.clear()
-      for (const terminal of [...liveTerminals]) terminal(runtimeFailure)
-      liveTerminals.clear()
-      for (const broker of [...liveBrokers]) broker.terminate(reason)
-      liveBrokers.clear()
+      if (teardownPromise) return teardownPromise
+      tornDown = true
+      teardownPromise = (async () => {
+        const runtimeFailure = failure('closed', reason)
+        for (const activationAbort of pendingActivationAborts) activationAbort.abort()
+        for (const terminal of [...liveTerminals]) terminal(runtimeFailure)
+        liveTerminals.clear()
+        for (const broker of [...liveBrokers]) broker.terminate(reason)
+        liveBrokers.clear()
+        await Promise.allSettled([...pendingBrokerSettlements])
+        await Promise.allSettled([...pendingActivationSettlements])
+        // Late broker resolutions are terminated by the activation guard before
+        // their settlement joins this terminal boundary.
+        for (const terminal of [...liveTerminals]) terminal(runtimeFailure)
+        for (const broker of [...liveBrokers]) broker.terminate(reason)
+        liveTerminals.clear()
+        liveBrokers.clear()
+        emitLifecycle(true)
+      })()
+      return teardownPromise
     },
   }
 }

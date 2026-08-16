@@ -13,6 +13,7 @@ import {
   type PluginSandboxMigrationRequest,
   type PluginSandboxRenderRequest,
 } from './pluginSandboxController'
+import type { PluginSandboxLifecycleSnapshot } from './pluginRuntimeLifecycleObserver'
 
 const MINIMAL_RENDER_MODULE_HEX = '0061736d01000000010f01600a7f7f7f7f7f7f7f7f7f7f017f021701086d7972656c697468066d656d6f727902018202820203020100071b01176d7972656c6974685f6566666563745f6669787475726500000a0601040041000b'
 
@@ -440,5 +441,89 @@ describe('plugin sandbox controller', () => {
       canonicalParameterBytes: new TextEncoder().encode('{}'),
       rgbaBytes: Uint8Array.of(4, 3, 2, 1),
     }, 5)).rejects.toMatchObject({ failure: { code: 'closed' } })
+  })
+
+  test('reports every sandbox owner transition and one terminal all-zero snapshot', async () => {
+    const harness = scriptedBrokerFactory({ ignoreRender: true })
+    const snapshots: PluginSandboxLifecycleSnapshot[] = []
+    const controller = createPluginSandboxController({
+      brokerFactory: harness.factory,
+      lifecycleObserver: {
+        onSandboxSnapshot(snapshot) {
+          snapshots.push(snapshot)
+        },
+        onRuntimeSnapshot() {},
+      },
+    })
+
+    expect(snapshots.at(-1)).toEqual({
+      brokerIframeCount: 0,
+      candidateWorkerCount: 0,
+      privatePortCount: 0,
+      watchdogCount: 0,
+      pendingActivationCount: 0,
+      pendingRequestCount: 0,
+      sessionCount: 0,
+      terminal: false,
+    })
+    const session = await controller.activate(activation())
+    expect(snapshots.some((snapshot) => (
+      snapshot.pendingActivationCount === 1 && snapshot.watchdogCount === 1
+    ))).toBe(true)
+    expect(snapshots.at(-1)).toMatchObject({
+      brokerIframeCount: 1,
+      candidateWorkerCount: 1,
+      privatePortCount: 2,
+      watchdogCount: 0,
+      pendingActivationCount: 0,
+      pendingRequestCount: 0,
+      sessionCount: 1,
+      terminal: false,
+    })
+
+    const pending = session.render(renderRequest(), 10_000).catch((cause: unknown) => cause)
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(snapshots.at(-1)).toMatchObject({
+      watchdogCount: 1,
+      pendingRequestCount: 1,
+      sessionCount: 1,
+      terminal: false,
+    })
+
+    await controller.teardown('observer-terminal')
+    expect(await pending).toMatchObject({ failure: { code: 'closed' } })
+    const terminal = snapshots.filter((snapshot) => snapshot.terminal)
+    expect(terminal).toHaveLength(1)
+    expect(terminal[0]).toEqual({
+      brokerIframeCount: 0,
+      candidateWorkerCount: 0,
+      privatePortCount: 0,
+      watchdogCount: 0,
+      pendingActivationCount: 0,
+      pendingRequestCount: 0,
+      sessionCount: 0,
+      terminal: true,
+    })
+    expect(snapshots.every((snapshot) => Object.isFrozen(snapshot))).toBe(true)
+  })
+
+  test('contains observer exceptions without changing sandbox outcomes or cleanup', async () => {
+    const harness = scriptedBrokerFactory()
+    const controller = createPluginSandboxController({
+      brokerFactory: harness.factory,
+      lifecycleObserver: {
+        onSandboxSnapshot() {
+          throw new Error('observer must be inert')
+        },
+        onRuntimeSnapshot() {},
+      },
+    })
+
+    const session = await controller.activate(activation())
+    await expect(session.render(renderRequest(), 100)).resolves.toMatchObject({
+      identity: false,
+    })
+    await expect(controller.teardown('throwing-observer')).resolves.toBeUndefined()
+    expect(harness.terminate).toHaveBeenCalledOnce()
   })
 })

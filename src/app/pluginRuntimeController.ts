@@ -27,6 +27,7 @@ import {
 } from '../workers/plugin-runtime-protocol'
 import { PLUGIN_WASM_OPCODE_TABLE_DIGESTS } from '../workers/plugin-wasm/policyTables'
 import type { PluginWasmProfileSelection } from '../domain/pluginWasmPolicy'
+import type { PluginRuntimeLifecycleObserver } from './pluginRuntimeLifecycleObserver'
 
 const MAX_RESIDENT_RUNTIMES = 8
 const MAX_ACTIVE_CALLS = 2
@@ -476,9 +477,12 @@ export function createPluginRuntimeController(options: {
   readonly activationBundleResolver: PluginActivationBundleResolver
   readonly sandboxController?: PluginSandboxController
   readonly rawModuleCache?: PluginRawModuleCache
+  readonly lifecycleObserver?: PluginRuntimeLifecycleObserver
 }): PluginRuntimeController {
   const resolver = options.activationBundleResolver
-  const sandboxController = options.sandboxController ?? createPluginSandboxController()
+  const sandboxController = options.sandboxController ?? createPluginSandboxController({
+    lifecycleObserver: options.lifecycleObserver,
+  })
   const rawModuleCache = options.rawModuleCache ?? createPluginRawModuleCache()
   const owners = new Set<RuntimeOwner>()
   const migrationReservations = new Set<RuntimeReservation>()
@@ -493,7 +497,39 @@ export function createPluginRuntimeController(options: {
   let ownerUsageSequence = 0
   let activeCallCount = 0
   let tornDown = false
+  let terminalSnapshotEmitted = false
   const controllerAbort = new AbortController()
+
+  const emitLifecycle = (terminal = false): void => {
+    if (!options.lifecycleObserver || (terminal && terminalSnapshotEmitted)) return
+    const cache = rawModuleCache.getSnapshot()
+    const snapshot = Object.freeze({
+      queuedCallCount: scheduledCalls.length,
+      activeCallCount,
+      liveOwnerCount: owners.size,
+      migrationReservationCount: migrationReservations.size,
+      residentRuntimeCount: [...owners].reduce(
+        (count, owner) => count + owner.entries.size,
+        0,
+      ),
+      rawCacheEntryCount: cache.entryCount,
+      rawCacheByteLength: cache.byteLength,
+      terminal,
+    })
+    if (terminal && Object.entries(snapshot).some(([key, value]) => (
+      key !== 'terminal' && value !== 0
+    ))) {
+      throw new Error('Plugin runtime terminal lifecycle snapshot requires zero ownership')
+    }
+    if (terminal) terminalSnapshotEmitted = true
+    try {
+      options.lifecycleObserver.onRuntimeSnapshot(snapshot)
+    } catch {
+      // The injection-only observer never participates in runtime outcomes.
+    }
+  }
+
+  emitLifecycle()
 
   const recordDiagnostic = (
     pluginId: string,
@@ -539,6 +575,7 @@ export function createPluginRuntimeController(options: {
       const index = scheduledCalls.findIndex((call) => !activePlugins.has(call.pluginId))
       if (index < 0) return
       const [call] = scheduledCalls.splice(index, 1)
+      emitLifecycle()
       if (call.signal?.aborted) {
         call.signal.removeEventListener('abort', call.onAbort!)
         call.reject(new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted)))
@@ -552,6 +589,7 @@ export function createPluginRuntimeController(options: {
     call.signal?.removeEventListener('abort', call.onAbort!)
     activeCallCount++
     activePlugins.add(call.pluginId)
+    emitLifecycle()
     const settlement = Promise.resolve()
       .then(call.task)
       .then(call.resolve, (cause) => call.reject(
@@ -563,6 +601,7 @@ export function createPluginRuntimeController(options: {
         activeCallCount--
         activePlugins.delete(call.pluginId)
         activeCallSettlements.delete(settlement)
+        emitLifecycle()
         dispatchScheduledCalls()
       })
     activeCallSettlements.add(settlement)
@@ -585,6 +624,7 @@ export function createPluginRuntimeController(options: {
         const index = scheduledCalls.indexOf(call)
         if (index < 0) return
         scheduledCalls.splice(index, 1)
+        emitLifecycle()
         signal!.removeEventListener('abort', onAbort!)
         reject(new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted)))
         dispatchScheduledCalls()
@@ -610,6 +650,7 @@ export function createPluginRuntimeController(options: {
         return
       }
       scheduledCalls.push(call)
+      emitLifecycle()
       signal?.addEventListener('abort', onAbort!, { once: true })
     })
   }
@@ -663,11 +704,12 @@ export function createPluginRuntimeController(options: {
   ): Promise<void> => {
     const entry = owner.entries.get(pluginId)
     if (!entry) return
-    owner.entries.delete(pluginId)
     try {
       await entry.session.close(reason)
     } finally {
+      if (owner.entries.get(pluginId) === entry) owner.entries.delete(pluginId)
       if (entry.reservation) entry.reservation.occupied = false
+      emitLifecycle()
     }
   }
 
@@ -776,6 +818,7 @@ export function createPluginRuntimeController(options: {
           throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
         }
         rawModuleCache.put(exactCacheKey, moduleBytes)
+        emitLifecycle()
       }
       if (moduleBytes.byteLength !== exactCacheKey.moduleByteLength) {
         throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
@@ -813,6 +856,7 @@ export function createPluginRuntimeController(options: {
       entries.set(bundle.pluginId, activated)
       if (reservation) reservation.occupied = true
       if (pin) pinnedIdentities.set(bundle.pluginId, expectedIdentityKey)
+      emitLifecycle()
       return activated
     }
 
@@ -872,10 +916,11 @@ export function createPluginRuntimeController(options: {
             const closing = [...entries.values()].map((entry) => (
               entry.session.close('export-preflight-rollback')
             ))
+            await Promise.allSettled(closing)
             entries.clear()
             pinnedIdentities.clear()
             owners.delete(owner)
-            await Promise.allSettled(closing)
+            emitLifecycle()
           }
           return Object.freeze(failures)
         })
@@ -886,11 +931,12 @@ export function createPluginRuntimeController(options: {
           if (closed) return
           closed = true
           const closing = [...entries.values()].map((entry) => entry.session.close(reason))
+          const settled = await Promise.allSettled(closing)
           entries.clear()
           pinnedIdentities.clear()
           owners.delete(owner)
-          const settled = await Promise.allSettled(closing)
           if (reservation) reservation.occupied = false
+          emitLifecycle()
           const rejected = settled.find(
             (result): result is PromiseRejectedResult => result.status === 'rejected',
           )
@@ -899,6 +945,7 @@ export function createPluginRuntimeController(options: {
       },
     }
     owners.add(owner)
+    emitLifecycle()
     return owner
   }
 
@@ -913,6 +960,7 @@ export function createPluginRuntimeController(options: {
       await reserveCapacityUnlocked(1)
       const reservation: RuntimeReservation = { occupied: false, closed: false }
       migrationReservations.add(reservation)
+      emitLifecycle()
       return reservation
     })
   )
@@ -924,6 +972,7 @@ export function createPluginRuntimeController(options: {
     reservation.closed = true
     reservation.occupied = false
     migrationReservations.delete(reservation)
+    emitLifecycle()
   })
 
   const applyWithBundle = async (
@@ -1659,6 +1708,7 @@ export function createPluginRuntimeController(options: {
         (invalidationEpochByPlugin.get(pluginId) ?? 0) + 1,
       )
       rawModuleCache.invalidatePlugin(pluginId)
+      emitLifecycle()
       await Promise.allSettled([...owners].map((owner) => owner.invalidate(pluginId, reason)))
       recordDiagnostic(
         pluginId,
@@ -1670,11 +1720,12 @@ export function createPluginRuntimeController(options: {
       if (tornDown) return
       tornDown = true
       controllerAbort.abort()
-      sandboxController.teardown(reason)
+      const sandboxTeardown = Promise.resolve().then(() => sandboxController.teardown(reason))
       for (const call of scheduledCalls.splice(0)) {
         call.signal?.removeEventListener('abort', call.onAbort!)
         call.reject(new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed)))
       }
+      emitLifecycle()
       await Promise.allSettled([...owners].map((owner) => owner.close(reason)))
       await Promise.allSettled([...activeCallSettlements])
       for (const reservation of migrationReservations) {
@@ -1685,6 +1736,9 @@ export function createPluginRuntimeController(options: {
       rawModuleCache.clear()
       invalidationEpochByPlugin.clear()
       activePlugins.clear()
+      const [sandboxResult] = await Promise.allSettled([sandboxTeardown])
+      emitLifecycle(true)
+      if (sandboxResult.status === 'rejected') throw sandboxResult.reason
     },
   }
 }

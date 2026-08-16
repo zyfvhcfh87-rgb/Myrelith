@@ -18,6 +18,7 @@ import {
   type PluginExportEffectRequirement,
 } from './pluginRuntimeController'
 import { PLUGIN_WASM_OPCODE_TABLE_DIGESTS } from '../workers/plugin-wasm/policyTables'
+import type { PluginRuntimeLifecycleSnapshot } from './pluginRuntimeLifecycleObserver'
 
 interface SandboxHarness {
   readonly controller: PluginSandboxController
@@ -112,7 +113,7 @@ function sandboxHarness(options: {
         sessions.push(session)
         return session
       },
-      teardown(reason) {
+      async teardown(reason) {
         closeReasons.push(`controller:${reason}`)
       },
     },
@@ -647,6 +648,111 @@ describe('plugin runtime controller', () => {
       failure: expect.objectContaining({ code: 'closed' }),
     }))
     expect(controller.getSnapshot().liveOwnerCount).toBe(0)
+  })
+
+  test('reports bounded runtime ownership transitions and one terminal all-zero snapshot', async () => {
+    const installed = new Map<string, ReturnType<typeof bundle>>()
+    for (let index = 0; index < 3; index++) {
+      const value = bundle(`com.example.observer${index}`)
+      installed.set(value.pluginId, value)
+    }
+    const releases: Array<() => void> = []
+    const sandbox = sandboxHarness({
+      render: (request) => new Promise((resolve) => {
+        releases.push(() => resolve({
+          identity: false,
+          rgbaBytes: request.rgbaBytes.slice(),
+        }))
+      }),
+    })
+    const snapshots: PluginRuntimeLifecycleSnapshot[] = []
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolverFor(installed),
+      sandboxController: sandbox.controller,
+      lifecycleObserver: {
+        onSandboxSnapshot() {},
+        onRuntimeSnapshot(snapshot) {
+          snapshots.push(snapshot)
+        },
+      },
+    })
+    const editors = [...installed.values()].map(() => controller.openEditorSession())
+    const applies = [...installed.values()].map((value, index) => editors[index].apply(
+      applyRequest(identity(value), { requestId: index + 1, descriptorId: value.pluginId }),
+    ))
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+    expect(snapshots.some((snapshot) => (
+      snapshot.activeCallCount === 2 && snapshot.queuedCallCount === 1
+    ))).toBe(true)
+    expect(snapshots.some((snapshot) => snapshot.liveOwnerCount === 3)).toBe(true)
+    releases.splice(0).forEach((release) => release())
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    releases.splice(0).forEach((release) => release())
+    await expect(Promise.all(applies)).resolves.toEqual([
+      expect.objectContaining({ status: 'applied' }),
+      expect.objectContaining({ status: 'applied' }),
+      expect.objectContaining({ status: 'applied' }),
+    ])
+    expect(snapshots.some((snapshot) => (
+      snapshot.residentRuntimeCount === 3
+        && snapshot.rawCacheEntryCount === 3
+        && snapshot.rawCacheByteLength === 24
+    ))).toBe(true)
+    await Promise.all(editors.map((editor) => editor.close('observer-editor-close')))
+
+    const migrationBundle = [...installed.values()][0]
+    const action = await controller.preflightDescriptorMigrationAction({
+      targets: [{
+        ...identity(migrationBundle),
+        descriptorId: 'observer-migration',
+        fromDescriptorVersion: 1,
+        canonicalParameterJson: '{"strength":0.5}',
+        hasAnimatedParameters: false,
+      }],
+    })
+    expect(snapshots.some((snapshot) => snapshot.migrationReservationCount === 1)).toBe(true)
+    await action.close('observer-migration-close')
+    expect(snapshots.at(-1)).toMatchObject({ migrationReservationCount: 0 })
+
+    await controller.teardown('observer-runtime-terminal')
+    const terminal = snapshots.filter((snapshot) => snapshot.terminal)
+    expect(terminal).toEqual([{
+      queuedCallCount: 0,
+      activeCallCount: 0,
+      liveOwnerCount: 0,
+      migrationReservationCount: 0,
+      residentRuntimeCount: 0,
+      rawCacheEntryCount: 0,
+      rawCacheByteLength: 0,
+      terminal: true,
+    }])
+    expect(snapshots.every((snapshot) => Object.isFrozen(snapshot))).toBe(true)
+  })
+
+  test('contains runtime observer exceptions without masking an operational failure', async () => {
+    const installed = bundle()
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolverFor(new Map([[installed.pluginId, installed]])),
+      sandboxController: sandboxHarness().controller,
+      lifecycleObserver: {
+        onSandboxSnapshot() {},
+        onRuntimeSnapshot() {
+          throw new Error('observer must be inert')
+        },
+      },
+    })
+    const editor = controller.openEditorSession()
+
+    await expect(editor.apply(applyRequest({
+      ...identity(installed),
+      catalogGeneration: installed.catalogGeneration + 1,
+    }))).resolves.toMatchObject({
+      status: 'failed',
+      failure: { code: 'stale-plan' },
+    })
+    await editor.close('throwing-observer-close')
+    await expect(controller.teardown('throwing-observer-terminal')).resolves.toBeUndefined()
   })
 
   test('fails an over-capacity export preflight before copying or activating partial owners', async () => {
