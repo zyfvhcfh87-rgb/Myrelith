@@ -20,23 +20,33 @@
  *   worker's own (a newer renderFrame settles older in-flight ones as
  *   'superseded'; the worker answers every request regardless).
  *
- * Layering: engine/ → domain/ + types-only worker protocols. Tests inject a
- * fake worker; the deprecated path also injects fake chunk providers.
+ * Layering: engine/ → domain/ + types-only worker protocols, plus the one
+ * pure, versioned plugin-effect protocol validator/ownership contract. Tests
+ * inject a fake worker; the deprecated path also injects fake chunk providers.
  */
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { PresentationProfile } from '../domain/presentationProfile'
 import type { AssetId, ClipId, FrameRate, TimelineDoc } from '../domain/schema'
-import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { VideoScopeAnalysis } from '../domain/videoScopes'
 import {
-  createVideoCompositionPlanner,
   videoCompositionRequests,
   type VideoCompositionPlan,
-  type VideoCompositionPlanner,
 } from '../domain/videoCompositionPlan'
+import type {
+  PluginVideoEffectExecutionPlan,
+  VideoEffectStagePlan,
+} from '../domain/pluginVideoEffectStagePlan'
 import { framesToMicroseconds } from '../domain/time'
+import {
+  PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+  isPluginEffectBridgeWorkerMessage,
+  zeroAttachedPluginEffectBuffer,
+  type PluginEffectBridgeApplyMessage,
+  type PluginEffectBridgeHandler,
+  type PluginEffectBridgeWorkerMessage,
+} from '../workers/plugin-effect-bridge-protocol'
 import type {
   FromRenderWorker,
   RenderMode,
@@ -112,21 +122,81 @@ type AssetSource =
 
 interface PendingRender {
   resolve: (result: RenderFrameResult) => void
+  generation: number
+  plan: VideoCompositionPlan
   /** Exact source objects captured when this request was posted. */
   sources: Map<AssetId, AssetSource>
 }
 
+interface PendingPluginEffectCall {
+  readonly generation: number
+  readonly renderRequestId: number
+  readonly controller: AbortController
+}
+
+function executionMatches(
+  left: PluginVideoEffectExecutionPlan,
+  right: PluginVideoEffectExecutionPlan,
+): boolean {
+  return left.catalogGeneration === right.catalogGeneration
+    && left.signerFingerprint === right.signerFingerprint
+    && left.packageDigest === right.packageDigest
+    && left.pluginId === right.pluginId
+    && left.pluginVersion === right.pluginVersion
+    && left.kind === right.kind
+    && left.contributionVersion === right.contributionVersion
+    && left.contributionId === right.contributionId
+    && left.descriptorVersion === right.descriptorVersion
+    && left.entrypoint === right.entrypoint
+    && left.canonicalParameterJson === right.canonicalParameterJson
+}
+
+function matchingPlannedExecution(
+  plan: VideoCompositionPlan,
+  descriptorId: string,
+  candidate: PluginVideoEffectExecutionPlan,
+): PluginVideoEffectExecutionPlan | null {
+  const inspect = (stagePlan: VideoEffectStagePlan | undefined) => {
+    if (!stagePlan) return null
+    for (const stage of stagePlan.stages) {
+      if (
+        stage.kind === 'plugin'
+        && stage.status === 'ready'
+        && stage.effect?.id === descriptorId
+        && stage.execution
+        && executionMatches(stage.execution, candidate)
+      ) return stage.execution
+    }
+    return null
+  }
+  for (const item of plan.items) {
+    if (item.kind === 'clip') {
+      const execution = inspect(item.request.effectStagePlan)
+      if (execution) return execution
+    } else if (item.kind === 'text') {
+      const execution = inspect(item.effectStagePlan)
+      if (execution) return execution
+    } else if (item.kind !== 'caption') {
+      for (const request of item.requests) {
+        const execution = inspect(request.effectStagePlan)
+        if (execution) return execution
+      }
+    }
+  }
+  return null
+}
+
 export class RenderWorkerBridge {
   private readonly worker: WorkerLike
+  private readonly pluginEffectHandler: PluginEffectBridgeHandler | null
   /** The doc snapshot last posted via setDoc — composites are built from
    * THIS, never from a fresher store read (protocol ordering contract). */
   private doc: TimelineDoc | null = null
-  private sourceBounds: SourceBoundsCatalog = new Map()
-  private visualPlanner: VideoCompositionPlanner | null = null
   private readonly sources = new Map<AssetId, AssetSource>()
   /** Invalidates legacy chunk reads when any source is replaced or removed. */
   private sourceRevision = 0
   private nextRequestId = 1
+  private nextRenderGeneration = 1
   private nextTelemetryRequestId = 1
   /** Monotonic identity for one configure/open attempt; prevents asset ABA. */
   private nextSetupId = 1
@@ -144,8 +214,11 @@ export class RenderWorkerBridge {
       reject: (error: Error) => void
     }
   >()
+  private readonly pendingPluginEffects = new Map<number, PendingPluginEffectCall>()
   private disposed = false
   private closeTimeout: ReturnType<typeof setTimeout> | null = null
+  private closePromise: Promise<void> | null = null
+  private resolveClose: (() => void) | null = null
   private workerTerminated = false
   /** Errors not tied to a request (decoder faults, stray failures). */
   onWorkerError: ((message: string) => void) | null = null
@@ -168,10 +241,14 @@ export class RenderWorkerBridge {
     analysis: VideoScopeAnalysis,
   ) => void) | null = null
 
-  constructor(worker: WorkerLike) {
+  constructor(
+    worker: WorkerLike,
+    pluginEffectHandler: PluginEffectBridgeHandler | null = null,
+  ) {
     this.worker = worker
+    this.pluginEffectHandler = pluginEffectHandler
     worker.addEventListener('message', (event: MessageEvent) => {
-      this.route(event.data as FromRenderWorker)
+      this.route(event.data)
     })
   }
 
@@ -183,26 +260,17 @@ export class RenderWorkerBridge {
   /** Post a new doc snapshot; subsequent composites are built from it. */
   setDoc(doc: TimelineDoc): void {
     this.doc = doc
-    this.visualPlanner = createVideoCompositionPlanner(doc, this.sourceBounds)
+    this.abortPluginEffectCalls()
+    this.settlePendingAsSuperseded()
     this.post({ type: 'setDoc', doc }, [])
   }
 
   /** Resize preview-only worker surfaces; authored geometry stays unchanged. */
   setPresentationProfile(profile: PresentationProfile): void {
     if (this.disposed) return
+    this.abortPluginEffectCalls()
     this.settlePendingAsSuperseded()
     this.post({ type: 'setPresentationProfile', profile }, [])
-  }
-
-  /** Replace durable media facts without invalidating worker decode lanes. */
-  setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void {
-    this.sourceBounds = new Map(catalog)
-    if (this.doc) {
-      this.visualPlanner = createVideoCompositionPlanner(
-        this.doc,
-        this.sourceBounds,
-      )
-    }
   }
 
   /**
@@ -330,10 +398,11 @@ export class RenderWorkerBridge {
    * missingClipIds. Supplying mode selects the Blob-backed streaming path;
    * omitting it temporarily selects the deprecated chunk-batch path.
    */
-  renderFrame(frame: number): Promise<RenderFrameResult>
-  renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult>
-  renderFrame(frame: number, mode?: RenderMode): Promise<RenderFrameResult> {
+  renderFrame(plan: VideoCompositionPlan): Promise<RenderFrameResult>
+  renderFrame(plan: VideoCompositionPlan, mode: RenderMode): Promise<RenderFrameResult>
+  renderFrame(plan: VideoCompositionPlan, mode?: RenderMode): Promise<RenderFrameResult> {
     const doc = this.doc
+    const frame = plan.frame
     if (!doc) {
       return Promise.resolve({
         status: 'error',
@@ -355,14 +424,13 @@ export class RenderWorkerBridge {
     // Omitting mode is the deprecated keyframe-batch path. Once its caller
     // migrates, every render supplies explicit playback/seek intent.
     const protocol = mode === undefined ? 'legacy' : 'streaming'
-    const plan = this.visualPlanner?.planFrame(frame)
-    if (!plan) {
+    if (!Number.isSafeInteger(frame) || frame < 0) {
       return Promise.resolve({
         status: 'error',
         drawnClipIds: [],
         missingClipIds: [],
         renderMs: 0,
-        message: 'visual planner is not configured',
+        message: 'visual plan frame must be a non-negative integer',
       })
     }
     const requests = videoCompositionRequests(plan)
@@ -382,11 +450,13 @@ export class RenderWorkerBridge {
     // Invalid calls above do not become latest: they neither post a worker
     // cancellation nor disturb the last valid presentation.
     const requestId = this.nextRequestId++
+    const generation = this.takeRenderGeneration()
     this.latestCallId = requestId
+    this.abortPluginEffectCalls()
     if (mode === undefined) {
-      return this.renderLegacyFrame(doc, plan, frame, requestId)
+      return this.renderLegacyFrame(doc, plan, frame, requestId, generation)
     }
-    return this.renderStreamingFrame(doc, plan, frame, requestId, mode)
+    return this.renderStreamingFrame(doc, plan, frame, requestId, generation, mode)
   }
 
   private async renderLegacyFrame(
@@ -394,6 +464,7 @@ export class RenderWorkerBridge {
     plan: VideoCompositionPlan,
     frame: number,
     requestId: number,
+    generation: number,
   ): Promise<RenderFrameResult> {
     const revision = this.sourceRevision
     const request = await buildLegacyRenderRequest({
@@ -419,6 +490,8 @@ export class RenderWorkerBridge {
     return new Promise((resolve) => {
       this.pending.set(requestId, {
         resolve,
+        generation,
+        plan,
         sources: request.sources,
       })
       this.post(request.message, request.transfer)
@@ -430,6 +503,7 @@ export class RenderWorkerBridge {
     plan: VideoCompositionPlan,
     frame: number,
     requestId: number,
+    generation: number,
     mode: RenderMode,
   ): Promise<RenderFrameResult> {
     const entries: StreamingCompositeSourceEntry[] = []
@@ -463,9 +537,10 @@ export class RenderWorkerBridge {
     // show the same asset frame while owning independent playback cursors.
     this.settlePendingAsSuperseded()
     return new Promise((resolve) => {
-      this.pending.set(requestId, { resolve, sources: requestSources })
+      this.pending.set(requestId, { resolve, generation, plan, sources: requestSources })
       this.post({
         type: 'renderFrame',
+        generation,
         requestId,
         frame,
         plan,
@@ -476,10 +551,14 @@ export class RenderWorkerBridge {
   }
 
   /** Shut the worker's decoders down and terminate the worker. */
-  dispose(): void {
-    if (this.disposed) return
+  dispose(): Promise<void> {
+    if (this.closePromise) return this.closePromise
+    this.closePromise = new Promise((resolve) => {
+      this.resolveClose = resolve
+    })
     this.disposed = true
     this.sourceRevision++
+    this.abortPluginEffectCalls()
     this.closeTimeout = setTimeout(() => {
       this.closeTimeout = null
       this.terminateWorker()
@@ -494,6 +573,7 @@ export class RenderWorkerBridge {
       waiter.reject(new Error('bridge disposed'))
     }
     this.pendingTelemetry.clear()
+    return this.closePromise
   }
 
   private terminateWorker(): void {
@@ -504,11 +584,19 @@ export class RenderWorkerBridge {
     if (this.workerTerminated) return
     this.workerTerminated = true
     this.worker.terminate?.()
+    this.resolveClose?.()
+    this.resolveClose = null
   }
 
   private settlePendingAsSuperseded(): void {
     for (const pending of this.pending.values()) pending.resolve(SUPERSEDED)
     this.pending.clear()
+  }
+
+  private abortPluginEffectCalls(): void {
+    for (const pending of this.pendingPluginEffects.values()) {
+      pending.controller.abort()
+    }
   }
 
   private post(msg: ToRenderWorker, transfer: Transferable[]): void {
@@ -524,7 +612,165 @@ export class RenderWorkerBridge {
     return setupId
   }
 
-  private route(msg: FromRenderWorker): void {
+  private takeRenderGeneration(): number {
+    const generation = this.nextRenderGeneration
+    if (!Number.isSafeInteger(generation)) {
+      throw new RangeError('Render worker generation overflow')
+    }
+    this.nextRenderGeneration++
+    return generation
+  }
+
+  private postPluginBypass(message: PluginEffectBridgeWorkerMessage): void {
+    this.post({
+      type: 'pluginEffectBypassed',
+      protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: message.generation,
+      renderRequestId: message.renderRequestId,
+      effectRequestId: message.effectRequestId,
+    }, [])
+  }
+
+  private handlePluginEffectCancel(
+    message: Extract<PluginEffectBridgeWorkerMessage, { type: 'pluginEffectCancel' }>,
+  ): void {
+    const pending = this.pendingPluginEffects.get(message.effectRequestId)
+    if (
+      !pending
+      || pending.generation !== message.generation
+      || pending.renderRequestId !== message.renderRequestId
+    ) return
+    pending.controller.abort()
+  }
+
+  private async handlePluginEffectApply(
+    message: PluginEffectBridgeApplyMessage,
+  ): Promise<void> {
+    const inputBuffer = message.rgbaBytes
+    let resultBuffer: ArrayBuffer | null = null
+    try {
+      const render = this.pending.get(message.renderRequestId)
+      const plannedExecution = render
+        && render.generation === message.generation
+        ? matchingPlannedExecution(render.plan, message.descriptorId, message.execution)
+        : null
+      if (!render || !plannedExecution || this.disposed || !this.pluginEffectHandler) {
+        if (render && render.generation === message.generation && !this.disposed) {
+          this.postPluginBypass(message)
+        }
+        return
+      }
+      if (this.pendingPluginEffects.has(message.effectRequestId)) return
+      const controller = new AbortController()
+      this.pendingPluginEffects.set(message.effectRequestId, {
+        generation: message.generation,
+        renderRequestId: message.renderRequestId,
+        controller,
+      })
+      let result
+      try {
+        result = await this.pluginEffectHandler.apply(Object.freeze({
+          requestId: message.effectRequestId,
+          execution: plannedExecution,
+          descriptorId: message.descriptorId,
+          timelineFrame: message.timelineFrame,
+          frameRateNumerator: message.frameRateNumerator,
+          frameRateDenominator: message.frameRateDenominator,
+          width: message.width,
+          height: message.height,
+          stride: message.stride,
+          rgbaBytes: new Uint8Array(inputBuffer),
+        }), controller.signal)
+      } catch {
+        result = { status: 'bypassed' as const }
+      } finally {
+        this.pendingPluginEffects.delete(message.effectRequestId)
+      }
+      const current = this.pending.get(message.renderRequestId)
+      if (
+        controller.signal.aborted
+        || !current
+        || current.generation !== message.generation
+        || this.disposed
+      ) {
+        if (result.status === 'applied') {
+          zeroAttachedPluginEffectBuffer(result.rgbaBytes.buffer)
+        }
+        return
+      }
+      if (result.status !== 'applied') {
+        this.postPluginBypass(message)
+        return
+      }
+      if (
+        !(result.rgbaBytes instanceof Uint8Array)
+        || result.rgbaBytes.byteOffset !== 0
+        || result.rgbaBytes.buffer.byteLength !== result.rgbaBytes.byteLength
+        || result.rgbaBytes.byteLength !== inputBuffer.byteLength
+      ) {
+        zeroAttachedPluginEffectBuffer(result.rgbaBytes.buffer)
+        this.postPluginBypass(message)
+        return
+      }
+      resultBuffer = result.rgbaBytes.buffer
+      this.post({
+        type: 'pluginEffectApplied',
+        protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+        generation: message.generation,
+        renderRequestId: message.renderRequestId,
+        effectRequestId: message.effectRequestId,
+        rgbaBytes: resultBuffer,
+      }, [resultBuffer])
+    } finally {
+      zeroAttachedPluginEffectBuffer(inputBuffer)
+      if (resultBuffer?.byteLength) zeroAttachedPluginEffectBuffer(resultBuffer)
+    }
+  }
+
+  private route(value: unknown): void {
+    const maybeType = value && typeof value === 'object'
+      ? (value as { readonly type?: unknown }).type
+      : undefined
+    if (maybeType === 'pluginEffectApply' || maybeType === 'pluginEffectCancel') {
+      if (!isPluginEffectBridgeWorkerMessage(value)) {
+        const candidate = value as {
+          readonly rgbaBytes?: unknown
+          readonly generation?: unknown
+          readonly renderRequestId?: unknown
+          readonly effectRequestId?: unknown
+        }
+        const buffer = candidate.rgbaBytes
+        if (buffer instanceof ArrayBuffer) zeroAttachedPluginEffectBuffer(buffer)
+        // A malformed apply still owns a live worker promise when its routing
+        // identity is intact. Settle that exact request as bypassed so hostile
+        // or corrupted payload fields cannot hang the whole render.
+        if (
+          maybeType === 'pluginEffectApply'
+          && Number.isSafeInteger(candidate.generation)
+          && Number(candidate.generation) > 0
+          && Number.isSafeInteger(candidate.renderRequestId)
+          && Number(candidate.renderRequestId) > 0
+          && Number.isSafeInteger(candidate.effectRequestId)
+          && Number(candidate.effectRequestId) > 0
+        ) {
+          this.post({
+            type: 'pluginEffectBypassed',
+            protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+            generation: Number(candidate.generation),
+            renderRequestId: Number(candidate.renderRequestId),
+            effectRequestId: Number(candidate.effectRequestId),
+          }, [])
+        }
+        return
+      }
+      if (value.type === 'pluginEffectCancel') {
+        this.handlePluginEffectCancel(value)
+      } else {
+        void this.handlePluginEffectApply(value)
+      }
+      return
+    }
+    const msg = value as FromRenderWorker
     switch (msg.type) {
       case 'rendererCapabilities': {
         this.onRendererCapabilities?.(msg.capabilities)

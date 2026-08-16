@@ -46,8 +46,12 @@ import {
 import {
   createVideoCompositionPlanner,
   videoCompositionRequests,
+  type VideoCompositionPlan,
   type VideoCompositionPlanner,
 } from '../domain/videoCompositionPlan'
+import type {
+  PluginVideoEffectContributionSnapshot,
+} from '../domain/pluginVideoEffectStagePlan'
 import {
   mediaAssetDecoderBudget,
   type LocalDecoderBudget,
@@ -69,6 +73,11 @@ import {
   type ClipVisualPreview,
   type TextOverlayPreview,
 } from '../state/transportStore'
+import type {
+  PluginEffectBridgeHandler,
+  PluginEffectBridgeHandlerRequest,
+  PluginEffectBridgeHandlerResult,
+} from '../workers/plugin-effect-bridge-protocol'
 import type {
   RenderMode,
   RenderWorkerCapabilities,
@@ -97,7 +106,6 @@ import {
 export interface BridgeLike {
   setDoc(doc: TimelineDoc): void
   setPresentationProfile(profile: PresentationProfile): void
-  setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void
   openAsset(
     assetId: AssetId,
     blob: Blob,
@@ -111,11 +119,11 @@ export interface BridgeLike {
     runtimeToken: object,
   ): Promise<void>
   releaseAsset(assetId: AssetId): void
-  renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult>
+  renderFrame(plan: VideoCompositionPlan, mode: RenderMode): Promise<RenderFrameResult>
   setRuntimeTelemetryEnabled?(enabled: boolean): void
   requestRuntimeTelemetry?(): Promise<RenderWorkerRuntimeTelemetrySnapshot>
   setVideoScopesEnabled?(enabled: boolean, generation: number): void
-  dispose(): void
+  dispose(): void | Promise<void>
   onWorkerError: ((message: string) => void) | null
   onAssetError: ((
     assetId: AssetId,
@@ -135,13 +143,28 @@ export interface BridgeLike {
 
 /** Injection points so tests can run without Worker/OffscreenCanvas/fetch. */
 export interface PreviewDeps {
-  createBridge(): BridgeLike
+  createBridge(pluginEffectHandler: PluginEffectBridgeHandler): BridgeLike
+  createVisualPlanner(
+    doc: TimelineDoc,
+    catalog: SourceBoundsCatalog,
+    pluginContributions?: PluginVideoEffectContributionSnapshot,
+  ): VideoCompositionPlanner
   transferCanvas(canvas: HTMLCanvasElement): OffscreenCanvas
   init(bridge: BridgeLike, canvas: OffscreenCanvas): void
   fetchBlob(url: string): Promise<Blob>
   now(): number
   /** Resolve only after a paint opportunity following the completed draw. */
   afterPresentationBoundary(): Promise<number>
+}
+
+/**
+ * App-owned plugin seam. The preview keeps only a serializable declaration
+ * snapshot plus a stable request facade; runtime owners never enter stores.
+ */
+export interface PreviewPluginBinding {
+  getContributionSnapshot(): PluginVideoEffectContributionSnapshot | undefined
+  getEffectBridgeHandler(): PluginEffectBridgeHandler
+  subscribe(listener: () => void): () => void
 }
 
 /** Passive timing evidence for dev tools; absent listeners add no clock reads. */
@@ -216,7 +239,9 @@ export function renderPreviewFrameForDevBenchmark(
   }
   const bridge = state.bridge
   if (!bridge) return Promise.reject(new Error('Preview is not initialized'))
-  return bridge.renderFrame(frame, 'seek')
+  const plan = state.visualPlanner?.planFrame(frame)
+  if (!plan) return Promise.reject(new Error('Preview planner is not initialized'))
+  return bridge.renderFrame(plan, 'seek')
 }
 
 function publishRenderDiagnostic(
@@ -232,7 +257,12 @@ function publishRenderDiagnostic(
 }
 
 const realDeps: PreviewDeps = {
-  createBridge: () => new RenderWorkerBridge(createRenderWorker()),
+  createBridge: (pluginEffectHandler) => (
+    new RenderWorkerBridge(createRenderWorker(), pluginEffectHandler)
+  ),
+  createVisualPlanner: (doc, catalog, pluginContributions) => (
+    createVideoCompositionPlanner(doc, catalog, pluginContributions)
+  ),
   transferCanvas: (canvas) => canvas.transferControlToOffscreen(),
   init: (bridge, offscreen) => (bridge as RenderWorkerBridge).init(offscreen),
   fetchBlob: (url) => fetch(url).then((r) => r.blob()),
@@ -254,6 +284,8 @@ interface ControllerState {
   viewport: PresentationViewport | null
   presentationProfile: PresentationProfile | null
   visualPlanner: VideoCompositionPlanner | null
+  pluginCatalogGeneration: number | null
+  pluginUnsubscribe: (() => void) | null
   effectStatusIndex: PreviewEffectStatusIndex | null
   /** Per-asset pipeline status. Absent = not started (or failed: retried
    * on the next mediaStore change). Removal releases the worker source. */
@@ -278,6 +310,8 @@ const state: ControllerState = {
   viewport: null,
   presentationProfile: null,
   visualPlanner: null,
+  pluginCatalogGeneration: null,
+  pluginUnsubscribe: null,
   effectStatusIndex: null,
   assetStates: new Map(),
   unsubscribes: [],
@@ -285,6 +319,65 @@ const state: ControllerState = {
   renderGeneration: 0,
   presentationGeneration: 0,
   scopeGeneration: 0,
+}
+
+let pluginBinding: PreviewPluginBinding | null = null
+
+const pluginEffectHandler: PluginEffectBridgeHandler = Object.freeze({
+  apply(
+    request: PluginEffectBridgeHandlerRequest,
+    signal: AbortSignal,
+  ): Promise<PluginEffectBridgeHandlerResult> {
+    const handler = pluginBinding?.getEffectBridgeHandler()
+    if (!handler) return Promise.resolve(Object.freeze({ status: 'bypassed' }))
+    return handler.apply(request, signal)
+  },
+})
+
+function currentPluginContributions(): PluginVideoEffectContributionSnapshot | undefined {
+  return pluginBinding?.getContributionSnapshot()
+}
+
+function createCurrentVisualPlanner(
+  deps: PreviewDeps,
+  doc = currentPreviewDocument(),
+  catalog = currentSourceBoundsCatalog(),
+  pluginContributions = currentPluginContributions(),
+): VideoCompositionPlanner {
+  state.pluginCatalogGeneration = pluginContributions?.catalogGeneration ?? null
+  return deps.createVisualPlanner(doc, catalog, pluginContributions)
+}
+
+function subscribePluginBinding(bridge: BridgeLike, deps: PreviewDeps): void {
+  const binding = pluginBinding
+  if (!binding) return
+  state.pluginUnsubscribe = binding.subscribe(() => {
+    if (state.bridge !== bridge || state.deps !== deps || pluginBinding !== binding) return
+    const snapshot = binding.getContributionSnapshot()
+    const catalogGeneration = snapshot?.catalogGeneration ?? null
+    if (catalogGeneration === state.pluginCatalogGeneration) return
+    state.visualPlanner = createCurrentVisualPlanner(
+      deps,
+      currentPreviewDocument(),
+      currentSourceBoundsCatalog(),
+      snapshot,
+    )
+    scheduleRender(deps)
+  })
+}
+
+/** Replace the app-owned binding without putting plugin state in Zustand. */
+export function setPreviewPluginBinding(binding: PreviewPluginBinding | null): void {
+  if (pluginBinding === binding) return
+  pluginBinding = binding
+  const bridge = state.bridge
+  const deps = state.deps
+  if (!bridge || !deps) return
+  state.pluginUnsubscribe?.()
+  state.pluginUnsubscribe = null
+  state.visualPlanner = createCurrentVisualPlanner(deps)
+  subscribePluginBinding(bridge, deps)
+  scheduleRender(deps)
 }
 
 /** Enable/disable preview scopes without making their state project truth. */
@@ -455,12 +548,9 @@ function rebuildPreviewEffectStatusIndex(doc: TimelineDoc): void {
   publishPreviewEffectStatuses()
 }
 
-function syncPreviewDocument(bridge: BridgeLike): void {
+function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
   const doc = currentPreviewDocument()
-  state.visualPlanner = createVideoCompositionPlanner(
-    doc,
-    currentSourceBoundsCatalog(),
-  )
+  state.visualPlanner = createCurrentVisualPlanner(deps, doc)
   bridge.setDoc(doc)
   rebuildPreviewEffectStatusIndex(doc)
   syncPresentationProfile(bridge, doc)
@@ -519,7 +609,7 @@ function scheduleRender(deps: PreviewDeps): void {
     const requestedAt = diagnosticsEnabled ? deps.now() : 0
     const presentationGeneration = ++state.presentationGeneration
     void bridge
-      .renderFrame(frame, mode)
+      .renderFrame(visualPlan, mode)
       .then((result) => {
         if (diagnosticsEnabled) {
           publishRenderCompletion({
@@ -780,11 +870,11 @@ export function initPreview(
   deps: PreviewDeps = realDeps,
 ): void {
   if (state.canvas === canvas) return
-  disposePreview()
+  void disposePreviewState(false)
 
   let bridge: BridgeLike
   try {
-    bridge = deps.createBridge()
+    bridge = deps.createBridge(pluginEffectHandler)
     deps.init(bridge, deps.transferCanvas(canvas))
   } catch (e) {
     console.warn(
@@ -828,9 +918,8 @@ export function initPreview(
 
   const initialDoc = currentPreviewDocument()
   const initialBounds = currentSourceBoundsCatalog()
-  state.visualPlanner = createVideoCompositionPlanner(initialDoc, initialBounds)
+  state.visualPlanner = createCurrentVisualPlanner(deps, initialDoc, initialBounds)
   state.effectStatusIndex = createPreviewEffectStatusIndex(initialDoc)
-  bridge.setSourceBoundsCatalog(initialBounds)
   bridge.setDoc(initialDoc)
   publishPreviewEffectStatuses(null)
   syncPresentationProfile(bridge, initialDoc)
@@ -840,7 +929,7 @@ export function initPreview(
   state.unsubscribes.push(
     useDocumentStore.subscribe((s, prev) => {
       if (s.doc !== prev.doc) {
-        syncPreviewDocument(bridge)
+        syncPreviewDocument(bridge, deps)
         syncAssets(deps)
         scheduleRender(deps)
       }
@@ -850,7 +939,7 @@ export function initPreview(
         s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
       ) {
-        syncPreviewDocument(bridge)
+        syncPreviewDocument(bridge, deps)
       }
       if (
         presentationReasonForTransport(s) !== presentationReasonForTransport(prev)
@@ -866,22 +955,14 @@ export function initPreview(
     }),
     useMediaStore.subscribe(() => {
       const bounds = currentSourceBoundsCatalog()
-      state.visualPlanner = createVideoCompositionPlanner(
-        currentPreviewDocument(),
-        bounds,
-      )
-      bridge.setSourceBoundsCatalog(bounds)
+      state.visualPlanner = createCurrentVisualPlanner(deps, undefined, bounds)
       syncAssets(deps)
       scheduleRender(deps)
     }),
     useProxyStore.subscribe((current, previous) => {
       if (current.assets === previous.assets) return
       const bounds = currentSourceBoundsCatalog()
-      state.visualPlanner = createVideoCompositionPlanner(
-        currentPreviewDocument(),
-        bounds,
-      )
-      bridge.setSourceBoundsCatalog(bounds)
+      state.visualPlanner = createCurrentVisualPlanner(deps, undefined, bounds)
       syncAssets(deps)
       scheduleRender(deps)
     }),
@@ -891,29 +972,39 @@ export function initPreview(
       scheduleRender(deps)
     }),
   )
+  subscribePluginBinding(bridge, deps)
   // Assets may already be waiting (import before mount, HMR, tests) and an
   // empty timeline still paints its background.
   syncAssets(deps)
   scheduleRender(deps)
 }
 
-/** Tear everything down (tests / real app teardown, not StrictMode churn). */
-export function disposePreview(): void {
+async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
   state.renderGeneration++
   state.presentationGeneration++
   state.scopeGeneration++
   for (const unsubscribe of state.unsubscribes) unsubscribe()
   state.unsubscribes = []
-  state.bridge?.dispose()
+  state.pluginUnsubscribe?.()
+  state.pluginUnsubscribe = null
+  const close = state.bridge?.dispose()
   state.bridge = null
   state.deps = null
   state.viewport = null
   state.presentationProfile = null
   state.visualPlanner = null
+  state.pluginCatalogGeneration = null
   state.effectStatusIndex = null
   state.canvas = null
   state.assetStates = new Map()
   state.rafPending = false
+  if (clearPluginBinding) pluginBinding = null
   usePreviewStatusStore.getState().resetPreviewStatus()
   useVideoScopesStore.getState().reset()
+  await close
+}
+
+/** Tear everything down (tests / real app teardown, not StrictMode churn). */
+export function disposePreview(): Promise<void> {
+  return disposePreviewState(true)
 }

@@ -29,7 +29,7 @@ non-negotiable rules. Re-read it at the start of every coding session.
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
 - The opt-in Issue #54 and Issue #70 evidence panels plus the checked-in Issue
-  #108, Issue #109, Issue #110, and Issue #111 browser gates have narrow,
+  #77, Issue #108, Issue #109, Issue #110, and Issue #111 browser gates have narrow,
   architecture-guarded dev exceptions. `dev/performance/runtime.ts` may compose
   existing `app/` controllers with `state/` and its bounded Mediabunny fixture
   generator;
@@ -39,7 +39,22 @@ non-negotiable rules. Re-read it at the start of every coding session.
   `PerformanceBenchmarkApp.tsx` may reuse existing `ui/` surfaces.
   `ProxyEditingBenchmarkPanel.tsx` may read the selected document/media state
   and call the app-owned preview/proxy/transport facades solely to measure the
-  exact live source path. `dev/issue108/motionAnalysisFoundation.ts` may compose
+  exact live source path. Issue #77's disposable acceptance gate has exactly
+  two privileged dev modules. `dev/issue77/pluginAcceptanceGate.ts` may compose
+  only the app-owned plugin facades needed to drive the audited local package
+  through the real install, runtime, preview, export, and terminal-cleanup
+  paths. `dev/issue77/pluginLifecycleEvidence.ts` may import only the app-owned
+  lifecycle observer and its serializable snapshots; the acceptance gate may
+  import that sibling recorder. Neither module may reconstruct package, trust,
+  runtime, or export policy; import UI, state, engine, pipeline, or worker
+  internals directly; expose controllers or owned resources globally; or enter
+  the ordinary production graph. Only
+  `scripts/issue77/plugin-acceptance-gate.html` may import the acceptance gate.
+  The standalone `scripts/issue77/run-plugin-acceptance.mjs` runner may only
+  serve, launch, and record bounded evidence; it must not import production
+  source, reconstruct policy, or expose private state or owned resources.
+  Production builds must exclude the gate and its complete closure.
+  `dev/issue108/motionAnalysisFoundation.ts` may compose
   only the production `app/` motion-analysis facade, browser-free `domain/`
   cache constants, and the serializable `pipeline/` protocol to run the
   source-bound Issue #108 gate; only `scripts/issue108/foundation-gate.html`
@@ -63,6 +78,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
   development-only query guard. Ordinary production builds remove both
   dynamic imports and their complete closures.
 - Sanctioned exceptions between those three (and nothing more):
+  - `engine/render-bridge.ts` alone may runtime-import
+    `workers/plugin-effect-bridge-protocol.ts`, the pure, versioned exact-key
+    validator and ownership contract for its render-worker RPC; this allowance
+    does not generalize to any other engine-to-worker runtime import,
   - anyone may import `workers/decode-types.ts`,
     `workers/decode-protocol.ts`, `workers/render-legacy-protocol.ts`, and
     `workers/render-protocol.ts` (types only, no runtime),

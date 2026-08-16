@@ -37,6 +37,10 @@ import type {
   LegacyCompositeMessage,
   LegacyConfigureAssetMessage,
 } from './render-legacy-protocol'
+import type {
+  PluginEffectBridgeHostMessage,
+  PluginEffectBridgeWorkerMessage,
+} from './plugin-effect-bridge-protocol'
 
 export type {
   CompositeSourceEntry,
@@ -182,6 +186,8 @@ export interface OpenImageMessage {
  */
 export interface RenderFrameMessage {
   type: 'renderFrame'
+  /** Bridge generation shared by every nested plugin-effect RPC. */
+  generation: number
   requestId: number
   /** Integer document frame selected from the audio clock or scrub state. */
   frame: number
@@ -224,6 +230,7 @@ export type ToRenderWorker =
       assetId: AssetId
     }
   | RenderFrameMessage
+  | PluginEffectBridgeHostMessage
   | LegacyCompositeMessage
   | {
       /** Enable/reset or disable the otherwise-dormant local counters. */
@@ -248,6 +255,7 @@ export type ToRenderWorker =
 
 /** Messages the render worker sends back to the main thread. */
 export type FromRenderWorker =
+  | PluginEffectBridgeWorkerMessage
   | {
       /** Published once the worker has created its real preview compositor. */
       type: 'rendererCapabilities'

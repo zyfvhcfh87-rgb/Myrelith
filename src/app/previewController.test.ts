@@ -8,6 +8,14 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
+import {
+  createVideoCompositionPlanner,
+  type VideoCompositionPlan,
+} from '../domain/videoCompositionPlan'
+import {
+  createPluginVideoEffectContributionSnapshot,
+  type PluginVideoEffectContributionSnapshot,
+} from '../domain/pluginVideoEffectStagePlan'
 import type {
   PresentationProfile,
   PresentationViewport,
@@ -38,6 +46,10 @@ import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useTransportStore } from '../state/transportStore'
 import { useVideoScopesStore } from '../state/videoScopesStore'
 import type {
+  PluginEffectBridgeHandler,
+  PluginEffectBridgeHandlerRequest,
+} from '../workers/plugin-effect-bridge-protocol'
+import type {
   RenderMode,
   RenderWorkerCapabilities,
 } from '../workers/render-protocol'
@@ -47,13 +59,18 @@ import {
   projectIndexedPreviewEffectStatuses,
   refreshAnimatedPreviewEffectStatuses,
 } from './previewEffectStatus'
-import type { BridgeLike, PreviewDeps } from './previewController'
+import type {
+  BridgeLike,
+  PreviewDeps,
+  PreviewPluginBinding,
+} from './previewController'
 import {
   disposePreview,
   documentWithClipVisualPreview,
   documentWithTextOverlayPreview,
   initPreview,
   renderPreviewFrameForDevBenchmark,
+  setPreviewPluginBinding,
   setPreviewViewport,
   setVideoScopesEnabled,
   subscribePreviewRenderCompletions,
@@ -90,6 +107,7 @@ class FakeBridge implements BridgeLike {
   }> = []
   released: string[] = []
   rendered: Array<{ frame: number; mode: RenderMode }> = []
+  renderPlans: VideoCompositionPlan[] = []
   videoScopes: Array<{ enabled: boolean; generation: number }> = []
   disposed = false
   openImpl: (
@@ -105,7 +123,7 @@ class FakeBridge implements BridgeLike {
     runtimeToken: object,
   ) => Promise<void> = async () => {}
   renderImpl: (
-    frame: number,
+    plan: VideoCompositionPlan,
     mode: RenderMode,
   ) => Promise<RenderFrameResult> = async () => ({
     status: 'drawn',
@@ -113,6 +131,7 @@ class FakeBridge implements BridgeLike {
     missingClipIds: [],
     renderMs: 1,
   })
+  disposeImpl: () => void | Promise<void> = () => {}
 
   setDoc(doc: TimelineDoc): void {
     this.docs.push(doc)
@@ -120,10 +139,6 @@ class FakeBridge implements BridgeLike {
 
   setPresentationProfile(profile: PresentationProfile): void {
     this.profiles.push(profile)
-  }
-
-  setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void {
-    this.catalogs.push(new Map(catalog))
   }
 
   async openAsset(
@@ -152,32 +167,82 @@ class FakeBridge implements BridgeLike {
     this.released.push(assetId)
   }
 
-  async renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult> {
-    this.rendered.push({ frame, mode })
-    return this.renderImpl(frame, mode)
+  async renderFrame(plan: VideoCompositionPlan, mode: RenderMode): Promise<RenderFrameResult> {
+    this.rendered.push({ frame: plan.frame, mode })
+    this.renderPlans.push(plan)
+    return this.renderImpl(plan, mode)
   }
 
   setVideoScopesEnabled(enabled: boolean, generation: number): void {
     this.videoScopes.push({ enabled, generation })
   }
 
-  dispose(): void {
+  dispose(): void | Promise<void> {
     this.disposed = true
+    return this.disposeImpl()
   }
 }
 
 function makeDeps() {
   const bridge = new FakeBridge()
   const blob = new Blob(['x'], { type: 'video/mp4' })
+  let pluginEffectHandler: PluginEffectBridgeHandler | null = null
   const deps: PreviewDeps = {
-    createBridge: () => bridge,
+    createBridge: (handler) => {
+      pluginEffectHandler = handler
+      return bridge
+    },
+    createVisualPlanner: (doc, catalog, pluginContributions) => {
+      bridge.catalogs.push(new Map(catalog))
+      return createVideoCompositionPlanner(doc, catalog, pluginContributions)
+    },
     transferCanvas: () => ({}) as OffscreenCanvas,
     init: vi.fn(),
     fetchBlob: vi.fn(async () => blob),
     now: vi.fn(() => performance.now()),
     afterPresentationBoundary: vi.fn(async () => performance.now()),
   }
-  return { deps, bridge, blob }
+  return {
+    deps,
+    bridge,
+    blob,
+    getPluginEffectHandler: () => pluginEffectHandler,
+  }
+}
+
+function pluginSnapshot(catalogGeneration: number): PluginVideoEffectContributionSnapshot {
+  return createPluginVideoEffectContributionSnapshot(catalogGeneration, [])
+}
+
+function makePluginBinding(initial = pluginSnapshot(1)) {
+  let snapshot = initial
+  const listeners = new Set<() => void>()
+  const historicalListeners = new Set<() => void>()
+  const handler: PluginEffectBridgeHandler = Object.freeze({
+    apply: vi.fn(async () => Object.freeze({ status: 'bypassed' as const })),
+  })
+  const binding: PreviewPluginBinding = Object.freeze({
+    getContributionSnapshot: () => snapshot,
+    getEffectBridgeHandler: () => handler,
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      historicalListeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+  })
+  return {
+    binding,
+    handler,
+    publish(next: PluginVideoEffectContributionSnapshot) {
+      snapshot = next
+      for (const listener of listeners) listener()
+    },
+    publishLate(next: PluginVideoEffectContributionSnapshot) {
+      snapshot = next
+      for (const listener of historicalListeners) listener()
+    },
+    listenerCount: () => listeners.size,
+  }
 }
 
 let assetCounter = 0
@@ -396,13 +461,98 @@ beforeEach(() => {
   usePreviewStatusStore.getState().resetPreviewStatus()
   usePreviewQualityStore.setState({ qualityMode: 'auto' })
   useVideoScopesStore.getState().reset()
+  setPreviewPluginBinding(null)
 })
 
-afterEach(() => {
-  disposePreview()
+afterEach(async () => {
+  setPreviewPluginBinding(null)
+  await disposePreview()
 })
 
 describe('previewController', () => {
+  test('routes the stable bridge handler through the current app-owned binding', async () => {
+    const { deps, getPluginEffectHandler } = makeDeps()
+    initPreview(canvasEl(), deps)
+    const bridgeHandler = getPluginEffectHandler()
+    expect(bridgeHandler).not.toBeNull()
+    const request = Object.freeze({}) as PluginEffectBridgeHandlerRequest
+    const signal = new AbortController().signal
+
+    await expect(bridgeHandler!.apply(request, signal)).resolves.toEqual({
+      status: 'bypassed',
+    })
+
+    const plugin = makePluginBinding()
+    setPreviewPluginBinding(plugin.binding)
+    await expect(bridgeHandler!.apply(request, signal)).resolves.toEqual({
+      status: 'bypassed',
+    })
+    expect(plugin.handler.apply).toHaveBeenCalledWith(request, signal)
+  })
+
+  test('rebuilds once for a new plugin catalog generation and unsubscribes on dispose', async () => {
+    const plugin = makePluginBinding(pluginSnapshot(3))
+    setPreviewPluginBinding(plugin.binding)
+    const { deps, getPluginEffectHandler } = makeDeps()
+    const createPlanner = vi.spyOn(deps, 'createVisualPlanner')
+
+    initPreview(canvasEl(), deps)
+    expect(plugin.listenerCount()).toBe(1)
+    expect(createPlanner).toHaveBeenCalledTimes(1)
+    expect(createPlanner.mock.calls[0][2]).toBe(plugin.binding.getContributionSnapshot())
+
+    plugin.publish(pluginSnapshot(3))
+    expect(createPlanner).toHaveBeenCalledTimes(1)
+
+    const replacement = pluginSnapshot(4)
+    plugin.publish(replacement)
+    expect(createPlanner).toHaveBeenCalledTimes(2)
+    expect(createPlanner.mock.calls[1][2]).toBe(replacement)
+
+    await disposePreview()
+    expect(plugin.listenerCount()).toBe(0)
+    plugin.publish(pluginSnapshot(5))
+    expect(createPlanner).toHaveBeenCalledTimes(2)
+
+    const request = Object.freeze({}) as PluginEffectBridgeHandlerRequest
+    await expect(getPluginEffectHandler()!.apply(
+      request,
+      new AbortController().signal,
+    )).resolves.toEqual({ status: 'bypassed' })
+    expect(plugin.handler.apply).not.toHaveBeenCalled()
+  })
+
+  test('replaces and clears a live plugin binding while ignoring stale callbacks', () => {
+    const first = makePluginBinding(pluginSnapshot(1))
+    const replacement = makePluginBinding(pluginSnapshot(2))
+    setPreviewPluginBinding(first.binding)
+    const { deps } = makeDeps()
+    const createPlanner = vi.spyOn(deps, 'createVisualPlanner')
+
+    initPreview(canvasEl(), deps)
+    expect(first.listenerCount()).toBe(1)
+    expect(createPlanner).toHaveBeenCalledTimes(1)
+
+    setPreviewPluginBinding(replacement.binding)
+    expect(first.listenerCount()).toBe(0)
+    expect(replacement.listenerCount()).toBe(1)
+    expect(createPlanner).toHaveBeenCalledTimes(2)
+    expect(createPlanner.mock.calls[1][2]).toBe(
+      replacement.binding.getContributionSnapshot(),
+    )
+
+    first.publishLate(pluginSnapshot(9))
+    expect(createPlanner).toHaveBeenCalledTimes(2)
+
+    setPreviewPluginBinding(null)
+    expect(replacement.listenerCount()).toBe(0)
+    expect(createPlanner).toHaveBeenCalledTimes(3)
+    expect(createPlanner.mock.calls[2][2]).toBeUndefined()
+
+    replacement.publishLate(pluginSnapshot(10))
+    expect(createPlanner).toHaveBeenCalledTimes(3)
+  })
+
   test('projects an ephemeral text geometry draft without mutating the document', () => {
     const doc = makeImageBackedTextDoc('legacy-image')
     const original = doc.tracks[0].clips[0]
@@ -831,6 +981,25 @@ describe('previewController', () => {
     useTransportStore.getState().setPlayheadFrame(30)
     await nextFrame()
     expect(usePreviewStatusStore.getState().offlineVisualAssetIds).toEqual([])
+  })
+
+  test('plans each displayed frame once and forwards that exact plan to the bridge', async () => {
+    const { deps, bridge } = makeDeps()
+    const sentinelPlan: VideoCompositionPlan = Object.freeze({
+      frame: 0,
+      items: [],
+    })
+    const planFrame = vi.fn(() => sentinelPlan)
+    deps.createVisualPlanner = vi.fn(() => ({ planFrame }))
+
+    initPreview(canvasEl(), deps)
+    await nextFrame()
+    await flush()
+
+    expect(planFrame).toHaveBeenCalledTimes(1)
+    expect(planFrame).toHaveBeenCalledWith(0)
+    expect(bridge.renderPlans).toHaveLength(1)
+    expect(bridge.renderPlans[0]).toBe(sentinelPlan)
   })
 
   test('reconnecting the current source clears offline status and repaints', async () => {
@@ -1615,11 +1784,28 @@ describe('previewController', () => {
   test('dispose unsubscribes and disposes the bridge', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)
-    disposePreview()
+    await disposePreview()
     expect(bridge.disposed).toBe(true)
 
     seedAsset({ id: 'after-dispose' })
     await flush()
     expect(bridge.opened).toHaveLength(0)
+  })
+
+  test('a rejecting async bridge close still leaves preview safe to reinitialize', async () => {
+    const first = makeDeps()
+    first.bridge.disposeImpl = async () => {
+      throw new Error('worker close failed')
+    }
+    initPreview(canvasEl(), first.deps)
+
+    await expect(disposePreview()).rejects.toThrow('worker close failed')
+    expect(first.bridge.disposed).toBe(true)
+
+    const second = makeDeps()
+    expect(() => initPreview(canvasEl(), second.deps)).not.toThrow()
+    expect(vi.mocked(second.deps.init)).toHaveBeenCalledOnce()
+    await disposePreview()
+    expect(second.bridge.disposed).toBe(true)
   })
 })

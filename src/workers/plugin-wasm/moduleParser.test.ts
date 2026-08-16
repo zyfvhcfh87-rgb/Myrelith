@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import { PLUGIN_WASM_BINARY_POLICY_VERSION } from '../../domain/pluginWasmPolicy'
-import { parsePluginWasmModule } from './moduleParser'
+import {
+  parsePluginWasmModule,
+  type PluginWasmModuleExpectations,
+} from './moduleParser'
+import { PLUGIN_WASM_OPCODE_TABLE_DIGESTS } from './policyTables'
 
 const MINIMAL_RENDER_MODULE_HEX = '0061736d01000000010f01600a7f7f7f7f7f7f7f7f7f7f017f021701086d7972656c697468066d656d6f727902018202820203020100071b01176d7972656c6974685f6566666563745f6669787475726500000a0601040041000b'
 
@@ -25,6 +29,85 @@ function u32(value: number): number[] {
     bytes.push(value === 0 ? payload : payload | 0x80)
   } while (value !== 0)
   return bytes
+}
+
+function nameBytes(value: string): number[] {
+  const bytes = [...new TextEncoder().encode(value)]
+  return [...u32(bytes.length), ...bytes]
+}
+
+function section(id: number, payload: readonly number[]): number[] {
+  return [id, ...u32(payload.length), ...payload]
+}
+
+function pluginModule(options: {
+  readonly parameterCount?: number
+  readonly entrypoint?: string
+  readonly instructions?: readonly number[]
+  readonly memoryPages?: number
+  readonly extraSectionsBeforeCode?: readonly number[]
+  readonly extraSectionsAfterCode?: readonly number[]
+} = {}): Uint8Array {
+  const parameterCount = options.parameterCount ?? 10
+  const entrypoint = options.entrypoint ?? 'myrelith_effect_fixture'
+  const instructions = options.instructions ?? [0x41, 0x00]
+  const memoryPages = options.memoryPages ?? 258
+  const typePayload = [
+    1,
+    0x60,
+    ...u32(parameterCount),
+    ...Array<number>(parameterCount).fill(0x7f),
+    1,
+    0x7f,
+  ]
+  const importPayload = [
+    1,
+    ...nameBytes('myrelith'),
+    ...nameBytes('memory'),
+    0x02,
+    0x01,
+    ...u32(memoryPages),
+    ...u32(memoryPages),
+  ]
+  const exportPayload = [1, ...nameBytes(entrypoint), 0x00, 0x00]
+  const body = [0x00, ...instructions, 0x0b]
+  const codePayload = [1, ...u32(body.length), ...body]
+  return Uint8Array.from([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    ...section(1, typePayload),
+    ...section(2, importPayload),
+    ...section(3, [1, 0]),
+    ...section(7, exportPayload),
+    ...(options.extraSectionsBeforeCode ?? []),
+    ...section(10, codePayload),
+    ...(options.extraSectionsAfterCode ?? []),
+  ])
+}
+
+function renderExpectations(memoryMaximumPages = 258): PluginWasmModuleExpectations {
+  return {
+    policy: {
+      binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
+      profileId: 'myrelith-wasm-render-general-v1' as const,
+    },
+    opcodeTableDigest: PLUGIN_WASM_OPCODE_TABLE_DIGESTS['myrelith-wasm-render-general-v1'],
+    memoryMaximumPages,
+    renderEntrypoints: ['myrelith_effect_fixture'],
+    migrationEntrypoints: [],
+  }
+}
+
+function migrationExpectations(): PluginWasmModuleExpectations {
+  return {
+    policy: {
+      binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
+      profileId: 'myrelith-wasm-migration-integer-v1' as const,
+    },
+    opcodeTableDigest: PLUGIN_WASM_OPCODE_TABLE_DIGESTS['myrelith-wasm-migration-integer-v1'],
+    memoryMaximumPages: 258,
+    renderEntrypoints: [],
+    migrationEntrypoints: ['migrate_v1_v2'],
+  }
 }
 
 function moduleWithDefinedFunctions(count: number): Uint8Array {
@@ -269,7 +352,7 @@ describe('plugin WebAssembly module policy', () => {
       memoryMaximumPages: 258,
       renderEntrypoints: ['myrelith_effect_fixture'],
       migrationEntrypoints: [],
-    })).toEqual({
+    })).toMatchObject({
       policy: {
         binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
         profileId: 'myrelith-wasm-render-general-v1',
@@ -402,6 +485,88 @@ describe('plugin WebAssembly module policy', () => {
       renderEntrypoints: ['myrelith_effect_fixture'],
       migrationEntrypoints: [],
     })).toThrow('WebAssembly combined declaration charge exceeds 32768.')
+  })
+
+  test('binds the selected profile to its exact opcode-table digest', () => {
+    expect(() => parsePluginWasmModule(pluginModule(), {
+      ...renderExpectations(),
+      opcodeTableDigest: `sha256:${'0'.repeat(64)}`,
+    })).toThrow('WebAssembly opcode-table digest does not match the selected profile.')
+  })
+
+  test('accepts fixed SIMD in render-general and rejects a reserved SIMD hole', () => {
+    const fixedSimd = pluginModule({
+      instructions: [0xfd, 0x0c, ...Array<number>(16).fill(0), 0x1a, 0x41, 0x00],
+    })
+    expect(parsePluginWasmModule(fixedSimd, renderExpectations())).toMatchObject({
+      definedFunctionCount: 1,
+    })
+
+    const reservedSimd = pluginModule({
+      instructions: [0xfd, ...u32(0x9a), 0x41, 0x00],
+    })
+    expect(() => parsePluginWasmModule(reservedSimd, renderExpectations()))
+      .toThrow('WebAssembly SIMD subopcode 154 is outside the selected profile.')
+  })
+
+  test('accepts integer migration code and rejects float or SIMD anywhere in that module', () => {
+    const integerModule = pluginModule({ parameterCount: 6, entrypoint: 'migrate_v1_v2' })
+    expect(parsePluginWasmModule(integerModule, migrationExpectations())).toMatchObject({
+      exportedFunctions: ['migrate_v1_v2'],
+    })
+
+    const floatModule = pluginModule({
+      parameterCount: 6,
+      entrypoint: 'migrate_v1_v2',
+      instructions: [0x43, 0, 0, 0, 0, 0x1a, 0x41, 0x00],
+    })
+    expect(() => parsePluginWasmModule(floatModule, migrationExpectations()))
+      .toThrow('WebAssembly opcode 0x43 is outside the selected profile.')
+
+    const simdModule = pluginModule({
+      parameterCount: 6,
+      entrypoint: 'migrate_v1_v2',
+      instructions: [0xfd, 0x0c, ...Array<number>(16).fill(0), 0x1a, 0x41, 0x00],
+    })
+    expect(() => parsePluginWasmModule(simdModule, migrationExpectations()))
+      .toThrow('WebAssembly SIMD subopcode 12 is outside the selected profile.')
+  })
+
+  test('accepts exactly 65,536 decoded body instructions and rejects plus one', () => {
+    const exact = pluginModule({
+      instructions: [...Array<number>(65_534).fill(0x01), 0x41, 0x00],
+    })
+    expect(parsePluginWasmModule(exact, renderExpectations())).toMatchObject({
+      definedFunctionCount: 1,
+    })
+
+    const plusOne = pluginModule({
+      instructions: [...Array<number>(65_535).fill(0x01), 0x41, 0x00],
+    })
+    expect(() => parsePluginWasmModule(plusOne, renderExpectations()))
+      .toThrow('WebAssembly function instruction count exceeds 65536.')
+  })
+
+  test('rejects noncanonical signed immediates, active data, and a start section', () => {
+    expect(() => parsePluginWasmModule(pluginModule({
+      instructions: [0x41, 0x80, 0x00],
+    }), renderExpectations())).toThrow('Signed LEB128 is not canonical.')
+
+    const activeDataPayload = [1, 0, 0x41, 0, 0x0b, 0]
+    expect(() => parsePluginWasmModule(pluginModule({
+      extraSectionsAfterCode: section(11, activeDataPayload),
+    }), renderExpectations())).toThrow('Only passive WebAssembly data segments are accepted.')
+
+    expect(() => parsePluginWasmModule(pluginModule({
+      extraSectionsBeforeCode: section(8, [0]),
+    }), renderExpectations())).toThrow('WebAssembly start functions are forbidden.')
+  })
+
+  test('rejects the memory-page ceiling plus one before section traversal', () => {
+    expect(() => parsePluginWasmModule(
+      pluginModule({ memoryPages: 1_026 }),
+      renderExpectations(1_026),
+    )).toThrow('WebAssembly memory pages must be between 258 and 1025.')
   })
 
   test('rejects more than 8,192 exports before allocating the export vector', () => {

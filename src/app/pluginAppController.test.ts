@@ -1,0 +1,1142 @@
+import { describe, expect, test, vi } from 'vitest'
+import type { PluginEffectBridgeHandlerRequest } from '../workers/plugin-effect-bridge-protocol'
+import {
+  createPluginAppAcceptanceSession,
+  createPluginAppControllerOwner,
+  disposePluginAppController,
+  getPluginAppController,
+  getPluginAppControllerOwner,
+  PluginAppControllerError,
+  type PluginAppAcceptanceSession,
+  type PluginAppController,
+  type PluginAppControllerDependencies,
+  type PluginAppFile,
+} from './pluginAppController'
+import type {
+  PluginAppEditorSnapshot,
+  PluginEditorController,
+  PluginEditorControllerFactory,
+} from './pluginEditorController'
+import type {
+  PluginDeclarationCatalogEntry,
+  PluginInstallController,
+  PluginInstalledPackageProjection,
+  PluginPackageInspection,
+} from './pluginInstallController'
+import {
+  captureLoadedPluginLifecycleToken,
+  registerLoadedPluginDisposer,
+  resetLoadedPluginDisposer,
+  type LoadedPluginDisposer,
+  type LoadedPluginLifecycleToken,
+} from './pluginLifecycle'
+import {
+  localPluginStorage,
+  localPluginTrustPolicyStore,
+} from './localPluginStorage'
+import { PLUGIN_PACKAGE_LIMITS } from './pluginPackage'
+import type {
+  PluginEditorSession,
+  PluginRuntimeController,
+} from './pluginRuntimeController'
+import type {
+  PluginRuntimeLifecycleObserver,
+  PluginRuntimeLifecycleSnapshot,
+  PluginSandboxLifecycleSnapshot,
+} from './pluginRuntimeLifecycleObserver'
+
+const PLUGIN_ID = 'example.soft-sparkle'
+const PACKAGE_DIGEST = `sha256:${'1'.repeat(64)}` as PluginDeclarationCatalogEntry['packageDigest']
+const SIGNER_FINGERPRINT = `sha256:${'2'.repeat(64)}` as PluginDeclarationCatalogEntry['signerFingerprint']
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+function safetyStorage(value: string | null = null) {
+  return {
+    getItem: vi.fn(() => value),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  }
+}
+
+function declaration(
+  availability: PluginDeclarationCatalogEntry['availability'] = 'ready',
+): PluginDeclarationCatalogEntry {
+  return Object.freeze({
+    pluginId: PLUGIN_ID,
+    pluginVersion: '1.2.3',
+    packageDigest: PACKAGE_DIGEST,
+    signerFingerprint: SIGNER_FINGERPRINT,
+    kind: 'video-effect',
+    contributionId: 'sparkle',
+    contributionName: 'Soft Sparkle',
+    contributionVersion: 1,
+    descriptorVersion: 1,
+    entrypoint: 'render_sparkle',
+    parameters: Object.freeze([Object.freeze({
+      key: 'enabled',
+      name: 'Enabled',
+      kind: 'boolean' as const,
+      default: true,
+    })]),
+    availability,
+    detail: availability === 'ready' ? 'Ready to render.' : 'Unavailable locally.',
+  })
+}
+
+function installedPackage(
+  status: PluginInstalledPackageProjection['status'] = 'ready',
+  diagnostics: PluginInstalledPackageProjection['diagnostics'] = Object.freeze([
+    Object.freeze({ code: 'timeout' as const, occurredAt: 1_700_000_000_000 }),
+  ]),
+): PluginInstalledPackageProjection {
+  return Object.freeze({
+    pluginId: PLUGIN_ID,
+    name: 'Soft Sparkle',
+    installedVersion: '1.2.3',
+    packageDigest: PACKAGE_DIGEST,
+    signerFingerprint: SIGNER_FINGERPRINT,
+    contributionNames: Object.freeze(['Soft Sparkle']),
+    selectedCapabilities: Object.freeze([Object.freeze({
+      id: 'myrelith.effect.video-frame.rgba8',
+      version: 1,
+      required: true,
+    })]),
+    status,
+    detail: status === 'ready' ? 'Ready to render.' : 'Unavailable locally.',
+    diagnostics,
+  })
+}
+
+function inspection(id = 'inspection-1'): PluginPackageInspection {
+  return Object.freeze({
+    inspectionId: id,
+    pluginId: PLUGIN_ID,
+    name: 'Soft Sparkle',
+    version: '1.2.3',
+    packageDigest: PACKAGE_DIGEST,
+    signerFingerprint: SIGNER_FINGERPRINT,
+    installedVersion: '1.2.2',
+    versionChanged: true,
+    sameVersionReplacement: false,
+    samePackage: false,
+    moduleSha256: PACKAGE_DIGEST,
+    memoryMaximumPages: 258,
+    change: 'upgrade',
+    contributionNames: Object.freeze(['Soft Sparkle']),
+    selectedCapabilities: Object.freeze([Object.freeze({
+      id: 'myrelith.effect.video-frame.rgba8',
+      version: 1,
+      required: true,
+    })]),
+    signerContinuity: true,
+    trustState: 'user-trusted',
+    trustDecisionRequired: false,
+    compatibility: Object.freeze({
+      status: 'compatible',
+      apiVersion: 1,
+      permissions: Object.freeze([Object.freeze({
+        id: 'myrelith.effect.video-frame.rgba8',
+        required: true,
+        version: 1,
+        status: 'available' as const,
+      })]),
+      contributions: Object.freeze([Object.freeze({
+        id: 'sparkle',
+        kind: 'video-effect' as const,
+        version: 1,
+        status: 'available' as const,
+      })]),
+      reasons: Object.freeze([]),
+    }),
+    permissions: Object.freeze([Object.freeze({
+      id: 'myrelith.effect.video-frame.rgba8',
+      minVersion: 1,
+      maxVersion: 1,
+      required: true,
+      negotiatedVersion: 1,
+      selectedVersion: 1,
+      status: 'available' as const,
+      decisionRequired: true,
+      priorGrant: null,
+      grantChange: 'new' as const,
+    })]),
+    diagnostics: Object.freeze([]),
+  })
+}
+
+function managementHarness() {
+  let generation = 9
+  let inspectionSequence = 0
+  let installed = installedPackage()
+  let declarations: readonly PluginDeclarationCatalogEntry[] = Object.freeze([declaration()])
+  let capturedInspectionBytes: Uint8Array | null = null
+  const activationBundles = Object.freeze({
+    resolve: vi.fn(async () => { throw new Error('not used') }),
+  })
+  const inspectPackage = vi.fn(async (bytes: Uint8Array) => {
+    capturedInspectionBytes = bytes
+    return inspection(`inspection-${++inspectionSequence}`)
+  })
+  const commitInstallation = vi.fn(async () => ({ pluginId: PLUGIN_ID }))
+  const cancelInspection = vi.fn(() => true)
+  const installedPackages = vi.fn(async () => Object.freeze({
+    generation,
+    packages: Object.freeze([installed]),
+  }))
+  const declarationCatalog = vi.fn(async () => Object.freeze({
+    generation,
+    declarations,
+  }))
+  const controller = {
+    activationBundles,
+    inspectPackage,
+    commitInstallation,
+    cancelInspection,
+    disable: vi.fn(async () => ({ pluginId: PLUGIN_ID })),
+    enable: vi.fn(async () => ({ pluginId: PLUGIN_ID })),
+    setPermissionGrant: vi.fn(async () => ({ pluginId: PLUGIN_ID })),
+    quarantine: vi.fn(async () => ({ pluginId: PLUGIN_ID })),
+    revoke: vi.fn(async () => ({ pluginId: PLUGIN_ID })),
+    uninstall: vi.fn(async () => true),
+    recordDiagnostic: vi.fn(async () => {}),
+    clearDiagnostics: vi.fn(async () => true),
+    installedPackages,
+    declarationCatalog,
+  } as unknown as PluginInstallController
+  return {
+    controller,
+    activationBundles,
+    inspectPackage,
+    commitInstallation,
+    cancelInspection,
+    installedPackages,
+    declarationCatalog,
+    getCapturedInspectionBytes: () => capturedInspectionBytes,
+    setInstalled: (value: PluginInstalledPackageProjection) => { installed = value },
+    setDeclarations: (value: readonly PluginDeclarationCatalogEntry[]) => { declarations = value },
+    setGeneration: (value: number) => { generation = value },
+  }
+}
+
+function runtimeHarness() {
+  const editor: PluginEditorSession = {
+    apply: vi.fn(async (request) => Object.freeze({
+      status: 'applied' as const,
+      effectResult: 'mutated' as const,
+      rgbaBytes: request.rgbaBytes,
+    })),
+    close: vi.fn(async () => {}),
+  }
+  const exportSession = Object.freeze({
+    apply: vi.fn(),
+    close: vi.fn(async () => {}),
+  })
+  const migrationSession = Object.freeze({
+    applyTarget: vi.fn(),
+    close: vi.fn(async () => {}),
+  })
+  const controller = {
+    openEditorSession: vi.fn(() => editor),
+    preflightExport: vi.fn(async () => exportSession),
+    openDescriptorMigrationChain: vi.fn(),
+    preflightDescriptorMigrationAction: vi.fn(async () => migrationSession),
+    getSnapshot: vi.fn(),
+    clearDiagnostics: vi.fn(),
+    invalidate: vi.fn(async () => {}),
+    teardown: vi.fn(async () => {}),
+  } as unknown as PluginRuntimeController
+  return { controller, editor, exportSession, migrationSession }
+}
+
+function lifecycleHarness() {
+  let generation = 0
+  let disposer: LoadedPluginDisposer | null = null
+  const tokenGenerations = new WeakMap<object, number>()
+  const captureToken = vi.fn(() => {
+    const token = Object.freeze({}) as LoadedPluginLifecycleToken
+    tokenGenerations.set(token, generation)
+    return token
+  })
+  const registerDisposer = vi.fn(async (
+    token: LoadedPluginLifecycleToken,
+    candidate: LoadedPluginDisposer,
+  ) => {
+    if (tokenGenerations.get(token) !== generation) {
+      await candidate()
+      return false
+    }
+    disposer = candidate
+    return true
+  })
+  const dispose = vi.fn(async () => {
+    generation++
+    const owned = disposer
+    disposer = null
+    await owned?.()
+  })
+  return { captureToken, registerDisposer, dispose }
+}
+
+function observerHarness() {
+  const sandboxSnapshots: PluginSandboxLifecycleSnapshot[] = []
+  const runtimeSnapshots: PluginRuntimeLifecycleSnapshot[] = []
+  const observer: PluginRuntimeLifecycleObserver = Object.freeze({
+    onSandboxSnapshot(snapshot: PluginSandboxLifecycleSnapshot) { sandboxSnapshots.push(snapshot) },
+    onRuntimeSnapshot(snapshot: PluginRuntimeLifecycleSnapshot) { runtimeSnapshots.push(snapshot) },
+  })
+  return { observer, sandboxSnapshots, runtimeSnapshots }
+}
+
+function setup(options?: {
+  readonly sentinel?: string | null
+  readonly management?: ReturnType<typeof managementHarness>
+  readonly runtime?: ReturnType<typeof runtimeHarness>
+  readonly lifecycle?: ReturnType<typeof lifecycleHarness>
+  readonly observer?: PluginRuntimeLifecycleObserver
+  readonly createReviewToken?: () => string
+  readonly createEditorController?: PluginEditorControllerFactory
+}) {
+  const storage = safetyStorage(options?.sentinel)
+  const management = options?.management ?? managementHarness()
+  const runtime = options?.runtime ?? runtimeHarness()
+  const lifecycle = options?.lifecycle ?? lifecycleHarness()
+  const createManagementController = vi.fn(async () => management.controller)
+  const createRuntimeController = vi.fn(async () => runtime.controller)
+  const dependencies: PluginAppControllerDependencies = {
+    safetyStorage: storage,
+    createManagementController,
+    createRuntimeController,
+    lifecycle,
+    lifecycleObserver: options?.observer,
+    createReviewToken: options?.createReviewToken,
+    createEditorController: options?.createEditorController,
+  }
+  const owner = createPluginAppControllerOwner(dependencies)
+  const controller = owner.controller
+  return {
+    owner,
+    controller,
+    storage,
+    management,
+    runtime,
+    lifecycle,
+    createManagementController,
+    createRuntimeController,
+  }
+}
+
+function editorHarness() {
+  const snapshot: PluginAppEditorSnapshot = Object.freeze({
+    coherent: true,
+    detail: 'Plugin effects are ready.',
+    documentGeneration: 3,
+    catalogGeneration: 9,
+    effects: Object.freeze([]),
+    previewIssues: Object.freeze([]),
+    manageAction: Object.freeze({
+      available: true,
+      disabledReason: null,
+      pending: false,
+      error: null,
+    }),
+  })
+  const applied = Object.freeze({
+    status: 'applied' as const,
+    code: 'applied' as const,
+    detail: 'Plugin effect updated.',
+    documentGeneration: 4,
+  })
+  const dispose = vi.fn()
+  const controller: PluginEditorController = Object.freeze({
+    getSnapshot: vi.fn(() => snapshot),
+    subscribe: vi.fn(() => vi.fn()),
+    addPluginEffect: vi.fn(() => applied),
+    setPluginEffectParameter: vi.fn(() => applied),
+    refresh: vi.fn(),
+    dispose,
+  })
+  return { controller, snapshot, dispose }
+}
+
+function fileFromBuffer(buffer: ArrayBuffer, declaredSize = buffer.byteLength): PluginAppFile & {
+  readonly arrayBuffer: ReturnType<typeof vi.fn>
+} {
+  return {
+    size: declaredSize,
+    arrayBuffer: vi.fn(async () => buffer),
+  }
+}
+
+function executionRequest(bytes = new Uint8Array([1, 2, 3, 4])): PluginEffectBridgeHandlerRequest {
+  return Object.freeze({
+    requestId: 1,
+    execution: Object.freeze({
+      catalogGeneration: 9,
+      signerFingerprint: SIGNER_FINGERPRINT,
+      packageDigest: PACKAGE_DIGEST,
+      pluginId: PLUGIN_ID,
+      pluginVersion: '1.2.3',
+      kind: 'video-effect',
+      contributionVersion: 1,
+      contributionId: 'sparkle',
+      descriptorVersion: 1,
+      entrypoint: 'render_sparkle',
+      parameterRecord: Object.freeze({ enabled: true }),
+      canonicalParameterJson: '{"enabled":true}',
+    }),
+    descriptorId: 'effect-1',
+    timelineFrame: 0,
+    frameRateNumerator: 30,
+    frameRateDenominator: 1,
+    width: 1,
+    height: 1,
+    stride: 4,
+    rgbaBytes: bytes,
+  })
+}
+
+function expectDeepFrozenData(value: unknown, seen = new Set<object>()): void {
+  expect(typeof value).not.toBe('function')
+  if (typeof value !== 'object' || value === null || seen.has(value)) return
+  seen.add(value)
+  expect(value).not.toBeInstanceOf(Uint8Array)
+  expect(value).not.toBeInstanceOf(Map)
+  expect(value).not.toBeInstanceOf(Set)
+  expect(Object.isFrozen(value)).toBe(true)
+  for (const nested of Object.values(value)) expectDeepFrozenData(nested, seen)
+}
+
+describe('plugin app controller', () => {
+  test('eager construction reads only the sentinel and keeps management and runtime lazy', () => {
+    const observer: PluginRuntimeLifecycleObserver = Object.freeze({
+      onSandboxSnapshot: vi.fn(),
+      onRuntimeSnapshot: vi.fn(),
+    })
+    const harness = setup({ observer })
+
+    expect(harness.storage.getItem).toHaveBeenCalledOnce()
+    expect(harness.createManagementController).not.toHaveBeenCalled()
+    expect(harness.createRuntimeController).not.toHaveBeenCalled()
+    expect(harness.controller.getContributionSnapshot()).toBeUndefined()
+    expect(harness.controller.getEffectBridgeHandler()).toBe(
+      harness.controller.getEffectBridgeHandler(),
+    )
+    expectDeepFrozenData(harness.controller.getSnapshot())
+  })
+
+  test('creates one lazy editor owner behind the stable public facade and disposes it terminally', async () => {
+    const editor = editorHarness()
+    const createEditorController = vi.fn(() => editor.controller)
+    const harness = setup({ createEditorController })
+    const listener = vi.fn()
+
+    expect(createEditorController).not.toHaveBeenCalled()
+    expect(harness.controller.getEditorSnapshot()).toBe(editor.snapshot)
+    expect(harness.controller.getEditorSnapshot()).toBe(editor.snapshot)
+    expect(createEditorController).toHaveBeenCalledOnce()
+    expect(harness.controller.subscribeEditor(listener)).toEqual(expect.any(Function))
+    expect(harness.controller.addPluginEffect({
+      documentGeneration: 3,
+      catalogGeneration: 9,
+      clipId: 'clip-1',
+      effectType: `plugin:${PLUGIN_ID}/sparkle`,
+    })).toMatchObject({ status: 'applied', code: 'applied' })
+    expect(harness.controller.setPluginEffectParameter({
+      documentGeneration: 3,
+      catalogGeneration: 9,
+      clipId: 'clip-1',
+      effectInstanceId: 'effect-1',
+      key: 'enabled',
+      value: false,
+    })).toMatchObject({ status: 'applied', code: 'applied' })
+    expect(harness.createManagementController).not.toHaveBeenCalled()
+    expect(harness.createRuntimeController).not.toHaveBeenCalled()
+
+    await harness.controller.refreshManagement()
+    expect(editor.controller.refresh).toHaveBeenCalled()
+    await harness.owner.close('terminal-close')
+    expect(editor.dispose).toHaveBeenCalledOnce()
+    expect(() => harness.controller.getEditorSnapshot()).toThrow(PluginAppControllerError)
+  })
+
+  test('exposes descriptor migration as a real app-owned recovery action', async () => {
+    const harness = setup()
+    await harness.controller.refreshManagement()
+
+    await expect(harness.controller.migratePluginEffects([])).rejects.toMatchObject({
+      code: 'invalid-target',
+    })
+    expect(Object.keys(harness.controller)).toContain('migratePluginEffects')
+    await harness.owner.close('migration-caller-test')
+  })
+
+  test('shares a rejecting terminal boundary while editor unsubscribe fails and composition still closes', async () => {
+    const editor = editorHarness()
+    editor.dispose.mockImplementation(() => { throw new Error('document unsubscribe failed') })
+    const harness = setup({ createEditorController: () => editor.controller })
+    harness.controller.getEditorSnapshot()
+
+    const first = harness.owner.close('editor-dispose-failure')
+    const concurrent = harness.owner.close('ignored-concurrent-reason')
+    expect(concurrent).toBe(first)
+    await expect(first).rejects.toThrow('document unsubscribe failed')
+
+    const repeated = harness.owner.close('ignored-repeat-reason')
+    expect(repeated).toBe(first)
+    await expect(repeated).rejects.toThrow('document unsubscribe failed')
+    expect(editor.dispose).toHaveBeenCalledOnce()
+    expect(harness.lifecycle.dispose).toHaveBeenCalledOnce()
+  })
+
+  test('publishes coherent host-authored views without private catalog or controller facts', async () => {
+    const harness = setup()
+
+    await harness.controller.refreshManagement()
+    const snapshot = harness.controller.getSnapshot()
+
+    expect(snapshot).toMatchObject({
+      catalogGeneration: 9,
+      installedPackages: [{
+        id: PLUGIN_ID,
+        status: 'ready',
+        permissionNames: ['Video frame pixels v1'],
+        diagnostics: [{
+          code: 'timeout',
+          message: 'Plugin work exceeded its host deadline.',
+          occurredAtLabel: '2023-11-14T22:13:20.000Z',
+        }],
+      }],
+      contributions: [{
+        effectType: `plugin:${PLUGIN_ID}/sparkle`,
+        status: 'ready',
+        parameters: [{ kind: 'boolean', default: true }],
+      }],
+    })
+    expectDeepFrozenData(snapshot)
+    const serialized = JSON.stringify(snapshot)
+    expect(serialized).not.toContain('declarationCatalog')
+    expect(serialized).not.toContain('inspectionId')
+    expect(serialized).not.toContain('archiveBytes')
+    expect(serialized).not.toContain('activationBundles')
+    expect(serialized).not.toContain('storage')
+    expect(serialized).not.toContain('runtimeController')
+  })
+
+  test('accepts the exact archive bound, zeroes owned bytes, and rejects cap plus one before reading', async () => {
+    const harness = setup({ createReviewToken: () => 'review-exact' })
+    const exactBuffer = new ArrayBuffer(PLUGIN_PACKAGE_LIMITS.maxArchiveBytes)
+    new Uint8Array(exactBuffer).fill(7)
+    const exactFile = fileFromBuffer(exactBuffer)
+
+    const review = await harness.controller.inspectFile(exactFile)
+
+    expect(review).toMatchObject({
+      reviewToken: 'plugin-review-1-review-exact',
+      signatureState: 'valid',
+      trustState: 'user-trusted',
+      versionChange: 'update',
+      memoryLimitMiB: 16.125,
+      permissions: [{
+        name: 'Video frame pixels',
+        grantState: 'new',
+        selectedVersion: '1',
+      }],
+    })
+    expect(exactFile.arrayBuffer).toHaveBeenCalledOnce()
+    expect(harness.management.getCapturedInspectionBytes()).not.toBeNull()
+    expect(harness.management.getCapturedInspectionBytes()?.every((value) => value === 0)).toBe(true)
+    expect(JSON.stringify(harness.controller.getSnapshot())).not.toContain('inspection-1')
+
+    const oversized = fileFromBuffer(new ArrayBuffer(0), PLUGIN_PACKAGE_LIMITS.maxArchiveBytes + 1)
+    await expect(harness.controller.inspectFile(oversized)).rejects.toMatchObject({
+      code: 'file-too-large',
+    })
+    expect(oversized.arrayBuffer).not.toHaveBeenCalled()
+  })
+
+  test('keeps one-use tokens unique with repeated entropy and consumes invalid decisions', async () => {
+    const management = managementHarness()
+    const commitGate = deferred<{ pluginId: string }>()
+    management.commitInstallation.mockImplementation(async () => commitGate.promise)
+    const harness = setup({
+      management,
+      createReviewToken: () => 'constant-entropy',
+    })
+    const first = await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+    const second = await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+
+    expect(first.reviewToken).toBe('plugin-review-1-constant-entropy')
+    expect(second.reviewToken).toBe('plugin-review-2-constant-entropy')
+    expect(management.cancelInspection).toHaveBeenCalledWith('inspection-1')
+    await expect(harness.controller.installPlugin({
+      reviewToken: first.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: [],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })).rejects.toMatchObject({ code: 'review-expired' })
+    await expect(harness.controller.installPlugin({
+      reviewToken: second.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: [
+        'myrelith.effect.video-frame.rgba8',
+        'myrelith.effect.video-frame.rgba8',
+      ],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })).rejects.toMatchObject({ code: 'review-invalid' })
+
+    await expect(harness.controller.installPlugin({
+      reviewToken: second.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: [],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })).rejects.toMatchObject({ code: 'review-expired' })
+    const third = await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+    await expect(harness.controller.installPlugin({
+      reviewToken: third.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: ['example.unsupported.capability'],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })).rejects.toMatchObject({ code: 'review-invalid' })
+
+    const fourth = await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+    const installing = harness.controller.installPlugin({
+      reviewToken: fourth.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: ['myrelith.effect.video-frame.rgba8'],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      review: null,
+      inspectionPhase: 'installing',
+    })
+    await expect(harness.controller.installPlugin({
+      reviewToken: fourth.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: [],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })).rejects.toMatchObject({ code: 'review-expired' })
+    commitGate.resolve({ pluginId: PLUGIN_ID })
+    await installing
+
+    expect(management.commitInstallation).toHaveBeenCalledWith(
+      'inspection-4',
+      expect.objectContaining({
+        permissionDecisions: [{
+          id: 'myrelith.effect.video-frame.rgba8',
+          granted: true,
+        }],
+      }),
+    )
+  })
+
+  test('rejects preserved permissions because only current decision ids are accepted', async () => {
+    const management = managementHarness()
+    const base = inspection('inspection-preserved')
+    const preserved = Object.freeze({
+      ...base,
+      permissions: Object.freeze([
+        ...base.permissions,
+        Object.freeze({
+          ...base.permissions[0],
+          id: 'example.preserved.capability',
+          decisionRequired: false,
+          priorGrant: Object.freeze({
+            minVersion: 1,
+            maxVersion: 1,
+            required: false,
+            selectedVersion: 1,
+          }),
+          grantChange: 'preserved' as const,
+        }),
+      ]),
+    })
+    management.inspectPackage.mockResolvedValue(preserved)
+    const harness = setup({ management, createReviewToken: () => 'preserved' })
+    const review = await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+    expect(review.permissions.find((permission) => permission.id === 'example.preserved.capability'))
+      .toMatchObject({ available: true, grantable: false, grantState: 'preserved' })
+
+    await expect(harness.controller.installPlugin({
+      reviewToken: review.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: ['example.preserved.capability'],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })).rejects.toMatchObject({ code: 'review-invalid' })
+
+    expect(management.commitInstallation).not.toHaveBeenCalled()
+    expect(management.cancelInspection).toHaveBeenCalledWith('inspection-preserved')
+    expect(harness.controller.getSnapshot().review).toBeNull()
+  })
+
+  test('constant entropy cannot reuse a token across different package inspections', async () => {
+    const management = managementHarness()
+    let call = 0
+    management.inspectPackage.mockImplementation(async () => {
+      call++
+      if (call === 1) return inspection('inspection-same')
+      return Object.freeze({
+        ...inspection('inspection-different'),
+        pluginId: 'example.different-plugin',
+        name: 'Different Plugin',
+        packageDigest: `sha256:${'3'.repeat(64)}` as PluginPackageInspection['packageDigest'],
+      })
+    })
+    const harness = setup({ management, createReviewToken: () => 'constant' })
+    const first = await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+    const different = await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+
+    expect(first.reviewToken).not.toBe(different.reviewToken)
+    await expect(harness.controller.installPlugin({
+      reviewToken: first.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: [],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })).rejects.toMatchObject({ code: 'review-expired' })
+  })
+
+  test('exposes exactly the two-method private export port and keeps export runtime lazy from editor use', async () => {
+    const harness = setup()
+    const port = harness.owner.exportCompositionPort
+    type PublicExportLeak = 'exportCompositionPort' extends keyof PluginAppController ? true : false
+    type PublicExportAccessorLeak = 'getExportCompositionPort' extends keyof PluginAppController
+      ? true
+      : false
+    const publicExportLeak: PublicExportLeak = false
+    const publicExportAccessorLeak: PublicExportAccessorLeak = false
+
+    expect(publicExportLeak).toBe(false)
+    expect(publicExportAccessorLeak).toBe(false)
+    expect(Object.keys(port).sort()).toEqual(['getDeclarationCatalog', 'preflightExport'])
+    expect(Object.keys(harness.controller)).not.toContain('getExportCompositionPort')
+    expect(Object.keys(harness.controller)).not.toContain('exportCompositionPort')
+    expect(Object.keys(harness.controller)).not.toContain('preflightDescriptorMigrationAction')
+    expect(Object.keys(harness.owner).sort()).toEqual([
+      'close',
+      'controller',
+      'exportCompositionPort',
+      'preflightDescriptorMigrationAction',
+    ])
+    const catalog = await port.getDeclarationCatalog()
+    expectDeepFrozenData(catalog)
+    expect(JSON.stringify(harness.controller.getSnapshot())).not.toContain('declarationCatalog')
+    await expect(port.preflightExport(Object.freeze({ requiredEffects: Object.freeze([]) })))
+      .resolves.toBe(harness.runtime.exportSession)
+    expect(harness.runtime.controller.openEditorSession).not.toHaveBeenCalled()
+    expect(harness.createRuntimeController).toHaveBeenCalledWith(
+      harness.management.activationBundles,
+      undefined,
+    )
+  })
+
+  test('safe mode blocks synchronously and stale app-level preview output is zeroed', async () => {
+    const runtime = runtimeHarness()
+    const applyGate = deferred<Uint8Array>()
+    const teardownGate = deferred<void>()
+    runtime.editor.apply = vi.fn(async () => Object.freeze({
+      status: 'applied' as const,
+      effectResult: 'mutated' as const,
+      rgbaBytes: await applyGate.promise,
+    }))
+    ;(runtime.controller.teardown as ReturnType<typeof vi.fn>).mockImplementation(
+      async () => teardownGate.promise,
+    )
+    const harness = setup({ runtime })
+    const applying = harness.controller.getEffectBridgeHandler().apply(
+      executionRequest(),
+      new AbortController().signal,
+    )
+    await vi.waitFor(() => expect(runtime.editor.apply).toHaveBeenCalledOnce())
+
+    const safeMode = harness.controller.enterSafeMode()
+    expect(harness.controller.getSnapshot().startup.mode).toBe('safe-mode')
+    expect(harness.controller.getContributionSnapshot()).toBeUndefined()
+    const lateBytes = new Uint8Array([9, 9, 9, 9])
+    applyGate.resolve(lateBytes)
+    await expect(applying).resolves.toEqual({ status: 'bypassed' })
+    expect([...lateBytes]).toEqual([0, 0, 0, 0])
+    teardownGate.resolve()
+    await expect(safeMode).resolves.toBe(true)
+  })
+
+  test('reviewed normal startup cancels and drains retained inspection state before continuing', async () => {
+    const management = managementHarness()
+    const harness = setup({
+      sentinel: JSON.stringify({ version: 1, batchId: 'interrupted' }),
+      management,
+      createReviewToken: () => 'startup-review',
+    })
+    const review = await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+
+    const continuing = harness.controller.continueWithReviewedNormalStartup()
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      startup: { mode: 'review-required' },
+    })
+
+    await expect(continuing).resolves.toBe(true)
+    expect(management.cancelInspection).toHaveBeenCalledWith('inspection-1')
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      review: null,
+      inspectionPhase: 'idle',
+    })
+    expect(harness.controller.getSnapshot().startup.mode).toBe('normal')
+    await expect(harness.controller.installPlugin({
+      reviewToken: review.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: [],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })).rejects.toMatchObject({ code: 'review-expired' })
+  })
+
+  test('threads the injection-only observer only to the lazy runtime factory', async () => {
+    const observer: PluginRuntimeLifecycleObserver = Object.freeze({
+      onSandboxSnapshot: vi.fn(),
+      onRuntimeSnapshot: vi.fn(),
+    })
+    const harness = setup({ observer })
+
+    expect(JSON.stringify(harness.controller.getSnapshot())).not.toContain('onSandboxSnapshot')
+    await harness.controller.getEffectBridgeHandler().apply(
+      executionRequest(),
+      new AbortController().signal,
+    )
+    expect(harness.createRuntimeController).toHaveBeenCalledWith(
+      harness.management.activationBundles,
+      observer,
+    )
+  })
+
+  test('close aborts and drains a pending file read, zeroes late bytes, and never inspects', async () => {
+    const readGate = deferred<ArrayBuffer>()
+    const lateBuffer = new ArrayBuffer(4)
+    new Uint8Array(lateBuffer).fill(9)
+    const harness = setup()
+    const listener = vi.fn()
+    harness.controller.subscribe(listener)
+    const file: PluginAppFile = {
+      size: 4,
+      arrayBuffer: vi.fn(async () => readGate.promise),
+    }
+    const inspecting = harness.controller.inspectFile(file)
+    await vi.waitFor(() => expect(file.arrayBuffer).toHaveBeenCalledOnce())
+    const publishedBeforeClose = listener.mock.calls.length
+    const closing = harness.owner.close('close-during-read')
+
+    readGate.resolve(lateBuffer)
+    await expect(inspecting).rejects.toMatchObject({ code: 'stale-operation' })
+    await closing
+
+    expect([...new Uint8Array(lateBuffer)]).toEqual([0, 0, 0, 0])
+    expect(harness.management.inspectPackage).not.toHaveBeenCalled()
+    expect(listener).toHaveBeenCalledTimes(publishedBeforeClose)
+  })
+
+  test('close during package verification drains and cancels the late retained inspection', async () => {
+    const management = managementHarness()
+    const inspectGate = deferred<PluginPackageInspection>()
+    management.inspectPackage.mockImplementation(async () => inspectGate.promise)
+    const harness = setup({ management })
+    const inspecting = harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+    await vi.waitFor(() => expect(management.inspectPackage).toHaveBeenCalledOnce())
+    const closing = harness.owner.close('close-during-inspect')
+
+    inspectGate.resolve(inspection('late-inspection'))
+    await expect(inspecting).rejects.toMatchObject({ code: 'stale-operation' })
+    await closing
+
+    expect(management.cancelInspection).toHaveBeenCalledWith('late-inspection')
+    expect(harness.controller.getSnapshot().review).toBeNull()
+  })
+
+  test('close retries and surfaces late inspection cancellation failure without skipping runtime cleanup', async () => {
+    const management = managementHarness()
+    const inspectGate = deferred<PluginPackageInspection>()
+    management.inspectPackage.mockImplementation(async () => inspectGate.promise)
+    management.cancelInspection.mockImplementation(() => { throw new Error('late cancel failed') })
+    const harness = setup({ management })
+    const inspecting = harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+    await vi.waitFor(() => expect(management.inspectPackage).toHaveBeenCalledOnce())
+    const closing = harness.owner.close('close-with-late-cancel-failure')
+
+    const inspectionExpectation = expect(inspecting).rejects.toThrow('late cancel failed')
+    const closeResult = closing.then(() => null, (cause: unknown) => cause)
+    inspectGate.resolve(inspection('late-failing-inspection'))
+    await inspectionExpectation
+    const closeCause = await closeResult
+    expect(closeCause).toBeInstanceOf(AggregateError)
+    expect((closeCause as AggregateError).errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: 'late cancel failed' }),
+    ]))
+
+    expect((management.cancelInspection.mock.calls as unknown[][]).filter(
+      (call) => call[0] === 'late-failing-inspection',
+    ).length).toBeGreaterThanOrEqual(2)
+    expect(harness.lifecycle.dispose).toHaveBeenCalledOnce()
+  })
+
+  test('close drains an in-flight refresh without publishing terminal late state', async () => {
+    const management = managementHarness()
+    const installedGate = deferred<{
+      readonly generation: number
+      readonly packages: readonly PluginInstalledPackageProjection[]
+    }>()
+    management.installedPackages.mockImplementation(async () => installedGate.promise)
+    const harness = setup({ management })
+    const listener = vi.fn()
+    harness.controller.subscribe(listener)
+    const refreshing = harness.controller.refreshManagement()
+    await vi.waitFor(() => expect(management.installedPackages).toHaveBeenCalledOnce())
+    const publishedBeforeClose = listener.mock.calls.length
+    const closing = harness.owner.close('close-during-refresh')
+
+    installedGate.resolve(Object.freeze({
+      generation: 9,
+      packages: Object.freeze([installedPackage()]),
+    }))
+    await refreshing
+    await closing
+    expect(listener).toHaveBeenCalledTimes(publishedBeforeClose)
+  })
+
+  test('close drains a durable install mutation and suppresses every late app publication', async () => {
+    const management = managementHarness()
+    const commitGate = deferred<{ pluginId: string }>()
+    management.commitInstallation.mockImplementation(async () => commitGate.promise)
+    const harness = setup({ management, createReviewToken: () => 'mutation' })
+    const review = await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+    const listener = vi.fn()
+    harness.controller.subscribe(listener)
+    const installing = harness.controller.installPlugin({
+      reviewToken: review.reviewToken,
+      trustSigner: false,
+      grantedPermissionIds: ['myrelith.effect.video-frame.rgba8'],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
+    })
+    await vi.waitFor(() => expect(management.commitInstallation).toHaveBeenCalledOnce())
+    const publishedBeforeClose = listener.mock.calls.length
+    const closing = harness.owner.close('close-during-mutation')
+
+    commitGate.resolve({ pluginId: PLUGIN_ID })
+    await installing
+    await closing
+    expect(listener).toHaveBeenCalledTimes(publishedBeforeClose)
+  })
+
+  test('token construction failure cancels the verified inspection before returning', async () => {
+    const management = managementHarness()
+    const harness = setup({
+      management,
+      createReviewToken: () => { throw new Error('entropy failed') },
+    })
+
+    await expect(harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1))))
+      .rejects.toThrow('entropy failed')
+    expect(management.cancelInspection).toHaveBeenCalledWith('inspection-1')
+    expect(harness.controller.getSnapshot().review).toBeNull()
+  })
+
+  test('terminal close attempts review cancellation and runtime cleanup and aggregates both failures', async () => {
+    const management = managementHarness()
+    const runtime = runtimeHarness()
+    management.cancelInspection.mockImplementation(() => { throw new Error('cancel failed') })
+    runtime.editor.close = vi.fn(async () => { throw new Error('editor close failed') })
+    ;(runtime.controller.teardown as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('runtime close failed'),
+    )
+    const harness = setup({
+      management,
+      runtime,
+      createReviewToken: () => 'review-close',
+    })
+    await harness.controller.inspectFile(fileFromBuffer(new ArrayBuffer(1)))
+    await harness.controller.getEffectBridgeHandler().apply(
+      executionRequest(),
+      new AbortController().signal,
+    )
+
+    const first = harness.owner.close('app-close')
+    const second = harness.owner.close('ignored')
+    expect(second).toBe(first)
+    await expect(first).rejects.toBeInstanceOf(AggregateError)
+    expect(management.cancelInspection).toHaveBeenCalledWith('inspection-1')
+    expect(runtime.editor.close).toHaveBeenCalledWith('app-close')
+    expect(runtime.controller.teardown).toHaveBeenCalledWith('app-close')
+    expect(() => harness.controller.subscribe(vi.fn())).toThrow(PluginAppControllerError)
+  })
+
+  test('exposes only the frozen bounded acceptance surface and rejects competing ownership', async () => {
+    const observer = observerHarness()
+    let session: PluginAppAcceptanceSession | null = createPluginAppAcceptanceSession(
+      observer.observer,
+    )
+    try {
+      expect(Object.keys(session)).toEqual(['controller', 'exportFacade', 'close'])
+      expect(Object.keys(session.exportFacade)).toEqual([
+        'getDeclarationCatalog',
+        'preflightAndCloseExport',
+        'applyAndCloseExport',
+      ])
+      expect(Object.isFrozen(session)).toBe(true)
+      expect(Object.isFrozen(session.exportFacade)).toBe(true)
+      expect(Object.isFrozen(session.controller)).toBe(true)
+      expect('exportCompositionPort' in session).toBe(false)
+      expect(() => createPluginAppAcceptanceSession(observer.observer)).toThrow(
+        'already exists or is closing',
+      )
+      expect(() => getPluginAppController()).toThrow(
+        'cannot open during acceptance validation',
+      )
+
+      const firstClose = session.close('acceptance-surface-test')
+      const secondClose = session.close('ignored-second-reason')
+      expect(secondClose).toBe(firstClose)
+      expect(() => createPluginAppAcceptanceSession(observer.observer)).toThrow(
+        'already exists or is closing',
+      )
+      expect(() => getPluginAppController()).toThrow(
+        'cannot open during acceptance validation',
+      )
+      await firstClose
+      session = null
+
+      const production = getPluginAppController()
+      expect(getPluginAppController()).toBe(production)
+      expect(() => createPluginAppAcceptanceSession(observer.observer)).toThrow(
+        'while production ownership exists',
+      )
+    } finally {
+      await session?.close('acceptance-surface-cleanup').catch(() => {})
+      await disposePluginAppController('acceptance-surface-cleanup').catch(() => {})
+      await resetLoadedPluginDisposer().catch(() => {})
+    }
+  })
+
+  test('threads lifecycle evidence through production composition and closes bounded export ownership', async () => {
+    const evidence = observerHarness()
+    const catalogSnapshot = vi.spyOn(localPluginStorage, 'catalogSnapshot').mockResolvedValue(
+      Object.freeze({ generation: 0, records: Object.freeze([]) }),
+    )
+    const generation = vi.spyOn(localPluginStorage, 'generation').mockResolvedValue(0)
+    const trustPolicy = vi.spyOn(localPluginTrustPolicyStore, 'load').mockResolvedValue(undefined)
+    let session: PluginAppAcceptanceSession | null = createPluginAppAcceptanceSession(
+      evidence.observer,
+    )
+    try {
+      await expect(session.exportFacade.getDeclarationCatalog()).resolves.toEqual({
+        generation: 0,
+        declarations: [],
+      })
+      await expect(session.exportFacade.preflightAndCloseExport({
+        requiredEffects: Object.freeze([]),
+      })).resolves.toBeUndefined()
+      expect(evidence.runtimeSnapshots.some((snapshot) => snapshot.liveOwnerCount === 1)).toBe(true)
+      expect(evidence.runtimeSnapshots.at(-1)).toMatchObject({
+        liveOwnerCount: 0,
+        terminal: false,
+      })
+
+      await session.close('acceptance-observer-terminal')
+      session = null
+      expect(evidence.sandboxSnapshots.filter((snapshot) => snapshot.terminal)).toEqual([{
+        brokerIframeCount: 0,
+        candidateWorkerCount: 0,
+        privatePortCount: 0,
+        watchdogCount: 0,
+        pendingActivationCount: 0,
+        pendingRequestCount: 0,
+        sessionCount: 0,
+        terminal: true,
+      }])
+      expect(evidence.runtimeSnapshots.filter((snapshot) => snapshot.terminal)).toEqual([{
+        queuedCallCount: 0,
+        activeCallCount: 0,
+        liveOwnerCount: 0,
+        migrationReservationCount: 0,
+        residentRuntimeCount: 0,
+        rawCacheEntryCount: 0,
+        rawCacheByteLength: 0,
+        terminal: true,
+      }])
+      expect(catalogSnapshot).toHaveBeenCalledOnce()
+      expect(generation).toHaveBeenCalledOnce()
+      expect(trustPolicy).toHaveBeenCalledOnce()
+    } finally {
+      await session?.close('acceptance-observer-cleanup').catch(() => {})
+      catalogSnapshot.mockRestore()
+      generation.mockRestore()
+      trustPolicy.mockRestore()
+      await disposePluginAppController('acceptance-observer-cleanup').catch(() => {})
+      await resetLoadedPluginDisposer().catch(() => {})
+    }
+  })
+
+  test('shares a rejected terminal close, releases the stale lease, and permits fresh ownership', async () => {
+    const evidence = observerHarness()
+    let session: PluginAppAcceptanceSession | null = createPluginAppAcceptanceSession(
+      evidence.observer,
+    )
+    const failingDisposer = vi.fn(async () => { throw new Error('terminal cleanup failed') })
+    try {
+      const token = captureLoadedPluginLifecycleToken()
+      await expect(registerLoadedPluginDisposer(token, failingDisposer)).resolves.toBe(true)
+      const firstClose = session.close('acceptance-failing-terminal')
+      const secondClose = session.close('ignored-second-reason')
+      expect(secondClose).toBe(firstClose)
+      expect(() => createPluginAppAcceptanceSession(evidence.observer)).toThrow(
+        'already exists or is closing',
+      )
+      await expect(firstClose).rejects.toThrow('terminal cleanup failed')
+      session = null
+      expect(failingDisposer).toHaveBeenCalledOnce()
+
+      const replacement = createPluginAppAcceptanceSession(evidence.observer)
+      await expect(replacement.close('acceptance-after-failure')).resolves.toBeUndefined()
+      const production = getPluginAppController()
+      expect(getPluginAppController()).toBe(production)
+    } finally {
+      await session?.close('acceptance-failure-cleanup').catch(() => {})
+      await disposePluginAppController('acceptance-failure-cleanup').catch(() => {})
+      await resetLoadedPluginDisposer().catch(() => {})
+    }
+  })
+
+  test('shares production disposal and rejects replacement until terminal close settles', async () => {
+    const first = getPluginAppController()
+    expect(getPluginAppController()).toBe(first)
+    const firstOwner = getPluginAppControllerOwner()
+    expect(firstOwner.controller).toBe(first)
+    expect(getPluginAppControllerOwner()).toBe(firstOwner)
+
+    const firstClose = disposePluginAppController('production-shared-close')
+    const secondClose = disposePluginAppController('ignored-second-reason')
+    expect(secondClose).toBe(firstClose)
+    expect(() => getPluginAppController()).toThrow('still closing')
+    expect(() => createPluginAppAcceptanceSession(observerHarness().observer)).toThrow(
+      'while production ownership exists',
+    )
+    await firstClose
+
+    const replacement = getPluginAppController()
+    expect(replacement).not.toBe(first)
+    expect(getPluginAppController()).toBe(replacement)
+    await disposePluginAppController('production-shared-close-cleanup')
+  })
+})

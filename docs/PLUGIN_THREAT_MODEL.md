@@ -1,8 +1,9 @@
 # Plugin threat model
 
-Status: Issue #76 design. Scope is the proposed third-party plugin boundary,
-not a claim that a runtime exists. The complete ABI, packaging, compatibility,
-failure, and unsupported-capability contract is in [PLUGINS.md](PLUGINS.md).
+Status: version-1 threat model. Issue #77 implements this third-party plugin
+boundary in PR #123 and remains merge-gated on the controls and acceptance
+evidence here. The complete ABI, packaging, compatibility, failure, and
+unsupported-capability contract is in [PLUGINS.md](PLUGINS.md).
 
 ## Overview
 
@@ -549,14 +550,16 @@ supported engines; a trap or timeout remains a transactional failure rather than
 an alternate output. Success, failure, malformed output, trap, cancellation,
 watchdog expiry, trust/revocation change, project replacement, stale state, or
 commit rejection settles outstanding host work and destroys the current owner
-without waiting for plugin acknowledgement. Any non-success discards every
-staged candidate and retains every original descriptor plus complete animation;
-retry is fresh, and only the parent-owned verified raw-byte entry may remain;
-retry receives a new copy and repeats all activation gates. Revoke/
+without waiting for plugin-controlled acknowledgement. The parent may wait only
+for a bounded host-authored broker termination acknowledgement before fallback
+cleanup. Any non-success discards every staged candidate and retains every
+original descriptor plus complete animation; retry is fresh, and only the
+parent-owned verified raw-byte entry may remain; retry receives a new copy and
+repeats all activation gates. Revoke/
 disable/safe mode never delete descriptors; export blocks by default and names
-every unavailable instance. Issue #77 must implement and fixture these byte-level,
-static-instance, fresh-owner, terminal-cleanup, and action-atomicity gates before
-any migration export can execute.
+every unavailable instance. Issue #77 must keep these byte-level,
+static-instance, fresh-owner, terminal-cleanup, and action-atomicity gates green
+before any migration export can ship.
 
 **Residual risk:** a user can deliberately remove an opaque effect or explicitly
 export with reviewed bypass. Those are visible user edits, not silent recovery.

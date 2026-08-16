@@ -25,6 +25,7 @@ import Timeline from '../ui/timeline/Timeline'
 import TimelineZoomControls from '../ui/timeline/TimelineZoomControls'
 import WorkspaceControls from '../ui/WorkspaceControls'
 import WorkspaceResizeHandle from '../ui/WorkspaceResizeHandle'
+import { PluginInspectorSurfaces, PluginPreviewSurface } from '../ui/plugins/PluginEditorSurfaces'
 import { fitWorkspaceLayout } from '../ui/workspaceLayout'
 import {
   WORKSPACE_PANEL_LIMITS,
@@ -37,6 +38,10 @@ import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
 import { initSelectionReconciliation } from './selectionReconciliationController'
 import { initProxyController } from './proxyController'
 import { initMotionAnalysisRuntime } from './motionAnalysisRuntime'
+import { getPluginAppController } from './pluginAppController'
+import { setPreviewPluginBinding } from './previewController'
+
+const pluginAppController = getPluginAppController()
 
 export interface EditorShellProps {
   closing: boolean
@@ -51,6 +56,10 @@ export default function EditorShell({ closing }: EditorShellProps) {
   const fitted = fitWorkspaceLayout(workspace, viewport)
   useUndoRedoShortcuts()
   useEditShortcuts()
+  useEffect(() => {
+    setPreviewPluginBinding(pluginAppController)
+    return () => { setPreviewPluginBinding(null) }
+  }, [])
   useEffect(() => {
     if (
       !import.meta.env.DEV
@@ -225,6 +234,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
       />
       <main className="area-preview" inert={closing}>
         <Preview />
+        <PluginPreviewSurface />
       </main>
       <WorkspaceResizeHandle
         className="area-inspector-resize"
@@ -249,6 +259,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
         inert={closing || fitted.inspectorWidth === 0}
       >
         <Inspector />
+        <PluginInspectorSurfaces />
       </aside>
       <section className="area-transport" inert={closing}>
         <ToolButtons />

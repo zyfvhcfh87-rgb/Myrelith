@@ -6,8 +6,13 @@ import {
   type PluginManifestV1,
 } from '../domain/pluginManifest'
 
-const ARCHIVE_LIMIT_BYTES = 32 * 1024 * 1024
-const EXPANDED_LIMIT_BYTES = 64 * 1024 * 1024
+export const PLUGIN_PACKAGE_LIMITS = Object.freeze({
+  maxArchiveBytes: 32 * 1024 * 1024,
+  maxExpandedEntryBytes: 64 * 1024 * 1024,
+})
+
+const ARCHIVE_LIMIT_BYTES = PLUGIN_PACKAGE_LIMITS.maxArchiveBytes
+const EXPANDED_LIMIT_BYTES = PLUGIN_PACKAGE_LIMITS.maxExpandedEntryBytes
 const SIGNATURE_LIMIT_BYTES = 65_536
 const WASM_MODULE_MIN_BYTES = 8
 const PACKAGE_ENTRY_COUNT = 3
@@ -51,8 +56,10 @@ export interface VerifiedPluginPackage {
   readonly signerFingerprint: `sha256:${string}`
   readonly modulePath: string
   readonly moduleSha256: string
+  readonly moduleByteLength: number
   readonly manifest: PluginManifestV1
   readonly compatibility: PluginCompatibilityResult
+  readonly archiveBytes: Uint8Array
   readonly manifestBytes: Uint8Array
   readonly moduleBytes: Uint8Array
   readonly signatureBytes: Uint8Array
@@ -693,7 +700,14 @@ export async function verifyPluginPackageArchive(
 ): Promise<VerifiedPluginPackage> {
   const subtle = globalThis.crypto?.subtle
   if (!subtle) fail('crypto-unavailable', 'Web Crypto is required to verify plugin packages.')
-  const archive = await parseStoredZip(archiveBytes)
+  if (archiveBytes.byteLength > ARCHIVE_LIMIT_BYTES) {
+    fail('archive-invalid', `Plugin packages must not exceed ${ARCHIVE_LIMIT_BYTES} bytes.`)
+  }
+  // Verification yields while hashing and checking CRCs. Snapshot the
+  // caller-owned buffer before the first yield so concurrent mutation cannot
+  // change what is accepted or later persisted as the verified package.
+  const retainedArchiveBytes = archiveBytes.slice()
+  const archive = await parseStoredZip(retainedArchiveBytes)
   const manifestEntry = archive.get('manifest.json')
   const signatureEntry = archive.get('signature.json')
   if (!manifestEntry || !signatureEntry) {
@@ -777,8 +791,10 @@ export async function verifyPluginPackageArchive(
     signerFingerprint: envelope.fingerprint,
     modulePath: moduleEntry.path,
     moduleSha256: moduleDeclaration.sha256,
+    moduleByteLength: moduleDeclaration.length,
     manifest: frozenManifest,
     compatibility: frozenCompatibility,
+    get archiveBytes() { return retainedArchiveBytes.slice() },
     get manifestBytes() { return retainedManifestBytes.slice() },
     get moduleBytes() { return retainedModuleBytes.slice() },
     get signatureBytes() { return retainedSignatureBytes.slice() },

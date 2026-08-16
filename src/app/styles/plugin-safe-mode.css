@@ -1,0 +1,122 @@
+/* Issue #77 launcher-only safe-mode surface. Imported only by later launcher wiring. */
+
+.plugin-safe-mode-card {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  color: #e8edf5;
+  background: #121c28;
+  border: 1px solid #35475d;
+  border-radius: 12px;
+}
+
+.plugin-safe-mode-card h2,
+.plugin-safe-mode-card p {
+  margin: 0;
+}
+
+.plugin-safe-mode-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.plugin-safe-mode-eyebrow {
+  color: #7faaff;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.plugin-safe-mode-copy h2 {
+  color: #f0f4f9;
+  font-size: 17px;
+  font-weight: 680;
+  line-height: 1.2;
+}
+
+.plugin-safe-mode-copy p,
+.plugin-safe-mode-action p,
+.plugin-safe-mode-callout p {
+  color: #9aa8ba;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.plugin-safe-mode-action {
+  display: grid;
+  gap: 7px;
+}
+
+.plugin-safe-mode-action button {
+  min-height: 36px;
+  justify-self: start;
+  padding: 7px 13px;
+  color: #f7f9fd;
+  background: #315b96;
+  border: 1px solid #5685c2;
+  border-radius: 7px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.plugin-safe-mode-action button:hover:not(:disabled) {
+  background: #3a68a7;
+  border-color: #78a9e8;
+}
+
+.plugin-safe-mode-action button:focus-visible {
+  outline: 2px solid #83adff;
+  outline-offset: 2px;
+}
+
+.plugin-safe-mode-action button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.plugin-safe-mode-callout {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  background: rgb(133 91 28 / 14%);
+  border: 1px solid rgb(213 154 67 / 42%);
+  border-radius: 8px;
+}
+
+.plugin-safe-mode-callout strong {
+  color: #f1d0a2;
+  font-size: 11px;
+}
+
+.plugin-safe-mode-status,
+.plugin-safe-mode-error {
+  min-height: 18px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.plugin-safe-mode-status {
+  color: #aeb9c7;
+}
+
+.plugin-safe-mode-error {
+  padding: 10px 11px;
+  color: #ffc0c5;
+  background: rgb(151 57 66 / 15%);
+  border: 1px solid rgb(216 91 102 / 38%);
+  border-radius: 7px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .plugin-safe-mode-card {
+    padding: 13px;
+    border-radius: 9px;
+  }
+
+  .plugin-safe-mode-action button {
+    width: 100%;
+  }
+}

@@ -17,10 +17,12 @@ import {
 } from '../domain/crossfadePlan'
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
+import type { PluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import { selectMediaRepresentation } from '../domain/proxyCache'
 import { audibleTracks, outputMediaAssetIds } from '../domain/selectors'
 import { sourceTimeAudioPolicy } from '../domain/sourceTimeMap'
 import {
+  assertExportAdmission,
   exportTimeline,
   type ExportDeps as PipelineExportDeps,
   type ExportMediaSource,
@@ -42,6 +44,14 @@ import {
 import { preflightExportProfile } from './exportCapabilitiesController'
 import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { registerLoadedExportDisposer } from './exportLifecycle'
+/* The later app composition wave owns the concrete prepared-attempt lifecycle. */
+import {
+  PluginExportAttemptError,
+  type PluginExportAttemptController,
+  type PluginExportAttemptToken,
+  type PluginPreparedExportExecution,
+} from './pluginExportAttemptController'
+import type { VideoEffectStageExecutor } from '../pipeline/videoEffectStageExecution'
 
 export type { ExportResult, ExportSettings } from '../pipeline/export'
 
@@ -68,11 +78,13 @@ export interface ExportControllerDeps {
     doc: TimelineDoc,
     resolveAsset: ExportAssetResolver,
     sourceBounds: SourceBoundsCatalog,
+    pluginSnapshot?: PluginVideoEffectContributionSnapshot,
   ): ExportMediaSource
   createPipelineDeps(
     resolveAsset: ExportAssetResolver,
     sourceBounds: SourceBoundsCatalog,
     fileDestination?: ExportFileDestinationCapability,
+    videoEffectStageExecutor?: VideoEffectStageExecutor | null,
   ): PipelineExportDeps
   runExport(
     doc: TimelineDoc,
@@ -94,11 +106,17 @@ const realDeps: ExportControllerDeps = {
     return response.blob()
   },
   createMediaSource: createMediabunnyExportMediaSource,
-  createPipelineDeps: (resolveAsset, sourceBounds, fileDestination) =>
+  createPipelineDeps: (
+    resolveAsset,
+    sourceBounds,
+    fileDestination,
+    videoEffectStageExecutor,
+  ) =>
     createMediabunnyExportDeps(
       resolveAsset,
       sourceBounds,
       fileDestination,
+      videoEffectStageExecutor,
     ),
   runExport: exportTimeline,
 }
@@ -114,6 +132,8 @@ interface ExportLifecycle {
   cancelRequested: boolean
   preflightAbort: AbortController
   session: ExportSession | null
+  pluginExecution: PluginPreparedExportExecution | null
+  pluginClosePromise: Promise<void> | null
 }
 
 interface ActiveExport {
@@ -248,6 +268,72 @@ function partialTrackConflict(
   return null
 }
 
+function freezeRunOptions(callbacks: ExportCallbacks): Readonly<ExportRunOptions> {
+  if (
+    callbacks.onProgress !== undefined
+    && typeof callbacks.onProgress !== 'function'
+  ) throw new TypeError('Export progress callback must be a function')
+  return Object.freeze({
+    ...(callbacks.onProgress ? { onProgress: callbacks.onProgress } : {}),
+    ...(callbacks.fileDestination
+      ? { fileDestination: callbacks.fileDestination }
+      : {}),
+  })
+}
+
+function assertDestinationCapability(
+  settings: Readonly<ExportSettings>,
+  options: Readonly<ExportRunOptions>,
+): void {
+  if (settings.destination === 'file' && !options.fileDestination) {
+    throw new TypeError('Direct file export requires a user-selected file destination')
+  }
+  if (settings.destination === 'download' && options.fileDestination) {
+    throw new TypeError('Browser download export cannot use a direct file destination')
+  }
+}
+
+interface CapturedExportInputs {
+  readonly assets: ReadonlyMap<AssetId, MediaAsset>
+  readonly runtimeGuards: Map<AssetId, MediaRuntimeGuard>
+}
+
+function captureExportInputs(
+  doc: TimelineDoc,
+  settings: Readonly<ExportSettings>,
+): CapturedExportInputs {
+  const mediaState = useMediaStore.getState()
+  const assets = new Map(mediaState.assets)
+  const includeAudio = settings.audioChannelLayout !== 'off'
+  const offline = [...outputMediaAssetIds(doc, includeAudio)].filter(
+    (assetId) => !assets.has(assetId),
+  )
+  if (offline.length > 0) {
+    const names = offline.map(
+      (assetId) => mediaState.descriptors.get(assetId)?.fileName ?? assetId,
+    )
+    throw new Error(
+      `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`,
+    )
+  }
+  const trackConflict = partialTrackConflict(doc, assets, includeAudio)
+  if (trackConflict) throw new Error(trackConflict)
+  return Object.freeze({
+    assets,
+    runtimeGuards: captureExportRuntimeGuards(assets),
+  })
+}
+
+function hasOutputPluginEffects(doc: TimelineDoc): boolean {
+  return doc.tracks.some((track) => (
+    track.kind === 'video'
+    && !track.hidden
+    && track.clips.some((clip) => (
+      clip.effects.some((effect) => effect.type.startsWith('plugin:'))
+    ))
+  ))
+}
+
 /** Preserve setup as the primary failure while releasing pre-start ownership. */
 async function rejectAfterClosingMedia(
   media: ExportMediaSource,
@@ -353,6 +439,33 @@ function trackActiveExport(
   return completion
 }
 
+function closePluginExecution(
+  lifecycle: ExportLifecycle,
+  reason: string,
+): Promise<void> {
+  if (lifecycle.pluginClosePromise) return lifecycle.pluginClosePromise
+  const execution = lifecycle.pluginExecution
+  if (!execution) return Promise.resolve()
+  try {
+    lifecycle.pluginClosePromise = Promise.resolve(execution.close(reason))
+  } catch (cause) {
+    lifecycle.pluginClosePromise = Promise.reject(cause)
+  }
+  return lifecycle.pluginClosePromise
+}
+
+function isPluginAttemptCancellation(cause: unknown): boolean {
+  const seen = new Set<unknown>()
+  let current = cause
+  for (let depth = 0; depth < 8 && current !== undefined && !seen.has(current); depth++) {
+    if (current instanceof PluginExportAttemptError && current.code === 'aborted') return true
+    seen.add(current)
+    if (typeof current !== 'object' || current === null || !('cause' in current)) return false
+    current = (current as { readonly cause?: unknown }).cause
+  }
+  return false
+}
+
 async function preflightAndRunExport(
   lifecycle: ExportLifecycle,
   doc: TimelineDoc,
@@ -360,16 +473,28 @@ async function preflightAndRunExport(
   assets: ReadonlyMap<AssetId, MediaAsset>,
   callbacks: ExportCallbacks,
   deps: ExportControllerDeps,
+  pluginExecution?: Pick<
+    PluginPreparedExportExecution,
+    'pluginSnapshot' | 'videoEffectStageExecutor'
+  >,
 ): Promise<ExportResult | undefined> {
   if (lifecycle.cancelRequested) return undefined
+  // Reject impossible work before Blob retention, profile probing, or the
+  // eager per-frame visual-plan schedule owned by createMediaSource().
+  assertExportAdmission(doc, settings)
   const includeAudio = settings.audioChannelLayout !== 'off'
-  const resolveAsset = createAssetResolver(assets, deps.fetchBlob)
   const sourceBounds = createSourceBoundsCatalog(assets.values())
-  // Acquire the captured source URLs before the first await. The media store
-  // may revoke them while capability probing is pending; these cached Blob
-  // promises are the lightweight snapshot lease. Decoder/encoder setup still
-  // waits until the fresh profile probe succeeds.
-  retainReferencedBlobs(doc, resolveAsset, includeAudio)
+  let resolveAsset: ExportAssetResolver | null = null
+  if (!pluginExecution) {
+    resolveAsset = createAssetResolver(assets, deps.fetchBlob)
+    // Legacy no-plugin exports retain captured object URLs across the profile
+    // await. Prepared plugin exports deliberately defer every Blob until the
+    // plugin attempt and encoding profile have both passed.
+    retainReferencedBlobs(doc, resolveAsset, includeAudio)
+  }
+  // Blob retention calls an injected boundary synchronously. If it re-enters
+  // cancellation, do not advance into profile/media ownership afterward.
+  if (lifecycle.cancelRequested) return undefined
 
   const signal = lifecycle.preflightAbort.signal
   try {
@@ -387,6 +512,11 @@ async function preflightAndRunExport(
   // A probe is allowed to ignore AbortSignal. Cancellation still prevents all
   // decoder creation and pipeline work after it settles.
   if (lifecycle.cancelRequested) return undefined
+  if (!resolveAsset) {
+    resolveAsset = createAssetResolver(assets, deps.fetchBlob)
+    retainReferencedBlobs(doc, resolveAsset, includeAudio)
+  }
+  if (lifecycle.cancelRequested) return undefined
 
   let media: ExportMediaSource | null = null
   let generator: ExportRun
@@ -395,8 +525,14 @@ async function preflightAndRunExport(
       resolveAsset,
       sourceBounds,
       callbacks.fileDestination,
+      pluginExecution?.videoEffectStageExecutor,
     )
-    media = deps.createMediaSource(doc, resolveAsset, sourceBounds)
+    media = deps.createMediaSource(
+      doc,
+      resolveAsset,
+      sourceBounds,
+      pluginExecution?.pluginSnapshot,
+    )
     if (lifecycle.cancelRequested) {
       await media.close()
       return undefined
@@ -450,54 +586,25 @@ export function startExport(
 
   const doc = useDocumentStore.getState().doc
   let runSettings: Readonly<ExportSettings>
+  let runOptions: Readonly<ExportRunOptions>
+  let captured: CapturedExportInputs
   try {
     runSettings = validateExportProfile(settings)
+    runOptions = freezeRunOptions(callbacks)
+    assertDestinationCapability(runSettings, runOptions)
+    if (hasOutputPluginEffects(doc)) {
+      throw new Error('Plugin-aware export requires a prepared one-shot attempt')
+    }
+    captured = captureExportInputs(doc, runSettings)
   } catch (cause) {
     return Promise.reject(cause)
   }
-  if (
-    callbacks.onProgress !== undefined
-    && typeof callbacks.onProgress !== 'function'
-  ) {
-    return Promise.reject(new TypeError('Export progress callback must be a function'))
-  }
-  const runOptions: Readonly<ExportRunOptions> = Object.freeze({
-    ...(callbacks.onProgress ? { onProgress: callbacks.onProgress } : {}),
-    ...(callbacks.fileDestination
-      ? { fileDestination: callbacks.fileDestination }
-      : {}),
-  })
-  if (runSettings.destination === 'file' && !runOptions.fileDestination) {
-    return Promise.reject(new TypeError(
-      'Direct file export requires a user-selected file destination',
-    ))
-  }
-  if (runSettings.destination === 'download' && runOptions.fileDestination) {
-    return Promise.reject(new TypeError(
-      'Browser download export cannot use a direct file destination',
-    ))
-  }
-  const mediaState = useMediaStore.getState()
-  const assets = new Map(mediaState.assets)
-  const runtimeGuards = captureExportRuntimeGuards(assets)
-  const includeAudio = runSettings.audioChannelLayout !== 'off'
-  const offline = [...outputMediaAssetIds(doc, includeAudio)].filter(
-    (assetId) => !assets.has(assetId),
-  )
-  if (offline.length > 0) {
-    const names = offline.map(
-      (assetId) => mediaState.descriptors.get(assetId)?.fileName ?? assetId,
-    )
-    return Promise.reject(new Error(
-      `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`,
-    ))
-  }
-  const trackConflict = partialTrackConflict(doc, assets, includeAudio)
-  if (trackConflict) return Promise.reject(new Error(trackConflict))
   const lifecycle: ExportLifecycle = {
     cancelRequested: false,
     preflightAbort: new AbortController(),
     session: null,
+    pluginExecution: null,
+    pluginClosePromise: null,
   }
   return trackActiveExport(
     lifecycle,
@@ -505,10 +612,102 @@ export function startExport(
       lifecycle,
       doc,
       runSettings,
-      assets,
+      captured.assets,
       runOptions,
       deps,
     ),
+    captured.runtimeGuards,
+  )
+}
+
+/**
+ * Consume one prepared plugin attempt, then enter the ordinary export path.
+ * The attempt is already plugin-preflighted before profile probing, Blob
+ * retention, decoder/media creation, file-handle consumption, or encoding.
+ */
+export function startPreparedExport(
+  token: PluginExportAttemptToken,
+  attemptController: Pick<PluginExportAttemptController, 'consume'>,
+  callbacks: ExportCallbacks = {},
+  deps: ExportControllerDeps = realDeps,
+): Promise<ExportResult | undefined> {
+  if (state.active) {
+    return Promise.reject(new Error('An export is already in progress'))
+  }
+  let runOptions: Readonly<ExportRunOptions>
+  try {
+    runOptions = freezeRunOptions(callbacks)
+  } catch (cause) {
+    return Promise.reject(cause)
+  }
+  const lifecycle: ExportLifecycle = {
+    cancelRequested: false,
+    preflightAbort: new AbortController(),
+    session: null,
+    pluginExecution: null,
+    pluginClosePromise: null,
+  }
+  const runtimeGuards = new Map<AssetId, MediaRuntimeGuard>()
+  return trackActiveExport(
+    lifecycle,
+    async () => {
+      let execution: PluginPreparedExportExecution | null = null
+      let closeStarted = false
+      try {
+        execution = await attemptController.consume(
+          token,
+          lifecycle.preflightAbort.signal,
+        )
+        lifecycle.pluginExecution = execution
+        assertDestinationCapability(execution.settings, runOptions)
+        const captured = captureExportInputs(execution.document, execution.settings)
+        for (const [assetId, guard] of captured.runtimeGuards) {
+          runtimeGuards.set(assetId, guard)
+        }
+        const result = await preflightAndRunExport(
+          lifecycle,
+          execution.document,
+          execution.settings,
+          captured.assets,
+          runOptions,
+          deps,
+          execution,
+        )
+        closeStarted = true
+        await closePluginExecution(
+          lifecycle,
+          lifecycle.cancelRequested ? 'plugin-export-cancelled' : 'plugin-export-complete',
+        )
+        return result
+      } catch (cause) {
+        if (!execution
+          && lifecycle.cancelRequested
+          && lifecycle.preflightAbort.signal.aborted
+          && cause instanceof PluginExportAttemptError
+          && cause.code === 'aborted') return undefined
+        let closeFailure: unknown
+        if (execution && !closeStarted) {
+          closeStarted = true
+          try {
+            await closePluginExecution(
+              lifecycle,
+              lifecycle.cancelRequested ? 'plugin-export-cancelled' : 'plugin-export-failed',
+            )
+          } catch (cleanupCause) {
+            closeFailure = cleanupCause
+          }
+        }
+        if (execution
+          && lifecycle.cancelRequested
+          && lifecycle.preflightAbort.signal.aborted
+          && isPluginAttemptCancellation(cause)) {
+          if (closeFailure !== undefined) throw closeFailure
+          return undefined
+        }
+        // Operational export failures remain primary over ordinary cleanup.
+        throw cause
+      }
+    },
     runtimeGuards,
   )
 }
@@ -519,6 +718,13 @@ export async function cancelExport(): Promise<void> {
   if (!active) return
   active.lifecycle.cancelRequested = true
   active.lifecycle.preflightAbort.abort()
+  if (active.lifecycle.pluginExecution) {
+    // Close pinned workers now even if the current profile/media boundary
+    // ignores AbortSignal. The completion path observes the same idempotent
+    // close promise and retains the established cleanup/error precedence.
+    void closePluginExecution(active.lifecycle, 'plugin-export-cancelled')
+      .catch(() => undefined)
+  }
   if (active.lifecycle.session) {
     active.lifecycle.session.cancelRequested = true
   }

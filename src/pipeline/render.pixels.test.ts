@@ -7,7 +7,12 @@
  */
 
 import { describe, expect, test } from 'vitest'
-import type { Clip, TimelineDoc, Track } from '../domain/schema'
+import type { Clip, EffectDescriptor, TimelineDoc, Track } from '../domain/schema'
+import { createColorAdjustEffect } from '../domain/effectStack'
+import {
+  createPluginVideoEffectContributionSnapshot,
+  type PluginVideoEffectContributionSnapshot,
+} from '../domain/pluginVideoEffectStagePlan'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import {
   compositeFrame,
@@ -16,6 +21,7 @@ import {
   type RenderFrameSource,
   type TransitionSurfaceProvider,
 } from './render'
+import type { VideoEffectStageExecutor } from './videoEffectStageExecution'
 
 type Matrix = [number, number, number, number, number, number]
 type Pixel = [number, number, number, number]
@@ -188,6 +194,58 @@ class PixelCanvas {
         }
         throw new Error(`Unsupported pixel-test drawImage arity: ${args.length + 1}`)
       },
+      getImageData: (sx, sy, width, height) => this.readPixels(sx, sy, width, height),
+      putImageData: (imageData, dx, dy) => this.writePixels(imageData, dx, dy),
+    }
+  }
+
+  private readPixels(sx: number, sy: number, width: number, height: number): ImageData {
+    const data = new Uint8ClampedArray(width * height * 4)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const sourceX = sx + x
+        const sourceY = sy + y
+        if (
+          sourceX < 0
+          || sourceX >= this.width
+          || sourceY < 0
+          || sourceY >= this.height
+        ) continue
+        const sourceOffset = (sourceY * this.width + sourceX) * 4
+        const destinationOffset = (y * width + x) * 4
+        const alpha = Math.min(1, Math.max(0, this.premultiplied[sourceOffset + 3]))
+        data[destinationOffset + 3] = Math.round(alpha * 255)
+        if (alpha === 0) continue
+        for (let channel = 0; channel < 3; channel++) {
+          data[destinationOffset + channel] = Math.round(
+            Math.min(1, Math.max(0, this.premultiplied[sourceOffset + channel] / alpha)) * 255,
+          )
+        }
+      }
+    }
+    return { data, width, height, colorSpace: 'srgb' } as ImageData
+  }
+
+  private writePixels(imageData: ImageData, dx: number, dy: number): void {
+    for (let y = 0; y < imageData.height; y++) {
+      for (let x = 0; x < imageData.width; x++) {
+        const destinationX = dx + x
+        const destinationY = dy + y
+        if (
+          destinationX < 0
+          || destinationX >= this.width
+          || destinationY < 0
+          || destinationY >= this.height
+        ) continue
+        const sourceOffset = (y * imageData.width + x) * 4
+        const destinationOffset = (destinationY * this.width + destinationX) * 4
+        const alpha = imageData.data[sourceOffset + 3] / 255
+        for (let channel = 0; channel < 3; channel++) {
+          this.premultiplied[destinationOffset + channel] =
+            (imageData.data[sourceOffset + channel] / 255) * alpha
+        }
+        this.premultiplied[destinationOffset + 3] = alpha
+      }
     }
   }
 
@@ -393,6 +451,45 @@ function horizontalColors(
   return { width: colors.length, height, rgba: bytes } as unknown as ImageBitmap
 }
 
+const PLUGIN_EFFECT_TYPE = 'plugin:com.example.pixel-test/channel-shift'
+
+function pluginEffect(id = 'plugin-effect'): EffectDescriptor {
+  return {
+    id,
+    type: PLUGIN_EFFECT_TYPE,
+    version: 1,
+    enabled: true,
+    params: { amount: 1 },
+  }
+}
+
+function pluginSnapshot(): PluginVideoEffectContributionSnapshot {
+  return createPluginVideoEffectContributionSnapshot(8, [{
+    signerFingerprint: `sha256:${'3'.repeat(64)}`,
+    packageDigest: `sha256:${'4'.repeat(64)}`,
+    pluginId: 'com.example.pixel-test',
+    pluginVersion: '1.0.0',
+    kind: 'video-effect',
+    contributionVersion: 1,
+    contributionId: 'channel-shift',
+    contributionName: 'Channel Shift',
+    descriptorVersion: 1,
+    entrypoint: 'myrelith_effect_channel_shift',
+    parameters: [{
+      key: 'amount',
+      name: 'Amount',
+      kind: 'number',
+      default: 1,
+      min: 0,
+      max: 1,
+      step: 0.1,
+      animatable: false,
+    }],
+    availability: 'ready',
+    detail: 'Ready.',
+  }])
+}
+
 function makeClip(
   id: string,
   assetId: string,
@@ -510,6 +607,8 @@ async function render(
   doc: TimelineDoc,
   frame: number,
   frames: Record<string, RenderFrameSource | null>,
+  pluginContributions?: PluginVideoEffectContributionSnapshot,
+  videoEffectStageExecutor?: VideoEffectStageExecutor | null,
 ) {
   const output = new PixelCanvas(doc.width, doc.height)
   const surfaces = makeProvider(doc.width, doc.height)
@@ -528,10 +627,13 @@ async function render(
           audio: null,
         },
       ] as const)),
-    )),
+    ), pluginContributions),
     output.context,
     source.source,
     surfaces.provider,
+    undefined,
+    undefined,
+    videoEffectStageExecutor,
   )
   return { output, surfaces, requests: source.requests, result }
 }
@@ -844,6 +946,114 @@ describe('compositeFrame pixel goldens', () => {
       drawn: ['lower', 'to'],
       missing: ['from'],
     })
+  })
+
+  test('applies a mixed built-in/plugin plan to an ordinary full-surface layer', async () => {
+    const builtIn = createColorAdjustEffect('ordinary-warm')
+    builtIn.params.temperature = 1
+    const clip = makeClip('ordinary-plugin', 'source', 0, 1, {
+      effects: [builtIn, pluginEffect('ordinary-channel-shift')],
+    })
+    const calls: Array<{ id: string; input: number[] }> = []
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: async (request) => {
+        calls.push({ id: request.effect.id, input: [...request.rgba] })
+        const output = new Uint8Array(request.rgba)
+        output.set([91, 128, 181, 255])
+        return { status: 'applied', rgba: output }
+      },
+    }
+
+    const rendered = await render(
+      makeDoc([makeTrack('V1', [clip])], 1, 1),
+      0,
+      { source: solid(1, 1, [128, 128, 128, 255]) },
+      pluginSnapshot(),
+      executor,
+    )
+
+    expect(calls).toEqual([{
+      id: 'ordinary-channel-shift',
+      input: [181, 128, 91, 255],
+    }])
+    expect(rendered.output.rgbaAt(0, 0)).toEqual([91, 128, 181, 255])
+    expect(rendered.surfaces.gets()).toBe(1)
+    expect(rendered.result).toEqual({ drawn: ['ordinary-plugin'], missing: [] })
+  })
+
+  test('continues authored built-ins after a visibly bypassed preview plugin', async () => {
+    const before = createColorAdjustEffect('before-bypass')
+    before.params.temperature = 1
+    const after = createColorAdjustEffect('after-bypass')
+    after.params.tint = 1
+    const withPlugin = makeClip('bypassed-plugin', 'source', 0, 1, {
+      effects: [before, pluginEffect('preview-bypass'), after],
+    })
+    const builtInsOnly = makeClip('built-ins-only', 'source', 0, 1, {
+      effects: [before, after],
+    })
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: async () => ({ status: 'bypassed' }),
+    }
+    const frame = solid(1, 1, [128, 128, 128, 255])
+
+    const bypassed = await render(
+      makeDoc([makeTrack('V1', [withPlugin])], 1, 1),
+      0,
+      { source: frame },
+      pluginSnapshot(),
+      executor,
+    )
+    const control = await render(
+      makeDoc([makeTrack('V1', [builtInsOnly])], 1, 1),
+      0,
+      { source: frame },
+    )
+
+    expect(bypassed.output.rgbaAt(0, 0)).toEqual(control.output.rgbaAt(0, 0))
+    expect(bypassed.result).toEqual({ drawn: ['bypassed-plugin'], missing: [] })
+  })
+
+  test('uses each crossfade leg\'s mixed built-in/plugin plan before weighting', async () => {
+    const outgoingBuiltIn = createColorAdjustEffect('outgoing-warm')
+    outgoingBuiltIn.params.temperature = 1
+    const incomingBuiltIn = createColorAdjustEffect('incoming-tint')
+    incomingBuiltIn.params.tint = 1
+    const from = makeClip('from-plugin', 'A', 0, 10, {
+      effects: [outgoingBuiltIn, pluginEffect('from-channel-shift')],
+    })
+    const to = makeClip('to-plugin', 'B', 10, 10, {
+      effects: [incomingBuiltIn, pluginEffect('to-channel-shift')],
+    })
+    const calls: Array<{ id: string; input: number[] }> = []
+    const executor: VideoEffectStageExecutor = {
+      applyPluginEffect: async (request) => {
+        calls.push({ id: request.effect.id, input: [...request.rgba] })
+        const output = new Uint8Array(request.rgba)
+        output.set(request.effect.id === 'from-channel-shift'
+          ? [255, 0, 0, 255]
+          : [0, 0, 255, 255])
+        return { status: 'applied', rgba: output }
+      },
+    }
+
+    const rendered = await render(
+      makeDoc([transitionTrack(from, to, 1)], 1, 1),
+      10,
+      {
+        A: solid(1, 1, [128, 128, 128, 255]),
+        B: solid(1, 1, [128, 128, 128, 255]),
+      },
+      pluginSnapshot(),
+      executor,
+    )
+
+    expect(calls).toEqual([
+      { id: 'from-channel-shift', input: [181, 128, 91, 255] },
+      { id: 'to-channel-shift', input: [140, 108, 140, 255] },
+    ])
+    expect(rendered.output.rgbaAt(0, 0)).toEqual([128, 0, 128, 255])
+    expect(rendered.result).toEqual({ drawn: ['from-plugin', 'to-plugin'], missing: [] })
   })
 
   test('ordinary video keeps source-over pixels and never allocates surfaces', async () => {

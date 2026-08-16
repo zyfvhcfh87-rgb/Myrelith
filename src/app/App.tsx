@@ -12,6 +12,7 @@ import {
   type ComponentType,
 } from 'react'
 import './launcher.css'
+import './styles/plugin-safe-mode.css'
 import ProjectLaunch from '../ui/ProjectLaunch'
 import LazyLoadBoundary from '../ui/LazyLoadBoundary'
 import { useProjectSessionStore } from '../state/projectSessionStore'
@@ -20,6 +21,7 @@ import { loadEditorShell } from './editorModuleLoader'
 import type { EditorShellProps } from './EditorShell'
 
 const LazyEditorShell = lazy(loadEditorShell)
+const LazyPluginAppRoot = lazy(() => import('../ui/plugins/PluginAppRoot'))
 
 function EditorLoadingState() {
   return (
@@ -32,6 +34,16 @@ function EditorLoadingState() {
       <span className="lazy-load-spinner" aria-hidden="true" />
       <h1>Opening your studio…</h1>
       <p>Your project is ready. Myrelith is loading the editing tools.</p>
+    </main>
+  )
+}
+
+function PluginStartupLoadingState() {
+  return (
+    <main className="lazy-editor-state" role="status" aria-live="polite" aria-busy="true">
+      <span className="lazy-load-spinner" aria-hidden="true" />
+      <h1>Checking plugin recovery…</h1>
+      <p>Myrelith is verifying the previous plugin session before opening your projects.</p>
     </main>
   )
 }
@@ -87,7 +99,14 @@ export default function App() {
     (state) => state.screen === 'editor',
   )
   const closing = useProjectSessionStore((state) => state.phase === 'closing')
-  return editorActive
+  const content = editorActive
     ? <EditorSurface closing={closing} />
     : <ProjectLaunch />
+  return (
+    <Suspense fallback={<PluginStartupLoadingState />}>
+      <LazyPluginAppRoot showStartupCard={!editorActive}>
+        {content}
+      </LazyPluginAppRoot>
+    </Suspense>
+  )
 }

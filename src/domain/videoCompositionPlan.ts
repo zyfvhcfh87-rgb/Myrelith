@@ -11,10 +11,17 @@ import {
   resolveCrossfadePlan,
   type CrossfadePlan,
   type CrossfadeFrameGroup,
+  type CrossfadeFrameRequest,
   type SourceBoundsCatalog,
   type VideoFrameRequest,
 } from './crossfadePlan'
 import { resolveClipAnimationAtFrame } from './clipAnimation'
+import {
+  createVideoEffectStagePlanner,
+  type PluginVideoEffectContributionSnapshot,
+  type VideoEffectStagePlan,
+  type VideoEffectStagePlanner,
+} from './pluginVideoEffectStagePlan'
 import { createFrameIndex, type FrameIndex } from './frameIndex'
 import {
   clipBlendModeIntent,
@@ -28,8 +35,18 @@ export interface OrdinaryVideoPlanItem {
   kind: 'clip'
   trackId: TrackId
   frame: number
-  request: VideoFrameRequest
+  request: PlannedVideoFrameRequest
   blendMode: BlendModeResolution
+}
+
+export interface PlannedVideoFrameRequest extends VideoFrameRequest {
+  /** Present only for authored stacks containing a plugin-prefixed descriptor. */
+  effectStagePlan?: VideoEffectStagePlan
+}
+
+export interface PlannedCrossfadeFrameRequest extends CrossfadeFrameRequest {
+  /** Planned independently after resolving this exact transition leg's animation. */
+  effectStagePlan?: VideoEffectStagePlan
 }
 
 export interface TextOverlayPlanItem {
@@ -39,9 +56,12 @@ export interface TextOverlayPlanItem {
   clip: Clip
   opacity: number
   blendMode: BlendModeResolution
+  /** Present only for authored stacks containing a plugin-prefixed descriptor. */
+  effectStagePlan?: VideoEffectStagePlan
 }
 
-export interface CrossfadeCompositionItem extends CrossfadeFrameGroup {
+export interface CrossfadeCompositionItem extends Omit<CrossfadeFrameGroup, 'requests'> {
+  requests: readonly [PlannedCrossfadeFrameRequest, PlannedCrossfadeFrameRequest]
   blendMode: BlendModeResolution
 }
 
@@ -78,11 +98,13 @@ function ordinaryItem(
   trackId: TrackId,
   clip: Clip | null,
   frame: number,
+  effectStagePlanner: VideoEffectStagePlanner,
 ): OrdinaryVideoPlanItem | TextOverlayPlanItem | null {
   if (!clip) return null
   const resolvedClip = resolveClipAnimationAtFrame(clip, frame)
   const opacity = clipOpacity(resolvedClip)
   if (opacity <= 0) return null
+  const effectStagePlan = effectStagePlanner.planClip(resolvedClip, frame)
   if (resolvedClip.text !== undefined) {
     return {
       kind: 'text',
@@ -91,6 +113,7 @@ function ordinaryItem(
       clip: resolvedClip,
       opacity,
       blendMode: resolveBlendMode(clipBlendModeIntent(resolvedClip)),
+      ...(effectStagePlan === null ? {} : { effectStagePlan }),
     }
   }
   return {
@@ -104,20 +127,28 @@ function ordinaryItem(
         ? 0
         : sourceFrameAtTimelineFrame(resolvedClip, frame),
       opacity,
+      ...(effectStagePlan === null ? {} : { effectStagePlan }),
     },
   }
 }
 
 function resolveCrossfadeGroupAnimation(
   group: CrossfadeFrameGroup,
+  effectStagePlanner: VideoEffectStagePlanner,
 ): CrossfadeCompositionItem {
   const resolveRequest = (
     request: CrossfadeFrameGroup['requests'][number],
-  ): CrossfadeFrameGroup['requests'][number] => {
+  ): PlannedCrossfadeFrameRequest => {
     const clip = resolveClipAnimationAtFrame(request.clip, group.frame)
-    return { ...request, clip, opacity: clipOpacity(clip) }
+    const effectStagePlan = effectStagePlanner.planClip(clip, group.frame)
+    return {
+      ...request,
+      clip,
+      opacity: clipOpacity(clip),
+      ...(effectStagePlan === null ? {} : { effectStagePlan }),
+    }
   }
-  const requests: CrossfadeFrameGroup['requests'] = [
+  const requests: CrossfadeCompositionItem['requests'] = [
     resolveRequest(group.requests[0]),
     resolveRequest(group.requests[1]),
   ]
@@ -136,7 +167,9 @@ function resolveCrossfadeGroupAnimation(
 export function createVideoCompositionPlanner(
   doc: TimelineDoc,
   catalog: SourceBoundsCatalog,
+  pluginContributions?: PluginVideoEffectContributionSnapshot,
 ): VideoCompositionPlanner {
+  const effectStagePlanner = createVideoEffectStagePlanner(pluginContributions)
   const tracks: Array<{
     readonly id: TrackId
     readonly clips: FrameIndex<Clip>
@@ -182,13 +215,20 @@ export function createVideoCompositionPlanner(
         const activeTransition = track.transitions.activeAt(frame)
         if (activeTransition) {
           const rawGroup = crossfadeFrameGroupAt(activeTransition, frame)
-          const group = rawGroup ? resolveCrossfadeGroupAnimation(rawGroup) : null
+          const group = rawGroup
+            ? resolveCrossfadeGroupAnimation(rawGroup, effectStagePlanner)
+            : null
           if (group) {
             items.push(group)
             continue
           }
         }
-        const ordinary = ordinaryItem(track.id, track.clips.activeAt(frame), frame)
+        const ordinary = ordinaryItem(
+          track.id,
+          track.clips.activeAt(frame),
+          frame,
+          effectStagePlanner,
+        )
         if (ordinary) items.push(ordinary)
       }
       const captions = activeCaptionItemsAtFrame(doc, frame)
@@ -211,8 +251,9 @@ export function videoCompositionPlanAtFrame(
   doc: TimelineDoc,
   frame: number,
   catalog: SourceBoundsCatalog,
+  pluginContributions?: PluginVideoEffectContributionSnapshot,
 ): VideoCompositionPlan {
-  return createVideoCompositionPlanner(doc, catalog).planFrame(frame)
+  return createVideoCompositionPlanner(doc, catalog, pluginContributions).planFrame(frame)
 }
 
 /** Exact decode requests in compositor call order; invisible legs need none. */
@@ -222,12 +263,25 @@ export function videoCompositionRequests(
   const requests: VideoFrameRequest[] = []
   for (const item of plan.items) {
     if (item.kind === 'clip') {
-      requests.push(item.request)
+      if (!Object.prototype.hasOwnProperty.call(item.request, 'effectStagePlan')) {
+        requests.push(item.request)
+      } else {
+        const request = { ...item.request }
+        delete request.effectStagePlan
+        requests.push(request)
+      }
       continue
     }
     if (item.kind === 'text' || item.kind === 'caption') continue
     for (const request of item.requests) {
-      if (request.opacity > 0 && request.weight > 0) requests.push(request)
+      if (request.opacity <= 0 || request.weight <= 0) continue
+      if (!Object.prototype.hasOwnProperty.call(request, 'effectStagePlan')) {
+        requests.push(request)
+      } else {
+        const decodeRequest = { ...request }
+        delete decodeRequest.effectStagePlan
+        requests.push(decodeRequest)
+      }
     }
   }
   return requests

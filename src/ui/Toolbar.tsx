@@ -17,6 +17,7 @@ import {
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 import EditorCommandPalette from './EditorCommandPalette'
+import { useOptionalPluginUi } from './plugins/PluginUiHooks'
 
 const ExportDialog = lazy(() => import('./ExportDialog'))
 const CaptionEditor = lazy(() => import('./CaptionEditor'))
@@ -52,6 +53,7 @@ function recoveryStatus(
 }
 
 export default function Toolbar() {
+  const pluginUi = useOptionalPluginUi()
   const [exportOpen, setExportOpen] = useState(false)
   const [captionsOpen, setCaptionsOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
@@ -215,6 +217,18 @@ export default function Toolbar() {
         >
           Captions
         </button>
+        {pluginUi && (
+          <button
+            type="button"
+            className="toolbar-button"
+            aria-haspopup="dialog"
+            aria-expanded={pluginUi.manager.open}
+            disabled={closing}
+            onClick={() => pluginUi.manager.openManager()}
+          >
+            Plugins
+          </button>
+        )}
         <button
           ref={exportButtonRef}
           type="button"

@@ -28,7 +28,12 @@ import {
   VIDEO_SCOPE_SAMPLE_WIDTH,
   type VideoScopeAnalysis,
 } from '../domain/videoScopes'
-import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
+import {
+  createVideoCompositionPlanner,
+  videoCompositionPlanAtFrame,
+  type VideoCompositionPlan,
+} from '../domain/videoCompositionPlan'
+import { createPluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import type { Composite2D } from '../pipeline/render'
 import { LensRemapUnavailableError } from '../pipeline/lensRemap'
 import type { WebGl2LensRemapBackend } from '../pipeline/lensRemapWebgl'
@@ -37,6 +42,7 @@ import {
   type DecodedStaticImage,
 } from '../pipeline/static-image'
 import type { ChunkPayload } from './decode-protocol'
+import { PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION } from './plugin-effect-bridge-protocol'
 import type {
   BitmapLike,
   DecodableFrame,
@@ -457,6 +463,7 @@ function makeSurface(
 interface Harness {
   core: ReturnType<typeof createRenderWorkerCore>
   posts: FromRenderWorker[]
+  postTransfers: Array<{ readonly message: FromRenderWorker; readonly transfer: Transferable[] }>
   frames: TrackedFrame[]
   streamingFrames: TrackedStreamingFrame[]
   bitmaps: TrackedBitmap[]
@@ -486,6 +493,10 @@ interface Harness {
 function makeHarness(opts: FakeOptions = {}): Harness {
   testPlanDoc = null
   const posts: FromRenderWorker[] = []
+  const postTransfers: Array<{
+    readonly message: FromRenderWorker
+    readonly transfer: Transferable[]
+  }> = []
   const frames: TrackedFrame[] = []
   const streamingFrames: TrackedStreamingFrame[] = []
   const bitmaps: TrackedBitmap[] = []
@@ -510,7 +521,13 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   const createdSurfaces: FakeSurface[] = []
 
   const env: RenderWorkerEnv = {
-    post: (msg) => posts.push(msg),
+    post: (msg, transfer = []) => {
+      const delivered = msg.type === 'pluginEffectApply' && transfer.length > 0
+        ? structuredClone(msg, { transfer }) as FromRenderWorker
+        : msg
+      posts.push(delivered)
+      postTransfers.push({ message: delivered, transfer })
+    },
     createDecoder: (init) => {
       const decoder = new FakeDecoder(init.output, init.error, opts, frames)
       decoders.push(decoder)
@@ -636,6 +653,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   return {
     core: createRenderWorkerCore(env),
     posts,
+    postTransfers,
     frames,
     streamingFrames,
     bitmaps,
@@ -893,6 +911,45 @@ function testVisualPlan(frame: number) {
   return videoCompositionPlanAtFrame(testPlanDoc, frame, bounds)
 }
 
+function pluginVisualPlan(doc: TimelineDoc, frame = 0): VideoCompositionPlan {
+  const contributions = createPluginVideoEffectContributionSnapshot(7, [{
+    signerFingerprint: `sha256:${'1'.repeat(64)}`,
+    packageDigest: `sha256:${'2'.repeat(64)}`,
+    pluginId: 'com.example.sparkle',
+    pluginVersion: '1.2.3',
+    kind: 'video-effect',
+    contributionVersion: 1,
+    contributionId: 'sparkle',
+    contributionName: 'Sparkle',
+    descriptorVersion: 1,
+    entrypoint: 'myrelith_effect_sparkle',
+    parameters: [{
+      key: 'strength',
+      name: 'Strength',
+      kind: 'number',
+      default: 0.2,
+      min: 0,
+      max: 1,
+      step: 0.1,
+      animatable: false,
+    }],
+    availability: 'ready',
+    detail: 'Ready to render.',
+  }])
+  const bounds = new Map(doc.tracks.flatMap((track) => track.clips.map((clip) => [
+    clip.assetId,
+    {
+      video: {
+        status: 'exact' as const,
+        firstTimestampUs: 0,
+        endTimestampUs: 1_000_000_000_000,
+      },
+      audio: null,
+    },
+  ] as const)))
+  return createVideoCompositionPlanner(doc, bounds, contributions).planFrame(frame)
+}
+
 const cfgMsg = (assetId: string, setupId = 1): ToRenderWorker => ({
   type: 'configureAsset',
   assetId,
@@ -946,6 +1003,7 @@ function renderMsg(
 ): RenderFrameMessage {
   return {
     type: 'renderFrame',
+    generation: requestId,
     requestId,
     frame,
     plan: testVisualPlan(frame),
@@ -1043,6 +1101,37 @@ function doneFor(h: Harness, requestId: number) {
   return replies[0] as Extract<FromRenderWorker, { type: 'compositeDone' }>
 }
 
+async function setupPluginStill(h: Harness): Promise<{
+  readonly doc: TimelineDoc
+  readonly plan: VideoCompositionPlan
+  readonly source: TrackedBitmap
+}> {
+  const clip = {
+    ...makeStillClip('plugin-still', 'IMAGE', 0, 10),
+    effects: [{
+      id: 'plugin-effect',
+      type: 'plugin:com.example.sparkle/sparkle',
+      version: 1,
+      enabled: true,
+      params: { strength: 0.25 },
+    }],
+  }
+  const doc = makeDoc([makeTrack('V1', [clip])])
+  const source = makeStaticSource()
+  await setupStaticImage(h, doc, 'IMAGE', source)
+  return { doc, plan: pluginVisualPlan(doc), source }
+}
+
+function pluginApplyFor(h: Harness, renderRequestId: number) {
+  const message = h.posts.find((post) => (
+    post.type === 'pluginEffectApply' && post.renderRequestId === renderRequestId
+  ))
+  if (!message || message.type !== 'pluginEffectApply') {
+    throw new Error(`missing plugin apply for render ${renderRequestId}`)
+  }
+  return message
+}
+
 /** Two stacked one-clip tracks on assets A (bottom) and B (top). */
 const twoTrackDoc = () =>
   makeDoc([
@@ -1053,6 +1142,194 @@ const twoTrackDoc = () =>
 /* ------------------------------------------------------------------ */
 /* Happy path                                                           */
 /* ------------------------------------------------------------------ */
+
+describe('plugin effect bridge', () => {
+  test('transfers owned pixels to the host, applies exact output, then zeroes it', async () => {
+    const h = makeHarness({ supportsCanvasPixels: true })
+    const { plan } = await setupPluginStill(h)
+    const rendering = h.core.handleMessage({
+      type: 'renderFrame',
+      generation: 1,
+      requestId: 1,
+      frame: 0,
+      plan,
+      mode: 'seek',
+      sources: [stillEntry('plugin-still', 'IMAGE')],
+    })
+    await microtasks()
+    const apply = pluginApplyFor(h, 1)
+    expect([...new Uint8Array(apply.rgbaBytes).slice(0, 4)]).toEqual([64, 128, 192, 255])
+    const transferred = h.postTransfers.find(({ message }) => message === apply)
+    if (!transferred) throw new Error('plugin effect transfer was not posted')
+    expect(transferred.transfer).toHaveLength(1)
+    expect((transferred.transfer[0] as ArrayBuffer).byteLength).toBe(0)
+
+    const output = new Uint8Array(apply.rgbaBytes.byteLength)
+    for (let offset = 0; offset < output.length; offset += 4) {
+      output.set([9, 8, 7, 255], offset)
+    }
+    await h.core.handleMessage({
+      type: 'pluginEffectApplied',
+      protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: apply.generation,
+      renderRequestId: apply.renderRequestId,
+      effectRequestId: apply.effectRequestId,
+      rgbaBytes: output.buffer,
+    })
+    await rendering
+
+    expect(doneFor(h, 1).status).toBe('drawn')
+    const put = h.ops.find((op) => op.name === 'putImageData')
+    expect(put).toBeDefined()
+    expect([...(put!.args[0] as ImageData).data.slice(0, 4)]).toEqual([9, 8, 7, 255])
+    expect(output.every((byte) => byte === 0)).toBe(true)
+  })
+
+  test('bypasses one plugin stage without aborting the composite', async () => {
+    const h = makeHarness({ supportsCanvasPixels: true })
+    const { plan } = await setupPluginStill(h)
+    const rendering = h.core.handleMessage({
+      type: 'renderFrame',
+      generation: 1,
+      requestId: 1,
+      frame: 0,
+      plan,
+      mode: 'seek',
+      sources: [stillEntry('plugin-still', 'IMAGE')],
+    })
+    await microtasks()
+    const apply = pluginApplyFor(h, 1)
+
+    await h.core.handleMessage({
+      type: 'pluginEffectBypassed',
+      protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: apply.generation,
+      renderRequestId: apply.renderRequestId,
+      effectRequestId: apply.effectRequestId,
+    })
+    await rendering
+
+    expect(doneFor(h, 1).status).toBe('drawn')
+    const put = h.ops.find((op) => op.name === 'putImageData')
+    expect([...(put!.args[0] as ImageData).data.slice(0, 4)]).toEqual([64, 128, 192, 255])
+  })
+
+  test('zeroes malformed host output and converts it to a stage-local bypass', async () => {
+    const h = makeHarness({ supportsCanvasPixels: true })
+    const { plan } = await setupPluginStill(h)
+    const rendering = h.core.handleMessage({
+      type: 'renderFrame',
+      generation: 1,
+      requestId: 1,
+      frame: 0,
+      plan,
+      mode: 'seek',
+      sources: [stillEntry('plugin-still', 'IMAGE')],
+    })
+    await microtasks()
+    const apply = pluginApplyFor(h, 1)
+    const malformed = Uint8Array.of(7, 7, 7)
+
+    await h.core.handleMessage({
+      type: 'pluginEffectApplied',
+      protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: apply.generation,
+      renderRequestId: apply.renderRequestId,
+      effectRequestId: apply.effectRequestId,
+      rgbaBytes: malformed.buffer,
+    })
+    await rendering
+
+    expect([...malformed]).toEqual([0, 0, 0])
+    expect(doneFor(h, 1).status).toBe('drawn')
+  })
+
+  test('cancels a superseded stage and zeroes a late host output', async () => {
+    const h = makeHarness({ supportsCanvasPixels: true })
+    const { plan } = await setupPluginStill(h)
+    const first = h.core.handleMessage({
+      type: 'renderFrame',
+      generation: 1,
+      requestId: 1,
+      frame: 0,
+      plan,
+      mode: 'seek',
+      sources: [stillEntry('plugin-still', 'IMAGE')],
+    })
+    await microtasks()
+    const firstApply = pluginApplyFor(h, 1)
+    const second = h.core.handleMessage({
+      type: 'renderFrame',
+      generation: 2,
+      requestId: 2,
+      frame: 0,
+      plan,
+      mode: 'seek',
+      sources: [stillEntry('plugin-still', 'IMAGE')],
+    })
+    await microtasks()
+
+    expect(h.posts).toContainEqual({
+      type: 'pluginEffectCancel',
+      protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: firstApply.generation,
+      renderRequestId: 1,
+      effectRequestId: firstApply.effectRequestId,
+    })
+    const late = new Uint8Array(firstApply.rgbaBytes.byteLength).fill(77)
+    await h.core.handleMessage({
+      type: 'pluginEffectApplied',
+      protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: firstApply.generation,
+      renderRequestId: 1,
+      effectRequestId: firstApply.effectRequestId,
+      rgbaBytes: late.buffer,
+    })
+    expect(late.every((byte) => byte === 0)).toBe(true)
+
+    await microtasks()
+    const secondApply = pluginApplyFor(h, 2)
+    await h.core.handleMessage({
+      type: 'pluginEffectBypassed',
+      protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: secondApply.generation,
+      renderRequestId: 2,
+      effectRequestId: secondApply.effectRequestId,
+    })
+    await Promise.all([first, second])
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(doneFor(h, 2).status).toBe('drawn')
+  })
+
+  test('close cancels plugin RPC and acknowledges only after the composite settles', async () => {
+    const h = makeHarness({ supportsCanvasPixels: true })
+    const { plan } = await setupPluginStill(h)
+    const rendering = h.core.handleMessage({
+      type: 'renderFrame',
+      generation: 1,
+      requestId: 1,
+      frame: 0,
+      plan,
+      mode: 'seek',
+      sources: [stillEntry('plugin-still', 'IMAGE')],
+    })
+    await microtasks()
+    const apply = pluginApplyFor(h, 1)
+
+    const closing = h.core.handleMessage({ type: 'close' })
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(0)
+    expect(h.posts).toContainEqual({
+      type: 'pluginEffectCancel',
+      protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: apply.generation,
+      renderRequestId: 1,
+      effectRequestId: apply.effectRequestId,
+    })
+    await Promise.all([rendering, closing])
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(1)
+  })
+})
 
 describe('composite happy path', () => {
   test.each([

@@ -12,6 +12,7 @@ import {
 } from '../codecs/mediaCodecFallbacks'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { AssetId, TimelineDoc } from '../domain/schema'
+import type { PluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import { docDurationFrames } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
 import {
@@ -92,6 +93,7 @@ interface VideoRequestSchedule {
 function videoRequestSchedule(
   doc: TimelineDoc,
   sourceBounds: SourceBoundsCatalog,
+  pluginSnapshot?: PluginVideoEffectContributionSnapshot,
 ): VideoRequestSchedule {
   const frameCount = docDurationFrames(doc)
   if (!Number.isSafeInteger(frameCount) || frameCount < 0) {
@@ -100,7 +102,7 @@ function videoRequestSchedule(
 
   const byAsset = new Map<AssetId, number[]>()
   const plans: VideoCompositionPlan[] = []
-  const planner = createVideoCompositionPlanner(doc, sourceBounds)
+  const planner = createVideoCompositionPlanner(doc, sourceBounds, pluginSnapshot)
   for (let frame = 0; frame < frameCount; frame++) {
     const plan = planner.planFrame(frame)
     plans.push(plan)
@@ -121,6 +123,7 @@ export function createMediabunnyExportMediaSource(
   doc: TimelineDoc,
   resolveAsset: ExportAssetResolver,
   sourceBounds: SourceBoundsCatalog,
+  pluginSnapshot?: PluginVideoEffectContributionSnapshot,
 ): ExportMediaSource {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -129,7 +132,7 @@ export function createMediabunnyExportMediaSource(
   framesToSeconds(0, doc.frameRate)
   const sessions = new Map<AssetId, Promise<DecodedVisualAsset>>()
   const openInputs = new Set<Input>()
-  const requests = videoRequestSchedule(doc, sourceBounds)
+  const requests = videoRequestSchedule(doc, sourceBounds, pluginSnapshot)
   const imageAbort = new AbortController()
   let closed = false
   let closePromise: Promise<void> | null = null

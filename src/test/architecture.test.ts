@@ -157,8 +157,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     'pipeline/decode.ts',
     'workers/decode.worker.ts',
   ])
-  const benchmarkDevImportAllowances = new Map<string, ReadonlySet<string>>([
+  const devImportAllowances = new Map<string, ReadonlySet<string>>([
     ['dev/ProxyEditingBenchmarkPanel.tsx', new Set(['app', 'domain', 'state'])],
+    ['dev/issue77/pluginAcceptanceGate.ts', new Set(['app'])],
+    ['dev/issue77/pluginLifecycleEvidence.ts', new Set(['app'])],
     ['dev/issue108/motionAnalysisFoundation.ts', new Set(['app', 'domain', 'pipeline'])],
     ['dev/issue109/videoStabilizationGate.ts', new Set(['app', 'domain', 'state'])],
     ['dev/issue110/motionTrackingGate.ts', new Set(['app', 'domain', 'state'])],
@@ -187,10 +189,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     const toName = moduleName(edge.to)
 
     if (fromArea === 'dev' && toArea !== 'dev') {
-      const allowedAreas = benchmarkDevImportAllowances.get(fromName)
+      const allowedAreas = devImportAllowances.get(fromName)
       if (!allowedAreas?.has(toArea)) {
         violations.push(
-          `${edgeLabel(edge)} is outside the narrow benchmark-only dev exception`,
+          `${edgeLabel(edge)} is outside the narrow documented dev exception`,
         )
       }
     }
@@ -256,6 +258,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
       && fromArea !== toArea
     ) {
       const sanctioned = workerTypeModules.has(toName) && edge.typeOnly
+        || (
+          fromName === 'engine/render-bridge.ts'
+          && toName === 'workers/plugin-effect-bridge-protocol.ts'
+        )
         || (
           fromArea === 'workers'
           && toName === 'engine/frame-cache.ts'
@@ -376,19 +382,28 @@ describe('architecture guard', () => {
     expect(editorClosure).not.toContain('ui/AnimationCurveEditor.tsx')
   })
 
-  test('limits benchmark-only composition imports to the documented dev files', () => {
+  test('limits privileged composition imports to the documented dev files', () => {
     const privilegedImporters = new Set(edges
       .filter((edge) => edge.to && area(edge.from) === 'dev')
       .filter((edge) => new Set(['app', 'state', 'ui']).has(area(edge.to!)))
       .map((edge) => moduleName(edge.from)))
-    expect(privilegedImporters).toEqual(new Set([
+    const expectedPrivilegedImporters = new Set([
       'dev/ProxyEditingBenchmarkPanel.tsx',
       'dev/issue108/motionAnalysisFoundation.ts',
       'dev/issue109/videoStabilizationGate.ts',
       'dev/issue110/motionTrackingGate.ts',
       'dev/performance/PerformanceBenchmarkApp.tsx',
       'dev/performance/runtime.ts',
-    ]))
+    ])
+    for (const issue77Importer of [
+      'dev/issue77/pluginAcceptanceGate.ts',
+      'dev/issue77/pluginLifecycleEvidence.ts',
+    ]) {
+      if (productionFiles.some((path) => moduleName(path) === issue77Importer)) {
+        expectedPrivilegedImporters.add(issue77Importer)
+      }
+    }
+    expect(privilegedImporters).toEqual(expectedPrivilegedImporters)
   })
 
   test('keeps ordinary test documents on the current timeline schema', () => {

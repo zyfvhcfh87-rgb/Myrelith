@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
+import { createPluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
+import { createVideoCompositionPlanner } from '../domain/videoCompositionPlan'
 import type { ExportVideoSink } from './export'
 import {
   DECODE_BUDGET,
@@ -38,6 +40,81 @@ const {
 } = adapterTestSubject
 
 describe('createMediabunnyExportMediaSource', () => {
+  test('retains the exact shared plugin plan and canonical parameter order for export', async () => {
+    const base = makeVideoDoc([{ assetId: 'asset-a', sourceStart: 0 }], 1)
+    const doc = {
+      ...base,
+      tracks: base.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => ({
+          ...clip,
+          effects: [{
+            id: 'effect-fixture',
+            type: 'plugin:com.example.fixture/fixture',
+            version: 1,
+            enabled: true,
+            params: { zeta: 0.75, alpha: 0.25 },
+          }],
+        })),
+      })),
+    }
+    const snapshot = createPluginVideoEffectContributionSnapshot(11, [{
+      signerFingerprint: `sha256:${'1'.repeat(64)}`,
+      packageDigest: `sha256:${'2'.repeat(64)}`,
+      pluginId: 'com.example.fixture',
+      pluginVersion: '1.0.0',
+      kind: 'video-effect',
+      contributionVersion: 1,
+      contributionId: 'fixture',
+      contributionName: 'Fixture',
+      descriptorVersion: 1,
+      entrypoint: 'myrelith_effect_fixture',
+      parameters: [{
+        key: 'zeta',
+        name: 'Zeta',
+        kind: 'number',
+        default: 0,
+        min: 0,
+        max: 1,
+        step: 0.01,
+        animatable: true,
+      }, {
+        key: 'alpha',
+        name: 'Alpha',
+        kind: 'number',
+        default: 0,
+        min: 0,
+        max: 1,
+        step: 0.01,
+        animatable: true,
+      }],
+      availability: 'ready',
+      detail: 'Available.',
+    }])
+    const previewPlan = createVideoCompositionPlanner(doc, new Map(), snapshot).planFrame(0)
+    const { createMediabunnyExportMediaSource: createRealMediabunnyExportMediaSource } =
+      await import('./export-mediabunny-visual-source')
+    const media = createRealMediabunnyExportMediaSource(
+      doc,
+      vi.fn(async () => resolvedAsset(new Blob(['unused']))),
+      new Map(),
+      snapshot,
+    )
+
+    const lease = await media.openFrame(0)
+    expect(lease.plan).toEqual(previewPlan)
+    const item = lease.plan.items[0]
+    if (!item || item.kind !== 'clip') throw new Error('expected plugin clip plan')
+    const stage = item.request.effectStagePlan?.stages[0]
+    if (!stage || stage.kind !== 'plugin' || !stage.execution) {
+      throw new Error('expected ready plugin stage')
+    }
+    expect(stage.execution.parameterRecord).toEqual({ zeta: 0.75, alpha: 0.25 })
+    expect(stage.execution.canonicalParameterJson).toBe('{"alpha":0.25,"zeta":0.75}')
+    expect(() => lease.close()).toThrow('received 0 of 1 scheduled media requests')
+    await media.close()
+  })
+
   test('decodes one retained still and closes it only with the export source', async () => {
     const doc = makeStillDoc()
     const blob = new Blob(['still'])

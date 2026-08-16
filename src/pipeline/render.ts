@@ -19,9 +19,10 @@
  *   bitmap cannot poison the transform stack for the next composite).
  * - Ownership: compositeFrame never closes images. The FrameSource owns
  *   frame lifetime/caching (single-owner rule); returned images must stay
- *   valid until compositeFrame's returned promise settles — it draws
- *   synchronously after the fetch phase, never holding images across a
- *   yield.
+ *   valid until compositeFrame's returned promise settles. Ordered plugin
+ *   stages may yield after the fetch phase, so every borrowed image remains
+ *   loaned across those awaited draws and is released only by the caller
+ *   after this promise settles.
  * - All getFrame calls for one composite are issued CONCURRENTLY (decoders
  *   for different assets work in parallel), and two clips may request the
  *   SAME asset at different frames in one composite (picture-in-picture).
@@ -48,12 +49,11 @@ import { wrapTextLines } from '../domain/textLayout'
 import { textPropsValidationError } from '../domain/textOverlay'
 import {
   videoCompositionRequests,
+  type PlannedCrossfadeFrameRequest,
+  type PlannedVideoFrameRequest,
   type VideoCompositionPlan,
 } from '../domain/videoCompositionPlan'
-import type {
-  CrossfadeFrameRequest,
-  VideoFrameRequest,
-} from '../domain/crossfadePlan'
+import type { VideoFrameRequest } from '../domain/crossfadePlan'
 import { clipVisualSettings } from '../domain/clipInspector'
 import {
   LensRemapUnavailableError,
@@ -72,6 +72,14 @@ import {
   supportsCanvasEffectPixels,
 } from '../domain/effectStack'
 import { applyOrderedPixelEffectsToRgba } from '../domain/effectPixels'
+import type { VideoEffectStagePlan } from '../domain/pluginVideoEffectStagePlan'
+import {
+  applyVideoEffectStagePlanToRgba,
+  VideoEffectStageExecutionError,
+  type VideoEffectStageExecutor,
+} from './videoEffectStageExecution'
+
+export type { VideoEffectStageExecutor } from './videoEffectStageExecution'
 
 const NORMAL_BLEND_MODE = resolveBlendMode(DEFAULT_BLEND_MODE)
 
@@ -180,8 +188,10 @@ export interface CompositeSurface {
 
 /**
  * Persistent scratch surfaces for isolated layer/transition composition.
- * Preview and export own separate pairs so concurrent renders cannot overwrite
- * one another. The compositor clears and reuses surfaces on every borrowed path.
+ * Preview and export own separate pairs so concurrent owners cannot overwrite
+ * one another. A returned pair is borrowed exclusively until compositeFrame's
+ * promise settles because ordered plugin execution may await while its pixels
+ * remain live. The compositor clears and reuses surfaces on every borrowed path.
  */
 export interface TransitionSurfaces {
   /** Renders one complete transformed clip with ordinary source-over rules. */
@@ -190,7 +200,10 @@ export interface TransitionSurfaces {
   group: CompositeSurface
 }
 
-/** Lazily supplies caller-owned persistent surfaces when a layer needs isolation. */
+/**
+ * Lazily supplies caller-owned persistent surfaces. The caller must serialize
+ * compositeFrame uses that share a provider so each async borrow stays exclusive.
+ */
 export interface TransitionSurfaceProvider {
   get(): TransitionSurfaces
 }
@@ -221,11 +234,25 @@ function correctedSourceForClip(
   return provider.remap(clip, source)
 }
 
+function rethrowVideoEffectStageExecutionError(error: unknown): void {
+  if (error instanceof VideoEffectStageExecutionError) throw error
+}
+
+/** Null selects the visible legacy built-in path without calling the plugin. */
+function orderedPixelSurfaces(
+  provider: TransitionSurfaceProvider,
+): TransitionSurfaces | null {
+  const surfaces = provider.get()
+  return supportsCanvasEffectPixels(surfaces.leg.ctx) ? surfaces : null
+}
+
 /**
  * Composite timeline `frame` of `doc` onto `ctx`: black background, then
  * each visible video track's active clip bottom-to-top (tracks[0] first),
  * with the clip Transform (scale → rotate → translate around the anchor)
- * and opacity applied. Never rejects; per-clip failures land in `missing`.
+ * and opacity applied. Ordinary per-item failures land in `missing`; authored
+ * lens unavailability and typed video-effect execution failures reject so the
+ * owning preview/export policy can respond explicitly.
  */
 export async function compositeFrame(
   doc: TimelineDoc,
@@ -235,6 +262,7 @@ export async function compositeFrame(
   transitionSurfaceProvider: TransitionSurfaceProvider,
   presentation?: PresentationProfile,
   lensRemapProvider?: LensRemapProvider | null,
+  videoEffectStageExecutor?: VideoEffectStageExecutor | null,
 ): Promise<CompositeResult> {
   // Phase 1 — collect what needs pixels, bottom-to-top.
   const requests = videoCompositionRequests(plan)
@@ -251,15 +279,15 @@ export async function compositeFrame(
       }),
     ),
   )
-  const imagesByRequest = new Map<
-    VideoFrameRequest,
-    RenderFrameSource | null
-  >()
+  // videoCompositionRequests deliberately removes compositor-only plan fields,
+  // so request object identity is not stable for plugin-planned items.
+  const imagesByClipId = new Map<ClipId, RenderFrameSource | null>()
   for (let index = 0; index < requests.length; index++) {
-    imagesByRequest.set(requests[index], images[index])
+    imagesByClipId.set(requests[index].clip.id, images[index])
   }
 
-  // Phase 3 — draw synchronously (no yields: images stay valid throughout).
+  // Phase 3 — draw in paint order. Ordered plugin stages may yield; FrameSource
+  // loans remain valid until this compositeFrame promise settles.
   const drawn: ClipId[] = []
   const missing: ClipId[] = []
   const presentationScale = {
@@ -279,24 +307,26 @@ export async function compositeFrame(
 
     for (const item of plan.items) {
       if (item.kind === 'crossfade') {
-        compositeTransitionGroup(
+        await compositeTransitionGroup(
           doc,
           ctx,
           transitionSurfaceProvider,
           item.requests,
           item.blendMode,
-          imagesByRequest,
+          imagesByClipId,
           drawn,
           missing,
           presentationScale,
           lensRemapProvider,
+          videoEffectStageExecutor,
+          plan.frame,
         )
         continue
       }
 
       if (item.kind === 'text') {
         try {
-          compositeTextLayer(
+          await compositeTextLayer(
             doc,
             ctx,
             transitionSurfaceProvider,
@@ -304,9 +334,13 @@ export async function compositeFrame(
             item.opacity,
             item.blendMode,
             presentationScale,
+            item.effectStagePlan,
+            videoEffectStageExecutor,
+            plan.frame,
           )
           drawn.push(item.clip.id)
         } catch (e) {
+          rethrowVideoEffectStageExecutionError(e)
           console.warn(
             `[render] drawing text clip "${item.clip.id}" failed:`,
             e instanceof Error ? e.message : e,
@@ -340,14 +374,38 @@ export async function compositeFrame(
 
       const request = item.request
       const clip = request.clip
-      const image = imagesByRequest.get(request) ?? null
+      const image = imagesByClipId.get(clip.id) ?? null
       if (!image) {
         missing.push(clip.id)
         continue
       }
       try {
         const correctedImage = correctedSourceForClip(clip, image, lensRemapProvider)
-        if (requiresPixelEffects(ctx, clip)) {
+        const effectStagePlan = request.effectStagePlan
+        const plannedSurfaces = effectStagePlan?.requiresOrderedPixelPath
+          ? orderedPixelSurfaces(transitionSurfaceProvider)
+          : null
+        if (plannedSurfaces && effectStagePlan) {
+          await compositeOrderedPixelMediaLayer(
+            doc,
+            ctx,
+            plannedSurfaces,
+            request,
+            correctedImage,
+            item.blendMode,
+            presentationScale,
+            effectStagePlan,
+            videoEffectStageExecutor,
+            plan.frame,
+          )
+        } else if (
+          effectStagePlan?.requiresOrderedPixelPath
+          && videoEffectStageExecutor?.bypassPolicy === 'fail'
+        ) {
+          throw new VideoEffectStageExecutionError(
+            'Canvas pixel access is unavailable for fail-closed plugin composition',
+          )
+        } else if (requiresPixelEffects(ctx, clip)) {
           compositePixelCorrectedMediaLayer(
             doc,
             ctx,
@@ -363,6 +421,7 @@ export async function compositeFrame(
         drawn.push(clip.id)
       } catch (e) {
         rethrowLensRemapUnavailable(e)
+        rethrowVideoEffectStageExecutionError(e)
         // e.g. the bitmap was closed under us — record and keep compositing.
         console.warn(
           `[render] drawing clip "${clip.id}" failed:`,
@@ -537,18 +596,20 @@ function idsNotIn(left: ClipId[], right: ClipId[]): ClipId[] {
  * with Porter-Duff plus (`lighter`), then source-over the isolated group onto
  * lower tracks exactly once.
  */
-function compositeTransitionGroup(
+async function compositeTransitionGroup(
   doc: TimelineDoc,
   destination: Composite2D,
   surfaceProvider: TransitionSurfaceProvider,
-  requests: readonly [CrossfadeFrameRequest, CrossfadeFrameRequest],
+  requests: readonly [PlannedCrossfadeFrameRequest, PlannedCrossfadeFrameRequest],
   blendMode: BlendModeResolution,
-  imagesByRequest: ReadonlyMap<VideoFrameRequest, RenderFrameSource | null>,
+  imagesByClipId: ReadonlyMap<ClipId, RenderFrameSource | null>,
   drawn: ClipId[],
   missing: ClipId[],
   presentationScale: { readonly x: number; readonly y: number },
   lensRemapProvider: LensRemapProvider | null | undefined,
-): void {
+  videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
+  timelineFrame: number,
+): Promise<void> {
   const ready: ClipId[] = []
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
   const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
@@ -563,7 +624,7 @@ function compositeTransitionGroup(
 
     for (const request of requests) {
       if (request.opacity <= 0 || request.weight <= 0) continue
-      const image = imagesByRequest.get(request) ?? null
+      const image = imagesByClipId.get(request.clip.id) ?? null
       if (!image) {
         missing.push(request.clip.id)
         continue
@@ -575,7 +636,19 @@ function compositeTransitionGroup(
           image,
           lensRemapProvider,
         )
-        const pixelEffects = requiresPixelEffects(surfaces.leg.ctx, request.clip)
+        const orderedPixelPath = request.effectStagePlan?.requiresOrderedPixelPath === true
+          && supportsCanvasEffectPixels(surfaces.leg.ctx)
+        if (
+          request.effectStagePlan?.requiresOrderedPixelPath
+          && !orderedPixelPath
+          && videoEffectStageExecutor?.bypassPolicy === 'fail'
+        ) {
+          throw new VideoEffectStageExecutionError(
+            'Canvas pixel access is unavailable for fail-closed plugin transition composition',
+          )
+        }
+        const pixelEffects = orderedPixelPath
+          || requiresPixelEffects(surfaces.leg.ctx, request.clip)
         inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
           clearSurface(surfaces.leg.ctx, doc)
           drawClip(
@@ -588,13 +661,25 @@ function compositeTransitionGroup(
             pixelEffects ? 1 : request.opacity,
           )
         })
-        applyPixelEffectsToSurface(
-          surfaces.leg.ctx,
-          request.clip,
-          surfaceWidth,
-          surfaceHeight,
-          doc,
-        )
+        if (orderedPixelPath) {
+          await applyPlannedEffectsToSurface(
+            surfaces.leg.ctx,
+            request.effectStagePlan!,
+            videoEffectStageExecutor,
+            surfaceWidth,
+            surfaceHeight,
+            doc,
+            timelineFrame,
+          )
+        } else {
+          applyPixelEffectsToSurface(
+            surfaces.leg.ctx,
+            request.clip,
+            surfaceWidth,
+            surfaceHeight,
+            doc,
+          )
+        }
 
         inPresentationSpace(surfaces.group.ctx, presentationScale, () => {
           surfaces.group.ctx.globalAlpha = request.weight
@@ -615,6 +700,7 @@ function compositeTransitionGroup(
         ready.push(request.clip.id)
       } catch (e) {
         rethrowLensRemapUnavailable(e)
+        rethrowVideoEffectStageExecutionError(e)
         console.warn(
           `[render] drawing transition clip "${request.clip.id}" failed:`,
           e instanceof Error ? e.message : e,
@@ -646,6 +732,7 @@ function compositeTransitionGroup(
     drawn.push(...ready)
   } catch (e) {
     rethrowLensRemapUnavailable(e)
+    rethrowVideoEffectStageExecutionError(e)
     console.warn(
       '[render] drawing isolated transition group failed:',
       e instanceof Error ? e.message : e,
@@ -832,6 +919,66 @@ function compositePixelCorrectedMediaLayer(
   }
 }
 
+/** Isolate one complete media layer for a unified authored-order pixel plan. */
+async function compositeOrderedPixelMediaLayer(
+  doc: TimelineDoc,
+  destination: Composite2D,
+  surfaces: TransitionSurfaces,
+  request: PlannedVideoFrameRequest,
+  image: CanvasImageSource,
+  blendMode: BlendModeResolution,
+  presentationScale: { readonly x: number; readonly y: number },
+  effectStagePlan: VideoEffectStagePlan,
+  videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
+  timelineFrame: number,
+): Promise<void> {
+  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
+  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
+  try {
+    inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
+      clearSurface(surfaces.leg.ctx, doc)
+      drawClip(
+        surfaces.leg.ctx,
+        doc,
+        request,
+        image,
+        NORMAL_BLEND_MODE,
+        false,
+        1,
+      )
+    })
+    await applyPlannedEffectsToSurface(
+      surfaces.leg.ctx,
+      effectStagePlan,
+      videoEffectStageExecutor,
+      surfaceWidth,
+      surfaceHeight,
+      doc,
+      timelineFrame,
+    )
+    destination.save()
+    try {
+      destination.globalAlpha = request.opacity
+      applyCanvasBlendMode(destination, blendMode)
+      destination.drawImage(
+        surfaces.leg.canvas,
+        0,
+        0,
+        surfaceWidth,
+        surfaceHeight,
+        0,
+        0,
+        doc.width,
+        doc.height,
+      )
+    } finally {
+      destination.restore()
+    }
+  } finally {
+    releaseSurfacePixels(surfaces.leg.ctx, doc, presentationScale)
+  }
+}
+
 /** Best-effort release of scratch pixels without transferring surface ownership. */
 function releaseSurfacePixels(
   ctx: Composite2D,
@@ -846,7 +993,7 @@ function releaseSurfacePixels(
 }
 
 /** Render procedural text into one transparent layer, then blend it once. */
-function compositeTextLayer(
+async function compositeTextLayer(
   doc: TimelineDoc,
   destination: Composite2D,
   surfaceProvider: TransitionSurfaceProvider,
@@ -854,7 +1001,10 @@ function compositeTextLayer(
   opacity: number,
   blendMode: BlendModeResolution,
   presentationScale: { readonly x: number; readonly y: number },
-): void {
+  effectStagePlan: VideoEffectStagePlan | undefined,
+  videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
+  timelineFrame: number,
+): Promise<void> {
   const surfaces = surfaceProvider.get()
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
   const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
@@ -864,8 +1014,29 @@ function compositeTextLayer(
       drawTextClip(surfaces.leg.ctx, doc, clip, 1, NORMAL_BLEND_MODE)
     })
 
-    const pixelCorrection = requiresPixelEffects(surfaces.leg.ctx, clip)
-    if (pixelCorrection) {
+    const orderedPixelPath = effectStagePlan?.requiresOrderedPixelPath === true
+      && supportsCanvasEffectPixels(surfaces.leg.ctx)
+    if (
+      effectStagePlan?.requiresOrderedPixelPath
+      && !orderedPixelPath
+      && videoEffectStageExecutor?.bypassPolicy === 'fail'
+    ) {
+      throw new VideoEffectStageExecutionError(
+        'Canvas pixel access is unavailable for fail-closed plugin text composition',
+      )
+    }
+    const pixelCorrection = orderedPixelPath || requiresPixelEffects(surfaces.leg.ctx, clip)
+    if (orderedPixelPath) {
+      await applyPlannedEffectsToSurface(
+        surfaces.leg.ctx,
+        effectStagePlan,
+        videoEffectStageExecutor,
+        surfaceWidth,
+        surfaceHeight,
+        doc,
+        timelineFrame,
+      )
+    } else if (pixelCorrection) {
       applyPixelEffectsToSurface(
         surfaces.leg.ctx,
         clip,
@@ -931,6 +1102,34 @@ function requiresPixelEffects(ctx: Composite2D, clip: Clip): boolean {
     supportsCanvasEffectFilter(ctx),
     supportsCanvasEffectPixels(ctx),
   ).pixelEffects.length > 0
+}
+
+async function applyPlannedEffectsToSurface(
+  ctx: Composite2D,
+  plan: VideoEffectStagePlan,
+  executor: VideoEffectStageExecutor | null | undefined,
+  width: number,
+  height: number,
+  doc: Pick<TimelineDoc, 'width' | 'height' | 'frameRate'>,
+  timelineFrame: number,
+): Promise<void> {
+  if (
+    !supportsCanvasEffectPixels(ctx)
+    || !ctx.getImageData
+    || !ctx.putImageData
+  ) {
+    throw new Error('Canvas pixel access is unavailable for ordered effect composition')
+  }
+  const imageData = ctx.getImageData(0, 0, width, height)
+  await applyVideoEffectStagePlanToRgba(imageData.data, plan, executor, {
+    timelineFrame,
+    frameRate: doc.frameRate,
+    surfaceWidth: width,
+    surfaceHeight: height,
+    projectWidth: doc.width,
+    projectHeight: doc.height,
+  })
+  ctx.putImageData(imageData, 0, 0)
 }
 
 function applyPixelEffectsToSurface(

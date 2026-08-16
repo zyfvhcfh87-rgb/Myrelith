@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "artifact": "audited-invert-v1",
+  "source": {
+    "manifest": {
+      "path": "manifest.json",
+      "bytes": 608,
+      "sha256": "cae5990957fd921d227540070ba6f1d47e4e6ec9404a678504769dab1086b8af"
+    },
+    "moduleGenerator": {
+      "path": "source/module.mjs",
+      "sha256": "566143523a6d42d79fd39359296b00cd6c0d408c14fe58e7153c78bb03d13b36"
+    },
+    "verifier": {
+      "path": "verify.mjs",
+      "sha256": "72ef66f4fb5997460fe61d2f3564201a903965b96472301852370dad38912a0b"
+    },
+    "wasm": {
+      "path": "runtime/audited-invert.wasm",
+      "bytes": 347,
+      "sha256": "eff88f4911517a4bad015a473f224ae6122147e7092b8efb2347cf1d249358fc"
+    }
+  },
+  "release": {
+    "package": {
+      "path": "audited-invert-v1.myrelith-plugin",
+      "bytes": 1892,
+      "sha256": "a809c6f086213064a90b63f1ca1e42c5e5215aa3cd874c706e15fe5edcded42e"
+    },
+    "signatureEnvelope": {
+      "path": "signature.json",
+      "bytes": 579,
+      "sha256": "3a1672f6b0acc20e56d5d56cf5af485410feab9d528748ba184b11b6bc520eeb"
+    },
+    "signedPayload": {
+      "bytes": 478,
+      "sha256": "3bd3d0335bc768793e880f47afe051ac7443fc4d3654b6b520ba1413ce64ecd1"
+    },
+    "publicKey": "ZFrWA--KAyLiFsDZINyBRz5eVlvgxY4M3l-d4yCMXOk",
+    "signerFingerprint": "sha256:c955bcdaff60dc0593be20942f5f153ee4427765694b5e69a1e9a6caa5764139",
+    "packageDigest": "sha256:ca3eaaba5a8a87ea88e313fd9f26dd1ebb9aefc217ea76ef219a35ca931f8b15",
+    "privateKeyPersisted": false
+  },
+  "abi": {
+    "entrypoint": "myrelith_effect_audited_invert",
+    "memoryPages": 1025,
+    "parameterPointer": 16777216,
+    "pixelPointer": 16842752
+  },
+  "vectors": {
+    "input": [
+      0,
+      1,
+      127,
+      255,
+      10,
+      20,
+      30,
+      40
+    ],
+    "false": {
+      "code": 1,
+      "output": [
+        0,
+        1,
+        127,
+        255,
+        10,
+        20,
+        30,
+        40
+      ]
+    },
+    "invalid": {
+      "code": 2,
+      "output": [
+        0,
+        1,
+        127,
+        255,
+        10,
+        20,
+        30,
+        40
+      ]
+    },
+    "true": {
+      "code": 0,
+      "output": [
+        255,
+        254,
+        128,
+        255,
+        245,
+        235,
+        225,
+        40
+      ]
+    },
+    "repeated": [
+      255,
+      254,
+      128,
+      255,
+      245,
+      235,
+      225,
+      40
+    ],
+    "fresh": [
+      255,
+      254,
+      128,
+      255,
+      245,
+      235,
+      225,
+      40
+    ]
+  }
+}

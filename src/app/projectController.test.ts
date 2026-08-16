@@ -389,7 +389,8 @@ function makeDeps(
     inspectMedia: vi.fn(async () => readyInspection(makeAsset())),
     disposeExport: vi.fn(async () => undefined),
     disposeTransport: vi.fn(async () => undefined),
-    disposePreview: vi.fn(),
+    disposePreview: vi.fn(async () => undefined),
+    disposePlugins: vi.fn(async () => undefined),
     disposeMediaVisuals: vi.fn(),
     resetMediaImport: vi.fn(),
     pauseProjectPersistence: vi.fn(async () => undefined),
@@ -503,9 +504,9 @@ function installOfflineCompatibility(
   )).toBe(true)
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
-  resetProjectController({ revokeObjectURL: URL.revokeObjectURL })
+  await resetProjectController({ revokeObjectURL: URL.revokeObjectURL })
   useDocumentStore.getState().setDoc(createTimelineDoc(
     'Current project',
     DEFAULT_PROJECT_SETTINGS,
@@ -549,8 +550,14 @@ describe('new-project activation', () => {
     })
 
     const cleanupGate = deferred<void>()
+    const previewGate = deferred<void>()
+    const pluginGate = deferred<void>()
     const disposeTransport = vi.fn(() => cleanupGate.promise)
-    const deps = makeDeps({ disposeTransport })
+    const deps = makeDeps({
+      disposeTransport,
+      disposePreview: vi.fn(() => previewGate.promise),
+      disposePlugins: vi.fn(() => pluginGate.promise),
+    })
     const settings: ProjectSettings = {
       width: 3840,
       height: 2160,
@@ -558,14 +565,30 @@ describe('new-project activation', () => {
       audioSampleRate: 96_000,
     }
 
+    const previousDocument = useDocumentStore.getState().doc
     const result = createNewProject('Cinema', settings, deps)
     await flush()
     expect(disposeTransport).toHaveBeenCalledOnce()
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
 
     cleanupGate.resolve()
+    await flush()
+    expect(deps.disposePreview).toHaveBeenCalledOnce()
+    expect(deps.disposePlugins).not.toHaveBeenCalled()
+    expect(useDocumentStore.getState().doc).toBe(previousDocument)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+
+    previewGate.resolve()
+    await flush()
+    expect(deps.disposePlugins).toHaveBeenCalledOnce()
+    expect(useDocumentStore.getState().doc).toBe(previousDocument)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+
+    pluginGate.resolve()
     await expect(result).resolves.toEqual({ status: 'activated' })
 
+    expect(deps.disposePreview).toHaveBeenCalledOnce()
+    expect(deps.disposePlugins).toHaveBeenCalledOnce()
     expect(useDocumentStore.getState().doc).toMatchObject({
       id: 'doc-new',
       name: 'Cinema',
@@ -649,9 +672,13 @@ describe('active-project cleanup', () => {
 
     const persistenceGate = deferred<void>()
     const transportGate = deferred<void>()
+    const previewGate = deferred<void>()
+    const pluginGate = deferred<void>()
     const deps = makeDeps({
       pauseProjectPersistence: vi.fn(() => persistenceGate.promise),
       disposeTransport: vi.fn(() => transportGate.promise),
+      disposePreview: vi.fn(() => previewGate.promise),
+      disposePlugins: vi.fn(() => pluginGate.promise),
     })
 
     const leaving = leaveActiveProject(deps)
@@ -670,9 +697,21 @@ describe('active-project cleanup', () => {
     expect(deps.suspendProjectPersistence).not.toHaveBeenCalled()
 
     transportGate.resolve()
+    await flush()
+    expect(deps.disposePreview).toHaveBeenCalledOnce()
+    expect(deps.disposePlugins).not.toHaveBeenCalled()
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+
+    previewGate.resolve()
+    await flush()
+    expect(deps.disposePlugins).toHaveBeenCalledOnce()
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+
+    pluginGate.resolve()
     await expect(leaving).resolves.toEqual({ status: 'ready' })
 
     expect(deps.disposePreview).toHaveBeenCalledOnce()
+    expect(deps.disposePlugins).toHaveBeenCalledOnce()
     expect(deps.disposeMediaVisuals).toHaveBeenCalledOnce()
     expect(deps.resetMediaImport).toHaveBeenCalledOnce()
     expect(deps.suspendProjectPersistence).toHaveBeenCalledOnce()
@@ -762,6 +801,120 @@ describe('active-project cleanup', () => {
       activeProjectName: 'Still active',
       error: 'Could not return to Projects: audio drain failed',
     })
+  })
+
+  test('a failed plugin teardown preserves the active project and resumes persistence', async () => {
+    const asset = makeAsset({
+      id: 'asset-plugin-teardown-failed',
+      objectUrl: 'blob:plugin-teardown-failed',
+    })
+    useMediaStore.getState().addAsset(asset)
+    useProjectSessionStore.setState({
+      screen: 'editor',
+      activeProjectName: 'Plugin teardown failed',
+    })
+    const deps = makeDeps({
+      disposePlugins: vi.fn(async () => {
+        throw new Error('plugin worker did not close')
+      }),
+    })
+
+    await expect(leaveActiveProject(deps)).resolves.toEqual({
+      status: 'failed',
+      message: 'Could not return to Projects: plugin worker did not close',
+    })
+
+    expect(deps.disposePreview).toHaveBeenCalledOnce()
+    expect(deps.disposeMediaVisuals).not.toHaveBeenCalled()
+    expect(deps.resetMediaImport).not.toHaveBeenCalled()
+    expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(asset.objectUrl)
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      screen: 'editor',
+      phase: 'error',
+      activeProjectName: 'Plugin teardown failed',
+    })
+  })
+
+  test('a failed preview teardown still closes plugins before preserving the project', async () => {
+    const asset = makeAsset({
+      id: 'asset-preview-teardown-failed',
+      objectUrl: 'blob:preview-teardown-failed',
+    })
+    useMediaStore.getState().addAsset(asset)
+    useProjectSessionStore.setState({ screen: 'editor' })
+    const deps = makeDeps({
+      disposePreview: vi.fn(async () => {
+        throw new Error('preview worker did not close')
+      }),
+    })
+
+    await expect(leaveActiveProject(deps)).resolves.toEqual({
+      status: 'failed',
+      message: 'Could not return to Projects: preview worker did not close',
+    })
+
+    expect(deps.disposePlugins).toHaveBeenCalledOnce()
+    expect(deps.disposeMediaVisuals).not.toHaveBeenCalled()
+    expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(asset.objectUrl)
+  })
+
+  test('two teardown failures preserve both errors and the active project', async () => {
+    const asset = makeAsset({
+      id: 'asset-dual-teardown-failed',
+      objectUrl: 'blob:dual-teardown-failed',
+    })
+    useMediaStore.getState().addAsset(asset)
+    useProjectSessionStore.setState({ screen: 'editor' })
+    const deps = makeDeps({
+      disposePreview: vi.fn(async () => {
+        throw new Error('preview close failed')
+      }),
+      disposePlugins: vi.fn(async () => {
+        throw new Error('plugin close failed')
+      }),
+    })
+
+    await expect(leaveActiveProject(deps)).resolves.toEqual({
+      status: 'failed',
+      message: 'Could not return to Projects: Preview and plugin cleanup both failed',
+    })
+
+    expect(deps.disposePreview).toHaveBeenCalledOnce()
+    expect(deps.disposePlugins).toHaveBeenCalledOnce()
+    expect(deps.disposeMediaVisuals).not.toHaveBeenCalled()
+    expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(asset.objectUrl)
+  })
+
+  test('reset exposes both teardown causes when both owners fail to close', async () => {
+    const previewError = new Error('preview reset failed')
+    const pluginError = new Error('plugin reset failed')
+    let rejection: unknown
+
+    try {
+      await resetProjectController({
+        revokeObjectURL: URL.revokeObjectURL,
+        disposePreview: vi.fn(async () => {
+          throw previewError
+        }),
+        disposePlugins: vi.fn(async () => {
+          throw pluginError
+        }),
+      })
+    } catch (cause) {
+      rejection = cause
+    }
+
+    expect(rejection).toBeInstanceOf(AggregateError)
+    expect((rejection as AggregateError).errors).toEqual([
+      previewError,
+      pluginError,
+    ])
   })
 
   test('a failed recovery discard keeps the editor intact before Blob cleanup', async () => {
@@ -1204,7 +1357,7 @@ describe('portable project resume', () => {
         .toHaveBeenCalledTimes(MAX_CONCURRENT_REMEMBERED_HANDLE_LOOKUPS)
     })
 
-    resetProjectController(deps)
+    await resetProjectController(deps)
     lookup.resolve(null)
 
     await expect(opening).resolves.toEqual({ status: 'cancelled' })

@@ -24,18 +24,32 @@ export interface RunPluginActivationBatchOptions<T> {
 
 export interface PluginSessionSafety {
   enterSafeMode(): void
+  continueWithReviewedNormalStartup(): boolean
+  startupMode(): PluginSessionStartupMode
   isSafeMode(): boolean
   thirdPartyInitializationAllowed(): boolean
 }
 
+export type PluginSessionStartupMode = 'normal' | 'review-required' | 'safe-mode'
+
 export function createPluginSessionSafety(
   startupSafety: PluginStartupSafety,
 ): PluginSessionSafety {
-  let safeMode = startupSafety.offerSafeMode
+  let mode: PluginSessionStartupMode = startupSafety.status === 'clean'
+    ? 'normal'
+    : startupSafety.status === 'stale-activation'
+      ? 'review-required'
+      : 'safe-mode'
   return Object.freeze({
-    enterSafeMode: () => { safeMode = true },
-    isSafeMode: () => safeMode,
-    thirdPartyInitializationAllowed: () => !safeMode,
+    enterSafeMode: () => { mode = 'safe-mode' },
+    continueWithReviewedNormalStartup: () => {
+      if (mode !== 'review-required') return false
+      mode = 'normal'
+      return true
+    },
+    startupMode: () => mode,
+    isSafeMode: () => mode === 'safe-mode',
+    thirdPartyInitializationAllowed: () => mode === 'normal',
   })
 }
 
@@ -75,6 +89,9 @@ export function readPluginStartupSafety(storage: PluginSafetyStorage): PluginSta
 export async function runPluginActivationBatch<T>(
   options: RunPluginActivationBatchOptions<T>,
 ): Promise<T> {
+  if (options.batchId.length === 0 || options.batchId.length > 128) {
+    throw new TypeError('Plugin activation batch id must contain 1-128 characters')
+  }
   options.storage.setItem(
     PLUGIN_ACTIVATION_SENTINEL_KEY,
     JSON.stringify({ version: 1, batchId: options.batchId }),

@@ -1,8 +1,8 @@
 # Sandboxed plugin capability and compatibility contract
 
-Status: design for Issue #76. No third-party code is loaded, installed, or
-executed by this change. Runtime implementation remains gated on Issue #77 and
-an independent security/compatibility review of this document and
+Status: normative version-1 contract. Issue #77 implements this boundary in
+PR #123; the implementation remains merge-gated on the acceptance and
+independent security/compatibility review requirements below and in
 [PLUGIN_THREAT_MODEL.md](PLUGIN_THREAT_MODEL.md).
 
 ## Decision summary
@@ -1046,9 +1046,11 @@ cancellation, watchdog expiry, trust or revocation change, stale state, or final
 commit rejection discards all staged candidates and preserves every original
 descriptor and complete animation. Success also terminates the final owner.
 Every terminal path settles outstanding host requests and destroys the worker,
-instance, memory, port, and queue without waiting for plugin acknowledgement;
-retry creates fresh owners. Only a parent-owned verified raw-byte cache entry
-may remain, and retry still repeats every activation gate from a fresh copy.
+instance, memory, port, and queue without waiting for plugin-controlled
+acknowledgement. The parent waits only for a bounded, host-authored broker
+termination acknowledgement before its fallback cleanup; retry creates fresh
+owners. Only a parent-owned verified raw-byte cache entry may remain, and retry
+still repeats every activation gate from a fresh copy.
 
 As part of every export attempt's exact plugin preflight, before a sink or encoder
 is acquired, the host creates a separate export-owned sandbox and fresh
@@ -1106,10 +1108,11 @@ checkpoint.
 Terminal success destroys every export-owned worker, instance, and memory after
 the final planned call and output transaction complete. Failure, cancellation,
 or watchdog expiry makes the trusted parent terminate outstanding export workers
-and settle their host-side requests without waiting for plugin acknowledgement.
-Retrying or restarting an export is a new attempt: it starts again at the first
-requested frame with another fresh instance, so no partial or prior export state
-is inherited.
+and settle their host-side requests without waiting for plugin-controlled
+acknowledgement. It may wait only for the bounded host-authored broker
+termination acknowledgement before fallback cleanup. Retrying or restarting an
+export is a new attempt: it starts again at the first requested frame with
+another fresh instance, so no partial or prior export state is inherited.
 
 ## Resource and failure containment
 
@@ -1252,8 +1255,8 @@ portable-data rules, negative browser probes, and preview/export agreement.
 
 ## Issue #77 implementation gates
 
-Execution remains disabled until all of these are independently reviewed and
-green:
+Execution is release-eligible only while all of these are independently reviewed
+and green:
 
 1. byte-level ZIP, canonical JSON, integrity, Ed25519, trust, update, rollback,
    and revocation fixtures including hostile archives; exact/+1 envelope/member/
@@ -1351,5 +1354,6 @@ green:
 9. a separate security reviewer explicitly signs off the residual risks in
    `PLUGIN_THREAT_MODEL.md`.
 
-Until those gates close, `pluginManifest.ts` remains data-only and no production
-module may import package bytes or instantiate plugin WebAssembly.
+PR #123 implements the runtime behind these gates. Any failed gate blocks merge
+or release; install, activation, preview, migration, and export continue to fail
+closed rather than weakening the version-1 boundary.
