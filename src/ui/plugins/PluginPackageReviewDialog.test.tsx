@@ -132,7 +132,7 @@ describe('PluginPackageReviewDialog', () => {
           trustState: 'user-trusted',
           permissions: packageView.permissions.map((permission) => ({
             ...permission,
-            grantState: 'previously-granted',
+            grantState: 'preserved',
           })),
         }}
         onCancel={vi.fn()}
@@ -176,7 +176,7 @@ describe('PluginPackageReviewDialog', () => {
       permissions: [
         {
           ...packageView.permissions[0],
-          grantState: 'previously-granted',
+          grantState: 'preserved',
         },
         {
           ...packageView.permissions[1],
@@ -185,13 +185,23 @@ describe('PluginPackageReviewDialog', () => {
         {
           id: 'example.unavailable',
           name: 'Unavailable optional capability',
-          selectedVersion: '3',
+          selectedVersion: null,
           detail: 'The current host cannot provide this optional capability.',
           required: false,
           available: false,
           grantable: true,
-          grantState: 'new',
+          grantState: 'unavailable',
           unavailableReason: 'This browser does not expose the required primitive.',
+        },
+        {
+          id: 'example.changed',
+          name: 'Changed optional capability',
+          selectedVersion: '1',
+          detail: 'The requested range changed without widening access.',
+          required: false,
+          available: true,
+          grantable: true,
+          grantState: 'changed',
         },
       ],
     }
@@ -205,13 +215,16 @@ describe('PluginPackageReviewDialog', () => {
     )
 
     expect(screen.getByText('Downgrade from 1.2.0')).toBeInTheDocument()
-    expect(screen.getByText('Previously granted')).toBeInTheDocument()
+    expect(screen.getByText('Previously granted and preserved')).toBeInTheDocument()
     expect(screen.getByText('Widened grant request')).toBeInTheDocument()
+    expect(screen.getByText('Changed grant request')).toBeInTheDocument()
+    expect(screen.getByText('Grant unavailable')).toBeInTheDocument()
     const priorGrant = screen.getByRole('checkbox', { name: /Read and change applied video frames/i })
     expect(priorGrant).toBeChecked()
     const unavailable = screen.getByRole('checkbox', { name: /Unavailable optional capability/i })
     expect(unavailable).toBeDisabled()
     expect(unavailable).not.toBeChecked()
+    expect(screen.getByText('No compatible version selected')).toBeInTheDocument()
     expect(screen.getByText('Not grantable')).toBeInTheDocument()
 
     const install = screen.getByRole('button', { name: 'Install plugin' })

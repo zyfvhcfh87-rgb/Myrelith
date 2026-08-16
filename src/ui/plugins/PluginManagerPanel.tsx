@@ -8,6 +8,7 @@ export type PluginManagerPhase = 'loading' | 'ready' | 'error'
 export interface PluginManagerPanelProps {
   readonly phase: PluginManagerPhase
   readonly packages: readonly InstalledPluginView[]
+  readonly selectedPluginId?: string | null
   readonly error?: string | null
   readonly onInspectPackage: () => void
   readonly onRetryLoad?: () => void
@@ -33,6 +34,7 @@ function statusLabel(status: PluginPackageStatus): string {
 
 function PluginCard({
   plugin,
+  selected,
   pendingUninstall,
   setPendingUninstall,
   onRetryPlugin,
@@ -42,6 +44,7 @@ function PluginCard({
   onClearDiagnostics,
 }: {
   readonly plugin: InstalledPluginView
+  readonly selected: boolean
   readonly pendingUninstall: boolean
   readonly setPendingUninstall: (pluginId: string | null) => void
   readonly onRetryPlugin: (pluginId: string) => void
@@ -54,7 +57,12 @@ function PluginCard({
   const uninstallConfirmationId = `plugin-uninstall-${plugin.id}`
 
   return (
-    <li className="plugin-package-card" data-status={plugin.status}>
+    <li
+      className="plugin-package-card"
+      data-status={plugin.status}
+      data-selected={selected || undefined}
+      aria-current={selected ? 'true' : undefined}
+    >
       <div className="plugin-package-heading">
         <div>
           <h3>{plugin.name}</h3>
@@ -160,6 +168,7 @@ function PluginCard({
 export default function PluginManagerPanel({
   phase,
   packages,
+  selectedPluginId = null,
   error = null,
   onInspectPackage,
   onRetryLoad,
@@ -217,6 +226,7 @@ export default function PluginManagerPanel({
             <PluginCard
               key={plugin.id}
               plugin={plugin}
+              selected={selectedPluginId === plugin.id}
               pendingUninstall={pendingUninstallId === plugin.id}
               setPendingUninstall={setPendingUninstallId}
               onRetryPlugin={onRetryPlugin}

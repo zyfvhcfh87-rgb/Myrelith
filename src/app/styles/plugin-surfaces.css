@@ -32,6 +32,8 @@
 }
 
 .plugin-surface button,
+.plugin-surface input,
+.plugin-surface select,
 .plugin-preview-notice button,
 .plugin-inspector-status button,
 .plugin-dialog button,
@@ -41,6 +43,8 @@
 }
 
 .plugin-surface button:focus-visible,
+.plugin-surface input:focus-visible,
+.plugin-surface select:focus-visible,
 .plugin-preview-notice button:focus-visible,
 .plugin-inspector-status button:focus-visible,
 .plugin-dialog button:focus-visible,
@@ -180,6 +184,7 @@
 }
 
 .plugin-package-list,
+.plugin-contribution-list,
 .plugin-preview-issue-list,
 .plugin-export-issue-list,
 .plugin-diagnostic-list,
@@ -190,6 +195,7 @@
 }
 
 .plugin-package-list,
+.plugin-contribution-list,
 .plugin-preview-issue-list,
 .plugin-export-issue-list,
 .plugin-diagnostic-list {
@@ -206,6 +212,11 @@
   background: #111923;
   border: 1px solid #304056;
   border-radius: 9px;
+}
+
+.plugin-package-card[data-selected='true'] {
+  border-color: #78a9e8;
+  box-shadow: 0 0 0 2px rgb(111 159 245 / 18%);
 }
 
 .plugin-package-card[data-status='failed'],
@@ -272,7 +283,10 @@
 .plugin-status[data-status='missing'],
 .plugin-status[data-status='incompatible'],
 .plugin-status[data-status='revoked'],
-.plugin-status[data-status='quarantined'] {
+.plugin-status[data-status='quarantined'],
+.plugin-status[data-status='version-mismatch'],
+.plugin-status[data-status='invalid'],
+.plugin-status[data-status='unsupported'] {
   color: #ffc0c5;
   background: rgb(151 57 66 / 20%);
   border-color: rgb(216 91 102 / 42%);
@@ -879,6 +893,126 @@
   line-height: 1.5;
 }
 
+.plugin-contribution-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 10px;
+}
+
+.plugin-contribution-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 13px;
+  background: #111923;
+  border: 1px solid #304056;
+  border-radius: 9px;
+}
+
+.plugin-contribution-card[data-status='failed'],
+.plugin-contribution-card[data-status='incompatible'],
+.plugin-contribution-card[data-status='revoked'],
+.plugin-contribution-card[data-status='quarantined'] {
+  border-color: rgb(202 91 101 / 48%);
+}
+
+.plugin-contribution-copy {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.plugin-contribution-copy > p,
+.plugin-contribution-copy > code {
+  color: #94a3b6;
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.plugin-contribution-copy > code {
+  color: #b8c6d8;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.plugin-parameter-list {
+  display: grid;
+  gap: 10px;
+}
+
+.plugin-parameter-field {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  background: #111923;
+  border: 1px solid #304056;
+  border-radius: 8px;
+}
+
+.plugin-parameter-field[data-state='disabled'],
+.plugin-parameter-field[data-state='locked'] {
+  background: #151b23;
+  border-color: #343d49;
+}
+
+.plugin-parameter-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.plugin-parameter-label-row label {
+  color: #dce5f0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.plugin-parameter-label-row span {
+  color: #8d9aae;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.plugin-parameter-field input[type='number'],
+.plugin-parameter-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  color: #e5ebf3;
+  background: #1c2632;
+  border: 1px solid #41516a;
+  border-radius: 6px;
+}
+
+.plugin-parameter-field input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #6f9ff5;
+}
+
+.plugin-parameter-field input:disabled,
+.plugin-parameter-field select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.plugin-parameter-field > p {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  color: #8391a4;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .plugin-bypass-confirmation {
   background: rgb(143 57 66 / 12%);
   border-color: rgb(218 97 108 / 42%);
@@ -930,7 +1064,8 @@
   }
 
   .plugin-preview-issue-list li,
-  .plugin-export-issue-list li {
+  .plugin-export-issue-list li,
+  .plugin-contribution-card {
     grid-template-columns: minmax(0, 1fr);
   }
 }

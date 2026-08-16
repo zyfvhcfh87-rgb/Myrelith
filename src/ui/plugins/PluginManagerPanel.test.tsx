@@ -124,6 +124,48 @@ describe('PluginManagerPanel', () => {
     expect(screen.getByText('timeout')).toBeInTheDocument()
   })
 
+  test('highlights only the app-selected plugin without creating local selection state', () => {
+    const actions = callbacks()
+    const second = {
+      ...installed,
+      id: 'com.example.second',
+      name: 'Second Plugin',
+      packageDigest: 'sha256:second',
+    }
+    const { rerender } = render(
+      <PluginManagerPanel
+        phase="ready"
+        packages={[installed, second]}
+        selectedPluginId={second.id}
+        {...actions}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Second Plugin', level: 3 }).closest('li')).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
+    expect(screen.getByRole('heading', { name: 'Soft Sparkle', level: 3 }).closest('li')).not.toHaveAttribute(
+      'aria-current',
+    )
+
+    rerender(
+      <PluginManagerPanel
+        phase="ready"
+        packages={[installed, second]}
+        selectedPluginId={installed.id}
+        {...actions}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: 'Soft Sparkle', level: 3 }).closest('li')).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
+    expect(screen.getByRole('heading', { name: 'Second Plugin', level: 3 }).closest('li')).not.toHaveAttribute(
+      'aria-current',
+    )
+  })
+
   test('defensively caps diagnostics to the latest 100 bounded messages', () => {
     const actions = callbacks()
     const diagnostics = Array.from({ length: 101 }, (_, index) => ({

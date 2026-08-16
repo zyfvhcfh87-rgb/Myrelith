@@ -25,8 +25,18 @@ function BlockingIssueList({ issues }: { readonly issues: readonly PluginEffectI
           </div>
           <dl className="plugin-export-package-identity">
             <div><dt>Plugin ID</dt><dd><code>{issue.pluginId}</code></dd></div>
-            <div><dt>Package version</dt><dd>{issue.pluginVersion}</dd></div>
-            <div><dt>Package digest</dt><dd><code>{issue.packageDigest}</code></dd></div>
+            <div>
+              <dt>Package version</dt>
+              <dd>{issue.pluginVersion ?? 'Unknown (package missing)'}</dd>
+            </div>
+            <div>
+              <dt>Package digest</dt>
+              <dd>
+                {issue.packageDigest
+                  ? <code>{issue.packageDigest}</code>
+                  : 'Unknown (package missing)'}
+              </dd>
+            </div>
             <div><dt>Block reason</dt><dd>{issue.reason}</dd></div>
           </dl>
         </li>
@@ -160,14 +170,14 @@ function PluginExportBlockReview({
             onChange={(event) => setConfirmed(event.target.checked)}
           />
           <span>
-            <strong>I understand these exact effects and packages will be omitted</strong>
-            <small>The project data is unchanged. This app-reviewed decision applies only to the current document snapshot and export attempt.</small>
+            <strong>I understand these exact effects will be omitted</strong>
+            <small>Package identities are shown where available; missing package details remain explicitly unknown. The project data is unchanged, and this app-reviewed decision applies only to the current document snapshot and export attempt.</small>
           </span>
         </label>
         <p id={bypassRequirementId} className="plugin-help-copy" role="status" aria-live="polite" aria-atomic="true">
           {confirmed
-            ? 'Reviewed bypass confirmed for the listed effect instances and exact package digests.'
-            : 'Confirm that the listed effects from these exact packages may be omitted from this export.'}
+            ? 'Reviewed bypass confirmed for the listed effect instances and displayed package identities.'
+            : 'Confirm that the listed effects and displayed package identities, including explicit unknowns, may be omitted from this export.'}
         </p>
         {error ? <p className="plugin-error" role="alert">{boundedPluginUiText(error)}</p> : null}
       </ExportReviewSurface>
@@ -213,7 +223,7 @@ function PluginExportBlockReview({
     >
       <div className="plugin-callout" data-tone="danger">
         <strong>No silent export fallback</strong>
-        <p>Each unavailable effect is preserved. Export stays blocked unless you fix it or confirm the exact package-backed omissions below.</p>
+        <p>Each unavailable effect is preserved. Export stays blocked unless you fix it or confirm the exact listed omissions below.</p>
       </div>
       <BlockingIssueList issues={issues} />
       {error ? <p className="plugin-error" role="alert">{boundedPluginUiText(error)}</p> : null}

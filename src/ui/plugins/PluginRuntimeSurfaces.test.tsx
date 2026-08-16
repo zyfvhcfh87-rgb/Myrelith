@@ -118,6 +118,20 @@ describe('Issue 77 runtime UI surfaces', () => {
     trigger.remove()
   })
 
+  test('does not fabricate an installed package count during protected startup', () => {
+    render(
+      <PluginSafeModeCard
+        startupMode="normal"
+        enterSafeModeAction={action(true)}
+        onEnterSafeMode={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText(/Installed plugins are not enumerated during this protected startup check/i)).toBeInTheDocument()
+    expect(screen.getByText(/keep every third-party package inactive/i)).toBeInTheDocument()
+    expect(screen.queryByText(/0 installed plugins/i)).not.toBeInTheDocument()
+  })
+
   test('honors projected unavailable, busy, and error actions while safe-only startup stays locked', () => {
     const onEnterSafeMode = vi.fn()
     const onContinueReviewedNormal = vi.fn()
@@ -241,6 +255,25 @@ describe('Issue 77 runtime UI surfaces', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Opening Sparkle Pack management')
   })
 
+  test.each([
+    ['quarantined', 'Quarantined'],
+    ['version-mismatch', 'Version mismatch'],
+    ['invalid', 'Invalid descriptor'],
+    ['unsupported', 'Unsupported descriptor'],
+  ] as const)('renders the lossless %s effect status', (status, label) => {
+    render(
+      <PluginInspectorStatus
+        effect={{ ...issues[0], status }}
+        actions={recoveryActions}
+        onRetryPlugin={vi.fn()}
+        onDisablePlugin={vi.fn()}
+        onManagePlugin={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText(label)).toHaveAttribute('data-status', status)
+  })
+
   test('displays exact package identity and returns the opaque app-minted review token', () => {
     const onExportBypassed = vi.fn()
     render(
@@ -263,13 +296,32 @@ describe('Issue 77 runtime UI surfaces', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review bypass…' }))
     expect(screen.getByRole('button', { name: 'Back to blocked effects' })).toHaveFocus()
     fireEvent.click(screen.getByRole('checkbox', {
-      name: /I understand these exact effects and packages will be omitted/i,
+      name: /I understand these exact effects will be omitted/i,
     }))
     fireEvent.click(screen.getByRole('button', {
       name: 'Export with listed plugins bypassed',
     }))
 
     expect(onExportBypassed).toHaveBeenCalledWith('opaque-review-token-1')
+  })
+
+  test('shows missing package version and digest as explicitly unknown', () => {
+    render(
+      <PluginExportBlockDialog
+        issues={[{
+          ...issues[1],
+          pluginVersion: null,
+          packageDigest: null,
+        }]}
+        reviewToken="opaque-missing-token"
+        documentRevision="document-revision-missing"
+        onCancel={vi.fn()}
+        onExportBypassed={vi.fn()}
+      />,
+    )
+
+    expect(screen.getAllByText('Unknown (package missing)')).toHaveLength(2)
+    expect(screen.queryByText(/undefined|null/i)).not.toBeInTheDocument()
   })
 
   test('provides a semantic inline body without a nested modal or fixed backdrop', () => {
@@ -308,14 +360,14 @@ describe('Issue 77 runtime UI surfaces', () => {
     const enterAndConfirm = (): void => {
       fireEvent.click(screen.getByRole('button', { name: 'Review bypass…' }))
       fireEvent.click(screen.getByRole('checkbox', {
-        name: /I understand these exact effects and packages will be omitted/i,
+        name: /I understand these exact effects will be omitted/i,
       }))
       expect(screen.getByRole('button', { name: 'Export with listed plugins bypassed' })).toBeEnabled()
     }
     const expectReset = (): void => {
       expect(screen.getByRole('button', { name: 'Review bypass…' })).toBeInTheDocument()
       expect(screen.queryByRole('checkbox', {
-        name: /I understand these exact effects and packages will be omitted/i,
+        name: /I understand these exact effects will be omitted/i,
       })).not.toBeInTheDocument()
     }
 

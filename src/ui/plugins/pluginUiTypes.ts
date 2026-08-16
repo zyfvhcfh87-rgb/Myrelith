@@ -20,14 +20,11 @@ export type PluginPackageStatus =
   | 'safe-mode'
 
 export type PluginEffectStatus =
-  | 'ready'
-  | 'disabled'
+  | PluginPackageStatus
   | 'missing'
-  | 'incompatible'
-  | 'failed'
-  | 'revoked'
-  | 'untrusted'
-  | 'safe-mode'
+  | 'version-mismatch'
+  | 'invalid'
+  | 'unsupported'
 
 export type PluginDiagnosticLevel = 'info' | 'warning' | 'error'
 
@@ -58,9 +55,11 @@ export interface PluginPreviewActionsView {
 }
 
 export type PluginPermissionGrantState =
-  | 'previously-granted'
   | 'new'
+  | 'preserved'
   | 'widened'
+  | 'changed'
+  | 'unavailable'
 
 export type PluginPackageVersionChange =
   | 'new-install'
@@ -77,7 +76,7 @@ export type PluginStartupModeView =
 export interface PluginPermissionView {
   readonly id: string
   readonly name: string
-  readonly selectedVersion: string
+  readonly selectedVersion: string | null
   readonly detail: string
   readonly required: boolean
   readonly available: boolean
@@ -138,8 +137,8 @@ export interface PluginEffectIssueView {
   readonly effectLabel: string
   readonly pluginId: string
   readonly pluginName: string
-  readonly pluginVersion: string
-  readonly packageDigest: string
+  readonly pluginVersion: string | null
+  readonly packageDigest: string | null
   readonly status: PluginEffectStatus
   readonly reason: string
   readonly blocksExport: boolean
@@ -148,3 +147,58 @@ export interface PluginEffectIssueView {
 export interface PluginPreviewIssueView extends PluginEffectIssueView {
   readonly actions: PluginPreviewActionsView
 }
+
+export interface PluginContributionView {
+  readonly effectType: string
+  readonly pluginId: string
+  readonly pluginName: string
+  readonly pluginVersion: string
+  readonly contributionName: string
+  readonly status: PluginPackageStatus
+  readonly detail: string
+  readonly selectAction: PluginActionView
+}
+
+export type PluginParameterFieldState =
+  | 'editable'
+  | 'disabled'
+  | 'locked'
+
+interface PluginParameterFieldBaseView {
+  readonly key: string
+  readonly name: string
+  readonly state: PluginParameterFieldState
+  readonly stateReason?: string | null
+}
+
+export interface PluginNumberParameterFieldView extends PluginParameterFieldBaseView {
+  readonly kind: 'number'
+  readonly value: number
+  readonly min: number
+  readonly max: number
+  readonly step: number
+  readonly animatable: boolean
+}
+
+export interface PluginBooleanParameterFieldView extends PluginParameterFieldBaseView {
+  readonly kind: 'boolean'
+  readonly value: boolean
+}
+
+export interface PluginEnumOptionView {
+  readonly value: string
+  readonly name: string
+}
+
+export interface PluginEnumParameterFieldView extends PluginParameterFieldBaseView {
+  readonly kind: 'enum'
+  readonly value: string
+  readonly options: readonly PluginEnumOptionView[]
+}
+
+export type PluginParameterFieldView =
+  | PluginNumberParameterFieldView
+  | PluginBooleanParameterFieldView
+  | PluginEnumParameterFieldView
+
+export type PluginParameterValue = number | boolean | string

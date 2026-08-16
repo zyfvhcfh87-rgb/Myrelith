@@ -16,5 +16,9 @@ export function pluginEffectStatusLabel(status: PluginEffectStatus): string {
     case 'revoked': return 'Revoked'
     case 'untrusted': return 'Trust required'
     case 'safe-mode': return 'Safe mode'
+    case 'quarantined': return 'Quarantined'
+    case 'version-mismatch': return 'Version mismatch'
+    case 'invalid': return 'Invalid descriptor'
+    case 'unsupported': return 'Unsupported descriptor'
   }
 }

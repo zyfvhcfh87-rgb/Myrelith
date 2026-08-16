@@ -60,9 +60,11 @@ function versionChangeLabel(
 
 function grantStateLabel(state: PluginPermissionGrantState): string {
   switch (state) {
-    case 'previously-granted': return 'Previously granted'
     case 'new': return 'New grant request'
+    case 'preserved': return 'Previously granted and preserved'
     case 'widened': return 'Widened grant request'
+    case 'changed': return 'Changed grant request'
+    case 'unavailable': return 'Grant unavailable'
   }
 }
 
@@ -91,7 +93,7 @@ function PackageDecisionForm({
   const [grants, setGrants] = useState<ReadonlySet<string>>(() => new Set(
     packageView.permissions
       .filter((permission) => (
-        permission.grantState === 'previously-granted' && isGrantable(permission)
+        permission.grantState === 'preserved' && isGrantable(permission)
       ))
       .map((permission) => permission.id),
   ))
@@ -262,7 +264,16 @@ function PackageDecisionForm({
                 <strong>{permission.name}{permission.required ? ' — required' : ' — optional'}</strong>
                 <small>{permission.detail}</small>
                 <span className="plugin-capability-meta">
-                  <code>{permission.id}@{permission.selectedVersion}</code>
+                  <code>
+                    {permission.selectedVersion === null
+                      ? permission.id
+                      : `${permission.id}@${permission.selectedVersion}`}
+                  </code>
+                  <span>
+                    {permission.selectedVersion === null
+                      ? 'No compatible version selected'
+                      : `Selected version ${permission.selectedVersion}`}
+                  </span>
                   <span>{permission.available ? 'Available' : 'Unavailable'}</span>
                   <span>{grantable ? 'Grantable' : 'Not grantable'}</span>
                   <span>{grantStateLabel(permission.grantState)}</span>
