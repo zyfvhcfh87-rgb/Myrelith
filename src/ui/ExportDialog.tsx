@@ -271,6 +271,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     preparationAbortRef.current?.abort(reason)
     preparationAbortRef.current = null
     preparedTokenRef.current = null
+    if (mountedRef.current) setPreparingPluginExport(false)
     if (preparedPortRef.current) void preparedPortRef.current.cancel(reason).catch(() => undefined)
   }, [])
 
@@ -311,21 +312,25 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   const selectRecommendedProfile = useCallback((
     nextSelectionId: ExportSelectionId,
   ): void => {
+    invalidatePluginPreparation('plugin-export-profile-changed')
+    setPluginBlock(null)
     setSelectionId(nextSelectionId)
     setAdvancedDraftsValid(true)
     setError(null)
     setFilePickerMessage(null)
-  }, [])
+  }, [invalidatePluginPreparation])
 
   const selectCustomProfile = useCallback((
     profile: Readonly<ExportProfile>,
   ): void => {
+    invalidatePluginPreparation('plugin-export-profile-changed')
+    setPluginBlock(null)
     setCustomCapabilityState(null)
     setCustomProfile(profile)
     setSelectionId('custom')
     setError(null)
     setFilePickerMessage(null)
-  }, [])
+  }, [invalidatePluginPreparation])
 
   const currentPresetCapability = presetCapabilityState.doc === doc
     ? presetCapabilityState
@@ -592,10 +597,10 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
         onProgress: (value: number) => publishProgress(token, value),
         ...(fileDestination ? { fileDestination } : {}),
       }
+      if (requiresPreparedExport) preparedTokenRef.current = null
       const result = requiresPreparedExport
         ? await preparedPort!.start(preparedToken!, callbacks)
         : await controller!.startExport(exportSettings, callbacks)
-      preparedTokenRef.current = null
       controllerRunStartedRef.current = false
       runningRef.current = false
       cancelRequestedRef.current = false
@@ -631,6 +636,9 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       setPhase('download')
     } catch (cause) {
       if (!mountedRef.current || token !== runTokenRef.current) return
+      if (requiresPreparedExport) {
+        invalidatePluginPreparation('plugin-export-start-failed')
+      }
       controllerRunStartedRef.current = false
       runningRef.current = false
       cancelRequestedRef.current = false

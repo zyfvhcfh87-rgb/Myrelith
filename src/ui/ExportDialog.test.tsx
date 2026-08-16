@@ -1155,6 +1155,26 @@ describe('Export dialog lifecycle', () => {
     expect(port.start).not.toHaveBeenCalled()
   })
 
+  test('invalidates a deferred prepared attempt when its profile changes', async () => {
+    const preparation = deferred<ReturnType<typeof readyPrepared>>()
+    const port = preparedPort({ prepare: vi.fn(() => preparation.promise) })
+    renderPluginToolbar()
+    await openDialog()
+    fireEvent.click(await readyStartButton())
+    await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+
+    fireEvent.click(profileRadio('Web'))
+    await waitFor(() => expect(port.cancel).toHaveBeenCalledOnce())
+    await act(async () => {
+      preparation.resolve(readyPrepared('stale-profile-token'))
+      await preparation.promise
+    })
+
+    expect(port.start).not.toHaveBeenCalled()
+    expect(screen.queryByText('Plugin checks complete. Choose a file to begin this prepared export.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   test('ignores stale prepared errors and blocker reviews after Close', async () => {
     const errorPreparation = deferred<ReturnType<typeof readyPrepared>>()
     const port = preparedPort({ prepare: vi.fn(() => errorPreparation.promise) })
@@ -1202,6 +1222,77 @@ describe('Export dialog lifecycle', () => {
     fireEvent.click(choose)
     await waitFor(() => expect(requestFileDestinationMock).toHaveBeenCalledOnce())
     await waitFor(() => expect(port.start).toHaveBeenCalledOnce())
+  })
+
+  test('refreshes a retained direct-file preparation after its profile changes', async () => {
+    const fileProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, { destination: 'file' })
+    const webFileProfile = updateExportProfile(exportPresetById('modern').profile, {
+      destination: 'file',
+    })
+    usePreferencesStore.setState({ exportSelection: { selectionId: 'custom', profile: fileProfile } })
+    const destination = {
+      fileName: 'chosen.webm',
+      takeFileHandle: () => ({}) as FileSystemFileHandle,
+    } satisfies ExportFileDestinationCapability
+    requestFileDestinationMock.mockResolvedValue({ status: 'selected', destination })
+    const port = preparedPort({
+      prepare: vi.fn()
+        .mockResolvedValueOnce(readyPrepared('old-file-token'))
+        .mockResolvedValueOnce(readyPrepared('new-file-token')),
+      start: vi.fn().mockResolvedValue(directFileResult(webFileProfile)),
+    })
+    renderPluginToolbar()
+    await openDialog()
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose file and export' }))
+    await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Export container' }), {
+      target: { value: 'webm' },
+    })
+    await waitFor(() => expect(port.cancel).toHaveBeenCalledOnce())
+    const choose = await screen.findByRole('button', { name: 'Choose file and export' })
+    fireEvent.click(choose)
+    await waitFor(() => expect(port.prepare).toHaveBeenCalledTimes(2))
+    expect(preparedPortMocks.prepare.mock.calls[1]?.[0]).toMatchObject({
+      container: 'webm',
+      destination: 'file',
+      fileExtension: 'webm',
+    })
+    expect(requestFileDestinationMock).not.toHaveBeenCalled()
+
+    fireEvent.click(choose)
+    await waitFor(() => expect(requestFileDestinationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ container: 'webm', fileExtension: 'webm' }),
+      'My - Rough- Cut.webm',
+    ))
+    await waitFor(() => expect(port.start).toHaveBeenCalledWith('new-file-token', expect.objectContaining({
+      fileDestination: destination,
+    })))
+  })
+
+  test('refreshes a consumed prepared token after its start rejects', async () => {
+    const rejection = deferred<ExportResult>()
+    const port = preparedPort({
+      prepare: vi.fn()
+        .mockResolvedValueOnce(readyPrepared('invalid-token'))
+        .mockResolvedValueOnce(readyPrepared('fresh-token')),
+      start: vi.fn()
+        .mockImplementationOnce(() => rejection.promise)
+        .mockResolvedValueOnce(exportResult(DEFAULT_EXPORT_PROFILE)),
+    })
+    renderPluginToolbar()
+    await openDialog()
+    fireEvent.click(await readyStartButton())
+    await waitFor(() => expect(port.start).toHaveBeenCalledWith('invalid-token', expect.any(Object)))
+    await act(async () => {
+      rejection.reject(new Error('prepared attempt expired'))
+      await rejection.promise.catch(() => undefined)
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry export' }))
+
+    await waitFor(() => expect(port.prepare).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(port.start).toHaveBeenCalledWith('fresh-token', expect.any(Object)))
+    expect(port.cancel).toHaveBeenCalledWith('plugin-export-start-failed')
   })
 
   test('fences a deferred reviewed bypass approval through unmount', async () => {
