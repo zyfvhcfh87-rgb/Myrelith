@@ -16,6 +16,7 @@ import {
   PluginInstallControllerError,
   type CommitPluginInstallationOptions,
   type PluginDeclarationCatalogEntry,
+  type PluginDeclarationCatalogSnapshot,
   type PluginInstallController,
   type PluginInstalledPackageProjection,
   type PluginPackageInspection,
@@ -39,6 +40,7 @@ import type {
   PluginSafetyStorage,
   PluginSessionSafety,
 } from './pluginSafetyController'
+import type { PluginRuntimeLifecycleObserver } from './pluginRuntimeLifecycleObserver'
 import {
   createPluginStartupController,
   type PluginStartupSnapshot,
@@ -112,6 +114,7 @@ export interface PluginCompositionInspection {
   readonly contributionNames: readonly string[]
   readonly selectedCapabilities: PluginCompositionInstalledPackage['selectedCapabilities']
   readonly signerContinuity: boolean
+  readonly trustState: PluginPackageInspection['trustState']
   readonly trustDecisionRequired: boolean
   readonly compatibility: {
     readonly status: PluginPackageInspection['compatibility']['status']
@@ -169,6 +172,7 @@ export interface PluginCompositionController {
   subscribe(listener: (snapshot: PluginCompositionSnapshot) => void): () => void
   getContributionSnapshot(): PluginVideoEffectContributionSnapshot | undefined
   getEffectBridgeHandler(): PluginEffectBridgeHandler
+  getDeclarationCatalog(signal?: AbortSignal): Promise<PluginDeclarationCatalogSnapshot>
   refreshManagement(signal?: AbortSignal): Promise<void>
   inspectPackage(
     archiveBytes: Uint8Array,
@@ -216,7 +220,9 @@ export interface PluginCompositionControllerDependencies {
   ) => PluginInstallController | Promise<PluginInstallController>
   readonly createRuntimeController: (
     activationBundleResolver: PluginInstallController['activationBundles'],
+    lifecycleObserver?: PluginRuntimeLifecycleObserver,
   ) => PluginRuntimeController | Promise<PluginRuntimeController>
+  readonly lifecycleObserver?: PluginRuntimeLifecycleObserver
   readonly lifecycle?: {
     captureToken(): LoadedPluginLifecycleToken
     registerDisposer(
@@ -230,6 +236,7 @@ export interface PluginCompositionControllerDependencies {
 interface CoherentManagementProjection {
   readonly generation: number
   readonly installedPackages: readonly PluginCompositionInstalledPackage[]
+  readonly declarationCatalog: PluginDeclarationCatalogSnapshot
   readonly contributionSnapshot: PluginVideoEffectContributionSnapshot
 }
 
@@ -310,6 +317,7 @@ function freezeInspection(source: PluginPackageInspection): PluginCompositionIns
       required: capability.required,
     }))),
     signerContinuity: source.signerContinuity,
+    trustState: source.trustState,
     trustDecisionRequired: source.trustDecisionRequired,
     compatibility: Object.freeze({
       status: source.compatibility.status,
@@ -354,6 +362,47 @@ function freezeInspection(source: PluginPackageInspection): PluginCompositionIns
   })
 }
 
+function freezeDeclarationEntry(
+  source: PluginDeclarationCatalogEntry,
+): PluginDeclarationCatalogEntry {
+  return Object.freeze({
+    pluginId: source.pluginId,
+    pluginVersion: source.pluginVersion,
+    packageDigest: source.packageDigest,
+    signerFingerprint: source.signerFingerprint,
+    kind: source.kind,
+    contributionId: source.contributionId,
+    contributionName: source.contributionName,
+    contributionVersion: source.contributionVersion,
+    descriptorVersion: source.descriptorVersion,
+    entrypoint: source.entrypoint,
+    parameters: Object.freeze(source.parameters.map(freezeParameter)),
+    availability: source.availability,
+    detail: boundedDetail(source.detail),
+  })
+}
+
+function freezeParameter(
+  parameter: PluginDeclarationCatalogEntry['parameters'][number],
+): PluginDeclarationCatalogEntry['parameters'][number] {
+  if (parameter.kind === 'enum') {
+    return Object.freeze({
+      ...parameter,
+      options: Object.freeze(parameter.options.map((option) => Object.freeze({ ...option }))),
+    })
+  }
+  return Object.freeze({ ...parameter })
+}
+
+function freezeDeclarationCatalog(
+  source: PluginDeclarationCatalogSnapshot,
+): PluginDeclarationCatalogSnapshot {
+  return Object.freeze({
+    generation: source.generation,
+    declarations: Object.freeze(source.declarations.map(freezeDeclarationEntry)),
+  })
+}
+
 function contributionSnapshot(
   generation: number,
   declarations: readonly PluginDeclarationCatalogEntry[],
@@ -393,6 +442,12 @@ function staleRuntimeError(): PluginInstallControllerError {
   )
 }
 
+function isExpectedRuntimeCloseRejection(cause: unknown): boolean {
+  return cause instanceof PluginInstallControllerError
+    ? cause.code === 'safe-mode' || cause.code === 'install-conflict'
+    : cause instanceof Error && cause.message === 'Plugin composition is closed'
+}
+
 function zeroBytes(bytes: Uint8Array): void {
   if (bytes.byteLength > 0) bytes.fill(0)
 }
@@ -406,7 +461,6 @@ export function createPluginCompositionController(
     registerDisposer: registerLoadedPluginDisposer,
     dispose: disposeLoadedPlugins,
   })
-  const lifecycleToken = lifecycle.captureToken()
   const listeners = new Set<(snapshot: PluginCompositionSnapshot) => void>()
   let managementPromise: Promise<PluginInstallController> | null = null
   let managementController: PluginInstallController | null = null
@@ -414,6 +468,9 @@ export function createPluginCompositionController(
   let runtimeController: PluginRuntimeController | null = null
   let editorSession: ReturnType<PluginRuntimeController['openEditorSession']> | null = null
   let runtimeDisposalPromise: Promise<void> | null = null
+  let terminalClosePromise: Promise<void> | null = null
+  const runtimeCandidateDisposals = new WeakMap<PluginRuntimeController, Promise<void>>()
+  const pendingInspectionIds = new Set<string>()
   let managementTail = Promise.resolve()
   let operationEpoch = 0
   let runtimeEpoch = 0
@@ -471,6 +528,52 @@ export function createPluginCompositionController(
     }
   }
 
+  const disposeRuntimeCandidate = (
+    candidate: PluginRuntimeController,
+    reason: string,
+  ): Promise<void> => {
+    const existing = runtimeCandidateDisposals.get(candidate)
+    if (existing) return existing
+    const ownedEditor = runtimeController === candidate ? editorSession : null
+    if (runtimeController === candidate) {
+      runtimeController = null
+      runtimePromise = null
+      editorSession = null
+    }
+    runtimeEpoch++
+    lifecycleEpoch++
+    const disposal = (async () => {
+      let editorFailure: unknown
+      try {
+        await ownedEditor?.close(reason)
+      } catch (cause) {
+        editorFailure = cause
+      }
+      let runtimeFailure: unknown
+      try {
+        await candidate.teardown(reason)
+      } catch (cause) {
+        runtimeFailure = cause
+      }
+      if (editorFailure !== undefined && runtimeFailure !== undefined) {
+        throw new AggregateError(
+          [editorFailure, runtimeFailure],
+          'Editor and plugin runtime cleanup both failed',
+        )
+      }
+      if (editorFailure !== undefined) throw editorFailure
+      if (runtimeFailure !== undefined) throw runtimeFailure
+    })().catch((cause) => {
+      if (!closed) {
+        runtimeBlocked = true
+        startup.enterSafeMode()
+      }
+      throw cause
+    })
+    runtimeCandidateDisposals.set(candidate, disposal)
+    return disposal
+  }
+
   const ensureManagement = (): Promise<PluginInstallController> => {
     assertOpen()
     if (managementController) return Promise.resolve(managementController)
@@ -495,6 +598,9 @@ export function createPluginCompositionController(
     assertRuntimeAllowed()
     if (runtimeController) return Promise.resolve(runtimeController)
     if (runtimePromise) return runtimePromise
+    // Capture at the beginning of every ownership attempt. A project disposal
+    // with no registered owner still advances the global lifecycle generation.
+    const creationLifecycleToken = lifecycle.captureToken()
     const expectedLifecycle = lifecycleEpoch
     const expectedRuntime = runtimeEpoch
     const candidatePromise = (async () => {
@@ -502,13 +608,16 @@ export function createPluginCompositionController(
       assertRuntimeAllowed()
       if (expectedLifecycle !== lifecycleEpoch) throw closedError()
       if (expectedRuntime !== runtimeEpoch) throw staleRuntimeError()
-      const candidate = await dependencies.createRuntimeController(management.activationBundles)
+      const candidate = await dependencies.createRuntimeController(
+        management.activationBundles,
+        dependencies.lifecycleObserver,
+      )
       if (closed
         || runtimeBlocked
         || startup.getSnapshot().mode !== 'normal'
         || expectedLifecycle !== lifecycleEpoch
         || expectedRuntime !== runtimeEpoch) {
-        await candidate.teardown('stale-plugin-composition')
+        await disposeRuntimeCandidate(candidate, 'stale-plugin-composition')
         if (runtimeBlocked) throw runtimeBlockedError()
         if (closed || expectedLifecycle !== lifecycleEpoch) throw closedError()
         throw staleRuntimeError()
@@ -516,20 +625,26 @@ export function createPluginCompositionController(
       let registered: boolean
       try {
         registered = await lifecycle.registerDisposer(
-          lifecycleToken,
-          () => candidate.teardown(runtimeCloseReason),
+          creationLifecycleToken,
+          () => disposeRuntimeCandidate(candidate, runtimeCloseReason),
         )
       } catch (cause) {
-        await candidate.teardown('plugin-lifecycle-registration-failed')
+        if (!runtimeCandidateDisposals.has(candidate)) {
+          await disposeRuntimeCandidate(candidate, 'plugin-lifecycle-registration-failed')
+        }
         throw cause
       }
-      if (!registered) throw closedError()
+      if (!registered) {
+        if (closed) throw closedError()
+        if (runtimeBlocked) throw runtimeBlockedError()
+        throw staleRuntimeError()
+      }
       if (closed
         || runtimeBlocked
         || startup.getSnapshot().mode !== 'normal'
         || expectedLifecycle !== lifecycleEpoch
         || expectedRuntime !== runtimeEpoch) {
-        await candidate.teardown('stale-plugin-composition')
+        await disposeRuntimeCandidate(candidate, 'stale-plugin-composition')
         if (runtimeBlocked) throw runtimeBlockedError()
         if (closed || expectedLifecycle !== lifecycleEpoch) throw closedError()
         throw staleRuntimeError()
@@ -555,10 +670,15 @@ export function createPluginCompositionController(
         management.declarationCatalog(signal),
       ])
       if (installed.generation !== catalog.generation) continue
+      const frozenCatalog = freezeDeclarationCatalog(catalog)
       return Object.freeze({
-        generation: catalog.generation,
+        generation: frozenCatalog.generation,
         installedPackages: Object.freeze(installed.packages.map(freezeInstalledPackage)),
-        contributionSnapshot: contributionSnapshot(catalog.generation, catalog.declarations),
+        declarationCatalog: frozenCatalog,
+        contributionSnapshot: contributionSnapshot(
+          frozenCatalog.generation,
+          frozenCatalog.declarations,
+        ),
       })
     }
     throw new PluginInstallControllerError(
@@ -673,37 +793,67 @@ export function createPluginCompositionController(
     if (!closed && epoch === operationEpoch) installProjection(projection)
   }
 
-  const closeLoadedRuntimeOnce = async (reason: string): Promise<void> => {
+  const closeLoadedRuntime = (reason: string): Promise<void> => {
+    if (runtimeDisposalPromise) return runtimeDisposalPromise
     runtimeCloseReason = boundedDetail(reason)
-    const editor = editorSession
-    editorSession = null
-    let editorFailure: unknown
-    try {
-      await editor?.close(runtimeCloseReason)
-    } catch (cause) {
-      editorFailure = cause
-    }
-    let lifecycleFailure: unknown
-    try {
-      await lifecycle.dispose()
-    } catch (cause) {
-      lifecycleFailure = cause
-    }
-    runtimeController = null
-    runtimePromise = null
-    if (editorFailure !== undefined && lifecycleFailure !== undefined) {
-      throw new AggregateError(
-        [editorFailure, lifecycleFailure],
-        'Editor and plugin runtime cleanup both failed',
+    runtimeEpoch++
+    lifecycleEpoch++
+    const pendingRuntime = runtimePromise
+    void pendingRuntime?.catch(() => {})
+    const disposal = (async () => {
+      let lifecycleFailure: unknown
+      try {
+        await lifecycle.dispose()
+      } catch (cause) {
+        lifecycleFailure = cause
+      }
+      let pendingRuntimeFailure: unknown
+      if (pendingRuntime) {
+        try {
+          await pendingRuntime
+        } catch (cause) {
+          if (!isExpectedRuntimeCloseRejection(cause)) pendingRuntimeFailure = cause
+        }
+      }
+      runtimeController = null
+      runtimePromise = null
+      editorSession = null
+      const cleanupFailures = [lifecycleFailure, pendingRuntimeFailure].filter(
+        (failure): failure is unknown => failure !== undefined,
       )
-    }
-    if (editorFailure !== undefined) throw editorFailure
-    if (lifecycleFailure !== undefined) throw lifecycleFailure
+      if (cleanupFailures.length > 0) {
+        if (!closed) {
+          runtimeBlocked = true
+          startup.enterSafeMode()
+        }
+        if (cleanupFailures.length === 1) throw cleanupFailures[0]
+        throw new AggregateError(cleanupFailures, 'Plugin runtime cleanup failed')
+      }
+    })().finally(() => {
+      if (runtimeDisposalPromise === disposal) runtimeDisposalPromise = null
+    })
+    runtimeDisposalPromise = disposal
+    return disposal
   }
 
-  const closeLoadedRuntime = (reason: string): Promise<void> => {
-    runtimeDisposalPromise ??= closeLoadedRuntimeOnce(reason)
-    return runtimeDisposalPromise
+  const closePendingInspections = async (): Promise<void> => {
+    await managementTail
+    const management = managementController
+    if (!management) return
+    const cleanupFailures: unknown[] = []
+    for (const inspectionId of pendingInspectionIds) {
+      try {
+        management.cancelInspection(inspectionId)
+        pendingInspectionIds.delete(inspectionId)
+      } catch (cause) {
+        cleanupFailures.push(cause)
+      }
+    }
+    inspection = null
+    if (cleanupFailures.length === 1) throw cleanupFailures[0]
+    if (cleanupFailures.length > 1) {
+      throw new AggregateError(cleanupFailures, 'Plugin inspection cleanup failed')
+    }
   }
 
   const invalidateLoadedRuntime = async (pluginId: string, reason: string): Promise<void> => {
@@ -832,6 +982,20 @@ export function createPluginCompositionController(
       return currentContributionSnapshot ?? undefined
     },
     getEffectBridgeHandler: () => effectBridgeHandler,
+    async getDeclarationCatalog(signal) {
+      assertRuntimeAllowed()
+      const expectedOperationEpoch = operationEpoch
+      const expectedRuntimeEpoch = runtimeEpoch
+      const management = await ensureManagement()
+      assertRuntimeAllowed()
+      const catalog = freezeDeclarationCatalog(await management.declarationCatalog(signal))
+      assertRuntimeAllowed()
+      if (
+        expectedOperationEpoch !== operationEpoch
+        || expectedRuntimeEpoch !== runtimeEpoch
+      ) throw staleRuntimeError()
+      return catalog
+    },
     refreshManagement(signal) {
       return enqueueManagement('refresh', null, async (management, epoch) => {
         await refreshAfterAction(management, epoch, signal)
@@ -840,9 +1004,21 @@ export function createPluginCompositionController(
     inspectPackage(archiveBytes, signal) {
       return enqueueManagement('inspect', null, async (management, epoch) => {
         const result = await management.inspectPackage(archiveBytes, signal)
+        pendingInspectionIds.add(result.inspectionId)
         const projected = freezeInspection(result)
         if (closed || epoch !== operationEpoch) {
-          management.cancelInspection(result.inspectionId)
+          try {
+            management.cancelInspection(result.inspectionId)
+            pendingInspectionIds.delete(result.inspectionId)
+          } catch (cleanupCause) {
+            throw new AggregateError(
+              [new PluginInstallControllerError(
+                'inspection-not-found',
+                'Package inspection was superseded by a newer plugin action',
+              ), cleanupCause],
+              'Plugin package inspection and cleanup both failed',
+            )
+          }
           throw new PluginInstallControllerError(
             'inspection-not-found',
             'Package inspection was superseded by a newer plugin action',
@@ -857,6 +1033,7 @@ export function createPluginCompositionController(
     cancelInspection(inspectionId) {
       return enqueueManagement('cancel-inspection', null, async (management, epoch) => {
         const cancelled = management.cancelInspection(inspectionId)
+        pendingInspectionIds.delete(inspectionId)
         if (epoch === operationEpoch && inspection?.inspectionId === inspectionId) inspection = null
         managementPhase = 'ready'
         managementDetail = ''
@@ -869,6 +1046,7 @@ export function createPluginCompositionController(
         inspection?.pluginId ?? null,
         async (management, epoch) => {
           const installed = await management.commitInstallation(inspectionId, options)
+          pendingInspectionIds.delete(inspectionId)
           await invalidateLoadedRuntimeAndRefresh(
             management,
             epoch,
@@ -1015,7 +1193,7 @@ export function createPluginCompositionController(
       }
     },
     close(reason) {
-      if (closed) return runtimeDisposalPromise ?? Promise.resolve()
+      if (closed) return terminalClosePromise ?? runtimeDisposalPromise ?? Promise.resolve()
       closed = true
       runtimeBlocked = true
       runtimeEpoch++
@@ -1023,7 +1201,20 @@ export function createPluginCompositionController(
       operationEpoch++
       unsubscribeStartup()
       listeners.clear()
-      return closeLoadedRuntime(reason)
+      terminalClosePromise = (async () => {
+        const [runtimeResult, inspectionResult] = await Promise.allSettled([
+          closeLoadedRuntime(reason),
+          closePendingInspections(),
+        ])
+        const cleanupFailures: unknown[] = []
+        if (runtimeResult.status === 'rejected') cleanupFailures.push(runtimeResult.reason)
+        if (inspectionResult.status === 'rejected') cleanupFailures.push(inspectionResult.reason)
+        if (cleanupFailures.length === 1) throw cleanupFailures[0]
+        if (cleanupFailures.length > 1) {
+          throw new AggregateError(cleanupFailures, 'Plugin composition cleanup failed')
+        }
+      })()
+      return terminalClosePromise
     },
   }
   return Object.freeze(controller)

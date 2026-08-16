@@ -106,6 +106,11 @@ export interface PluginManagementDiagnostic {
   readonly occurredAt: number
 }
 
+export type PluginInspectionTrustState =
+  | 'built-in-trusted'
+  | 'user-trusted'
+  | 'untrusted'
+
 export interface PluginPackageInspection {
   readonly inspectionId: string
   readonly pluginId: string
@@ -123,6 +128,7 @@ export interface PluginPackageInspection {
   readonly contributionNames: readonly string[]
   readonly selectedCapabilities: readonly PluginSelectedCapabilityVersion[]
   readonly signerContinuity: boolean
+  readonly trustState: PluginInspectionTrustState
   readonly trustDecisionRequired: boolean
   readonly compatibility: PluginCompatibilityResult
   readonly permissions: readonly PluginPermissionInspection[]
@@ -837,6 +843,12 @@ export function createPluginInstallController(
         ),
         selectedCapabilities: freezeSelectedCapabilities(verified),
         signerContinuity: previous?.signerFingerprint === identity.signerFingerprint,
+        trustState: isBuiltInTrusted(identity, policy)
+          ? 'built-in-trusted'
+          : previous?.signerFingerprint === identity.signerFingerprint
+            && previous.trust.kind === 'user'
+            ? 'user-trusted'
+            : 'untrusted',
         trustDecisionRequired: !isBuiltInTrusted(identity, policy)
           && !(previous?.signerFingerprint === identity.signerFingerprint
             && previous.trust.kind === 'user'),

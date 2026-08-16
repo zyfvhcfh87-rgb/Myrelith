@@ -217,6 +217,7 @@ describe('plugin installation and activation boundary', () => {
       versionChanged: false,
       sameVersionReplacement: false,
       samePackage: false,
+      trustState: 'untrusted',
       trustDecisionRequired: true,
       change: 'new-install',
       contributionNames: ['Fixture'],
@@ -250,6 +251,14 @@ describe('plugin installation and activation boundary', () => {
     expect(Object.keys(bundle)).not.toContain('trust')
     expect(Object.keys(bundle)).not.toContain('archiveBytes')
 
+    const trustedInspection = await controller.inspectPackage(new Uint8Array([1]))
+    expect(trustedInspection).toMatchObject({
+      signerContinuity: true,
+      trustState: 'user-trusted',
+      trustDecisionRequired: false,
+    })
+    expect(controller.cancelInspection(trustedInspection.inspectionId)).toBe(true)
+
     const catalog = await controller.declarationCatalog()
     expect(bundle.catalogGeneration).toBe(catalog.generation)
     expect(catalog.declarations[0]).toMatchObject({
@@ -261,6 +270,25 @@ describe('plugin installation and activation boundary', () => {
       detail: 'Ready to render.',
     })
     expect(Object.isFrozen(catalog.declarations[0].parameters)).toBe(true)
+  })
+
+  test('projects built-in trust from the host policy without inferring publisher identity', async () => {
+    const fixture = verified({ key: 1, version: '1.0.0', digest: DIGEST_A })
+    const { controller, setPolicy } = harness([fixture])
+    setPolicy({
+      builtInTrustedBindings: [Object.freeze({
+        pluginId: 'com.example.fixture',
+        signerFingerprint: SIGNER_A,
+      })],
+      revokedPackageDigests: [],
+      revokedSignerFingerprints: [],
+      revokedBindings: [],
+    })
+
+    await expect(controller.inspectPackage(new Uint8Array([1]))).resolves.toMatchObject({
+      trustState: 'built-in-trusted',
+      trustDecisionRequired: false,
+    })
   })
 
   test('rejects an off-by-one signed module length before bytes cross to runtime', async () => {
@@ -447,6 +475,7 @@ describe('plugin installation and activation boundary', () => {
 
     expect(inspection).toMatchObject({
       signerContinuity: false,
+      trustState: 'untrusted',
       trustDecisionRequired: true,
     })
     expect(inspection.permissions[0]).toMatchObject({

@@ -111,6 +111,7 @@ function inspection(): PluginPackageInspection {
       required: true,
     })]),
     signerContinuity: true,
+    trustState: 'user-trusted',
     trustDecisionRequired: false,
     compatibility: Object.freeze({
       status: 'compatible',
@@ -292,11 +293,13 @@ function runtimeHarness() {
 }
 
 function lifecycleHarness(events: string[] = []) {
-  let valid = true
+  let generation = 0
   let disposer: LoadedPluginDisposer | null = null
-  const token = Object.freeze({}) as LoadedPluginLifecycleToken
+  const tokenGenerations = new WeakMap<object, number>()
   const captureToken = vi.fn(() => {
     events.push('capture-token')
+    const token = Object.freeze({}) as LoadedPluginLifecycleToken
+    tokenGenerations.set(token, generation)
     return token
   })
   const registerDisposer = vi.fn(async (
@@ -304,8 +307,7 @@ function lifecycleHarness(events: string[] = []) {
     candidate: LoadedPluginDisposer,
   ) => {
     events.push('register-disposer')
-    expect(received).toBe(token)
-    if (!valid) {
+    if (tokenGenerations.get(received) !== generation) {
       await candidate()
       return false
     }
@@ -314,7 +316,7 @@ function lifecycleHarness(events: string[] = []) {
   })
   const dispose = vi.fn(async () => {
     events.push('dispose-lifecycle')
-    valid = false
+    generation++
     const owned = disposer
     disposer = null
     await owned?.()
@@ -370,7 +372,7 @@ describe('plugin composition controller', () => {
     expect(harness.storage.getItem).toHaveBeenCalledOnce()
     expect(harness.createManagementController).not.toHaveBeenCalled()
     expect(harness.createRuntimeController).not.toHaveBeenCalled()
-    expect(harness.lifecycle.captureToken).toHaveBeenCalledOnce()
+    expect(harness.lifecycle.captureToken).not.toHaveBeenCalled()
     expect(harness.controller.getContributionSnapshot()).toBeUndefined()
     expect(harness.controller.getEffectBridgeHandler()).toBe(
       harness.controller.getEffectBridgeHandler(),
@@ -448,6 +450,19 @@ describe('plugin composition controller', () => {
     expect(snapshot.inspection).toEqual(projectedInspection)
   })
 
+  test('private declaration reads are fresh frozen copies and never enter the public snapshot', async () => {
+    const harness = setup()
+    const rawCatalog = await harness.management.declarationCatalog()
+
+    const catalog = await harness.controller.getDeclarationCatalog()
+
+    expect(catalog).not.toBe(rawCatalog)
+    expectDeeplyFrozenData(catalog)
+    expect(catalog).toMatchObject({ generation: 7, declarations: [{ contributionId: 'sparkle' }] })
+    expect(JSON.stringify(harness.controller.getSnapshot())).not.toContain('declarationCatalog')
+    expect(harness.createRuntimeController).not.toHaveBeenCalled()
+  })
+
   test('the stable effect handler opens one editor session only on the first real apply', async () => {
     const harness = setup()
     const handler = harness.controller.getEffectBridgeHandler()
@@ -490,13 +505,93 @@ describe('plugin composition controller', () => {
     )
     await vi.waitFor(() => expect(events).toContain('create-runtime'))
 
-    await expect(harness.controller.enterSafeMode()).resolves.toBe(true)
+    const safeMode = harness.controller.enterSafeMode()
     creation.resolve(runtime.controller)
     await expect(result).resolves.toEqual({ status: 'bypassed' })
+    await expect(safeMode).resolves.toBe(true)
 
     expect(events[0]).toBe('capture-token')
     expect(runtime.teardown).toHaveBeenCalledWith('stale-plugin-composition')
     expect(lifecycle.registerDisposer).not.toHaveBeenCalled()
+  })
+
+  test('external project disposal clears an active owner and the stable facade opens a fresh runtime', async () => {
+    const firstRuntime = runtimeHarness()
+    const secondRuntime = runtimeHarness()
+    let creationCount = 0
+    const harness = setup({
+      runtime: firstRuntime,
+      createRuntime: async () => (++creationCount === 1
+        ? firstRuntime.controller
+        : secondRuntime.controller),
+    })
+
+    await harness.controller.getEffectBridgeHandler().apply(
+      bridgeRequest(),
+      new AbortController().signal,
+    )
+    await harness.lifecycle.dispose()
+
+    expect(firstRuntime.editor.close).toHaveBeenCalledWith('plugin-composition-disposed')
+    expect(firstRuntime.teardown).toHaveBeenCalledWith('plugin-composition-disposed')
+    await expect(harness.controller.getEffectBridgeHandler().apply(
+      bridgeRequest(new Uint8Array([5, 6, 7, 8])),
+      new AbortController().signal,
+    )).resolves.toMatchObject({ status: 'applied' })
+    expect(harness.createRuntimeController).toHaveBeenCalledTimes(2)
+    expect(secondRuntime.openEditorSession).toHaveBeenCalledOnce()
+  })
+
+  test('repeated no-owner project disposal leaves the first preview/export/migration runtime fresh', async () => {
+    const harness = setup()
+    const exportRequest = Object.freeze({ requiredEffects: Object.freeze([]) })
+    const migrationRequest = Object.freeze({ targets: Object.freeze([]) })
+    await harness.lifecycle.dispose()
+    await harness.lifecycle.dispose()
+
+    await expect(harness.controller.getEffectBridgeHandler().apply(
+      bridgeRequest(),
+      new AbortController().signal,
+    )).resolves.toMatchObject({ status: 'applied' })
+    await expect(harness.controller.preflightExport(exportRequest)).resolves.toBe(
+      harness.runtime.exportSession,
+    )
+    await expect(harness.controller.preflightDescriptorMigrationAction(migrationRequest))
+      .resolves.toBe(harness.runtime.migrationSession)
+
+    expect(harness.createRuntimeController).toHaveBeenCalledOnce()
+    expect(harness.lifecycle.registerDisposer).toHaveBeenCalledOnce()
+    expect(harness.runtime.openEditorSession).toHaveBeenCalledOnce()
+  })
+
+  test('project disposal during runtime creation rejects the late owner then allows a fresh request', async () => {
+    const firstRuntime = runtimeHarness()
+    const secondRuntime = runtimeHarness()
+    const creation = deferred<PluginRuntimeController>()
+    let creationCount = 0
+    const harness = setup({
+      runtime: firstRuntime,
+      createRuntime: async () => (++creationCount === 1
+        ? creation.promise
+        : secondRuntime.controller),
+    })
+    const staleApply = harness.controller.getEffectBridgeHandler().apply(
+      bridgeRequest(),
+      new AbortController().signal,
+    )
+    await vi.waitFor(() => expect(harness.createRuntimeController).toHaveBeenCalledOnce())
+
+    await harness.lifecycle.dispose()
+    creation.resolve(firstRuntime.controller)
+    await expect(staleApply).resolves.toEqual({ status: 'bypassed' })
+    expect(firstRuntime.teardown).toHaveBeenCalledWith('plugin-composition-disposed')
+
+    await expect(harness.controller.getEffectBridgeHandler().apply(
+      bridgeRequest(new Uint8Array([5, 6, 7, 8])),
+      new AbortController().signal,
+    )).resolves.toMatchObject({ status: 'applied' })
+    expect(harness.createRuntimeController).toHaveBeenCalledTimes(2)
+    expect(secondRuntime.openEditorSession).toHaveBeenCalledOnce()
   })
 
   test('a management mutation during async runtime creation tears down the stale candidate', async () => {
@@ -872,5 +967,52 @@ describe('plugin composition controller', () => {
     expect(harness.runtime.teardown).toHaveBeenCalledWith('project-replaced')
     expect(harness.lifecycle.dispose).toHaveBeenCalledOnce()
     expect(() => harness.controller.subscribe(vi.fn())).toThrow('closed')
+  })
+
+  test('terminal close waits for an in-flight runtime candidate and closes it exactly once', async () => {
+    const runtime = runtimeHarness()
+    const creation = deferred<PluginRuntimeController>()
+    const harness = setup({
+      runtime,
+      createRuntime: async () => creation.promise,
+    })
+    const applying = harness.controller.getEffectBridgeHandler().apply(
+      bridgeRequest(),
+      new AbortController().signal,
+    )
+    await vi.waitFor(() => expect(harness.createRuntimeController).toHaveBeenCalledOnce())
+
+    let closeSettled = false
+    const closing = harness.controller.close('terminal-during-creation')
+      .finally(() => { closeSettled = true })
+    await Promise.resolve()
+    expect(closeSettled).toBe(false)
+
+    creation.resolve(runtime.controller)
+    await expect(applying).resolves.toEqual({ status: 'bypassed' })
+    await expect(closing).resolves.toBeUndefined()
+    expect(runtime.teardown).toHaveBeenCalledOnce()
+    expect(runtime.teardown).toHaveBeenCalledWith('stale-plugin-composition')
+  })
+
+  test('terminal close surfaces a late candidate teardown failure exactly once', async () => {
+    const runtime = runtimeHarness()
+    const creation = deferred<PluginRuntimeController>()
+    runtime.teardown.mockRejectedValue(new Error('late runtime teardown failed'))
+    const harness = setup({
+      runtime,
+      createRuntime: async () => creation.promise,
+    })
+    const applying = harness.controller.getEffectBridgeHandler().apply(
+      bridgeRequest(),
+      new AbortController().signal,
+    )
+    await vi.waitFor(() => expect(harness.createRuntimeController).toHaveBeenCalledOnce())
+    const closing = harness.controller.close('terminal-during-failing-creation')
+
+    creation.resolve(runtime.controller)
+    await expect(applying).resolves.toEqual({ status: 'bypassed' })
+    await expect(closing).rejects.toThrow('late runtime teardown failed')
+    expect(runtime.teardown).toHaveBeenCalledOnce()
   })
 })
