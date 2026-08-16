@@ -212,7 +212,9 @@ describe('plugin sandbox controller', () => {
       })
       expect(harness.terminate).toHaveBeenCalledOnce()
       const zeroedViews = fillSpy.mock.instances
-        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+        .filter((view, index): view is Uint8Array => (
+          view instanceof Uint8Array && fillSpy.mock.calls[index]?.[0] === 0
+        ))
       expectZeroedViews(zeroedViews, [activation().moduleBytes.byteLength])
     } finally {
       fillSpy.mockRestore()
@@ -275,7 +277,9 @@ describe('plugin sandbox controller', () => {
         failure: { code: 'closed' },
       })
       const zeroedViews = fillSpy.mock.instances
-        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+        .filter((view, index): view is Uint8Array => (
+          view instanceof Uint8Array && fillSpy.mock.calls[index]?.[0] === 0
+        ))
       expectZeroedViews(zeroedViews, [2, 4, 3])
     } finally {
       fillSpy.mockRestore()
@@ -297,7 +301,9 @@ describe('plugin sandbox controller', () => {
         failure: { code: 'busy' },
       })
       const zeroedViews = fillSpy.mock.instances
-        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+        .filter((view, index): view is Uint8Array => (
+          view instanceof Uint8Array && fillSpy.mock.calls[index]?.[0] === 0
+        ))
       expectZeroedViews(zeroedViews, [2, 4, 3])
     } finally {
       fillSpy.mockRestore()
@@ -320,7 +326,9 @@ describe('plugin sandbox controller', () => {
         failure: { code: 'aborted' },
       })
       const zeroedViews = fillSpy.mock.instances
-        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+        .filter((view, index): view is Uint8Array => (
+          view instanceof Uint8Array && fillSpy.mock.calls[index]?.[0] === 0
+        ))
       expectZeroedViews(zeroedViews, [2, 4])
     } finally {
       fillSpy.mockRestore()
@@ -340,7 +348,9 @@ describe('plugin sandbox controller', () => {
         failure: { code: 'aborted' },
       })
       const zeroedViews = fillSpy.mock.instances
-        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+        .filter((view, index): view is Uint8Array => (
+          view instanceof Uint8Array && fillSpy.mock.calls[index]?.[0] === 0
+        ))
       expectZeroedViews(zeroedViews, [3])
     } finally {
       fillSpy.mockRestore()
