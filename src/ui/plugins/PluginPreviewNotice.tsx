@@ -1,9 +1,13 @@
+import PluginActionButton from './PluginActionButton'
 import { pluginEffectStatusLabel } from './pluginUiCopy'
-import type { PluginEffectIssueView } from './pluginUiTypes'
+import type {
+  PluginActionView,
+  PluginPreviewIssueView,
+} from './pluginUiTypes'
 
 export interface PluginPreviewNoticeProps {
-  readonly issues: readonly PluginEffectIssueView[]
-  readonly busyPluginIds?: readonly string[]
+  readonly issues: readonly PluginPreviewIssueView[]
+  readonly manageAction: PluginActionView
   readonly onRetryPlugin: (pluginId: string) => void
   readonly onDisablePlugin: (pluginId: string) => void
   readonly onManagePlugins: () => void
@@ -11,20 +15,18 @@ export interface PluginPreviewNoticeProps {
 
 export default function PluginPreviewNotice({
   issues,
-  busyPluginIds = [],
+  manageAction,
   onRetryPlugin,
   onDisablePlugin,
   onManagePlugins,
 }: PluginPreviewNoticeProps) {
   if (issues.length === 0) return null
-  const busy = new Set(busyPluginIds)
   const blockingCount = issues.filter((issue) => issue.blocksExport).length
 
   return (
     <aside
       className="plugin-preview-notice"
       aria-labelledby="plugin-preview-heading"
-      aria-live="polite"
     >
       <div className="plugin-preview-heading">
         <div>
@@ -33,7 +35,12 @@ export default function PluginPreviewNotice({
             {issues.length} plugin effect{issues.length === 1 ? '' : 's'} unavailable
           </h2>
         </div>
-        <button type="button" onClick={onManagePlugins}>Manage plugins</button>
+        <PluginActionButton
+          action={manageAction}
+          label="Manage plugins"
+          pendingLabel="Opening plugin management…"
+          onAction={onManagePlugins}
+        />
       </div>
       <p>
         Preview continues with the listed effects visibly bypassed.
@@ -41,41 +48,40 @@ export default function PluginPreviewNotice({
           ? ` ${blockingCount} ${blockingCount === 1 ? 'effect blocks' : 'effects block'} export until fixed or explicitly reviewed for bypass.`
           : ''}
       </p>
+      <p
+        className="plugin-preview-live-status"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {issues.length} plugin effect{issues.length === 1 ? '' : 's'} bypassed. Export blockers: {blockingCount}.
+      </p>
       <ul className="plugin-preview-issue-list">
-        {issues.map((issue) => {
-          const pluginBusy = busy.has(issue.pluginId)
-          return (
-            <li key={issue.effectInstanceId}>
-              <div>
-                <strong>{issue.effectLabel}</strong>
-                <span>{issue.pluginName} · {pluginEffectStatusLabel(issue.status)}</span>
-                <p>{issue.reason}</p>
-              </div>
-              <div className="plugin-card-actions" aria-label={`${issue.effectLabel} recovery actions`}>
-                {(issue.status === 'failed' || issue.status === 'incompatible') ? (
-                  <button
-                    type="button"
-                    disabled={pluginBusy}
-                    aria-label={`Retry ${issue.pluginName}`}
-                    onClick={() => onRetryPlugin(issue.pluginId)}
-                  >
-                    Retry
-                  </button>
-                ) : null}
-                {issue.status !== 'disabled' && issue.status !== 'safe-mode' ? (
-                  <button
-                    type="button"
-                    disabled={pluginBusy}
-                    aria-label={`Disable ${issue.pluginName}`}
-                    onClick={() => onDisablePlugin(issue.pluginId)}
-                  >
-                    Disable plugin
-                  </button>
-                ) : null}
-              </div>
-            </li>
-          )
-        })}
+        {issues.map((issue) => (
+          <li key={issue.effectInstanceId}>
+            <div>
+              <strong>{issue.effectLabel}</strong>
+              <span>{issue.pluginName} · {pluginEffectStatusLabel(issue.status)}</span>
+              <p>{issue.reason}</p>
+            </div>
+            <div className="plugin-card-actions" aria-label={`${issue.effectLabel} recovery actions`}>
+              <PluginActionButton
+                action={issue.actions.retry}
+                label="Retry"
+                pendingLabel={`Retrying ${issue.pluginName}…`}
+                ariaLabel={`Retry ${issue.pluginName}`}
+                onAction={() => onRetryPlugin(issue.pluginId)}
+              />
+              <PluginActionButton
+                action={issue.actions.disable}
+                label="Disable plugin"
+                pendingLabel={`Disabling ${issue.pluginName}…`}
+                ariaLabel={`Disable ${issue.pluginName}`}
+                onAction={() => onDisablePlugin(issue.pluginId)}
+              />
+            </div>
+          </li>
+        ))}
       </ul>
     </aside>
   )

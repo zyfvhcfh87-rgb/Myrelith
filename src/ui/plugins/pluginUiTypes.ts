@@ -29,26 +29,63 @@ export type PluginEffectStatus =
   | 'untrusted'
   | 'safe-mode'
 
-export type PluginOperation =
-  | 'retry'
-  | 'enable'
-  | 'disable'
-  | 'uninstall'
-  | null
-
 export type PluginDiagnosticLevel = 'info' | 'warning' | 'error'
+
+export interface PluginActionView {
+  readonly available: boolean
+  readonly disabledReason?: string | null
+  readonly pending: boolean
+  readonly error?: string | null
+}
+
+export interface PluginManagerActionsView {
+  readonly retry: PluginActionView
+  readonly enable: PluginActionView
+  readonly disable: PluginActionView
+  readonly uninstall: PluginActionView
+  readonly clearDiagnostics: PluginActionView
+}
+
+export interface PluginRecoveryActionsView {
+  readonly retry: PluginActionView
+  readonly disable: PluginActionView
+  readonly manage: PluginActionView
+}
+
+export interface PluginPreviewActionsView {
+  readonly retry: PluginActionView
+  readonly disable: PluginActionView
+}
+
+export type PluginPermissionGrantState =
+  | 'previously-granted'
+  | 'new'
+  | 'widened'
+
+export type PluginPackageVersionChange =
+  | 'new-install'
+  | 'reinstall'
+  | 'update'
+  | 'downgrade'
 
 export interface PluginPermissionView {
   readonly id: string
   readonly name: string
+  readonly selectedVersion: string
   readonly detail: string
   readonly required: boolean
+  readonly available: boolean
+  readonly grantable: boolean
+  readonly grantState: PluginPermissionGrantState
+  readonly unavailableReason?: string | null
 }
 
 export interface PluginPackageReviewView {
   readonly id: string
   readonly name: string
   readonly version: string
+  readonly installedVersion: string | null
+  readonly versionChange: PluginPackageVersionChange
   readonly signerFingerprint: string
   readonly packageDigest: string
   readonly signatureState: PluginSignatureState
@@ -64,6 +101,7 @@ export interface PluginPackageReviewView {
 export interface PluginInstallDecision {
   readonly trustSigner: boolean
   readonly grantedPermissionIds: readonly string[]
+  readonly confirmDowngrade: boolean
 }
 
 export interface PluginDiagnosticView {
@@ -85,8 +123,7 @@ export interface InstalledPluginView {
   readonly permissionNames: readonly string[]
   readonly contributionNames: readonly string[]
   readonly diagnostics: readonly PluginDiagnosticView[]
-  readonly operation: PluginOperation
-  readonly operationError?: string | null
+  readonly actions: PluginManagerActionsView
 }
 
 export interface PluginEffectIssueView {
@@ -94,7 +131,13 @@ export interface PluginEffectIssueView {
   readonly effectLabel: string
   readonly pluginId: string
   readonly pluginName: string
+  readonly pluginVersion: string
+  readonly packageDigest: string
   readonly status: PluginEffectStatus
   readonly reason: string
   readonly blocksExport: boolean
+}
+
+export interface PluginPreviewIssueView extends PluginEffectIssueView {
+  readonly actions: PluginPreviewActionsView
 }

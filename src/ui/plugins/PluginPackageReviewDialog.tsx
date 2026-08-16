@@ -1,8 +1,12 @@
 import { useId, useState } from 'react'
 import PluginDialogFrame from './PluginDialogFrame'
+import { boundedPluginUiText } from './pluginUiCopy'
 import type {
   PluginInstallDecision,
   PluginPackageReviewView,
+  PluginPackageVersionChange,
+  PluginPermissionGrantState,
+  PluginPermissionView,
 } from './pluginUiTypes'
 
 export type PluginPackageReviewPhase =
@@ -41,6 +45,30 @@ function trustLabel(view: PluginPackageReviewView): string {
   }
 }
 
+function versionChangeLabel(
+  change: PluginPackageVersionChange,
+  installedVersion: string | null,
+): string {
+  switch (change) {
+    case 'new-install': return 'New installation'
+    case 'reinstall': return `Reinstall${installedVersion ? ` ${installedVersion}` : ''}`
+    case 'update': return `Update${installedVersion ? ` from ${installedVersion}` : ''}`
+    case 'downgrade': return `Downgrade${installedVersion ? ` from ${installedVersion}` : ''}`
+  }
+}
+
+function grantStateLabel(state: PluginPermissionGrantState): string {
+  switch (state) {
+    case 'previously-granted': return 'Previously granted'
+    case 'new': return 'New grant request'
+    case 'widened': return 'Widened grant request'
+  }
+}
+
+function isGrantable(permission: PluginPermissionView): boolean {
+  return permission.available && permission.grantable
+}
+
 function PackageDecisionForm({
   phase,
   packageView,
@@ -51,29 +79,45 @@ function PackageDecisionForm({
   readonly packageView: PluginPackageReviewView
 }) {
   const requiresTrust = packageView.trustState === 'untrusted'
+  const isDowngrade = packageView.versionChange === 'downgrade'
   const compatibilityHeadingId = useId()
   const contributionsHeadingId = useId()
   const installRequirementsId = useId()
   const [trustSigner, setTrustSigner] = useState(!requiresTrust)
-  const [grants, setGrants] = useState<ReadonlySet<string>>(() => new Set())
+  const [confirmDowngrade, setConfirmDowngrade] = useState(false)
+  const [grants, setGrants] = useState<ReadonlySet<string>>(() => new Set(
+    packageView.permissions
+      .filter((permission) => (
+        permission.grantState === 'previously-granted' && isGrantable(permission)
+      ))
+      .map((permission) => permission.id),
+  ))
   const busy = phase === 'installing' || phase === 'cancelling'
   const packageBlocked = packageView.signatureState !== 'valid'
     || packageView.trustState === 'invalid'
     || packageView.trustState === 'revoked'
     || packageView.compatibilityState === 'incompatible'
+  const requiredUnavailable = packageView.permissions.some(
+    (permission) => permission.required && !isGrantable(permission),
+  )
   const missingRequiredGrant = packageView.permissions.some(
-    (permission) => permission.required && !grants.has(permission.id),
+    (permission) => permission.required
+      && isGrantable(permission)
+      && !grants.has(permission.id),
   )
   const canInstall = !busy
     && !packageBlocked
+    && !requiredUnavailable
     && trustSigner
     && !missingRequiredGrant
+    && (!isDowngrade || confirmDowngrade)
 
-  const toggleGrant = (id: string, granted: boolean): void => {
+  const toggleGrant = (permission: PluginPermissionView, granted: boolean): void => {
+    if (!isGrantable(permission)) return
     setGrants((current) => {
       const next = new Set(current)
-      if (granted) next.add(id)
-      else next.delete(id)
+      if (granted) next.add(permission.id)
+      else next.delete(permission.id)
       return next
     })
   }
@@ -83,8 +127,9 @@ function PackageDecisionForm({
     onInstall({
       trustSigner: requiresTrust,
       grantedPermissionIds: packageView.permissions
-        .filter((permission) => grants.has(permission.id))
+        .filter((permission) => isGrantable(permission) && grants.has(permission.id))
         .map((permission) => permission.id),
+      confirmDowngrade: isDowngrade && confirmDowngrade,
     })
   }
 
@@ -92,7 +137,7 @@ function PackageDecisionForm({
     <PluginDialogFrame
       eyebrow="Local plugin package"
       title={`Review ${packageView.name}`}
-      description="Myrelith inspected this local package without contacting a server. Review its identity and requested frame access before installation."
+      description="Myrelith inspected this local package without contacting a server. Review its identity, version change, and requested frame access before installation."
       busy={busy}
       dismissDisabled={phase === 'cancelling'}
       onDismiss={onCancel}
@@ -121,7 +166,9 @@ function PackageDecisionForm({
     >
       <dl className="plugin-fact-grid">
         <div><dt>Plugin</dt><dd>{packageView.id}</dd></div>
-        <div><dt>Version</dt><dd>{packageView.version}</dd></div>
+        <div><dt>Package version</dt><dd>{packageView.version}</dd></div>
+        <div><dt>Installed version</dt><dd>{packageView.installedVersion ?? 'Not installed'}</dd></div>
+        <div><dt>Requested change</dt><dd>{versionChangeLabel(packageView.versionChange, packageView.installedVersion)}</dd></div>
         <div><dt>Signer fingerprint</dt><dd><code>{packageView.signerFingerprint}</code></dd></div>
         <div><dt>Package digest</dt><dd><code>{packageView.packageDigest}</code></dd></div>
         <div><dt>Memory limit</dt><dd>{packageView.memoryLimitMiB} MiB</dd></div>
@@ -136,6 +183,16 @@ function PackageDecisionForm({
             : 'This package cannot be installed or executed. Its details are shown for inspection only.'}
         </p>
       </section>
+
+      {isDowngrade ? (
+        <section className="plugin-callout" data-tone="warning">
+          <strong>Downgrade requires explicit confirmation</strong>
+          <p>
+            The installed version is {packageView.installedVersion ?? 'unknown'}; this package is version {packageView.version}.
+            Existing project descriptors are preserved, but the older package may be incompatible with them.
+          </p>
+        </section>
+      ) : null}
 
       <section className="plugin-review-section" aria-labelledby={compatibilityHeadingId}>
         <div className="plugin-section-heading">
@@ -161,7 +218,7 @@ function PackageDecisionForm({
       </section>
 
       <fieldset className="plugin-consent-fieldset" disabled={busy || packageBlocked}>
-        <legend>Trust and permissions</legend>
+        <legend>Trust and capabilities</legend>
         <p className="plugin-fieldset-copy">{trustLabel(packageView)}</p>
         {requiresTrust ? (
           <label className="plugin-consent-row">
@@ -176,31 +233,67 @@ function PackageDecisionForm({
             </span>
           </label>
         ) : null}
-        {packageView.permissions.map((permission) => (
-          <label className="plugin-consent-row" key={permission.id}>
+        {packageView.permissions.map((permission) => {
+          const grantable = isGrantable(permission)
+          return (
+            <label className="plugin-consent-row" key={permission.id} data-available={permission.available}>
+              <input
+                type="checkbox"
+                checked={grantable && grants.has(permission.id)}
+                disabled={!grantable}
+                onChange={(event) => toggleGrant(permission, event.target.checked)}
+              />
+              <span>
+                <strong>{permission.name}{permission.required ? ' — required' : ' — optional'}</strong>
+                <small>{permission.detail}</small>
+                <span className="plugin-capability-meta">
+                  <code>{permission.id}@{permission.selectedVersion}</code>
+                  <span>{permission.available ? 'Available' : 'Unavailable'}</span>
+                  <span>{grantable ? 'Grantable' : 'Not grantable'}</span>
+                  <span>{grantStateLabel(permission.grantState)}</span>
+                </span>
+                {!permission.available && permission.unavailableReason ? (
+                  <small className="plugin-capability-unavailable">
+                    {boundedPluginUiText(permission.unavailableReason)}
+                  </small>
+                ) : null}
+              </span>
+            </label>
+          )
+        })}
+        {isDowngrade ? (
+          <label className="plugin-consent-row plugin-downgrade-confirmation">
             <input
               type="checkbox"
-              checked={grants.has(permission.id)}
-              onChange={(event) => toggleGrant(permission.id, event.target.checked)}
+              checked={confirmDowngrade}
+              onChange={(event) => setConfirmDowngrade(event.target.checked)}
             />
             <span>
-              <strong>{permission.name}{permission.required ? ' — required' : ' — optional'}</strong>
-              <small>{permission.detail}</small>
+              <strong>Install this older package version</strong>
+              <small>This confirms only the displayed downgrade from {packageView.installedVersion ?? 'the installed version'} to {packageView.version}.</small>
             </span>
           </label>
-        ))}
+        ) : null}
       </fieldset>
 
-      <p id={installRequirementsId} className="plugin-help-copy" role="status" aria-live="polite">
+      <p className="plugin-help-copy">
+        Plugin access stops while the plugin is disabled. Uninstalling removes the local package and grants.
+      </p>
+
+      <p id={installRequirementsId} className="plugin-help-copy" role="status" aria-live="polite" aria-atomic="true">
         {packageBlocked
           ? 'Installation is unavailable until signature, trust, and compatibility checks pass.'
-          : !trustSigner
-            ? 'Choose whether to trust this signer for the exact plugin ID.'
-            : missingRequiredGrant
-              ? 'Grant every required permission to enable installation, or cancel to keep the package uninstalled.'
-              : 'Ready to install. Permission grants can be revoked later by disabling or uninstalling the plugin.'}
+          : requiredUnavailable
+            ? 'A required capability is unavailable or cannot be granted.'
+            : !trustSigner
+              ? 'Choose whether to trust this signer for the exact plugin ID.'
+              : missingRequiredGrant
+                ? 'Grant every required capability to enable installation, or cancel to keep the package unchanged.'
+                : isDowngrade && !confirmDowngrade
+                  ? 'Confirm the exact downgrade before installing this older package.'
+                  : 'Ready to install with the displayed trust and capability decisions.'}
       </p>
-      {error ? <p className="plugin-error" role="alert">{error}</p> : null}
+      {error ? <p className="plugin-error" role="alert">{boundedPluginUiText(error)}</p> : null}
     </PluginDialogFrame>
   )
 }
@@ -237,7 +330,7 @@ export default function PluginPackageReviewDialog({
       eyebrow="Local plugin package"
       title={title}
       description={complete
-        ? 'The verified package and your local decisions were committed together.'
+        ? 'The inspected package and your local decisions were committed together.'
         : 'Package inspection runs before installation, trust, permissions, or plugin execution.'}
       busy={inspecting}
       dismissDisabled={phase === 'cancelling'}
@@ -280,7 +373,7 @@ export default function PluginPackageReviewDialog({
       ) : null}
       {phase === 'error' ? (
         <p className="plugin-error" role="alert">
-          {error ?? 'The package could not be inspected. Nothing was installed or changed.'}
+          {boundedPluginUiText(error ?? 'The package could not be inspected. Nothing was installed or changed.')}
         </p>
       ) : null}
     </PluginDialogFrame>

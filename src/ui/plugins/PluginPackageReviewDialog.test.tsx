@@ -7,6 +7,8 @@ const packageView: PluginPackageReviewView = {
   id: 'com.example.sparkle',
   name: 'Soft Sparkle',
   version: '1.2.0',
+  installedVersion: null,
+  versionChange: 'new-install',
   signerFingerprint: 'sha256:1234abcd',
   packageDigest: 'sha256:fedcba98',
   signatureState: 'valid',
@@ -17,14 +19,22 @@ const packageView: PluginPackageReviewView = {
     {
       id: 'myrelith.effect.video-frame.rgba8',
       name: 'Read and change applied video frames',
+      selectedVersion: '1',
       detail: 'When enabled, this effect receives the pixels of each frame it is applied to.',
       required: true,
+      available: true,
+      grantable: true,
+      grantState: 'new',
     },
     {
       id: 'example.optional',
       name: 'Optional test permission',
+      selectedVersion: '2',
       detail: 'This optional permission is not required for installation.',
       required: false,
+      available: true,
+      grantable: true,
+      grantState: 'new',
     },
   ],
   contributionNames: ['Soft Sparkle'],
@@ -46,6 +56,7 @@ describe('PluginPackageReviewDialog', () => {
 
     expect(screen.getByRole('dialog')).toHaveAccessibleName('Review Soft Sparkle')
     expect(screen.getByText(/does not certify the publisher, code quality, privacy, or safety/i)).toBeInTheDocument()
+    expect(screen.getByText('myrelith.effect.video-frame.rgba8@1')).toBeInTheDocument()
     const install = screen.getByRole('button', { name: 'Install plugin' })
     expect(install).toBeDisabled()
 
@@ -62,7 +73,93 @@ describe('PluginPackageReviewDialog', () => {
     expect(onInstall).toHaveBeenCalledWith({
       trustSigner: true,
       grantedPermissionIds: ['myrelith.effect.video-frame.rgba8'],
+      confirmDowngrade: false,
     })
+  })
+
+  test('shows installed update facts from the app projection', () => {
+    render(
+      <PluginPackageReviewDialog
+        phase="review"
+        packageView={{
+          ...packageView,
+          version: '1.3.0',
+          installedVersion: '1.2.0',
+          versionChange: 'update',
+          packageDigest: 'sha256:update',
+        }}
+        onCancel={vi.fn()}
+        onInstall={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('1.2.0')).toBeInTheDocument()
+    expect(screen.getByText('Update from 1.2.0')).toBeInTheDocument()
+  })
+
+  test('preserves prior grants, identifies widened grants, blocks unavailable options, and requires downgrade confirmation', () => {
+    const onInstall = vi.fn()
+    const downgradeView: PluginPackageReviewView = {
+      ...packageView,
+      version: '1.1.0',
+      installedVersion: '1.2.0',
+      versionChange: 'downgrade',
+      packageDigest: 'sha256:downgrade',
+      trustState: 'user-trusted',
+      permissions: [
+        {
+          ...packageView.permissions[0],
+          grantState: 'previously-granted',
+        },
+        {
+          ...packageView.permissions[1],
+          grantState: 'widened',
+        },
+        {
+          id: 'example.unavailable',
+          name: 'Unavailable optional capability',
+          selectedVersion: '3',
+          detail: 'The current host cannot provide this optional capability.',
+          required: false,
+          available: false,
+          grantable: true,
+          grantState: 'new',
+          unavailableReason: 'This browser does not expose the required primitive.',
+        },
+      ],
+    }
+    render(
+      <PluginPackageReviewDialog
+        phase="review"
+        packageView={downgradeView}
+        onCancel={vi.fn()}
+        onInstall={onInstall}
+      />,
+    )
+
+    expect(screen.getByText('Downgrade from 1.2.0')).toBeInTheDocument()
+    expect(screen.getByText('Previously granted')).toBeInTheDocument()
+    expect(screen.getByText('Widened grant request')).toBeInTheDocument()
+    const priorGrant = screen.getByRole('checkbox', { name: /Read and change applied video frames/i })
+    expect(priorGrant).toBeChecked()
+    const unavailable = screen.getByRole('checkbox', { name: /Unavailable optional capability/i })
+    expect(unavailable).toBeDisabled()
+    expect(unavailable).not.toBeChecked()
+    expect(screen.getByText('Not grantable')).toBeInTheDocument()
+
+    const install = screen.getByRole('button', { name: 'Install plugin' })
+    expect(install).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox', { name: /Install this older package version/i }))
+    expect(install).toBeEnabled()
+    fireEvent.click(install)
+
+    expect(onInstall).toHaveBeenCalledWith({
+      trustSigner: false,
+      grantedPermissionIds: ['myrelith.effect.video-frame.rgba8'],
+      confirmDowngrade: true,
+    })
+    expect(screen.getByText(/Plugin access stops while the plugin is disabled/i)).toBeInTheDocument()
+    expect(screen.getByText(/uninstalling removes the local package and grants/i)).toBeInTheDocument()
   })
 
   test('shows incompatibility as inspectable text and never creates plugin markup', () => {

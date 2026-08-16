@@ -1,5 +1,11 @@
 import type { PluginEffectStatus } from './pluginUiTypes'
 
+const MAX_PLUGIN_UI_TEXT_LENGTH = 512
+
+export function boundedPluginUiText(value: string): string {
+  return value.slice(0, MAX_PLUGIN_UI_TEXT_LENGTH)
+}
+
 export function pluginEffectStatusLabel(status: PluginEffectStatus): string {
   switch (status) {
     case 'ready': return 'Ready'

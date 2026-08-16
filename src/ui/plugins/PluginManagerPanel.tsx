@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PluginActionButton from './PluginActionButton'
 import PluginDiagnostics from './PluginDiagnostics'
 import type { InstalledPluginView, PluginPackageStatus } from './pluginUiTypes'
 
@@ -14,7 +15,7 @@ export interface PluginManagerPanelProps {
   readonly onEnablePlugin: (pluginId: string) => void
   readonly onDisablePlugin: (pluginId: string) => void
   readonly onUninstallPlugin: (pluginId: string) => void
-  readonly onClearDiagnostics?: (pluginId: string) => void
+  readonly onClearDiagnostics: (pluginId: string) => void
 }
 
 function statusLabel(status: PluginPackageStatus): string {
@@ -27,16 +28,6 @@ function statusLabel(status: PluginPackageStatus): string {
     case 'untrusted': return 'Trust required'
     case 'quarantined': return 'Quarantined'
     case 'safe-mode': return 'Safe mode'
-  }
-}
-
-function operationLabel(plugin: InstalledPluginView): string | null {
-  switch (plugin.operation) {
-    case 'retry': return `Retrying ${plugin.name}…`
-    case 'enable': return `Enabling ${plugin.name}…`
-    case 'disable': return `Disabling ${plugin.name}…`
-    case 'uninstall': return `Uninstalling ${plugin.name}…`
-    case null: return null
   }
 }
 
@@ -57,17 +48,10 @@ function PluginCard({
   readonly onEnablePlugin: (pluginId: string) => void
   readonly onDisablePlugin: (pluginId: string) => void
   readonly onUninstallPlugin: (pluginId: string) => void
-  readonly onClearDiagnostics?: (pluginId: string) => void
+  readonly onClearDiagnostics: (pluginId: string) => void
 }) {
-  const busy = plugin.operation !== null
-  const canRetry = plugin.status === 'failed'
-    || plugin.status === 'incompatible'
-    || plugin.status === 'quarantined'
-  const canEnable = plugin.status === 'disabled'
-  const canDisable = plugin.status === 'ready'
-    || plugin.status === 'failed'
-    || plugin.status === 'untrusted'
-  const operation = operationLabel(plugin)
+  const { actions } = plugin
+  const uninstallConfirmationId = `plugin-uninstall-${plugin.id}`
 
   return (
     <li className="plugin-package-card" data-status={plugin.status}>
@@ -96,48 +80,38 @@ function PluginCard({
       </dl>
 
       <div className="plugin-card-actions" aria-label={`${plugin.name} actions`}>
-        {canRetry ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onRetryPlugin(plugin.id)}
-          >
-            Retry
-          </button>
-        ) : null}
-        {canEnable ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onEnablePlugin(plugin.id)}
-          >
-            Enable
-          </button>
-        ) : null}
-        {canDisable ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onDisablePlugin(plugin.id)}
-          >
-            Disable
-          </button>
-        ) : null}
-        <button
-          type="button"
+        <PluginActionButton
+          action={actions.retry}
+          label="Retry"
+          pendingLabel={`Retrying ${plugin.name}…`}
+          onAction={() => onRetryPlugin(plugin.id)}
+        />
+        <PluginActionButton
+          action={actions.enable}
+          label="Enable"
+          pendingLabel={`Enabling ${plugin.name}…`}
+          onAction={() => onEnablePlugin(plugin.id)}
+        />
+        <PluginActionButton
+          action={actions.disable}
+          label="Disable"
+          pendingLabel={`Disabling ${plugin.name}…`}
+          onAction={() => onDisablePlugin(plugin.id)}
+        />
+        <PluginActionButton
+          action={actions.uninstall}
+          label="Review uninstall"
+          pendingLabel={`Uninstalling ${plugin.name}…`}
           className="plugin-button-danger-quiet"
-          disabled={busy}
-          aria-expanded={pendingUninstall}
-          aria-controls={`plugin-uninstall-${plugin.id}`}
-          onClick={() => setPendingUninstall(pendingUninstall ? null : plugin.id)}
-        >
-          Review uninstall
-        </button>
+          ariaExpanded={pendingUninstall}
+          ariaControls={uninstallConfirmationId}
+          onAction={() => setPendingUninstall(pendingUninstall ? null : plugin.id)}
+        />
       </div>
 
-      {pendingUninstall ? (
+      {pendingUninstall && actions.uninstall.available ? (
         <section
-          id={`plugin-uninstall-${plugin.id}`}
+          id={uninstallConfirmationId}
           className="plugin-inline-confirmation"
           aria-label={`Confirm uninstall of ${plugin.name}`}
         >
@@ -147,14 +121,20 @@ function PluginCard({
             preserved and bypassed, so opening and saving remain available.
           </p>
           <div>
-            <button type="button" disabled={busy} onClick={() => setPendingUninstall(null)}>Keep plugin</button>
+            <button
+              type="button"
+              disabled={actions.uninstall.pending}
+              onClick={() => setPendingUninstall(null)}
+            >
+              Keep plugin
+            </button>
             <button
               type="button"
               className="plugin-button-danger"
-              disabled={busy}
+              disabled={actions.uninstall.pending || Boolean(actions.uninstall.disabledReason)}
               onClick={() => onUninstallPlugin(plugin.id)}
             >
-              Confirm uninstall
+              {actions.uninstall.pending ? 'Uninstalling…' : 'Confirm uninstall'}
             </button>
           </div>
         </section>
@@ -163,22 +143,16 @@ function PluginCard({
       <details className="plugin-diagnostics-disclosure">
         <summary>Diagnostics ({plugin.diagnostics.length})</summary>
         <PluginDiagnostics diagnostics={plugin.diagnostics} label={`${plugin.name} diagnostics`} />
-        {plugin.diagnostics.length > 0 && onClearDiagnostics ? (
-          <button
-            type="button"
+        <div>
+          <PluginActionButton
+            action={actions.clearDiagnostics}
+            label="Clear diagnostics"
+            pendingLabel={`Clearing ${plugin.name} diagnostics…`}
             className="plugin-clear-diagnostics"
-            disabled={busy}
-            onClick={() => onClearDiagnostics(plugin.id)}
-          >
-            Clear diagnostics
-          </button>
-        ) : null}
+            onAction={() => onClearDiagnostics(plugin.id)}
+          />
+        </div>
       </details>
-
-      <div className="plugin-operation-status" role="status" aria-live="polite" aria-atomic="true">
-        {operation}
-      </div>
-      {plugin.operationError ? <p className="plugin-error" role="alert">{plugin.operationError}</p> : null}
     </li>
   )
 }

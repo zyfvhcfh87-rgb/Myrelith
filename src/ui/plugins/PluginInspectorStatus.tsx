@@ -1,11 +1,14 @@
 import { useId } from 'react'
+import PluginActionButton from './PluginActionButton'
 import { pluginEffectStatusLabel } from './pluginUiCopy'
-import type { PluginEffectIssueView } from './pluginUiTypes'
+import type {
+  PluginEffectIssueView,
+  PluginRecoveryActionsView,
+} from './pluginUiTypes'
 
 export interface PluginInspectorStatusProps {
   readonly effect: PluginEffectIssueView
-  readonly busy?: boolean
-  readonly error?: string | null
+  readonly actions: PluginRecoveryActionsView
   readonly onRetryPlugin: (pluginId: string) => void
   readonly onDisablePlugin: (pluginId: string) => void
   readonly onManagePlugin: (pluginId: string) => void
@@ -13,17 +16,12 @@ export interface PluginInspectorStatusProps {
 
 export default function PluginInspectorStatus({
   effect,
-  busy = false,
-  error = null,
+  actions,
   onRetryPlugin,
   onDisablePlugin,
   onManagePlugin,
 }: PluginInspectorStatusProps) {
   const headingId = useId()
-  const canRetry = effect.status === 'failed' || effect.status === 'incompatible'
-  const canDisable = effect.status !== 'disabled'
-    && effect.status !== 'safe-mode'
-    && effect.status !== 'revoked'
 
   return (
     <section
@@ -49,18 +47,25 @@ export default function PluginInspectorStatus({
             : 'The descriptor is preserved and remains editable, reorderable, removable, and saveable.'}
       </p>
       <div className="plugin-card-actions" aria-label={`${effect.effectLabel} plugin actions`}>
-        {canRetry ? (
-          <button type="button" disabled={busy} onClick={() => onRetryPlugin(effect.pluginId)}>Retry</button>
-        ) : null}
-        {canDisable ? (
-          <button type="button" disabled={busy} onClick={() => onDisablePlugin(effect.pluginId)}>Disable plugin</button>
-        ) : null}
-        <button type="button" disabled={busy} onClick={() => onManagePlugin(effect.pluginId)}>Manage plugin</button>
+        <PluginActionButton
+          action={actions.retry}
+          label="Retry"
+          pendingLabel={`Retrying ${effect.pluginName}…`}
+          onAction={() => onRetryPlugin(effect.pluginId)}
+        />
+        <PluginActionButton
+          action={actions.disable}
+          label="Disable plugin"
+          pendingLabel={`Disabling ${effect.pluginName}…`}
+          onAction={() => onDisablePlugin(effect.pluginId)}
+        />
+        <PluginActionButton
+          action={actions.manage}
+          label="Manage plugin"
+          pendingLabel={`Opening ${effect.pluginName} management…`}
+          onAction={() => onManagePlugin(effect.pluginId)}
+        />
       </div>
-      <div className="plugin-operation-status" role="status" aria-live="polite" aria-atomic="true">
-        {busy ? `Updating ${effect.pluginName}…` : ''}
-      </div>
-      {error ? <p className="plugin-error" role="alert">{error}</p> : null}
     </section>
   )
 }
