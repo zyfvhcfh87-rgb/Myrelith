@@ -508,27 +508,28 @@ describe('plugin sandbox controller', () => {
     expect(snapshots.every((snapshot) => Object.isFrozen(snapshot))).toBe(true)
   })
 
-  test('counts pending broker resources until a deferred handshake abort fully drains', async () => {
+  test('keeps abort-ignoring pending broker ownership visible until late settlement drains', async () => {
     const snapshots: PluginSandboxLifecycleSnapshot[] = []
-    const factory: PluginSandboxBrokerFactory = ({ signal, reportOwnership }) => {
+    const terminate = vi.fn()
+    const channel = new MessageChannel()
+    const broker: PluginSandboxBroker = {
+      runtimePort: channel.port1,
+      setFatalHandler() {},
+      terminate(reason) {
+        terminate(reason)
+        channel.port1.close()
+        channel.port2.close()
+      },
+    }
+    let resolveBroker!: (broker: PluginSandboxBroker) => void
+    const factory: PluginSandboxBrokerFactory = ({ reportOwnership }) => {
       reportOwnership?.({
         brokerIframeCount: 1,
         candidateWorkerCount: 1,
         privatePortCount: 2,
       })
-      return new Promise((_resolve, reject) => {
-        signal?.addEventListener('abort', () => {
-          reportOwnership?.({
-            brokerIframeCount: 0,
-            candidateWorkerCount: 0,
-            privatePortCount: 0,
-          })
-          reject(new PluginSandboxError({
-            code: 'aborted',
-            message: 'Plugin activation was cancelled.',
-            terminal: true,
-          }))
-        }, { once: true })
+      return new Promise((resolve) => {
+        resolveBroker = resolve
       })
     }
     const controller = createPluginSandboxController({
@@ -552,8 +553,27 @@ describe('plugin sandbox controller', () => {
         && !snapshot.terminal
     ))).toBe(true)
 
-    await controller.teardown('pending-broker-terminal')
+    let teardownSettled = false
+    const teardown = controller.teardown('pending-broker-terminal').finally(() => {
+      teardownSettled = true
+    })
     expect(await pending).toMatchObject({ failure: { code: 'aborted' } })
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(teardownSettled).toBe(false)
+    expect(snapshots.at(-1)).toMatchObject({
+      brokerIframeCount: 1,
+      candidateWorkerCount: 1,
+      privatePortCount: 2,
+      watchdogCount: 0,
+      pendingActivationCount: 0,
+      terminal: false,
+    })
+    expect(snapshots.some((snapshot) => snapshot.terminal)).toBe(false)
+
+    resolveBroker(broker)
+    await teardown
+    expect(terminate).toHaveBeenCalledOnce()
+    expect(terminate).toHaveBeenCalledWith('activation-aborted-before-broker-ready')
     const terminal = snapshots.filter((snapshot) => snapshot.terminal)
     expect(terminal).toEqual([{
       brokerIframeCount: 0,

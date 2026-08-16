@@ -555,6 +555,11 @@ export function createPluginSandboxController(options: {
       pendingBrokerOwnership.set(generation, Object.freeze({ ...ownership }))
       emitLifecycle()
     }
+    const releasePendingOwnership = (): void => {
+      if (!acceptsPendingOwnership) return
+      acceptsPendingOwnership = false
+      if (pendingBrokerOwnership.delete(generation)) emitLifecycle()
+    }
     let brokerPromise: Promise<PluginSandboxBroker>
     try {
       brokerPromise = Promise.resolve(brokerFactory({
@@ -565,8 +570,7 @@ export function createPluginSandboxController(options: {
         reportOwnership,
       }))
     } catch (cause) {
-      acceptsPendingOwnership = false
-      pendingBrokerOwnership.delete(generation)
+      releasePendingOwnership()
       cleanupActivation()
       throw cause
     }
@@ -588,20 +592,23 @@ export function createPluginSandboxController(options: {
           (created) => {
             activationAbort.signal.removeEventListener('abort', onAbort)
             if (aborted || activationAbort.signal.aborted) {
-              created.terminate('activation-aborted-before-broker-ready')
+              try {
+                created.terminate('activation-aborted-before-broker-ready')
+              } finally {
+                releasePendingOwnership()
+              }
               return
             }
             resolve(created)
           },
           (cause) => {
             activationAbort.signal.removeEventListener('abort', onAbort)
+            releasePendingOwnership()
             if (!aborted) reject(cause)
           },
         )
       })
     } catch (cause) {
-      acceptsPendingOwnership = false
-      pendingBrokerOwnership.delete(generation)
       cleanupActivation()
       throw cause
     } finally {
