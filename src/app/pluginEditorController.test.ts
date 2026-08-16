@@ -9,6 +9,7 @@ import type { Clip, EffectDescriptor, TimelineDoc } from '../domain/schema'
 import type { DocumentState } from '../state/documentStore'
 import {
   createPluginDocumentGenerationController,
+  type PluginDocumentGenerationController,
   type PluginDocumentStoreAdapter,
 } from './pluginDocumentGeneration'
 import {
@@ -32,6 +33,10 @@ const AVAILABLE_ACTION: PluginAppEditorActionView = Object.freeze({
 
 function declaration(
   availability: PluginVideoEffectContributionDeclarationInput['availability'] = 'ready',
+  mode: {
+    readonly default: string
+    readonly options: readonly string[]
+  } = { default: 'soft', options: ['soft', 'hard'] },
 ): PluginVideoEffectContributionDeclarationInput {
   return Object.freeze({
     signerFingerprint: SIGNER_FINGERPRINT,
@@ -65,11 +70,11 @@ function declaration(
         key: 'mode',
         name: 'Mode',
         kind: 'enum' as const,
-        default: 'soft',
-        options: Object.freeze([
-          Object.freeze({ value: 'soft', name: 'Soft' }),
-          Object.freeze({ value: 'hard', name: 'Hard' }),
-        ]),
+        default: mode.default,
+        options: Object.freeze(mode.options.map((value) => Object.freeze({
+          value,
+          name: value,
+        }))),
       }),
     ]),
     availability,
@@ -467,6 +472,68 @@ describe('plugin editor controller', () => {
     animated.controller.dispose()
   })
 
+  test('distinguishes an exact-capacity string replacement from a genuine no-change', () => {
+    const currentMode = 'a'
+    const fullString = 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters)
+    const fullCount = Math.floor(
+      (EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters - currentMode.length)
+        / fullString.length,
+    )
+    const remainingCharacters = EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters
+      - currentMode.length
+      - (fullCount * fullString.length)
+    const fillerEffects: EffectDescriptor[] = Array.from(
+      { length: fullCount },
+      (_, index) => ({
+        id: `filler-${index}`,
+        type: 'builtin:filler',
+        version: 0,
+        enabled: true,
+        params: { padding: fullString },
+      }),
+    )
+    if (remainingCharacters > 0) {
+      fillerEffects.push({
+        id: 'filler-remainder',
+        type: 'builtin:filler',
+        version: 0,
+        enabled: true,
+        params: { padding: 'x'.repeat(remainingCharacters) },
+      })
+    }
+    const target = pluginEffect({
+      params: { strength: 0.5, enabled: true, mode: currentMode },
+    })
+    const harness = setup({
+      document: documentWith([clip([target, ...fillerEffects])]),
+      contribution: createPluginVideoEffectContributionSnapshot(7, [
+        declaration('ready', { default: currentMode, options: [currentMode, 'bb'] }),
+      ]),
+    })
+    const original = harness.store.document()
+
+    expect(harness.controller.setPluginEffectParameter({
+      ...requestGenerations(harness.controller),
+      clipId: 'clip-1',
+      effectInstanceId: 'effect-plugin',
+      key: 'mode',
+      value: 'bb',
+    })).toMatchObject({ status: 'rejected', code: 'budget-exceeded' })
+    expect(harness.store.document()).toBe(original)
+    expect(harness.store.commits).toHaveLength(0)
+
+    expect(harness.controller.setPluginEffectParameter({
+      ...requestGenerations(harness.controller),
+      clipId: 'clip-1',
+      effectInstanceId: 'effect-plugin',
+      key: 'mode',
+      value: currentMode,
+    })).toMatchObject({ status: 'rejected', code: 'no-change' })
+    expect(harness.store.document()).toBe(original)
+    expect(harness.store.commits).toHaveLength(0)
+    harness.controller.dispose()
+  })
+
   test('rejects locked targets, id exhaustion, and exact effect budget without history', () => {
     const locked = setup({
       document: documentWith([clip([])], true),
@@ -634,5 +701,76 @@ describe('plugin editor controller', () => {
       effectType: EFFECT_TYPE,
     }).code).toBe('closed')
     expect(() => harness.controller.subscribe(vi.fn())).toThrow('closed')
+  })
+
+  test('attempts every terminal document cleanup once and preserves cleanup errors', () => {
+    const document = documentWith()
+    const contribution = createPluginVideoEffectContributionSnapshot(7, [declaration()])
+    const readPlugins = (): PluginEditorPluginProjection => Object.freeze({
+      revision: 1,
+      startupMode: 'normal',
+      catalogGeneration: 7,
+      contributionSnapshot: contribution,
+      installedPackages: Object.freeze([packageProjection()]),
+    })
+    const createController = (
+      unsubscribeError: Error,
+      documentDisposeError?: Error,
+    ) => {
+      const unsubscribeDocument = vi.fn(() => { throw unsubscribeError })
+      const disposeDocument = vi.fn(() => {
+        if (documentDisposeError) throw documentDisposeError
+      })
+      const documentStore: PluginDocumentStoreAdapter = {
+        getState: () => ({ doc: document, setDocWithHistory: vi.fn() }),
+        subscribe: vi.fn(() => unsubscribeDocument),
+      }
+      const documentController: PluginDocumentGenerationController = Object.freeze({
+        getDocumentSnapshot: () => Object.freeze({ generation: 0, document }),
+        commitDocument: vi.fn(() => false),
+        dispose: disposeDocument,
+      })
+      return {
+        controller: createPluginEditorController({
+          readPlugins,
+          documentController,
+          documentStore,
+        }),
+        unsubscribeDocument,
+        disposeDocument,
+      }
+    }
+
+    const unsubscribeError = new Error('document unsubscribe failed')
+    const single = createController(unsubscribeError)
+    let singleFailure: unknown
+    try {
+      single.controller.dispose()
+    } catch (error) {
+      singleFailure = error
+    }
+    expect(singleFailure).toBe(unsubscribeError)
+    expect(single.unsubscribeDocument).toHaveBeenCalledOnce()
+    expect(single.disposeDocument).toHaveBeenCalledOnce()
+    expect(() => single.controller.dispose()).not.toThrow()
+    expect(single.unsubscribeDocument).toHaveBeenCalledOnce()
+    expect(single.disposeDocument).toHaveBeenCalledOnce()
+
+    const disposeError = new Error('document controller dispose failed')
+    const multiple = createController(unsubscribeError, disposeError)
+    let multipleFailure: unknown
+    try {
+      multiple.controller.dispose()
+    } catch (error) {
+      multipleFailure = error
+    }
+    expect(multipleFailure).toBeInstanceOf(AggregateError)
+    expect((multipleFailure as AggregateError).errors).toEqual([
+      unsubscribeError,
+      disposeError,
+    ])
+    expect(multiple.unsubscribeDocument).toHaveBeenCalledOnce()
+    expect(multiple.disposeDocument).toHaveBeenCalledOnce()
+    expect(() => multiple.controller.dispose()).not.toThrow()
   })
 })

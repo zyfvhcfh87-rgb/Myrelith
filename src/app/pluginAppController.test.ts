@@ -442,20 +442,20 @@ describe('plugin app controller', () => {
     expect(() => harness.controller.getEditorSnapshot()).toThrow(PluginAppControllerError)
   })
 
-  test('shares a rejecting terminal boundary while editor disposal fails and composition still closes', async () => {
+  test('shares a rejecting terminal boundary while editor unsubscribe fails and composition still closes', async () => {
     const editor = editorHarness()
-    editor.dispose.mockImplementation(() => { throw new Error('editor dispose failed') })
+    editor.dispose.mockImplementation(() => { throw new Error('document unsubscribe failed') })
     const harness = setup({ createEditorController: () => editor.controller })
     harness.controller.getEditorSnapshot()
 
     const first = harness.owner.close('editor-dispose-failure')
     const concurrent = harness.owner.close('ignored-concurrent-reason')
     expect(concurrent).toBe(first)
-    await expect(first).rejects.toThrow('editor dispose failed')
+    await expect(first).rejects.toThrow('document unsubscribe failed')
 
     const repeated = harness.owner.close('ignored-repeat-reason')
     expect(repeated).toBe(first)
-    await expect(repeated).rejects.toThrow('editor dispose failed')
+    await expect(repeated).rejects.toThrow('document unsubscribe failed')
     expect(editor.dispose).toHaveBeenCalledOnce()
     expect(harness.lifecycle.dispose).toHaveBeenCalledOnce()
   })

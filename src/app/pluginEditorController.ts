@@ -1,7 +1,11 @@
 /** App-owned plugin editor projection and atomic document mutation seam. */
 
 import { effectAnimationTrack } from '../domain/clipAnimation'
-import { effectAppendBudgetError, effectDescriptorBoundsError } from '../domain/effectBounds'
+import {
+  effectAppendBudgetError,
+  effectDescriptorBoundsError,
+  effectReplacementBudgetError,
+} from '../domain/effectBounds'
 import { addEffect, updateEffectParams } from '../domain/operations'
 import {
   createPluginVideoEffectContributionSnapshot,
@@ -770,6 +774,24 @@ export function createPluginEditorController(
           document.generation,
         )
       }
+      if (effect.params[parameter.key] === request.value) {
+        return rejected(
+          'no-change',
+          'The requested edit made no project change.',
+          document.generation,
+        )
+      }
+      const replacement: EffectDescriptor = {
+        ...effect,
+        params: { ...effect.params, [parameter.key]: request.value },
+      }
+      if (effectReplacementBudgetError(document.document, effect, replacement)) {
+        return rejected(
+          'budget-exceeded',
+          'The project effect budget cannot accept this parameter value.',
+          document.generation,
+        )
+      }
       return commit(
         document,
         plugin,
@@ -783,8 +805,21 @@ export function createPluginEditorController(
       if (closed) return
       closed = true
       listeners.clear()
-      unsubscribeDocument()
-      documentController.dispose()
+      const errors: unknown[] = []
+      try {
+        unsubscribeDocument()
+      } catch (error) {
+        errors.push(error)
+      }
+      try {
+        documentController.dispose()
+      } catch (error) {
+        errors.push(error)
+      }
+      if (errors.length === 1) throw errors[0]
+      if (errors.length > 1) {
+        throw new AggregateError(errors, 'Plugin editor cleanup failed')
+      }
     },
   }
   return Object.freeze(controller)
