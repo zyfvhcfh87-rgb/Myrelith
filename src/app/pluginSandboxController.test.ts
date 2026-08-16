@@ -10,6 +10,8 @@ import {
   type PluginSandboxBroker,
   type PluginSandboxBrokerFactory,
   type PluginSandboxActivationRequest,
+  type PluginSandboxMigrationRequest,
+  type PluginSandboxRenderRequest,
 } from './pluginSandboxController'
 
 const MINIMAL_RENDER_MODULE_HEX = '0061736d01000000010f01600a7f7f7f7f7f7f7f7f7f7f017f021701086d7972656c697468066d656d6f727902018202820203020100071b01176d7972656c6974685f6566666563745f6669787475726500000a0601040041000b'
@@ -34,6 +36,39 @@ function activation(): PluginSandboxActivationRequest {
       renderEntrypoints: ['myrelith_effect_fixture'],
       migrationEntrypoints: [],
     },
+  }
+}
+
+function renderRequest(): PluginSandboxRenderRequest {
+  return {
+    entrypoint: 'myrelith_effect_fixture',
+    width: 1,
+    height: 1,
+    stride: 4,
+    timelineFrame: 0,
+    frameRateNumerator: 30,
+    frameRateDenominator: 1,
+    canonicalParameterBytes: Uint8Array.of(0x7b, 0x7d),
+    rgbaBytes: Uint8Array.of(1, 2, 3, 4),
+  }
+}
+
+function migrationRequest(): PluginSandboxMigrationRequest {
+  return {
+    entrypoint: 'myrelith_migrate_fixture',
+    fromVersion: 1,
+    toVersion: 2,
+    canonicalInputBytes: Uint8Array.of(7, 11, 13),
+  }
+}
+
+function expectZeroedViews(
+  views: readonly Uint8Array[],
+  expectedByteLengths: readonly number[],
+): void {
+  expect(views.map((view) => view.byteLength)).toEqual(expectedByteLengths)
+  for (const view of views) {
+    expect([...view]).toEqual(Array.from({ length: view.byteLength }, () => 0))
   }
 }
 
@@ -169,11 +204,19 @@ describe('plugin sandbox controller', () => {
       .mockReturnValueOnce(10)
       .mockReturnValueOnce(10 + PLUGIN_ACTIVATION_DEADLINE_MS + 1)
     const controller = createPluginSandboxController({ brokerFactory: harness.factory, now })
+    const fillSpy = vi.spyOn(Uint8Array.prototype, 'fill')
 
-    await expect(controller.activate(activation())).rejects.toMatchObject({
-      failure: { code: 'timeout', terminal: true },
-    })
-    expect(harness.terminate).toHaveBeenCalledOnce()
+    try {
+      await expect(controller.activate(activation())).rejects.toMatchObject({
+        failure: { code: 'timeout', terminal: true },
+      })
+      expect(harness.terminate).toHaveBeenCalledOnce()
+      const zeroedViews = fillSpy.mock.instances
+        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+      expectZeroedViews(zeroedViews, [activation().moduleBytes.byteLength])
+    } finally {
+      fillSpy.mockRestore()
+    }
   })
 
   test('cancellation before candidate creation does not call the broker factory', async () => {
@@ -215,6 +258,93 @@ describe('plugin sandbox controller', () => {
       canonicalParameterBytes: new TextEncoder().encode('{}'),
       rgbaBytes: Uint8Array.of(4, 3, 2, 1),
     }, 5)).rejects.toMatchObject({ failure: { code: 'closed' } })
+  })
+
+  test('clears attached render and migration copies when the session is closed', async () => {
+    const harness = scriptedBrokerFactory()
+    const controller = createPluginSandboxController({ brokerFactory: harness.factory })
+    const session = await controller.activate(activation())
+    controller.teardown('closed-before-dispatch')
+    const fillSpy = vi.spyOn(Uint8Array.prototype, 'fill')
+
+    try {
+      await expect(session.render(renderRequest(), 100)).rejects.toMatchObject({
+        failure: { code: 'closed' },
+      })
+      await expect(session.migrate(migrationRequest())).rejects.toMatchObject({
+        failure: { code: 'closed' },
+      })
+      const zeroedViews = fillSpy.mock.instances
+        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+      expectZeroedViews(zeroedViews, [2, 4, 3])
+    } finally {
+      fillSpy.mockRestore()
+    }
+  })
+
+  test('clears attached render and migration copies when another call is busy', async () => {
+    const harness = scriptedBrokerFactory({ ignoreRender: true })
+    const controller = createPluginSandboxController({ brokerFactory: harness.factory })
+    const session = await controller.activate(activation())
+    const pendingRender = session.render(renderRequest(), 10_000).catch((cause: unknown) => cause)
+    const fillSpy = vi.spyOn(Uint8Array.prototype, 'fill')
+
+    try {
+      await expect(session.render(renderRequest(), 100)).rejects.toMatchObject({
+        failure: { code: 'busy' },
+      })
+      await expect(session.migrate(migrationRequest())).rejects.toMatchObject({
+        failure: { code: 'busy' },
+      })
+      const zeroedViews = fillSpy.mock.instances
+        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+      expectZeroedViews(zeroedViews, [2, 4, 3])
+    } finally {
+      fillSpy.mockRestore()
+      controller.teardown('busy-test-complete')
+      expect(await pendingRender).toMatchObject({ failure: { code: 'closed' } })
+      harness.postLateRender()
+    }
+  })
+
+  test('clears attached render copies for a pre-aborted request', async () => {
+    const harness = scriptedBrokerFactory()
+    const controller = createPluginSandboxController({ brokerFactory: harness.factory })
+    const session = await controller.activate(activation())
+    const abort = new AbortController()
+    abort.abort()
+    const fillSpy = vi.spyOn(Uint8Array.prototype, 'fill')
+
+    try {
+      await expect(session.render(renderRequest(), 100, abort.signal)).rejects.toMatchObject({
+        failure: { code: 'aborted' },
+      })
+      const zeroedViews = fillSpy.mock.instances
+        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+      expectZeroedViews(zeroedViews, [2, 4])
+    } finally {
+      fillSpy.mockRestore()
+    }
+  })
+
+  test('clears the attached migration copy for a pre-aborted request', async () => {
+    const harness = scriptedBrokerFactory()
+    const controller = createPluginSandboxController({ brokerFactory: harness.factory })
+    const session = await controller.activate(activation())
+    const abort = new AbortController()
+    abort.abort()
+    const fillSpy = vi.spyOn(Uint8Array.prototype, 'fill')
+
+    try {
+      await expect(session.migrate(migrationRequest(), abort.signal)).rejects.toMatchObject({
+        failure: { code: 'aborted' },
+      })
+      const zeroedViews = fillSpy.mock.instances
+        .filter((_view, index) => fillSpy.mock.calls[index]?.[0] === 0)
+      expectZeroedViews(zeroedViews, [3])
+    } finally {
+      fillSpy.mockRestore()
+    }
   })
 
   test.each([

@@ -113,6 +113,12 @@ function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return copy.buffer
 }
 
+function zeroAttachedArrayBuffers(buffers: readonly ArrayBuffer[]): void {
+  for (const buffer of buffers) {
+    if (buffer.byteLength > 0) new Uint8Array(buffer).fill(0)
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -579,9 +585,7 @@ export function createPluginSandboxController(options: {
         try {
           port.postMessage({ ...request, requestId }, transfer)
         } catch {
-          for (const value of transfer) {
-            if (isArrayBuffer(value) && value.byteLength > 0) new Uint8Array(value).fill(0)
-          }
+          zeroAttachedArrayBuffers(transfer.filter(isArrayBuffer))
           terminal(failure('crashed', 'Plugin request dispatch failed.'))
         }
       })
@@ -603,6 +607,8 @@ export function createPluginSandboxController(options: {
       terminal(cause instanceof PluginSandboxError ? cause.failure : failure('activation-failed', String(cause)))
       cleanupActivation()
       throw cause
+    } finally {
+      zeroAttachedArrayBuffers([activationBytes])
     }
     if (ready.kind !== 'ready') {
       const runtimeFailure = failure('invalid-envelope', 'Plugin worker did not return a ready response.')
@@ -625,47 +631,55 @@ export function createPluginSandboxController(options: {
       async render(request, deadlineMs, requestSignal) {
         const canonicalParameterBytes = ownedArrayBuffer(request.canonicalParameterBytes)
         const rgbaBytes = ownedArrayBuffer(request.rgbaBytes)
-        const response = await send({
-          protocolVersion: PLUGIN_RUNTIME_PROTOCOL_VERSION,
-          kind: 'render',
-          generation,
-          entrypoint: request.entrypoint,
-          width: request.width,
-          height: request.height,
-          stride: request.stride,
-          timelineFrame: request.timelineFrame,
-          frameRateNumerator: request.frameRateNumerator,
-          frameRateDenominator: request.frameRateDenominator,
-          canonicalParameterBytes,
-          rgbaBytes,
-        }, [canonicalParameterBytes, rgbaBytes], deadlineMs, requestSignal)
-        if (response.kind !== 'rendered' || !isArrayBuffer(response.rgbaBytes)) {
-          const runtimeFailure = failure('invalid-envelope', 'Plugin render response is invalid.')
-          terminal(runtimeFailure)
-          throw new PluginSandboxError(runtimeFailure)
+        try {
+          const response = await send({
+            protocolVersion: PLUGIN_RUNTIME_PROTOCOL_VERSION,
+            kind: 'render',
+            generation,
+            entrypoint: request.entrypoint,
+            width: request.width,
+            height: request.height,
+            stride: request.stride,
+            timelineFrame: request.timelineFrame,
+            frameRateNumerator: request.frameRateNumerator,
+            frameRateDenominator: request.frameRateDenominator,
+            canonicalParameterBytes,
+            rgbaBytes,
+          }, [canonicalParameterBytes, rgbaBytes], deadlineMs, requestSignal)
+          if (response.kind !== 'rendered' || !isArrayBuffer(response.rgbaBytes)) {
+            const runtimeFailure = failure('invalid-envelope', 'Plugin render response is invalid.')
+            terminal(runtimeFailure)
+            throw new PluginSandboxError(runtimeFailure)
+          }
+          return Object.freeze({
+            identity: response.identity,
+            rgbaBytes: new Uint8Array(response.rgbaBytes),
+          })
+        } finally {
+          zeroAttachedArrayBuffers([canonicalParameterBytes, rgbaBytes])
         }
-        return Object.freeze({
-          identity: response.identity,
-          rgbaBytes: new Uint8Array(response.rgbaBytes),
-        })
       },
       async migrate(request, requestSignal) {
         const canonicalInputBytes = ownedArrayBuffer(request.canonicalInputBytes)
-        const response = await send({
-          protocolVersion: PLUGIN_RUNTIME_PROTOCOL_VERSION,
-          kind: 'migrate',
-          generation,
-          entrypoint: request.entrypoint,
-          fromVersion: request.fromVersion,
-          toVersion: request.toVersion,
-          canonicalInputBytes,
-        }, [canonicalInputBytes], PLUGIN_MIGRATION_DEADLINE_MS, requestSignal)
-        if (response.kind !== 'migrated' || !isArrayBuffer(response.canonicalOutputBytes)) {
-          const runtimeFailure = failure('invalid-envelope', 'Plugin migration response is invalid.')
-          terminal(runtimeFailure)
-          throw new PluginSandboxError(runtimeFailure)
+        try {
+          const response = await send({
+            protocolVersion: PLUGIN_RUNTIME_PROTOCOL_VERSION,
+            kind: 'migrate',
+            generation,
+            entrypoint: request.entrypoint,
+            fromVersion: request.fromVersion,
+            toVersion: request.toVersion,
+            canonicalInputBytes,
+          }, [canonicalInputBytes], PLUGIN_MIGRATION_DEADLINE_MS, requestSignal)
+          if (response.kind !== 'migrated' || !isArrayBuffer(response.canonicalOutputBytes)) {
+            const runtimeFailure = failure('invalid-envelope', 'Plugin migration response is invalid.')
+            terminal(runtimeFailure)
+            throw new PluginSandboxError(runtimeFailure)
+          }
+          return new Uint8Array(response.canonicalOutputBytes)
+        } finally {
+          zeroAttachedArrayBuffers([canonicalInputBytes])
         }
-        return new Uint8Array(response.canonicalOutputBytes)
       },
       async close(reason) {
         if (sessionClosed) return
