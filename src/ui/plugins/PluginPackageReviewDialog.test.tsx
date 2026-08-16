@@ -4,6 +4,7 @@ import PluginPackageReviewDialog from './PluginPackageReviewDialog'
 import type { PluginPackageReviewView } from './pluginUiTypes'
 
 const packageView: PluginPackageReviewView = {
+  reviewToken: 'review:new-install:1',
   id: 'com.example.sparkle',
   name: 'Soft Sparkle',
   version: '1.2.0',
@@ -71,6 +72,7 @@ describe('PluginPackageReviewDialog', () => {
     fireEvent.click(install)
 
     expect(onInstall).toHaveBeenCalledWith({
+      reviewToken: 'review:new-install:1',
       trustSigner: true,
       grantedPermissionIds: ['myrelith.effect.video-frame.rgba8'],
       confirmDowngrade: false,
@@ -126,6 +128,7 @@ describe('PluginPackageReviewDialog', () => {
         phase="review"
         packageView={{
           ...packageView,
+          reviewToken: 'review:replacement:1',
           installedVersion: '1.2.0',
           versionChange: 'same-version-replacement',
           packageDigest: 'sha256:replacement',
@@ -154,6 +157,7 @@ describe('PluginPackageReviewDialog', () => {
     fireEvent.click(install)
 
     expect(onInstall).toHaveBeenCalledWith({
+      reviewToken: 'review:replacement:1',
       trustSigner: false,
       grantedPermissionIds: [
         'myrelith.effect.video-frame.rgba8',
@@ -168,6 +172,7 @@ describe('PluginPackageReviewDialog', () => {
     const onInstall = vi.fn()
     const downgradeView: PluginPackageReviewView = {
       ...packageView,
+      reviewToken: 'review:downgrade:1',
       version: '1.1.0',
       installedVersion: '1.2.0',
       versionChange: 'downgrade',
@@ -234,6 +239,7 @@ describe('PluginPackageReviewDialog', () => {
     fireEvent.click(install)
 
     expect(onInstall).toHaveBeenCalledWith({
+      reviewToken: 'review:downgrade:1',
       trustSigner: false,
       grantedPermissionIds: ['myrelith.effect.video-frame.rgba8'],
       confirmDowngrade: true,
@@ -241,6 +247,131 @@ describe('PluginPackageReviewDialog', () => {
     })
     expect(screen.getByText(/Plugin access stops while the plugin is disabled/i)).toBeInTheDocument()
     expect(screen.getByText(/uninstalling removes the local package and grants/i)).toBeInTheDocument()
+  })
+
+  test('resets trust, grants, and downgrade consent when the app changes the review token', () => {
+    const downgradeView: PluginPackageReviewView = {
+      ...packageView,
+      reviewToken: 'review:reset-downgrade:1',
+      version: '1.1.0',
+      installedVersion: '1.2.0',
+      versionChange: 'downgrade',
+      permissions: packageView.permissions.map((permission) => ({
+        ...permission,
+        grantState: 'preserved',
+      })),
+    }
+    const { rerender } = render(
+      <PluginPackageReviewDialog
+        phase="review"
+        packageView={downgradeView}
+        onCancel={vi.fn()}
+        onInstall={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('checkbox', {
+      name: /Trust this signer for com\.example\.sparkle/i,
+    }))
+    fireEvent.click(screen.getByRole('checkbox', {
+      name: /Install this older package version/i,
+    }))
+    expect(screen.getByRole('checkbox', {
+      name: /Read and change applied video frames/i,
+    })).toBeChecked()
+    expect(screen.getByRole('checkbox', {
+      name: /Optional test permission/i,
+    })).toBeChecked()
+
+    rerender(
+      <PluginPackageReviewDialog
+        phase="review"
+        packageView={{
+          ...downgradeView,
+          reviewToken: 'review:reset-downgrade:2',
+          permissions: downgradeView.permissions.map((permission) => ({
+            ...permission,
+            grantState: 'widened',
+          })),
+        }}
+        onCancel={vi.fn()}
+        onInstall={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('checkbox', {
+      name: /Trust this signer for com\.example\.sparkle/i,
+    })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', {
+      name: /Read and change applied video frames/i,
+    })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', {
+      name: /Optional test permission/i,
+    })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', {
+      name: /Install this older package version/i,
+    })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Install plugin' })).toBeDisabled()
+  })
+
+  test('resets replacement consent and returns only the current app-minted review token', () => {
+    const onInstall = vi.fn()
+    const replacementView: PluginPackageReviewView = {
+      ...packageView,
+      reviewToken: 'review:reset-replacement:1',
+      installedVersion: '1.2.0',
+      versionChange: 'same-version-replacement',
+      trustState: 'user-trusted',
+      permissions: packageView.permissions.map((permission) => ({
+        ...permission,
+        grantState: 'preserved',
+      })),
+    }
+    const { rerender } = render(
+      <PluginPackageReviewDialog
+        phase="review"
+        packageView={replacementView}
+        onCancel={vi.fn()}
+        onInstall={onInstall}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('checkbox', {
+      name: /Replace this installed same-version package/i,
+    }))
+    expect(screen.getByRole('button', { name: 'Install plugin' })).toBeEnabled()
+
+    rerender(
+      <PluginPackageReviewDialog
+        phase="review"
+        packageView={{
+          ...replacementView,
+          reviewToken: 'review:reset-replacement:2',
+        }}
+        onCancel={vi.fn()}
+        onInstall={onInstall}
+      />,
+    )
+
+    const replacementConsent = screen.getByRole('checkbox', {
+      name: /Replace this installed same-version package/i,
+    })
+    expect(replacementConsent).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Install plugin' })).toBeDisabled()
+
+    fireEvent.click(replacementConsent)
+    fireEvent.click(screen.getByRole('button', { name: 'Install plugin' }))
+    expect(onInstall).toHaveBeenCalledOnce()
+    expect(onInstall).toHaveBeenCalledWith({
+      reviewToken: 'review:reset-replacement:2',
+      trustSigner: false,
+      grantedPermissionIds: [
+        'myrelith.effect.video-frame.rgba8',
+        'example.optional',
+      ],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: true,
+    })
   })
 
   test('shows incompatibility as inspectable text and never creates plugin markup', () => {

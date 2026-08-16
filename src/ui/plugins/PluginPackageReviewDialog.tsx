@@ -131,6 +131,7 @@ function PackageDecisionForm({
   const install = (): void => {
     if (!canInstall) return
     onInstall({
+      reviewToken: packageView.reviewToken,
       trustSigner: requiresTrust,
       grantedPermissionIds: packageView.permissions
         .filter((permission) => isGrantable(permission) && grants.has(permission.id))
@@ -350,7 +351,7 @@ export default function PluginPackageReviewDialog({
   if (packageView && phase !== 'complete') {
     return (
       <PackageDecisionForm
-        key={`${packageView.id}:${packageView.packageDigest}`}
+        key={`${packageView.id}:${packageView.packageDigest}:${packageView.reviewToken}`}
         phase={phase}
         packageView={packageView}
         error={error}

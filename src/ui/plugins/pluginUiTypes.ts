@@ -86,6 +86,8 @@ export interface PluginPermissionView {
 }
 
 export interface PluginPackageReviewView {
+  /** Opaque app-minted identity; replace it whenever any consent-relevant projection changes. */
+  readonly reviewToken: string
   readonly id: string
   readonly name: string
   readonly version: string
@@ -104,6 +106,8 @@ export interface PluginPackageReviewView {
 }
 
 export interface PluginInstallDecision {
+  /** Exact token from the reviewed projection; the app must revalidate it before committing. */
+  readonly reviewToken: string
   readonly trustSigner: boolean
   readonly grantedPermissionIds: readonly string[]
   readonly confirmDowngrade: boolean
