@@ -90,6 +90,7 @@ import {
   type LocalMediaSelection,
 } from './localMediaHandles'
 import { disposeLoadedExport } from './exportLifecycle'
+import { disposeLoadedPlugins } from './pluginLifecycle'
 import {
   isLocalProjectPickerCancellation,
   pickLocalProjectFile,
@@ -128,7 +129,8 @@ export interface ProjectControllerDeps {
   ): Promise<MediaProbeResult>
   disposeExport(): Promise<void>
   disposeTransport(): Promise<void>
-  disposePreview(): void
+  disposePreview(): Promise<void>
+  disposePlugins(): Promise<void>
   disposeMediaVisuals(): void
   resetMediaImport(): void
   pauseProjectPersistence(): Promise<void>
@@ -178,6 +180,7 @@ const realDeps: ProjectControllerDeps = {
   disposeExport: disposeLoadedExport,
   disposeTransport,
   disposePreview,
+  disposePlugins: disposeLoadedPlugins,
   disposeMediaVisuals,
   resetMediaImport: resetMediaImportController,
   pauseProjectPersistence: pauseProjectPersistenceSession,
@@ -204,6 +207,31 @@ const realDeps: ProjectControllerDeps = {
   getRecoveryJournal: getRecoveryJournalRecord,
   rememberRecentProject: rememberRecentProjectRecord,
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
+}
+
+async function disposePreviewAndPlugins(
+  deps: Pick<ProjectControllerDeps, 'disposePreview' | 'disposePlugins'>,
+): Promise<void> {
+  let previewFailed = false
+  let previewError: unknown
+  try {
+    await deps.disposePreview()
+  } catch (cause) {
+    previewFailed = true
+    previewError = cause
+  }
+  try {
+    await deps.disposePlugins()
+  } catch (pluginError) {
+    if (previewFailed) {
+      throw new AggregateError(
+        [previewError, pluginError],
+        'Preview and plugin cleanup both failed',
+      )
+    }
+    throw pluginError
+  }
+  if (previewFailed) throw previewError
 }
 
 interface PendingResume {
@@ -467,7 +495,8 @@ export async function leaveActiveProject(
     await deps.disposeTransport()
     if (generation !== operationGeneration) return { status: 'cancelled' }
 
-    deps.disposePreview()
+    await disposePreviewAndPlugins(deps)
+    if (generation !== operationGeneration) return { status: 'cancelled' }
     deps.disposeMediaVisuals()
     deps.resetMediaImport()
     deps.suspendProjectPersistence()
@@ -511,7 +540,8 @@ async function activateProject(
     await deps.disposeTransport()
     if (generation !== operationGeneration) return { status: 'cancelled' }
 
-    deps.disposePreview()
+    await disposePreviewAndPlugins(deps)
+    if (generation !== operationGeneration) return { status: 'cancelled' }
     deps.disposeMediaVisuals()
     deps.resetMediaImport()
     deps.suspendProjectPersistence()
@@ -2136,11 +2166,23 @@ export function activateResumedProject(
 }
 
 /** Test/HMR seam: discard uncommitted resources and restore launch state. */
-export function resetProjectController(
-  deps: Pick<ProjectControllerDeps, 'revokeObjectURL'> = realDeps,
-): void {
+export async function resetProjectController(
+  deps: Pick<ProjectControllerDeps, 'revokeObjectURL'> & Partial<Pick<
+    ProjectControllerDeps,
+    'disposePreview' | 'disposePlugins'
+  >> = realDeps,
+): Promise<void> {
   invalidatePending(deps)
   suspendProjectPersistenceSession()
+  if (deps.disposePreview && deps.disposePlugins) {
+    await disposePreviewAndPlugins({
+      disposePreview: deps.disposePreview,
+      disposePlugins: deps.disposePlugins,
+    })
+  } else {
+    await deps.disposePreview?.()
+    await deps.disposePlugins?.()
+  }
   clearActiveLocalProjectBindingId()
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
 }
