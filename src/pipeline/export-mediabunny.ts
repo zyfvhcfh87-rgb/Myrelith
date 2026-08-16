@@ -6,6 +6,7 @@ import type { PreparedExportFileCapability } from './export-file-target'
 import { createMediabunnyExportSink } from './export-mediabunny-sink'
 import type { ExportAssetResolver } from './export-mediabunny-common'
 import { compositeFrame } from './render'
+import type { VideoEffectStageExecutor } from './videoEffectStageExecution'
 
 export type {
   ExportAssetResolver,
@@ -20,12 +21,14 @@ export function createMediabunnyExportDeps(
   resolveAsset: ExportAssetResolver,
   sourceBounds: SourceBoundsCatalog = new Map(),
   fileDestination?: PreparedExportFileCapability,
+  videoEffectStageExecutor?: VideoEffectStageExecutor | null,
 ): ExportDeps {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
   }
   return {
     composite: compositeFrame,
+    videoEffectStageExecutor,
     createVideoSink: (doc, settings) =>
       createMediabunnyExportSink(
         doc,

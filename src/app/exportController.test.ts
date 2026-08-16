@@ -14,11 +14,13 @@ import {
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { MediaAsset, TimelineDoc } from '../domain/schema'
+import { createPluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import type {
   ExportDeps as PipelineExportDeps,
   ExportMediaSource,
 } from '../pipeline/export'
 import type { ExportAssetResolver } from '../pipeline/export-mediabunny'
+import { VideoEffectStageExecutionError } from '../pipeline/videoEffectStageExecution'
 import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -26,10 +28,17 @@ import {
   cancelExport,
   disposeExport,
   startExport,
+  startPreparedExport,
   type ExportControllerDeps,
   type ExportResult,
   type ExportSettings,
 } from './exportController'
+import {
+  PluginExportAttemptError,
+  type PluginExportAttemptController,
+  type PluginExportAttemptToken,
+  type PluginPreparedExportExecution,
+} from './pluginExportAttemptController'
 
 const SETTINGS: ExportSettings = DEFAULT_EXPORT_PROFILE
 
@@ -259,6 +268,37 @@ function makeHarness(
   }
 }
 
+const PREPARED_TOKEN = Object.freeze({
+  kind: 'plugin-export-attempt-token' as const,
+}) satisfies PluginExportAttemptToken
+
+function preparedExecution(
+  overrides: Partial<PluginPreparedExportExecution> = {},
+): PluginPreparedExportExecution & { readonly close: ReturnType<typeof vi.fn> } {
+  const close = vi.fn(async () => undefined)
+  return {
+    document: DOC,
+    documentGeneration: 7,
+    settings: SETTINGS,
+    pluginSnapshot: createPluginVideoEffectContributionSnapshot(5, []),
+    videoEffectStageExecutor: {
+      applyPluginEffect: vi.fn(async () => ({ status: 'bypassed' as const })),
+    },
+    close,
+    ...overrides,
+  } as PluginPreparedExportExecution & { readonly close: ReturnType<typeof vi.fn> }
+}
+
+function preparedController(
+  execution: PluginPreparedExportExecution,
+): Pick<PluginExportAttemptController, 'consume'> & {
+  readonly consume: ReturnType<typeof vi.fn>
+} {
+  return {
+    consume: vi.fn(async () => execution),
+  }
+}
+
 beforeEach(() => {
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
   useDocumentStore.setState({ doc: DOC, past: [], future: [] })
@@ -276,6 +316,297 @@ afterEach(async () => {
 })
 
 describe('exportController wiring and completion', () => {
+  test('requires the prepared path for an output-contributing plugin descriptor', async () => {
+    const h = makeHarness()
+    const pluginDoc: TimelineDoc = {
+      ...DOC,
+      tracks: DOC.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => ({
+          ...clip,
+          opacity: 0,
+          animation: {
+            tracks: [{
+              property: 'opacity',
+              keyframes: [{
+                frame: 0,
+                value: 0,
+                easing: { type: 'linear' },
+              }, {
+                frame: 1,
+                value: 1,
+                easing: { type: 'linear' },
+              }],
+            }],
+            effectTracks: [],
+          },
+          effects: [{
+            id: 'plugin-effect',
+            type: 'plugin:com.example.fixture/effect',
+            version: 1,
+            enabled: true,
+            params: {},
+          }],
+        })),
+      })),
+    }
+    useDocumentStore.setState({ doc: pluginDoc })
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      /requires a prepared one-shot attempt/,
+    )
+    expect(h.preflightProfile).not.toHaveBeenCalled()
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+  })
+
+  test('consumes a ready attempt before profile, Blob, media, sink, or pipeline creation', async () => {
+    const h = makeHarness()
+    const execution = preparedExecution()
+    const controller = preparedController(execution)
+    const order: string[] = []
+    controller.consume.mockImplementationOnce(async () => {
+      order.push('plugin:consume')
+      return execution
+    })
+    h.preflightProfile.mockImplementationOnce(async () => {
+      order.push('profile')
+    })
+    h.fetchBlob.mockImplementationOnce(async () => {
+      order.push('blob')
+      return new Blob(['source'])
+    })
+    h.createPipelineDeps.mockImplementationOnce(() => {
+      order.push('pipeline-deps')
+      return h.pipelineDeps
+    })
+    h.createMediaSource.mockImplementationOnce(() => {
+      order.push('media')
+      return h.media
+    })
+    h.runExport.mockImplementationOnce(() => {
+      order.push('run')
+      return completedRun()
+    })
+
+    await expect(startPreparedExport(
+      PREPARED_TOKEN,
+      controller,
+      {},
+      h.deps,
+    )).resolves.toBe(RESULT)
+
+    expect(order).toEqual([
+      'plugin:consume',
+      'profile',
+      'blob',
+      'pipeline-deps',
+      'media',
+      'run',
+    ])
+    expect(h.createMediaSource.mock.calls[0][3]).toBe(execution.pluginSnapshot)
+    expect(h.createPipelineDeps.mock.calls[0][3]).toBe(
+      execution.videoEffectStageExecutor,
+    )
+    expect(execution.close).toHaveBeenCalledExactlyOnceWith('plugin-export-complete')
+  })
+
+  test('returns ready before a direct-file capability and acquires no resource when it is absent', async () => {
+    const h = makeHarness()
+    const execution = preparedExecution({ settings: FILE_SETTINGS })
+    const controller = preparedController(execution)
+
+    await expect(startPreparedExport(
+      PREPARED_TOKEN,
+      controller,
+      {},
+      h.deps,
+    )).rejects.toThrow(/requires a user-selected file destination/)
+
+    expect(controller.consume).toHaveBeenCalledOnce()
+    expect(h.preflightProfile).not.toHaveBeenCalled()
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(execution.close).toHaveBeenCalledExactlyOnceWith('plugin-export-failed')
+  })
+
+  test('runs plugin preflight before an encoding profile probe and retains no Blob when it fails', async () => {
+    const h = makeHarness()
+    const execution = preparedExecution()
+    const controller = preparedController(execution)
+    const profileFailure = new Error('profile unsupported')
+    h.preflightProfile.mockRejectedValueOnce(profileFailure)
+
+    await expect(startPreparedExport(
+      PREPARED_TOKEN,
+      controller,
+      {},
+      h.deps,
+    )).rejects.toBe(profileFailure)
+
+    expect(controller.consume).toHaveBeenCalledOnce()
+    expect(h.preflightProfile).toHaveBeenCalledOnce()
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(execution.close).toHaveBeenCalledExactlyOnceWith('plugin-export-failed')
+  })
+
+  test('preserves a runtime/pipeline failure over ordinary plugin-session cleanup failure', async () => {
+    const primary = new Error('ready plugin failed during export')
+    const execution = preparedExecution({
+      close: vi.fn(async () => {
+        throw new Error('ordinary plugin close failure')
+      }),
+    })
+    const h = makeHarness(() => (async function* (): ExportRun {
+      yield 0
+      throw primary
+    })())
+
+    await expect(startPreparedExport(
+      PREPARED_TOKEN,
+      preparedController(execution),
+      {},
+      h.deps,
+    )).rejects.toBe(primary)
+    expect(execution.close).toHaveBeenCalledOnce()
+  })
+
+  test('cancels a pending attempt consume without starting resource factories', async () => {
+    const h = makeHarness()
+    const controller = {
+      consume: vi.fn((_token: PluginExportAttemptToken, signal?: AbortSignal) => (
+        new Promise<PluginPreparedExportExecution>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new PluginExportAttemptError(
+            'aborted',
+            'Plugin export preparation was cancelled',
+          )), { once: true })
+        })
+      )),
+    }
+    const completion = startPreparedExport(PREPARED_TOKEN, controller, {}, h.deps)
+    await vi.waitFor(() => expect(controller.consume).toHaveBeenCalledOnce())
+
+    const cancellation = cancelExport()
+    await expect(completion).resolves.toBeUndefined()
+    await expect(cancellation).resolves.toBeUndefined()
+    expect(h.preflightProfile).not.toHaveBeenCalled()
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+  })
+
+  test('closes pinned plugins immediately while an abort-ignoring profile probe settles', async () => {
+    const h = makeHarness()
+    const execution = preparedExecution()
+    const pendingProfile = deferred<void>()
+    h.preflightProfile.mockImplementationOnce(async () => pendingProfile.promise)
+    const completion = startPreparedExport(
+      PREPARED_TOKEN,
+      preparedController(execution),
+      {},
+      h.deps,
+    )
+    await vi.waitFor(() => expect(h.preflightProfile).toHaveBeenCalledOnce())
+
+    const cancellation = cancelExport()
+    await vi.waitFor(() => expect(execution.close).toHaveBeenCalledExactlyOnceWith(
+      'plugin-export-cancelled',
+    ))
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    pendingProfile.resolve()
+
+    await expect(completion).resolves.toBeUndefined()
+    await expect(cancellation).resolves.toBeUndefined()
+    expect(execution.close).toHaveBeenCalledOnce()
+  })
+
+  test('resolves exact in-flight plugin cancellation after generator and session cleanup', async () => {
+    const pluginCall = deferred<void>()
+    const close = vi.fn(async () => {
+      pluginCall.resolve()
+    })
+    const execution = preparedExecution({ close })
+    const wrappedCancellation = new VideoEffectStageExecutionError(
+      'Plugin effect execution failed',
+      new PluginExportAttemptError('aborted', 'Plugin export execution was cancelled'),
+    )
+    const observed = observeRun((async function* (): ExportRun {
+      yield 0
+      await pluginCall.promise
+      throw wrappedCancellation
+    })())
+    const h = makeHarness(() => observed.run)
+    const completion = startPreparedExport(
+      PREPARED_TOKEN,
+      preparedController(execution),
+      {},
+      h.deps,
+    )
+    await vi.waitFor(() => expect(observed.next).toHaveBeenCalledTimes(2))
+
+    const cancellation = cancelExport()
+
+    await expect(completion).resolves.toBeUndefined()
+    await expect(cancellation).resolves.toBeUndefined()
+    expect(execution.close).toHaveBeenCalledExactlyOnceWith('plugin-export-cancelled')
+    expect(observed.returnRun).not.toHaveBeenCalled()
+  })
+
+  test('preserves a genuine in-flight plugin failure when cancellation races it', async () => {
+    const pluginCall = deferred<void>()
+    const primary = new VideoEffectStageExecutionError(
+      'Plugin effect execution failed',
+      new Error('plugin crashed'),
+    )
+    const execution = preparedExecution({
+      close: vi.fn(async () => pluginCall.resolve()),
+    })
+    const observed = observeRun((async function* (): ExportRun {
+      yield 0
+      await pluginCall.promise
+      throw primary
+    })())
+    const h = makeHarness(() => observed.run)
+    const completion = startPreparedExport(
+      PREPARED_TOKEN,
+      preparedController(execution),
+      {},
+      h.deps,
+    )
+    await vi.waitFor(() => expect(observed.next).toHaveBeenCalledTimes(2))
+
+    const cancellation = cancelExport()
+
+    const completionCheck = expect(completion).rejects.toBe(primary)
+    const cancellationCheck = expect(cancellation).rejects.toBe(primary)
+    await Promise.all([completionCheck, cancellationCheck])
+    expect(execution.close).toHaveBeenCalledExactlyOnceWith('plugin-export-cancelled')
+  })
+
+  test('stops after a reentrant prepared Blob cancellation without creating media or pipeline', async () => {
+    const h = makeHarness()
+    let cancellation: Promise<void> | null = null
+    h.fetchBlob.mockImplementationOnce(async () => {
+      cancellation = cancelExport()
+      return new Blob(['source'])
+    })
+
+    const completion = startPreparedExport(
+      PREPARED_TOKEN,
+      preparedController(preparedExecution()),
+      {},
+      h.deps,
+    )
+
+    await expect(completion).resolves.toBeUndefined()
+    await expect(cancellation).resolves.toBeUndefined()
+    expect(h.preflightProfile).toHaveBeenCalledOnce()
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+  })
+
   test('requires an exact destination capability/profile pairing', async () => {
     const missing = makeHarness()
     await expect(startExport(FILE_SETTINGS, {}, missing.deps)).rejects.toThrow(

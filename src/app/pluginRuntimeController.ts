@@ -78,8 +78,21 @@ export interface PluginEditorSession {
   close(reason: string): Promise<void>
 }
 
+export interface PluginExportEffectRequirement extends PluginExecutionIdentity {
+  /** Exact largest straight-RGBA8 surface this effect can receive in this export. */
+  readonly maximumSurfaceWidth: number
+  readonly maximumSurfaceHeight: number
+  readonly maximumSurfaceStride: number
+  readonly maximumSurfaceByteLength: number
+}
+
 export interface PluginExportPreflightRequest {
-  readonly requiredEffects: readonly PluginExecutionIdentity[]
+  readonly requiredEffects: readonly PluginExportEffectRequirement[]
+}
+
+export interface PluginExportPreflightFailure {
+  readonly pluginId: string
+  readonly failure: PluginRuntimeFailure
 }
 
 export interface PluginExportSession {
@@ -190,6 +203,23 @@ export class PluginRuntimeError extends Error {
   }
 }
 
+/** Complete host-authored export activation failures in first-plugin order. */
+export class PluginExportPreflightError extends PluginRuntimeError {
+  readonly failures: readonly PluginExportPreflightFailure[]
+
+  constructor(failures: readonly PluginExportPreflightFailure[]) {
+    if (failures.length === 0) {
+      throw new TypeError('Plugin export preflight requires at least one failure')
+    }
+    super(failures[0].failure)
+    this.name = 'PluginExportPreflightError'
+    this.failures = Object.freeze(failures.map(({ pluginId, failure }) => Object.freeze({
+      pluginId,
+      failure,
+    })))
+  }
+}
+
 interface RuntimeEntry {
   readonly pluginId: string
   readonly identityKey: string
@@ -215,7 +245,7 @@ interface RuntimeOwner {
   pinBundles(
     bundles: readonly VerifiedPluginActivationBundle[],
     signal: AbortSignal | undefined,
-  ): Promise<void>
+  ): Promise<readonly PluginExportPreflightFailure[]>
   invalidate(pluginId: string, reason: string): Promise<void>
   close(reason: string): Promise<void>
 }
@@ -382,6 +412,30 @@ function executionIdentityKey(identity: PluginExecutionIdentity): string {
     identity.descriptorVersion,
     identity.entrypoint,
   ])
+}
+
+function assertExportSurfaceCapacity(
+  requirement: PluginExportEffectRequirement,
+  bundle: VerifiedPluginActivationBundle,
+): void {
+  const expectedStride = requirement.maximumSurfaceWidth * 4
+  const expectedLength = expectedStride * requirement.maximumSurfaceHeight
+  const pixelCapacity = bundle.profile.memoryMaximumPages * PLUGIN_IO_PAGE_BYTES
+    - PLUGIN_PIXEL_POINTER
+  if (!Number.isSafeInteger(requirement.maximumSurfaceWidth)
+    || !Number.isSafeInteger(requirement.maximumSurfaceHeight)
+    || !Number.isSafeInteger(requirement.maximumSurfaceStride)
+    || !Number.isSafeInteger(requirement.maximumSurfaceByteLength)
+    || requirement.maximumSurfaceWidth < 1
+    || requirement.maximumSurfaceHeight < 1
+    || requirement.maximumSurfaceStride !== expectedStride
+    || requirement.maximumSurfaceByteLength !== expectedLength
+    || !Number.isSafeInteger(expectedLength)
+    || !Number.isSafeInteger(pixelCapacity)
+    || pixelCapacity < 0
+    || expectedLength > pixelCapacity) {
+    throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
+  }
 }
 
 function canonicalBytes(canonicalParameterJson: string): Uint8Array {
@@ -788,7 +842,7 @@ export function createPluginRuntimeController(options: {
         }
       },
       async pinBundles(bundles, signal) {
-        await withLifecycle(signal, async () => {
+        return withLifecycle(signal, async () => {
           if (closed || tornDown) {
             throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
           }
@@ -803,11 +857,17 @@ export function createPluginRuntimeController(options: {
           // Check and make room for the entire export attempt before copying or
           // activating any of its modules. The lifecycle lock holds the reservation.
           await reserveCapacityUnlocked(newEntryCount)
-          try {
-            for (const bundle of unique.values()) {
+          const failures: PluginExportPreflightFailure[] = []
+          for (const bundle of unique.values()) {
+            try {
               await activateUnlocked(bundle, signal, true, true)
+            } catch (cause) {
+              const failure = resolutionFailure(cause)
+              failures.push(Object.freeze({ pluginId: bundle.pluginId, failure }))
+              if (failure.code === 'aborted' || failure.code === 'closed') break
             }
-          } catch (cause) {
+          }
+          if (failures.length > 0) {
             closed = true
             const closing = [...entries.values()].map((entry) => (
               entry.session.close('export-preflight-rollback')
@@ -816,8 +876,8 @@ export function createPluginRuntimeController(options: {
             pinnedIdentities.clear()
             owners.delete(owner)
             await Promise.allSettled(closing)
-            throw cause
           }
+          return Object.freeze(failures)
         })
       },
       invalidate: removeEntry,
@@ -1070,6 +1130,10 @@ export function createPluginRuntimeController(options: {
     if (tornDown) throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
     const frozenBundles = new Map<string, VerifiedPluginActivationBundle>()
     const frozenIdentities = new Set<string>()
+    const frozenRequirements = new Map<string, PluginExportEffectRequirement>()
+    const frozenIdentityKeysByPlugin = new Map<string, Set<string>>()
+    const failedPlugins = new Set<string>()
+    const failures: PluginExportPreflightFailure[] = []
     const owner = createOwner()
     const preflightSignal = linkedAbortSignal([signal, controllerAbort.signal])
     try {
@@ -1077,28 +1141,82 @@ export function createPluginRuntimeController(options: {
         if (preflightSignal.signal.aborted) {
           throw new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted))
         }
+        if (failedPlugins.has(identity.pluginId)) continue
         const existing = frozenBundles.get(identity.pluginId)
         if (existing) {
-          matchBundle(identity, existing)
-          frozenIdentities.add(executionIdentityKey(identity))
+          try {
+            matchBundle(identity, existing)
+            assertExportSurfaceCapacity(identity, existing)
+            const key = executionIdentityKey(identity)
+            frozenIdentities.add(key)
+            frozenRequirements.set(key, identity)
+            const pluginKeys = frozenIdentityKeysByPlugin.get(identity.pluginId)
+            if (pluginKeys) pluginKeys.add(key)
+            else frozenIdentityKeysByPlugin.set(identity.pluginId, new Set([key]))
+          } catch (cause) {
+            const failure = resolutionFailure(cause)
+            failures.push(Object.freeze({ pluginId: identity.pluginId, failure }))
+            failedPlugins.add(identity.pluginId)
+            frozenBundles.delete(identity.pluginId)
+            for (const key of frozenIdentityKeysByPlugin.get(identity.pluginId) ?? []) {
+              frozenIdentities.delete(key)
+              frozenRequirements.delete(key)
+            }
+            frozenIdentityKeysByPlugin.delete(identity.pluginId)
+          }
           continue
         }
-        const bundle = await resolver.resolve(identity.pluginId, preflightSignal.signal)
-        matchBundle(identity, bundle)
-        frozenBundles.set(identity.pluginId, bundle)
-        frozenIdentities.add(executionIdentityKey(identity))
+        try {
+          const bundle = await resolver.resolve(identity.pluginId, preflightSignal.signal)
+          matchBundle(identity, bundle)
+          assertExportSurfaceCapacity(identity, bundle)
+          frozenBundles.set(identity.pluginId, bundle)
+          const key = executionIdentityKey(identity)
+          frozenIdentities.add(key)
+          frozenRequirements.set(key, identity)
+          frozenIdentityKeysByPlugin.set(identity.pluginId, new Set([key]))
+        } catch (cause) {
+          const failure = resolutionFailure(cause)
+          failures.push(Object.freeze({ pluginId: identity.pluginId, failure }))
+          failedPlugins.add(identity.pluginId)
+          if (failure.code === 'aborted' || failure.code === 'closed') break
+        }
       }
+      if (failures.some(({ failure }) => (
+        failure.code === 'aborted' || failure.code === 'closed'
+      ))) throw new PluginExportPreflightError(failures)
       // Compile and instantiate before encoder initialization. Each later apply
       // uses only these attempt-frozen bundles and never re-enters the registry.
-      await owner.pinBundles([...frozenBundles.values()], preflightSignal.signal)
+      try {
+        failures.push(...await owner.pinBundles(
+          [...frozenBundles.values()],
+          preflightSignal.signal,
+        ))
+      } catch (cause) {
+        failures.push(Object.freeze({
+          pluginId: 'plugin-runtime',
+          failure: resolutionFailure(cause),
+        }))
+      }
+      if (failures.length > 0) throw new PluginExportPreflightError(failures)
     } catch (cause) {
-      const runtimeFailure = resolutionFailure(cause)
-      const pluginId = request.requiredEffects.find((identity) => (
-        !frozenBundles.has(identity.pluginId)
-      ))?.pluginId ?? request.requiredEffects[0]?.pluginId ?? 'plugin-runtime'
-      recordDiagnostic(pluginId, 'export', runtimeFailure)
-      await owner.close(runtimeFailure.code)
-      throw new PluginRuntimeError(runtimeFailure)
+      const aggregate = cause instanceof PluginExportPreflightError
+        ? cause
+        : new PluginExportPreflightError([Object.freeze({
+            pluginId: request.requiredEffects.find((identity) => (
+              !frozenBundles.has(identity.pluginId)
+            ))?.pluginId ?? request.requiredEffects[0]?.pluginId ?? 'plugin-runtime',
+            failure: resolutionFailure(cause),
+          })])
+      for (const failed of aggregate.failures) {
+        recordDiagnostic(failed.pluginId, 'export', failed.failure)
+      }
+      try {
+        await owner.close(aggregate.failure.code)
+      } catch {
+        // The complete preflight failure remains primary over ordinary cleanup.
+      }
+      throw aggregate
     } finally {
       preflightSignal.dispose()
     }
@@ -1110,10 +1228,21 @@ export function createPluginRuntimeController(options: {
           failure: hostFailure('closed', FAILURE_MESSAGES.closed),
         })
         const bundle = frozenBundles.get(applyRequest.pluginId)
-        if (!bundle || !frozenIdentities.has(executionIdentityKey(applyRequest))) return Object.freeze({
+        const identityKey = executionIdentityKey(applyRequest)
+        const requirement = frozenRequirements.get(identityKey)
+        if (!bundle || !frozenIdentities.has(identityKey) || !requirement) return Object.freeze({
           status: 'failed',
           failure: hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']),
         })
+        if (applyRequest.width !== requirement.maximumSurfaceWidth
+          || applyRequest.height !== requirement.maximumSurfaceHeight
+          || applyRequest.stride !== requirement.maximumSurfaceStride
+          || applyRequest.rgbaBytes.byteLength !== requirement.maximumSurfaceByteLength) {
+          return Object.freeze({
+            status: 'failed',
+            failure: hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']),
+          })
+        }
         const linked = linkedAbortSignal([applySignal, controllerAbort.signal])
         try {
           return await runBounded(
@@ -1134,6 +1263,8 @@ export function createPluginRuntimeController(options: {
         closed = true
         frozenBundles.clear()
         frozenIdentities.clear()
+        frozenRequirements.clear()
+        frozenIdentityKeysByPlugin.clear()
         await owner.close(reason)
       },
     }

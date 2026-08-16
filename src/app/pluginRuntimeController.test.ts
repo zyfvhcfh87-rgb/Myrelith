@@ -15,6 +15,7 @@ import {
   createPluginRuntimeController,
   type PluginEffectApplyRequest,
   type PluginExecutionIdentity,
+  type PluginExportEffectRequirement,
 } from './pluginRuntimeController'
 import { PLUGIN_WASM_OPCODE_TABLE_DIGESTS } from '../workers/plugin-wasm/policyTables'
 
@@ -188,6 +189,20 @@ function identity(value = bundle()): PluginExecutionIdentity {
     contributionVersion: contribution.contributionVersion,
     descriptorVersion: contribution.descriptorVersion,
     entrypoint: contribution.entrypoint,
+  }
+}
+
+function exportRequirement(
+  value = bundle(),
+  overrides: Partial<PluginExportEffectRequirement> = {},
+): PluginExportEffectRequirement {
+  return {
+    ...identity(value),
+    maximumSurfaceWidth: 1,
+    maximumSurfaceHeight: 1,
+    maximumSurfaceStride: 4,
+    maximumSurfaceByteLength: 4,
+    ...overrides,
   }
 }
 
@@ -440,7 +455,7 @@ describe('plugin runtime controller', () => {
     })
 
     const session = await controller.preflightExport({
-      requiredEffects: [identity(installed), identity(installed)],
+      requiredEffects: [exportRequirement(installed), exportRequirement(installed)],
     })
     expect(resolver.calls).toEqual([installed.pluginId])
     expect(sandbox.activations).toHaveLength(1)
@@ -474,7 +489,7 @@ describe('plugin runtime controller', () => {
       sandboxController: sandbox.controller,
     })
     const session = await controller.preflightExport({
-      requiredEffects: [identity(installed)],
+      requiredEffects: [exportRequirement(installed)],
     })
 
     const result = await session.apply(applyRequest({
@@ -647,7 +662,7 @@ describe('plugin runtime controller', () => {
     })
 
     await expect(controller.preflightExport({
-      requiredEffects: [...installed.values()].map(identity),
+      requiredEffects: [...installed.values()].map((value) => exportRequirement(value)),
     })).rejects.toMatchObject({ failure: { code: 'busy' } })
 
     expect([...installed.values()].map((value) => value.copyCount()))
@@ -683,11 +698,144 @@ describe('plugin runtime controller', () => {
     })
 
     await expect(controller.preflightExport({
-      requiredEffects: [identity(first), identity(second)],
+      requiredEffects: [exportRequirement(first), exportRequirement(second)],
     })).rejects.toMatchObject({ failure: { code: 'activation-failed' } })
 
     expect(sandbox.activations).toHaveLength(2)
     expect(sandbox.sessions).toHaveLength(1)
+    expect(sandbox.closeReasons).toEqual(['export-preflight-rollback'])
+    expect(controller.getSnapshot()).toMatchObject({
+      liveOwnerCount: 0,
+      residentRuntimeCount: 0,
+    })
+  })
+
+  test('checks the exact maximum export surface before copying or activating a plugin', async () => {
+    const installed = bundle('com.example.export-surface')
+    const sandbox = sandboxHarness()
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolverFor(new Map([[installed.pluginId, installed]])),
+      sandboxController: sandbox.controller,
+    })
+
+    const exact = await controller.preflightExport({
+      requiredEffects: [exportRequirement(installed, {
+        maximumSurfaceWidth: 16_384,
+        maximumSurfaceHeight: 1,
+        maximumSurfaceStride: 65_536,
+        maximumSurfaceByteLength: 65_536,
+      })],
+    })
+    expect(installed.copyCount()).toBe(1)
+    expect(sandbox.activations).toHaveLength(1)
+    await exact.close('exact-surface-complete')
+
+    await expect(controller.preflightExport({
+      requiredEffects: [exportRequirement(installed, {
+        maximumSurfaceWidth: 16_385,
+        maximumSurfaceHeight: 1,
+        maximumSurfaceStride: 65_540,
+        maximumSurfaceByteLength: 65_540,
+      })],
+    })).rejects.toMatchObject({
+      failures: [{
+        pluginId: installed.pluginId,
+        failure: { code: 'invalid-input' },
+      }],
+    })
+    expect(installed.copyCount()).toBe(1)
+    expect(sandbox.activations).toHaveLength(1)
+  })
+
+  test('aggregates malformed and over-capacity export surfaces before activation', async () => {
+    const malformed = bundle('com.example.export-malformed')
+    const overCapacity = bundle('com.example.export-over-capacity')
+    const sandbox = sandboxHarness()
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolverFor(new Map([
+        [malformed.pluginId, malformed],
+        [overCapacity.pluginId, overCapacity],
+      ])),
+      sandboxController: sandbox.controller,
+    })
+
+    await expect(controller.preflightExport({
+      requiredEffects: [
+        exportRequirement(malformed, { maximumSurfaceByteLength: 3 }),
+        exportRequirement(overCapacity, {
+          maximumSurfaceWidth: 16_385,
+          maximumSurfaceHeight: 1,
+          maximumSurfaceStride: 65_540,
+          maximumSurfaceByteLength: 65_540,
+        }),
+      ],
+    })).rejects.toMatchObject({
+      failures: [{
+        pluginId: malformed.pluginId,
+        failure: { code: 'invalid-input' },
+      }, {
+        pluginId: overCapacity.pluginId,
+        failure: { code: 'invalid-input' },
+      }],
+    })
+    expect(malformed.copyCount()).toBe(0)
+    expect(overCapacity.copyCount()).toBe(0)
+    expect(sandbox.activations).toHaveLength(0)
+  })
+
+  test('aggregates ordered resolver and activation failures while rolling back all successes', async () => {
+    const missing = bundle('com.example.aggregate-missing')
+    const activationFailure = bundle('com.example.aggregate-activation')
+    const successful = bundle('com.example.aggregate-success')
+    const resolverCalls: string[] = []
+    const resolver: PluginActivationBundleResolver = {
+      async resolve(pluginId) {
+        resolverCalls.push(pluginId)
+        if (pluginId === missing.pluginId) {
+          throw Object.assign(new Error('not installed'), { code: 'disabled' })
+        }
+        return pluginId === activationFailure.pluginId ? activationFailure : successful
+      },
+    }
+    const sandbox = sandboxHarness({
+      activate: (_request, activationIndex) => {
+        if (activationIndex === 0) {
+          throw new PluginSandboxError({
+            code: 'activation-failed',
+            message: 'Plugin activation failed.',
+            terminal: true,
+          })
+        }
+      },
+    })
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+    })
+
+    await expect(controller.preflightExport({
+      requiredEffects: [
+        exportRequirement(missing),
+        exportRequirement(activationFailure),
+        exportRequirement(successful),
+      ],
+    })).rejects.toMatchObject({
+      failures: [{
+        pluginId: missing.pluginId,
+        failure: { code: 'stale-plan' },
+      }, {
+        pluginId: activationFailure.pluginId,
+        failure: { code: 'activation-failed' },
+      }],
+    })
+
+    expect(resolverCalls).toEqual([
+      missing.pluginId,
+      activationFailure.pluginId,
+      successful.pluginId,
+    ])
+    expect(sandbox.activations).toHaveLength(2)
+    expect(successful.copyCount()).toBe(1)
     expect(sandbox.closeReasons).toEqual(['export-preflight-rollback'])
     expect(controller.getSnapshot()).toMatchObject({
       liveOwnerCount: 0,
@@ -708,7 +856,7 @@ describe('plugin runtime controller', () => {
     })
     const required = [...installed.values()].slice(0, 8)
     const exportSession = await controller.preflightExport({
-      requiredEffects: required.map(identity),
+      requiredEffects: required.map((value) => exportRequirement(value)),
     })
     const editor = controller.openEditorSession()
     const ninth = [...installed.values()][8]
@@ -743,7 +891,7 @@ describe('plugin runtime controller', () => {
     })
     const required = [...installed.values()].slice(0, 8)
     const exportSession = await controller.preflightExport({
-      requiredEffects: required.map(identity),
+      requiredEffects: required.map((value) => exportRequirement(value)),
     })
 
     await exportSession.close('terminal-export-close')
@@ -1023,7 +1171,7 @@ describe('plugin runtime controller', () => {
       sandboxController: sandbox.controller,
     })
     const exportSession = await controller.preflightExport({
-      requiredEffects: exports.map((value) => identity(value)),
+      requiredEffects: exports.map((value) => exportRequirement(value)),
     })
 
     await expect(controller.preflightDescriptorMigrationAction({

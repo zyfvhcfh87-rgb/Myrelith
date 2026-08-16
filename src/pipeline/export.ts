@@ -24,6 +24,7 @@ import {
   type Composite2D,
   type FrameSource,
   type TransitionSurfaceProvider,
+  type VideoEffectStageExecutor,
 } from './render'
 import type { LensRemapProvider } from './lensRemap'
 
@@ -123,6 +124,8 @@ export interface ExportVideoSink {
 
 export interface ExportDeps {
   composite: typeof compositeFrame
+  /** Attempt-scoped executor shared with the declarative preview plan contract. */
+  videoEffectStageExecutor?: VideoEffectStageExecutor | null
   createVideoSink(
     doc: TimelineDoc,
     settings: ExportSettings,
@@ -160,9 +163,22 @@ async function compositeAndCloseLease(
   sink: ExportVideoSink,
   lease: ExportFrameLease,
   composite: typeof compositeFrame,
+  videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
 ): Promise<void> {
   let failed = false
   let failure: unknown
+  const returnedPluginBuffers = new Set<Uint8Array>()
+  const trackedVideoEffectStageExecutor = videoEffectStageExecutor
+    ? Object.freeze({
+        async applyPluginEffect(
+          request: Parameters<VideoEffectStageExecutor['applyPluginEffect']>[0],
+        ) {
+          const result = await videoEffectStageExecutor.applyPluginEffect(request)
+          if (result.status === 'applied') returnedPluginBuffers.add(result.rgba)
+          return result
+        },
+      }) satisfies VideoEffectStageExecutor
+    : videoEffectStageExecutor
   let sourceFailed = false
   let sourceFailure: unknown
   const observedSource: FrameSource = {
@@ -191,6 +207,7 @@ async function compositeAndCloseLease(
       sink.transitionSurfaceProvider,
       fullResolutionPresentationProfile(doc, 'export'),
       sink.lensRemapProvider,
+      trackedVideoEffectStageExecutor,
     )
     // Preview intentionally softens source failures into `missing` so a later
     // repaint can recover. Export has no retry boundary: preserve the exact
@@ -206,6 +223,11 @@ async function compositeAndCloseLease(
     failed = true
     failure = cause
   }
+
+  for (const bytes of returnedPluginBuffers) {
+    if (bytes.byteLength > 0) bytes.fill(0)
+  }
+  returnedPluginBuffers.clear()
 
   try {
     await lease.close()
@@ -294,6 +316,7 @@ export async function* exportTimeline(
         sink,
         lease,
         deps.composite,
+        deps.videoEffectStageExecutor,
       )
 
       const timestampSec = assertBoundaryTime(

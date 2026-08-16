@@ -25,6 +25,7 @@ import type {
   CompositeResult,
   FrameSource,
   TransitionSurfaceProvider,
+  VideoEffectStageExecutor,
 } from './render'
 import type {
   ExportDeps,
@@ -119,6 +120,7 @@ interface HarnessOptions {
   composite?: (
     frame: number,
     source: FrameSource,
+    videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
   ) => Promise<CompositeResult>
   getFrame?: (
     assetId: string,
@@ -179,10 +181,16 @@ function makeHarness(options: HarnessOptions = {}) {
       _source: FrameSource,
       _transitionSurfaceProvider: TransitionSurfaceProvider,
       _presentation?: PresentationProfile,
+      _lensRemapProvider?: unknown,
+      videoEffectStageExecutor?: VideoEffectStageExecutor | null,
     ): Promise<CompositeResult> => {
       events.push('composite:' + plan.frame)
       return (
-        (await options.composite?.(plan.frame, _source)) ?? {
+        (await options.composite?.(
+          plan.frame,
+          _source,
+          videoEffectStageExecutor,
+        )) ?? {
           drawn: ['clip-a'],
           missing: [],
         }
@@ -388,6 +396,69 @@ describe('exportTimeline CFR scheduling', () => {
       'media:close',
       'sink:finalize',
     ])
+  })
+
+  test('forwards the attempt executor and clears every returned plugin buffer after composite', async () => {
+    const outputs = [
+      Uint8Array.of(4, 3, 2, 255),
+      Uint8Array.of(8, 7, 6, 255),
+    ]
+    let outputIndex = 0
+    const request = {} as Parameters<VideoEffectStageExecutor['applyPluginEffect']>[0]
+    const executor = Object.freeze({
+      applyPluginEffect: vi.fn(async () => ({
+        status: 'applied' as const,
+        rgba: outputs[outputIndex++],
+      })),
+    })
+    const h = makeHarness({
+      composite: async (_frame, _source, receivedExecutor) => {
+        if (!receivedExecutor) throw new Error('expected plugin executor')
+        const result = await receivedExecutor.applyPluginEffect(request)
+        expect(result).toMatchObject({ status: 'applied' })
+        if (result.status !== 'applied') throw new Error('expected applied output')
+        expect(result.rgba[3]).toBe(255)
+        return { drawn: [], missing: [] }
+      },
+    })
+    h.deps.videoEffectStageExecutor = executor
+
+    await drain(exportTimeline(makeDoc(2), SETTINGS, h.media, h.deps))
+
+    expect(h.composite).toHaveBeenCalledTimes(2)
+    expect(executor.applyPluginEffect).toHaveBeenCalledTimes(2)
+    expect(executor.applyPluginEffect).toHaveBeenNthCalledWith(1, request)
+    expect(outputs.map((output) => [...output])).toEqual([
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+    ])
+  })
+
+  test('treats a ready plugin execution failure as fatal and cancels the sink', async () => {
+    const primary = new Error('ready plugin failed')
+    const request = {} as Parameters<VideoEffectStageExecutor['applyPluginEffect']>[0]
+    const executor = Object.freeze({
+      applyPluginEffect: vi.fn(async () => {
+        throw primary
+      }),
+    })
+    const h = makeHarness({
+      composite: async (_frame, _source, receivedExecutor) => {
+        if (!receivedExecutor) throw new Error('expected plugin executor')
+        await receivedExecutor.applyPluginEffect(request)
+        throw new Error('unreachable after plugin failure')
+      },
+    })
+    h.deps.videoEffectStageExecutor = executor
+
+    await expect(
+      drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)),
+    ).rejects.toBe(primary)
+    expect(executor.applyPluginEffect).toHaveBeenCalledExactlyOnceWith(request)
+    expect(h.addFrame).not.toHaveBeenCalled()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
   })
 
   test('derives NTSC timestamps from each integer frame without accumulation', async () => {
