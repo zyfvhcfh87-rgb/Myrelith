@@ -79,6 +79,8 @@ import {
   type VideoEffectStageExecutor,
 } from './videoEffectStageExecution'
 
+export type { VideoEffectStageExecutor } from './videoEffectStageExecution'
+
 const NORMAL_BLEND_MODE = resolveBlendMode(DEFAULT_BLEND_MODE)
 
 /**

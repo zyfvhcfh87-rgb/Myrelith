@@ -63,6 +63,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
   development-only query guard. Ordinary production builds remove both
   dynamic imports and their complete closures.
 - Sanctioned exceptions between those three (and nothing more):
+  - `engine/render-bridge.ts` alone may runtime-import
+    `workers/plugin-effect-bridge-protocol.ts`, the pure, versioned exact-key
+    validator and ownership contract for its render-worker RPC; this allowance
+    does not generalize to any other engine-to-worker runtime import,
   - anyone may import `workers/decode-types.ts`,
     `workers/decode-protocol.ts`, `workers/render-legacy-protocol.ts`, and
     `workers/render-protocol.ts` (types only, no runtime),

@@ -257,6 +257,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     ) {
       const sanctioned = workerTypeModules.has(toName) && edge.typeOnly
         || (
+          fromName === 'engine/render-bridge.ts'
+          && toName === 'workers/plugin-effect-bridge-protocol.ts'
+        )
+        || (
           fromArea === 'workers'
           && toName === 'engine/frame-cache.ts'
         )

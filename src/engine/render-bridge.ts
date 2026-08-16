@@ -20,8 +20,9 @@
  *   worker's own (a newer renderFrame settles older in-flight ones as
  *   'superseded'; the worker answers every request regardless).
  *
- * Layering: engine/ → domain/ + types-only worker protocols. Tests inject a
- * fake worker; the deprecated path also injects fake chunk providers.
+ * Layering: engine/ → domain/ + types-only worker protocols, plus the one
+ * pure, versioned plugin-effect protocol validator/ownership contract. Tests
+ * inject a fake worker; the deprecated path also injects fake chunk providers.
  */
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'

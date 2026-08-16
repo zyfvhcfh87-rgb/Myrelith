@@ -64,9 +64,9 @@ import type {
   RenderFrameSource,
   TransitionSurfaceProvider,
   TransitionSurfaces,
+  VideoEffectStageExecutor,
 } from '../pipeline/render'
 import { compositeFrame } from '../pipeline/render'
-import type { VideoEffectStageExecutor } from '../pipeline/videoEffectStageExecution'
 import {
   LensRemapUnavailableError,
   LENS_REMAP_BACKEND_VERSION,
