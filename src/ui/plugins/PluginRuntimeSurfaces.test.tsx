@@ -163,6 +163,9 @@ describe('Issue 77 runtime UI surfaces', () => {
     )
 
     expect(screen.getByRole('dialog')).toHaveAccessibleName('Plugin effects block export')
+    expect(screen.getByText(
+      'No decoder, encoder, or media pipeline started. Fix the listed effects, or explicitly review a one-time bypass.',
+    )).toBeInTheDocument()
     expect(screen.getByText('com.example.sparkle')).toBeInTheDocument()
     expect(screen.getByText('sha256:sparkle')).toBeInTheDocument()
     expect(screen.getByText('1.2.0')).toBeInTheDocument()

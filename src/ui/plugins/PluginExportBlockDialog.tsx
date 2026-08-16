@@ -180,7 +180,7 @@ function PluginExportBlockReview({
       inline={inline}
       eyebrow="Export preflight"
       title="Plugin effects block export"
-      description="Myrelith did not acquire an output file or start an encoder. Fix the listed effects, or explicitly review a one-time bypass."
+      description="No decoder, encoder, or media pipeline started. Fix the listed effects, or explicitly review a one-time bypass."
       busy={busy}
       dismissDisabled={busy}
       onDismiss={onCancel}
