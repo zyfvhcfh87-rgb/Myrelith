@@ -2,6 +2,7 @@
 
 import {
   createPluginAppAcceptanceSession,
+  type PluginAppController,
   type PluginAppFile,
 } from '../../app/pluginAppController'
 import {
@@ -9,10 +10,12 @@ import {
   type PluginSandboxBrokerOwnershipSnapshot,
 } from '../../app/pluginSandboxController'
 import { localPluginStorage } from '../../app/localPluginStorage'
-import type { PluginEffectBridgeHandlerRequest } from '../../workers/plugin-effect-bridge-protocol'
 import { createPluginLifecycleEvidence, type PluginLifecycleEvidence } from './pluginLifecycleEvidence'
 
 const SAMPLE_PLUGIN_ID = 'com.myrelith.sample.audited-invert'
+type PluginEffectBridgeHandlerRequest = Parameters<
+  ReturnType<PluginAppController['getEffectBridgeHandler']>['apply']
+>[0]
 
 export interface PluginAcceptanceEvidence {
   readonly pluginId: string
