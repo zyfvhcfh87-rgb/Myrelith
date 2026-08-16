@@ -48,6 +48,21 @@ import {
   usePreferencesStore,
 } from '../state/preferencesStore'
 import Toolbar from './Toolbar'
+import { PluginUiProvider } from './plugins/PluginUiContext'
+import type { PluginAppController } from '../app/pluginAppController'
+import type { PluginPreparedExportPort } from '../app/pluginPreparedExportOwner'
+
+const preparedPortMocks = vi.hoisted(() => ({
+  getSnapshot: vi.fn(),
+  prepare: vi.fn(),
+  approveReviewedBlockers: vi.fn(),
+  start: vi.fn(),
+  cancel: vi.fn(),
+}))
+
+vi.mock('../app/pluginPreparedExportOwner', () => ({
+  getPluginPreparedExportPort: () => preparedPortMocks,
+}))
 
 vi.mock('../app/exportController', () => ({
   startExport: vi.fn(),
@@ -228,6 +243,64 @@ const presetCapabilitiesMock = vi.mocked(getExportPresetCapabilities)
 const customCapabilityMock = vi.mocked(checkCurrentExportProfile)
 const pickerAvailabilityMock = vi.mocked(getExportFilePickerAvailability)
 const requestFileDestinationMock = vi.mocked(requestExportFileDestination)
+function renderPluginToolbar() {
+  const controller = {
+    getEditorSnapshot: () => ({ effects: [{ effectInstanceId: 'plugin-effect' }] }),
+    subscribe: () => () => {},
+    getSnapshot: () => ({ startup: {}, startupActions: {}, installedPackages: [], contributions: [], review: null, inspectionPhase: 'idle', managementPhase: 'ready', managementDetail: '', catalogGeneration: null, inspectionDetail: '', action: {} }),
+    subscribeEditor: () => () => {},
+  } as unknown as PluginAppController
+  return render(<PluginUiProvider controller={controller}><Toolbar /></PluginUiProvider>)
+}
+
+function preparedPort(
+  overrides: Partial<PluginPreparedExportPort> = {},
+): PluginPreparedExportPort {
+  preparedPortMocks.getSnapshot.mockReset()
+  preparedPortMocks.prepare.mockReset()
+  preparedPortMocks.approveReviewedBlockers.mockReset()
+  preparedPortMocks.start.mockReset()
+  preparedPortMocks.cancel.mockReset()
+  preparedPortMocks.cancel.mockResolvedValue(undefined)
+  if (overrides.getSnapshot) preparedPortMocks.getSnapshot.mockImplementation(overrides.getSnapshot)
+  if (overrides.prepare) preparedPortMocks.prepare.mockImplementation(overrides.prepare)
+  if (overrides.approveReviewedBlockers) {
+    preparedPortMocks.approveReviewedBlockers.mockImplementation(overrides.approveReviewedBlockers)
+  }
+  if (overrides.start) preparedPortMocks.start.mockImplementation(overrides.start)
+  if (overrides.cancel) preparedPortMocks.cancel.mockImplementation(overrides.cancel)
+  return preparedPortMocks as unknown as PluginPreparedExportPort
+}
+
+function readyPrepared(token = 'prepared-token') {
+  return { status: 'ready', token } as never
+}
+
+function blockedPrepared(token = 'review-token') {
+  return {
+    status: 'blocked',
+    token,
+    attempt: {
+      documentGeneration: 1,
+      settings: DEFAULT_EXPORT_PROFILE,
+      blockers: [{
+        key: 'clip/effect',
+        descriptorId: 'effect',
+        pluginId: 'com.example.fixture',
+        contributionId: 'invert',
+        status: 'disabled',
+        reason: 'Disabled.',
+      }],
+      effects: [{
+        key: 'clip/effect',
+        descriptorId: 'effect',
+        effectType: 'plugin:com.example.fixture/invert',
+        pluginVersion: '1.0.0',
+        packageDigest: `sha256:${'1'.repeat(64)}`,
+      }],
+    },
+  } as never
+}
 
 beforeEach(() => {
   rafId = 0
@@ -264,6 +337,7 @@ beforeEach(() => {
   pickerAvailabilityMock.mockReset()
   pickerAvailabilityMock.mockReturnValue({ available: true, reason: null })
   requestFileDestinationMock.mockReset()
+  preparedPort()
 
   usePreferencesStore.setState({ ...INITIAL_PREFERENCES_STATE })
   useDocumentStore.setState({ doc: doc(), past: [], future: [] })
@@ -1026,5 +1100,131 @@ describe('Export dialog lifecycle', () => {
       await completion.promise
     })
     expect(screen.getByText('Export cancelled')).toBeInTheDocument()
+  })
+
+  test('owns one plugin preparation across same-tick Start activations', async () => {
+    const preparation = deferred<ReturnType<typeof readyPrepared>>()
+    const port = preparedPort({ prepare: vi.fn(() => preparation.promise) })
+    renderPluginToolbar()
+    await openDialog()
+    const start = await readyStartButton()
+
+    fireEvent.click(start)
+    fireEvent.click(start)
+
+    await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+    expect(start).toBeDisabled()
+    await act(async () => {
+      preparation.resolve(readyPrepared())
+      await preparation.promise
+    })
+    await waitFor(() => expect(port.start).toHaveBeenCalledOnce())
+  })
+
+  test('disables Close while a prepared attempt is still fenced', async () => {
+    const preparation = deferred<ReturnType<typeof readyPrepared>>()
+    const port = preparedPort({ prepare: vi.fn(() => preparation.promise) })
+    renderPluginToolbar()
+    await openDialog()
+    fireEvent.click(await readyStartButton())
+    await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+
+    expect(screen.getByRole('button', { name: 'Close export dialog' })).toBeDisabled()
+    await act(async () => {
+      preparation.resolve(readyPrepared())
+      await preparation.promise
+    })
+
+    await waitFor(() => expect(port.start).toHaveBeenCalledOnce())
+  })
+
+  test('cancels a deferred prepared attempt during unmount', async () => {
+    const preparation = deferred<ReturnType<typeof readyPrepared>>()
+    const port = preparedPort({ prepare: vi.fn(() => preparation.promise) })
+    const { unmount } = renderPluginToolbar()
+    await openDialog()
+    fireEvent.click(await readyStartButton())
+    await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+
+    unmount()
+    await waitFor(() => expect(port.cancel).toHaveBeenCalledOnce())
+    await act(async () => {
+      preparation.resolve(readyPrepared())
+      await preparation.promise
+    })
+    expect(port.start).not.toHaveBeenCalled()
+  })
+
+  test('ignores stale prepared errors and blocker reviews after Close', async () => {
+    const errorPreparation = deferred<ReturnType<typeof readyPrepared>>()
+    const port = preparedPort({ prepare: vi.fn(() => errorPreparation.promise) })
+    renderPluginToolbar()
+    await openDialog()
+    fireEvent.click(await readyStartButton())
+    cleanup()
+    await act(async () => {
+      errorPreparation.reject(new Error('stale prepare failure'))
+      await errorPreparation.promise.catch(() => undefined)
+    })
+
+    renderPluginToolbar()
+    await openDialog()
+    const blockPreparation = deferred<ReturnType<typeof blockedPrepared>>()
+    ;(port.prepare as ReturnType<typeof vi.fn>).mockImplementationOnce(() => blockPreparation.promise)
+    fireEvent.click(await readyStartButton())
+    cleanup()
+    await act(async () => {
+      blockPreparation.resolve(blockedPrepared())
+      await blockPreparation.promise
+    })
+    expect(screen.queryByText(/Plugin export review/)).not.toBeInTheDocument()
+  })
+
+  test('keeps direct-file selection as the separate prepared-export gesture', async () => {
+    const fileProfile = updateExportProfile(DEFAULT_EXPORT_PROFILE, { destination: 'file' })
+    usePreferencesStore.setState({ exportSelection: { selectionId: 'custom', profile: fileProfile } })
+    const destination = {
+      fileName: `chosen.${fileProfile.fileExtension}`,
+      takeFileHandle: () => ({}) as FileSystemFileHandle,
+    } satisfies ExportFileDestinationCapability
+    requestFileDestinationMock.mockResolvedValue({ status: 'selected', destination })
+    const port = preparedPort({
+      prepare: vi.fn().mockResolvedValue(readyPrepared()),
+      start: vi.fn().mockResolvedValue(directFileResult(fileProfile)),
+    })
+    renderPluginToolbar()
+    await openDialog()
+    const choose = await screen.findByRole('button', { name: 'Choose file and export' })
+
+    fireEvent.click(choose)
+    await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+    expect(requestFileDestinationMock).not.toHaveBeenCalled()
+    fireEvent.click(choose)
+    await waitFor(() => expect(requestFileDestinationMock).toHaveBeenCalledOnce())
+    await waitFor(() => expect(port.start).toHaveBeenCalledOnce())
+  })
+
+  test('fences a deferred reviewed bypass approval through unmount', async () => {
+    const approval = deferred<ReturnType<typeof readyPrepared>>()
+    const port = preparedPort({
+      prepare: vi.fn().mockResolvedValue(blockedPrepared()),
+      approveReviewedBlockers: vi.fn(() => approval.promise),
+    })
+    const { unmount } = renderPluginToolbar()
+    await openDialog()
+    fireEvent.click(await readyStartButton())
+    fireEvent.click(await screen.findByRole('button', { name: /Review bypass/ }))
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Export with listed plugins bypassed' }))
+    await waitFor(() => expect(port.approveReviewedBlockers).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: 'Back to blocked effects' })).toBeDisabled()
+
+    unmount()
+    await waitFor(() => expect(port.cancel).toHaveBeenCalled())
+    await act(async () => {
+      approval.resolve(readyPrepared())
+      await approval.promise
+    })
+    expect(port.start).not.toHaveBeenCalled()
   })
 })

@@ -12,14 +12,20 @@ import {
   type ComponentType,
 } from 'react'
 import './launcher.css'
+import './styles/plugin-safe-mode.css'
 import ProjectLaunch from '../ui/ProjectLaunch'
 import LazyLoadBoundary from '../ui/LazyLoadBoundary'
+import { PluginUiProvider } from '../ui/plugins/PluginUiContext'
+import PluginManagerDialog from '../ui/plugins/PluginManagerDialog'
+import PluginStartupSurface from '../ui/plugins/PluginStartupSurface'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import { initPreferencesPersistence } from './preferencesController'
 import { loadEditorShell } from './editorModuleLoader'
+import { getPluginAppController } from './pluginAppController'
 import type { EditorShellProps } from './EditorShell'
 
 const LazyEditorShell = lazy(loadEditorShell)
+const pluginAppController = getPluginAppController()
 
 function EditorLoadingState() {
   return (
@@ -87,7 +93,14 @@ export default function App() {
     (state) => state.screen === 'editor',
   )
   const closing = useProjectSessionStore((state) => state.phase === 'closing')
-  return editorActive
-    ? <EditorSurface closing={closing} />
-    : <ProjectLaunch />
+  return (
+    <PluginUiProvider controller={pluginAppController}>
+      <PluginStartupSurface showCard={!editorActive}>
+        {editorActive
+          ? <EditorSurface closing={closing} />
+          : <ProjectLaunch />}
+      </PluginStartupSurface>
+      <PluginManagerDialog />
+    </PluginUiProvider>
+  )
 }

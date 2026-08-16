@@ -46,6 +46,10 @@ import {
   profileForSelectionFallback,
   type ExportUiSelectionId,
 } from './exportProfileUi'
+import PluginExportBlockDialog from './plugins/PluginExportBlockDialog'
+import { useOptionalPluginUi } from './plugins/PluginUiContext'
+import type { PluginEffectIssueView } from './plugins/pluginUiTypes'
+import type { PluginPreparedExportPort } from '../app/pluginPreparedExportOwner'
 
 type ExportControllerModule = typeof import('../app/exportController')
 type ExportSettings = Parameters<ExportControllerModule['startExport']>[0]
@@ -57,6 +61,9 @@ type ExportCapabilitySnapshot = Awaited<ReturnType<
 type ExportCapabilityResult = Awaited<ReturnType<
   ExportCapabilitiesModule['checkCurrentExportProfile']
 >>
+type PluginPreparedExportSnapshot = ReturnType<
+  PluginPreparedExportPort['getSnapshot']
+>
 
 type PresetCapabilityState =
   | {
@@ -89,15 +96,7 @@ type CustomCapabilityState =
 
 let controllerPromise: Promise<ExportControllerModule> | null = null
 let capabilitiesPromise: Promise<ExportCapabilitiesModule> | null = null
-
-/** Export codecs/adapters stay out of the initial editor bundle. */
-function loadExportController(): Promise<ExportControllerModule> {
-  controllerPromise ??= import('../app/exportController').catch((cause) => {
-    controllerPromise = null
-    throw cause
-  })
-  return controllerPromise
-}
+let preparedExportPortPromise: Promise<PluginPreparedExportPort> | null = null
 
 /** Capability code is also excluded from the initial editor bundle. */
 function loadExportCapabilities(): Promise<ExportCapabilitiesModule> {
@@ -107,6 +106,34 @@ function loadExportCapabilities(): Promise<ExportCapabilitiesModule> {
       throw cause
     })
   return capabilitiesPromise
+}
+
+function loadPreparedExportPort(): Promise<PluginPreparedExportPort> {
+  preparedExportPortPromise ??= import('../app/pluginPreparedExportOwner')
+    .then(({ getPluginPreparedExportPort }) => getPluginPreparedExportPort())
+    .catch((cause) => {
+      preparedExportPortPromise = null
+      throw cause
+    })
+  return preparedExportPortPromise
+}
+
+function blockerIssues(snapshot: PluginPreparedExportSnapshot): readonly PluginEffectIssueView[] {
+  if (snapshot.status !== 'blocked') return []
+  return snapshot.attempt.blockers.map((blocker) => {
+    const effect = snapshot.attempt.effects.find((candidate) => candidate.key === blocker.key)
+    return {
+      effectInstanceId: blocker.descriptorId,
+      effectLabel: effect?.effectType ?? blocker.descriptorId,
+      pluginId: blocker.pluginId ?? 'unknown-plugin',
+      pluginName: blocker.pluginId ?? 'Unknown plugin',
+      pluginVersion: effect?.pluginVersion ?? null,
+      packageDigest: effect?.packageDigest ?? null,
+      status: blocker.status as PluginEffectIssueView['status'],
+      reason: blocker.reason,
+      blocksExport: true,
+    }
+  })
 }
 
 interface ExportDialogProps {
@@ -129,6 +156,7 @@ function directFileFailureMessage(cause: unknown): string {
 }
 
 export default function ExportDialog({ onClose }: ExportDialogProps) {
+  const pluginUi = useOptionalPluginUi()
   const doc = useDocumentStore((state) => state.doc)
   const hasContent = docDurationFrames(doc) > 0
   const mediaAssets = useMediaStore((state) => state.assets)
@@ -159,6 +187,11 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   const progressFrameRef = useRef<number | null>(null)
   const latestProgressRef = useRef(0)
   const downloadUrlRef = useRef<string | null>(null)
+  const preparedPortRef = useRef<PluginPreparedExportPort | null>(null)
+  const preparedTokenRef = useRef<string | null>(null)
+  const preparationGenerationRef = useRef(0)
+  const preparationAbortRef = useRef<AbortController | null>(null)
+  const preparationInFlightRef = useRef(false)
   const capabilityTokenRef = useRef(0)
   const customCapabilityTokenRef = useRef(0)
   const previousSelectedSupportedRef = useRef<boolean | null>(null)
@@ -168,6 +201,8 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   const [error, setError] = useState<string | null>(null)
   const [download, setDownload] = useState<DownloadReady | null>(null)
   const [savedFile, setSavedFile] = useState<SavedFileReady | null>(null)
+  const [pluginBlock, setPluginBlock] = useState<PluginPreparedExportSnapshot | null>(null)
+  const [preparingPluginExport, setPreparingPluginExport] = useState(false)
   const [filePickerMessage, setFilePickerMessage] = useState<string | null>(
     () => initialPreference.profile?.destination === 'file'
       && !filePickerAvailability.available
@@ -230,11 +265,22 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     runTokenRef.current++
   }, [])
 
+  const invalidatePluginPreparation = useCallback((reason: string): void => {
+    preparationGenerationRef.current++
+    preparationInFlightRef.current = false
+    preparationAbortRef.current?.abort(reason)
+    preparationAbortRef.current = null
+    preparedTokenRef.current = null
+    if (preparedPortRef.current) void preparedPortRef.current.cancel(reason).catch(() => undefined)
+  }, [])
+
   const cancelActiveControllerRun = useCallback((): void => {
     if (!runningRef.current || !controllerRunStartedRef.current) return
-    void loadExportController()
-      .then((controller) => controller.cancelExport())
-      .catch(() => undefined)
+    if (preparedPortRef.current) {
+      void preparedPortRef.current.cancel('user-cancel').catch(() => undefined)
+    } else {
+      void loadExportController().then((controller) => controller.cancelExport()).catch(() => undefined)
+    }
   }, [])
 
   const refreshCapabilities = useCallback((requestDoc: TimelineDoc): void => {
@@ -380,16 +426,19 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
         (assetId) => mediaDescriptors.get(assetId)?.fileName ?? assetId,
       ).join(', ')}.`
 
-  const canStart = hasContent
+  const canStart = !preparingPluginExport
+    && hasContent
     && offlineExportMessage === null
     && selectedSupported === true
     && activeProfile !== null
     && advancedDraftsValid
+  const requiresPreparedExport = (pluginUi?.controller.getEditorSnapshot().effects.length ?? 0) > 0
   const estimatedSize = formatEstimatedFileSize(
     estimateExportBytes(doc, displayProfile),
   )
 
   const resetToConfigure = (): void => {
+    invalidatePluginPreparation('plugin-export-reset')
     invalidateRun()
     cancelProgressFrame()
     revokeDownload()
@@ -404,6 +453,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
 
   const closeDialog = (): void => {
     if (runningRef.current) return
+    invalidatePluginPreparation('plugin-export-dialog-closed')
     invalidateRun()
     cancelProgressFrame()
     revokeDownload()
@@ -432,7 +482,56 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
 
   const beginExport = async (): Promise<void> => {
     const exportSettings: ExportSettings | null = activeProfile
-    if (runningRef.current || !canStart || exportSettings === null) return
+    if (
+      runningRef.current
+      || preparationInFlightRef.current
+      || !canStart
+      || exportSettings === null
+    ) return
+    if (requiresPreparedExport && preparedTokenRef.current === null) {
+      preparationInFlightRef.current = true
+      const generation = ++preparationGenerationRef.current
+      const abort = new AbortController()
+      preparationAbortRef.current?.abort('plugin-export-replaced')
+      preparationAbortRef.current = abort
+      setPreparingPluginExport(true)
+      try {
+        const port = await loadPreparedExportPort()
+        if (!mountedRef.current || generation !== preparationGenerationRef.current) {
+          void port.cancel('plugin-export-stale-load').catch(() => undefined)
+          return
+        }
+        preparedPortRef.current = port
+        const prepared = await port.prepare(exportSettings, abort.signal)
+        if (!mountedRef.current || generation !== preparationGenerationRef.current) {
+          void port.cancel('plugin-export-stale-prepare').catch(() => undefined)
+          return
+        }
+        if (prepared.status === 'blocked') {
+          setPluginBlock(prepared)
+          return
+        }
+        if (prepared.status !== 'ready') throw new Error('Plugin export checks did not produce a ready attempt.')
+        preparedTokenRef.current = prepared.token
+        if (exportSettings.destination === 'file') {
+          setFilePickerMessage('Plugin checks complete. Choose a file to begin this prepared export.')
+          return
+        }
+      } catch (cause) {
+        if (!mountedRef.current || generation !== preparationGenerationRef.current) return
+        setError(errorMessage(cause))
+        return
+      } finally {
+        if (generation === preparationGenerationRef.current) {
+          preparationAbortRef.current = null
+          preparationInFlightRef.current = false
+          if (mountedRef.current) setPreparingPluginExport(false)
+        }
+      }
+    }
+    const preparedPort = preparedPortRef.current
+    const preparedToken = preparedTokenRef.current
+    if (requiresPreparedExport && (!preparedPort || !preparedToken)) return
     runningRef.current = true
     cancelRequestedRef.current = false
     runDestinationRef.current = exportSettings.destination
@@ -475,7 +574,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       }
 
       setPhase('running')
-      const controller = await loadExportController()
+      const controller = requiresPreparedExport ? null : await loadExportController()
       if (!mountedRef.current || token !== runTokenRef.current) {
         return
       }
@@ -489,10 +588,14 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       }
 
       controllerRunStartedRef.current = true
-      const result = await controller.startExport(exportSettings, {
-        onProgress: (value) => publishProgress(token, value),
+      const callbacks = {
+        onProgress: (value: number) => publishProgress(token, value),
         ...(fileDestination ? { fileDestination } : {}),
-      })
+      }
+      const result = requiresPreparedExport
+        ? await preparedPort!.start(preparedToken!, callbacks)
+        : await controller!.startExport(exportSettings, callbacks)
+      preparedTokenRef.current = null
       controllerRunStartedRef.current = false
       runningRef.current = false
       cancelRequestedRef.current = false
@@ -541,6 +644,53 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     }
   }
 
+  const approvePluginBlockers = async (reviewToken: string): Promise<void> => {
+    const port = preparedPortRef.current
+    if (!port || preparationInFlightRef.current) return
+    preparationInFlightRef.current = true
+    const generation = ++preparationGenerationRef.current
+    const abort = new AbortController()
+    preparationAbortRef.current?.abort('plugin-export-approval-replaced')
+    preparationAbortRef.current = abort
+    setPreparingPluginExport(true)
+    let startPreparedExport = false
+    try {
+      const prepared = await port.approveReviewedBlockers(reviewToken, abort.signal)
+      if (!mountedRef.current || generation !== preparationGenerationRef.current) {
+        void port.cancel('plugin-export-stale-approval').catch(() => undefined)
+        return
+      }
+      if (prepared.status === 'blocked') {
+        setPluginBlock(prepared)
+        return
+      }
+      if (prepared.status !== 'ready') throw new Error('Plugin export review did not produce a ready attempt.')
+      setPluginBlock(null)
+      preparedTokenRef.current = prepared.token
+      if (prepared.attempt.settings.destination === 'file') {
+        setFilePickerMessage('Plugin review complete. Choose a file to begin this prepared export.')
+      } else {
+        startPreparedExport = true
+      }
+    } catch (cause) {
+      if (!mountedRef.current || generation !== preparationGenerationRef.current) return
+      setError(errorMessage(cause))
+    } finally {
+      if (generation === preparationGenerationRef.current) {
+        preparationAbortRef.current = null
+        preparationInFlightRef.current = false
+        if (mountedRef.current) setPreparingPluginExport(false)
+      }
+    }
+    if (
+      startPreparedExport
+      && mountedRef.current
+      && generation === preparationGenerationRef.current
+    ) {
+      void beginExport()
+    }
+  }
+
   // Open the native modal safely under StrictMode. jsdom lacks showModal(),
   // so the attribute fallback keeps focused RTL tests faithful to the UI.
   useEffect(() => {
@@ -569,6 +719,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       capabilityToken.current++
       customCapabilityToken.current++
       invalidateRun()
+      invalidatePluginPreparation('plugin-export-dialog-unmounted')
       cancelProgressFrame()
       revokeDownload()
       cancelActiveControllerRun()
@@ -576,6 +727,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   }, [
     cancelActiveControllerRun,
     cancelProgressFrame,
+    invalidatePluginPreparation,
     invalidateRun,
     revokeDownload,
   ])
@@ -691,7 +843,8 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     return () => cancelAnimationFrame(focusFrame)
   }, [phase, selectedSupported])
 
-  const busy = phase === 'choosing-file'
+  const busy = preparingPluginExport
+    || phase === 'choosing-file'
     || phase === 'running'
     || phase === 'cancelling'
   const percent = Math.round(progress * 100)
@@ -760,6 +913,25 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             savedFile={savedFile}
             runDestination={runDestinationRef.current}
           />
+          {pluginBlock?.status === 'blocked' ? (
+            <PluginExportBlockDialog
+              issues={blockerIssues(pluginBlock)}
+              reviewToken={pluginBlock.token}
+              documentRevision={String(pluginBlock.attempt.documentGeneration)}
+              busy={preparingPluginExport}
+              error={error}
+              onCancel={() => {
+                invalidatePluginPreparation('plugin-export-review-dismissed')
+                setPluginBlock(null)
+              }}
+              onRetry={() => {
+                invalidatePluginPreparation('plugin-export-review-retry')
+                setPluginBlock(null)
+                void beginExport()
+              }}
+              onExportBypassed={(reviewToken) => { void approvePluginBlockers(reviewToken) }}
+            />
+          ) : null}
         </div>
 
         <ExportDialogActions
@@ -785,4 +957,11 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       </div>
     </dialog>
   )
+}
+function loadExportController(): Promise<ExportControllerModule> {
+  controllerPromise ??= import('../app/exportController').catch((cause) => {
+    controllerPromise = null
+    throw cause
+  })
+  return controllerPromise
 }

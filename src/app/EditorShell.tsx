@@ -25,6 +25,7 @@ import Timeline from '../ui/timeline/Timeline'
 import TimelineZoomControls from '../ui/timeline/TimelineZoomControls'
 import WorkspaceControls from '../ui/WorkspaceControls'
 import WorkspaceResizeHandle from '../ui/WorkspaceResizeHandle'
+import { PluginInspectorSurfaces, PluginPreviewSurface } from '../ui/plugins/PluginEditorSurfaces'
 import { fitWorkspaceLayout } from '../ui/workspaceLayout'
 import {
   WORKSPACE_PANEL_LIMITS,
@@ -225,6 +226,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
       />
       <main className="area-preview" inert={closing}>
         <Preview />
+        <PluginPreviewSurface />
       </main>
       <WorkspaceResizeHandle
         className="area-inspector-resize"
@@ -249,6 +251,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
         inert={closing || fitted.inspectorWidth === 0}
       >
         <Inspector />
+        <PluginInspectorSurfaces />
       </aside>
       <section className="area-transport" inert={closing}>
         <ToolButtons />
