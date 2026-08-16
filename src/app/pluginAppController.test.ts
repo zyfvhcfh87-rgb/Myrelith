@@ -1,8 +1,13 @@
 import { describe, expect, test, vi } from 'vitest'
 import type { PluginEffectBridgeHandlerRequest } from '../workers/plugin-effect-bridge-protocol'
 import {
+  createPluginAppAcceptanceSession,
   createPluginAppControllerOwner,
+  disposePluginAppController,
+  getPluginAppController,
+  getPluginAppControllerOwner,
   PluginAppControllerError,
+  type PluginAppAcceptanceSession,
   type PluginAppController,
   type PluginAppControllerDependencies,
   type PluginAppFile,
@@ -18,16 +23,27 @@ import type {
   PluginInstalledPackageProjection,
   PluginPackageInspection,
 } from './pluginInstallController'
-import type {
-  LoadedPluginDisposer,
-  LoadedPluginLifecycleToken,
+import {
+  captureLoadedPluginLifecycleToken,
+  registerLoadedPluginDisposer,
+  resetLoadedPluginDisposer,
+  type LoadedPluginDisposer,
+  type LoadedPluginLifecycleToken,
 } from './pluginLifecycle'
+import {
+  localPluginStorage,
+  localPluginTrustPolicyStore,
+} from './localPluginStorage'
 import { PLUGIN_PACKAGE_LIMITS } from './pluginPackage'
 import type {
   PluginEditorSession,
   PluginRuntimeController,
 } from './pluginRuntimeController'
-import type { PluginRuntimeLifecycleObserver } from './pluginRuntimeLifecycleObserver'
+import type {
+  PluginRuntimeLifecycleObserver,
+  PluginRuntimeLifecycleSnapshot,
+  PluginSandboxLifecycleSnapshot,
+} from './pluginRuntimeLifecycleObserver'
 
 const PLUGIN_ID = 'example.soft-sparkle'
 const PACKAGE_DIGEST = `sha256:${'1'.repeat(64)}` as PluginDeclarationCatalogEntry['packageDigest']
@@ -268,6 +284,16 @@ function lifecycleHarness() {
     await owned?.()
   })
   return { captureToken, registerDisposer, dispose }
+}
+
+function observerHarness() {
+  const sandboxSnapshots: PluginSandboxLifecycleSnapshot[] = []
+  const runtimeSnapshots: PluginRuntimeLifecycleSnapshot[] = []
+  const observer: PluginRuntimeLifecycleObserver = Object.freeze({
+    onSandboxSnapshot(snapshot: PluginSandboxLifecycleSnapshot) { sandboxSnapshots.push(snapshot) },
+    onRuntimeSnapshot(snapshot: PluginRuntimeLifecycleSnapshot) { runtimeSnapshots.push(snapshot) },
+  })
+  return { observer, sandboxSnapshots, runtimeSnapshots }
 }
 
 function setup(options?: {
@@ -943,5 +969,162 @@ describe('plugin app controller', () => {
     expect(runtime.editor.close).toHaveBeenCalledWith('app-close')
     expect(runtime.controller.teardown).toHaveBeenCalledWith('app-close')
     expect(() => harness.controller.subscribe(vi.fn())).toThrow(PluginAppControllerError)
+  })
+
+  test('exposes only the frozen bounded acceptance surface and rejects competing ownership', async () => {
+    const observer = observerHarness()
+    let session: PluginAppAcceptanceSession | null = createPluginAppAcceptanceSession(
+      observer.observer,
+    )
+    try {
+      expect(Object.keys(session)).toEqual(['controller', 'exportFacade', 'close'])
+      expect(Object.keys(session.exportFacade)).toEqual([
+        'getDeclarationCatalog',
+        'preflightAndCloseExport',
+      ])
+      expect(Object.isFrozen(session)).toBe(true)
+      expect(Object.isFrozen(session.exportFacade)).toBe(true)
+      expect(Object.isFrozen(session.controller)).toBe(true)
+      expect('exportCompositionPort' in session).toBe(false)
+      expect(() => createPluginAppAcceptanceSession(observer.observer)).toThrow(
+        'already exists or is closing',
+      )
+      expect(() => getPluginAppController()).toThrow(
+        'cannot open during acceptance validation',
+      )
+
+      const firstClose = session.close('acceptance-surface-test')
+      const secondClose = session.close('ignored-second-reason')
+      expect(secondClose).toBe(firstClose)
+      expect(() => createPluginAppAcceptanceSession(observer.observer)).toThrow(
+        'already exists or is closing',
+      )
+      expect(() => getPluginAppController()).toThrow(
+        'cannot open during acceptance validation',
+      )
+      await firstClose
+      session = null
+
+      const production = getPluginAppController()
+      expect(getPluginAppController()).toBe(production)
+      expect(() => createPluginAppAcceptanceSession(observer.observer)).toThrow(
+        'while production ownership exists',
+      )
+    } finally {
+      await session?.close('acceptance-surface-cleanup').catch(() => {})
+      await disposePluginAppController('acceptance-surface-cleanup').catch(() => {})
+      await resetLoadedPluginDisposer().catch(() => {})
+    }
+  })
+
+  test('threads lifecycle evidence through production composition and closes bounded export ownership', async () => {
+    const evidence = observerHarness()
+    const catalogSnapshot = vi.spyOn(localPluginStorage, 'catalogSnapshot').mockResolvedValue(
+      Object.freeze({ generation: 0, records: Object.freeze([]) }),
+    )
+    const generation = vi.spyOn(localPluginStorage, 'generation').mockResolvedValue(0)
+    const trustPolicy = vi.spyOn(localPluginTrustPolicyStore, 'load').mockResolvedValue(undefined)
+    let session: PluginAppAcceptanceSession | null = createPluginAppAcceptanceSession(
+      evidence.observer,
+    )
+    try {
+      await expect(session.exportFacade.getDeclarationCatalog()).resolves.toEqual({
+        generation: 0,
+        declarations: [],
+      })
+      await expect(session.exportFacade.preflightAndCloseExport({
+        requiredEffects: Object.freeze([]),
+      })).resolves.toBeUndefined()
+      expect(evidence.runtimeSnapshots.some((snapshot) => snapshot.liveOwnerCount === 1)).toBe(true)
+      expect(evidence.runtimeSnapshots.at(-1)).toMatchObject({
+        liveOwnerCount: 0,
+        terminal: false,
+      })
+
+      await session.close('acceptance-observer-terminal')
+      session = null
+      expect(evidence.sandboxSnapshots.filter((snapshot) => snapshot.terminal)).toEqual([{
+        brokerIframeCount: 0,
+        candidateWorkerCount: 0,
+        privatePortCount: 0,
+        watchdogCount: 0,
+        pendingActivationCount: 0,
+        pendingRequestCount: 0,
+        sessionCount: 0,
+        terminal: true,
+      }])
+      expect(evidence.runtimeSnapshots.filter((snapshot) => snapshot.terminal)).toEqual([{
+        queuedCallCount: 0,
+        activeCallCount: 0,
+        liveOwnerCount: 0,
+        migrationReservationCount: 0,
+        residentRuntimeCount: 0,
+        rawCacheEntryCount: 0,
+        rawCacheByteLength: 0,
+        terminal: true,
+      }])
+      expect(catalogSnapshot).toHaveBeenCalledOnce()
+      expect(generation).toHaveBeenCalledOnce()
+      expect(trustPolicy).toHaveBeenCalledOnce()
+    } finally {
+      await session?.close('acceptance-observer-cleanup').catch(() => {})
+      catalogSnapshot.mockRestore()
+      generation.mockRestore()
+      trustPolicy.mockRestore()
+      await disposePluginAppController('acceptance-observer-cleanup').catch(() => {})
+      await resetLoadedPluginDisposer().catch(() => {})
+    }
+  })
+
+  test('shares a rejected terminal close, releases the stale lease, and permits fresh ownership', async () => {
+    const evidence = observerHarness()
+    let session: PluginAppAcceptanceSession | null = createPluginAppAcceptanceSession(
+      evidence.observer,
+    )
+    const failingDisposer = vi.fn(async () => { throw new Error('terminal cleanup failed') })
+    try {
+      const token = captureLoadedPluginLifecycleToken()
+      await expect(registerLoadedPluginDisposer(token, failingDisposer)).resolves.toBe(true)
+      const firstClose = session.close('acceptance-failing-terminal')
+      const secondClose = session.close('ignored-second-reason')
+      expect(secondClose).toBe(firstClose)
+      expect(() => createPluginAppAcceptanceSession(evidence.observer)).toThrow(
+        'already exists or is closing',
+      )
+      await expect(firstClose).rejects.toThrow('terminal cleanup failed')
+      session = null
+      expect(failingDisposer).toHaveBeenCalledOnce()
+
+      const replacement = createPluginAppAcceptanceSession(evidence.observer)
+      await expect(replacement.close('acceptance-after-failure')).resolves.toBeUndefined()
+      const production = getPluginAppController()
+      expect(getPluginAppController()).toBe(production)
+    } finally {
+      await session?.close('acceptance-failure-cleanup').catch(() => {})
+      await disposePluginAppController('acceptance-failure-cleanup').catch(() => {})
+      await resetLoadedPluginDisposer().catch(() => {})
+    }
+  })
+
+  test('shares production disposal and rejects replacement until terminal close settles', async () => {
+    const first = getPluginAppController()
+    expect(getPluginAppController()).toBe(first)
+    const firstOwner = getPluginAppControllerOwner()
+    expect(firstOwner.controller).toBe(first)
+    expect(getPluginAppControllerOwner()).toBe(firstOwner)
+
+    const firstClose = disposePluginAppController('production-shared-close')
+    const secondClose = disposePluginAppController('ignored-second-reason')
+    expect(secondClose).toBe(firstClose)
+    expect(() => getPluginAppController()).toThrow('still closing')
+    expect(() => createPluginAppAcceptanceSession(observerHarness().observer)).toThrow(
+      'while production ownership exists',
+    )
+    await firstClose
+
+    const replacement = getPluginAppController()
+    expect(replacement).not.toBe(first)
+    expect(getPluginAppController()).toBe(replacement)
+    await disposePluginAppController('production-shared-close-cleanup')
   })
 })

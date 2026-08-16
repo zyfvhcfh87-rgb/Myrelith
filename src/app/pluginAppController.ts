@@ -270,6 +270,22 @@ export interface PluginAppControllerOwner {
   close(reason: string): Promise<void>
 }
 
+/** Data-only export operations exposed to the disposable Issue #77 gate. */
+export interface PluginAppAcceptanceExportFacade {
+  getDeclarationCatalog(signal?: AbortSignal): Promise<PluginDeclarationCatalogSnapshot>
+  preflightAndCloseExport(
+    request: PluginExportPreflightRequest,
+    signal?: AbortSignal,
+  ): Promise<void>
+}
+
+/** Exclusive dev-gate lease. It never exposes the app-private owner or sessions. */
+export interface PluginAppAcceptanceSession {
+  readonly controller: PluginAppController
+  readonly exportFacade: PluginAppAcceptanceExportFacade
+  close(reason: string): Promise<void>
+}
+
 export interface PluginAppControllerDependencies
   extends PluginCompositionControllerDependencies {
   readonly createReviewToken?: () => string
@@ -1286,13 +1302,12 @@ export function createPluginAppControllerOwner(
   return owner
 }
 
-let productionOwner: PluginAppControllerOwner | null = null
-
-/** App-private production accessor for export, migration, and terminal ownership. */
-export function getPluginAppControllerOwner(): PluginAppControllerOwner {
-  if (productionOwner) return productionOwner
-  productionOwner = createPluginAppControllerOwner({
+function createProductionPluginAppControllerOwner(
+  lifecycleObserver?: PluginRuntimeLifecycleObserver,
+): PluginAppControllerOwner {
+  return createPluginAppControllerOwner({
     safetyStorage: browserSafetyStorage(),
+    lifecycleObserver,
     createManagementController(sessionSafety) {
       const trustRegistry = createPluginTrustRegistry(localPluginTrustPolicyStore)
       return createPluginInstallController({
@@ -1302,10 +1317,92 @@ export function getPluginAppControllerOwner(): PluginAppControllerOwner {
         revokeBinding: trustRegistry.revokeBinding,
       })
     },
-    createRuntimeController(activationBundleResolver) {
-      return createPluginRuntimeController({ activationBundleResolver })
+    createRuntimeController(activationBundleResolver, observer) {
+      return createPluginRuntimeController({
+        activationBundleResolver,
+        lifecycleObserver: observer,
+      })
     },
   })
+}
+
+interface PluginAppAcceptanceLease {
+  readonly owner: PluginAppControllerOwner
+}
+
+let productionOwner: PluginAppControllerOwner | null = null
+let productionClosePromise: Promise<void> | null = null
+let acceptanceLease: PluginAppAcceptanceLease | null = null
+
+function ownershipConflict(message: string): PluginAppControllerError {
+  return new PluginAppControllerError('stale-operation', message)
+}
+
+/**
+ * Creates one isolated, production-composed owner for the disposable browser gate.
+ * The lease is deliberately separate from `productionOwner` and remains exclusive
+ * until terminal cleanup settles, including a rejected cleanup.
+ */
+export function createPluginAppAcceptanceSession(
+  lifecycleObserver: PluginRuntimeLifecycleObserver,
+): PluginAppAcceptanceSession {
+  if (productionOwner || productionClosePromise) {
+    throw ownershipConflict('Plugin acceptance cannot run while production ownership exists')
+  }
+  if (acceptanceLease) {
+    throw ownershipConflict('Plugin acceptance ownership already exists or is closing')
+  }
+
+  const owner = createProductionPluginAppControllerOwner(lifecycleObserver)
+  const lease = Object.freeze({ owner })
+  acceptanceLease = lease
+  let terminalClosePromise: Promise<void> | null = null
+
+  const exportFacade: PluginAppAcceptanceExportFacade = Object.freeze({
+    getDeclarationCatalog(signal?: AbortSignal) {
+      return owner.exportCompositionPort.getDeclarationCatalog(signal)
+    },
+    async preflightAndCloseExport(
+      request: PluginExportPreflightRequest,
+      signal?: AbortSignal,
+    ) {
+      const session = await owner.exportCompositionPort.preflightExport(request, signal)
+      await session.close('issue77-acceptance-export-preflight-complete')
+    },
+  })
+
+  const close = (reason: string): Promise<void> => {
+    if (terminalClosePromise) return terminalClosePromise
+    const completion = owner.close(reason).then(
+      () => {
+        if (acceptanceLease === lease) acceptanceLease = null
+      },
+      (cause: unknown) => {
+        if (acceptanceLease === lease) acceptanceLease = null
+        throw cause
+      },
+    )
+    terminalClosePromise = completion
+    return completion
+  }
+
+  return Object.freeze({
+    controller: owner.controller,
+    exportFacade,
+    close,
+  })
+}
+
+/** App-private production accessor for export, migration, and terminal ownership. */
+export function getPluginAppControllerOwner(): PluginAppControllerOwner {
+  if (acceptanceLease) {
+    throw ownershipConflict('Production plugin ownership cannot open during acceptance validation')
+  }
+  if (productionOwner) return productionOwner
+  if (productionClosePromise) {
+    throw ownershipConflict('Production plugin ownership is still closing')
+  }
+  productionOwner = createProductionPluginAppControllerOwner()
   return productionOwner
 }
 
@@ -1315,8 +1412,20 @@ export function getPluginAppController(): PluginAppController {
 }
 
 /** Test/HMR-only terminal release; the next accessor creates a fresh root. */
-export async function disposePluginAppController(reason: string): Promise<void> {
+export function disposePluginAppController(reason: string): Promise<void> {
+  if (productionClosePromise) return productionClosePromise
   const retiring = productionOwner
   productionOwner = null
-  await retiring?.close(reason)
+  if (!retiring) return Promise.resolve()
+  const completion = retiring.close(reason).then(
+    () => {
+      if (productionClosePromise === completion) productionClosePromise = null
+    },
+    (cause: unknown) => {
+      if (productionClosePromise === completion) productionClosePromise = null
+      throw cause
+    },
+  )
+  productionClosePromise = completion
+  return completion
 }
