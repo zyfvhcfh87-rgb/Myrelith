@@ -67,6 +67,12 @@ export type PluginPackageVersionChange =
   | 'reinstall'
   | 'update'
   | 'downgrade'
+  | 'same-version-replacement'
+
+export type PluginStartupModeView =
+  | 'normal'
+  | 'review-required'
+  | 'safe-mode'
 
 export interface PluginPermissionView {
   readonly id: string
@@ -102,6 +108,7 @@ export interface PluginInstallDecision {
   readonly trustSigner: boolean
   readonly grantedPermissionIds: readonly string[]
   readonly confirmDowngrade: boolean
+  readonly confirmSameVersionReplacement: boolean
 }
 
 export interface PluginDiagnosticView {

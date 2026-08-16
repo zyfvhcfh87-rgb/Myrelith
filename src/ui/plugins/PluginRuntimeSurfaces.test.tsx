@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import PluginExportBlockDialog, { PluginExportBlockBody } from './PluginExportBlockDialog'
 import PluginInspectorStatus from './PluginInspectorStatus'
@@ -50,28 +51,26 @@ const recoveryActions: PluginRecoveryActionsView = {
 }
 
 describe('Issue 77 runtime UI surfaces', () => {
-  test('enters launcher safe mode once and locks the enabled session', () => {
+  test('keeps clean startup optional and locks one-way safe mode for the session', () => {
     const onEnterSafeMode = vi.fn()
     const { rerender } = render(
       <PluginSafeModeCard
-        enabled={false}
-        recommended
-        recommendationReason="A previous plugin activation did not finish."
+        startupMode="normal"
         installedPluginCount={2}
+        enterSafeModeAction={action(true)}
         onEnterSafeMode={onEnterSafeMode}
       />,
     )
 
-    expect(screen.getByRole('alert')).toHaveTextContent('previous plugin activation')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Continue normally after review' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Enter safe mode' }))
     expect(onEnterSafeMode).toHaveBeenCalledOnce()
 
     rerender(
       <PluginSafeModeCard
-        enabled
-        recommended={false}
+        startupMode="safe-mode"
         installedPluginCount={2}
-        onEnterSafeMode={onEnterSafeMode}
       />,
     )
     const active = screen.getByRole('button', { name: 'Safe mode active' })
@@ -79,6 +78,98 @@ describe('Issue 77 runtime UI surfaces', () => {
     expect(screen.getByText(/Restart the editor or begin a new session without safe mode to leave it/i)).toBeInTheDocument()
     fireEvent.click(active)
     expect(onEnterSafeMode).toHaveBeenCalledOnce()
+  })
+
+  test('offers reviewed normal startup beside safe mode with native keyboard focus order', async () => {
+    const user = userEvent.setup()
+    const trigger = document.createElement('button')
+    document.body.append(trigger)
+    trigger.focus()
+    const onEnterSafeMode = vi.fn()
+    const onContinueReviewedNormal = vi.fn()
+    const { unmount } = render(
+      <PluginSafeModeCard
+        startupMode="review-required"
+        startupReason="A previous plugin activation did not finish cleanly."
+        installedPluginCount={2}
+        enterSafeModeAction={action(true)}
+        continueReviewedNormalAction={action(true)}
+        onEnterSafeMode={onEnterSafeMode}
+        onContinueReviewedNormal={onContinueReviewedNormal}
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('previous plugin activation')
+    expect(screen.getByRole('status')).toHaveTextContent('Choose reviewed normal startup or safe mode')
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Enter safe mode' })).toHaveFocus()
+    await user.tab()
+    const continueNormally = screen.getByRole('button', { name: 'Continue normally after review' })
+    expect(continueNormally).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(onContinueReviewedNormal).toHaveBeenCalledOnce()
+    expect(onEnterSafeMode).not.toHaveBeenCalled()
+
+    screen.getByRole('button', { name: 'Enter safe mode' }).focus()
+    await user.keyboard(' ')
+    expect(onEnterSafeMode).toHaveBeenCalledOnce()
+
+    unmount()
+    trigger.remove()
+  })
+
+  test('honors projected unavailable, busy, and error actions while safe-only startup stays locked', () => {
+    const onEnterSafeMode = vi.fn()
+    const onContinueReviewedNormal = vi.fn()
+    const { rerender } = render(
+      <PluginSafeModeCard
+        startupMode="review-required"
+        startupReason="Review is required before plugin initialization."
+        installedPluginCount={1}
+        enterSafeModeAction={action(true, { pending: true })}
+        continueReviewedNormalAction={action(false)}
+        onEnterSafeMode={onEnterSafeMode}
+        onContinueReviewedNormal={onContinueReviewedNormal}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Continue normally after review' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Entering safe modeâ€¦' })).toBeDisabled()
+    expect(screen.getAllByRole('status').some((node) => node.textContent === 'Entering safe modeâ€¦')).toBe(true)
+
+    rerender(
+      <PluginSafeModeCard
+        startupMode="review-required"
+        startupReason="Review is required before plugin initialization."
+        installedPluginCount={1}
+        enterSafeModeAction={action(true, {
+          disabledReason: 'Safe-mode preparation is temporarily unavailable.',
+          error: 'The last safe-mode request did not complete.',
+        })}
+        continueReviewedNormalAction={action(false)}
+        onEnterSafeMode={onEnterSafeMode}
+        onContinueReviewedNormal={onContinueReviewedNormal}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Enter safe mode' })).toBeDisabled()
+    expect(screen.getByText('Safe-mode preparation is temporarily unavailable.')).toBeInTheDocument()
+    expect(screen.getAllByRole('alert').some((node) => (
+      node.textContent?.includes('last safe-mode request did not complete') ?? false
+    ))).toBe(true)
+
+    rerender(
+      <PluginSafeModeCard
+        startupMode="safe-mode"
+        startupReason="Plugin safety storage is unavailable."
+        installedPluginCount={1}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Safe mode active' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Enter safe mode' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Continue normally after review' })).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Plugin safety storage is unavailable')
   })
 
   test('uses projected preview actions and announces only a compact atomic summary', () => {

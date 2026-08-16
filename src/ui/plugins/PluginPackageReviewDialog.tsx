@@ -54,6 +54,7 @@ function versionChangeLabel(
     case 'reinstall': return `Reinstall${installedVersion ? ` ${installedVersion}` : ''}`
     case 'update': return `Update${installedVersion ? ` from ${installedVersion}` : ''}`
     case 'downgrade': return `Downgrade${installedVersion ? ` from ${installedVersion}` : ''}`
+    case 'same-version-replacement': return `Same-version replacement${installedVersion ? ` of ${installedVersion}` : ''}`
   }
 }
 
@@ -80,11 +81,13 @@ function PackageDecisionForm({
 }) {
   const requiresTrust = packageView.trustState === 'untrusted'
   const isDowngrade = packageView.versionChange === 'downgrade'
+  const isSameVersionReplacement = packageView.versionChange === 'same-version-replacement'
   const compatibilityHeadingId = useId()
   const contributionsHeadingId = useId()
   const installRequirementsId = useId()
   const [trustSigner, setTrustSigner] = useState(!requiresTrust)
   const [confirmDowngrade, setConfirmDowngrade] = useState(false)
+  const [confirmSameVersionReplacement, setConfirmSameVersionReplacement] = useState(false)
   const [grants, setGrants] = useState<ReadonlySet<string>>(() => new Set(
     packageView.permissions
       .filter((permission) => (
@@ -111,6 +114,7 @@ function PackageDecisionForm({
     && trustSigner
     && !missingRequiredGrant
     && (!isDowngrade || confirmDowngrade)
+    && (!isSameVersionReplacement || confirmSameVersionReplacement)
 
   const toggleGrant = (permission: PluginPermissionView, granted: boolean): void => {
     if (!isGrantable(permission)) return
@@ -130,6 +134,7 @@ function PackageDecisionForm({
         .filter((permission) => isGrantable(permission) && grants.has(permission.id))
         .map((permission) => permission.id),
       confirmDowngrade: isDowngrade && confirmDowngrade,
+      confirmSameVersionReplacement: isSameVersionReplacement && confirmSameVersionReplacement,
     })
   }
 
@@ -190,6 +195,16 @@ function PackageDecisionForm({
           <p>
             The installed version is {packageView.installedVersion ?? 'unknown'}; this package is version {packageView.version}.
             Existing project descriptors are preserved, but the older package may be incompatible with them.
+          </p>
+        </section>
+      ) : null}
+
+      {isSameVersionReplacement ? (
+        <section className="plugin-callout" data-tone="warning">
+          <strong>Same-version package replacement requires explicit confirmation</strong>
+          <p>
+            This package uses the installed version number, but its package identity differs.
+            Replacing it changes the local package bytes without presenting an update or downgrade.
           </p>
         </section>
       ) : null}
@@ -274,6 +289,19 @@ function PackageDecisionForm({
             </span>
           </label>
         ) : null}
+        {isSameVersionReplacement ? (
+          <label className="plugin-consent-row plugin-replacement-confirmation">
+            <input
+              type="checkbox"
+              checked={confirmSameVersionReplacement}
+              onChange={(event) => setConfirmSameVersionReplacement(event.target.checked)}
+            />
+            <span>
+              <strong>Replace this installed same-version package</strong>
+              <small>This confirms only the displayed replacement of {packageView.installedVersion ?? packageView.version} with package digest {packageView.packageDigest}.</small>
+            </span>
+          </label>
+        ) : null}
       </fieldset>
 
       <p className="plugin-help-copy">
@@ -291,7 +319,9 @@ function PackageDecisionForm({
                 ? 'Grant every required capability to enable installation, or cancel to keep the package unchanged.'
                 : isDowngrade && !confirmDowngrade
                   ? 'Confirm the exact downgrade before installing this older package.'
-                  : 'Ready to install with the displayed trust and capability decisions.'}
+                  : isSameVersionReplacement && !confirmSameVersionReplacement
+                    ? 'Confirm the exact same-version package replacement before installation.'
+                    : 'Ready to install with the displayed trust and capability decisions.'}
       </p>
       {error ? <p className="plugin-error" role="alert">{boundedPluginUiText(error)}</p> : null}
     </PluginDialogFrame>

@@ -74,6 +74,7 @@ describe('PluginPackageReviewDialog', () => {
       trustSigner: true,
       grantedPermissionIds: ['myrelith.effect.video-frame.rgba8'],
       confirmDowngrade: false,
+      confirmSameVersionReplacement: false,
     })
   })
 
@@ -95,6 +96,72 @@ describe('PluginPackageReviewDialog', () => {
 
     expect(screen.getByText('1.2.0')).toBeInTheDocument()
     expect(screen.getByText('Update from 1.2.0')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /Replace this installed same-version package/i })).not.toBeInTheDocument()
+  })
+
+  test('keeps an ordinary same-package reinstall distinct from replacement', () => {
+    render(
+      <PluginPackageReviewDialog
+        phase="review"
+        packageView={{
+          ...packageView,
+          installedVersion: '1.2.0',
+          versionChange: 'reinstall',
+          trustState: 'user-trusted',
+        }}
+        onCancel={vi.fn()}
+        onInstall={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Reinstall 1.2.0')).toBeInTheDocument()
+    expect(screen.queryByText(/Same-version package replacement requires/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /Replace this installed same-version package/i })).not.toBeInTheDocument()
+  })
+
+  test('requires a distinct same-version replacement decision and emits only that confirmation', () => {
+    const onInstall = vi.fn()
+    render(
+      <PluginPackageReviewDialog
+        phase="review"
+        packageView={{
+          ...packageView,
+          installedVersion: '1.2.0',
+          versionChange: 'same-version-replacement',
+          packageDigest: 'sha256:replacement',
+          trustState: 'user-trusted',
+          permissions: packageView.permissions.map((permission) => ({
+            ...permission,
+            grantState: 'previously-granted',
+          })),
+        }}
+        onCancel={vi.fn()}
+        onInstall={onInstall}
+      />,
+    )
+
+    expect(screen.getByText('Same-version replacement of 1.2.0')).toBeInTheDocument()
+    expect(screen.getByText(/package identity differs/i)).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /Install this older package version/i })).not.toBeInTheDocument()
+    const install = screen.getByRole('button', { name: 'Install plugin' })
+    expect(install).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Confirm the exact same-version package replacement')
+
+    fireEvent.click(screen.getByRole('checkbox', {
+      name: /Replace this installed same-version package/i,
+    }))
+    expect(install).toBeEnabled()
+    fireEvent.click(install)
+
+    expect(onInstall).toHaveBeenCalledWith({
+      trustSigner: false,
+      grantedPermissionIds: [
+        'myrelith.effect.video-frame.rgba8',
+        'example.optional',
+      ],
+      confirmDowngrade: false,
+      confirmSameVersionReplacement: true,
+    })
   })
 
   test('preserves prior grants, identifies widened grants, blocks unavailable options, and requires downgrade confirmation', () => {
@@ -157,6 +224,7 @@ describe('PluginPackageReviewDialog', () => {
       trustSigner: false,
       grantedPermissionIds: ['myrelith.effect.video-frame.rgba8'],
       confirmDowngrade: true,
+      confirmSameVersionReplacement: false,
     })
     expect(screen.getByText(/Plugin access stops while the plugin is disabled/i)).toBeInTheDocument()
     expect(screen.getByText(/uninstalling removes the local package and grants/i)).toBeInTheDocument()
