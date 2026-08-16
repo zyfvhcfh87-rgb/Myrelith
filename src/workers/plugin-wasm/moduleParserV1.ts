@@ -8,9 +8,6 @@ import {
   type PluginWasmOpcodeTableArtifact,
 } from './policyTables'
 
-const MIN_MEMORY_PAGES = 258
-const MAX_MEMORY_PAGES = 1_025
-
 export interface PluginWasmModuleExpectations {
   readonly policy: PluginWasmProfileSelection
   readonly opcodeTableDigest?: string
@@ -54,6 +51,8 @@ export function createPluginWasmPolicyParser(environment: PluginWasmParserEnviro
   moduleBytes: Uint8Array,
   expectations: PluginWasmModuleExpectations,
 ) => PluginWasmModuleFacts {
+  const MIN_MEMORY_PAGES = 258
+  const MAX_MEMORY_PAGES = 1_025
   const WASM_MAGIC = [0x00, 0x61, 0x73, 0x6d]
   const WASM_VERSION_1 = [0x01, 0x00, 0x00, 0x00]
   const FUNCTION_TYPE = 0x60

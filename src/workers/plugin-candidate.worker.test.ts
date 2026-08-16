@@ -205,6 +205,67 @@ describe('plugin candidate worker core', () => {
     expect(() => new Function('self', source)).not.toThrow()
   })
 
+  test('activates the emitted worker source over a real MessageChannel', async () => {
+    const scope = {
+      onmessage: null as ((event: MessageEvent<unknown>) => void) | null,
+      close: vi.fn(),
+    }
+    const source = createPluginCandidateWorkerSource()
+    const executeWorkerSource = new Function('self', source) as (workerScope: typeof scope) => void
+    executeWorkerSource(scope)
+    expect(scope.onmessage).toBeTypeOf('function')
+
+    const channel = new MessageChannel()
+    const receive = (): Promise<Record<string, unknown>> => new Promise((resolve) => {
+      channel.port1.onmessage = (event): void => resolve(event.data as Record<string, unknown>)
+      channel.port1.start()
+    })
+
+    try {
+      scope.onmessage?.({
+        data: { protocolVersion: 1, kind: 'connect', generation: 11, port: channel.port2 },
+      } as MessageEvent<unknown>)
+
+      const moduleBytes = hexBytes(MINIMAL_RENDER_MODULE_HEX)
+      const activationResponse = receive()
+      channel.port1.postMessage({
+        protocolVersion: 1,
+        kind: 'activate',
+        generation: 11,
+        requestId: 1,
+        moduleBytes: moduleBytes.buffer,
+        expectations: {
+          ...expectations(),
+          opcodeTableDigest: PLUGIN_WASM_OPCODE_TABLE_DIGESTS['myrelith-wasm-render-general-v1'],
+        },
+      }, [moduleBytes.buffer])
+
+      await expect(activationResponse).resolves.toMatchObject({
+        kind: 'ready',
+        generation: 11,
+        requestId: 1,
+      })
+
+      const closeResponse = receive()
+      channel.port1.postMessage({
+        protocolVersion: 1,
+        kind: 'close',
+        generation: 11,
+        requestId: 2,
+        reason: 'emitted-source-test-complete',
+      })
+      await expect(closeResponse).resolves.toMatchObject({
+        kind: 'closed',
+        generation: 11,
+        requestId: 2,
+      })
+      expect(scope.close).toHaveBeenCalledOnce()
+    } finally {
+      channel.port1.close()
+      channel.port2.close()
+    }
+  })
+
   test('promotes and renders on the same private worker port with exact-length output', async () => {
     const parser = createPluginWasmPolicyParser({
       binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
