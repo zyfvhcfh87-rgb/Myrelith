@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Issue 77 plugin acceptance gate</title></head>
+  <body>
+    <main><h1>Issue 77 plugin acceptance gate</h1><p role="status">Running</p></main>
+    <script type="module">
+      import { runPluginAcceptanceBrowserGate } from '/src/dev/issue77/pluginAcceptanceGate.ts'
+      try {
+        const response = await fetch('/samples/plugins/audited-invert-v1/audited-invert-v1.myrelith-plugin', { cache: 'no-store' })
+        if (!response.ok) throw new Error(`Audited sample fetch failed: ${response.status}`)
+        globalThis.__issue77PluginAcceptanceResult = await runPluginAcceptanceBrowserGate(await response.arrayBuffer())
+        document.querySelector('[role=status]').textContent = 'Passed'
+      } catch (error) {
+        const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+        globalThis.__issue77PluginAcceptanceError = detail
+        document.querySelector('[role=status]').textContent = `Failed: ${detail}`
+      }
+    </script>
+  </body>
+</html>
