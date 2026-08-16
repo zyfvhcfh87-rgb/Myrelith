@@ -841,10 +841,10 @@ describe('previewController', () => {
 
   test('plans each displayed frame once and forwards that exact plan to the bridge', async () => {
     const { deps, bridge } = makeDeps()
-    const sentinelPlan = Object.freeze({
+    const sentinelPlan: VideoCompositionPlan = Object.freeze({
       frame: 0,
-      items: Object.freeze([]),
-    }) satisfies VideoCompositionPlan
+      items: [],
+    })
     const planFrame = vi.fn(() => sentinelPlan)
     deps.createVisualPlanner = vi.fn(() => ({ planFrame }))
 

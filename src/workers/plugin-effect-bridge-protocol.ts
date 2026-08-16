@@ -72,14 +72,14 @@ export interface PluginEffectBridgeHandlerRequest {
   readonly height: number
   readonly stride: number
   /** Full-span bytes owned by the handler until it settles. */
-  readonly rgbaBytes: Uint8Array
+  readonly rgbaBytes: Uint8Array<ArrayBuffer>
 }
 
 export type PluginEffectBridgeHandlerResult =
   | {
       readonly status: 'applied'
       /** Fresh full-span exact-length bytes transferred to the render worker. */
-      readonly rgbaBytes: Uint8Array
+      readonly rgbaBytes: Uint8Array<ArrayBuffer>
     }
   | { readonly status: 'bypassed' }
 

@@ -1204,7 +1204,7 @@ describe('plugin effect RPC', () => {
     const handler: PluginEffectBridgeHandler = {
       apply: vi.fn(async (request) => {
         observedInputs.push([...request.rgbaBytes])
-        return { status: 'applied', rgbaBytes: output }
+        return { status: 'applied' as const, rgbaBytes: output }
       }),
     }
     const worker = new FakeWorker()
@@ -1288,14 +1288,14 @@ describe('plugin effect RPC', () => {
 
   test('aborts the exact in-flight handler on worker cancellation', async () => {
     const plan = readyPluginPlan()
-    let observedSignal: AbortSignal | null = null
+    const observedSignals: AbortSignal[] = []
     let settleHandler!: () => void
     const handlerSettled = new Promise<void>((resolve) => { settleHandler = resolve })
     const handler: PluginEffectBridgeHandler = {
       apply: vi.fn(async (_request, signal) => {
-        observedSignal = signal
+        observedSignals.push(signal)
         await handlerSettled
-        return { status: 'bypassed' }
+        return { status: 'bypassed' as const }
       }),
     }
     const worker = new FakeWorker()
@@ -1314,7 +1314,8 @@ describe('plugin effect RPC', () => {
       renderRequestId: renderMessage.requestId,
       effectRequestId: 41,
     })
-    expect(observedSignal?.aborted).toBe(true)
+    expect(observedSignals).toHaveLength(1)
+    expect(observedSignals[0].aborted).toBe(true)
     settleHandler()
     await flushMicrotasks()
     expect([...input]).toEqual([0, 0, 0, 0])

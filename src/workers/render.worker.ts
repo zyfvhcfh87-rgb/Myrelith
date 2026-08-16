@@ -99,6 +99,7 @@ import {
   type LegacyRenderWorkerEnv,
 } from './render-legacy'
 import type {
+  FromRenderWorker,
   RenderWorkerRuntimeTelemetrySnapshot,
   RenderFrameMessage,
   StreamingCompositeSourceEntry,
@@ -263,7 +264,7 @@ interface PendingPluginEffect {
   readonly workerGeneration: number
   readonly renderRequestId: number
   readonly expectedByteLength: number
-  readonly resolve: (result: { readonly status: 'applied'; readonly rgba: Uint8Array }
+  readonly resolve: (result: { readonly status: 'applied'; readonly rgba: Uint8Array<ArrayBuffer> }
     | { readonly status: 'bypassed' }) => void
 }
 
@@ -568,7 +569,8 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         }
         const rgbaBytes = request.rgba.buffer
         if (
-          request.rgba.byteOffset !== 0
+          !(rgbaBytes instanceof ArrayBuffer)
+          || request.rgba.byteOffset !== 0
           || rgbaBytes.byteLength !== request.rgba.byteLength
         ) {
           request.rgba.fill(0)
@@ -2545,9 +2547,12 @@ export function createVideoScopeAnalyzer(): {
 declare const WorkerGlobalScope: unknown
 
 if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
+  const renderWorkerGlobal = self as unknown as {
+    postMessage(message: FromRenderWorker, transfer: Transferable[]): void
+  }
   const videoScopeAnalyzer = createVideoScopeAnalyzer()
   const core = createRenderWorkerCore({
-    post: (msg, transfer = []) => self.postMessage(msg, transfer),
+    post: (msg, transfer = []) => renderWorkerGlobal.postMessage(msg, transfer),
     createDecoder: (init) =>
       new VideoDecoder({
         output: (frame) => init.output(frame),
