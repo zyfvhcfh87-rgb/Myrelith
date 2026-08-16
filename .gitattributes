@@ -1,1 +1,7 @@
 *.patch -whitespace
+samples/plugins/audited-invert-v1/README.md text eol=lf
+samples/plugins/audited-invert-v1/audit.json text eol=lf
+samples/plugins/audited-invert-v1/manifest.json text eol=lf
+samples/plugins/audited-invert-v1/signature.json text eol=lf
+samples/plugins/audited-invert-v1/source/module.mjs text eol=lf
+samples/plugins/audited-invert-v1/verify.mjs text eol=lf

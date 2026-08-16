@@ -1,10 +1,13 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
+  copyFileSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
@@ -67,11 +70,32 @@ interface AuditedModuleSource {
 }
 
 function runVerifier(...arguments_: string[]): unknown {
+  return runVerifierAt(VERIFIER_PATH, ...arguments_)
+}
+
+function runVerifierAt(verifierPath: string, ...arguments_: string[]): unknown {
   return JSON.parse(execFileSync(
     process.execPath,
-    [VERIFIER_PATH, ...arguments_, '--json'],
+    [verifierPath, ...arguments_, '--json'],
     { cwd: REPO_ROOT, encoding: 'utf8' },
   ))
+}
+
+function checkoutText(sourcePath: string, targetPath: string, newline: '\r\n' | '\r'): void {
+  const source = readFileSync(sourcePath, 'utf8')
+  writeFileSync(targetPath, source.replace(/\r\n|\r|\n/g, newline), 'utf8')
+}
+
+function populateCheckoutCopy(root: string, newline: '\r\n' | '\r'): string {
+  const sourceDirectory = join(root, 'source')
+  mkdirSync(sourceDirectory, { recursive: true })
+  checkoutText(VERIFIER_PATH, join(root, 'verify.mjs'), newline)
+  checkoutText(MODULE_SOURCE_PATH, join(sourceDirectory, 'module.mjs'), newline)
+  checkoutText(join(SAMPLE_ROOT, 'audit.json'), join(root, 'audit.json'), newline)
+  for (const name of ['manifest.json', 'signature.json', PACKAGE_FILE]) {
+    copyFileSync(join(SAMPLE_ROOT, name), join(root, name))
+  }
+  return join(root, 'verify.mjs')
 }
 
 function assertSafeTemporaryDirectory(path: string): void {
@@ -153,12 +177,17 @@ describe('audited sample plugin source and release artifact', () => {
 
     const source = await moduleSource()
     const moduleBytes = source.buildAuditedInvertModule()
-    expect(WebAssembly.validate(moduleBytes)).toBe(true)
+    const ownedModuleBytes = new Uint8Array(moduleBytes.byteLength)
+    ownedModuleBytes.set(moduleBytes)
+    expect(WebAssembly.validate(ownedModuleBytes.buffer)).toBe(true)
     const memory = new WebAssembly.Memory({
       initial: source.AUDITED_INVERT_MEMORY_PAGES,
       maximum: source.AUDITED_INVERT_MEMORY_PAGES,
     })
-    const instantiated = await WebAssembly.instantiate(moduleBytes, { myrelith: { memory } })
+    const instantiated = await WebAssembly.instantiate(
+      ownedModuleBytes.buffer,
+      { myrelith: { memory } },
+    )
     const render = instantiated.instance.exports[source.AUDITED_INVERT_EXPORT]
     expect(typeof render).toBe('function')
     if (typeof render !== 'function') throw new Error('sample render export is missing')
@@ -232,5 +261,36 @@ describe('audited sample plugin source and release artifact', () => {
     expect(report.status).toBe('release-verified')
     expect(report.privateArtifactsWritten).toBe(0)
     await assertProductionAcceptance(join(SAMPLE_ROOT, PACKAGE_FILE))
+  })
+
+  test('normalizes checkout line endings for source evidence and rejects substantive drift', () => {
+    const checkoutDirectory = mkdtempSync(join(tmpdir(), 'myrelith-audited-invert-checkout-'))
+    assertSafeTemporaryDirectory(checkoutDirectory)
+    try {
+      for (const newline of ['\r\n', '\r'] as const) {
+        const verifierPath = populateCheckoutCopy(checkoutDirectory, newline)
+        expect(runVerifierAt(verifierPath, '--check')).toMatchObject({
+          status: 'release-verified',
+          archiveSha256: 'a809c6f086213064a90b63f1ca1e42c5e5215aa3cd874c706e15fe5edcded42e',
+          packageDigest: 'sha256:ca3eaaba5a8a87ea88e313fd9f26dd1ebb9aefc217ea76ef219a35ca931f8b15',
+          signerFingerprint: 'sha256:c955bcdaff60dc0593be20942f5f153ee4427765694b5e69a1e9a6caa5764139',
+        })
+      }
+
+      writeFileSync(
+        join(checkoutDirectory, 'source', 'module.mjs'),
+        `${readFileSync(MODULE_SOURCE_PATH, 'utf8')}\n// substantive source drift\n`,
+        'utf8',
+      )
+      const driftCheck = spawnSync(
+        process.execPath,
+        [join(checkoutDirectory, 'verify.mjs'), '--check', '--json'],
+        { cwd: REPO_ROOT, encoding: 'utf8' },
+      )
+      expect(driftCheck.status).not.toBe(0)
+      expect(driftCheck.stderr).toMatch(/audit\.json differs from recomputed evidence/u)
+    } finally {
+      rmSync(checkoutDirectory, { recursive: true, force: true })
+    }
   })
 })

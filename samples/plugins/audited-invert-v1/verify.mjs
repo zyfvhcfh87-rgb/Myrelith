@@ -104,6 +104,17 @@ function text(bytes) {
   return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
 }
 
+function canonicalUtf8TextBytes(path, label) {
+  const bytes = readFileSync(path)
+  invariant(
+    bytes.byteLength < 3 || bytes[0] !== 0xef || bytes[1] !== 0xbb || bytes[2] !== 0xbf,
+    `${label} has a BOM`,
+  )
+  const decoded = text(bytes)
+  invariant(Buffer.from(utf8(decoded)).equals(bytes), `${label} is not canonical UTF-8`)
+  return Buffer.from(utf8(decoded.replace(/\r\n?/g, '\n')))
+}
+
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest()
 }
@@ -345,8 +356,8 @@ async function sourceReport() {
     manifestSha256: sha256Hex(manifestOnDisk),
     moduleBytes: moduleBytes.byteLength,
     moduleSha256: sha256Hex(moduleBytes),
-    moduleSourceSha256: sha256Hex(readFileSync(MODULE_SOURCE_PATH)),
-    verifierSha256: sha256Hex(readFileSync(VERIFIER_PATH)),
+    moduleSourceSha256: sha256Hex(canonicalUtf8TextBytes(MODULE_SOURCE_PATH, 'module source')),
+    verifierSha256: sha256Hex(canonicalUtf8TextBytes(VERIFIER_PATH, 'verifier source')),
     abi: {
       entrypoint: AUDITED_INVERT_EXPORT,
       memoryPages: AUDITED_INVERT_MEMORY_PAGES,

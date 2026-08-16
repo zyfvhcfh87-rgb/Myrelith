@@ -13,7 +13,7 @@
     },
     "verifier": {
       "path": "verify.mjs",
-      "sha256": "586fb7038b1e54b9026c2fcf7dfb429eb4d7bd1ab8734d44526f50fd0384de1a"
+      "sha256": "72ef66f4fb5997460fe61d2f3564201a903965b96472301852370dad38912a0b"
     },
     "wasm": {
       "path": "runtime/audited-invert.wasm",
