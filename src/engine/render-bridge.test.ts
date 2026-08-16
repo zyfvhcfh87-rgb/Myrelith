@@ -15,10 +15,21 @@
 import { describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, FrameRate, TimelineDoc, Track } from '../domain/schema'
+import {
+  createVideoCompositionPlanner,
+  type VideoCompositionPlan,
+  type VideoCompositionPlanner,
+} from '../domain/videoCompositionPlan'
+import { createPluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import { resolvePresentationProfile } from '../domain/presentationProfile'
 import { defaultTextProps } from '../domain/textOverlay'
 import { analyzeVideoScopes } from '../domain/videoScopes'
 import type { ChunkPayload } from '../workers/decode-protocol'
+import {
+  PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+  type PluginEffectBridgeApplyMessage,
+  type PluginEffectBridgeHandler,
+} from '../workers/plugin-effect-bridge-protocol'
 import type {
   FromRenderWorker,
   RenderWorkerRuntimeTelemetrySnapshot,
@@ -209,11 +220,13 @@ function makeDoc(tracks: Track[]): TimelineDoc {
 }
 
 /** Bridge with a doc set and its worker exposed. */
-function makeBridge(doc?: TimelineDoc) {
+const planners = new WeakMap<RenderWorkerBridge, VideoCompositionPlanner>()
+
+function makeBridge(doc?: TimelineDoc, pluginEffectHandler: PluginEffectBridgeHandler | null = null) {
   const worker = new FakeWorker()
-  const bridge = new RenderWorkerBridge(worker)
+  const bridge = new RenderWorkerBridge(worker, pluginEffectHandler)
   if (doc) {
-    bridge.setSourceBoundsCatalog(new Map(
+    const bounds = new Map(
       doc.tracks.flatMap((track) => track.clips.map((clip) => [
         clip.assetId,
         {
@@ -225,10 +238,92 @@ function makeBridge(doc?: TimelineDoc) {
           audio: null,
         },
       ] as const)),
-    ))
+    )
+    planners.set(bridge, createVideoCompositionPlanner(doc, bounds))
     bridge.setDoc(doc)
   }
   return { worker, bridge }
+}
+
+function readyPluginPlan(frame = 0): VideoCompositionPlan {
+  const doc = makeDoc([makeTrack('V1', 'video', [makeClip('plugin-clip', 'A', 0, 100, 0, {
+    effects: [{
+      id: 'plugin-effect',
+      type: 'plugin:com.example.sparkle/sparkle',
+      version: 1,
+      enabled: true,
+      params: { strength: 0.25 },
+    }],
+  })])])
+  const contributions = createPluginVideoEffectContributionSnapshot(7, [{
+    signerFingerprint: `sha256:${'1'.repeat(64)}`,
+    packageDigest: `sha256:${'2'.repeat(64)}`,
+    pluginId: 'com.example.sparkle',
+    pluginVersion: '1.2.3',
+    kind: 'video-effect',
+    contributionVersion: 1,
+    contributionId: 'sparkle',
+    contributionName: 'Sparkle',
+    descriptorVersion: 1,
+    entrypoint: 'myrelith_effect_sparkle',
+    parameters: [{
+      key: 'strength',
+      name: 'Strength',
+      kind: 'number',
+      default: 0.2,
+      min: 0,
+      max: 1,
+      step: 0.1,
+      animatable: false,
+    }],
+    availability: 'ready',
+    detail: 'Ready to render.',
+  }])
+  return createVideoCompositionPlanner(doc, new Map([['A', {
+    video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 1_000_000_000 },
+    audio: null,
+  }]]), contributions).planFrame(frame)
+}
+
+function pluginApplyMessage(
+  plan: VideoCompositionPlan,
+  renderMessage: Extract<ToRenderWorker, { type: 'renderFrame' }>,
+  rgbaBytes: ArrayBuffer,
+  effectRequestId = 1,
+): PluginEffectBridgeApplyMessage {
+  const item = plan.items[0]
+  if (item?.kind !== 'clip') throw new Error('expected plugin clip item')
+  const stage = item.request.effectStagePlan?.stages[0]
+  if (stage?.kind !== 'plugin' || !stage.execution) {
+    throw new Error('expected ready plugin stage')
+  }
+  return {
+    type: 'pluginEffectApply',
+    protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+    generation: renderMessage.generation,
+    renderRequestId: renderMessage.requestId,
+    effectRequestId,
+    execution: stage.execution,
+    descriptorId: stage.effect.id,
+    timelineFrame: plan.frame,
+    frameRateNumerator: 30,
+    frameRateDenominator: 1,
+    width: 1,
+    height: 1,
+    stride: 4,
+    rgbaBytes,
+  }
+}
+
+function render(
+  bridge: RenderWorkerBridge,
+  frame: number,
+  mode?: 'playback' | 'seek',
+) {
+  const plan = planners.get(bridge)?.planFrame(frame) ?? { frame, items: [] }
+  return mode === undefined
+    ? bridge.renderFrame(plan)
+    : bridge.renderFrame(plan, mode)
 }
 
 /** configureAsset + immediately ack it from the fake worker. */
@@ -341,7 +436,7 @@ describe('renderFrame entry building', () => {
     await configureAcked({ worker, bridge }, 'A', R30, a.provider)
     await configureAcked({ worker, bridge }, 'B', R60, b.provider)
 
-    void bridge.renderFrame(10)
+    void render(bridge, 10)
     await flushMicrotasks()
 
     expect(b.calls[0].targetSec).toBeCloseTo((50 * 2) / 60, 9)
@@ -384,7 +479,7 @@ describe('renderFrame entry building', () => {
     const a = makeProvider()
     await configureAcked({ worker, bridge }, 'A', R30, a.provider)
 
-    void bridge.renderFrame(1)
+    void render(bridge, 1)
     await flushMicrotasks()
 
     expect(a.calls).toHaveLength(1)
@@ -404,7 +499,7 @@ describe('renderFrame entry building', () => {
     await configureAcked({ worker, bridge }, 'A', R30, a.provider)
     await configureAcked({ worker, bridge }, 'B', R60, b.provider)
 
-    const result = bridge.renderFrame(10)
+    const result = render(bridge, 10)
     await flushMicrotasks()
 
     // A: source frame 10 at document 30fps → 1/3 s. B: source frame 40
@@ -459,7 +554,7 @@ describe('renderFrame entry building', () => {
 
     const streaming = makeBridge(doc)
     await openAcked(streaming, 'A', new Blob(['video']), R24)
-    const streamingResult = streaming.bridge.renderFrame(2, 'seek')
+    const streamingResult = render(streaming.bridge, 2, 'seek')
     const streamingRequest = streaming.worker.renderFrames()[0]!
     expect(streamingRequest.sources[0]?.targetTimestampUs).toBe(66_667)
     streaming.worker.emit({
@@ -475,7 +570,7 @@ describe('renderFrame entry building', () => {
     const legacy = makeBridge(doc)
     const provider = makeProvider()
     await configureAcked(legacy, 'A', R24, provider.provider)
-    const legacyResult = legacy.bridge.renderFrame(2)
+    const legacyResult = render(legacy.bridge, 2)
     await flushMicrotasks()
     expect(provider.calls[0]?.targetSec).toBeCloseTo(2 / 30, 9)
     legacy.worker.emit({
@@ -513,7 +608,7 @@ describe('renderFrame entry building', () => {
     const a = makeProvider()
     await configureAcked({ worker, bridge }, 'A', R30, a.provider)
 
-    void bridge.renderFrame(5)
+    void render(bridge, 5)
     await flushMicrotasks()
 
     expect(a.calls).toHaveLength(1) // only 'real'
@@ -529,7 +624,7 @@ describe('renderFrame entry building', () => {
     const a = makeProvider()
     await configureAcked({ worker, bridge }, 'A', R30, a.provider)
 
-    void bridge.renderFrame(7)
+    void render(bridge, 7)
     await flushMicrotasks()
 
     expect(a.calls).toHaveLength(1)
@@ -538,7 +633,7 @@ describe('renderFrame entry building', () => {
 
   test('renderFrame without a doc resolves an error result and posts nothing', async () => {
     const { worker, bridge } = makeBridge()
-    const result = await bridge.renderFrame(0)
+    const result = await render(bridge, 0)
     expect(result.status).toBe('error')
     expect(worker.composites()).toHaveLength(0)
   })
@@ -555,7 +650,7 @@ describe('renderFrame entry building', () => {
       }
       await configureAcked({ worker, bridge }, 'A', R30, provider)
 
-      void bridge.renderFrame(3)
+      void render(bridge, 3)
       await flushMicrotasks()
 
       const composites = worker.composites()
@@ -653,9 +748,9 @@ describe('Blob-backed streaming path', () => {
       new Blob(['png'], { type: 'image/png' }),
     )
 
-    const result = bridge.renderFrame(137, 'playback')
-    const render = worker.renderFrames()[0]
-    expect(render.sources).toEqual([
+    const result = render(bridge, 137, 'playback')
+    const postedRender = worker.renderFrames()[0]
+    expect(postedRender.sources).toEqual([
       {
         kind: 'image',
         clipId: 'one',
@@ -674,7 +769,7 @@ describe('Blob-backed streaming path', () => {
 
     worker.emit({
       type: 'compositeDone',
-      requestId: render.requestId,
+      requestId: postedRender.requestId,
       status: 'drawn',
       drawnClipIds: ['one', 'two'],
       missingClipIds: [],
@@ -714,7 +809,7 @@ describe('Blob-backed streaming path', () => {
     const { worker, bridge } = makeBridge(doc)
     await openAcked({ worker, bridge }, 'A', new Blob(['video']), R_NTSC)
 
-    const playback = bridge.renderFrame(100, 'playback')
+    const playback = render(bridge, 100, 'playback')
     const first = worker.renderFrames()[0]
 
     expect(first.mode).toBe('playback')
@@ -746,7 +841,7 @@ describe('Blob-backed streaming path', () => {
     })
     await expect(playback).resolves.toMatchObject({ status: 'drawn' })
 
-    const seek = bridge.renderFrame(101, 'seek')
+    const seek = render(bridge, 101, 'seek')
     const second = worker.renderFrames()[1]
     expect(second.mode).toBe('seek')
     expect(worker.posted.find((post) => post.msg === second)?.transfer).toEqual([])
@@ -766,7 +861,7 @@ describe('Blob-backed streaming path', () => {
 
     const legacy = makeBridge(doc)
     await configureAcked(legacy, 'A', R30, makeProvider().provider)
-    await expect(legacy.bridge.renderFrame(1, 'playback')).resolves.toMatchObject({
+    await expect(render(legacy.bridge, 1, 'playback')).resolves.toMatchObject({
       status: 'error',
       message: expect.stringContaining('legacy render protocol'),
     })
@@ -775,7 +870,7 @@ describe('Blob-backed streaming path', () => {
 
     const streaming = makeBridge(doc)
     await openAcked(streaming, 'A', new Blob(['video']), R30)
-    await expect(streaming.bridge.renderFrame(1)).resolves.toMatchObject({
+    await expect(render(streaming.bridge, 1)).resolves.toMatchObject({
       status: 'error',
       message: expect.stringContaining('streaming render protocol'),
     })
@@ -794,8 +889,8 @@ describe('Blob-backed streaming path', () => {
     await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
     await configureAcked({ worker, bridge }, 'B', R30, makeProvider().provider)
 
-    const valid = bridge.renderFrame(1, 'playback')
-    await expect(bridge.renderFrame(10, 'playback')).resolves.toMatchObject({
+    const valid = render(bridge, 1, 'playback')
+    await expect(render(bridge, 10, 'playback')).resolves.toMatchObject({
       status: 'error',
       message: expect.stringContaining('legacy render protocol'),
     })
@@ -820,13 +915,13 @@ describe('Blob-backed streaming path', () => {
     const { worker, bridge } = makeBridge(doc)
     await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
 
-    const result = bridge.renderFrame(3, 'seek')
-    const render = worker.renderFrames()[0]
-    expect(render.sources.map((source) => source.clipId)).toEqual(['ready'])
+    const result = render(bridge, 3, 'seek')
+    const postedRender = worker.renderFrames()[0]
+    expect(postedRender.sources.map((source) => source.clipId)).toEqual(['ready'])
 
     worker.emit({
       type: 'compositeDone',
-      requestId: render.requestId,
+      requestId: postedRender.requestId,
       status: 'drawn',
       drawnClipIds: ['ready'],
       missingClipIds: ['missing'],
@@ -843,8 +938,8 @@ describe('Blob-backed streaming path', () => {
     const { worker, bridge } = makeBridge(doc)
     await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
 
-    const first = bridge.renderFrame(1, 'playback')
-    const second = bridge.renderFrame(2, 'seek')
+    const first = render(bridge, 1, 'playback')
+    const second = render(bridge, 2, 'seek')
     await expect(first).resolves.toMatchObject({ status: 'superseded' })
 
     const renders = worker.renderFrames()
@@ -881,12 +976,12 @@ describe('Blob-backed streaming path', () => {
     })
     await expect(opening).rejects.toThrow('container unsupported')
 
-    const result = bridge.renderFrame(1, 'seek')
-    const render = worker.renderFrames()[0]
-    expect(render.sources).toEqual([])
+    const result = render(bridge, 1, 'seek')
+    const postedRender = worker.renderFrames()[0]
+    expect(postedRender.sources).toEqual([])
     worker.emit({
       type: 'compositeDone',
-      requestId: render.requestId,
+      requestId: postedRender.requestId,
       status: 'drawn',
       drawnClipIds: [],
       missingClipIds: ['a'],
@@ -960,7 +1055,7 @@ describe('Blob-backed streaming path', () => {
 
     await expect(opening).resolves.toBeUndefined()
     expect(warnings).toEqual(['stale release cleanup failed for asset A'])
-    const result = bridge.renderFrame(1, 'seek')
+    const result = render(bridge, 1, 'seek')
     expect(worker.renderFrames()[0].sources.map((source) => source.assetId))
       .toEqual(['A'])
     worker.emit({
@@ -983,12 +1078,12 @@ describe('Blob-backed streaming path', () => {
     await expect(opening).rejects.toThrow('asset released')
     expect(worker.posted.find((post) => post.msg.type === 'releaseAsset')?.transfer).toEqual([])
 
-    const result = bridge.renderFrame(1, 'seek')
-    const render = worker.renderFrames()[0]
-    expect(render.sources).toEqual([])
+    const result = render(bridge, 1, 'seek')
+    const postedRender = worker.renderFrames()[0]
+    expect(postedRender.sources).toEqual([])
     worker.emit({
       type: 'compositeDone',
-      requestId: render.requestId,
+      requestId: postedRender.requestId,
       status: 'drawn',
       drawnClipIds: [],
       missingClipIds: ['a'],
@@ -1080,14 +1175,14 @@ describe('Blob-backed streaming path', () => {
     })
     await expect(replacement).resolves.toBeUndefined()
 
-    const rendering = bridge.renderFrame(1, 'seek')
-    const render = worker.renderFrames().at(-1)!
-    expect(render.sources).toEqual([
+    const rendering = render(bridge, 1, 'seek')
+    const postedRender = worker.renderFrames().at(-1)!
+    expect(postedRender.sources).toEqual([
       expect.objectContaining({ kind: 'image', assetId: 'A' }),
     ])
     worker.emit({
       type: 'compositeDone',
-      requestId: render.requestId,
+      requestId: postedRender.requestId,
       status: 'drawn',
       drawnClipIds: ['still'],
       missingClipIds: [],
@@ -1101,6 +1196,131 @@ describe('Blob-backed streaming path', () => {
 /* Latest-wins                                                          */
 /* ------------------------------------------------------------------ */
 
+describe('plugin effect RPC', () => {
+  test('accepts only the current exact plan identity and clears host-owned input', async () => {
+    const plan = readyPluginPlan()
+    const observedInputs: number[][] = []
+    const output = Uint8Array.of(9, 8, 7, 6)
+    const handler: PluginEffectBridgeHandler = {
+      apply: vi.fn(async (request) => {
+        observedInputs.push([...request.rgbaBytes])
+        return { status: 'applied', rgbaBytes: output }
+      }),
+    }
+    const worker = new FakeWorker()
+    const bridge = new RenderWorkerBridge(worker, handler)
+    bridge.setDoc(makeDoc([]))
+    const rendering = bridge.renderFrame(plan, 'seek')
+    const renderMessage = worker.renderFrames()[0]
+    const input = Uint8Array.of(1, 2, 3, 4)
+
+    worker.emit(pluginApplyMessage(plan, renderMessage, input.buffer))
+    await flushMicrotasks()
+
+    expect(handler.apply).toHaveBeenCalledOnce()
+    expect(vi.mocked(handler.apply).mock.calls[0][0].requestId).toBe(1)
+    expect(observedInputs).toEqual([[1, 2, 3, 4]])
+    expect([...input]).toEqual([0, 0, 0, 0])
+    const applied = worker.posted.find(({ msg }) => msg.type === 'pluginEffectApplied')
+    expect(applied?.msg).toMatchObject({
+      type: 'pluginEffectApplied',
+      generation: renderMessage.generation,
+      renderRequestId: renderMessage.requestId,
+      effectRequestId: 1,
+    })
+    expect(applied?.transfer).toEqual([output.buffer])
+    // The fake does not detach transfers, so the bridge still owns and wipes it.
+    expect([...output]).toEqual([0, 0, 0, 0])
+
+    worker.emit({
+      type: 'compositeDone',
+      requestId: renderMessage.requestId,
+      status: 'drawn',
+      drawnClipIds: ['plugin-clip'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(rendering).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('bypasses handler failures and clears stale late worker input without replying', async () => {
+    const plan = readyPluginPlan()
+    const handler: PluginEffectBridgeHandler = {
+      apply: vi.fn(async () => { throw new Error('runtime unavailable') }),
+    }
+    const worker = new FakeWorker()
+    const bridge = new RenderWorkerBridge(worker, handler)
+    bridge.setDoc(makeDoc([]))
+    const first = bridge.renderFrame(plan, 'seek')
+    const firstMessage = worker.renderFrames()[0]
+    const failingInput = Uint8Array.of(1, 2, 3, 4)
+
+    worker.emit(pluginApplyMessage(plan, firstMessage, failingInput.buffer))
+    await flushMicrotasks()
+    expect([...failingInput]).toEqual([0, 0, 0, 0])
+    expect(worker.posted.filter(({ msg }) => msg.type === 'pluginEffectBypassed'))
+      .toHaveLength(1)
+
+    const second = bridge.renderFrame(readyPluginPlan(1), 'seek')
+    await expect(first).resolves.toMatchObject({ status: 'superseded' })
+    const staleInput = Uint8Array.of(5, 6, 7, 8)
+    const responseCount = worker.posted.filter(({ msg }) => (
+      msg.type === 'pluginEffectApplied' || msg.type === 'pluginEffectBypassed'
+    )).length
+    worker.emit(pluginApplyMessage(plan, firstMessage, staleInput.buffer, 2))
+    await flushMicrotasks()
+
+    expect([...staleInput]).toEqual([0, 0, 0, 0])
+    expect(worker.posted.filter(({ msg }) => (
+      msg.type === 'pluginEffectApplied' || msg.type === 'pluginEffectBypassed'
+    ))).toHaveLength(responseCount)
+    const secondMessage = worker.renderFrames()[1]
+    worker.emit({
+      type: 'compositeDone',
+      requestId: secondMessage.requestId,
+      status: 'drawn',
+      drawnClipIds: ['plugin-clip'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(second).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('aborts the exact in-flight handler on worker cancellation', async () => {
+    const plan = readyPluginPlan()
+    let observedSignal: AbortSignal | null = null
+    let settleHandler!: () => void
+    const handlerSettled = new Promise<void>((resolve) => { settleHandler = resolve })
+    const handler: PluginEffectBridgeHandler = {
+      apply: vi.fn(async (_request, signal) => {
+        observedSignal = signal
+        await handlerSettled
+        return { status: 'bypassed' }
+      }),
+    }
+    const worker = new FakeWorker()
+    const bridge = new RenderWorkerBridge(worker, handler)
+    bridge.setDoc(makeDoc([]))
+    void bridge.renderFrame(plan, 'seek')
+    const renderMessage = worker.renderFrames()[0]
+    const input = Uint8Array.of(1, 2, 3, 4)
+    worker.emit(pluginApplyMessage(plan, renderMessage, input.buffer, 41))
+    await flushMicrotasks()
+
+    worker.emit({
+      type: 'pluginEffectCancel',
+      protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: renderMessage.generation,
+      renderRequestId: renderMessage.requestId,
+      effectRequestId: 41,
+    })
+    expect(observedSignal?.aborted).toBe(true)
+    settleHandler()
+    await flushMicrotasks()
+    expect([...input]).toEqual([0, 0, 0, 0])
+  })
+})
+
 describe('latest-wins', () => {
   test('a call superseded mid-chunk-fetch is never posted', async () => {
     const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
@@ -1113,9 +1333,9 @@ describe('latest-wins', () => {
     }
     await configureAcked({ worker, bridge }, 'A', R30, provider)
 
-    const first = bridge.renderFrame(1)
+    const first = render(bridge, 1)
     await flushMicrotasks()
-    const second = bridge.renderFrame(2)
+    const second = render(bridge, 2)
     await flushMicrotasks()
     expect(pendingFetches).toHaveLength(2)
 
@@ -1150,14 +1370,14 @@ describe('latest-wins', () => {
     }
     await configureAcked({ worker, bridge }, 'A', R30, provider)
 
-    const render = bridge.renderFrame(1)
+    const rendering = render(bridge, 1)
     await flushMicrotasks()
     expect(pendingFetches).toHaveLength(1)
 
     await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
     pendingFetches[0]([chunk(1)])
 
-    await expect(render).resolves.toMatchObject({ status: 'superseded' })
+    await expect(rendering).resolves.toMatchObject({ status: 'superseded' })
     expect(worker.composites()).toHaveLength(0)
   })
 
@@ -1170,12 +1390,12 @@ describe('latest-wins', () => {
     }
     await configureAcked({ worker, bridge }, 'A', R30, provider)
 
-    const render = bridge.renderFrame(1)
+    const rendering = render(bridge, 1)
     await flushMicrotasks()
     bridge.releaseAsset('A')
     pendingFetches[0]([chunk(1)])
 
-    await expect(render).resolves.toMatchObject({ status: 'superseded' })
+    await expect(rendering).resolves.toMatchObject({ status: 'superseded' })
     expect(worker.composites()).toHaveLength(0)
   })
 
@@ -1188,16 +1408,17 @@ describe('latest-wins', () => {
     }
     await configureAcked({ worker, bridge }, 'A', R30, provider)
 
-    const render = bridge.renderFrame(1)
+    const rendering = render(bridge, 1)
     await flushMicrotasks()
-    bridge.dispose()
+    const closing = bridge.dispose()
     pendingFetches[0]([chunk(1)])
 
-    await expect(render).resolves.toMatchObject({ status: 'superseded' })
+    await expect(rendering).resolves.toMatchObject({ status: 'superseded' })
     expect(worker.composites()).toHaveLength(0)
     expect(worker.posted.at(-1)).toEqual({ msg: { type: 'close' }, transfer: [] })
     expect(worker.terminated).toBe(false)
     worker.emit({ type: 'closed' })
+    await expect(closing).resolves.toBeUndefined()
     expect(worker.terminated).toBe(true)
     expect(worker.terminateCount).toBe(1)
     worker.emit({ type: 'closed' })
@@ -1206,13 +1427,13 @@ describe('latest-wins', () => {
     expect(worker.posted.filter(({ msg }) => msg.type === 'close')).toHaveLength(1)
   })
 
-  test('a missing close acknowledgement falls back to exact-once termination', () => {
+  test('a missing close acknowledgement falls back to exact-once termination', async () => {
     vi.useFakeTimers()
     try {
       const { worker, bridge } = makeBridge()
 
-      bridge.dispose()
-      bridge.dispose()
+      const closing = bridge.dispose()
+      expect(bridge.dispose()).toBe(closing)
       expect(worker.terminateCount).toBe(0)
       expect(worker.posted.filter(({ msg }) => msg.type === 'close')).toHaveLength(1)
 
@@ -1220,6 +1441,7 @@ describe('latest-wins', () => {
       expect(worker.terminateCount).toBe(0)
       vi.advanceTimersByTime(1)
       expect(worker.terminateCount).toBe(1)
+      await expect(closing).resolves.toBeUndefined()
 
       worker.emit({ type: 'closed' })
       bridge.dispose()
@@ -1237,11 +1459,11 @@ describe('latest-wins', () => {
     const a = makeProvider()
     await configureAcked({ worker, bridge }, 'A', R30, a.provider)
 
-    const first = bridge.renderFrame(1)
+    const first = render(bridge, 1)
     await flushMicrotasks()
     expect(worker.composites()).toHaveLength(1)
 
-    const second = bridge.renderFrame(2)
+    const second = render(bridge, 2)
     await expect(first).resolves.toMatchObject({ status: 'superseded' })
 
     await flushMicrotasks()
@@ -1271,7 +1493,7 @@ describe('latest-wins', () => {
   test('a presentation profile posts without transfer and supersedes pending presentation', async () => {
     const doc = makeDoc([])
     const { worker, bridge } = makeBridge(doc)
-    const rendering = bridge.renderFrame(0, 'seek')
+    const rendering = render(bridge, 0, 'seek')
     const profile = resolvePresentationProfile(doc, {
       qualityMode: 'quarter',
       reason: 'scrubbing',
@@ -1322,7 +1544,7 @@ describe('reply routing', () => {
     const a = makeProvider()
     await configureAcked({ worker, bridge }, 'A', R30, a.provider)
 
-    const result = bridge.renderFrame(1)
+    const result = render(bridge, 1)
     await flushMicrotasks()
     const requestId = worker.composites()[0].requestId
     worker.emit({ type: 'error', requestId, message: 'composite before init/setDoc' })
@@ -1340,7 +1562,7 @@ describe('reply routing', () => {
     const a = makeProvider()
     await configureAcked({ worker, bridge }, 'A', R30, a.provider)
 
-    const result = bridge.renderFrame(1)
+    const result = render(bridge, 1)
     await flushMicrotasks()
     const requestId = worker.composites()[0].requestId
 
@@ -1379,7 +1601,7 @@ describe('reply routing', () => {
       assetFailures.push({ assetId, runtimeToken: token, trackKind, message })
     }
 
-    const result = bridge.renderFrame(1, 'seek')
+    const result = render(bridge, 1, 'seek')
     const requestId = worker.renderFrames()[0].requestId
     worker.emit({
       type: 'error',
@@ -1427,7 +1649,7 @@ describe('reply routing', () => {
       assetFailures.push({ assetId, runtimeToken: token, trackKind, message })
     }
 
-    const result = bridge.renderFrame(1, 'seek')
+    const result = render(bridge, 1, 'seek')
     const requestId = worker.renderFrames()[0].requestId
     worker.emit({
       type: 'error',
@@ -1470,7 +1692,7 @@ describe('reply routing', () => {
     bridge.onWorkerError = (message) => warnings.push(message)
     bridge.onAssetError = (_assetId, token) => assetFailures.push(token)
 
-    const oldResult = bridge.renderFrame(1, 'seek')
+    const oldResult = render(bridge, 1, 'seek')
     const oldRequestId = worker.renderFrames()[0].requestId
 
     const replacement = bridge.openAsset(
@@ -1501,12 +1723,12 @@ describe('reply routing', () => {
     expect(warnings).toEqual(['late decode diagnostic'])
     expect(assetFailures).toEqual([])
 
-    const result = bridge.renderFrame(1, 'seek')
-    const render = worker.renderFrames().at(-1)!
-    expect(render.sources.map((source) => source.assetId)).toEqual(['A'])
+    const result = render(bridge, 1, 'seek')
+    const postedRender = worker.renderFrames().at(-1)!
+    expect(postedRender.sources.map((source) => source.assetId)).toEqual(['A'])
     worker.emit({
       type: 'compositeDone',
-      requestId: render.requestId,
+      requestId: postedRender.requestId,
       status: 'drawn',
       drawnClipIds: ['a'],
       missingClipIds: [],
@@ -1524,7 +1746,7 @@ describe('reply routing', () => {
     bridge.releaseAsset('A')
     expect(worker.posted.some((p) => p.msg.type === 'releaseAsset')).toBe(true)
 
-    void bridge.renderFrame(1)
+    void render(bridge, 1)
     await flushMicrotasks()
     expect(a.calls).toHaveLength(0)
     expect(worker.composites()[0].sources).toEqual([])
@@ -1536,17 +1758,18 @@ describe('reply routing', () => {
     const a = makeProvider()
     await configureAcked({ worker, bridge }, 'A', R30, a.provider)
 
-    const inflight = bridge.renderFrame(1)
+    const inflight = render(bridge, 1)
     await flushMicrotasks()
     const configuring = bridge.configureAsset('B', { codec: 'x' }, R30, a.provider)
 
-    bridge.dispose()
+    const closing = bridge.dispose()
 
     expect(worker.posted.at(-1)?.msg).toEqual({ type: 'close' })
     expect(worker.terminated).toBe(false)
     await expect(inflight).resolves.toMatchObject({ status: 'superseded' })
     await expect(configuring).rejects.toThrow('bridge disposed')
     worker.emit({ type: 'closed' })
+    await expect(closing).resolves.toBeUndefined()
     expect(worker.terminated).toBe(true)
   })
 

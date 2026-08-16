@@ -41,6 +41,7 @@ function sandboxHarness(options: {
     request: PluginSandboxMigrationRequest,
     sessionIndex: number,
   ) => Promise<Uint8Array>
+  readonly close?: (reason: string, sessionIndex: number) => void | Promise<void>
 } = {}): SandboxHarness {
   const activations: PluginSandboxActivationRequest[] = []
   const sessions: PluginSandboxSession[] = []
@@ -104,6 +105,7 @@ function sandboxHarness(options: {
             if (closed) return
             closed = true
             closeReasons.push(reason)
+            await options.close?.(reason, sessionIndex)
           },
         }
         sessions.push(session)
@@ -550,6 +552,46 @@ describe('plugin runtime controller', () => {
     await editor.close('test-complete')
   })
 
+  test('clears only one runtime diagnostic bucket without resetting sequence or lifecycle state', async () => {
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolverFor(new Map()),
+      sandboxController: sandboxHarness().controller,
+    })
+    await controller.invalidate('com.example.alpha', 'test')
+    await controller.invalidate('com.example.beta', 'test')
+    const before = controller.getSnapshot()
+    const beta = before.diagnostics.find((diagnostic) => (
+      diagnostic.pluginId === 'com.example.beta'
+    ))!
+
+    controller.clearDiagnostics('com.example.alpha')
+    controller.clearDiagnostics('com.example.alpha')
+    controller.clearDiagnostics('com.example.missing')
+    const cleared = controller.getSnapshot()
+
+    expect(cleared.diagnostics).toEqual([beta])
+    expect(cleared).toMatchObject({
+      activeCallCount: before.activeCallCount,
+      queuedCallCount: before.queuedCallCount,
+      liveOwnerCount: before.liveOwnerCount,
+      residentRuntimeCount: before.residentRuntimeCount,
+      cache: before.cache,
+    })
+
+    await controller.invalidate('com.example.alpha', 'retry')
+    expect(controller.getSnapshot().diagnostics).toEqual([
+      beta,
+      expect.objectContaining({
+        pluginId: 'com.example.alpha',
+        sequence: beta.sequence + 1,
+      }),
+    ])
+    controller.clearDiagnostics('com.example.alpha')
+    controller.clearDiagnostics('com.example.beta')
+    await controller.teardown('test-complete')
+    expect(controller.getSnapshot().diagnostics).toEqual([])
+  })
+
   test('enforces the tab-global eight-runtime LRU across distinct owners', async () => {
     const installed = new Map<string, ReturnType<typeof bundle>>()
     for (let index = 0; index < 9; index++) {
@@ -783,8 +825,219 @@ describe('plugin runtime controller', () => {
       parameters: { strength: 0.75 },
     })
     expect(sandbox.migrationRequests).toHaveLength(1)
-    expect(resolver.calls).toHaveLength(1)
+    expect(resolver.calls).toHaveLength(2)
     await session.close('migration-complete')
+  })
+
+  test('preflights every ordered migration target before any plugin code runs', async () => {
+    const first = bundle('com.example.migration-first')
+    const secondBase = bundle('com.example.migration-second')
+    const second = bundle(secondBase.pluginId, {
+      contributions: Object.freeze([Object.freeze({
+        ...secondBase.contributions[0],
+        descriptorVersion: 3,
+      })]),
+    })
+    const resolver = resolverFor(new Map([
+      [first.pluginId, first],
+      [second.pluginId, second],
+    ]))
+    const sandbox = sandboxHarness()
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+    })
+
+    await expect(controller.preflightDescriptorMigrationAction({
+      targets: [
+        {
+          ...identity(first),
+          descriptorId: 'first-effect',
+          fromDescriptorVersion: 1,
+          canonicalParameterJson: '{"strength":0.5}',
+          hasAnimatedParameters: false,
+        },
+        {
+          ...identity(second),
+          descriptorId: 'second-effect',
+          fromDescriptorVersion: 1,
+          canonicalParameterJson: '{"strength":0.5}',
+          hasAnimatedParameters: false,
+        },
+      ],
+    })).rejects.toMatchObject({ failure: { code: 'stale-plan' } })
+
+    expect(resolver.calls).toEqual([first.pluginId, second.pluginId])
+    expect(first.copyCount()).toBe(0)
+    expect(second.copyCount()).toBe(0)
+    expect(sandbox.activations).toHaveLength(0)
+    expect(controller.getSnapshot()).toMatchObject({
+      liveOwnerCount: 0,
+      residentRuntimeCount: 0,
+    })
+  })
+
+  test('uses one fresh terminal owner per ordered migration target', async () => {
+    const installed = bundle()
+    const resolver = resolverFor(new Map([[installed.pluginId, installed]]))
+    const sandbox = sandboxHarness({
+      migrate: async () => new TextEncoder().encode('{"strength":0.75}'),
+    })
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+    })
+    const target = {
+      ...identity(installed),
+      fromDescriptorVersion: 1,
+      canonicalParameterJson: '{"strength":0.5}',
+      hasAnimatedParameters: false,
+    }
+    const action = await controller.preflightDescriptorMigrationAction({
+      targets: [
+        { ...target, descriptorId: 'first-effect' },
+        { ...target, descriptorId: 'second-effect' },
+      ],
+    })
+
+    await expect(action.applyTarget({ targetIndex: 0, requestId: 10 }))
+      .resolves.toMatchObject({ status: 'migrated', descriptorVersion: 2 })
+    expect(sandbox.activations).toHaveLength(1)
+    expect(sandbox.closeReasons).toEqual(['migration-target-terminal'])
+    expect(controller.getSnapshot()).toMatchObject({ liveOwnerCount: 0, residentRuntimeCount: 0 })
+
+    await expect(action.applyTarget({ targetIndex: 1, requestId: 11 }))
+      .resolves.toMatchObject({ status: 'migrated', descriptorVersion: 2 })
+    expect(sandbox.activations).toHaveLength(2)
+    expect(sandbox.sessions.map((session) => session.generation)).toEqual([1, 2])
+    expect(sandbox.closeReasons).toEqual([
+      'migration-target-terminal',
+      'migration-target-terminal',
+    ])
+    expect(resolver.calls).toEqual([
+      installed.pluginId,
+      installed.pluginId,
+      installed.pluginId,
+      installed.pluginId,
+    ])
+    await action.close('migration-action-complete')
+    await action.close('migration-action-complete-again')
+  })
+
+  test('reports migration close failure only after owner and reservation are terminal', async () => {
+    const installed = bundle()
+    let markMigrationStarted!: () => void
+    let rejectMigration!: (cause: Error) => void
+    const migrationStarted = new Promise<void>((resolve) => { markMigrationStarted = resolve })
+    const resolver = resolverFor(new Map([[installed.pluginId, installed]]))
+    const sandbox = sandboxHarness({
+      migrate: () => new Promise<Uint8Array>((_resolve, reject) => {
+        rejectMigration = reject
+        markMigrationStarted()
+      }),
+      close: async () => {
+        rejectMigration(new Error('migration interrupted by close'))
+        throw new Error('sandbox close failed after terminal cleanup')
+      },
+    })
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+    })
+    const request = {
+      targets: [{
+        ...identity(installed),
+        descriptorId: 'effect-fixture',
+        fromDescriptorVersion: 1,
+        canonicalParameterJson: '{"strength":0.5}',
+        hasAnimatedParameters: false,
+      }],
+    }
+    const action = await controller.preflightDescriptorMigrationAction(request)
+    const applying = action.applyTarget({ targetIndex: 0, requestId: 30 })
+    await migrationStarted
+
+    await expect(action.close('caller-finally'))
+      .rejects.toThrow('sandbox close failed after terminal cleanup')
+    await expect(applying).resolves.toMatchObject({ status: 'failed' })
+    expect(controller.getSnapshot()).toMatchObject({
+      activeCallCount: 0,
+      queuedCallCount: 0,
+      liveOwnerCount: 0,
+      residentRuntimeCount: 0,
+    })
+    expect(sandbox.closeReasons).toEqual(['caller-finally'])
+
+    const retry = await controller.preflightDescriptorMigrationAction(request)
+    await retry.close('retry-not-committed')
+  })
+
+  test('rejects a changed migration identity before bytes and retries from fresh preflight', async () => {
+    const original = bundle()
+    const changed = bundle(original.pluginId, { catalogGeneration: original.catalogGeneration + 1 })
+    const installed = new Map<string, VerifiedPluginActivationBundle>([[original.pluginId, original]])
+    const resolver = resolverFor(installed)
+    const sandbox = sandboxHarness({
+      migrate: async () => new TextEncoder().encode('{"strength":0.75}'),
+    })
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+    })
+    const request = {
+      targets: [{
+        ...identity(original),
+        descriptorId: 'effect-fixture',
+        fromDescriptorVersion: 1,
+        canonicalParameterJson: '{"strength":0.5}',
+        hasAnimatedParameters: false,
+      }],
+    }
+    const staleAction = await controller.preflightDescriptorMigrationAction(request)
+    installed.set(original.pluginId, changed)
+
+    await expect(staleAction.applyTarget({ targetIndex: 0, requestId: 20 }))
+      .resolves.toMatchObject({ status: 'failed', failure: { code: 'stale-plan' } })
+    expect(original.copyCount()).toBe(0)
+    expect(changed.copyCount()).toBe(0)
+    expect(sandbox.activations).toHaveLength(0)
+
+    installed.set(original.pluginId, original)
+    const retry = await controller.preflightDescriptorMigrationAction(request)
+    await expect(retry.applyTarget({ targetIndex: 0, requestId: 21 }))
+      .resolves.toMatchObject({ status: 'migrated', descriptorVersion: 2 })
+    expect(sandbox.activations).toHaveLength(1)
+    expect(resolver.calls).toHaveLength(4)
+    await retry.close('retry-committed')
+  })
+
+  test('fails migration reservation when export pins consume all runtime capacity', async () => {
+    const exports = Array.from({ length: 8 }, (_, index) => bundle(`com.example.export-${index}`))
+    const migrating = bundle('com.example.migrating')
+    const resolver = resolverFor(new Map(
+      [...exports, migrating].map((value) => [value.pluginId, value]),
+    ))
+    const sandbox = sandboxHarness()
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+    })
+    const exportSession = await controller.preflightExport({
+      requiredEffects: exports.map((value) => identity(value)),
+    })
+
+    await expect(controller.preflightDescriptorMigrationAction({
+      targets: [{
+        ...identity(migrating),
+        descriptorId: 'migration-effect',
+        fromDescriptorVersion: 1,
+        canonicalParameterJson: '{"strength":0.5}',
+        hasAnimatedParameters: false,
+      }],
+    })).rejects.toMatchObject({ failure: { code: 'busy' } })
+    expect(migrating.copyCount()).toBe(0)
+    expect(sandbox.activations).toHaveLength(8)
+    await exportSession.close('export-complete')
   })
 
   test('rejects animated descriptor migration before bundle resolution', async () => {

@@ -140,8 +140,10 @@ describe('plugin video effect stage plan', () => {
         packageDigest: PACKAGE,
         pluginId: 'com.example.sparkle',
         pluginVersion: '1.2.3',
+        kind: 'video-effect',
         contributionVersion: 1,
         contributionId: 'sparkle',
+        descriptorVersion: 1,
         entrypoint: 'myrelith_effect_sparkle',
       },
     })

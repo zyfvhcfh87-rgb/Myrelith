@@ -46,6 +46,7 @@ import {
 import {
   createVideoCompositionPlanner,
   videoCompositionRequests,
+  type VideoCompositionPlan,
   type VideoCompositionPlanner,
 } from '../domain/videoCompositionPlan'
 import {
@@ -97,7 +98,6 @@ import {
 export interface BridgeLike {
   setDoc(doc: TimelineDoc): void
   setPresentationProfile(profile: PresentationProfile): void
-  setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void
   openAsset(
     assetId: AssetId,
     blob: Blob,
@@ -111,11 +111,11 @@ export interface BridgeLike {
     runtimeToken: object,
   ): Promise<void>
   releaseAsset(assetId: AssetId): void
-  renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult>
+  renderFrame(plan: VideoCompositionPlan, mode: RenderMode): Promise<RenderFrameResult>
   setRuntimeTelemetryEnabled?(enabled: boolean): void
   requestRuntimeTelemetry?(): Promise<RenderWorkerRuntimeTelemetrySnapshot>
   setVideoScopesEnabled?(enabled: boolean, generation: number): void
-  dispose(): void
+  dispose(): void | Promise<void>
   onWorkerError: ((message: string) => void) | null
   onAssetError: ((
     assetId: AssetId,
@@ -136,6 +136,10 @@ export interface BridgeLike {
 /** Injection points so tests can run without Worker/OffscreenCanvas/fetch. */
 export interface PreviewDeps {
   createBridge(): BridgeLike
+  createVisualPlanner(
+    doc: TimelineDoc,
+    catalog: SourceBoundsCatalog,
+  ): VideoCompositionPlanner
   transferCanvas(canvas: HTMLCanvasElement): OffscreenCanvas
   init(bridge: BridgeLike, canvas: OffscreenCanvas): void
   fetchBlob(url: string): Promise<Blob>
@@ -216,7 +220,9 @@ export function renderPreviewFrameForDevBenchmark(
   }
   const bridge = state.bridge
   if (!bridge) return Promise.reject(new Error('Preview is not initialized'))
-  return bridge.renderFrame(frame, 'seek')
+  const plan = state.visualPlanner?.planFrame(frame)
+  if (!plan) return Promise.reject(new Error('Preview planner is not initialized'))
+  return bridge.renderFrame(plan, 'seek')
 }
 
 function publishRenderDiagnostic(
@@ -233,6 +239,7 @@ function publishRenderDiagnostic(
 
 const realDeps: PreviewDeps = {
   createBridge: () => new RenderWorkerBridge(createRenderWorker()),
+  createVisualPlanner: (doc, catalog) => createVideoCompositionPlanner(doc, catalog),
   transferCanvas: (canvas) => canvas.transferControlToOffscreen(),
   init: (bridge, offscreen) => (bridge as RenderWorkerBridge).init(offscreen),
   fetchBlob: (url) => fetch(url).then((r) => r.blob()),
@@ -455,9 +462,9 @@ function rebuildPreviewEffectStatusIndex(doc: TimelineDoc): void {
   publishPreviewEffectStatuses()
 }
 
-function syncPreviewDocument(bridge: BridgeLike): void {
+function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
   const doc = currentPreviewDocument()
-  state.visualPlanner = createVideoCompositionPlanner(
+  state.visualPlanner = deps.createVisualPlanner(
     doc,
     currentSourceBoundsCatalog(),
   )
@@ -519,7 +526,7 @@ function scheduleRender(deps: PreviewDeps): void {
     const requestedAt = diagnosticsEnabled ? deps.now() : 0
     const presentationGeneration = ++state.presentationGeneration
     void bridge
-      .renderFrame(frame, mode)
+      .renderFrame(visualPlan, mode)
       .then((result) => {
         if (diagnosticsEnabled) {
           publishRenderCompletion({
@@ -780,7 +787,7 @@ export function initPreview(
   deps: PreviewDeps = realDeps,
 ): void {
   if (state.canvas === canvas) return
-  disposePreview()
+  void disposePreview()
 
   let bridge: BridgeLike
   try {
@@ -828,9 +835,8 @@ export function initPreview(
 
   const initialDoc = currentPreviewDocument()
   const initialBounds = currentSourceBoundsCatalog()
-  state.visualPlanner = createVideoCompositionPlanner(initialDoc, initialBounds)
+  state.visualPlanner = deps.createVisualPlanner(initialDoc, initialBounds)
   state.effectStatusIndex = createPreviewEffectStatusIndex(initialDoc)
-  bridge.setSourceBoundsCatalog(initialBounds)
   bridge.setDoc(initialDoc)
   publishPreviewEffectStatuses(null)
   syncPresentationProfile(bridge, initialDoc)
@@ -840,7 +846,7 @@ export function initPreview(
   state.unsubscribes.push(
     useDocumentStore.subscribe((s, prev) => {
       if (s.doc !== prev.doc) {
-        syncPreviewDocument(bridge)
+        syncPreviewDocument(bridge, deps)
         syncAssets(deps)
         scheduleRender(deps)
       }
@@ -850,7 +856,7 @@ export function initPreview(
         s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
       ) {
-        syncPreviewDocument(bridge)
+        syncPreviewDocument(bridge, deps)
       }
       if (
         presentationReasonForTransport(s) !== presentationReasonForTransport(prev)
@@ -866,22 +872,20 @@ export function initPreview(
     }),
     useMediaStore.subscribe(() => {
       const bounds = currentSourceBoundsCatalog()
-      state.visualPlanner = createVideoCompositionPlanner(
+      state.visualPlanner = deps.createVisualPlanner(
         currentPreviewDocument(),
         bounds,
       )
-      bridge.setSourceBoundsCatalog(bounds)
       syncAssets(deps)
       scheduleRender(deps)
     }),
     useProxyStore.subscribe((current, previous) => {
       if (current.assets === previous.assets) return
       const bounds = currentSourceBoundsCatalog()
-      state.visualPlanner = createVideoCompositionPlanner(
+      state.visualPlanner = deps.createVisualPlanner(
         currentPreviewDocument(),
         bounds,
       )
-      bridge.setSourceBoundsCatalog(bounds)
       syncAssets(deps)
       scheduleRender(deps)
     }),
@@ -898,13 +902,13 @@ export function initPreview(
 }
 
 /** Tear everything down (tests / real app teardown, not StrictMode churn). */
-export function disposePreview(): void {
+export function disposePreview(): Promise<void> {
   state.renderGeneration++
   state.presentationGeneration++
   state.scopeGeneration++
   for (const unsubscribe of state.unsubscribes) unsubscribe()
   state.unsubscribes = []
-  state.bridge?.dispose()
+  const close = state.bridge?.dispose()
   state.bridge = null
   state.deps = null
   state.viewport = null
@@ -916,4 +920,5 @@ export function disposePreview(): void {
   state.rafPending = false
   usePreviewStatusStore.getState().resetPreviewStatus()
   useVideoScopesStore.getState().reset()
+  return Promise.resolve(close)
 }

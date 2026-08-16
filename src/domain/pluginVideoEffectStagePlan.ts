@@ -75,8 +75,10 @@ export interface PluginVideoEffectExecutionPlan {
   readonly packageDigest: string
   readonly pluginId: string
   readonly pluginVersion: string
+  readonly kind: 'video-effect'
   readonly contributionVersion: number
   readonly contributionId: string
+  readonly descriptorVersion: number
   readonly entrypoint: string
   readonly parameterRecord: Readonly<Record<string, EffectParamValue>>
   /** RFC 8785 text; the runtime performs the sole UTF-8 encoding. */
@@ -572,8 +574,10 @@ function pluginStage(
     packageDigest: declaration.packageDigest,
     pluginId: declaration.pluginId,
     pluginVersion: declaration.pluginVersion,
+    kind: declaration.kind,
     contributionVersion: declaration.contributionVersion,
     contributionId: declaration.contributionId,
+    descriptorVersion: declaration.descriptorVersion,
     entrypoint: declaration.entrypoint,
     parameterRecord,
     canonicalParameterJson: canonicalPluginVideoEffectParameterJson(parameterRecord),

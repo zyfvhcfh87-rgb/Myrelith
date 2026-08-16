@@ -8,6 +8,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
+import {
+  createVideoCompositionPlanner,
+  type VideoCompositionPlan,
+} from '../domain/videoCompositionPlan'
 import type {
   PresentationProfile,
   PresentationViewport,
@@ -90,6 +94,7 @@ class FakeBridge implements BridgeLike {
   }> = []
   released: string[] = []
   rendered: Array<{ frame: number; mode: RenderMode }> = []
+  renderPlans: VideoCompositionPlan[] = []
   videoScopes: Array<{ enabled: boolean; generation: number }> = []
   disposed = false
   openImpl: (
@@ -105,7 +110,7 @@ class FakeBridge implements BridgeLike {
     runtimeToken: object,
   ) => Promise<void> = async () => {}
   renderImpl: (
-    frame: number,
+    plan: VideoCompositionPlan,
     mode: RenderMode,
   ) => Promise<RenderFrameResult> = async () => ({
     status: 'drawn',
@@ -120,10 +125,6 @@ class FakeBridge implements BridgeLike {
 
   setPresentationProfile(profile: PresentationProfile): void {
     this.profiles.push(profile)
-  }
-
-  setSourceBoundsCatalog(catalog: SourceBoundsCatalog): void {
-    this.catalogs.push(new Map(catalog))
   }
 
   async openAsset(
@@ -152,9 +153,10 @@ class FakeBridge implements BridgeLike {
     this.released.push(assetId)
   }
 
-  async renderFrame(frame: number, mode: RenderMode): Promise<RenderFrameResult> {
-    this.rendered.push({ frame, mode })
-    return this.renderImpl(frame, mode)
+  async renderFrame(plan: VideoCompositionPlan, mode: RenderMode): Promise<RenderFrameResult> {
+    this.rendered.push({ frame: plan.frame, mode })
+    this.renderPlans.push(plan)
+    return this.renderImpl(plan, mode)
   }
 
   setVideoScopesEnabled(enabled: boolean, generation: number): void {
@@ -171,6 +173,10 @@ function makeDeps() {
   const blob = new Blob(['x'], { type: 'video/mp4' })
   const deps: PreviewDeps = {
     createBridge: () => bridge,
+    createVisualPlanner: (doc, catalog) => {
+      bridge.catalogs.push(new Map(catalog))
+      return createVideoCompositionPlanner(doc, catalog)
+    },
     transferCanvas: () => ({}) as OffscreenCanvas,
     init: vi.fn(),
     fetchBlob: vi.fn(async () => blob),
@@ -831,6 +837,25 @@ describe('previewController', () => {
     useTransportStore.getState().setPlayheadFrame(30)
     await nextFrame()
     expect(usePreviewStatusStore.getState().offlineVisualAssetIds).toEqual([])
+  })
+
+  test('plans each displayed frame once and forwards that exact plan to the bridge', async () => {
+    const { deps, bridge } = makeDeps()
+    const sentinelPlan = Object.freeze({
+      frame: 0,
+      items: Object.freeze([]),
+    }) satisfies VideoCompositionPlan
+    const planFrame = vi.fn(() => sentinelPlan)
+    deps.createVisualPlanner = vi.fn(() => ({ planFrame }))
+
+    initPreview(canvasEl(), deps)
+    await nextFrame()
+    await flush()
+
+    expect(planFrame).toHaveBeenCalledTimes(1)
+    expect(planFrame).toHaveBeenCalledWith(0)
+    expect(bridge.renderPlans).toHaveLength(1)
+    expect(bridge.renderPlans[0]).toBe(sentinelPlan)
   })
 
   test('reconnecting the current source clears offline status and repaints', async () => {

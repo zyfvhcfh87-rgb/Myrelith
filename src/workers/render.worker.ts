@@ -66,6 +66,7 @@ import type {
   TransitionSurfaces,
 } from '../pipeline/render'
 import { compositeFrame } from '../pipeline/render'
+import type { VideoEffectStageExecutor } from '../pipeline/videoEffectStageExecution'
 import {
   LensRemapUnavailableError,
   LENS_REMAP_BACKEND_VERSION,
@@ -117,6 +118,11 @@ import type {
   VideoScopeAnalyzeMessage,
   VideoScopeWorkerReply,
 } from './video-scopes-protocol'
+import {
+  PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+  isPluginEffectBridgeHostMessage,
+  zeroAttachedPluginEffectBuffer,
+} from './plugin-effect-bridge-protocol'
 
 /** A larger forward gap is a discontinuity, not useful sequential catch-up. */
 const PLAYBACK_RESTART_GAP_US = 1_000_000
@@ -145,6 +151,7 @@ const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
 
 /** Everything the core needs from the outside world. */
 export interface RenderWorkerEnv extends LegacyRenderWorkerEnv {
+  post(msg: FromRenderWorker, transfer?: Transferable[]): void
   /** Open one worker-owned Mediabunny source for a structured-cloned Blob. */
   openVideoSource(
     blob: Blob,
@@ -251,6 +258,15 @@ interface ClipDecodeIdentity {
   timelineDuration: number
 }
 
+interface PendingPluginEffect {
+  readonly generation: number
+  readonly workerGeneration: number
+  readonly renderRequestId: number
+  readonly expectedByteLength: number
+  readonly resolve: (result: { readonly status: 'applied'; readonly rgba: Uint8Array }
+    | { readonly status: 'bypassed' }) => void
+}
+
 export function createRenderWorkerCore(env: RenderWorkerEnv): {
   handleMessage(msg: ToRenderWorker): Promise<void>
   revisionEntryCounts(): { assets: number; playbackLanes: number }
@@ -282,6 +298,8 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   /** Bumped by every composite/setDoc/configureAsset/releaseAsset/close;
    * stale composites and parked feed loops check it and unwind. */
   let generation = 0
+  let nextPluginEffectRequestId = 1
+  const pendingPluginEffects = new Map<number, PendingPluginEffect>()
   /** Composites run strictly one at a time (stale ones exit immediately). */
   let compositeChain: Promise<void> = Promise.resolve()
   /** Invalidates asset opens/configures that outlive a worker-wide close. */
@@ -463,12 +481,132 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
   }
 
+  function cancelPendingPluginEffects(): void {
+    for (const [effectRequestId, pending] of pendingPluginEffects) {
+      env.post({
+        type: 'pluginEffectCancel',
+        protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+        generation: pending.generation,
+        renderRequestId: pending.renderRequestId,
+        effectRequestId,
+      })
+      pending.resolve({ status: 'bypassed' })
+    }
+    pendingPluginEffects.clear()
+  }
+
   /** Invalidate presentation work without cancelling persistent playback lanes. */
   function supersede(): number {
     generation++
     legacyCompatibility?.wakeAll()
     cancelActiveSeeks()
+    cancelPendingPluginEffects()
     return generation
+  }
+
+  function takePluginEffectRequestId(): number {
+    const requestId = nextPluginEffectRequestId
+    if (!Number.isSafeInteger(requestId)) {
+      throw new RangeError('Plugin effect request id overflow')
+    }
+    nextPluginEffectRequestId++
+    return requestId
+  }
+
+  function handlePluginEffectHostMessage(value: unknown): void {
+    const candidate = value && typeof value === 'object'
+      ? value as { readonly effectRequestId?: unknown; readonly rgbaBytes?: unknown }
+      : null
+    const effectRequestId = candidate && Number.isSafeInteger(candidate.effectRequestId)
+      ? Number(candidate.effectRequestId)
+      : -1
+    const pending = pendingPluginEffects.get(effectRequestId)
+    const expectedByteLength = pending?.expectedByteLength ?? -1
+    if (!isPluginEffectBridgeHostMessage(value, expectedByteLength)) {
+      if (candidate?.rgbaBytes instanceof ArrayBuffer) {
+        zeroAttachedPluginEffectBuffer(candidate.rgbaBytes)
+      }
+      if (pending) {
+        pendingPluginEffects.delete(effectRequestId)
+        pending.resolve({ status: 'bypassed' })
+      }
+      return
+    }
+    if (
+      !pending
+      || pending.generation !== value.generation
+      || pending.renderRequestId !== value.renderRequestId
+      || generation !== pending.workerGeneration
+    ) {
+      if (value.type === 'pluginEffectApplied') {
+        zeroAttachedPluginEffectBuffer(value.rgbaBytes)
+      }
+      return
+    }
+    pendingPluginEffects.delete(effectRequestId)
+    if (value.type === 'pluginEffectBypassed') {
+      pending.resolve({ status: 'bypassed' })
+      return
+    }
+    pending.resolve({
+      status: 'applied',
+      rgba: new Uint8Array(value.rgbaBytes),
+    })
+  }
+
+  function pluginEffectExecutor(
+    renderGeneration: number,
+    renderRequestId: number,
+    workerGeneration: number,
+    returnedBuffers: Set<ArrayBuffer>,
+  ): VideoEffectStageExecutor {
+    return {
+      applyPluginEffect(request) {
+        if (generation !== workerGeneration) {
+          if (request.rgba.byteLength > 0) request.rgba.fill(0)
+          return Promise.resolve({ status: 'bypassed' })
+        }
+        const rgbaBytes = request.rgba.buffer
+        if (
+          request.rgba.byteOffset !== 0
+          || rgbaBytes.byteLength !== request.rgba.byteLength
+        ) {
+          request.rgba.fill(0)
+          return Promise.resolve({ status: 'bypassed' })
+        }
+        const effectRequestId = takePluginEffectRequestId()
+        return new Promise((resolve) => {
+          pendingPluginEffects.set(effectRequestId, {
+            generation: renderGeneration,
+            workerGeneration,
+            renderRequestId,
+            expectedByteLength: request.rgba.byteLength,
+            resolve: (result) => {
+              if (result.status === 'applied') {
+                returnedBuffers.add(result.rgba.buffer)
+              }
+              resolve(result)
+            },
+          })
+          env.post({
+            type: 'pluginEffectApply',
+            protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+            generation: renderGeneration,
+            renderRequestId,
+            effectRequestId,
+            execution: request.execution,
+            descriptorId: request.effect.id,
+            timelineFrame: request.timelineFrame,
+            frameRateNumerator: request.frameRate.num,
+            frameRateDenominator: request.frameRate.den,
+            width: request.width,
+            height: request.height,
+            stride: request.stride,
+            rgbaBytes,
+          }, [rgbaBytes])
+        })
+      },
+    }
   }
 
   function currentPresentationProfile(): PresentationProfile | null {
@@ -1967,6 +2105,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       >()
       const loans: StreamingLoan[] = []
       const staticLoans: StaticImageLoan[] = []
+      const returnedPluginEffectBuffers = new Set<ArrayBuffer>()
       const source: FrameSource = {
         getFrame: (assetId, sourceFrame) => {
           const queue = queues.get(`${assetId}@${sourceFrame}`)
@@ -2018,10 +2157,19 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           transitionSurfaceProvider,
           currentPresentationProfile() ?? undefined,
           lensRemapProvider,
+          pluginEffectExecutor(
+            msg.generation,
+            msg.requestId,
+            myGen,
+            returnedPluginEffectBuffers,
+          ),
         )
       } finally {
         for (const loan of loans) loan.settle()
         for (const loan of staticLoans) loan.settle()
+        for (const buffer of returnedPluginEffectBuffers) {
+          zeroAttachedPluginEffectBuffer(buffer)
+        }
       }
 
       if (generation !== myGen) {
@@ -2108,6 +2256,10 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       case 'renderFrame':
         await handleRenderFrame(msg)
         break
+      case 'pluginEffectApplied':
+      case 'pluginEffectBypassed':
+        handlePluginEffectHostMessage(msg)
+        break
       case 'composite':
         await handleComposite(msg)
         break
@@ -2154,6 +2306,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         const results = await Promise.allSettled(
           [
             ...(videoScopeRelease ? [videoScopeRelease] : []),
+            compositeChain,
             ...streaming.map((state) => teardownStreamingAsset(state)),
             ...staticRetirements,
             ...pendingImageOpens.map((pending) => pending.done),
@@ -2394,7 +2547,7 @@ declare const WorkerGlobalScope: unknown
 if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
   const videoScopeAnalyzer = createVideoScopeAnalyzer()
   const core = createRenderWorkerCore({
-    post: (msg) => self.postMessage(msg),
+    post: (msg, transfer = []) => self.postMessage(msg, transfer),
     createDecoder: (init) =>
       new VideoDecoder({
         output: (frame) => init.output(frame),

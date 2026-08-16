@@ -93,6 +93,22 @@ export interface PluginDescriptorMigrationChainRequest extends PluginExecutionId
   readonly hasAnimatedParameters: boolean
 }
 
+export interface PluginDescriptorMigrationTargetRequest
+  extends PluginDescriptorMigrationChainRequest {
+  /** Stable app-owned locator, unique inside one ordered migration action. */
+  readonly descriptorId: string
+}
+
+export interface PluginDescriptorMigrationActionPreflightRequest {
+  /** Frozen stable document order: track, clip, then effect-stack order. */
+  readonly targets: readonly PluginDescriptorMigrationTargetRequest[]
+}
+
+export interface PluginDescriptorMigrationActionApplyRequest {
+  readonly targetIndex: number
+  readonly requestId: number
+}
+
 export interface PluginDescriptorMigrationApplyRequest {
   readonly requestId: number
 }
@@ -112,6 +128,14 @@ export type PluginDescriptorMigrationResult =
 export interface PluginDescriptorMigrationChainSession {
   apply(
     request: PluginDescriptorMigrationApplyRequest,
+    signal?: AbortSignal,
+  ): Promise<PluginDescriptorMigrationResult>
+  close(reason: string): Promise<void>
+}
+
+export interface PluginDescriptorMigrationActionSession {
+  applyTarget(
+    request: PluginDescriptorMigrationActionApplyRequest,
     signal?: AbortSignal,
   ): Promise<PluginDescriptorMigrationResult>
   close(reason: string): Promise<void>
@@ -145,7 +169,13 @@ export interface PluginRuntimeController {
     request: PluginDescriptorMigrationChainRequest,
     signal?: AbortSignal,
   ): Promise<PluginDescriptorMigrationChainSession>
+  preflightDescriptorMigrationAction(
+    request: PluginDescriptorMigrationActionPreflightRequest,
+    signal?: AbortSignal,
+  ): Promise<PluginDescriptorMigrationActionSession>
   getSnapshot(): PluginRuntimeSnapshot
+  /** Drop only retained in-memory runtime diagnostics for one exact plugin. */
+  clearDiagnostics(pluginId: string): void
   invalidate(pluginId: string, reason: string): Promise<void>
   teardown(reason: string): Promise<void>
 }
@@ -167,6 +197,12 @@ interface RuntimeEntry {
   lastUsed: number
   activeCalls: number
   pinned: boolean
+  readonly reservation: RuntimeReservation | null
+}
+
+interface RuntimeReservation {
+  occupied: boolean
+  closed: boolean
 }
 
 interface RuntimeOwner {
@@ -391,6 +427,7 @@ export function createPluginRuntimeController(options: {
   const sandboxController = options.sandboxController ?? createPluginSandboxController()
   const rawModuleCache = options.rawModuleCache ?? createPluginRawModuleCache()
   const owners = new Set<RuntimeOwner>()
+  const migrationReservations = new Set<RuntimeReservation>()
   const diagnosticsByPlugin = new Map<string, PluginRuntimeDiagnostic[]>()
   const diagnosticPluginAccess = new Map<string, number>()
   const scheduledCalls: ScheduledCall[] = []
@@ -573,51 +610,59 @@ export function createPluginRuntimeController(options: {
     const entry = owner.entries.get(pluginId)
     if (!entry) return
     owner.entries.delete(pluginId)
-    await entry.session.close(reason)
+    try {
+      await entry.session.close(reason)
+    } finally {
+      if (entry.reservation) entry.reservation.occupied = false
+    }
   }
 
-  const createOwner = (): RuntimeOwner => {
+  const residentEntries = (): Array<{
+    readonly owner: RuntimeOwner
+    readonly entry: RuntimeEntry
+  }> => (
+    [...owners].flatMap((candidateOwner) => (
+      [...candidateOwner.entries.values()].map((candidate) => ({
+        owner: candidateOwner,
+        entry: candidate,
+      }))
+    ))
+  )
+
+  const reserveCapacityUnlocked = async (newEntryCount: number): Promise<void> => {
+    const residents = residentEntries()
+    const ordinaryResidents = residents.filter((candidate) => (
+      candidate.entry.reservation === null
+    ))
+    const occupiedSlots = ordinaryResidents.length + migrationReservations.size
+    const evictionCount = Math.max(0, occupiedSlots + newEntryCount - MAX_RESIDENT_RUNTIMES)
+    if (evictionCount === 0) return
+    const candidates = ordinaryResidents
+      .filter((candidate) => candidate.entry.activeCalls === 0 && !candidate.entry.pinned)
+      .sort((left, right) => (
+        left.entry.lastUsed - right.entry.lastUsed
+          || left.entry.pluginId.localeCompare(right.entry.pluginId)
+      ))
+    if (candidates.length < evictionCount) {
+      throw new PluginRuntimeError(hostFailure('busy', FAILURE_MESSAGES.busy, false))
+    }
+    for (const eviction of candidates.slice(0, evictionCount)) {
+      await removeEntryUnlocked(eviction.owner, eviction.entry.pluginId, 'runtime-lru-eviction')
+    }
+  }
+
+  const exactBundleIdentityKey = (bundle: VerifiedPluginActivationBundle): string => (
+    JSON.stringify([
+      bundle.catalogGeneration,
+      cacheKey(bundle),
+    ])
+  )
+
+  const createOwner = (reservation: RuntimeReservation | null = null): RuntimeOwner => {
     const entries = new Map<string, RuntimeEntry>()
     const pinnedIdentities = new Map<string, string>()
     let closed = false
     let owner!: RuntimeOwner
-
-    const bundleIdentityKey = (bundle: VerifiedPluginActivationBundle): string => JSON.stringify([
-      bundle.catalogGeneration,
-      bundle.pluginId,
-      bundle.version,
-      bundle.packageDigest,
-      bundle.signerFingerprint,
-      bundle.moduleSha256,
-      contributionIdentityKey(bundle),
-    ])
-
-    const residentEntries = (): Array<{ readonly owner: RuntimeOwner; readonly entry: RuntimeEntry }> => (
-      [...owners].flatMap((candidateOwner) => (
-        [...candidateOwner.entries.values()].map((candidate) => ({
-          owner: candidateOwner,
-          entry: candidate,
-        }))
-      ))
-    )
-
-    const reserveCapacityUnlocked = async (newEntryCount: number): Promise<void> => {
-      const residents = residentEntries()
-      const evictionCount = Math.max(0, residents.length + newEntryCount - MAX_RESIDENT_RUNTIMES)
-      if (evictionCount === 0) return
-      const candidates = residents
-        .filter((candidate) => candidate.entry.activeCalls === 0 && !candidate.entry.pinned)
-        .sort((left, right) => (
-          left.entry.lastUsed - right.entry.lastUsed
-            || left.entry.pluginId.localeCompare(right.entry.pluginId)
-        ))
-      if (candidates.length < evictionCount) {
-        throw new PluginRuntimeError(hostFailure('busy', FAILURE_MESSAGES.busy, false))
-      }
-      for (const eviction of candidates.slice(0, evictionCount)) {
-        await removeEntryUnlocked(eviction.owner, eviction.entry.pluginId, 'runtime-lru-eviction')
-      }
-    }
 
     const activateUnlocked = async (
       bundle: VerifiedPluginActivationBundle,
@@ -628,10 +673,13 @@ export function createPluginRuntimeController(options: {
       if (closed || tornDown) {
         throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
       }
+      if (reservation?.closed) {
+        throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+      }
       if (signal?.aborted) {
         throw new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted))
       }
-      const expectedIdentityKey = bundleIdentityKey(bundle)
+      const expectedIdentityKey = exactBundleIdentityKey(bundle)
       const expectedPinnedIdentity = pinnedIdentities.get(bundle.pluginId)
       const existing = entries.get(bundle.pluginId)
       if (expectedPinnedIdentity !== undefined
@@ -654,6 +702,9 @@ export function createPluginRuntimeController(options: {
         await removeEntryUnlocked(owner, bundle.pluginId, 'activation-identity-changed')
       }
       if (!capacityReserved) await reserveCapacityUnlocked(1)
+      if (reservation?.occupied) {
+        throw new PluginRuntimeError(hostFailure('busy', FAILURE_MESSAGES.busy, false))
+      }
 
       const exactCacheKey = cacheKey(bundle)
       const cachedModuleBytes = rawModuleCache.get(exactCacheKey)
@@ -703,8 +754,10 @@ export function createPluginRuntimeController(options: {
         lastUsed: ++ownerUsageSequence,
         activeCalls: 0,
         pinned: pin,
+        reservation,
       }
       entries.set(bundle.pluginId, activated)
+      if (reservation) reservation.occupied = true
       if (pin) pinnedIdentities.set(bundle.pluginId, expectedIdentityKey)
       return activated
     }
@@ -718,7 +771,12 @@ export function createPluginRuntimeController(options: {
       entries,
       async withEntry(bundle, signal, task) {
         const entry = await withLifecycle(signal, async () => {
-          const activated = await activateUnlocked(bundle, signal, false, false)
+          const activated = await activateUnlocked(
+            bundle,
+            signal,
+            reservation !== null,
+            reservation !== null,
+          )
           activated.activeCalls++
           return activated
         })
@@ -740,7 +798,7 @@ export function createPluginRuntimeController(options: {
             throw new PluginRuntimeError(hostFailure('busy', FAILURE_MESSAGES.busy, false))
           }
           const newEntryCount = [...unique.values()].filter((bundle) => (
-            entries.get(bundle.pluginId)?.identityKey !== bundleIdentityKey(bundle)
+            entries.get(bundle.pluginId)?.identityKey !== exactBundleIdentityKey(bundle)
           )).length
           // Check and make room for the entire export attempt before copying or
           // activating any of its modules. The lifecycle lock holds the reservation.
@@ -771,13 +829,42 @@ export function createPluginRuntimeController(options: {
           entries.clear()
           pinnedIdentities.clear()
           owners.delete(owner)
-          await Promise.allSettled(closing)
+          const settled = await Promise.allSettled(closing)
+          if (reservation) reservation.occupied = false
+          const rejected = settled.find(
+            (result): result is PromiseRejectedResult => result.status === 'rejected',
+          )
+          if (rejected) throw rejected.reason
         })
       },
     }
     owners.add(owner)
     return owner
   }
+
+  const reserveMigrationSlot = (signal?: AbortSignal): Promise<RuntimeReservation> => (
+    withLifecycle(signal, async () => {
+      if (tornDown) {
+        throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+      }
+      if (signal?.aborted) {
+        throw new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted))
+      }
+      await reserveCapacityUnlocked(1)
+      const reservation: RuntimeReservation = { occupied: false, closed: false }
+      migrationReservations.add(reservation)
+      return reservation
+    })
+  )
+
+  const releaseMigrationSlot = (
+    reservation: RuntimeReservation,
+  ): Promise<void> => withLifecycle(undefined, async () => {
+    if (reservation.closed) return
+    reservation.closed = true
+    reservation.occupied = false
+    migrationReservations.delete(reservation)
+  })
 
   const applyWithBundle = async (
     owner: RuntimeOwner,
@@ -1119,121 +1206,292 @@ export function createPluginRuntimeController(options: {
     })
   }
 
-  const openDescriptorMigrationChain = async (
+  const completeMigrationChain = (
     request: PluginDescriptorMigrationChainRequest,
-    signal?: AbortSignal,
-  ): Promise<PluginDescriptorMigrationChainSession> => {
-    if (request.hasAnimatedParameters) {
-      throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
-    }
-    const activationSignal = linkedAbortSignal([signal, controllerAbort.signal])
-    let bundle: VerifiedPluginActivationBundle
-    let contribution: VerifiedPluginContribution
-    try {
-      bundle = await resolver.resolve(request.pluginId, activationSignal.signal)
-      contribution = matchBundle(request, bundle)
-    } catch (cause) {
-      const runtimeFailure = resolutionFailure(cause)
-      recordDiagnostic(request.pluginId, 'migration', runtimeFailure)
-      throw new PluginRuntimeError(runtimeFailure)
-    } finally {
-      activationSignal.dispose()
-    }
-    const steps = contribution.migrations
+    contribution: VerifiedPluginContribution,
+  ): readonly VerifiedPluginContribution['migrations'][number][] => {
     let version = request.fromDescriptorVersion
-    for (const step of steps) {
+    const steps: VerifiedPluginContribution['migrations'][number][] = []
+    for (const step of contribution.migrations) {
       if (step.fromVersion < version) continue
       if (step.fromVersion !== version || step.toVersion <= step.fromVersion) {
         throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
       }
+      steps.push(step)
       version = step.toVersion
     }
     if (version !== contribution.descriptorVersion) {
       throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
     }
-    // Validate the initial bytes generically without changing their byte representation.
-    const initialBytes = canonicalBytes(request.canonicalParameterJson)
-    let initial: ReturnType<typeof canonicalRecord>
-    try {
-      initial = canonicalRecord(initialBytes)
-    } finally {
-      initialBytes.fill(0)
+    return Object.freeze([...steps])
+  }
+
+  interface PreparedMigrationTarget {
+    readonly request: PluginDescriptorMigrationTargetRequest
+    readonly bundleIdentityKey: string
+    readonly initial: ReturnType<typeof canonicalRecord>
+  }
+
+  const preflightDescriptorMigrationAction = async (
+    request: PluginDescriptorMigrationActionPreflightRequest,
+    signal?: AbortSignal,
+  ): Promise<PluginDescriptorMigrationActionSession> => {
+    if (tornDown) throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+    if (!Array.isArray(request.targets)
+      || request.targets.length === 0
+      || request.targets.length > 1_024) {
+      throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
     }
-    const owner = createOwner()
+    const descriptorIds = new Set<string>()
+    const locallyValidated: Array<{
+      readonly request: PluginDescriptorMigrationTargetRequest
+      readonly initial: ReturnType<typeof canonicalRecord>
+    }> = []
+    for (const target of request.targets) {
+      if (typeof target.descriptorId !== 'string'
+        || target.descriptorId.length === 0
+        || target.descriptorId.length > 128
+        || descriptorIds.has(target.descriptorId)
+        || target.hasAnimatedParameters
+        || !Number.isSafeInteger(target.fromDescriptorVersion)
+        || target.fromDescriptorVersion < 1) {
+        throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
+      }
+      descriptorIds.add(target.descriptorId)
+      const inputBytes = canonicalBytes(target.canonicalParameterJson)
+      let initial: ReturnType<typeof canonicalRecord>
+      try {
+        initial = canonicalRecord(inputBytes)
+      } finally {
+        inputBytes.fill(0)
+      }
+      locallyValidated.push({
+        request: Object.freeze({ ...target }),
+        initial,
+      })
+    }
+
+    const linked = linkedAbortSignal([signal, controllerAbort.signal])
+    const prepared: PreparedMigrationTarget[] = []
+    let reservation: RuntimeReservation | null = null
+    try {
+      for (const target of locallyValidated) {
+        let bundle: VerifiedPluginActivationBundle
+        try {
+          bundle = await resolver.resolve(target.request.pluginId, linked.signal)
+        } catch (cause) {
+          throw new PluginRuntimeError(resolutionFailure(cause))
+        }
+        const contribution = matchBundle(target.request, bundle)
+        completeMigrationChain(target.request, contribution)
+        prepared.push(Object.freeze({
+          request: target.request,
+          bundleIdentityKey: exactBundleIdentityKey(bundle),
+          initial: target.initial,
+        }))
+      }
+      reservation = await reserveMigrationSlot(linked.signal)
+    } catch (cause) {
+      const runtimeFailure = cause instanceof PluginRuntimeError
+        ? cause.failure
+        : resolutionFailure(cause)
+      const pluginId = prepared.length < locallyValidated.length
+        ? locallyValidated[prepared.length]!.request.pluginId
+        : locallyValidated[0]!.request.pluginId
+      recordDiagnostic(pluginId, 'migration', runtimeFailure)
+      if (reservation) await releaseMigrationSlot(reservation)
+      throw new PluginRuntimeError(runtimeFailure)
+    } finally {
+      linked.dispose()
+    }
+
+    if (!reservation) {
+      throw new PluginRuntimeError(hostFailure('busy', FAILURE_MESSAGES.busy, false))
+    }
+    const actionReservation = reservation
     let closed = false
-    let applied = false
+    let running = false
+    let nextTargetIndex = 0
+    let currentAbort: AbortController | null = null
+    let currentOwner: RuntimeOwner | null = null
+    let currentSettlement: Promise<PluginDescriptorMigrationResult> | null = null
+    let closingPromise: Promise<void> | null = null
+
+    const closeAction = (reason: string): Promise<void> => {
+      if (closingPromise) return closingPromise
+      closed = true
+      currentAbort?.abort()
+      closingPromise = (async () => {
+        const owner = currentOwner
+        let cleanupError: unknown
+        try {
+          if (owner) await owner.close(reason)
+        } catch (cause) {
+          cleanupError = cause
+        }
+        try {
+          await releaseMigrationSlot(actionReservation)
+        } catch (cause) {
+          cleanupError ??= cause
+        }
+        if (cleanupError !== undefined) throw cleanupError
+      })()
+      return closingPromise
+    }
+
+    const applyPreparedTarget = async (
+      preparedTarget: PreparedMigrationTarget,
+      requestId: number,
+      applySignal?: AbortSignal,
+    ): Promise<PluginDescriptorMigrationResult> => {
+      const target = preparedTarget.request
+      currentAbort = new AbortController()
+      const targetSignal = linkedAbortSignal([
+        applySignal,
+        currentAbort.signal,
+        controllerAbort.signal,
+      ])
+      const owner = createOwner(actionReservation)
+      currentOwner = owner
+      let result: PluginDescriptorMigrationResult
+      try {
+        result = await runBounded(target.pluginId, targetSignal.signal, async () => {
+          let bundle: VerifiedPluginActivationBundle
+          try {
+            bundle = await resolver.resolve(target.pluginId, targetSignal.signal)
+          } catch (cause) {
+            throw new PluginRuntimeError(resolutionFailure(cause))
+          }
+          const contribution = matchBundle(target, bundle)
+          if (exactBundleIdentityKey(bundle) !== preparedTarget.bundleIdentityKey) {
+            throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
+          }
+          const steps = completeMigrationChain(target, contribution)
+          let currentBytes = canonicalBytes(preparedTarget.initial.json)
+          let currentVersion = target.fromDescriptorVersion
+          let finalRecord = preparedTarget.initial
+          try {
+            if (steps.length > 0) {
+              await owner.withEntry(bundle, targetSignal.signal, async (entry) => {
+                for (const step of steps) {
+                  const outputBytes = await entry.session.migrate({
+                    entrypoint: step.entrypoint,
+                    fromVersion: step.fromVersion,
+                    toVersion: step.toVersion,
+                    canonicalInputBytes: currentBytes,
+                  }, targetSignal.signal)
+                  try {
+                    finalRecord = canonicalRecord(outputBytes)
+                  } finally {
+                    outputBytes.fill(0)
+                  }
+                  currentBytes.fill(0)
+                  currentBytes = canonicalBytes(finalRecord.json)
+                  currentVersion = step.toVersion
+                }
+              })
+            }
+            if (currentVersion !== contribution.descriptorVersion
+              || !matchesCurrentSchema(finalRecord.value, contribution)) {
+              throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
+            }
+            return Object.freeze({
+              status: 'migrated' as const,
+              descriptorVersion: currentVersion,
+              canonicalParameterJson: finalRecord.json,
+              parameters: finalRecord.value,
+            })
+          } finally {
+            currentBytes.fill(0)
+          }
+        })
+      } catch (cause) {
+        const runtimeFailure = publicFailure(cause)
+        recordDiagnostic(target.pluginId, 'migration', runtimeFailure, requestId)
+        result = Object.freeze({ status: 'failed', failure: runtimeFailure })
+      } finally {
+        targetSignal.dispose()
+        let cleanupFailure: PluginRuntimeFailure | null = null
+        try {
+          await owner.close('migration-target-terminal')
+        } catch (cause) {
+          cleanupFailure = publicFailure(cause)
+        }
+        if (currentOwner === owner) currentOwner = null
+        currentAbort = null
+        if (cleanupFailure && result!.status === 'migrated') {
+          recordDiagnostic(target.pluginId, 'migration', cleanupFailure, requestId)
+          result = Object.freeze({ status: 'failed', failure: cleanupFailure })
+        }
+      }
+      return result!
+    }
 
     return {
-      async apply(applyRequest, applySignal) {
-        if (closed || applied) return Object.freeze({
+      applyTarget(applyRequest, applySignal) {
+        if (closed || running) return Promise.resolve(Object.freeze({
           status: 'failed',
           failure: hostFailure('closed', FAILURE_MESSAGES.closed),
-        })
-        if (!Number.isSafeInteger(applyRequest.requestId) || applyRequest.requestId < 0) {
+        }))
+        if (!Number.isSafeInteger(applyRequest.targetIndex)
+          || applyRequest.targetIndex !== nextTargetIndex
+          || !Number.isSafeInteger(applyRequest.requestId)
+          || applyRequest.requestId < 0
+          || applyRequest.targetIndex >= prepared.length) {
           const runtimeFailure = hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input'])
-          recordDiagnostic(request.pluginId, 'migration', runtimeFailure, applyRequest.requestId)
-          return Object.freeze({ status: 'failed', failure: runtimeFailure })
+          const pluginId = prepared[nextTargetIndex]?.request.pluginId ?? prepared[0]!.request.pluginId
+          recordDiagnostic(pluginId, 'migration', runtimeFailure, applyRequest.requestId)
+          return closeAction(runtimeFailure.code).catch(() => undefined).then(() => Object.freeze({
+            status: 'failed' as const,
+            failure: runtimeFailure,
+          }))
         }
-        applied = true
-        const linked = linkedAbortSignal([applySignal, controllerAbort.signal])
-        try {
-          return await runBounded(request.pluginId, linked.signal, async (): Promise<PluginDescriptorMigrationResult> => {
-            let currentBytes = canonicalBytes(initial.json)
-            try {
-              let currentVersion = request.fromDescriptorVersion
-              let finalRecord = initial
-              if (steps.some((step) => step.fromVersion >= currentVersion)) {
-                await owner.withEntry(bundle, linked.signal, async (entry) => {
-                  for (const step of steps) {
-                    if (step.fromVersion < currentVersion) continue
-                    const outputBytes = await entry.session.migrate({
-                      entrypoint: step.entrypoint,
-                      fromVersion: step.fromVersion,
-                      toVersion: step.toVersion,
-                      canonicalInputBytes: currentBytes,
-                    }, linked.signal)
-                    try {
-                      finalRecord = canonicalRecord(outputBytes)
-                    } finally {
-                      outputBytes.fill(0)
-                    }
-                    currentBytes.fill(0)
-                    currentBytes = canonicalBytes(finalRecord.json)
-                    currentVersion = step.toVersion
-                  }
-                })
-              }
-              if (currentVersion !== contribution.descriptorVersion
-                || !matchesCurrentSchema(finalRecord.value, contribution)) {
-                throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
-              }
-              return Object.freeze({
-                status: 'migrated',
-                descriptorVersion: currentVersion,
-                canonicalParameterJson: finalRecord.json,
-                parameters: finalRecord.value,
-              })
-            } catch (cause) {
-              const runtimeFailure = publicFailure(cause)
-              recordDiagnostic(request.pluginId, 'migration', runtimeFailure, applyRequest.requestId)
-              await owner.invalidate(request.pluginId, runtimeFailure.code)
-              return Object.freeze({ status: 'failed', failure: runtimeFailure })
-            } finally {
-              currentBytes.fill(0)
-            }
-          })
-        } catch (cause) {
-          const runtimeFailure = publicFailure(cause)
-          recordDiagnostic(request.pluginId, 'migration', runtimeFailure, applyRequest.requestId)
-          return Object.freeze({ status: 'failed', failure: runtimeFailure })
-        } finally {
-          linked.dispose()
-        }
+        running = true
+        const settlement = applyPreparedTarget(
+          prepared[applyRequest.targetIndex]!,
+          applyRequest.requestId,
+          applySignal,
+        ).then(async (result) => {
+          if (result.status === 'failed') {
+            await closeAction(result.failure.code).catch(() => undefined)
+          } else {
+            nextTargetIndex++
+          }
+          return result
+        }).finally(() => {
+          running = false
+          if (currentSettlement === settlement) currentSettlement = null
+        })
+        currentSettlement = settlement
+        return settlement
       },
       async close(reason) {
-        if (closed) return
-        closed = true
-        await owner.close(reason)
+        const settlement = currentSettlement
+        let cleanupError: unknown
+        try {
+          await closeAction(reason)
+        } catch (cause) {
+          cleanupError = cause
+        }
+        await settlement?.catch(() => undefined)
+        if (cleanupError !== undefined) throw cleanupError
+      },
+    }
+  }
+
+  const openDescriptorMigrationChain = async (
+    request: PluginDescriptorMigrationChainRequest,
+    signal?: AbortSignal,
+  ): Promise<PluginDescriptorMigrationChainSession> => {
+    const action = await preflightDescriptorMigrationAction({
+      targets: [{ ...request, descriptorId: `${request.pluginId}:${request.contributionId}` }],
+    }, signal)
+    return {
+      apply(applyRequest, applySignal) {
+        return action.applyTarget({ targetIndex: 0, requestId: applyRequest.requestId }, applySignal)
+      },
+      close(reason) {
+        return action.close(reason)
       },
     }
   }
@@ -1242,6 +1500,7 @@ export function createPluginRuntimeController(options: {
     openEditorSession,
     preflightExport,
     openDescriptorMigrationChain,
+    preflightDescriptorMigrationAction,
     getSnapshot() {
       const diagnostics = [...diagnosticsByPlugin.values()]
         .flat()
@@ -1258,6 +1517,10 @@ export function createPluginRuntimeController(options: {
         cache: rawModuleCache.getSnapshot(),
         diagnostics: Object.freeze(diagnostics),
       })
+    },
+    clearDiagnostics(pluginId) {
+      diagnosticsByPlugin.delete(pluginId)
+      diagnosticPluginAccess.delete(pluginId)
     },
     async invalidate(pluginId, reason) {
       invalidationEpochByPlugin.set(
@@ -1283,6 +1546,11 @@ export function createPluginRuntimeController(options: {
       }
       await Promise.allSettled([...owners].map((owner) => owner.close(reason)))
       await Promise.allSettled([...activeCallSettlements])
+      for (const reservation of migrationReservations) {
+        reservation.closed = true
+        reservation.occupied = false
+      }
+      migrationReservations.clear()
       rawModuleCache.clear()
       invalidationEpochByPlugin.clear()
       activePlugins.clear()
