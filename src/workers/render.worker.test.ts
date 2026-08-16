@@ -1160,8 +1160,9 @@ describe('plugin effect bridge', () => {
     const apply = pluginApplyFor(h, 1)
     expect([...new Uint8Array(apply.rgbaBytes).slice(0, 4)]).toEqual([64, 128, 192, 255])
     const transferred = h.postTransfers.find(({ message }) => message === apply)
-    expect(transferred?.transfer).toHaveLength(1)
-    expect((transferred?.transfer[0] as ArrayBuffer).byteLength).toBe(0)
+    if (!transferred) throw new Error('plugin effect transfer was not posted')
+    expect(transferred.transfer).toHaveLength(1)
+    expect((transferred.transfer[0] as ArrayBuffer).byteLength).toBe(0)
 
     const output = new Uint8Array(apply.rgbaBytes.byteLength)
     for (let offset = 0; offset < output.length; offset += 4) {
