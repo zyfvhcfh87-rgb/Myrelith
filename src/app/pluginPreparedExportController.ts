@@ -327,11 +327,19 @@ export function createPluginPreparedExportController(
         retained = null
         let completion: Promise<ExportResult | undefined>
         try {
-          completion = startExport(
+          const sourceCompletion = startExport(
             current.sourceToken as PluginExportAttemptToken,
             attemptController,
             callbacks,
           )
+          completion = sourceCompletion.catch(async (cause: unknown) => {
+            try {
+              await attemptController.close(current.sourceToken, 'plugin-export-start-failed')
+            } catch {
+              // The operational start failure remains primary after terminal cleanup.
+            }
+            throw cause
+          })
         } catch (cause) {
           try {
             await attemptController.close(current.sourceToken, 'plugin-export-start-failed')

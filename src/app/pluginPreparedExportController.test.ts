@@ -359,6 +359,37 @@ describe('plugin prepared export controller', () => {
     expect(startController.getSnapshot()).toEqual({ status: 'idle', token: null, attempt: null })
   })
 
+  test('awaits exact-once token cleanup before an asynchronous start failure settles', async () => {
+    const source = Object.freeze({ kind: 'plugin-export-attempt-token' })
+    const attempt = fakeAttemptHarness({ prepareResults: [readyResult(source)] })
+    let releaseClose!: () => void
+    const closeGate = new Promise<void>((resolve) => { releaseClose = resolve })
+    vi.mocked(attempt.controller.close).mockImplementation(async () => closeGate)
+    const startFailure = new Error('asynchronous export start failed')
+    const controller = createPluginPreparedExportController(baseDependencies(
+      attempt,
+      Object.freeze({ getDeclarationCatalog: vi.fn(), preflightExport: vi.fn() }),
+      ['plugin-export-ready-async'],
+      { startExport: vi.fn(() => Promise.reject(startFailure)) },
+    ))
+    const ready = await controller.prepare(DEFAULT_EXPORT_PROFILE)
+    const settled = vi.fn()
+    const started = controller.start(ready.token!)
+    void started.then(settled, settled)
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(attempt.controller.close).toHaveBeenCalledOnce()
+    expect(attempt.controller.close).toHaveBeenCalledWith(source, 'plugin-export-start-failed')
+    expect(settled).not.toHaveBeenCalled()
+    expect(controller.getSnapshot()).toMatchObject({ status: 'running', token: null })
+
+    releaseClose()
+    await expect(started).rejects.toBe(startFailure)
+    expect(attempt.controller.close).toHaveBeenCalledOnce()
+    expect(controller.getSnapshot()).toEqual({ status: 'idle', token: null, attempt: null })
+    await expect(controller.start(ready.token!)).rejects.toMatchObject({ code: 'invalid-token' })
+  })
+
   test.each(['status', 'detail', 'schema'] as const)(
     'fences same-generation catalog %s drift before export start',
     async (drift) => {
@@ -389,6 +420,10 @@ describe('plugin prepared export controller', () => {
     currentCatalog = driftedCatalog(drift)
     await expect(controller.start(ready.token!)).rejects.toMatchObject({
       code: 'stale-attempt',
+    })
+    expect(controller.getSnapshot()).toEqual({ status: 'idle', token: null, attempt: null })
+    await expect(controller.start(ready.token!)).rejects.toMatchObject({
+      code: 'invalid-token',
     })
     expect(port.preflightExport).not.toHaveBeenCalled()
     },

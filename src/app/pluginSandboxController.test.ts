@@ -172,6 +172,7 @@ describe('plugin sandbox controller', () => {
     expect(iframe.srcdoc).toContain("worker-src blob:")
     expect(iframe.srcdoc).toContain("connect-src 'none'")
     expect(iframe.srcdoc).toContain('MYRELITH_PLUGIN_SANDBOX_BROKER_V1')
+    expect(iframe.srcdoc).toContain("kind:'worker-created'")
     expect(iframe.srcdoc).not.toMatch(/https?:\/\//)
   })
 
@@ -505,6 +506,66 @@ describe('plugin sandbox controller', () => {
       terminal: true,
     })
     expect(snapshots.every((snapshot) => Object.isFrozen(snapshot))).toBe(true)
+  })
+
+  test('counts pending broker resources until a deferred handshake abort fully drains', async () => {
+    const snapshots: PluginSandboxLifecycleSnapshot[] = []
+    const factory: PluginSandboxBrokerFactory = ({ signal, reportOwnership }) => {
+      reportOwnership?.({
+        brokerIframeCount: 1,
+        candidateWorkerCount: 1,
+        privatePortCount: 2,
+      })
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reportOwnership?.({
+            brokerIframeCount: 0,
+            candidateWorkerCount: 0,
+            privatePortCount: 0,
+          })
+          reject(new PluginSandboxError({
+            code: 'aborted',
+            message: 'Plugin activation was cancelled.',
+            terminal: true,
+          }))
+        }, { once: true })
+      })
+    }
+    const controller = createPluginSandboxController({
+      brokerFactory: factory,
+      lifecycleObserver: {
+        onSandboxSnapshot(snapshot) {
+          snapshots.push(snapshot)
+        },
+        onRuntimeSnapshot() {},
+      },
+    })
+
+    const pending = controller.activate(activation()).catch((cause: unknown) => cause)
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(snapshots.some((snapshot) => (
+      snapshot.brokerIframeCount === 1
+        && snapshot.candidateWorkerCount === 1
+        && snapshot.privatePortCount === 2
+        && snapshot.pendingActivationCount === 1
+        && snapshot.watchdogCount === 1
+        && !snapshot.terminal
+    ))).toBe(true)
+
+    await controller.teardown('pending-broker-terminal')
+    expect(await pending).toMatchObject({ failure: { code: 'aborted' } })
+    const terminal = snapshots.filter((snapshot) => snapshot.terminal)
+    expect(terminal).toEqual([{
+      brokerIframeCount: 0,
+      candidateWorkerCount: 0,
+      privatePortCount: 0,
+      watchdogCount: 0,
+      pendingActivationCount: 0,
+      pendingRequestCount: 0,
+      sessionCount: 0,
+      terminal: true,
+    }])
+    expect(snapshots.findIndex((snapshot) => snapshot.terminal)).toBe(snapshots.length - 1)
   })
 
   test('contains observer exceptions without changing sandbox outcomes or cleanup', async () => {

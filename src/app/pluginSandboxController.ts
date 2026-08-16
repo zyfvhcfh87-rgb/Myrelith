@@ -71,11 +71,18 @@ export interface PluginSandboxBroker {
   terminate(reason: string): void
 }
 
+export interface PluginSandboxBrokerOwnershipSnapshot {
+  readonly brokerIframeCount: number
+  readonly candidateWorkerCount: number
+  readonly privatePortCount: number
+}
+
 export interface PluginSandboxBrokerCreateRequest {
   readonly generation: number
   readonly workerSource: string
   readonly deadlineAt: number
   readonly signal?: AbortSignal
+  readonly reportOwnership?: (snapshot: PluginSandboxBrokerOwnershipSnapshot) => void
 }
 
 export type PluginSandboxBrokerFactory = (
@@ -262,6 +269,7 @@ function receiveHandshake(event){
     URL.revokeObjectURL(url);
     const runtime=new MessageChannel();
     worker.postMessage({protocolVersion:1,kind:'connect',generation:data.generation,port:runtime.port2},[runtime.port2]);
+    controlPort.postMessage({kind:'worker-created',nonce:handshakeNonce,generation:data.generation});
     worker.addEventListener('error',(error)=>controlPort.postMessage({kind:'worker-error',nonce:handshakeNonce,generation:data.generation,message:String(error.message||'Worker crashed.').slice(0,512)}));
     worker.addEventListener('messageerror',()=>controlPort.postMessage({kind:'worker-error',nonce:handshakeNonce,generation:data.generation,message:'Worker message deserialization failed.'}));
     controlPort.onmessage=(controlEvent)=>{
@@ -320,6 +328,20 @@ export async function createBrowserPluginSandboxBroker(
   const iframe = document.createElement('iframe')
   configurePluginSandboxIframe(iframe, nonce, request.workerSource)
   const controlChannel = new MessageChannel()
+  let ownership: PluginSandboxBrokerOwnershipSnapshot = Object.freeze({
+    brokerIframeCount: 1,
+    candidateWorkerCount: 0,
+    privatePortCount: 2,
+  })
+  const reportOwnership = (next: PluginSandboxBrokerOwnershipSnapshot): void => {
+    ownership = Object.freeze({ ...next })
+    try {
+      request.reportOwnership?.(ownership)
+    } catch {
+      // Lifecycle observation cannot alter broker creation or cleanup.
+    }
+  }
+  reportOwnership(ownership)
   let fatalHandler: ((runtimeFailure: PluginRuntimeFailure) => void) | undefined
   let terminated = false
   const terminate = (reason: string): void => {
@@ -331,6 +353,11 @@ export async function createBrowserPluginSandboxBroker(
       controlChannel.port1.close()
       controlChannel.port2.close()
       iframe.remove()
+      reportOwnership({
+        brokerIframeCount: 0,
+        candidateWorkerCount: 0,
+        privatePortCount: 0,
+      })
     }
   }
 
@@ -359,6 +386,11 @@ export async function createBrowserPluginSandboxBroker(
     controlChannel.port1.onmessage = (event): void => {
       const value = event.data
       if (!isRecord(value) || value.nonce !== nonce || value.generation !== request.generation) return
+      if (exactKeys(value, ['kind', 'nonce', 'generation'])
+        && value.kind === 'worker-created') {
+        reportOwnership({ ...ownership, candidateWorkerCount: 1 })
+        return
+      }
       if (value.kind === 'worker-error') {
         window.clearTimeout(timer)
         request.signal?.removeEventListener('abort', onAbort)
@@ -440,6 +472,7 @@ export function createPluginSandboxController(options: {
   const pendingActivationAborts = new Set<AbortController>()
   const pendingActivationSettlements = new Set<Promise<void>>()
   const pendingBrokerSettlements = new Set<Promise<void>>()
+  const pendingBrokerOwnership = new Map<number, PluginSandboxBrokerOwnershipSnapshot>()
   let generationSequence = 0
   let watchdogCount = 0
   let pendingRequestCount = 0
@@ -450,10 +483,18 @@ export function createPluginSandboxController(options: {
 
   const emitLifecycle = (terminal = false): void => {
     if (!options.lifecycleObserver || (terminal && terminalSnapshotEmitted)) return
+    const pendingOwnership = [...pendingBrokerOwnership.values()].reduce(
+      (total, value) => ({
+        brokerIframeCount: total.brokerIframeCount + value.brokerIframeCount,
+        candidateWorkerCount: total.candidateWorkerCount + value.candidateWorkerCount,
+        privatePortCount: total.privatePortCount + value.privatePortCount,
+      }),
+      { brokerIframeCount: 0, candidateWorkerCount: 0, privatePortCount: 0 },
+    )
     const snapshot = Object.freeze({
-      brokerIframeCount: liveBrokers.size,
-      candidateWorkerCount: liveBrokers.size,
-      privatePortCount: liveBrokers.size * 2,
+      brokerIframeCount: liveBrokers.size + pendingOwnership.brokerIframeCount,
+      candidateWorkerCount: liveBrokers.size + pendingOwnership.candidateWorkerCount,
+      privatePortCount: liveBrokers.size * 2 + pendingOwnership.privatePortCount,
       watchdogCount,
       pendingActivationCount: pendingActivationAborts.size,
       pendingRequestCount,
@@ -503,12 +544,32 @@ export function createPluginSandboxController(options: {
     }
     const generation = ++generationSequence
     const deadlineAt = now() + PLUGIN_ACTIVATION_DEADLINE_MS
-    const brokerPromise = brokerFactory({
-      generation,
-      workerSource: createPluginCandidateWorkerSource(),
-      deadlineAt,
-      signal: activationAbort.signal,
-    })
+    let acceptsPendingOwnership = true
+    pendingBrokerOwnership.set(generation, Object.freeze({
+      brokerIframeCount: 0,
+      candidateWorkerCount: 0,
+      privatePortCount: 0,
+    }))
+    const reportOwnership = (ownership: PluginSandboxBrokerOwnershipSnapshot): void => {
+      if (!acceptsPendingOwnership || !pendingBrokerOwnership.has(generation)) return
+      pendingBrokerOwnership.set(generation, Object.freeze({ ...ownership }))
+      emitLifecycle()
+    }
+    let brokerPromise: Promise<PluginSandboxBroker>
+    try {
+      brokerPromise = Promise.resolve(brokerFactory({
+        generation,
+        workerSource: createPluginCandidateWorkerSource(),
+        deadlineAt,
+        signal: activationAbort.signal,
+        reportOwnership,
+      }))
+    } catch (cause) {
+      acceptsPendingOwnership = false
+      pendingBrokerOwnership.delete(generation)
+      cleanupActivation()
+      throw cause
+    }
     const brokerSettlement = brokerPromise.then(() => undefined, () => undefined)
     pendingBrokerSettlements.add(brokerSettlement)
     void brokerSettlement.finally(() => pendingBrokerSettlements.delete(brokerSettlement))
@@ -539,12 +600,16 @@ export function createPluginSandboxController(options: {
         )
       })
     } catch (cause) {
+      acceptsPendingOwnership = false
+      pendingBrokerOwnership.delete(generation)
       cleanupActivation()
       throw cause
     } finally {
       watchdogCount--
       emitLifecycle()
     }
+    acceptsPendingOwnership = false
+    pendingBrokerOwnership.delete(generation)
     liveBrokers.add(broker)
     emitLifecycle()
     const port = broker.runtimePort

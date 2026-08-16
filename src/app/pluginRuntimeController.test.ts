@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import type {
   PluginActivationBundleResolver,
   VerifiedPluginActivationBundle,
@@ -18,7 +18,10 @@ import {
   type PluginExportEffectRequirement,
 } from './pluginRuntimeController'
 import { PLUGIN_WASM_OPCODE_TABLE_DIGESTS } from '../workers/plugin-wasm/policyTables'
-import type { PluginRuntimeLifecycleSnapshot } from './pluginRuntimeLifecycleObserver'
+import type {
+  PluginRuntimeLifecycleSnapshot,
+  PluginSandboxLifecycleSnapshot,
+} from './pluginRuntimeLifecycleObserver'
 
 interface SandboxHarness {
   readonly controller: PluginSandboxController
@@ -728,6 +731,82 @@ describe('plugin runtime controller', () => {
       terminal: true,
     }])
     expect(snapshots.every((snapshot) => Object.isFrozen(snapshot))).toBe(true)
+  })
+
+  test('shares concurrent teardown through sandbox and runtime terminal cleanup', async () => {
+    const installed = bundle()
+    let releaseOwner!: () => void
+    const ownerCloseGate = new Promise<void>((resolve) => { releaseOwner = resolve })
+    let releaseSandbox!: () => void
+    const sandboxCloseGate = new Promise<void>((resolve) => { releaseSandbox = resolve })
+    const sandbox = sandboxHarness({ close: () => ownerCloseGate })
+    const lifecycleOrder: string[] = []
+    const runtimeSnapshots: PluginRuntimeLifecycleSnapshot[] = []
+    const sandboxTerminal: PluginSandboxLifecycleSnapshot = Object.freeze({
+      brokerIframeCount: 0,
+      candidateWorkerCount: 0,
+      privatePortCount: 0,
+      watchdogCount: 0,
+      pendingActivationCount: 0,
+      pendingRequestCount: 0,
+      sessionCount: 0,
+      terminal: true,
+    })
+    const sandboxTeardown = vi.fn(async () => {
+      await sandboxCloseGate
+      lifecycleOrder.push('sandbox-terminal')
+      lifecycleObserver.onSandboxSnapshot(sandboxTerminal)
+    })
+    const lifecycleObserver = {
+      onSandboxSnapshot(snapshot: PluginSandboxLifecycleSnapshot) {
+        if (snapshot.terminal) expect(snapshot).toEqual(sandboxTerminal)
+      },
+      onRuntimeSnapshot(snapshot: PluginRuntimeLifecycleSnapshot) {
+        runtimeSnapshots.push(snapshot)
+        if (snapshot.terminal) lifecycleOrder.push('runtime-terminal')
+      },
+    }
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolverFor(new Map([[installed.pluginId, installed]])),
+      sandboxController: { ...sandbox.controller, teardown: sandboxTeardown },
+      lifecycleObserver,
+    })
+    const editor = controller.openEditorSession()
+    await expect(editor.apply(applyRequest(identity(installed)))).resolves.toMatchObject({
+      status: 'applied',
+    })
+
+    const first = controller.teardown('shared-terminal')
+    const second = controller.teardown('ignored-second-reason')
+    expect(second).toBe(first)
+    const firstSettled = vi.fn()
+    const secondSettled = vi.fn()
+    void first.finally(firstSettled)
+    void second.finally(secondSettled)
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(firstSettled).not.toHaveBeenCalled()
+    expect(secondSettled).not.toHaveBeenCalled()
+
+    releaseOwner()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(firstSettled).not.toHaveBeenCalled()
+    expect(secondSettled).not.toHaveBeenCalled()
+    releaseSandbox()
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined])
+
+    expect(sandboxTeardown).toHaveBeenCalledOnce()
+    expect(sandboxTeardown).toHaveBeenCalledWith('shared-terminal')
+    expect(lifecycleOrder).toEqual(['sandbox-terminal', 'runtime-terminal'])
+    expect(runtimeSnapshots.filter((snapshot) => snapshot.terminal)).toEqual([{
+      queuedCallCount: 0,
+      activeCallCount: 0,
+      liveOwnerCount: 0,
+      migrationReservationCount: 0,
+      residentRuntimeCount: 0,
+      rawCacheEntryCount: 0,
+      rawCacheByteLength: 0,
+      terminal: true,
+    }])
   })
 
   test('contains runtime observer exceptions without masking an operational failure', async () => {

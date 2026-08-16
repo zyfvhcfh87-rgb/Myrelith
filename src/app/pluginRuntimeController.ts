@@ -498,6 +498,7 @@ export function createPluginRuntimeController(options: {
   let activeCallCount = 0
   let tornDown = false
   let terminalSnapshotEmitted = false
+  let teardownPromise: Promise<void> | null = null
   const controllerAbort = new AbortController()
 
   const emitLifecycle = (terminal = false): void => {
@@ -1716,29 +1717,32 @@ export function createPluginRuntimeController(options: {
         hostFailure('stale-generation', FAILURE_MESSAGES['stale-generation']),
       )
     },
-    async teardown(reason) {
-      if (tornDown) return
+    teardown(reason) {
+      if (teardownPromise) return teardownPromise
       tornDown = true
-      controllerAbort.abort()
-      const sandboxTeardown = Promise.resolve().then(() => sandboxController.teardown(reason))
-      for (const call of scheduledCalls.splice(0)) {
-        call.signal?.removeEventListener('abort', call.onAbort!)
-        call.reject(new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed)))
-      }
-      emitLifecycle()
-      await Promise.allSettled([...owners].map((owner) => owner.close(reason)))
-      await Promise.allSettled([...activeCallSettlements])
-      for (const reservation of migrationReservations) {
-        reservation.closed = true
-        reservation.occupied = false
-      }
-      migrationReservations.clear()
-      rawModuleCache.clear()
-      invalidationEpochByPlugin.clear()
-      activePlugins.clear()
-      const [sandboxResult] = await Promise.allSettled([sandboxTeardown])
-      emitLifecycle(true)
-      if (sandboxResult.status === 'rejected') throw sandboxResult.reason
+      teardownPromise = (async () => {
+        controllerAbort.abort()
+        const sandboxTeardown = Promise.resolve().then(() => sandboxController.teardown(reason))
+        for (const call of scheduledCalls.splice(0)) {
+          call.signal?.removeEventListener('abort', call.onAbort!)
+          call.reject(new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed)))
+        }
+        emitLifecycle()
+        await Promise.allSettled([...owners].map((owner) => owner.close(reason)))
+        await Promise.allSettled([...activeCallSettlements])
+        for (const reservation of migrationReservations) {
+          reservation.closed = true
+          reservation.occupied = false
+        }
+        migrationReservations.clear()
+        rawModuleCache.clear()
+        invalidationEpochByPlugin.clear()
+        activePlugins.clear()
+        const [sandboxResult] = await Promise.allSettled([sandboxTeardown])
+        emitLifecycle(true)
+        if (sandboxResult.status === 'rejected') throw sandboxResult.reason
+      })()
+      return teardownPromise
     },
   }
 }
