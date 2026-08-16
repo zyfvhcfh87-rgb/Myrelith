@@ -733,8 +733,34 @@ export class RenderWorkerBridge {
       : undefined
     if (maybeType === 'pluginEffectApply' || maybeType === 'pluginEffectCancel') {
       if (!isPluginEffectBridgeWorkerMessage(value)) {
-        const buffer = (value as { readonly rgbaBytes?: unknown }).rgbaBytes
+        const candidate = value as {
+          readonly rgbaBytes?: unknown
+          readonly generation?: unknown
+          readonly renderRequestId?: unknown
+          readonly effectRequestId?: unknown
+        }
+        const buffer = candidate.rgbaBytes
         if (buffer instanceof ArrayBuffer) zeroAttachedPluginEffectBuffer(buffer)
+        // A malformed apply still owns a live worker promise when its routing
+        // identity is intact. Settle that exact request as bypassed so hostile
+        // or corrupted payload fields cannot hang the whole render.
+        if (
+          maybeType === 'pluginEffectApply'
+          && Number.isSafeInteger(candidate.generation)
+          && Number(candidate.generation) > 0
+          && Number.isSafeInteger(candidate.renderRequestId)
+          && Number(candidate.renderRequestId) > 0
+          && Number.isSafeInteger(candidate.effectRequestId)
+          && Number(candidate.effectRequestId) > 0
+        ) {
+          this.post({
+            type: 'pluginEffectBypassed',
+            protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+            generation: Number(candidate.generation),
+            renderRequestId: Number(candidate.renderRequestId),
+            effectRequestId: Number(candidate.effectRequestId),
+          }, [])
+        }
         return
       }
       if (value.type === 'pluginEffectCancel') {

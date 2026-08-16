@@ -463,6 +463,33 @@ describe('compositeFrame — background & selection', () => {
     expect(result).toEqual({ drawn: ['capability-fallback'], missing: [] })
   })
 
+  test('fails export-closed when a ready plugin cannot access scratch pixels', async () => {
+    const bitmap = fakeBitmap(640, 360)
+    const clip = makeClip('fail-closed-capability', 0, 30, {
+      effects: [pluginEffect()],
+    })
+    const doc = makeDoc([makeTrack('V1', 'video', [clip])])
+    const destination = makeCtx()
+    const surfaces = makeTransitionSurfaceProvider()
+    const executor: VideoEffectStageExecutor = {
+      bypassPolicy: 'fail',
+      applyPluginEffect: vi.fn(),
+    }
+
+    await expect(compositeFrame(
+      doc,
+      0,
+      destination.ctx,
+      makeSource({ 'asset-1@0': bitmap }).source,
+      surfaces.provider,
+      undefined,
+      undefined,
+      pluginSnapshot(),
+      executor,
+    )).rejects.toBeInstanceOf(VideoEffectStageExecutionError)
+    expect(executor.applyPluginEffect).not.toHaveBeenCalled()
+  })
+
   test('awaits a mixed built-in/plugin stage transaction before painting the layer', async () => {
     const builtIn = createColorAdjustEffect('warm-before-plugin')
     builtIn.params.temperature = 1

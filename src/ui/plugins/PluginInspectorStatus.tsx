@@ -2,6 +2,7 @@ import { useId } from 'react'
 import PluginActionButton from './PluginActionButton'
 import { pluginEffectStatusLabel } from './pluginUiCopy'
 import type {
+  PluginActionView,
   PluginEffectIssueView,
   PluginRecoveryActionsView,
 } from './pluginUiTypes'
@@ -12,6 +13,8 @@ export interface PluginInspectorStatusProps {
   readonly onRetryPlugin: (pluginId: string) => void
   readonly onDisablePlugin: (pluginId: string) => void
   readonly onManagePlugin: (pluginId: string) => void
+  readonly migrationAction?: PluginActionView
+  readonly onMigrateEffect?: (effectInstanceId: string) => void
 }
 
 export default function PluginInspectorStatus({
@@ -20,6 +23,8 @@ export default function PluginInspectorStatus({
   onRetryPlugin,
   onDisablePlugin,
   onManagePlugin,
+  migrationAction,
+  onMigrateEffect,
 }: PluginInspectorStatusProps) {
   const headingId = useId()
 
@@ -47,6 +52,14 @@ export default function PluginInspectorStatus({
             : 'The descriptor is preserved and remains editable, reorderable, removable, and saveable.'}
       </p>
       <div className="plugin-card-actions" aria-label={`${effect.effectLabel} plugin actions`}>
+        {migrationAction && onMigrateEffect ? (
+          <PluginActionButton
+            action={migrationAction}
+            label="Update effect"
+            pendingLabel={`Updating ${effect.effectLabel}…`}
+            onAction={() => onMigrateEffect(effect.effectInstanceId)}
+          />
+        ) : null}
         <PluginActionButton
           action={actions.retry}
           label="Retry"

@@ -1121,7 +1121,7 @@ describe('Export dialog lifecycle', () => {
     await waitFor(() => expect(port.start).toHaveBeenCalledOnce())
   })
 
-  test('disables Close while a prepared attempt is still fenced', async () => {
+  test('lets Close cancel a prepared attempt while it is still fenced', async () => {
     const preparation = deferred<ReturnType<typeof readyPrepared>>()
     const port = preparedPort({ prepare: vi.fn(() => preparation.promise) })
     renderPluginToolbar()
@@ -1129,13 +1129,14 @@ describe('Export dialog lifecycle', () => {
     fireEvent.click(await readyStartButton())
     await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
 
-    expect(screen.getByRole('button', { name: 'Close export dialog' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Close export dialog' }))
+    await waitFor(() => expect(port.cancel).toHaveBeenCalledWith('plugin-export-dialog-closed'))
     await act(async () => {
       preparation.resolve(readyPrepared())
       await preparation.promise
     })
 
-    await waitFor(() => expect(port.start).toHaveBeenCalledOnce())
+    expect(port.start).not.toHaveBeenCalled()
   })
 
   test('cancels a deferred prepared attempt during unmount', async () => {

@@ -1,7 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
   copyFileSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -15,10 +14,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, test } from 'vitest'
 import { verifyPluginPackageArchive } from '../../app/pluginPackage'
 import { selectPluginWasmProfile } from '../../domain/pluginWasmPolicy'
-import {
-  PluginWasmPolicyError,
-  parsePluginWasmModule,
-} from '../../workers/plugin-wasm/moduleParser'
+import { parsePluginWasmModule } from '../../workers/plugin-wasm/moduleParser'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 const SAMPLE_ROOT = join(REPO_ROOT, 'samples', 'plugins', 'audited-invert-v1')
@@ -128,25 +124,12 @@ async function assertProductionAcceptance(packagePath: string): Promise<void> {
     kind: 'video-effect',
   })
 
-  let facts
-  try {
-    facts = parsePluginWasmModule(verified.moduleBytes, {
-      policy: selectPluginWasmProfile(verified.manifest),
-      memoryMaximumPages: 1_025,
-      renderEntrypoints: ['myrelith_effect_audited_invert'],
-      migrationEntrypoints: [],
-    })
-  } catch (error) {
-    const parserSource = readFileSync(
-      join(REPO_ROOT, 'src', 'workers', 'plugin-wasm', 'moduleParser.ts'),
-      'utf8',
-    )
-    const isExactPreRuntimeTracer = error instanceof PluginWasmPolicyError
-      && error.message === 'The minimal render tracer has no locals.'
-      && parserSource.includes('The minimal render tracer body must be i32.const 0 followed by end.')
-    if (isExactPreRuntimeTracer) return
-    throw error
-  }
+  const facts = parsePluginWasmModule(verified.moduleBytes, {
+    policy: selectPluginWasmProfile(verified.manifest),
+    memoryMaximumPages: 1_025,
+    renderEntrypoints: ['myrelith_effect_audited_invert'],
+    migrationEntrypoints: [],
+  })
   expect(facts.importedMemory).toEqual({ minimumPages: 1_025, maximumPages: 1_025 })
   expect(facts.definedFunctionCount).toBe(1)
   expect(facts.exportedFunctions).toEqual(['myrelith_effect_audited_invert'])
@@ -252,11 +235,12 @@ describe('audited sample plugin source and release artifact', () => {
     }
   })
 
-  test('keeps the immutable repository release wholly absent or fully verifiable', async () => {
-    const states = RELEASE_FILES.map((name) => existsSync(join(SAMPLE_ROOT, name)))
-    expect(new Set(states).size).toBe(1)
-    if (!states[0]) return
-
+  test('requires and verifies the immutable repository release', async () => {
+    expect(RELEASE_FILES.map((name) => readdirSync(SAMPLE_ROOT).includes(name))).toEqual([
+      true,
+      true,
+      true,
+    ])
     const report = runVerifier('--check') as ReleaseReport
     expect(report.status).toBe('release-verified')
     expect(report.privateArtifactsWritten).toBe(0)

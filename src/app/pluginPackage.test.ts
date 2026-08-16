@@ -3,6 +3,7 @@ import {
   PluginPackageError,
   verifyPluginPackageArchive,
 } from './pluginPackage'
+import { hostileArchiveFixtures } from '../test/plugins/archiveFixtures'
 
 const MANIFEST_JSON = '{"api":{"maxVersion":1,"minVersion":1},"contributions":[{"contributionVersion":1,"descriptorVersion":1,"entrypoint":"myrelith_effect_fixture","id":"fixture","kind":"video-effect","migrations":[],"name":"Fixture","parameters":[]}],"id":"com.example.fixture","name":"Fixture","permissions":[{"id":"myrelith.effect.video-frame.rgba8","maxVersion":1,"minVersion":1,"required":true}],"runtime":{"entry":"runtime/plugin.wasm","kind":"wasm","memoryMaximumPages":258},"schemaVersion":1,"version":"1.0.0"}'
 const WASM_HEX = '0061736d01000000010f01600a7f7f7f7f7f7f7f7f7f7f017f021701086d7972656c697468066d656d6f727902018202820203020100071b01176d7972656c6974685f6566666563745f6669787475726500000a0601040041000b'
@@ -203,6 +204,18 @@ function corruptFirstEntryChecksum(archive: Uint8Array): Uint8Array {
 }
 
 describe('signed plugin package verification', () => {
+  test.each(hostileArchiveFixtures())(
+    'rejects independently built hostile archive $id ($expectedGate)',
+    async ({ build }) => {
+      await expect(verifyPluginPackageArchive(build())).rejects.toEqual(
+        expect.objectContaining<Partial<PluginPackageError>>({
+          name: 'PluginPackageError',
+          code: 'archive-invalid',
+        }),
+      )
+    },
+  )
+
   test('accepts the complete canonical Ed25519 golden package', async () => {
     const archive = storedZip(goldenEntries())
     const verified = await verifyPluginPackageArchive(archive)

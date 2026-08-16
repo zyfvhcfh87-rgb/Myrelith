@@ -38,6 +38,10 @@ import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
 import { initSelectionReconciliation } from './selectionReconciliationController'
 import { initProxyController } from './proxyController'
 import { initMotionAnalysisRuntime } from './motionAnalysisRuntime'
+import { getPluginAppController } from './pluginAppController'
+import { setPreviewPluginBinding } from './previewController'
+
+const pluginAppController = getPluginAppController()
 
 export interface EditorShellProps {
   closing: boolean
@@ -52,6 +56,10 @@ export default function EditorShell({ closing }: EditorShellProps) {
   const fitted = fitWorkspaceLayout(workspace, viewport)
   useUndoRedoShortcuts()
   useEditShortcuts()
+  useEffect(() => {
+    setPreviewPluginBinding(pluginAppController)
+    return () => { setPreviewPluginBinding(null) }
+  }, [])
   useEffect(() => {
     if (
       !import.meta.env.DEV

@@ -17,7 +17,7 @@ import {
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 import EditorCommandPalette from './EditorCommandPalette'
-import { useOptionalPluginUi } from './plugins/PluginUiContext'
+import { useOptionalPluginUi } from './plugins/PluginUiHooks'
 
 const ExportDialog = lazy(() => import('./ExportDialog'))
 const CaptionEditor = lazy(() => import('./CaptionEditor'))

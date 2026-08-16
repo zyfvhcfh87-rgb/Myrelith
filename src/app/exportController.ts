@@ -22,6 +22,7 @@ import { selectMediaRepresentation } from '../domain/proxyCache'
 import { audibleTracks, outputMediaAssetIds } from '../domain/selectors'
 import { sourceTimeAudioPolicy } from '../domain/sourceTimeMap'
 import {
+  assertExportAdmission,
   exportTimeline,
   type ExportDeps as PipelineExportDeps,
   type ExportMediaSource,
@@ -478,6 +479,9 @@ async function preflightAndRunExport(
   >,
 ): Promise<ExportResult | undefined> {
   if (lifecycle.cancelRequested) return undefined
+  // Reject impossible work before Blob retention, profile probing, or the
+  // eager per-frame visual-plan schedule owned by createMediaSource().
+  assertExportAdmission(doc, settings)
   const includeAudio = settings.audioChannelLayout !== 'off'
   const sourceBounds = createSourceBoundsCatalog(assets.values())
   let resolveAsset: ExportAssetResolver | null = null

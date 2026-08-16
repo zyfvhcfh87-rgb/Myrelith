@@ -316,6 +316,69 @@ afterEach(async () => {
 })
 
 describe('exportController wiring and completion', () => {
+  test('rejects an over-budget timeline before any media or pipeline allocation', async () => {
+    const h = makeHarness()
+    const sourceTrack = DOC.tracks[0]
+    const sourceClip = sourceTrack?.clips[0]
+    if (!sourceTrack || !sourceClip) throw new Error('export budget fixture missing')
+    useDocumentStore.setState({
+      doc: {
+        ...DOC,
+        tracks: [{
+          ...sourceTrack,
+          clips: [{
+            ...sourceClip,
+            sourceRange: { ...sourceClip.sourceRange, durationFrames: 5_000_001 },
+            timelineRange: { ...sourceClip.timelineRange, durationFrames: 5_000_001 },
+          }],
+        }],
+      },
+      past: [],
+      future: [],
+    })
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      'Export work exceeds the 5000000-frame limit.',
+    )
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.preflightProfile).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('rejects an over-budget prepared plugin export before its frame plans allocate', async () => {
+    const h = makeHarness()
+    const sourceTrack = DOC.tracks[0]
+    const sourceClip = sourceTrack?.clips[0]
+    if (!sourceTrack || !sourceClip) throw new Error('prepared export budget fixture missing')
+    const document: TimelineDoc = {
+      ...DOC,
+      tracks: [{
+        ...sourceTrack,
+        clips: [{
+          ...sourceClip,
+          sourceRange: { ...sourceClip.sourceRange, durationFrames: 5_000_001 },
+          timelineRange: { ...sourceClip.timelineRange, durationFrames: 5_000_001 },
+        }],
+      }],
+    }
+    const execution = preparedExecution({ document })
+
+    await expect(startPreparedExport(
+      PREPARED_TOKEN,
+      preparedController(execution),
+      {},
+      h.deps,
+    )).rejects.toThrow('Export work exceeds the 5000000-frame limit.')
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.preflightProfile).not.toHaveBeenCalled()
+    expect(h.createPipelineDeps).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+    expect(execution.close).toHaveBeenCalledWith('plugin-export-failed')
+  })
+
   test('requires the prepared path for an output-contributing plugin descriptor', async () => {
     const h = makeHarness()
     const pluginDoc: TimelineDoc = {

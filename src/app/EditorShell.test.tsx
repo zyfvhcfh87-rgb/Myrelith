@@ -17,10 +17,15 @@ import {
 } from '../test/storeFixtures'
 import EditorShell from './EditorShell'
 
+const previewMocks = vi.hoisted(() => ({
+  setPreviewPluginBinding: vi.fn(),
+}))
+
 vi.mock('../app/previewController', () => ({
   disposePreview: vi.fn(),
   initPreview: vi.fn(),
   setPreviewViewport: vi.fn(),
+  setPreviewPluginBinding: previewMocks.setPreviewPluginBinding,
 }))
 
 function makeClip(id: string, startFrame: number): Clip {
@@ -83,6 +88,19 @@ beforeEach(() => {
 })
 
 describe('EditorShell', () => {
+  test('binds the production plugin controller to preview for the editor lifetime', () => {
+    const { unmount } = render(<EditorShell closing={false} />)
+
+    expect(previewMocks.setPreviewPluginBinding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        getContributionSnapshot: expect.any(Function),
+        getEffectBridgeHandler: expect.any(Function),
+      }),
+    )
+    unmount()
+    expect(previewMocks.setPreviewPluginBinding).toHaveBeenLastCalledWith(null)
+  })
+
   test('renders every editor panel area', () => {
     const { container } = render(<EditorShell closing={false} />)
 

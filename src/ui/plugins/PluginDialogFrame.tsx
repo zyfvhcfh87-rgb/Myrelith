@@ -9,9 +9,9 @@ import {
 const FOCUSABLE_SELECTOR = [
   '[data-plugin-dialog-initial-focus]:not([disabled])',
   'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
+  'input:not([disabled]):not([tabindex="-1"]):not([type="hidden"])',
+  'select:not([disabled]):not([tabindex="-1"])',
+  'textarea:not([disabled]):not([tabindex="-1"])',
   '[href]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ')
@@ -56,6 +56,12 @@ export default function PluginDialogFrame({
     }
   }, [])
 
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (busy || !dialog || document.activeElement !== dialog) return
+    dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus()
+  }, [busy])
+
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
     event.stopPropagation()
     if (event.key === 'Escape' && !dismissDisabled) {
@@ -68,7 +74,11 @@ export default function PluginDialogFrame({
     const dialog = dialogRef.current
     if (!dialog) return
     const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
-      .filter((element) => !element.hasAttribute('disabled') && !element.hidden)
+      .filter((element) => (
+        !element.hasAttribute('disabled')
+        && !element.hidden
+        && element.getAttribute('aria-hidden') !== 'true'
+      ))
     if (focusable.length === 0) {
       event.preventDefault()
       dialog.focus()

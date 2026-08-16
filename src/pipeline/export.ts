@@ -132,6 +132,12 @@ export interface ExportDeps {
   ): Promise<ExportVideoSink>
 }
 
+export interface ExportAdmission {
+  readonly settings: Readonly<ExportSettings>
+  readonly frameCount: number
+  readonly frameDurationSec: number
+}
+
 function assertSettings(settings: ExportSettings): Readonly<ExportSettings> {
   return validateExportProfile(settings)
 }
@@ -142,6 +148,30 @@ function exportFrameCount(doc: TimelineDoc): number {
     throw new RangeError('Cannot export an empty or invalid timeline')
   }
   return frameCount
+}
+
+/**
+ * Pure, allocation-free admission gate shared by the app composition root and
+ * the pipeline. Callers must pass it before constructing any per-frame plan,
+ * decoder, sink, or frame lease.
+ */
+export function assertExportAdmission(
+  doc: TimelineDoc,
+  settings: ExportSettings,
+): Readonly<ExportAdmission> {
+  const validatedSettings = assertSettings(settings)
+  const frameCount = exportFrameCount(doc)
+  assertRenderSurfaceBudget(doc.width, doc.height)
+  const frameDurationSec = assertBoundaryTime(
+    framesToSeconds(1, doc.frameRate),
+    'duration',
+  )
+  assertExportWorkBudget(frameCount, doc.frameRate, validatedSettings)
+  return Object.freeze({
+    settings: validatedSettings,
+    frameCount,
+    frameDurationSec,
+  })
 }
 
 function assertBoundaryTime(
@@ -170,6 +200,7 @@ async function compositeAndCloseLease(
   const returnedPluginBuffers = new Set<Uint8Array>()
   const trackedVideoEffectStageExecutor = videoEffectStageExecutor
     ? Object.freeze({
+        bypassPolicy: videoEffectStageExecutor.bypassPolicy,
         async applyPluginEffect(
           request: Parameters<VideoEffectStageExecutor['applyPluginEffect']>[0],
         ) {
@@ -297,14 +328,10 @@ export async function* exportTimeline(
   }
 
   try {
-    const validatedSettings = assertSettings(settings)
-    const frameCount = exportFrameCount(doc)
-    assertRenderSurfaceBudget(doc.width, doc.height)
-    const frameDurationSec = assertBoundaryTime(
-      framesToSeconds(1, doc.frameRate),
-      'duration',
-    )
-    assertExportWorkBudget(frameCount, doc.frameRate, validatedSettings)
+    const admission = assertExportAdmission(doc, settings)
+    const validatedSettings = admission.settings
+    const frameCount = admission.frameCount
+    const frameDurationSec = admission.frameDurationSec
     yield 0
 
     sink = await deps.createVideoSink(doc, validatedSettings)

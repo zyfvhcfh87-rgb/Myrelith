@@ -130,7 +130,7 @@ export default function PluginSafeModeCard(props: PluginSafeModeCardProps) {
             <SafeModeAction
               action={props.enterSafeModeAction}
               label="Enter safe mode"
-              pendingLabel="Entering safe modeâ€¦"
+              pendingLabel="Entering safe mode…"
               descriptionId="plugin-safe-mode-detail"
               onAction={props.onEnterSafeMode}
             />
@@ -138,7 +138,7 @@ export default function PluginSafeModeCard(props: PluginSafeModeCardProps) {
               <SafeModeAction
                 action={props.continueReviewedNormalAction}
                 label="Continue normally after review"
-                pendingLabel="Continuing normallyâ€¦"
+                pendingLabel="Continuing normally…"
                 descriptionId="plugin-safe-mode-detail"
                 onAction={props.onContinueReviewedNormal}
               />

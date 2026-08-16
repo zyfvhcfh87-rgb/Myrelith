@@ -4,7 +4,7 @@ import PluginContributionPicker from './PluginContributionPicker'
 import PluginInspectorStatus from './PluginInspectorStatus'
 import PluginParameterFields from './PluginParameterFields'
 import PluginPreviewNotice from './PluginPreviewNotice'
-import { useOptionalPluginEditorSnapshot, useOptionalPluginUi, usePluginAppSnapshot, usePluginUi } from './PluginUiContext'
+import { useOptionalPluginEditorSnapshot, useOptionalPluginUi, usePluginAppSnapshot, usePluginUi } from './PluginUiHooks'
 import type { PluginEffectIssueView, PluginPreviewIssueView } from './pluginUiTypes'
 
 function ignored(promise: Promise<unknown>): void {
@@ -21,13 +21,12 @@ function issueView<T extends {
   readonly status: PluginEffectIssueView['status']
   readonly reason: string
   readonly blocksExport: boolean
-}>(value: T): PluginEffectIssueView | null {
-  if (value.pluginId === null || value.pluginName === null) return null
+}>(value: T): PluginEffectIssueView {
   return {
     effectInstanceId: value.effectInstanceId,
     effectLabel: value.effectLabel,
-    pluginId: value.pluginId,
-    pluginName: value.pluginName,
+    pluginId: value.pluginId ?? 'unknown-plugin',
+    pluginName: value.pluginName ?? 'Unknown plugin',
     pluginVersion: value.pluginVersion,
     packageDigest: value.packageDigest,
     status: value.status,
@@ -42,11 +41,10 @@ function PluginInspectorContent() {
   const app = usePluginAppSnapshot()
   const editor = useOptionalPluginEditorSnapshot()
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [migratingEffectId, setMigratingEffectId] = useState<string | null>(null)
 
   if (!editor || !editor.coherent || editor.catalogGeneration === null || !selectedClipId) return null
-  const effects = editor.effects.filter(
-    (effect) => effect.clipId === selectedClipId && issueView(effect) !== null,
-  )
+  const effects = editor.effects.filter((effect) => effect.clipId === selectedClipId)
   const addEffect = (effectType: string): void => {
     const result = controller.addPluginEffect({
       documentGeneration: editor.documentGeneration,
@@ -67,6 +65,16 @@ function PluginInspectorContent() {
     })
     setFeedback(result.status === 'rejected' ? result.detail : null)
   }
+  const migrateEffect = (effectInstanceId: string): void => {
+    setMigratingEffectId(effectInstanceId)
+    setFeedback(null)
+    void controller.migratePluginEffects([effectInstanceId]).then(
+      () => { setFeedback(null) },
+      (cause: unknown) => {
+        setFeedback(cause instanceof Error ? cause.message : 'The effect update did not complete.')
+      },
+    ).finally(() => { setMigratingEffectId(null) })
+  }
 
   return (
     <div className="plugin-editor-surfaces" data-testid="plugin-editor-surfaces">
@@ -74,11 +82,21 @@ function PluginInspectorContent() {
       {effects.map((effect) => (
         <div key={effect.effectInstanceId}>
           <PluginInspectorStatus
-            effect={issueView(effect)!}
+            effect={issueView(effect)}
             actions={effect.actions}
             onRetryPlugin={(pluginId) => ignored(controller.retryPlugin(pluginId))}
             onDisablePlugin={(pluginId) => ignored(controller.disablePlugin(pluginId))}
             onManagePlugin={(pluginId) => manager.openManager(pluginId)}
+            migrationAction={effect.status === 'version-mismatch' ? {
+              available: true,
+              disabledReason: migratingEffectId !== null
+                && migratingEffectId !== effect.effectInstanceId
+                ? 'Another effect update is still finishing.'
+                : null,
+              pending: migratingEffectId === effect.effectInstanceId,
+              error: null,
+            } : undefined}
+            onMigrateEffect={effect.status === 'version-mismatch' ? migrateEffect : undefined}
           />
           <PluginParameterFields
             effectType={effect.effectType}
@@ -104,10 +122,10 @@ function PluginPreviewContent() {
   if (!editor || !editor.coherent) return null
   return (
     <PluginPreviewNotice
-      issues={editor.previewIssues.flatMap((issue): PluginPreviewIssueView[] => {
-        const view = issueView(issue)
-        return view === null ? [] : [{ ...view, actions: issue.actions }]
-      })}
+      issues={editor.previewIssues.map((issue): PluginPreviewIssueView => ({
+        ...issueView(issue),
+        actions: issue.actions,
+      }))}
       manageAction={editor.manageAction}
       onRetryPlugin={(pluginId) => ignored(controller.retryPlugin(pluginId))}
       onDisablePlugin={(pluginId) => ignored(controller.disablePlugin(pluginId))}

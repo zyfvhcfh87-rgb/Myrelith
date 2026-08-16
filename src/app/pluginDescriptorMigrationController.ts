@@ -493,6 +493,11 @@ export function createPluginDescriptorMigrationController(
 
           actionClosed = true
           await closeMigrationAction(action, 'migration-complete', undefined)
+          const postCloseSnapshot = dependencies.getContributionSnapshot()
+          if (postCloseSnapshot.catalogGeneration !== snapshot.catalogGeneration) {
+            fail('stale', 'The plugin catalog changed while migration resources were closing')
+          }
+          assertStartingState(dependencies, starting, targets)
           if (!dependencies.commitDocument(
             starting.generation,
             starting.document,

@@ -56,7 +56,7 @@
 
 .plugin-eyebrow {
   color: #7faaff;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -253,7 +253,7 @@
   background: #293749;
   border: 1px solid #3b4d64;
   border-radius: 999px;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -322,7 +322,7 @@
 .plugin-compact-facts dt,
 .plugin-fact-grid dt {
   color: #7f8ea2;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -354,7 +354,7 @@
 .plugin-action-disabled-reason,
 .plugin-action-error {
   max-width: 240px;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -492,7 +492,7 @@
   justify-content: space-between;
   gap: 12px;
   color: #7f8da0;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .plugin-diagnostic-meta code {
@@ -502,7 +502,7 @@
 
 .plugin-diagnostic-list p {
   color: #a8b3c2;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -680,7 +680,7 @@
 .plugin-consent-row small,
 .plugin-bypass-confirmation small {
   color: #8f9caf;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -699,7 +699,7 @@
   flex-wrap: wrap;
   gap: 4px 8px;
   color: #8190a4;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .plugin-capability-meta code {
@@ -739,7 +739,7 @@
 
 .plugin-preview-live-status {
   color: #c8a96f !important;
-  font-size: 9px !important;
+  font-size: 12px !important;
   font-weight: 650;
 }
 
@@ -772,13 +772,13 @@
 .plugin-preview-issue-list span,
 .plugin-export-issue-list span {
   color: #8996a8;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .plugin-preview-issue-list p,
 .plugin-export-issue-list p {
   color: #a7b2c0;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -803,14 +803,14 @@
 
 .plugin-export-package-identity dt {
   color: #75859a;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .plugin-export-package-identity dd {
   min-width: 0;
   margin: 0;
   color: #acb8c7;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -973,7 +973,7 @@
 
 .plugin-parameter-label-row span {
   color: #8d9aae;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;

@@ -46,8 +46,8 @@ import {
   profileForSelectionFallback,
   type ExportUiSelectionId,
 } from './exportProfileUi'
-import PluginExportBlockDialog from './plugins/PluginExportBlockDialog'
-import { useOptionalPluginUi } from './plugins/PluginUiContext'
+import { PluginExportBlockBody } from './plugins/PluginExportBlockDialog'
+import { useOptionalPluginUi } from './plugins/PluginUiHooks'
 import type { PluginEffectIssueView } from './plugins/pluginUiTypes'
 import type { PluginPreparedExportPort } from '../app/pluginPreparedExportOwner'
 
@@ -96,7 +96,7 @@ type CustomCapabilityState =
 
 let controllerPromise: Promise<ExportControllerModule> | null = null
 let capabilitiesPromise: Promise<ExportCapabilitiesModule> | null = null
-let preparedExportPortPromise: Promise<PluginPreparedExportPort> | null = null
+let preparedExportModulePromise: Promise<typeof import('../app/pluginPreparedExportOwner')> | null = null
 
 /** Capability code is also excluded from the initial editor bundle. */
 function loadExportCapabilities(): Promise<ExportCapabilitiesModule> {
@@ -109,13 +109,14 @@ function loadExportCapabilities(): Promise<ExportCapabilitiesModule> {
 }
 
 function loadPreparedExportPort(): Promise<PluginPreparedExportPort> {
-  preparedExportPortPromise ??= import('../app/pluginPreparedExportOwner')
-    .then(({ getPluginPreparedExportPort }) => getPluginPreparedExportPort())
+  preparedExportModulePromise ??= import('../app/pluginPreparedExportOwner')
     .catch((cause) => {
-      preparedExportPortPromise = null
+      preparedExportModulePromise = null
       throw cause
     })
-  return preparedExportPortPromise
+  return preparedExportModulePromise.then(
+    ({ getPluginPreparedExportPort }) => getPluginPreparedExportPort(),
+  )
 }
 
 function blockerIssues(snapshot: PluginPreparedExportSnapshot): readonly PluginEffectIssueView[] {
@@ -466,6 +467,11 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   }
 
   const requestCancel = (): void => {
+    if (preparationInFlightRef.current) {
+      invalidatePluginPreparation('user-cancel')
+      setPluginBlock(null)
+      return
+    }
     if (!runningRef.current || cancelRequestedRef.current) return
     cancelRequestedRef.current = true
     // If the export-only controller chunk has not started a run yet, there is
@@ -878,7 +884,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       <div className="export-dialog-card">
         <ExportDialogHeader
           titleId={titleId}
-          busy={busy}
+          busy={phase === 'choosing-file' || phase === 'running' || phase === 'cancelling'}
           closeButtonRef={closeButtonRef}
           onClose={closeDialog}
         />
@@ -922,7 +928,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             runDestination={runDestinationRef.current}
           />
           {pluginBlock?.status === 'blocked' ? (
-            <PluginExportBlockDialog
+            <PluginExportBlockBody
               issues={blockerIssues(pluginBlock)}
               reviewToken={pluginBlock.token}
               documentRevision={String(pluginBlock.attempt.documentGeneration)}

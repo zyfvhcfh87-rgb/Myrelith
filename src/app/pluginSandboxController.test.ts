@@ -151,7 +151,7 @@ function scriptedBrokerFactory(options: {
       return {
         runtimePort: channel.port1,
         setFatalHandler() {},
-        terminate(reason) {
+        async terminate(reason) {
           terminate(reason)
           channel.port1.close()
           if (!options.ignoreRender) channel.port2.close()
@@ -173,6 +173,7 @@ describe('plugin sandbox controller', () => {
     expect(iframe.srcdoc).toContain("connect-src 'none'")
     expect(iframe.srcdoc).toContain('MYRELITH_PLUGIN_SANDBOX_BROKER_V1')
     expect(iframe.srcdoc).toContain("kind:'worker-created'")
+    expect(iframe.srcdoc).toContain("kind:'worker-terminated'")
     expect(iframe.srcdoc).not.toMatch(/https?:\/\//)
   })
 
@@ -408,6 +409,65 @@ describe('plugin sandbox controller', () => {
     expect(harness.terminate).toHaveBeenCalledOnce()
   })
 
+  test('zeroes a transferred frame from a wrong-generation reply before ignoring it', async () => {
+    let replyBytes: Uint8Array | undefined
+    const factory: PluginSandboxBrokerFactory = async ({ generation }) => {
+      const runtimePort = {
+        onmessage: null as ((event: MessageEvent) => void) | null,
+        onmessageerror: null as ((event: MessageEvent) => void) | null,
+        start() {},
+        close() {},
+        postMessage(request: Record<string, unknown>) {
+          queueMicrotask(() => {
+            if (request.kind === 'activate') {
+              runtimePort.onmessage?.({ data: {
+                protocolVersion: 1,
+                kind: 'ready',
+                generation,
+                requestId: request.requestId,
+                facts: {
+                  policy: activation().expectations.policy,
+                  opcodeTableDigest: activation().expectations.opcodeTableDigest,
+                  importedMemory: { minimumPages: 258, maximumPages: 258 },
+                  definedFunctionCount: 1,
+                  tableCount: 0,
+                  elementSegmentCount: 0,
+                  dataSegmentCount: 0,
+                  exportedFunctions: ['myrelith_effect_fixture'],
+                },
+              } } as MessageEvent)
+              return
+            }
+            if (request.kind === 'render') {
+              replyBytes = Uint8Array.of(1, 2, 3, 4)
+              runtimePort.onmessage?.({ data: {
+                protocolVersion: 1,
+                kind: 'rendered',
+                generation: generation + 1,
+                requestId: request.requestId,
+                identity: false,
+                rgbaBytes: replyBytes.buffer,
+              } } as MessageEvent)
+            }
+          })
+        },
+      }
+      return {
+        runtimePort: runtimePort as unknown as MessagePort,
+        setFatalHandler() {},
+        async terminate() {},
+      }
+    }
+    const controller = createPluginSandboxController({ brokerFactory: factory })
+    const session = await controller.activate(activation())
+
+    await expect(session.render(renderRequest(), 20)).rejects.toMatchObject({
+      failure: { code: 'timeout' },
+    })
+    expect(replyBytes).toBeDefined()
+    expect([...replyBytes!]).toEqual([0, 0, 0, 0])
+  })
+
   test('direct teardown settles a pending call and ignores a late worker reply', async () => {
     const harness = scriptedBrokerFactory({ ignoreRender: true })
     const controller = createPluginSandboxController({ brokerFactory: harness.factory })
@@ -474,7 +534,7 @@ describe('plugin sandbox controller', () => {
     expect(snapshots.at(-1)).toMatchObject({
       brokerIframeCount: 1,
       candidateWorkerCount: 1,
-      privatePortCount: 2,
+      privatePortCount: 4,
       watchdogCount: 0,
       pendingActivationCount: 0,
       pendingRequestCount: 0,
@@ -515,7 +575,7 @@ describe('plugin sandbox controller', () => {
     const broker: PluginSandboxBroker = {
       runtimePort: channel.port1,
       setFatalHandler() {},
-      terminate(reason) {
+      async terminate(reason) {
         terminate(reason)
         channel.port1.close()
         channel.port2.close()

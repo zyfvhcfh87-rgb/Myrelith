@@ -68,7 +68,7 @@ export interface PluginSandboxSession {
 export interface PluginSandboxBroker {
   readonly runtimePort: MessagePort
   setFatalHandler(handler: (failure: PluginRuntimeFailure) => void): void
-  terminate(reason: string): void
+  terminate(reason: string): Promise<void>
 }
 
 export interface PluginSandboxBrokerOwnershipSnapshot {
@@ -125,6 +125,13 @@ function zeroAttachedArrayBuffers(buffers: readonly ArrayBuffer[]): void {
   for (const buffer of buffers) {
     if (buffer.byteLength > 0) new Uint8Array(buffer).fill(0)
   }
+}
+
+function zeroWorkerResponsePayloads(value: unknown): void {
+  if (!isRecord(value)) return
+  const buffers = [value.rgbaBytes, value.canonicalOutputBytes]
+    .filter(isArrayBuffer)
+  zeroAttachedArrayBuffers([...new Set(buffers)])
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -276,6 +283,7 @@ function receiveHandshake(event){
       const command=controlEvent.data;
       if(command&&typeof command==='object'&&!Array.isArray(command)&&Object.keys(command).sort().join(',')==='kind,nonce,reason'&&command.kind==='terminate'&&command.nonce===handshakeNonce&&typeof command.reason==='string'){
         worker.terminate();
+        controlPort.postMessage({kind:'worker-terminated',nonce:handshakeNonce,generation:data.generation});
         controlPort.close();
       }
     };
@@ -344,28 +352,48 @@ export async function createBrowserPluginSandboxBroker(
   reportOwnership(ownership)
   let fatalHandler: ((runtimeFailure: PluginRuntimeFailure) => void) | undefined
   let terminated = false
-  const terminate = (reason: string): void => {
-    if (terminated) return
+  let terminatePromise: Promise<void> | undefined
+  let acknowledgeTermination: (() => void) | undefined
+  const terminate = (reason: string): Promise<void> => {
+    if (terminatePromise) return terminatePromise
     terminated = true
-    try {
-      controlChannel.port1.postMessage({ kind: 'terminate', nonce, reason: reason.slice(0, 512) })
-    } finally {
-      controlChannel.port1.close()
-      controlChannel.port2.close()
-      iframe.remove()
-      reportOwnership({
-        brokerIframeCount: 0,
-        candidateWorkerCount: 0,
-        privatePortCount: 0,
-      })
-    }
+    terminatePromise = new Promise<void>((resolve) => {
+      let settled = false
+      let timer: number | undefined
+      const finish = (): void => {
+        if (settled) return
+        settled = true
+        if (timer !== undefined) window.clearTimeout(timer)
+        acknowledgeTermination = undefined
+        controlChannel.port1.close()
+        controlChannel.port2.close()
+        iframe.remove()
+        reportOwnership({
+          brokerIframeCount: 0,
+          candidateWorkerCount: 0,
+          privatePortCount: 0,
+        })
+        resolve()
+      }
+      acknowledgeTermination = finish
+      try {
+        controlChannel.port1.postMessage({ kind: 'terminate', nonce, reason: reason.slice(0, 512) })
+        if (ownership.candidateWorkerCount === 0) {
+          finish()
+          return
+        }
+        timer = window.setTimeout(finish, 250)
+      } catch {
+        finish()
+      }
+    })
+    return terminatePromise
   }
 
   const runtimePort = await new Promise<MessagePort>((resolve, reject) => {
     const remaining = request.deadlineAt - performance.now()
     const rejectAndTerminate = (runtimeFailure: PluginRuntimeFailure): void => {
-      terminate(runtimeFailure.code)
-      reject(new PluginSandboxError(runtimeFailure))
+      void terminate(runtimeFailure.code).finally(() => reject(new PluginSandboxError(runtimeFailure)))
     }
     if (remaining <= 0) {
       rejectAndTerminate(failure('timeout', 'Plugin activation timed out before broker creation.'))
@@ -388,7 +416,12 @@ export async function createBrowserPluginSandboxBroker(
       if (!isRecord(value) || value.nonce !== nonce || value.generation !== request.generation) return
       if (exactKeys(value, ['kind', 'nonce', 'generation'])
         && value.kind === 'worker-created') {
-        reportOwnership({ ...ownership, candidateWorkerCount: 1 })
+        reportOwnership({ ...ownership, candidateWorkerCount: 1, privatePortCount: 4 })
+        return
+      }
+      if (exactKeys(value, ['kind', 'nonce', 'generation'])
+        && value.kind === 'worker-terminated') {
+        acknowledgeTermination?.()
         return
       }
       if (value.kind === 'worker-error') {
@@ -429,6 +462,12 @@ export async function createBrowserPluginSandboxBroker(
 
   controlChannel.port1.onmessage = (event): void => {
     const value = event.data
+    if (isRecord(value) && exactKeys(value, ['kind', 'nonce', 'generation'])
+      && value.kind === 'worker-terminated'
+      && value.nonce === nonce && value.generation === request.generation) {
+      acknowledgeTermination?.()
+      return
+    }
     if (isRecord(value) && value.kind === 'worker-error'
       && value.nonce === nonce && value.generation === request.generation) {
       const runtimeFailure = failure(
@@ -436,7 +475,7 @@ export async function createBrowserPluginSandboxBroker(
         typeof value.message === 'string' ? value.message : 'Plugin worker crashed.',
       )
       fatalHandler?.(runtimeFailure)
-      terminate(runtimeFailure.code)
+      void terminate(runtimeFailure.code)
     }
   }
 
@@ -468,7 +507,7 @@ export function createPluginSandboxController(options: {
   const brokerFactory = options.brokerFactory ?? createBrowserPluginSandboxBroker
   const now = options.now ?? (() => performance.now())
   const liveBrokers = new Set<PluginSandboxBroker>()
-  const liveTerminals = new Set<(runtimeFailure: PluginRuntimeFailure) => void>()
+  const liveTerminals = new Set<(runtimeFailure: PluginRuntimeFailure) => Promise<void>>()
   const pendingActivationAborts = new Set<AbortController>()
   const pendingActivationSettlements = new Set<Promise<void>>()
   const pendingBrokerSettlements = new Set<Promise<void>>()
@@ -494,7 +533,7 @@ export function createPluginSandboxController(options: {
     const snapshot = Object.freeze({
       brokerIframeCount: liveBrokers.size + pendingOwnership.brokerIframeCount,
       candidateWorkerCount: liveBrokers.size + pendingOwnership.candidateWorkerCount,
-      privatePortCount: liveBrokers.size * 2 + pendingOwnership.privatePortCount,
+      privatePortCount: liveBrokers.size * 4 + pendingOwnership.privatePortCount,
       watchdogCount,
       pendingActivationCount: pendingActivationAborts.size,
       pendingRequestCount,
@@ -592,11 +631,10 @@ export function createPluginSandboxController(options: {
           (created) => {
             activationAbort.signal.removeEventListener('abort', onAbort)
             if (aborted || activationAbort.signal.aborted) {
-              try {
-                created.terminate('activation-aborted-before-broker-ready')
-              } finally {
-                releasePendingOwnership()
-              }
+              const termination = created.terminate('activation-aborted-before-broker-ready')
+                .finally(releasePendingOwnership)
+              pendingBrokerSettlements.add(termination)
+              void termination.finally(() => pendingBrokerSettlements.delete(termination))
               return
             }
             resolve(created)
@@ -624,6 +662,7 @@ export function createPluginSandboxController(options: {
     let pending: PendingRequest | undefined
     let sessionClosed = false
     let sessionAcquired = false
+    let terminalPromise: Promise<void> | null = null
 
     const releasePending = (current: PendingRequest): void => {
       clearTimeout(current.timer)
@@ -635,8 +674,8 @@ export function createPluginSandboxController(options: {
       emitLifecycle()
     }
 
-    const terminal = (runtimeFailure: PluginRuntimeFailure): void => {
-      if (sessionClosed) return
+    const terminal = (runtimeFailure: PluginRuntimeFailure): Promise<void> => {
+      if (terminalPromise) return terminalPromise
       sessionClosed = true
       if (pending) {
         const current = pending
@@ -645,26 +684,42 @@ export function createPluginSandboxController(options: {
         current.reject(new PluginSandboxError(runtimeFailure))
       }
       port.close()
-      broker.terminate(runtimeFailure.code)
-      liveBrokers.delete(broker)
-      liveTerminals.delete(terminal)
       if (sessionAcquired) {
         sessionAcquired = false
         sessionCount--
       }
       emitLifecycle()
+      terminalPromise = (async () => {
+        try {
+          await broker.terminate(runtimeFailure.code)
+        } catch {
+          // Local ownership is still released below if broker teardown itself faults.
+        } finally {
+          liveBrokers.delete(broker)
+          liveTerminals.delete(terminal)
+          emitLifecycle()
+        }
+      })()
+      return terminalPromise
     }
     liveTerminals.add(terminal)
-    broker.setFatalHandler(terminal)
-    port.onmessageerror = (): void => terminal(failure('crashed', 'Plugin worker message deserialization failed.'))
+    broker.setFatalHandler((runtimeFailure) => { void terminal(runtimeFailure) })
+    port.onmessageerror = (): void => { void terminal(failure('crashed', 'Plugin worker message deserialization failed.')) }
     port.onmessage = (event): void => {
       const response = event.data
-      if (!pending || !isRecord(response)) return
+      if (!pending || !isRecord(response)) {
+        zeroWorkerResponsePayloads(response)
+        return
+      }
       if (response.protocolVersion !== PLUGIN_RUNTIME_PROTOCOL_VERSION
         || response.generation !== generation
-        || response.requestId !== pending.requestId) return
+        || response.requestId !== pending.requestId) {
+        zeroWorkerResponsePayloads(response)
+        return
+      }
       if (typeof response.kind !== 'string') {
-        terminal(failure('invalid-envelope', 'Plugin worker response envelope is invalid.'))
+        zeroWorkerResponsePayloads(response)
+        void terminal(failure('invalid-envelope', 'Plugin worker response envelope is invalid.'))
         return
       }
       const current = pending
@@ -672,18 +727,20 @@ export function createPluginSandboxController(options: {
         if (!exactKeys(response, [
           'protocolVersion', 'kind', 'generation', 'requestId', 'failure',
         ]) || !isPluginRuntimeFailure(response.failure)) {
-          terminal(failure('invalid-envelope', 'Plugin worker failure response is invalid.'))
+          zeroWorkerResponsePayloads(response)
+          void terminal(failure('invalid-envelope', 'Plugin worker failure response is invalid.'))
           return
         }
         pending = undefined
         releasePending(current)
         const runtimeFailure = response.failure
         current.reject(new PluginSandboxError(runtimeFailure))
-        if (runtimeFailure.terminal) terminal(runtimeFailure)
+        if (runtimeFailure.terminal) void terminal(runtimeFailure)
         return
       }
       if (!isWorkerSuccessResponse(response, current.expectedKind)) {
-        terminal(failure('invalid-envelope', 'Plugin worker success response is invalid.'))
+        zeroWorkerResponsePayloads(response)
+        void terminal(failure('invalid-envelope', 'Plugin worker success response is invalid.'))
         return
       }
       pending = undefined
@@ -704,7 +761,7 @@ export function createPluginSandboxController(options: {
       if (sessionClosed) return Promise.reject(new PluginSandboxError(failure('closed', 'Plugin sandbox is closed.')))
       if (pending) return Promise.reject(new PluginSandboxError(failure('busy', 'Plugin sandbox already has an active request.')))
       if (requestSignal?.aborted) {
-        terminal(failure('aborted', 'Plugin request was cancelled.'))
+        void terminal(failure('aborted', 'Plugin request was cancelled.'))
         return Promise.reject(new PluginSandboxError(failure('aborted', 'Plugin request was cancelled.')))
       }
       const requestId = ++requestSequence
@@ -716,8 +773,8 @@ export function createPluginSandboxController(options: {
             ? 'migrated'
             : 'closed'
       return new Promise((resolve, reject) => {
-        const onAbort = requestSignal ? (): void => terminal(failure('aborted', 'Plugin request was cancelled.')) : undefined
-        const timer = setTimeout(() => terminal(failure('timeout', 'Plugin request exceeded its watchdog deadline.')), deadlineMs)
+        const onAbort = requestSignal ? (): void => { void terminal(failure('aborted', 'Plugin request was cancelled.')) } : undefined
+        const timer = setTimeout(() => { void terminal(failure('timeout', 'Plugin request exceeded its watchdog deadline.')) }, deadlineMs)
         const countsAsRequest = request.kind !== 'activate'
         watchdogCount++
         if (countsAsRequest) pendingRequestCount++
@@ -737,7 +794,7 @@ export function createPluginSandboxController(options: {
           port.postMessage({ ...request, requestId }, transfer)
         } catch {
           zeroAttachedArrayBuffers(transfer.filter(isArrayBuffer))
-          terminal(failure('crashed', 'Plugin request dispatch failed.'))
+          void terminal(failure('crashed', 'Plugin request dispatch failed.'))
         }
       })
     }
@@ -755,7 +812,7 @@ export function createPluginSandboxController(options: {
         expectations: activation.expectations,
       }, [activationBytes], remaining, activationAbort.signal)
     } catch (cause) {
-      terminal(cause instanceof PluginSandboxError ? cause.failure : failure('activation-failed', String(cause)))
+      await terminal(cause instanceof PluginSandboxError ? cause.failure : failure('activation-failed', String(cause)))
       cleanupActivation()
       throw cause
     } finally {
@@ -763,13 +820,13 @@ export function createPluginSandboxController(options: {
     }
     if (ready.kind !== 'ready') {
       const runtimeFailure = failure('invalid-envelope', 'Plugin worker did not return a ready response.')
-      terminal(runtimeFailure)
+      await terminal(runtimeFailure)
       cleanupActivation()
       throw new PluginSandboxError(runtimeFailure)
     }
     if (!isPluginWasmModuleFacts(ready.facts, activation.expectations)) {
       const runtimeFailure = failure('invalid-envelope', 'Plugin worker facts are invalid.')
-      terminal(runtimeFailure)
+      await terminal(runtimeFailure)
       cleanupActivation()
       throw new PluginSandboxError(runtimeFailure)
     }
@@ -802,7 +859,7 @@ export function createPluginSandboxController(options: {
           }, [canonicalParameterBytes, rgbaBytes], deadlineMs, requestSignal)
           if (response.kind !== 'rendered' || !isArrayBuffer(response.rgbaBytes)) {
             const runtimeFailure = failure('invalid-envelope', 'Plugin render response is invalid.')
-            terminal(runtimeFailure)
+            await terminal(runtimeFailure)
             throw new PluginSandboxError(runtimeFailure)
           }
           return Object.freeze({
@@ -827,7 +884,7 @@ export function createPluginSandboxController(options: {
           }, [canonicalInputBytes], PLUGIN_MIGRATION_DEADLINE_MS, requestSignal)
           if (response.kind !== 'migrated' || !isArrayBuffer(response.canonicalOutputBytes)) {
             const runtimeFailure = failure('invalid-envelope', 'Plugin migration response is invalid.')
-            terminal(runtimeFailure)
+            await terminal(runtimeFailure)
             throw new PluginSandboxError(runtimeFailure)
           }
           return new Uint8Array(response.canonicalOutputBytes)
@@ -848,7 +905,7 @@ export function createPluginSandboxController(options: {
         } catch {
           // Terminal cleanup below is authoritative even when the worker is wedged.
         } finally {
-          terminal(failure('closed', reason))
+          await terminal(failure('closed', reason))
         }
       },
     }
@@ -862,16 +919,17 @@ export function createPluginSandboxController(options: {
       teardownPromise = (async () => {
         const runtimeFailure = failure('closed', reason)
         for (const activationAbort of pendingActivationAborts) activationAbort.abort()
-        for (const terminal of [...liveTerminals]) terminal(runtimeFailure)
-        liveTerminals.clear()
-        for (const broker of [...liveBrokers]) broker.terminate(reason)
-        liveBrokers.clear()
-        await Promise.allSettled([...pendingBrokerSettlements])
-        await Promise.allSettled([...pendingActivationSettlements])
+        await Promise.allSettled([...liveTerminals].map((terminal) => terminal(runtimeFailure)))
+        while (pendingBrokerSettlements.size > 0 || pendingActivationSettlements.size > 0) {
+          await Promise.allSettled([
+            ...pendingBrokerSettlements,
+            ...pendingActivationSettlements,
+          ])
+        }
         // Late broker resolutions are terminated by the activation guard before
         // their settlement joins this terminal boundary.
-        for (const terminal of [...liveTerminals]) terminal(runtimeFailure)
-        for (const broker of [...liveBrokers]) broker.terminate(reason)
+        await Promise.allSettled([...liveTerminals].map((terminal) => terminal(runtimeFailure)))
+        await Promise.allSettled([...liveBrokers].map((broker) => broker.terminate(reason)))
         liveTerminals.clear()
         liveBrokers.clear()
         emitLifecycle(true)

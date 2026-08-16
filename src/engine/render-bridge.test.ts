@@ -1286,6 +1286,35 @@ describe('plugin effect RPC', () => {
     await expect(second).resolves.toMatchObject({ status: 'drawn' })
   })
 
+  test('settles an identifiable malformed worker apply instead of hanging render', async () => {
+    const plan = readyPluginPlan()
+    const handler: PluginEffectBridgeHandler = { apply: vi.fn() }
+    const worker = new FakeWorker()
+    const bridge = new RenderWorkerBridge(worker, handler)
+    bridge.setDoc(makeDoc([]))
+    void bridge.renderFrame(plan, 'seek')
+    const renderMessage = worker.renderFrames()[0]
+    const input = Uint8Array.of(1, 2, 3, 4)
+    const malformed = {
+      ...pluginApplyMessage(plan, renderMessage, input.buffer, 17),
+      stride: 8,
+    }
+
+    worker.emit(malformed)
+
+    expect([...input]).toEqual([0, 0, 0, 0])
+    expect(handler.apply).not.toHaveBeenCalled()
+    expect(worker.posted.find(({ msg }) => (
+      msg.type === 'pluginEffectBypassed'
+      && msg.effectRequestId === 17
+    ))?.msg).toMatchObject({
+      type: 'pluginEffectBypassed',
+      generation: renderMessage.generation,
+      renderRequestId: renderMessage.requestId,
+      effectRequestId: 17,
+    })
+  })
+
   test('aborts the exact in-flight handler on worker cancellation', async () => {
     const plan = readyPluginPlan()
     const observedSignals: AbortSignal[] = []

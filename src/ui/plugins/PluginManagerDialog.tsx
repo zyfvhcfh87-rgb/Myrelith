@@ -4,7 +4,7 @@ import PluginManagerPanel, { type PluginManagerPhase } from './PluginManagerPane
 import PluginPackageReviewDialog, {
   type PluginPackageReviewPhase,
 } from './PluginPackageReviewDialog'
-import { usePluginAppSnapshot, usePluginUi } from './PluginUiContext'
+import { usePluginAppSnapshot, usePluginUi } from './PluginUiHooks'
 import type { PluginInstallDecision } from './pluginUiTypes'
 
 function ignored(promise: Promise<unknown>): void {

@@ -478,6 +478,10 @@ export function createPluginRuntimeController(options: {
   readonly sandboxController?: PluginSandboxController
   readonly rawModuleCache?: PluginRawModuleCache
   readonly lifecycleObserver?: PluginRuntimeLifecycleObserver
+  readonly runActivationBatch?: <T>(
+    pluginId: string,
+    activate: () => Promise<T>,
+  ) => Promise<T>
 }): PluginRuntimeController {
   const resolver = options.activationBundleResolver
   const sandboxController = options.sandboxController ?? createPluginSandboxController({
@@ -826,7 +830,7 @@ export function createPluginRuntimeController(options: {
       }
       let session: PluginSandboxSession
       try {
-        session = await sandboxController.activate({
+        const activate = () => sandboxController.activate({
           moduleBytes,
           expectations: {
             policy: exactCacheKey.policy,
@@ -838,6 +842,9 @@ export function createPluginRuntimeController(options: {
             ),
           },
         }, signal)
+        session = options.runActivationBatch
+          ? await options.runActivationBatch(bundle.pluginId, activate)
+          : await activate()
       } finally {
         moduleBytes.fill(0)
       }
@@ -983,7 +990,15 @@ export function createPluginRuntimeController(options: {
     phase: 'editor' | 'export',
     signal?: AbortSignal,
   ): Promise<PluginEffectApplyResult> => {
+    let result: { readonly identity: boolean; readonly rgbaBytes: Uint8Array } | null = null
     try {
+      const authorizationSignal = signal ?? controllerAbort.signal
+      if (await resolver.generation(authorizationSignal) !== bundle.catalogGeneration) {
+        throw new PluginRuntimeError(hostFailure(
+          'stale-generation',
+          FAILURE_MESSAGES['stale-generation'],
+        ))
+      }
       matchBundle(request, bundle)
       const expectedLength = request.stride * request.height
       const pixelCapacity = bundle.profile.memoryMaximumPages * PLUGIN_IO_PAGE_BYTES
@@ -1015,7 +1030,6 @@ export function createPluginRuntimeController(options: {
       }
       // The planner owns canonicalization. Runtime performs this one exact UTF-8 encoding only.
       const parameterBytes = canonicalBytes(request.canonicalParameterJson)
-      let result: { readonly identity: boolean; readonly rgbaBytes: Uint8Array }
       try {
         result = await owner.withEntry(bundle, signal, (entry) => entry.session.render({
           entrypoint: request.entrypoint,
@@ -1034,12 +1048,19 @@ export function createPluginRuntimeController(options: {
       if (result.rgbaBytes.byteLength !== request.rgbaBytes.byteLength) {
         throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
       }
+      if (await resolver.generation(authorizationSignal) !== bundle.catalogGeneration) {
+        throw new PluginRuntimeError(hostFailure(
+          'stale-generation',
+          FAILURE_MESSAGES['stale-generation'],
+        ))
+      }
       return Object.freeze({
         status: 'applied',
         effectResult: result.identity ? 'identity' : 'mutated',
         rgbaBytes: result.rgbaBytes,
       })
     } catch (cause) {
+      if (result?.rgbaBytes.byteLength) result.rgbaBytes.fill(0)
       const runtimeFailure = publicFailure(cause)
       recordDiagnostic(request.pluginId, phase, runtimeFailure, request.requestId)
       if (runtimeFailure.terminal) await owner.invalidate(request.pluginId, runtimeFailure.code)

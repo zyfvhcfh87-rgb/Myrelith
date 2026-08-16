@@ -232,10 +232,19 @@ function applyRequest(
 
 function resolverFor(
   values: ReadonlyMap<string, VerifiedPluginActivationBundle>,
-): PluginActivationBundleResolver & { readonly calls: string[] } {
+): PluginActivationBundleResolver & {
+  readonly calls: string[]
+  setGeneration(value: number): void
+} {
   const calls: string[] = []
+  let generation = values.values().next().value?.catalogGeneration ?? 0
   return {
     calls,
+    setGeneration(value) { generation = value },
+    async generation(signal) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+      return generation
+    },
     async resolve(pluginId, signal) {
       calls.push(pluginId)
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
@@ -440,12 +449,65 @@ describe('plugin runtime controller', () => {
     expect((await editor.apply(applyRequest(identity(first), { requestId: 1 }))).status)
       .toBe('applied')
     installed.set(first.pluginId, second)
+    resolver.setGeneration(second.catalogGeneration)
     expect((await editor.apply(applyRequest(identity(second), { requestId: 2 }))).status)
       .toBe('applied')
 
     expect(resolver.calls).toEqual([first.pluginId, first.pluginId])
     expect(sandbox.closeReasons).toContain('editor-plan-identity-changed')
     expect(sandbox.activations).toHaveLength(2)
+    await editor.close('test-complete')
+  })
+
+  test('rejects a cached editor runtime after another tab advances authorization', async () => {
+    const installed = bundle()
+    const resolver = resolverFor(new Map([[installed.pluginId, installed]]))
+    const sandbox = sandboxHarness()
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+    })
+    const editor = controller.openEditorSession()
+
+    expect((await editor.apply(applyRequest(identity(installed), { requestId: 1 }))).status)
+      .toBe('applied')
+    resolver.setGeneration(installed.catalogGeneration + 1)
+    const revoked = await editor.apply(applyRequest(identity(installed), { requestId: 2 }))
+
+    expect(revoked).toMatchObject({
+      status: 'failed',
+      failure: { code: 'stale-generation' },
+    })
+    expect(sandbox.renderRequests).toHaveLength(1)
+    expect(sandbox.closeReasons).toContain('stale-generation')
+    await editor.close('test-complete')
+  })
+
+  test('zeroes a completed frame when cross-tab authorization changes during render', async () => {
+    const installed = bundle()
+    const resolver = resolverFor(new Map([[installed.pluginId, installed]]))
+    let returnedBytes: Uint8Array | null = null
+    const sandbox = sandboxHarness({
+      render: async (request) => {
+        returnedBytes = request.rgbaBytes.slice()
+        resolver.setGeneration(installed.catalogGeneration + 1)
+        return { identity: false, rgbaBytes: returnedBytes }
+      },
+    })
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+    })
+    const editor = controller.openEditorSession()
+
+    const revoked = await editor.apply(applyRequest(identity(installed)))
+
+    expect(revoked).toMatchObject({
+      status: 'failed',
+      failure: { code: 'stale-generation' },
+    })
+    expect(returnedBytes).not.toBeNull()
+    expect([...returnedBytes!]).toEqual([0, 0, 0, 0])
     await editor.close('test-complete')
   })
 
@@ -509,6 +571,29 @@ describe('plugin runtime controller', () => {
     await session.close('export-complete')
   })
 
+  test('stops a prepared export after another tab advances authorization', async () => {
+    const installed = bundle()
+    const resolver = resolverFor(new Map([[installed.pluginId, installed]]))
+    const sandbox = sandboxHarness()
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+    })
+    const session = await controller.preflightExport({
+      requiredEffects: [exportRequirement(installed)],
+    })
+    resolver.setGeneration(installed.catalogGeneration + 1)
+
+    const revoked = await session.apply(applyRequest(identity(installed)))
+
+    expect(revoked).toMatchObject({
+      status: 'failed',
+      failure: { code: 'stale-generation' },
+    })
+    expect(sandbox.renderRequests).toHaveLength(0)
+    await session.close('export-complete')
+  })
+
   test('repeats sandbox policy activation on a raw-cache hit across owners', async () => {
     const installed = bundle()
     const resolver = resolverFor(new Map([[installed.pluginId, installed]]))
@@ -531,6 +616,31 @@ describe('plugin runtime controller', () => {
     expect(sandbox.activations[0].expectations.opcodeTableDigest)
       .toBe(PLUGIN_WASM_OPCODE_TABLE_DIGESTS['myrelith-wasm-migration-integer-v1'])
     await second.close('second-complete')
+  })
+
+  test('wraps third-party sandbox activation in the injected crash-sentinel batch', async () => {
+    const installed = bundle()
+    const resolver = resolverFor(new Map([[installed.pluginId, installed]]))
+    const sandbox = sandboxHarness()
+    const events: string[] = []
+    const controller = createPluginRuntimeController({
+      activationBundleResolver: resolver,
+      sandboxController: sandbox.controller,
+      async runActivationBatch(pluginId, activate) {
+        events.push(`before:${pluginId}:${sandbox.activations.length}`)
+        const session = await activate()
+        events.push(`after:${pluginId}:${sandbox.activations.length}`)
+        return session
+      },
+    })
+    const editor = controller.openEditorSession()
+
+    expect((await editor.apply(applyRequest(identity(installed)))).status).toBe('applied')
+    expect(events).toEqual([
+      `before:${installed.pluginId}:0`,
+      `after:${installed.pluginId}:1`,
+    ])
+    await editor.close('test-complete')
   })
 
   test('disables one editor plugin after three consecutive runtime failures', async () => {
@@ -974,6 +1084,7 @@ describe('plugin runtime controller', () => {
     const successful = bundle('com.example.aggregate-success')
     const resolverCalls: string[] = []
     const resolver: PluginActivationBundleResolver = {
+      async generation() { return 7 },
       async resolve(pluginId) {
         resolverCalls.push(pluginId)
         if (pluginId === missing.pluginId) {

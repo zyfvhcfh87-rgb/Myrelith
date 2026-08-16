@@ -42,6 +42,8 @@ export type PluginVideoEffectApplyResult =
 
 /** Preview and export inject distinct lifecycle owners behind this one contract. */
 export interface VideoEffectStageExecutor {
+  /** Preview may disclose a visible bypass; export must fail closed. */
+  readonly bypassPolicy?: 'allow' | 'fail'
   applyPluginEffect(
     request: PluginVideoEffectApplyRequest,
   ): Promise<PluginVideoEffectApplyResult>
@@ -147,7 +149,14 @@ export async function applyVideoEffectStagePlanToRgba(
         cause,
       )
     }
-    if (result.status === 'bypassed') continue
+    if (result.status === 'bypassed') {
+      if (executor.bypassPolicy === 'fail') {
+        throw new VideoEffectStageExecutionError(
+          `Plugin effect ${stage.effect.id} was bypassed during fail-closed execution`,
+        )
+      }
+      continue
+    }
     if (!(result.rgba instanceof Uint8Array) || result.rgba.byteLength !== expectedLength) {
       throw new VideoEffectStageExecutionError(
         `Plugin effect ${stage.effect.id} returned an invalid RGBA byte length`,

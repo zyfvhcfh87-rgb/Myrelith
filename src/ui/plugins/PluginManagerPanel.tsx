@@ -189,9 +189,12 @@ export default function PluginManagerPanel({
           <p>Packages stay on this browser profile. Projects never carry plugin code or permission grants.</p>
         </div>
         <button
+          key={`inspect-package-${phase}`}
           type="button"
           className="plugin-button-primary"
           disabled={phase !== 'ready'}
+          autoFocus={phase === 'ready'}
+          data-plugin-dialog-initial-focus={phase === 'ready' ? '' : undefined}
           onClick={onInspectPackage}
         >
           Inspect package…

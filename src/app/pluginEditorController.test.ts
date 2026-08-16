@@ -336,8 +336,8 @@ describe('plugin editor controller', () => {
     expect(missing.controller.getSnapshot()).toMatchObject({
       effects: [{
         status: 'missing',
-        pluginId: null,
-        pluginName: null,
+        pluginId: PLUGIN_ID,
+        pluginName: PLUGIN_ID,
         pluginVersion: null,
         packageDigest: null,
         actions: {
@@ -346,7 +346,7 @@ describe('plugin editor controller', () => {
           manage: { available: true },
         },
       }],
-      previewIssues: [{ pluginId: null, status: 'missing' }],
+      previewIssues: [{ pluginId: PLUGIN_ID, pluginName: PLUGIN_ID, status: 'missing' }],
     })
     safeMode.controller.dispose()
     missing.controller.dispose()
@@ -470,6 +470,27 @@ describe('plugin editor controller', () => {
     }).code).toBe('animated-parameter')
     expect(animated.store.commits).toHaveLength(0)
     animated.controller.dispose()
+  })
+
+  test('refuses to mutate a malformed video effect attached to an audio track', () => {
+    const document = documentWith()
+    const audioDocument: TimelineDoc = {
+      ...document,
+      tracks: document.tracks.map((track, index) => (
+        index === 0 ? { ...track, kind: 'audio' as const } : track
+      )),
+    }
+    const harness = setup({ document: audioDocument })
+
+    expect(harness.controller.setPluginEffectParameter({
+      ...requestGenerations(harness.controller),
+      clipId: 'clip-1',
+      effectInstanceId: 'effect-plugin',
+      key: 'strength',
+      value: 0.75,
+    })).toMatchObject({ status: 'rejected', code: 'invalid-target' })
+    expect(harness.store.commits).toHaveLength(0)
+    harness.controller.dispose()
   })
 
   test('distinguishes an exact-capacity string replacement from a genuine no-change', () => {

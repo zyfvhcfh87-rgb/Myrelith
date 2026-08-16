@@ -468,6 +468,17 @@ describe('plugin app controller', () => {
     expect(() => harness.controller.getEditorSnapshot()).toThrow(PluginAppControllerError)
   })
 
+  test('exposes descriptor migration as a real app-owned recovery action', async () => {
+    const harness = setup()
+    await harness.controller.refreshManagement()
+
+    await expect(harness.controller.migratePluginEffects([])).rejects.toMatchObject({
+      code: 'invalid-target',
+    })
+    expect(Object.keys(harness.controller)).toContain('migratePluginEffects')
+    await harness.owner.close('migration-caller-test')
+  })
+
   test('shares a rejecting terminal boundary while editor unsubscribe fails and composition still closes', async () => {
     const editor = editorHarness()
     editor.dispose.mockImplementation(() => { throw new Error('document unsubscribe failed') })
@@ -981,6 +992,7 @@ describe('plugin app controller', () => {
       expect(Object.keys(session.exportFacade)).toEqual([
         'getDeclarationCatalog',
         'preflightAndCloseExport',
+        'applyAndCloseExport',
       ])
       expect(Object.isFrozen(session)).toBe(true)
       expect(Object.isFrozen(session.exportFacade)).toBe(true)

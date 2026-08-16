@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import PluginSafeModeCard from './PluginSafeModeCard'
-import { usePluginAppSnapshot, usePluginUi } from './PluginUiContext'
+import { usePluginAppSnapshot, usePluginUi } from './PluginUiHooks'
 
 export interface PluginStartupSurfaceProps {
   readonly showCard: boolean

@@ -127,6 +127,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #110 — bounded point and box tracking** | ✅ complete | exact-frame Program Monitor selection; bounded forward/backward local tracking; explicit loss; ordinary Position and optional Scale authoring; PR #117 squash-merged as `a91f1af`; issue closed |
 | **Post-MVP #111 — parity-safe manual lens remap** | ✅ complete | build-unreferenced CPU oracle + accepted RGBA8 WebGL2 candidate; seven-fixture pixel/geometry parity, 720p/1080p/4K timing, finite memory, cancellation, context-loss/fresh-owner proof; PR #114 squash-merged as `56826a6` |
 | **Post-MVP #119 — bounded manual lens correction** | 🚧 implementation complete locally | schema-14 versioned intent; accessible Inspector/history controls; promoted source-space WebGL2 preview/export path; explicit coverage/unavailability; seven-surface 4K budget; local CI/review gates pending |
+| **Post-MVP #77 — signed sandboxed plugins** | 🚧 PR #123 remediation validated locally | production preview/export/migration wiring; fail-closed render and stale-generation gates; bounded host-acknowledged teardown; safe startup recovery; hostile-package and real Chromium acceptance; full/exact-head publication gates pending |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
@@ -4936,3 +4937,54 @@ surface; it is not a second zoom and never enters document history.
   console health were clean with zero warnings/errors.
 - Push, CI, current-head Codex review, PR delivery, merge, and issue closeout
   remain outside this local implementation turn.
+
+## Part 10c issue #77 / PR #123 - merge-readiness remediation
+
+**REMEDIATION COMPLETE AND VALIDATED LOCALLY; EXACT-HEAD PUBLICATION PENDING
+(2026-08-16).**
+
+- Production preview now binds the app-owned plugin bridge for the lifetime of
+  `EditorShell`; export keeps a separate prepared owner and fails closed on a
+  bypass or unavailable ordered-pixel surface. Export admission rejects an
+  excessive frame schedule before Blob retention, media planning, decoder/sink
+  acquisition, or per-frame plugin-plan allocation.
+- Runtime authorization checks the current IndexedDB catalog generation both
+  before and after every render, zeros stale output, and invalidates the owner.
+  Malformed and late bridge/broker messages settle only an exact valid routing
+  identity and zero any transferred pixel or migration buffers. Audio clips can
+  no longer accept video-plugin parameter edits.
+- Teardown retains observable ownership until the host-authored iframe broker
+  acknowledges `worker.terminate()`; a 250 ms parent fallback remains bounded.
+  Project replacement and cancellation drain late broker and activation
+  settlements before publishing all-zero terminal evidence. The actual private
+  channel accounting is four endpoints per live broker.
+- The app startup path now loads the plugin recovery root before exposing the
+  project launcher. A production activation sentinel wraps actual sandbox
+  activation. Descriptor migration is wired to the real document CAS boundary,
+  rechecks project and catalog state after resource closure, commits once, and
+  has a visible pending/error recovery action in the Inspector.
+- Plugin Manager focus now lands on a visible actionable control after async
+  refresh; missing descriptors remain visible with bounded fallback identity;
+  Export uses an inline block body instead of nesting dialogs and acquires a
+  fresh project-scoped export owner. Plugin UI text is at least 12 px, and the
+  safe-mode ellipsis corruption is removed.
+- Independently built duplicate/path/case-fold/symlink/checksum/trailing-byte
+  archives now cross the production package verifier. The repository sample is
+  mandatory rather than conditionally skipped, and production parser rejection
+  can no longer be treated as success. Its unchanged release verifies as archive
+  SHA-256 `a809c6f086213064a90b63f1ca1e42c5e5215aa3cd874c706e15fe5edcded42e`,
+  package digest `sha256:ca3eaaba5a8a87ea88e313fd9f26dd1ebb9aefc217ea76ef219a35ca931f8b15`,
+  and signer fingerprint `sha256:c955bcdaff60dc0593be20942f5f153ee4427765694b5e69a1e9a6caa5764139`.
+- The authoritative local gate passes 225/225 files with 3,055/3,055 Vitest
+  tests plus all 17 evidence-runner checks. TypeScript/Vite builds 4,872 modules
+  with the established large-chunk advisory; lint is clean and the production
+  audit reports zero vulnerabilities. Real Chromium installs/uninstalls through
+  production UI, produces exact preview pixels `245,235,225,255` and separate
+  export pixels `254,253,252,255`, blocks interrupted-startup launcher access,
+  recovers through safe mode, and returns every runtime/broker counter to zero.
+  The same browser gate proves opaque origin plus blocked network, storage, DOM,
+  opener, dynamic-script, nested-worker, beacon, and WebRTC capabilities. It
+  also changes the authoritative IndexedDB generation behind a warmed controller
+  and proves the next pixel call is rejected before sandbox execution.
+- Commit/push, exact clean-head Chromium evidence, CI, and current-head review
+  remain publication gates. Merge and issue closeout are not authorized here.

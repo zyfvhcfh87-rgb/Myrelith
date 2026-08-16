@@ -31,11 +31,16 @@ import { createPluginRuntimeController } from './pluginRuntimeController'
 import type {
   PluginDescriptorMigrationActionPreflightRequest,
   PluginDescriptorMigrationActionSession,
+  PluginEffectApplyRequest,
+  PluginEffectApplyResult,
   PluginExportPreflightRequest,
   PluginExportSession,
 } from './pluginRuntimeController'
 import type { PluginRuntimeLifecycleObserver } from './pluginRuntimeLifecycleObserver'
-import type { PluginSafetyStorage } from './pluginSafetyController'
+import {
+  runPluginActivationBatch,
+  type PluginSafetyStorage,
+} from './pluginSafetyController'
 import { createPluginTrustRegistry, type PluginDiagnosticCode } from './pluginTrustRegistry'
 import {
   createPluginEditorController,
@@ -47,6 +52,16 @@ import {
   type PluginEditorControllerFactory,
   type PluginEditorPluginProjection,
 } from './pluginEditorController'
+import {
+  createPluginDescriptorMigrationController,
+  PluginDescriptorMigrationError,
+  type PluginDescriptorMigrationController,
+  type PluginDescriptorMigrationResult,
+} from './pluginDescriptorMigrationController'
+import {
+  createPluginDocumentGenerationController,
+  type PluginDocumentGenerationController,
+} from './pluginDocumentGeneration'
 
 const MAX_PUBLIC_DETAIL_CHARACTERS = 512
 const FAILURE_POLICY = 'Preview bypasses a failed effect with a warning. Export stops unless you review a one-time bypass.'
@@ -236,6 +251,10 @@ export interface PluginAppController {
   subscribeEditor(listener: (snapshot: PluginAppEditorSnapshot) => void): () => void
   addPluginEffect(request: PluginAppAddEffectRequest): PluginAppEditorMutationResult
   setPluginEffectParameter(request: PluginAppSetParameterRequest): PluginAppEditorMutationResult
+  migratePluginEffects(
+    effectIds: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<PluginDescriptorMigrationResult>
   getContributionSnapshot(): PluginVideoEffectContributionSnapshot | undefined
   getEffectBridgeHandler(): PluginEffectBridgeHandler
   refreshManagement(signal?: AbortSignal): Promise<void>
@@ -277,6 +296,11 @@ export interface PluginAppAcceptanceExportFacade {
     request: PluginExportPreflightRequest,
     signal?: AbortSignal,
   ): Promise<void>
+  applyAndCloseExport(
+    preflight: PluginExportPreflightRequest,
+    effect: PluginEffectApplyRequest,
+    signal?: AbortSignal,
+  ): Promise<PluginEffectApplyResult>
 }
 
 /** Exclusive dev-gate lease. It never exposes the app-private owner or sessions. */
@@ -317,6 +341,8 @@ function boundedDetail(value: string): string {
 function isExpectedAppCloseRejection(cause: unknown): boolean {
   return cause instanceof PluginAppControllerError
     ? cause.code === 'aborted' || cause.code === 'closed' || cause.code === 'stale-operation'
+    : cause instanceof PluginDescriptorMigrationError
+      ? cause.code === 'aborted' || cause.code === 'stale'
     : cause instanceof Error && cause.message === 'Plugin composition is closed'
 }
 
@@ -580,6 +606,8 @@ export function createPluginAppControllerOwner(
   const ownedInspectionIds = new Set<string>()
   let snapshot: PluginAppSnapshot
   let editorController: PluginEditorController | null = null
+  let migrationController: PluginDescriptorMigrationController | null = null
+  let migrationDocumentController: PluginDocumentGenerationController | null = null
   let editorPluginRevision = 0
   const createEditorController = dependencies.createEditorController
     ?? ((readPlugins) => createPluginEditorController({ readPlugins }))
@@ -916,6 +944,29 @@ export function createPluginAppControllerOwner(
     },
   )
 
+  const ensureMigrationController = (): PluginDescriptorMigrationController => {
+    assertOpen()
+    if (migrationController) return migrationController
+    const documentController = createPluginDocumentGenerationController()
+    migrationDocumentController = documentController
+    migrationController = createPluginDescriptorMigrationController({
+      getDocumentSnapshot: documentController.getDocumentSnapshot,
+      commitDocument: documentController.commitDocument,
+      getContributionSnapshot() {
+        const contributionSnapshot = composition.getSnapshot().contributionSnapshot
+        if (!contributionSnapshot) {
+          throw new PluginAppControllerError(
+            'stale-operation',
+            'Plugin declarations are unavailable for descriptor migration',
+          )
+        }
+        return contributionSnapshot
+      },
+      runtime: { preflightDescriptorMigrationAction },
+    })
+    return migrationController
+  }
+
   const close = (reason: string): Promise<void> => {
     if (closed) return terminalClosePromise ?? Promise.resolve()
     closed = true
@@ -938,6 +989,13 @@ export function createPluginAppControllerOwner(
       const cleanupFailures: unknown[] = []
       try {
         ownedEditorController?.dispose()
+      } catch (cause) {
+        cleanupFailures.push(cause)
+      }
+      try {
+        migrationDocumentController?.dispose()
+        migrationDocumentController = null
+        migrationController = null
       } catch (cause) {
         cleanupFailures.push(cause)
       }
@@ -994,6 +1052,12 @@ export function createPluginAppControllerOwner(
     },
     setPluginEffectParameter(request) {
       return ensureEditorController().setPluginEffectParameter(request)
+    },
+    migratePluginEffects(effectIds, signal) {
+      return trackOperation(signal, async (ownedSignal) => {
+        assertOpen()
+        return ensureMigrationController().migrate({ effectIds, signal: ownedSignal })
+      })
     },
     getContributionSnapshot() {
       if (closed) return undefined
@@ -1305,8 +1369,10 @@ export function createPluginAppControllerOwner(
 function createProductionPluginAppControllerOwner(
   lifecycleObserver?: PluginRuntimeLifecycleObserver,
 ): PluginAppControllerOwner {
+  const safetyStorage = browserSafetyStorage()
+  let activationBatchSequence = 0
   return createPluginAppControllerOwner({
-    safetyStorage: browserSafetyStorage(),
+    safetyStorage,
     lifecycleObserver,
     createManagementController(sessionSafety) {
       const trustRegistry = createPluginTrustRegistry(localPluginTrustPolicyStore)
@@ -1321,6 +1387,14 @@ function createProductionPluginAppControllerOwner(
       return createPluginRuntimeController({
         activationBundleResolver,
         lifecycleObserver: observer,
+        runActivationBatch(pluginId, activate) {
+          activationBatchSequence++
+          return runPluginActivationBatch({
+            storage: safetyStorage,
+            batchId: `plugin-activation-${activationBatchSequence.toString(36)}-${pluginId.length.toString(36)}`,
+            activate,
+          })
+        },
       })
     },
   })
@@ -1368,6 +1442,18 @@ export function createPluginAppAcceptanceSession(
     ) {
       const session = await owner.exportCompositionPort.preflightExport(request, signal)
       await session.close('issue77-acceptance-export-preflight-complete')
+    },
+    async applyAndCloseExport(
+      preflight: PluginExportPreflightRequest,
+      effect: PluginEffectApplyRequest,
+      signal?: AbortSignal,
+    ) {
+      const session = await owner.exportCompositionPort.preflightExport(preflight, signal)
+      try {
+        return await session.apply(effect, signal)
+      } finally {
+        await session.close('issue77-acceptance-export-apply-complete')
+      }
     },
   })
 

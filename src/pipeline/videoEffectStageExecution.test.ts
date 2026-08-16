@@ -144,6 +144,21 @@ describe('ordered video effect stage execution', () => {
     expect([...rgba]).toEqual([40, 60, 80, 255])
   })
 
+  test('fails closed when export policy receives a plugin bypass', async () => {
+    const rgba = new Uint8ClampedArray([20, 30, 40, 255])
+
+    await expect(applyVideoEffectStagePlanToRgba(
+      rgba,
+      plan([builtin('before', 1), plugin()]),
+      {
+        bypassPolicy: 'fail',
+        applyPluginEffect: async () => ({ status: 'bypassed' }),
+      },
+      CONTEXT,
+    )).rejects.toThrow(/bypassed during fail-closed execution/)
+    expect([...rgba]).toEqual([20, 30, 40, 255])
+  })
+
   test('does not publish partial pixels when execution fails', async () => {
     const rgba = new Uint8ClampedArray([20, 30, 40, 255])
 

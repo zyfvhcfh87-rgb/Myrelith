@@ -570,6 +570,7 @@ function createExecutor(
 ): VideoEffectStageExecutor {
   let requestId = 0
   return Object.freeze({
+    bypassPolicy: 'fail' as const,
     async applyPluginEffect(
       request: PluginVideoEffectApplyRequest,
     ): Promise<PluginVideoEffectApplyResult> {

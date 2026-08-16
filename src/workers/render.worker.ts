@@ -562,6 +562,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     returnedBuffers: Set<ArrayBuffer>,
   ): VideoEffectStageExecutor {
     return {
+      bypassPolicy: 'allow',
       applyPluginEffect(request) {
         if (generation !== workerGeneration) {
           if (request.rgba.byteLength > 0) request.rgba.fill(0)

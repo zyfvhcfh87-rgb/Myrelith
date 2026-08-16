@@ -123,6 +123,7 @@ function runtimeHarness(options: {
   preflightFailureContribution?: string
   preflightBusy?: boolean
   onApply?: (contributionId: string) => void
+  onClose?: () => void
   actionCloseFailure?: boolean
   invalidCanonical?: boolean
   resultFor?: (
@@ -183,6 +184,7 @@ function runtimeHarness(options: {
           },
           async close(reason) {
             actionCloses.push(reason)
+            options.onClose?.()
             if (options.actionCloseFailure) throw new Error('action close failed')
           },
         }
@@ -387,6 +389,15 @@ describe('plugin descriptor migration controller', () => {
     await expect(catalog.controller.migrate({ effectIds: ['effect-sparkle'] }))
       .rejects.toMatchObject({ code: 'stale' })
     expect(catalog.commit).not.toHaveBeenCalled()
+
+    let closeCatalog: ReturnType<typeof setup>
+    closeCatalog = setup({ runtime: runtimeHarness({
+      onClose: () => closeCatalog.advanceCatalogGeneration(),
+    }) })
+    await expect(closeCatalog.controller.migrate({ effectIds: ['effect-sparkle'] }))
+      .rejects.toMatchObject({ code: 'stale' })
+    expect(closeCatalog.runtime.actionCloses).toEqual(['migration-complete'])
+    expect(closeCatalog.commit).not.toHaveBeenCalled()
 
     let mutated: ReturnType<typeof setup>
     mutated = setup({ runtime: runtimeHarness({

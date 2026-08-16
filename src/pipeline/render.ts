@@ -398,6 +398,13 @@ export async function compositeFrame(
             videoEffectStageExecutor,
             plan.frame,
           )
+        } else if (
+          effectStagePlan?.requiresOrderedPixelPath
+          && videoEffectStageExecutor?.bypassPolicy === 'fail'
+        ) {
+          throw new VideoEffectStageExecutionError(
+            'Canvas pixel access is unavailable for fail-closed plugin composition',
+          )
         } else if (requiresPixelEffects(ctx, clip)) {
           compositePixelCorrectedMediaLayer(
             doc,
@@ -631,6 +638,15 @@ async function compositeTransitionGroup(
         )
         const orderedPixelPath = request.effectStagePlan?.requiresOrderedPixelPath === true
           && supportsCanvasEffectPixels(surfaces.leg.ctx)
+        if (
+          request.effectStagePlan?.requiresOrderedPixelPath
+          && !orderedPixelPath
+          && videoEffectStageExecutor?.bypassPolicy === 'fail'
+        ) {
+          throw new VideoEffectStageExecutionError(
+            'Canvas pixel access is unavailable for fail-closed plugin transition composition',
+          )
+        }
         const pixelEffects = orderedPixelPath
           || requiresPixelEffects(surfaces.leg.ctx, request.clip)
         inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
@@ -1000,6 +1016,15 @@ async function compositeTextLayer(
 
     const orderedPixelPath = effectStagePlan?.requiresOrderedPixelPath === true
       && supportsCanvasEffectPixels(surfaces.leg.ctx)
+    if (
+      effectStagePlan?.requiresOrderedPixelPath
+      && !orderedPixelPath
+      && videoEffectStageExecutor?.bypassPolicy === 'fail'
+    ) {
+      throw new VideoEffectStageExecutionError(
+        'Canvas pixel access is unavailable for fail-closed plugin text composition',
+      )
+    }
     const pixelCorrection = orderedPixelPath || requiresPixelEffects(surfaces.leg.ctx, clip)
     if (orderedPixelPath) {
       await applyPlannedEffectsToSurface(

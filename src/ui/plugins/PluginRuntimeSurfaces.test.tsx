@@ -148,8 +148,8 @@ describe('Issue 77 runtime UI surfaces', () => {
     )
 
     expect(screen.queryByRole('button', { name: 'Continue normally after review' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Entering safe modeâ€¦' })).toBeDisabled()
-    expect(screen.getAllByRole('status').some((node) => node.textContent === 'Entering safe modeâ€¦')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Entering safe mode…' })).toBeDisabled()
+    expect(screen.getAllByRole('status').some((node) => node.textContent === 'Entering safe mode…')).toBe(true)
 
     rerender(
       <PluginSafeModeCard
@@ -272,6 +272,24 @@ describe('Issue 77 runtime UI surfaces', () => {
     )
 
     expect(screen.getByText(label)).toHaveAttribute('data-status', status)
+  })
+
+  test('offers an explicit descriptor update for a version mismatch', () => {
+    const onMigrateEffect = vi.fn()
+    render(
+      <PluginInspectorStatus
+        effect={{ ...issues[0], status: 'version-mismatch' }}
+        actions={recoveryActions}
+        migrationAction={action(true)}
+        onMigrateEffect={onMigrateEffect}
+        onRetryPlugin={vi.fn()}
+        onDisablePlugin={vi.fn()}
+        onManagePlugin={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Update effect' }))
+    expect(onMigrateEffect).toHaveBeenCalledWith('effect-1')
   })
 
   test('displays exact package identity and returns the opaque app-minted review token', () => {

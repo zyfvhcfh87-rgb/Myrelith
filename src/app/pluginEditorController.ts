@@ -420,6 +420,13 @@ function packageActions(
   })
 }
 
+function pluginIdFromEffectType(effectType: string): string | null {
+  if (!effectType.startsWith('plugin:')) return null
+  const separator = effectType.indexOf('/', 'plugin:'.length)
+  if (separator <= 'plugin:'.length) return null
+  return effectType.slice('plugin:'.length, separator)
+}
+
 function effectView(
   plugin: PluginEditorPluginProjection,
   clip: Clip,
@@ -435,14 +442,15 @@ function effectView(
         && candidate.packageDigest === declaration.packageDigest
       ))
     : undefined
+  const fallbackPluginId = pluginIdFromEffectType(effect.type)
   const actions = packageActions(plugin, declaration)
   return Object.freeze({
     clipId: clip.id,
     effectInstanceId: effect.id,
     effectType: effect.type,
     effectLabel: stage.label,
-    pluginId: declaration?.pluginId ?? null,
-    pluginName: installed?.name ?? null,
+    pluginId: declaration?.pluginId ?? fallbackPluginId,
+    pluginName: installed?.name ?? declaration?.pluginId ?? fallbackPluginId,
     pluginVersion: declaration?.pluginVersion ?? null,
     packageDigest: declaration?.packageDigest ?? null,
     status: stage.status,
@@ -738,6 +746,13 @@ export function createPluginEditorController(
       }
       if (located.locked) {
         return rejected('locked', 'The owning track is locked.', document.generation)
+      }
+      if (located.trackKind !== 'video') {
+        return rejected(
+          'invalid-target',
+          'Video plugin effects can be edited only on video clips.',
+          document.generation,
+        )
       }
       const effect = located.clip.effects.find(
         (candidate) => candidate.id === request.effectInstanceId,

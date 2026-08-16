@@ -186,6 +186,7 @@ export interface VerifiedPluginActivationBundle {
 }
 
 export interface PluginActivationBundleResolver {
+  generation(signal: AbortSignal): Promise<number>
   resolve(pluginId: string, signal: AbortSignal): Promise<VerifiedPluginActivationBundle>
 }
 
@@ -754,6 +755,12 @@ export function createPluginInstallController(
   }
 
   const activationBundles: PluginActivationBundleResolver = Object.freeze({
+    async generation(signal: AbortSignal) {
+      throwIfAborted(signal)
+      const generation = await dependencies.storage.generation()
+      throwIfAborted(signal)
+      return generation
+    },
     async resolve(pluginId: string, signal: AbortSignal) {
       throwIfAborted(signal)
       const snapshot = await dependencies.storage.loadSnapshot(pluginId)
