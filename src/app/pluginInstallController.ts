@@ -9,7 +9,10 @@ import {
   verifyPluginPackageArchive,
   type VerifiedPluginPackage,
 } from './pluginPackage'
-import type { PluginSessionSafety } from './pluginSafetyController'
+import type {
+  PluginSessionSafety,
+  PluginSessionStartupMode,
+} from './pluginSafetyController'
 import type {
   LocalPluginStorage,
   PluginRecordSnapshot,
@@ -35,6 +38,7 @@ import {
 
 const MAX_PENDING_INSPECTIONS = 4
 const MAX_PENDING_ARCHIVE_BYTES = 64 * 1024 * 1024
+const MAX_MANAGEMENT_DETAIL_LENGTH = 512
 
 export type PluginInstallControllerErrorCode =
   | 'aborted'
@@ -50,6 +54,7 @@ export type PluginInstallControllerErrorCode =
   | 'disabled'
   | 'quarantined'
   | 'safe-mode'
+  | 'startup-review-required'
   | 'package-invalid'
   | 'storage-failed'
 
@@ -69,8 +74,36 @@ export interface PluginPermissionInspection {
   readonly maxVersion: number
   readonly required: boolean
   readonly negotiatedVersion: number | null
+  readonly selectedVersion: number | null
   readonly status: 'available' | 'unavailable'
   readonly decisionRequired: boolean
+  readonly priorGrant: PluginPriorGrantInspection | null
+  readonly grantChange: PluginGrantInspectionChange
+}
+
+export interface PluginPriorGrantInspection {
+  readonly minVersion: number
+  readonly maxVersion: number
+  readonly required: boolean
+  readonly selectedVersion: number
+}
+
+export type PluginGrantInspectionChange =
+  | 'new'
+  | 'preserved'
+  | 'widened'
+  | 'changed'
+  | 'unavailable'
+
+export interface PluginSelectedCapabilityVersion {
+  readonly id: string
+  readonly version: number
+  readonly required: boolean
+}
+
+export interface PluginManagementDiagnostic {
+  readonly code: PluginDiagnosticCode
+  readonly occurredAt: number
 }
 
 export interface PluginPackageInspection {
@@ -80,13 +113,20 @@ export interface PluginPackageInspection {
   readonly version: string
   readonly packageDigest: Sha256Identity
   readonly signerFingerprint: Sha256Identity
+  readonly installedVersion: string | null
+  readonly versionChanged: boolean
+  readonly sameVersionReplacement: boolean
+  readonly samePackage: boolean
   readonly moduleSha256: string
   readonly memoryMaximumPages: number
   readonly change: PluginInstallChange
+  readonly contributionNames: readonly string[]
+  readonly selectedCapabilities: readonly PluginSelectedCapabilityVersion[]
   readonly signerContinuity: boolean
   readonly trustDecisionRequired: boolean
   readonly compatibility: PluginCompatibilityResult
   readonly permissions: readonly PluginPermissionInspection[]
+  readonly diagnostics: readonly PluginManagementDiagnostic[]
 }
 
 export interface PluginPermissionDecision {
@@ -145,6 +185,7 @@ export interface PluginActivationBundleResolver {
 
 type PluginDeclarationStatusReason =
   | 'available'
+  | 'startup-review-required'
   | 'untrusted'
   | 'disabled'
   | 'quarantined'
@@ -186,6 +227,24 @@ export interface PluginDeclarationCatalogSnapshot {
   readonly declarations: readonly PluginDeclarationCatalogEntry[]
 }
 
+export interface PluginInstalledPackageProjection {
+  readonly pluginId: string
+  readonly name: string
+  readonly installedVersion: string
+  readonly packageDigest: Sha256Identity
+  readonly signerFingerprint: Sha256Identity
+  readonly contributionNames: readonly string[]
+  readonly selectedCapabilities: readonly PluginSelectedCapabilityVersion[]
+  readonly status: PluginDeclarationAvailability
+  readonly detail: string
+  readonly diagnostics: readonly PluginManagementDiagnostic[]
+}
+
+export interface PluginInstalledPackageSnapshot {
+  readonly generation: number
+  readonly packages: readonly PluginInstalledPackageProjection[]
+}
+
 export interface PluginInstallController {
   readonly activationBundles: PluginActivationBundleResolver
   inspectPackage(archiveBytes: Uint8Array, signal?: AbortSignal): Promise<PluginPackageInspection>
@@ -207,6 +266,8 @@ export interface PluginInstallController {
   revoke(pluginId: string): Promise<InstalledPluginRecord>
   uninstall(pluginId: string): Promise<boolean>
   recordDiagnostic(pluginId: string, code: PluginDiagnosticCode): Promise<void>
+  clearDiagnostics(pluginId: string): Promise<boolean>
+  installedPackages(signal?: AbortSignal): Promise<PluginInstalledPackageSnapshot>
   declarationCatalog(signal?: AbortSignal): Promise<PluginDeclarationCatalogSnapshot>
 }
 
@@ -317,6 +378,79 @@ function freezeCompatibility(
   })
 }
 
+function freezeManagementDiagnostic(
+  diagnostic: PluginManagementDiagnostic,
+): PluginManagementDiagnostic {
+  return Object.freeze({ code: diagnostic.code, occurredAt: diagnostic.occurredAt })
+}
+
+function freezeSelectedCapabilities(
+  verified: VerifiedPluginPackage,
+): readonly PluginSelectedCapabilityVersion[] {
+  const selected: PluginSelectedCapabilityVersion[] = []
+  for (const request of verified.manifest.permissions) {
+    const capability = verified.compatibility.permissions.find((item) => item.id === request.id)
+    if (capability?.status !== 'available' || capability.version === null) continue
+    selected.push(Object.freeze({
+      id: request.id,
+      version: capability.version,
+      required: request.required,
+    }))
+  }
+  return Object.freeze(selected)
+}
+
+function freezeGrantedCapabilities(
+  record: InstalledPluginRecord,
+): readonly PluginSelectedCapabilityVersion[] {
+  return Object.freeze(record.grants
+    .map((grant) => Object.freeze({
+      id: grant.id,
+      version: grant.negotiatedVersion,
+      required: grant.required,
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id)))
+}
+
+function priorGrantInspection(
+  previous: InstalledPluginRecord | null,
+  request: PluginPermissionRequest,
+): PluginPriorGrantInspection | null {
+  const grant = previous?.grants.find((item) => item.id === request.id)
+  return grant
+    ? Object.freeze({
+        minVersion: grant.minVersion,
+        maxVersion: grant.maxVersion,
+        required: grant.required,
+        selectedVersion: grant.negotiatedVersion,
+      })
+    : null
+}
+
+function grantInspectionChange(options: {
+  readonly priorGrant: PluginPriorGrantInspection | null
+  readonly selectedVersion: number | null
+  readonly request: PluginPermissionRequest
+  readonly preserved: boolean
+  readonly signerContinuity: boolean
+}): PluginGrantInspectionChange {
+  if (options.selectedVersion === null) return 'unavailable'
+  if (!options.signerContinuity) return 'new'
+  if (!options.priorGrant) return 'new'
+  if (options.preserved) return 'preserved'
+  if (
+    options.request.minVersion < options.priorGrant.minVersion
+    || options.request.maxVersion > options.priorGrant.maxVersion
+    || (options.request.required && !options.priorGrant.required)
+    || options.selectedVersion > options.priorGrant.selectedVersion
+  ) return 'widened'
+  return 'changed'
+}
+
+function boundedManagementDetail(detail: string): string {
+  return detail.slice(0, MAX_MANAGEMENT_DETAIL_LENGTH)
+}
+
 function trustForInstall(
   previous: InstalledPluginRecord | null,
   identity: PluginPackageIdentity,
@@ -403,10 +537,11 @@ function requiredGrantsAvailable(
 function statusForRecord(
   record: InstalledPluginRecord,
   verified: VerifiedPluginPackage | null,
-  safeMode: boolean,
+  startupMode: PluginSessionStartupMode,
   policy: PluginTrustPolicy,
 ): PluginDeclarationStatusReason {
-  if (safeMode) return 'disabled-safe-mode'
+  if (startupMode === 'safe-mode') return 'disabled-safe-mode'
+  if (startupMode === 'review-required') return 'startup-review-required'
   if (evaluatePluginRevocation(record, policy).revoked || record.activationState === 'revoked') {
     return 'revoked'
   }
@@ -428,6 +563,7 @@ function availabilityForStatus(
 ): PluginDeclarationAvailability {
   switch (status) {
     case 'available': return 'ready'
+    case 'startup-review-required': return 'safe-mode'
     case 'disabled': return 'disabled'
     case 'quarantined': return 'quarantined'
     case 'revoked': return 'revoked'
@@ -443,6 +579,7 @@ function availabilityForStatus(
 function detailForStatus(status: PluginDeclarationStatusReason): string {
   switch (status) {
     case 'available': return 'Ready to render.'
+    case 'startup-review-required': return 'Review the interrupted activation before initializing plugins.'
     case 'disabled': return 'The plugin is disabled locally.'
     case 'quarantined': return 'The plugin is quarantined after a runtime safety failure.'
     case 'revoked': return 'The package or signer is locally revoked.'
@@ -469,6 +606,17 @@ export function createPluginInstallController(
       throw new PluginInstallControllerError('package-invalid', 'Inspection id is invalid or reused')
     }
     return proposed
+  }
+
+  function assertThirdPartyInitializationAllowed(): void {
+    if (dependencies.sessionSafety.thirdPartyInitializationAllowed()) return
+    if (dependencies.sessionSafety.startupMode() === 'review-required') {
+      throw new PluginInstallControllerError(
+        'startup-review-required',
+        'Review the interrupted plugin activation before initializing plugins',
+      )
+    }
+    throw new PluginInstallControllerError('safe-mode', 'Plugins are disabled for this session')
   }
 
   async function replaceState(
@@ -520,9 +668,7 @@ export function createPluginInstallController(
     if (!record) {
       throw new PluginInstallControllerError('package-invalid', 'Plugin is not installed')
     }
-    if (dependencies.sessionSafety.isSafeMode()) {
-      throw new PluginInstallControllerError('safe-mode', 'Plugins are disabled for this session')
-    }
+    assertThirdPartyInitializationAllowed()
     const policy = await dependencies.trustPolicy()
     if (evaluatePluginRevocation(record, policy).revoked || record.activationState === 'revoked') {
       throw new PluginInstallControllerError('revoked', 'Plugin identity is locally revoked')
@@ -563,9 +709,7 @@ export function createPluginInstallController(
     }
     const currentPolicy = await dependencies.trustPolicy()
     throwIfAborted(signal)
-    if (dependencies.sessionSafety.isSafeMode()) {
-      throw new PluginInstallControllerError('safe-mode', 'Plugins are disabled for this session')
-    }
+    assertThirdPartyInitializationAllowed()
     if (await dependencies.storage.generation() !== startingGeneration) {
       throw new PluginInstallControllerError(
         'install-conflict',
@@ -573,6 +717,7 @@ export function createPluginInstallController(
       )
     }
     throwIfAborted(signal)
+    assertThirdPartyInitializationAllowed()
     if (evaluatePluginRevocation(current, currentPolicy).revoked
       || current.activationState === 'revoked') {
       throw new PluginInstallControllerError('revoked', 'Plugin identity is locally revoked')
@@ -609,6 +754,7 @@ export function createPluginInstallController(
       throwIfAborted(signal)
       const resolved = await verifiedRecord(snapshot, signal, false)
       throwIfAborted(signal)
+      assertThirdPartyInitializationAllowed()
       const { record: current, verified } = resolved
       const retainedModuleBytes = verified.moduleBytes
       if (retainedModuleBytes.byteLength !== verified.moduleByteLength) {
@@ -669,7 +815,9 @@ export function createPluginInstallController(
         verified.compatibility,
       )
       const decisionIds = new Set(permissionPlan.decisionsRequired.map((request) => request.id))
+      const preservedIds = new Set(permissionPlan.preserved.map((grant) => grant.id))
       const inspectionId = createInspectionId()
+      const change = classifyPluginInstall(previous, identity)
       const inspection: PluginPackageInspection = Object.freeze({
         inspectionId,
         pluginId: identity.pluginId,
@@ -677,9 +825,17 @@ export function createPluginInstallController(
         version: identity.version,
         packageDigest: identity.packageDigest,
         signerFingerprint: identity.signerFingerprint,
+        installedVersion: previous?.version ?? null,
+        versionChanged: change === 'upgrade' || change === 'downgrade',
+        sameVersionReplacement: change === 'same-version-replacement',
+        samePackage: change === 'same-package',
         moduleSha256: verified.moduleSha256,
         memoryMaximumPages: verified.manifest.runtime.memoryMaximumPages,
-        change: classifyPluginInstall(previous, identity),
+        change,
+        contributionNames: Object.freeze(
+          verified.manifest.contributions.map((contribution) => contribution.name),
+        ),
+        selectedCapabilities: freezeSelectedCapabilities(verified),
         signerContinuity: previous?.signerFingerprint === identity.signerFingerprint,
         trustDecisionRequired: !isBuiltInTrusted(identity, policy)
           && !(previous?.signerFingerprint === identity.signerFingerprint
@@ -687,13 +843,27 @@ export function createPluginInstallController(
         compatibility: freezeCompatibility(verified.compatibility),
         permissions: Object.freeze(verified.manifest.permissions.map((request) => {
           const compatibility = verified.compatibility.permissions.find((item) => item.id === request.id)
+          const selectedVersion = compatibility?.version ?? null
+          const priorGrant = priorGrantInspection(previous, request)
           return Object.freeze({
             ...request,
-            negotiatedVersion: compatibility?.version ?? null,
+            negotiatedVersion: selectedVersion,
+            selectedVersion,
             status: compatibility?.status ?? 'unavailable',
             decisionRequired: decisionIds.has(request.id),
+            priorGrant,
+            grantChange: grantInspectionChange({
+              priorGrant,
+              selectedVersion,
+              request,
+              preserved: preservedIds.has(request.id),
+              signerContinuity: previous?.signerFingerprint === identity.signerFingerprint,
+            }),
           })
         })),
+        diagnostics: Object.freeze(
+          (previous?.diagnostics ?? []).map(freezeManagementDiagnostic),
+        ),
       })
       const archiveByteLength = verified.archiveBytes.byteLength
       const retainedBytes = [...pending.values()].reduce(
@@ -958,12 +1128,96 @@ export function createPluginInstallController(
         // Diagnostics are deliberately best effort and never expose exception text.
       }
     },
+    async clearDiagnostics(pluginId: string) {
+      const previous = await dependencies.storage.load(pluginId)
+      if (!previous) return false
+      if (previous.diagnostics.length === 0) return true
+      const next: InstalledPluginRecord = Object.freeze({
+        ...previous,
+        revision: nextStorageRevision(previous),
+        updatedAt: now(),
+        diagnostics: Object.freeze([]),
+        archiveBytes: previous.archiveBytes.slice(),
+      })
+      let replaced: boolean
+      try {
+        replaced = await dependencies.storage.replace(
+          pluginId,
+          storageRevision(previous),
+          next,
+          false,
+        )
+      } catch (cause) {
+        throw new PluginInstallControllerError(
+          'storage-failed',
+          'Plugin diagnostics were not cleared',
+          { cause },
+        )
+      }
+      if (!replaced) {
+        throw new PluginInstallControllerError('install-conflict', 'Plugin changed in another tab')
+      }
+      return true
+    },
+    async installedPackages(signal?: AbortSignal) {
+      throwIfAborted(signal)
+      const snapshot = await dependencies.storage.catalogSnapshot()
+      const { generation, records } = snapshot
+      throwIfAborted(signal)
+      const startupMode = dependencies.sessionSafety.startupMode()
+      const policy = await dependencies.trustPolicy()
+      const packages: PluginInstalledPackageProjection[] = []
+      for (const record of records) {
+        throwIfAborted(signal)
+        let verified: VerifiedPluginPackage | null = null
+        try {
+          verified = await verifyPackage(record.archiveBytes)
+        } catch {
+          // The management projection exposes only a host-authored failure reason.
+        }
+        throwIfAborted(signal)
+        const statusReason = statusForRecord(record, verified, startupMode, policy)
+        const contributionNames = verified !== null && recordIdentityMatches(record, verified)
+          ? verified.manifest.contributions.map((contribution) => contribution.name)
+          : []
+        packages.push(Object.freeze({
+          pluginId: record.pluginId,
+          name: record.name,
+          installedVersion: record.version,
+          packageDigest: record.packageDigest,
+          signerFingerprint: record.signerFingerprint,
+          contributionNames: Object.freeze(contributionNames),
+          selectedCapabilities: freezeGrantedCapabilities(record),
+          status: availabilityForStatus(statusReason),
+          detail: boundedManagementDetail(detailForStatus(statusReason)),
+          diagnostics: Object.freeze(record.diagnostics.map(freezeManagementDiagnostic)),
+        }))
+      }
+      packages.sort((left, right) => left.pluginId.localeCompare(right.pluginId))
+      if (await dependencies.storage.generation() !== generation) {
+        throw new PluginInstallControllerError(
+          'install-conflict',
+          'Plugin catalog changed while installed packages were being verified',
+        )
+      }
+      throwIfAborted(signal)
+      if (dependencies.sessionSafety.startupMode() !== startupMode) {
+        throw new PluginInstallControllerError(
+          'safe-mode',
+          'Plugin startup safety changed while installed packages were being verified',
+        )
+      }
+      return Object.freeze({
+        generation,
+        packages: Object.freeze(packages),
+      })
+    },
     async declarationCatalog(signal?: AbortSignal) {
       throwIfAborted(signal)
       const snapshot = await dependencies.storage.catalogSnapshot()
       const { generation, records } = snapshot
       throwIfAborted(signal)
-      const safeMode = dependencies.sessionSafety.isSafeMode()
+      const startupMode = dependencies.sessionSafety.startupMode()
       const policy = await dependencies.trustPolicy()
       const declarations: PluginDeclarationCatalogEntry[] = []
       for (const record of records) {
@@ -975,7 +1229,7 @@ export function createPluginInstallController(
           // The catalog reports a host-authored reason without retaining attacker text.
         }
         throwIfAborted(signal)
-        const statusReason = statusForRecord(record, verified, safeMode, policy)
+        const statusReason = statusForRecord(record, verified, startupMode, policy)
         if (verified && recordIdentityMatches(record, verified)) {
           for (const contribution of verified.manifest.contributions) {
             declarations.push(Object.freeze({
@@ -991,7 +1245,7 @@ export function createPluginInstallController(
               entrypoint: contribution.entrypoint,
               parameters: Object.freeze(contribution.parameters.map(freezeParameter)),
               availability: availabilityForStatus(statusReason),
-              detail: detailForStatus(statusReason),
+              detail: boundedManagementDetail(detailForStatus(statusReason)),
             }))
           }
         }
@@ -1008,10 +1262,10 @@ export function createPluginInstallController(
         )
       }
       throwIfAborted(signal)
-      if (dependencies.sessionSafety.isSafeMode() !== safeMode) {
+      if (dependencies.sessionSafety.startupMode() !== startupMode) {
         throw new PluginInstallControllerError(
           'safe-mode',
-          'Plugin safe mode changed while declarations were being verified',
+          'Plugin startup safety changed while declarations were being verified',
         )
       }
       return Object.freeze({

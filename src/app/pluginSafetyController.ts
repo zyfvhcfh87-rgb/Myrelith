@@ -24,18 +24,32 @@ export interface RunPluginActivationBatchOptions<T> {
 
 export interface PluginSessionSafety {
   enterSafeMode(): void
+  continueWithReviewedNormalStartup(): boolean
+  startupMode(): PluginSessionStartupMode
   isSafeMode(): boolean
   thirdPartyInitializationAllowed(): boolean
 }
 
+export type PluginSessionStartupMode = 'normal' | 'review-required' | 'safe-mode'
+
 export function createPluginSessionSafety(
   startupSafety: PluginStartupSafety,
 ): PluginSessionSafety {
-  let safeMode = startupSafety.offerSafeMode
+  let mode: PluginSessionStartupMode = startupSafety.status === 'clean'
+    ? 'normal'
+    : startupSafety.status === 'stale-activation'
+      ? 'review-required'
+      : 'safe-mode'
   return Object.freeze({
-    enterSafeMode: () => { safeMode = true },
-    isSafeMode: () => safeMode,
-    thirdPartyInitializationAllowed: () => !safeMode,
+    enterSafeMode: () => { mode = 'safe-mode' },
+    continueWithReviewedNormalStartup: () => {
+      if (mode !== 'review-required') return false
+      mode = 'normal'
+      return true
+    },
+    startupMode: () => mode,
+    isSafeMode: () => mode === 'safe-mode',
+    thirdPartyInitializationAllowed: () => mode === 'normal',
   })
 }
 

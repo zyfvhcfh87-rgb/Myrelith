@@ -10,7 +10,10 @@ import {
 } from './pluginInstallController'
 import { createLocalPluginStorage, type LocalPluginStorageBackend } from './localPluginStorage'
 import type { VerifiedPluginPackage } from './pluginPackage'
-import type { PluginSessionSafety } from './pluginSafetyController'
+import type {
+  PluginSessionSafety,
+  PluginSessionStartupMode,
+} from './pluginSafetyController'
 import type {
   InstalledPluginRecord,
   PluginTrustPolicy,
@@ -155,11 +158,17 @@ function harness(packages: readonly VerifiedPluginPackage[]) {
     revokedBindings: [],
   }
   let readPolicy: () => PluginTrustPolicy | Promise<PluginTrustPolicy> = () => policy
-  let safeMode = false
+  let startupMode: PluginSessionStartupMode = 'normal'
   const sessionSafety: PluginSessionSafety = {
-    enterSafeMode: () => { safeMode = true },
-    isSafeMode: () => safeMode,
-    thirdPartyInitializationAllowed: () => !safeMode,
+    enterSafeMode: () => { startupMode = 'safe-mode' },
+    continueWithReviewedNormalStartup: () => {
+      if (startupMode !== 'review-required') return false
+      startupMode = 'normal'
+      return true
+    },
+    startupMode: () => startupMode,
+    isSafeMode: () => startupMode === 'safe-mode',
+    thirdPartyInitializationAllowed: () => startupMode === 'normal',
   }
   const createController = () => createPluginInstallController({
     storage,
@@ -189,7 +198,9 @@ function harness(packages: readonly VerifiedPluginPackage[]) {
     setPolicyReader: (next: () => PluginTrustPolicy | Promise<PluginTrustPolicy>) => {
       readPolicy = next
     },
-    enterSafeMode: () => { safeMode = true },
+    enterSafeMode: () => { startupMode = 'safe-mode' },
+    requireStartupReview: () => { startupMode = 'review-required' },
+    continueWithReviewedNormalStartup: () => sessionSafety.continueWithReviewedNormalStartup(),
   }
 }
 
@@ -202,10 +213,26 @@ describe('plugin installation and activation boundary', () => {
     expect(backend.swapCalls).toBe(0)
     expect(inspection).toMatchObject({
       pluginId: 'com.example.fixture',
+      installedVersion: null,
+      versionChanged: false,
+      sameVersionReplacement: false,
+      samePackage: false,
       trustDecisionRequired: true,
       change: 'new-install',
+      contributionNames: ['Fixture'],
+      selectedCapabilities: [{
+        id: 'myrelith.effect.video-frame.rgba8',
+        version: 1,
+        required: true,
+      }],
+      diagnostics: [],
     })
     expect(inspection.permissions[0].decisionRequired).toBe(true)
+    expect(inspection.permissions[0]).toMatchObject({
+      selectedVersion: 1,
+      priorGrant: null,
+      grantChange: 'new',
+    })
 
     await controller.commitInstallation(inspection.inspectionId, INSTALL_ENABLED)
     const record = await storage.load('com.example.fixture')
@@ -253,6 +280,89 @@ describe('plugin installation and activation boundary', () => {
     )).rejects.toMatchObject({ code: 'package-invalid' })
   })
 
+  test('blocks activation until a stale-startup review explicitly chooses normal startup', async () => {
+    const fixture = verified({ key: 1, version: '1.0.0', digest: DIGEST_A })
+    const {
+      controller,
+      requireStartupReview,
+      continueWithReviewedNormalStartup,
+      verifyPackage,
+    } = harness([fixture])
+    const inspection = await controller.inspectPackage(new Uint8Array([1]))
+    await controller.commitInstallation(inspection.inspectionId, INSTALL_ENABLED)
+    verifyPackage.mockClear()
+    requireStartupReview()
+
+    await expect(controller.activationBundles.resolve(
+      'com.example.fixture',
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'startup-review-required' })
+    expect(verifyPackage).not.toHaveBeenCalled()
+
+    const catalog = await controller.declarationCatalog()
+    expect(catalog.declarations[0]).toMatchObject({
+      availability: 'safe-mode',
+      detail: 'Review the interrupted activation before initializing plugins.',
+    })
+    const installed = await controller.installedPackages()
+    expect(installed.packages[0]).toMatchObject({
+      status: 'safe-mode',
+      detail: 'Review the interrupted activation before initializing plugins.',
+    })
+
+    expect(continueWithReviewedNormalStartup()).toBe(true)
+    await expect(controller.activationBundles.resolve(
+      'com.example.fixture',
+      new AbortController().signal,
+    )).resolves.toMatchObject({ pluginId: 'com.example.fixture' })
+  })
+
+  test('projects bounded installed-package facts and clears diagnostics without catalog churn', async () => {
+    const fixture = verified({ key: 1, version: '1.0.0', digest: DIGEST_A })
+    const { controller, storage } = harness([fixture])
+    const inspection = await controller.inspectPackage(new Uint8Array([1]))
+    await controller.commitInstallation(inspection.inspectionId, INSTALL_ENABLED)
+    await controller.recordDiagnostic('com.example.fixture', 'timeout')
+    await controller.recordDiagnostic('com.example.fixture', 'bad-response')
+    const generationBeforeClear = await storage.generation()
+
+    const snapshot = await controller.installedPackages()
+    const projected = snapshot.packages[0]
+    expect(projected).toEqual({
+      pluginId: 'com.example.fixture',
+      name: 'Fixture',
+      installedVersion: '1.0.0',
+      packageDigest: DIGEST_A,
+      signerFingerprint: SIGNER_A,
+      contributionNames: ['Fixture'],
+      selectedCapabilities: [{
+        id: 'myrelith.effect.video-frame.rgba8',
+        version: 1,
+        required: true,
+      }],
+      status: 'ready',
+      detail: 'Ready to render.',
+      diagnostics: [
+        { code: 'timeout', occurredAt: 12 },
+        { code: 'bad-response', occurredAt: 14 },
+      ],
+    })
+    expect(Object.isFrozen(snapshot)).toBe(true)
+    expect(Object.isFrozen(snapshot.packages)).toBe(true)
+    expect(Object.isFrozen(projected)).toBe(true)
+    expect(Object.isFrozen(projected.diagnostics)).toBe(true)
+    expect(Object.keys(projected)).not.toContain('archiveBytes')
+    expect(Object.keys(projected)).not.toContain('trust')
+    expect(Object.keys(projected)).not.toContain('grants')
+    expect(Object.keys(projected)).not.toContain('storage')
+
+    await expect(controller.clearDiagnostics('com.example.fixture')).resolves.toBe(true)
+    expect(await storage.generation()).toBe(generationBeforeClear)
+    expect((await storage.load('com.example.fixture'))?.diagnostics).toEqual([])
+    expect((await controller.installedPackages()).packages[0].diagnostics).toEqual([])
+    await expect(controller.clearDiagnostics('com.example.missing')).resolves.toBe(false)
+  })
+
   test('same-signer update preserves only an unchanged grant and rebases its digest', async () => {
     const first = verified({ key: 1, version: '1.0.0', digest: DIGEST_A })
     const update = verified({ key: 2, version: '2.0.0', digest: DIGEST_B })
@@ -268,6 +378,20 @@ describe('plugin installation and activation boundary', () => {
 
     const next = await controller.inspectPackage(new Uint8Array([2]))
     expect(next.permissions[0].decisionRequired).toBe(false)
+    expect(next).toMatchObject({
+      installedVersion: '1.0.0',
+      versionChanged: true,
+      sameVersionReplacement: false,
+    })
+    expect(next.permissions[0]).toMatchObject({
+      grantChange: 'preserved',
+      priorGrant: {
+        minVersion: 1,
+        maxVersion: 1,
+        required: true,
+        selectedVersion: 1,
+      },
+    })
     const committed = await controller.commitInstallation(next.inspectionId, {
       ...INSTALL_ENABLED,
       trustSigner: false,
@@ -278,7 +402,34 @@ describe('plugin installation and activation boundary', () => {
 
     const changedPermission = await controller.inspectPackage(new Uint8Array([3]))
     expect(changedPermission.permissions[0].decisionRequired).toBe(true)
+    expect(changedPermission.permissions[0]).toMatchObject({
+      grantChange: 'widened',
+      priorGrant: {
+        maxVersion: 1,
+        selectedVersion: 1,
+      },
+      maxVersion: 2,
+    })
     expect((await storage.load('com.example.fixture'))?.packageDigest).toBe(DIGEST_B)
+  })
+
+  test('distinguishes an exact same-version replacement from a version change', async () => {
+    const first = verified({ key: 1, version: '1.0.0', digest: DIGEST_A })
+    const replacement = verified({ key: 2, version: '1.0.0', digest: DIGEST_B })
+    const { controller } = harness([first, replacement])
+    const initial = await controller.inspectPackage(new Uint8Array([1]))
+    await controller.commitInstallation(initial.inspectionId, INSTALL_ENABLED)
+
+    const inspection = await controller.inspectPackage(new Uint8Array([2]))
+
+    expect(inspection).toMatchObject({
+      installedVersion: '1.0.0',
+      versionChanged: false,
+      sameVersionReplacement: true,
+      samePackage: false,
+      change: 'same-version-replacement',
+    })
+    expect(inspection.permissions[0].grantChange).toBe('preserved')
   })
 
   test('signer changes require new trust and cannot inherit permission grants', async () => {
@@ -298,7 +449,16 @@ describe('plugin installation and activation boundary', () => {
       signerContinuity: false,
       trustDecisionRequired: true,
     })
-    expect(inspection.permissions[0].decisionRequired).toBe(true)
+    expect(inspection.permissions[0]).toMatchObject({
+      decisionRequired: true,
+      grantChange: 'new',
+      priorGrant: {
+        minVersion: 1,
+        maxVersion: 1,
+        required: true,
+        selectedVersion: 1,
+      },
+    })
     await expect(controller.commitInstallation(inspection.inspectionId, {
       ...INSTALL_ENABLED,
       trustSigner: false,
@@ -380,6 +540,26 @@ describe('plugin installation and activation boundary', () => {
     releaseVerification()
 
     await expect(resolution).rejects.toMatchObject({ code: 'revoked' })
+  })
+
+  test('rejects activation when safe mode begins during the final generation check', async () => {
+    const fixture = verified({ key: 1, version: '1.0.0', digest: DIGEST_A })
+    const { backend, controller, enterSafeMode } = harness([fixture])
+    const inspection = await controller.inspectPackage(new Uint8Array([1]))
+    await controller.commitInstallation(inspection.inspectionId, INSTALL_ENABLED)
+
+    const getGeneration = backend.getGeneration
+    let generationReads = 0
+    backend.getGeneration = async () => {
+      generationReads += 1
+      if (generationReads === 2) enterSafeMode()
+      return getGeneration()
+    }
+
+    await expect(controller.activationBundles.resolve(
+      'com.example.fixture',
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'safe-mode' })
   })
 
   test('same-digest install cannot overwrite a newer disabled revision', async () => {
