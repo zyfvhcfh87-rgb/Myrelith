@@ -8,6 +8,11 @@ import {
   type PluginAppFile,
 } from './pluginAppController'
 import type {
+  PluginAppEditorSnapshot,
+  PluginEditorController,
+  PluginEditorControllerFactory,
+} from './pluginEditorController'
+import type {
   PluginDeclarationCatalogEntry,
   PluginInstallController,
   PluginInstalledPackageProjection,
@@ -272,6 +277,7 @@ function setup(options?: {
   readonly lifecycle?: ReturnType<typeof lifecycleHarness>
   readonly observer?: PluginRuntimeLifecycleObserver
   readonly createReviewToken?: () => string
+  readonly createEditorController?: PluginEditorControllerFactory
 }) {
   const storage = safetyStorage(options?.sentinel)
   const management = options?.management ?? managementHarness()
@@ -286,6 +292,7 @@ function setup(options?: {
     lifecycle,
     lifecycleObserver: options?.observer,
     createReviewToken: options?.createReviewToken,
+    createEditorController: options?.createEditorController,
   }
   const owner = createPluginAppControllerOwner(dependencies)
   const controller = owner.controller
@@ -299,6 +306,39 @@ function setup(options?: {
     createManagementController,
     createRuntimeController,
   }
+}
+
+function editorHarness() {
+  const snapshot: PluginAppEditorSnapshot = Object.freeze({
+    coherent: true,
+    detail: 'Plugin effects are ready.',
+    documentGeneration: 3,
+    catalogGeneration: 9,
+    effects: Object.freeze([]),
+    previewIssues: Object.freeze([]),
+    manageAction: Object.freeze({
+      available: true,
+      disabledReason: null,
+      pending: false,
+      error: null,
+    }),
+  })
+  const applied = Object.freeze({
+    status: 'applied' as const,
+    code: 'applied' as const,
+    detail: 'Plugin effect updated.',
+    documentGeneration: 4,
+  })
+  const dispose = vi.fn()
+  const controller: PluginEditorController = Object.freeze({
+    getSnapshot: vi.fn(() => snapshot),
+    subscribe: vi.fn(() => vi.fn()),
+    addPluginEffect: vi.fn(() => applied),
+    setPluginEffectParameter: vi.fn(() => applied),
+    refresh: vi.fn(),
+    dispose,
+  })
+  return { controller, snapshot, dispose }
 }
 
 function fileFromBuffer(buffer: ArrayBuffer, declaredSize = buffer.byteLength): PluginAppFile & {
@@ -365,6 +405,59 @@ describe('plugin app controller', () => {
       harness.controller.getEffectBridgeHandler(),
     )
     expectDeepFrozenData(harness.controller.getSnapshot())
+  })
+
+  test('creates one lazy editor owner behind the stable public facade and disposes it terminally', async () => {
+    const editor = editorHarness()
+    const createEditorController = vi.fn(() => editor.controller)
+    const harness = setup({ createEditorController })
+    const listener = vi.fn()
+
+    expect(createEditorController).not.toHaveBeenCalled()
+    expect(harness.controller.getEditorSnapshot()).toBe(editor.snapshot)
+    expect(harness.controller.getEditorSnapshot()).toBe(editor.snapshot)
+    expect(createEditorController).toHaveBeenCalledOnce()
+    expect(harness.controller.subscribeEditor(listener)).toEqual(expect.any(Function))
+    expect(harness.controller.addPluginEffect({
+      documentGeneration: 3,
+      catalogGeneration: 9,
+      clipId: 'clip-1',
+      effectType: `plugin:${PLUGIN_ID}/sparkle`,
+    })).toMatchObject({ status: 'applied', code: 'applied' })
+    expect(harness.controller.setPluginEffectParameter({
+      documentGeneration: 3,
+      catalogGeneration: 9,
+      clipId: 'clip-1',
+      effectInstanceId: 'effect-1',
+      key: 'enabled',
+      value: false,
+    })).toMatchObject({ status: 'applied', code: 'applied' })
+    expect(harness.createManagementController).not.toHaveBeenCalled()
+    expect(harness.createRuntimeController).not.toHaveBeenCalled()
+
+    await harness.controller.refreshManagement()
+    expect(editor.controller.refresh).toHaveBeenCalled()
+    await harness.owner.close('terminal-close')
+    expect(editor.dispose).toHaveBeenCalledOnce()
+    expect(() => harness.controller.getEditorSnapshot()).toThrow(PluginAppControllerError)
+  })
+
+  test('shares a rejecting terminal boundary while editor disposal fails and composition still closes', async () => {
+    const editor = editorHarness()
+    editor.dispose.mockImplementation(() => { throw new Error('editor dispose failed') })
+    const harness = setup({ createEditorController: () => editor.controller })
+    harness.controller.getEditorSnapshot()
+
+    const first = harness.owner.close('editor-dispose-failure')
+    const concurrent = harness.owner.close('ignored-concurrent-reason')
+    expect(concurrent).toBe(first)
+    await expect(first).rejects.toThrow('editor dispose failed')
+
+    const repeated = harness.owner.close('ignored-repeat-reason')
+    expect(repeated).toBe(first)
+    await expect(repeated).rejects.toThrow('editor dispose failed')
+    expect(editor.dispose).toHaveBeenCalledOnce()
+    expect(harness.lifecycle.dispose).toHaveBeenCalledOnce()
   })
 
   test('publishes coherent host-authored views without private catalog or controller facts', async () => {

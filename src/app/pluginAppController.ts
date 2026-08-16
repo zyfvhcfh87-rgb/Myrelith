@@ -37,6 +37,16 @@ import type {
 import type { PluginRuntimeLifecycleObserver } from './pluginRuntimeLifecycleObserver'
 import type { PluginSafetyStorage } from './pluginSafetyController'
 import { createPluginTrustRegistry, type PluginDiagnosticCode } from './pluginTrustRegistry'
+import {
+  createPluginEditorController,
+  type PluginAppAddEffectRequest,
+  type PluginAppEditorMutationResult,
+  type PluginAppEditorSnapshot,
+  type PluginAppSetParameterRequest,
+  type PluginEditorController,
+  type PluginEditorControllerFactory,
+  type PluginEditorPluginProjection,
+} from './pluginEditorController'
 
 const MAX_PUBLIC_DETAIL_CHARACTERS = 512
 const FAILURE_POLICY = 'Preview bypasses a failed effect with a warning. Export stops unless you review a one-time bypass.'
@@ -222,6 +232,10 @@ export interface PluginExportCompositionPort {
 export interface PluginAppController {
   getSnapshot(): PluginAppSnapshot
   subscribe(listener: (snapshot: PluginAppSnapshot) => void): () => void
+  getEditorSnapshot(): PluginAppEditorSnapshot
+  subscribeEditor(listener: (snapshot: PluginAppEditorSnapshot) => void): () => void
+  addPluginEffect(request: PluginAppAddEffectRequest): PluginAppEditorMutationResult
+  setPluginEffectParameter(request: PluginAppSetParameterRequest): PluginAppEditorMutationResult
   getContributionSnapshot(): PluginVideoEffectContributionSnapshot | undefined
   getEffectBridgeHandler(): PluginEffectBridgeHandler
   refreshManagement(signal?: AbortSignal): Promise<void>
@@ -260,6 +274,7 @@ export interface PluginAppControllerDependencies
   extends PluginCompositionControllerDependencies {
   readonly createReviewToken?: () => string
   readonly lifecycleObserver?: PluginRuntimeLifecycleObserver
+  readonly createEditorController?: PluginEditorControllerFactory
 }
 
 interface RetainedReview {
@@ -548,6 +563,10 @@ export function createPluginAppControllerOwner(
   const ownedOperations = new Set<AppOwnedOperation>()
   const ownedInspectionIds = new Set<string>()
   let snapshot: PluginAppSnapshot
+  let editorController: PluginEditorController | null = null
+  let editorPluginRevision = 0
+  const createEditorController = dependencies.createEditorController
+    ?? ((readPlugins) => createPluginEditorController({ readPlugins }))
 
   const assertOpen = (): void => {
     if (closed) throw new PluginAppControllerError('closed', 'Plugin app controller is closed')
@@ -635,11 +654,27 @@ export function createPluginAppControllerOwner(
   const publish = (): void => {
     if (closed) return
     snapshot = buildSnapshot()
+    editorPluginRevision++
+    editorController?.refresh()
     for (const listener of listeners) listener(snapshot)
   }
 
   snapshot = buildSnapshot()
   const unsubscribeComposition = composition.subscribe(() => { publish() })
+
+  const readEditorPlugins = (): PluginEditorPluginProjection => Object.freeze({
+    revision: editorPluginRevision,
+    catalogGeneration: snapshot.catalogGeneration,
+    startupMode: snapshot.startup.mode,
+    contributionSnapshot: composition.getSnapshot().contributionSnapshot ?? undefined,
+    installedPackages: snapshot.installedPackages,
+  })
+
+  const ensureEditorController = (): PluginEditorController => {
+    assertOpen()
+    editorController ??= createEditorController(readEditorPlugins)
+    return editorController
+  }
 
   const clearReview = (): RetainedReview | null => {
     const previous = retainedReview
@@ -880,12 +915,19 @@ export function createPluginAppControllerOwner(
     inspectionDetail = ''
     for (const operation of ownedOperations) operation.controller.abort(reason)
     unsubscribeComposition()
+    const ownedEditorController = editorController
+    editorController = null
     listeners.clear()
-    terminalClosePromise = (async () => {
+    terminalClosePromise = Promise.resolve().then(async () => {
+      const cleanupFailures: unknown[] = []
+      try {
+        ownedEditorController?.dispose()
+      } catch (cause) {
+        cleanupFailures.push(cause)
+      }
       await operationTransition
       const pending = [...ownedOperations]
       for (const operation of pending) operation.controller.abort(reason)
-      const cleanupFailures: unknown[] = []
       const settledOperations = await Promise.allSettled(
         pending.map((operation) => operation.promise),
       )
@@ -916,7 +958,7 @@ export function createPluginAppControllerOwner(
       if (cleanupFailures.length > 1) {
         throw new AggregateError(cleanupFailures, 'Plugin app cleanup failed')
       }
-    })()
+    })
     return terminalClosePromise
   }
 
@@ -926,6 +968,16 @@ export function createPluginAppControllerOwner(
       assertOpen()
       listeners.add(listener)
       return () => { listeners.delete(listener) }
+    },
+    getEditorSnapshot: () => ensureEditorController().getSnapshot(),
+    subscribeEditor(listener) {
+      return ensureEditorController().subscribe(listener)
+    },
+    addPluginEffect(request) {
+      return ensureEditorController().addPluginEffect(request)
+    },
+    setPluginEffectParameter(request) {
+      return ensureEditorController().setPluginEffectParameter(request)
     },
     getContributionSnapshot() {
       if (closed) return undefined
