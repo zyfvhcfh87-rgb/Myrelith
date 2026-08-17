@@ -169,13 +169,13 @@
 }
 
 .project-launch-fold-title.is-visible .project-launch-fold-piece {
-  animation: project-launch-fold-in 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: calc(var(--project-launch-char-index) * 45ms);
+  animation: project-launch-fold-in 1030ms cubic-bezier(0.22, 0.78, 0.3, 1) both;
+  animation-delay: calc(var(--project-launch-char-index) * 68ms);
 }
 
 .project-launch-fold-title.is-visible .project-launch-fold-piece::after {
-  animation: project-launch-fold-crease 680ms ease-out both;
-  animation-delay: calc(var(--project-launch-char-index) * 45ms);
+  animation: project-launch-fold-crease 1030ms cubic-bezier(0.22, 0.78, 0.3, 1) both;
+  animation-delay: calc(var(--project-launch-char-index) * 68ms);
 }
 
 .project-launch-brand > span,
@@ -459,8 +459,8 @@
 }
 
 .project-launch-split-text.is-visible .project-launch-split-char {
-  animation: project-launch-split-in 660ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: calc(var(--project-launch-char-index) * 32ms);
+  animation: project-launch-split-in 1000ms cubic-bezier(0.16, 0.76, 0.24, 1) both;
+  animation-delay: calc(var(--project-launch-char-index) * 48ms);
 }
 
 .project-launch-hero-copy > p {
