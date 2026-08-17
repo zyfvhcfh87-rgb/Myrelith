@@ -34,3 +34,4 @@ coverage
 .npm-cache/
 .playwright-cli/
 output/
+.worktrees/
