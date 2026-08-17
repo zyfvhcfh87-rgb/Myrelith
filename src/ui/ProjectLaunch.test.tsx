@@ -302,7 +302,7 @@ describe('ProjectLaunch', () => {
 
   test('offers every requested ratio and preserves the size tier between them', async () => {
     useProjectSessionStore.setState({ screen: 'new-project' })
-    render(<ProjectLaunch />)
+    const { container } = render(<ProjectLaunch />)
 
     const resolution = screen.getByLabelText('Resolution')
     expect(screen.getByRole('radio', { name: 'Horizontal 16:9' }))
@@ -314,6 +314,12 @@ describe('ProjectLaunch', () => {
       .toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Social portrait 4:5' }))
       .toBeInTheDocument()
+    expect(screen.queryByText('Browser video editor')).not.toBeInTheDocument()
+    expect(screen.queryByText('Your media stays on this device.'))
+      .not.toBeInTheDocument()
+    expect(container.querySelectorAll('.project-ratio-preview')).toHaveLength(4)
+    expect(container.querySelectorAll('.project-ratio-shape')).toHaveLength(4)
+    expect(container.querySelector('.project-ratio-preview img')).toBeNull()
 
     fireEvent.change(resolution, { target: { value: '1440' } })
     fireEvent.click(screen.getByRole('radio', { name: 'Square 1:1' }))

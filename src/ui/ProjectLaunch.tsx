@@ -243,9 +243,13 @@ function LaunchFrame({
     home ? 'project-launch-frame-home' : '',
     setup ? 'project-launch-frame-setup' : '',
   ].filter(Boolean).join(' ')
+  const launchClassName = [
+    'project-launch',
+    setup ? 'project-launch-setup' : '',
+  ].filter(Boolean).join(' ')
 
   return (
-    <main className="project-launch">
+    <main className={launchClassName}>
       <section className={frameClassName}>
         {children}
       </section>
@@ -645,17 +649,6 @@ function NewProjectScreen({
 
   return (
     <LaunchFrame setup>
-      <header className="project-launch-home-nav project-setup-nav">
-        <div className="project-launch-brand">
-          <strong>Myrelith</strong>
-          <span>Browser video editor</span>
-        </div>
-        <div className="project-launch-trust">
-          <ShieldCheck aria-hidden="true" size={21} weight="regular" />
-          <span>Your media stays on this device.</span>
-        </div>
-      </header>
-
       <div className="project-setup-layout">
         <div className="project-setup-intro">
           <h1>
@@ -687,16 +680,12 @@ function NewProjectScreen({
                       className="project-ratio-preview"
                       data-ratio={aspectRatio.id}
                     >
-                      {aspectRatio.id === DEFAULT_PROJECT_ASPECT_RATIO_ID ? (
-                        <img src="/landing/coast-main.webp" alt="" />
-                      ) : (
-                        <span
-                          className="project-ratio-shape"
-                          style={{
-                            aspectRatio: `${aspectRatio.ratioWidth} / ${aspectRatio.ratioHeight}`,
-                          }}
-                        />
-                      )}
+                      <span
+                        className="project-ratio-shape"
+                        style={{
+                          aspectRatio: `${aspectRatio.ratioWidth} / ${aspectRatio.ratioHeight}`,
+                        }}
+                      />
                       {selected && (
                         <CheckCircle
                           className="project-ratio-check"
