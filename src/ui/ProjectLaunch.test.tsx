@@ -76,6 +76,50 @@ describe('ProjectLaunch', () => {
       .toBeInTheDocument()
   })
 
+  test('home keeps text motion accessible and tracks the primary-button light without rerendering', () => {
+    const { container } = render(<ProjectLaunch />)
+
+    const heading = screen.getByRole('heading', {
+      name: 'Your footage. Your space. Your cut.',
+    })
+    expect(heading).toHaveClass('project-launch-split-text')
+    expect(heading.querySelectorAll('.project-launch-headline-line')).toHaveLength(3)
+    expect(heading.querySelectorAll('.project-launch-split-char').length).toBeGreaterThan(20)
+    expect(heading.querySelector('.project-launch-split-visual'))
+      .toHaveAttribute('aria-hidden', 'true')
+
+    const brand = container.querySelector<HTMLElement>('.project-launch-fold-title')!
+    expect(brand.querySelector('.project-launch-text-sr-only'))
+      .toHaveTextContent('Myrelith')
+    expect(brand.querySelectorAll('.project-launch-fold-piece')).toHaveLength(8)
+    expect(brand.querySelector('.project-launch-fold-visual'))
+      .toHaveAttribute('aria-hidden', 'true')
+
+    const startButton = screen.getByRole('button', { name: 'Start a new project' })
+    expect(startButton).toHaveClass('project-launch-card-specular')
+    vi.spyOn(startButton, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 60,
+      width: 200,
+      height: 60,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.pointerMove(startButton, { clientX: 150, clientY: 15 })
+    expect(startButton.style.getPropertyValue('--project-launch-specular-x')).toBe('75%')
+    expect(startButton.style.getPropertyValue('--project-launch-specular-y')).toBe('25%')
+    expect(startButton.style.getPropertyValue('--project-launch-specular-angle')).not.toBe('')
+
+    fireEvent.pointerLeave(startButton)
+    expect(startButton.style.getPropertyValue('--project-launch-specular-x')).toBe('')
+    expect(startButton.style.getPropertyValue('--project-launch-specular-y')).toBe('')
+    expect(startButton.style.getPropertyValue('--project-launch-specular-angle')).toBe('')
+  })
+
   test('recovery search, age groups, and confirmed stale cleanup stay narrowly scoped', () => {
     const now = Date.now()
     vi.spyOn(window, 'confirm').mockReturnValue(true)

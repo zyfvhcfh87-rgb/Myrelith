@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react'
 import {
   ArrowRight,
   CheckCircle,
@@ -57,6 +64,13 @@ import {
   staleRecoveryJournals,
   type RecoverySort,
 } from './projectRecoveryModel'
+import { FoldRevealTitle, SplitRevealHeading } from './LaunchTextEffects'
+
+const PROJECT_LAUNCH_HEADLINE_LINES = [
+  'Your footage.',
+  'Your space.',
+  'Your cut.',
+] as const
 
 function rateKey(rate: FrameRate): string {
   return `${rate.num}/${rate.den}`
@@ -85,6 +99,31 @@ function isBusy(phase: string): boolean {
   return phase === 'reading-project'
     || phase === 'relinking'
     || phase === 'activating'
+}
+
+function updateProjectLaunchSpecularLight(
+  event: ReactPointerEvent<HTMLButtonElement>,
+): void {
+  const button = event.currentTarget
+  const bounds = button.getBoundingClientRect()
+  if (bounds.width <= 0 || bounds.height <= 0) return
+
+  const x = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width))
+  const y = Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height))
+  const angle = Math.atan2(y - 0.5, x - 0.5) * (180 / Math.PI) + 90
+
+  button.style.setProperty('--project-launch-specular-x', `${x * 100}%`)
+  button.style.setProperty('--project-launch-specular-y', `${y * 100}%`)
+  button.style.setProperty('--project-launch-specular-angle', `${angle}deg`)
+}
+
+function resetProjectLaunchSpecularLight(
+  event: ReactPointerEvent<HTMLButtonElement>,
+): void {
+  const button = event.currentTarget
+  button.style.removeProperty('--project-launch-specular-x')
+  button.style.removeProperty('--project-launch-specular-y')
+  button.style.removeProperty('--project-launch-specular-angle')
 }
 
 function confirmRecoveryDiscard(projectName: string): boolean {
@@ -263,7 +302,7 @@ function HomeScreen() {
     <LaunchFrame home>
       <header className="project-launch-home-nav">
         <div className="project-launch-brand">
-          <strong>Myrelith</strong>
+          <FoldRevealTitle text="Myrelith" />
           <span>Browser video editor</span>
         </div>
         <div className="project-launch-trust">
@@ -274,17 +313,18 @@ function HomeScreen() {
 
       <section className="project-launch-hero" aria-labelledby="project-home-title">
         <div className="project-launch-hero-copy">
-          <h1 id="project-home-title">
-            <span>Your footage.</span>
-            <span>Your space.</span>
-            <span>Your cut.</span>
-          </h1>
+          <SplitRevealHeading
+            id="project-home-title"
+            lines={PROJECT_LAUNCH_HEADLINE_LINES}
+          />
           <p>Edit locally in your browser—no upload, no account, no rush.</p>
           <div className="project-launch-actions" aria-label="Project actions">
             <button
-              className="project-launch-card project-launch-card-primary"
+              className="project-launch-card project-launch-card-primary project-launch-card-specular"
               type="button"
               onClick={showNewProject}
+              onPointerMove={updateProjectLaunchSpecularLight}
+              onPointerLeave={resetProjectLaunchSpecularLight}
             >
               <PlusCircle aria-hidden="true" size={28} weight="regular" />
               <strong>Start a new project</strong>
