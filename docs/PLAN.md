@@ -4779,3 +4779,35 @@ acceptance claims.
   Export ready, and zero console warnings/errors.
 - [ ] Push the exact commit, pass CI, request a fresh current-head Codex review,
   and complete PR/issue closeout only when explicitly authorized.
+
+## Milestone 6 Part 12 / issue #78 - editor-structure research gate
+
+**COMPLETE LOCALLY (2026-08-17).**
+
+- [x] Compare current adjustment-layer, compound/nested-sequence, and multicam
+  workflows against Myrelith's real single-document schema, integer-frame
+  planners, audio-master-clock playback, project/recovery boundary, history,
+  and shared preview/export path.
+- [x] Freeze bounded recommendations: adjustment layers first; then a central
+  same-settings sequence graph; then live depth-8 nested instances; then manual
+  two-to-eight-angle multicam with fixed or follow-video audio. Keep mixed-rate
+  nesting, automatic sync, and simultaneous live angle playback no-go for the
+  first slices.
+- [x] Add build-unreferenced pure prototypes for post-composite adjustment
+  ordering, complete-project cycle/depth/reference validation, exact 1:1 nested
+  frame expansion, logarithmic multicam switches, and the 256 MiB surface
+  envelope. Pass 19 focused tests.
+- [x] Run representative large fixtures: 128x1,024 adjustment items, 256
+  sequences/255 references, and eight angles/24,000 switches/250,000 lookups.
+  Pin seven/eight/nine 4K surfaces at 232,243,200 / 265,420,800 / 298,598,400
+  bytes, proving that a ninth surface exceeds the shared limit.
+- [x] Record migration, portability, history, nested resource ownership,
+  performance risks, explicit non-goals, recommended order, and four
+  implementation-ready child issue specifications in
+  `docs/EDITOR_STRUCTURE_RESEARCH.md`. No product schema/UI/runtime behavior or
+  remote GitHub item is changed by the local-only gate.
+- [x] Pass the complete 226-file / 3,074-test suite plus all 17 runner checks,
+  the 4,872-module production build/typecheck, source lint excluding the
+  user-owned untracked `.worktrees/` directory, a production audit with zero
+  vulnerabilities, production-isolation search, and diff checks. Chromium is
+  not applicable because the gate adds no observable browser/runtime path.

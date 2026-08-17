@@ -4988,3 +4988,35 @@ surface; it is not a second zoom and never enters document history.
   and proves the next pixel call is rejected before sandbox execution.
 - Commit/push, exact clean-head Chromium evidence, CI, and current-head review
   remain publication gates. Merge and issue closeout are not authorized here.
+
+## Milestone 6 Part 12 / issue #78 - editor-structure research gate
+
+**COMPLETE LOCALLY (2026-08-17); CHILD ISSUE PUBLICATION NOT AUTHORIZED.**
+
+- `docs/EDITOR_STRUCTURE_RESEARCH.md` is the decision record for adjustment
+  layers, a project-level same-settings sequence graph, bounded live nested
+  sequences, and manual-sync multicam. The recommended order is 12a adjustment
+  layers, 12b sequence foundation, 12c compound/nested sequences, then 12d
+  manual multicam.
+- `src/domain/editorStructureResearch.ts` is a pure, build-unreferenced
+  feasibility contract only. It proves post-composite adjustment order,
+  complete-project cycle/reference/depth validation, exact 1:1 nested frame
+  mapping, independent multicam video/audio selection, logarithmic range/cut
+  lookup, and full-frame surface accounting. No production entry may import it.
+- The first product slices explicitly exclude mixed-rate/dimension nesting,
+  automatic waveform/timecode sync, and simultaneous live angle playback. A
+  child must own each schema/UI/runtime change and replace the relevant
+  research prototype with production contracts.
+- The focused gate passes 19 tests. The source-bound fixture covers 128 tracks
+  x 1,024 items, 256 sequences/255 references, and eight angles/24,000
+  switches/250,000 lookups. Seven and eight 4K RGBA8 surfaces fit the 256 MiB
+  limit at 232,243,200 and 265,420,800 bytes; nine fail at 298,598,400 bytes.
+  Adjustment integration therefore gets at most one additional simultaneous
+  surface and must prove lens/transition/plugin/export coexistence.
+- The authoritative tree passes 226/226 Vitest files and 3,074/3,074 tests plus
+  all 17 runner checks, the 4,872-module build/typecheck, source lint with the
+  user-owned untracked `.worktrees/` directory excluded, a zero-vulnerability
+  production audit, clean diff checks, and a normal-dist isolation search.
+- No product schema, project format, UI, browser runtime, or remote GitHub item
+  changes in #78 itself. Chromium is not applicable to this build-unreferenced
+  pure gate; every observable child requires source-bound browser evidence.
