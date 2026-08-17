@@ -31,6 +31,7 @@
     "qa:issue109:stabilization": "node scripts/issue109/run-stabilization.mjs",
     "qa:issue110:tracking": "node scripts/issue110/run-motion-tracking.mjs",
     "qa:issue111:lens-remap": "node scripts/issue111/run-lens-remap.mjs",
+    "qa:issue78:research": "npx --no-install vite-node scripts/issue78/run-structure-research.mjs",
     "postinstall": "patch-package",
     "test": "node scripts/run-vitest.mjs",
     "test:browser": "playwright test",

@@ -262,6 +262,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `null`. Current-version records are bounded and foldover-validated; bounded
   future objects remain opaque durable intent and are never interpreted as
   version 1. Audio and procedural-text clips cannot carry this field.
+- `domain/editorStructureResearch.ts` is the build-unreferenced, browser-free
+  Issue #78 feasibility contract for adjustment ordering, project-level
+  sequence graphs, exact same-rate nested frame mapping, multicam video/audio
+  switching, and candidate surface accounting. It does NOT change
+  `TimelineDoc`, project files, planners, stores, UI, preview, export, or audio.
+  No production entry may import it. Follow-up issues must replace the relevant
+  prototype with separately reviewed production contracts rather than shipping
+  through the research module.
 - `domain/pluginManifest.ts` is the pure, non-executing structural validator and
   compatibility negotiator for the proposed plugin manifest. It reuses the
   durable effect-number/key bounds, requires one package-unique render export per
