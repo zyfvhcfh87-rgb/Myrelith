@@ -88,24 +88,57 @@ export default function PluginSafeModeCard(props: PluginSafeModeCardProps) {
     : reviewRequired
       ? 'Third-party plugins remain blocked until you choose reviewed normal startup or safe mode for this session.'
       : installedPluginCount === null
-        ? 'Installed plugins are not enumerated during this protected startup check. Enter safe mode to keep every third-party package inactive.'
+        ? "Installed plugins aren't checked here. Safe mode keeps every third-party package inactive."
         : installedPluginCount === 0
           ? 'No third-party plugins are installed.'
           : `${installedPluginCount} installed plugin${installedPluginCount === 1 ? '' : 's'} will stay inactive if you enter safe mode.`
+  const statusMessage = safeModeActive
+    ? 'Safe mode is active and locked for this editor session.'
+    : reviewRequired
+      ? 'Choose reviewed normal startup or safe mode before third-party plugins initialize.'
+      : null
 
   return (
     <section
       className="plugin-safe-mode-card"
       aria-labelledby="plugin-safe-mode-heading"
     >
-      <div className="plugin-safe-mode-copy">
-        <span className="plugin-safe-mode-eyebrow">Startup protection</span>
-        <h2 id="plugin-safe-mode-heading">Plugin safe mode</h2>
-        <p>
-          Open the editor without registering or starting third-party packages.
-          Built-in effects still work, and plugin effect records remain available
-          to bypass, reorder, remove, save, and recover.
-        </p>
+      <div className="plugin-safe-mode-main">
+        <div className="plugin-safe-mode-copy">
+          <h2 id="plugin-safe-mode-heading">Plugin safety</h2>
+          <p>
+            Start without loading third-party plugins. Built-in effects and saved
+            plugin records stay available.
+          </p>
+        </div>
+
+        <div className="plugin-safe-mode-action">
+          {safeModeActive ? (
+            <button type="button" disabled aria-describedby="plugin-safe-mode-detail">
+              Safe mode active
+            </button>
+          ) : (
+            <>
+              <SafeModeAction
+                action={props.enterSafeModeAction}
+                label="Enter safe mode"
+                pendingLabel="Entering safe mode…"
+                descriptionId="plugin-safe-mode-detail"
+                onAction={props.onEnterSafeMode}
+              />
+              {props.startupMode === 'review-required' ? (
+                <SafeModeAction
+                  action={props.continueReviewedNormalAction}
+                  label="Continue normally after review"
+                  pendingLabel="Continuing normally…"
+                  descriptionId="plugin-safe-mode-detail"
+                  onAction={props.onContinueReviewedNormal}
+                />
+              ) : null}
+            </>
+          )}
+          <p id="plugin-safe-mode-detail">{actionDescription}</p>
+        </div>
       </div>
 
       {props.startupMode === 'review-required' ? (
@@ -120,46 +153,16 @@ export default function PluginSafeModeCard(props: PluginSafeModeCardProps) {
         </div>
       ) : null}
 
-      <div className="plugin-safe-mode-action">
-        {safeModeActive ? (
-          <button type="button" disabled aria-describedby="plugin-safe-mode-detail">
-            Safe mode active
-          </button>
-        ) : (
-          <>
-            <SafeModeAction
-              action={props.enterSafeModeAction}
-              label="Enter safe mode"
-              pendingLabel="Entering safe mode…"
-              descriptionId="plugin-safe-mode-detail"
-              onAction={props.onEnterSafeMode}
-            />
-            {props.startupMode === 'review-required' ? (
-              <SafeModeAction
-                action={props.continueReviewedNormalAction}
-                label="Continue normally after review"
-                pendingLabel="Continuing normally…"
-                descriptionId="plugin-safe-mode-detail"
-                onAction={props.onContinueReviewedNormal}
-              />
-            ) : null}
-          </>
-        )}
-        <p id="plugin-safe-mode-detail">{actionDescription}</p>
-      </div>
-
-      <div
-        className="plugin-safe-mode-status"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        {safeModeActive
-          ? 'Safe mode is active and locked for this editor session.'
-          : reviewRequired
-            ? 'Choose reviewed normal startup or safe mode before third-party plugins initialize.'
-            : ''}
-      </div>
+      {statusMessage ? (
+        <div
+          className="plugin-safe-mode-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {statusMessage}
+        </div>
+      ) : null}
     </section>
   )
 }

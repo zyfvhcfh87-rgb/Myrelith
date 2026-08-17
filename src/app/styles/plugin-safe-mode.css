@@ -3,12 +3,12 @@
 .plugin-safe-mode-card {
   min-width: 0;
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  gap: 8px;
+  padding: 10px 14px;
   color: #e8edf5;
   background: #121c28;
   border: 1px solid #35475d;
-  border-radius: 12px;
+  border-radius: 9px;
 }
 
 .plugin-safe-mode-card h2,
@@ -16,22 +16,24 @@
   margin: 0;
 }
 
-.plugin-safe-mode-copy {
+.plugin-safe-mode-main {
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(460px, 1.15fr);
+  align-items: center;
+  gap: 16px;
 }
 
-.plugin-safe-mode-eyebrow {
-  color: #7faaff;
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+.plugin-safe-mode-copy {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
 }
 
 .plugin-safe-mode-copy h2 {
+  flex: none;
   color: #f0f4f9;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 680;
   line-height: 1.2;
 }
@@ -41,18 +43,31 @@
 .plugin-safe-mode-callout p {
   color: #9aa8ba;
   font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.4;
 }
 
 .plugin-safe-mode-action {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+}
+
+.plugin-safe-mode-action-item {
+  flex: none;
   display: grid;
-  gap: 7px;
+  gap: 4px;
+}
+
+.plugin-safe-mode-action > p {
+  max-width: 470px;
 }
 
 .plugin-safe-mode-action button {
-  min-height: 36px;
+  min-height: 32px;
   justify-self: start;
-  padding: 7px 13px;
+  padding: 5px 11px;
   color: #f7f9fd;
   background: #315b96;
   border: 1px solid #5685c2;
@@ -77,22 +92,23 @@
 }
 
 .plugin-safe-mode-callout {
-  display: grid;
-  gap: 7px;
-  padding: 11px 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 7px 10px;
   background: rgb(133 91 28 / 14%);
   border: 1px solid rgb(213 154 67 / 42%);
-  border-radius: 8px;
+  border-radius: 7px;
 }
 
 .plugin-safe-mode-callout strong {
+  flex: none;
   color: #f1d0a2;
   font-size: 11px;
 }
 
 .plugin-safe-mode-status,
 .plugin-safe-mode-error {
-  min-height: 18px;
   font-size: 10px;
   line-height: 1.5;
 }
@@ -102,7 +118,7 @@
 }
 
 .plugin-safe-mode-error {
-  padding: 10px 11px;
+  padding: 7px 9px;
   color: #ffc0c5;
   background: rgb(151 57 66 / 15%);
   border: 1px solid rgb(216 91 102 / 38%);
@@ -110,10 +126,36 @@
   overflow-wrap: anywhere;
 }
 
+@media (max-width: 1100px) {
+  .plugin-safe-mode-main {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .plugin-safe-mode-action {
+    justify-content: flex-start;
+  }
+
+  .plugin-safe-mode-action > p {
+    max-width: none;
+  }
+}
+
 @media (max-width: 420px) {
   .plugin-safe-mode-card {
-    padding: 13px;
-    border-radius: 9px;
+    padding: 10px;
+    border-radius: 8px;
+  }
+
+  .plugin-safe-mode-copy,
+  .plugin-safe-mode-action,
+  .plugin-safe-mode-callout {
+    display: grid;
+    align-items: start;
+  }
+
+  .plugin-safe-mode-copy {
+    gap: 4px;
   }
 
   .plugin-safe-mode-action button {

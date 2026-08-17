@@ -127,8 +127,10 @@ describe('Issue 77 runtime UI surfaces', () => {
       />,
     )
 
-    expect(screen.getByText(/Installed plugins are not enumerated during this protected startup check/i)).toBeInTheDocument()
-    expect(screen.getByText(/keep every third-party package inactive/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Plugin safety' })).toBeInTheDocument()
+    expect(screen.getByText(/Start without loading third-party plugins/i)).toBeInTheDocument()
+    expect(screen.getByText(/Installed plugins aren't checked here/i)).toBeInTheDocument()
+    expect(screen.getByText(/keeps every third-party package inactive/i)).toBeInTheDocument()
     expect(screen.queryByText(/0 installed plugins/i)).not.toBeInTheDocument()
   })
 

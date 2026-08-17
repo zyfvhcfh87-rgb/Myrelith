@@ -175,9 +175,10 @@ describe('ProjectLaunch', () => {
     })
     render(<ProjectLaunch />)
 
-    expect(screen.getByText('Portable .myrelith files')).toBeInTheDocument()
+    expect(screen.getByText('Project files')).toBeInTheDocument()
     expect(screen.getByText(/1\.0 KB protected/)).toBeInTheDocument()
-    expect(screen.getByText(/No derived media is stored/)).toBeInTheDocument()
+    expect(screen.getByText(/0 B · empty/)).toBeInTheDocument()
+    expect(screen.getByText(/Projects and source media stay on your device/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Clear disposable data' }))
       .toBeDisabled()
   })

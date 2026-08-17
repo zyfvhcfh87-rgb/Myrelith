@@ -180,7 +180,7 @@ function LocalStorageSummary() {
       <header>
         <div>
           <h3 id="project-storage-title">Local storage</h3>
-          <p>Portable project truth stays separate from browser-local convenience data.</p>
+          <p>Project files stay separate from browser recovery and cache.</p>
         </div>
         <strong>
           {storage.browserUsageBytes === null
@@ -192,37 +192,38 @@ function LocalStorageSummary() {
       </header>
       <dl className="project-storage-list">
         <div data-storage-kind="project-truth">
-          <dt>Portable .myrelith files</dt>
-          <dd>On your disk · never cleared here</dd>
-          <small>Saved project truth. Source media is referenced, not bundled.</small>
+          <dt>Project files</dt>
+          <dd>Portable .myrelith · on your disk</dd>
         </div>
         <div data-storage-kind="recovery">
-          <dt>Recovery copies</dt>
-          <dd>{recoveryCount} · {formatBytes(storage.recoveryBytes)} protected</dd>
-          <small>Unsaved project snapshots only. They contain no source-media bytes.</small>
+          <dt>Recovery</dt>
+          <dd>{recoveryCount} {recoveryCount === 1 ? 'copy' : 'copies'} · {formatBytes(storage.recoveryBytes)} protected</dd>
         </div>
         <div data-storage-kind="access">
           <dt>Remembered access</dt>
-          <dd>{recentCount} recent project {recentCount === 1 ? 'shortcut' : 'shortcuts'}</dd>
-          <small>Browser permissions and labels only; Myrelith does not copy the files.</small>
+          <dd>{recentCount} project {recentCount === 1 ? 'shortcut' : 'shortcuts'} · files aren&apos;t copied</dd>
         </div>
         <div data-storage-kind="disposable">
-          <dt>Derived cache &amp; proxies</dt>
-          <dd>{formatBytes(storage.disposableBytes)} disposable</dd>
-          <small>
-            {storage.disposableItemCount === 0
-              ? 'No derived media is stored. Proxies are disposable and can be regenerated.'
-              : `${storage.disposableItemCount} derived ${storage.disposableItemCount === 1 ? 'item' : 'items'} can be regenerated.`}
-          </small>
+          <dt>Cache &amp; proxies</dt>
+          <dd>
+            {formatBytes(storage.disposableBytes)} · {storage.disposableItemCount === 0
+              ? 'empty'
+              : `${storage.disposableItemCount} derived ${storage.disposableItemCount === 1 ? 'item' : 'items'}`}
+          </dd>
           <button
             type="button"
+            aria-label={clearing ? 'Clearing disposable data' : 'Clear disposable data'}
             disabled={!hasDisposableData || clearing}
             onClick={clearDisposable}
           >
-            {clearing ? 'Clearing…' : 'Clear disposable data'}
+            {clearing ? 'Clearing…' : 'Clear cache & proxies'}
           </button>
         </div>
       </dl>
+      <p className="project-storage-note">
+        Projects and source media stay on your device. Recovery copies contain no source media;
+        cache and proxies are disposable.
+      </p>
       {storage.error ? <p className="project-storage-error">{storage.error}</p> : null}
     </section>
   )
