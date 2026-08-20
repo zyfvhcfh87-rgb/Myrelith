@@ -1393,7 +1393,7 @@ function createProductionPluginAppControllerOwner(
           activationBatchSequence++
           return runPluginActivationBatch({
             storage: safetyStorage,
-            ownerId: `${activationRuntimeId}:${activationBatchSequence.toString(36)}`,
+            ownerId: activationRuntimeId,
             batchId: `plugin-activation-${activationBatchSequence.toString(36)}-${pluginId.length.toString(36)}`,
             activate,
           })

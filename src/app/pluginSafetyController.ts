@@ -79,6 +79,24 @@ export function createPluginSessionSafety(
   })
 }
 
+type StaleActivationLeftovers =
+  | { readonly kind: 'v1' }
+  | { readonly kind: 'v2'; readonly ownerIds: readonly string[] }
+  | { readonly kind: 'none' }
+
+/**
+ * Capture leftover owners at launch. A later reviewed continue drops only
+ * those entries so a live peer written after this snapshot stays counted.
+ */
+export function createStaleActivationAcknowledgement(
+  storage: PluginSafetyStorage,
+): () => void {
+  const leftovers = snapshotStaleActivationLeftovers(storage)
+  return () => {
+    acknowledgeStaleActivationLeftovers(storage, leftovers)
+  }
+}
+
 export function readPluginStartupSafety(storage: PluginSafetyStorage): PluginStartupSafety {
   let raw: string | null
   try {
@@ -146,6 +164,56 @@ export function createPluginActivationOwnerId(): string {
     return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('')
   }
   throw new TypeError('Plugin activation owner id could not be created')
+}
+
+function snapshotStaleActivationLeftovers(
+  storage: PluginSafetyStorage,
+): StaleActivationLeftovers {
+  try {
+    const raw = storage.getItem(PLUGIN_ACTIVATION_SENTINEL_KEY)
+    if (raw === null) return Object.freeze({ kind: 'none' })
+    const parsed = parseActivationRecord(raw)
+    if (parsed.kind === 'v1') return Object.freeze({ kind: 'v1' })
+    if (parsed.kind === 'v2') {
+      return Object.freeze({
+        kind: 'v2',
+        ownerIds: Object.freeze(parsed.owners.map((owner) => owner.ownerId)),
+      })
+    }
+    return Object.freeze({ kind: 'none' })
+  } catch {
+    return Object.freeze({ kind: 'none' })
+  }
+}
+
+function acknowledgeStaleActivationLeftovers(
+  storage: PluginSafetyStorage,
+  leftovers: StaleActivationLeftovers,
+): void {
+  if (leftovers.kind === 'none') return
+  try {
+    const raw = storage.getItem(PLUGIN_ACTIVATION_SENTINEL_KEY)
+    if (raw === null) return
+    const current = parseActivationRecord(raw)
+    if (leftovers.kind === 'v1') {
+      if (current.kind === 'v1') storage.removeItem(PLUGIN_ACTIVATION_SENTINEL_KEY)
+      return
+    }
+    if (current.kind !== 'v2') return
+    const drop = new Set(leftovers.ownerIds)
+    const remaining = current.owners.filter((owner) => !drop.has(owner.ownerId))
+    if (remaining.length === current.owners.length) return
+    if (remaining.length === 0) {
+      storage.removeItem(PLUGIN_ACTIVATION_SENTINEL_KEY)
+      return
+    }
+    storage.setItem(
+      PLUGIN_ACTIVATION_SENTINEL_KEY,
+      serializeActivationRecord(Object.freeze({ version: 2, owners: remaining })),
+    )
+  } catch {
+    // In-memory review already continued; durable leftovers stay until storage recovers.
+  }
 }
 
 function validatedId(value: string, label: string): string {

@@ -369,7 +369,7 @@ describe('plugin composition controller', () => {
   test('eager construction reads only the sentinel and keeps both lazy gates inert', () => {
     const harness = setup()
 
-    expect(harness.storage.getItem).toHaveBeenCalledOnce()
+    expect(harness.storage.getItem).toHaveBeenCalledTimes(2)
     expect(harness.createManagementController).not.toHaveBeenCalled()
     expect(harness.createRuntimeController).not.toHaveBeenCalled()
     expect(harness.lifecycle.captureToken).not.toHaveBeenCalled()

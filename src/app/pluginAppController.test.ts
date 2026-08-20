@@ -423,7 +423,7 @@ describe('plugin app controller', () => {
     })
     const harness = setup({ observer })
 
-    expect(harness.storage.getItem).toHaveBeenCalledOnce()
+    expect(harness.storage.getItem).toHaveBeenCalledTimes(2)
     expect(harness.createManagementController).not.toHaveBeenCalled()
     expect(harness.createRuntimeController).not.toHaveBeenCalled()
     expect(harness.controller.getContributionSnapshot()).toBeUndefined()

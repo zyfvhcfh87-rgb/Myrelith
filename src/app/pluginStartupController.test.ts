@@ -14,7 +14,7 @@ describe('plugin startup controller', () => {
   test('clean startup is normal and import-time construction does no package work', () => {
     const storage = storageWith(null)
     const controller = createPluginStartupController(storage)
-    expect(storage.getItem).toHaveBeenCalledOnce()
+    expect(storage.getItem).toHaveBeenCalledTimes(2)
     expect(storage.getItem).toHaveBeenCalledWith(PLUGIN_ACTIVATION_SENTINEL_KEY)
     expect(controller.getSnapshot()).toEqual({
       mode: 'normal',
@@ -27,10 +27,11 @@ describe('plugin startup controller', () => {
   })
 
   test('stale activation requires one explicit reviewed-normal or safe-mode choice', () => {
-    const controller = createPluginStartupController(storageWith(JSON.stringify({
+    const storage = storageWith(JSON.stringify({
       version: 1,
       batchId: 'previous-batch',
-    })))
+    }))
+    const controller = createPluginStartupController(storage)
     const listener = vi.fn()
     controller.subscribe(listener)
 
@@ -42,6 +43,7 @@ describe('plugin startup controller', () => {
     })
     expect(controller.getSessionSafety().thirdPartyInitializationAllowed()).toBe(false)
     expect(controller.continueWithReviewedNormalStartup()).toBe(true)
+    expect(storage.removeItem).toHaveBeenCalledWith(PLUGIN_ACTIVATION_SENTINEL_KEY)
     expect(controller.getSnapshot()).toMatchObject({
       mode: 'normal',
       safeModeRecommended: false,
