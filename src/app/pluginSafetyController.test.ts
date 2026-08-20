@@ -69,6 +69,28 @@ function exclusiveLock(): PluginActivationCoordinationLock & {
   }
 }
 
+function queueingLock(): PluginActivationCoordinationLock & {
+  readonly isHeld: () => boolean
+} {
+  let chain = Promise.resolve()
+  let held = 0
+  return {
+    isHeld: () => held > 0,
+    async runExclusive<T>(work: () => Promise<T> | T): Promise<T> {
+      const run = chain.then(async () => {
+        held++
+        try {
+          return await work()
+        } finally {
+          held--
+        }
+      })
+      chain = run.then(() => undefined, () => undefined)
+      return run
+    },
+  }
+}
+
 describe('plugin activation safety', () => {
   test('brackets successful third-party registration with a durable sentinel', async () => {
     const order: string[] = []
@@ -344,7 +366,7 @@ describe('plugin activation safety', () => {
       activate: async () => 'ready',
     })).rejects.toThrow('Plugin activation owner limit exceeded')
 
-    acknowledge()
+    await acknowledge()
     expect(backing.values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(false)
 
     await expect(runPluginActivationBatch({
@@ -381,7 +403,7 @@ describe('plugin activation safety', () => {
       ]))
     })
 
-    acknowledge()
+    await acknowledge()
     expect(backing.values.get(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(record([
       { ownerId: 'tab-live', batchId: 'live-batch' },
     ]))
@@ -396,7 +418,7 @@ describe('plugin activation safety', () => {
     expect(backing.values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(false)
   })
 
-  test('reviewed continue clears a leftover v1 sentinel', () => {
+  test('reviewed continue clears a leftover v1 sentinel', async () => {
     const backing = storage([])
     backing.values.set(
       PLUGIN_ACTIVATION_SENTINEL_KEY,
@@ -404,11 +426,78 @@ describe('plugin activation safety', () => {
     )
     const acknowledge = createStaleActivationAcknowledgement(backing)
 
-    acknowledge()
+    await acknowledge()
     expect(backing.values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(false)
     expect(readPluginStartupSafety(backing)).toEqual({
       status: 'clean',
       offerSafeMode: false,
     })
+  })
+
+  test('reviewed continue holds the activation lock across leftover read and write', async () => {
+    const backing = storage([])
+    backing.values.set(
+      PLUGIN_ACTIVATION_SENTINEL_KEY,
+      record([{ ownerId: 'crashed', batchId: 'crashed-batch' }]),
+    )
+    const lock = queueingLock()
+    let getWhileHeld = false
+    let removeWhileHeld = false
+    const observing: PluginSafetyStorage = {
+      getItem(key) {
+        getWhileHeld = lock.isHeld()
+        return backing.getItem(key)
+      },
+      setItem: (key, value) => backing.setItem(key, value),
+      removeItem(key) {
+        removeWhileHeld = lock.isHeld()
+        backing.removeItem(key)
+      },
+    }
+
+    await createStaleActivationAcknowledgement(observing, lock)()
+    expect(getWhileHeld).toBe(true)
+    expect(removeWhileHeld).toBe(true)
+    expect(backing.values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(false)
+  })
+
+  test('reviewed continue cannot wipe a live owner written during leftover acknowledgement', async () => {
+    const backing = storage([])
+    backing.values.set(
+      PLUGIN_ACTIVATION_SENTINEL_KEY,
+      record([{ ownerId: 'crashed', batchId: 'crashed-batch' }]),
+    )
+    const lock = queueingLock()
+    const holdLive = deferred<string>()
+    let peer: Promise<string> | undefined
+    const racing: PluginSafetyStorage = {
+      getItem(key) {
+        const raw = backing.getItem(key)
+        if (peer === undefined && raw !== null) {
+          peer = runPluginActivationBatch({
+            storage: backing,
+            ownerId: 'tab-live',
+            batchId: 'live-batch',
+            coordinationLock: lock,
+            activate: async () => holdLive.promise,
+          })
+        }
+        return raw
+      },
+      setItem: (key, value) => backing.setItem(key, value),
+      removeItem: (key) => backing.removeItem(key),
+    }
+
+    await createStaleActivationAcknowledgement(racing, lock)()
+    expect(peer).toBeDefined()
+    await vi.waitFor(() => {
+      expect(backing.values.get(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(record([
+        { ownerId: 'tab-live', batchId: 'live-batch' },
+      ]))
+    })
+
+    holdLive.resolve('ready')
+    await expect(peer).resolves.toBe('ready')
+    expect(backing.values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(false)
   })
 })

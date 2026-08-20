@@ -90,11 +90,10 @@ type StaleActivationLeftovers =
  */
 export function createStaleActivationAcknowledgement(
   storage: PluginSafetyStorage,
-): () => void {
+  coordinationLock?: PluginActivationCoordinationLock,
+): () => Promise<void> {
   const leftovers = snapshotStaleActivationLeftovers(storage)
-  return () => {
-    acknowledgeStaleActivationLeftovers(storage, leftovers)
-  }
+  return () => acknowledgeStaleActivationLeftovers(storage, leftovers, coordinationLock)
 }
 
 export function readPluginStartupSafety(storage: PluginSafetyStorage): PluginStartupSafety {
@@ -186,31 +185,26 @@ function snapshotStaleActivationLeftovers(
   }
 }
 
-function acknowledgeStaleActivationLeftovers(
+async function acknowledgeStaleActivationLeftovers(
   storage: PluginSafetyStorage,
   leftovers: StaleActivationLeftovers,
-): void {
+  lock: PluginActivationCoordinationLock | undefined,
+): Promise<void> {
   if (leftovers.kind === 'none') return
   try {
-    const raw = storage.getItem(PLUGIN_ACTIVATION_SENTINEL_KEY)
-    if (raw === null) return
-    const current = parseActivationRecord(raw)
-    if (leftovers.kind === 'v1') {
-      if (current.kind === 'v1') storage.removeItem(PLUGIN_ACTIVATION_SENTINEL_KEY)
-      return
-    }
-    if (current.kind !== 'v2') return
-    const drop = new Set(leftovers.ownerIds)
-    const remaining = current.owners.filter((owner) => !drop.has(owner.ownerId))
-    if (remaining.length === current.owners.length) return
-    if (remaining.length === 0) {
-      storage.removeItem(PLUGIN_ACTIVATION_SENTINEL_KEY)
-      return
-    }
-    storage.setItem(
-      PLUGIN_ACTIVATION_SENTINEL_KEY,
-      serializeActivationRecord(Object.freeze({ version: 2, owners: remaining })),
-    )
+    await mutateActivationRecord(storage, lock, (current) => {
+      if (current === null) return { write: false, next: null }
+      if (leftovers.kind === 'v1') {
+        if (current.kind === 'v1') return { write: true, next: null }
+        return { write: false, next: null }
+      }
+      if (current.kind !== 'v2') return { write: false, next: null }
+      const drop = new Set(leftovers.ownerIds)
+      const remaining = current.owners.filter((owner) => !drop.has(owner.ownerId))
+      if (remaining.length === current.owners.length) return { write: false, next: null }
+      if (remaining.length === 0) return { write: true, next: null }
+      return { write: true, next: Object.freeze({ version: 2, owners: remaining }) }
+    })
   } catch {
     // In-memory review already continued; durable leftovers stay until storage recovers.
   }
