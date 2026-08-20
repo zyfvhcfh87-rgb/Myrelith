@@ -2,6 +2,7 @@
 
 import {
   createPluginSessionSafety,
+  createStaleActivationAcknowledgement,
   readPluginStartupSafety,
   type PluginSafetyStorage,
   type PluginSessionSafety,
@@ -58,6 +59,7 @@ export function createPluginStartupController(
   storage: PluginSafetyStorage,
 ): PluginStartupController {
   const startup = readPluginStartupSafety(storage)
+  const acknowledgeStaleActivation = createStaleActivationAcknowledgement(storage)
   const session = createPluginSessionSafety(startup)
   const listeners = new Set<(snapshot: PluginStartupSnapshot) => void>()
   let snapshot = snapshotFor(startup, session)
@@ -77,6 +79,7 @@ export function createPluginStartupController(
 
   const continueWithReviewedNormalStartup = (): boolean => {
     if (!session.continueWithReviewedNormalStartup()) return false
+    acknowledgeStaleActivation()
     publishIfChanged()
     return true
   }

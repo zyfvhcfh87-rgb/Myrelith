@@ -1182,7 +1182,8 @@ Failure policy is context-specific:
 - migration rejection or failure: retain the original descriptor, complete clip
   animation, every other descriptor in the same action, and document history;
 - package/update failure: retain the previous committed installation;
-- crash during activation: retain an origin-local activation sentinel so the
+- crash during activation: retain an origin-local, owner-counted activation
+  sentinel until every origin activation owner finishes successfully, so the
   next launch offers safe mode before initializing plugins.
 
 Diagnostics use host-owned reason codes such as `manifest-invalid`,

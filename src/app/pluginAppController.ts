@@ -38,6 +38,7 @@ import type {
 } from './pluginRuntimeController'
 import type { PluginRuntimeLifecycleObserver } from './pluginRuntimeLifecycleObserver'
 import {
+  createPluginActivationOwnerId,
   runPluginActivationBatch,
   type PluginSafetyStorage,
 } from './pluginSafetyController'
@@ -1370,6 +1371,7 @@ function createProductionPluginAppControllerOwner(
   lifecycleObserver?: PluginRuntimeLifecycleObserver,
 ): PluginAppControllerOwner {
   const safetyStorage = browserSafetyStorage()
+  const activationRuntimeId = createPluginActivationOwnerId()
   let activationBatchSequence = 0
   return createPluginAppControllerOwner({
     safetyStorage,
@@ -1391,6 +1393,7 @@ function createProductionPluginAppControllerOwner(
           activationBatchSequence++
           return runPluginActivationBatch({
             storage: safetyStorage,
+            ownerId: activationRuntimeId,
             batchId: `plugin-activation-${activationBatchSequence.toString(36)}-${pluginId.length.toString(36)}`,
             activate,
           })
