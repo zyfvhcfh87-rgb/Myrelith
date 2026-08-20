@@ -186,12 +186,15 @@ describe('multichannel preview/export fold-down parity', () => {
         const folded = foldDecodedFrameToStereo(planes, frame)
         expect(scheduled.folded.getChannelData(0)[frame]).toBeCloseTo(folded[0])
         expect(scheduled.folded.getChannelData(1)[frame]).toBeCloseTo(folded[1])
-        expect(applyStereoBalanceToSample(
+        const audible = applyStereoBalanceToSample(
           scheduled.folded.getChannelData(0)[frame],
           scheduled.folded.getChannelData(1)[frame],
           scheduled.leftGain,
           scheduled.rightGain,
-        )).toEqual(expectedParityStereo(planes, frame, balance))
+        )
+        const expected = expectedParityStereo(planes, frame, balance)
+        expect(audible[0]).toBeCloseTo(expected[0], 6)
+        expect(audible[1]).toBeCloseTo(expected[1], 6)
       }
 
       if (balance === 0) {

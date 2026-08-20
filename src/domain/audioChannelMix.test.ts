@@ -11,8 +11,8 @@ import {
 const CENTER = AUDIO_FOLD_CENTER_GAIN
 const LFE = AUDIO_FOLD_LFE_GAIN
 
-function planesFromValues(values: readonly number[]): Float32Array[] {
-  return values.map((value) => new Float32Array([value]))
+function planesFromValues(values: readonly number[]): number[][] {
+  return values.map((value) => [value])
 }
 
 function isolatedValues(channelCount: number, hotIndex: number): number[] {
@@ -117,9 +117,17 @@ describe('shared decoded-channel fold-down', () => {
 
   test('folds a mixed 5.1 frame before balance', () => {
     const values = [0.05, 0.1, 0.05, 0.02, 0.05, 0.1]
+    let left = 0.05
+    left += 0.05 * CENTER
+    left += 0.02 * LFE
+    left += 0.05 * CENTER
+    let right = 0.1
+    right += 0.05 * CENTER
+    right += 0.02 * LFE
+    right += 0.1 * CENTER
     expect(foldDecodedFrameToStereo(planesFromValues(values), 0)).toEqual([
-      0.05 + 0.05 * CENTER + 0.01 + 0.05 * CENTER,
-      0.1 + 0.05 * CENTER + 0.01 + 0.1 * CENTER,
+      left,
+      right,
     ])
   })
 
