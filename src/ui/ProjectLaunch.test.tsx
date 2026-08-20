@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
@@ -673,5 +675,33 @@ describe('ProjectLaunch', () => {
     expect(summary).toHaveTextContent('48 kHz')
     expect(summary).toHaveTextContent('4 video + 4 audio tracks')
     expect(summary).toHaveTextContent('Starts locally and unsaved')
+  })
+
+  test('keeps audio settings and Create inside a scrollable setup frame', () => {
+    useProjectSessionStore.setState({ screen: 'new-project' })
+    const { container } = render(<ProjectLaunch />)
+    const frame = container.querySelector('.project-launch-frame-setup')
+
+    expect(container.querySelector('.project-launch-setup')).not.toBeNull()
+    expect(frame).not.toBeNull()
+    expect(frame).toContainElement(screen.getByLabelText('Audio quality'))
+    expect(frame).toContainElement(screen.getByRole('button', { name: 'Create project' }))
+    expect(frame).toContainElement(screen.getByRole('button', { name: 'Back' }))
+
+    const css = readFileSync(resolve('src/app/styles/project-launch.css'), 'utf8')
+    const frameRule = css.slice(
+      css.indexOf('.project-launch-frame-setup {'),
+      css.indexOf('.project-launch-setup .project-launch-footer {'),
+    )
+    const layoutRule = css.slice(
+      css.indexOf('.project-setup-layout {'),
+      css.indexOf('.project-setup-intro {'),
+    )
+
+    expect(frameRule).toContain('overflow-y: auto')
+    expect(frameRule).not.toMatch(/overflow:\s*hidden/)
+    expect(layoutRule).toContain('flex: 1 0 auto')
+    expect(layoutRule).not.toMatch(/min-height:\s*0/)
+    expect(layoutRule).not.toMatch(/flex:\s*1 1 auto/)
   })
 })
