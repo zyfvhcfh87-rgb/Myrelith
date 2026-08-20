@@ -1611,6 +1611,144 @@ describe('previewController', () => {
     expect(useMediaStore.getState().compatibility.has(original.id)).toBe(false)
   })
 
+  test('late capabilities from a superseded bridge cannot overwrite the current owner', async () => {
+    const first = makeDeps()
+    const second = makeDeps()
+    const hang = deferred<void>()
+    first.bridge.disposeImpl = () => hang.promise
+
+    const doc = makeVideoDoc(['graded'])
+    const effect = createColorAdjustEffect('fx-stale-cap')
+    effect.params.temperature = 0.25
+    doc.tracks[0].clips[0].effects = [effect]
+    useDocumentStore.getState().setDoc(doc)
+
+    initPreview(canvasEl(), first.deps)
+    first.bridge.onRendererCapabilities?.({
+      canvasFilter: true,
+      canvasPixelAccess: true,
+    })
+    expect(usePreviewStatusStore.getState()).toMatchObject({
+      rendererCapabilities: { canvasFilter: true, canvasPixelAccess: true },
+    })
+    expect(useVideoScopesStore.getState().rendererSupported).toBe(true)
+
+    initPreview(canvasEl(), second.deps)
+    expect(first.bridge.disposed).toBe(true)
+    expect(second.bridge.disposed).toBe(false)
+
+    second.bridge.onRendererCapabilities?.({
+      canvasFilter: true,
+      canvasPixelAccess: true,
+    })
+    expect(usePreviewStatusStore.getState().effectStatuses.get('fx-stale-cap'))
+      .toMatchObject({ status: 'ready' })
+    expect(useVideoScopesStore.getState().rendererSupported).toBe(true)
+
+    first.bridge.onRendererCapabilities?.({
+      canvasFilter: false,
+      canvasPixelAccess: false,
+    })
+
+    expect(usePreviewStatusStore.getState()).toMatchObject({
+      rendererCapabilities: { canvasFilter: true, canvasPixelAccess: true },
+    })
+    expect(usePreviewStatusStore.getState().effectStatuses.get('fx-stale-cap'))
+      .toMatchObject({ status: 'ready' })
+    expect(useVideoScopesStore.getState().rendererSupported).toBe(true)
+
+    hang.resolve()
+  })
+
+  test('late asset failure from a superseded bridge cannot disconnect a reused source', async () => {
+    const first = makeDeps()
+    const second = makeDeps()
+    const hang = deferred<void>()
+    first.bridge.disposeImpl = () => hang.promise
+
+    initPreview(canvasEl(), first.deps)
+    const asset = seedAsset({ id: 'reused-source' })
+    await flush()
+    const staleToken = first.bridge.opened[0].runtimeToken
+
+    initPreview(canvasEl(), second.deps)
+    await flush()
+    const currentToken = second.bridge.opened[0].runtimeToken
+
+    expect(staleToken).toMatchObject({
+      assetId: asset.id,
+      objectUrl: asset.objectUrl,
+    })
+    expect(currentToken).toMatchObject({
+      assetId: asset.id,
+      objectUrl: asset.objectUrl,
+    })
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+
+    first.bridge.onAssetError?.(
+      asset.id,
+      staleToken,
+      'video',
+      'late old-bridge decode failure',
+    )
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(useMediaStore.getState().compatibility.has(asset.id)).toBe(false)
+
+    first.bridge.onAssetError?.(
+      asset.id,
+      currentToken,
+      'video',
+      'late old-bridge reuse failure',
+    )
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(useMediaStore.getState().compatibility.has(asset.id)).toBe(false)
+
+    second.bridge.onAssetError?.(
+      asset.id,
+      currentToken,
+      'video',
+      'current decode failure',
+    )
+    expect(useMediaStore.getState().assets.has(asset.id)).toBe(false)
+    expect(useMediaStore.getState().compatibility.get(asset.id)).toMatchObject({
+      status: 'error',
+      report: {
+        runtimeFailures: [{
+          surface: 'preview',
+          detail: 'current decode failure',
+        }],
+      },
+    })
+
+    hang.resolve()
+  })
+
+  test('late ready and worker-error callbacks from a superseded bridge stay inert', async () => {
+    const first = makeDeps()
+    const second = makeDeps()
+    const hang = deferred<void>()
+    first.bridge.disposeImpl = () => hang.promise
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    initPreview(canvasEl(), first.deps)
+    initPreview(canvasEl(), second.deps)
+    await nextFrame()
+    const rendered = second.bridge.rendered.length
+
+    first.bridge.onAssetReady?.('reused-source')
+    first.bridge.onWorkerError?.('late old-bridge worker fault')
+    await nextFrame()
+
+    expect(second.bridge.rendered).toHaveLength(rendered)
+    expect(warn).not.toHaveBeenCalledWith(
+      '[previewController] worker error:',
+      'late old-bridge worker fault',
+    )
+
+    hang.resolve()
+    warn.mockRestore()
+  })
+
   test('worker diagnostics keep their controller prefix without blaming media', async () => {
     const { deps, bridge } = makeDeps()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})

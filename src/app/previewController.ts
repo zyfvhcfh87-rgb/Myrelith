@@ -859,6 +859,14 @@ function syncAssets(deps: PreviewDeps): void {
   }
 }
 
+/** True only while this exact preview owner is still the live bridge. */
+function isCurrentPreviewOwner(
+  bridge: BridgeLike,
+  ownerGeneration: number,
+): boolean {
+  return state.bridge === bridge && state.renderGeneration === ownerGeneration
+}
+
 /**
  * Attach the preview pipeline to the visible canvas. Idempotent per canvas
  * element (safe under StrictMode double-mount). Failures (e.g. environments
@@ -883,9 +891,21 @@ export function initPreview(
     )
     return
   }
-  bridge.onWorkerError = (message) =>
+  // Become the current owner before wiring callbacks so a synchronous
+  // first message is not dropped by the identity guard.
+  state.canvas = canvas
+  state.bridge = bridge
+  state.deps = deps
+  // Replacement starts disposing the previous owner without awaiting it.
+  // Capture this generation so late messages from that owner stay inert,
+  // even when they reuse the current asset id, runtime token, or object URL.
+  const ownerGeneration = state.renderGeneration
+  bridge.onWorkerError = (message) => {
+    if (!isCurrentPreviewOwner(bridge, ownerGeneration)) return
     console.warn('[previewController] worker error:', message)
+  }
   bridge.onAssetError = (assetId, runtimeToken, trackKind, message) => {
+    if (!isCurrentPreviewOwner(bridge, ownerGeneration)) return
     if (isProxyPreviewToken(assetId, runtimeToken)) {
       reportProxyPreviewFailure(assetId, message)
       return
@@ -898,13 +918,17 @@ export function initPreview(
     )
   }
   // A source came online: repaint so its clips fill in (retry policy).
-  bridge.onAssetReady = () =>
+  bridge.onAssetReady = () => {
+    if (!isCurrentPreviewOwner(bridge, ownerGeneration)) return
     scheduleRender(deps)
+  }
   bridge.onRendererCapabilities = (capabilities) => {
+    if (!isCurrentPreviewOwner(bridge, ownerGeneration)) return
     publishPreviewEffectStatuses(capabilities)
     useVideoScopesStore.getState().setRendererSupported(capabilities.canvasPixelAccess)
   }
   bridge.onVideoScopes = (generation, frame, analyzedAt, analysis) => {
+    if (!isCurrentPreviewOwner(bridge, ownerGeneration)) return
     useVideoScopesStore.getState().acceptAnalysis(
       generation,
       frame,
@@ -912,9 +936,6 @@ export function initPreview(
       analysis,
     )
   }
-  state.canvas = canvas
-  state.bridge = bridge
-  state.deps = deps
 
   const initialDoc = currentPreviewDocument()
   const initialBounds = currentSourceBoundsCatalog()
