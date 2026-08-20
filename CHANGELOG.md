@@ -6,6 +6,11 @@ still change.
 
 ## Unreleased
 
+### Fixed
+
+- New-project setup scrolls on shorter viewports so audio settings and Create
+  stay reachable instead of sitting below a clipped frame.
+
 ### Changed
 
 - Renamed the app, repository, package, container target, documentation, and
