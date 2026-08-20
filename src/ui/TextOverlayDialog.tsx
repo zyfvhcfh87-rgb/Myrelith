@@ -100,6 +100,7 @@ export default function TextOverlayDialog({ onClose }: TextOverlayDialogProps) {
         event.preventDefault()
         onClose()
       }}
+      onKeyDown={(event) => event.stopPropagation()}
     >
       <form method="dialog" className="text-overlay-dialog-card" onSubmit={submit}>
         <header>

@@ -230,6 +230,8 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
   }
 
   const onDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    // Keep modal-owned keys from reaching window edit/history/palette shortcuts.
+    event.stopPropagation()
     if (event.key === 'Escape') {
       event.preventDefault()
       onClose()

@@ -66,6 +66,26 @@ describe('text overlay editing UI', () => {
     expect(useDocumentStore.getState().doc.tracks[0].clips).toHaveLength(1)
   })
 
+  test('keeps modal keydowns from reaching window editor shortcuts', () => {
+    render(<TextOverlayDialog onClose={vi.fn()} />)
+    const dialog = screen.getByRole('dialog', { name: 'Add text overlay' })
+    const leakedShortcut = vi.fn()
+    window.addEventListener('keydown', leakedShortcut)
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Add text' }), {
+      key: 'z',
+      ctrlKey: true,
+    })
+    fireEvent.keyDown(screen.getByLabelText('Text'), {
+      key: 'k',
+      ctrlKey: true,
+    })
+    fireEvent.keyDown(dialog, { key: 'Delete' })
+
+    expect(leakedShortcut).not.toHaveBeenCalled()
+    window.removeEventListener('keydown', leakedShortcut)
+  })
+
   test('commits content and style edits once, and explains invalid geometry', () => {
     const clip = createTextClip(emptyDoc(), 0, 90, 'Before')
     useDocumentStore.setState({
