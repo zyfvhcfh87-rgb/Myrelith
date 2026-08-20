@@ -82,7 +82,29 @@ const SUPERSEDED: RenderFrameResult = {
   renderMs: 0,
 }
 
+function renderFailure(message: string): RenderFrameResult {
+  return {
+    status: 'error',
+    drawnClipIds: [],
+    missingClipIds: [],
+    renderMs: 0,
+    message,
+  }
+}
+
 const WORKER_CLOSE_ACK_TIMEOUT_MS = 1_000
+const BRIDGE_DISPOSED_MESSAGE = 'bridge disposed'
+const BRIDGE_RENDER_DISPOSED_MESSAGE = 'render bridge is disposed'
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
+}
+
+function isDeadWorkerSendError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return error.name === 'InvalidStateError'
+    || /terminated|invalid state/i.test(error.message)
+}
 
 export interface RenderAssetOpenFailure {
   trackKind: 'video' | null
@@ -216,6 +238,8 @@ export class RenderWorkerBridge {
   >()
   private readonly pendingPluginEffects = new Map<number, PendingPluginEffectCall>()
   private disposed = false
+  private failed = false
+  private failedError: Error | null = null
   private closeTimeout: ReturnType<typeof setTimeout> | null = null
   private closePromise: Promise<void> | null = null
   private resolveClose: (() => void) | null = null
@@ -251,27 +275,36 @@ export class RenderWorkerBridge {
     worker.addEventListener('message', (event: MessageEvent) => {
       this.route(event.data)
     })
+    worker.addEventListener('error', (event: ErrorEvent) => {
+      event.preventDefault()
+      this.failBridge(new Error(event.message || 'Render worker failed'))
+    })
+    worker.addEventListener('messageerror', () => {
+      this.failBridge(new Error('Render worker message failed'))
+    })
   }
 
   /** Hand the visible drawing surface to the worker (transferred, once). */
   init(canvas: OffscreenCanvas): void {
-    this.post({ type: 'init', canvas }, [canvas])
+    if (this.disposed) return
+    this.send({ type: 'init', canvas }, [canvas])
   }
 
   /** Post a new doc snapshot; subsequent composites are built from it. */
   setDoc(doc: TimelineDoc): void {
+    if (this.disposed) return
+    this.send({ type: 'setDoc', doc }, [])
     this.doc = doc
     this.abortPluginEffectCalls()
     this.settlePendingAsSuperseded()
-    this.post({ type: 'setDoc', doc }, [])
   }
 
   /** Resize preview-only worker surfaces; authored geometry stays unchanged. */
   setPresentationProfile(profile: PresentationProfile): void {
     if (this.disposed) return
+    this.send({ type: 'setPresentationProfile', profile }, [])
     this.abortPluginEffectCalls()
     this.settlePendingAsSuperseded()
-    this.post({ type: 'setPresentationProfile', profile }, [])
   }
 
   /**
@@ -287,17 +320,17 @@ export class RenderWorkerBridge {
     rate: FrameRate,
     chunkProvider: ChunkProvider,
   ): Promise<void> {
-    if (this.disposed) return Promise.reject(new Error('bridge disposed'))
+    if (this.disposed) return Promise.reject(this.rejectionError())
     if (this.pendingConfigures.has(assetId)) {
       return Promise.reject(new Error(`asset ${assetId} registration already pending`))
     }
     const setupId = this.takeSetupId()
-    this.sourceRevision++
-    this.sources.set(assetId, createLegacyRenderAssetSource(rate, chunkProvider))
-    return new Promise((resolve, reject) => {
-      this.pendingConfigures.set(assetId, { setupId, resolve, reject })
-      this.post({ type: 'configureAsset', assetId, setupId, config }, [])
-    })
+    return this.commitAssetSetup(
+      assetId,
+      createLegacyRenderAssetSource(rate, chunkProvider),
+      setupId,
+      { type: 'configureAsset', assetId, setupId, config },
+    )
   }
 
   /**
@@ -312,22 +345,22 @@ export class RenderWorkerBridge {
     budget: LocalDecoderBudget,
     runtimeToken: object = {},
   ): Promise<void> {
-    if (this.disposed) return Promise.reject(new Error('bridge disposed'))
+    if (this.disposed) return Promise.reject(this.rejectionError())
     if (this.pendingConfigures.has(assetId)) {
       return Promise.reject(new Error(`asset ${assetId} registration already pending`))
     }
     const setupId = this.takeSetupId()
-    this.sourceRevision++
-    this.sources.set(assetId, {
-      protocol: 'streaming',
-      kind: 'video',
-      rate,
-      runtimeToken,
-    })
-    return new Promise((resolve, reject) => {
-      this.pendingConfigures.set(assetId, { setupId, resolve, reject })
-      this.post({ type: 'openAsset', assetId, setupId, blob, budget }, [])
-    })
+    return this.commitAssetSetup(
+      assetId,
+      {
+        protocol: 'streaming',
+        kind: 'video',
+        rate,
+        runtimeToken,
+      },
+      setupId,
+      { type: 'openAsset', assetId, setupId, blob, budget },
+    )
   }
 
   /**
@@ -340,54 +373,61 @@ export class RenderWorkerBridge {
     blob: Blob,
     runtimeToken: object = {},
   ): Promise<void> {
-    if (this.disposed) return Promise.reject(new Error('bridge disposed'))
+    if (this.disposed) return Promise.reject(this.rejectionError())
     if (this.pendingConfigures.has(assetId)) {
       return Promise.reject(new Error(`asset ${assetId} registration already pending`))
     }
     const setupId = this.takeSetupId()
-    this.sourceRevision++
-    this.sources.set(assetId, {
-      protocol: 'streaming',
-      kind: 'image',
-      runtimeToken,
-    })
-    return new Promise((resolve, reject) => {
-      this.pendingConfigures.set(assetId, { setupId, resolve, reject })
-      this.post({ type: 'openImage', assetId, setupId, blob }, [])
-    })
+    return this.commitAssetSetup(
+      assetId,
+      {
+        protocol: 'streaming',
+        kind: 'image',
+        runtimeToken,
+      },
+      setupId,
+      { type: 'openImage', assetId, setupId, blob },
+    )
   }
 
   /** Drop an asset's decoder, cache and chunk source. */
   releaseAsset(assetId: AssetId): void {
+    if (this.disposed) return
+    this.send({ type: 'releaseAsset', assetId }, [])
     this.sourceRevision++
     this.sources.delete(assetId)
     this.pendingConfigures.get(assetId)?.reject(new Error('asset released'))
     this.pendingConfigures.delete(assetId)
-    this.post({ type: 'releaseAsset', assetId }, [])
   }
 
   /** Enable/reset or disable the local-only worker health counters. */
   setRuntimeTelemetryEnabled(enabled: boolean): void {
     if (this.disposed) return
-    this.post({ type: 'setRuntimeTelemetry', enabled }, [])
+    this.send({ type: 'setRuntimeTelemetry', enabled }, [])
   }
 
   /** Configure the worker-owned bounded scope sampler for this UI generation. */
   setVideoScopesEnabled(enabled: boolean, generation: number): void {
     if (this.disposed) return
-    this.post({ type: 'setVideoScopes', enabled, generation }, [])
+    this.send({ type: 'setVideoScopes', enabled, generation }, [])
   }
 
   /** Capture a point-in-time worker health snapshot for the performance lab. */
   requestRuntimeTelemetry(): Promise<RenderWorkerRuntimeTelemetrySnapshot> {
-    if (this.disposed) return Promise.reject(new Error('bridge disposed'))
+    if (this.disposed) return Promise.reject(this.rejectionError())
     const requestId = this.nextTelemetryRequestId++
     if (!Number.isSafeInteger(requestId)) {
       return Promise.reject(new RangeError('Render telemetry request id overflow'))
     }
     return new Promise((resolve, reject) => {
       this.pendingTelemetry.set(requestId, { resolve, reject })
-      this.post({ type: 'requestRuntimeTelemetry', requestId }, [])
+      try {
+        this.send({ type: 'requestRuntimeTelemetry', requestId }, [])
+      } catch (error) {
+        if (this.failed) return
+        this.pendingTelemetry.delete(requestId)
+        reject(asError(error))
+      }
     })
   }
 
@@ -405,55 +445,33 @@ export class RenderWorkerBridge {
     const doc = this.doc
     const frame = plan.frame
     if (!doc) {
-      return Promise.resolve({
-        status: 'error',
-        drawnClipIds: [],
-        missingClipIds: [],
-        renderMs: 0,
-        message: 'no document configured (call setDoc first)',
-      })
+      return Promise.resolve(renderFailure('no document configured (call setDoc first)'))
     }
     if (this.disposed) {
-      return Promise.resolve({
-        status: 'error',
-        drawnClipIds: [],
-        missingClipIds: [],
-        renderMs: 0,
-        message: 'render bridge is disposed',
-      })
+      return Promise.resolve(renderFailure(BRIDGE_RENDER_DISPOSED_MESSAGE))
     }
     // Omitting mode is the deprecated keyframe-batch path. Once its caller
     // migrates, every render supplies explicit playback/seek intent.
     const protocol = mode === undefined ? 'legacy' : 'streaming'
     if (!Number.isSafeInteger(frame) || frame < 0) {
-      return Promise.resolve({
-        status: 'error',
-        drawnClipIds: [],
-        missingClipIds: [],
-        renderMs: 0,
-        message: 'visual plan frame must be a non-negative integer',
-      })
+      return Promise.resolve(renderFailure('visual plan frame must be a non-negative integer'))
     }
     const requests = videoCompositionRequests(plan)
     for (const request of requests) {
       const source = this.sources.get(request.clip.assetId)
       if (source && source.protocol !== protocol) {
-        return Promise.resolve({
-          status: 'error',
-          drawnClipIds: [],
-          missingClipIds: [],
-          renderMs: 0,
-          message: `asset ${request.clip.assetId} uses the ${source.protocol} render protocol`,
-        })
+        return Promise.resolve(renderFailure(
+          `asset ${request.clip.assetId} uses the ${source.protocol} render protocol`,
+        ))
       }
     }
 
     // Invalid calls above do not become latest: they neither post a worker
-    // cancellation nor disturb the last valid presentation.
+    // cancellation nor disturb the last valid presentation. Abort/supersede
+    // wait until the replacement request is actually posted.
     const requestId = this.nextRequestId++
     const generation = this.takeRenderGeneration()
     this.latestCallId = requestId
-    this.abortPluginEffectCalls()
     if (mode === undefined) {
       return this.renderLegacyFrame(doc, plan, frame, requestId, generation)
     }
@@ -486,16 +504,21 @@ export class RenderWorkerBridge {
     })
     if (!request) return SUPERSEDED
 
-    this.settlePendingAsSuperseded()
-
     return new Promise((resolve) => {
+      try {
+        this.send(request.message, request.transfer)
+      } catch (error) {
+        resolve(renderFailure(asError(error).message))
+        return
+      }
+      this.abortPluginEffectCalls()
+      this.settlePendingAsSuperseded()
       this.pending.set(requestId, {
         resolve,
         generation,
         plan,
         sources: request.sources,
       })
-      this.post(request.message, request.transfer)
     })
   }
 
@@ -536,18 +559,24 @@ export class RenderWorkerBridge {
 
     // Unlike the legacy batch table, entries stay clip-keyed. Two clips may
     // show the same asset frame while owning independent playback cursors.
-    this.settlePendingAsSuperseded()
     return new Promise((resolve) => {
+      try {
+        this.send({
+          type: 'renderFrame',
+          generation,
+          requestId,
+          frame,
+          plan,
+          mode,
+          sources: entries,
+        }, [])
+      } catch (error) {
+        resolve(renderFailure(asError(error).message))
+        return
+      }
+      this.abortPluginEffectCalls()
+      this.settlePendingAsSuperseded()
       this.pending.set(requestId, { resolve, generation, plan, sources: requestSources })
-      this.post({
-        type: 'renderFrame',
-        generation,
-        requestId,
-        frame,
-        plan,
-        mode,
-        sources: entries,
-      }, [])
     })
   }
 
@@ -561,20 +590,29 @@ export class RenderWorkerBridge {
     this.disposed = true
     this.sourceRevision++
     this.abortPluginEffectCalls()
+    this.settlePendingAsSuperseded()
+    const disposed = new Error(BRIDGE_DISPOSED_MESSAGE)
+    for (const waiter of this.pendingConfigures.values()) {
+      waiter.reject(this.failedError ?? disposed)
+    }
+    this.pendingConfigures.clear()
+    for (const waiter of this.pendingTelemetry.values()) {
+      waiter.reject(this.failedError ?? disposed)
+    }
+    this.pendingTelemetry.clear()
+    if (this.failed) {
+      this.settleClose(this.failedError ?? new Error('Render worker failed'))
+      return this.closePromise
+    }
     this.closeTimeout = setTimeout(() => {
       this.closeTimeout = null
       this.settleClose()
     }, WORKER_CLOSE_ACK_TIMEOUT_MS)
-    this.post({ type: 'close' }, [])
-    this.settlePendingAsSuperseded()
-    for (const waiter of this.pendingConfigures.values()) {
-      waiter.reject(new Error('bridge disposed'))
+    try {
+      this.post({ type: 'close' }, [])
+    } catch (error) {
+      this.failBridge(asError(error))
     }
-    this.pendingConfigures.clear()
-    for (const waiter of this.pendingTelemetry.values()) {
-      waiter.reject(new Error('bridge disposed'))
-    }
-    this.pendingTelemetry.clear()
     return this.closePromise
   }
 
@@ -606,8 +644,76 @@ export class RenderWorkerBridge {
     }
   }
 
+  private rejectionError(): Error {
+    return this.failedError ?? new Error(BRIDGE_DISPOSED_MESSAGE)
+  }
+
+  private commitAssetSetup(
+    assetId: AssetId,
+    source: AssetSource,
+    setupId: number,
+    message: Extract<ToRenderWorker, { setupId: number }>,
+  ): Promise<void> {
+    const previous = this.sources.get(assetId)
+    this.sourceRevision++
+    this.sources.set(assetId, source)
+    return new Promise((resolve, reject) => {
+      this.pendingConfigures.set(assetId, { setupId, resolve, reject })
+      try {
+        this.send(message, [])
+      } catch (error) {
+        if (this.failed) return
+        this.pendingConfigures.delete(assetId)
+        if (previous) this.sources.set(assetId, previous)
+        else this.sources.delete(assetId)
+        this.sourceRevision++
+        reject(asError(error))
+      }
+    })
+  }
+
+  private failBridge(error: Error): void {
+    if (this.failed) {
+      this.settleClose(error)
+      return
+    }
+    this.failed = true
+    this.failedError = error
+    this.disposed = true
+    this.sourceRevision++
+    this.sources.clear()
+    this.abortPluginEffectCalls()
+    for (const pending of this.pending.values()) {
+      pending.resolve(renderFailure(error.message))
+    }
+    this.pending.clear()
+    for (const waiter of this.pendingConfigures.values()) waiter.reject(error)
+    this.pendingConfigures.clear()
+    for (const waiter of this.pendingTelemetry.values()) waiter.reject(error)
+    this.pendingTelemetry.clear()
+    this.onWorkerError?.(error.message)
+    this.settleClose(error)
+  }
+
   private post(msg: ToRenderWorker, transfer: Transferable[]): void {
     this.worker.postMessage(msg, transfer)
+  }
+
+  private send(msg: ToRenderWorker, transfer: Transferable[]): void {
+    try {
+      this.post(msg, transfer)
+    } catch (error) {
+      if (isDeadWorkerSendError(error)) this.failBridge(asError(error))
+      throw asError(error)
+    }
+  }
+
+  private sendOrFail(msg: ToRenderWorker, transfer: Transferable[]): void {
+    try {
+      this.post(msg, transfer)
+    } catch (error) {
+      this.failBridge(asError(error))
+    }
   }
 
   private takeSetupId(): number {
@@ -629,7 +735,7 @@ export class RenderWorkerBridge {
   }
 
   private postPluginBypass(message: PluginEffectBridgeWorkerMessage): void {
-    this.post({
+    this.sendOrFail({
       type: 'pluginEffectBypassed',
       protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
       generation: message.generation,
@@ -720,7 +826,7 @@ export class RenderWorkerBridge {
         return
       }
       resultBuffer = result.rgbaBytes.buffer
-      this.post({
+      this.sendOrFail({
         type: 'pluginEffectApplied',
         protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
         generation: message.generation,
@@ -735,6 +841,7 @@ export class RenderWorkerBridge {
   }
 
   private route(value: unknown): void {
+    if (this.failed) return
     const maybeType = value && typeof value === 'object'
       ? (value as { readonly type?: unknown }).type
       : undefined
@@ -760,7 +867,7 @@ export class RenderWorkerBridge {
           && Number.isSafeInteger(candidate.effectRequestId)
           && Number(candidate.effectRequestId) > 0
         ) {
-          this.post({
+          this.sendOrFail({
             type: 'pluginEffectBypassed',
             protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
             generation: Number(candidate.generation),

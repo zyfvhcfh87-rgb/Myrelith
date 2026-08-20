@@ -21,8 +21,11 @@ class FakeWorker implements WorkerLike {
     this.sent.push({ msg: message as ToDecodeWorker, transfer })
   }
 
-  addEventListener(_type: 'message', listener: (event: MessageEvent) => void): void {
-    this.listener = listener
+  addEventListener(
+    type: 'message' | 'error' | 'messageerror',
+    listener: ((event: MessageEvent) => void) | ((event: ErrorEvent) => void),
+  ): void {
+    if (type === 'message') this.listener = listener as (event: MessageEvent) => void
   }
 
   /** Worker side of the wire replies. */
