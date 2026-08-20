@@ -156,8 +156,8 @@ describe('shared decoded-channel fold-down', () => {
       expect(foldedRight).toBe(0.4)
       expect(left).toBeCloseTo(0.4 * leftGain)
       expect(right).toBeCloseTo(0.4 * rightGain)
-      if (balance > -1) expect(Math.abs(left)).toBeGreaterThan(0)
-      if (balance < 1) expect(Math.abs(right)).toBeGreaterThan(0)
+      if (balance < 1) expect(Math.abs(left)).toBeGreaterThan(0)
+      if (balance > -1) expect(Math.abs(right)).toBeGreaterThan(0)
     },
   )
 

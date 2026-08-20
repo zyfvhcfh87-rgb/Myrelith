@@ -133,8 +133,8 @@ describe('multichannel preview/export fold-down parity', () => {
       }
       expect(planeEnergy(left)).toEqual(planeEnergy(expectedLeft))
       expect(planeEnergy(right)).toEqual(planeEnergy(expectedRight))
-      if (balance > -1) expect(planeEnergy(left).sum).toBeGreaterThan(0)
-      if (balance < 1) expect(planeEnergy(right).sum).toBeGreaterThan(0)
+      if (balance < 1) expect(planeEnergy(left).sum).toBeGreaterThan(0)
+      if (balance > -1) expect(planeEnergy(right).sum).toBeGreaterThan(0)
     },
   )
 

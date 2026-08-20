@@ -240,8 +240,8 @@ describe('multichannel preview/export fold-down parity', () => {
         expect(audible[0]).toBeCloseTo(expected[0], 6)
         expect(audible[1]).toBeCloseTo(expected[1], 6)
       }
-      if (balance > -1) expect(planeEnergy(audibleLeft).sum).toBeGreaterThan(0)
-      if (balance < 1) expect(planeEnergy(audibleRight).sum).toBeGreaterThan(0)
+      if (balance < 1) expect(planeEnergy(audibleLeft).sum).toBeGreaterThan(0)
+      if (balance > -1) expect(planeEnergy(audibleRight).sum).toBeGreaterThan(0)
 
       if (balance === 0) {
         expect(scheduled.routedLeftGain).toBeUndefined()
