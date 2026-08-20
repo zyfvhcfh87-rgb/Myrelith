@@ -426,6 +426,24 @@ interface FakeAnalyserNode extends FakeChannelNode {
   getFloatTimeDomainData: ReturnType<typeof vi.fn>
 }
 
+function makePlanarAudioBuffer(
+  channels: readonly Float32Array[],
+  sampleRate: number,
+): AudioBuffer {
+  const length = channels[0]?.length ?? 0
+  return {
+    numberOfChannels: channels.length,
+    length,
+    sampleRate,
+    duration: sampleRate > 0 ? length / sampleRate : 0,
+    getChannelData: (index: number) => {
+      const plane = channels[index]
+      if (!plane) throw new Error(`Missing audio channel ${index}`)
+      return plane
+    },
+  } as AudioBuffer
+}
+
 function makeWebAudioHarness(state: AudioContextState): {
   context: AudioContext
   gains: FakeGainNode[]
@@ -497,6 +515,14 @@ function makeWebAudioHarness(state: AudioContextState): {
       sources.push(source)
       return source
     }),
+    createBuffer: vi.fn((
+      numberOfChannels: number,
+      length: number,
+      sampleRate: number,
+    ) => makePlanarAudioBuffer(
+      Array.from({ length: numberOfChannels }, () => new Float32Array(length)),
+      sampleRate,
+    )),
   } as unknown as AudioContext
   return { context, gains, sources, splitters, mergers, analysers }
 }
