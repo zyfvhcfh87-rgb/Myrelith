@@ -3717,11 +3717,11 @@ describe('static-image worker ownership', () => {
     expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(0)
     expect(h.posts.filter((post) => post.type === 'closeFailed')).toEqual([{
       type: 'closeFailed',
-      message: expect.stringContaining('scope release failed'),
+      message: 'worker close failed: AggregateError: Failed to close render worker',
     }])
     expect(h.posts.filter((post) => post.type === 'error')).toContainEqual({
       type: 'error',
-      message: expect.stringContaining('scope release failed'),
+      message: 'worker close failed: AggregateError: Failed to close render worker',
     })
   })
 
