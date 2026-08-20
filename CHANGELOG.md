@@ -6,6 +6,25 @@ still change.
 
 ## Unreleased
 
+The hosted preview at [myrelith.pages.dev](https://myrelith.pages.dev) already
+includes the work below. The public prerelease label remains
+**v0.1.0-alpha.1**.
+
+### Added
+
+- Full clip Inspector with transforms, crop, blend modes, color correction,
+  masks, chroma key, and keyframed animation curves.
+- Caption tracks with SRT/VTT import, timeline markers, snapping guides,
+  constant-speed retiming, and speed ramps.
+- Searchable virtualized Media Pool, collections, and optional OPFS editing
+  proxies that never replace the original export source.
+- Video stabilization, point and box tracking, and manual lens correction
+  when a capable WebGL2 path is available.
+- Adaptive preview quality, video scopes, playback audio meters, command
+  palette, and workspace presets.
+- Signed local plugin packages with review, enable/disable, and fail-closed
+  preview and export.
+
 ### Fixed
 
 - New-project setup scrolls on shorter viewports so audio settings and Create
