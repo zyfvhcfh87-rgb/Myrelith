@@ -1,4 +1,4 @@
-/** Shared 3-channel and 5.1 fixtures for preview/export fold-down parity. */
+/** Shared mono, 3-channel, and 5.1 fixtures for preview/export fold-down parity. */
 
 import {
   applyStereoBalanceToSample,
@@ -11,12 +11,25 @@ export const PARITY_FRAME_COUNT = 8
 
 export interface ChannelMixParityCase {
   readonly id: string
-  readonly layout: '3-channel' | '5.1'
+  readonly layout: 'mono' | '3-channel' | '5.1'
   readonly channelCount: number
   readonly hotChannel: number
   readonly channelName: string
   readonly balance: number
 }
+
+/** Center, full-left, full-right, and intermediate clip-balance values. */
+export const MONO_BALANCE_PARITY_VALUES = [-1, -0.25, 0, 0.5, 1] as const
+
+export const MONO_BALANCE_PARITY_CASES: readonly ChannelMixParityCase[] =
+  MONO_BALANCE_PARITY_VALUES.map((balance) => ({
+    id: `mono balance=${balance}`,
+    layout: 'mono',
+    channelCount: 1,
+    hotChannel: 0,
+    channelName: 'mono',
+    balance,
+  }))
 
 function layoutCases(
   layout: ChannelMixParityCase['layout'],
@@ -74,4 +87,34 @@ export function expectedParityStereo(
   const [left, right] = foldDecodedFrameToStereo(planes, frame)
   const [leftGain, rightGain] = stereoBalanceGains(balance)
   return applyStereoBalanceToSample(left, right, leftGain, rightGain)
+}
+
+/**
+ * Discrete ChannelSplitter(2) semantics: output i is source channel i,
+ * or silence when that channel is absent. This is what the live meter
+ * and clip-balance graphs hear if preview skips the shared upmix.
+ */
+export function discreteSplitterPlanes(buffer: AudioBuffer): readonly [
+  Float32Array,
+  Float32Array,
+] {
+  const silent = new Float32Array(buffer.length)
+  return [
+    buffer.numberOfChannels > 0 ? buffer.getChannelData(0) : silent,
+    buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : silent,
+  ]
+}
+
+export function planeEnergy(plane: ArrayLike<number>): {
+  readonly max: number
+  readonly sum: number
+} {
+  let max = 0
+  let sum = 0
+  for (let index = 0; index < plane.length; index++) {
+    const magnitude = Math.abs(plane[index] ?? 0)
+    max = Math.max(max, magnitude)
+    sum += magnitude
+  }
+  return { max, sum }
 }

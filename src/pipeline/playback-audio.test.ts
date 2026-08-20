@@ -1517,6 +1517,53 @@ describe('createWebAudioPlaybackOutput ownership', () => {
     output.stop()
   })
 
+  test('upmixes a mono buffer before meter and balance routing', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const mono = new Float32Array(8).fill(0.5)
+    const buffer = makePlanarAudioBuffer([mono], 48_000)
+
+    output.schedule({
+      clipId: 'mono-balanced',
+      buffer,
+      timelineStartTime: 0,
+      when: 10,
+      offset: 0,
+      duration: 8 / 48_000,
+      volume: 1,
+      envelope: null,
+      balance: 1,
+      leftGain: 0,
+      rightGain: 1,
+    })
+
+    const folded = h.sources[0]?.buffer
+    expect(folded?.numberOfChannels).toBe(2)
+    expect(Array.from(folded?.getChannelData(0) ?? [])).toEqual(Array.from(mono))
+    expect(Array.from(folded?.getChannelData(1) ?? [])).toEqual(Array.from(mono))
+    expect(h.splitters).toHaveLength(2)
+    expect(h.gains[2]?.gain.value).toBe(0)
+    expect(h.gains[3]?.gain.value).toBe(1)
+
+    output.stop()
+  })
+
+  test('rejects a decoded buffer with an invalid channel count', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    expect(() => output.schedule({
+      clipId: 'invalid-channels',
+      buffer: { duration: 1, numberOfChannels: 0 } as AudioBuffer,
+      timelineStartTime: 0,
+      when: 10,
+      offset: 0,
+      duration: 1,
+      volume: 1,
+      envelope: null,
+    })).toThrow(/invalid channel count/)
+    output.stop()
+  })
+
   test('multiplies overlapping fades and routes stereo balance explicitly', () => {
     const h = makeWebAudioHarness('running')
     const output = createWebAudioPlaybackOutput(h.context)

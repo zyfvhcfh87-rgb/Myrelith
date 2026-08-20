@@ -582,11 +582,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   unavailable audio falls back to the ordinary hard cut without weakening a
   valid visual crossfade.
 - `domain/audioChannelMix.ts` is the one browser-free decoded-channel fold-down
-  authority. Preview and export fold 3–32 channels into stereo with the same
+  authority. Preview and export fold 1–32 channels into stereo with the same
   canonical Web Audio layouts before applying clip `stereoBalanceGains`:
-  3=L/R/C, 4=L/R/SL/SR, 5=L/R/C/SL/SR, 6=L/R/C/LFE/SL/SR. Extra discrete
-  channels fold alternately at -6 dB. The live graph must never drop channels
-  2+ at a two-output ChannelSplitter. Mono upmix remains a separate contract.
+  1=M/M, 2=L/R, 3=L/R/C, 4=L/R/SL/SR, 5=L/R/C/SL/SR, 6=L/R/C/LFE/SL/SR. Extra
+  discrete channels fold alternately at -6 dB. The live graph must never drop
+  channels 2+ or a valid mono source at a two-output ChannelSplitter; mono is
+  duplicated into both stereo legs before meter or balance routing.
 - Timing audio is deliberately supported only for an exact integer-origin 1×
   mapping; an explicit all-1× curve is equivalent and remains supported. Any
   constant non-1× speed, variable-speed ramp, or freeze is omitted from the

@@ -4,9 +4,11 @@ import { stereoBalanceGains } from '../domain/clipInspector'
 import {
   expectedParityStereo,
   isolatedParityPlanes,
+  MONO_BALANCE_PARITY_CASES,
   MULTICHANNEL_FOLD_PARITY_CASES,
   PARITY_FRAME_COUNT,
   PARITY_SAMPLE_RATE,
+  planeEnergy,
 } from '../test/audioChannelMixParity'
 import {
   adapterTestSubject,
@@ -112,6 +114,27 @@ describe('multichannel preview/export fold-down parity', () => {
         expect(left[frame]).toBeCloseTo(expected[0])
         expect(right[frame]).toBeCloseTo(expected[1])
       }
+    },
+  )
+
+  test.each(MONO_BALANCE_PARITY_CASES)(
+    'export upmixes $id before balance',
+    async ({ channelCount, hotChannel, balance }) => {
+      const planes = isolatedParityPlanes(channelCount, hotChannel)
+      const [left, right] = await exportFoldedParity(planes, balance)
+      const expectedLeft = new Float32Array(PARITY_FRAME_COUNT)
+      const expectedRight = new Float32Array(PARITY_FRAME_COUNT)
+      for (let frame = 0; frame < PARITY_FRAME_COUNT; frame++) {
+        const expected = expectedParityStereo(planes, frame, balance)
+        expectedLeft[frame] = expected[0]
+        expectedRight[frame] = expected[1]
+        expect(left[frame]).toBeCloseTo(expected[0])
+        expect(right[frame]).toBeCloseTo(expected[1])
+      }
+      expect(planeEnergy(left)).toEqual(planeEnergy(expectedLeft))
+      expect(planeEnergy(right)).toEqual(planeEnergy(expectedRight))
+      if (balance > -1) expect(planeEnergy(left).sum).toBeGreaterThan(0)
+      if (balance < 1) expect(planeEnergy(right).sum).toBeGreaterThan(0)
     },
   )
 

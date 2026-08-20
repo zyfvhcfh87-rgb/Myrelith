@@ -1,10 +1,10 @@
 /**
- * Browser-backed preview fold-down parity for multichannel sources.
+ * Browser-backed preview fold-down parity for mono and multichannel sources.
  *
  * Preview uses AudioBuffer channel planes plus the live Web Audio output.
  * Export coverage lives in export-mediabunny-audio-source.test.ts and uses
- * the same fixtures. Both paths must match the shared policy for every
- * documented 3-channel and 5.1 source channel.
+ * the same fixtures. Both paths must match the shared policy for mono
+ * upmix/balance and every documented 3-channel and 5.1 source channel.
  */
 
 import { describe, expect, test, vi } from 'vitest'
@@ -14,11 +14,14 @@ import {
 } from '../domain/audioChannelMix'
 import { stereoBalanceGains } from '../domain/clipInspector'
 import {
+  discreteSplitterPlanes,
   expectedParityStereo,
   isolatedParityPlanes,
+  MONO_BALANCE_PARITY_CASES,
   MULTICHANNEL_FOLD_PARITY_CASES,
   PARITY_FRAME_COUNT,
   PARITY_SAMPLE_RATE,
+  planeEnergy,
 } from '../test/audioChannelMixParity'
 import {
   createWebAudioPlaybackOutput,
@@ -196,6 +199,49 @@ describe('multichannel preview/export fold-down parity', () => {
         expect(audible[0]).toBeCloseTo(expected[0], 6)
         expect(audible[1]).toBeCloseTo(expected[1], 6)
       }
+
+      if (balance === 0) {
+        expect(scheduled.routedLeftGain).toBeUndefined()
+        expect(scheduled.routedRightGain).toBeUndefined()
+      } else {
+        expect(scheduled.routedLeftGain).toBe(scheduled.leftGain)
+        expect(scheduled.routedRightGain).toBe(scheduled.rightGain)
+      }
+    },
+  )
+
+  test.each(MONO_BALANCE_PARITY_CASES)(
+    'preview upmixes $id before meter and balance routing',
+    ({ channelCount, hotChannel, balance }) => {
+      const planes = isolatedParityPlanes(channelCount, hotChannel)
+      const scheduled = schedulePreview(planes, balance)
+      expect(scheduled.folded.numberOfChannels).toBe(2)
+      expect(scheduled.folded.length).toBe(PARITY_FRAME_COUNT)
+
+      const [splitLeft, splitRight] = discreteSplitterPlanes(scheduled.folded)
+      expect(planeEnergy(splitLeft)).toEqual({ max: 1, sum: PARITY_FRAME_COUNT })
+      expect(planeEnergy(splitRight)).toEqual({ max: 1, sum: PARITY_FRAME_COUNT })
+
+      const audibleLeft = new Float32Array(PARITY_FRAME_COUNT)
+      const audibleRight = new Float32Array(PARITY_FRAME_COUNT)
+      for (let frame = 0; frame < PARITY_FRAME_COUNT; frame++) {
+        const folded = foldDecodedFrameToStereo(planes, frame)
+        expect(splitLeft[frame]).toBeCloseTo(folded[0])
+        expect(splitRight[frame]).toBeCloseTo(folded[1])
+        const audible = applyStereoBalanceToSample(
+          splitLeft[frame],
+          splitRight[frame],
+          scheduled.leftGain,
+          scheduled.rightGain,
+        )
+        const expected = expectedParityStereo(planes, frame, balance)
+        audibleLeft[frame] = audible[0]
+        audibleRight[frame] = audible[1]
+        expect(audible[0]).toBeCloseTo(expected[0], 6)
+        expect(audible[1]).toBeCloseTo(expected[1], 6)
+      }
+      if (balance > -1) expect(planeEnergy(audibleLeft).sum).toBeGreaterThan(0)
+      if (balance < 1) expect(planeEnergy(audibleRight).sum).toBeGreaterThan(0)
 
       if (balance === 0) {
         expect(scheduled.routedLeftGain).toBeUndefined()
