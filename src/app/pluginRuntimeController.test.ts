@@ -17,6 +17,12 @@ import {
   type PluginExecutionIdentity,
   type PluginExportEffectRequirement,
 } from './pluginRuntimeController'
+import {
+  PLUGIN_ACTIVATION_SENTINEL_KEY,
+  readPluginStartupSafety,
+  runPluginActivationBatch,
+  type PluginSafetyStorage,
+} from './pluginSafetyController'
 import { PLUGIN_WASM_OPCODE_TABLE_DIGESTS } from '../workers/plugin-wasm/policyTables'
 import type {
   PluginRuntimeLifecycleSnapshot,
@@ -228,6 +234,16 @@ function applyRequest(
     rgbaBytes: Uint8Array.of(10, 20, 30, 255),
     ...overrides,
   }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
 }
 
 function resolverFor(
@@ -616,6 +632,67 @@ describe('plugin runtime controller', () => {
     expect(sandbox.activations[0].expectations.opcodeTableDigest)
       .toBe(PLUGIN_WASM_OPCODE_TABLE_DIGESTS['myrelith-wasm-migration-integer-v1'])
     await second.close('second-complete')
+  })
+
+  test('keeps a shared activation sentinel unsafe after one runtime succeeds and another is interrupted', async () => {
+    const values = new Map<string, string>()
+    const sharedStorage: PluginSafetyStorage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, value) },
+      removeItem: (key) => { values.delete(key) },
+    }
+    const holdB = deferred<void>()
+    const pluginA = bundle('com.example.runtime-a')
+    const pluginB = bundle('com.example.runtime-b')
+    const sandboxA = sandboxHarness()
+    const sandboxB = sandboxHarness({
+      activate: () => holdB.promise,
+    })
+    const controllerA = createPluginRuntimeController({
+      activationBundleResolver: resolverFor(new Map([[pluginA.pluginId, pluginA]])),
+      sandboxController: sandboxA.controller,
+      runActivationBatch(pluginId, activate) {
+        return runPluginActivationBatch({
+          storage: sharedStorage,
+          ownerId: 'runtime-a',
+          batchId: `batch-a-${pluginId}`,
+          activate,
+        })
+      },
+    })
+    const controllerB = createPluginRuntimeController({
+      activationBundleResolver: resolverFor(new Map([[pluginB.pluginId, pluginB]])),
+      sandboxController: sandboxB.controller,
+      runActivationBatch(pluginId, activate) {
+        return runPluginActivationBatch({
+          storage: sharedStorage,
+          ownerId: 'runtime-b',
+          batchId: `batch-b-${pluginId}`,
+          activate,
+        })
+      },
+    })
+    const editorA = controllerA.openEditorSession()
+    const editorB = controllerB.openEditorSession()
+    const applyA = editorA.apply(applyRequest(identity(pluginA)))
+    const applyB = editorB.apply(applyRequest(identity(pluginB)))
+
+    await vi.waitFor(() => {
+      expect(sandboxA.activations).toHaveLength(1)
+      expect(sandboxB.activations).toHaveLength(1)
+    })
+    expect((await applyA).status).toBe('applied')
+    expect(readPluginStartupSafety(sharedStorage)).toEqual({
+      status: 'stale-activation',
+      offerSafeMode: true,
+      batchId: `batch-b-${pluginB.pluginId}`,
+    })
+    expect(values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(true)
+
+    holdB.resolve()
+    expect((await applyB).status).toBe('applied')
+    await editorA.close('runtime-a-complete')
+    await editorB.close('runtime-b-complete')
   })
 
   test('wraps third-party sandbox activation in the injected crash-sentinel batch', async () => {

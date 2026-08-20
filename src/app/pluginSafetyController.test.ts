@@ -4,6 +4,7 @@ import {
   PLUGIN_ACTIVATION_SENTINEL_KEY,
   readPluginStartupSafety,
   runPluginActivationBatch,
+  type PluginActivationCoordinationLock,
   type PluginSafetyStorage,
 } from './pluginSafetyController'
 
@@ -25,6 +26,48 @@ function storage(order: string[]): PluginSafetyStorage & {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+function record(owners: ReadonlyArray<{ readonly ownerId: string; readonly batchId: string }>) {
+  return JSON.stringify({
+    version: 2,
+    owners: [...owners].sort((left, right) => (
+      left.ownerId < right.ownerId ? -1 : left.ownerId > right.ownerId ? 1 : 0
+    )),
+  })
+}
+
+function exclusiveLock(): PluginActivationCoordinationLock & {
+  readonly heldDuringActivate: () => boolean
+  markActivate(): void
+} {
+  let held = 0
+  let heldDuringActivate = false
+  return {
+    heldDuringActivate: () => heldDuringActivate,
+    markActivate() {
+      heldDuringActivate = held > 0
+    },
+    async runExclusive<T>(work: () => Promise<T> | T): Promise<T> {
+      if (held !== 0) throw new Error('activation record lock is not exclusive')
+      held++
+      try {
+        return await work()
+      } finally {
+        held--
+      }
+    },
+  }
+}
+
 describe('plugin activation safety', () => {
   test('brackets successful third-party registration with a durable sentinel', async () => {
     const order: string[] = []
@@ -32,12 +75,13 @@ describe('plugin activation safety', () => {
 
     await expect(runPluginActivationBatch({
       storage: backing,
+      ownerId: 'owner-1',
       batchId: 'batch-1',
       activate: async () => {
         order.push('activate')
-        expect(backing.values.get(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(
-          JSON.stringify({ version: 1, batchId: 'batch-1' }),
-        )
+        expect(backing.values.get(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(record([
+          { ownerId: 'owner-1', batchId: 'batch-1' },
+        ]))
         return 'ready'
       },
     })).resolves.toBe('ready')
@@ -67,6 +111,23 @@ describe('plugin activation safety', () => {
     expect(sessionSafety.continueWithReviewedNormalStartup()).toBe(true)
     expect(sessionSafety.startupMode()).toBe('normal')
     expect(sessionSafety.thirdPartyInitializationAllowed()).toBe(true)
+  })
+
+  test('offers safe mode when a multi-owner activation record remains', () => {
+    const backing = storage([])
+    backing.values.set(
+      PLUGIN_ACTIVATION_SENTINEL_KEY,
+      record([
+        { ownerId: 'tab-b', batchId: 'batch-b' },
+        { ownerId: 'tab-a', batchId: 'batch-a' },
+      ]),
+    )
+
+    expect(readPluginStartupSafety(backing)).toEqual({
+      status: 'stale-activation',
+      offerSafeMode: true,
+      batchId: 'batch-a',
+    })
   })
 
   test('fails safe when persisted activation sentinel data is invalid', () => {
@@ -138,5 +199,99 @@ describe('plugin activation safety', () => {
     })).rejects.toThrow('must contain 1-128 characters')
 
     expect(backing.setItem).not.toHaveBeenCalled()
+  })
+
+  test('a successful peer cannot clear an interrupted origin activation owner', async () => {
+    const backing = storage([])
+    const startedA = deferred<void>()
+    const holdB = deferred<string>()
+
+    const finishedA = runPluginActivationBatch({
+      storage: backing,
+      ownerId: 'tab-a',
+      batchId: 'batch-a',
+      activate: async () => {
+        startedA.resolve()
+        return 'ready-a'
+      },
+    })
+    const interruptedB = runPluginActivationBatch({
+      storage: backing,
+      ownerId: 'tab-b',
+      batchId: 'batch-b',
+      activate: async () => {
+        await startedA.promise
+        return holdB.promise
+      },
+    })
+
+    await finishedA
+    expect(readPluginStartupSafety(backing)).toEqual({
+      status: 'stale-activation',
+      offerSafeMode: true,
+      batchId: 'batch-b',
+    })
+    expect(backing.values.get(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(record([
+      { ownerId: 'tab-b', batchId: 'batch-b' },
+    ]))
+
+    holdB.resolve('ready-b')
+    await expect(interruptedB).resolves.toBe('ready-b')
+    expect(backing.values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(false)
+    expect(readPluginStartupSafety(backing)).toEqual({
+      status: 'clean',
+      offerSafeMode: false,
+    })
+  })
+
+  test('a later success leaves a failed peer owner for next-launch review', async () => {
+    const backing = storage([])
+    const startedA = deferred<void>()
+
+    const failedA = runPluginActivationBatch({
+      storage: backing,
+      ownerId: 'tab-a',
+      batchId: 'batch-a',
+      activate: async () => {
+        startedA.resolve()
+        throw new Error('activation interrupted')
+      },
+    })
+    const finishedB = runPluginActivationBatch({
+      storage: backing,
+      ownerId: 'tab-b',
+      batchId: 'batch-b',
+      activate: async () => {
+        await startedA.promise
+        return 'ready-b'
+      },
+    })
+
+    await expect(failedA).rejects.toThrow('activation interrupted')
+    await expect(finishedB).resolves.toBe('ready-b')
+    expect(readPluginStartupSafety(backing)).toEqual({
+      status: 'stale-activation',
+      offerSafeMode: true,
+      batchId: 'batch-a',
+    })
+  })
+
+  test('coordinates record mutations without holding the lock during activation', async () => {
+    const backing = storage([])
+    const lock = exclusiveLock()
+
+    await expect(runPluginActivationBatch({
+      storage: backing,
+      ownerId: 'owner-1',
+      batchId: 'batch-1',
+      coordinationLock: lock,
+      activate: async () => {
+        lock.markActivate()
+        return 'ready'
+      },
+    })).resolves.toBe('ready')
+
+    expect(lock.heldDuringActivate()).toBe(false)
+    expect(backing.values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(false)
   })
 })
