@@ -487,10 +487,6 @@ export async function leaveActiveProject(
     // cross the slower export/audio teardown below.
     await deps.pauseProjectPersistence()
     if (generation !== operationGeneration) return { status: 'cancelled' }
-    // A confirmed return to Projects is an intentional discard, not a crash.
-    // Remove its recovery lineage before revoking any media resources.
-    await deps.discardProjectRecovery()
-    if (generation !== operationGeneration) return { status: 'cancelled' }
     await deps.disposeExport()
     await deps.disposeTransport()
     if (generation !== operationGeneration) return { status: 'cancelled' }
@@ -499,6 +495,11 @@ export async function leaveActiveProject(
     if (generation !== operationGeneration) return { status: 'cancelled' }
     deps.disposeMediaVisuals()
     deps.resetMediaImport()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+    // Keep the prior journal until teardown reaches terminal success. A
+    // failed exit or crash during cleanup must still have a durable copy.
+    await deps.discardProjectRecovery()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
     deps.suspendProjectPersistence()
     if (generation !== operationGeneration) return { status: 'cancelled' }
 

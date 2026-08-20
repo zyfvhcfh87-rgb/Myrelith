@@ -690,7 +690,7 @@ describe('active-project cleanup', () => {
 
     persistenceGate.resolve()
     await flush()
-    expect(deps.discardProjectRecovery).toHaveBeenCalledOnce()
+    expect(deps.discardProjectRecovery).not.toHaveBeenCalled()
     expect(deps.disposeExport).toHaveBeenCalledOnce()
     expect(deps.disposeTransport).toHaveBeenCalledOnce()
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
@@ -714,6 +714,7 @@ describe('active-project cleanup', () => {
     expect(deps.disposePlugins).toHaveBeenCalledOnce()
     expect(deps.disposeMediaVisuals).toHaveBeenCalledOnce()
     expect(deps.resetMediaImport).toHaveBeenCalledOnce()
+    expect(deps.discardProjectRecovery).toHaveBeenCalledOnce()
     expect(deps.suspendProjectPersistence).toHaveBeenCalledOnce()
     expect(deps.resumeProjectPersistence).not.toHaveBeenCalled()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:active-source')
@@ -790,6 +791,7 @@ describe('active-project cleanup', () => {
       message: 'Could not return to Projects: audio drain failed',
     })
 
+    expect(deps.discardProjectRecovery).not.toHaveBeenCalled()
     expect(deps.disposePreview).not.toHaveBeenCalled()
     expect(deps.suspendProjectPersistence).not.toHaveBeenCalled()
     expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
@@ -825,6 +827,7 @@ describe('active-project cleanup', () => {
     })
 
     expect(deps.disposePreview).toHaveBeenCalledOnce()
+    expect(deps.discardProjectRecovery).not.toHaveBeenCalled()
     expect(deps.disposeMediaVisuals).not.toHaveBeenCalled()
     expect(deps.resetMediaImport).not.toHaveBeenCalled()
     expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
@@ -856,6 +859,7 @@ describe('active-project cleanup', () => {
     })
 
     expect(deps.disposePlugins).toHaveBeenCalledOnce()
+    expect(deps.discardProjectRecovery).not.toHaveBeenCalled()
     expect(deps.disposeMediaVisuals).not.toHaveBeenCalled()
     expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
     expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
@@ -885,6 +889,7 @@ describe('active-project cleanup', () => {
 
     expect(deps.disposePreview).toHaveBeenCalledOnce()
     expect(deps.disposePlugins).toHaveBeenCalledOnce()
+    expect(deps.discardProjectRecovery).not.toHaveBeenCalled()
     expect(deps.disposeMediaVisuals).not.toHaveBeenCalled()
     expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
     expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
@@ -917,7 +922,7 @@ describe('active-project cleanup', () => {
     ])
   })
 
-  test('a failed recovery discard keeps the editor intact before Blob cleanup', async () => {
+  test('a failed recovery discard keeps the editor intact after consumer cleanup', async () => {
     const asset = makeAsset({
       id: 'asset-recovery-retained',
       objectUrl: 'blob:recovery-retained',
@@ -938,13 +943,50 @@ describe('active-project cleanup', () => {
       message: 'Could not return to Projects: local storage unavailable',
     })
 
-    expect(deps.disposeExport).not.toHaveBeenCalled()
-    expect(deps.disposeTransport).not.toHaveBeenCalled()
+    expect(deps.disposeExport).toHaveBeenCalledOnce()
+    expect(deps.disposeTransport).toHaveBeenCalledOnce()
+    expect(deps.disposePreview).toHaveBeenCalledOnce()
+    expect(deps.disposePlugins).toHaveBeenCalledOnce()
+    expect(deps.disposeMediaVisuals).toHaveBeenCalledOnce()
+    expect(deps.resetMediaImport).toHaveBeenCalledOnce()
+    expect(deps.suspendProjectPersistence).not.toHaveBeenCalled()
     expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
     expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
     expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(
       'blob:recovery-retained',
     )
+  })
+
+  test('a failed leave plus immediate crash never deletes the recovery journal', async () => {
+    const asset = makeAsset({
+      id: 'asset-recovery-crash-window',
+      objectUrl: 'blob:recovery-crash-window',
+    })
+    useMediaStore.getState().addAsset(asset)
+    useProjectSessionStore.setState({
+      screen: 'editor',
+      activeProjectName: 'Crash window',
+      hasUnsavedChanges: true,
+    })
+    const deps = makeDeps({
+      disposeTransport: vi.fn(async () => {
+        throw new Error('audio drain failed')
+      }),
+    })
+
+    await expect(leaveActiveProject(deps)).resolves.toEqual({
+      status: 'failed',
+      message: 'Could not return to Projects: audio drain failed',
+    })
+
+    expect(deps.discardProjectRecovery).not.toHaveBeenCalled()
+    expect(deps.resumeProjectPersistence).toHaveBeenCalledOnce()
+    expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      screen: 'editor',
+      phase: 'error',
+      hasUnsavedChanges: true,
+    })
   })
 })
 
