@@ -13,6 +13,9 @@
 [Releases](https://github.com/zyfvhcfh87-rgb/Myrelith/releases) ·
 [Report a bug](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/new/choose)
 
+Current public preview: **v0.1.0-alpha.1**. The
+[hosted app](https://myrelith.pages.dev) tracks current `master`.
+
 Myrelith is an experimental non-linear editor built with React, TypeScript,
 WebCodecs, Mediabunny, Web Audio, and worker-owned Canvas rendering. It can take
 a project from local media to a capability-aware MP4 or WebM export without
@@ -26,9 +29,9 @@ Projects created before the rename with a `.webcut` filename or
 
 - **Local-first:** media decoding, preview, editing, and export happen in your
   browser. There are no accounts, ads, cookies, or in-app analytics.
-- **A real editing model:** multi-track editing, editable titles/captions,
-  linked A/V, trim/ripple/slip/slide/razor tools, transitions, transforms,
-  opacity, and clip volume.
+- **A real editing model:** multi-track editing, linked A/V, trim/ripple/slip/
+  slide/razor tools, markers, snapping, captions, constant-speed retiming, and
+  speed ramps.
 - **Portable projects:** `.myrelith` files contain the edit, not bundled source
   media. Chrome can remember browser-managed file permissions and reconnect
   sources when allowed.
@@ -42,11 +45,14 @@ Projects created before the rename with a `.webcut` filename or
 
 | Area | Highlights |
 |---|---|
-| Projects | 16:9, 9:16, 1:1, and 4:5 canvases from 720p to 4K; exact common frame and audio rates; Save, Save As, Resume, Recent, and recovery |
-| Media | Video, audio, PNG, JPEG, WebP, and AVIF; byte-level container inspection; thumbnails, filmstrips, and waveforms |
-| Timeline | Four video and four audio tracks by default; select, razor, trim, ripple trim, slip, slide, linked editing, track controls, and undo/redo |
-| Effects | Editable text overlays, position, scale, rotation, opacity, volume, visual crossfades, and synchronized audio fades when valid handles exist |
+| Projects | Horizontal 16:9, vertical 9:16, square 1:1, and 4:5 canvases from 720p to 4K; exact common frame and audio rates; Save, Save As, live save, Resume, Recent, recovery, and workspace presets |
+| Media | Video, audio, PNG, JPEG, WebP, and AVIF; byte-level container inspection; searchable virtualized pool; collections; thumbnails, filmstrips, and waveforms; offline relink; optional local editing proxies |
+| Timeline | Four video and four audio tracks by default; select, razor, trim, ripple trim, slip, slide, linked editing, track controls, markers, snapping, caption tracks with SRT/VTT, and undo/redo |
+| Effects | Text overlays, transforms, crop, blend modes, opacity, volume, color correction, masks and chroma key, keyframed animation, dynamic zoom presets, visual crossfades, and synchronized audio fades when valid handles exist |
+| Motion | Constant-speed retiming and speed ramps; video stabilization; point and box tracking; manual lens correction when WebGL2 is available |
+| Preview | Direct Program Monitor manipulation; Auto/Full/Half/Quarter quality; histogram, waveform, and vectorscope; playback audio meters; command palette |
 | Export | Auto, Compatibility MP4/AVC/AAC, Web WebM/VP9/Opus, Modern WebM/AV1/Opus, and explicit HEVC; buffered download or direct-to-file save |
+| Plugins | Signed local `.myrelith-plugin` packages only; review, enable, disable, and fail-closed preview/export. There is no plugin marketplace |
 
 ## Try it
 
@@ -78,7 +84,7 @@ Open [http://localhost:5173](http://localhost:5173).
 ## Run the container
 
 Future versioned images publish to GitHub Container Registry under the
-`myrelith` package name. The previously released alpha remains immutable under
+`myrelith` package name. The v0.1.0-alpha.1 tagged image remains immutable under
 its legacy package name; the server listens on port `8080` inside the container.
 
 ```bash
@@ -119,7 +125,14 @@ security metadata. Cloudflare Web Analytics is disabled. Read the full
 - Recovery copies are origin-local browser conveniences, not user-owned
   `.myrelith` saves. Multi-tab recovery ownership is not coordinated.
 - Local ProRes and AC-3/E-AC-3 extensions cover import only. There is no proxy
-  converter or local export-encoder fallback.
+  converter or local export-encoder fallback. Editing proxies are optional
+  preview helpers; export always uses the original source.
+- Non-1× speed and speed ramps retime picture. Clip audio is muted outside
+  exact 1×. Timeline text overlays and caption tracks are separate; text
+  overlays do not yet have keyframe animation.
+- Manual lens correction needs a capable WebGL2 path and can block motion
+  tracking while it is active. Signed plugins are local packages only and can
+  block export when they cannot be prepared.
 - The bundled AC-3/E-AC-3 decoder includes FFmpeg-derived WebAssembly. Copyright
   and patent obligations are separate; this prerelease is not a
   patent-clearance certification. See [Third-party notices](THIRD_PARTY_NOTICES.md).
