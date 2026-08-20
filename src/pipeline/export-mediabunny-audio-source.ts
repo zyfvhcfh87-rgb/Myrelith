@@ -13,6 +13,7 @@ import {
 } from '../codecs/mediaCodecFallbacks'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { AssetId } from '../domain/schema'
+import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import {
   EXPORT_AUDIO_CHANNELS,
   type ExportAudioClipReader,
@@ -166,32 +167,8 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
     outputChannel: number,
     frame: number,
   ): number {
-    const channel = (index: number): number =>
-      chunk.channels[index]?.[frame] ?? 0
-    const count = chunk.channels.length
-    if (count === 1) return channel(0)
-    if (count === 2) return channel(outputChannel)
-
-    // Web Audio's canonical layouts: 3=L/R/C, 4=L/R/SL/SR,
-    // 5=L/R/C/SL/SR, 6=L/R/C/LFE/SL/SR. Extra discrete channels are
-    // folded alternately at -6 dB rather than making export fail.
-    let value = channel(outputChannel)
-    if (count === 3) {
-      value += channel(2) * Math.SQRT1_2
-    } else if (count === 4) {
-      value += channel(outputChannel + 2) * Math.SQRT1_2
-    } else if (count === 5) {
-      value += channel(2) * Math.SQRT1_2
-      value += channel(outputChannel + 3) * Math.SQRT1_2
-    } else {
-      value += channel(2) * Math.SQRT1_2
-      value += channel(3) * 0.5
-      value += channel(outputChannel + 4) * Math.SQRT1_2
-      for (let index = 6 + outputChannel; index < count; index += 2) {
-        value += channel(index) * 0.5
-      }
-    }
-    return value
+    const folded = foldDecodedFrameToStereo(chunk.channels, frame)
+    return outputChannel === 1 ? folded[1] : folded[0]
   }
 
   async read(sampleCount: number): Promise<readonly Float32Array[]> {

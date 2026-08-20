@@ -38,6 +38,7 @@ import {
   AUDIO_METER_FFT_SIZE,
   measureAudioMeterSample,
 } from '../domain/audioMeter'
+import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 
 export const PLAYBACK_AUDIO_LOOKAHEAD_SECONDS = 0.75
 export const PLAYBACK_AUDIO_START_LEAD_SECONDS = 0.05
@@ -782,6 +783,30 @@ function scheduleNodeGain(
   )
 }
 
+function foldPlaybackBufferToStereo(
+  context: AudioContext,
+  buffer: AudioBuffer,
+): AudioBuffer {
+  const channelCount = buffer.numberOfChannels
+  if (!Number.isSafeInteger(channelCount) || channelCount <= 2) return buffer
+  if (channelCount > 32) {
+    throw new RangeError('Playback audio buffer has an invalid channel count')
+  }
+  const planes: Float32Array[] = []
+  for (let index = 0; index < channelCount; index++) {
+    planes.push(buffer.getChannelData(index))
+  }
+  const stereo = context.createBuffer(2, buffer.length, buffer.sampleRate)
+  const left = stereo.getChannelData(0)
+  const right = stereo.getChannelData(1)
+  for (let frame = 0; frame < buffer.length; frame++) {
+    const folded = foldDecodedFrameToStereo(planes, frame)
+    left[frame] = folded[0]
+    right[frame] = folded[1]
+  }
+  return stereo
+}
+
 /** The only module that turns decoded buffers into an audible Web Audio graph. */
 export function createWebAudioPlaybackOutput(
   context: AudioContext,
@@ -851,14 +876,15 @@ export function createWebAudioPlaybackOutput(
     if (stopped) return
     const source = context.createBufferSource()
     const gain = context.createGain()
-    source.buffer = request.buffer
+    const playbackBuffer = foldPlaybackBufferToStereo(context, request.buffer)
+    source.buffer = playbackBuffer
     scheduleNodeGain(gain.gain, request)
     source.connect(gain)
     const balanceNodes: AudioNode[] = []
     if (
       request.balance !== undefined
       && request.balance !== 0
-      && request.buffer.numberOfChannels >= 2
+      && playbackBuffer.numberOfChannels >= 2
     ) {
       const splitter = context.createChannelSplitter(2)
       const left = context.createGain()
