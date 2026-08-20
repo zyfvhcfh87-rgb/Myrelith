@@ -783,13 +783,16 @@ function scheduleNodeGain(
   )
 }
 
+/** Fold 1 and 3–32 channel buffers to stereo before live routing. */
 function foldPlaybackBufferToStereo(
   context: AudioContext,
   buffer: AudioBuffer,
 ): AudioBuffer {
   const channelCount = buffer.numberOfChannels
-  if (!Number.isSafeInteger(channelCount) || channelCount <= 2) return buffer
-  if (channelCount > 32) {
+  // Already-stereo buffers stay as-is. A missing/non-integer channel count
+  // is left unchanged rather than inventing a fold.
+  if (!Number.isSafeInteger(channelCount) || channelCount === 2) return buffer
+  if (channelCount < 1 || channelCount > 32) {
     throw new RangeError('Playback audio buffer has an invalid channel count')
   }
   const planes: Float32Array[] = []

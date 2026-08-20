@@ -141,6 +141,26 @@ describe('shared decoded-channel fold-down', () => {
       .toEqual([CENTER * 0.5, CENTER])
   })
 
+  test.each([-1, -0.25, 0, 0.5, 1])(
+    'keeps duplicated mono audible after balance %s',
+    (balance) => {
+      const [foldedLeft, foldedRight] = foldSourceChannelsToStereo(() => 0.4, 1)
+      const [leftGain, rightGain] = stereoBalanceGains(balance)
+      const [left, right] = applyStereoBalanceToSample(
+        foldedLeft,
+        foldedRight,
+        leftGain,
+        rightGain,
+      )
+      expect(foldedLeft).toBe(0.4)
+      expect(foldedRight).toBe(0.4)
+      expect(left).toBeCloseTo(0.4 * leftGain)
+      expect(right).toBeCloseTo(0.4 * rightGain)
+      if (balance < 1) expect(Math.abs(left)).toBeGreaterThan(0)
+      if (balance > -1) expect(Math.abs(right)).toBeGreaterThan(0)
+    },
+  )
+
   test('rejects an invalid decoded channel count', () => {
     expect(() => foldSourceChannelsToStereo(() => 0, 0)).toThrow(/1 to 32/)
     expect(() => foldSourceChannelsToStereo(() => 0, 33)).toThrow(/1 to 32/)
