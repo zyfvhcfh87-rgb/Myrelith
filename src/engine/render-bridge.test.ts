@@ -35,7 +35,7 @@ import type {
   RenderWorkerRuntimeTelemetrySnapshot,
   ToRenderWorker,
 } from '../workers/render-protocol'
-import { RenderAssetOpenError, RenderWorkerBridge } from './render-bridge'
+import { RenderAssetOpenError, RenderWorkerBridge, type RenderFrameResult } from './render-bridge'
 import type { ChunkProvider, WorkerLike } from './worker-bridge'
 
 /* ------------------------------------------------------------------ */
@@ -94,20 +94,53 @@ class FakeWorker implements WorkerLike {
   posted: Array<{ msg: ToRenderWorker; transfer: Transferable[] }> = []
   terminated = false
   terminateCount = 0
-  private listener: ((event: MessageEvent) => void) | null = null
+  throwOnPost: Error | ((message: ToRenderWorker) => Error | null) | null = null
+  private readonly listeners = new Map<string, Set<(event: MessageEvent | ErrorEvent) => void>>()
 
   postMessage(message: unknown, transfer: Transferable[]): void {
-    this.posted.push({ msg: message as ToRenderWorker, transfer })
+    if (this.terminated) {
+      const error = new Error('Worker has been terminated')
+      error.name = 'InvalidStateError'
+      throw error
+    }
+    const msg = message as ToRenderWorker
+    const failure = typeof this.throwOnPost === 'function'
+      ? this.throwOnPost(msg)
+      : this.throwOnPost
+    if (failure) throw failure
+    this.posted.push({ msg, transfer })
   }
-  addEventListener(_type: 'message', listener: (event: MessageEvent) => void): void {
-    this.listener = listener
+  addEventListener(
+    type: 'message' | 'error' | 'messageerror',
+    listener: ((event: MessageEvent) => void) | ((event: ErrorEvent) => void),
+  ): void {
+    const bucket = this.listeners.get(type) ?? new Set()
+    bucket.add(listener as (event: MessageEvent | ErrorEvent) => void)
+    this.listeners.set(type, bucket)
   }
   terminate(): void {
     this.terminateCount++
     this.terminated = true
   }
-  emit(msg: FromRenderWorker): void {
-    this.listener?.({ data: msg } as MessageEvent)
+  emit(msg: FromRenderWorker | PluginEffectBridgeApplyMessage | Record<string, unknown>): void {
+    for (const listener of this.listeners.get('message') ?? []) {
+      listener({ data: msg } as MessageEvent)
+    }
+  }
+  emitError(message: string): void {
+    const event = {
+      message,
+      preventDefault() {},
+    } as ErrorEvent
+    for (const listener of this.listeners.get('error') ?? []) listener(event)
+  }
+  emitMessageError(): void {
+    const event = { data: null } as MessageEvent
+    for (const listener of this.listeners.get('messageerror') ?? []) listener(event)
+  }
+  terminateUnexpectedly(): void {
+    this.terminated = true
+    this.emitError('Render worker terminated')
   }
   composites(): Array<Extract<ToRenderWorker, { type: 'composite' }>> {
     return this.posted
@@ -1859,5 +1892,432 @@ describe('reply routing', () => {
       snapshot,
     })
     await expect(pending).resolves.toEqual(snapshot)
+  })
+})
+
+const CLONE_FAILURE = new Error('structured clone failed')
+
+describe('native worker terminal failures', () => {
+  async function startWaiterFamilies(): Promise<{
+    worker: FakeWorker
+    bridge: RenderWorkerBridge
+    opening: Promise<void>
+    telemetry: Promise<unknown>
+    rendering: Promise<RenderFrameResult>
+    pluginSignal: AbortSignal | null
+  }> {
+    const signals: AbortSignal[] = []
+    const handler: PluginEffectBridgeHandler = {
+      apply: vi.fn(async (_request, signal) => {
+        signals.push(signal)
+        if (!signal.aborted) {
+          await new Promise<void>((resolve) => {
+            signal.addEventListener('abort', () => resolve(), { once: true })
+          })
+        }
+        return { status: 'bypassed' as const }
+      }),
+    }
+    const { worker, bridge } = makeBridge(
+      makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])]),
+      handler,
+    )
+    await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
+    const opening = bridge.openAsset('B', new Blob(['other']), R30, BUDGET)
+    const telemetry = bridge.requestRuntimeTelemetry()
+    const plan = readyPluginPlan()
+    const rendering = bridge.renderFrame(plan, 'seek')
+    const renderMessage = worker.renderFrames()[0]
+    worker.emit(pluginApplyMessage(plan, renderMessage, Uint8Array.of(1, 2, 3, 4).buffer))
+    await flushMicrotasks()
+    return {
+      worker,
+      bridge,
+      opening,
+      telemetry,
+      rendering,
+      pluginSignal: signals[0] ?? null,
+    }
+  }
+
+  test.each([
+    ['error', (worker: FakeWorker) => worker.emitError('decoder isolate crashed')],
+    ['messageerror', (worker: FakeWorker) => worker.emitMessageError()],
+    ['unexpected termination', (worker: FakeWorker) => worker.terminateUnexpectedly()],
+  ] as const)('%s settles every waiter family once and lets dispose terminate', async (
+    _label,
+    fire,
+  ) => {
+    const {
+      worker,
+      bridge,
+      opening,
+      telemetry,
+      rendering,
+      pluginSignal,
+    } = await startWaiterFamilies()
+    const onWorkerError = vi.fn()
+    bridge.onWorkerError = onWorkerError
+
+    fire(worker)
+    fire(worker)
+
+    const expected = _label === 'messageerror'
+      ? 'Render worker message failed'
+      : _label === 'unexpected termination'
+        ? 'Render worker terminated'
+        : 'decoder isolate crashed'
+    await expect(opening).rejects.toThrow(expected)
+    await expect(telemetry).rejects.toThrow(expected)
+    await expect(rendering).resolves.toEqual({
+      status: 'error',
+      drawnClipIds: [],
+      missingClipIds: [],
+      renderMs: 0,
+      message: expected,
+    })
+    expect(pluginSignal?.aborted).toBe(true)
+    expect(onWorkerError).toHaveBeenCalledOnce()
+    expect(onWorkerError).toHaveBeenCalledWith(expected)
+    expect(worker.terminated).toBe(true)
+    expect(worker.terminateCount).toBe(1)
+
+    await expect(bridge.openAsset('C', new Blob(['retry']), R30, BUDGET))
+      .rejects.toThrow(expected)
+    const retryRender = render(bridge, 2, 'seek')
+    await expect(retryRender).resolves.toMatchObject({
+      status: 'error',
+      message: 'render bridge is disposed',
+    })
+
+    const closing = bridge.dispose()
+    await expect(closing).rejects.toThrow(expected)
+    expect(bridge.dispose()).toBe(closing)
+    expect(worker.terminateCount).toBe(1)
+  })
+
+  test.each([
+    ['error', (worker: FakeWorker) => worker.emitError('isolate crashed during close')],
+    ['messageerror', (worker: FakeWorker) => worker.emitMessageError()],
+    ['unexpected termination', (worker: FakeWorker) => worker.terminateUnexpectedly()],
+  ] as const)('%s during dispose rejects the close waiter and terminates once', async (
+    _label,
+    fire,
+  ) => {
+    const { worker, bridge } = makeBridge()
+    const opening = bridge.openAsset('A', new Blob(['video']), R30, BUDGET)
+    const telemetry = bridge.requestRuntimeTelemetry()
+    const closing = bridge.dispose()
+    expect(worker.terminated).toBe(false)
+
+    fire(worker)
+
+    const expected = _label === 'messageerror'
+      ? 'Render worker message failed'
+      : _label === 'unexpected termination'
+        ? 'Render worker terminated'
+        : 'isolate crashed during close'
+    await expect(opening).rejects.toThrow('bridge disposed')
+    await expect(telemetry).rejects.toThrow('bridge disposed')
+    await expect(closing).rejects.toThrow(expected)
+    expect(worker.terminated).toBe(true)
+    expect(worker.terminateCount).toBe(1)
+    await expect(bridge.dispose()).rejects.toThrow(expected)
+    expect(worker.terminateCount).toBe(1)
+  })
+})
+
+describe('postMessage send failures', () => {
+  function throwOn(
+    worker: FakeWorker,
+    type: ToRenderWorker['type'],
+    error: Error = CLONE_FAILURE,
+  ): void {
+    worker.throwOnPost = (message) => message.type === type ? error : null
+  }
+
+  test('init rolls back and retries after a clone failure', () => {
+    const { worker, bridge } = makeBridge()
+    const canvas = {} as OffscreenCanvas
+    throwOn(worker, 'init')
+    expect(() => bridge.init(canvas)).toThrow('structured clone failed')
+    expect(worker.posted).toEqual([])
+
+    worker.throwOnPost = null
+    bridge.init(canvas)
+    expect(worker.posted).toEqual([{
+      msg: { type: 'init', canvas },
+      transfer: [canvas],
+    }])
+  })
+
+  test('setDoc does not supersede or replace the snapshot until the send commits', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
+    const rendering = render(bridge, 1, 'seek')
+    const requestId = worker.renderFrames()[0].requestId
+
+    throwOn(worker, 'setDoc')
+    expect(() => bridge.setDoc(makeDoc([]))).toThrow('structured clone failed')
+    expect(worker.posted.filter(({ msg }) => msg.type === 'setDoc')).toHaveLength(1)
+
+    worker.emit({
+      type: 'compositeDone',
+      requestId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 2,
+    })
+    await expect(rendering).resolves.toMatchObject({ status: 'drawn' })
+
+    worker.throwOnPost = null
+    bridge.setDoc(makeDoc([]))
+    expect(worker.posted.filter(({ msg }) => msg.type === 'setDoc')).toHaveLength(2)
+  })
+
+  test('setPresentationProfile does not supersede until the send commits', async () => {
+    const doc = makeDoc([])
+    const { worker, bridge } = makeBridge(doc)
+    const rendering = render(bridge, 0, 'seek')
+    const profile = resolvePresentationProfile(doc, {
+      qualityMode: 'quarter',
+      reason: 'scrubbing',
+      viewport: null,
+    })
+    throwOn(worker, 'setPresentationProfile')
+    expect(() => bridge.setPresentationProfile(profile)).toThrow('structured clone failed')
+    expect(worker.posted.filter(({ msg }) => msg.type === 'setPresentationProfile'))
+      .toHaveLength(0)
+
+    const requestId = worker.renderFrames()[0].requestId
+    worker.emit({
+      type: 'compositeDone',
+      requestId,
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(rendering).resolves.toMatchObject({ status: 'drawn' })
+
+    worker.throwOnPost = null
+    bridge.setPresentationProfile(profile)
+    expect(worker.posted.at(-1)?.msg).toEqual({
+      type: 'setPresentationProfile',
+      profile,
+    })
+  })
+
+  test('configureAsset, openAsset, and openImage roll back stale registrations', async () => {
+    const { worker, bridge } = makeBridge()
+    const provider = makeProvider().provider
+    throwOn(worker, 'configureAsset')
+    await expect(bridge.configureAsset('A', { codec: 'avc1' }, R30, provider))
+      .rejects.toThrow('structured clone failed')
+    await expect(bridge.configureAsset('A', { codec: 'avc1' }, R30, provider))
+      .rejects.toThrow('structured clone failed')
+
+    worker.throwOnPost = null
+    const configuring = bridge.configureAsset('A', { codec: 'avc1' }, R30, provider)
+    worker.ackLatestSetup('A')
+    await expect(configuring).resolves.toBeUndefined()
+
+    throwOn(worker, 'openAsset')
+    await expect(bridge.openAsset('B', new Blob(['video']), R30, BUDGET))
+      .rejects.toThrow('structured clone failed')
+    worker.throwOnPost = null
+    const opening = bridge.openAsset('B', new Blob(['video']), R30, BUDGET)
+    worker.ackLatestSetup('B')
+    await expect(opening).resolves.toBeUndefined()
+
+    throwOn(worker, 'openImage')
+    await expect(bridge.openImage('C', new Blob(['still'])))
+      .rejects.toThrow('structured clone failed')
+    worker.throwOnPost = null
+    const imaging = bridge.openImage('C', new Blob(['still']))
+    worker.ackLatestSetup('C')
+    await expect(imaging).resolves.toBeUndefined()
+  })
+
+  test('releaseAsset keeps the source until the worker is told', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
+    throwOn(worker, 'releaseAsset')
+    expect(() => bridge.releaseAsset('A')).toThrow('structured clone failed')
+    expect(worker.posted.filter(({ msg }) => msg.type === 'releaseAsset')).toHaveLength(0)
+
+    const rendering = render(bridge, 1, 'seek')
+    expect(worker.renderFrames()[0].sources).toEqual([
+      expect.objectContaining({ assetId: 'A' }),
+    ])
+    worker.throwOnPost = null
+    bridge.releaseAsset('A')
+    expect(worker.posted.some(({ msg }) => msg.type === 'releaseAsset')).toBe(true)
+    worker.emit({
+      type: 'compositeDone',
+      requestId: worker.renderFrames()[0].requestId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(rendering).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('telemetry enable, scopes, and telemetry requests roll back independently', async () => {
+    const { worker, bridge } = makeBridge()
+    throwOn(worker, 'setRuntimeTelemetry')
+    expect(() => bridge.setRuntimeTelemetryEnabled(true)).toThrow('structured clone failed')
+    expect(worker.posted).toEqual([])
+    worker.throwOnPost = null
+    bridge.setRuntimeTelemetryEnabled(true)
+
+    throwOn(worker, 'setVideoScopes')
+    expect(() => bridge.setVideoScopesEnabled(true, 3)).toThrow('structured clone failed')
+    worker.throwOnPost = null
+    bridge.setVideoScopesEnabled(true, 3)
+    expect(worker.posted.filter(({ msg }) => msg.type === 'setVideoScopes')).toHaveLength(1)
+
+    throwOn(worker, 'requestRuntimeTelemetry')
+    await expect(bridge.requestRuntimeTelemetry()).rejects.toThrow('structured clone failed')
+    worker.throwOnPost = null
+    const pending = bridge.requestRuntimeTelemetry()
+    const request = worker.posted.at(-1)?.msg
+    if (request?.type !== 'requestRuntimeTelemetry') {
+      throw new Error('telemetry request was not posted')
+    }
+    worker.emit({
+      type: 'runtimeTelemetry',
+      requestId: request.requestId,
+      snapshot: emptyRuntimeTelemetry(),
+    })
+    await expect(pending).resolves.toEqual(emptyRuntimeTelemetry())
+  })
+
+  test('a failed render send never rejects and does not supersede the previous frame', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    await openAcked({ worker, bridge }, 'A', new Blob(['video']), R30)
+    const first = render(bridge, 1, 'seek')
+    const firstId = worker.renderFrames()[0].requestId
+
+    throwOn(worker, 'renderFrame')
+    const second = render(bridge, 2, 'seek')
+    await expect(second).resolves.toEqual({
+      status: 'error',
+      drawnClipIds: [],
+      missingClipIds: [],
+      renderMs: 0,
+      message: 'structured clone failed',
+    })
+    expect(worker.renderFrames()).toHaveLength(1)
+
+    worker.emit({
+      type: 'compositeDone',
+      requestId: firstId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 3,
+    })
+    await expect(first).resolves.toMatchObject({ status: 'drawn' })
+
+    worker.throwOnPost = null
+    const third = render(bridge, 3, 'seek')
+    expect(worker.renderFrames()).toHaveLength(2)
+    worker.emit({
+      type: 'compositeDone',
+      requestId: worker.renderFrames()[1].requestId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(third).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('a failed legacy composite send keeps the documented non-rejecting contract', async () => {
+    const doc = makeDoc([makeTrack('V1', 'video', [makeClip('a', 'A', 0, 100)])])
+    const { worker, bridge } = makeBridge(doc)
+    const provider = makeProvider()
+    await configureAcked({ worker, bridge }, 'A', R30, provider.provider)
+    throwOn(worker, 'composite')
+    await expect(render(bridge, 1)).resolves.toEqual({
+      status: 'error',
+      drawnClipIds: [],
+      missingClipIds: [],
+      renderMs: 0,
+      message: 'structured clone failed',
+    })
+    expect(worker.composites()).toHaveLength(0)
+
+    worker.throwOnPost = null
+    const retry = render(bridge, 1)
+    await flushMicrotasks()
+    expect(worker.composites()).toHaveLength(1)
+    worker.emit({
+      type: 'compositeDone',
+      requestId: worker.composites()[0].requestId,
+      status: 'drawn',
+      drawnClipIds: ['a'],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await expect(retry).resolves.toMatchObject({ status: 'drawn' })
+  })
+
+  test('dispose still settles waiters and terminates when close cannot be posted', async () => {
+    const { worker, bridge } = makeBridge()
+    const opening = bridge.openAsset('A', new Blob(['video']), R30, BUDGET)
+    const telemetry = bridge.requestRuntimeTelemetry()
+    throwOn(worker, 'close')
+    const closing = bridge.dispose()
+    await expect(opening).rejects.toThrow('bridge disposed')
+    await expect(telemetry).rejects.toThrow('bridge disposed')
+    await expect(closing).rejects.toThrow('structured clone failed')
+    expect(worker.terminated).toBe(true)
+    expect(worker.terminateCount).toBe(1)
+    expect(bridge.dispose()).toBe(closing)
+    expect(worker.posted.filter(({ msg }) => msg.type === 'close')).toHaveLength(0)
+  })
+
+  test('a failed plugin reply terminally fails the bridge so the render cannot hang', async () => {
+    const plan = readyPluginPlan()
+    const handler: PluginEffectBridgeHandler = {
+      apply: vi.fn(async () => ({
+        status: 'applied' as const,
+        rgbaBytes: Uint8Array.of(9, 8, 7, 6),
+      })),
+    }
+    const worker = new FakeWorker()
+    const bridge = new RenderWorkerBridge(worker, handler)
+    bridge.setDoc(makeDoc([]))
+    const rendering = bridge.renderFrame(plan, 'seek')
+    const renderMessage = worker.renderFrames()[0]
+    throwOn(worker, 'pluginEffectApplied')
+    worker.emit(pluginApplyMessage(plan, renderMessage, Uint8Array.of(1, 2, 3, 4).buffer))
+    await flushMicrotasks()
+
+    await expect(rendering).resolves.toMatchObject({
+      status: 'error',
+      message: 'structured clone failed',
+    })
+    expect(worker.terminated).toBe(true)
+    await expect(bridge.dispose()).rejects.toThrow('structured clone failed')
+  })
+
+  test('a dead-worker send fails the whole bridge instead of leaving stale state', async () => {
+    const { worker, bridge } = makeBridge()
+    const opening = bridge.openAsset('A', new Blob(['video']), R30, BUDGET)
+    worker.terminated = true
+    await expect(bridge.openAsset('B', new Blob(['other']), R30, BUDGET))
+      .rejects.toThrow('Worker has been terminated')
+    await expect(opening).rejects.toThrow('Worker has been terminated')
+    expect(worker.terminateCount).toBe(1)
+    await expect(bridge.openAsset('C', new Blob(['retry']), R30, BUDGET))
+      .rejects.toThrow('Worker has been terminated')
   })
 })

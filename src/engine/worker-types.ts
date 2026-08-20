@@ -7,6 +7,14 @@ export interface WorkerLike {
     type: 'message',
     listener: (event: MessageEvent) => void,
   ): void
+  addEventListener(
+    type: 'error',
+    listener: (event: ErrorEvent) => void,
+  ): void
+  addEventListener(
+    type: 'messageerror',
+    listener: (event: MessageEvent) => void,
+  ): void
   terminate?(): void
 }
 
