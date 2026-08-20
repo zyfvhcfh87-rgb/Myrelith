@@ -1067,6 +1067,12 @@ export default function MediaPool() {
     }
     if (nextIndex === null) return
     event.preventDefault()
+    if (
+      (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+      && (nextIndex < 0 || nextIndex >= filteredItems.length)
+    ) {
+      return
+    }
     const boundedIndex = Math.max(
       0,
       Math.min(filteredItems.length - 1, nextIndex),

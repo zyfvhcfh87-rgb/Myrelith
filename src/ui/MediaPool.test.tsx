@@ -622,6 +622,39 @@ describe('MediaPool presentation', () => {
     expect(screen.getByTitle('Clip 0008.webp')).toHaveAttribute('aria-selected', 'true')
   })
 
+  test('leaves ArrowUp/ArrowDown on the current cell when that column has no destination', async () => {
+    seedLargeCatalog(5, true)
+    render(<MediaPool />)
+    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+
+    Object.defineProperty(listbox, 'clientWidth', {
+      configurable: true,
+      value: 360,
+    })
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'))
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve())
+      })
+    })
+
+    listbox.focus()
+    fireEvent.keyDown(listbox, { key: 'Home' })
+    fireEvent.keyDown(listbox, { key: 'ArrowRight' })
+    fireEvent.keyDown(listbox, { key: 'ArrowRight' })
+    expect(screen.getByTitle('Clip 0002.webp')).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.keyDown(listbox, { key: 'ArrowDown' })
+    expect(screen.getByTitle('Clip 0002.webp')).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(listbox, { key: 'ArrowUp' })
+    expect(screen.getByTitle('Clip 0002.webp')).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.keyDown(listbox, { key: 'End' })
+    expect(screen.getByTitle('Clip 0004.wav')).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(listbox, { key: 'ArrowDown' })
+    expect(screen.getByTitle('Clip 0004.wav')).toHaveAttribute('aria-selected', 'true')
+  })
+
   test('relinks an offline item reached across a virtual boundary', async () => {
     seedLargeCatalog(500, false)
     render(<MediaPool />)
