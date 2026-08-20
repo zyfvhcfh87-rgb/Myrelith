@@ -418,6 +418,42 @@ describe('plugin activation safety', () => {
     expect(backing.values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(false)
   })
 
+  test('reviewed continue keeps a live owner already present at leftover snapshot', async () => {
+    const backing = storage([])
+    backing.values.set(
+      PLUGIN_ACTIVATION_SENTINEL_KEY,
+      record([{ ownerId: 'crashed', batchId: 'crashed-batch' }]),
+    )
+    const holdLive = deferred<string>()
+    const live = runPluginActivationBatch({
+      storage: backing,
+      ownerId: 'tab-live',
+      batchId: 'live-batch',
+      activate: async () => holdLive.promise,
+    })
+    await vi.waitFor(() => {
+      expect(backing.values.get(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(record([
+        { ownerId: 'crashed', batchId: 'crashed-batch' },
+        { ownerId: 'tab-live', batchId: 'live-batch' },
+      ]))
+    })
+
+    const acknowledge = createStaleActivationAcknowledgement(backing)
+    await acknowledge()
+    expect(backing.values.get(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(record([
+      { ownerId: 'tab-live', batchId: 'live-batch' },
+    ]))
+    expect(readPluginStartupSafety(backing)).toEqual({
+      status: 'stale-activation',
+      offerSafeMode: true,
+      batchId: 'live-batch',
+    })
+
+    holdLive.resolve('ready')
+    await expect(live).resolves.toBe('ready')
+    expect(backing.values.has(PLUGIN_ACTIVATION_SENTINEL_KEY)).toBe(false)
+  })
+
   test('reviewed continue clears a leftover v1 sentinel', async () => {
     const backing = storage([])
     backing.values.set(

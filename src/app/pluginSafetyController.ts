@@ -4,6 +4,9 @@ export const PLUGIN_ACTIVATION_LOCK_NAME = 'myrelith.plugin-activation:v1'
 const PLUGIN_ACTIVATION_RECORD_VERSION = 2
 const MAX_ACTIVATION_OWNER_COUNT = 32
 const MAX_ID_CHARACTERS = 128
+const PLUGIN_ACTIVATION_OWNER_LOCK_PREFIX = `${PLUGIN_ACTIVATION_LOCK_NAME}:owner:`
+
+const liveActivationOwnerCounts = new Map<string, number>()
 
 export interface PluginSafetyStorage {
   getItem(key: string): string | null
@@ -86,7 +89,9 @@ type StaleActivationLeftovers =
 
 /**
  * Capture leftover owners at launch. A later reviewed continue drops only
- * those entries so a live peer written after this snapshot stays counted.
+ * those entries that are no longer inside activate(), so a live peer,
+ * including one already counted when this snapshot was taken, stays
+ * recorded until it finishes.
  */
 export function createStaleActivationAcknowledgement(
   storage: PluginSafetyStorage,
@@ -132,26 +137,28 @@ export async function runPluginActivationBatch<T>(
     'Plugin activation owner id',
   )
   const owner: ActivationOwner = Object.freeze({ ownerId, batchId })
-  await mutateActivationRecord(options.storage, options.coordinationLock, (current) => {
-    if (current?.kind === 'invalid') {
-      throw new TypeError('Plugin activation sentinel is invalid')
-    }
-    const existing = current?.kind === 'v2' ? current.owners : []
-    const nextOwners = [...existing.filter((entry) => entry.ownerId !== ownerId), owner]
-    if (nextOwners.length > MAX_ACTIVATION_OWNER_COUNT) {
-      throw new TypeError('Plugin activation owner limit exceeded')
-    }
-    return { write: true, next: Object.freeze({ version: 2, owners: nextOwners }) }
+  return withActivationOwnerPresence(ownerId, async () => {
+    await mutateActivationRecord(options.storage, options.coordinationLock, (current) => {
+      if (current?.kind === 'invalid') {
+        throw new TypeError('Plugin activation sentinel is invalid')
+      }
+      const existing = current?.kind === 'v2' ? current.owners : []
+      const nextOwners = [...existing.filter((entry) => entry.ownerId !== ownerId), owner]
+      if (nextOwners.length > MAX_ACTIVATION_OWNER_COUNT) {
+        throw new TypeError('Plugin activation owner limit exceeded')
+      }
+      return { write: true, next: Object.freeze({ version: 2, owners: nextOwners }) }
+    })
+    const result = await options.activate()
+    await mutateActivationRecord(options.storage, options.coordinationLock, (current) => {
+      if (current === null || current.kind !== 'v2') return { write: false, next: null }
+      const remaining = current.owners.filter((entry) => entry.ownerId !== ownerId)
+      if (remaining.length === current.owners.length) return { write: false, next: null }
+      if (remaining.length === 0) return { write: true, next: null }
+      return { write: true, next: Object.freeze({ version: 2, owners: remaining }) }
+    })
+    return result
   })
-  const result = await options.activate()
-  await mutateActivationRecord(options.storage, options.coordinationLock, (current) => {
-    if (current === null || current.kind !== 'v2') return { write: false, next: null }
-    const remaining = current.owners.filter((entry) => entry.ownerId !== ownerId)
-    if (remaining.length === current.owners.length) return { write: false, next: null }
-    if (remaining.length === 0) return { write: true, next: null }
-    return { write: true, next: Object.freeze({ version: 2, owners: remaining }) }
-  })
-  return result
 }
 
 export function createPluginActivationOwnerId(): string {
@@ -192,6 +199,9 @@ async function acknowledgeStaleActivationLeftovers(
 ): Promise<void> {
   if (leftovers.kind === 'none') return
   try {
+    const remoteLive = leftovers.kind === 'v2'
+      ? await snapshotRemoteLiveActivationOwnerIds()
+      : null
     await mutateActivationRecord(storage, lock, (current) => {
       if (current === null) return { write: false, next: null }
       if (leftovers.kind === 'v1') {
@@ -199,7 +209,9 @@ async function acknowledgeStaleActivationLeftovers(
         return { write: false, next: null }
       }
       if (current.kind !== 'v2') return { write: false, next: null }
-      const drop = new Set(leftovers.ownerIds)
+      const live = new Set(liveActivationOwnerCounts.keys())
+      for (const ownerId of remoteLive ?? []) live.add(ownerId)
+      const drop = new Set(leftovers.ownerIds.filter((ownerId) => !live.has(ownerId)))
       const remaining = current.owners.filter((owner) => !drop.has(owner.ownerId))
       if (remaining.length === current.owners.length) return { write: false, next: null }
       if (remaining.length === 0) return { write: true, next: null }
@@ -300,6 +312,46 @@ function browserActivationLock(): PluginActivationCoordinationLock | undefined {
       )
     },
   })
+}
+
+async function withActivationOwnerPresence<T>(
+  ownerId: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  liveActivationOwnerCounts.set(ownerId, (liveActivationOwnerCounts.get(ownerId) ?? 0) + 1)
+  try {
+    const locks = globalThis.navigator?.locks
+    if (!locks || typeof locks.request !== 'function') return await work()
+    return await locks.request(
+      PLUGIN_ACTIVATION_OWNER_LOCK_PREFIX + ownerId,
+      { mode: 'shared' },
+      async () => await work(),
+    )
+  } finally {
+    const remaining = (liveActivationOwnerCounts.get(ownerId) ?? 1) - 1
+    if (remaining <= 0) liveActivationOwnerCounts.delete(ownerId)
+    else liveActivationOwnerCounts.set(ownerId, remaining)
+  }
+}
+
+async function snapshotRemoteLiveActivationOwnerIds(): Promise<ReadonlySet<string>> {
+  const locks = globalThis.navigator?.locks
+  if (!locks || typeof locks.query !== 'function') return new Set()
+  try {
+    const snapshot = await locks.query()
+    const live = new Set<string>()
+    for (const info of [...snapshot.held ?? [], ...snapshot.pending ?? []]) {
+      const name = info.name
+      if (typeof name !== 'string' || !name.startsWith(PLUGIN_ACTIVATION_OWNER_LOCK_PREFIX)) {
+        continue
+      }
+      const ownerId = name.slice(PLUGIN_ACTIVATION_OWNER_LOCK_PREFIX.length)
+      if (isBoundedId(ownerId)) live.add(ownerId)
+    }
+    return live
+  } catch {
+    return new Set()
+  }
 }
 
 async function withActivationCoordination<T>(
