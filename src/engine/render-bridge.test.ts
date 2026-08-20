@@ -1803,6 +1803,39 @@ describe('reply routing', () => {
     expect(worker.terminated).toBe(true)
   })
 
+  test('a closeFailed acknowledgement rejects dispose and never looks like success', async () => {
+    const { worker, bridge } = makeBridge()
+    const onWorkerError = vi.fn()
+    bridge.onWorkerError = onWorkerError
+
+    const closing = bridge.dispose()
+    expect(worker.posted.at(-1)?.msg).toEqual({ type: 'close' })
+    expect(worker.terminated).toBe(false)
+
+    worker.emit({
+      type: 'error',
+      message: 'worker close failed: AggregateError: Failed to close render worker',
+    })
+    expect(onWorkerError).toHaveBeenCalledWith(
+      'worker close failed: AggregateError: Failed to close render worker',
+    )
+    expect(worker.terminated).toBe(false)
+
+    worker.emit({
+      type: 'closeFailed',
+      message: 'worker close failed: AggregateError: Failed to close render worker',
+    })
+    await expect(closing).rejects.toThrow(
+      'worker close failed: AggregateError: Failed to close render worker',
+    )
+    expect(worker.terminated).toBe(true)
+    expect(worker.terminateCount).toBe(1)
+    expect(worker.posted.filter(({ msg }) => msg.type === 'close')).toHaveLength(1)
+
+    worker.emit({ type: 'closed' })
+    expect(worker.terminateCount).toBe(1)
+  })
+
   test('runtime telemetry is opt-in and routed independently from renders', async () => {
     const worker = new FakeWorker()
     const bridge = new RenderWorkerBridge(worker)

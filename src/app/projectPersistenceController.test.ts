@@ -395,20 +395,22 @@ describe('project persistence', () => {
     })
   })
 
-  test('a failed exit can rebuild the intentionally discarded recovery', async () => {
+  test('a failed exit plus immediate crash retains the prior recovery journal', async () => {
     const deps = makeDeps(makeHandle())
     controller = new ProjectPersistenceController(deps)
     controller.startSession({ fileName: null, persisted: false })
     await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    expect(deps.appendRecoverySnapshot).toHaveBeenCalledOnce()
+    expect(deps.deleteRecoveryJournal).not.toHaveBeenCalled()
 
     await controller.pauseSession()
-    await controller.discardRecovery()
+    // Leave teardown fails here. Do not discard, and do not let the
+    // recovery debounce fire — a crash in that window must still find
+    // the prior durable copy.
     controller.resumeSession()
-    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
 
-    expect(deps.deleteRecoveryJournal)
-      .toHaveBeenCalledWith('recovery-journal-test')
-    expect(deps.appendRecoverySnapshot).toHaveBeenCalledTimes(2)
+    expect(deps.deleteRecoveryJournal).not.toHaveBeenCalled()
+    expect(deps.appendRecoverySnapshot).toHaveBeenCalledTimes(1)
     expect(useProjectSessionStore.getState()).toMatchObject({
       hasUnsavedChanges: true,
       recoveryPhase: 'idle',

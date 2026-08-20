@@ -1647,6 +1647,154 @@ describe('composite happy path', () => {
     }
   })
 
+  test('a child-worker send throw settles pending state and later analysis recovers', async () => {
+    const workers: FakeVideoScopeWorker[] = []
+    class FakeVideoScopeWorker {
+      onmessage: ((event: MessageEvent<VideoScopeWorkerReply>) => void) | null = null
+      onerror: ((event: ErrorEvent) => unknown) | null = null
+      onmessageerror: ((event: MessageEvent) => unknown) | null = null
+      readonly posted: unknown[] = []
+      terminateCount = 0
+
+      constructor() {
+        workers.push(this)
+      }
+
+      postMessage(message: unknown): void {
+        if (workers[0] === this && this.posted.length === 0) {
+          throw new Error('structured clone failed')
+        }
+        this.posted.push(message)
+      }
+
+      terminate(): void {
+        this.terminateCount++
+      }
+
+      emit(message: VideoScopeWorkerReply): void {
+        this.onmessage?.({ data: message } as MessageEvent<VideoScopeWorkerReply>)
+      }
+    }
+    vi.stubGlobal('Worker', FakeVideoScopeWorker)
+
+    try {
+      const analyzer = createVideoScopeAnalyzer()
+      await expect(analyzer.analyze(new Uint8ClampedArray(4), 1, 1))
+        .rejects.toThrow('structured clone failed')
+      expect(workers).toHaveLength(1)
+      expect(workers[0].terminateCount).toBe(1)
+
+      const recovered = analyzer.analyze(new Uint8ClampedArray(4), 1, 1)
+      expect(workers).toHaveLength(2)
+      const analysis = analyzeVideoScopes(new Uint8ClampedArray(4), 1, 1)
+      workers[1].emit({ type: 'analysis', requestId: 2, analysis })
+      await expect(recovered).resolves.toEqual(analysis)
+      expect(workers[1].terminateCount).toBe(0)
+
+      const release = analyzer.release()
+      workers[1].emit({ type: 'released' })
+      await release
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('a child-worker messageerror rejects owned requests and later analysis recovers', async () => {
+    const workers: FakeVideoScopeWorker[] = []
+    class FakeVideoScopeWorker {
+      onmessage: ((event: MessageEvent<VideoScopeWorkerReply>) => void) | null = null
+      onerror: ((event: ErrorEvent) => unknown) | null = null
+      onmessageerror: ((event: MessageEvent) => unknown) | null = null
+      readonly posted: unknown[] = []
+      terminateCount = 0
+
+      constructor() {
+        workers.push(this)
+      }
+
+      postMessage(message: unknown): void {
+        this.posted.push(message)
+      }
+
+      terminate(): void {
+        this.terminateCount++
+      }
+
+      emit(message: VideoScopeWorkerReply): void {
+        this.onmessage?.({ data: message } as MessageEvent<VideoScopeWorkerReply>)
+      }
+
+      emitMessageError(): void {
+        this.onmessageerror?.({} as MessageEvent)
+      }
+    }
+    vi.stubGlobal('Worker', FakeVideoScopeWorker)
+
+    try {
+      const analyzer = createVideoScopeAnalyzer()
+      const first = analyzer.analyze(new Uint8ClampedArray(4), 1, 1)
+      const second = analyzer.analyze(new Uint8ClampedArray(4), 1, 1)
+      expect(workers).toHaveLength(1)
+
+      workers[0].emitMessageError()
+      await expect(first).rejects.toThrow('Video scope analysis worker message failed')
+      await expect(second).rejects.toThrow('Video scope analysis worker message failed')
+      expect(workers[0].terminateCount).toBe(1)
+
+      const recovered = analyzer.analyze(new Uint8ClampedArray(4), 1, 1)
+      expect(workers).toHaveLength(2)
+      const analysis = analyzeVideoScopes(new Uint8ClampedArray(4), 1, 1)
+      workers[1].emit({ type: 'analysis', requestId: 3, analysis })
+      await expect(recovered).resolves.toEqual(analysis)
+
+      const release = analyzer.release()
+      workers[1].emit({ type: 'released' })
+      await release
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('a rejected scope analysis clears pending and later frames can sample again', async () => {
+    let now = 0
+    const scheduled: Array<() => void> = []
+    let calls = 0
+    const analyze = vi.fn(async (
+      rgba: Uint8ClampedArray,
+      width: number,
+      height: number,
+    ) => {
+      calls++
+      if (calls === 1) throw new Error('structured clone failed')
+      return analyzeVideoScopes(rgba, width, height)
+    })
+    const h = makeHarness({
+      supportsCanvasPixels: true,
+      now: () => now,
+      schedule: (callback) => scheduled.push(callback),
+      analyzeVideoScopes: analyze,
+    })
+    await setup(h, makeDoc([]), [])
+    await h.core.handleMessage({ type: 'setVideoScopes', enabled: true, generation: 1 })
+    await h.core.handleMessage(renderMsg(1, 0, 'seek', []))
+    scheduled.shift()?.()
+    await microtasks()
+    expect(analyze).toHaveBeenCalledOnce()
+    expect(h.posts.filter((post) => post.type === 'videoScopes')).toHaveLength(0)
+
+    now = 250
+    await h.core.handleMessage(renderMsg(2, 1, 'seek', []))
+    expect(scheduled).toHaveLength(1)
+    scheduled.shift()?.()
+    await microtasks()
+    expect(analyze).toHaveBeenCalledTimes(2)
+    expect(h.posts.at(-1)).toMatchObject({
+      type: 'videoScopes',
+      generation: 1,
+      frame: 1,
+    })
+  })
+
   test('two assets decode in their own decoders, draw bottom-to-top, blit once', async () => {
     const h = makeHarness()
     await setup(h, twoTrackDoc(), ['A', 'B'])
@@ -3552,6 +3700,29 @@ describe('static-image worker ownership', () => {
       h.posts.filter((post) => post.type === 'assetConfigured'),
     ).toHaveLength(0)
     expect(h.posts.filter((post) => post.type === 'error')).toHaveLength(0)
+  })
+
+  test('a rejected close cleanup posts closeFailed and still releases owned sources', async () => {
+    const source = makeStaticSource()
+    const releaseVideoScopes = vi.fn(async () => {
+      throw new Error('scope release failed')
+    })
+    const h = makeHarness({ releaseVideoScopes })
+    await setupStaticImage(h, makeDoc([]), 'IMAGE', source)
+
+    await h.core.handleMessage({ type: 'close' })
+
+    expect(source.closeCount).toBe(1)
+    expect(releaseVideoScopes).toHaveBeenCalledOnce()
+    expect(h.posts.filter((post) => post.type === 'closed')).toHaveLength(0)
+    expect(h.posts.filter((post) => post.type === 'closeFailed')).toEqual([{
+      type: 'closeFailed',
+      message: 'worker close failed: AggregateError: Failed to close render worker',
+    }])
+    expect(h.posts.filter((post) => post.type === 'error')).toContainEqual({
+      type: 'error',
+      message: 'worker close failed: AggregateError: Failed to close render worker',
+    })
   })
 
   test('worker close waits for a pending decode, then closes its late source exactly once', async () => {

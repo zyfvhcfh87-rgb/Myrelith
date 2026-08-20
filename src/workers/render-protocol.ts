@@ -318,6 +318,18 @@ export type FromRenderWorker =
       /**
        * All worker-owned sources have completed cleanup. The bridge may now
        * terminate the worker realm without racing resource disposal.
+       * Never posted when any close owner rejected; that path uses
+       * `closeFailed` only.
        */
       type: 'closed'
+    }
+  | {
+      /**
+       * Close ran every feasible cleanup, but at least one owner rejected.
+       * This is the only terminal close acknowledgement for a failed close.
+       * The bridge must reject dispose() and must not treat this as a
+       * successful resource release.
+       */
+      type: 'closeFailed'
+      message: string
     }

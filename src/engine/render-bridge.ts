@@ -219,6 +219,7 @@ export class RenderWorkerBridge {
   private closeTimeout: ReturnType<typeof setTimeout> | null = null
   private closePromise: Promise<void> | null = null
   private resolveClose: (() => void) | null = null
+  private rejectClose: ((error: Error) => void) | null = null
   private workerTerminated = false
   /** Errors not tied to a request (decoder faults, stray failures). */
   onWorkerError: ((message: string) => void) | null = null
@@ -553,15 +554,16 @@ export class RenderWorkerBridge {
   /** Shut the worker's decoders down and terminate the worker. */
   dispose(): Promise<void> {
     if (this.closePromise) return this.closePromise
-    this.closePromise = new Promise((resolve) => {
+    this.closePromise = new Promise((resolve, reject) => {
       this.resolveClose = resolve
+      this.rejectClose = reject
     })
     this.disposed = true
     this.sourceRevision++
     this.abortPluginEffectCalls()
     this.closeTimeout = setTimeout(() => {
       this.closeTimeout = null
-      this.terminateWorker()
+      this.settleClose()
     }, WORKER_CLOSE_ACK_TIMEOUT_MS)
     this.post({ type: 'close' }, [])
     this.settlePendingAsSuperseded()
@@ -576,16 +578,21 @@ export class RenderWorkerBridge {
     return this.closePromise
   }
 
-  private terminateWorker(): void {
+  private settleClose(error?: Error): void {
     if (this.closeTimeout !== null) {
       clearTimeout(this.closeTimeout)
       this.closeTimeout = null
     }
-    if (this.workerTerminated) return
-    this.workerTerminated = true
-    this.worker.terminate?.()
-    this.resolveClose?.()
+    if (!this.workerTerminated) {
+      this.workerTerminated = true
+      this.worker.terminate?.()
+    }
+    const resolve = this.resolveClose
+    const reject = this.rejectClose
     this.resolveClose = null
+    this.rejectClose = null
+    if (error) reject?.(error)
+    else resolve?.()
   }
 
   private settlePendingAsSuperseded(): void {
@@ -869,7 +876,11 @@ export class RenderWorkerBridge {
         break
       }
       case 'closed': {
-        this.terminateWorker()
+        this.settleClose()
+        break
+      }
+      case 'closeFailed': {
+        this.settleClose(new Error(msg.message))
         break
       }
     }

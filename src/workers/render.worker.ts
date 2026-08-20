@@ -2327,11 +2327,13 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   }
 
   async function handleMessage(msg: ToRenderWorker): Promise<void> {
+    let closeFailedMessage: string | null = null
     try {
       await dispatch(msg)
     } catch (e) {
       // Uncaught async exceptions in a worker are silent to the page —
       // never let one vanish (same rule as the decode worker).
+      const message = `worker ${msg.type} failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`
       env.post({
         type: 'error',
         requestId:
@@ -2355,10 +2357,17 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           : msg.type === 'openImage'
             ? { mediaFailure: staticImageFailure(e) }
             : {}),
-        message: `worker ${msg.type} failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`,
+        message,
       })
+      if (msg.type === 'close') closeFailedMessage = message
     } finally {
-      if (msg.type === 'close') env.post({ type: 'closed' })
+      if (msg.type === 'close') {
+        if (closeFailedMessage !== null) {
+          env.post({ type: 'closeFailed', message: closeFailedMessage })
+        } else {
+          env.post({ type: 'closed' })
+        }
+      }
     }
   }
 
@@ -2467,6 +2476,11 @@ export function createVideoScopeAnalyzer(): {
     }
     return true
   }
+  const failOwnedWorker = (ownedWorker: Worker, message: string): void => {
+    rejectWorkerPending(ownedWorker, message)
+    if (worker === ownedWorker) worker = null
+    if (!finishRetiringWorker(ownedWorker)) terminateWorker(ownedWorker)
+  }
   const startRetiringWorker = (ownedWorker: Worker): void => {
     if (retiring.has(ownedWorker) || terminated.has(ownedWorker)) return
     let resolve = (): void => undefined
@@ -2504,9 +2518,10 @@ export function createVideoScopeAnalyzer(): {
     }
     created.onerror = (event) => {
       event.preventDefault()
-      rejectWorkerPending(created, event.message || 'Video scope analysis worker failed')
-      if (worker === created) worker = null
-      if (!finishRetiringWorker(created)) terminateWorker(created)
+      failOwnedWorker(created, event.message || 'Video scope analysis worker failed')
+    }
+    created.onmessageerror = () => {
+      failOwnedWorker(created, 'Video scope analysis worker message failed')
     }
     return created
   }
@@ -2535,11 +2550,26 @@ export function createVideoScopeAnalyzer(): {
         width,
         height,
       }
-      const result = new Promise<VideoScopeAnalysis>((resolve, reject) => {
-        pending.set(id, { worker: ensureWorker(), resolve, reject })
+      return new Promise<VideoScopeAnalysis>((resolve, reject) => {
+        let ownedWorker: Worker
+        try {
+          ownedWorker = ensureWorker()
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error(String(error)))
+          return
+        }
+        pending.set(id, { worker: ownedWorker, resolve, reject })
+        try {
+          ownedWorker.postMessage(message, [copy.buffer])
+        } catch (error) {
+          failOwnedWorker(
+            ownedWorker,
+            error instanceof Error
+              ? error.message
+              : 'Video scope analysis send failed',
+          )
+        }
       })
-      pending.get(id)?.worker.postMessage(message, [copy.buffer])
-      return result
     },
     release,
   }

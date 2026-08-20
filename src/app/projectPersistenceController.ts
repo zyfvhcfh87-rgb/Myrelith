@@ -362,8 +362,9 @@ export class ProjectPersistenceController {
     if (journalId !== this.recoveryJournalId) return
     await this.deps.deleteRecoveryJournal(journalId)
     if (journalId !== this.recoveryJournalId) return
-    // A later teardown step can still fail after this intentional delete. Keep
-    // dirty work eligible for a fresh recovery write if the editor is resumed.
+    // Caller owns when this is safe. Leave only discards after teardown
+    // succeeds; if this session is later resumed, keep dirty work eligible
+    // for a fresh recovery write.
     this.recoveryRevision = useProjectSessionStore.getState().hasUnsavedChanges
       ? this.revision - 1
       : this.revision
