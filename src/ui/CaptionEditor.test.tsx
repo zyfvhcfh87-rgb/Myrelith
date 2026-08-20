@@ -108,4 +108,24 @@ describe('CaptionEditor', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     expect(onClose).toHaveBeenCalledOnce()
   })
+
+  it('keeps modal keydowns from reaching window editor shortcuts', () => {
+    render(<CaptionEditor onClose={vi.fn()} />)
+    const dialog = screen.getByRole('dialog', { name: 'Caption editor' })
+    const leakedShortcut = vi.fn()
+    window.addEventListener('keydown', leakedShortcut)
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Save cue' }), {
+      key: 'z',
+      ctrlKey: true,
+    })
+    fireEvent.keyDown(screen.getByLabelText('Text'), {
+      key: 'k',
+      ctrlKey: true,
+    })
+    fireEvent.keyDown(dialog, { key: 'Delete' })
+
+    expect(leakedShortcut).not.toHaveBeenCalled()
+    window.removeEventListener('keydown', leakedShortcut)
+  })
 })

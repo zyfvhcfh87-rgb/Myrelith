@@ -14,9 +14,14 @@ export default defineConfig({
     format: 'es',
   },
   // External preview harnesses may assign an isolated port through PORT;
-  // plain `npm run dev` keeps Vite's 5173 default.
+  // plain `npm run dev` keeps Vite's 5173 default. Ignore Playwright's
+  // outputDir so Windows EBUSY locks on in-flight traces cannot crash the
+  // watcher mid-suite.
   server: {
     port: Number(process.env.PORT) || 5173,
+    watch: {
+      ignored: ['**/.tmp/**'],
+    },
   },
   test: {
     environment: 'jsdom',

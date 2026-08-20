@@ -15,8 +15,11 @@ function collectPageProblems(page: Page, problems: string[]): void {
 }
 
 async function expectHome(page: Page): Promise<void> {
-  await expect(page.getByRole('main').getByText('Myrelith', { exact: true }))
-    .toBeVisible()
+  // FoldRevealTitle keeps an sr-only brand and an aria-hidden visual wordmark;
+  // scope to the accessible brand so strict mode does not match both.
+  await expect(
+    page.locator('.project-launch-brand .project-launch-text-sr-only'),
+  ).toHaveText('Myrelith')
   await expect(page.getByRole('region', { name: 'Back to your projects' }))
     .toBeVisible()
 }

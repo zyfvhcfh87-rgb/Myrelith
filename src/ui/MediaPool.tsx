@@ -1047,21 +1047,32 @@ export default function MediaPool() {
       ? filteredIndexById.get(effectiveSelectedAssetId) ?? 0
       : 0
     let nextIndex: number | null = null
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    const columnCount = Math.max(1, virtualizer.columnCount)
+    if (event.key === 'ArrowRight') {
       nextIndex = currentIndex + 1
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    } else if (event.key === 'ArrowLeft') {
       nextIndex = currentIndex - 1
+    } else if (event.key === 'ArrowDown') {
+      nextIndex = currentIndex + columnCount
+    } else if (event.key === 'ArrowUp') {
+      nextIndex = currentIndex - columnCount
     } else if (event.key === 'Home') {
       nextIndex = 0
     } else if (event.key === 'End') {
       nextIndex = filteredItems.length - 1
     } else if (event.key === 'PageDown') {
-      nextIndex = currentIndex + virtualizer.columnCount * 4
+      nextIndex = currentIndex + columnCount * 4
     } else if (event.key === 'PageUp') {
-      nextIndex = currentIndex - virtualizer.columnCount * 4
+      nextIndex = currentIndex - columnCount * 4
     }
     if (nextIndex === null) return
     event.preventDefault()
+    if (
+      (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+      && (nextIndex < 0 || nextIndex >= filteredItems.length)
+    ) {
+      return
+    }
     const boundedIndex = Math.max(
       0,
       Math.min(filteredItems.length - 1, nextIndex),

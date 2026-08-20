@@ -68,6 +68,7 @@ describe('AudioMeter', () => {
     })
     expect(reset).toBeEnabled()
     expect(reset).toHaveTextContent('CLIP')
+    expect(reset).toHaveClass('audio-meter-reset')
     fireEvent.click(reset)
     expect(resetAudioMeterOverload).toHaveBeenCalledOnce()
   })
