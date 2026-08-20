@@ -130,7 +130,7 @@ export async function runPluginActivationBatch<T>(
   await mutateActivationRecord(options.storage, options.coordinationLock, (current) => {
     if (current === null || current.kind !== 'v2') return { write: false, next: null }
     const remaining = current.owners.filter((entry) => entry.ownerId !== ownerId)
-    if (remaining.length === current.owners.length) return { write: false, next: current }
+    if (remaining.length === current.owners.length) return { write: false, next: null }
     if (remaining.length === 0) return { write: true, next: null }
     return { write: true, next: Object.freeze({ version: 2, owners: remaining }) }
   })
