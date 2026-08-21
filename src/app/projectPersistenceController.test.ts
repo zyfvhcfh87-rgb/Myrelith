@@ -431,6 +431,57 @@ describe('project persistence', () => {
     })
   })
 
+  test('Save after replacement cannot revive a journal from a concurrent recovery write', async () => {
+    const oldWrite = deferred<void>()
+    const appendRecoverySnapshot = vi.fn<
+      ProjectPersistenceDeps['appendRecoverySnapshot']
+    >()
+      .mockImplementationOnce(() => oldWrite.promise)
+      .mockResolvedValue(undefined)
+    const createRecoveryJournalId = vi.fn()
+      .mockReturnValueOnce('journal-a')
+      .mockReturnValueOnce('journal-b')
+    const deps = makeDeps(makeHandle(), {
+      appendRecoverySnapshot,
+      createRecoveryJournalId,
+    })
+    controller = new ProjectPersistenceController(deps)
+
+    controller.startSession({
+      fileName: null,
+      persisted: false,
+      projectBindingId: 'local-project:session-a',
+    })
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    expect(appendRecoverySnapshot).toHaveBeenCalledOnce()
+
+    controller.startSession({
+      fileName: null,
+      persisted: false,
+      projectBindingId: 'local-project:session-b',
+    })
+
+    const savePromise = controller.saveAs()
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    expect(appendRecoverySnapshot).toHaveBeenCalledOnce()
+    expect(deps.deleteRecoveryJournal).toHaveBeenCalledWith('journal-b')
+    await expect(savePromise).resolves.toMatchObject({ status: 'saved' })
+
+    oldWrite.resolve()
+    await oldWrite.promise
+    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    expect(appendRecoverySnapshot).toHaveBeenCalledOnce()
+    expect(deps.deleteRecoveryJournal).toHaveBeenCalledTimes(1)
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      hasUnsavedChanges: false,
+      lastRecoveryAt: null,
+      recoveryPhase: 'idle',
+    })
+  })
+
   test('Save before the recovery debounce cannot recreate a cleared journal', async () => {
     const deps = makeDeps(makeHandle())
     controller = new ProjectPersistenceController(deps)

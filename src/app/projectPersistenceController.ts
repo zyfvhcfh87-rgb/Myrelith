@@ -579,7 +579,13 @@ export class ProjectPersistenceController {
     const journalId = this.recoveryJournalId
     if (!journalId) return
     const pendingRecovery = this.activeRecoveryWrite
-    if (pendingRecovery) {
+    // Only the current generation can still write this journal. Waiting on a
+    // replaced session's write keeps this session's recovery timer armed, so
+    // a new append can race the delete below and revive the journal.
+    if (
+      pendingRecovery
+      && this.activeRecoveryWriteGeneration === this.generation
+    ) {
       try {
         await pendingRecovery
       } catch {
