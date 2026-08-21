@@ -114,10 +114,25 @@ type LocalMediaPickerWindow = Window & {
   ) => Promise<LocalMediaDirectoryHandle>
 }
 
+export interface LocalMediaHandleTransaction {
+  get(key: string): Promise<unknown>
+  set(key: string, value: unknown): Promise<void>
+  delete(key: string): Promise<void>
+}
+
 export interface LocalMediaHandleStore {
   get(key: string): Promise<unknown>
   set(key: string, value: LocalMediaFileHandle): Promise<void>
   delete(key: string): Promise<void>
+  /**
+   * Run get/set/delete against both physical keys and the forget tombstone
+   * in one ownership boundary. IndexedDB uses one transaction; Map-backed
+   * tests serialize these callbacks so two registries cannot interleave
+   * check-then-write.
+   */
+  transact<T>(
+    work: (tx: LocalMediaHandleTransaction) => Promise<T> | T,
+  ): Promise<T>
 }
 
 export interface LocalMediaHandleRegistry {
@@ -143,6 +158,19 @@ function legacyRegistryKey(documentId: string, assetId: string): string {
   return JSON.stringify([documentId, assetId])
 }
 
+function forgottenKey(projectBindingId: string, assetId: string): string {
+  return JSON.stringify(['forgotten-v1', projectBindingId, assetId])
+}
+
+function ownershipKey(projectBindingId: string, assetId: string): string {
+  return `media:${projectBindingId}:${assetId}`
+}
+
+const FORGOTTEN_MEDIA_HANDLE = {
+  kind: 'myrelith-forgotten-media-handle',
+  version: 1,
+} as const
+
 function isFileHandle(value: unknown): value is LocalMediaFileHandle {
   return typeof value === 'object'
     && value !== null
@@ -162,8 +190,8 @@ export function createLocalMediaHandleRegistry(
   function enqueue<T>(key: string, operation: () => Promise<T>): Promise<T> {
     // IndexedDB requests are individually atomic, but a late put could still
     // overtake a later forget at the app layer. One non-rejecting tail per
-    // key preserves call order while allowing unrelated assets to proceed in
-    // parallel. The final action for a document+asset pair therefore wins.
+    // binding+asset pair covers the v2 key, legacy key, and forget tombstone
+    // while allowing unrelated assets to proceed in parallel.
     const previous = tails.get(key) ?? Promise.resolve()
     const result = previous.then(operation)
     const tail = result.then(
@@ -179,29 +207,48 @@ export function createLocalMediaHandleRegistry(
 
   return {
     async load(projectBindingId, assetId) {
+      const owner = ownershipKey(projectBindingId, assetId)
       const key = registryKey(projectBindingId, assetId)
-      const value = await enqueue(key, () => store.get(key))
+      const tombstoneKey = forgottenKey(projectBindingId, assetId)
+      const value = await enqueue(owner, () => store.get(key))
       if (isFileHandle(value)) return value
 
       const legacyDocumentId = legacyDocumentIdForBinding(projectBindingId)
       if (!legacyDocumentId) return null
       const legacyKey = legacyRegistryKey(legacyDocumentId, assetId)
-      const legacyValue = await enqueue(legacyKey, () => store.get(legacyKey))
+      const legacyValue = await enqueue(owner, () => store.get(legacyKey))
       if (!isFileHandle(legacyValue)) return null
-      await enqueue(key, () => store.set(key, legacyValue))
-      return legacyValue
+
+      const wrote = await enqueue(owner, () => store.transact(async (tx) => {
+        const forgotten = await tx.get(tombstoneKey)
+        if (forgotten !== undefined) return false
+        await tx.set(key, legacyValue)
+        return true
+      }))
+      return wrote ? legacyValue : null
     },
     remember(projectBindingId, assetId, handle) {
+      const owner = ownershipKey(projectBindingId, assetId)
       const key = registryKey(projectBindingId, assetId)
-      return enqueue(key, () => store.set(key, handle))
+      const tombstoneKey = forgottenKey(projectBindingId, assetId)
+      return enqueue(owner, () => store.transact(async (tx) => {
+        await tx.delete(tombstoneKey)
+        await tx.set(key, handle)
+      }))
     },
-    async forget(projectBindingId, assetId) {
+    forget(projectBindingId, assetId) {
+      const owner = ownershipKey(projectBindingId, assetId)
       const key = registryKey(projectBindingId, assetId)
-      await enqueue(key, () => store.delete(key))
+      const tombstoneKey = forgottenKey(projectBindingId, assetId)
       const legacyDocumentId = legacyDocumentIdForBinding(projectBindingId)
-      if (!legacyDocumentId) return
-      const legacyKey = legacyRegistryKey(legacyDocumentId, assetId)
-      await enqueue(legacyKey, () => store.delete(legacyKey))
+      const legacyKey = legacyDocumentId
+        ? legacyRegistryKey(legacyDocumentId, assetId)
+        : null
+      return enqueue(owner, () => store.transact(async (tx) => {
+        await tx.set(tombstoneKey, FORGOTTEN_MEDIA_HANDLE)
+        await tx.delete(key)
+        if (legacyKey) await tx.delete(legacyKey)
+      }))
     },
   }
 }
@@ -219,6 +266,12 @@ class IndexedDbMediaHandleStore implements LocalMediaHandleStore {
 
   async delete(key: string): Promise<void> {
     await this.withStore('readwrite', (store) => store.delete(key))
+  }
+
+  transact<T>(
+    work: (tx: LocalMediaHandleTransaction) => Promise<T> | T,
+  ): Promise<T> {
+    return this.withTransaction(work)
   }
 
   private open(): Promise<IDBDatabase> {
@@ -266,6 +319,59 @@ class IndexedDbMediaHandleStore implements LocalMediaHandleStore {
       transaction.oncomplete = () => resolve(result)
       transaction.onabort = () => reject(
         transaction.error ?? new Error('Remembered media access was aborted'),
+      )
+    })
+  }
+
+  private async withTransaction<T>(
+    work: (tx: LocalMediaHandleTransaction) => Promise<T> | T,
+  ): Promise<T> {
+    const database = await this.open()
+    return new Promise<T>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, 'readwrite')
+      const objectStore = transaction.objectStore(STORE_NAME)
+      let settled = false
+      let result: T
+      const settle = (action: () => void): void => {
+        if (settled) return
+        settled = true
+        action()
+      }
+      const requestPromise = <R>(request: IDBRequest<R>): Promise<R> => (
+        new Promise<R>((requestResolve, requestReject) => {
+          request.onsuccess = () => requestResolve(request.result)
+          request.onerror = () => requestReject(
+            request.error ?? new Error('Could not access remembered media'),
+          )
+        })
+      )
+      const api: LocalMediaHandleTransaction = {
+        get: (key) => requestPromise(objectStore.get(key)),
+        set: async (key, value) => {
+          await requestPromise(objectStore.put(value, key))
+        },
+        delete: async (key) => {
+          await requestPromise(objectStore.delete(key))
+        },
+      }
+      transaction.oncomplete = () => settle(() => resolve(result))
+      transaction.onabort = () => settle(() => reject(
+        transaction.error ?? new Error('Remembered media access was aborted'),
+      ))
+      // Start work in this turn so the first IDB request keeps the
+      // transaction alive. Only IDB request promises are awaited.
+      void Promise.resolve(work(api)).then(
+        (value) => {
+          result = value
+        },
+        (cause) => {
+          settle(() => reject(cause))
+          try {
+            transaction.abort()
+          } catch {
+            // Already complete or aborting.
+          }
+        },
       )
     })
   }

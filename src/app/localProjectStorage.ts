@@ -84,6 +84,8 @@ export interface RecoveryGeneration {
   snapshotId: string
   capturedAt: number
   serializedProject: string
+  /** Binding that owned this generation when it was written. */
+  projectBindingId: string
 }
 
 export interface RecoveryJournalRecord {
@@ -248,6 +250,7 @@ function cloneRecoveryJournal(
 function normalizeRecoveryGeneration(
   value: unknown,
   documentId: string,
+  fallbackBindingId: string,
 ): RecoveryGeneration | null {
   if (
     !isRecord(value)
@@ -270,10 +273,17 @@ function normalizeRecoveryGeneration(
   } catch {
     return null
   }
+  const projectBindingId = value.projectBindingId === undefined
+    ? fallbackBindingId
+    : isLocalProjectBindingId(value.projectBindingId)
+      ? value.projectBindingId
+      : null
+  if (!projectBindingId) return null
   return {
     snapshotId: value.snapshotId,
     capturedAt: value.capturedAt,
     serializedProject: value.serializedProject,
+    projectBindingId,
   }
 }
 
@@ -298,9 +308,20 @@ function normalizeRecoveryJournal(
     return null
   }
 
+  const projectBindingId = value.projectBindingId === undefined
+    ? legacyLocalProjectBindingId(value.documentId)
+    : isLocalProjectBindingId(value.projectBindingId)
+      ? value.projectBindingId
+      : null
+  if (!projectBindingId) return null
+
   const generations: RecoveryGeneration[] = []
   for (const candidate of value.generations) {
-    const generation = normalizeRecoveryGeneration(candidate, value.documentId)
+    const generation = normalizeRecoveryGeneration(
+      candidate,
+      value.documentId,
+      projectBindingId,
+    )
     // A partially corrupted newest entry must not hide an older complete
     // recovery point. IndexedDB writes are atomic, but this also makes manual
     // storage damage and future record migrations fail safely.
@@ -319,13 +340,6 @@ function normalizeRecoveryJournal(
     return null
   }
 
-  const projectBindingId = value.projectBindingId === undefined
-    ? legacyLocalProjectBindingId(value.documentId)
-    : isLocalProjectBindingId(value.projectBindingId)
-      ? value.projectBindingId
-      : null
-  if (!projectBindingId) return null
-
   return {
     version: LOCAL_PROJECT_RECORD_VERSION,
     journalId: value.journalId,
@@ -334,7 +348,10 @@ function normalizeRecoveryJournal(
     projectFileName: value.projectFileName,
     updatedAt: latest.capturedAt,
     generations,
-    projectBindingId,
+    // The journal label follows the newest surviving generation. Older
+    // generations keep the binding they were written with and never inherit
+    // a later lineage from this field.
+    projectBindingId: latest.projectBindingId,
   }
 }
 
@@ -620,7 +637,17 @@ export function createLocalProjectStorage(
         if (stored && stored.documentId !== snapshot.documentId) {
           throw new Error('Recovery journal belongs to a different document')
         }
+        if (stored && stored.projectBindingId !== snapshot.projectBindingId) {
+          throw new Error('Recovery journal belongs to a different project binding')
+        }
         const previousGenerations = stored?.generations ?? []
+        if (
+          previousGenerations.some(
+            (generation) => generation.projectBindingId !== snapshot.projectBindingId,
+          )
+        ) {
+          throw new Error('Recovery journal belongs to a different project binding')
+        }
         const previousTimestamp = previousGenerations.at(-1)?.capturedAt ?? 0
         const capturedAt = Math.max(snapshot.capturedAt, previousTimestamp)
         const generations = [
@@ -629,6 +656,7 @@ export function createLocalProjectStorage(
             snapshotId: snapshot.snapshotId,
             capturedAt,
             serializedProject: snapshot.serializedProject,
+            projectBindingId: snapshot.projectBindingId,
           },
         ].slice(-limits.maxRecoveryGenerations)
         const record: RecoveryJournalRecord = {

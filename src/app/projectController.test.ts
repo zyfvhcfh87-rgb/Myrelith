@@ -354,6 +354,18 @@ function makeProject(
   }
 }
 
+function resumeProjectFile(
+  name: string,
+  documentId: string,
+  assets: PortableAssetDescriptor[] = [],
+): File {
+  const project = makeProject(assets, name)
+  return new File([serializeProjectFile({
+    ...project,
+    document: { ...project.document, id: documentId, name },
+  })], `${documentId}.myrelith`)
+}
+
 function makeLegacyTwoTrackProject(name: string): ProjectFile {
   const project = makeProject([], name)
   const videoTrack = project.document.tracks.find((track) => track.id === 'V1')
@@ -1172,10 +1184,12 @@ describe('portable project resume', () => {
         snapshotId: 'snapshot-good',
         capturedAt: 100,
         serializedProject: serialized,
+        projectBindingId: 'local-project:recovery',
       }, {
         snapshotId: 'snapshot-corrupt',
         capturedAt: 200,
         serializedProject: '{broken',
+        projectBindingId: 'local-project:recovery',
       }],
       projectBindingId: 'local-project:recovery',
     }
@@ -1201,6 +1215,52 @@ describe('portable project resume', () => {
       recoveryCapturedAt: 100,
       projectBindingId: 'local-project:recovery',
     })
+  })
+
+  test('recovery fallback never applies a newer journal binding to an older generation', async () => {
+    const savedProject = makeLegacyTwoTrackProject('Recovered project')
+    const serialized = serializeProjectFile(savedProject)
+    const record: RecoveryJournalRecord = {
+      version: LOCAL_PROJECT_RECORD_VERSION,
+      journalId: 'journal-mixed',
+      documentId: 'doc-saved',
+      projectName: 'Recovered project',
+      projectFileName: 'Recovered.myrelith',
+      updatedAt: 200,
+      generations: [{
+        snapshotId: 'snapshot-a',
+        capturedAt: 100,
+        serializedProject: serialized,
+        projectBindingId: 'local-project:binding-a',
+      }, {
+        snapshotId: 'snapshot-b',
+        capturedAt: 200,
+        serializedProject: '{broken',
+        projectBindingId: 'local-project:binding-b',
+      }],
+      projectBindingId: 'local-project:binding-b',
+    }
+    const deps = makeDeps({
+      getRecoveryJournal: vi.fn(() => record),
+    })
+
+    await expect(openRecoveryProject('journal-mixed', deps))
+      .resolves.toEqual({ status: 'ready' })
+    await expect(activateResumedProject(deps)).resolves.toEqual({
+      status: 'activated',
+    })
+    expect(deps.startProjectPersistence).toHaveBeenCalledWith({
+      fileName: 'Recovered.myrelith',
+      persisted: false,
+      recoveryJournalId: 'journal-mixed',
+      recoveryCapturedAt: 100,
+      projectBindingId: 'local-project:binding-a',
+    })
+    expect(deps.startProjectPersistence).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectBindingId: 'local-project:binding-b',
+      }),
+    )
   })
 
   test('image relink restores its saved duration after the import default changes', async () => {
@@ -1789,6 +1849,126 @@ describe('portable project resume', () => {
     )
     expect(useProjectSessionStore.getState().candidate?.assets[0].status)
       .toBe('ready')
+  })
+
+  test('a stale Project Media picker resolve cannot reconnect a replacement candidate', async () => {
+    const expected = makeAsset()
+    const descriptor = descriptorFrom(expected)
+    const analyzed = makeAsset({
+      id: 'asset-stale-picker',
+      objectUrl: 'blob:stale-picker',
+    })
+    const picker = deferred<Array<{ file: File; handle: LocalMediaFileHandle }>>()
+    let nextBinding = 0
+    const deps = makeDeps({
+      createProjectBindingId: vi.fn(() => (
+        nextBinding++ === 0
+          ? 'local-project:candidate-a'
+          : 'local-project:candidate-b'
+      )),
+      readText: vi.fn(async (file: File) => file.text()),
+      pickMediaFiles: vi.fn(() => picker.promise),
+      inspectMedia: vi.fn(async () => readyInspection(analyzed)),
+    })
+    const source = new File(['12345678'], descriptor.fileName, {
+      type: descriptor.mimeType,
+      lastModified: descriptor.lastModified,
+    })
+    const handle = makeHandle(source)
+
+    await expect(openProjectFile(
+      resumeProjectFile('Candidate A', 'doc-candidate-a', [descriptor]),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+    expect(useProjectSessionStore.getState().candidate).toMatchObject({
+      projectName: 'Candidate A',
+    })
+
+    const choosing = chooseProjectMedia(deps)
+    await expect(openProjectFile(
+      resumeProjectFile('Candidate B', 'doc-candidate-b', [descriptor]),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+    expect(useProjectSessionStore.getState().candidate).toMatchObject({
+      projectName: 'Candidate B',
+      assets: [{ id: descriptor.id, status: 'missing' }],
+    })
+
+    picker.resolve([{ file: source, handle }])
+    await expect(choosing).resolves.toEqual({ status: 'cancelled' })
+    expect(deps.inspectMedia).not.toHaveBeenCalled()
+    expect(deps.rememberMediaHandle).not.toHaveBeenCalled()
+    expect(useProjectSessionStore.getState().candidate).toMatchObject({
+      projectName: 'Candidate B',
+      assets: [{ id: descriptor.id, status: 'missing' }],
+    })
+    expect(useProjectSessionStore.getState().error).toBeNull()
+  })
+
+  test('a stale Project Media picker cancel leaves the replacement candidate untouched', async () => {
+    const descriptor = descriptorFrom(makeAsset())
+    const picker = deferred<Array<{ file: File; handle: LocalMediaFileHandle }>>()
+    let nextBinding = 0
+    const deps = makeDeps({
+      createProjectBindingId: vi.fn(() => (
+        nextBinding++ === 0
+          ? 'local-project:candidate-a'
+          : 'local-project:candidate-b'
+      )),
+      readText: vi.fn(async (file: File) => file.text()),
+      pickMediaFiles: vi.fn(() => picker.promise),
+    })
+
+    await expect(openProjectFile(
+      resumeProjectFile('Candidate A', 'doc-candidate-a', [descriptor]),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+    const choosing = chooseProjectMedia(deps)
+    await expect(openProjectFile(
+      resumeProjectFile('Candidate B', 'doc-candidate-b', [descriptor]),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+
+    picker.reject(new DOMException('cancelled', 'AbortError'))
+    await expect(choosing).resolves.toEqual({ status: 'cancelled' })
+    expect(useProjectSessionStore.getState().candidate).toMatchObject({
+      projectName: 'Candidate B',
+      assets: [{ id: descriptor.id, status: 'missing' }],
+    })
+    expect(useProjectSessionStore.getState().error).toBeNull()
+  })
+
+  test('a stale Project Media picker reject cannot republish the replaced candidate', async () => {
+    const descriptor = descriptorFrom(makeAsset())
+    const picker = deferred<Array<{ file: File; handle: LocalMediaFileHandle }>>()
+    let nextBinding = 0
+    const deps = makeDeps({
+      createProjectBindingId: vi.fn(() => (
+        nextBinding++ === 0
+          ? 'local-project:candidate-a'
+          : 'local-project:candidate-b'
+      )),
+      readText: vi.fn(async (file: File) => file.text()),
+      pickMediaFiles: vi.fn(() => picker.promise),
+    })
+
+    await expect(openProjectFile(
+      resumeProjectFile('Candidate A', 'doc-candidate-a', [descriptor]),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+    const choosing = chooseProjectMedia(deps)
+    await expect(openProjectFile(
+      resumeProjectFile('Candidate B', 'doc-candidate-b', [descriptor]),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+
+    picker.reject(new Error('disk failure'))
+    await expect(choosing).resolves.toEqual({ status: 'cancelled' })
+    expect(useProjectSessionStore.getState().candidate).toMatchObject({
+      projectName: 'Candidate B',
+      assets: [{ id: descriptor.id, status: 'missing' }],
+    })
+    expect(useProjectSessionStore.getState().error).toBeNull()
   })
 
   test('manual Resume relink preserves a saved audio-only choice after both tracks become decodable', async () => {

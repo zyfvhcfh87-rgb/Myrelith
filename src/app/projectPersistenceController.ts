@@ -228,6 +228,7 @@ export class ProjectPersistenceController {
   private operation: SaveOperation | null = null
   private activeWrite: Promise<ProjectSaveResult> | null = null
   private activeRecoveryWrite: Promise<void> | null = null
+  private activeRecoveryWriteGeneration = -1
   private recoveryFollowUp = false
   private recoveryRevision = 0
   private recoveryJournalId: string | null = null
@@ -299,6 +300,9 @@ export class ProjectPersistenceController {
     this.operation = null
     this.recoveryJournalId = null
     this.projectBindingId = null
+    // Follow-up belongs to the session that requested it. A still-running
+    // write from this now-abandoned generation cannot consume the next
+    // session's recovery request.
     this.recoveryFollowUp = false
     this.paused = false
     this.syncBeforeUnload(false)
@@ -697,12 +701,15 @@ export class ProjectPersistenceController {
   private async runRecoverySave(): Promise<void> {
     const journalId = this.recoveryJournalId
     if (!this.active || !journalId || this.paused) return
-    if (this.activeRecoveryWrite) {
+    const generation = this.generation
+    if (
+      this.activeRecoveryWrite
+      && this.activeRecoveryWriteGeneration === generation
+    ) {
       this.recoveryFollowUp = true
       return
     }
 
-    const generation = this.generation
     this.recoveryFollowUp = false
     let snapshot: CapturedProjectSnapshot
     try {
@@ -737,6 +744,7 @@ export class ProjectPersistenceController {
       })
     ))
     this.activeRecoveryWrite = write
+    this.activeRecoveryWriteGeneration = generation
     let succeeded = false
 
     try {
@@ -766,7 +774,10 @@ export class ProjectPersistenceController {
         })
       }
     } finally {
-      if (this.activeRecoveryWrite === write) this.activeRecoveryWrite = null
+      if (this.activeRecoveryWrite === write) {
+        this.activeRecoveryWrite = null
+        this.activeRecoveryWriteGeneration = -1
+      }
       if (
         this.active
         && generation === this.generation
