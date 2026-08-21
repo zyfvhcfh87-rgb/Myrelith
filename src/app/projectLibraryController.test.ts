@@ -47,6 +47,7 @@ function recovery(): RecoveryJournalRecord {
       snapshotId: 'snapshot-1',
       capturedAt: 100,
       serializedProject: '{}',
+      projectBindingId: 'local-project:recovery',
     }],
     projectBindingId: 'local-project:recovery',
   }

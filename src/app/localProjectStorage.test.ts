@@ -375,6 +375,67 @@ describe('recovery journal storage', () => {
       recoverySnapshot('journal', 'doc-b', 2),
     )).rejects.toThrow('different document')
   })
+
+  test('rejects appending a different project binding to an existing journal', async () => {
+    const storage = createLocalProjectStorage(
+      createMapLocalProjectStorageBackend(),
+    )
+    const bindingA = 'local-project:binding-a'
+    const bindingB = 'local-project:binding-b'
+    await storage.appendRecoverySnapshot({
+      ...recoverySnapshot('journal', 'doc-a', 1),
+      projectBindingId: bindingA,
+    })
+
+    await expect(storage.appendRecoverySnapshot({
+      ...recoverySnapshot('journal', 'doc-a', 2),
+      projectBindingId: bindingB,
+    })).rejects.toThrow('different project binding')
+
+    const journal = await storage.getRecoveryJournal('journal')
+    expect(journal?.projectBindingId).toBe(bindingA)
+    expect(journal?.generations).toEqual([
+      expect.objectContaining({
+        capturedAt: 1,
+        projectBindingId: bindingA,
+      }),
+    ])
+  })
+
+  test('fallback generations keep the binding they were written with', async () => {
+    const backend = createMapLocalProjectStorageBackend()
+    const bindingA = 'local-project:binding-a'
+    const bindingB = 'local-project:binding-b'
+    backend.stores['recovery-journals'].set('journal-mixed', {
+      version: LOCAL_PROJECT_RECORD_VERSION,
+      journalId: 'journal-mixed',
+      documentId: 'doc-a',
+      projectName: 'Project doc-a',
+      projectFileName: 'doc-a.myrelith',
+      updatedAt: 2,
+      projectBindingId: bindingB,
+      generations: [{
+        snapshotId: 'snapshot-a',
+        capturedAt: 1,
+        serializedProject: serializedProject('doc-a'),
+        projectBindingId: bindingA,
+      }, {
+        snapshotId: 'snapshot-b',
+        capturedAt: 2,
+        serializedProject: '{broken newest snapshot',
+        projectBindingId: bindingB,
+      }],
+    })
+    const storage = createLocalProjectStorage(backend)
+
+    await expect(storage.getRecoveryJournal('journal-mixed')).resolves.toMatchObject({
+      projectBindingId: bindingA,
+      generations: [{
+        capturedAt: 1,
+        projectBindingId: bindingA,
+      }],
+    })
+  })
 })
 
 describe('local project picker helpers', () => {

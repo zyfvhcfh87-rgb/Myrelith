@@ -14,6 +14,7 @@ import {
   type LocalMediaDirectoryHandle,
   type LocalMediaFileHandle,
   type LocalMediaHandleStore,
+  type LocalMediaHandleTransaction,
 } from './localMediaHandles'
 import { legacyLocalProjectBindingId } from './localProjectProvenance'
 
@@ -28,7 +29,8 @@ function makeHandle(name = 'source.mp4'): LocalMediaFileHandle {
 
 function makeStore(): LocalMediaHandleStore & { values: Map<string, unknown> } {
   const values = new Map<string, unknown>()
-  return {
+  let tail = Promise.resolve()
+  const store: LocalMediaHandleStore & { values: Map<string, unknown> } = {
     values,
     get: async (key) => values.get(key),
     set: async (key, value) => {
@@ -37,7 +39,22 @@ function makeStore(): LocalMediaHandleStore & { values: Map<string, unknown> } {
     delete: async (key) => {
       values.delete(key)
     },
+    transact(work) {
+      const run = tail.then(async () => {
+        const api: LocalMediaHandleTransaction = {
+          get: (key) => store.get(key),
+          set: async (key, value) => {
+            await store.set(key, value as LocalMediaFileHandle)
+          },
+          delete: (key) => store.delete(key),
+        }
+        return work(api)
+      })
+      tail = run.then(() => undefined, () => undefined)
+      return run
+    },
   }
+  return store
 }
 
 function makeDirectory(
@@ -124,14 +141,85 @@ describe('local media handle registry', () => {
 
     const remember = registry.remember('doc-a', 'asset-1', makeHandle())
     const forget = registry.forget('doc-a', 'asset-1')
-    expect(store.delete).not.toHaveBeenCalled()
+    expect(store.delete).not.toHaveBeenCalledWith(
+      JSON.stringify(['v2', 'doc-a', 'asset-1']),
+    )
 
     releaseWrite()
     await Promise.all([remember, forget])
 
-    expect(store.set).toHaveBeenCalledOnce()
-    expect(store.delete).toHaveBeenCalledOnce()
+    expect(store.set).toHaveBeenCalledTimes(2)
+    expect(store.delete).toHaveBeenCalledTimes(2)
     await expect(registry.load('doc-a', 'asset-1')).resolves.toBeNull()
+  })
+
+  test('a same-instance forget wins over a delayed legacy migration', async () => {
+    const store = makeStore()
+    const binding = legacyLocalProjectBindingId('doc-a')
+    const handle = makeHandle('legacy.mp4')
+    const legacyKey = JSON.stringify(['doc-a', 'asset-1'])
+    store.values.set(legacyKey, handle)
+
+    let releaseLegacyRead!: () => void
+    const legacyReadCanFinish = new Promise<void>((resolve) => {
+      releaseLegacyRead = resolve
+    })
+    let legacyReads = 0
+    const originalGet = store.get.bind(store)
+    store.get = vi.fn(async (key) => {
+      if (key === legacyKey) {
+        legacyReads += 1
+        if (legacyReads === 1) await legacyReadCanFinish
+      }
+      return originalGet(key)
+    })
+    const registry = createLocalMediaHandleRegistry(store)
+
+    const loading = registry.load(binding, 'asset-1')
+    await vi.waitFor(() => expect(legacyReads).toBe(1))
+    const forgetting = registry.forget(binding, 'asset-1')
+    releaseLegacyRead()
+
+    await expect(forgetting).resolves.toBeUndefined()
+    await expect(loading).resolves.toBeNull()
+    await expect(registry.load(binding, 'asset-1')).resolves.toBeNull()
+    expect(store.values.get(JSON.stringify(['v2', binding, 'asset-1'])))
+      .toBeUndefined()
+  })
+
+  test('a separate registry cannot revive a forgotten legacy handle', async () => {
+    const store = makeStore()
+    const binding = legacyLocalProjectBindingId('doc-a')
+    const handle = makeHandle('legacy.mp4')
+    const legacyKey = JSON.stringify(['doc-a', 'asset-1'])
+    store.values.set(legacyKey, handle)
+
+    let releaseLegacyRead!: () => void
+    const legacyReadCanFinish = new Promise<void>((resolve) => {
+      releaseLegacyRead = resolve
+    })
+    let legacyReads = 0
+    const originalGet = store.get.bind(store)
+    store.get = vi.fn(async (key) => {
+      if (key === legacyKey) {
+        legacyReads += 1
+        if (legacyReads === 1) await legacyReadCanFinish
+      }
+      return originalGet(key)
+    })
+    const loadingRegistry = createLocalMediaHandleRegistry(store)
+    const forgettingRegistry = createLocalMediaHandleRegistry(store)
+
+    const loading = loadingRegistry.load(binding, 'asset-1')
+    await vi.waitFor(() => expect(legacyReads).toBe(1))
+    await forgettingRegistry.forget(binding, 'asset-1')
+    releaseLegacyRead()
+
+    await expect(loading).resolves.toBeNull()
+    await expect(loadingRegistry.load(binding, 'asset-1')).resolves.toBeNull()
+    await expect(forgettingRegistry.load(binding, 'asset-1')).resolves.toBeNull()
+    expect(store.values.get(JSON.stringify(['v2', binding, 'asset-1'])))
+      .toBeUndefined()
   })
 
   test('queries or requests read permission and supports older granted handles', async () => {

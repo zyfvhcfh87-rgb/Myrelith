@@ -916,7 +916,8 @@ export async function openRecoveryProject(
         expectedDocumentId: record.documentId,
         recoveryJournalId: record.journalId,
         recoveryCapturedAt: recovery.capturedAt,
-        projectBindingId: record.projectBindingId
+        projectBindingId: recovery.projectBindingId
+          ?? record.projectBindingId
           ?? legacyLocalProjectBindingId(record.documentId),
       }, generation, deps)
     } catch (cause) {
@@ -1499,16 +1500,21 @@ interface ProjectMediaSelection {
 async function connectProjectMediaSelections(
   selections: readonly ProjectMediaSelection[],
   deps: ProjectControllerDeps,
+  owner?: PendingResume,
+  ownerGeneration?: number,
 ): Promise<ProjectActionResult> {
-  const pending = pendingResume
-  if (!pending) {
-    const message = 'Choose a valid Myrelith project before reconnecting media'
-    useProjectSessionStore.setState({ phase: 'error', error: message })
-    return { status: 'failed', message }
+  const pending = owner ?? pendingResume
+  const generation = ownerGeneration ?? operationGeneration
+  if (!pending || !pendingIsCurrent(pending, generation)) {
+    if (!pending) {
+      const message = 'Choose a valid Myrelith project before reconnecting media'
+      useProjectSessionStore.setState({ phase: 'error', error: message })
+      return { status: 'failed', message }
+    }
+    return { status: 'cancelled' }
   }
   if (selections.length === 0) return { status: 'ready' }
 
-  const generation = operationGeneration
   useProjectSessionStore.setState({ phase: 'relinking', error: null })
   const errors: string[] = []
 
@@ -1685,13 +1691,18 @@ export async function chooseProjectMedia(
     useProjectSessionStore.setState({ phase: 'error', error: message })
     return { status: 'failed', message }
   }
+  const generation = operationGeneration
   try {
     const selections = await deps.pickMediaFiles(true)
+    if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
     return connectProjectMediaSelections(
       selections.map(({ file, handle }) => ({ file, handle })),
       deps,
+      pending,
+      generation,
     )
   } catch (cause) {
+    if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
     if (isLocalMediaPickerCancellation(cause)) return { status: 'ready' }
     const message = `Could not choose source media: ${messageFrom(cause)}`
     publishResumeCandidate(pending, message)
