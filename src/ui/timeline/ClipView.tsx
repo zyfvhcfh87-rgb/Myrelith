@@ -184,6 +184,7 @@ function ClipView({
     )
   const markerStride = Math.max(1, Math.ceil(allMarkers.length / 128))
   const markers = allMarkers.filter((_, index) => index % markerStride === 0)
+  const exposesInteractiveSemantics = hasVisibleSlice || ownsLiveGesture
 
   return (
     <div
@@ -194,15 +195,17 @@ function ClipView({
       data-source-mode={clip.sourceMode ?? 'timed'}
       data-primary-selected={isSelected && isPrimarySelection ? 'true' : 'false'}
       data-virtual-gesture-host={hasVisibleSlice ? 'false' : 'true'}
-      role={hasVisibleSlice ? 'button' : undefined}
-      tabIndex={hasVisibleSlice ? 0 : -1}
-      aria-hidden={hasVisibleSlice || ownsLiveGesture ? undefined : true}
+      role={exposesInteractiveSemantics ? 'button' : undefined}
+      tabIndex={exposesInteractiveSemantics ? 0 : -1}
+      aria-hidden={exposesInteractiveSemantics ? undefined : true}
       aria-label={
-        hasVisibleSlice ? `${clip.name}, ${accessibleKind} clip` : undefined
+        exposesInteractiveSemantics
+          ? `${clip.name}, ${accessibleKind} clip`
+          : undefined
       }
-      aria-pressed={hasVisibleSlice ? isSelected : undefined}
+      aria-pressed={exposesInteractiveSemantics ? isSelected : undefined}
       aria-keyshortcuts={
-        hasVisibleSlice
+        exposesInteractiveSemantics
           ? 'Control+ArrowLeft Control+ArrowRight Meta+ArrowLeft Meta+ArrowRight [ ] ArrowLeft ArrowRight Enter Escape'
           : undefined
       }

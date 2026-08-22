@@ -21,7 +21,7 @@
  * live-gesture participant; neither follows per-frame preview deltas.
  */
 
-import { memo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type { DragEvent as ReactDragEvent } from 'react'
 import type { Track as TrackData } from '../../domain/schema'
 import { createLinkGroupId } from '../../domain/linking'
@@ -55,14 +55,27 @@ function Track({
   const clipDropTarget = useTransportStore(
     (state) => state.dragPreview?.targetTrackId === track.id,
   )
-  const hasLiveGestureParticipant = useTransportStore((state) => {
-    const gesture = state.dragPreview ?? state.editPreview
-    return gesture !== null && track.clips.some(
-      (clip) =>
-        gesture.clipId === clip.id
-        || (clip.linkGroupId !== undefined && gesture.linkGroupId === clip.linkGroupId),
-    )
-  })
+  // Subscribe only to stable gesture identity. Preview deltas publish on every
+  // pointer frame, so scanning the lane inside a selector would defeat
+  // virtualization even when this track's membership has not changed.
+  const liveGestureClipId = useTransportStore(
+    (state) => (state.dragPreview ?? state.editPreview)?.clipId,
+  )
+  const liveGestureLinkGroupId = useTransportStore(
+    (state) => (state.dragPreview ?? state.editPreview)?.linkGroupId,
+  )
+  const hasLiveGestureParticipant = useMemo(
+    () =>
+      liveGestureClipId !== undefined && track.clips.some(
+        (clip) =>
+          liveGestureClipId === clip.id
+          || (
+            clip.linkGroupId !== undefined
+            && liveGestureLinkGroupId === clip.linkGroupId
+          ),
+      ),
+    [liveGestureClipId, liveGestureLinkGroupId, track.clips],
+  )
 
   const acceptsDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
     !track.locked && trackAcceptsAssetDrag(track.kind, e.dataTransfer.types)
@@ -72,14 +85,10 @@ function Track({
     (track.muted ? ' track-muted' : '') +
     (track.locked ? ' track-locked' : '') +
     (soloDimmed ? ' track-solo-dimmed' : '')
-  const liveTransport = useTransportStore.getState()
-  const liveGesture = hasLiveGestureParticipant
-    ? liveTransport.dragPreview ?? liveTransport.editPreview
-    : null
   const participatesInLiveGesture = (clipId: string, linkGroupId?: string) =>
-    liveGesture !== null &&
-    (liveGesture.clipId === clipId ||
-      (linkGroupId !== undefined && liveGesture.linkGroupId === linkGroupId))
+    hasLiveGestureParticipant &&
+    (liveGestureClipId === clipId ||
+      (linkGroupId !== undefined && liveGestureLinkGroupId === linkGroupId))
 
   return (
     <div

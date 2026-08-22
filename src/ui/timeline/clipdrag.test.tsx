@@ -388,6 +388,11 @@ describe('drag: scrub-preview then commit', () => {
     expect(document.body.contains(el)).toBe(true)
     expect(el).toHaveAttribute('data-virtual-gesture-host', 'true')
     expect(el).not.toHaveAttribute('aria-hidden')
+    expect(el).toHaveAttribute('role', 'button')
+    expect(el).toHaveAttribute('tabindex', '0')
+    expect(el).toHaveAttribute('aria-label', 'clipA, video clip')
+    expect(el).toHaveAttribute('aria-pressed')
+    expect(el).toHaveAttribute('aria-keyshortcuts')
     expect(el).toHaveStyle({ transform: 'translateX(199px)', width: '1px' })
 
     // Simulate an origin rebase that culls the committed range but brings the
@@ -408,6 +413,29 @@ describe('drag: scrub-preview then commit', () => {
     expect(clipA().timelineRange.startFrame).toBe(250)
     expect(doc().past).toHaveLength(1)
     expect(transport().dragPreview).toBeNull()
+  })
+
+  test('live gesture membership is not rescanned for preview delta updates', () => {
+    const track = makeTrack('stable-membership', [makeClip('stable-clip', 10, 20)])
+    const membershipScan = vi.spyOn(track.clips, 'some')
+    render(<Track track={track} timelineWindowEndFrame={200} />)
+
+    expect(membershipScan).not.toHaveBeenCalled()
+
+    act(() => transport().setDragPreview({
+      clipId: 'stable-clip',
+      deltaFrames: 1,
+    }))
+    expect(membershipScan).toHaveBeenCalledTimes(1)
+
+    act(() => transport().setDragPreview({
+      clipId: 'stable-clip',
+      deltaFrames: 2,
+    }))
+    act(() => transport().setPlayheadFrame(12))
+    expect(membershipScan).toHaveBeenCalledTimes(1)
+
+    act(() => transport().setDragPreview(null))
   })
 })
 
