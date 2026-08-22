@@ -195,13 +195,16 @@ describe('MotionTrackingOverlay', () => {
     fireEvent.keyDown(surface, { key: 'ArrowRight', shiftKey: true })
     fireEvent.keyDown(surface, { key: 'Enter' })
 
+    const selection = useMotionTrackingSelectionStore.getState().selection
+    expect(selection?.kind).toBe('box')
+    if (selection?.kind !== 'box') throw new Error('expected a box selection')
+    expect(selection.box.x).toBeCloseTo(0.42)
+    expect(selection.box.y).toBeCloseTo(0.42)
+    expect(selection.box.width).toBeCloseTo(0.22)
+    expect(selection.box.height).toBeCloseTo(0.2)
     expect(useMotionTrackingSelectionStore.getState()).toMatchObject({
       pickingKind: null,
       selectionGlobalFrame: 12,
-      selection: {
-        kind: 'box',
-        box: { x: 0.42, y: 0.42, width: 0.22, height: 0.2 },
-      },
     })
 
     act(() => useMotionTrackingSelectionStore.getState().beginPicking(clipId, 'box'))

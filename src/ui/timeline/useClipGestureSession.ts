@@ -503,8 +503,11 @@ export function useClipGestureSession({
   const nudgeKeyboardGesture = (step: number, bypassSnapping: boolean): void => {
     const active = session.current
     if (!active || active.origin !== 'keyboard') return
+    // One-frame keyboard nudges stay exact. Neighbor/marker snaps would
+    // otherwise swallow the first arrow press when an edge already sits
+    // on a snap candidate.
     const raw = Math.min(active.maxDelta, Math.max(active.minDelta, active.currentDelta + step))
-    const update = snapUpdate(active, raw, bypassSnapping)
+    const update = snapUpdate(active, raw, true)
     active.currentDelta = update.deltaFrames
     if (active.mode === 'move') {
       setDragPreview({
@@ -520,7 +523,7 @@ export function useClipGestureSession({
         linkGroupId: active.linkGroupId,
       })
     }
-    setSnapGuide(update.guide)
+    setSnapGuide(bypassSnapping ? null : snapUpdate(active, raw, false).guide)
     const signed = update.deltaFrames > 0
       ? `plus ${update.deltaFrames}`
       : update.deltaFrames < 0
@@ -540,7 +543,7 @@ export function useClipGestureSession({
       announce(`${editLabel(active.mode)} cancelled because the timeline changed.`)
       return
     }
-    const delta = snapUpdate(active, active.currentDelta, false).deltaFrames
+    const delta = active.currentDelta
     applyEditDelta(active, delta)
     endGesture()
     announce(

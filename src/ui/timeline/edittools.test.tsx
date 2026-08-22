@@ -1113,10 +1113,10 @@ describe('keyboard trim, ripple, slip, and slide', () => {
     fireEvent.keyDown(clip, { key: 'Enter' })
 
     expect(clipById('clipA').timelineRange).toEqual({
-      startFrame: 101,
+      startFrame: 100,
       durationFrames: 49,
     })
-    expect(clipById('clipB').timelineRange.startFrame).toBe(151)
+    expect(clipById('clipB').timelineRange.startFrame).toBe(149)
     expect(doc().past).toHaveLength(1)
   })
 

@@ -40,8 +40,8 @@ function clampDraft(
     return {
       kind: 'point',
       point: {
-        x: clamp(draft.point.x, minX, maxX),
-        y: clamp(draft.point.y, minY, maxY),
+        x: roundNorm(clamp(draft.point.x, minX, maxX)),
+        y: roundNorm(clamp(draft.point.y, minY, maxY)),
       },
     }
   }
@@ -50,10 +50,10 @@ function clampDraft(
   return {
     kind: 'box',
     box: {
-      x: clamp(draft.box.x, minX, maxX - width),
-      y: clamp(draft.box.y, minY, maxY - height),
-      width,
-      height,
+      x: roundNorm(clamp(draft.box.x, minX, maxX - width)),
+      y: roundNorm(clamp(draft.box.y, minY, maxY - height)),
+      width: roundNorm(width),
+      height: roundNorm(height),
     },
   }
 }
@@ -166,6 +166,10 @@ function sourceFacts(
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
+}
+
+function roundNorm(value: number): number {
+  return Math.round(value * 1000) / 1000
 }
 
 function sourcePoint(

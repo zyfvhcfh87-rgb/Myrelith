@@ -64,7 +64,10 @@ export default function MediaImportDialog() {
   useEffect(() => {
     if (phase === 'idle') return
     const dialog = dialogRef.current
-    const initial = dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+    if (dialog?.contains(document.activeElement)) return
+    const initial = dialog?.querySelector<HTMLElement>(
+      '[autofocus]:not([disabled])',
+    ) ?? dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
     ;(initial ?? dialog)?.focus()
   }, [phase])
 
