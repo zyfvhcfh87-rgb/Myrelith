@@ -36,3 +36,20 @@ explicitly selected issues and HANDOFF.md's open list.
 - Never skip a phase gate. Quality over speed, explicitly requested.
 - End-of-turn summaries: short, plain, low-jargon (see HANDOFF.md).
 - TypeScript `erasableSyntaxOnly`: no constructor parameter properties.
+
+## Cursor Cloud specific instructions
+
+- Pure client-side app: no backend, database, or external service. `npm run dev`
+  serves the whole product on `http://localhost:5173` (see Build & test above).
+- Node version gotcha (important): the VM's default `node` on `PATH`
+  (`/exec-daemon/node`) is v22.14.0, whose bundled build hits a jsdom
+  cross-realm WebCrypto bug that fails 11 `src/test/plugins/*` vitest specs
+  (`SubtleCrypto.digest` rejecting a cross-realm `ArrayBuffer`). App/lint/build
+  are unaffected, but `npm test` needs a newer Node. Setup pins nvm's Node 24
+  (matching CI) and prepends it in `~/.bashrc`, so login shells resolve
+  `node` → v24 automatically. If a shell ever reports `node -v` = v22.14.0,
+  run through nvm's Node 24 (e.g. `bash -lc 'npm test'`) or
+  `nvm use 24`.
+- The MVP hello-world flow (launcher → "Start a new project" → pick a canvas
+  size → editor → toolbar "T" text overlay) renders text in the Program Monitor
+  and adds a clip to timeline track V1; use it as a quick smoke test.
