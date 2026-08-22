@@ -364,6 +364,9 @@ export async function dropOsFilesOnTimeline(input: {
   files: readonly File[]
 }): Promise<TimelineFileDropResult> {
   bumpPreviewEpoch()
+  // Refuse and lane-invalid exits must also invalidate any in-flight import
+  // so a later place cannot overwrite that terminal status.
+  const generation = ++timelineDropGeneration
   const policy = resolveTimelineFileDropPolicy(input.files.length)
   if (policy.status === 'refuse') {
     setMediaPlacementPreview(null)
@@ -383,7 +386,6 @@ export async function dropOsFilesOnTimeline(input: {
   }
 
   const file = input.files[0]
-  const generation = ++timelineDropGeneration
   const fileName = input.fileName ?? file.name
   setMediaPlacementPreview({
     trackId: input.trackId,

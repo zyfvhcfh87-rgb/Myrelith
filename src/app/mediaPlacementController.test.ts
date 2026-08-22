@@ -350,6 +350,87 @@ describe('dropOsFilesOnTimeline', () => {
     expect(doc().past).toHaveLength(0)
   })
 
+  test('refusing a later drop cancels an in-flight import so it cannot place', async () => {
+    let finishImport: ((result: { status: 'imported'; assetId: string }) => void) | undefined
+    vi.mocked(importMedia).mockImplementation(() => new Promise((resolve) => {
+      finishImport = resolve
+    }))
+
+    const first = dropOsFilesOnTimeline({
+      documentId: 'doc-place-ctrl',
+      trackId: 'V1',
+      startFrame: 240,
+      files: [new File(['video'], 'beach.mp4', { type: 'video/mp4' })],
+    })
+    expect(importMedia).toHaveBeenCalledOnce()
+
+    const refused = await dropOsFilesOnTimeline({
+      documentId: 'doc-place-ctrl',
+      trackId: 'V1',
+      startFrame: 12,
+      files: [
+        new File(['a'], 'a.mp4', { type: 'video/mp4' }),
+        new File(['b'], 'b.mp4', { type: 'video/mp4' }),
+      ],
+    })
+    expect(refused).toEqual({
+      status: 'refused',
+      message: TIMELINE_MULTI_FILE_DROP_MESSAGE,
+    })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe(TIMELINE_MULTI_FILE_DROP_MESSAGE)
+
+    expect(useMediaStore.getState().addAsset(makeAsset())).toBe(true)
+    finishImport!({ status: 'imported', assetId: 'asset-9' })
+
+    expect(await first).toEqual({ status: 'cancelled' })
+    expect(trackById('V1').clips).toHaveLength(0)
+    expect(doc().past).toHaveLength(0)
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe(TIMELINE_MULTI_FILE_DROP_MESSAGE)
+  })
+
+  test('a later invalid-lane drop also cancels an in-flight import', async () => {
+    let finishImport: ((result: { status: 'imported'; assetId: string }) => void) | undefined
+    vi.mocked(importMedia).mockImplementation(() => new Promise((resolve) => {
+      finishImport = resolve
+    }))
+
+    const first = dropOsFilesOnTimeline({
+      documentId: 'doc-place-ctrl',
+      trackId: 'V1',
+      startFrame: 240,
+      files: [new File(['video'], 'beach.mp4', { type: 'video/mp4' })],
+    })
+    expect(importMedia).toHaveBeenCalledOnce()
+
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video', [], true),
+        makeTrack('A1', 'audio'),
+      ],
+    })
+    expect(await dropOsFilesOnTimeline({
+      documentId: 'doc-place-ctrl',
+      trackId: 'V1',
+      trackKind: 'video',
+      startFrame: 0,
+      files: [new File(['video'], 'locked.mp4', { type: 'video/mp4' })],
+    })).toMatchObject({ status: 'not-placed', reason: 'locked-track' })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('The lane is no longer valid for this drop.')
+
+    expect(useMediaStore.getState().addAsset(makeAsset())).toBe(true)
+    finishImport!({ status: 'imported', assetId: 'asset-9' })
+
+    expect(await first).toEqual({ status: 'cancelled' })
+    expect(trackById('V1').clips).toHaveLength(0)
+    expect(doc().past).toHaveLength(0)
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('The lane is no longer valid for this drop.')
+  })
+
   test('does not import when the rendered document has already been replaced', async () => {
     doc().setDoc({ ...makeDoc(), id: 'doc-other' })
 
