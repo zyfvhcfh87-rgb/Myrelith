@@ -45,6 +45,13 @@ interface TrackProps {
   timelineWindowEndFrame?: number
 }
 
+// Authored link groups are pairs, while imported documents may contain a
+// defensive larger group. Keep the normal offscreen partner preview without
+// allowing one pathological lane to replace virtualization with thousands of
+// live ClipViews. Project files cap tracks at 256, so this also gives the
+// whole timeline a strict upper bound of 256 cold hosts per gesture.
+const MAX_COLD_LIVE_GESTURE_HOSTS_PER_TRACK = 1
+
 function Track({
   track,
   soloDimmed = false,
@@ -64,19 +71,6 @@ function Track({
   const liveGestureLinkGroupId = useTransportStore(
     (state) => (state.dragPreview ?? state.editPreview)?.linkGroupId,
   )
-  const hasLiveGestureParticipant = useMemo(
-    () =>
-      liveGestureClipId !== undefined && track.clips.some(
-        (clip) =>
-          liveGestureClipId === clip.id
-          || (
-            clip.linkGroupId !== undefined
-            && liveGestureLinkGroupId === clip.linkGroupId
-          ),
-      ),
-    [liveGestureClipId, liveGestureLinkGroupId, track.clips],
-  )
-
   const acceptsDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
     !track.locked && trackAcceptsAssetDrag(track.kind, e.dataTransfer.types)
 
@@ -85,10 +79,28 @@ function Track({
     (track.muted ? ' track-muted' : '') +
     (track.locked ? ' track-locked' : '') +
     (soloDimmed ? ' track-solo-dimmed' : '')
-  const participatesInLiveGesture = (clipId: string, linkGroupId?: string) =>
-    hasLiveGestureParticipant &&
-    (liveGestureClipId === clipId ||
-      (linkGroupId !== undefined && liveGestureLinkGroupId === linkGroupId))
+  const clipsToRender = useMemo(() => {
+    let coldGestureHostCount = 0
+    return track.clips.filter((clip) => {
+      const intersectsWindow =
+        rangeEnd(clip.timelineRange) > timelineOriginFrame
+        && clip.timelineRange.startFrame < timelineWindowEndFrame
+      if (intersectsWindow || clip.id === liveGestureClipId) return true
+      if (
+        liveGestureLinkGroupId === undefined
+        || clip.linkGroupId !== liveGestureLinkGroupId
+        || coldGestureHostCount >= MAX_COLD_LIVE_GESTURE_HOSTS_PER_TRACK
+      ) return false
+      coldGestureHostCount += 1
+      return true
+    })
+  }, [
+    liveGestureClipId,
+    liveGestureLinkGroupId,
+    timelineOriginFrame,
+    timelineWindowEndFrame,
+    track.clips,
+  ])
 
   return (
     <div
@@ -155,23 +167,16 @@ function Track({
         }
       }}
     >
-      {track.clips
-        .filter(
-          (clip) =>
-            participatesInLiveGesture(clip.id, clip.linkGroupId) ||
-            (rangeEnd(clip.timelineRange) > timelineOriginFrame &&
-              clip.timelineRange.startFrame < timelineWindowEndFrame),
-        )
-        .map((clip) => (
-          <ClipView
-            key={clip.id}
-            clip={clip}
-            trackId={track.id}
-            trackKind={track.kind}
-            timelineOriginFrame={timelineOriginFrame}
-            timelineWindowEndFrame={timelineWindowEndFrame}
-          />
-        ))}
+      {clipsToRender.map((clip) => (
+        <ClipView
+          key={clip.id}
+          clip={clip}
+          trackId={track.id}
+          trackKind={track.kind}
+          timelineOriginFrame={timelineOriginFrame}
+          timelineWindowEndFrame={timelineWindowEndFrame}
+        />
+      ))}
       {track.kind === 'video' &&
         track.clips.slice(0, -1).map((from, index) => {
           const to = track.clips[index + 1]

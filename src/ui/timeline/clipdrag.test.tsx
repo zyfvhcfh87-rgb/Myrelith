@@ -426,14 +426,39 @@ describe('drag: scrub-preview then commit', () => {
       clipId: 'stable-clip',
       deltaFrames: 1,
     }))
-    expect(membershipScan).toHaveBeenCalledTimes(1)
+    expect(membershipScan).not.toHaveBeenCalled()
 
     act(() => transport().setDragPreview({
       clipId: 'stable-clip',
       deltaFrames: 2,
     }))
     act(() => transport().setPlayheadFrame(12))
-    expect(membershipScan).toHaveBeenCalledTimes(1)
+    expect(membershipScan).not.toHaveBeenCalled()
+
+    act(() => transport().setDragPreview(null))
+  })
+
+  test('bounds cold gesture hosts for an oversized imported link group', () => {
+    const linkedClips = Array.from({ length: 2_000 }, (_, index) => ({
+      ...makeClip(`oversized-${index}`, 1_000 + index * 30, 20),
+      linkGroupId: 'oversized-imported-group',
+    }))
+    const track = makeTrack('oversized-track', linkedClips, 'audio')
+
+    act(() => transport().setDragPreview({
+      clipId: 'owner-on-another-track',
+      deltaFrames: 1,
+      linkGroupId: 'oversized-imported-group',
+    }))
+    const { container } = render(
+      <Track track={track} timelineOriginFrame={0} timelineWindowEndFrame={200} />,
+    )
+
+    expect(
+      container.querySelectorAll('[data-virtual-gesture-host="true"]'),
+    ).toHaveLength(1)
+    expect(screen.getByTestId('clip-oversized-0')).toBeInTheDocument()
+    expect(screen.queryByTestId('clip-oversized-1')).not.toBeInTheDocument()
 
     act(() => transport().setDragPreview(null))
   })
