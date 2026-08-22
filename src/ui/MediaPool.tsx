@@ -86,6 +86,7 @@ import { extractDroppedFiles, isFileDrag } from './fileDrag'
 import {
   buildMediaPoolItems,
   filterMediaPoolItems,
+  type MediaPoolKind,
   type MediaPoolKindFilter,
   type MediaPoolStatusFilter,
 } from './mediaPoolModel'
@@ -622,6 +623,7 @@ function MediaRelinkStatus() {
 
 interface MediaPoolItemCardProps {
   readonly id: string
+  readonly kind: MediaPoolKind
   readonly rowId: string
   readonly rowKey: string
   readonly position: number
@@ -640,6 +642,7 @@ interface MediaPoolItemCardProps {
 
 const MediaPoolItemCard = memo(function MediaPoolItemCard({
   id,
+  kind,
   rowId,
   rowKey,
   position,
@@ -703,6 +706,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
       key={id}
       className="media-item"
       data-media-id={id}
+      data-kind={kind}
       data-media-virtual-row={rowKey}
       data-connection={connection}
       data-compatibility={compatibilityItem?.status}
@@ -1379,11 +1383,13 @@ export default function MediaPool() {
         {virtualizer.renderedItemIds.map((id) => {
           const position = filteredIndexById.get(id)
           const rowKey = rowKeyByItemId.get(id)
-          if (position === undefined || !rowKey) return null
+          const item = position === undefined ? undefined : filteredItems[position]
+          if (position === undefined || !rowKey || !item) return null
           return (
             <MediaPoolItemCard
               key={id}
               id={id}
+              kind={item.kind}
               rowId={`media-pool-row-${position}`}
               rowKey={rowKey}
               position={position + 1}

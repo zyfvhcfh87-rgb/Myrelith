@@ -148,6 +148,35 @@ describe('placeImportedAsset', () => {
       .toContain('could not be placed')
   })
 
+  test('places a second A/V drop onto V2 by linking free A2 instead of occupied A1', () => {
+    expect(useMediaStore.getState().addAsset(makeAsset())).toBe(true)
+    expect(useMediaStore.getState().addAsset(makeAsset({
+      id: 'asset-10',
+      fileName: 'second.mp4',
+      objectUrl: 'blob:fake-2',
+    }))).toBe(true)
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video'),
+        makeTrack('V2', 'video'),
+        makeTrack('A1', 'audio'),
+        makeTrack('A2', 'audio'),
+      ],
+    })
+
+    expect(placeImportedAsset('doc-place-ctrl', 'asset-9', 'V1', 0))
+      .toEqual({ status: 'placed', assetId: 'asset-9' })
+    expect(placeImportedAsset('doc-place-ctrl', 'asset-10', 'V2', 0))
+      .toEqual({ status: 'placed', assetId: 'asset-10' })
+    expect(trackById('V2').clips[0].assetId).toBe('asset-10')
+    expect(trackById('A1').clips[0].assetId).toBe('asset-9')
+    expect(trackById('A2').clips[0].assetId).toBe('asset-10')
+    expect(trackById('A2').clips[0].linkGroupId)
+      .toBe(trackById('V2').clips[0].linkGroupId)
+    expect(doc().past).toHaveLength(2)
+  })
+
   test('leaves a successful import in the pool when overlap rejects placement', () => {
     expect(useMediaStore.getState().addAsset(makeAsset())).toBe(true)
     doc().setDoc({

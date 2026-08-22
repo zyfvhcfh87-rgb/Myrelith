@@ -1330,7 +1330,15 @@
   height: 63px;
 }
 
-.media-item[data-compatibility='ready']:has(.media-compatibility) {
+/* Ready audio/stills stay in the thumbnail grid. Videos keep a full-width
+   row so the virtualizer's one-item-per-video packing matches layout;
+   otherwise later cards vanish behind a spacer while the footer still
+   counts them. */
+.media-item[data-kind='video'] {
+  grid-column: 1 / -1;
+}
+
+.media-item[data-compatibility='ready']:has(.media-compatibility):not([data-kind='video']) {
   grid-column: auto;
   grid-template-columns: minmax(0, 1fr) 22px;
   grid-template-areas:
@@ -1338,7 +1346,7 @@
     'details remove';
 }
 
-.media-item[data-compatibility='ready']:has(.media-compatibility) .media-thumbnail {
+.media-item[data-compatibility='ready']:has(.media-compatibility):not([data-kind='video']) .media-thumbnail {
   width: 100%;
   height: auto;
 }

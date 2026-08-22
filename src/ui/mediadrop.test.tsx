@@ -420,7 +420,32 @@ describe('Track drop target', () => {
     expect(trackById('V1').clips[0].linkGroupId).toBeUndefined() // solo fallback: unlinked
   })
 
-  test('occupied audio spot rejects the WHOLE drop (never half a pair)', () => {
+  test('occupied A1 still places the video and links onto free A2', () => {
+    seedAsset(makeAsset()) // hasAudio: true
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video'),
+        makeTrack('V2', 'video'),
+        makeTrack('A1', 'audio', [makeClip('existingA', 200, 100)]),
+        makeTrack('A2', 'audio'),
+      ],
+    })
+    render(<Track track={trackById('V2')} />)
+
+    fireEvent.drop(screen.getByTestId('track-V2'), {
+      dataTransfer: assetDragData(makeAsset()),
+      clientX: 240, // A1 is occupied here; A2 is free
+    })
+    expect(trackById('V2').clips).toHaveLength(1)
+    expect(trackById('A1').clips).toHaveLength(1)
+    expect(trackById('A2').clips).toHaveLength(1)
+    expect(trackById('A2').clips[0].linkGroupId)
+      .toBe(trackById('V2').clips[0].linkGroupId)
+    expect(doc().past).toHaveLength(1)
+  })
+
+  test('occupied audio with no free lane still lands the video half alone', () => {
     seedAsset(makeAsset()) // hasAudio: true
     doc().setDoc({
       ...makeDoc(),
@@ -435,9 +460,10 @@ describe('Track drop target', () => {
       dataTransfer: assetDragData(makeAsset()),
       clientX: 240, // audio half would land inside existingA [200, 300)
     })
-    expect(trackById('V1').clips).toHaveLength(0)
+    expect(trackById('V1').clips).toHaveLength(1)
     expect(trackById('A1').clips).toHaveLength(1) // only the original
-    expect(doc().past).toHaveLength(0)
+    expect(trackById('V1').clips[0].linkGroupId).toBeUndefined()
+    expect(doc().past).toHaveLength(1)
   })
 
   test('drop honors zoom when mapping pixels to frames', () => {

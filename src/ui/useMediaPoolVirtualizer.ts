@@ -198,7 +198,12 @@ export function useMediaPoolVirtualizer(
 
   useLayoutEffect(() => {
     measureRenderedRows()
-  }, [measureRenderedRows, virtualWindow.renderEndRow, virtualWindow.renderStartRow])
+  }, [
+    measureRenderedRows,
+    rows,
+    virtualWindow.renderEndRow,
+    virtualWindow.renderStartRow,
+  ])
 
   const ensureRowVisible = useCallback((rowIndex: number): void => {
     const list = listRef.current
