@@ -86,13 +86,19 @@ non-negotiable rules. Re-read it at the start of every coding session.
     `workers/decode-protocol.ts`, `workers/render-legacy-protocol.ts`, and
     `workers/render-protocol.ts` (types only, no runtime),
   - `workers/` may import `engine/frame-cache.ts` (pure class, no deps),
-  - `workers/render.worker.ts` may import `pipeline/render.ts` (the pure
-    compositing core: imports domain/ only, no browser I/O — the worker is
-    its runtime host, as `export.ts` is the finite export host),
+  - `workers/render.worker.ts` remains the sole browser wiring entry and may
+    import only `pipeline/lensRemapWebgl.ts` and `pipeline/static-image.ts` to
+    construct the injected production backends. Its owned
+    `workers/renderWorker/core.ts` may import `pipeline/render.ts` (the pure
+    compositing core: imports domain/ only, no browser I/O — the render worker
+    is its runtime host, as `export.ts` is the finite export host),
     `pipeline/lensRemap.ts` and `pipeline/lensRemapWebgl.ts` (the bounded
     source-space WebGL2 contract/backend owned by that worker),
     `pipeline/static-image.ts` (the bounded browser/worker-safe still-image
-    inspection + decode boundary),
+    inspection + decode boundary). The focused
+    `workers/renderWorker/contracts.ts` and `workers/renderWorker/state.ts`
+    collaborators may type-import only the corresponding render/lens/static
+    contracts they describe; they add no runtime pipeline edge,
   - `workers/motion-analysis.worker.ts` may import only
     `pipeline/motionAnalysisDecode.ts` (the bounded sequential decode and
     grayscale core) and `pipeline/motionAnalysisProtocol.ts` (its serializable

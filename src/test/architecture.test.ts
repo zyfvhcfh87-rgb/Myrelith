@@ -151,6 +151,30 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     'engine/render-legacy-bridge.ts',
     'workers/render-legacy.ts',
     'workers/render.worker.ts',
+    'workers/renderWorker/core.ts',
+  ])
+  const renderWorkerPipelineImports = new Map<string, ReadonlySet<string>>([
+    ['workers/render.worker.ts', new Set([
+      'pipeline/lensRemapWebgl.ts',
+      'pipeline/static-image.ts',
+    ])],
+    ['workers/renderWorker/core.ts', new Set([
+      'pipeline/lensRemap.ts',
+      'pipeline/lensRemapWebgl.ts',
+      'pipeline/render.ts',
+      'pipeline/static-image.ts',
+    ])],
+  ])
+  const renderWorkerPipelineTypeImports = new Map<string, ReadonlySet<string>>([
+    ['workers/renderWorker/contracts.ts', new Set([
+      'pipeline/lensRemapWebgl.ts',
+      'pipeline/render.ts',
+      'pipeline/static-image.ts',
+    ])],
+    ['workers/renderWorker/state.ts', new Set([
+      'pipeline/render.ts',
+      'pipeline/static-image.ts',
+    ])],
   ])
   const retiredDecodeImplementations = new Set([
     'engine/worker-bridge.ts',
@@ -266,14 +290,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
           fromArea === 'workers'
           && toName === 'engine/frame-cache.ts'
         )
+        || renderWorkerPipelineImports.get(fromName)?.has(toName)
         || (
-          fromName === 'workers/render.worker.ts'
-          && new Set([
-            'pipeline/lensRemap.ts',
-            'pipeline/lensRemapWebgl.ts',
-            'pipeline/render.ts',
-            'pipeline/static-image.ts',
-          ]).has(toName)
+          edge.typeOnly
+          && renderWorkerPipelineTypeImports.get(fromName)?.has(toName)
         )
         || (
           fromName === 'workers/motion-analysis.worker.ts'
