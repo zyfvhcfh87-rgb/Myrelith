@@ -17,5 +17,6 @@
 @import './styles/inspector.css';
 @import './styles/placeholders.css';
 @import './styles/command-palette.css';
+@import './styles/context-menu.css';
 @import './styles/accessibility.css';
 @import './styles/plugin-surfaces.css';

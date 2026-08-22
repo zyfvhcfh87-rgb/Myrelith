@@ -30,6 +30,7 @@ import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { usePreferencesStore } from '../../state/preferencesStore'
 import { useTransportStore } from '../../state/transportStore'
+import { EditorContextMenuHost } from '../EditorContextMenu'
 import ClipView from './ClipView'
 import Track from './Track'
 
@@ -313,6 +314,86 @@ beforeEach(() => {
 const renderTrack = () => render(<Track track={v1()} />)
 
 describe('selection (select tool)', () => {
+  test('clip context invocation preserves a selected group or replaces it exactly', () => {
+    transport().setSelectedClip('clipA')
+    transport().toggleClipSelection('clipB')
+    render(
+      <EditorContextMenuHost>
+        <Track track={v1()} />
+      </EditorContextMenuHost>,
+    )
+
+    fireEvent.contextMenu(screen.getByTestId('clip-clipA'), {
+      clientX: 120,
+      clientY: 80,
+    })
+    expect(transport()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipB'],
+      selectedClipId: 'clipA',
+    })
+    expect(screen.getByRole('menu', { name: 'clipA clip' })).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    fireEvent.contextMenu(screen.getByTestId('clip-clipC'), {
+      clientX: 290,
+      clientY: 80,
+    })
+    expect(transport()).toMatchObject({
+      selectedClipIds: ['clipC'],
+      selectedClipId: 'clipC',
+    })
+    expect(screen.getByRole('menu', { name: 'clipC clip' })).toBeInTheDocument()
+  })
+
+  test('secondary pointerdown never selects, deselects, moves, trims, or razors', () => {
+    transport().setSelectedClip('clipA')
+    renderTrack()
+    const documentBefore = doc().doc
+
+    fireEvent.pointerDown(screen.getByTestId('clip-clipB'), {
+      pointerId: 40,
+      button: 2,
+      buttons: 2,
+      clientX: 170,
+    })
+    fireEvent.pointerDown(screen.getByTestId('clip-clipB-edge-end'), {
+      pointerId: 41,
+      button: 2,
+      buttons: 2,
+      clientX: 225,
+    })
+    fireEvent.pointerDown(screen.getByTestId('track-V1'), {
+      pointerId: 42,
+      button: 2,
+      buttons: 2,
+      clientX: 700,
+    })
+
+    expect(transport()).toMatchObject({
+      selectedClipId: 'clipA',
+      selectedClipIds: ['clipA'],
+      dragPreview: null,
+      editPreview: null,
+    })
+    expect(doc().doc).toBe(documentBefore)
+
+    act(() => transport().setTool('razor'))
+    fireEvent.pointerDown(screen.getByTestId('clip-clipB'), {
+      pointerId: 43,
+      button: 2,
+      buttons: 2,
+      clientX: 175,
+    })
+    fireEvent.pointerUp(screen.getByTestId('clip-clipB'), {
+      pointerId: 43,
+      button: 2,
+      buttons: 0,
+      clientX: 175,
+    })
+    expect(doc().doc).toBe(documentBefore)
+    expect(v1().clips).toHaveLength(3)
+  })
+
   test('normal pointer selection replaces the group, begins a move, and empty-lane pointerdown clears it', () => {
     renderTrack()
     const documentBefore = doc().doc

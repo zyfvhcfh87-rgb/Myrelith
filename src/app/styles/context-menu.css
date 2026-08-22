@@ -1,0 +1,92 @@
+.editor-context-menu {
+  position: fixed;
+  inset: auto;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 230px;
+  max-width: min(330px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  color: var(--text-primary, #f5f2eb);
+  background:
+    linear-gradient(145deg, rgb(37 35 42 / 98%), rgb(24 23 28 / 98%));
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 11px;
+  box-shadow:
+    0 18px 48px rgb(0 0 0 / 48%),
+    0 2px 8px rgb(0 0 0 / 36%);
+  z-index: 1000;
+}
+
+.editor-context-menu[popover]::backdrop {
+  background: transparent;
+}
+
+.editor-context-menu-row {
+  display: contents;
+}
+
+.editor-context-menu-item {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: default;
+}
+
+.editor-context-menu-item:hover,
+.editor-context-menu-item:focus-visible {
+  color: #fff;
+  background: rgb(255 255 255 / 10%);
+  outline: 1px solid rgb(255 255 255 / 14%);
+  outline-offset: -1px;
+}
+
+.editor-context-menu-item[data-danger='true'] {
+  color: #ffaaa0;
+}
+
+.editor-context-menu-item[data-danger='true']:hover,
+.editor-context-menu-item[data-danger='true']:focus-visible {
+  color: #ffd2cc;
+  background: rgb(185 56 48 / 23%);
+  outline-color: rgb(255 124 111 / 28%);
+}
+
+.editor-context-menu-item[aria-disabled='true'] {
+  color: rgb(237 233 225 / 48%);
+}
+
+.editor-context-menu-item[aria-disabled='true']:hover,
+.editor-context-menu-item[aria-disabled='true']:focus-visible {
+  background: rgb(255 255 255 / 5%);
+}
+
+.editor-context-menu-item small {
+  display: block;
+  max-width: 290px;
+  color: rgb(229 223 213 / 53%);
+  font-size: 10px;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.editor-context-menu-separator {
+  height: 1px;
+  margin: 5px 6px;
+  background: rgb(255 255 255 / 10%);
+}

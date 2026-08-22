@@ -188,6 +188,11 @@ export interface TransportState {
   setTool: (tool: TimelineTool) => void
   /** Replace the selection with one clip (or clear both fields with null). */
   setSelectedClip: (clipId: ClipId | null) => void
+  /**
+   * Context invocation promotes an already-selected clip without destroying
+   * its multi-selection; an unselected clip becomes the sole selection.
+   */
+  promoteContextClipSelection: (clipId: ClipId) => void
   /** Add/remove one clip from the ordered selection and update its primary. */
   toggleClipSelection: (clipId: ClipId) => void
   /**
@@ -371,6 +376,27 @@ export const useTransportStore = create<TransportState>()((set) => ({
         ? state
         : {
             selectedClipIds: [clipId],
+            selectedClipId: clipId,
+            selectedMarkerId: null,
+            editingMarkerId: null,
+          }
+    }),
+  promoteContextClipSelection: (clipId) =>
+    set((state) => {
+      if (!state.selectedClipIds.includes(clipId)) {
+        return {
+          selectedClipIds: [clipId],
+          selectedClipId: clipId,
+          selectedMarkerId: null,
+          editingMarkerId: null,
+        }
+      }
+      return state.selectedClipId === clipId
+        && state.selectedMarkerId === null
+        && state.editingMarkerId === null
+        ? state
+        : {
+            selectedClipIds: state.selectedClipIds,
             selectedClipId: clipId,
             selectedMarkerId: null,
             editingMarkerId: null,

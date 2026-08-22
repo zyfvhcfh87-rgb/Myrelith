@@ -30,7 +30,6 @@ import {
   acceptPartialMediaImport,
   canRememberImportedMedia,
   chooseMediaForImport,
-  forgetImportedMediaHandle,
   importMediaFiles,
   removeMediaCompatibility,
   retryMediaCompatibility,
@@ -98,6 +97,18 @@ import {
   localAccessChoiceDescription,
   localAccessChoiceLabel,
 } from './localAccessCopy'
+import {
+  mediaAssetRemovalDisabledReason,
+  removeMediaAssetFromProject,
+} from '../app/mediaAssetActions'
+import {
+  editorContextMenuIdentity,
+  type EditorContextMenuUiActions,
+} from '../app/editorContextMenuCommands'
+import {
+  openEditorContextMenuFromEvent,
+  useEditorContextMenu,
+} from './editorContextMenuController'
 
 function formatPreferenceSeconds(durationMicroseconds: number): string {
   return String(durationMicroseconds / 1_000_000)
@@ -205,14 +216,6 @@ function formatAssetMetadata(
     ? ' · First frame only'
     : ''
   return `${dimensions} · ${duration}${animation}`
-}
-
-function assetIsUsedOnTimeline(assetId: string): boolean {
-  return useDocumentStore.getState().doc.tracks.some((track) => (
-    track.clips.some(
-      (clip) => clip.text === undefined && clip.assetId === assetId,
-    )
-  ))
 }
 
 const COMPATIBILITY_LABELS: Record<MediaCompatibilityStatus, string> = {
@@ -617,6 +620,31 @@ function MediaRelinkStatus() {
   )
 }
 
+function mediaPoolItemContextActions(
+  row: HTMLElement,
+): EditorContextMenuUiActions {
+  return {
+    openAssetCollections: () => {
+      const trigger = row.querySelector<HTMLButtonElement>(
+        '.media-membership > button',
+      )
+      if (!trigger?.isConnected || trigger.disabled) return false
+      if (trigger.getAttribute('aria-expanded') !== 'true') trigger.click()
+      requestAnimationFrame(() => trigger.focus({ preventScroll: true }))
+      return true
+    },
+    openRelinkOnce: () => {
+      const input = row.querySelector<HTMLInputElement>(
+        '.media-offline-actions input[type="file"]',
+      )
+      if (!input?.isConnected || input.disabled) return false
+      // Deliberately synchronous: the picker needs transient user activation.
+      input.click()
+      return true
+    },
+  }
+}
+
 interface MediaPoolItemCardProps {
   readonly id: string
   readonly kind: MediaPoolKind
@@ -629,6 +657,7 @@ interface MediaPoolItemCardProps {
   readonly busy: boolean
   readonly handlePickerAvailable: boolean
   readonly onSelect: (id: string) => void
+  readonly onContextSelect: (id: string) => void
   readonly onReviewPartial: (
     id: string,
     selection: PartialTrackImportSelection,
@@ -648,15 +677,16 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
   busy,
   handlePickerAvailable,
   onSelect,
+  onContextSelect,
   onReviewPartial,
 }: MediaPoolItemCardProps) {
+  const contextMenu = useEditorContextMenu()
   const descriptor = useMediaStore((state) => state.descriptors.get(id))
   const asset = useMediaStore((state) => state.assets.get(id))
   const visual = useMediaStore((state) => state.visuals.get(id))
   const compatibilityItem = useMediaStore(
     (state) => state.compatibility.get(id),
   )
-  const removeAsset = useMediaStore((state) => state.removeAsset)
   const fileName = descriptor?.fileName ?? compatibilityItem?.fileName
   if (!fileName) return null
 
@@ -715,6 +745,19 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
           && target.closest('button, input, label, select, textarea, a')
         ) return
         onSelect(id)
+      }}
+      onContextMenu={(event) => {
+        const row = event.currentTarget
+        if (openEditorContextMenuFromEvent(contextMenu, event, {
+          target: {
+            ...editorContextMenuIdentity(),
+            kind: 'asset',
+            assetId: id,
+          },
+          anchorElement: row,
+          restoreFocusTo: row.closest<HTMLElement>('[role="grid"]'),
+          uiActions: mediaPoolItemContextActions(row),
+        })) onContextSelect(id)
       }}
       onDragStart={(event) => {
         const liveMedia = useMediaStore.getState()
@@ -841,14 +884,13 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
               removeMediaCompatibility(id)
               return
             }
-            if (assetIsUsedOnTimeline(id)) {
-              window.alert(
-                'Remove this media\'s clips from the timeline before removing its source.',
-              )
+            const document = useDocumentStore.getState().doc
+            const reason = mediaAssetRemovalDisabledReason(document, id)
+            if (reason) {
+              window.alert(reason)
               return
             }
-            forgetImportedMediaHandle(id)
-            removeAsset(id)
+            removeMediaAssetFromProject(document, id)
           }}
         >
           <X aria-hidden="true" size={14} weight="bold" />
@@ -875,6 +917,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
 })
 
 export default function MediaPool() {
+  const contextMenu = useEditorContextMenu()
   const documentFrameRate = useDocumentStore((state) => state.doc.frameRate)
   const descriptors = useMediaStore((state) => state.descriptors)
   const assets = useMediaStore((state) => state.assets)
@@ -1072,6 +1115,39 @@ export default function MediaPool() {
     const currentIndex = effectiveSelectedAssetId
       ? filteredIndexById.get(effectiveSelectedAssetId) ?? 0
       : 0
+    if (
+      event.key === 'ContextMenu'
+      || (event.key === 'F10' && event.shiftKey)
+    ) {
+      const assetId = filteredItems[currentIndex]?.id
+      const row = assetId
+        ? [...event.currentTarget.querySelectorAll<HTMLElement>('[data-media-id]')]
+          .find((candidate) => candidate.dataset.mediaId === assetId)
+        : null
+      if (!assetId || !row) return
+      const rect = row.getBoundingClientRect()
+      const opened = contextMenu.open({
+        target: {
+          ...editorContextMenuIdentity(),
+          kind: 'asset',
+          assetId,
+        },
+        anchor: {
+          kind: 'rect',
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+        },
+        restoreFocusTo: event.currentTarget,
+        uiActions: mediaPoolItemContextActions(row),
+      })
+      if (!opened) return
+      event.preventDefault()
+      event.stopPropagation()
+      setSelectedAssetId(assetId)
+      return
+    }
     let nextIndex: number | null = null
     const columnCount = Math.max(1, virtualizer.columnCount)
     if (event.key === 'ArrowRight') {
@@ -1112,6 +1188,7 @@ export default function MediaPool() {
     effectiveSelectedAssetId,
     filteredIndexById,
     filteredItems,
+    contextMenu,
     virtualizer,
   ])
 
@@ -1393,6 +1470,7 @@ export default function MediaPool() {
               busy={busy}
               handlePickerAvailable={handlePickerAvailable}
               onSelect={selectItem}
+              onContextSelect={setSelectedAssetId}
               onReviewPartial={openPartialReview}
             />
           )

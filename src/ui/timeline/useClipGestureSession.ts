@@ -37,6 +37,8 @@ import {
   type GestureMode,
 } from './gestureBounds'
 import { useScrubScheduler } from './useScrubScheduler'
+import { isPrimaryEditingPointer } from '../pointerButtons'
+import { frameAtTimelineClientX } from './timelineViewport'
 
 interface ClipGestureSessionOptions {
   clipId: ClipId
@@ -50,6 +52,8 @@ interface ClipGestureSessionOptions {
 interface GestureSession {
   mode: GestureMode
   origin: 'pointer' | 'keyboard'
+  /** Exact pointer owner; keyboard sessions use null. */
+  pointerId: number | null
   pointerStartX: number
   /** Exact immutable document snapshot this gesture was opened against. */
   document: TimelineDoc
@@ -311,6 +315,7 @@ export function useClipGestureSession({
     event: ReactPointerEvent<HTMLDivElement>,
     mode: GestureMode,
   ): boolean => {
+    if (!isPrimaryEditingPointer(event)) return false
     const currentDoc = useDocumentStore.getState().doc
     const currentClip = findClip(currentDoc, clipId)
     const currentTrack = trackOfClip(currentDoc, clipId)
@@ -325,6 +330,7 @@ export function useClipGestureSession({
     session.current = {
       mode,
       origin: 'pointer',
+      pointerId: event.pointerId,
       pointerStartX: event.clientX,
       document: currentDoc,
       originFrame: currentClip.timelineRange.startFrame,
@@ -461,6 +467,7 @@ export function useClipGestureSession({
     session.current = {
       mode,
       origin: 'keyboard',
+      pointerId: null,
       pointerStartX: 0,
       document: currentDoc,
       originFrame: currentClip.timelineRange.startFrame,
@@ -564,6 +571,7 @@ export function useClipGestureSession({
   const onBodyPointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
   ): void => {
+    if (!isPrimaryEditingPointer(event)) return
     // Route by the current store tool, not a potentially stale render closure.
     const transport = useTransportStore.getState()
     switch (transport.tool) {
@@ -572,9 +580,15 @@ export function useClipGestureSession({
         const currentClip = findClip(currentDoc, clipId)
         if (!currentClip || trackOfClip(currentDoc, clipId)?.id !== trackId) return
         const rect = event.currentTarget.getBoundingClientRect()
-        const frame =
-          Math.max(currentClip.timelineRange.startFrame, timelineOriginFrame) +
-          Math.round((event.clientX - rect.left) / zoom)
+        const frame = frameAtTimelineClientX(
+          event.clientX,
+          rect.left,
+          Math.max(currentClip.timelineRange.startFrame, timelineOriginFrame),
+          zoom,
+          currentClip.timelineRange.startFrame,
+          currentClip.timelineRange.startFrame
+            + currentClip.timelineRange.durationFrames,
+        )
         useDocumentStore.getState().splitClipAt(clipId, frame)
         if (findClip(useDocumentStore.getState().doc, clipId)) {
           transport.setSelectedClip(clipId)
@@ -616,6 +630,7 @@ export function useClipGestureSession({
     event: ReactPointerEvent<HTMLDivElement>,
     edge: 'start' | 'end',
   ): void => {
+    if (!isPrimaryEditingPointer(event)) return
     event.stopPropagation()
     const transport = useTransportStore.getState()
     // Modifier activation on the handle toggles selection instead of trimming.
@@ -706,6 +721,7 @@ export function useClipGestureSession({
       const active: GestureSession = {
         mode: 'move',
         origin: 'keyboard',
+        pointerId: null,
         pointerStartX: 0,
         document: currentDoc,
         originFrame: currentClip.timelineRange.startFrame,
@@ -771,7 +787,11 @@ export function useClipGestureSession({
     // Gate on a pointer session, not capture status: capture can fail while
     // move events remain usable. Keyboard edits share this ref.
     const active = session.current
-    if (!active || active.origin !== 'pointer') return
+    if (
+      !active
+      || active.origin !== 'pointer'
+      || active.pointerId !== event.pointerId
+    ) return
     if (active.mode === 'move') {
       const target = trackTargetAt(event.clientX, event.clientY)
       active.targetTrackId = target.trackId
@@ -791,7 +811,11 @@ export function useClipGestureSession({
   }
 
   const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (session.current?.origin !== 'pointer') return
+    if (
+      session.current?.origin !== 'pointer'
+      || session.current.pointerId !== event.pointerId
+      || !isPrimaryEditingPointer(event)
+    ) return
     commitGesture(event)
     try {
       rootRef.current?.releasePointerCapture(event.pointerId)
@@ -800,8 +824,11 @@ export function useClipGestureSession({
     }
   }
 
-  const onPointerCancel = (): void => {
-    if (session.current?.origin === 'keyboard') return
+  const onPointerCancel = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (
+      session.current?.origin === 'keyboard'
+      || session.current?.pointerId !== event.pointerId
+    ) return
     endGesture()
   }
 
@@ -809,14 +836,18 @@ export function useClipGestureSession({
     // If capture failed and the pointer leaves, cancel instead of wedging.
     if (
       session.current?.origin === 'pointer' &&
+      session.current.pointerId === event.pointerId &&
       !event.currentTarget.hasPointerCapture(event.pointerId)
     ) {
       endGesture()
     }
   }
 
-  const onLostPointerCapture = (): void => {
-    if (session.current?.origin === 'pointer') endGesture()
+  const onLostPointerCapture = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (
+      session.current?.origin === 'pointer'
+      && session.current.pointerId === event.pointerId
+    ) endGesture()
   }
 
   return {

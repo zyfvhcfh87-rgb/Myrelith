@@ -62,6 +62,7 @@ import {
 import { useTransportStore } from '../state/transportStore'
 import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
 import { FILES_DRAG_TYPE } from './fileDrag'
+import { EditorContextMenuHost } from './EditorContextMenu'
 import MediaPool from './MediaPool'
 
 vi.mock('../app/mediaImportController', () => ({
@@ -416,6 +417,57 @@ beforeEach(() => {
 })
 
 describe('MediaPool presentation', () => {
+  test('right-click and Shift+F10 make the exact asset active before opening its menu', () => {
+    seedAsset(makeAsset())
+    const offline = descriptorFromAsset(makeAsset({
+      id: 'asset-off',
+      fileName: 'offline.mp4',
+    }))
+    useMediaStore.setState((state) => ({
+      descriptors: new Map(state.descriptors).set(offline.id, offline),
+    }))
+    render(
+      <EditorContextMenuHost>
+        <MediaPool />
+      </EditorContextMenuHost>,
+    )
+
+    const connectedRow = screen.getByRole('row', { name: /beach\.mp4/ })
+    const offlineRow = screen.getByRole('row', { name: /offline\.mp4/ })
+    expect(connectedRow).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.contextMenu(offlineRow, { clientX: 220, clientY: 180 })
+    expect(offlineRow).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('menu', { name: 'offline.mp4' })).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    const grid = screen.getByRole('grid', { name: 'Media assets' })
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'Home' })
+    fireEvent.keyDown(grid, { key: 'F10', shiftKey: true })
+    expect(connectedRow).toHaveAttribute('aria-selected', 'true')
+    expect(grid).toHaveAttribute('aria-activedescendant', connectedRow.id)
+    expect(screen.getByRole('menu', { name: 'beach.mp4' })).toBeInTheDocument()
+  })
+
+  test('invokes the offline relink-once picker synchronously from its menu item', () => {
+    seedOfflineDescriptor()
+    render(
+      <EditorContextMenuHost>
+        <MediaPool />
+      </EditorContextMenuHost>,
+    )
+    const row = screen.getByRole('row', { name: /beach\.mp4/ })
+    const relinkInput = within(row).getByLabelText('Relink beach.mp4')
+    const click = vi.spyOn(relinkInput, 'click')
+
+    fireEvent.contextMenu(row, { clientX: 220, clientY: 180 })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Relink once…' }))
+
+    expect(click).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
   test('creates, renames, reorders, deletes, and undoes collection edits without touching media', () => {
     const asset = makeAsset()
     seedAsset(asset)

@@ -15,6 +15,7 @@ import {
 } from '../../domain/timelineMarkers'
 import { formatTimecode } from '../../domain/time'
 import { executeEditorCommand } from '../../app/editorCommands'
+import { editorContextMenuIdentity } from '../../app/editorContextMenuCommands'
 import { useDocumentStore } from '../../state/documentStore'
 import { useTransportStore } from '../../state/transportStore'
 import { planTimelineMarkerClusters } from './timelineMarkerLayout'
@@ -22,6 +23,10 @@ import {
   measureTimelineLaneWidth,
   planTimelineAnchor,
 } from './timelineViewport'
+import {
+  openEditorContextMenuFromEvent,
+  useEditorContextMenu,
+} from '../editorContextMenuController'
 
 interface TimelineMarkersProps {
   readonly markers: readonly TimelineMarker[]
@@ -181,6 +186,7 @@ export default function TimelineMarkers({
   viewLeftPx,
   viewWidthPx,
 }: TimelineMarkersProps) {
+  const contextMenu = useEditorContextMenu()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const previousSelectedRef = useRef<TimelineMarkerId | null>(null)
   const [edgeViewportPosition, setEdgeViewportPosition] = useState<{
@@ -294,6 +300,18 @@ export default function TimelineMarkers({
             onPointerDown={stopPointer}
             onPointerMove={stopPointer}
             onPointerUp={stopPointer}
+            onContextMenu={(event) => {
+              if (openEditorContextMenuFromEvent(contextMenu, event, {
+                target: {
+                  ...editorContextMenuIdentity(),
+                  kind: 'marker',
+                  markerId: marker.id,
+                },
+                restoreFocusTo: event.currentTarget,
+              })) {
+                useTransportStore.getState().setSelectedMarker(marker.id)
+              }
+            }}
             onClick={() => {
               const currentIndex = cluster.markers.findIndex(({ id }) => id === selectedMarkerId)
               selectMarker(cluster.markers[(currentIndex + 1) % cluster.markers.length])
@@ -347,6 +365,18 @@ export default function TimelineMarkers({
           aria-label={`Selected marker ${selected.label} is ${selectedDirection} the visible timeline. Reveal it.`}
           onPointerDown={stopPointer}
           onPointerUp={stopPointer}
+          onContextMenu={(event) => {
+            if (openEditorContextMenuFromEvent(contextMenu, event, {
+              target: {
+                ...editorContextMenuIdentity(),
+                kind: 'marker',
+                markerId: selected.id,
+              },
+              restoreFocusTo: event.currentTarget,
+            })) {
+              useTransportStore.getState().setSelectedMarker(selected.id)
+            }
+          }}
           onClick={() => reveal(selected)}
         >
           {selectedDirection === 'before' ? '‹' : '›'}

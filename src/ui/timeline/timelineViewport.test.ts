@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   MAX_TIMELINE_SURFACE_PX,
   calculateTimelineViewport,
+  frameAtTimelineClientX,
   frameAtTimelineLocalPx,
   frameToTimelineLocalPx,
   planTimelineAnchor,
@@ -11,6 +12,13 @@ import {
 describe('virtual timeline viewport math', () => {
   const laneWidth = 2360
   const maxZoom = laneWidth / (1.8 * 30)
+
+  test('maps pointer coordinates to one bounded integer frame for every surface', () => {
+    expect(frameAtTimelineClientX(132.6, 100, 1_000, 2.5)).toBe(1_013)
+    expect(frameAtTimelineClientX(-500, 100, 1_000, 2.5)).toBe(760)
+    expect(frameAtTimelineClientX(50_000, 100, 1_000, 2.5, 0, 1_200))
+      .toBe(1_200)
+  })
 
   test('bounds a 12-hour max-zoom runway below browser layout limits', () => {
     const totalFrames = 12 * 3600 * 30

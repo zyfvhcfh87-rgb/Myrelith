@@ -25,12 +25,18 @@ import { Eye, LockSimple, PencilSimple, X } from '@phosphor-icons/react'
 import type { Track as TrackData } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import type { TrackFlagsPatch } from '../../domain/operations'
+import { editorContextMenuIdentity } from '../../app/editorContextMenuCommands'
+import {
+  openEditorContextMenuFromEvent,
+  useEditorContextMenu,
+} from '../editorContextMenuController'
 
 interface TrackHeaderProps {
   track: TrackData
 }
 
 function TrackHeader({ track }: TrackHeaderProps) {
+  const contextMenu = useEditorContextMenu()
   const [renaming, setRenaming] = useState(false)
   const renameTriggerRef = useRef<HTMLButtonElement | null>(null)
   const restoreRenameFocusRef = useRef(false)
@@ -67,6 +73,24 @@ function TrackHeader({ track }: TrackHeaderProps) {
       className={`track-header track-header-${track.kind}`}
       data-testid={`track-header-${track.id}`}
       title="Rename from the Rename button, or double-click the header"
+      onContextMenu={(event) => {
+        openEditorContextMenuFromEvent(contextMenu, event, {
+          target: {
+            ...editorContextMenuIdentity(),
+            kind: 'track',
+            trackId: track.id,
+          },
+          restoreFocusTo: event.target instanceof HTMLElement
+            ? event.target
+            : null,
+          uiActions: {
+            openTrackRename: () => {
+              beginRename()
+              return true
+            },
+          },
+        })
+      }}
       onDoubleClick={(e) => {
         // Buttons keep their own double-click meaning (fast toggling).
         if ((e.target as HTMLElement).closest('button')) return

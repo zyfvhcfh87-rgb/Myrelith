@@ -18,6 +18,11 @@ import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
 import { frameToTimelineLocalPx } from './timelineViewport'
+import { editorContextMenuIdentity } from '../../app/editorContextMenuCommands'
+import {
+  openEditorContextMenuFromEvent,
+  useEditorContextMenu,
+} from '../editorContextMenuController'
 
 const DEFAULT_CROSSFADE_FRAMES = 15
 
@@ -154,6 +159,7 @@ export default function TransitionSeam({
   transition,
   timelineOriginFrame = 0,
 }: TransitionSeamProps) {
+  const contextMenu = useEditorContextMenu()
   const zoom = useTransportStore((state) => state.zoom)
   const doc = useDocumentStore((state) => state.doc)
   const descriptors = useMediaStore((state) => state.descriptors)
@@ -323,6 +329,28 @@ export default function TransitionSeam({
       data-testid={`transition-seam-${from.id}-${to.id}`}
       style={{
         left: frameToTimelineLocalPx(seamFrame, timelineOriginFrame, zoom),
+      }}
+      onContextMenu={(event) => {
+        openEditorContextMenuFromEvent(contextMenu, event, {
+          target: {
+            ...editorContextMenuIdentity(),
+            kind: 'transition',
+            trackId,
+            fromClipId: from.id,
+            toClipId: to.id,
+            transitionId: transition?.id ?? null,
+          },
+          restoreFocusTo: triggerRef.current,
+          uiActions: {
+            openTransitionEditor: () => {
+              if (!triggerRef.current?.isConnected) return false
+              setOpen(true)
+              resetDraft()
+              requestAnimationFrame(() => inputRef.current?.select())
+              return true
+            },
+          },
+        })
       }}
       onPointerDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => {

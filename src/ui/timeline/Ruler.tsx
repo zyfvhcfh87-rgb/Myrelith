@@ -42,15 +42,21 @@ import type { FrameRate } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import { usePreferencesStore } from '../../state/preferencesStore'
 import { useTransportStore } from '../../state/transportStore'
+import { isPrimaryEditingPointer } from '../pointerButtons'
 import { useScrubScheduler } from './useScrubScheduler'
 import { timelineRunwayFrames } from './timelineZoom'
 import {
   calculateTimelineViewport,
-  frameAtTimelineLocalPx,
+  frameAtTimelineClientX,
   frameToTimelineLocalPx,
   measureTimelineLaneWidth,
 } from './timelineViewport'
 import TimelineMarkers from './TimelineMarkers'
+import { editorContextMenuIdentity } from '../../app/editorContextMenuCommands'
+import {
+  openEditorContextMenuFromEvent,
+  useEditorContextMenu,
+} from '../editorContextMenuController'
 
 /** Ticks want at least this much horizontal room per label. */
 const MIN_LABEL_PX = 90
@@ -108,6 +114,7 @@ interface RulerSnapUpdate {
 }
 
 export default function Ruler() {
+  const contextMenu = useEditorContextMenu()
   const zoom = useTransportStore((s) => s.zoom)
   const timelineOriginFrame = useTransportStore((s) => s.timelineOriginFrame)
   const setIsScrubbing = useTransportStore((s) => s.setIsScrubbing)
@@ -122,6 +129,7 @@ export default function Ruler() {
     seekFocused ? s.playheadFrame : -1
   ))
   const scrubbingRef = useRef(false)
+  const scrubbingPointerIdRef = useRef<number | null>(null)
   const seekOriginFrameRef = useRef(0)
   const snapCandidatesRef = useRef<readonly TimelineSnapCandidate[]>([])
   const schedule = useScrubScheduler((update: RulerSnapUpdate) => {
@@ -229,10 +237,13 @@ export default function Ruler() {
 
   const frameFromPointer = (e: ReactPointerEvent<HTMLDivElement>): number => {
     const rect = e.currentTarget.getBoundingClientRect()
-    return frameAtTimelineLocalPx(
-      e.clientX - rect.left,
+    return frameAtTimelineClientX(
+      e.clientX,
+      rect.left,
       viewport.originFrame,
       zoom,
+      0,
+      viewport.totalFrames,
     )
   }
 
@@ -263,6 +274,7 @@ export default function Ruler() {
 
   const endScrub = (): void => {
     scrubbingRef.current = false
+    scrubbingPointerIdRef.current = null
     snapCandidatesRef.current = []
     setIsScrubbing(false)
     setSnapGuide(null)
@@ -354,8 +366,39 @@ export default function Ruler() {
       className="timeline-ruler"
       data-testid="ruler"
       style={{ width: viewport.surfaceWidth }}
+      onContextMenu={(event) => {
+        if (
+          event.target instanceof Element
+          && event.target.closest(
+            '.timeline-marker, .timeline-marker-offscreen, .timeline-marker-editor',
+          )
+        ) return
+        const rect = event.currentTarget.getBoundingClientRect()
+        const frame = event.clientX === 0 && event.clientY === 0
+          ? useTransportStore.getState().playheadFrame
+          : frameAtTimelineClientX(
+              event.clientX,
+              rect.left,
+              useTransportStore.getState().timelineOriginFrame,
+              useTransportStore.getState().zoom,
+              0,
+              viewport.totalFrames,
+            )
+        openEditorContextMenuFromEvent(contextMenu, event, {
+          target: {
+            ...editorContextMenuIdentity(),
+            kind: 'ruler',
+            frame,
+          },
+          restoreFocusTo: event.target instanceof HTMLElement
+            ? event.target
+            : event.currentTarget,
+        })
+      }}
       onPointerDown={(e) => {
+        if (!isPrimaryEditingPointer(e)) return
         scrubbingRef.current = true
+        scrubbingPointerIdRef.current = e.pointerId
         snapCandidatesRef.current = timelineSnapCandidates(
           useDocumentStore.getState().doc,
         )
@@ -364,21 +407,34 @@ export default function Ruler() {
         capturePointer(e)
       }}
       onPointerMove={(e) => {
-        if (scrubbingRef.current) {
+        if (
+          scrubbingRef.current
+          && scrubbingPointerIdRef.current === e.pointerId
+        ) {
           schedule(snapFromPointer(e))
         }
       }}
       onPointerUp={(e) => {
+        if (
+          scrubbingPointerIdRef.current !== e.pointerId
+          || !isPrimaryEditingPointer(e)
+        ) return
         scrubbingRef.current = false
+        scrubbingPointerIdRef.current = null
         releasePointer(e)
         schedule(snapFromPointer(e))
         snapCandidatesRef.current = []
         setIsScrubbing(false)
         setSnapGuide(null)
       }}
-      onPointerCancel={endScrub}
-      onLostPointerCapture={() => {
-        if (scrubbingRef.current) endScrub()
+      onPointerCancel={(e) => {
+        if (scrubbingPointerIdRef.current === e.pointerId) endScrub()
+      }}
+      onLostPointerCapture={(e) => {
+        if (
+          scrubbingRef.current
+          && scrubbingPointerIdRef.current === e.pointerId
+        ) endScrub()
       }}
       onPointerLeave={(e) => {
         // Capture failed and the pointer left: end the scrub cleanly.
