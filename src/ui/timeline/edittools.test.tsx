@@ -1102,56 +1102,117 @@ describe('keyboard trim, ripple, slip, and slide', () => {
     expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
   })
 
-  test('trim tool plus [ ripple-trims the start from the keyboard', () => {
+  test('T plus [ announces a ripple, Escape cancels, Enter commits one undoable edit', () => {
     act(() => transport().setTool('trim'))
     renderTrack()
     const clip = screen.getByRole('button', { name: 'clipA, video clip' })
     clip.focus()
+    expect(clip).toHaveFocus()
+
     fireEvent.keyDown(clip, { key: '[' })
-    expect(transport().editPreview?.kind).toBe('ripple-start')
+    expect(transport().editPreview).toMatchObject({
+      clipId: 'clipA',
+      kind: 'ripple-start',
+      deltaFrames: 0,
+    })
+    expect(clip).toHaveTextContent('Ripple trim start started')
+
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
+    expect(transport().editPreview?.deltaFrames).toBe(1)
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Ripple trim start preview plus 1 frames')
+
+    fireEvent.keyDown(clip, { key: 'Escape' })
+    expect(transport().editPreview).toBeNull()
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Ripple trim start cancelled')
+
+    fireEvent.keyDown(clip, { key: '[' })
     fireEvent.keyDown(clip, { key: 'ArrowRight' })
     fireEvent.keyDown(clip, { key: 'Enter' })
-
     expect(clipById('clipA').timelineRange).toEqual({
       startFrame: 100,
       durationFrames: 49,
     })
     expect(clipById('clipB').timelineRange.startFrame).toBe(149)
     expect(doc().past).toHaveLength(1)
+    expect(transport().editPreview).toBeNull()
+    expect(clip).toHaveTextContent('Ripple trim start applied')
+
+    act(() => doc().undo())
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
   })
 
-  test('Slip and Slide arrow keys preview, cancel, and commit', () => {
-    renderTrack()
-    const clipA = screen.getByRole('button', { name: 'clipA, video clip' })
+  test('Y plus arrows announce a slip, Escape cancels, Enter commits one undoable edit', () => {
     act(() => transport().setTool('slip'))
-    clipA.focus()
-    fireEvent.keyDown(clipA, { key: 'ArrowRight' })
+    renderTrack()
+    const clip = screen.getByRole('button', { name: 'clipA, video clip' })
+    clip.focus()
+    expect(clip).toHaveFocus()
+
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
     expect(transport().editPreview).toMatchObject({
       clipId: 'clipA',
       kind: 'slip',
       deltaFrames: 1,
     })
-    fireEvent.keyDown(clipA, { key: 'Escape' })
+    expect(clipById('clipA').sourceRange.startFrame).toBe(20)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Slip preview plus 1 frames')
+
+    fireEvent.keyDown(clip, { key: 'Escape' })
     expect(transport().editPreview).toBeNull()
     expect(clipById('clipA').sourceRange.startFrame).toBe(20)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Slip cancelled')
 
-    fireEvent.keyDown(clipA, { key: 'ArrowRight' })
-    fireEvent.keyDown(clipA, { key: 'Enter' })
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
+    fireEvent.keyDown(clip, { key: 'Enter' })
     expect(clipById('clipA').sourceRange.startFrame).toBe(21)
     expect(doc().past).toHaveLength(1)
+    expect(transport().editPreview).toBeNull()
+    expect(clip).toHaveTextContent('Slip applied')
 
-    const clipB = screen.getByRole('button', { name: 'clipB, video clip' })
+    act(() => doc().undo())
+    expect(clipById('clipA').sourceRange.startFrame).toBe(20)
+  })
+
+  test('U plus arrows announce a slide, Escape cancels, Enter commits one undoable edit', () => {
     act(() => transport().setTool('slide'))
-    clipB.focus()
-    fireEvent.keyDown(clipB, { key: 'ArrowRight' })
+    renderTrack()
+    const clip = screen.getByRole('button', { name: 'clipB, video clip' })
+    clip.focus()
+    expect(clip).toHaveFocus()
+
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
     expect(transport().editPreview).toMatchObject({
       clipId: 'clipB',
       kind: 'slide',
       deltaFrames: 1,
     })
-    fireEvent.keyDown(clipB, { key: 'Enter' })
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Slide preview plus 1 frames')
+
+    fireEvent.keyDown(clip, { key: 'Escape' })
+    expect(transport().editPreview).toBeNull()
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Slide cancelled')
+
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
+    fireEvent.keyDown(clip, { key: 'Enter' })
     expect(clipById('clipB').timelineRange.startFrame).toBe(151)
-    expect(doc().past).toHaveLength(2)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().editPreview).toBeNull()
+    expect(clip).toHaveTextContent('Slide applied')
+
+    act(() => doc().undo())
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
   })
 })
 

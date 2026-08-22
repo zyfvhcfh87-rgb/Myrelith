@@ -18,6 +18,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   acceptPartialMediaImport,
@@ -35,6 +36,7 @@ import {
   connectActiveAssetMedia,
   connectActiveMediaFolderFiles,
 } from '../app/projectController'
+import { requestProxyGeneration } from '../app/proxyController'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import {
   withMediaRuntimeFailure,
@@ -84,6 +86,14 @@ vi.mock('../app/mediaImportController', () => ({
   dismissMediaImportError: vi.fn(),
   resolveMediaImportDecision: vi.fn(),
 }))
+
+vi.mock('../app/proxyController', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../app/proxyController')>()
+  return {
+    ...actual,
+    requestProxyGeneration: vi.fn(() => true),
+  }
+})
 
 vi.mock('../app/projectController', () => ({
   canChooseActiveMediaFolder: vi.fn(() => false),
@@ -396,6 +406,7 @@ beforeEach(() => {
   vi.mocked(chooseActiveMediaFolder).mockClear()
   vi.mocked(connectActiveAssetMedia).mockClear()
   vi.mocked(connectActiveMediaFolderFiles).mockClear()
+  vi.mocked(requestProxyGeneration).mockClear()
   useDocumentStore.getState().setDoc({
     ...useDocumentStore.getState().doc,
     frameRate: { num: 30, den: 1 },
@@ -670,7 +681,8 @@ describe('MediaPool presentation', () => {
     expect(connectActiveAssetMedia).toHaveBeenCalledWith('asset-0499', file)
   })
 
-  test('keeps row actions out of listbox options and operates them from the keyboard', () => {
+  test('keeps row actions out of listbox options and operates them from the keyboard', async () => {
+    const user = userEvent.setup()
     seedAsset(makeAsset())
     useMediaStore.setState((state) => {
       const offline = descriptorFromAsset(makeAsset({
@@ -706,15 +718,17 @@ describe('MediaPool presentation', () => {
     })
     organize.focus()
     expect(organize).toHaveFocus()
-    fireEvent.click(organize)
+    await user.keyboard('{Enter}')
     const membership = within(connectedRow).getByRole('checkbox', { name: 'Selects' })
     membership.focus()
-    fireEvent.click(membership)
+    await user.keyboard(' ')
     expect(useMediaStore.getState().collections[0]?.assetIds).toEqual(['asset-9'])
 
     const proxy = within(connectedRow).getByRole('button', { name: 'Generate proxy' })
     proxy.focus()
     expect(proxy).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(requestProxyGeneration).toHaveBeenCalledWith('asset-9')
 
     grid.focus()
     fireEvent.keyDown(grid, { key: 'ArrowRight' })
@@ -729,7 +743,7 @@ describe('MediaPool presentation', () => {
 
     const remove = within(connectedRow).getByRole('button', { name: 'Remove beach.mp4' })
     remove.focus()
-    fireEvent.click(remove)
+    await user.keyboard('{Enter}')
     expect(forgetImportedMediaHandle).toHaveBeenCalledWith('asset-9')
     expect(screen.queryByRole('row', { name: /beach\.mp4/ })).not.toBeInTheDocument()
   })
