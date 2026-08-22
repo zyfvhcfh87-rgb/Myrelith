@@ -163,6 +163,61 @@ describe('MotionTrackingOverlay', () => {
     })
   })
 
+  test('completes a point pick from the keyboard without pointer events', () => {
+    const clipId = useDocumentStore.getState().doc.tracks[0]!.clips[0]!.id
+    useMotionTrackingSelectionStore.getState().beginPicking(clipId, 'point')
+    render(<Harness />)
+    const surface = screen.getByRole('button', { name: /choose a point/i })
+    surface.focus()
+    expect(surface).toHaveFocus()
+
+    fireEvent.keyDown(surface, { key: 'ArrowRight' })
+    fireEvent.keyDown(surface, { key: 'ArrowDown', shiftKey: true })
+    fireEvent.keyDown(surface, { key: 'Enter' })
+
+    expect(useMotionTrackingSelectionStore.getState()).toMatchObject({
+      sourceClipId: clipId,
+      pickingKind: null,
+      selectionGlobalFrame: 12,
+      selection: { kind: 'point', point: { x: 0.52, y: 0.6 } },
+    })
+  })
+
+  test('moves and resizes a box from the keyboard, then cancels without a selection', () => {
+    const clipId = useDocumentStore.getState().doc.tracks[0]!.clips[0]!.id
+    useMotionTrackingSelectionStore.getState().beginPicking(clipId, 'box')
+    render(<Harness />)
+    const surface = screen.getByRole('button', { name: /drag a box/i })
+    surface.focus()
+
+    fireEvent.keyDown(surface, { key: 'ArrowRight' })
+    fireEvent.keyDown(surface, { key: 'ArrowDown' })
+    fireEvent.keyDown(surface, { key: 'ArrowRight', shiftKey: true })
+    fireEvent.keyDown(surface, { key: 'Enter' })
+
+    const selection = useMotionTrackingSelectionStore.getState().selection
+    expect(selection?.kind).toBe('box')
+    if (selection?.kind !== 'box') throw new Error('expected a box selection')
+    expect(selection.box.x).toBeCloseTo(0.42)
+    expect(selection.box.y).toBeCloseTo(0.42)
+    expect(selection.box.width).toBeCloseTo(0.22)
+    expect(selection.box.height).toBeCloseTo(0.2)
+    expect(useMotionTrackingSelectionStore.getState()).toMatchObject({
+      pickingKind: null,
+      selectionGlobalFrame: 12,
+    })
+
+    act(() => useMotionTrackingSelectionStore.getState().beginPicking(clipId, 'box'))
+    fireEvent.keyDown(screen.getByRole('button', { name: /drag a box/i }), {
+      key: 'Escape',
+    })
+    expect(useMotionTrackingSelectionStore.getState()).toMatchObject({
+      sourceClipId: clipId,
+      pickingKind: null,
+      selection: null,
+    })
+  })
+
   test('renders the selected box in the source clip rotation instead of its axis-aligned bounds', () => {
     const clipId = useDocumentStore.getState().doc.tracks[0]!.clips[0]!.id
     useDocumentStore.getState().updateClipVisual(clipId, {

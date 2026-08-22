@@ -9,6 +9,7 @@ interface MotionTrackingSelectionState {
   selection: MotionTrackingSelection | null
   selectionGlobalFrame: number | null
   beginPicking: (sourceClipId: string, kind: MotionTrackingKind) => void
+  cancelPicking: () => void
   setSelection: (
     sourceClipId: string,
     selection: MotionTrackingSelection,
@@ -27,6 +28,9 @@ export const useMotionTrackingSelectionStore = create<MotionTrackingSelectionSta
     pickingKind,
     selection: null,
     selectionGlobalFrame: null,
+  }),
+  cancelPicking: () => set({
+    pickingKind: null,
   }),
   setSelection: (sourceClipId, selection, selectionGlobalFrame) => set({
     sourceClipId,

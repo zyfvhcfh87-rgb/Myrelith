@@ -10,6 +10,10 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import {
+  INITIAL_MEDIA_IMPORT_STATE,
+  useMediaImportStore,
+} from '../state/mediaImportStore'
+import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
@@ -89,6 +93,7 @@ beforeEach(() => {
     ...INITIAL_PROJECT_SESSION_STATE,
     screen: 'editor',
   })
+  useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
 })
 
 describe('tool keys', () => {
@@ -130,6 +135,34 @@ describe('tool keys', () => {
     key({ key: 'b' })
     key({ key: 's' })
     key({ key: 'ArrowRight' })
+    key({ key: 'Delete' })
+
+    expect(transport().tool).toBe('select')
+    expect(transport().playheadFrame).toBe(120)
+    expect(transport().selectedClipId).toBe('clipA')
+    expect(doc().doc.tracks[0].clips).toHaveLength(2)
+    expect(doc().past).toHaveLength(0)
+  })
+
+  test('an open media import dialog blocks every global edit shortcut', () => {
+    render(<Host />)
+    transport().setPlayheadFrame(120)
+    transport().setSelectedClip('clipA')
+    useMediaImportStore.setState({
+      phase: 'awaiting-decision',
+      fileName: 'cinema.mp4',
+      prompt: {
+        fileName: 'cinema.mp4',
+        projectRate: { num: 30, den: 1 },
+        sourceRate: { num: 60, den: 1 },
+        canMatchSource: true,
+        matchUnavailableReason: null,
+      },
+      error: null,
+    })
+
+    key({ key: 't' })
+    key({ key: 's' })
     key({ key: 'Delete' })
 
     expect(transport().tool).toBe('select')

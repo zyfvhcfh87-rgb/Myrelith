@@ -1061,6 +1061,161 @@ describe('linked gesture bounds', () => {
   })
 })
 
+describe('keyboard trim, ripple, slip, and slide', () => {
+  test('] previews a trim, Escape cancels, Enter commits one undoable edit', () => {
+    renderTrack()
+    const clip = screen.getByRole('button', { name: 'clipA, video clip' })
+    clip.focus()
+    expect(clip).toHaveFocus()
+
+    fireEvent.keyDown(clip, { key: ']' })
+    expect(transport().editPreview).toMatchObject({
+      clipId: 'clipA',
+      kind: 'trim-end',
+      deltaFrames: 0,
+    })
+    expect(clip).toHaveTextContent('Trim end started')
+
+    fireEvent.keyDown(clip, { key: 'ArrowLeft' })
+    expect(transport().editPreview?.deltaFrames).toBe(-1)
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+    expect(doc().past).toHaveLength(0)
+
+    fireEvent.keyDown(clip, { key: 'Escape' })
+    expect(transport().editPreview).toBeNull()
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Trim end cancelled')
+
+    fireEvent.keyDown(clip, { key: ']' })
+    fireEvent.keyDown(clip, { key: 'ArrowLeft' })
+    fireEvent.keyDown(clip, { key: 'Enter' })
+    expect(clipById('clipA').timelineRange).toEqual({
+      startFrame: 100,
+      durationFrames: 49,
+    })
+    expect(doc().past).toHaveLength(1)
+    expect(transport().editPreview).toBeNull()
+    expect(clip).toHaveTextContent('Trim end applied')
+
+    act(() => doc().undo())
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+  })
+
+  test('T plus [ announces a ripple, Escape cancels, Enter commits one undoable edit', () => {
+    act(() => transport().setTool('trim'))
+    renderTrack()
+    const clip = screen.getByRole('button', { name: 'clipA, video clip' })
+    clip.focus()
+    expect(clip).toHaveFocus()
+
+    fireEvent.keyDown(clip, { key: '[' })
+    expect(transport().editPreview).toMatchObject({
+      clipId: 'clipA',
+      kind: 'ripple-start',
+      deltaFrames: 0,
+    })
+    expect(clip).toHaveTextContent('Ripple trim start started')
+
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
+    expect(transport().editPreview?.deltaFrames).toBe(1)
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Ripple trim start preview plus 1 frames')
+
+    fireEvent.keyDown(clip, { key: 'Escape' })
+    expect(transport().editPreview).toBeNull()
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Ripple trim start cancelled')
+
+    fireEvent.keyDown(clip, { key: '[' })
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
+    fireEvent.keyDown(clip, { key: 'Enter' })
+    expect(clipById('clipA').timelineRange).toEqual({
+      startFrame: 100,
+      durationFrames: 49,
+    })
+    expect(clipById('clipB').timelineRange.startFrame).toBe(149)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().editPreview).toBeNull()
+    expect(clip).toHaveTextContent('Ripple trim start applied')
+
+    act(() => doc().undo())
+    expect(clipById('clipA').timelineRange.durationFrames).toBe(50)
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
+  })
+
+  test('Y plus arrows announce a slip, Escape cancels, Enter commits one undoable edit', () => {
+    act(() => transport().setTool('slip'))
+    renderTrack()
+    const clip = screen.getByRole('button', { name: 'clipA, video clip' })
+    clip.focus()
+    expect(clip).toHaveFocus()
+
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
+    expect(transport().editPreview).toMatchObject({
+      clipId: 'clipA',
+      kind: 'slip',
+      deltaFrames: 1,
+    })
+    expect(clipById('clipA').sourceRange.startFrame).toBe(20)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Slip preview plus 1 frames')
+
+    fireEvent.keyDown(clip, { key: 'Escape' })
+    expect(transport().editPreview).toBeNull()
+    expect(clipById('clipA').sourceRange.startFrame).toBe(20)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Slip cancelled')
+
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
+    fireEvent.keyDown(clip, { key: 'Enter' })
+    expect(clipById('clipA').sourceRange.startFrame).toBe(21)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().editPreview).toBeNull()
+    expect(clip).toHaveTextContent('Slip applied')
+
+    act(() => doc().undo())
+    expect(clipById('clipA').sourceRange.startFrame).toBe(20)
+  })
+
+  test('U plus arrows announce a slide, Escape cancels, Enter commits one undoable edit', () => {
+    act(() => transport().setTool('slide'))
+    renderTrack()
+    const clip = screen.getByRole('button', { name: 'clipB, video clip' })
+    clip.focus()
+    expect(clip).toHaveFocus()
+
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
+    expect(transport().editPreview).toMatchObject({
+      clipId: 'clipB',
+      kind: 'slide',
+      deltaFrames: 1,
+    })
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Slide preview plus 1 frames')
+
+    fireEvent.keyDown(clip, { key: 'Escape' })
+    expect(transport().editPreview).toBeNull()
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
+    expect(doc().past).toHaveLength(0)
+    expect(clip).toHaveTextContent('Slide cancelled')
+
+    fireEvent.keyDown(clip, { key: 'ArrowRight' })
+    fireEvent.keyDown(clip, { key: 'Enter' })
+    expect(clipById('clipB').timelineRange.startFrame).toBe(151)
+    expect(doc().past).toHaveLength(1)
+    expect(transport().editPreview).toBeNull()
+    expect(clip).toHaveTextContent('Slide applied')
+
+    act(() => doc().undo())
+    expect(clipById('clipB').timelineRange.startFrame).toBe(150)
+  })
+})
+
 describe('slide tool', () => {
   test('body drag slides between neighbors: they absorb, downstream stays', async () => {
     act(() => transport().setTool('slide'))

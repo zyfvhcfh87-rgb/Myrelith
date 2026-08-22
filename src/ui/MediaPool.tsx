@@ -298,6 +298,7 @@ function CompatibilityDiagnostics({
 
   return (
     <section
+      role="gridcell"
       className="media-compatibility"
       data-status={item.status}
       aria-label={`${item.fileName} compatibility`}
@@ -609,7 +610,7 @@ function MediaRelinkStatus() {
 
 interface MediaPoolItemCardProps {
   readonly id: string
-  readonly optionId: string
+  readonly rowId: string
   readonly rowKey: string
   readonly position: number
   readonly itemCount: number
@@ -627,7 +628,7 @@ interface MediaPoolItemCardProps {
 
 const MediaPoolItemCard = memo(function MediaPoolItemCard({
   id,
-  optionId,
+  rowId,
   rowKey,
   position,
   itemCount,
@@ -681,8 +682,8 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
 
   return (
     <li
-      id={optionId}
-      role="option"
+      id={rowId}
+      role="row"
       aria-selected={selected}
       aria-posinset={position}
       aria-setsize={itemCount}
@@ -725,6 +726,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
       }}
     >
       <div
+        role="gridcell"
         className="media-thumbnail"
         data-testid={`media-thumbnail-${id}`}
         data-state={connected
@@ -742,7 +744,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
           : null}
       </div>
 
-      <div className="media-details">
+      <div role="gridcell" className="media-details">
         <span className="media-name">{fileName}</span>
         <span className="media-meta">{metadata}</span>
         {descriptor && connected ? (
@@ -806,29 +808,31 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
         ) : null}
       </div>
 
-      <button
-        className="media-remove"
-        type="button"
-        draggable={false}
-        aria-label={`Remove ${fileName}`}
-        onDragStart={(event) => event.stopPropagation()}
-        onClick={() => {
-          if (!descriptor) {
-            removeMediaCompatibility(id)
-            return
-          }
-          if (assetIsUsedOnTimeline(id)) {
-            window.alert(
-              'Remove this media\'s clips from the timeline before removing its source.',
-            )
-            return
-          }
-          forgetImportedMediaHandle(id)
-          removeAsset(id)
-        }}
-      >
-        <X aria-hidden="true" size={14} weight="bold" />
-      </button>
+      <div role="gridcell" className="media-remove-cell">
+        <button
+          className="media-remove"
+          type="button"
+          draggable={false}
+          aria-label={`Remove ${fileName}`}
+          onDragStart={(event) => event.stopPropagation()}
+          onClick={() => {
+            if (!descriptor) {
+              removeMediaCompatibility(id)
+              return
+            }
+            if (assetIsUsedOnTimeline(id)) {
+              window.alert(
+                'Remove this media\'s clips from the timeline before removing its source.',
+              )
+              return
+            }
+            forgetImportedMediaHandle(id)
+            removeAsset(id)
+          }}
+        >
+          <X aria-hidden="true" size={14} weight="bold" />
+        </button>
+      </div>
       {compatibilityItem ? (
         <CompatibilityDiagnostics
           item={compatibilityItem}
@@ -948,9 +952,9 @@ export default function MediaPool() {
     && filteredIndexById.has(selectedAssetId)
       ? selectedAssetId
       : filteredItems[0]?.id ?? null
-  const activeOptionId = effectiveSelectedAssetId
+  const activeRowId = effectiveSelectedAssetId
     && renderedItemIds.has(effectiveSelectedAssetId)
-      ? `media-pool-option-${filteredIndexById.get(effectiveSelectedAssetId)}`
+      ? `media-pool-row-${filteredIndexById.get(effectiveSelectedAssetId)}`
       : undefined
   const offlineCount = useMemo(() => {
     let count = 0
@@ -1292,10 +1296,10 @@ export default function MediaPool() {
         ref={virtualizer.listRef}
         id="media-pool-list"
         className="media-list"
-        role="listbox"
+        role="grid"
         aria-label="Media assets"
         aria-busy={filterPending}
-        aria-activedescendant={activeOptionId}
+        aria-activedescendant={activeRowId}
         aria-describedby="media-pool-keyboard-help"
         tabIndex={0}
         style={{
@@ -1325,7 +1329,7 @@ export default function MediaPool() {
             <MediaPoolItemCard
               key={id}
               id={id}
-              optionId={`media-pool-option-${position}`}
+              rowId={`media-pool-row-${position}`}
               rowKey={rowKey}
               position={position + 1}
               itemCount={filteredItems.length}
@@ -1371,7 +1375,7 @@ export default function MediaPool() {
         </div>
       ) : null}
       <span id="media-pool-keyboard-help" className="media-pool-sr-only">
-        Use arrow keys, Home, End, Page Up, and Page Down to move the Media Pool selection.
+        Use arrow keys, Home, End, Page Up, and Page Down to move the Media Pool selection. Tab moves into that row's relink, collection, proxy, and remove actions.
       </span>
       <span className="media-pool-sr-only" aria-live="polite">
         {effectiveSelectedAssetId

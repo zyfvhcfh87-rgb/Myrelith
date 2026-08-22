@@ -1,13 +1,14 @@
 /**
  * ui/timeline/TrackHeader.tsx — One row of the timeline's header gutter
  * (timeline tracks upgrade): the track's badge (its name), kind + clip
- * count, and its buttons — hide (video), solo + mute (audio), lock, and
- * delete. Double-click anywhere on the row (buttons aside) renames the
- * track inline: Enter/blur commits, Escape cancels; empty and unchanged
- * names cancel silently (the domain op would no-op/reject anyway, this
- * just spares the console.warn). The global A/B/T/Y/U·S·Del shortcuts
- * already ignore keystrokes in editable targets (isEditableTarget), so
- * typing a name never razors a clip.
+ * count, and its buttons — rename, hide (video), solo + mute (audio),
+ * lock, and delete. The Rename button (or double-click anywhere on the
+ * row, buttons aside) opens the inline editor: Enter/blur commits,
+ * Escape cancels; empty and unchanged names cancel silently (the domain
+ * op would no-op/reject anyway, this just spares the console.warn).
+ * Focus returns to Rename after commit or cancel. The global
+ * A/B/T/Y/U·S·Del shortcuts already ignore keystrokes in editable
+ * targets (isEditableTarget), so typing a name never razors a clip.
  *
  * Receives its Track as a prop from Timeline (which owns the doc
  * subscription) and reads stores only inside event handlers via
@@ -19,8 +20,8 @@
  * lives in domain selectors.audibleTracks.
  */
 
-import { memo, useState } from 'react'
-import { Eye, LockSimple, X } from '@phosphor-icons/react'
+import { memo, useEffect, useRef, useState } from 'react'
+import { Eye, LockSimple, PencilSimple, X } from '@phosphor-icons/react'
 import type { Track as TrackData } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
 import type { TrackFlagsPatch } from '../../domain/operations'
@@ -31,16 +32,32 @@ interface TrackHeaderProps {
 
 function TrackHeader({ track }: TrackHeaderProps) {
   const [renaming, setRenaming] = useState(false)
+  const renameTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const restoreRenameFocusRef = useRef(false)
 
   const setFlags = (patch: TrackFlagsPatch) =>
     useDocumentStore.getState().setTrackFlags(track.id, patch)
 
-  const commitRename = (raw: string) => {
-    setRenaming(false)
-    const name = raw.trim()
-    if (name === '' || name === track.name) return
-    useDocumentStore.getState().renameTrack(track.id, name)
+  const beginRename = (): void => {
+    restoreRenameFocusRef.current = true
+    setRenaming(true)
   }
+
+  const finishRename = (raw: string | null): void => {
+    setRenaming(false)
+    if (raw !== null) {
+      const name = raw.trim()
+      if (name !== '' && name !== track.name) {
+        useDocumentStore.getState().renameTrack(track.id, name)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (renaming || !restoreRenameFocusRef.current) return
+    restoreRenameFocusRef.current = false
+    renameTriggerRef.current?.focus()
+  }, [renaming])
 
   const clipCount = track.clips.length
   const kindLabel = track.kind === 'video' ? 'Video' : 'Audio'
@@ -49,11 +66,11 @@ function TrackHeader({ track }: TrackHeaderProps) {
     <div
       className={`track-header track-header-${track.kind}`}
       data-testid={`track-header-${track.id}`}
-      title="Double-click to rename"
+      title="Rename from the Rename button, or double-click the header"
       onDoubleClick={(e) => {
         // Buttons keep their own double-click meaning (fast toggling).
         if ((e.target as HTMLElement).closest('button')) return
-        setRenaming(true)
+        beginRename()
       }}
     >
       <span className={`track-badge track-badge-${track.kind}`}>{track.name}</span>
@@ -63,10 +80,13 @@ function TrackHeader({ track }: TrackHeaderProps) {
           defaultValue={track.name}
           autoFocus
           onFocus={(e) => e.currentTarget.select()}
-          onBlur={(e) => commitRename(e.currentTarget.value)}
+          onBlur={(e) => finishRename(e.currentTarget.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') commitRename(e.currentTarget.value)
-            else if (e.key === 'Escape') setRenaming(false)
+            if (e.key === 'Enter') finishRename(e.currentTarget.value)
+            else if (e.key === 'Escape') {
+              e.preventDefault()
+              finishRename(null)
+            }
           }}
           aria-label={`rename track ${track.name}`}
           data-testid={`track-rename-${track.id}`}
@@ -80,6 +100,18 @@ function TrackHeader({ track }: TrackHeaderProps) {
         </div>
       )}
       <div className="track-header-toggles">
+        {!renaming ? (
+          <button
+            ref={renameTriggerRef}
+            type="button"
+            className="track-toggle"
+            title="Rename track"
+            aria-label={`rename track ${track.name}`}
+            onClick={beginRename}
+          >
+            <PencilSimple aria-hidden="true" size={14} weight="bold" />
+          </button>
+        ) : null}
         {track.kind === 'video' ? (
           <button
             type="button"

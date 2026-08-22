@@ -334,6 +334,52 @@ describe('Ruler', () => {
       expect(useTransportStore.getState().playheadFrame).toBe(1_000_050),
     )
   })
+
+  test('the seek slider is keyboard-operable with snap, bounds, and cancel', () => {
+    useDocumentStore.getState().setDoc({
+      ...makeDoc(),
+      markers: [{ id: 'marker-cue', frame: 12, label: 'Cue', color: 'blue' }],
+    })
+    usePreferencesStore.getState().setSnappingEnabled(false)
+    render(<Ruler />)
+    const seek = screen.getByRole('slider', { name: 'Timeline playhead' })
+    expect(seek).toHaveAttribute('tabindex', '0')
+    expect(seek).toHaveAccessibleName('Timeline playhead')
+    expect(seek).toHaveAccessibleDescription(/Arrow keys move one frame/)
+
+    seek.focus()
+    expect(seek).toHaveFocus()
+    fireEvent.keyDown(seek, { key: 'ArrowRight' })
+    expect(useTransportStore.getState().playheadFrame).toBe(1)
+    fireEvent.keyDown(seek, { key: 'ArrowRight', shiftKey: true })
+    expect(useTransportStore.getState().playheadFrame).toBe(11)
+
+    act(() => usePreferencesStore.getState().setSnappingEnabled(true))
+    fireEvent.keyDown(seek, { key: 'ArrowRight' })
+    expect(useTransportStore.getState().playheadFrame).toBe(12)
+    expect(useTransportStore.getState().snapGuide).toMatchObject({
+      frame: 12,
+      candidateKind: 'marker',
+    })
+
+    fireEvent.keyDown(seek, { key: 'ArrowRight', altKey: true })
+    expect(useTransportStore.getState().playheadFrame).toBe(13)
+    expect(useTransportStore.getState().snapGuide).toBeNull()
+
+    fireEvent.keyDown(seek, { key: 'Home' })
+    expect(useTransportStore.getState().playheadFrame).toBe(0)
+    fireEvent.keyDown(seek, { key: 'End' })
+    expect(useTransportStore.getState().playheadFrame).toBeGreaterThan(0)
+    const endFrame = useTransportStore.getState().playheadFrame
+    fireEvent.keyDown(seek, { key: 'ArrowRight' })
+    expect(useTransportStore.getState().playheadFrame).toBe(endFrame)
+
+    fireEvent.keyDown(seek, { key: 'Home' })
+    fireEvent.keyDown(seek, { key: 'PageDown' })
+    expect(useTransportStore.getState().playheadFrame).toBe(30)
+    fireEvent.keyDown(seek, { key: 'Escape' })
+    expect(useTransportStore.getState().playheadFrame).toBe(0)
+  })
 })
 
 describe('Timeline container', () => {

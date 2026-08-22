@@ -267,6 +267,42 @@ describe('rename (double-click the header)', () => {
   })
 })
 
+describe('rename from the keyboard', () => {
+  test('the Rename button opens, commits, restores focus, and undoes', () => {
+    render(<Timeline />)
+    const trigger = screen.getByRole('button', { name: 'rename track V1' })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    const input = screen.getByTestId('track-rename-V1') as HTMLInputElement
+    expect(input).toHaveFocus()
+    fireEvent.change(input, { target: { value: 'Main cam' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(trackById('V1').name).toBe('Main cam')
+    expect(getState().past).toHaveLength(1)
+    expect(screen.queryByTestId('track-rename-V1')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'rename track Main cam' })).toHaveFocus()
+
+    act(() => getState().undo())
+    expect(trackById('V1').name).toBe('V1')
+    expect(screen.getByRole('button', { name: 'rename track V1' })).toBeInTheDocument()
+  })
+
+  test('Escape cancels rename and restores focus without history', () => {
+    render(<Timeline />)
+    const trigger = screen.getByRole('button', { name: 'rename track V2' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    fireEvent.keyDown(screen.getByTestId('track-rename-V2'), { key: 'Escape' })
+
+    expect(screen.queryByTestId('track-rename-V2')).not.toBeInTheDocument()
+    expect(trackById('V2').name).toBe('V2')
+    expect(getState().past).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'rename track V2' })).toHaveFocus()
+  })
+})
+
 describe('delete button', () => {
   test('removes header + lane as ONE entry; one undo restores the clips too', () => {
     render(<Timeline />)

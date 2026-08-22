@@ -1,6 +1,14 @@
 /** Program Monitor point/box picker; selection is ephemeral and never history. */
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type RefObject } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type RefObject,
+} from 'react'
 import { resolveClipAnimationAtFrame } from '../domain/clipAnimation'
 import { clipVisualSettings } from '../domain/clipInspector'
 import { findClip } from '../domain/selectors'
@@ -8,8 +16,97 @@ import type { Clip, TimelineDoc } from '../domain/schema'
 import { rangeEnd } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import type { MotionTrackingSelection } from '../domain/motionTracking'
 import { useMotionTrackingSelectionStore } from '../state/motionTrackingSelectionStore'
 import { useTransportStore } from '../state/transportStore'
+
+const KEYBOARD_STEP = 0.02
+const KEYBOARD_LARGE_STEP = 0.1
+
+function defaultDraft(kind: 'point' | 'box'): MotionTrackingSelection {
+  return kind === 'point'
+    ? { kind: 'point', point: { x: 0.5, y: 0.5 } }
+    : { kind: 'box', box: { x: 0.4, y: 0.4, width: 0.2, height: 0.2 } }
+}
+
+function clampDraft(
+  draft: MotionTrackingSelection,
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+): MotionTrackingSelection {
+  if (draft.kind === 'point') {
+    return {
+      kind: 'point',
+      point: {
+        x: roundNorm(clamp(draft.point.x, minX, maxX)),
+        y: roundNorm(clamp(draft.point.y, minY, maxY)),
+      },
+    }
+  }
+  const width = Math.min(draft.box.width, maxX - minX)
+  const height = Math.min(draft.box.height, maxY - minY)
+  return {
+    kind: 'box',
+    box: {
+      x: roundNorm(clamp(draft.box.x, minX, maxX - width)),
+      y: roundNorm(clamp(draft.box.y, minY, maxY - height)),
+      width: roundNorm(width),
+      height: roundNorm(height),
+    },
+  }
+}
+
+function moveDraft(
+  draft: MotionTrackingSelection,
+  deltaX: number,
+  deltaY: number,
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+): MotionTrackingSelection {
+  if (draft.kind === 'point') {
+    return clampDraft({
+      kind: 'point',
+      point: { x: draft.point.x + deltaX, y: draft.point.y + deltaY },
+    }, minX, maxX, minY, maxY)
+  }
+  return clampDraft({
+    kind: 'box',
+    box: {
+      ...draft.box,
+      x: draft.box.x + deltaX,
+      y: draft.box.y + deltaY,
+    },
+  }, minX, maxX, minY, maxY)
+}
+
+function resizeDraft(
+  draft: MotionTrackingSelection,
+  deltaX: number,
+  deltaY: number,
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+): MotionTrackingSelection {
+  if (draft.kind !== 'box') return draft
+  const width = Math.max(0.02, draft.box.width + deltaX)
+  const height = Math.max(0.02, draft.box.height + deltaY)
+  return clampDraft({
+    kind: 'box',
+    box: { ...draft.box, width, height },
+  }, minX, maxX, minY, maxY)
+}
+
+function describeDraft(draft: MotionTrackingSelection): string {
+  if (draft.kind === 'point') {
+    return `Point at ${Math.round(draft.point.x * 100)}% x, ${Math.round(draft.point.y * 100)}% y`
+  }
+  return `Box at ${Math.round(draft.box.x * 100)}% x, ${Math.round(draft.box.y * 100)}% y, ${Math.round(draft.box.width * 100)}% by ${Math.round(draft.box.height * 100)}%`
+}
 
 interface Viewport {
   left: number
@@ -69,6 +166,10 @@ function sourceFacts(
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
+}
+
+function roundNorm(value: number): number {
+  return Math.round(value * 1000) / 1000
 }
 
 function sourcePoint(
@@ -135,6 +236,7 @@ export default function MotionTrackingOverlay({
   const selection = useMotionTrackingSelectionStore((state) => state.selection)
   const selectionGlobalFrame = useMotionTrackingSelectionStore((state) => state.selectionGlobalFrame)
   const [viewport, setViewport] = useState<Viewport | null>(null)
+  const [keyboardDraft, setKeyboardDraft] = useState<MotionTrackingSelection | null>(null)
   const dragStart = useRef<{ x: number; y: number; frame: number } | null>(null)
   const selectionOnDisplayedFrame = !selection
     || selectionGlobalFrame === playheadFrame
@@ -142,6 +244,10 @@ export default function MotionTrackingOverlay({
     () => sourceFacts(doc, sourceClipId, playheadFrame, descriptors),
     [descriptors, doc, playheadFrame, sourceClipId],
   )
+
+  useEffect(() => {
+    setKeyboardDraft(pickingKind ? defaultDraft(pickingKind) : null)
+  }, [pickingKind])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -167,27 +273,73 @@ export default function MotionTrackingOverlay({
   ) return null
   const scaleX = viewport.width / doc.width
   const scaleY = viewport.height / doc.height
-  const marker = selection?.kind === 'point'
+  const displayedSelection = selection ?? keyboardDraft
+  const marker = displayedSelection?.kind === 'point'
     ? (() => {
-        const point = documentPoint(selection.point, doc, source)
+        const point = documentPoint(displayedSelection.point, doc, source)
         return {
           left: viewport.left + point.x * scaleX,
           top: viewport.top + point.y * scaleY,
         }
       })()
     : null
-  const boxPolygon = selection?.kind === 'box'
+  const boxPolygon = displayedSelection?.kind === 'box'
     ? (() => {
         return [
-          { x: selection.box.x, y: selection.box.y },
-          { x: selection.box.x + selection.box.width, y: selection.box.y },
-          { x: selection.box.x + selection.box.width, y: selection.box.y + selection.box.height },
-          { x: selection.box.x, y: selection.box.y + selection.box.height },
+          { x: displayedSelection.box.x, y: displayedSelection.box.y },
+          { x: displayedSelection.box.x + displayedSelection.box.width, y: displayedSelection.box.y },
+          { x: displayedSelection.box.x + displayedSelection.box.width, y: displayedSelection.box.y + displayedSelection.box.height },
+          { x: displayedSelection.box.x, y: displayedSelection.box.y + displayedSelection.box.height },
         ].map((point) => documentPoint(point, doc, source))
           .map((point) => `${point.x * scaleX},${point.y * scaleY}`)
           .join(' ')
       })()
     : null
+  const visual = clipVisualSettings(source.clip)
+  const cropMinX = visual.crop.left
+  const cropMaxX = 1 - visual.crop.right
+  const cropMinY = visual.crop.top
+  const cropMaxY = 1 - visual.crop.bottom
+
+  const confirmDraft = (draft: MotionTrackingSelection | null): void => {
+    if (!draft || !sourceClipId) return
+    if (draft.kind === 'box' && (draft.box.width <= 0 || draft.box.height <= 0)) return
+    useMotionTrackingSelectionStore.getState().setSelection(
+      sourceClipId,
+      draft,
+      playheadFrame,
+    )
+  }
+
+  const handlePickKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      useMotionTrackingSelectionStore.getState().cancelPicking()
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      event.stopPropagation()
+      confirmDraft(keyboardDraft)
+      return
+    }
+    if (!keyboardDraft) return
+    const step = event.shiftKey && keyboardDraft.kind === 'point'
+      ? KEYBOARD_LARGE_STEP
+      : KEYBOARD_STEP
+    let next: MotionTrackingSelection | null = null
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      event.preventDefault()
+      event.stopPropagation()
+      const deltaX = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+      const deltaY = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+      next = event.shiftKey && keyboardDraft.kind === 'box'
+        ? resizeDraft(keyboardDraft, deltaX, deltaY, cropMinX, cropMaxX, cropMinY, cropMaxY)
+        : moveDraft(keyboardDraft, deltaX, deltaY, cropMinX, cropMaxX, cropMinY, cropMaxY)
+    }
+    if (next) setKeyboardDraft(next)
+  }
 
   const finishBox = (event: PointerEvent<HTMLButtonElement>): void => {
     const start = dragStart.current
@@ -234,7 +386,14 @@ export default function MotionTrackingOverlay({
           aria-label={pickingKind === 'point'
             ? 'Choose a point to track in the source clip'
             : 'Drag a box to track in the source clip'}
+          aria-describedby="motion-tracking-pick-help"
+          aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Escape"
           style={{ left: viewport.left, top: viewport.top, width: viewport.width, height: viewport.height }}
+          onClick={(event) => {
+            if (event.detail !== 0) return
+            confirmDraft(keyboardDraft)
+          }}
+          onKeyDown={handlePickKeyDown}
           onPointerDown={(event) => {
             const point = sourcePoint(event, viewport, doc, source)
             if (pickingKind === 'point' && sourceClipId) {
@@ -251,6 +410,18 @@ export default function MotionTrackingOverlay({
           onPointerUp={finishBox}
           onPointerCancel={() => { dragStart.current = null }}
         />
+      ) : null}
+      {pickingKind ? (
+        <>
+          <span id="motion-tracking-pick-help" className="visually-hidden">
+            {pickingKind === 'point'
+              ? 'Arrow keys move the point. Shift+arrow moves farther. Enter or Space confirms. Escape cancels.'
+              : 'Arrow keys move the box. Shift+arrow resizes. Enter or Space confirms. Escape cancels.'}
+          </span>
+          <span className="visually-hidden" aria-live="polite">
+            {keyboardDraft ? describeDraft(keyboardDraft) : ''}
+          </span>
+        </>
       ) : null}
     </div>
   )

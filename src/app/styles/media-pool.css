@@ -830,8 +830,12 @@
   outline-offset: 1px;
 }
 
-.media-remove {
+.media-remove-cell {
   grid-area: remove;
+  align-self: start;
+}
+
+.media-remove {
   align-self: start;
   width: 24px;
   height: 24px;
