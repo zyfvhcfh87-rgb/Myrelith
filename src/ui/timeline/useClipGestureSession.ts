@@ -768,10 +768,10 @@ export function useClipGestureSession({
   }
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    // Gate on our session, not capture status: capture can fail while move
-    // events remain usable.
+    // Gate on a pointer session, not capture status: capture can fail while
+    // move events remain usable. Keyboard edits share this ref.
     const active = session.current
-    if (!active) return
+    if (!active || active.origin !== 'pointer') return
     if (active.mode === 'move') {
       const target = trackTargetAt(event.clientX, event.clientY)
       active.targetTrackId = target.trackId
@@ -791,7 +791,7 @@ export function useClipGestureSession({
   }
 
   const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (!session.current) return
+    if (session.current?.origin !== 'pointer') return
     commitGesture(event)
     try {
       rootRef.current?.releasePointerCapture(event.pointerId)
@@ -801,13 +801,14 @@ export function useClipGestureSession({
   }
 
   const onPointerCancel = (): void => {
+    if (session.current?.origin === 'keyboard') return
     endGesture()
   }
 
   const onPointerLeave = (event: ReactPointerEvent<HTMLDivElement>): void => {
     // If capture failed and the pointer leaves, cancel instead of wedging.
     if (
-      session.current &&
+      session.current?.origin === 'pointer' &&
       !event.currentTarget.hasPointerCapture(event.pointerId)
     ) {
       endGesture()
@@ -815,7 +816,7 @@ export function useClipGestureSession({
   }
 
   const onLostPointerCapture = (): void => {
-    if (session.current) endGesture()
+    if (session.current?.origin === 'pointer') endGesture()
   }
 
   return {
