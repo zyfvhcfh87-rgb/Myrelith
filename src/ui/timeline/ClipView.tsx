@@ -89,6 +89,15 @@ function ClipView({
       ? s.editPreview
       : null,
   )
+  const participatesInLiveGesture = useTransportStore((s) => {
+    const gesture = s.dragPreview ?? s.editPreview
+    return gesture !== null && (
+      gesture.clipId === clip.id
+      || (clip.linkGroupId !== undefined && gesture.linkGroupId === clip.linkGroupId)
+    )
+  })
+  // The capture/keyboard owner stays focused when its preview leaves the
+  // window. Only cold-mounted linked partners may be aria-hidden.
   const ownsLiveGesture = useTransportStore(
     (s) =>
       s.dragPreview?.clipId === clip.id || s.editPreview?.clipId === clip.id,
@@ -144,7 +153,7 @@ function ClipView({
     tool,
     movePreviewDelta,
     editPreview,
-    ownsLiveGesture,
+    participatesInLiveGesture,
     timelineOriginFrame,
     timelineWindowEndFrame,
     assetDurationFrames,
@@ -175,6 +184,7 @@ function ClipView({
     )
   const markerStride = Math.max(1, Math.ceil(allMarkers.length / 128))
   const markers = allMarkers.filter((_, index) => index % markerStride === 0)
+  const exposesInteractiveSemantics = hasVisibleSlice || ownsLiveGesture
 
   return (
     <div
@@ -185,11 +195,20 @@ function ClipView({
       data-source-mode={clip.sourceMode ?? 'timed'}
       data-primary-selected={isSelected && isPrimarySelection ? 'true' : 'false'}
       data-virtual-gesture-host={hasVisibleSlice ? 'false' : 'true'}
-      role="button"
-      tabIndex={0}
-      aria-label={`${clip.name}, ${accessibleKind} clip`}
-      aria-pressed={isSelected}
-      aria-keyshortcuts="Control+ArrowLeft Control+ArrowRight Meta+ArrowLeft Meta+ArrowRight [ ] ArrowLeft ArrowRight Enter Escape"
+      role={exposesInteractiveSemantics ? 'button' : undefined}
+      tabIndex={exposesInteractiveSemantics ? 0 : -1}
+      aria-hidden={exposesInteractiveSemantics ? undefined : true}
+      aria-label={
+        exposesInteractiveSemantics
+          ? `${clip.name}, ${accessibleKind} clip`
+          : undefined
+      }
+      aria-pressed={exposesInteractiveSemantics ? isSelected : undefined}
+      aria-keyshortcuts={
+        exposesInteractiveSemantics
+          ? 'Control+ArrowLeft Control+ArrowRight Meta+ArrowLeft Meta+ArrowRight [ ] ArrowLeft ArrowRight Enter Escape'
+          : undefined
+      }
       title={interactionTitle}
       style={{
         transform:

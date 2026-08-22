@@ -387,6 +387,12 @@ describe('drag: scrub-preview then commit', () => {
 
     expect(document.body.contains(el)).toBe(true)
     expect(el).toHaveAttribute('data-virtual-gesture-host', 'true')
+    expect(el).not.toHaveAttribute('aria-hidden')
+    expect(el).toHaveAttribute('role', 'button')
+    expect(el).toHaveAttribute('tabindex', '0')
+    expect(el).toHaveAttribute('aria-label', 'clipA, video clip')
+    expect(el).toHaveAttribute('aria-pressed')
+    expect(el).toHaveAttribute('aria-keyshortcuts')
     expect(el).toHaveStyle({ transform: 'translateX(199px)', width: '1px' })
 
     // Simulate an origin rebase that culls the committed range but brings the
@@ -407,6 +413,54 @@ describe('drag: scrub-preview then commit', () => {
     expect(clipA().timelineRange.startFrame).toBe(250)
     expect(doc().past).toHaveLength(1)
     expect(transport().dragPreview).toBeNull()
+  })
+
+  test('live gesture membership is not rescanned for preview delta updates', () => {
+    const track = makeTrack('stable-membership', [makeClip('stable-clip', 10, 20)])
+    const membershipScan = vi.spyOn(track.clips, 'some')
+    render(<Track track={track} timelineWindowEndFrame={200} />)
+
+    expect(membershipScan).not.toHaveBeenCalled()
+
+    act(() => transport().setDragPreview({
+      clipId: 'stable-clip',
+      deltaFrames: 1,
+    }))
+    expect(membershipScan).not.toHaveBeenCalled()
+
+    act(() => transport().setDragPreview({
+      clipId: 'stable-clip',
+      deltaFrames: 2,
+    }))
+    act(() => transport().setPlayheadFrame(12))
+    expect(membershipScan).not.toHaveBeenCalled()
+
+    act(() => transport().setDragPreview(null))
+  })
+
+  test('bounds cold gesture hosts for an oversized imported link group', () => {
+    const linkedClips = Array.from({ length: 2_000 }, (_, index) => ({
+      ...makeClip(`oversized-${index}`, 1_000 + index * 30, 20),
+      linkGroupId: 'oversized-imported-group',
+    }))
+    const track = makeTrack('oversized-track', linkedClips, 'audio')
+
+    act(() => transport().setDragPreview({
+      clipId: 'owner-on-another-track',
+      deltaFrames: 1,
+      linkGroupId: 'oversized-imported-group',
+    }))
+    const { container } = render(
+      <Track track={track} timelineOriginFrame={0} timelineWindowEndFrame={200} />,
+    )
+
+    expect(
+      container.querySelectorAll('[data-virtual-gesture-host="true"]'),
+    ).toHaveLength(1)
+    expect(screen.getByTestId('clip-oversized-0')).toBeInTheDocument()
+    expect(screen.queryByTestId('clip-oversized-1')).not.toBeInTheDocument()
+
+    act(() => transport().setDragPreview(null))
   })
 })
 
@@ -708,6 +762,52 @@ describe('linked clip gestures (A/V pairs)', () => {
     doc().redo()
     expect(vidClip().timelineRange.startFrame).toBe(157)
     expect(audClip().timelineRange.startFrame).toBe(92)
+  })
+
+  test('an offscreen linked partner mounts for the live drag, then commits atomically', async () => {
+    const linked = makeUnequalLinkedDoc()
+    linked.tracks[1].clips[0] = {
+      ...linked.tracks[1].clips[0],
+      timelineRange: { startFrame: 1_000, durationFrames: 40 },
+    }
+    doc().setDoc(linked)
+    render(
+      <>
+        <Track
+          track={v1()}
+          timelineOriginFrame={0}
+          timelineWindowEndFrame={200}
+        />
+        <Track
+          track={a1()}
+          timelineOriginFrame={0}
+          timelineWindowEndFrame={200}
+        />
+      </>,
+    )
+    const videoEl = screen.getByTestId('clip-vid')
+    expect(screen.queryByTestId('clip-aud')).not.toBeInTheDocument()
+
+    fireEvent.pointerDown(videoEl, { pointerId: 14, clientX: 100 })
+    fireEvent.pointerMove(videoEl, { pointerId: 14, clientX: 120 })
+    await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(20))
+
+    const audioEl = screen.getByTestId('clip-aud')
+    expect(audioEl).toHaveAttribute('data-virtual-gesture-host', 'true')
+    expect(audioEl).not.toHaveAttribute('role')
+    expect(audioEl).toHaveAttribute('tabindex', '-1')
+    expect(audioEl).toHaveAttribute('aria-hidden', 'true')
+    expect(audioEl).not.toHaveAttribute('aria-label')
+    expect(audioEl).toHaveClass('dragging')
+    expect(audioEl).toHaveStyle({ width: '1px' })
+    expect(doc().doc).toBe(linked)
+
+    fireEvent.pointerUp(videoEl, { pointerId: 14, clientX: 120 })
+
+    expect(vidClip().timelineRange.startFrame).toBe(120)
+    expect(audClip().timelineRange.startFrame).toBe(1_020)
+    expect(doc().past).toEqual([linked])
+    expect(screen.queryByTestId('clip-aud')).not.toBeInTheDocument()
   })
 
   test('linked move clamps live to the earliest partner timeline floor', async () => {

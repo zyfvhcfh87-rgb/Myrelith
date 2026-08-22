@@ -83,20 +83,59 @@ async function expectCreateReachable(page: Page, frame: Locator): Promise<void> 
   await expect.poll(() => isFullyInViewport(heading, viewport)).toBe(true)
 }
 
+async function expectNoHorizontalClipping(page: Page): Promise<void> {
+  const viewport = page.viewportSize()
+  if (!viewport) throw new Error('Setup overflow tests require a viewport size')
+
+  const surfaces = [
+    page.locator('.project-setup-layout'),
+    page.locator('.project-setup-intro'),
+    page.locator('.project-form-setup'),
+  ]
+  for (const surface of surfaces) {
+    const geometry = await surface.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        left: rect.left,
+        right: rect.right,
+      }
+    })
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1)
+    expect(geometry.left).toBeGreaterThanOrEqual(-0.5)
+    expect(geometry.right).toBeLessThanOrEqual(viewport.width + 0.5)
+  }
+}
+
 test('new-project setup can reach Create at 1440x900', async ({ page }) => {
   const problems: string[] = []
   collectPageProblems(page, problems)
   await page.setViewportSize({ width: 1440, height: 900 })
   const frame = await openSetup(page)
+  await expectNoHorizontalClipping(page)
   await expectCreateReachable(page, frame)
   expect(problems).toEqual([])
 })
+
+for (const width of [1050, 1051, 1100]) {
+  test(`new-project setup stays horizontally contained at ${width}px wide`, async ({ page }) => {
+    const problems: string[] = []
+    collectPageProblems(page, problems)
+    await page.setViewportSize({ width, height: 720 })
+    const frame = await openSetup(page)
+    await expectNoHorizontalClipping(page)
+    await expectCreateReachable(page, frame)
+    expect(problems).toEqual([])
+  })
+}
 
 test('new-project setup can reach Create at 390x720', async ({ page }) => {
   const problems: string[] = []
   collectPageProblems(page, problems)
   await page.setViewportSize({ width: 390, height: 720 })
   const frame = await openSetup(page)
+  await expectNoHorizontalClipping(page)
   await expectCreateReachable(page, frame)
   expect(problems).toEqual([])
 })

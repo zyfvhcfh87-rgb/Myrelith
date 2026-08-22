@@ -29,6 +29,10 @@ includes the work below. The public prerelease label remains
 
 - New-project setup scrolls on shorter viewports so audio settings and Create
   stay reachable instead of sitting below a clipped frame.
+- New-project setup switches to one column before its desktop grid can clip at
+  intermediate viewport widths.
+- Linked A/V partners outside the bounded timeline window now join live move,
+  trim, ripple, slip, and slide previews before the edit commits atomically.
 
 ### Changed
 

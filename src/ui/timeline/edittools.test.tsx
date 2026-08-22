@@ -825,6 +825,51 @@ describe('offline descriptor source bounds', () => {
 })
 
 describe('linked gesture bounds', () => {
+  test.each([
+    'trim-start',
+    'trim-end',
+    'ripple-start',
+    'ripple-end',
+    'slip',
+    'slide',
+  ] as const)('an offscreen linked partner mounts for a live %s preview', (kind) => {
+    installLinkedBoundsFixture({ audioTimelineStart: 1_000 })
+    render(
+      <>
+        <Track
+          track={doc().doc.tracks[0]}
+          timelineOriginFrame={0}
+          timelineWindowEndFrame={200}
+        />
+        <Track
+          track={doc().doc.tracks[1]}
+          timelineOriginFrame={0}
+          timelineWindowEndFrame={200}
+        />
+      </>,
+    )
+    expect(screen.queryByTestId('clip-linked-audio')).not.toBeInTheDocument()
+
+    act(() => transport().setEditPreview({
+      clipId: 'linked-video',
+      kind,
+      deltaFrames: 2,
+      linkGroupId: 'link_preview_bounds',
+    }))
+
+    const audio = screen.getByTestId('clip-linked-audio')
+    expect(audio).toHaveAttribute('data-virtual-gesture-host', 'true')
+    expect(audio).not.toHaveAttribute('role')
+    expect(audio).toHaveAttribute('tabindex', '-1')
+    expect(audio).toHaveAttribute('aria-hidden', 'true')
+    expect(audio).not.toHaveAttribute('aria-label')
+    expect(audio).toHaveClass('dragging')
+    expect(audio).toHaveStyle({ width: '1px' })
+
+    act(() => transport().setEditPreview(null))
+    expect(screen.queryByTestId('clip-linked-audio')).not.toBeInTheDocument()
+  })
+
   test('plain trim-start uses the partner timeline floor for both live ghosts', async () => {
     installLinkedBoundsFixture({ audioTimelineStart: 2 })
     renderLinkedBoundsTracks()

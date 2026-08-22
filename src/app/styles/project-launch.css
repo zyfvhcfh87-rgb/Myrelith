@@ -1613,7 +1613,7 @@
   gap: 7px;
 }
 
-@media (max-width: 1050px) {
+@media (max-width: 1200px) {
   .project-setup-layout {
     grid-template-columns: 1fr;
     align-items: start;
