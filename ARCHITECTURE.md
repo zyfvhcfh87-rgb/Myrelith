@@ -1089,6 +1089,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   store, and revokes every analyzed-but-uncommitted URL in its outer `finally`.
   Cancellation, a rejected decision, project replacement, and failed retry
   must not bypass that exact cleanup owner.
+  OS file drops never invent a second importer: `src/ui/fileDrag.ts` copies
+  File objects only in the drop tick, `src/domain/mediaPlacement.ts` owns
+  integer-frame capture, one-file timeline policy, and linked placement
+  planning, and `src/app/mediaPlacementController.ts` imports through the
+  existing controller before a live-state recheck commits `insertClip`(s).
+  Transport may hold only serializable ghost geometry and status strings —
+  never a File, handle, blob, or object URL.
 - Local media reconnection — `src/app/localMediaHandles.ts` stores opaque
   `FileSystemFileHandle` capabilities in an origin-local IndexedDB sidecar,
   keyed by opaque local-project binding + asset ids. The binding lives only in

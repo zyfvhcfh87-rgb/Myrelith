@@ -131,6 +131,74 @@ describe('EditorShell', () => {
     expect(screen.getAllByRole('separator')).toHaveLength(3)
   })
 
+  test('file drags over the editor never navigate, while link drags stay untouched', () => {
+    render(<EditorShell closing={false} />)
+    const fileOver = new Event('dragover', { bubbles: true, cancelable: true })
+    Object.defineProperty(fileOver, 'dataTransfer', {
+      value: {
+        types: ['Files'],
+        items: [{ kind: 'file', type: 'video/mp4' }],
+        dropEffect: 'none',
+      },
+    })
+    window.dispatchEvent(fileOver)
+    expect(fileOver.defaultPrevented).toBe(true)
+
+    const fileDrop = new Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(fileDrop, 'dataTransfer', {
+      value: {
+        types: ['Files'],
+        items: [{ kind: 'file', type: 'video/mp4' }],
+        files: [],
+        dropEffect: 'none',
+      },
+    })
+    window.dispatchEvent(fileDrop)
+    expect(fileDrop.defaultPrevented).toBe(true)
+
+    const linkOver = new Event('dragover', { bubbles: true, cancelable: true })
+    Object.defineProperty(linkOver, 'dataTransfer', {
+      value: {
+        types: ['text/uri-list'],
+        items: [{ kind: 'string', type: 'text/uri-list' }],
+        dropEffect: 'none',
+      },
+    })
+    window.dispatchEvent(linkOver)
+    expect(linkOver.defaultPrevented).toBe(false)
+  })
+
+  test('dropping a file outside a valid editor target clears the placement marker', async () => {
+    const { container } = render(<EditorShell closing={false} />)
+    const file = new File(['video'], 'take.mp4', { type: 'video/mp4' })
+    const dataTransfer = {
+      types: ['Files'],
+      items: [{
+        kind: 'file',
+        type: file.type,
+        getAsFile: () => file,
+      }],
+      files: [file],
+      getData: () => '',
+      setData: () => {},
+      dropEffect: 'none',
+      effectAllowed: 'copy',
+    }
+
+    fireEvent.dragOver(screen.getByTestId('track-V1'), {
+      dataTransfer,
+      clientX: 240,
+    })
+    expect(await screen.findByTestId('media-placement-ghost')).toBeInTheDocument()
+
+    const invalidTarget = container.querySelector('.area-preview')
+    expect(invalidTarget).not.toBeNull()
+    fireEvent.drop(invalidTarget as Element, { dataTransfer })
+
+    expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+    expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+  })
+
   test('collapses and restores mounted panels without losing editor state', () => {
     useTransportStore.getState().setSelectedClip('clipA')
     const documentBefore = useDocumentStore.getState()
@@ -260,5 +328,52 @@ describe('EditorShell', () => {
       expect(handle).toHaveAttribute('aria-disabled', 'true')
       expect(handle).toHaveAttribute('tabindex', '-1')
     }
+  })
+
+  test('clears a hover placement preview when the project is replaced', () => {
+    render(<EditorShell closing={false} />)
+    act(() => {
+      useTransportStore.getState().setMediaPlacementPreview({
+        trackId: 'V1',
+        startFrame: 12,
+        durationFrames: null,
+        valid: true,
+        phase: 'hover',
+      })
+      useTransportStore.getState().setMediaPlacementStatus('Importing 1 file.')
+    })
+
+    act(() => useDocumentStore.getState().setDoc({
+      ...makeDocument(),
+      id: 'doc-editor-shell-next',
+    }))
+
+    expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+    expect(useTransportStore.getState().mediaPlacementStatus).toBe('')
+  })
+
+  test('window file dragleave invalidates a queued hover preview', () => {
+    render(<EditorShell closing={false} />)
+    act(() => {
+      useTransportStore.getState().setMediaPlacementPreview({
+        trackId: 'V1',
+        startFrame: 12,
+        durationFrames: null,
+        valid: true,
+        phase: 'hover',
+      })
+    })
+
+    const leave = new Event('dragleave', { bubbles: true, cancelable: true })
+    Object.defineProperty(leave, 'relatedTarget', { value: null })
+    Object.defineProperty(leave, 'dataTransfer', {
+      value: {
+        types: ['Files'],
+        items: [{ kind: 'file', type: 'image/png' }],
+      },
+    })
+    window.dispatchEvent(leave)
+
+    expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
   })
 })

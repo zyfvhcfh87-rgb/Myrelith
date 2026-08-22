@@ -59,7 +59,9 @@ import {
   INITIAL_PREFERENCES_STATE,
   usePreferencesStore,
 } from '../state/preferencesStore'
+import { useTransportStore } from '../state/transportStore'
 import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
+import { FILES_DRAG_TYPE } from './fileDrag'
 import MediaPool from './MediaPool'
 
 vi.mock('../app/mediaImportController', () => ({
@@ -791,6 +793,42 @@ describe('MediaPool presentation', () => {
     expect(useMediaStore.getState().assets.size).toBe(0)
   })
 
+  test('OS file drops on the pool invoke the same bounded batch importer', () => {
+    render(<MediaPool />)
+    const video = new File(['video'], 'fresh.mp4', { type: 'video/mp4' })
+    const image = new File(['image'], 'poster.png', { type: 'image/png' })
+    const pool = document.querySelector('.media-pool')
+    if (!pool) throw new Error('Media Pool missing')
+
+    fireEvent.dragOver(pool, {
+      dataTransfer: {
+        types: ['Files'],
+        items: [
+          { kind: 'file', type: video.type, getAsFile: () => video },
+          { kind: 'file', type: image.type, getAsFile: () => image },
+        ],
+        files: [video, image],
+        dropEffect: 'none',
+      },
+    })
+    expect(pool).toHaveClass('drop-target')
+
+    fireEvent.drop(pool, {
+      dataTransfer: {
+        types: ['Files'],
+        items: [
+          { kind: 'file', type: video.type, getAsFile: () => video },
+          { kind: 'file', type: image.type, getAsFile: () => image },
+        ],
+        files: [video, image],
+        dropEffect: 'copy',
+      },
+    })
+
+    expect(importMediaFiles).toHaveBeenCalledWith([video, image])
+    expect(pool).not.toHaveClass('drop-target')
+  })
+
   test('supporting browsers offer remembered and quick import paths', () => {
     vi.mocked(canRememberImportedMedia).mockReturnValue(true)
     render(<MediaPool />)
@@ -1473,5 +1511,40 @@ describe('MediaPool presentation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'One source could not be inspected.',
     )
+  })
+
+  test('file drops import through the shared facade and announce a terminal status', async () => {
+    vi.mocked(importMediaFiles).mockResolvedValueOnce({
+      status: 'batch-complete',
+      results: [
+        { status: 'imported', assetId: 'a' },
+        { status: 'imported', assetId: 'b' },
+      ],
+    })
+    const { container } = render(<MediaPool />)
+    const pool = container.querySelector('.media-pool')
+    if (!pool) throw new Error('Media Pool missing')
+    const files = [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]
+
+    fireEvent.drop(pool, {
+      dataTransfer: {
+        types: [FILES_DRAG_TYPE],
+        items: files.map((file) => ({
+          kind: 'file',
+          type: file.type,
+          getAsFile: () => file,
+        })),
+        files,
+      },
+    })
+
+    expect(importMediaFiles).toHaveBeenCalledWith(files)
+    await waitFor(() => {
+      expect(useTransportStore.getState().mediaPlacementStatus)
+        .toBe('Imported 2 files.')
+    })
   })
 })

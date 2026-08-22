@@ -18,12 +18,27 @@ import type {
   Track as TrackData,
 } from '../domain/schema'
 import type { MediaCompatibilityStatus } from '../domain/mediaCompatibility'
+import { dropOsFilesOnTimeline } from '../app/mediaPlacementController'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
-import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
+import {
+  ASSET_DRAG_TYPE,
+  assetKindDragType,
+  beginAssetDrag,
+  endAssetDrag,
+} from './dnd'
+import { FILES_DRAG_TYPE } from './fileDrag'
 import MediaPool from './MediaPool'
 import Track from './timeline/Track'
+
+vi.mock('../app/mediaPlacementController', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../app/mediaPlacementController')>()
+  return {
+    ...actual,
+    dropOsFilesOnTimeline: vi.fn(actual.dropOsFilesOnTimeline),
+  }
+})
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                             */
@@ -111,14 +126,31 @@ function assetDragData(asset: Pick<MediaAsset, 'id' | 'kind'>) {
   }
 }
 
+function fileDragData(files: File[]) {
+  return {
+    types: [FILES_DRAG_TYPE],
+    items: files.map((file) => ({
+      kind: 'file',
+      type: file.type,
+      getAsFile: () => file,
+    })),
+    files,
+    getData: () => '',
+    setData: () => {},
+    dropEffect: 'none',
+    effectAllowed: 'copy',
+  }
+}
+
 const doc = () => useDocumentStore.getState()
 const trackById = (id: string) =>
   doc().doc.tracks.find((t) => t.id === id) as TrackData
 
-let warnSpy: ReturnType<typeof vi.spyOn>
-
 beforeEach(() => {
-  warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  endAssetDrag()
+  vi.mocked(dropOsFilesOnTimeline).mockReset()
+  vi.mocked(dropOsFilesOnTimeline).mockResolvedValue({ status: 'cancelled' })
   useTransportStore.setState({
     playheadFrame: 0,
     isPlaying: false,
@@ -129,6 +161,8 @@ beforeEach(() => {
     timelineOriginFrame: 0,
     inOut: null,
     dragPreview: null,
+    mediaPlacementPreview: null,
+    mediaPlacementStatus: '',
   })
   useMediaStore.setState({
     descriptors: new Map(),
@@ -386,7 +420,32 @@ describe('Track drop target', () => {
     expect(trackById('V1').clips[0].linkGroupId).toBeUndefined() // solo fallback: unlinked
   })
 
-  test('occupied audio spot rejects the WHOLE drop (never half a pair)', () => {
+  test('occupied A1 still places the video and links onto free A2', () => {
+    seedAsset(makeAsset()) // hasAudio: true
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video'),
+        makeTrack('V2', 'video'),
+        makeTrack('A1', 'audio', [makeClip('existingA', 200, 100)]),
+        makeTrack('A2', 'audio'),
+      ],
+    })
+    render(<Track track={trackById('V2')} />)
+
+    fireEvent.drop(screen.getByTestId('track-V2'), {
+      dataTransfer: assetDragData(makeAsset()),
+      clientX: 240, // A1 is occupied here; A2 is free
+    })
+    expect(trackById('V2').clips).toHaveLength(1)
+    expect(trackById('A1').clips).toHaveLength(1)
+    expect(trackById('A2').clips).toHaveLength(1)
+    expect(trackById('A2').clips[0].linkGroupId)
+      .toBe(trackById('V2').clips[0].linkGroupId)
+    expect(doc().past).toHaveLength(1)
+  })
+
+  test('occupied audio with no free lane rejects the whole pair', () => {
     seedAsset(makeAsset()) // hasAudio: true
     doc().setDoc({
       ...makeDoc(),
@@ -401,10 +460,9 @@ describe('Track drop target', () => {
       dataTransfer: assetDragData(makeAsset()),
       clientX: 240, // audio half would land inside existingA [200, 300)
     })
-    expect(trackById('V1').clips).toHaveLength(0) // video half rolled back too
+    expect(trackById('V1').clips).toHaveLength(0)
     expect(trackById('A1').clips).toHaveLength(1) // only the original
     expect(doc().past).toHaveLength(0)
-    expect(warnSpy).toHaveBeenCalled()
   })
 
   test('drop honors zoom when mapping pixels to frames', () => {
@@ -526,7 +584,7 @@ describe('Track drop target', () => {
     expect(doc().past).toHaveLength(0)
   })
 
-  test('overlapping drop is rejected: no clip, no history, domain warns', () => {
+  test('overlapping drop is rejected: no clip and no history', () => {
     seedAsset(makeAsset())
     doc().setDoc({
       ...makeDoc(),
@@ -543,6 +601,242 @@ describe('Track drop target', () => {
     })
     expect(trackById('V1').clips).toHaveLength(1) // only the original
     expect(doc().past).toHaveLength(0)
-    expect(warnSpy).toHaveBeenCalled()
+  })
+})
+
+describe('Track OS file drop', () => {
+  test('captures the integer drop frame without placing before import', () => {
+    render(<Track track={trackById('V1')} />)
+    const file = new File(['video'], 'take.mp4', { type: 'video/mp4' })
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData([file]),
+      clientX: 240,
+    })
+
+    expect(dropOsFilesOnTimeline).toHaveBeenCalledWith({
+      documentId: 'doc-mediadrop',
+      trackId: 'V1',
+      trackKind: 'video',
+      startFrame: 240,
+      files: [file],
+    })
+    expect(trackById('V1').clips).toHaveLength(0)
+    expect(doc().past).toHaveLength(0)
+  })
+
+  test('honors zoom and the bounded timeline origin for OS files', () => {
+    act(() => useTransportStore.getState().setZoom(2))
+    render(
+      <Track
+        track={trackById('V1')}
+        timelineOriginFrame={1_000_000}
+        timelineWindowEndFrame={1_100_000}
+      />,
+    )
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData([
+        new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+      ]),
+      clientX: 240,
+    })
+
+    expect(dropOsFilesOnTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startFrame: 1_000_120,
+        trackId: 'V1',
+        trackKind: 'video',
+      }),
+    )
+  })
+
+  test('passes every dropped file through so the controller can refuse multiples', () => {
+    render(<Track track={trackById('V1')} />)
+    const files = [
+      new File(['a'], 'a.mp4', { type: 'video/mp4' }),
+      new File(['b'], 'b.mp4', { type: 'video/mp4' }),
+    ]
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData(files),
+      clientX: 0,
+    })
+
+    expect(dropOsFilesOnTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({ files }),
+    )
+    expect(trackById('V1').clips).toHaveLength(0)
+  })
+
+  test('passes the rendered document identity, not a later live replacement', () => {
+    render(<Track documentId="doc-rendered" track={trackById('V1')} />)
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData([
+        new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+      ]),
+      clientX: 0,
+    })
+
+    expect(dropOsFilesOnTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: 'doc-rendered',
+        trackId: 'V1',
+        trackKind: 'video',
+      }),
+    )
+    expect(doc().doc.id).toBe('doc-mediadrop')
+  })
+})
+
+describe('Track placement ghost', () => {
+  test('shows a duration-accurate ghost for an in-flight Media Pool asset', async () => {
+    const asset = makeAsset()
+    seedAsset(asset)
+    beginAssetDrag({
+      assetId: asset.id,
+      kind: asset.kind,
+      durationFrames: asset.durationFrames,
+    })
+    render(<Track track={trackById('V1')} />)
+
+    fireEvent.dragOver(screen.getByTestId('track-V1'), {
+      dataTransfer: assetDragData(asset),
+      clientX: 240,
+    })
+
+    const ghost = await screen.findByTestId('media-placement-ghost')
+    expect(ghost).toHaveAttribute('data-placement-valid', 'true')
+    expect(ghost).toHaveStyle({
+      transform: 'translateX(240px)',
+      width: '120px',
+    })
+  })
+
+  test('shows a one-frame insertion marker for an OS file before release', async () => {
+    render(<Track track={trackById('V1')} />)
+
+    fireEvent.dragOver(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData([
+        new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+      ]),
+      clientX: 240,
+    })
+
+    const ghost = await screen.findByTestId('media-placement-ghost')
+    expect(ghost).toHaveClass('marker')
+    expect(ghost).toHaveStyle({
+      transform: 'translateX(240px)',
+      width: '1px',
+    })
+  })
+
+  test('a queued hover frame cannot resurrect a ghost after drop', () => {
+    const frames: FrameRequestCallback[] = []
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      frames.push(cb)
+      return frames.length
+    })
+    try {
+      render(<Track track={trackById('V1')} />)
+      const lane = screen.getByTestId('track-V1')
+      fireEvent.dragOver(lane, {
+        dataTransfer: fileDragData([
+          new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+        ]),
+        clientX: 240,
+      })
+      expect(frames).toHaveLength(1)
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+
+      fireEvent.drop(lane, {
+        dataTransfer: fileDragData([
+          new File(['a'], 'a.mp4', { type: 'video/mp4' }),
+          new File(['b'], 'b.mp4', { type: 'video/mp4' }),
+        ]),
+        clientX: 240,
+      })
+      act(() => {
+        for (const frame of frames) frame(0)
+      })
+
+      expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+    } finally {
+      raf.mockRestore()
+    }
+  })
+
+  test('a queued hover frame cannot resurrect a ghost after leaving the lane', () => {
+    const frames: FrameRequestCallback[] = []
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      frames.push(cb)
+      return frames.length
+    })
+    try {
+      render(<Track track={trackById('V1')} />)
+      const lane = screen.getByTestId('track-V1')
+      const dataTransfer = fileDragData([
+        new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+      ])
+      fireEvent.dragOver(lane, {
+        dataTransfer,
+        clientX: 240,
+      })
+      expect(frames).toHaveLength(1)
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+
+      fireEvent.dragLeave(lane, {
+        dataTransfer,
+        relatedTarget: null,
+      })
+      act(() => {
+        for (const frame of frames) frame(0)
+      })
+
+      expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+    } finally {
+      raf.mockRestore()
+    }
+  })
+
+  test('a queued asset hover frame cannot resurrect a ghost after drag end', () => {
+    const asset = makeAsset()
+    seedAsset(asset)
+    render(
+      <>
+        <MediaPool />
+        <Track track={trackById('V1')} />
+      </>,
+    )
+    const card = screen.getByTitle(asset.fileName)
+    const dragData = assetDragData(asset)
+    fireEvent.dragStart(card, { dataTransfer: dragData })
+
+    const frames: FrameRequestCallback[] = []
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      frames.push(cb)
+      return frames.length
+    })
+    try {
+      fireEvent.dragOver(screen.getByTestId('track-V1'), {
+        dataTransfer: dragData,
+        clientX: 240,
+      })
+      expect(frames).toHaveLength(1)
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+
+      fireEvent.dragEnd(card, { dataTransfer: dragData })
+      act(() => {
+        for (const frame of frames) frame(0)
+      })
+
+      expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+    } finally {
+      raf.mockRestore()
+    }
   })
 })

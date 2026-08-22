@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import {
@@ -70,10 +71,18 @@ import { useMediaImportStore } from '../state/mediaImportStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import { usePreferencesStore } from '../state/preferencesStore'
-import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
+import { importDroppedMediaFiles, clearMediaPlacementPreview } from '../app/mediaPlacementController'
+import {
+  ASSET_DRAG_TYPE,
+  assetKindDragType,
+  beginAssetDrag,
+  endAssetDrag,
+} from './dnd'
+import { extractDroppedFiles, isFileDrag } from './fileDrag'
 import {
   buildMediaPoolItems,
   filterMediaPoolItems,
+  type MediaPoolKind,
   type MediaPoolKindFilter,
   type MediaPoolStatusFilter,
 } from './mediaPoolModel'
@@ -610,6 +619,7 @@ function MediaRelinkStatus() {
 
 interface MediaPoolItemCardProps {
   readonly id: string
+  readonly kind: MediaPoolKind
   readonly rowId: string
   readonly rowKey: string
   readonly position: number
@@ -628,6 +638,7 @@ interface MediaPoolItemCardProps {
 
 const MediaPoolItemCard = memo(function MediaPoolItemCard({
   id,
+  kind,
   rowId,
   rowKey,
   position,
@@ -691,6 +702,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
       key={id}
       className="media-item"
       data-media-id={id}
+      data-kind={kind}
       data-media-virtual-row={rowKey}
       data-connection={connection}
       data-compatibility={compatibilityItem?.status}
@@ -723,6 +735,15 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
           liveAsset.kind,
         )
         event.dataTransfer.effectAllowed = 'copy'
+        beginAssetDrag({
+          assetId: liveAsset.id,
+          kind: liveAsset.kind,
+          durationFrames: liveAsset.durationFrames,
+        })
+      }}
+      onDragEnd={() => {
+        endAssetDrag()
+        clearMediaPlacementPreview()
       }}
     >
       <div
@@ -889,6 +910,7 @@ export default function MediaPool() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [partialReview, setPartialReview] =
     useState<PartialTrackImportReview | null>(null)
+  const [dropReady, setDropReady] = useState(false)
   const partialReviewTriggerRef = useRef<HTMLButtonElement | null>(null)
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const itemModels = useMemo(
@@ -1122,8 +1144,39 @@ export default function MediaPool() {
     undoCollectionEdit,
   ])
 
+  const handleFileDragOver = (event: ReactDragEvent<HTMLDivElement>): void => {
+    if (!isFileDrag(event.dataTransfer)) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'copy'
+    setDropReady(true)
+  }
+
+  const handleFileDragLeave = (event: ReactDragEvent<HTMLDivElement>): void => {
+    const related = event.relatedTarget
+    if (related instanceof Node && event.currentTarget.contains(related)) return
+    setDropReady(false)
+  }
+
+  const handleFileDrop = (event: ReactDragEvent<HTMLDivElement>): void => {
+    if (!isFileDrag(event.dataTransfer)) return
+    event.preventDefault()
+    event.stopPropagation()
+    setDropReady(false)
+    const files = extractDroppedFiles(event.dataTransfer)
+    if (files.length === 0) return
+    void importDroppedMediaFiles(files)
+  }
+
   return (
-    <div className="media-pool" onKeyDown={handleCollectionHistoryKeyDown}>
+    <div
+      className={`media-pool${dropReady ? ' drop-target' : ''}`}
+      data-drop-target={dropReady ? 'true' : undefined}
+      onKeyDown={handleCollectionHistoryKeyDown}
+      onDragOver={handleFileDragOver}
+      onDragLeave={handleFileDragLeave}
+      onDrop={handleFileDrop}
+    >
       <div className="media-pool-header">
         <div className="media-pool-header-main">
           <h2 className="media-pool-title">Media</h2>
@@ -1324,11 +1377,13 @@ export default function MediaPool() {
         {virtualizer.renderedItemIds.map((id) => {
           const position = filteredIndexById.get(id)
           const rowKey = rowKeyByItemId.get(id)
-          if (position === undefined || !rowKey) return null
+          const item = position === undefined ? undefined : filteredItems[position]
+          if (position === undefined || !rowKey || !item) return null
           return (
             <MediaPoolItemCard
               key={id}
               id={id}
+              kind={item.kind}
               rowId={`media-pool-row-${position}`}
               rowKey={rowKey}
               position={position + 1}

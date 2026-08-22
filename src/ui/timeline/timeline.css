@@ -454,6 +454,46 @@
   box-shadow: inset 0 0 0 1px #63a979;
 }
 
+.media-placement-ghost {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  z-index: 7;
+  pointer-events: none;
+  border-radius: 4px;
+  background: rgba(61, 100, 145, 0.35);
+  border: 1px solid #6f9fd0;
+  box-sizing: border-box;
+}
+
+.track-audio .media-placement-ghost {
+  background: rgba(61, 127, 86, 0.35);
+  border-color: #63a979;
+}
+
+.media-placement-ghost.marker {
+  top: 0;
+  bottom: 0;
+  border-radius: 0;
+  background: #8cb4e8;
+  border: 0;
+  box-shadow: 0 0 0 1px rgba(16, 22, 30, 0.65);
+}
+
+.track-audio .media-placement-ghost.marker {
+  background: #7dcaa0;
+}
+
+.media-placement-ghost.invalid {
+  background: rgba(154, 74, 74, 0.4);
+  border-color: #c07a7a;
+}
+
+.media-placement-ghost.marker.invalid {
+  background: #d98989;
+}
+
 /* Flag-state restyles (behavior lives in the compositor / domain ops).
    track-solo-dimmed = ANOTHER audio track is solo, this one is out of
    the mix (Timeline derives it; the rule lives in audibleTracks). */
