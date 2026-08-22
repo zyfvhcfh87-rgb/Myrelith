@@ -41,12 +41,14 @@ import { initMotionAnalysisRuntime } from './motionAnalysisRuntime'
 import { getPluginAppController } from './pluginAppController'
 import { setPreviewPluginBinding } from './previewController'
 import {
+  clearMediaPlacementPreview,
   teardownMediaPlacementUi,
 } from './mediaPlacementController'
 import {
   isEditorFileDropTarget,
   isFileDrag,
 } from '../ui/fileDrag'
+import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 
 const pluginAppController = getPluginAppController()
@@ -61,6 +63,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
   const [workspaceAnnouncement, setWorkspaceAnnouncement] = useState('')
   const [ProxyBenchmarkPanel, setProxyBenchmarkPanel] = useState<ComponentType | null>(null)
   const workspace = useWorkspaceLayoutStore()
+  const documentId = useDocumentStore((state) => state.doc.id)
   const fitted = fitWorkspaceLayout(workspace, viewport)
   useUndoRedoShortcuts()
   useEditShortcuts()
@@ -147,7 +150,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
       if (event.relatedTarget != null) return
       const preview = useTransportStore.getState().mediaPlacementPreview
       if (preview?.phase === 'hover') {
-        useTransportStore.getState().setMediaPlacementPreview(null)
+        clearMediaPlacementPreview()
       }
     }
     window.addEventListener('dragover', onDragOver)
@@ -160,6 +163,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
       teardownMediaPlacementUi()
     }
   }, [])
+  useEffect(() => () => teardownMediaPlacementUi(), [documentId])
   useEffect(() => {
     const shell = shellRef.current
     if (!shell) return

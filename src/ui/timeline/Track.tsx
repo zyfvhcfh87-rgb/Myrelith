@@ -20,20 +20,20 @@
 import { memo, useMemo, useState } from 'react'
 import type { DragEvent as ReactDragEvent } from 'react'
 import type { Track as TrackData } from '../../domain/schema'
-import { compatibilityAllowsTimelineUse } from '../../domain/mediaCompatibility'
-import {
-  planMediaAssetPlacement,
-  timelineFrameFromPointer,
-  visiblePlacementPreviewRange,
-} from '../../domain/mediaPlacement'
 import { rangeEnd } from '../../domain/time'
 import {
+  applyMediaPlacementHoverPreview,
+  clearMediaPlacementPreview,
   dropOsFilesOnTimeline,
+  invalidateMediaPlacementHover,
+  mediaPlacementPreviewEpoch,
   placeImportedAsset,
-  setMediaPlacementPreview,
+  previewImportedAssetPlacement,
+  previewOsFilePlacement,
+  timelineFrameFromPointer,
+  visiblePlacementPreviewRange,
 } from '../../app/mediaPlacementController'
 import { useDocumentStore } from '../../state/documentStore'
-import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
 import {
   ASSET_DRAG_TYPE,
@@ -49,6 +49,11 @@ import { useScrubScheduler } from './useScrubScheduler'
 
 interface TrackProps {
   track: TrackData
+  /**
+   * Document identity from the last committed render of this lane.
+   * Timeline always passes the snapshot it rendered; tests may omit it.
+   */
+  documentId?: string
   /** True while ANOTHER audio track is solo — this lane is out of the mix. */
   soloDimmed?: boolean
   /** Global frame represented by this bounded lane's local x=0. */
@@ -128,6 +133,7 @@ function MediaPlacementGhost({
 
 function Track({
   track,
+  documentId,
   soloDimmed = false,
   timelineOriginFrame = 0,
   timelineWindowEndFrame = Number.MAX_SAFE_INTEGER,
@@ -146,12 +152,15 @@ function Track({
     (state) => (state.dragPreview ?? state.editPreview)?.linkGroupId,
   )
   const schedulePlacementPreview = useScrubScheduler(
-    setMediaPlacementPreview,
+    (payload: { preview: ReturnType<typeof previewOsFilePlacement>; epoch: number }) => {
+      applyMediaPlacementHoverPreview(payload.preview, payload.epoch)
+    },
   )
   const acceptsAssetDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
     !track.locked && trackAcceptsAssetDrag(track.kind, e.dataTransfer.types)
   const acceptsFileDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
     !track.locked && isFileDrag(e.dataTransfer)
+  const snapshotDocumentId = documentId ?? useDocumentStore.getState().doc.id
 
   const flagClasses =
     (track.hidden ? ' track-hidden' : '') +
@@ -204,34 +213,23 @@ function Track({
         e.dataTransfer.dropEffect = 'copy'
         setDropReady(true)
         const startFrame = pointerFrame(e, timelineOriginFrame)
+        const epoch = mediaPlacementPreviewEpoch()
         if (fileDrag) {
           schedulePlacementPreview({
-            trackId: track.id,
-            startFrame,
-            durationFrames: null,
-            valid: true,
-            phase: 'hover',
+            preview: previewOsFilePlacement(track.id, startFrame),
+            epoch,
           })
           return
         }
         const active = getActiveAssetDrag()
-        const media = useMediaStore.getState()
-        const asset = active ? media.assets.get(active.assetId) ?? null : null
-        const plan = planMediaAssetPlacement({
-          doc: useDocumentStore.getState().doc,
-          asset,
-          trackId: track.id,
-          startFrame,
-          timelineCompatible: compatibilityAllowsTimelineUse(
-            active ? media.compatibility.get(active.assetId) : undefined,
-          ),
-        })
         schedulePlacementPreview({
-          trackId: track.id,
-          startFrame,
-          durationFrames: asset?.durationFrames ?? active?.durationFrames ?? null,
-          valid: plan.status !== 'reject',
-          phase: 'hover',
+          preview: previewImportedAssetPlacement({
+            trackId: track.id,
+            startFrame,
+            assetId: active?.assetId ?? null,
+            fallbackDurationFrames: active?.durationFrames ?? null,
+          }),
+          epoch,
         })
       }}
       onDragLeave={(e) => {
@@ -239,40 +237,42 @@ function Track({
         setDropReady(false)
         const preview = useTransportStore.getState().mediaPlacementPreview
         if (preview?.trackId === track.id && preview.phase === 'hover') {
-          setMediaPlacementPreview(null)
+          clearMediaPlacementPreview()
         }
       }}
       onDrop={(e) => {
         setDropReady(false)
+        invalidateMediaPlacementHover()
         const startFrame = pointerFrame(e, timelineOriginFrame)
         if (isFileDrag(e.dataTransfer)) {
           e.preventDefault()
           e.stopPropagation()
           if (track.locked) {
-            setMediaPlacementPreview(null)
+            clearMediaPlacementPreview()
             return
           }
           void dropOsFilesOnTimeline({
-            documentId: useDocumentStore.getState().doc.id,
+            documentId: snapshotDocumentId,
             trackId: track.id,
+            trackKind: track.kind,
             startFrame,
             files: extractDroppedFiles(e.dataTransfer),
           })
           return
         }
         if (!acceptsAssetDrag(e)) {
-          setMediaPlacementPreview(null)
+          clearMediaPlacementPreview()
           return
         }
         e.preventDefault()
         const assetId = e.dataTransfer.getData(ASSET_DRAG_TYPE)
         placeImportedAsset(
-          useDocumentStore.getState().doc.id,
+          snapshotDocumentId,
           assetId,
           track.id,
           startFrame,
         )
-        setMediaPlacementPreview(null)
+        clearMediaPlacementPreview()
         endAssetDrag()
       }}
     >

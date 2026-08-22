@@ -160,7 +160,7 @@ describe('planMediaAssetPlacement', () => {
     })
   })
 
-  test('lands an unlinked video when every unlocked audio lane overlaps', () => {
+  test('rejects the whole pair when the only unlocked audio lane overlaps', () => {
     expect(planMediaAssetPlacement({
       doc: doc([
         track('V1', 'video'),
@@ -170,11 +170,21 @@ describe('planMediaAssetPlacement', () => {
       trackId: 'V1',
       startFrame: 240,
       timelineCompatible: true,
-    })).toEqual({
-      status: 'place-single',
+    })).toEqual({ status: 'reject', reason: 'overlap' })
+  })
+
+  test('rejects the whole pair when every unlocked audio lane overlaps', () => {
+    expect(planMediaAssetPlacement({
+      doc: doc([
+        track('V1', 'video'),
+        track('A1', 'audio', [clip('existingA', 200, 100)]),
+        track('A2', 'audio', [clip('existingA2', 200, 100)]),
+      ]),
+      asset: videoAsset,
       trackId: 'V1',
       startFrame: 240,
-    })
+      timelineCompatible: true,
+    })).toEqual({ status: 'reject', reason: 'overlap' })
   })
 
   test('rejects overlap, lock, kind, compatibility, and missing targets', () => {

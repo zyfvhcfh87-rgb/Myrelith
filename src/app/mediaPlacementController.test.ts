@@ -8,9 +8,13 @@ import {
   resetMediaStoreForTest,
   resetTransportStoreForTest,
 } from '../test/storeFixtures'
-import { importMedia } from './mediaImportController'
+import { importMedia, importMediaFiles } from './mediaImportController'
 import {
+  applyMediaPlacementHoverPreview,
   dropOsFilesOnTimeline,
+  importDroppedMediaFiles,
+  invalidateMediaPlacementHover,
+  mediaPlacementPreviewEpoch,
   placeImportedAsset,
   resetMediaPlacementControllerForTest,
   TIMELINE_MULTI_FILE_DROP_MESSAGE,
@@ -21,6 +25,7 @@ vi.mock('./mediaImportController', async (importOriginal) => {
   return {
     ...actual,
     importMedia: vi.fn(actual.importMedia),
+    importMediaFiles: vi.fn(actual.importMediaFiles),
   }
 })
 
@@ -113,12 +118,26 @@ const doc = () => useDocumentStore.getState()
 const trackById = (id: string) =>
   doc().doc.tracks.find((t) => t.id === id) as TrackData
 
+function fillHistoryToCapacity(): TimelineDoc {
+  const current = doc().doc
+  useDocumentStore.setState({
+    doc: current,
+    past: Array.from({ length: 100 }, (_, index) => ({
+      ...current,
+      name: `history-${index}`,
+    })),
+    future: [],
+  })
+  return current
+}
+
 beforeEach(() => {
   resetMediaPlacementControllerForTest()
   resetTransportStoreForTest()
   resetMediaStoreForTest()
   resetDocumentStoreForTest(makeDoc())
   vi.mocked(importMedia).mockReset()
+  vi.mocked(importMediaFiles).mockReset()
 })
 
 describe('placeImportedAsset', () => {
@@ -198,6 +217,63 @@ describe('placeImportedAsset', () => {
     expect(trackById('V1').clips).toHaveLength(1)
     expect(doc().past).toHaveLength(0)
   })
+
+  test('rejects the whole A/V pair when every unlocked audio lane overlaps', () => {
+    expect(useMediaStore.getState().addAsset(makeAsset())).toBe(true)
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video'),
+        makeTrack('A1', 'audio', [makeClip('existingA', 200, 100)]),
+        makeTrack('A2', 'audio', [makeClip('existingA2', 200, 100)]),
+      ],
+    })
+
+    expect(placeImportedAsset('doc-place-ctrl', 'asset-9', 'V1', 240, true))
+      .toEqual({
+        status: 'not-placed',
+        assetId: 'asset-9',
+        reason: 'overlap',
+      })
+    expect(trackById('V1').clips).toHaveLength(0)
+    expect(trackById('A1').clips.map((item) => item.id)).toEqual(['existingA'])
+    expect(trackById('A2').clips.map((item) => item.id)).toEqual(['existingA2'])
+    expect(doc().past).toHaveLength(0)
+  })
+
+  test('detects a successful place at the 100-entry history cap', () => {
+    expect(useMediaStore.getState().addAsset(makeAsset())).toBe(true)
+    const current = fillHistoryToCapacity()
+
+    expect(placeImportedAsset('doc-place-ctrl', 'asset-9', 'V1', 240))
+      .toEqual({ status: 'placed', assetId: 'asset-9' })
+    expect(doc().doc).not.toBe(current)
+    expect(doc().past).toHaveLength(100)
+    expect(doc().past[99]).toBe(current)
+    expect(trackById('V1').clips).toHaveLength(1)
+  })
+
+  test('detects a rejected place at the 100-entry history cap', () => {
+    expect(useMediaStore.getState().addAsset(makeAsset())).toBe(true)
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video', [makeClip('existing', 200, 100)]),
+        makeTrack('A1', 'audio'),
+      ],
+    })
+    const current = fillHistoryToCapacity()
+
+    expect(placeImportedAsset('doc-place-ctrl', 'asset-9', 'V1', 240))
+      .toEqual({
+        status: 'not-placed',
+        assetId: 'asset-9',
+        reason: 'overlap',
+      })
+    expect(doc().doc).toBe(current)
+    expect(doc().past).toHaveLength(100)
+    expect(trackById('V1').clips.map((item) => item.id)).toEqual(['existing'])
+  })
 })
 
 describe('dropOsFilesOnTimeline', () => {
@@ -272,5 +348,187 @@ describe('dropOsFilesOnTimeline', () => {
     expect(useMediaStore.getState().assets.has('asset-9')).toBe(true)
     expect(trackById('V1').clips.map((item) => item.id)).toEqual(['existing'])
     expect(doc().past).toHaveLength(0)
+  })
+
+  test('does not import when the rendered document has already been replaced', async () => {
+    doc().setDoc({ ...makeDoc(), id: 'doc-other' })
+
+    const result = await dropOsFilesOnTimeline({
+      documentId: 'doc-place-ctrl',
+      trackId: 'V1',
+      trackKind: 'video',
+      startFrame: 240,
+      files: [new File(['video'], 'stale.mp4', { type: 'video/mp4' })],
+    })
+
+    expect(importMedia).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      status: 'not-placed',
+      assetId: '',
+      reason: 'stale-document',
+    })
+    expect(useMediaStore.getState().assets.size).toBe(0)
+  })
+
+  test('does not import when the rendered lane was locked, removed, or changed kind', async () => {
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video', [], true),
+        makeTrack('A1', 'audio'),
+      ],
+    })
+    expect(await dropOsFilesOnTimeline({
+      documentId: 'doc-place-ctrl',
+      trackId: 'V1',
+      trackKind: 'video',
+      startFrame: 0,
+      files: [new File(['video'], 'locked.mp4', { type: 'video/mp4' })],
+    })).toMatchObject({ status: 'not-placed', reason: 'locked-track' })
+    expect(importMedia).not.toHaveBeenCalled()
+
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [makeTrack('A1', 'audio')],
+    })
+    expect(await dropOsFilesOnTimeline({
+      documentId: 'doc-place-ctrl',
+      trackId: 'V1',
+      trackKind: 'video',
+      startFrame: 0,
+      files: [new File(['video'], 'gone.mp4', { type: 'video/mp4' })],
+    })).toMatchObject({ status: 'not-placed', reason: 'missing-track' })
+    expect(importMedia).not.toHaveBeenCalled()
+
+    doc().setDoc({
+      ...makeDoc(),
+      tracks: [
+        { ...makeTrack('V1', 'video'), kind: 'audio' },
+        makeTrack('A1', 'audio'),
+      ],
+    })
+    expect(await dropOsFilesOnTimeline({
+      documentId: 'doc-place-ctrl',
+      trackId: 'V1',
+      trackKind: 'video',
+      startFrame: 0,
+      files: [new File(['video'], 'kind.mp4', { type: 'video/mp4' })],
+    })).toMatchObject({ status: 'not-placed', reason: 'wrong-kind' })
+    expect(importMedia).not.toHaveBeenCalled()
+  })
+})
+
+describe('importDroppedMediaFiles', () => {
+  test('announces success, partial success, and empty drops', async () => {
+    vi.mocked(importMediaFiles).mockResolvedValueOnce({
+      status: 'batch-complete',
+      results: [
+        { status: 'imported', assetId: 'a' },
+        { status: 'imported', assetId: 'b' },
+      ],
+    })
+    expect(await importDroppedMediaFiles([
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ])).toMatchObject({ status: 'batch-complete' })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('Imported 2 files.')
+
+    vi.mocked(importMediaFiles).mockResolvedValueOnce({
+      status: 'imported',
+      assetId: 'one',
+    })
+    expect(await importDroppedMediaFiles([
+      new File(['one'], 'one.png', { type: 'image/png' }),
+    ])).toMatchObject({ status: 'imported' })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('Imported 1 file.')
+
+    vi.mocked(importMediaFiles).mockResolvedValueOnce({
+      status: 'batch-complete',
+      results: [
+        { status: 'imported', assetId: 'a' },
+        { status: 'failed', message: 'Could not read the second file.' },
+      ],
+    })
+    expect(await importDroppedMediaFiles([
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ])).toMatchObject({ status: 'batch-complete' })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('Imported 1 of 2 files.')
+
+    expect(await importDroppedMediaFiles([])).toEqual({ status: 'cancelled' })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('No files to import.')
+  })
+
+  test('announces busy, cancelled, unsupported, and failed terminal states', async () => {
+    vi.mocked(importMediaFiles).mockResolvedValueOnce({ status: 'busy' })
+    expect(await importDroppedMediaFiles([
+      new File(['a'], 'a.png', { type: 'image/png' }),
+    ])).toEqual({ status: 'busy' })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('Import already in progress.')
+
+    vi.mocked(importMediaFiles).mockResolvedValueOnce({ status: 'cancelled' })
+    expect(await importDroppedMediaFiles([
+      new File(['a'], 'a.png', { type: 'image/png' }),
+    ])).toEqual({ status: 'cancelled' })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('Import cancelled.')
+
+    vi.mocked(importMediaFiles).mockResolvedValueOnce({
+      status: 'unsupported',
+      itemId: 'bad',
+    })
+    expect(await importDroppedMediaFiles([
+      new File(['a'], 'a.bin', { type: 'application/octet-stream' }),
+    ])).toMatchObject({ status: 'unsupported' })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('Could not import the file.')
+
+    vi.mocked(importMediaFiles).mockResolvedValueOnce({
+      status: 'failed',
+      message: 'The decoder failed.',
+    })
+    expect(await importDroppedMediaFiles([
+      new File(['a'], 'a.mp4', { type: 'video/mp4' }),
+    ])).toMatchObject({ status: 'failed' })
+    expect(useTransportStore.getState().mediaPlacementStatus)
+      .toBe('The decoder failed.')
+
+    vi.mocked(importMediaFiles).mockRejectedValueOnce(new Error('boom'))
+    expect(await importDroppedMediaFiles([
+      new File(['a'], 'a.mp4', { type: 'video/mp4' }),
+    ])).toEqual({ status: 'failed', message: 'boom' })
+    expect(useTransportStore.getState().mediaPlacementStatus).toBe('boom')
+  })
+})
+
+describe('applyMediaPlacementHoverPreview', () => {
+  test('ignores a queued hover after drop invalidation or a pending marker', () => {
+    const hover = {
+      trackId: 'V1',
+      startFrame: 240,
+      durationFrames: null,
+      valid: true,
+      phase: 'hover' as const,
+    }
+    const epoch = mediaPlacementPreviewEpoch()
+    invalidateMediaPlacementHover()
+    applyMediaPlacementHoverPreview(hover, epoch)
+    expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+
+    const pendingEpoch = mediaPlacementPreviewEpoch()
+    useTransportStore.getState().setMediaPlacementPreview({
+      ...hover,
+      phase: 'pending',
+    })
+    applyMediaPlacementHoverPreview(hover, pendingEpoch)
+    expect(useTransportStore.getState().mediaPlacementPreview).toEqual({
+      ...hover,
+      phase: 'pending',
+    })
   })
 })

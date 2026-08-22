@@ -129,23 +129,28 @@ export function planMediaAssetPlacement(input: {
     return { status: 'reject', reason: 'overlap' }
   }
 
-  // Linked audio follows the first unlocked lane that can actually hold the
-  // pair. Occupied A1 must not reject a drop onto empty V2 when A2 is free,
-  // and a full audio stack still lands the video half alone.
-  const audioLane =
-    input.asset.kind === 'video' && input.asset.hasAudio
-      ? input.doc.tracks.find((candidate) => (
-        candidate.kind === 'audio'
-        && !candidate.locked
-        && !overlapsAny(candidate.clips, range)
-      ))
-      : undefined
-  if (audioLane) {
-    return {
-      status: 'place-linked',
-      videoTrackId: track.id,
-      audioTrackId: audioLane.id,
-      startFrame,
+  // Linked audio uses the first unlocked lane that can actually hold the
+  // pair. Occupied A1 must not reject a drop onto empty V2 when A2 is free.
+  // If any unlocked audio lane exists but all overlap, reject the whole
+  // pair — never a video-only half. No unlocked audio lane still lands
+  // the video clip alone.
+  if (input.asset.kind === 'video' && input.asset.hasAudio) {
+    const unlockedAudioLanes = input.doc.tracks.filter((candidate) => (
+      candidate.kind === 'audio' && !candidate.locked
+    ))
+    const audioLane = unlockedAudioLanes.find((candidate) => (
+      !overlapsAny(candidate.clips, range)
+    ))
+    if (audioLane) {
+      return {
+        status: 'place-linked',
+        videoTrackId: track.id,
+        audioTrackId: audioLane.id,
+        startFrame,
+      }
+    }
+    if (unlockedAudioLanes.length > 0) {
+      return { status: 'reject', reason: 'overlap' }
     }
   }
 

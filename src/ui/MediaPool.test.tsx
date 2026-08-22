@@ -59,7 +59,9 @@ import {
   INITIAL_PREFERENCES_STATE,
   usePreferencesStore,
 } from '../state/preferencesStore'
+import { useTransportStore } from '../state/transportStore'
 import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
+import { FILES_DRAG_TYPE } from './fileDrag'
 import MediaPool from './MediaPool'
 
 vi.mock('../app/mediaImportController', () => ({
@@ -1509,5 +1511,40 @@ describe('MediaPool presentation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'One source could not be inspected.',
     )
+  })
+
+  test('file drops import through the shared facade and announce a terminal status', async () => {
+    vi.mocked(importMediaFiles).mockResolvedValueOnce({
+      status: 'batch-complete',
+      results: [
+        { status: 'imported', assetId: 'a' },
+        { status: 'imported', assetId: 'b' },
+      ],
+    })
+    const { container } = render(<MediaPool />)
+    const pool = container.querySelector('.media-pool')
+    if (!pool) throw new Error('Media Pool missing')
+    const files = [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ]
+
+    fireEvent.drop(pool, {
+      dataTransfer: {
+        types: [FILES_DRAG_TYPE],
+        items: files.map((file) => ({
+          kind: 'file',
+          type: file.type,
+          getAsFile: () => file,
+        })),
+        files,
+      },
+    })
+
+    expect(importMediaFiles).toHaveBeenCalledWith(files)
+    await waitFor(() => {
+      expect(useTransportStore.getState().mediaPlacementStatus)
+        .toBe('Imported 2 files.')
+    })
   })
 })

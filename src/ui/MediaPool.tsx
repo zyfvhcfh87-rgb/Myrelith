@@ -71,10 +71,7 @@ import { useMediaImportStore } from '../state/mediaImportStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import { usePreferencesStore } from '../state/preferencesStore'
-import {
-  announceMediaPoolFileDrop,
-  setMediaPlacementPreview,
-} from '../app/mediaPlacementController'
+import { importDroppedMediaFiles, clearMediaPlacementPreview } from '../app/mediaPlacementController'
 import { useTransportStore } from '../state/transportStore'
 import {
   ASSET_DRAG_TYPE,
@@ -748,7 +745,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
       onDragEnd={() => {
         endAssetDrag()
         const preview = useTransportStore.getState().mediaPlacementPreview
-        if (preview?.phase === 'hover') setMediaPlacementPreview(null)
+        if (preview?.phase === 'hover') clearMediaPlacementPreview()
       }}
     >
       <div
@@ -1170,8 +1167,7 @@ export default function MediaPool() {
     setDropReady(false)
     const files = extractDroppedFiles(event.dataTransfer)
     if (files.length === 0) return
-    announceMediaPoolFileDrop(files.length)
-    void importMediaFiles(files)
+    void importDroppedMediaFiles(files)
   }
 
   return (

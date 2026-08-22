@@ -204,6 +204,7 @@ export default function Timeline() {
             <Track
               key={track.id}
               track={track}
+              documentId={doc.id}
               soloDimmed={anyAudioSolo && track.kind === 'audio' && !track.solo}
               timelineOriginFrame={viewport.originFrame}
               timelineWindowEndFrame={viewport.endFrame}

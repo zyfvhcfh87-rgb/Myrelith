@@ -298,4 +298,51 @@ describe('EditorShell', () => {
       expect(handle).toHaveAttribute('tabindex', '-1')
     }
   })
+
+  test('clears a hover placement preview when the project is replaced', () => {
+    render(<EditorShell closing={false} />)
+    act(() => {
+      useTransportStore.getState().setMediaPlacementPreview({
+        trackId: 'V1',
+        startFrame: 12,
+        durationFrames: null,
+        valid: true,
+        phase: 'hover',
+      })
+      useTransportStore.getState().setMediaPlacementStatus('Importing 1 file.')
+    })
+
+    act(() => useDocumentStore.getState().setDoc({
+      ...makeDocument(),
+      id: 'doc-editor-shell-next',
+    }))
+
+    expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+    expect(useTransportStore.getState().mediaPlacementStatus).toBe('')
+  })
+
+  test('window file dragleave invalidates a queued hover preview', () => {
+    render(<EditorShell closing={false} />)
+    act(() => {
+      useTransportStore.getState().setMediaPlacementPreview({
+        trackId: 'V1',
+        startFrame: 12,
+        durationFrames: null,
+        valid: true,
+        phase: 'hover',
+      })
+    })
+
+    const leave = new Event('dragleave', { bubbles: true, cancelable: true })
+    Object.defineProperty(leave, 'relatedTarget', { value: null })
+    Object.defineProperty(leave, 'dataTransfer', {
+      value: {
+        types: ['Files'],
+        items: [{ kind: 'file', type: 'image/png' }],
+      },
+    })
+    window.dispatchEvent(leave)
+
+    expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+  })
 })

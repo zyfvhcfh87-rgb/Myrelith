@@ -445,7 +445,7 @@ describe('Track drop target', () => {
     expect(doc().past).toHaveLength(1)
   })
 
-  test('occupied audio with no free lane still lands the video half alone', () => {
+  test('occupied audio with no free lane rejects the whole pair', () => {
     seedAsset(makeAsset()) // hasAudio: true
     doc().setDoc({
       ...makeDoc(),
@@ -460,10 +460,9 @@ describe('Track drop target', () => {
       dataTransfer: assetDragData(makeAsset()),
       clientX: 240, // audio half would land inside existingA [200, 300)
     })
-    expect(trackById('V1').clips).toHaveLength(1)
+    expect(trackById('V1').clips).toHaveLength(0)
     expect(trackById('A1').clips).toHaveLength(1) // only the original
-    expect(trackById('V1').clips[0].linkGroupId).toBeUndefined()
-    expect(doc().past).toHaveLength(1)
+    expect(doc().past).toHaveLength(0)
   })
 
   test('drop honors zoom when mapping pixels to frames', () => {
@@ -618,6 +617,7 @@ describe('Track OS file drop', () => {
     expect(dropOsFilesOnTimeline).toHaveBeenCalledWith({
       documentId: 'doc-mediadrop',
       trackId: 'V1',
+      trackKind: 'video',
       startFrame: 240,
       files: [file],
     })
@@ -646,6 +646,7 @@ describe('Track OS file drop', () => {
       expect.objectContaining({
         startFrame: 1_000_120,
         trackId: 'V1',
+        trackKind: 'video',
       }),
     )
   })
@@ -666,6 +667,26 @@ describe('Track OS file drop', () => {
       expect.objectContaining({ files }),
     )
     expect(trackById('V1').clips).toHaveLength(0)
+  })
+
+  test('passes the rendered document identity, not a later live replacement', () => {
+    render(<Track documentId="doc-rendered" track={trackById('V1')} />)
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData([
+        new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+      ]),
+      clientX: 0,
+    })
+
+    expect(dropOsFilesOnTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: 'doc-rendered',
+        trackId: 'V1',
+        trackKind: 'video',
+      }),
+    )
+    expect(doc().doc.id).toBe('doc-mediadrop')
   })
 })
 
@@ -709,5 +730,39 @@ describe('Track placement ghost', () => {
       transform: 'translateX(240px)',
       width: '1px',
     })
+  })
+
+  test('a queued hover frame cannot resurrect a ghost after drop', () => {
+    const frames: FrameRequestCallback[] = []
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      frames.push(cb)
+      return frames.length
+    })
+    try {
+      render(<Track track={trackById('V1')} />)
+      const lane = screen.getByTestId('track-V1')
+      fireEvent.dragOver(lane, {
+        dataTransfer: fileDragData([
+          new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+        ]),
+        clientX: 240,
+      })
+      expect(frames).toHaveLength(1)
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+
+      fireEvent.drop(lane, {
+        dataTransfer: fileDragData([
+          new File(['a'], 'a.mp4', { type: 'video/mp4' }),
+          new File(['b'], 'b.mp4', { type: 'video/mp4' }),
+        ]),
+        clientX: 240,
+      })
+      for (const frame of frames) frame(0)
+
+      expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+    } finally {
+      raf.mockRestore()
+    }
   })
 })

@@ -8,13 +8,14 @@
  * TYPE so lanes can accept/refuse (cursor feedback) mid-drag without seeing
  * the payload. Formats stay lowercase — setData() lowercases them anyway.
  *
- * Kind policy is owned by domain/mediaPlacement.ts. This module only maps
- * HTML5 type strings onto that policy so lanes can refuse mid-drag without
- * seeing the payload. An in-flight asset session carries duration for the
- * hover ghost because getData() is unavailable until drop.
+ * Kind policy is owned by domain/mediaPlacement.ts and exposed through
+ * the app placement facade. This module only maps HTML5 type strings
+ * onto that policy so lanes can refuse mid-drag without seeing the payload.
+ * An in-flight asset session carries duration for the hover ghost because
+ * getData() is unavailable until drop.
  */
 
-import { trackKindAcceptsAssetKind } from '../domain/mediaPlacement'
+import { trackKindAcceptsAssetKind } from '../app/mediaPlacementController'
 import type { AssetKind, TrackKind } from '../domain/schema'
 
 /** dataTransfer format whose payload is the dragged MediaAsset's id. */
