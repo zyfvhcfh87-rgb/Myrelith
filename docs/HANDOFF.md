@@ -993,7 +993,8 @@ surface; it is not a second zoom and never enters document history.
   settings validation, and the pure empty-document factory. Fresh documents
   own four independent video tracks followed by four independent audio tracks;
   persisted documents are never padded to that creation-time default.
-- `src/domain/projectFile.ts` — versioned portable `.myrelith` serialization,
+- `src/domain/projectFile.ts` + `src/domain/projectFile/` — stable facade over
+  focused versioned `.myrelith` serialization, migration, and validation modules;
   migration entry point, strict untrusted-input validation, and bounded durable
   asset metadata; excludes every session-owned field. Issue #17 advances the
   outer project format to 4 and nested timeline schema to 3 for independent
@@ -1058,7 +1059,9 @@ surface; it is not a second zoom and never enters document history.
   source-change cancellation, fresh preview capabilities, and narrowly scoped
   derived-data clearing. The files remain disposable and never enter portable
   project/recovery schemas.
-- `src/ui/Inspector.tsx` — original Issue #12 Slice 6 shared Link/Unlink command
+- `src/ui/Inspector.tsx` + `src/ui/inspector/` — thin tab/composition host over
+  focused timing, text, video, audio, crop, and linking panels. The original
+  Issue #12 Slice 6 shared Link/Unlink command
   group: focusable `aria-disabled` controls, visible described availability,
   exact rendered-intent/latest-state race checks, live rejection announcements,
   retained primary selection, and post-Unlink focus handoff. Issue #33 adds the
@@ -1077,7 +1080,9 @@ surface; it is not a second zoom and never enters document history.
   on release; keyboard controls cover every operation. Issue #43 resolves
   animated values at the playhead and routes edits on animated properties to
   exact playhead keyframes while keeping static property behavior unchanged.
-- `src/app/projectController.ts` — Slice 3 session composition root: validates
+- `src/app/projectController.ts` + `src/app/projectController/` — stable facade,
+  public contracts, production dependency wiring, and one stateful Slice 3
+  session ownership root: validates
   candidates off-store, restores granted local handles, requests remembered
   permission only from the Open click, generation-cancels late work, and
   performs the awaited outgoing-session teardown before committing a complete
@@ -1094,6 +1099,9 @@ surface; it is not a second zoom and never enters document history.
   recovery IndexedDB records; `src/app/projectLibraryController.ts` keeps their
   handles/snapshots outside state. `src/ui/ProjectLaunch.tsx` is the Home, New
   Project, Resume, Recent, and explicit-Recovery UI facade.
+- `src/app/pluginRuntimeController.ts` + `src/app/pluginRuntime/` — stable public
+  facade over explicit request/result contracts, stateless policy helpers, and
+  one app-owned scheduling/cancellation/fail-closed runtime ownership root.
 - `src/pipeline/static-image-inspection.ts` — Issue #18 original Slice 1 bounded,
   content-based PNG/JPEG/WebP/AVIF inspection. It owns immutable source,
   candidate-dimension, decoded-allocation, and animation facts plus stable
@@ -1310,7 +1318,8 @@ surface; it is not a second zoom and never enters document history.
   worker cleanup before bounded-timeout bridge termination. The deprecated
   chunk-batch messages are defined in `render-legacy-protocol.ts` and remain
   only for migration tests. `setDoc` must precede renders built from it.
-- `src/workers/render.worker.ts` — Blob-backed compositing worker: timed video
+- `src/workers/render.worker.ts` + `src/workers/renderWorker/core.ts` — thin
+  worker wiring around the Blob-backed compositing owner: timed video
   keeps one source per asset, sequential clip-keyed playback lanes,
   request-scoped seek cursors, and a tiny timestamp cache. Original Slice 6 adds one
   retained frame-zero static source per image asset, shared across clips and
