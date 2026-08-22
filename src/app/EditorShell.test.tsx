@@ -131,6 +131,43 @@ describe('EditorShell', () => {
     expect(screen.getAllByRole('separator')).toHaveLength(3)
   })
 
+  test('file drags over the editor never navigate, while link drags stay untouched', () => {
+    render(<EditorShell closing={false} />)
+    const fileOver = new Event('dragover', { bubbles: true, cancelable: true })
+    Object.defineProperty(fileOver, 'dataTransfer', {
+      value: {
+        types: ['Files'],
+        items: [{ kind: 'file', type: 'video/mp4' }],
+        dropEffect: 'none',
+      },
+    })
+    window.dispatchEvent(fileOver)
+    expect(fileOver.defaultPrevented).toBe(true)
+
+    const fileDrop = new Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(fileDrop, 'dataTransfer', {
+      value: {
+        types: ['Files'],
+        items: [{ kind: 'file', type: 'video/mp4' }],
+        files: [],
+        dropEffect: 'none',
+      },
+    })
+    window.dispatchEvent(fileDrop)
+    expect(fileDrop.defaultPrevented).toBe(true)
+
+    const linkOver = new Event('dragover', { bubbles: true, cancelable: true })
+    Object.defineProperty(linkOver, 'dataTransfer', {
+      value: {
+        types: ['text/uri-list'],
+        items: [{ kind: 'string', type: 'text/uri-list' }],
+        dropEffect: 'none',
+      },
+    })
+    window.dispatchEvent(linkOver)
+    expect(linkOver.defaultPrevented).toBe(false)
+  })
+
   test('collapses and restores mounted panels without losing editor state', () => {
     useTransportStore.getState().setSelectedClip('clipA')
     const documentBefore = useDocumentStore.getState()

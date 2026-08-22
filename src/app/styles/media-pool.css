@@ -6,6 +6,12 @@
   flex-direction: column;
 }
 
+.media-pool.drop-target {
+  outline: 1px solid #3d6491;
+  outline-offset: -1px;
+  background: #1a222c;
+}
+
 .media-pool-header {
   position: sticky;
   top: 0;

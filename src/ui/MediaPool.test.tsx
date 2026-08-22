@@ -791,6 +791,42 @@ describe('MediaPool presentation', () => {
     expect(useMediaStore.getState().assets.size).toBe(0)
   })
 
+  test('OS file drops on the pool invoke the same bounded batch importer', () => {
+    render(<MediaPool />)
+    const video = new File(['video'], 'fresh.mp4', { type: 'video/mp4' })
+    const image = new File(['image'], 'poster.png', { type: 'image/png' })
+    const pool = document.querySelector('.media-pool')
+    if (!pool) throw new Error('Media Pool missing')
+
+    fireEvent.dragOver(pool, {
+      dataTransfer: {
+        types: ['Files'],
+        items: [
+          { kind: 'file', type: video.type, getAsFile: () => video },
+          { kind: 'file', type: image.type, getAsFile: () => image },
+        ],
+        files: [video, image],
+        dropEffect: 'none',
+      },
+    })
+    expect(pool).toHaveClass('drop-target')
+
+    fireEvent.drop(pool, {
+      dataTransfer: {
+        types: ['Files'],
+        items: [
+          { kind: 'file', type: video.type, getAsFile: () => video },
+          { kind: 'file', type: image.type, getAsFile: () => image },
+        ],
+        files: [video, image],
+        dropEffect: 'copy',
+      },
+    })
+
+    expect(importMediaFiles).toHaveBeenCalledWith([video, image])
+    expect(pool).not.toHaveClass('drop-target')
+  })
+
   test('supporting browsers offer remembered and quick import paths', () => {
     vi.mocked(canRememberImportedMedia).mockReturnValue(true)
     render(<MediaPool />)

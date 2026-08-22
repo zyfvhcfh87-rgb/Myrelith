@@ -8,11 +8,13 @@
  * TYPE so lanes can accept/refuse (cursor feedback) mid-drag without seeing
  * the payload. Formats stay lowercase — setData() lowercases them anyway.
  *
- * Kind policy lives here, not in domain/: operations.ts cannot see assets
- * (they live in mediaStore), so which asset kinds may land on which track
- * kind is gated at the UI boundary before insertClip is ever called.
+ * Kind policy is owned by domain/mediaPlacement.ts. This module only maps
+ * HTML5 type strings onto that policy so lanes can refuse mid-drag without
+ * seeing the payload. An in-flight asset session carries duration for the
+ * hover ghost because getData() is unavailable until drop.
  */
 
+import { trackKindAcceptsAssetKind } from '../domain/mediaPlacement'
 import type { AssetKind, TrackKind } from '../domain/schema'
 
 /** dataTransfer format whose payload is the dragged MediaAsset's id. */
@@ -23,10 +25,27 @@ export function assetKindDragType(kind: AssetKind): string {
   return `${ASSET_DRAG_TYPE}-kind-${kind}`
 }
 
-/** Asset kinds each track kind accepts (images composite on video lanes). */
-const ACCEPTED: Record<TrackKind, readonly AssetKind[]> = {
-  video: ['video', 'image'],
-  audio: ['audio'],
+const ASSET_KINDS: readonly AssetKind[] = ['video', 'audio', 'image']
+
+/** Serializable payload published on Media Pool dragstart for hover ghosts. */
+export interface ActiveAssetDrag {
+  assetId: string
+  kind: AssetKind
+  durationFrames: number
+}
+
+let activeAssetDrag: ActiveAssetDrag | null = null
+
+export function beginAssetDrag(payload: ActiveAssetDrag): void {
+  activeAssetDrag = payload
+}
+
+export function endAssetDrag(): void {
+  activeAssetDrag = null
+}
+
+export function getActiveAssetDrag(): ActiveAssetDrag | null {
+  return activeAssetDrag
 }
 
 /** True when an in-flight drag (its type list) may drop on `trackKind`. */
@@ -34,7 +53,8 @@ export function trackAcceptsAssetDrag(
   trackKind: TrackKind,
   types: readonly string[],
 ): boolean {
-  return ACCEPTED[trackKind].some((kind) =>
-    types.includes(assetKindDragType(kind)),
+  return ASSET_KINDS.some((kind) =>
+    trackKindAcceptsAssetKind(trackKind, kind)
+    && types.includes(assetKindDragType(kind)),
   )
 }

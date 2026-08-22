@@ -18,12 +18,27 @@ import type {
   Track as TrackData,
 } from '../domain/schema'
 import type { MediaCompatibilityStatus } from '../domain/mediaCompatibility'
+import { dropOsFilesOnTimeline } from '../app/mediaPlacementController'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
-import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
+import {
+  ASSET_DRAG_TYPE,
+  assetKindDragType,
+  beginAssetDrag,
+  endAssetDrag,
+} from './dnd'
+import { FILES_DRAG_TYPE } from './fileDrag'
 import MediaPool from './MediaPool'
 import Track from './timeline/Track'
+
+vi.mock('../app/mediaPlacementController', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../app/mediaPlacementController')>()
+  return {
+    ...actual,
+    dropOsFilesOnTimeline: vi.fn(actual.dropOsFilesOnTimeline),
+  }
+})
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                             */
@@ -111,14 +126,31 @@ function assetDragData(asset: Pick<MediaAsset, 'id' | 'kind'>) {
   }
 }
 
+function fileDragData(files: File[]) {
+  return {
+    types: [FILES_DRAG_TYPE],
+    items: files.map((file) => ({
+      kind: 'file',
+      type: file.type,
+      getAsFile: () => file,
+    })),
+    files,
+    getData: () => '',
+    setData: () => {},
+    dropEffect: 'none',
+    effectAllowed: 'copy',
+  }
+}
+
 const doc = () => useDocumentStore.getState()
 const trackById = (id: string) =>
   doc().doc.tracks.find((t) => t.id === id) as TrackData
 
-let warnSpy: ReturnType<typeof vi.spyOn>
-
 beforeEach(() => {
-  warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  endAssetDrag()
+  vi.mocked(dropOsFilesOnTimeline).mockReset()
+  vi.mocked(dropOsFilesOnTimeline).mockResolvedValue({ status: 'cancelled' })
   useTransportStore.setState({
     playheadFrame: 0,
     isPlaying: false,
@@ -129,6 +161,8 @@ beforeEach(() => {
     timelineOriginFrame: 0,
     inOut: null,
     dragPreview: null,
+    mediaPlacementPreview: null,
+    mediaPlacementStatus: '',
   })
   useMediaStore.setState({
     descriptors: new Map(),
@@ -401,10 +435,9 @@ describe('Track drop target', () => {
       dataTransfer: assetDragData(makeAsset()),
       clientX: 240, // audio half would land inside existingA [200, 300)
     })
-    expect(trackById('V1').clips).toHaveLength(0) // video half rolled back too
+    expect(trackById('V1').clips).toHaveLength(0)
     expect(trackById('A1').clips).toHaveLength(1) // only the original
     expect(doc().past).toHaveLength(0)
-    expect(warnSpy).toHaveBeenCalled()
   })
 
   test('drop honors zoom when mapping pixels to frames', () => {
@@ -526,7 +559,7 @@ describe('Track drop target', () => {
     expect(doc().past).toHaveLength(0)
   })
 
-  test('overlapping drop is rejected: no clip, no history, domain warns', () => {
+  test('overlapping drop is rejected: no clip and no history', () => {
     seedAsset(makeAsset())
     doc().setDoc({
       ...makeDoc(),
@@ -543,6 +576,112 @@ describe('Track drop target', () => {
     })
     expect(trackById('V1').clips).toHaveLength(1) // only the original
     expect(doc().past).toHaveLength(0)
-    expect(warnSpy).toHaveBeenCalled()
+  })
+})
+
+describe('Track OS file drop', () => {
+  test('captures the integer drop frame without placing before import', () => {
+    render(<Track track={trackById('V1')} />)
+    const file = new File(['video'], 'take.mp4', { type: 'video/mp4' })
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData([file]),
+      clientX: 240,
+    })
+
+    expect(dropOsFilesOnTimeline).toHaveBeenCalledWith({
+      documentId: 'doc-mediadrop',
+      trackId: 'V1',
+      startFrame: 240,
+      files: [file],
+    })
+    expect(trackById('V1').clips).toHaveLength(0)
+    expect(doc().past).toHaveLength(0)
+  })
+
+  test('honors zoom and the bounded timeline origin for OS files', () => {
+    act(() => useTransportStore.getState().setZoom(2))
+    render(
+      <Track
+        track={trackById('V1')}
+        timelineOriginFrame={1_000_000}
+        timelineWindowEndFrame={1_100_000}
+      />,
+    )
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData([
+        new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+      ]),
+      clientX: 240,
+    })
+
+    expect(dropOsFilesOnTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startFrame: 1_000_120,
+        trackId: 'V1',
+      }),
+    )
+  })
+
+  test('passes every dropped file through so the controller can refuse multiples', () => {
+    render(<Track track={trackById('V1')} />)
+    const files = [
+      new File(['a'], 'a.mp4', { type: 'video/mp4' }),
+      new File(['b'], 'b.mp4', { type: 'video/mp4' }),
+    ]
+
+    fireEvent.drop(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData(files),
+      clientX: 0,
+    })
+
+    expect(dropOsFilesOnTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({ files }),
+    )
+    expect(trackById('V1').clips).toHaveLength(0)
+  })
+})
+
+describe('Track placement ghost', () => {
+  test('shows a duration-accurate ghost for an in-flight Media Pool asset', async () => {
+    const asset = makeAsset()
+    seedAsset(asset)
+    beginAssetDrag({
+      assetId: asset.id,
+      kind: asset.kind,
+      durationFrames: asset.durationFrames,
+    })
+    render(<Track track={trackById('V1')} />)
+
+    fireEvent.dragOver(screen.getByTestId('track-V1'), {
+      dataTransfer: assetDragData(asset),
+      clientX: 240,
+    })
+
+    const ghost = await screen.findByTestId('media-placement-ghost')
+    expect(ghost).toHaveAttribute('data-placement-valid', 'true')
+    expect(ghost).toHaveStyle({
+      transform: 'translateX(240px)',
+      width: '120px',
+    })
+  })
+
+  test('shows a one-frame insertion marker for an OS file before release', async () => {
+    render(<Track track={trackById('V1')} />)
+
+    fireEvent.dragOver(screen.getByTestId('track-V1'), {
+      dataTransfer: fileDragData([
+        new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+      ]),
+      clientX: 240,
+    })
+
+    const ghost = await screen.findByTestId('media-placement-ghost')
+    expect(ghost).toHaveClass('marker')
+    expect(ghost).toHaveStyle({
+      transform: 'translateX(240px)',
+      width: '1px',
+    })
   })
 })

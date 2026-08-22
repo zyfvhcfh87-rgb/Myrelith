@@ -9,13 +9,9 @@
  * Flag classes (track-hidden/-muted/-locked) only restyle the lane; the
  * flags' behavior is enforced in the compositor and domain ops.
  *
- * Dropping an asset (ui/dnd.ts contract) builds clips via domain
- * clipFromAsset and commits ONE documentStore action — insertClip, or
- * insertClips when a video asset brings its audio along as a second clip
- * on the first unlocked audio lane, the pair lands LINKED (edits follow
- * the link; Inspector unlinks). Either way it is a plain click-release
- * edit (one undo entry), so unlike clip drags there is no scrub-preview
- * phase.
+ * Dropping an already-imported asset, or one OS file after import, goes
+ * through app/mediaPlacementController so both paths share overlap, kind,
+ * and linked A/V pairing. Hover writes only transport preview geometry.
  * Handlers read stores with getState() only. Narrow derived transport
  * subscriptions cover the drop highlight and whether this lane contains a
  * live-gesture participant; neither follows per-frame preview deltas.
@@ -24,16 +20,32 @@
 import { memo, useMemo, useState } from 'react'
 import type { DragEvent as ReactDragEvent } from 'react'
 import type { Track as TrackData } from '../../domain/schema'
-import { createLinkGroupId } from '../../domain/linking'
-import { clipFromAsset } from '../../domain/operations'
 import { compatibilityAllowsTimelineUse } from '../../domain/mediaCompatibility'
+import {
+  planMediaAssetPlacement,
+  timelineFrameFromPointer,
+  visiblePlacementPreviewRange,
+} from '../../domain/mediaPlacement'
 import { rangeEnd } from '../../domain/time'
+import {
+  dropOsFilesOnTimeline,
+  placeImportedAsset,
+  setMediaPlacementPreview,
+} from '../../app/mediaPlacementController'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
-import { ASSET_DRAG_TYPE, trackAcceptsAssetDrag } from '../dnd'
+import {
+  ASSET_DRAG_TYPE,
+  endAssetDrag,
+  getActiveAssetDrag,
+  trackAcceptsAssetDrag,
+} from '../dnd'
+import { extractDroppedFiles, isFileDrag } from '../fileDrag'
 import ClipView from './ClipView'
 import TransitionSeam from './TransitionSeam'
+import { frameToTimelineLocalPx } from './timelineViewport'
+import { useScrubScheduler } from './useScrubScheduler'
 
 interface TrackProps {
   track: TrackData
@@ -51,6 +63,68 @@ interface TrackProps {
 // live ClipViews. Project files cap tracks at 256, so this also gives the
 // whole timeline a strict upper bound of 256 cold hosts per gesture.
 const MAX_COLD_LIVE_GESTURE_HOSTS_PER_TRACK = 1
+
+function pointerFrame(
+  event: ReactDragEvent<HTMLDivElement>,
+  originFrame: number,
+): number {
+  const rect = event.currentTarget.getBoundingClientRect()
+  return timelineFrameFromPointer(
+    originFrame,
+    event.clientX - rect.left,
+    useTransportStore.getState().zoom,
+  )
+}
+
+function isLeavingLane(event: ReactDragEvent<HTMLDivElement>): boolean {
+  const related = event.relatedTarget
+  return !(related instanceof Node && event.currentTarget.contains(related))
+}
+
+function MediaPlacementGhost({
+  trackId,
+  timelineOriginFrame,
+  timelineWindowEndFrame,
+}: {
+  trackId: string
+  timelineOriginFrame: number
+  timelineWindowEndFrame: number
+}) {
+  const preview = useTransportStore((state) => (
+    state.mediaPlacementPreview?.trackId === trackId
+      ? state.mediaPlacementPreview
+      : null
+  ))
+  const zoom = useTransportStore((state) => state.zoom)
+  if (!preview) return null
+  const visible = visiblePlacementPreviewRange(
+    preview.startFrame,
+    preview.durationFrames,
+    timelineOriginFrame,
+    timelineWindowEndFrame,
+  )
+  if (!visible) return null
+  const marker = preview.durationFrames === null
+  return (
+    <div
+      className={
+        `media-placement-ghost${marker ? ' marker' : ''}${preview.valid ? '' : ' invalid'}`
+      }
+      data-testid="media-placement-ghost"
+      data-placement-valid={preview.valid ? 'true' : 'false'}
+      data-placement-phase={preview.phase}
+      aria-hidden="true"
+      style={{
+        transform: `translateX(${frameToTimelineLocalPx(
+          visible.startFrame,
+          timelineOriginFrame,
+          zoom,
+        )}px)`,
+        width: Math.max(1, visible.durationFrames * zoom),
+      }}
+    />
+  )
+}
 
 function Track({
   track,
@@ -71,8 +145,13 @@ function Track({
   const liveGestureLinkGroupId = useTransportStore(
     (state) => (state.dragPreview ?? state.editPreview)?.linkGroupId,
   )
-  const acceptsDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
+  const schedulePlacementPreview = useScrubScheduler(
+    setMediaPlacementPreview,
+  )
+  const acceptsAssetDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
     !track.locked && trackAcceptsAssetDrag(track.kind, e.dataTransfer.types)
+  const acceptsFileDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
+    !track.locked && isFileDrag(e.dataTransfer)
 
   const flagClasses =
     (track.hidden ? ' track-hidden' : '') +
@@ -118,53 +197,83 @@ function Track({
         }
       }}
       onDragOver={(e) => {
-        if (!acceptsDrag(e)) return
-        e.preventDefault() // required by DnD: marks the lane as droppable
+        const fileDrag = acceptsFileDrag(e)
+        const assetDrag = acceptsAssetDrag(e)
+        if (!fileDrag && !assetDrag) return
+        e.preventDefault()
         e.dataTransfer.dropEffect = 'copy'
         setDropReady(true)
+        const startFrame = pointerFrame(e, timelineOriginFrame)
+        if (fileDrag) {
+          schedulePlacementPreview({
+            trackId: track.id,
+            startFrame,
+            durationFrames: null,
+            valid: true,
+            phase: 'hover',
+          })
+          return
+        }
+        const active = getActiveAssetDrag()
+        const media = useMediaStore.getState()
+        const asset = active ? media.assets.get(active.assetId) ?? null : null
+        const plan = planMediaAssetPlacement({
+          doc: useDocumentStore.getState().doc,
+          asset,
+          trackId: track.id,
+          startFrame,
+          timelineCompatible: compatibilityAllowsTimelineUse(
+            active ? media.compatibility.get(active.assetId) : undefined,
+          ),
+        })
+        schedulePlacementPreview({
+          trackId: track.id,
+          startFrame,
+          durationFrames: asset?.durationFrames ?? active?.durationFrames ?? null,
+          valid: plan.status !== 'reject',
+          phase: 'hover',
+        })
       }}
-      onDragLeave={() => setDropReady(false)}
+      onDragLeave={(e) => {
+        if (!isLeavingLane(e)) return
+        setDropReady(false)
+        const preview = useTransportStore.getState().mediaPlacementPreview
+        if (preview?.trackId === track.id && preview.phase === 'hover') {
+          setMediaPlacementPreview(null)
+        }
+      }}
       onDrop={(e) => {
         setDropReady(false)
-        if (!acceptsDrag(e)) return
+        const startFrame = pointerFrame(e, timelineOriginFrame)
+        if (isFileDrag(e.dataTransfer)) {
+          e.preventDefault()
+          e.stopPropagation()
+          if (track.locked) {
+            setMediaPlacementPreview(null)
+            return
+          }
+          void dropOsFilesOnTimeline({
+            documentId: useDocumentStore.getState().doc.id,
+            trackId: track.id,
+            startFrame,
+            files: extractDroppedFiles(e.dataTransfer),
+          })
+          return
+        }
+        if (!acceptsAssetDrag(e)) {
+          setMediaPlacementPreview(null)
+          return
+        }
         e.preventDefault()
         const assetId = e.dataTransfer.getData(ASSET_DRAG_TYPE)
-        const media = useMediaStore.getState()
-        const asset = media.assets.get(assetId)
-        if (
-          !asset
-          || asset.durationFrames <= 0
-          || !compatibilityAllowsTimelineUse(media.compatibility.get(assetId))
-        ) return
-        // Same px→frame mapping as the ruler: the lane's left edge is the
-        // current global origin, while pointer deltas remain local pixels.
-        const rect = e.currentTarget.getBoundingClientRect()
-        const zoom = useTransportStore.getState().zoom
-        const frame = Math.max(
-          0,
-          timelineOriginFrame + Math.round((e.clientX - rect.left) / zoom),
+        placeImportedAsset(
+          useDocumentStore.getState().doc.id,
+          assetId,
+          track.id,
+          startFrame,
         )
-        const documentStore = useDocumentStore.getState()
-        // A video asset that carries audio lands as a PAIR (NLE convention):
-        // its video clip on this lane plus an audio clip on the first
-        // unlocked audio lane, both stamped with ONE fresh linkGroupId so
-        // the pair lands LINKED — one atomic insertClips, one undo entry.
-        // If the audio spot is taken the whole drop is rejected (never half
-        // a pair); with no usable audio lane the video half lands alone,
-        // unlinked.
-        const audioLane =
-          asset.kind === 'video' && asset.hasAudio
-            ? documentStore.doc.tracks.find((t) => t.kind === 'audio' && !t.locked)
-            : undefined
-        if (audioLane) {
-          const linkGroupId = createLinkGroupId(documentStore.doc)
-          documentStore.insertClips([
-            { trackId: track.id, clip: clipFromAsset(asset, frame, linkGroupId) },
-            { trackId: audioLane.id, clip: clipFromAsset(asset, frame, linkGroupId) },
-          ])
-        } else {
-          documentStore.insertClip(track.id, clipFromAsset(asset, frame))
-        }
+        setMediaPlacementPreview(null)
+        endAssetDrag()
       }}
     >
       {clipsToRender.map((clip) => (
@@ -177,6 +286,11 @@ function Track({
           timelineWindowEndFrame={timelineWindowEndFrame}
         />
       ))}
+      <MediaPlacementGhost
+        trackId={track.id}
+        timelineOriginFrame={timelineOriginFrame}
+        timelineWindowEndFrame={timelineWindowEndFrame}
+      />
       {track.kind === 'video' &&
         track.clips.slice(0, -1).map((from, index) => {
           const to = track.clips[index + 1]

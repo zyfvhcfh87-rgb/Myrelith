@@ -89,6 +89,21 @@ export type ClipVisualPreviewOwner =
   | 'stabilization'
   | 'motion-tracking'
 
+/**
+ * Ephemeral geometry for dropping a Media Pool asset or OS file onto a lane.
+ * Duration is null for an unopened OS file (insertion marker). Never holds a
+ * File, handle, blob, or object URL.
+ */
+export type MediaPlacementPreviewPhase = 'hover' | 'pending'
+
+export interface MediaPlacementPreview {
+  trackId: TrackId
+  startFrame: number
+  durationFrames: number | null
+  valid: boolean
+  phase: MediaPlacementPreviewPhase
+}
+
 /** Live preview-only geometry for a media clip direct-manipulation gesture. */
 export interface ClipVisualPreview {
   /** Named editor ownership prevents one mounted preview surface clearing another. */
@@ -141,6 +156,10 @@ export interface TransportState {
   textOverlayPreview: TextOverlayPreview | null
   /** Uncommitted media geometry shown by the shared preview compositor. */
   clipVisualPreview: ClipVisualPreview | null
+  /** Lane ghost / insertion marker for an in-flight media drop. */
+  mediaPlacementPreview: MediaPlacementPreview | null
+  /** Polite live-region copy for drop import/placement outcomes. */
+  mediaPlacementStatus: string
 
   /** Move the playhead. Does NOTHING else — no side effects, no coupling. */
   setPlayheadFrame: (frame: number) => void
@@ -201,6 +220,10 @@ export interface TransportState {
     owner: ClipVisualPreviewOwner,
     preview: Omit<ClipVisualPreview, 'owner'> | null,
   ) => void
+  /** Publish or clear the media-drop ghost. Never writes document history. */
+  setMediaPlacementPreview: (preview: MediaPlacementPreview | null) => void
+  /** Replace the drop-import live region; empty string is silence. */
+  setMediaPlacementStatus: (status: string) => void
   /** Clear every session-owned playback/navigation value for a new project. */
   resetTransport: () => void
 }
@@ -226,6 +249,8 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   snapGuide: null,
   textOverlayPreview: null,
   clipVisualPreview: null,
+  mediaPlacementPreview: null,
+  mediaPlacementStatus: '',
 })
 
 // A queued range-input frame must not resurrect pre-reset zoom state. Keep
@@ -491,6 +516,40 @@ export const useTransportStore = create<TransportState>()((set) => ({
     }
     set({ clipVisualPreview: activeOwnedClipVisualPreview() })
   },
+  setMediaPlacementPreview: (preview) =>
+    set((state) => {
+      const mediaPlacementPreview = preview
+        ? {
+            trackId: preview.trackId,
+            startFrame: Math.max(0, Math.round(preview.startFrame)),
+            durationFrames: preview.durationFrames === null
+              ? null
+              : Math.max(0, Math.round(preview.durationFrames)),
+            valid: preview.valid,
+            phase: preview.phase,
+          }
+        : null
+      if (
+        state.mediaPlacementPreview === null
+        && mediaPlacementPreview === null
+      ) return state
+      if (
+        state.mediaPlacementPreview?.trackId === mediaPlacementPreview?.trackId
+        && state.mediaPlacementPreview?.startFrame
+          === mediaPlacementPreview?.startFrame
+        && state.mediaPlacementPreview?.durationFrames
+          === mediaPlacementPreview?.durationFrames
+        && state.mediaPlacementPreview?.valid === mediaPlacementPreview?.valid
+        && state.mediaPlacementPreview?.phase === mediaPlacementPreview?.phase
+      ) return state
+      return { mediaPlacementPreview }
+    }),
+  setMediaPlacementStatus: (status) =>
+    set((state) => (
+      state.mediaPlacementStatus === status
+        ? state
+        : { mediaPlacementStatus: status }
+    )),
   resetTransport: () => {
     transportResetRevision += 1
     clearOwnedClipVisualPreviews()

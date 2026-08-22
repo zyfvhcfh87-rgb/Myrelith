@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import {
@@ -70,7 +71,18 @@ import { useMediaImportStore } from '../state/mediaImportStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import { usePreferencesStore } from '../state/preferencesStore'
-import { ASSET_DRAG_TYPE, assetKindDragType } from './dnd'
+import {
+  announceMediaPoolFileDrop,
+  setMediaPlacementPreview,
+} from '../app/mediaPlacementController'
+import { useTransportStore } from '../state/transportStore'
+import {
+  ASSET_DRAG_TYPE,
+  assetKindDragType,
+  beginAssetDrag,
+  endAssetDrag,
+} from './dnd'
+import { extractDroppedFiles, isFileDrag } from './fileDrag'
 import {
   buildMediaPoolItems,
   filterMediaPoolItems,
@@ -723,6 +735,16 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
           liveAsset.kind,
         )
         event.dataTransfer.effectAllowed = 'copy'
+        beginAssetDrag({
+          assetId: liveAsset.id,
+          kind: liveAsset.kind,
+          durationFrames: liveAsset.durationFrames,
+        })
+      }}
+      onDragEnd={() => {
+        endAssetDrag()
+        const preview = useTransportStore.getState().mediaPlacementPreview
+        if (preview?.phase === 'hover') setMediaPlacementPreview(null)
       }}
     >
       <div
@@ -889,6 +911,7 @@ export default function MediaPool() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [partialReview, setPartialReview] =
     useState<PartialTrackImportReview | null>(null)
+  const [dropReady, setDropReady] = useState(false)
   const partialReviewTriggerRef = useRef<HTMLButtonElement | null>(null)
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const itemModels = useMemo(
@@ -1122,8 +1145,40 @@ export default function MediaPool() {
     undoCollectionEdit,
   ])
 
+  const handleFileDragOver = (event: ReactDragEvent<HTMLDivElement>): void => {
+    if (!isFileDrag(event.dataTransfer)) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'copy'
+    setDropReady(true)
+  }
+
+  const handleFileDragLeave = (event: ReactDragEvent<HTMLDivElement>): void => {
+    const related = event.relatedTarget
+    if (related instanceof Node && event.currentTarget.contains(related)) return
+    setDropReady(false)
+  }
+
+  const handleFileDrop = (event: ReactDragEvent<HTMLDivElement>): void => {
+    if (!isFileDrag(event.dataTransfer)) return
+    event.preventDefault()
+    event.stopPropagation()
+    setDropReady(false)
+    const files = extractDroppedFiles(event.dataTransfer)
+    if (files.length === 0) return
+    announceMediaPoolFileDrop(files.length)
+    void importMediaFiles(files)
+  }
+
   return (
-    <div className="media-pool" onKeyDown={handleCollectionHistoryKeyDown}>
+    <div
+      className={`media-pool${dropReady ? ' drop-target' : ''}`}
+      data-drop-target={dropReady ? 'true' : undefined}
+      onKeyDown={handleCollectionHistoryKeyDown}
+      onDragOver={handleFileDragOver}
+      onDragLeave={handleFileDragLeave}
+      onDrop={handleFileDrop}
+    >
       <div className="media-pool-header">
         <div className="media-pool-header-main">
           <h2 className="media-pool-title">Media</h2>

@@ -40,6 +40,14 @@ import { initProxyController } from './proxyController'
 import { initMotionAnalysisRuntime } from './motionAnalysisRuntime'
 import { getPluginAppController } from './pluginAppController'
 import { setPreviewPluginBinding } from './previewController'
+import {
+  teardownMediaPlacementUi,
+} from './mediaPlacementController'
+import {
+  isEditorFileDropTarget,
+  isFileDrag,
+} from '../ui/fileDrag'
+import { useTransportStore } from '../state/transportStore'
 
 const pluginAppController = getPluginAppController()
 
@@ -119,6 +127,38 @@ export default function EditorShell({ closing }: EditorShellProps) {
   }, [])
   useEffect(() => {
     initMediaVisuals()
+  }, [])
+  useEffect(() => {
+    const onDragOver = (event: DragEvent): void => {
+      if (!isFileDrag(event.dataTransfer)) return
+      event.preventDefault()
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = isEditorFileDropTarget(event.target)
+          ? 'copy'
+          : 'none'
+      }
+    }
+    const onDrop = (event: DragEvent): void => {
+      if (!isFileDrag(event.dataTransfer)) return
+      event.preventDefault()
+    }
+    const onDragLeave = (event: DragEvent): void => {
+      if (!isFileDrag(event.dataTransfer)) return
+      if (event.relatedTarget != null) return
+      const preview = useTransportStore.getState().mediaPlacementPreview
+      if (preview?.phase === 'hover') {
+        useTransportStore.getState().setMediaPlacementPreview(null)
+      }
+    }
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('drop', onDrop)
+    window.addEventListener('dragleave', onDragLeave)
+    return () => {
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('drop', onDrop)
+      window.removeEventListener('dragleave', onDragLeave)
+      teardownMediaPlacementUi()
+    }
   }, [])
   useEffect(() => {
     const shell = shellRef.current
@@ -292,6 +332,22 @@ export default function EditorShell({ closing }: EditorShellProps) {
         <Timeline />
       </section>
       {ProxyBenchmarkPanel ? <ProxyBenchmarkPanel /> : null}
+      <MediaDropStatus />
     </div>
+  )
+}
+
+function MediaDropStatus() {
+  const status = useTransportStore((state) => state.mediaPlacementStatus)
+  return (
+    <span
+      className="visually-hidden"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="media-drop-status"
+    >
+      {status}
+    </span>
   )
 }
