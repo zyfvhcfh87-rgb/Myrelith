@@ -60,21 +60,26 @@ function clipFixture(id: string, startFrame: number) {
   }
 }
 
-function trackFixture(id: string, kind: 'video' | 'audio', clips: object[]) {
+function trackFixture(
+  id: string,
+  kind: 'video' | 'audio',
+  clips: object[],
+  hidden = false,
+) {
   return {
     id,
     kind,
     name: id,
     clips,
     transitions: [],
-    hidden: false,
+    hidden,
     muted: false,
     solo: false,
     locked: false,
   }
 }
 
-function linkedProjectFixture(): string {
+function linkedProjectFixture(hiddenVideoPartner = false): string {
   const durationMicroseconds = 4_000_000
   return JSON.stringify({
     format: 'myrelith-project',
@@ -88,11 +93,22 @@ function linkedProjectFixture(): string {
       height: 1_080,
       audioSampleRate: 48_000,
       tracks: [
-        trackFixture('V1', 'video', [clipFixture(VISIBLE_CLIP_ID, 100)]),
+        trackFixture(
+          'V1',
+          'video',
+          [clipFixture(
+            hiddenVideoPartner ? OFFSCREEN_CLIP_ID : VISIBLE_CLIP_ID,
+            hiddenVideoPartner ? 20_000_000 : 100,
+          )],
+          hiddenVideoPartner,
+        ),
         trackFixture('V2', 'video', []),
         trackFixture('V3', 'video', []),
         trackFixture('V4', 'video', []),
-        trackFixture('A1', 'audio', [clipFixture(OFFSCREEN_CLIP_ID, 20_000_000)]),
+        trackFixture('A1', 'audio', [clipFixture(
+          hiddenVideoPartner ? VISIBLE_CLIP_ID : OFFSCREEN_CLIP_ID,
+          hiddenVideoPartner ? 100 : 20_000_000,
+        )]),
         trackFixture('A2', 'audio', []),
         trackFixture('A3', 'audio', []),
         trackFixture('A4', 'audio', []),
@@ -156,5 +172,36 @@ test('offscreen linked clip joins a live keyboard trim preview', async ({ page }
 
   await expect(offscreen).toHaveCount(0)
   await expect.poll(() => visible.getAttribute('style')).not.toBe(committedStyle)
+  expect(problems).toEqual([])
+})
+
+test('hidden offscreen video partner remains an invisible live host', async ({ page }) => {
+  const problems: string[] = []
+  collectPageProblems(page, problems)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Open a project', exact: true }).click()
+  await page.locator('.project-file-input').setInputFiles({
+    name: 'hidden-video-linked-preview.myrelith',
+    mimeType: 'application/json',
+    buffer: Buffer.from(linkedProjectFixture(true)),
+  })
+  await page.getByRole('button', { name: 'Open with 1 offline', exact: true }).click()
+
+  const visible = page.getByTestId(`clip-${VISIBLE_CLIP_ID}`)
+  const offscreen = page.getByTestId(`clip-${OFFSCREEN_CLIP_ID}`)
+  await expect(visible).toBeVisible()
+  await expect(offscreen).toHaveCount(0)
+
+  await visible.focus()
+  await visible.press('[')
+  await visible.press('ArrowRight')
+
+  await expect(offscreen).toHaveCount(1)
+  await expect(offscreen).toHaveAttribute('data-virtual-gesture-host', 'true')
+  await expect(offscreen).toHaveCSS('opacity', '0')
+  await expect(offscreen).toHaveCSS('width', '1px')
+
+  await visible.press('Escape')
+  await expect(offscreen).toHaveCount(0)
   expect(problems).toEqual([])
 })

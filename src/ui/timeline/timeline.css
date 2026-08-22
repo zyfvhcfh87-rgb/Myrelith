@@ -528,7 +528,7 @@
    the bounded frame window. It stays connected for pointerup/cancel, but the
    1px edge proxy is invisible and cannot become a new interaction target. */
 .clip-view.virtual-gesture-host,
-.track-audio .clip-view.virtual-gesture-host {
+.timeline-track .clip-view.virtual-gesture-host {
   opacity: 0;
   padding: 0;
   border: 0;
