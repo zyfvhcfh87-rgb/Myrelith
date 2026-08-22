@@ -16,8 +16,9 @@
  * the link; Inspector unlinks). Either way it is a plain click-release
  * edit (one undo entry), so unlike clip drags there is no scrub-preview
  * phase.
- * Handlers read stores with getState() only; the lone subscription-free
- * local state is the drop highlight, so render isolation is unchanged.
+ * Handlers read stores with getState() only. Narrow derived transport
+ * subscriptions cover the drop highlight and whether this lane contains a
+ * live-gesture participant; neither follows per-frame preview deltas.
  */
 
 import { memo, useState } from 'react'
@@ -54,6 +55,14 @@ function Track({
   const clipDropTarget = useTransportStore(
     (state) => state.dragPreview?.targetTrackId === track.id,
   )
+  const hasLiveGestureParticipant = useTransportStore((state) => {
+    const gesture = state.dragPreview ?? state.editPreview
+    return gesture !== null && track.clips.some(
+      (clip) =>
+        gesture.clipId === clip.id
+        || (clip.linkGroupId !== undefined && gesture.linkGroupId === clip.linkGroupId),
+    )
+  })
 
   const acceptsDrag = (e: ReactDragEvent<HTMLDivElement>): boolean =>
     !track.locked && trackAcceptsAssetDrag(track.kind, e.dataTransfer.types)
@@ -64,7 +73,9 @@ function Track({
     (track.locked ? ' track-locked' : '') +
     (soloDimmed ? ' track-solo-dimmed' : '')
   const liveTransport = useTransportStore.getState()
-  const liveGesture = liveTransport.dragPreview ?? liveTransport.editPreview
+  const liveGesture = hasLiveGestureParticipant
+    ? liveTransport.dragPreview ?? liveTransport.editPreview
+    : null
   const participatesInLiveGesture = (clipId: string, linkGroupId?: string) =>
     liveGesture !== null &&
     (liveGesture.clipId === clipId ||

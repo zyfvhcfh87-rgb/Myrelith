@@ -55,7 +55,7 @@ function plan(
     tool: 'select',
     movePreviewDelta: null,
     editPreview: null,
-    ownsLiveGesture: false,
+    participatesInLiveGesture: false,
     timelineOriginFrame: 0,
     timelineWindowEndFrame: 1_000,
     assetDurationFrames: 300,
@@ -259,7 +259,7 @@ describe('planClipPresentation', () => {
     }
 
     expect(plan(input)).toBeNull()
-    expect(plan({ ...input, ownsLiveGesture: true })).toMatchObject({
+    expect(plan({ ...input, participatesInLiveGesture: true })).toMatchObject({
       hasVisibleSlice: false,
       displayedStartFrame: 200,
       displayedEndFrame: 200,

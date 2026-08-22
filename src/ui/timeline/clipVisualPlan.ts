@@ -152,7 +152,7 @@ export interface ClipPresentationPlanInput {
   tool: TimelineTool
   movePreviewDelta: number | null
   editPreview: EditPreview | null
-  ownsLiveGesture: boolean
+  participatesInLiveGesture: boolean
   timelineOriginFrame: number
   timelineWindowEndFrame: number
   assetDurationFrames: number
@@ -412,7 +412,7 @@ export function planClipPresentation({
   tool,
   movePreviewDelta,
   editPreview,
-  ownsLiveGesture,
+  participatesInLiveGesture,
   timelineOriginFrame,
   timelineWindowEndFrame,
   assetDurationFrames,
@@ -480,7 +480,7 @@ export function planClipPresentation({
     timelineWindowEndFrame,
   )
   const hasVisibleSlice = clippedEndFrame > clippedStartFrame
-  if (!hasVisibleSlice && !ownsLiveGesture) return null
+  if (!hasVisibleSlice && !participatesInLiveGesture) return null
 
   const displayedStartFrame = hasVisibleSlice
     ? clippedStartFrame

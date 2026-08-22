@@ -89,10 +89,13 @@ function ClipView({
       ? s.editPreview
       : null,
   )
-  const ownsLiveGesture = useTransportStore(
-    (s) =>
-      s.dragPreview?.clipId === clip.id || s.editPreview?.clipId === clip.id,
-  )
+  const participatesInLiveGesture = useTransportStore((s) => {
+    const gesture = s.dragPreview ?? s.editPreview
+    return gesture !== null && (
+      gesture.clipId === clip.id
+      || (clip.linkGroupId !== undefined && gesture.linkGroupId === clip.linkGroupId)
+    )
+  })
   const documentRate = useDocumentStore((s) => s.doc.frameRate)
 
   // Both visuals map the asset's FULL source duration. The waveform crops a
@@ -144,7 +147,7 @@ function ClipView({
     tool,
     movePreviewDelta,
     editPreview,
-    ownsLiveGesture,
+    participatesInLiveGesture,
     timelineOriginFrame,
     timelineWindowEndFrame,
     assetDurationFrames,
