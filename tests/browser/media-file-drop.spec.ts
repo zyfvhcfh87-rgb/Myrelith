@@ -206,11 +206,13 @@ test('OS file drops stay in the editor and finish Media Pool and timeline import
   await createProject(page)
   const editorUrl = page.url()
 
+  await showOsInsertionMarker(page, 'V1')
   await page.locator('.area-preview').drop({
     files: [pngFile('away.png')],
   })
   await expect(page).toHaveURL(editorUrl)
   await expect(page.getByText('away.png')).toHaveCount(0)
+  await expect(page.getByTestId('media-placement-ghost')).toHaveCount(0)
 
   const pool = page.locator('.media-pool')
   await pool.drop({

@@ -235,10 +235,7 @@ function Track({
       onDragLeave={(e) => {
         if (!isLeavingLane(e)) return
         setDropReady(false)
-        const preview = useTransportStore.getState().mediaPlacementPreview
-        if (preview?.trackId === track.id && preview.phase === 'hover') {
-          clearMediaPlacementPreview()
-        }
+        clearMediaPlacementPreview()
       }}
       onDrop={(e) => {
         setDropReady(false)

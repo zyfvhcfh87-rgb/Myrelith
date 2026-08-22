@@ -144,14 +144,12 @@ export default function EditorShell({ closing }: EditorShellProps) {
     const onDrop = (event: DragEvent): void => {
       if (!isFileDrag(event.dataTransfer)) return
       event.preventDefault()
+      clearMediaPlacementPreview()
     }
     const onDragLeave = (event: DragEvent): void => {
       if (!isFileDrag(event.dataTransfer)) return
       if (event.relatedTarget != null) return
-      const preview = useTransportStore.getState().mediaPlacementPreview
-      if (preview?.phase === 'hover') {
-        clearMediaPlacementPreview()
-      }
+      clearMediaPlacementPreview()
     }
     window.addEventListener('dragover', onDragOver)
     window.addEventListener('drop', onDrop)

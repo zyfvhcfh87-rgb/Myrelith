@@ -757,7 +757,81 @@ describe('Track placement ghost', () => {
         ]),
         clientX: 240,
       })
-      for (const frame of frames) frame(0)
+      act(() => {
+        for (const frame of frames) frame(0)
+      })
+
+      expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+    } finally {
+      raf.mockRestore()
+    }
+  })
+
+  test('a queued hover frame cannot resurrect a ghost after leaving the lane', () => {
+    const frames: FrameRequestCallback[] = []
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      frames.push(cb)
+      return frames.length
+    })
+    try {
+      render(<Track track={trackById('V1')} />)
+      const lane = screen.getByTestId('track-V1')
+      const dataTransfer = fileDragData([
+        new File(['video'], 'take.mp4', { type: 'video/mp4' }),
+      ])
+      fireEvent.dragOver(lane, {
+        dataTransfer,
+        clientX: 240,
+      })
+      expect(frames).toHaveLength(1)
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+
+      fireEvent.dragLeave(lane, {
+        dataTransfer,
+        relatedTarget: null,
+      })
+      act(() => {
+        for (const frame of frames) frame(0)
+      })
+
+      expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+    } finally {
+      raf.mockRestore()
+    }
+  })
+
+  test('a queued asset hover frame cannot resurrect a ghost after drag end', () => {
+    const asset = makeAsset()
+    seedAsset(asset)
+    render(
+      <>
+        <MediaPool />
+        <Track track={trackById('V1')} />
+      </>,
+    )
+    const card = screen.getByTitle(asset.fileName)
+    const dragData = assetDragData(asset)
+    fireEvent.dragStart(card, { dataTransfer: dragData })
+
+    const frames: FrameRequestCallback[] = []
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      frames.push(cb)
+      return frames.length
+    })
+    try {
+      fireEvent.dragOver(screen.getByTestId('track-V1'), {
+        dataTransfer: dragData,
+        clientX: 240,
+      })
+      expect(frames).toHaveLength(1)
+      expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+
+      fireEvent.dragEnd(card, { dataTransfer: dragData })
+      act(() => {
+        for (const frame of frames) frame(0)
+      })
 
       expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
       expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()

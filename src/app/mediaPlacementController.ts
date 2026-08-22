@@ -21,7 +21,6 @@ import {
   trackKindAcceptsAssetKind as domainTrackKindAcceptsAssetKind,
   visiblePlacementPreviewRange as domainVisiblePlacementPreviewRange,
   TIMELINE_MULTI_FILE_DROP_MESSAGE,
-  type MediaPlacementPlan,
   type MediaPlacementPreviewRange,
   type MediaPlacementRejection,
 } from '../domain/mediaPlacement'
@@ -51,12 +50,6 @@ export type TimelineFileDropResult =
   | { status: 'unsupported'; assetId?: string }
   | { status: 'failed'; message: string }
 
-export type {
-  MediaPlacementPlan,
-  MediaPlacementPreviewRange,
-  MediaPlacementRejection,
-}
-
 let timelineDropGeneration = 0
 let previewEpoch = 0
 
@@ -76,7 +69,7 @@ export function invalidateMediaPlacementHover(): void {
   bumpPreviewEpoch()
 }
 
-export function setMediaPlacementPreview(
+function setMediaPlacementPreview(
   preview: MediaPlacementPreview | null,
 ): void {
   useTransportStore.getState().setMediaPlacementPreview(preview)
@@ -188,7 +181,7 @@ function announcePlacementFailure(fileName: string): void {
   setStatus(`Imported ${fileName}, but it could not be placed on that lane.`)
 }
 
-export function announceMediaPoolFileDrop(fileCount: number): void {
+function announceMediaPoolFileDrop(fileCount: number): void {
   setStatus(
     fileCount === 1
       ? 'Importing 1 file.'
@@ -202,80 +195,65 @@ function importedFileName(assetId: string, fallback = 'media'): string {
     ?? fallback
 }
 
+function successfulImportMessage(fileCount: number): string {
+  return fileCount === 1 ? 'Imported 1 file.' : `Imported ${fileCount} files.`
+}
+
+function unsupportedImportMessage(fileCount: number): string {
+  return fileCount === 1
+    ? 'Could not import the file.'
+    : `Could not import ${fileCount} files.`
+}
+
+function terminalImportMessage(
+  result: MediaImportResult,
+  requestedCount: number,
+): string {
+  switch (result.status) {
+    case 'imported':
+      return successfulImportMessage(requestedCount)
+    case 'busy':
+      return 'Import already in progress.'
+    case 'cancelled':
+      return 'Import cancelled.'
+    case 'limited':
+    case 'unsupported':
+      return unsupportedImportMessage(requestedCount)
+    case 'failed':
+      return result.message
+  }
+}
+
 function announceBatchImportResult(
   results: readonly MediaImportResult[],
   requestedCount: number,
 ): void {
   const imported = results.filter((result) => result.status === 'imported')
-  const cancelled = results.some((result) => result.status === 'cancelled')
-  const busy = results.some((result) => result.status === 'busy')
-  const unsupported = results.filter((result) => (
-    result.status === 'limited' || result.status === 'unsupported'
-  ))
   const failed = results.filter((result) => result.status === 'failed')
 
   if (imported.length === requestedCount && requestedCount > 0) {
-    setStatus(
-      requestedCount === 1 ? 'Imported 1 file.' : `Imported ${requestedCount} files.`,
-    )
+    setStatus(successfulImportMessage(requestedCount))
     return
   }
   if (imported.length > 0) {
     setStatus(`Imported ${imported.length} of ${requestedCount} files.`)
     return
   }
-  if (busy) {
-    setStatus('Import already in progress.')
-    return
-  }
-  if (cancelled) {
-    setStatus('Import cancelled.')
-    return
-  }
-  if (unsupported.length > 0) {
-    setStatus(
-      requestedCount === 1
-        ? 'Could not import the file.'
-        : `Could not import ${requestedCount} files.`,
-    )
-    return
-  }
-  const firstFailure = failed[0]
-  setStatus(
-    firstFailure && firstFailure.status === 'failed'
-      ? firstFailure.message
-      : 'Import failed.',
-  )
+  const terminal = results.find((result) => result.status === 'busy')
+    ?? results.find((result) => result.status === 'cancelled')
+    ?? results.find((result) => (
+      result.status === 'limited' || result.status === 'unsupported'
+    ))
+    ?? failed[0]
+  setStatus(terminal ? terminalImportMessage(terminal, requestedCount) : 'Import failed.')
 }
 
 function announceImportSelectionResult(
   result: MediaImportSelectionResult,
   requestedCount: number,
 ): void {
-  if (result.status === 'busy') {
-    setStatus('Import already in progress.')
-    return
-  }
-  if (result.status === 'cancelled') {
-    setStatus('Import cancelled.')
-    return
-  }
-  if (result.status === 'failed') {
-    setStatus(result.message)
-    return
-  }
-  if (result.status === 'imported') {
-    setStatus(
-      requestedCount === 1 ? 'Imported 1 file.' : `Imported ${requestedCount} files.`,
-    )
-    return
-  }
-  if (result.status === 'limited' || result.status === 'unsupported') {
-    setStatus(
-      requestedCount === 1
-        ? 'Could not import the file.'
-        : `Could not import ${requestedCount} files.`,
-    )
+  if (result.status !== 'batch-complete') {
+    setStatus(terminalImportMessage(result, requestedCount))
     return
   }
   announceBatchImportResult(result.results, requestedCount)

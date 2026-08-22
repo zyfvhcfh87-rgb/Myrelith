@@ -72,7 +72,6 @@ import { useMediaStore } from '../state/mediaStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import { usePreferencesStore } from '../state/preferencesStore'
 import { importDroppedMediaFiles, clearMediaPlacementPreview } from '../app/mediaPlacementController'
-import { useTransportStore } from '../state/transportStore'
 import {
   ASSET_DRAG_TYPE,
   assetKindDragType,
@@ -744,8 +743,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
       }}
       onDragEnd={() => {
         endAssetDrag()
-        const preview = useTransportStore.getState().mediaPlacementPreview
-        if (preview?.phase === 'hover') clearMediaPlacementPreview()
+        clearMediaPlacementPreview()
       }}
     >
       <div

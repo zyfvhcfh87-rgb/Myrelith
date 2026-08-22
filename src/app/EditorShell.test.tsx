@@ -168,6 +168,37 @@ describe('EditorShell', () => {
     expect(linkOver.defaultPrevented).toBe(false)
   })
 
+  test('dropping a file outside a valid editor target clears the placement marker', async () => {
+    const { container } = render(<EditorShell closing={false} />)
+    const file = new File(['video'], 'take.mp4', { type: 'video/mp4' })
+    const dataTransfer = {
+      types: ['Files'],
+      items: [{
+        kind: 'file',
+        type: file.type,
+        getAsFile: () => file,
+      }],
+      files: [file],
+      getData: () => '',
+      setData: () => {},
+      dropEffect: 'none',
+      effectAllowed: 'copy',
+    }
+
+    fireEvent.dragOver(screen.getByTestId('track-V1'), {
+      dataTransfer,
+      clientX: 240,
+    })
+    expect(await screen.findByTestId('media-placement-ghost')).toBeInTheDocument()
+
+    const invalidTarget = container.querySelector('.area-preview')
+    expect(invalidTarget).not.toBeNull()
+    fireEvent.drop(invalidTarget as Element, { dataTransfer })
+
+    expect(useTransportStore.getState().mediaPlacementPreview).toBeNull()
+    expect(screen.queryByTestId('media-placement-ghost')).not.toBeInTheDocument()
+  })
+
   test('collapses and restores mounted panels without losing editor state', () => {
     useTransportStore.getState().setSelectedClip('clipA')
     const documentBefore = useDocumentStore.getState()
