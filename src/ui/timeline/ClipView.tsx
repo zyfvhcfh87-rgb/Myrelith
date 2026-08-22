@@ -188,11 +188,18 @@ function ClipView({
       data-source-mode={clip.sourceMode ?? 'timed'}
       data-primary-selected={isSelected && isPrimarySelection ? 'true' : 'false'}
       data-virtual-gesture-host={hasVisibleSlice ? 'false' : 'true'}
-      role="button"
-      tabIndex={0}
-      aria-label={`${clip.name}, ${accessibleKind} clip`}
-      aria-pressed={isSelected}
-      aria-keyshortcuts="Control+ArrowLeft Control+ArrowRight Meta+ArrowLeft Meta+ArrowRight [ ] ArrowLeft ArrowRight Enter Escape"
+      role={hasVisibleSlice ? 'button' : undefined}
+      tabIndex={hasVisibleSlice ? 0 : -1}
+      aria-hidden={hasVisibleSlice ? undefined : true}
+      aria-label={
+        hasVisibleSlice ? `${clip.name}, ${accessibleKind} clip` : undefined
+      }
+      aria-pressed={hasVisibleSlice ? isSelected : undefined}
+      aria-keyshortcuts={
+        hasVisibleSlice
+          ? 'Control+ArrowLeft Control+ArrowRight Meta+ArrowLeft Meta+ArrowRight [ ] ArrowLeft ArrowRight Enter Escape'
+          : undefined
+      }
       title={interactionTitle}
       style={{
         transform:

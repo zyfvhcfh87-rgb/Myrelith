@@ -859,6 +859,10 @@ describe('linked gesture bounds', () => {
 
     const audio = screen.getByTestId('clip-linked-audio')
     expect(audio).toHaveAttribute('data-virtual-gesture-host', 'true')
+    expect(audio).not.toHaveAttribute('role')
+    expect(audio).toHaveAttribute('tabindex', '-1')
+    expect(audio).toHaveAttribute('aria-hidden', 'true')
+    expect(audio).not.toHaveAttribute('aria-label')
     expect(audio).toHaveClass('dragging')
     expect(audio).toHaveStyle({ width: '1px' })
 

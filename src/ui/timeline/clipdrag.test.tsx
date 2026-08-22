@@ -740,6 +740,10 @@ describe('linked clip gestures (A/V pairs)', () => {
 
     const audioEl = screen.getByTestId('clip-aud')
     expect(audioEl).toHaveAttribute('data-virtual-gesture-host', 'true')
+    expect(audioEl).not.toHaveAttribute('role')
+    expect(audioEl).toHaveAttribute('tabindex', '-1')
+    expect(audioEl).toHaveAttribute('aria-hidden', 'true')
+    expect(audioEl).not.toHaveAttribute('aria-label')
     expect(audioEl).toHaveClass('dragging')
     expect(audioEl).toHaveStyle({ width: '1px' })
     expect(doc().doc).toBe(linked)
