@@ -47,6 +47,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { INITIAL_MEDIA_IMPORT_STATE, useMediaImportStore } from '../state/mediaImportStore'
 import type { AssetVisuals } from '../state/mediaStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useProxyStore } from '../state/proxyStore'
 import {
   INITIAL_ACTIVE_MEDIA_RELINK,
   INITIAL_PROJECT_SESSION_STATE,
@@ -484,7 +485,7 @@ describe('MediaPool presentation', () => {
       collections: [{ id: 'selects', name: 'Selects', assetIds: [] }],
     })
     render(<MediaPool />)
-    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+    const listbox = screen.getByRole('grid', { name: 'Media assets' })
     listbox.focus()
     fireEvent.keyDown(listbox, { key: 'End' })
     const finalCard = await screen.findByTitle('Clip 0499.wav')
@@ -509,8 +510,8 @@ describe('MediaPool presentation', () => {
     seedLargeCatalog(500, true)
     render(<MediaPool />)
 
-    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
-    expect(within(listbox).getAllByRole('option').length).toBeLessThan(40)
+    const listbox = screen.getByRole('grid', { name: 'Media assets' })
+    expect(within(listbox).getAllByRole('row').length).toBeLessThan(40)
     expect(screen.getByText('500 of 500')).toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('searchbox'), {
@@ -518,7 +519,7 @@ describe('MediaPool presentation', () => {
     })
 
     await waitFor(() => {
-      expect(within(listbox).getAllByRole('option')).toHaveLength(1)
+      expect(within(listbox).getAllByRole('row')).toHaveLength(1)
     })
     expect(screen.getByTitle('Clip 0499.wav')).toHaveAttribute(
       'aria-posinset',
@@ -556,7 +557,7 @@ describe('MediaPool presentation', () => {
   test('keeps keyboard selection and drag identity across a virtual boundary', async () => {
     seedLargeCatalog(500, true)
     render(<MediaPool />)
-    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+    const listbox = screen.getByRole('grid', { name: 'Media assets' })
     listbox.focus()
 
     fireEvent.keyDown(listbox, { key: 'End' })
@@ -576,7 +577,7 @@ describe('MediaPool presentation', () => {
   test('moves ArrowUp/ArrowDown by the visible grid column count', async () => {
     seedLargeCatalog(9, true)
     render(<MediaPool />)
-    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+    const listbox = screen.getByRole('grid', { name: 'Media assets' })
 
     const setListWidth = async (width: number): Promise<void> => {
       Object.defineProperty(listbox, 'clientWidth', {
@@ -625,7 +626,7 @@ describe('MediaPool presentation', () => {
   test('leaves ArrowUp/ArrowDown on the current cell when that column has no destination', async () => {
     seedLargeCatalog(5, true)
     render(<MediaPool />)
-    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+    const listbox = screen.getByRole('grid', { name: 'Media assets' })
 
     Object.defineProperty(listbox, 'clientWidth', {
       configurable: true,
@@ -658,7 +659,7 @@ describe('MediaPool presentation', () => {
   test('relinks an offline item reached across a virtual boundary', async () => {
     seedLargeCatalog(500, false)
     render(<MediaPool />)
-    const listbox = screen.getByRole('listbox', { name: 'Media assets' })
+    const listbox = screen.getByRole('grid', { name: 'Media assets' })
     listbox.focus()
 
     fireEvent.keyDown(listbox, { key: 'End' })
@@ -667,6 +668,70 @@ describe('MediaPool presentation', () => {
     const file = new File(['audio'], 'Clip 0499.wav', { type: 'audio/wav' })
     fireEvent.change(input, { target: { files: [file] } })
     expect(connectActiveAssetMedia).toHaveBeenCalledWith('asset-0499', file)
+  })
+
+  test('keeps row actions out of listbox options and operates them from the keyboard', () => {
+    seedAsset(makeAsset())
+    useMediaStore.setState((state) => {
+      const offline = descriptorFromAsset(makeAsset({
+        id: 'asset-off',
+        fileName: 'offline.mp4',
+      }))
+      const descriptors = new Map(state.descriptors)
+      descriptors.set(offline.id, offline)
+      return {
+        descriptors,
+        collections: [{ id: 'selects', name: 'Selects', assetIds: [] }],
+      }
+    })
+    useProxyStore.getState().setAsset({
+      assetId: 'asset-9',
+      phase: 'available',
+      progress: 0,
+      detail: 'No local proxy yet.',
+      canGenerate: true,
+      originalAvailable: true,
+      entry: null,
+    })
+    render(<MediaPool />)
+
+    const grid = screen.getByRole('grid', { name: 'Media assets' })
+    expect(within(grid).queryAllByRole('option')).toHaveLength(0)
+    const connectedRow = screen.getByRole('row', { name: /beach\.mp4/ })
+    expect(connectedRow).toHaveAttribute('aria-selected', 'true')
+    expect(within(connectedRow).getAllByRole('gridcell').length).toBeGreaterThan(0)
+
+    const organize = within(connectedRow).getByRole('button', {
+      name: 'Organize beach.mp4 in collections',
+    })
+    organize.focus()
+    expect(organize).toHaveFocus()
+    fireEvent.click(organize)
+    const membership = within(connectedRow).getByRole('checkbox', { name: 'Selects' })
+    membership.focus()
+    fireEvent.click(membership)
+    expect(useMediaStore.getState().collections[0]?.assetIds).toEqual(['asset-9'])
+
+    const proxy = within(connectedRow).getByRole('button', { name: 'Generate proxy' })
+    proxy.focus()
+    expect(proxy).toHaveFocus()
+
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'ArrowRight' })
+    const offlineRow = screen.getByRole('row', { name: /offline\.mp4/ })
+    expect(offlineRow).toHaveAttribute('aria-selected', 'true')
+    const relink = within(offlineRow).getByLabelText('Relink offline.mp4')
+    relink.focus()
+    expect(relink).toHaveFocus()
+    const file = new File(['source'], 'offline.mp4', { type: 'video/mp4' })
+    fireEvent.change(relink, { target: { files: [file] } })
+    expect(connectActiveAssetMedia).toHaveBeenCalledWith('asset-off', file)
+
+    const remove = within(connectedRow).getByRole('button', { name: 'Remove beach.mp4' })
+    remove.focus()
+    fireEvent.click(remove)
+    expect(forgetImportedMediaHandle).toHaveBeenCalledWith('asset-9')
+    expect(screen.queryByRole('row', { name: /beach\.mp4/ })).not.toBeInTheDocument()
   })
 
   test('edits the future-import duration with an exact accessible name', () => {

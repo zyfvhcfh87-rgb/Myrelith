@@ -517,7 +517,7 @@ export function planClipPresentation({
       ? clip.text !== undefined
         ? 'Text overlays have no source media, so Slip is unavailable.'
         : 'Still images always show their single source frame, so Slip is unavailable.'
-      : 'Select clip. Hold Ctrl or Command while clicking, or with Enter or Space, to add or remove it from the selection.'
+      : 'Select clip. Hold Ctrl or Command while clicking, or with Enter or Space, to add or remove it from the selection. Use [ and ] to preview a start or end trim, or arrow keys with Slip or Slide. Enter applies a keyboard edit; Escape cancels.'
 
   return {
     isStillSource,

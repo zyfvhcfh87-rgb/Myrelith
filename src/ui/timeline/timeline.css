@@ -200,6 +200,21 @@
   user-select: none;
 }
 
+.timeline-ruler-seek {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+}
+
+.timeline-ruler-seek:focus-visible {
+  outline: 2px solid #76a8ea;
+  outline-offset: -2px;
+}
+
 .ruler-tick {
   position: absolute;
   top: 0;

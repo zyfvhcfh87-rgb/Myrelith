@@ -21,6 +21,7 @@ import {
 } from '../domain/timelineMarkers'
 import { rangeEnd } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaImportStore } from '../state/mediaImportStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
 import { useTransportStore, type TimelineTool } from '../state/transportStore'
 import { stepFrame, togglePlayback } from './transportController'
@@ -308,6 +309,9 @@ function rippleDeleteDisabledReason(doc: TimelineDoc, clipId: string | null): st
 function commandDisabledReason(id: EditorCommandId): string | null {
   const session = useProjectSessionStore.getState()
   if (session.phase === 'closing') return 'Wait until the project finishes closing.'
+  if (useMediaImportStore.getState().phase !== 'idle') {
+    return 'Finish or cancel the media import first.'
+  }
 
   const document = useDocumentStore.getState()
   const transport = useTransportStore.getState()

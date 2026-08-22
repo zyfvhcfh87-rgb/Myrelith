@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import {
+  INITIAL_MEDIA_IMPORT_STATE,
+  useMediaImportStore,
+} from '../state/mediaImportStore'
+import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
@@ -68,6 +72,7 @@ beforeEach(() => {
     ...INITIAL_PROJECT_SESSION_STATE,
     screen: 'editor',
   })
+  useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
 })
 
 describe('editor command catalog', () => {
@@ -204,5 +209,22 @@ describe('editor command catalog', () => {
     })
     expect(executeEditorCommand('timeline.ripple-delete').executed).toBe(false)
     expect(warn).not.toHaveBeenCalled()
+  })
+
+  test('refuses every command while a media import dialog is open', () => {
+    useMediaImportStore.setState({
+      phase: 'error',
+      fileName: 'broken.mp4',
+      prompt: null,
+      error: 'unsupported container',
+    })
+    useTransportStore.getState().setSelectedClip('clip-1')
+
+    expect(resolveEditorCommand('tool.trim')).toMatchObject({
+      enabled: false,
+      disabledReason: 'Finish or cancel the media import first.',
+    })
+    expect(executeEditorCommand('timeline.ripple-delete').executed).toBe(false)
+    expect(useDocumentStore.getState().doc.tracks[0]?.clips).toHaveLength(1)
   })
 })

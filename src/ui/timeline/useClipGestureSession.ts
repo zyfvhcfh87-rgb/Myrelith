@@ -49,6 +49,7 @@ interface ClipGestureSessionOptions {
 /** Live drag-session values; refs, so moves never re-render anything extra. */
 interface GestureSession {
   mode: GestureMode
+  origin: 'pointer' | 'keyboard'
   pointerStartX: number
   /** Exact immutable document snapshot this gesture was opened against. */
   document: TimelineDoc
@@ -64,6 +65,8 @@ interface GestureSession {
   maxDelta: number
   /** Stable targets from the same immutable pointer-down document. */
   snapCandidates: readonly TimelineSnapCandidate[]
+  /** Keyboard-edit delta; unused for pointer sessions. */
+  currentDelta: number
 }
 
 interface SnapPreviewUpdate {
@@ -137,7 +140,27 @@ export function useClipGestureSession({
   const setSnapGuide = useTransportStore((s) => s.setSnapGuide)
   const session = useRef<GestureSession | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const announceRef = useRef<HTMLSpanElement | null>(null)
   const keyboardGuideTimer = useRef<number | null>(null)
+
+  const announce = (message: string): void => {
+    const region = announceRef.current
+    if (!region) return
+    region.textContent = ''
+    region.textContent = message
+  }
+
+  const editLabel = (mode: GestureMode): string => {
+    switch (mode) {
+      case 'trim-start': return 'Trim start'
+      case 'trim-end': return 'Trim end'
+      case 'ripple-start': return 'Ripple trim start'
+      case 'ripple-end': return 'Ripple trim end'
+      case 'slip': return 'Slip'
+      case 'slide': return 'Slide'
+      case 'move': return 'Move'
+    }
+  }
 
   // If a gesture owner disappears before pointerup, clear only its preview.
   useEffect(
@@ -301,6 +324,7 @@ export function useClipGestureSession({
 
     session.current = {
       mode,
+      origin: 'pointer',
       pointerStartX: event.clientX,
       document: currentDoc,
       originFrame: currentClip.timelineRange.startFrame,
@@ -312,6 +336,7 @@ export function useClipGestureSession({
         playheadFrame: useTransportStore.getState().playheadFrame,
         excludedClipIds,
       }),
+      currentDelta: 0,
     }
     if (keyboardGuideTimer.current !== null) {
       window.clearTimeout(keyboardGuideTimer.current)
@@ -397,6 +422,142 @@ export function useClipGestureSession({
     endGesture()
   }
 
+  const applyEditDelta = (active: GestureSession, delta: number): void => {
+    const store = useDocumentStore.getState()
+    if (delta === 0) return
+    switch (active.mode) {
+      case 'move':
+        store.moveClip(clipId, trackId, active.originFrame + delta)
+        break
+      case 'trim-start':
+        store.trimClip(clipId, 'start', delta)
+        break
+      case 'trim-end':
+        store.trimClip(clipId, 'end', delta)
+        break
+      case 'ripple-start':
+        store.rippleTrim(clipId, 'start', delta)
+        break
+      case 'ripple-end':
+        store.rippleTrim(clipId, 'end', delta)
+        break
+      case 'slip':
+        store.slipClip(clipId, delta)
+        break
+      case 'slide':
+        store.slideClip(clipId, delta)
+        break
+    }
+  }
+
+  const startKeyboardGesture = (mode: GestureMode): boolean => {
+    const currentDoc = useDocumentStore.getState().doc
+    const currentClip = findClip(currentDoc, clipId)
+    const currentTrack = trackOfClip(currentDoc, clipId)
+    if (!currentClip || currentTrack?.id !== trackId) return false
+    if (currentTrack.locked || currentTrack.hidden) return false
+    if (mode === 'slip' && currentClip.sourceMode === 'still') return false
+    const members = gestureMembers(currentDoc, clipId)
+    session.current = {
+      mode,
+      origin: 'keyboard',
+      pointerStartX: 0,
+      document: currentDoc,
+      originFrame: currentClip.timelineRange.startFrame,
+      linkGroupId: currentClip.linkGroupId,
+      targetTrackId: trackId,
+      trackOffsetY: 0,
+      ...boundsFor(currentDoc, mode),
+      snapCandidates: timelineSnapCandidates(currentDoc, {
+        playheadFrame: useTransportStore.getState().playheadFrame,
+        excludedClipIds: new Set(members.map((member) => member.id)),
+      }),
+      currentDelta: 0,
+    }
+    if (keyboardGuideTimer.current !== null) {
+      window.clearTimeout(keyboardGuideTimer.current)
+      keyboardGuideTimer.current = null
+    }
+    setSnapGuide(null)
+    if (mode === 'move') {
+      setDragPreview({
+        clipId,
+        deltaFrames: 0,
+        linkGroupId: currentClip.linkGroupId,
+      })
+    } else {
+      setEditPreview({
+        clipId,
+        kind: mode,
+        deltaFrames: 0,
+        linkGroupId: currentClip.linkGroupId,
+      })
+    }
+    useTransportStore.getState().setSelectedClip(clipId)
+    announce(
+      `${editLabel(mode)} started. Use arrow keys to adjust, Enter to apply, Escape to cancel.`,
+    )
+    return true
+  }
+
+  const nudgeKeyboardGesture = (step: number, bypassSnapping: boolean): void => {
+    const active = session.current
+    if (!active || active.origin !== 'keyboard') return
+    const raw = Math.min(active.maxDelta, Math.max(active.minDelta, active.currentDelta + step))
+    const update = snapUpdate(active, raw, bypassSnapping)
+    active.currentDelta = update.deltaFrames
+    if (active.mode === 'move') {
+      setDragPreview({
+        clipId,
+        deltaFrames: update.deltaFrames,
+        linkGroupId: active.linkGroupId,
+      })
+    } else {
+      setEditPreview({
+        clipId,
+        kind: active.mode,
+        deltaFrames: update.deltaFrames,
+        linkGroupId: active.linkGroupId,
+      })
+    }
+    setSnapGuide(update.guide)
+    const signed = update.deltaFrames > 0
+      ? `plus ${update.deltaFrames}`
+      : update.deltaFrames < 0
+        ? `minus ${Math.abs(update.deltaFrames)}`
+        : '0'
+    announce(
+      `${editLabel(active.mode)} preview ${signed} frames. Press Enter to apply or Escape to cancel.`,
+    )
+  }
+
+  const commitKeyboardGesture = (): void => {
+    const active = session.current
+    if (!active || active.origin !== 'keyboard') return
+    const store = useDocumentStore.getState()
+    if (store.doc !== active.document) {
+      endGesture()
+      announce(`${editLabel(active.mode)} cancelled because the timeline changed.`)
+      return
+    }
+    const delta = snapUpdate(active, active.currentDelta, false).deltaFrames
+    applyEditDelta(active, delta)
+    endGesture()
+    announce(
+      delta === 0
+        ? `${editLabel(active.mode)} cancelled. No frames changed.`
+        : `${editLabel(active.mode)} applied.`,
+    )
+  }
+
+  const cancelKeyboardGesture = (): void => {
+    const active = session.current
+    if (!active || active.origin !== 'keyboard') return
+    const label = editLabel(active.mode)
+    endGesture()
+    announce(`${label} cancelled.`)
+  }
+
   const onBodyPointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
   ): void => {
@@ -472,6 +633,54 @@ export function useClipGestureSession({
   }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const active = session.current
+    if (active?.origin === 'keyboard') {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        cancelKeyboardGesture()
+        return
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        event.stopPropagation()
+        commitKeyboardGesture()
+        return
+      }
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault()
+        event.stopPropagation()
+        nudgeKeyboardGesture(event.key === 'ArrowLeft' ? -1 : 1, event.altKey)
+        return
+      }
+    }
+
+    if (event.key === '[' || event.key === ']') {
+      event.preventDefault()
+      event.stopPropagation()
+      const tool = useTransportStore.getState().tool
+      const edge = event.key === '[' ? 'start' : 'end'
+      const mode: GestureMode = tool === 'trim' ? `ripple-${edge}` : `trim-${edge}`
+      if (active?.origin === 'keyboard') endGesture()
+      startKeyboardGesture(mode)
+      return
+    }
+
+    if (
+      (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+      && !event.ctrlKey
+      && !event.metaKey
+    ) {
+      const tool = useTransportStore.getState().tool
+      if (tool === 'slip' || tool === 'slide') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!active) startKeyboardGesture(tool)
+        nudgeKeyboardGesture(event.key === 'ArrowLeft' ? -1 : 1, event.altKey)
+        return
+      }
+    }
+
     if (
       (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
       && (event.ctrlKey || event.metaKey)
@@ -493,6 +702,7 @@ export function useClipGestureSession({
       const members = gestureMembers(currentDoc, clipId)
       const active: GestureSession = {
         mode: 'move',
+        origin: 'keyboard',
         pointerStartX: 0,
         document: currentDoc,
         originFrame: currentClip.timelineRange.startFrame,
@@ -504,6 +714,7 @@ export function useClipGestureSession({
           playheadFrame: useTransportStore.getState().playheadFrame,
           excludedClipIds: new Set(members.map((member) => member.id)),
         }),
+        currentDelta: 0,
       }
       const update = snapUpdate(active, rawDelta, event.altKey)
       const store = useDocumentStore.getState()
@@ -606,6 +817,7 @@ export function useClipGestureSession({
 
   return {
     rootRef,
+    announceRef,
     onBodyPointerDown,
     onEdgePointerDown,
     onKeyDown,

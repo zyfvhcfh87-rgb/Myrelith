@@ -25,7 +25,10 @@
  */
 
 import { useLayoutEffect, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react'
 import { timelineDisplayDurationFrames } from '../../domain/selectors'
 import { formatTimecode, secondsToFrames } from '../../domain/time'
 import { timelineMarkers } from '../../domain/timelineMarkers'
@@ -114,7 +117,12 @@ export default function Ruler() {
   const durationFrames = useDocumentStore((s) => timelineDisplayDurationFrames(s.doc))
   const markers = useDocumentStore((s) => timelineMarkers(s.doc))
 
+  const [seekFocused, setSeekFocused] = useState(false)
+  const playheadFrame = useTransportStore((s) => (
+    seekFocused ? s.playheadFrame : -1
+  ))
   const scrubbingRef = useRef(false)
+  const seekOriginFrameRef = useRef(0)
   const snapCandidatesRef = useRef<readonly TimelineSnapCandidate[]>([])
   const schedule = useScrubScheduler((update: RulerSnapUpdate) => {
     setPlayheadFrame(update.frame)
@@ -278,6 +286,68 @@ export default function Ruler() {
     }
   }
 
+  const lastSeekFrame = Math.max(0, totalFrames)
+  const announcedPlayhead = playheadFrame >= 0
+    ? playheadFrame
+    : useTransportStore.getState().playheadFrame
+
+  const snapSeekFrame = (frame: number, bypassSnapping: boolean): RulerSnapUpdate => {
+    const bounded = Math.min(lastSeekFrame, Math.max(0, frame))
+    if (bypassSnapping || !usePreferencesStore.getState().snappingEnabled) {
+      return { frame: bounded, guide: null }
+    }
+    const resolution = resolveTimelineSnap({
+      candidates: snapCandidatesRef.current,
+      movingPoints: [{
+        id: 'playhead',
+        kind: 'cursor',
+        frame: bounded,
+        deltaDirection: 1,
+        trackKind: null,
+        trackIndex: -1,
+      }],
+      rawDeltaFrames: bounded,
+      minDeltaFrames: 0,
+      maxDeltaFrames: viewport.totalFrames,
+      zoom,
+    })
+    return { frame: resolution.deltaFrames, guide: resolution.guide }
+  }
+
+  const seekTo = (frame: number, bypassSnapping: boolean): void => {
+    snapCandidatesRef.current = timelineSnapCandidates(
+      useDocumentStore.getState().doc,
+    )
+    const update = snapSeekFrame(frame, bypassSnapping)
+    setPlayheadFrame(update.frame)
+    setSnapGuide(update.guide)
+  }
+
+  const handleSeekKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const current = useTransportStore.getState().playheadFrame
+    const second = secondsToFrames(1, frameRate)
+    let next: number | null = null
+    if (event.key === 'ArrowLeft') next = current - (event.shiftKey ? 10 : 1)
+    else if (event.key === 'ArrowRight') next = current + (event.shiftKey ? 10 : 1)
+    else if (event.key === 'PageUp') next = current - second
+    else if (event.key === 'PageDown') next = current + second
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = lastSeekFrame
+    else if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      setPlayheadFrame(seekOriginFrameRef.current)
+      setSnapGuide(null)
+      setIsScrubbing(false)
+      return
+    } else {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    seekTo(next, event.altKey)
+  }
+
   return (
     <div
       ref={rootRef}
@@ -317,6 +387,34 @@ export default function Ruler() {
         }
       }}
     >
+      <div
+        className="timeline-ruler-seek"
+        role="slider"
+        tabIndex={0}
+        data-testid="ruler-seek"
+        aria-label="Timeline playhead"
+        aria-valuemin={0}
+        aria-valuemax={lastSeekFrame}
+        aria-valuenow={announcedPlayhead}
+        aria-valuetext={formatTimecode(announcedPlayhead, frameRate)}
+        aria-keyshortcuts="ArrowLeft ArrowRight Home End PageUp PageDown"
+        aria-describedby="timeline-ruler-seek-help"
+        onFocus={() => {
+          seekOriginFrameRef.current = useTransportStore.getState().playheadFrame
+          setSeekFocused(true)
+        }}
+        onBlur={() => {
+          setSeekFocused(false)
+          setSnapGuide(null)
+          setIsScrubbing(false)
+        }}
+        onKeyDown={handleSeekKeyDown}
+      />
+      <span id="timeline-ruler-seek-help" className="visually-hidden">
+        Arrow keys move one frame, Shift+arrow moves ten, Page Up and Page Down
+        move one second, Home and End jump to the bounds, Escape restores the
+        playhead from when this ruler received focus, and Alt bypasses snapping.
+      </span>
       {ticks.map((frame) => (
         <div
           key={frame}

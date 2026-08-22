@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react'
+import { useEffect, useRef, type KeyboardEvent } from 'react'
 import {
   cancelMediaImport,
   dismissMediaImportError,
@@ -7,10 +7,27 @@ import {
 import type { FrameRate } from '../domain/schema'
 import { useMediaImportStore } from '../state/mediaImportStore'
 
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  'input:not([disabled]):not([tabindex="-1"]):not([type="hidden"])',
+  'select:not([disabled]):not([tabindex="-1"])',
+  'textarea:not([disabled]):not([tabindex="-1"])',
+  '[href]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ')
+
 function formatRate(rate: FrameRate): string {
   const fps = rate.num / rate.den
   if (Number.isInteger(fps)) return String(fps)
   return fps.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function focusableIn(dialog: HTMLElement): HTMLElement[] {
+  return [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter((element) => (
+    !element.hasAttribute('disabled')
+    && !element.hidden
+    && element.getAttribute('aria-hidden') !== 'true'
+  ))
 }
 
 export default function MediaImportDialog() {
@@ -18,6 +35,38 @@ export default function MediaImportDialog() {
   const fileName = useMediaImportStore((state) => state.fileName)
   const prompt = useMediaImportStore((state) => state.prompt)
   const error = useMediaImportStore((state) => state.error)
+  const dialogRef = useRef<HTMLElement | null>(null)
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
+  const wasOpenRef = useRef(false)
+
+  if (phase !== 'idle' && !wasOpenRef.current) {
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    wasOpenRef.current = true
+  }
+
+  useEffect(() => {
+    if (phase !== 'idle' || !wasOpenRef.current) return
+    const target = restoreFocusRef.current
+    restoreFocusRef.current = null
+    wasOpenRef.current = false
+    if (target?.isConnected) target.focus()
+  }, [phase])
+
+  useEffect(() => () => {
+    const target = restoreFocusRef.current
+    restoreFocusRef.current = null
+    wasOpenRef.current = false
+    if (target?.isConnected) target.focus()
+  }, [])
+
+  useEffect(() => {
+    if (phase === 'idle') return
+    const dialog = dialogRef.current
+    const initial = dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+    ;(initial ?? dialog)?.focus()
+  }, [phase])
 
   if (phase === 'idle') return null
 
@@ -25,20 +74,43 @@ export default function MediaImportDialog() {
     // A modal choice must not leak editor shortcuts (S/Delete/A/B/etc.) to
     // the timeline behind it.
     event.stopPropagation()
-    if (event.key !== 'Escape') return
-    event.preventDefault()
-    if (phase === 'error') dismissMediaImportError()
-    else cancelMediaImport()
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      if (phase === 'error') dismissMediaImportError()
+      else cancelMediaImport()
+      return
+    }
+    if (event.key !== 'Tab') return
+    const dialog = dialogRef.current
+    if (!dialog) return
+    const focusable = focusableIn(dialog)
+    if (focusable.length === 0) {
+      event.preventDefault()
+      dialog.focus()
+      return
+    }
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    const current = document.activeElement
+    if (event.shiftKey && (current === first || !dialog.contains(current))) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (current === last || !dialog.contains(current))) {
+      event.preventDefault()
+      first.focus()
+    }
   }
 
   return (
     <div className="media-import-backdrop">
       <section
+        ref={dialogRef}
         className="media-import-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="media-import-title"
         aria-describedby="media-import-description"
+        tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
         {phase === 'awaiting-decision' && prompt ? (

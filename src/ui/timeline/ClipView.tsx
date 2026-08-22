@@ -118,6 +118,7 @@ function ClipView({
 
   const {
     rootRef,
+    announceRef,
     onBodyPointerDown,
     onEdgePointerDown,
     onKeyDown,
@@ -188,7 +189,7 @@ function ClipView({
       tabIndex={0}
       aria-label={`${clip.name}, ${accessibleKind} clip`}
       aria-pressed={isSelected}
-      aria-keyshortcuts="Control+ArrowLeft Control+ArrowRight Meta+ArrowLeft Meta+ArrowRight"
+      aria-keyshortcuts="Control+ArrowLeft Control+ArrowRight Meta+ArrowLeft Meta+ArrowRight [ ] ArrowLeft ArrowRight Enter Escape"
       title={interactionTitle}
       style={{
         transform:
@@ -205,6 +206,11 @@ function ClipView({
       onPointerLeave={onPointerLeave}
       onLostPointerCapture={onLostPointerCapture}
     >
+      <span
+        ref={announceRef}
+        className="visually-hidden"
+        aria-live="polite"
+      />
       <ClipVisualLayer clipId={clip.id} visual={presentation.visual} />
       {hasVisibleSlice && hasSpeedLane && (
         <ClipAutomationLane
