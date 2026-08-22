@@ -96,6 +96,12 @@ function ClipView({
       || (clip.linkGroupId !== undefined && gesture.linkGroupId === clip.linkGroupId)
     )
   })
+  // The capture/keyboard owner stays focused when its preview leaves the
+  // window. Only cold-mounted linked partners may be aria-hidden.
+  const ownsLiveGesture = useTransportStore(
+    (s) =>
+      s.dragPreview?.clipId === clip.id || s.editPreview?.clipId === clip.id,
+  )
   const documentRate = useDocumentStore((s) => s.doc.frameRate)
 
   // Both visuals map the asset's FULL source duration. The waveform crops a
@@ -190,7 +196,7 @@ function ClipView({
       data-virtual-gesture-host={hasVisibleSlice ? 'false' : 'true'}
       role={hasVisibleSlice ? 'button' : undefined}
       tabIndex={hasVisibleSlice ? 0 : -1}
-      aria-hidden={hasVisibleSlice ? undefined : true}
+      aria-hidden={hasVisibleSlice || ownsLiveGesture ? undefined : true}
       aria-label={
         hasVisibleSlice ? `${clip.name}, ${accessibleKind} clip` : undefined
       }

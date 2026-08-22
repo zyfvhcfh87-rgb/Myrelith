@@ -387,6 +387,7 @@ describe('drag: scrub-preview then commit', () => {
 
     expect(document.body.contains(el)).toBe(true)
     expect(el).toHaveAttribute('data-virtual-gesture-host', 'true')
+    expect(el).not.toHaveAttribute('aria-hidden')
     expect(el).toHaveStyle({ transform: 'translateX(199px)', width: '1px' })
 
     // Simulate an origin rebase that culls the committed range but brings the
