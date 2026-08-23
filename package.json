@@ -1,7 +1,7 @@
 {
   "name": "myrelith",
   "private": true,
-  "version": "0.1.0-alpha.1",
+  "version": "0.2.0-alpha.1",
   "description": "Private-by-design, browser-native non-linear video editor powered by WebCodecs.",
   "license": "MIT",
   "author": "Aryel",
