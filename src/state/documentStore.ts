@@ -117,6 +117,7 @@ import {
 import {
   linkClips as linkClipsInDocument,
   linkedMoveClip,
+  linkedMoveClips,
   linkedRippleDelete,
   linkedRippleTrim,
   linkedClearClipSpeedRamp,
@@ -219,6 +220,12 @@ export interface DocumentState {
    * Linked partners follow (one entry); see domain/linking.
    */
   moveClip: (clipId: ClipId, toTrackId: TrackId, toFrame: number) => void
+  /**
+   * Move an ordered clip selection horizontally by one signed frame delta.
+   * Linked partners join automatically; success is one history entry and any
+   * rejected member rolls the complete group back.
+   */
+  moveClips: (clipIds: readonly ClipId[], deltaFrames: number) => void
   /**
    * Delete a clip and shift later clips on its track left to close the gap.
    * Linked partners follow (one entry); see domain/linking.
@@ -562,6 +569,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   moveClip: (clipId, toTrackId, toFrame) =>
     set((state) => commit(state, linkedMoveClip(state.doc, clipId, toTrackId, toFrame))),
+
+  moveClips: (clipIds, deltaFrames) =>
+    set((state) => commit(state, linkedMoveClips(state.doc, clipIds, deltaFrames))),
 
   rippleDelete: (clipId) =>
     set((state) => commit(state, linkedRippleDelete(state.doc, clipId))),

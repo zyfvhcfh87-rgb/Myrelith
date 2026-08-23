@@ -198,6 +198,41 @@ describe('Phase 4.2 tool / selection / edit-preview state', () => {
     })
   })
 
+  test('setClipSelection deduplicates ordered ids and chooses an explicit or final primary', () => {
+    getState().setSelectedMarker('marker-1')
+    getState().setClipSelection(['clipB', 'clipA', 'clipB'], 'clipB')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipB', 'clipA'],
+      selectedClipId: 'clipB',
+      selectedMarkerId: null,
+    })
+
+    getState().setClipSelection(['clipA', 'clipC'])
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipC'],
+      selectedClipId: 'clipC',
+    })
+  })
+
+  test('selection marquee is bounded ephemeral state and reset clears it', () => {
+    getState().setSelectionMarquee({
+      left: 10.5,
+      top: 20,
+      width: -4,
+      height: 30,
+      clipIds: ['clipA', 'clipA', 'clipB'],
+    })
+    expect(getState().selectionMarquee).toEqual({
+      left: 10.5,
+      top: 20,
+      width: 0,
+      height: 30,
+      clipIds: ['clipA', 'clipB'],
+    })
+    getState().resetTransport()
+    expect(getState().selectionMarquee).toBeNull()
+  })
+
   test('toggleClipSelection appends unique ids and makes each addition primary', () => {
     getState().toggleClipSelection('clipA')
     expect(getState()).toMatchObject({

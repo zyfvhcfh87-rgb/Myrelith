@@ -19,6 +19,7 @@ export { clipFromAsset, createTextClip, insertClip } from './operations/creation
 export {
   clearClipSpeedRamp,
   moveClip,
+  moveClipsByDelta,
   removeClipSpeedPoint,
   retimeClip,
   rippleDelete,

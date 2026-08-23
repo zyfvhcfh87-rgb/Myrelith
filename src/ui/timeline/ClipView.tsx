@@ -71,7 +71,8 @@ function ClipView({
   const zoom = useTransportStore((s) => s.zoom)
   const tool = useTransportStore((s) => s.tool)
   const isSelected = useTransportStore((s) =>
-    s.selectedClipIds.includes(clip.id),
+    s.selectedClipIds.includes(clip.id)
+    || s.selectionMarquee?.clipIds.includes(clip.id) === true,
   )
   const isPrimarySelection = useTransportStore(
     (s) => s.selectedClipId === clip.id,
@@ -83,6 +84,7 @@ function ClipView({
   const movePreviewDelta = useTransportStore((s) =>
     s.dragPreview &&
     (s.dragPreview.clipId === clip.id ||
+      s.dragPreview.clipIds?.includes(clip.id) === true ||
       (clip.linkGroupId !== undefined && s.dragPreview.linkGroupId === clip.linkGroupId))
       ? s.dragPreview.deltaFrames
       : null,
@@ -103,6 +105,7 @@ function ClipView({
     const gesture = s.dragPreview ?? s.editPreview
     return gesture !== null && (
       gesture.clipId === clip.id
+      || ('clipIds' in gesture && gesture.clipIds?.includes(clip.id) === true)
       || (clip.linkGroupId !== undefined && gesture.linkGroupId === clip.linkGroupId)
     )
   })
@@ -201,6 +204,7 @@ function ClipView({
       ref={rootRef}
       className={`clip-view${dragging ? ' dragging' : ''}${isSelected ? ' selected' : ''}${isSelected && isPrimarySelection ? ' primary-selected' : ''}${isOffline ? ' offline' : ''}${hasSpeedLane ? ' has-speed-lane' : ''}${hasVisibleSlice ? '' : ' virtual-gesture-host'}`}
       data-testid={`clip-${clip.id}`}
+      data-clip-id={clip.id}
       data-offline={isOffline ? 'true' : 'false'}
       data-source-mode={clip.sourceMode ?? 'timed'}
       data-primary-selected={isSelected && isPrimarySelection ? 'true' : 'false'}

@@ -161,6 +161,9 @@ function Track({
   const liveGestureLinkGroupId = useTransportStore(
     (state) => (state.dragPreview ?? state.editPreview)?.linkGroupId,
   )
+  const liveGestureClipIds = useTransportStore(
+    (state) => state.dragPreview?.clipIds,
+  )
   const schedulePlacementPreview = useScrubScheduler(
     (payload: { preview: ReturnType<typeof previewOsFilePlacement>; epoch: number }) => {
       applyMediaPlacementHoverPreview(payload.preview, payload.epoch)
@@ -185,6 +188,13 @@ function Track({
         && clip.timelineRange.startFrame < timelineWindowEndFrame
       if (intersectsWindow || clip.id === liveGestureClipId) return true
       if (
+        liveGestureClipIds?.includes(clip.id) === true
+        && coldGestureHostCount < MAX_COLD_LIVE_GESTURE_HOSTS_PER_TRACK
+      ) {
+        coldGestureHostCount += 1
+        return true
+      }
+      if (
         liveGestureLinkGroupId === undefined
         || clip.linkGroupId !== liveGestureLinkGroupId
         || coldGestureHostCount >= MAX_COLD_LIVE_GESTURE_HOSTS_PER_TRACK
@@ -194,6 +204,7 @@ function Track({
     })
   }, [
     liveGestureClipId,
+    liveGestureClipIds,
     liveGestureLinkGroupId,
     timelineOriginFrame,
     timelineWindowEndFrame,

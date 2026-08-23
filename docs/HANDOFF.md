@@ -129,6 +129,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #171 — OS file drop import** | 🚧 in progress locally | file-only window guard; Media Pool batch drop; one-file timeline drop after import; duration-accurate asset ghost + insertion marker; shared placement planner/controller; Files never enter stores |
 | **Post-MVP #119 — bounded manual lens correction** | 🚧 implementation complete locally | schema-14 versioned intent; accessible Inspector/history controls; promoted source-space WebGL2 preview/export path; explicit coverage/unavailability; seven-surface 4K budget; local CI/review gates pending |
 | **Post-MVP #77 — signed sandboxed plugins** | 🚧 PR #123 remediation validated locally | production preview/export/migration wiring; fail-closed render and stale-generation gates; bounded host-acknowledged teardown; safe startup recovery; hostile-package and real Chromium acceptance; full/exact-head publication gates pending |
+| **Post-MVP #179 — marquee selection + grouped move** | ✅ implementation complete | Select-tool left-drag over empty lanes previews and commits box selection; selected/link-expanded clips move horizontally as one collision-safe, one-history edit; 3,364 tests + desktop Chromium interaction/undo/redo gate clean |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Current public preview — `v0.2.0-alpha.1` First Light** | ✅ published | annotated tag resolves to `2a845c8`; verified 43-file web archive `sha256:aef2445b…`; public Linux AMD64/ARM64 GHCR index `sha256:ee060a7e…`; exact-head PR + master CI, 3,335 Vitest tests, 17 runner tests, and 10 Chromium tests passed |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
@@ -1046,7 +1047,9 @@ surface; it is not a second zoom and never enters document history.
   including ordered unique `selectedClipIds` plus primary `selectedClipId`, and
   document-agnostic `reconcileClipSelection(existingIds)` for stable stale-id
   pruning, plus signed `dragPreview.deltaFrames` shared by every linked move
-  participant,
+  participant. Issue #179 adds `dragPreview.clipIds` for the exact selected/link
+  closure and `selectionMarquee` for the live box-intersection preview; both
+  remain ephemeral and outside document history,
   authoritative timeline `zoom`, `zoomMode`, remembered `customZoom`, and the
   translation-only `timelineOriginFrame`, plus uncommitted Program Monitor
   text-geometry and Issue #34 clip-visual previews; selection, gesture drafts,
@@ -5048,3 +5051,28 @@ surface; it is not a second zoom and never enters document history.
 - No product schema, project format, UI, browser runtime, or remote GitHub item
   changes in #78 itself. Chromium is not applicable to this build-unreferenced
   pure gate; every observable child requires source-bound browser evidence.
+
+## Post-MVP issue #179 - marquee selection and grouped movement
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-24); PUBLICATION NOT AUTHORIZED.**
+
+- With the Select tool active, a primary left-button drag that starts on empty
+  timeline lane space draws a translucent blue marquee. Intersecting clips on
+  visible, unlocked lanes highlight live; release commits their ordered
+  transport-only selection. Pointer capture plus a window release fallback
+  keeps cross-lane and sticky-gutter gestures from getting stranded.
+- Dragging any selected member snapshots the complete selected/link-expanded
+  closure. Every participant previews the same signed horizontal delta and
+  commits through one immutable `moveClips` domain/store operation. Bounds,
+  locked lanes, collisions, stale ids, and transitions validate as a unit; any
+  rejection preserves the original document reference and history.
+- Multi-clip moves deliberately stay on their existing lanes. The established
+  single-clip drag path remains the only cross-track move contract. Ctrl/Cmd +
+  Arrow applies the same grouped one-frame move, and one Undo/Redo restores the
+  entire group.
+- Desktop Chromium at 1280x720 selected two text clips across V2/V1 with a
+  reverse cross-gutter drag, moved both by +40 frames, and restored/reapplied
+  both positions with one Undo/Redo; no console warnings or errors appeared.
+- The authoritative automated gate passes all 236 Vitest files / 3,364 tests
+  plus all 17 repository runner checks, production build/typecheck, lint,
+  production dependency audit, and diff hygiene.

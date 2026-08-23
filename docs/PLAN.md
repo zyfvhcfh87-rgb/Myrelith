@@ -4811,3 +4811,26 @@ acceptance claims.
   user-owned untracked `.worktrees/` directory, a production audit with zero
   vulnerabilities, production-isolation search, and diff checks. Chromium is
   not applicable because the gate adds no observable browser/runtime path.
+
+## Post-MVP issue #179 - marquee selection and grouped movement
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-24).**
+
+- [x] Add Select-tool primary left-drag marquee selection from empty timeline
+  lane space, with live translucent intersection feedback across visible,
+  unlocked lanes and robust release/cancel cleanup across the sticky gutter.
+- [x] Keep marquee and multi-selection truth ephemeral in transport state; no
+  document mutation, persistence, or undo entry occurs until a clip move is
+  committed.
+- [x] Add one pure atomic horizontal group-move operation, expand selected roots
+  through existing A/V link groups, and reject the entire edit on stale ids,
+  locks, bounds, or final-layout collisions while preserving transitions.
+- [x] Reuse the shared selected/link closure for drag preview, pointer commit,
+  and Ctrl/Cmd + Arrow. Preserve the existing single-clip cross-track path;
+  grouped clips remain on their current lanes.
+- [x] Browser-verify reverse cross-gutter box selection, live highlighting,
+  +40-frame grouped movement, one-step Undo/Redo, and a clean console in desktop
+  Chromium at 1280x720.
+- [x] Pass all 236 Vitest files / 3,364 tests plus all 17 repository runner
+  checks, production build/typecheck, lint, production dependency audit, and
+  diff hygiene.

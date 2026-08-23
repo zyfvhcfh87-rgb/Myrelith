@@ -422,6 +422,17 @@
   flex: 1;
 }
 
+.timeline-selection-marquee {
+  position: absolute;
+  z-index: 8;
+  left: 0;
+  top: 0;
+  border: 1px solid #6fb7ff;
+  background: rgb(55 134 213 / 22%);
+  box-shadow: inset 0 0 0 1px rgb(207 229 255 / 18%);
+  pointer-events: none;
+}
+
 .timeline-track {
   position: relative;
   height: 56px;

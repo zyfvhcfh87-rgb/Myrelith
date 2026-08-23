@@ -270,6 +270,29 @@ describe('history behavior', () => {
     expect(getState().past).toHaveLength(1)
   })
 
+  test('a multi-clip move is one history entry and one undo restores every member', () => {
+    const initial = deepFreeze({
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', 'video', [
+          makeClip('clipA', 0, 100),
+          makeClip('clipB', 100, 100),
+          makeClip('blocker', 500, 100),
+        ]),
+      ],
+    })
+    getState().setDoc(initial)
+
+    getState().moveClips(['clipA', 'clipB'], 50)
+
+    expect(getState().doc.tracks[0].clips.map(
+      (clip) => clip.timelineRange.startFrame,
+    )).toEqual([50, 150, 500])
+    expect(getState().past).toEqual([initial])
+    getState().undo()
+    expect(getState().doc).toBe(initial)
+  })
+
   test('a new edit after undo clears the redo stack', () => {
     getState().trimClip('clipA', 'end', -10)
     getState().undo()

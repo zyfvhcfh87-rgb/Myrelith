@@ -444,6 +444,72 @@ export function moveClip(
 }
 
 /**
+ * Move several clips by one signed integer-frame delta while keeping every
+ * clip on its current track. Validation is performed against the complete
+ * staged result, so selected neighbors may move through their old positions
+ * without colliding with one another. Any stale id, locked track, unsafe
+ * range, or overlap rejects the whole edit with the original document.
+ */
+export function moveClipsByDelta(
+  doc: TimelineDoc,
+  clipIds: readonly ClipId[],
+  deltaFrames: number,
+): TimelineDoc {
+  const op = 'moveClipsByDelta'
+  if (!Number.isInteger(deltaFrames)) {
+    return reject(doc, op, `deltaFrames must be an integer, got ${deltaFrames}`)
+  }
+  if (clipIds.length === 0 || deltaFrames === 0) return doc
+
+  const movingIds = new Set<ClipId>()
+  const affectedTrackIndexes = new Set<number>()
+  for (const clipId of clipIds) {
+    if (movingIds.has(clipId)) continue
+    const loc = locateClip(doc, clipId)
+    if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+    if (loc.track.locked) {
+      return reject(doc, op, `track ${loc.track.id} is locked`)
+    }
+    const startFrame = loc.clip.timelineRange.startFrame + deltaFrames
+    const endFrame = startFrame + loc.clip.timelineRange.durationFrames
+    if (
+      !Number.isSafeInteger(startFrame)
+      || !Number.isSafeInteger(endFrame)
+      || startFrame < 0
+    ) {
+      return reject(doc, op, `clip ${clipId} would leave safe timeline bounds`)
+    }
+    movingIds.add(clipId)
+    affectedTrackIndexes.add(loc.trackIndex)
+  }
+
+  const tracks = doc.tracks.slice()
+  for (const trackIndex of affectedTrackIndexes) {
+    const before = doc.tracks[trackIndex]
+    const clips = before.clips.map((candidate) => (
+      movingIds.has(candidate.id)
+        ? {
+            ...candidate,
+            timelineRange: {
+              ...candidate.timelineRange,
+              startFrame: candidate.timelineRange.startFrame + deltaFrames,
+            },
+          }
+        : candidate
+    )).sort(byStart)
+
+    for (let index = 1; index < clips.length; index += 1) {
+      if (rangeOverlap(clips[index - 1].timelineRange, clips[index].timelineRange)) {
+        return reject(doc, op, 'move would overlap a clip on an affected track')
+      }
+    }
+    tracks[trackIndex] = reconcileTransitions(before, { ...before, clips })
+  }
+
+  return { ...doc, tracks }
+}
+
+/**
  * Delete a clip and close the gap: every clip on the SAME track that starts
  * at/after the deleted clip's end shifts left by the deleted duration.
  * (MVP scope: single-track ripple; other tracks are untouched.)
