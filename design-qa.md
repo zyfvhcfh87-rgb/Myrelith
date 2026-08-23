@@ -105,3 +105,50 @@ final result: passed
 ## Final result
 
 passed
+
+---
+
+# Design QA: Compact canvas setup rework
+
+## Source visual
+
+- Path: `C:\Users\Aryel\.codex\generated_images\01a030b2-1f7d-71c3-9c20-09bb6f2f5114\exec-0a133d67-90fe-40cb-9c25-87e20d2cf5a7.png`
+- Pixel dimensions: 1342 x 1172
+- Density: not embedded
+- Reference state: Plugin safety banner visible; Horizontal 16:9 selected; project name `Untitled project`; 1920 x 1080, 30 fps, and 48 kHz selected; compact confirmation strip and footer visible.
+
+## Implementation capture
+
+- Path: `E:\ClaudeSpace\WebCut\.tmp\design-qa-canvas-setup\implementation-desktop-1429x1248.png`
+- Browser viewport and captured pixels: 1429 x 1248 CSS pixels at DPR 1; 1429 x 1248 captured pixels.
+- State: matches the reference selections and copy. Focus is parked on the footer Privacy link so the project-name field is in the same neutral visual state as the source; the footer focus ring is outside the focused comparison and is a P3 capture-state difference.
+- Mobile capture: `E:\ClaudeSpace\WebCut\.tmp\design-qa-canvas-setup\implementation-mobile-390x844.png`
+
+## Comparisons
+
+- Full normalized comparison: `E:\ClaudeSpace\WebCut\.tmp\design-qa-canvas-setup\comparison-full-normalized.png`
+- Focused setup comparison: `E:\ClaudeSpace\WebCut\.tmp\design-qa-canvas-setup\comparison-setup-focused.png`
+- Density normalization: the implementation capture was resized from 1429 x 1248 to the source's 1342 x 1172 pixel dimensions for comparison. The unmodified browser capture remains listed above.
+- Left side: source visual. Right side: implementation.
+
+## Findings
+
+- P0: none.
+- P1: none remain.
+- P2: none remain.
+- Fonts and typography: the existing Myrelith display and UI type treatment preserves the source hierarchy, weights, wrapping, and compact label scale. The source's generated UI text is fractionally softer; this is non-actionable P3 raster variation.
+- Spacing and layout rhythm: headline, divider, ratio gallery, full-width name field, three-column settings row, confirmation strip, actions, and footer align with the normalized source. The implementation intentionally retains the existing responsive scroll frame below desktop widths.
+- Colors and visual tokens: the live page uses the established navy, warm-white, muted-blue, and cobalt selection tokens. The generated source has a faint background glow that was not introduced into the shared launcher surface; this remains P3.
+- Image quality and asset fidelity: the target contains no raster imagery. The ratio outlines remain semantic canvas previews and the checkmark uses the existing Phosphor icon family rather than a custom asset substitute.
+- Copy and content: all visible setup labels, values, actions, trust copy, and footer links match the chosen direction while continuing to use the real project-settings catalog.
+
+## Comparison history
+
+1. Pass 1 found a P2 desktop hierarchy mismatch: the later base form rule overrode the intended three-column settings grid, placing Audio quality on a second row. A higher-specificity setup-form grid rule restored the selected layout.
+2. Pass 2 found a P1 responsive defect: the same three-column rule survived at 720 px and 390 px, narrowing the summary and actions and causing internal horizontal overflow. A max-760 setup override now stacks the form and removes field margins; both widths report zero horizontal overflow.
+3. Pass 3 found two P2 fidelity issues: a one-pixel desktop frame overflow produced a visible scrollbar, and the Back/Create actions were materially narrower than the source. Bottom padding was reduced by two pixels and setup-specific action widths were added, with a mobile min-width reset.
+4. Pass 4 full and focused comparisons show no actionable P0/P1/P2 differences. Browser checks at 1429 x 1248, 1100 x 1000, 720 x 900, and 390 x 844 found no horizontal overflow. Ratio switching, tier-preserving resolution updates, audio updates, project naming, Back, Start a new project, and summary updates worked with no browser warnings or errors.
+
+## Final result
+
+passed

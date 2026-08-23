@@ -762,10 +762,7 @@ function NewProjectScreen({
     <LaunchFrame setup>
       <div className="project-setup-layout">
         <div className="project-setup-intro">
-          <h1>
-            <span>Set up</span>
-            <span>your <em>canvas</em></span>
-          </h1>
+          <h1>Set up your canvas</h1>
           <p>Choose the shape your story needs.</p>
         </div>
 
@@ -862,7 +859,7 @@ function NewProjectScreen({
             ))}
           </select>
         </label>
-        <label className="project-field project-field-wide project-field-audio">
+        <label className="project-field project-field-audio">
           <span>Audio quality</span>
           <select
             value={audioSampleRate}
@@ -877,33 +874,39 @@ function NewProjectScreen({
           </select>
         </label>
         <section className="project-create-summary" aria-labelledby="project-create-summary-title">
+          <CheckCircle
+            className="project-create-summary-icon"
+            aria-hidden="true"
+            size={32}
+            weight="regular"
+          />
           <div>
             <span id="project-create-summary-title">Ready to create</span>
-            <h2>{name.trim() || 'Untitled project'}</h2>
           </div>
           <dl>
             <div>
               <dt>Canvas</dt>
-              <dd>{selectedResolution
-                ? formatProjectCanvas(selectedResolution.width, selectedResolution.height)
+              <dd>{selectedAspectRatio
+                ? `${selectedAspectRatio.label} ${selectedAspectRatio.ratioLabel}`
                 : 'Choose a canvas'}</dd>
             </div>
             <div>
-              <dt>Video</dt>
+              <dt>Resolution</dt>
+              <dd>{selectedResolution
+                ? `${selectedResolution.width} × ${selectedResolution.height}`
+                : 'Choose a resolution'}</dd>
+            </div>
+            <div>
+              <dt>Frame rate</dt>
               <dd>{selectedFrameRate
                 ? formatRate(selectedFrameRate)
                 : 'Choose a frame rate'}</dd>
             </div>
             <div>
-              <dt>Audio</dt>
+              <dt>Audio quality</dt>
               <dd>{Number(audioSampleRate) / 1_000} kHz</dd>
             </div>
-            <div>
-              <dt>Timeline</dt>
-              <dd>4 video + 4 audio tracks</dd>
-            </div>
           </dl>
-          <p>Starts locally and unsaved. Save a portable .myrelith when you are ready.</p>
         </section>
         {error && <p className="project-launch-error" role="alert">{error}</p>}
         {editorLoadError && (

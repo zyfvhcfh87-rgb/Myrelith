@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
@@ -688,17 +688,19 @@ describe('ProjectLaunch', () => {
     expect(controller.openProjectFile).toHaveBeenCalledWith(project)
   })
 
-  test('summarizes the complete local setup before project creation', () => {
+  test('summarizes the chosen setup in the compact confirmation strip', () => {
     useProjectSessionStore.setState({ screen: 'new-project' })
     render(<ProjectLaunch />)
 
     const summary = screen.getByRole('region', { name: 'Ready to create' })
-    expect(summary).toHaveTextContent('Untitled project')
-    expect(summary).toHaveTextContent('Horizontal 16:9 · 1920 × 1080')
+    expect(summary).toHaveTextContent('Horizontal 16:9')
+    expect(summary).toHaveTextContent('1920 × 1080')
     expect(summary).toHaveTextContent('30 fps')
     expect(summary).toHaveTextContent('48 kHz')
-    expect(summary).toHaveTextContent('4 video + 4 audio tracks')
-    expect(summary).toHaveTextContent('Starts locally and unsaved')
+    expect(within(summary).getByText('Canvas')).toBeInTheDocument()
+    expect(within(summary).getByText('Resolution')).toBeInTheDocument()
+    expect(within(summary).getByText('Frame rate')).toBeInTheDocument()
+    expect(within(summary).getByText('Audio quality')).toBeInTheDocument()
   })
 
   test('keeps audio settings and Create inside a scrollable setup frame', () => {
