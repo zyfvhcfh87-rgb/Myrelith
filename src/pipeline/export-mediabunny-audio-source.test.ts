@@ -130,6 +130,87 @@ describe('createMediabunnyExportAudioSource exact ranges', () => {
     await reader.close()
     await source.close()
   })
+
+  test('fails an exact handle whose first packet is after decoder priming', async () => {
+    const decoded = decodedAudioSample(
+      [new Float32Array([0.5, 0.5, 0.5, 0.5])],
+      48_000,
+      1,
+    )
+    mb.audioTracks.push(audioTrack(true, 1))
+    mb.audioSinkSampleSequences.push([decoded])
+    const source = createMediabunnyExportAudioSource(
+      async () => resolvedAsset(new Blob(['late-audio'])),
+    )
+    const reader = await source.openClip({
+      clipId: 'exact-handle',
+      assetId: 'audio-asset',
+      startSample: 0,
+      endSample: 48_000,
+      sampleRate: 48_000,
+      channelCount: 2,
+      requireComplete: true,
+    })
+
+    const failure = await reader.read(1_024).catch((cause) => cause)
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'audio-asset',
+      failure: {
+        surface: 'export',
+        trackKind: 'audio',
+        reason: 'decode-failed',
+        detail: expect.stringContaining('decoded PCM starts after decoder priming'),
+      },
+    })
+
+    await reader.close()
+    await source.close()
+    expect(decoded.close).toHaveBeenCalledOnce()
+  })
+
+  test('fails an exact handle that gaps after the first decoded packet', async () => {
+    const first = decodedAudioSample(
+      [new Float32Array([0.5, 0.5, 0.5, 0.5])],
+      48_000,
+    )
+    const second = decodedAudioSample(
+      [new Float32Array([0.25, 0.25, 0.25, 0.25])],
+      48_000,
+      20 / 48_000,
+    )
+    mb.audioTracks.push(audioTrack(true, 1))
+    mb.audioSinkSampleSequences.push([first, second])
+    const source = createMediabunnyExportAudioSource(
+      async () => resolvedAsset(new Blob(['gapped-audio'])),
+    )
+    const reader = await source.openClip({
+      clipId: 'exact-handle',
+      assetId: 'audio-asset',
+      startSample: 0,
+      endSample: 24,
+      sampleRate: 48_000,
+      channelCount: 2,
+      requireComplete: true,
+    })
+
+    const failure = await reader.read(24).catch((cause) => cause)
+    expect(failure).toBeInstanceOf(MediaAssetRuntimeError)
+    expect(failure).toMatchObject({
+      assetId: 'audio-asset',
+      failure: {
+        surface: 'export',
+        trackKind: 'audio',
+        reason: 'decode-failed',
+        detail: expect.stringContaining('decoded PCM has a gap'),
+      },
+    })
+
+    await reader.close()
+    await source.close()
+    expect(first.close).toHaveBeenCalledOnce()
+    expect(second.close).toHaveBeenCalledOnce()
+  })
 })
 
 describe('multichannel preview/export fold-down parity', () => {

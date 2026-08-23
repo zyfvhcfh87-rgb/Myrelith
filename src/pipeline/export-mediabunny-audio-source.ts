@@ -26,6 +26,14 @@ import {
   type ResolvedExportAsset,
 } from './export-mediabunny-common'
 
+/**
+ * Exact crossfade handles may zero-fill this many decoded samples of leading
+ * encoder/decoder priming. HE-AAC frames and AAC encoder delay stay within
+ * 2048–2112 samples; 4096 leaves one extra frame of seek alignment. A later
+ * first packet is incomplete media, not priming.
+ */
+const MAX_EXPORT_AUDIO_PRIMING_SAMPLES = 4096
+
 interface DecodedAudioAsset {
   input: Input
   sink: AudioSampleSink
@@ -224,6 +232,21 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
       if (sourceTime < chunk.timestampSec - epsilon) {
         if (this.request.requireComplete && this.heardDecodedPcm) {
           throw this.incompleteSource(sourceSample, 'decoded PCM has a gap')
+        }
+        if (this.request.requireComplete) {
+          const requestedStartSec =
+            this.request.startSample / this.request.sampleRate
+          const maxPrimingSec =
+            MAX_EXPORT_AUDIO_PRIMING_SAMPLES / chunk.sampleRate
+          if (
+            chunk.timestampSec - requestedStartSec
+            > maxPrimingSec + epsilon
+          ) {
+            throw this.incompleteSource(
+              sourceSample,
+              'decoded PCM starts after decoder priming',
+            )
+          }
         }
         continue
       }

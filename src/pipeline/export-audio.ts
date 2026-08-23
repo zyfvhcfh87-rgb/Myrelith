@@ -28,8 +28,9 @@ export interface ExportAudioClipRequest {
   sampleRate: number
   channelCount: typeof EXPORT_AUDIO_CHANNELS
   /**
-   * Crossfade handle legs may zero-fill decoder priming before the first PCM
-   * packet, but must not invent samples after decode has started or at EOF.
+   * Crossfade handle legs may zero-fill a bounded decoder-priming interval
+   * before the first PCM packet, but must not invent samples after that bound,
+   * after decode has started, or at EOF.
    */
   requireComplete?: true
 }
