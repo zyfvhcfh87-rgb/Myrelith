@@ -6,9 +6,13 @@ still change.
 
 ## Unreleased
 
-The hosted preview at [myrelith.pages.dev](https://myrelith.pages.dev) already
-includes the work below. The public prerelease label remains
-**v0.1.0-alpha.1**.
+No changes recorded yet.
+
+## [0.2.0-alpha.1] - 2026-08-23
+
+**First Light** is the first prerelease published under the Myrelith name. It
+rolls up the post-MVP work shipped since `v0.1.0-alpha.1`; the hosted preview at
+[myrelith.pages.dev](https://myrelith.pages.dev) continues to track `master`.
 
 ### Added
 
@@ -24,6 +28,8 @@ includes the work below. The public prerelease label remains
   palette, and workspace presets.
 - Signed local plugin packages with review, enable/disable, and fail-closed
   preview and export.
+- OS file drops through the existing compatibility flow, contextual Timeline
+  and Media Pool menus, and list/grid Media Pool views with local sorting.
 
 ### Fixed
 
@@ -33,6 +39,8 @@ includes the work below. The public prerelease label remains
   intermediate viewport widths.
 - Linked A/V partners outside the bounded timeline window now join live move,
   trim, ripple, slip, and slide previews before the edit commits atomically.
+- Project replacement, plugin activation, preview-worker teardown, and audio
+  channel-mixing races now preserve their current owners and settle cleanly.
 
 ### Changed
 
@@ -71,4 +79,6 @@ includes the work below. The public prerelease label remains
 - This is an experimental public preview, not a production-ready editor or a
   patent-clearance certification.
 
+[Unreleased]: https://github.com/zyfvhcfh87-rgb/Myrelith/compare/v0.2.0-alpha.1...HEAD
+[0.2.0-alpha.1]: https://github.com/zyfvhcfh87-rgb/Myrelith/compare/v0.1.0-alpha.1...v0.2.0-alpha.1
 [0.1.0-alpha.1]: https://github.com/zyfvhcfh87-rgb/Myrelith/releases/tag/v0.1.0-alpha.1

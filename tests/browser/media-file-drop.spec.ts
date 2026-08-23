@@ -167,7 +167,7 @@ async function dropFilesAt(
 }
 
 async function expectPoolItem(page: Page, fileName: string): Promise<void> {
-  const search = page.getByPlaceholder('Name, codec, or format')
+  const search = page.getByRole('searchbox', { name: 'Search' })
   await search.fill(fileName)
   await expect(page.getByTitle(fileName)).toBeVisible({ timeout: 10_000 })
   await search.fill('')

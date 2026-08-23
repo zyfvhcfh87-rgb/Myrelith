@@ -13,7 +13,7 @@
 [Releases](https://github.com/zyfvhcfh87-rgb/Myrelith/releases) ·
 [Report a bug](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/new/choose)
 
-Current public preview: **v0.1.0-alpha.1**. The
+Current public preview: **v0.2.0-alpha.1**. The
 [hosted app](https://myrelith.pages.dev) tracks current `master`.
 
 Myrelith is an experimental non-linear editor built with React, TypeScript,
@@ -83,12 +83,12 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Run the container
 
-Future versioned images publish to GitHub Container Registry under the
-`myrelith` package name. The v0.1.0-alpha.1 tagged image remains immutable under
-its legacy package name; the server listens on port `8080` inside the container.
+Versioned images publish to GitHub Container Registry under the `myrelith`
+package name for Linux AMD64 and ARM64. The server listens on port `8080` inside
+the container.
 
 ```bash
-docker run --rm -p 8080:8080 ghcr.io/zyfvhcfh87-rgb/webcut:0.1.0-alpha.1
+docker run --rm -p 8080:8080 ghcr.io/zyfvhcfh87-rgb/myrelith:0.2.0-alpha.1
 ```
 
 Then open [http://localhost:8080](http://localhost:8080). The container serves
