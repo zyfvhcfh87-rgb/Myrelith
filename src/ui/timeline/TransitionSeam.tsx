@@ -185,6 +185,16 @@ export default function TransitionSeam({
   const [audioEnabled, setAudioEnabled] = useState(committedAudioEnabled)
   const [curve, setCurve] = useState<TransitionAudioCurve>(committedCurve)
   const [error, setError] = useState<string | null>(null)
+  const latestCommittedSettings = useRef({
+    durationFrames: committedDuration,
+    audioEnabled: committedAudioEnabled,
+    curve: committedCurve,
+  })
+  latestCommittedSettings.current = {
+    durationFrames: committedDuration,
+    audioEnabled: committedAudioEnabled,
+    curve: committedCurve,
+  }
 
   const draftDuration = (() => {
     const trimmed = draft.trim()
@@ -224,9 +234,10 @@ export default function TransitionSeam({
   const liveExplanation = availabilityText(resolution, timelineMaximum)
 
   const resetDraft = (): void => {
-    setDraft(String(committedDuration))
-    setAudioEnabled(committedAudioEnabled)
-    setCurve(committedCurve)
+    const latest = latestCommittedSettings.current
+    setDraft(String(latest.durationFrames))
+    setAudioEnabled(latest.audioEnabled)
+    setCurve(latest.curve)
     setError(null)
   }
 

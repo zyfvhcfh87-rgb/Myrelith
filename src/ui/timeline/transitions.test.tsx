@@ -22,6 +22,7 @@ import {
   resetMediaStoreForTest,
   resetTransportStoreForTest,
 } from '../../test/storeFixtures'
+import { EditorContextMenuHost } from '../EditorContextMenu'
 import Timeline from './Timeline'
 
 function makeClip(id: string, startFrame: number, durationFrames: number): Clip {
@@ -370,6 +371,45 @@ describe('timeline crossfade controls', () => {
     fireEvent.click(screen.getByTestId('transition-toggle-t1'))
     expect(screen.getByTestId('transition-duration-t1')).toHaveValue(9)
     expect(documentState().past).toHaveLength(1)
+  })
+
+  test('context-menu editing reads transition settings changed while the menu is open', () => {
+    act(() => documentState().setDoc(makeDoc({ seeded: true })))
+    render(
+      <EditorContextMenuHost>
+        <Timeline />
+      </EditorContextMenuHost>,
+    )
+
+    fireEvent.click(screen.getByTestId('transition-toggle-t1'))
+    fireEvent.change(screen.getByTestId('transition-duration-t1'), {
+      target: { value: '9' },
+    })
+    fireEvent.change(screen.getByLabelText('Audio crossfade curve'), {
+      target: { value: 'linear' },
+    })
+    fireEvent.click(screen.getByLabelText('Crossfade linked audio'))
+    fireEvent.submit(screen.getByRole('form', { name: 'Edit crossfade A to B' }))
+    fireEvent.keyDown(screen.getByTestId('transition-duration-t1'), { key: 'Escape' })
+
+    fireEvent.contextMenu(screen.getByTestId('transition-seam-A-B'), {
+      clientX: 200,
+      clientY: 100,
+    })
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+
+    act(() => documentState().undo())
+    const current = documentState().doc
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit crossfade…' }))
+
+    expect(screen.getByTestId('transition-duration-t1')).toHaveValue(5)
+    expect(screen.getByLabelText('Crossfade linked audio')).toBeChecked()
+    expect(screen.getByLabelText('Audio crossfade curve')).toHaveValue('equal-power')
+
+    fireEvent.submit(screen.getByRole('form', { name: 'Edit crossfade A to B' }))
+    expect(documentState().doc).toBe(current)
+    expect(documentState().past).toHaveLength(0)
+    expect(documentState().future).toHaveLength(1)
   })
 
   test('reports exact linked-audio availability from aligned partners', () => {
