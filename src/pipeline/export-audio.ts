@@ -79,17 +79,45 @@ export function scaleExportSampleIndex(
   return Number(scaled)
 }
 
+/** One unpaired document sample held for the next 2:1 downsample block. */
+export interface ExportAudioResampleCarry {
+  readonly left: number
+  readonly right: number
+}
+
+export interface ResampledAudioBlock {
+  readonly encoded: MixedAudioBlock
+  readonly carry: ExportAudioResampleCarry | null
+}
+
+function pairAverageCarry(
+  block: MixedAudioBlock,
+  pairAverage: boolean,
+): ExportAudioResampleCarry | null {
+  if (!pairAverage || block.sampleCount <= 0) return null
+  // An odd exclusive end leaves a globally even leftover (2e) whose pair
+  // partner lives in the next mix block.
+  if ((block.startSample + block.sampleCount) % 2 === 0) return null
+  const last = block.sampleCount - 1
+  return {
+    left: block.channels[0][last],
+    right: block.channels[1][last],
+  }
+}
+
 /**
  * Convert one mixed block from the document sample grid to the encoder grid.
- * 96 kHz → 48 kHz averages adjacent pairs; other integer ratios pick the
- * containing source sample.
+ * 96 kHz → 48 kHz averages global pairs (2e, 2e+1); a one-sample carry keeps
+ * that pairing exact when a mix block starts on an odd document sample.
+ * Other integer ratios pick the containing source sample.
  */
 export function resampleMixedAudioBlock(
   block: MixedAudioBlock,
   fromRate: number,
   toRate: number,
-): MixedAudioBlock {
-  if (fromRate === toRate) return block
+  carry: ExportAudioResampleCarry | null = null,
+): ResampledAudioBlock {
+  if (fromRate === toRate) return { encoded: block, carry: null }
   const startSample = scaleExportSampleIndex(block.startSample, fromRate, toRate)
   const endSample = scaleExportSampleIndex(
     block.startSample + block.sampleCount,
@@ -97,30 +125,45 @@ export function resampleMixedAudioBlock(
     toRate,
   )
   const sampleCount = endSample - startSample
+  const pairAverage = fromRate === toRate * 2
+  const nextCarry = pairAverageCarry(block, pairAverage)
   if (sampleCount <= 0) {
     return {
-      startSample,
-      sampleCount: 0,
-      channels: [new Float32Array(0), new Float32Array(0)],
+      encoded: {
+        startSample,
+        sampleCount: 0,
+        channels: [new Float32Array(0), new Float32Array(0)],
+      },
+      carry: nextCarry,
     }
   }
 
   const left = new Float32Array(sampleCount)
   const right = new Float32Array(sampleCount)
-  const pairAverage = fromRate === toRate * 2
   for (let index = 0; index < sampleCount; index++) {
     const sourceIndex = scaleExportSampleIndex(startSample + index, toRate, fromRate)
       - block.startSample
-    const clamped = Math.max(0, Math.min(block.sampleCount - 1, sourceIndex))
-    if (pairAverage && clamped + 1 < block.sampleCount) {
-      left[index] = (block.channels[0][clamped] + block.channels[0][clamped + 1]) / 2
-      right[index] = (block.channels[1][clamped] + block.channels[1][clamped + 1]) / 2
+    if (pairAverage && sourceIndex + 1 < block.sampleCount) {
+      if (sourceIndex >= 0) {
+        left[index] = (block.channels[0][sourceIndex] + block.channels[0][sourceIndex + 1]) / 2
+        right[index] = (block.channels[1][sourceIndex] + block.channels[1][sourceIndex + 1]) / 2
+      } else if (carry) {
+        left[index] = (carry.left + block.channels[0][sourceIndex + 1]) / 2
+        right[index] = (carry.right + block.channels[1][sourceIndex + 1]) / 2
+      } else {
+        left[index] = block.channels[0][sourceIndex + 1]
+        right[index] = block.channels[1][sourceIndex + 1]
+      }
     } else {
+      const clamped = Math.max(0, Math.min(block.sampleCount - 1, sourceIndex))
       left[index] = block.channels[0][clamped]
       right[index] = block.channels[1][clamped]
     }
   }
-  return { startSample, sampleCount, channels: [left, right] }
+  return {
+    encoded: { startSample, sampleCount, channels: [left, right] },
+    carry: nextCarry,
+  }
 }
 
 /**

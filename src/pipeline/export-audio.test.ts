@@ -908,10 +908,87 @@ describe('export encoder-rate resampling', () => {
       ],
     }
     const resampled = resampleMixedAudioBlock(block, 96_000, 48_000)
-    expect(resampled.startSample).toBe(0)
-    expect(resampled.sampleCount).toBe(2)
-    expect([...resampled.channels[0]]).toEqual([0.5, 1])
-    expect([...resampled.channels[1]]).toEqual([3, 7])
-    expect(resampleMixedAudioBlock(block, 48_000, 48_000)).toBe(block)
+    expect(resampled.encoded.startSample).toBe(0)
+    expect(resampled.encoded.sampleCount).toBe(2)
+    expect([...resampled.encoded.channels[0]]).toEqual([0.5, 1])
+    expect([...resampled.encoded.channels[1]]).toEqual([3, 7])
+    expect(resampled.carry).toBeNull()
+    expect(resampleMixedAudioBlock(block, 48_000, 48_000).encoded).toBe(block)
+  })
+
+  test('carries a leftover 96 kHz sample across an odd mix-block start', () => {
+    const first: MixedAudioBlock = {
+      startSample: 0,
+      sampleCount: 5,
+      channels: [
+        new Float32Array([0, 1, 2, 3, 4]),
+        new Float32Array([10, 11, 12, 13, 14]),
+      ],
+    }
+    const firstPass = resampleMixedAudioBlock(first, 96_000, 48_000)
+    expect(firstPass.encoded.startSample).toBe(0)
+    expect(firstPass.encoded.sampleCount).toBe(2)
+    expect([...firstPass.encoded.channels[0]]).toEqual([0.5, 2.5])
+    expect([...firstPass.encoded.channels[1]]).toEqual([10.5, 12.5])
+    expect(firstPass.carry).toEqual({ left: 4, right: 14 })
+
+    const second: MixedAudioBlock = {
+      startSample: 5,
+      sampleCount: 3,
+      channels: [
+        new Float32Array([5, 6, 7]),
+        new Float32Array([15, 16, 17]),
+      ],
+    }
+    const secondPass = resampleMixedAudioBlock(
+      second,
+      96_000,
+      48_000,
+      firstPass.carry,
+    )
+    expect(secondPass.encoded.startSample).toBe(2)
+    expect(secondPass.encoded.sampleCount).toBe(2)
+    expect([...secondPass.encoded.channels[0]]).toEqual([4.5, 6.5])
+    expect([...secondPass.encoded.channels[1]]).toEqual([14.5, 16.5])
+    expect(secondPass.carry).toBeNull()
+  })
+
+  test('keeps exact 2:1 pairs across a 96 kHz NTSC frame boundary', () => {
+    const doc = makeDoc([], NTSC_2997, 96_000)
+    const boundary = audioSampleBoundary(1, doc)
+    expect(boundary).toBe(3_203)
+
+    const before: MixedAudioBlock = {
+      startSample: boundary - 3,
+      sampleCount: 3,
+      channels: [
+        new Float32Array([0, 2, 4]),
+        new Float32Array([1, 3, 5]),
+      ],
+    }
+    const after: MixedAudioBlock = {
+      startSample: boundary,
+      sampleCount: 3,
+      channels: [
+        new Float32Array([6, 8, 10]),
+        new Float32Array([7, 9, 11]),
+      ],
+    }
+    const firstPass = resampleMixedAudioBlock(before, 96_000, 48_000)
+    expect(firstPass.encoded.startSample).toBe(1_600)
+    expect([...firstPass.encoded.channels[0]]).toEqual([1])
+    expect([...firstPass.encoded.channels[1]]).toEqual([2])
+    expect(firstPass.carry).toEqual({ left: 4, right: 5 })
+
+    const secondPass = resampleMixedAudioBlock(
+      after,
+      96_000,
+      48_000,
+      firstPass.carry,
+    )
+    expect(secondPass.encoded.startSample).toBe(1_601)
+    expect([...secondPass.encoded.channels[0]]).toEqual([5, 9])
+    expect([...secondPass.encoded.channels[1]]).toEqual([6, 10])
+    expect(secondPass.carry).toBeNull()
   })
 })

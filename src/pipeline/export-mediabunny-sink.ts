@@ -31,6 +31,7 @@ import {
   audioSampleBoundary,
   resampleMixedAudioBlock,
   scaleExportSampleIndex,
+  type ExportAudioResampleCarry,
   type MixedAudioBlock,
 } from './export-audio'
 import { createMediabunnyExportAudioSource } from './export-mediabunny-audio-source'
@@ -325,6 +326,7 @@ export async function createMediabunnyExportSink(
   let state: SinkState = 'open'
   let cancelPromise: Promise<void> | null = null
   let nextFrame = 0
+  let audioResampleCarry: ExportAudioResampleCarry | null = null
   let transitionSurfaces: TransitionSurfaces | null = null
   let renderSurfacesReleased = false
 
@@ -402,11 +404,14 @@ export async function createMediabunnyExportSink(
       const audioWrite =
         mixer && audioSource && outputAudioChannels !== null
           ? mixer.writeFrame(nextFrame, async (block) => {
-              const encoded = resampleMixedAudioBlock(
+              const resampled = resampleMixedAudioBlock(
                 block,
                 doc.audioSampleRate,
                 encoderSampleRate,
+                audioResampleCarry,
               )
+              audioResampleCarry = resampled.carry
+              const encoded = resampled.encoded
               if (encoded.sampleCount <= 0) return
               const sample = new AudioSample({
                 data: interleaveAudioBlock(encoded, outputAudioChannels),
