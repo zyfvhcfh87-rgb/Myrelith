@@ -376,6 +376,19 @@ function seedLargeCatalog(count: number, connected: boolean): void {
   })
 }
 
+function openDetailsAndActions(fileName: string): void {
+  fireEvent.click(screen.getByRole('button', {
+    name: `Details and actions for ${fileName}`,
+  }))
+}
+
+function showThumbnailGrid(): void {
+  fireEvent.click(screen.getByRole('radio', { name: 'Thumbnail grid' }))
+  fireEvent.change(screen.getByLabelText('Thumbnail size'), {
+    target: { value: 'small' },
+  })
+}
+
 beforeEach(() => {
   let urlCount = 0
   URL.createObjectURL = vi.fn(
@@ -488,6 +501,7 @@ describe('MediaPool presentation', () => {
     expect(screen.getByText(/This collection is empty/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: 'All media' }))
+    openDetailsAndActions('beach.mp4')
     fireEvent.click(screen.getByRole('button', {
       name: 'Organize beach.mp4 in collections',
     }))
@@ -537,6 +551,7 @@ describe('MediaPool presentation', () => {
       'offline',
     )
     expect(screen.getByText('Selects: 1 item')).toBeInTheDocument()
+    openDetailsAndActions('beach.mp4')
     fireEvent.click(screen.getByRole('button', {
       name: 'Organize beach.mp4 in collections',
     }))
@@ -642,9 +657,14 @@ describe('MediaPool presentation', () => {
   test('moves ArrowUp/ArrowDown by the visible grid column count', async () => {
     seedLargeCatalog(9, true)
     render(<MediaPool />)
+    showThumbnailGrid()
     const listbox = screen.getByRole('grid', { name: 'Media assets' })
 
     const setListWidth = async (width: number): Promise<void> => {
+      Object.defineProperty(listbox, 'clientWidth', {
+        configurable: true,
+        value: width,
+      })
       Object.defineProperty(listbox, 'clientWidth', {
         configurable: true,
         value: width,
@@ -691,8 +711,13 @@ describe('MediaPool presentation', () => {
   test('leaves ArrowUp/ArrowDown on the current cell when that column has no destination', async () => {
     seedLargeCatalog(5, true)
     render(<MediaPool />)
+    showThumbnailGrid()
     const listbox = screen.getByRole('grid', { name: 'Media assets' })
 
+    Object.defineProperty(listbox, 'clientWidth', {
+      configurable: true,
+      value: 360,
+    })
     Object.defineProperty(listbox, 'clientWidth', {
       configurable: true,
       value: 360,
@@ -767,6 +792,7 @@ describe('MediaPool presentation', () => {
     expect(connectedRow).toHaveAttribute('aria-selected', 'true')
     expect(within(connectedRow).getAllByRole('gridcell').length).toBeGreaterThan(0)
 
+    openDetailsAndActions('beach.mp4')
     const organize = within(connectedRow).getByRole('button', {
       name: 'Organize beach.mp4 in collections',
     })
@@ -881,22 +907,18 @@ describe('MediaPool presentation', () => {
     expect(pool).not.toHaveClass('drop-target')
   })
 
-  test('supporting browsers offer remembered and quick import paths', () => {
+  test('supporting browsers import through the remembered picker', () => {
     vi.mocked(canRememberImportedMedia).mockReturnValue(true)
     render(<MediaPool />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Import & remember' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }))
 
     expect(chooseMediaForImport).toHaveBeenCalledOnce()
-    const quickInput = screen.getByLabelText('Import media once')
-    const file = new File(['video'], 'fresh.mp4', { type: 'video/mp4' })
-    fireEvent.change(quickInput, { target: { files: [file] } })
-
-    expect(quickInput).toHaveAttribute('multiple')
-    expect(importMediaFiles).toHaveBeenCalledWith([file])
+    expect(screen.queryByLabelText('Import media')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Import media once')).not.toBeInTheDocument()
   })
 
-  test('disables every import path while another import is active', () => {
+  test('disables import while another import is active', () => {
     vi.mocked(canRememberImportedMedia).mockReturnValue(true)
     useMediaImportStore.setState({
       ...INITIAL_MEDIA_IMPORT_STATE,
@@ -905,10 +927,8 @@ describe('MediaPool presentation', () => {
     })
     render(<MediaPool />)
 
-    expect(screen.getByRole('button', {
-      name: 'Import & remember',
-    })).toBeDisabled()
-    expect(screen.getByLabelText('Import media once')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
+    expect(screen.queryByLabelText('Import media once')).not.toBeInTheDocument()
   })
 
   test('shows a placeholder while preserving ready metadata and drag state', () => {
@@ -1012,6 +1032,7 @@ describe('MediaPool presentation', () => {
     expect(screen.getByText(
       '640×360 · 00:00:05:00 · First frame only',
     )).toBeInTheDocument()
+    openDetailsAndActions('poster.webp')
     expect(screen.getByText('Still image')).toBeInTheDocument()
     expect(screen.getByText(
       'WEBP · 640×360 · ImageBitmap · First frame only',
@@ -1171,6 +1192,7 @@ describe('MediaPool presentation', () => {
       report: makeReport(),
     }))
     render(<MediaPool />)
+    openDetailsAndActions('beach.mp4')
 
     expect(screen.getByRole('status', {
       name: 'beach.mp4 compatibility status',
@@ -1230,6 +1252,7 @@ describe('MediaPool presentation', () => {
     }))
 
     render(<MediaPool />)
+    openDetailsAndActions('beach.mp4')
 
     expect(screen.getByText(/Local fallback \(ProRes\)/)).toBeInTheDocument()
     expect(screen.getByText(/Local fallback \(AC-3\/E-AC-3\)/))
@@ -1443,6 +1466,7 @@ describe('MediaPool presentation', () => {
       }),
     }))
     render(<MediaPool />)
+    openDetailsAndActions('beach.mp4')
 
     expect(screen.getByRole('status', {
       name: 'beach.mp4 compatibility status',
@@ -1598,5 +1622,56 @@ describe('MediaPool presentation', () => {
       expect(useTransportStore.getState().mediaPlacementStatus)
         .toBe('Imported 2 files.')
     })
+  })
+
+  test('hides Organize and proxy until Details and actions is opened', () => {
+    seedAsset(makeAsset())
+    render(<MediaPool />)
+
+    expect(screen.queryByRole('button', {
+      name: 'Organize beach.mp4 in collections',
+    })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Generate proxy' }))
+      .not.toBeInTheDocument()
+
+    openDetailsAndActions('beach.mp4')
+    expect(screen.getByRole('button', {
+      name: 'Organize beach.mp4 in collections',
+    })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generate proxy' }))
+      .toBeInTheDocument()
+  })
+
+  test('compact list skips thumbnails while keeping names and selection', () => {
+    seedAsset(makeAsset())
+    render(<MediaPool />)
+    expect(screen.getByTestId('media-thumbnail-asset-9')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Compact list' }))
+
+    expect(screen.queryByTestId('media-thumbnail-asset-9')).not.toBeInTheDocument()
+    expect(screen.getByTitle('beach.mp4')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Thumbnail size')).toBeDisabled()
+  })
+
+  test('sorts visible cards by name without changing catalog order', () => {
+    seedAsset(makeAsset({ id: 'asset-b', fileName: 'zeta.mp4' }))
+    seedAsset(makeAsset({ id: 'asset-a', fileName: 'alpha.mp4' }))
+    render(<MediaPool />)
+
+    const before = screen.getAllByRole('row').map((row) => row.getAttribute('title'))
+    expect(before[0]).toBe('zeta.mp4')
+
+    fireEvent.change(screen.getByLabelText('Sort media'), {
+      target: { value: 'name' },
+    })
+
+    const after = screen.getAllByRole('row').map((row) => row.getAttribute('title'))
+    expect(after[0]).toBe('alpha.mp4')
+    expect(after[1]).toBe('zeta.mp4')
+    expect([...useMediaStore.getState().descriptors.keys()]).toEqual([
+      'asset-b',
+      'asset-a',
+    ])
   })
 })

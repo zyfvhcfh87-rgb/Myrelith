@@ -5,6 +5,7 @@ import {
 } from '../domain/exportProfile'
 import {
   INITIAL_EXPORT_SELECTION,
+  INITIAL_MEDIA_POOL_VIEW_PREFERENCE,
   INITIAL_PREFERENCES_STATE,
   usePreferencesStore,
 } from './preferencesStore'
@@ -90,6 +91,55 @@ describe('preferencesStore', () => {
     expect(selection.profile).not.toBe(input)
     expect(Object.isFrozen(selection)).toBe(true)
     expect(Object.isFrozen(selection.profile)).toBe(true)
+  })
+
+  test('starts with Details, Medium, project order, and ascending sort', () => {
+    const view = usePreferencesStore.getState().mediaPoolView
+    expect(view).toBe(INITIAL_MEDIA_POOL_VIEW_PREFERENCE)
+    expect(view).toEqual({
+      viewMode: 'details',
+      thumbnailSize: 'medium',
+      sortField: 'project-order',
+      sortDirection: 'ascending',
+    })
+    expect(Object.isFrozen(view)).toBe(true)
+  })
+
+  test('stores a validated Media Pool view preference idempotently', () => {
+    const next = {
+      viewMode: 'thumbnail' as const,
+      thumbnailSize: 'large' as const,
+      sortField: 'name' as const,
+      sortDirection: 'descending' as const,
+    }
+    usePreferencesStore.getState().setMediaPoolView(next)
+    const stored = usePreferencesStore.getState().mediaPoolView
+    expect(stored).toEqual(next)
+    expect(stored).not.toBe(next)
+    expect(Object.isFrozen(stored)).toBe(true)
+
+    const before = usePreferencesStore.getState()
+    before.setMediaPoolView({ ...next })
+    expect(usePreferencesStore.getState()).toBe(before)
+  })
+
+  test('ignores an invalid Media Pool view preference without replacing the last valid value', () => {
+    usePreferencesStore.getState().setMediaPoolView({
+      viewMode: 'compact-list',
+      thumbnailSize: 'small',
+      sortField: 'duration',
+      sortDirection: 'descending',
+    })
+    const previous = usePreferencesStore.getState().mediaPoolView
+
+    usePreferencesStore.getState().setMediaPoolView({
+      viewMode: 'gallery',
+      thumbnailSize: 'medium',
+      sortField: 'name',
+      sortDirection: 'ascending',
+    } as never)
+
+    expect(usePreferencesStore.getState().mediaPoolView).toBe(previous)
   })
 
   test.each([

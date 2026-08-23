@@ -17,14 +17,34 @@ import {
   isValidStillImageDurationMicroseconds,
 } from '../domain/staticImage'
 
+export type MediaPoolViewMode = 'thumbnail' | 'details' | 'compact-list'
+export type MediaPoolThumbnailSize = 'small' | 'medium' | 'large'
+export type MediaPoolSortField =
+  | 'project-order'
+  | 'name'
+  | 'kind'
+  | 'duration'
+  | 'last-modified'
+  | 'size'
+export type MediaPoolSortDirection = 'ascending' | 'descending'
+
+export interface MediaPoolViewPreference {
+  readonly viewMode: MediaPoolViewMode
+  readonly thumbnailSize: MediaPoolThumbnailSize
+  readonly sortField: MediaPoolSortField
+  readonly sortDirection: MediaPoolSortDirection
+}
+
 export interface PreferencesState {
   defaultStillImageDurationMicroseconds: number
   /** Persistent user intent; Alt temporarily bypasses it during an edit. */
   snappingEnabled: boolean
   exportSelection: Readonly<ExportSelectionPreference>
+  mediaPoolView: Readonly<MediaPoolViewPreference>
   setDefaultStillImageDurationMicroseconds(value: number): void
   setSnappingEnabled(value: boolean): void
   setExportSelection(value: ExportSelectionPreference): void
+  setMediaPoolView(value: MediaPoolViewPreference): void
 }
 
 export type ExportPreferenceSelectionId = ExportSelectionId | 'custom'
@@ -49,11 +69,42 @@ const EXPORT_SELECTION_IDS: readonly ExportPreferenceSelectionId[] =
     'custom',
   ])
 
+const MEDIA_POOL_VIEW_MODES: readonly MediaPoolViewMode[] = Object.freeze([
+  'thumbnail',
+  'details',
+  'compact-list',
+])
+const MEDIA_POOL_THUMBNAIL_SIZES: readonly MediaPoolThumbnailSize[] = Object.freeze([
+  'small',
+  'medium',
+  'large',
+])
+const MEDIA_POOL_SORT_FIELDS: readonly MediaPoolSortField[] = Object.freeze([
+  'project-order',
+  'name',
+  'kind',
+  'duration',
+  'last-modified',
+  'size',
+])
+const MEDIA_POOL_SORT_DIRECTIONS: readonly MediaPoolSortDirection[] = Object.freeze([
+  'ascending',
+  'descending',
+])
+
+export const INITIAL_MEDIA_POOL_VIEW_PREFERENCE = Object.freeze({
+  viewMode: 'details',
+  thumbnailSize: 'medium',
+  sortField: 'project-order',
+  sortDirection: 'ascending',
+}) satisfies Readonly<MediaPoolViewPreference>
+
 export const INITIAL_PREFERENCES_STATE = Object.freeze({
   defaultStillImageDurationMicroseconds:
     DEFAULT_STILL_IMAGE_DURATION_MICROSECONDS,
   snappingEnabled: true,
   exportSelection: INITIAL_EXPORT_SELECTION,
+  mediaPoolView: INITIAL_MEDIA_POOL_VIEW_PREFERENCE,
 })
 
 export function validateExportSelectionPreference(
@@ -69,6 +120,29 @@ export function validateExportSelectionPreference(
     })
   }
   return Object.freeze({ selectionId: value.selectionId, profile: null })
+}
+
+export function validateMediaPoolViewPreference(
+  value: MediaPoolViewPreference,
+): Readonly<MediaPoolViewPreference> {
+  if (!MEDIA_POOL_VIEW_MODES.some((candidate) => candidate === value.viewMode)) {
+    throw new TypeError('Unknown Media Pool view mode')
+  }
+  if (!MEDIA_POOL_THUMBNAIL_SIZES.some((candidate) => candidate === value.thumbnailSize)) {
+    throw new TypeError('Unknown Media Pool thumbnail size')
+  }
+  if (!MEDIA_POOL_SORT_FIELDS.some((candidate) => candidate === value.sortField)) {
+    throw new TypeError('Unknown Media Pool sort field')
+  }
+  if (!MEDIA_POOL_SORT_DIRECTIONS.some((candidate) => candidate === value.sortDirection)) {
+    throw new TypeError('Unknown Media Pool sort direction')
+  }
+  return Object.freeze({
+    viewMode: value.viewMode,
+    thumbnailSize: value.thumbnailSize,
+    sortField: value.sortField,
+    sortDirection: value.sortDirection,
+  })
 }
 
 export const usePreferencesStore = create<PreferencesState>()((set) => ({
@@ -93,5 +167,21 @@ export const usePreferencesStore = create<PreferencesState>()((set) => ({
       return
     }
     set({ exportSelection })
+  },
+  setMediaPoolView: (value) => {
+    let mediaPoolView: Readonly<MediaPoolViewPreference>
+    try {
+      mediaPoolView = validateMediaPoolViewPreference(value)
+    } catch {
+      return
+    }
+    set((state) => (
+      state.mediaPoolView.viewMode === mediaPoolView.viewMode
+      && state.mediaPoolView.thumbnailSize === mediaPoolView.thumbnailSize
+      && state.mediaPoolView.sortField === mediaPoolView.sortField
+      && state.mediaPoolView.sortDirection === mediaPoolView.sortDirection
+        ? state
+        : { mediaPoolView }
+    ))
   },
 }))

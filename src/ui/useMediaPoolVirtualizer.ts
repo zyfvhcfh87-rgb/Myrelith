@@ -8,21 +8,21 @@ import {
 import type { RefObject } from 'react'
 import {
   computeMediaPoolVirtualWindow,
+  mediaPoolColumnCount,
   planMediaPoolRows,
   type MediaPoolItemModel,
+  type MediaPoolRowLayout,
   type MediaPoolVirtualRow,
   type MediaPoolVirtualWindow,
 } from './mediaPoolModel'
 
 const FALLBACK_VIEWPORT_HEIGHT = 640
 const FALLBACK_LIST_WIDTH = 360
-const MEDIA_POOL_SINGLE_COLUMN_WIDTH = 210
-const MEDIA_POOL_COMPACT_WIDTH = 300
 
 interface ViewportMeasurement {
   readonly start: number
   readonly end: number
-  readonly columnCount: number
+  readonly width: number
 }
 
 export interface MediaPoolVirtualizer {
@@ -79,6 +79,7 @@ function rowsInRange(
  */
 export function useMediaPoolVirtualizer(
   items: readonly MediaPoolItemModel[],
+  layout: MediaPoolRowLayout,
 ): MediaPoolVirtualizer {
   const listRef = useRef<HTMLUListElement>(null)
   const measuredHeightsRef = useRef<Map<string, number>>(new Map())
@@ -86,7 +87,7 @@ export function useMediaPoolVirtualizer(
   const [viewport, setViewport] = useState<ViewportMeasurement>({
     start: 0,
     end: FALLBACK_VIEWPORT_HEIGHT,
-    columnCount: 3,
+    width: FALLBACK_LIST_WIDTH,
   })
 
   const measureViewport = useCallback((): void => {
@@ -105,21 +106,24 @@ export function useMediaPoolVirtualizer(
       : 0
     const start = Math.max(0, relativeScroll + coveredByStickyHeader)
     const end = Math.max(start + 1, relativeScroll + rootHeight)
-    const columnCount = listWidth <= MEDIA_POOL_SINGLE_COLUMN_WIDTH
-      ? 1
-      : listWidth <= MEDIA_POOL_COMPACT_WIDTH ? 2 : 3
     setViewport((current) => (
       current.start === start
       && current.end === end
-      && current.columnCount === columnCount
+      && current.width === listWidth
         ? current
-        : { start, end, columnCount }
+        : { start, end, width: listWidth }
     ))
   }, [])
 
+  const columnCount = mediaPoolColumnCount(
+    viewport.width,
+    layout.viewMode,
+    layout.thumbnailSize,
+  )
+
   const rows = useMemo(
-    () => planMediaPoolRows(items, viewport.columnCount),
-    [items, viewport.columnCount],
+    () => planMediaPoolRows(items, columnCount, layout),
+    [columnCount, items, layout],
   )
 
   const virtualWindow = useMemo(
@@ -264,7 +268,7 @@ export function useMediaPoolVirtualizer(
 
   return {
     listRef,
-    columnCount: viewport.columnCount,
+    columnCount,
     rows,
     virtualWindow,
     renderedItemIds,
