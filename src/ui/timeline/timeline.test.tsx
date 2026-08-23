@@ -172,6 +172,32 @@ describe('Playhead', () => {
 })
 
 describe('Ruler', () => {
+  test('secondary pointerdown never seeks or starts a scrub', async () => {
+    act(() => useTransportStore.getState().setPlayheadFrame(27))
+    render(<Ruler />)
+    const ruler = screen.getByTestId('ruler')
+
+    fireEvent.pointerDown(ruler, {
+      pointerId: 99,
+      button: 2,
+      buttons: 2,
+      clientX: 400,
+    })
+    fireEvent.pointerUp(ruler, {
+      pointerId: 99,
+      button: 2,
+      buttons: 0,
+      clientX: 400,
+    })
+    await nextFrame()
+
+    expect(useTransportStore.getState()).toMatchObject({
+      playheadFrame: 27,
+      isScrubbing: false,
+      snapGuide: null,
+    })
+  })
+
   test('draws timecode labels at a zoom-appropriate interval', () => {
     act(() => {
       useTransportStore.getState().setZoom(3) // 30f * 3px = 90px → 1s ticks

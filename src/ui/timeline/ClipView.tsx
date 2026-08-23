@@ -28,6 +28,7 @@
 import { memo } from 'react'
 import type { Clip, TrackId, TrackKind } from '../../domain/schema'
 import { microsecondsDurationToFrames } from '../../domain/time'
+import { findClip } from '../../domain/selectors'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
@@ -39,6 +40,14 @@ import {
 import { planClipPresentation } from './clipVisualPlan'
 import ClipVisualLayer from './ClipVisualLayer'
 import { useClipGestureSession } from './useClipGestureSession'
+import { frameAtTimelineClientX } from './timelineViewport'
+import {
+  editorContextMenuIdentity,
+} from '../../app/editorContextMenuCommands'
+import {
+  openEditorContextMenuFromEvent,
+  useEditorContextMenu,
+} from '../editorContextMenuController'
 
 interface ClipViewProps {
   clip: Clip
@@ -58,6 +67,7 @@ function ClipView({
   timelineOriginFrame = 0,
   timelineWindowEndFrame = Number.MAX_SAFE_INTEGER,
 }: ClipViewProps) {
+  const contextMenu = useEditorContextMenu()
   const zoom = useTransportStore((s) => s.zoom)
   const tool = useTransportStore((s) => s.tool)
   const isSelected = useTransportStore((s) =>
@@ -218,6 +228,41 @@ function ClipView({
         width: hasVisibleSlice ? displayedDurationFrames * zoom : 1,
       }}
       onPointerDown={onBodyPointerDown}
+      onContextMenu={(event) => {
+        const currentClip = findClip(useDocumentStore.getState().doc, clip.id)
+        if (!currentClip) return
+        const rect = event.currentTarget.getBoundingClientRect()
+        const transport = useTransportStore.getState()
+        const clipEnd = currentClip.timelineRange.startFrame
+          + currentClip.timelineRange.durationFrames
+        const frame = event.clientX === 0 && event.clientY === 0
+          ? Math.min(
+              clipEnd,
+              Math.max(
+                currentClip.timelineRange.startFrame,
+                transport.playheadFrame,
+              ),
+            )
+          : frameAtTimelineClientX(
+              event.clientX,
+              rect.left,
+              Math.max(currentClip.timelineRange.startFrame, timelineOriginFrame),
+              transport.zoom,
+              currentClip.timelineRange.startFrame,
+              clipEnd,
+            )
+        if (openEditorContextMenuFromEvent(contextMenu, event, {
+          target: {
+            ...editorContextMenuIdentity(),
+            kind: 'clip',
+            clipId: currentClip.id,
+            frame,
+          },
+          restoreFocusTo: event.currentTarget,
+        })) {
+          transport.promoteContextClipSelection(currentClip.id)
+        }
+      }}
       onKeyDown={onKeyDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

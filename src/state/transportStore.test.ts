@@ -219,6 +219,36 @@ describe('Phase 4.2 tool / selection / edit-preview state', () => {
     expect(new Set(getState().selectedClipIds).size).toBe(3)
   })
 
+  test('context selection preserves a selected group while promoting its target', () => {
+    getState().toggleClipSelection('clipA')
+    getState().toggleClipSelection('clipB')
+    getState().toggleClipSelection('clipC')
+
+    getState().promoteContextClipSelection('clipA')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipB', 'clipC'],
+      selectedClipId: 'clipA',
+    })
+
+    const selection = getState().selectedClipIds
+    getState().promoteContextClipSelection('clipA')
+    expect(getState().selectedClipIds).toBe(selection)
+  })
+
+  test('context selection replaces the group when its target was not selected', () => {
+    getState().toggleClipSelection('clipA')
+    getState().toggleClipSelection('clipB')
+    getState().setSelectedMarker('marker-1')
+
+    getState().promoteContextClipSelection('clipC')
+    expect(getState()).toMatchObject({
+      selectedClipIds: ['clipC'],
+      selectedClipId: 'clipC',
+      selectedMarkerId: null,
+      editingMarkerId: null,
+    })
+  })
+
   test('toggling the primary off promotes the last remaining selected clip', () => {
     getState().toggleClipSelection('clipA')
     getState().toggleClipSelection('clipB')

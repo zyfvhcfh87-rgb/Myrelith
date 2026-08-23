@@ -42,10 +42,19 @@ import {
   trackAcceptsAssetDrag,
 } from '../dnd'
 import { extractDroppedFiles, isFileDrag } from '../fileDrag'
+import { isPrimaryEditingPointer } from '../pointerButtons'
 import ClipView from './ClipView'
 import TransitionSeam from './TransitionSeam'
-import { frameToTimelineLocalPx } from './timelineViewport'
+import {
+  frameAtTimelineClientX,
+  frameToTimelineLocalPx,
+} from './timelineViewport'
 import { useScrubScheduler } from './useScrubScheduler'
+import { editorContextMenuIdentity } from '../../app/editorContextMenuCommands'
+import {
+  openEditorContextMenuFromEvent,
+  useEditorContextMenu,
+} from '../editorContextMenuController'
 
 interface TrackProps {
   track: TrackData
@@ -138,6 +147,7 @@ function Track({
   timelineOriginFrame = 0,
   timelineWindowEndFrame = Number.MAX_SAFE_INTEGER,
 }: TrackProps) {
+  const contextMenu = useEditorContextMenu()
   const [dropReady, setDropReady] = useState(false)
   const clipDropTarget = useTransportStore(
     (state) => state.dragPreview?.targetTrackId === track.id,
@@ -199,11 +209,31 @@ function Track({
       data-track-locked={track.locked ? 'true' : 'false'}
       data-track-hidden={track.hidden ? 'true' : 'false'}
       onPointerDown={(e) => {
+        if (!isPrimaryEditingPointer(e)) return
         // Empty-lane click deselects; clip pointerdowns have the CLIP as
         // target, so they never land here (Phase 4.2 selection).
         if (e.target === e.currentTarget) {
           useTransportStore.getState().setSelectedClip(null)
         }
+      }}
+      onContextMenu={(event) => {
+        if (event.target !== event.currentTarget) return
+        const rect = event.currentTarget.getBoundingClientRect()
+        const frame = frameAtTimelineClientX(
+          event.clientX,
+          rect.left,
+          useTransportStore.getState().timelineOriginFrame,
+          useTransportStore.getState().zoom,
+        )
+        openEditorContextMenuFromEvent(contextMenu, event, {
+          target: {
+            ...editorContextMenuIdentity(),
+            kind: 'lane',
+            trackId: track.id,
+            frame,
+          },
+          restoreFocusTo: null,
+        })
       }}
       onDragOver={(e) => {
         const fileDrag = acceptsFileDrag(e)

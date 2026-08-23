@@ -50,6 +50,7 @@ import {
 } from '../ui/fileDrag'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import { EditorContextMenuHost } from '../ui/EditorContextMenu'
 
 const pluginAppController = getPluginAppController()
 
@@ -228,6 +229,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
   } as CSSProperties
 
   return (
+    <EditorContextMenuHost closing={closing}>
     <div
       ref={shellRef}
       className="app-shell"
@@ -336,6 +338,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
       {ProxyBenchmarkPanel ? <ProxyBenchmarkPanel /> : null}
       <MediaDropStatus />
     </div>
+    </EditorContextMenuHost>
   )
 }
 

@@ -85,6 +85,29 @@ export function frameAtTimelineLocalPx(
 }
 
 /**
+ * Shared pointer-to-global-frame conversion for ruler, lanes, clips, and
+ * media drops. Bounds are inclusive so callers can retain an exact boundary
+ * frame and let the command resolver explain why an edit is unavailable.
+ */
+export function frameAtTimelineClientX(
+  clientX: number,
+  surfaceLeftPx: number,
+  originFrame: number,
+  zoom: number,
+  minimumFrame = 0,
+  maximumFrame = Number.MAX_SAFE_INTEGER,
+): number {
+  const minimum = Math.max(0, Math.ceil(minimumFrame))
+  const maximum = Math.max(minimum, Math.floor(maximumFrame))
+  const frame = frameAtTimelineLocalPx(
+    clientX - surfaceLeftPx,
+    originFrame,
+    zoom,
+  )
+  return Math.min(maximum, Math.max(minimum, frame))
+}
+
+/**
  * Plan a viewport whose requested frame lands at `anchorScreenPx` in the
  * lane. Products are formed only from frame differences bounded by the
  * physical surface, so very large global frame numbers stay precise.
