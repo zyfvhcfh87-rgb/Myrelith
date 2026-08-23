@@ -7,8 +7,10 @@ import {
   INITIAL_PREFERENCES_STATE,
   usePreferencesStore,
   validateExportSelectionPreference,
+  validateMediaPoolViewPreference,
   type ExportPreferenceSelectionId,
   type ExportSelectionPreference,
+  type MediaPoolViewPreference,
 } from '../state/preferencesStore'
 import {
   INITIAL_WORKSPACE_LAYOUT,
@@ -20,10 +22,12 @@ import {
 export const USER_PREFERENCES_STORAGE_KEY = 'myrelith.preferences:v1'
 export const EXPORT_SELECTION_STORAGE_KEY = 'myrelith.export-selection:v1'
 export const WORKSPACE_LAYOUT_STORAGE_KEY = 'myrelith.workspace:v1'
+export const MEDIA_POOL_VIEW_STORAGE_KEY = 'myrelith.media-pool-view:v1'
 /** Local-storage keys written before the Myrelith rebrand. */
 export const LEGACY_USER_PREFERENCES_STORAGE_KEY = 'webcut.preferences:v1'
 export const LEGACY_EXPORT_SELECTION_STORAGE_KEY = 'webcut.export-selection:v1'
 export const LEGACY_WORKSPACE_LAYOUT_STORAGE_KEY = 'webcut.workspace:v1'
+export const LEGACY_MEDIA_POOL_VIEW_STORAGE_KEY = 'webcut.media-pool-view:v1'
 
 interface PersistedPreferencesV1 {
   version: 1
@@ -38,6 +42,10 @@ interface PersistedExportSelectionV1 {
 }
 
 interface PersistedWorkspaceLayoutV1 extends WorkspaceLayoutPreference {
+  version: 1
+}
+
+interface PersistedMediaPoolViewV1 extends MediaPoolViewPreference {
   version: 1
 }
 
@@ -133,6 +141,39 @@ function parsePersistedWorkspaceLayout(
   }
 }
 
+function parsePersistedMediaPoolView(
+  raw: string | null,
+): Readonly<MediaPoolViewPreference> | null {
+  if (raw === null) return null
+  try {
+    const value = JSON.parse(raw) as unknown
+    if (!value || typeof value !== 'object') return null
+    const record = value as Record<string, unknown>
+    if (record.version !== 1) return null
+    return validateMediaPoolViewPreference({
+      viewMode: record.viewMode,
+      thumbnailSize: record.thumbnailSize,
+      sortField: record.sortField,
+      sortDirection: record.sortDirection,
+    } as MediaPoolViewPreference)
+  } catch {
+    return null
+  }
+}
+
+function serializeMediaPoolView(
+  preference: Readonly<MediaPoolViewPreference>,
+): string {
+  const value: PersistedMediaPoolViewV1 = {
+    version: 1,
+    viewMode: preference.viewMode,
+    thumbnailSize: preference.thumbnailSize,
+    sortField: preference.sortField,
+    sortDirection: preference.sortDirection,
+  }
+  return JSON.stringify(value)
+}
+
 function serializeWorkspaceLayout(
   preference: WorkspaceLayoutPreference,
 ): string {
@@ -211,6 +252,18 @@ export function initPreferencesPersistence(
     } catch {
       // Workspace geometry remains usable in memory when storage rejects.
     }
+    try {
+      const persisted = parsePersistedMediaPoolView(
+        persistenceStorage.getItem(MEDIA_POOL_VIEW_STORAGE_KEY),
+      ) ?? parsePersistedMediaPoolView(
+        persistenceStorage.getItem(LEGACY_MEDIA_POOL_VIEW_STORAGE_KEY),
+      )
+      if (persisted) {
+        usePreferencesStore.setState({ mediaPoolView: persisted })
+      }
+    } catch {
+      // Media Pool view persistence is independent from other preferences.
+    }
   }
 
   const unsubscribe = usePreferencesStore.subscribe((state, previous) => {
@@ -232,6 +285,16 @@ export function initPreferencesPersistence(
         )
       } catch {
         // Preference changes still work for this session when storage rejects.
+      }
+    }
+    if (state.mediaPoolView !== previous.mediaPoolView && persistenceStorage !== null) {
+      try {
+        persistenceStorage.setItem(
+          MEDIA_POOL_VIEW_STORAGE_KEY,
+          serializeMediaPoolView(state.mediaPoolView),
+        )
+      } catch {
+        // Media Pool view changes remain usable for this session.
       }
     }
     if (state.exportSelection === previous.exportSelection) return

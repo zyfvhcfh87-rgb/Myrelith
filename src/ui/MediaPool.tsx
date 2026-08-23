@@ -21,7 +21,12 @@ import {
 import {
   FileVideo,
   ImageSquare,
+  List,
   Plus,
+  Rows,
+  SortAscending,
+  SortDescending,
+  SquaresFour,
   UploadSimple,
   Waveform,
   X,
@@ -69,7 +74,12 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaImportStore } from '../state/mediaImportStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
-import { usePreferencesStore } from '../state/preferencesStore'
+import {
+  usePreferencesStore,
+  type MediaPoolSortField,
+  type MediaPoolThumbnailSize,
+  type MediaPoolViewPreference,
+} from '../state/preferencesStore'
 import { importDroppedMediaFiles, clearMediaPlacementPreview } from '../app/mediaPlacementController'
 import {
   ASSET_DRAG_TYPE,
@@ -81,8 +91,11 @@ import { extractDroppedFiles, isFileDrag } from './fileDrag'
 import {
   buildMediaPoolItems,
   filterMediaPoolItems,
+  mediaPoolShowsThumbnails,
+  sortMediaPoolItems,
   type MediaPoolKind,
   type MediaPoolKindFilter,
+  type MediaPoolRowLayout,
   type MediaPoolStatusFilter,
 } from './mediaPoolModel'
 import MediaImportDialog from './MediaImportDialog'
@@ -144,10 +157,11 @@ function StillImageDurationPreference() {
   }
 
   return (
-    <label className="media-still-duration">
-      <span className="media-still-duration-label">
-        Default still-image duration
-      </span>
+    <label
+      className="media-still-duration"
+      title="Default still-image duration. Future imports only."
+    >
+      <span className="media-still-duration-label">Stills</span>
       <span className="media-still-duration-input">
         <input
           aria-label="Default still-image duration"
@@ -172,7 +186,7 @@ function StillImageDurationPreference() {
         />
         <span aria-hidden="true">s</span>
       </span>
-      <span id="media-still-duration-help" className="media-still-duration-help">
+      <span id="media-still-duration-help" className="media-pool-sr-only">
         Future imports only
       </span>
     </label>
@@ -645,6 +659,125 @@ function mediaPoolItemContextActions(
   }
 }
 
+const MEDIA_POOL_VIEW_OPTIONS = [
+  { viewMode: 'thumbnail', label: 'Thumbnail grid', Icon: SquaresFour },
+  { viewMode: 'details', label: 'Details', Icon: Rows },
+  { viewMode: 'compact-list', label: 'Compact list', Icon: List },
+] as const
+
+const MEDIA_POOL_SIZE_OPTIONS: readonly {
+  readonly value: MediaPoolThumbnailSize
+  readonly label: string
+}[] = [
+  { value: 'small', label: 'Small' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'large', label: 'Large' },
+]
+
+const MEDIA_POOL_SORT_OPTIONS: readonly {
+  readonly value: MediaPoolSortField
+  readonly label: string
+}[] = [
+  { value: 'project-order', label: 'Project order' },
+  { value: 'name', label: 'Name' },
+  { value: 'kind', label: 'Kind' },
+  { value: 'duration', label: 'Duration' },
+  { value: 'last-modified', label: 'Last modified' },
+  { value: 'size', label: 'Size' },
+]
+
+function MediaPoolViewToolbar({
+  preference,
+  onChange,
+}: {
+  readonly preference: MediaPoolViewPreference
+  readonly onChange: (next: MediaPoolViewPreference) => void
+}) {
+  const compact = preference.viewMode === 'compact-list'
+  const ascending = preference.sortDirection === 'ascending'
+  return (
+    <div className="media-pool-view-toolbar" role="group" aria-label="View and sort">
+      <div
+        className="media-pool-view-modes"
+        role="radiogroup"
+        aria-label="Media Pool view"
+      >
+        {MEDIA_POOL_VIEW_OPTIONS.map(({ viewMode, label, Icon }) => {
+          const selected = preference.viewMode === viewMode
+          return (
+            <button
+              key={viewMode}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              aria-label={label}
+              title={label}
+              className="media-pool-view-button"
+              data-selected={selected ? 'true' : undefined}
+              onClick={() => {
+                if (!selected) onChange({ ...preference, viewMode })
+              }}
+            >
+              <Icon aria-hidden="true" size={14} weight={selected ? 'bold' : 'regular'} />
+            </button>
+          )
+        })}
+      </div>
+      <label className="media-pool-view-select">
+        <span className="media-pool-sr-only">Thumbnail size</span>
+        <select
+          value={preference.thumbnailSize}
+          disabled={compact}
+          aria-disabled={compact}
+          aria-label="Thumbnail size"
+          onChange={(event) => onChange({
+            ...preference,
+            thumbnailSize: event.target.value as MediaPoolThumbnailSize,
+          })}
+        >
+          {MEDIA_POOL_SIZE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="media-pool-view-select">
+        <span className="media-pool-sr-only">Sort</span>
+        <select
+          value={preference.sortField}
+          aria-label="Sort media"
+          onChange={(event) => onChange({
+            ...preference,
+            sortField: event.target.value as MediaPoolSortField,
+          })}
+        >
+          {MEDIA_POOL_SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="media-pool-view-button"
+        aria-label={ascending ? 'Sort ascending' : 'Sort descending'}
+        aria-pressed={!ascending}
+        title={ascending ? 'Ascending' : 'Descending'}
+        onClick={() => onChange({
+          ...preference,
+          sortDirection: ascending ? 'descending' : 'ascending',
+        })}
+      >
+        {ascending
+          ? <SortAscending aria-hidden="true" size={14} weight="bold" />
+          : <SortDescending aria-hidden="true" size={14} weight="bold" />}
+      </button>
+    </div>
+  )
+}
+
 interface MediaPoolItemCardProps {
   readonly id: string
   readonly kind: MediaPoolKind
@@ -656,8 +789,12 @@ interface MediaPoolItemCardProps {
   readonly projectRate: FrameRate
   readonly busy: boolean
   readonly handlePickerAvailable: boolean
+  readonly showThumbnail: boolean
+  readonly attention: boolean
+  readonly detailsOpen: boolean
   readonly onSelect: (id: string) => void
   readonly onContextSelect: (id: string) => void
+  readonly onToggleDetails: (id: string) => void
   readonly onReviewPartial: (
     id: string,
     selection: PartialTrackImportSelection,
@@ -676,8 +813,12 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
   projectRate,
   busy,
   handlePickerAvailable,
+  showThumbnail,
+  attention,
+  detailsOpen,
   onSelect,
   onContextSelect,
+  onToggleDetails,
   onReviewPartial,
 }: MediaPoolItemCardProps) {
   const contextMenu = useEditorContextMenu()
@@ -736,6 +877,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
       data-media-virtual-row={rowKey}
       data-connection={connection}
       data-compatibility={compatibilityItem?.status}
+      data-expanded={detailsOpen || attention ? 'true' : undefined}
       title={fileName}
       draggable={draggable}
       onClick={(event) => {
@@ -789,24 +931,26 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
         clearMediaPlacementPreview()
       }}
     >
-      <div
-        role="gridcell"
-        className="media-thumbnail"
-        data-testid={`media-thumbnail-${id}`}
-        data-state={connected
-          ? filmstrip ? 'ready' : 'placeholder'
-          : descriptor ? 'offline' : compatibilityItem?.status}
-        style={thumbnailStyle}
-        aria-hidden="true"
-      >
-        {!filmstrip
-          ? descriptor?.kind === 'image'
-            ? <ImageSquare className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
-            : descriptor?.kind === 'audio'
-              ? <Waveform className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
-              : <FileVideo className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
-          : null}
-      </div>
+      {showThumbnail ? (
+        <div
+          role="gridcell"
+          className="media-thumbnail"
+          data-testid={`media-thumbnail-${id}`}
+          data-state={connected
+            ? filmstrip ? 'ready' : 'placeholder'
+            : descriptor ? 'offline' : compatibilityItem?.status}
+          style={thumbnailStyle}
+          aria-hidden="true"
+        >
+          {!filmstrip
+            ? descriptor?.kind === 'image'
+              ? <ImageSquare className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
+              : descriptor?.kind === 'audio'
+                ? <Waveform className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
+                : <FileVideo className="media-thumbnail-icon" aria-hidden="true" size={28} weight="regular" />
+            : null}
+        </div>
+      ) : null}
 
       <div role="gridcell" className="media-details">
         <span className="media-name">{fileName}</span>
@@ -861,14 +1005,31 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
             </label>
           </div>
         ) : null}
-        {descriptor ? (
-          <MediaCollectionMembership
-            assetId={descriptor.id}
-            fileName={descriptor.fileName}
-          />
-        ) : null}
-        {descriptor?.kind === 'video' ? (
-          <ProxyControls assetId={descriptor.id} fileName={descriptor.fileName} />
+        <button
+          type="button"
+          className="media-item-details-toggle"
+          aria-expanded={detailsOpen}
+          aria-controls={`media-pool-item-actions-${id}`}
+          aria-label={`Details and actions for ${fileName}`}
+          onClick={() => onToggleDetails(id)}
+        >
+          Details and actions
+        </button>
+        {detailsOpen ? (
+          <div
+            id={`media-pool-item-actions-${id}`}
+            className="media-item-actions"
+          >
+            {descriptor ? (
+              <MediaCollectionMembership
+                assetId={descriptor.id}
+                fileName={descriptor.fileName}
+              />
+            ) : null}
+            {descriptor?.kind === 'video' ? (
+              <ProxyControls assetId={descriptor.id} fileName={descriptor.fileName} />
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -896,7 +1057,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
           <X aria-hidden="true" size={14} weight="bold" />
         </button>
       </div>
-      {compatibilityItem ? (
+      {compatibilityItem && (detailsOpen || attention) ? (
         <CompatibilityDiagnostics
           item={compatibilityItem}
           busy={busy}
@@ -955,6 +1116,9 @@ export default function MediaPool() {
     useState<PartialTrackImportReview | null>(null)
   const [dropReady, setDropReady] = useState(false)
   const partialReviewTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
+  const mediaPoolView = usePreferencesStore((state) => state.mediaPoolView)
+  const setMediaPoolView = usePreferencesStore((state) => state.setMediaPoolView)
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const itemModels = useMemo(
     () => buildMediaPoolItems(descriptors, assets, compatibility),
@@ -997,11 +1161,33 @@ export default function MediaPool() {
       statusFilter,
     ],
   )
-  const virtualizer = useMediaPoolVirtualizer(filteredItems)
+  const sortedItems = useMemo(
+    () => sortMediaPoolItems(
+      filteredItems,
+      mediaPoolView.sortField,
+      mediaPoolView.sortDirection,
+    ),
+    [
+      filteredItems,
+      mediaPoolView.sortDirection,
+      mediaPoolView.sortField,
+    ],
+  )
+  const showThumbnails = mediaPoolShowsThumbnails(mediaPoolView.viewMode)
+  const rowLayout = useMemo((): MediaPoolRowLayout => ({
+    viewMode: mediaPoolView.viewMode,
+    thumbnailSize: mediaPoolView.thumbnailSize,
+    expandedItemId,
+  }), [
+    expandedItemId,
+    mediaPoolView.thumbnailSize,
+    mediaPoolView.viewMode,
+  ])
+  const virtualizer = useMediaPoolVirtualizer(sortedItems, rowLayout)
   const { scrollToStart, visibleItemIds } = virtualizer
   const filteredIndexById = useMemo(() => new Map(
-    filteredItems.map((item, index) => [item.id, index] as const),
-  ), [filteredItems])
+    sortedItems.map((item, index) => [item.id, index] as const),
+  ), [sortedItems])
   const rowKeyByItemId = useMemo(() => {
     const result = new Map<string, string>()
     for (const row of virtualizer.rows) {
@@ -1016,7 +1202,7 @@ export default function MediaPool() {
   const effectiveSelectedAssetId = selectedAssetId
     && filteredIndexById.has(selectedAssetId)
       ? selectedAssetId
-      : filteredItems[0]?.id ?? null
+      : sortedItems[0]?.id ?? null
   const activeRowId = effectiveSelectedAssetId
     && renderedItemIds.has(effectiveSelectedAssetId)
       ? `media-pool-row-${filteredIndexById.get(effectiveSelectedAssetId)}`
@@ -1033,8 +1219,8 @@ export default function MediaPool() {
     || statusFilter !== 'all'
   const filterPending = searchQuery !== deferredSearchQuery
   useEffect(() => {
-    setMediaVisualPoolViewport(visibleItemIds)
-  }, [visibleItemIds])
+    setMediaVisualPoolViewport(showThumbnails ? visibleItemIds : [])
+  }, [showThumbnails, visibleItemIds])
 
   useEffect(() => () => setMediaVisualPoolViewport([]), [])
 
@@ -1051,6 +1237,25 @@ export default function MediaPool() {
   useEffect(() => {
     if (selectedCollectionMissing) setSelectedCollectionId(null)
   }, [selectedCollectionMissing])
+
+  useEffect(() => {
+    if (expandedItemId && !filteredIndexById.has(expandedItemId)) {
+      setExpandedItemId(null)
+    }
+  }, [expandedItemId, filteredIndexById])
+
+  useEffect(() => {
+    if (!effectiveSelectedAssetId) return
+    const rowIndex = virtualizer.rowIndexByItemId.get(effectiveSelectedAssetId)
+    if (rowIndex !== undefined) virtualizer.ensureRowVisible(rowIndex)
+  }, [
+    effectiveSelectedAssetId,
+    mediaPoolView.sortDirection,
+    mediaPoolView.sortField,
+    mediaPoolView.thumbnailSize,
+    mediaPoolView.viewMode,
+    virtualizer,
+  ])
 
   const partialReviewItem = partialReview
     ? compatibility.get(partialReview.itemId)
@@ -1071,6 +1276,11 @@ export default function MediaPool() {
       virtualizer.listRef.current?.focus({ preventScroll: true })
     })
   }, [virtualizer.listRef])
+
+  const toggleItemDetails = useCallback((id: string): void => {
+    setExpandedItemId((current) => current === id ? null : id)
+    setSelectedAssetId(id)
+  }, [])
 
   const openPartialReview = useCallback((
     id: string,
@@ -1109,7 +1319,7 @@ export default function MediaPool() {
   const handleListKeyDown = useCallback((
     event: ReactKeyboardEvent<HTMLUListElement>,
   ): void => {
-    if (event.currentTarget !== event.target || filteredItems.length === 0) {
+    if (event.currentTarget !== event.target || sortedItems.length === 0) {
       return
     }
     const currentIndex = effectiveSelectedAssetId
@@ -1119,7 +1329,7 @@ export default function MediaPool() {
       event.key === 'ContextMenu'
       || (event.key === 'F10' && event.shiftKey)
     ) {
-      const assetId = filteredItems[currentIndex]?.id
+      const assetId = sortedItems[currentIndex]?.id
       const row = assetId
         ? [...event.currentTarget.querySelectorAll<HTMLElement>('[data-media-id]')]
           .find((candidate) => candidate.dataset.mediaId === assetId)
@@ -1161,7 +1371,7 @@ export default function MediaPool() {
     } else if (event.key === 'Home') {
       nextIndex = 0
     } else if (event.key === 'End') {
-      nextIndex = filteredItems.length - 1
+      nextIndex = sortedItems.length - 1
     } else if (event.key === 'PageDown') {
       nextIndex = currentIndex + columnCount * 4
     } else if (event.key === 'PageUp') {
@@ -1171,15 +1381,15 @@ export default function MediaPool() {
     event.preventDefault()
     if (
       (event.key === 'ArrowUp' || event.key === 'ArrowDown')
-      && (nextIndex < 0 || nextIndex >= filteredItems.length)
+      && (nextIndex < 0 || nextIndex >= sortedItems.length)
     ) {
       return
     }
     const boundedIndex = Math.max(
       0,
-      Math.min(filteredItems.length - 1, nextIndex),
+      Math.min(sortedItems.length - 1, nextIndex),
     )
-    const nextId = filteredItems[boundedIndex]?.id
+    const nextId = sortedItems[boundedIndex]?.id
     if (!nextId) return
     const rowIndex = virtualizer.rowIndexByItemId.get(nextId)
     if (rowIndex !== undefined) virtualizer.ensureRowVisible(rowIndex)
@@ -1187,7 +1397,7 @@ export default function MediaPool() {
   }, [
     effectiveSelectedAssetId,
     filteredIndexById,
-    filteredItems,
+    sortedItems,
     contextMenu,
     virtualizer,
   ])
@@ -1302,12 +1512,14 @@ export default function MediaPool() {
               <button
                 className="media-import"
                 type="button"
+                aria-label={localAccessChoiceLabel('Import', 'remember')}
+                aria-describedby="media-access-explanation"
                 title="Choose media and remember access for future sessions"
                 disabled={importBusy || relinkBusy}
                 onClick={() => void chooseMediaForImport()}
               >
-                <UploadSimple aria-hidden="true" size={16} weight="bold" />
-                <span>{localAccessChoiceLabel('Import', 'remember')}</span>
+                <UploadSimple aria-hidden="true" size={14} weight="bold" />
+                <span>Remember</span>
               </button>
             ) : null}
             <label
@@ -1318,15 +1530,16 @@ export default function MediaPool() {
                 ? 'Choose media for this session without remembering access'
                 : undefined}
             >
-              <Plus aria-hidden="true" size={15} weight="bold" />
-              <span>{handlePickerAvailable
-                ? localAccessChoiceLabel('Import', 'once')
-                : 'Import'}</span>
+              <Plus aria-hidden="true" size={14} weight="bold" />
+              <span>{handlePickerAvailable ? 'Once' : 'Import'}</span>
               <input
                 className="media-import-input"
                 aria-label={handlePickerAvailable
                   ? 'Import media once'
                   : 'Import media'}
+                aria-describedby={handlePickerAvailable
+                  ? 'media-access-explanation'
+                  : undefined}
                 type="file"
                 accept={MEDIA_FILE_INPUT_ACCEPT}
                 multiple
@@ -1341,24 +1554,23 @@ export default function MediaPool() {
           </div>
         </div>
         {handlePickerAvailable ? (
-          <p className="media-access-explanation">
+          <p id="media-access-explanation" className="media-pool-sr-only">
             {LOCAL_ACCESS_EXPLANATION}
           </p>
         ) : null}
-        <ProxyStorageSummary />
         <div className="media-pool-filters" role="search" aria-label="Filter media">
           <label className="media-pool-search">
-            <span>Search</span>
+            <span className="media-pool-sr-only">Search</span>
             <input
               type="search"
               value={searchQuery}
-              placeholder="Name, codec, or format"
+              placeholder="Search"
               aria-controls="media-pool-list"
               onChange={(event) => setSearchQuery(event.target.value)}
             />
           </label>
           <label className="media-pool-filter">
-            <span>Type</span>
+            <span className="media-pool-sr-only">Type</span>
             <select
               value={kindFilter}
               aria-controls="media-pool-list"
@@ -1373,7 +1585,7 @@ export default function MediaPool() {
             </select>
           </label>
           <label className="media-pool-filter">
-            <span>Status</span>
+            <span className="media-pool-sr-only">Status</span>
             <select
               value={statusFilter}
               aria-controls="media-pool-list"
@@ -1408,11 +1620,20 @@ export default function MediaPool() {
             aria-live="polite"
           >
             {filterPending
-              ? 'Filtering media...'
+              ? 'Filtering…'
               : `${filteredItems.length} of ${collectionItemCount}`}
           </span>
         </div>
-        <StillImageDurationPreference />
+        <div className="media-pool-header-tools">
+          <MediaPoolViewToolbar
+            preference={mediaPoolView}
+            onChange={setMediaPoolView}
+          />
+        </div>
+        <div className="media-pool-header-meta">
+          <ProxyStorageSummary />
+          <StillImageDurationPreference />
+        </div>
       </div>
 
       <MediaCollectionsPanel
@@ -1431,6 +1652,8 @@ export default function MediaPool() {
         aria-busy={filterPending}
         aria-activedescendant={activeRowId}
         aria-describedby="media-pool-keyboard-help"
+        data-view={mediaPoolView.viewMode}
+        data-size={mediaPoolView.thumbnailSize}
         tabIndex={0}
         style={{
           '--media-pool-columns': virtualizer.columnCount,
@@ -1454,7 +1677,7 @@ export default function MediaPool() {
         {virtualizer.renderedItemIds.map((id) => {
           const position = filteredIndexById.get(id)
           const rowKey = rowKeyByItemId.get(id)
-          const item = position === undefined ? undefined : filteredItems[position]
+          const item = position === undefined ? undefined : sortedItems[position]
           if (position === undefined || !rowKey || !item) return null
           return (
             <MediaPoolItemCard
@@ -1464,13 +1687,17 @@ export default function MediaPool() {
               rowId={`media-pool-row-${position}`}
               rowKey={rowKey}
               position={position + 1}
-              itemCount={filteredItems.length}
+              itemCount={sortedItems.length}
               selected={effectiveSelectedAssetId === id}
               projectRate={documentFrameRate}
               busy={busy}
               handlePickerAvailable={handlePickerAvailable}
+              showThumbnail={showThumbnails}
+              attention={item.expanded}
+              detailsOpen={expandedItemId === id}
               onSelect={selectItem}
               onContextSelect={setSelectedAssetId}
+              onToggleDetails={toggleItemDetails}
               onReviewPartial={openPartialReview}
             />
           )

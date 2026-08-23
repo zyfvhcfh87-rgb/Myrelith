@@ -1,5 +1,5 @@
 /**
- * Pure Media Pool indexing, filtering, and virtual-row planning.
+ * Pure Media Pool indexing, filtering, sorting, and virtual-row planning.
  *
  * The functions in this file preserve catalog insertion order and never mutate
  * project or session state. Keeping this work outside React also makes the
@@ -9,6 +9,19 @@
 import type { MediaCompatibilityItem } from '../domain/mediaCompatibility'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { MediaAsset } from '../domain/schema'
+import type {
+  MediaPoolSortDirection,
+  MediaPoolSortField,
+  MediaPoolThumbnailSize,
+  MediaPoolViewMode,
+} from '../state/preferencesStore'
+
+export type {
+  MediaPoolSortDirection,
+  MediaPoolSortField,
+  MediaPoolThumbnailSize,
+  MediaPoolViewMode,
+} from '../state/preferencesStore'
 
 export type MediaPoolKind = 'video' | 'audio' | 'image' | 'unknown'
 export type MediaPoolKindFilter = 'all' | Exclude<MediaPoolKind, 'unknown'>
@@ -20,6 +33,43 @@ export type MediaPoolStatus =
   | 'unsupported'
   | 'error'
 export type MediaPoolStatusFilter = 'all' | MediaPoolStatus
+
+export const MEDIA_POOL_KIND_SORT_RANK: Readonly<Record<MediaPoolKind, number>> = {
+  video: 0,
+  audio: 1,
+  image: 2,
+  unknown: 3,
+}
+
+export interface MediaPoolRowLayout {
+  readonly viewMode: MediaPoolViewMode
+  readonly thumbnailSize: MediaPoolThumbnailSize
+  readonly expandedItemId: string | null
+}
+
+export const DEFAULT_MEDIA_POOL_ROW_LAYOUT: MediaPoolRowLayout = {
+  viewMode: 'thumbnail',
+  thumbnailSize: 'medium',
+  expandedItemId: null,
+}
+
+export const MEDIA_POOL_THUMBNAIL_TILE_WIDTH_PX = {
+  small: 100,
+  medium: 140,
+  large: 180,
+} as const
+
+export const MEDIA_POOL_COMPACT_ROW_ESTIMATE_PX = 36
+export const MEDIA_POOL_DETAILS_ROW_ESTIMATE_PX = {
+  small: 56,
+  medium: 72,
+  large: 88,
+} as const
+export const MEDIA_POOL_THUMBNAIL_ROW_ESTIMATE_PX = {
+  small: 96,
+  medium: 112,
+  large: 176,
+} as const
 
 export interface MediaPoolFilter {
   readonly query: string
@@ -33,8 +83,12 @@ export interface MediaPoolItemModel {
   readonly kind: MediaPoolKind
   readonly statuses: ReadonlySet<MediaPoolStatus>
   readonly searchText: string
-  /** Full-width proxy controls or diagnostics consume one complete grid row. */
+  /** Exceptional statuses occupy a full-width row; Ready items follow the view. */
   readonly expanded: boolean
+  readonly catalogIndex: number
+  readonly durationMicroseconds: number | null
+  readonly lastModified: number | null
+  readonly size: number | null
 }
 
 export interface MediaPoolVirtualRow {
@@ -138,7 +192,7 @@ export function buildMediaPoolItems(
     ...descriptors.keys(),
     ...[...compatibility.keys()].filter((id) => !descriptors.has(id)),
   ]
-  return ids.flatMap((id) => {
+  return ids.flatMap((id, catalogIndex) => {
     const descriptor = descriptors.get(id)
     const compatibilityItem = compatibility.get(id)
     const fileName = descriptor?.fileName ?? compatibilityItem?.fileName
@@ -162,8 +216,11 @@ export function buildMediaPoolItems(
       kind,
       statuses,
       searchText,
-      expanded: kind === 'video'
-        || (compatibilityItem !== undefined && compatibilityItem.status !== 'ready'),
+      expanded: [...statuses].some((status) => status !== 'ready'),
+      catalogIndex,
+      durationMicroseconds: descriptor?.durationMicroseconds ?? null,
+      lastModified: descriptor?.lastModified ?? null,
+      size: descriptor?.size ?? null,
     }]
   })
 }
@@ -183,6 +240,111 @@ export function filterMediaPoolItems(
   ))
 }
 
+function compareNaturalFileName(left: string, right: string): number {
+  return left.localeCompare(right, 'en', { numeric: true, sensitivity: 'base' })
+}
+
+function compareKnownNumbersLast(
+  left: number | null,
+  right: number | null,
+  direction: MediaPoolSortDirection,
+): number {
+  if (left === null && right === null) return 0
+  if (left === null) return 1
+  if (right === null) return -1
+  const delta = left - right
+  return direction === 'ascending' ? delta : -delta
+}
+
+function compareSortField(
+  left: MediaPoolItemModel,
+  right: MediaPoolItemModel,
+  field: MediaPoolSortField,
+  direction: MediaPoolSortDirection,
+): number {
+  const sign = direction === 'ascending' ? 1 : -1
+  switch (field) {
+    case 'project-order':
+      return (left.catalogIndex - right.catalogIndex) * sign
+    case 'name':
+      return compareNaturalFileName(left.fileName, right.fileName) * sign
+    case 'kind':
+      return (
+        (MEDIA_POOL_KIND_SORT_RANK[left.kind] - MEDIA_POOL_KIND_SORT_RANK[right.kind])
+        * sign
+      )
+    case 'duration':
+      return compareKnownNumbersLast(
+        left.durationMicroseconds,
+        right.durationMicroseconds,
+        direction,
+      )
+    case 'last-modified':
+      return compareKnownNumbersLast(left.lastModified, right.lastModified, direction)
+    case 'size':
+      return compareKnownNumbersLast(left.size, right.size, direction)
+  }
+}
+
+/**
+ * Return a new ordered copy after collection/filter selection. Catalog maps and
+ * the input array stay untouched. Missing numeric metadata always sorts last.
+ */
+export function sortMediaPoolItems(
+  items: readonly MediaPoolItemModel[],
+  field: MediaPoolSortField,
+  direction: MediaPoolSortDirection,
+): readonly MediaPoolItemModel[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => {
+      const primary = compareSortField(left.item, right.item, field, direction)
+      if (primary !== 0) return primary
+      if (left.item.catalogIndex !== right.item.catalogIndex) {
+        return left.item.catalogIndex - right.item.catalogIndex
+      }
+      if (left.item.id !== right.item.id) {
+        return left.item.id < right.item.id ? -1 : 1
+      }
+      return left.index - right.index
+    })
+    .map((entry) => entry.item)
+}
+
+export function mediaPoolShowsThumbnails(viewMode: MediaPoolViewMode): boolean {
+  return viewMode !== 'compact-list'
+}
+
+export function mediaPoolColumnCount(
+  listWidth: number,
+  viewMode: MediaPoolViewMode,
+  thumbnailSize: MediaPoolThumbnailSize,
+): number {
+  if (viewMode !== 'thumbnail') return 1
+  const tile = MEDIA_POOL_THUMBNAIL_TILE_WIDTH_PX[thumbnailSize]
+  const width = Math.max(0, listWidth)
+  return Math.max(1, Math.floor((width + MEDIA_POOL_GRID_GAP_PX) / (tile + MEDIA_POOL_GRID_GAP_PX)))
+}
+
+function estimatedRowHeight(
+  isolated: boolean,
+  layout: MediaPoolRowLayout,
+): number {
+  if (isolated) return MEDIA_POOL_EXPANDED_ROW_ESTIMATE_PX
+  if (layout.viewMode === 'compact-list') return MEDIA_POOL_COMPACT_ROW_ESTIMATE_PX
+  if (layout.viewMode === 'details') {
+    return MEDIA_POOL_DETAILS_ROW_ESTIMATE_PX[layout.thumbnailSize]
+  }
+  return MEDIA_POOL_THUMBNAIL_ROW_ESTIMATE_PX[layout.thumbnailSize]
+}
+
+function isolateMediaPoolItem(
+  item: MediaPoolItemModel,
+  layout: MediaPoolRowLayout,
+): boolean {
+  return item.expanded || item.id === layout.expandedItemId
+}
+
 /**
  * Pack ordinary cards by visual grid row while keeping expanded diagnostics on
  * their own row. The item order is identical to the filtered catalog order.
@@ -190,31 +352,33 @@ export function filterMediaPoolItems(
 export function planMediaPoolRows(
   items: readonly MediaPoolItemModel[],
   columnCount: number,
+  layout: MediaPoolRowLayout = DEFAULT_MEDIA_POOL_ROW_LAYOUT,
 ): readonly MediaPoolVirtualRow[] {
   const columns = Math.max(1, Math.floor(columnCount))
   const rows: MediaPoolVirtualRow[] = []
   let pending: MediaPoolItemModel[] = []
+  const layoutKey = `${layout.viewMode}:${layout.thumbnailSize}`
 
   const flushPending = (): void => {
     if (pending.length === 0) return
     const itemIds = pending.map((item) => item.id)
     rows.push({
-      key: `cards:${itemIds.join('|')}`,
+      key: `${layoutKey}:cards:${itemIds.join('|')}`,
       itemIds,
       itemStartIndex: 0,
-      estimatedHeight: MEDIA_POOL_NORMAL_ROW_ESTIMATE_PX,
+      estimatedHeight: estimatedRowHeight(false, layout),
     })
     pending = []
   }
 
   for (const item of items) {
-    if (item.expanded || item.kind === 'video') {
+    if (isolateMediaPoolItem(item, layout)) {
       flushPending()
       rows.push({
-        key: `full-width:${item.id}`,
+        key: `${layoutKey}:full-width:${item.id}`,
         itemIds: [item.id],
         itemStartIndex: 0,
-        estimatedHeight: MEDIA_POOL_EXPANDED_ROW_ESTIMATE_PX,
+        estimatedHeight: estimatedRowHeight(true, layout),
       })
       continue
     }

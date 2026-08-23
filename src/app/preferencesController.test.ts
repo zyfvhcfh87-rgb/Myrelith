@@ -6,6 +6,7 @@ import {
 } from '../domain/exportProfile'
 import {
   INITIAL_PREFERENCES_STATE,
+  INITIAL_MEDIA_POOL_VIEW_PREFERENCE,
   usePreferencesStore,
 } from '../state/preferencesStore'
 import {
@@ -16,8 +17,10 @@ import {
   EXPORT_SELECTION_STORAGE_KEY,
   initPreferencesPersistence,
   LEGACY_EXPORT_SELECTION_STORAGE_KEY,
+  LEGACY_MEDIA_POOL_VIEW_STORAGE_KEY,
   LEGACY_USER_PREFERENCES_STORAGE_KEY,
   LEGACY_WORKSPACE_LAYOUT_STORAGE_KEY,
+  MEDIA_POOL_VIEW_STORAGE_KEY,
   USER_PREFERENCES_STORAGE_KEY,
   WORKSPACE_LAYOUT_STORAGE_KEY,
   type PreferencesStorage,
@@ -336,6 +339,113 @@ describe('preferences persistence', () => {
     })
   })
 
+  test('loads and persists the independent Media Pool view preference', () => {
+    const persisted = {
+      version: 1,
+      viewMode: 'thumbnail',
+      thumbnailSize: 'large',
+      sortField: 'name',
+      sortDirection: 'descending',
+    }
+    const backing = storage({
+      [MEDIA_POOL_VIEW_STORAGE_KEY]: JSON.stringify(persisted),
+    })
+
+    dispose = initPreferencesPersistence(backing)
+
+    expect(backing.getItem).toHaveBeenCalledWith(MEDIA_POOL_VIEW_STORAGE_KEY)
+    expect(usePreferencesStore.getState().mediaPoolView).toEqual({
+      viewMode: 'thumbnail',
+      thumbnailSize: 'large',
+      sortField: 'name',
+      sortDirection: 'descending',
+    })
+
+    usePreferencesStore.getState().setMediaPoolView({
+      viewMode: 'compact-list',
+      thumbnailSize: 'small',
+      sortField: 'duration',
+      sortDirection: 'ascending',
+    })
+    expect(backing.setItem).toHaveBeenCalledWith(
+      MEDIA_POOL_VIEW_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        viewMode: 'compact-list',
+        thumbnailSize: 'small',
+        sortField: 'duration',
+        sortDirection: 'ascending',
+      }),
+    )
+  })
+
+  test('hydrates a Media Pool view preference written before the Myrelith rebrand', () => {
+    dispose = initPreferencesPersistence(storage({
+      [LEGACY_MEDIA_POOL_VIEW_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        viewMode: 'compact-list',
+        thumbnailSize: 'small',
+        sortField: 'size',
+        sortDirection: 'descending',
+      }),
+    }))
+
+    expect(usePreferencesStore.getState().mediaPoolView).toEqual({
+      viewMode: 'compact-list',
+      thumbnailSize: 'small',
+      sortField: 'size',
+      sortDirection: 'descending',
+    })
+  })
+
+  test.each([
+    '{broken',
+    JSON.stringify({ version: 2, viewMode: 'details' }),
+    JSON.stringify({
+      version: 1,
+      viewMode: 'gallery',
+      thumbnailSize: 'medium',
+      sortField: 'name',
+      sortDirection: 'ascending',
+    }),
+  ])('falls back to Details/Medium/project order for invalid Media Pool view data', (raw) => {
+    dispose = initPreferencesPersistence(storage({
+      [USER_PREFERENCES_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        defaultStillImageDurationMicroseconds: 2_500_000,
+      }),
+      [MEDIA_POOL_VIEW_STORAGE_KEY]: raw,
+    }))
+
+    expect(usePreferencesStore.getState().mediaPoolView).toEqual(
+      INITIAL_MEDIA_POOL_VIEW_PREFERENCE,
+    )
+    expect(usePreferencesStore.getState()
+      .defaultStillImageDurationMicroseconds).toBe(2_500_000)
+  })
+
+  test('loads a valid Media Pool view when the unrelated preference is invalid', () => {
+    dispose = initPreferencesPersistence(storage({
+      [USER_PREFERENCES_STORAGE_KEY]: '{broken',
+      [MEDIA_POOL_VIEW_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        viewMode: 'thumbnail',
+        thumbnailSize: 'medium',
+        sortField: 'kind',
+        sortDirection: 'ascending',
+      }),
+    }))
+
+    expect(usePreferencesStore.getState()
+      .defaultStillImageDurationMicroseconds).toBe(5_000_000)
+    expect(usePreferencesStore.getState().mediaPoolView).toEqual({
+      viewMode: 'thumbnail',
+      thumbnailSize: 'medium',
+      sortField: 'kind',
+      sortDirection: 'ascending',
+    })
+  })
+
   test('keeps the in-memory preference usable when storage throws', () => {
     const backing = storage()
     backing.getItem.mockImplementation(() => {
@@ -355,6 +465,18 @@ describe('preferences persistence', () => {
       profile: null,
     })).not.toThrow()
     expect(usePreferencesStore.getState().exportSelection.selectionId).toBe('auto')
+    expect(() => usePreferencesStore.getState().setMediaPoolView({
+      viewMode: 'compact-list',
+      thumbnailSize: 'small',
+      sortField: 'size',
+      sortDirection: 'descending',
+    })).not.toThrow()
+    expect(usePreferencesStore.getState().mediaPoolView).toEqual({
+      viewMode: 'compact-list',
+      thumbnailSize: 'small',
+      sortField: 'size',
+      sortDirection: 'descending',
+    })
   })
 
   test('keeps the in-memory preference usable when localStorage access throws', () => {
@@ -379,5 +501,12 @@ describe('preferences persistence', () => {
       profile: null,
     })
     expect(usePreferencesStore.getState().exportSelection.selectionId).toBe('auto')
+    usePreferencesStore.getState().setMediaPoolView({
+      viewMode: 'thumbnail',
+      thumbnailSize: 'large',
+      sortField: 'kind',
+      sortDirection: 'ascending',
+    })
+    expect(usePreferencesStore.getState().mediaPoolView.viewMode).toBe('thumbnail')
   })
 })

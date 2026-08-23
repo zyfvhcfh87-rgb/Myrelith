@@ -14,13 +14,19 @@ export function ProxyStorageSummary() {
   const origin = storage.originUsageBytes !== null && storage.originQuotaBytes !== null
     ? `${formatBytes(storage.originUsageBytes)} of ${formatBytes(storage.originQuotaBytes)} origin storage used`
     : 'Browser quota estimate unavailable'
+  const summary = storage.supported
+    ? `${storage.itemCount} · ${formatBytes(storage.cacheBytes)}`
+    : storage.error ?? 'Unavailable'
   return (
-    <section className="proxy-storage" aria-label="Local proxy storage">
+    <details className="proxy-storage" aria-label="Local proxy storage">
+      <summary>
+        <strong>Proxies</strong>
+        <span>{summary}</span>
+      </summary>
       <div>
-        <strong>Local proxies</strong>
         <span>
           {storage.supported
-            ? `${storage.itemCount} cached · ${formatBytes(storage.cacheBytes)} · ${origin}`
+            ? origin
             : storage.error ?? 'OPFS proxy storage is unavailable in this browser.'}
         </span>
         {storage.supported && storage.persisted === false ? (
@@ -42,7 +48,7 @@ export function ProxyStorageSummary() {
           {clearing ? 'Clearing…' : 'Clear proxies'}
         </button>
       ) : null}
-    </section>
+    </details>
   )
 }
 
