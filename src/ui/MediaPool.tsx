@@ -22,7 +22,6 @@ import {
   FileVideo,
   ImageSquare,
   List,
-  Plus,
   Rows,
   SortAscending,
   SortDescending,
@@ -106,7 +105,6 @@ import MediaRelinkDialog from './MediaRelinkDialog'
 import { ProxyControls, ProxyStorageSummary } from './ProxyControls'
 import { useMediaPoolVirtualizer } from './useMediaPoolVirtualizer'
 import {
-  LOCAL_ACCESS_EXPLANATION,
   localAccessChoiceDescription,
   localAccessChoiceLabel,
 } from './localAccessCopy'
@@ -1512,50 +1510,39 @@ export default function MediaPool() {
               <button
                 className="media-import"
                 type="button"
-                aria-label={localAccessChoiceLabel('Import', 'remember')}
                 aria-describedby="media-access-explanation"
-                title="Choose media and remember access for future sessions"
+                title="Choose media and keep access for later sessions"
                 disabled={importBusy || relinkBusy}
                 onClick={() => void chooseMediaForImport()}
               >
                 <UploadSimple aria-hidden="true" size={14} weight="bold" />
-                <span>Remember</span>
+                <span>Import</span>
               </button>
-            ) : null}
-            <label
-              className={handlePickerAvailable
-                ? 'media-import media-import-quick'
-                : 'media-import'}
-              title={handlePickerAvailable
-                ? 'Choose media for this session without remembering access'
-                : undefined}
-            >
-              <Plus aria-hidden="true" size={14} weight="bold" />
-              <span>{handlePickerAvailable ? 'Once' : 'Import'}</span>
-              <input
-                className="media-import-input"
-                aria-label={handlePickerAvailable
-                  ? 'Import media once'
-                  : 'Import media'}
-                aria-describedby={handlePickerAvailable
-                  ? 'media-access-explanation'
-                  : undefined}
-                type="file"
-                accept={MEDIA_FILE_INPUT_ACCEPT}
-                multiple
-                disabled={importBusy || relinkBusy}
-                onChange={(event) => {
-                  const files = [...(event.target.files ?? [])]
-                  event.target.value = ''
-                  if (files.length > 0) void importMediaFiles(files)
-                }}
-              />
-            </label>
+            ) : (
+              <label className="media-import">
+                <UploadSimple aria-hidden="true" size={14} weight="bold" />
+                <span>Import</span>
+                <input
+                  className="media-import-input"
+                  aria-label="Import media"
+                  type="file"
+                  accept={MEDIA_FILE_INPUT_ACCEPT}
+                  multiple
+                  disabled={importBusy || relinkBusy}
+                  onChange={(event) => {
+                    const files = [...(event.target.files ?? [])]
+                    event.target.value = ''
+                    if (files.length > 0) void importMediaFiles(files)
+                  }}
+                />
+              </label>
+            )}
           </div>
         </div>
         {handlePickerAvailable ? (
           <p id="media-access-explanation" className="media-pool-sr-only">
-            {LOCAL_ACCESS_EXPLANATION}
+            Import stores a browser-only file permission and its label.
+            Myrelith never copies or uploads the file.
           </p>
         ) : null}
         <div className="media-pool-filters" role="search" aria-label="Filter media">

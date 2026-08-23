@@ -907,22 +907,18 @@ describe('MediaPool presentation', () => {
     expect(pool).not.toHaveClass('drop-target')
   })
 
-  test('supporting browsers offer remembered and quick import paths', () => {
+  test('supporting browsers import through the remembered picker', () => {
     vi.mocked(canRememberImportedMedia).mockReturnValue(true)
     render(<MediaPool />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Import & remember' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }))
 
     expect(chooseMediaForImport).toHaveBeenCalledOnce()
-    const quickInput = screen.getByLabelText('Import media once')
-    const file = new File(['video'], 'fresh.mp4', { type: 'video/mp4' })
-    fireEvent.change(quickInput, { target: { files: [file] } })
-
-    expect(quickInput).toHaveAttribute('multiple')
-    expect(importMediaFiles).toHaveBeenCalledWith([file])
+    expect(screen.queryByLabelText('Import media')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Import media once')).not.toBeInTheDocument()
   })
 
-  test('disables every import path while another import is active', () => {
+  test('disables import while another import is active', () => {
     vi.mocked(canRememberImportedMedia).mockReturnValue(true)
     useMediaImportStore.setState({
       ...INITIAL_MEDIA_IMPORT_STATE,
@@ -931,10 +927,8 @@ describe('MediaPool presentation', () => {
     })
     render(<MediaPool />)
 
-    expect(screen.getByRole('button', {
-      name: 'Import & remember',
-    })).toBeDisabled()
-    expect(screen.getByLabelText('Import media once')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
+    expect(screen.queryByLabelText('Import media once')).not.toBeInTheDocument()
   })
 
   test('shows a placeholder while preserving ready metadata and drag state', () => {
