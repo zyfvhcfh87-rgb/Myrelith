@@ -3,16 +3,24 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
 import {
+  ArrowClockwise,
   ArrowRight,
   CheckCircle,
+  Database,
   DotsThreeVertical,
+  File,
+  FilmSlate,
   FolderOpen,
+  Key,
+  MagnifyingGlass,
   PlusCircle,
   ShieldCheck,
+  Trash,
 } from '@phosphor-icons/react'
 import {
   activateResumedProject,
@@ -192,19 +200,39 @@ function LocalStorageSummary() {
       </header>
       <dl className="project-storage-list">
         <div data-storage-kind="project-truth">
-          <dt>Project files</dt>
+          <dt>
+            <span className="project-storage-icon" aria-hidden="true">
+              <File size={19} weight="regular" />
+            </span>
+            <span>Project files</span>
+          </dt>
           <dd>Portable .myrelith · on your disk</dd>
         </div>
         <div data-storage-kind="recovery">
-          <dt>Recovery</dt>
+          <dt>
+            <span className="project-storage-icon" aria-hidden="true">
+              <ShieldCheck size={19} weight="regular" />
+            </span>
+            <span>Recovery</span>
+          </dt>
           <dd>{recoveryCount} {recoveryCount === 1 ? 'copy' : 'copies'} · {formatBytes(storage.recoveryBytes)} protected</dd>
         </div>
         <div data-storage-kind="access">
-          <dt>Remembered access</dt>
+          <dt>
+            <span className="project-storage-icon" aria-hidden="true">
+              <Key size={19} weight="regular" />
+            </span>
+            <span>Remembered access</span>
+          </dt>
           <dd>{recentCount} project {recentCount === 1 ? 'shortcut' : 'shortcuts'} · files aren&apos;t copied</dd>
         </div>
         <div data-storage-kind="disposable">
-          <dt>Cache &amp; proxies</dt>
+          <dt>
+            <span className="project-storage-icon" aria-hidden="true">
+              <Database size={19} weight="regular" />
+            </span>
+            <span>Cache &amp; proxies</span>
+          </dt>
           <dd>
             {formatBytes(storage.disposableBytes)} · {storage.disposableItemCount === 0
               ? 'empty'
@@ -256,9 +284,14 @@ function LaunchFrame({
       <footer className="project-launch-footer">
         <span>Private by design. Portable by default.</span>
         <nav aria-label="Project information">
-          <a href="/privacy/">Privacy</a>
-          <a href="/licenses/">Licenses</a>
+          <a className="project-button project-button-secondary" href="/privacy/">
+            Privacy
+          </a>
+          <a className="project-button project-button-secondary" href="/licenses/">
+            Licenses
+          </a>
           <a
+            className="project-button project-button-secondary"
             href="https://github.com/zyfvhcfh87-rgb/Myrelith"
             rel="noreferrer"
             target="_blank"
@@ -280,6 +313,7 @@ function HomeScreen() {
   const recoveries = useProjectLibraryStore((state) => state.recoveries)
   const libraryError = useProjectLibraryStore((state) => state.error)
   const homeError = useProjectSessionStore((state) => state.error)
+  const [libraryTab, setLibraryTab] = useState<'recent' | 'recovery' | null>(null)
   const [recoveryQuery, setRecoveryQuery] = useState('')
   const [recoverySort, setRecoverySort] = useState<RecoverySort>('newest')
   const [recoveryNow] = useState(() => Date.now())
@@ -302,21 +336,32 @@ function HomeScreen() {
   const libraryEmpty = libraryPhase !== 'loading'
     && recentProjects.length === 0
     && recoveries.length === 0
+  const activeLibraryTab = libraryTab
+    ?? (recoveries.length > 0 ? 'recovery' : 'recent')
+
+  const handleLibraryTabKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ): void => {
+    let nextTab: 'recent' | 'recovery' | null = null
+    if (event.key === 'ArrowLeft' || event.key === 'Home') nextTab = 'recent'
+    if (event.key === 'ArrowRight' || event.key === 'End') nextTab = 'recovery'
+    if (nextTab === null) return
+
+    event.preventDefault()
+    setLibraryTab(nextTab)
+    document.getElementById(`project-library-tab-${nextTab}`)?.focus()
+  }
 
   return (
     <LaunchFrame home>
-      <header className="project-launch-home-nav">
-        <div className="project-launch-brand">
-          <FoldRevealTitle text="Myrelith" />
-          <span>Browser video editor</span>
-        </div>
-        <div className="project-launch-trust">
-          <ShieldCheck aria-hidden="true" size={21} weight="regular" />
-          <span>Your media stays on this device.</span>
-        </div>
-      </header>
-
       <section className="project-launch-hero" aria-labelledby="project-home-title">
+        <header className="project-launch-home-nav">
+          <div className="project-launch-brand">
+            <FoldRevealTitle text="Myrelith" />
+            <span>Browser video editor</span>
+          </div>
+        </header>
+
         <div className="project-launch-hero-copy">
           <SplitRevealHeading
             id="project-home-title"
@@ -349,11 +394,6 @@ function HomeScreen() {
               <strong>Open a project</strong>
             </button>
           </div>
-          <ul className="project-launch-capabilities" aria-label="Myrelith capabilities">
-            <li>Portable .myrelith projects</li>
-            <li>Any canvas ratio</li>
-            <li>Multitrack editing</li>
-          </ul>
         </div>
 
         <figure className="project-launch-story">
@@ -380,11 +420,15 @@ function HomeScreen() {
         <header className="project-library-header">
           <div>
             <h2 id="project-library-title">Back to your projects</h2>
-            <p>Pick up where you left off.</p>
           </div>
           <div className="project-library-header-actions">
             {recoveries.length > 0 && (
-              <a className="project-library-recovery-link" href="#recovery-copies">
+              <a
+                className="project-library-recovery-link"
+                href="#recovery-copies"
+                aria-label="Show recovery copies — local unsaved work"
+                onClick={() => setLibraryTab('recovery')}
+              >
                 <span>Recovery copies</span>
                 <small>Local unsaved work</small>
                 <ArrowRight aria-hidden="true" size={17} weight="bold" />
@@ -396,6 +440,7 @@ function HomeScreen() {
               disabled={libraryPhase === 'loading'}
               onClick={() => void refreshProjectLibrary()}
             >
+              <ArrowClockwise aria-hidden="true" size={17} weight="bold" />
               Refresh
             </button>
           </div>
@@ -412,60 +457,46 @@ function HomeScreen() {
           </p>
         )}
 
-        {recentProjects.length > 0 && (
-          <div className="project-library-group">
-            <ul className="project-library-list">
-              {recentProjects.map((project, index) => (
-                <li key={project.documentId} data-kind="recent">
-                  <img
-                    className="project-library-thumbnail"
-                    src={index % 2 === 0
-                      ? '/landing/project-coast.webp'
-                      : '/landing/project-city.webp'}
-                    alt=""
-                  />
-                  <button
-                    className="project-library-open"
-                    type="button"
-                    aria-label={`Open ${project.projectName}`}
-                    onClick={() => void openRecentProject(project.documentId)}
-                  >
-                    <span className="project-library-copy">
-                      <strong>{project.projectName}</strong>
-                      <span>{project.fileName}</span>
-                    </span>
-                    <time dateTime={new Date(project.lastOpenedAt).toISOString()}>
-                      <small>Last edited</small>
-                      {formatLocalTime(project.lastOpenedAt)}
-                    </time>
-                    <span className="project-library-open-action">
-                      Open
-                      <ArrowRight aria-hidden="true" size={17} weight="bold" />
-                    </span>
-                  </button>
-                  <button
-                    className="project-library-remove"
-                    type="button"
-                    aria-label={`Remove ${project.projectName} from Recent`}
-                    title="Remove this shortcut only — the .myrelith file stays on disk"
-                    onClick={() => void forgetRecentProject(project.documentId)}
-                  >
-                    <DotsThreeVertical aria-hidden="true" size={20} weight="bold" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {recoveries.length > 0 && (
-          <div className="project-library-group" id="recovery-copies">
-            <div className="project-library-group-heading">
-              <div>
-                <h3>Recovery copies</h3>
-                <span>Unsaved project snapshots · no source media · never opened automatically</span>
+        {libraryPhase !== 'loading' ? (
+          <>
+            <div className="project-library-tabs-bar">
+              <div
+                className="project-library-tabs"
+                role="tablist"
+                aria-label="Project library"
+              >
+                <button
+                  className="project-library-tab"
+                  id="project-library-tab-recent"
+                  type="button"
+                  role="tab"
+                  aria-controls="project-library-panel-recent"
+                  aria-selected={activeLibraryTab === 'recent'}
+                  tabIndex={activeLibraryTab === 'recent' ? 0 : -1}
+                  onClick={() => setLibraryTab('recent')}
+                  onKeyDown={handleLibraryTabKeyDown}
+                >
+                  Recent projects
+                </button>
+                <button
+                  className="project-library-tab"
+                  id="project-library-tab-recovery"
+                  type="button"
+                  role="tab"
+                  aria-controls="recovery-copies"
+                  aria-label={`Recovery copies, ${recoveries.length}`}
+                  aria-selected={activeLibraryTab === 'recovery'}
+                  tabIndex={activeLibraryTab === 'recovery' ? 0 : -1}
+                  onClick={() => setLibraryTab('recovery')}
+                  onKeyDown={handleLibraryTabKeyDown}
+                >
+                  <span>Recovery copies</span>
+                  <span className="project-library-tab-count" aria-hidden="true">
+                    {recoveries.length}
+                  </span>
+                </button>
               </div>
-              {staleRecoveries.length > 0 ? (
+              {activeLibraryTab === 'recovery' && staleRecoveries.length > 0 ? (
                 <button
                   className="project-recovery-cleanup"
                   type="button"
@@ -477,106 +508,186 @@ function HomeScreen() {
                     }
                   }}
                 >
+                  <Trash aria-hidden="true" size={16} weight="bold" />
                   Clean up {staleRecoveries.length} older than 30 days
                 </button>
               ) : null}
             </div>
-            <div className="project-recovery-controls" role="search" aria-label="Find recovery copies">
-              <label>
-                <span>Search</span>
-                <input
-                  type="search"
-                  value={recoveryQuery}
-                  placeholder="Project or .myrelith name"
-                  onChange={(event) => setRecoveryQuery(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Sort</span>
-                <select
-                  value={recoverySort}
-                  onChange={(event) => setRecoverySort(
-                    event.target.value as RecoverySort,
-                  )}
-                >
-                  <option value="newest">Newest first</option>
-                  <option value="oldest">Oldest first</option>
-                  <option value="name">Project name</option>
-                </select>
-              </label>
-              <span aria-live="polite">
-                {recoveryGroups.reduce(
-                  (count, group) => count + group.recoveries.length,
-                  0,
-                )} of {recoveries.length}
-              </span>
-            </div>
-            {recoveryGroups.map((group) => (
-              <section
-                className="project-recovery-age-group"
-                aria-labelledby={`recovery-age-${group.id}`}
-                key={group.id}
+
+            {activeLibraryTab === 'recent' ? (
+              <div
+                className="project-library-group project-library-panel"
+                id="project-library-panel-recent"
+                role="tabpanel"
+                aria-labelledby="project-library-tab-recent"
+                tabIndex={0}
               >
-                <h4 id={`recovery-age-${group.id}`}>{group.label}</h4>
-                <ul className="project-library-list project-recovery-list">
-                  {group.recoveries.map((recovery) => (
-                    <li key={recovery.journalId} data-kind="recovery">
-                      <button
-                        className="project-library-open"
-                        type="button"
-                        aria-label={`Recover ${recovery.projectName}`}
-                        onClick={() => void openRecoveryProject(recovery.journalId)}
-                      >
-                        <span className="project-library-copy">
-                          <strong>{recovery.projectName}</strong>
-                          <span>
-                            {recovery.projectFileName ?? 'Not saved to a .myrelith yet'}
+                {recentProjects.length > 0 ? (
+                  <ul className="project-library-list project-recent-list">
+                    {recentProjects.map((project, index) => (
+                      <li key={project.documentId} data-kind="recent">
+                        <img
+                          className="project-library-thumbnail"
+                          src={index % 2 === 0
+                            ? '/landing/project-coast.webp'
+                            : '/landing/project-city.webp'}
+                          alt=""
+                        />
+                        <button
+                          className="project-library-open"
+                          type="button"
+                          aria-label={`Open ${project.projectName}`}
+                          onClick={() => void openRecentProject(project.documentId)}
+                        >
+                          <span className="project-library-copy">
+                            <strong>{project.projectName}</strong>
+                            <span>{project.fileName}</span>
                           </span>
-                        </span>
-                        <time dateTime={new Date(recovery.updatedAt).toISOString()}>
-                          <small>{recovery.generationCount} safety {recovery.generationCount === 1 ? 'copy' : 'copies'}</small>
-                          {formatLocalTime(recovery.updatedAt)}
-                        </time>
-                        <span className="project-library-open-action project-library-recover-action">
-                          Recover
-                          <ArrowRight aria-hidden="true" size={17} weight="bold" />
-                        </span>
-                      </button>
-                      <button
-                        className="project-library-remove"
-                        type="button"
-                        aria-label={`Discard recovery for ${recovery.projectName}`}
-                        title="Permanently discard this recovery copy only"
-                        onClick={() => {
-                          if (confirmRecoveryDiscard(recovery.projectName)) {
-                            void discardRecoveryJournal(recovery.journalId)
-                          }
-                        }}
+                          <time dateTime={new Date(project.lastOpenedAt).toISOString()}>
+                            <small>Last edited</small>
+                            {formatLocalTime(project.lastOpenedAt)}
+                          </time>
+                          <span className="project-library-open-action">
+                            Open
+                            <ArrowRight aria-hidden="true" size={17} weight="bold" />
+                          </span>
+                        </button>
+                        <button
+                          className="project-library-remove"
+                          type="button"
+                          aria-label={`Remove ${project.projectName} from Recent`}
+                          title="Remove this shortcut only — the .myrelith file stays on disk"
+                          onClick={() => void forgetRecentProject(project.documentId)}
+                        >
+                          <DotsThreeVertical aria-hidden="true" size={20} weight="bold" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="project-library-empty">
+                    {recentSupported
+                      ? 'No recent project shortcuts yet.'
+                      : 'Recent-file shortcuts need Chrome file access.'}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div
+                className="project-library-group project-library-panel project-library-recovery-panel"
+                id="recovery-copies"
+                role="tabpanel"
+                aria-labelledby="project-library-tab-recovery"
+                tabIndex={0}
+              >
+                {recoveries.length > 0 ? (
+                  <>
+                    <p className="project-launch-text-sr-only">
+                      Unsaved project snapshots · no source media · never opened automatically
+                    </p>
+                    <div className="project-recovery-controls" role="search" aria-label="Find recovery copies">
+                      <label className="project-recovery-search">
+                        <MagnifyingGlass aria-hidden="true" size={20} weight="regular" />
+                        <span>Search</span>
+                        <input
+                          aria-label="Search recovery copies"
+                          type="search"
+                          value={recoveryQuery}
+                          placeholder="Project or .myrelith name"
+                          onChange={(event) => setRecoveryQuery(event.target.value)}
+                        />
+                      </label>
+                      <label className="project-recovery-sort">
+                        <span>Sort</span>
+                        <select
+                          value={recoverySort}
+                          onChange={(event) => setRecoverySort(
+                            event.target.value as RecoverySort,
+                          )}
+                        >
+                          <option value="newest">Newest first</option>
+                          <option value="oldest">Oldest first</option>
+                          <option value="name">Project name</option>
+                        </select>
+                      </label>
+                      <span className="project-recovery-count" aria-live="polite">
+                        {recoveryGroups.reduce(
+                          (count, group) => count + group.recoveries.length,
+                          0,
+                        )} of {recoveries.length}
+                      </span>
+                    </div>
+                    {recoveryGroups.map((group) => (
+                      <section
+                        className="project-recovery-age-group"
+                        aria-labelledby={`recovery-age-${group.id}`}
+                        key={group.id}
                       >
-                        <DotsThreeVertical aria-hidden="true" size={20} weight="bold" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-            {recoveryGroups.length === 0 ? (
-              <p className="project-library-empty" role="status">
-                No recovery copies match that search.
-              </p>
-            ) : null}
-          </div>
-        )}
+                        <h4 id={`recovery-age-${group.id}`}>{group.label}</h4>
+                        <ul className="project-library-list project-recovery-list">
+                          {group.recoveries.map((recovery) => (
+                            <li key={recovery.journalId} data-kind="recovery">
+                              <button
+                                className="project-library-open"
+                                type="button"
+                                aria-label={`Recover ${recovery.projectName}`}
+                                onClick={() => void openRecoveryProject(recovery.journalId)}
+                              >
+                                <span className="project-library-type-icon" aria-hidden="true">
+                                  <FilmSlate size={22} weight="regular" />
+                                </span>
+                                <span className="project-library-copy">
+                                  <strong>{recovery.projectName}</strong>
+                                  <span>
+                                    {recovery.projectFileName ?? 'Not saved to a .myrelith yet'}
+                                  </span>
+                                </span>
+                                <time dateTime={new Date(recovery.updatedAt).toISOString()}>
+                                  <small>{recovery.generationCount} safety {recovery.generationCount === 1 ? 'copy' : 'copies'}</small>
+                                  {formatLocalTime(recovery.updatedAt)}
+                                </time>
+                                <span className="project-library-open-action project-library-recover-action">
+                                  Recover
+                                  <ArrowRight aria-hidden="true" size={17} weight="bold" />
+                                </span>
+                              </button>
+                              <button
+                                className="project-library-remove"
+                                type="button"
+                                aria-label={`Discard recovery for ${recovery.projectName}`}
+                                title="Permanently discard this recovery copy only"
+                                onClick={() => {
+                                  if (confirmRecoveryDiscard(recovery.projectName)) {
+                                    void discardRecoveryJournal(recovery.journalId)
+                                  }
+                                }}
+                              >
+                                <DotsThreeVertical aria-hidden="true" size={20} weight="bold" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
+                    {recoveryGroups.length === 0 ? (
+                      <p className="project-library-empty" role="status">
+                        No recovery copies match that search.
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="project-library-empty">
+                    {libraryEmpty
+                      ? 'No recent projects or recovery copies yet.'
+                      : 'No recovery copies yet.'}
+                  </p>
+                )}
+              </div>
+            )}
+          </>
+        ) : null}
 
         {libraryPhase !== 'loading' ? <LocalStorageSummary /> : null}
-
-        {libraryEmpty && (
-          <p className="project-library-empty">
-            {recentSupported
-              ? 'No recent projects or recovery copies yet.'
-              : 'No recovery copies yet. Recent-file shortcuts need Chrome file access.'}
-          </p>
-        )}
       </section>
     </LaunchFrame>
   )
@@ -651,10 +762,7 @@ function NewProjectScreen({
     <LaunchFrame setup>
       <div className="project-setup-layout">
         <div className="project-setup-intro">
-          <h1>
-            <span>Set up</span>
-            <span>your <em>canvas</em></span>
-          </h1>
+          <h1>Set up your canvas</h1>
           <p>Choose the shape your story needs.</p>
         </div>
 
@@ -751,7 +859,7 @@ function NewProjectScreen({
             ))}
           </select>
         </label>
-        <label className="project-field project-field-wide project-field-audio">
+        <label className="project-field project-field-audio">
           <span>Audio quality</span>
           <select
             value={audioSampleRate}
@@ -766,33 +874,39 @@ function NewProjectScreen({
           </select>
         </label>
         <section className="project-create-summary" aria-labelledby="project-create-summary-title">
+          <CheckCircle
+            className="project-create-summary-icon"
+            aria-hidden="true"
+            size={32}
+            weight="regular"
+          />
           <div>
             <span id="project-create-summary-title">Ready to create</span>
-            <h2>{name.trim() || 'Untitled project'}</h2>
           </div>
           <dl>
             <div>
               <dt>Canvas</dt>
-              <dd>{selectedResolution
-                ? formatProjectCanvas(selectedResolution.width, selectedResolution.height)
+              <dd>{selectedAspectRatio
+                ? `${selectedAspectRatio.label} ${selectedAspectRatio.ratioLabel}`
                 : 'Choose a canvas'}</dd>
             </div>
             <div>
-              <dt>Video</dt>
+              <dt>Resolution</dt>
+              <dd>{selectedResolution
+                ? `${selectedResolution.width} × ${selectedResolution.height}`
+                : 'Choose a resolution'}</dd>
+            </div>
+            <div>
+              <dt>Frame rate</dt>
               <dd>{selectedFrameRate
                 ? formatRate(selectedFrameRate)
                 : 'Choose a frame rate'}</dd>
             </div>
             <div>
-              <dt>Audio</dt>
+              <dt>Audio quality</dt>
               <dd>{Number(audioSampleRate) / 1_000} kHz</dd>
             </div>
-            <div>
-              <dt>Timeline</dt>
-              <dd>4 video + 4 audio tracks</dd>
-            </div>
           </dl>
-          <p>Starts locally and unsaved. Save a portable .myrelith when you are ready.</p>
         </section>
         {error && <p className="project-launch-error" role="alert">{error}</p>}
         {editorLoadError && (

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
@@ -68,14 +68,26 @@ describe('ProjectLaunch', () => {
     expect(controller.showNewProject).toHaveBeenCalledOnce()
     expect(controller.showResumeProject).toHaveBeenCalledOnce()
     expect(libraryController.refreshProjectLibrary).toHaveBeenCalledOnce()
+    expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy/')
     expect(screen.getByRole('link', { name: 'Privacy' }))
-      .toHaveAttribute('href', '/privacy/')
+      .toHaveClass('project-button', 'project-button-secondary')
     expect(screen.getByRole('link', { name: 'Licenses' }))
       .toHaveAttribute('href', '/licenses/')
-    expect(screen.getByText('Your media stays on this device.'))
-      .toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Licenses' }))
+      .toHaveClass('project-button', 'project-button-secondary')
+    expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/zyfvhcfh87-rgb/Myrelith',
+    )
+    expect(screen.getByRole('link', { name: 'GitHub' }))
+      .toHaveClass('project-button', 'project-button-secondary')
     expect(screen.getByRole('heading', { name: /your footage/i }))
       .toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Back to your projects' }))
+      .toBeInTheDocument()
+    expect(screen.queryByText('Pick up where you left off.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Portable .myrelith projects')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Myrelith capabilities')).not.toBeInTheDocument()
   })
 
   test('home keeps text motion accessible and tracks the primary-button light without rerendering', () => {
@@ -230,13 +242,27 @@ describe('ProjectLaunch', () => {
     })
     render(<ProjectLaunch />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Recover Recovered edit' }))
+    const recentTab = screen.getByRole('tab', { name: 'Recent projects' })
+    const recoveryTab = screen.getByRole('tab', { name: 'Recovery copies, 1' })
+    expect(recoveryTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('button', { name: 'Open Recent edit' }))
+      .not.toBeInTheDocument()
+
+    fireEvent.keyDown(recoveryTab, { key: 'ArrowLeft' })
+    expect(recentTab).toHaveAttribute('aria-selected', 'true')
+    expect(recentTab).toHaveFocus()
     fireEvent.click(screen.getByRole('button', { name: 'Open Recent edit' }))
     fireEvent.click(screen.getByRole('button', {
-      name: 'Discard recovery for Recovered edit',
-    }))
-    fireEvent.click(screen.getByRole('button', {
       name: 'Remove Recent edit from Recent',
+    }))
+
+    fireEvent.click(screen.getByRole('link', {
+      name: 'Show recovery copies — local unsaved work',
+    }))
+    expect(recoveryTab).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Recover Recovered edit' }))
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Discard recovery for Recovered edit',
     }))
 
     expect(controller.openRecoveryProject).toHaveBeenCalledWith(
@@ -317,8 +343,6 @@ describe('ProjectLaunch', () => {
     expect(screen.getByRole('radio', { name: 'Social portrait 4:5' }))
       .toBeInTheDocument()
     expect(screen.queryByText('Browser video editor')).not.toBeInTheDocument()
-    expect(screen.queryByText('Your media stays on this device.'))
-      .not.toBeInTheDocument()
     expect(container.querySelectorAll('.project-ratio-preview')).toHaveLength(4)
     expect(container.querySelectorAll('.project-ratio-shape')).toHaveLength(4)
     expect(container.querySelector('.project-ratio-preview img')).toBeNull()
@@ -664,17 +688,19 @@ describe('ProjectLaunch', () => {
     expect(controller.openProjectFile).toHaveBeenCalledWith(project)
   })
 
-  test('summarizes the complete local setup before project creation', () => {
+  test('summarizes the chosen setup in the compact confirmation strip', () => {
     useProjectSessionStore.setState({ screen: 'new-project' })
     render(<ProjectLaunch />)
 
     const summary = screen.getByRole('region', { name: 'Ready to create' })
-    expect(summary).toHaveTextContent('Untitled project')
-    expect(summary).toHaveTextContent('Horizontal 16:9 · 1920 × 1080')
+    expect(summary).toHaveTextContent('Horizontal 16:9')
+    expect(summary).toHaveTextContent('1920 × 1080')
     expect(summary).toHaveTextContent('30 fps')
     expect(summary).toHaveTextContent('48 kHz')
-    expect(summary).toHaveTextContent('4 video + 4 audio tracks')
-    expect(summary).toHaveTextContent('Starts locally and unsaved')
+    expect(within(summary).getByText('Canvas')).toBeInTheDocument()
+    expect(within(summary).getByText('Resolution')).toBeInTheDocument()
+    expect(within(summary).getByText('Frame rate')).toBeInTheDocument()
+    expect(within(summary).getByText('Audio quality')).toBeInTheDocument()
   })
 
   test('keeps audio settings and Create inside a scrollable setup frame', () => {
