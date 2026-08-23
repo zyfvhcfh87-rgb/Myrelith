@@ -399,6 +399,43 @@ export function exportProfileIncludesAudio(
   )
 }
 
+/** AAC WebCodecs encoders accept only these input rates. */
+export const AAC_EXPORT_ENCODER_SAMPLE_RATES = Object.freeze([44_100, 48_000])
+
+/** Native Opus encoder rates. 44.1 kHz is still legal input; 96 kHz is not. */
+export const OPUS_EXPORT_ENCODER_SAMPLE_RATES = Object.freeze([
+  8_000,
+  12_000,
+  16_000,
+  24_000,
+  48_000,
+])
+
+/**
+ * Sample rate submitted to the encoder. Mix math stays on the document rate.
+ * 96 kHz is an exact 2:1 downsample to 48 kHz for both AAC and Opus.
+ */
+export function exportAudioEncoderSampleRate(
+  documentSampleRate: number,
+  codec: ExportAudioCodec,
+): number {
+  if (!Number.isSafeInteger(documentSampleRate) || documentSampleRate <= 0) {
+    throw new RangeError('Export audio sample rate must be a positive safe integer')
+  }
+  if (codec === 'aac') {
+    return AAC_EXPORT_ENCODER_SAMPLE_RATES.some((rate) => rate === documentSampleRate)
+      ? documentSampleRate
+      : 48_000
+  }
+  if (
+    documentSampleRate === 44_100
+    || OPUS_EXPORT_ENCODER_SAMPLE_RATES.some((rate) => rate === documentSampleRate)
+  ) {
+    return documentSampleRate
+  }
+  return 48_000
+}
+
 /** Apply advanced-setting changes without weakening boundary validation. */
 export function updateExportProfile(
   profile: ExportProfile,

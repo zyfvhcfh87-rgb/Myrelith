@@ -836,6 +836,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   MIME, extension, and destination shapes. `auto` is selection policy only and
   resolves Modern → Web → Compatibility; HEVC is explicit-only. Dimensions,
   exact rational FPS, and audio sample rate remain `TimelineDoc` facts.
+  Mix math stays on that document rate. At the encoder boundary, 96 kHz is an
+  exact 2:1 downsample to 48 kHz so AAC/Opus WebCodecs configs stay native;
+  capability probes and AAC padding use that encoder rate.
+- `app/exportController.ts` pauses live playback before allocating export
+  decoders so preview and export do not share a hardware decoder budget.
+- `pipeline/export-mediabunny-visual-source.ts` walks document frames
+  cooperatively and does not retain one composition plan per exported frame.
+  Per-asset timestamp streams stay one long-lived `canvasesAtTimestamps`
+  iterator; `openFrame` recomputes the matching plan.
 - `domain/exportWorkBudget.ts` rejects unbounded finite work before a sink,
   encoder, or frame lease exists. The current ceiling is five million frames,
   24 hours, a conservative bitrate-derived four-GiB buffered-output estimate,

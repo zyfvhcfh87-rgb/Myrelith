@@ -19,7 +19,12 @@ import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
 import type { PluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import { selectMediaRepresentation } from '../domain/proxyCache'
-import { audibleTracks, outputMediaAssetIds } from '../domain/selectors'
+import {
+  audibleTracks,
+  clipContributesVisualOutput,
+  documentHasOutputPluginEffects,
+  outputMediaAssetIds,
+} from '../domain/selectors'
 import { sourceTimeAudioPolicy } from '../domain/sourceTimeMap'
 import {
   assertExportAdmission,
@@ -44,6 +49,7 @@ import {
 import { preflightExportProfile } from './exportCapabilitiesController'
 import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { registerLoadedExportDisposer } from './exportLifecycle'
+import { pause as pausePlayback } from './transportController'
 /* The later app composition wave owns the concrete prepared-attempt lifecycle. */
 import {
   PluginExportAttemptError,
@@ -250,10 +256,12 @@ function partialTrackConflict(
       : includeAudio && audibleTrackIds.has(track.id)
     if (!contributes) continue
     for (const clip of track.clips) {
-      if (
+      if (track.kind === 'video') {
+        if (!clipContributesVisualOutput(clip)) continue
+      } else if (
         clip.text
-        || (track.kind === 'video' ? clip.opacity <= 0 : clip.volume <= 0)
-        || (track.kind === 'audio' && sourceTimeAudioPolicy(clip).status === 'muted')
+        || clip.volume <= 0
+        || sourceTimeAudioPolicy(clip).status === 'muted'
       ) continue
       const asset = assets.get(clip.assetId)
       if (!asset) continue
@@ -324,14 +332,12 @@ function captureExportInputs(
   })
 }
 
-function hasOutputPluginEffects(doc: TimelineDoc): boolean {
-  return doc.tracks.some((track) => (
-    track.kind === 'video'
-    && !track.hidden
-    && track.clips.some((clip) => (
-      clip.effects.some((effect) => effect.type.startsWith('plugin:'))
-    ))
-  ))
+function pausePlaybackForExport(): void {
+  try {
+    pausePlayback()
+  } catch {
+    // A pause failure must not replace export admission or pipeline errors.
+  }
 }
 
 /** Preserve setup as the primary failure while releasing pre-start ownership. */
@@ -479,8 +485,9 @@ async function preflightAndRunExport(
   >,
 ): Promise<ExportResult | undefined> {
   if (lifecycle.cancelRequested) return undefined
+  pausePlaybackForExport()
   // Reject impossible work before Blob retention, profile probing, or the
-  // eager per-frame visual-plan schedule owned by createMediaSource().
+  // cooperative per-asset visual schedule owned by createMediaSource().
   assertExportAdmission(doc, settings)
   const includeAudio = settings.audioChannelLayout !== 'off'
   const sourceBounds = createSourceBoundsCatalog(assets.values())
@@ -592,7 +599,7 @@ export function startExport(
     runSettings = validateExportProfile(settings)
     runOptions = freezeRunOptions(callbacks)
     assertDestinationCapability(runSettings, runOptions)
-    if (hasOutputPluginEffects(doc)) {
+    if (documentHasOutputPluginEffects(doc)) {
       throw new Error('Plugin-aware export requires a prepared one-shot attempt')
     }
     captured = captureExportInputs(doc, runSettings)

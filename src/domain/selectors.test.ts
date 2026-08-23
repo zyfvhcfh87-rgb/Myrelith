@@ -7,8 +7,10 @@ import type { Clip, TimelineDoc, Track } from './schema'
 import {
   activeClipAt,
   audibleTracks,
+  clipContributesVisualOutput,
   clipSourceFrame,
   docDurationFrames,
+  documentHasOutputPluginEffects,
   findClip,
   outputMediaAssetIds,
   trackOfClip,
@@ -291,6 +293,54 @@ describe('outputMediaAssetIds', () => {
       makeTrack('A1', 'audio', [mutedAudio]),
     ])
     expect([...outputMediaAssetIds(audiovisual)]).toEqual(['shared-retimed'])
+  })
+
+  test('includes a zero-opacity clip when its opacity animation becomes visible', () => {
+    const faded = {
+      ...makeClip('fade-in', 0, 10),
+      assetId: 'video-faded',
+      opacity: 0,
+      animation: {
+        tracks: [{
+          property: 'opacity' as const,
+          keyframes: [
+            { frame: 0, value: 0, easing: { type: 'linear' as const } },
+            { frame: 8, value: 1, easing: { type: 'linear' as const } },
+          ],
+        }],
+        effectTracks: [],
+      },
+    }
+    expect(clipContributesVisualOutput(faded)).toBe(true)
+    expect([...outputMediaAssetIds(makeDoc([
+      makeTrack('V1', 'video', [faded]),
+    ]))]).toEqual(['video-faded'])
+  })
+})
+
+describe('documentHasOutputPluginEffects', () => {
+  test('ignores hidden tracks and non-plugin stacks', () => {
+    const visiblePlugin = {
+      ...makeClip('plugin-visible', 0, 10),
+      effects: [{
+        id: 'fx-1',
+        type: 'plugin:com.example.fixture/invert',
+        version: 1,
+        enabled: true,
+        params: {},
+      }],
+    }
+    const hiddenPlugin = {
+      ...makeClip('plugin-hidden', 0, 10),
+      effects: visiblePlugin.effects,
+    }
+    expect(documentHasOutputPluginEffects(makeDoc([
+      makeTrack('V1', 'video', [makeClip('plain', 0, 10)]),
+      makeTrack('V2', 'video', [hiddenPlugin], { hidden: true }),
+    ]))).toBe(false)
+    expect(documentHasOutputPluginEffects(makeDoc([
+      makeTrack('V1', 'video', [visiblePlugin]),
+    ]))).toBe(true)
   })
 })
 

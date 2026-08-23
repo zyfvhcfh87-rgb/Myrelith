@@ -9,7 +9,10 @@ import {
   canEncodeAudio,
   canEncodeVideo,
 } from 'mediabunny'
-import type { ExportProfile } from '../domain/exportProfile'
+import {
+  exportAudioEncoderSampleRate,
+  type ExportProfile,
+} from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
 import { docDurationFrames } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
@@ -89,13 +92,19 @@ export async function runFreshMediabunnyExportProbe(
   }
   const audioProfile =
     includeAudio && profile.audioChannelLayout !== 'off' ? profile : null
+  const encoderSampleRate = audioProfile && audioProfile.audioCodec
+    ? exportAudioEncoderSampleRate(doc.audioSampleRate, audioProfile.audioCodec)
+    : doc.audioSampleRate
+  const encoderDoc = encoderSampleRate === doc.audioSampleRate
+    ? doc
+    : { ...doc, audioSampleRate: encoderSampleRate }
 
   const totalFrames = docDurationFrames(doc)
   if (includeAudio && totalFrames === 0) {
     throw new RangeError('Cannot probe audio for an empty export timeline')
   }
   const probeFrameCount = includeAudio
-    ? audioProbeFrameCount(doc, totalFrames)
+    ? audioProbeFrameCount(encoderDoc, totalFrames)
     : 1
 
   if (typeof OffscreenCanvas === 'undefined') {
@@ -141,9 +150,9 @@ export async function runFreshMediabunnyExportProbe(
       const audioWrite = async (): Promise<void> => {
         if (!audioSource || !audioProfile) return
         const channels = exportAudioChannelCount(audioProfile)
-        const frameEndSample = audioSampleBoundary(frame + 1, doc)
+        const frameEndSample = audioSampleBoundary(frame + 1, encoderDoc)
         for (
-          let startSample = audioSampleBoundary(frame, doc);
+          let startSample = audioSampleBoundary(frame, encoderDoc);
           startSample < frameEndSample;
           startSample += EXPORT_AUDIO_BLOCK_SAMPLES
         ) {
@@ -156,8 +165,8 @@ export async function runFreshMediabunnyExportProbe(
             data: new Float32Array(numberOfFrames * channels),
             format: 'f32',
             numberOfChannels: channels,
-            sampleRate: doc.audioSampleRate,
-            timestamp: startSample / doc.audioSampleRate,
+            sampleRate: encoderSampleRate,
+            timestamp: startSample / encoderSampleRate,
           })
           try {
             await audioSource.add(audioSample)

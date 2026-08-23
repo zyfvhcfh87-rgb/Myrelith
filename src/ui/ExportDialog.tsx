@@ -25,7 +25,11 @@ import {
   type ExportFileDestinationCapability,
 } from '../app/exportFilePicker'
 import type { TimelineDoc } from '../domain/schema'
-import { docDurationFrames, outputMediaAssetIds } from '../domain/selectors'
+import {
+  docDurationFrames,
+  documentHasOutputPluginEffects,
+  outputMediaAssetIds,
+} from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { usePreferencesStore } from '../state/preferencesStore'
@@ -47,7 +51,6 @@ import {
   type ExportUiSelectionId,
 } from './exportProfileUi'
 import { PluginExportBlockBody } from './plugins/PluginExportBlockDialog'
-import { useOptionalPluginUi } from './plugins/PluginUiHooks'
 import type { PluginEffectIssueView } from './plugins/pluginUiTypes'
 import type { PluginPreparedExportPort } from '../app/pluginPreparedExportOwner'
 
@@ -157,7 +160,6 @@ function directFileFailureMessage(cause: unknown): string {
 }
 
 export default function ExportDialog({ onClose }: ExportDialogProps) {
-  const pluginUi = useOptionalPluginUi()
   const doc = useDocumentStore((state) => state.doc)
   const hasContent = docDurationFrames(doc) > 0
   const mediaAssets = useMediaStore((state) => state.assets)
@@ -438,7 +440,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     && selectedSupported === true
     && activeProfile !== null
     && advancedDraftsValid
-  const requiresPreparedExport = (pluginUi?.controller.getEditorSnapshot().effects.length ?? 0) > 0
+  const requiresPreparedExport = documentHasOutputPluginEffects(doc)
   const estimatedSize = formatEstimatedFileSize(
     estimateExportBytes(doc, displayProfile),
   )

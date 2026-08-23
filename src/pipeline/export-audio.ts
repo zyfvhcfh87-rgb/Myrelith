@@ -27,7 +27,10 @@ export interface ExportAudioClipRequest {
   endSample: number
   sampleRate: number
   channelCount: typeof EXPORT_AUDIO_CHANNELS
-  /** Crossfade handle legs must never freeze or zero-fill missing PCM. */
+  /**
+   * Crossfade handle legs may zero-fill decoder priming before the first PCM
+   * packet, but must not invent samples after decode has started or at EOF.
+   */
   requireComplete?: true
 }
 
@@ -55,6 +58,69 @@ function assertPositiveSafeInteger(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${label} must be a positive safe integer`)
   }
+}
+
+/** Floor-scale a mix-grid sample index onto another integer sample rate. */
+export function scaleExportSampleIndex(
+  sample: number,
+  fromRate: number,
+  toRate: number,
+): number {
+  if (fromRate === toRate) return sample
+  if (!Number.isSafeInteger(sample) || sample < 0) {
+    throw new RangeError('Sample index must be a non-negative safe integer')
+  }
+  assertPositiveSafeInteger(fromRate, 'Source sample rate')
+  assertPositiveSafeInteger(toRate, 'Encoder sample rate')
+  const scaled = (BigInt(sample) * BigInt(toRate)) / BigInt(fromRate)
+  if (scaled > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError('Scaled sample index exceeds the safe integer range')
+  }
+  return Number(scaled)
+}
+
+/**
+ * Convert one mixed block from the document sample grid to the encoder grid.
+ * 96 kHz → 48 kHz averages adjacent pairs; other integer ratios pick the
+ * containing source sample.
+ */
+export function resampleMixedAudioBlock(
+  block: MixedAudioBlock,
+  fromRate: number,
+  toRate: number,
+): MixedAudioBlock {
+  if (fromRate === toRate) return block
+  const startSample = scaleExportSampleIndex(block.startSample, fromRate, toRate)
+  const endSample = scaleExportSampleIndex(
+    block.startSample + block.sampleCount,
+    fromRate,
+    toRate,
+  )
+  const sampleCount = endSample - startSample
+  if (sampleCount <= 0) {
+    return {
+      startSample,
+      sampleCount: 0,
+      channels: [new Float32Array(0), new Float32Array(0)],
+    }
+  }
+
+  const left = new Float32Array(sampleCount)
+  const right = new Float32Array(sampleCount)
+  const pairAverage = fromRate === toRate * 2
+  for (let index = 0; index < sampleCount; index++) {
+    const sourceIndex = scaleExportSampleIndex(startSample + index, toRate, fromRate)
+      - block.startSample
+    const clamped = Math.max(0, Math.min(block.sampleCount - 1, sourceIndex))
+    if (pairAverage && clamped + 1 < block.sampleCount) {
+      left[index] = (block.channels[0][clamped] + block.channels[0][clamped + 1]) / 2
+      right[index] = (block.channels[1][clamped] + block.channels[1][clamped + 1]) / 2
+    } else {
+      left[index] = block.channels[0][clamped]
+      right[index] = block.channels[1][clamped]
+    }
+  }
+  return { startSample, sampleCount, channels: [left, right] }
 }
 
 /**

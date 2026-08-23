@@ -33,6 +33,7 @@ import {
   type ExportResult,
   type ExportSettings,
 } from './exportController'
+import * as transportController from './transportController'
 import {
   PluginExportAttemptError,
   type PluginExportAttemptController,
@@ -316,6 +317,14 @@ afterEach(async () => {
 })
 
 describe('exportController wiring and completion', () => {
+  test('pauses live playback before preflight and media allocation', async () => {
+    const pause = vi.spyOn(transportController, 'pause')
+    const h = makeHarness()
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+    expect(pause).toHaveBeenCalled()
+    pause.mockRestore()
+  })
+
   test('rejects an over-budget timeline before any media or pipeline allocation', async () => {
     const h = makeHarness()
     const sourceTrack = DOC.tracks[0]

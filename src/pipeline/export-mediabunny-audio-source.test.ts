@@ -101,6 +101,35 @@ describe('createMediabunnyExportAudioSource exact ranges', () => {
     expect(decoded.close).toHaveBeenCalledOnce()
     expect(inputAt().dispose).toHaveBeenCalledOnce()
   })
+
+  test('zero-fills decoder priming before the first exact crossfade packet', async () => {
+    const decoded = decodedAudioSample(
+      [new Float32Array([0.5, 0.5, 0.5, 0.5])],
+      48_000,
+      2 / 48_000,
+    )
+    mb.audioTracks.push(audioTrack(true, 1))
+    mb.audioSinkSampleSequences.push([decoded])
+    const source = createMediabunnyExportAudioSource(
+      async () => resolvedAsset(new Blob(['primed-audio'])),
+    )
+    const reader = await source.openClip({
+      clipId: 'exact-handle',
+      assetId: 'audio-asset',
+      startSample: 0,
+      endSample: 6,
+      sampleRate: 48_000,
+      channelCount: 2,
+      requireComplete: true,
+    })
+
+    const channels = await reader.read(6)
+    expect([...channels[0]]).toEqual([0, 0, 0.5, 0.5, 0.5, 0.5])
+    expect([...channels[1]]).toEqual([0, 0, 0.5, 0.5, 0.5, 0.5])
+
+    await reader.close()
+    await source.close()
+  })
 })
 
 describe('multichannel preview/export fold-down parity', () => {

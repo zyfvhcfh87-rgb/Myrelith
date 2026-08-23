@@ -21,6 +21,7 @@ import { docDurationFrames } from '../domain/selectors'
 import {
   audioSampleBoundary,
   EXPORT_AUDIO_BLOCK_SAMPLES,
+  resampleMixedAudioBlock,
   TimelineAudioMixer,
   type ExportAudioClipRequest,
   type ExportAudioClipReader,
@@ -893,5 +894,24 @@ describe('TimelineAudioMixer streaming and ownership', () => {
 
     expect(h.readers[0].close).toHaveBeenCalledOnce()
     expect(h.close).toHaveBeenCalledOnce()
+  })
+})
+
+describe('export encoder-rate resampling', () => {
+  test('averages exact 96 kHz pairs onto the 48 kHz encoder grid', () => {
+    const block: MixedAudioBlock = {
+      startSample: 0,
+      sampleCount: 4,
+      channels: [
+        new Float32Array([0, 1, 0.5, 1.5]),
+        new Float32Array([2, 4, 6, 8]),
+      ],
+    }
+    const resampled = resampleMixedAudioBlock(block, 96_000, 48_000)
+    expect(resampled.startSample).toBe(0)
+    expect(resampled.sampleCount).toBe(2)
+    expect([...resampled.channels[0]]).toEqual([0.5, 1])
+    expect([...resampled.channels[1]]).toEqual([3, 7])
+    expect(resampleMixedAudioBlock(block, 48_000, 48_000)).toBe(block)
   })
 })

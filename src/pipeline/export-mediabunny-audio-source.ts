@@ -90,6 +90,7 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
   private lookahead: DecodedPcmChunk | null = null
   private lookaheadLoaded = false
   private iteratorDone = false
+  private heardDecodedPcm = false
   private closePromise: Promise<void> | null = null
 
   private incompleteSource(sample: number, detail: string): MediaAssetRuntimeError {
@@ -221,7 +222,7 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
         continue
       }
       if (sourceTime < chunk.timestampSec - epsilon) {
-        if (this.request.requireComplete) {
+        if (this.request.requireComplete && this.heardDecodedPcm) {
           throw this.incompleteSource(sourceSample, 'decoded PCM has a gap')
         }
         continue
@@ -272,6 +273,7 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
         if (channel === 0) left[outputIndex] = value
         else right[outputIndex] = value
       }
+      this.heardDecodedPcm = true
     }
 
     return [left, right]
