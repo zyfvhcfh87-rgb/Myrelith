@@ -587,6 +587,17 @@ export function pause(): void {
   useTransportStore.getState().setIsPlaying(false)
 }
 
+/** Pause immediately, then wait until every playback decoder owner is gone. */
+export async function pauseAndDrainPlayback(): Promise<void> {
+  pause()
+  while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
+    await Promise.all([
+      ...state.playbackTasks,
+      ...state.cleanupTasks,
+    ])
+  }
+}
+
 /** The play/pause button behavior. */
 export function togglePlayback(): void {
   if (useTransportStore.getState().isPlaying) pause()

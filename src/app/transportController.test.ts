@@ -28,6 +28,7 @@ import {
   configureTransport,
   disposeTransport,
   pause,
+  pauseAndDrainPlayback,
   play,
   resetAudioMeterOverload,
   stepFrame,
@@ -634,6 +635,29 @@ describe('live audio integration', () => {
       expect(transport().playheadFrame).toBe(action === 'step' ? 1 : 0)
     },
   )
+
+  test('pause-and-drain waits for active audio decoder cleanup', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const stopGate = deferred<void>()
+    const session = makeAudioSession(0)
+    session.stop.mockImplementationOnce(() => stopGate.promise)
+    fake.startAudio.mockResolvedValueOnce(session)
+
+    play()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+    const draining = pauseAndDrainPlayback()
+    let settled = false
+    void draining.then(() => { settled = true })
+    await Promise.resolve()
+
+    expect(session.stop).toHaveBeenCalledOnce()
+    expect(transport().isPlaying).toBe(false)
+    expect(settled).toBe(false)
+
+    stopGate.resolve()
+    await draining
+    expect(settled).toBe(true)
+  })
 
   test('audio-plan changes re-prime from the current frame; video transforms do not', async () => {
     useDocumentStore.getState().setDoc(makeAudibleDoc())

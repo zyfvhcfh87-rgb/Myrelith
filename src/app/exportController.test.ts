@@ -33,7 +33,6 @@ import {
   type ExportResult,
   type ExportSettings,
 } from './exportController'
-import * as transportController from './transportController'
 import {
   PluginExportAttemptError,
   type PluginExportAttemptController,
@@ -207,6 +206,7 @@ function observeRun(run: ExportRun): {
 
 interface Harness {
   deps: ExportControllerDeps
+  preparePlaybackForExport: ReturnType<typeof vi.fn>
   preflightProfile: ReturnType<typeof vi.fn>
   fetchBlob: ReturnType<typeof vi.fn>
   createMediaSource: ReturnType<typeof vi.fn>
@@ -226,6 +226,7 @@ function makeHarness(
     close: vi.fn(async () => undefined),
   }
   const pipelineDeps = {} as PipelineExportDeps
+  const preparePlaybackForExport = vi.fn(async () => undefined)
   const preflightProfile = vi.fn(async () => undefined)
   const fetchBlob = vi.fn(async () => new Blob(['source']))
   const createMediaSource = vi.fn(
@@ -251,6 +252,7 @@ function makeHarness(
     ) => createRun(),
   )
   const deps: ExportControllerDeps = {
+    preparePlaybackForExport,
     preflightProfile,
     fetchBlob,
     createMediaSource,
@@ -259,6 +261,7 @@ function makeHarness(
   }
   return {
     deps,
+    preparePlaybackForExport,
     preflightProfile,
     fetchBlob,
     createMediaSource,
@@ -317,12 +320,21 @@ afterEach(async () => {
 })
 
 describe('exportController wiring and completion', () => {
-  test('pauses live playback before preflight and media allocation', async () => {
-    const pause = vi.spyOn(transportController, 'pause')
+  test('awaits playback decoder teardown before preflight and media allocation', async () => {
+    const playbackDrain = deferred()
     const h = makeHarness()
-    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
-    expect(pause).toHaveBeenCalled()
-    pause.mockRestore()
+    h.preparePlaybackForExport.mockReturnValueOnce(playbackDrain.promise)
+    const pending = startExport(SETTINGS, {}, h.deps)
+
+    await Promise.resolve()
+    expect(h.preparePlaybackForExport).toHaveBeenCalledOnce()
+    expect(h.preflightProfile).not.toHaveBeenCalled()
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+
+    playbackDrain.resolve()
+    await expect(pending).resolves.toBe(RESULT)
+    expect(h.preflightProfile).toHaveBeenCalledOnce()
   })
 
   test('rejects an over-budget timeline before any media or pipeline allocation', async () => {

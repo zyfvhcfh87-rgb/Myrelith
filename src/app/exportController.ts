@@ -49,7 +49,8 @@ import {
 import { preflightExportProfile } from './exportCapabilitiesController'
 import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { registerLoadedExportDisposer } from './exportLifecycle'
-import { pause as pausePlayback } from './transportController'
+import { drainPreviewPlayback } from './previewController'
+import { pauseAndDrainPlayback } from './transportController'
 /* The later app composition wave owns the concrete prepared-attempt lifecycle. */
 import {
   PluginExportAttemptError,
@@ -74,6 +75,7 @@ export type ExportCallbacks = ExportRunOptions
 
 /** Browser/pipeline seams injected by tests; production uses realDeps. */
 export interface ExportControllerDeps {
+  preparePlaybackForExport(): Promise<void>
   preflightProfile(
     doc: TimelineDoc,
     settings: ExportSettings,
@@ -101,6 +103,12 @@ export interface ExportControllerDeps {
 }
 
 const realDeps: ExportControllerDeps = {
+  preparePlaybackForExport: async () => {
+    await Promise.all([
+      pauseAndDrainPlayback(),
+      drainPreviewPlayback(),
+    ])
+  },
   preflightProfile: preflightExportProfile,
   fetchBlob: async (url) => {
     const response = await fetch(url)
@@ -332,14 +340,6 @@ function captureExportInputs(
   })
 }
 
-function pausePlaybackForExport(): void {
-  try {
-    pausePlayback()
-  } catch {
-    // A pause failure must not replace export admission or pipeline errors.
-  }
-}
-
 /** Preserve setup as the primary failure while releasing pre-start ownership. */
 async function rejectAfterClosingMedia(
   media: ExportMediaSource,
@@ -485,7 +485,8 @@ async function preflightAndRunExport(
   >,
 ): Promise<ExportResult | undefined> {
   if (lifecycle.cancelRequested) return undefined
-  pausePlaybackForExport()
+  await deps.preparePlaybackForExport()
+  if (lifecycle.cancelRequested) return undefined
   // Reject impossible work before Blob retention, profile probing, or the
   // cooperative per-asset visual schedule owned by createMediaSource().
   assertExportAdmission(doc, settings)
