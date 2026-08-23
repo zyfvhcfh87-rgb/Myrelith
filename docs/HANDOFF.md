@@ -130,6 +130,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #119 — bounded manual lens correction** | 🚧 implementation complete locally | schema-14 versioned intent; accessible Inspector/history controls; promoted source-space WebGL2 preview/export path; explicit coverage/unavailability; seven-surface 4K budget; local CI/review gates pending |
 | **Post-MVP #77 — signed sandboxed plugins** | 🚧 PR #123 remediation validated locally | production preview/export/migration wiring; fail-closed render and stale-generation gates; bounded host-acknowledged teardown; safe startup recovery; hostile-package and real Chromium acceptance; full/exact-head publication gates pending |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
+| **Current public preview — `v0.2.0-alpha.1` First Light** | ✅ published | annotated tag resolves to `2a845c8`; verified 43-file web archive `sha256:aef2445b…`; public Linux AMD64/ARM64 GHCR index `sha256:ee060a7e…`; exact-head PR + master CI, 3,335 Vitest tests, 17 runner tests, and 10 Chromium tests passed |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
 | **Refactor Stage 6 — media import decision seams** | ✅ complete | pure partial-track + FPS/commit policy behind the unchanged resource-owning facade; 162 focused + 1,725 total tests; checked-in recovery smoke and headed Chromium UI import/FPS-cancel/Unsupported→Retry→Ready matrix, clean console |
 | **Refactor Stage 7 — Mediabunny export adapter owners** | ✅ complete | stable facade split into visual/audio/sink resource owners plus one shared fake harness; 156 focused + 1,725 total tests; headed Chromium buffered/direct A/V reopen + native playback, exact 9,600-sample presentation, commit/cancel/write-failure cleanup, clean console |
@@ -1881,6 +1882,23 @@ surface; it is not a second zoom and never enters document history.
   clearance, production readiness, representative low-memory behavior, or all
   downstream redistribution obligations. Keep the AC-3/E-AC-3 FFmpeg and codec
   caveat visible in every release until a dedicated legal review resolves it.
+- `v0.2.0-alpha.1` **First Light** was published on 2026-08-23 after release
+  prep PR #176 passed exact-head CI and Bugbot at `e198ed1` and was normally
+  merged as `2a845c8`. The annotated tag peels to that exact merge. Its verified
+  43-file, 2,914,162-byte static web archive has SHA-256
+  `aef2445b99969fb4285fdd287fd9f4cde5552938e9b890eee4b2e0bf8de73a96`;
+  the attached checksum file and GitHub asset digest agree. Tag-triggered
+  container run `32644089661` published the public `0.2.0-alpha.1` and
+  `sha-2a845c8` tags as the same Linux AMD64/ARM64 OCI index at
+  `sha256:ee060a7ea03d58dafc55152341db19d284dfd853c33354540a20043414a8aabd`,
+  with provenance and SBOM attestations. Anonymous release, asset, package-page,
+  and registry checks passed; the dynamic release badge resolved to the new
+  version. The local Docker Desktop daemon was unavailable, so no local
+  container-start smoke was claimed. Local release validation passed 3,335
+  Vitest tests across 233 files, 17 benchmark-runner tests, production build,
+  oxlint, a production audit with 0 vulnerabilities, and all 10 checked-in
+  Chromium tests. The existing alpha, browser/codec, FFmpeg/patent, low-memory,
+  and downstream-redistribution caveats remain in force.
 - Issue #32 is complete. PR #37 was reviewed at `b131436`, normally merged as
   `daf3a6e`, and GitHub closed the issue as completed. The sole fresh-project
   factory now creates persisted `V1`–`V4` followed by `A1`–`A4`; the timeline
