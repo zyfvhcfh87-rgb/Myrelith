@@ -837,7 +837,8 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   resolves Modern → Web → Compatibility; HEVC is explicit-only. Dimensions,
   exact rational FPS, and audio sample rate remain `TimelineDoc` facts.
   Mix math stays on that document rate. At the encoder boundary, 96 kHz is an
-  exact 2:1 downsample to 48 kHz so AAC/Opus WebCodecs configs stay native;
+  exact 2:1 anti-aliased downsample to 48 kHz so AAC/Opus WebCodecs configs
+  stay native;
   capability probes and AAC padding use that encoder rate.
 - `app/exportController.ts` pauses live playback before allocating export
   decoders so preview and export do not share a hardware decoder budget.
