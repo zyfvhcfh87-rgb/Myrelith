@@ -466,7 +466,9 @@ export function resolveEditorContextMenu(
           item('marker.edit', 'Edit…', unavailable, {
             restoreFocusAfterActivation: false,
           }),
-          item('marker.duplicate', 'Duplicate', unavailable),
+          item('marker.duplicate', 'Duplicate', unavailable, {
+            restoreFocusAfterActivation: false,
+          }),
           item('marker.delete', 'Delete', unavailable, {
             danger: true,
             separatorBefore: true,
