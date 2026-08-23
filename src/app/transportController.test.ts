@@ -659,6 +659,36 @@ describe('live audio integration', () => {
     expect(settled).toBe(true)
   })
 
+  test('pause-and-drain ignores play until decoder cleanup finishes', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const stopGate = deferred<void>()
+    const session = makeAudioSession(0)
+    session.stop.mockImplementationOnce(() => stopGate.promise)
+    const restarted = makeAudioSession(1)
+    fake.startAudio
+      .mockResolvedValueOnce(session)
+      .mockResolvedValueOnce(restarted)
+
+    play()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+    const draining = pauseAndDrainPlayback()
+    play()
+    await Promise.resolve()
+
+    expect(session.stop).toHaveBeenCalledOnce()
+    expect(transport().isPlaying).toBe(false)
+    expect(fake.startAudio).toHaveBeenCalledOnce()
+
+    stopGate.resolve()
+    await draining
+    expect(transport().isPlaying).toBe(false)
+    expect(fake.startAudio).toHaveBeenCalledOnce()
+
+    play()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledTimes(2))
+    expect(transport().isPlaying).toBe(true)
+  })
+
   test('audio-plan changes re-prime from the current frame; video transforms do not', async () => {
     useDocumentStore.getState().setDoc(makeAudibleDoc())
     const first = makeAudioSession(0)

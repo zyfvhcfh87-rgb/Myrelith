@@ -106,7 +106,10 @@ const realDeps: ExportControllerDeps = {
   preparePlaybackForExport: async () => {
     await Promise.all([
       pauseAndDrainPlayback(),
-      drainPreviewPlayback(),
+      drainPreviewPlayback().catch(() => {
+        // A preview teardown failure must not replace export admission
+        // or pipeline errors. Export uses a separate media path.
+      }),
     ])
   },
   preflightProfile: preflightExportProfile,
@@ -485,7 +488,11 @@ async function preflightAndRunExport(
   >,
 ): Promise<ExportResult | undefined> {
   if (lifecycle.cancelRequested) return undefined
-  await deps.preparePlaybackForExport()
+  try {
+    await deps.preparePlaybackForExport()
+  } catch {
+    // A pause failure must not replace export admission or pipeline errors.
+  }
   if (lifecycle.cancelRequested) return undefined
   // Reject impossible work before Blob retention, profile probing, or the
   // cooperative per-asset visual schedule owned by createMediaSource().

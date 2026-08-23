@@ -337,6 +337,18 @@ describe('exportController wiring and completion', () => {
     expect(h.preflightProfile).toHaveBeenCalledOnce()
   })
 
+  test('preview drain failures do not replace export admission or pipeline errors', async () => {
+    const h = makeHarness()
+    h.preparePlaybackForExport.mockRejectedValueOnce(
+      new Error('Preview playback decoder teardown failed'),
+    )
+
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+    expect(h.preflightProfile).toHaveBeenCalledOnce()
+    expect(h.createMediaSource).toHaveBeenCalledOnce()
+    expect(h.runExport).toHaveBeenCalledOnce()
+  })
+
   test('rejects an over-budget timeline before any media or pipeline allocation', async () => {
     const h = makeHarness()
     const sourceTrack = DOC.tracks[0]

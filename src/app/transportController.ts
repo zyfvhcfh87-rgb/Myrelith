@@ -138,6 +138,8 @@ interface ControllerState {
   /** Async playback startups and stop work that project switching must drain. */
   playbackTasks: Set<Promise<void>>
   cleanupTasks: Set<Promise<void>>
+  /** Blocks play() while an export/project drain is waiting for decoder owners. */
+  playbackDrainHold: number
 }
 
 const state: ControllerState = {
@@ -156,6 +158,7 @@ const state: ControllerState = {
   unsubscribes: [],
   playbackTasks: new Set(),
   cleanupTasks: new Set(),
+  playbackDrainHold: 0,
 }
 
 /** Last frame the playhead may rest on; 0 for an empty doc. */
@@ -565,7 +568,7 @@ function restartPlayback(): void {
  */
 export function play(): void {
   const transport = useTransportStore.getState()
-  if (transport.isPlaying) return
+  if (transport.isPlaying || state.playbackDrainHold > 0) return
 
   const doc = useDocumentStore.getState().doc
   if (docDurationFrames(doc) <= 0) return
@@ -589,12 +592,17 @@ export function pause(): void {
 
 /** Pause immediately, then wait until every playback decoder owner is gone. */
 export async function pauseAndDrainPlayback(): Promise<void> {
-  pause()
-  while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
-    await Promise.all([
-      ...state.playbackTasks,
-      ...state.cleanupTasks,
-    ])
+  state.playbackDrainHold += 1
+  try {
+    pause()
+    while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
+      await Promise.all([
+        ...state.playbackTasks,
+        ...state.cleanupTasks,
+      ])
+    }
+  } finally {
+    state.playbackDrainHold -= 1
   }
 }
 
