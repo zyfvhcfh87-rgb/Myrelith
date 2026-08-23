@@ -61,3 +61,47 @@ The combined image compares the supplied Resolve speed-change strip directly wit
 - None required for handoff.
 
 final result: passed
+
+---
+
+# Design QA: Quiet Tabs launcher rework
+
+## Source visual
+
+- Path: `C:\Users\Aryel\.codex\generated_images\01a030b2-1f7d-71c3-9c20-09bb6f2f5114\exec-0c13f9fb-6987-49cd-a9c3-932bbda66042.png`
+- Pixel dimensions: 1342 x 1172
+- Density: not embedded
+- Reference state: Recovery copies selected, 3 recovery rows, empty search, newest-first sort, local-storage strip visible.
+
+## Implementation capture
+
+- Path: `E:\ClaudeSpace\WebCut\.tmp\design-qa-launcher\implementation-desktop-1429x1248.png`
+- Browser viewport request: 1429 x 1248 CSS pixels at DPR 1
+- Captured pixels: 1414 x 1235; the browser scrollbar and capture frame account for the difference from the requested viewport.
+- Reference state: Recovery copies selected, 3 recovery rows, empty search, newest-first sort, no focused control, page scrolled to 160 CSS pixels to align the hero and library with the source visual.
+- Mobile capture: `E:\ClaudeSpace\WebCut\.tmp\design-qa-launcher\implementation-mobile-390x844.png`
+
+## Comparisons
+
+- Full normalized comparison: `E:\ClaudeSpace\WebCut\.tmp\design-qa-launcher\comparison-full-normalized.png`
+- Focused recovery comparison: `E:\ClaudeSpace\WebCut\.tmp\design-qa-launcher\comparison-recovery-normalized.png`
+- Normalization: the implementation capture was resized to 1342 x 1172 only for side-by-side comparison with the source. The unmodified implementation capture remains listed above.
+- Left side: source visual. Right side: implementation.
+
+## Comparison history
+
+1. First desktop pass matched the selected tab, cleanup action, search/sort toolbar, divided recovery rows, amber Recover actions, and four-part storage strip. The search control still held the functional-test focus state, so the capture was rejected as a visual-state mismatch.
+2. Focus was cleared through the live UI and the desktop capture was repeated. The resulting full and focused comparisons preserve the same neutral state as the source.
+3. Responsive checks at 1100 x 1000, 720 x 900, and 390 x 844 found no horizontal overflow. At 390 px, tabs, cleanup, search, sort, recovery actions, and storage summaries remain usable and legible.
+4. Keyboard and functional checks confirmed ArrowLeft/ArrowRight tab switching, the header recovery shortcut, search filtering, newest/oldest sorting, and the existing recovery/discard actions. Browser warnings and errors: none.
+
+## Findings
+
+- P0: none.
+- P1: none.
+- P2: none.
+- P3: the implementation uses the existing Myrelith hero spacing and live type metrics, producing small non-functional spacing differences from the generated source. The hierarchy, controls, row rhythm, color treatment, and storage strip remain visually faithful.
+
+## Final result
+
+passed

@@ -242,13 +242,27 @@ describe('ProjectLaunch', () => {
     })
     render(<ProjectLaunch />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Recover Recovered edit' }))
+    const recentTab = screen.getByRole('tab', { name: 'Recent projects' })
+    const recoveryTab = screen.getByRole('tab', { name: 'Recovery copies, 1' })
+    expect(recoveryTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('button', { name: 'Open Recent edit' }))
+      .not.toBeInTheDocument()
+
+    fireEvent.keyDown(recoveryTab, { key: 'ArrowLeft' })
+    expect(recentTab).toHaveAttribute('aria-selected', 'true')
+    expect(recentTab).toHaveFocus()
     fireEvent.click(screen.getByRole('button', { name: 'Open Recent edit' }))
     fireEvent.click(screen.getByRole('button', {
-      name: 'Discard recovery for Recovered edit',
-    }))
-    fireEvent.click(screen.getByRole('button', {
       name: 'Remove Recent edit from Recent',
+    }))
+
+    fireEvent.click(screen.getByRole('link', {
+      name: 'Show recovery copies — local unsaved work',
+    }))
+    expect(recoveryTab).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Recover Recovered edit' }))
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Discard recovery for Recovered edit',
     }))
 
     expect(controller.openRecoveryProject).toHaveBeenCalledWith(
