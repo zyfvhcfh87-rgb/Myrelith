@@ -68,14 +68,26 @@ describe('ProjectLaunch', () => {
     expect(controller.showNewProject).toHaveBeenCalledOnce()
     expect(controller.showResumeProject).toHaveBeenCalledOnce()
     expect(libraryController.refreshProjectLibrary).toHaveBeenCalledOnce()
+    expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy/')
     expect(screen.getByRole('link', { name: 'Privacy' }))
-      .toHaveAttribute('href', '/privacy/')
+      .toHaveClass('project-button', 'project-button-secondary')
     expect(screen.getByRole('link', { name: 'Licenses' }))
       .toHaveAttribute('href', '/licenses/')
-    expect(screen.getByText('Your media stays on this device.'))
-      .toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Licenses' }))
+      .toHaveClass('project-button', 'project-button-secondary')
+    expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/zyfvhcfh87-rgb/Myrelith',
+    )
+    expect(screen.getByRole('link', { name: 'GitHub' }))
+      .toHaveClass('project-button', 'project-button-secondary')
     expect(screen.getByRole('heading', { name: /your footage/i }))
       .toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Back to your projects' }))
+      .toBeInTheDocument()
+    expect(screen.queryByText('Pick up where you left off.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Portable .myrelith projects')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Myrelith capabilities')).not.toBeInTheDocument()
   })
 
   test('home keeps text motion accessible and tracks the primary-button light without rerendering', () => {
@@ -317,8 +329,6 @@ describe('ProjectLaunch', () => {
     expect(screen.getByRole('radio', { name: 'Social portrait 4:5' }))
       .toBeInTheDocument()
     expect(screen.queryByText('Browser video editor')).not.toBeInTheDocument()
-    expect(screen.queryByText('Your media stays on this device.'))
-      .not.toBeInTheDocument()
     expect(container.querySelectorAll('.project-ratio-preview')).toHaveLength(4)
     expect(container.querySelectorAll('.project-ratio-shape')).toHaveLength(4)
     expect(container.querySelector('.project-ratio-preview img')).toBeNull()

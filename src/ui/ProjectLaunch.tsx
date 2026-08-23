@@ -12,7 +12,6 @@ import {
   DotsThreeVertical,
   FolderOpen,
   PlusCircle,
-  ShieldCheck,
 } from '@phosphor-icons/react'
 import {
   activateResumedProject,
@@ -256,9 +255,14 @@ function LaunchFrame({
       <footer className="project-launch-footer">
         <span>Private by design. Portable by default.</span>
         <nav aria-label="Project information">
-          <a href="/privacy/">Privacy</a>
-          <a href="/licenses/">Licenses</a>
+          <a className="project-button project-button-secondary" href="/privacy/">
+            Privacy
+          </a>
+          <a className="project-button project-button-secondary" href="/licenses/">
+            Licenses
+          </a>
           <a
+            className="project-button project-button-secondary"
             href="https://github.com/zyfvhcfh87-rgb/Myrelith"
             rel="noreferrer"
             target="_blank"
@@ -305,18 +309,14 @@ function HomeScreen() {
 
   return (
     <LaunchFrame home>
-      <header className="project-launch-home-nav">
-        <div className="project-launch-brand">
-          <FoldRevealTitle text="Myrelith" />
-          <span>Browser video editor</span>
-        </div>
-        <div className="project-launch-trust">
-          <ShieldCheck aria-hidden="true" size={21} weight="regular" />
-          <span>Your media stays on this device.</span>
-        </div>
-      </header>
-
       <section className="project-launch-hero" aria-labelledby="project-home-title">
+        <header className="project-launch-home-nav">
+          <div className="project-launch-brand">
+            <FoldRevealTitle text="Myrelith" />
+            <span>Browser video editor</span>
+          </div>
+        </header>
+
         <div className="project-launch-hero-copy">
           <SplitRevealHeading
             id="project-home-title"
@@ -349,11 +349,6 @@ function HomeScreen() {
               <strong>Open a project</strong>
             </button>
           </div>
-          <ul className="project-launch-capabilities" aria-label="Myrelith capabilities">
-            <li>Portable .myrelith projects</li>
-            <li>Any canvas ratio</li>
-            <li>Multitrack editing</li>
-          </ul>
         </div>
 
         <figure className="project-launch-story">
@@ -380,7 +375,6 @@ function HomeScreen() {
         <header className="project-library-header">
           <div>
             <h2 id="project-library-title">Back to your projects</h2>
-            <p>Pick up where you left off.</p>
           </div>
           <div className="project-library-header-actions">
             {recoveries.length > 0 && (

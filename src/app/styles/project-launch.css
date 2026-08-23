@@ -42,22 +42,17 @@
 
 .project-launch-footer nav {
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.project-launch-footer a {
-  color: #97a4b9;
-  text-underline-offset: 4px;
+.project-launch-footer .project-button {
+  color: #c4cbd5;
+  text-decoration: none;
 }
 
-.project-launch-footer a:hover {
-  color: #e4eaf3;
-}
-
-.project-launch-footer a:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid #8bbcff;
-  outline-offset: 4px;
+.project-launch-footer .project-button:hover {
+  color: #edf1f6;
 }
 
 .project-launch-frame {
@@ -106,19 +101,18 @@
 }
 
 .project-launch-home-nav {
+  grid-area: nav;
   min-height: 66px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 0 10px 18px;
+  padding: 0 0 16px;
   border-bottom: 1px solid #223044;
 }
 
 .project-launch-brand,
-.project-launch-trust,
 .project-launch-card,
-.project-launch-capabilities,
 .project-library-recovery-link,
 .project-library-open-action {
   display: flex;
@@ -201,18 +195,9 @@
   animation-delay: calc(var(--project-launch-char-index) * 68ms);
 }
 
-.project-launch-brand > span,
-.project-launch-trust {
+.project-launch-brand > span {
   color: #9aa7ba;
   font-size: 14px;
-}
-
-.project-launch-trust {
-  gap: 9px;
-}
-
-.project-launch-trust svg {
-  color: #a4c97b;
 }
 
 .project-setup-layout {
@@ -442,9 +427,19 @@
 .project-launch-hero {
   display: grid;
   grid-template-columns: minmax(360px, 0.78fr) minmax(540px, 1.22fr);
-  align-items: center;
-  gap: clamp(30px, 3.5vw, 52px);
-  padding: clamp(38px, 3.5vw, 50px) 10px clamp(38px, 3.5vw, 50px);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'nav story'
+    'copy story';
+  align-items: stretch;
+  column-gap: clamp(30px, 3.5vw, 52px);
+  row-gap: clamp(18px, 2vw, 28px);
+  padding: 8px 10px clamp(38px, 3.5vw, 50px);
+}
+
+.project-launch-hero-copy {
+  grid-area: copy;
+  min-width: 0;
 }
 
 .project-launch-hero-copy h1 {
@@ -612,25 +607,11 @@
   margin-left: auto;
 }
 
-.project-launch-capabilities {
-  flex-wrap: wrap;
-  gap: 10px 22px;
-  margin: 28px 0 0;
-  padding: 0;
-  color: #8e9aae;
-  font-size: 14px;
-  list-style: none;
-}
-
-.project-launch-capabilities li + li::before {
-  margin-right: 22px;
-  color: #687890;
-  content: '•';
-}
-
 .project-launch-story {
+  grid-area: story;
   min-height: 430px;
   position: relative;
+  align-self: stretch;
   margin: 0;
 }
 
@@ -645,23 +626,23 @@
 
 .project-launch-story-main {
   width: 74%;
-  height: 330px;
+  height: 76%;
   left: 0;
-  top: 50px;
+  top: 12%;
 }
 
 .project-launch-story-cliffs {
   width: 38%;
-  height: 190px;
+  height: 44%;
   right: 0;
-  top: 22px;
+  top: 5%;
 }
 
 .project-launch-story-path {
   width: 40%;
-  height: 210px;
+  height: 49%;
   right: 2%;
-  bottom: 16px;
+  bottom: 4%;
 }
 
 .project-launch-story figcaption {
@@ -703,12 +684,6 @@
 .project-library-header h2 {
   font-size: 23px;
   letter-spacing: -0.025em;
-}
-
-.project-library-header p {
-  margin: 5px 0 0;
-  color: #7f8ca1;
-  font-size: 13px;
 }
 
 .project-library-header-actions {
@@ -1638,6 +1613,11 @@
 
   .project-launch-hero {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-template-areas:
+      'nav'
+      'copy'
+      'story';
     gap: 18px;
   }
 
@@ -1692,7 +1672,7 @@
   .project-launch-home-nav {
     min-height: 58px;
     align-items: flex-start;
-    padding: 6px 4px 16px;
+    padding: 6px 0 16px;
   }
 
   .project-launch-brand {
@@ -1704,19 +1684,13 @@
     font-size: 32px;
   }
 
-  .project-launch-brand > span,
-  .project-launch-trust {
+  .project-launch-brand > span {
     font-size: 11px;
-  }
-
-  .project-launch-trust {
-    max-width: 150px;
-    align-items: flex-start;
   }
 
   .project-launch-hero {
     gap: 10px;
-    padding: 32px 4px 38px;
+    padding: 8px 4px 38px;
   }
 
   .project-setup-layout {
@@ -1797,16 +1771,6 @@
   .project-launch-card {
     min-height: 60px;
     padding: 0 18px;
-  }
-
-  .project-launch-capabilities {
-    display: grid;
-    gap: 7px;
-    margin-top: 24px;
-  }
-
-  .project-launch-capabilities li + li::before {
-    margin-right: 9px;
   }
 
   .project-launch-story {
