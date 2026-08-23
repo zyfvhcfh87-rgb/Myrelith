@@ -12,6 +12,7 @@ import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { TimelineDoc } from '../domain/schema'
 import { docDurationFrames } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
+import { exportAudioEncoderSampleRate } from '../domain/exportProfile'
 import {
   createBufferedExportResult,
   createDirectFileExportResult,
@@ -28,6 +29,9 @@ import {
 import {
   TimelineAudioMixer,
   audioSampleBoundary,
+  resampleMixedAudioBlock,
+  scaleExportSampleIndex,
+  type ExportAudioResampleCarry,
   type MixedAudioBlock,
 } from './export-audio'
 import { createMediabunnyExportAudioSource } from './export-mediabunny-audio-source'
@@ -176,8 +180,15 @@ export async function createMediabunnyExportSink(
     : null
   const hasAudio = audioSettings !== null
   const expectedFrames = docDurationFrames(doc)
+  const encoderSampleRate = audioSettings && audioSettings.audioCodec
+    ? exportAudioEncoderSampleRate(doc.audioSampleRate, audioSettings.audioCodec)
+    : doc.audioSampleRate
   const expectedAudioSamples = hasAudio
-    ? audioSampleBoundary(expectedFrames, doc)
+    ? scaleExportSampleIndex(
+      audioSampleBoundary(expectedFrames, doc),
+      doc.audioSampleRate,
+      encoderSampleRate,
+    )
     : 0
 
   if (typeof OffscreenCanvas === 'undefined') {
@@ -287,7 +298,7 @@ export async function createMediabunnyExportSink(
                 trimAacPaddingPacket(
                   packet,
                   expectedAudioSamples,
-                  doc.audioSampleRate,
+                  encoderSampleRate,
                 )
               },
             }
@@ -315,6 +326,7 @@ export async function createMediabunnyExportSink(
   let state: SinkState = 'open'
   let cancelPromise: Promise<void> | null = null
   let nextFrame = 0
+  let audioResampleCarry: ExportAudioResampleCarry | null = null
   let transitionSurfaces: TransitionSurfaces | null = null
   let renderSurfacesReleased = false
 
@@ -392,12 +404,21 @@ export async function createMediabunnyExportSink(
       const audioWrite =
         mixer && audioSource && outputAudioChannels !== null
           ? mixer.writeFrame(nextFrame, async (block) => {
+              const resampled = resampleMixedAudioBlock(
+                block,
+                doc.audioSampleRate,
+                encoderSampleRate,
+                audioResampleCarry,
+              )
+              audioResampleCarry = resampled.carry
+              const encoded = resampled.encoded
+              if (encoded.sampleCount <= 0) return
               const sample = new AudioSample({
-                data: interleaveAudioBlock(block, outputAudioChannels),
+                data: interleaveAudioBlock(encoded, outputAudioChannels),
                 format: 'f32',
                 numberOfChannels: outputAudioChannels,
-                sampleRate: doc.audioSampleRate,
-                timestamp: block.startSample / doc.audioSampleRate,
+                sampleRate: encoderSampleRate,
+                timestamp: encoded.startSample / encoderSampleRate,
               })
               try {
                 await audioSource.add(sample)

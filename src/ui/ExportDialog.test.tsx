@@ -243,7 +243,25 @@ const presetCapabilitiesMock = vi.mocked(getExportPresetCapabilities)
 const customCapabilityMock = vi.mocked(checkCurrentExportProfile)
 const pickerAvailabilityMock = vi.mocked(getExportFilePickerAvailability)
 const requestFileDestinationMock = vi.mocked(requestExportFileDestination)
+function pluginClip(): Clip {
+  return {
+    ...clip(),
+    effects: [{
+      id: 'plugin-effect',
+      type: 'plugin:com.example.fixture/invert',
+      version: 1,
+      enabled: true,
+      params: {},
+    }],
+  }
+}
+
 function renderPluginToolbar() {
+  useDocumentStore.setState({
+    doc: { ...doc(), tracks: [track([pluginClip()])] },
+    past: [],
+    future: [],
+  })
   const controller = {
     getEditorSnapshot: () => ({ effects: [{ effectInstanceId: 'plugin-effect' }] }),
     subscribe: () => () => {},

@@ -7,6 +7,7 @@
  */
 
 import {
+  exportAudioEncoderSampleRate,
   exportProfileIncludesAudio,
   validateExportProfile,
   type ExportAudioCodec,
@@ -227,11 +228,15 @@ export async function checkExportProfileSupport(
     return supported(profile)
   }
 
+  const encoderSampleRate = exportAudioEncoderSampleRate(
+    doc.audioSampleRate,
+    profile.audioCodec,
+  )
   let audioSupported: boolean
   try {
     audioSupported = await probe.canEncodeAudio(profile.audioCodec, {
       numberOfChannels: profile.audioChannelLayout === 'mono' ? 1 : 2,
-      sampleRate: doc.audioSampleRate,
+      sampleRate: encoderSampleRate,
       bitrate: profile.audioBitrate,
       bitrateMode: profile.audioBitrateMode,
     })
@@ -243,10 +248,13 @@ export async function checkExportProfileSupport(
     )
   }
   if (!audioSupported) {
+    const rateLabel = encoderSampleRate === doc.audioSampleRate
+      ? `${encoderSampleRate} Hz`
+      : `${encoderSampleRate} Hz (project ${doc.audioSampleRate} Hz)`
     return unsupported(
       profile,
       `This browser cannot encode ${profile.audioCodec.toUpperCase()} ` +
-        `${profile.audioChannelLayout} audio at ${doc.audioSampleRate} Hz and ` +
+        `${profile.audioChannelLayout} audio at ${rateLabel} and ` +
         `${profile.audioBitrate} bps.`,
     )
   }

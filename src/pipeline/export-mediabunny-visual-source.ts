@@ -18,7 +18,6 @@ import { framesToSeconds } from '../domain/time'
 import {
   createVideoCompositionPlanner,
   videoCompositionRequests,
-  type VideoCompositionPlan,
 } from '../domain/videoCompositionPlan'
 import type {
   ExportFrameLease,
@@ -87,32 +86,54 @@ interface VideoFrameRequest {
 interface VideoRequestSchedule {
   frameCount: number
   byAsset: Map<AssetId, number[]>
-  plans: VideoCompositionPlan[]
 }
 
-function videoRequestSchedule(
+const EXPORT_SCHEDULE_YIELD_FRAMES = 32
+
+function yieldExportSchedule(): Promise<void> {
+  const scheduler = (globalThis as {
+    scheduler?: { yield?: () => Promise<void> }
+  }).scheduler
+  if (typeof scheduler?.yield === 'function') return scheduler.yield()
+  if (typeof MessageChannel === 'function') {
+    return new Promise((resolve) => {
+      const channel = new MessageChannel()
+      channel.port1.onmessage = () => {
+        channel.port1.close()
+        channel.port2.close()
+        resolve()
+      }
+      channel.port2.postMessage(undefined)
+    })
+  }
+  return Promise.resolve()
+}
+
+async function videoRequestSchedule(
   doc: TimelineDoc,
-  sourceBounds: SourceBoundsCatalog,
-  pluginSnapshot?: PluginVideoEffectContributionSnapshot,
-): VideoRequestSchedule {
+  planner: ReturnType<typeof createVideoCompositionPlanner>,
+  closed: () => boolean,
+): Promise<VideoRequestSchedule> {
   const frameCount = docDurationFrames(doc)
   if (!Number.isSafeInteger(frameCount) || frameCount < 0) {
     throw new RangeError('Cannot schedule an invalid export timeline')
   }
 
   const byAsset = new Map<AssetId, number[]>()
-  const plans: VideoCompositionPlan[] = []
-  const planner = createVideoCompositionPlanner(doc, sourceBounds, pluginSnapshot)
   for (let frame = 0; frame < frameCount; frame++) {
+    if (closed()) throw new Error('Export media source is closed')
+    if (frame > 0 && frame % EXPORT_SCHEDULE_YIELD_FRAMES === 0) {
+      await yieldExportSchedule()
+      if (closed()) throw new Error('Export media source is closed')
+    }
     const plan = planner.planFrame(frame)
-    plans.push(plan)
     for (const request of videoCompositionRequests(plan)) {
       const assetRequests = byAsset.get(request.clip.assetId)
       if (assetRequests) assetRequests.push(request.sourceFrame)
       else byAsset.set(request.clip.assetId, [request.sourceFrame])
     }
   }
-  return { frameCount, byAsset, plans }
+  return { frameCount, byAsset }
 }
 
 /**
@@ -132,10 +153,11 @@ export function createMediabunnyExportMediaSource(
   framesToSeconds(0, doc.frameRate)
   const sessions = new Map<AssetId, Promise<DecodedVisualAsset>>()
   const openInputs = new Set<Input>()
-  const requests = videoRequestSchedule(doc, sourceBounds, pluginSnapshot)
+  const planner = createVideoCompositionPlanner(doc, sourceBounds, pluginSnapshot)
   const imageAbort = new AbortController()
   let closed = false
   let closePromise: Promise<void> | null = null
+  const schedulePromise = videoRequestSchedule(doc, planner, () => closed)
 
   const openAsset = (assetId: AssetId): Promise<DecodedVisualAsset> => {
     const cached = sessions.get(assetId)
@@ -143,6 +165,7 @@ export function createMediabunnyExportMediaSource(
 
     const pending = (async (): Promise<DecodedVisualAsset> => {
       if (closed) throw new Error('Export media source is closed')
+      const requests = await schedulePromise
       const sourceFrames = requests.byAsset.get(assetId)
       if (!sourceFrames || sourceFrames.length === 0) {
         throw new Error(`Export asset "${assetId}" was not scheduled`)
@@ -300,11 +323,14 @@ export function createMediabunnyExportMediaSource(
   const openFrame = async (docFrame: number): Promise<ExportFrameLease> => {
     assertFrame(docFrame, 'Document frame')
     if (closed) throw new Error('Export media source is closed')
+    const requests = await schedulePromise
     if (docFrame >= requests.frameCount) {
       throw new Error(`Export received an extra document frame ${docFrame}`)
     }
-    const plan = requests.plans[docFrame]
-    if (!plan) throw new Error(`Export frame ${docFrame} has no visual plan`)
+    const plan = planner.planFrame(docFrame)
+    if (plan.frame !== docFrame) {
+      throw new Error(`Export frame ${docFrame} has no visual plan`)
+    }
     const frameRequests: VideoFrameRequest[] = videoCompositionRequests(plan)
       .map((request) => ({
         assetId: request.clip.assetId,
@@ -435,6 +461,7 @@ export function createMediabunnyExportMediaSource(
     closed = true
     imageAbort.abort()
     closePromise = (async () => {
+      await schedulePromise.catch(() => undefined)
       const settled = await Promise.allSettled(sessions.values())
       await Promise.all(
         settled.flatMap((entry) =>

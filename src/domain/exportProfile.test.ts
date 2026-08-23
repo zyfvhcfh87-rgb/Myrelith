@@ -4,6 +4,7 @@ import {
   DEFAULT_EXPORT_PRESET_ID,
   DEFAULT_EXPORT_PROFILE,
   EXPORT_PRESETS,
+  exportAudioEncoderSampleRate,
   exportProfileIncludesAudio,
   exportPresetById,
   isAllowedExportCodecPair,
@@ -140,6 +141,16 @@ describe('export profile catalog', () => {
     expect(exportProfileIncludesAudio(withoutAudioClip, DEFAULT_EXPORT_PROFILE))
       .toBe(false)
     expect(exportProfileIncludesAudio(withAudio, audioOff)).toBe(false)
+  })
+
+  test('maps 96 kHz to a 48 kHz encoder rate and keeps native AAC/Opus rates', () => {
+    expect(exportAudioEncoderSampleRate(48_000, 'aac')).toBe(48_000)
+    expect(exportAudioEncoderSampleRate(44_100, 'aac')).toBe(44_100)
+    expect(exportAudioEncoderSampleRate(96_000, 'aac')).toBe(48_000)
+    expect(exportAudioEncoderSampleRate(48_000, 'opus')).toBe(48_000)
+    expect(exportAudioEncoderSampleRate(44_100, 'opus')).toBe(44_100)
+    expect(exportAudioEncoderSampleRate(96_000, 'opus')).toBe(48_000)
+    expect(exportAudioEncoderSampleRate(24_000, 'opus')).toBe(24_000)
   })
 })
 

@@ -65,6 +65,7 @@ import type {
   PreviewPluginBinding,
 } from './previewController'
 import {
+  drainPreviewPlayback,
   disposePreview,
   documentWithClipVisualPreview,
   documentWithTextOverlayPreview,
@@ -470,6 +471,43 @@ afterEach(async () => {
 })
 
 describe('previewController', () => {
+  test('drains playback lanes before a queued paused repaint can run', async () => {
+    const { deps, bridge } = makeDeps()
+    initPreview(canvasEl(), deps)
+    await nextFrame()
+    await flush()
+
+    const transport = useTransportStore.getState()
+    transport.setIsPlaying(true)
+    await nextFrame()
+    await flush()
+    expect(bridge.rendered.at(-1)).toEqual({ frame: 0, mode: 'playback' })
+
+    const renderGate = deferred<RenderFrameResult>()
+    bridge.rendered.length = 0
+    bridge.renderImpl = () => renderGate.promise
+    transport.setIsPlaying(false)
+    const draining = drainPreviewPlayback()
+    let settled = false
+    void draining.then(() => { settled = true })
+    await Promise.resolve()
+
+    expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
+    expect(settled).toBe(false)
+
+    renderGate.resolve({
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await draining
+    await nextFrame()
+
+    expect(settled).toBe(true)
+    expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
+  })
+
   test('routes the stable bridge handler through the current app-owned binding', async () => {
     const { deps, getPluginEffectHandler } = makeDeps()
     initPreview(canvasEl(), deps)

@@ -256,6 +256,20 @@ describe('checkExportProfileSupport', () => {
       'This browser cannot encode AAC stereo audio at 48000 Hz and 192000 bps.',
     )
 
+    const highRateDoc = { ...makeDoc(), audioSampleRate: 96_000 }
+    const highRateHarness = makeProbe()
+    await checkExportProfileSupport(
+      highRateDoc,
+      DEFAULT_EXPORT_PROFILE,
+      highRateHarness.probe,
+    )
+    expect(highRateHarness.canEncodeAudio).toHaveBeenCalledWith('aac', {
+      numberOfChannels: 2,
+      sampleRate: 48_000,
+      bitrate: 192_000,
+      bitrateMode: 'variable',
+    })
+
     const thrownHarness = makeProbe()
     thrownHarness.canEncodeAudio.mockRejectedValue('audio probe failed')
     const thrown = await checkExportProfileSupport(

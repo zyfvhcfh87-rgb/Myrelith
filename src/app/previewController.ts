@@ -294,7 +294,7 @@ interface ControllerState {
     status: 'loading' | 'ready' | 'failed'
   }>
   unsubscribes: Array<() => void>
-  rafPending: boolean
+  rafHandle: number | null
   /** Invalidates callbacks queued for a disposed/replaced bridge. */
   renderGeneration: number
   /** Invalidates presentation evidence when a newer render is dispatched. */
@@ -315,7 +315,7 @@ const state: ControllerState = {
   effectStatusIndex: null,
   assetStates: new Map(),
   unsubscribes: [],
-  rafPending: false,
+  rafHandle: null,
   renderGeneration: 0,
   presentationGeneration: 0,
   scopeGeneration: 0,
@@ -556,14 +556,19 @@ function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
   syncPresentationProfile(bridge, doc)
 }
 
+function cancelScheduledRender(): void {
+  if (state.rafHandle === null) return
+  cancelAnimationFrame(state.rafHandle)
+  state.rafHandle = null
+}
+
 function scheduleRender(deps: PreviewDeps): void {
   const bridge = state.bridge
-  if (state.rafPending || !bridge) return
+  if (state.rafHandle !== null || !bridge) return
   const generation = state.renderGeneration
-  state.rafPending = true
-  requestAnimationFrame(() => {
+  const handle = requestAnimationFrame(() => {
+    if (state.rafHandle === handle) state.rafHandle = null
     if (state.renderGeneration !== generation || state.bridge !== bridge) return
-    state.rafPending = false
     // Document frames go straight through — per-asset rescaling happens
     // inside the bridge; source cursor policy belongs to the worker.
     const transport = useTransportStore.getState()
@@ -659,6 +664,27 @@ function scheduleRender(deps: PreviewDeps): void {
         )
       })
   })
+  state.rafHandle = handle
+}
+
+/** Retire every preview playback lane before another decoder owner starts. */
+export async function drainPreviewPlayback(): Promise<void> {
+  while (true) {
+    cancelScheduledRender()
+    const bridge = state.bridge
+    const planner = state.visualPlanner
+    if (!bridge || !planner) return
+    const generation = state.renderGeneration
+    const frame = useTransportStore.getState().playheadFrame
+    const result = await bridge.renderFrame(planner.planFrame(frame), 'seek')
+    if (state.bridge !== bridge || state.renderGeneration !== generation) continue
+    if (result.status === 'superseded') continue
+    cancelScheduledRender()
+    if (result.status === 'error') {
+      throw new Error(result.message ?? 'Preview playback decoder teardown failed')
+    }
+    return
+  }
 }
 
 function desiredVideoSourceKey(assetId: AssetId, asset: MediaAsset | undefined): string | null {
@@ -1001,6 +1027,7 @@ export function initPreview(
 }
 
 async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
+  cancelScheduledRender()
   state.renderGeneration++
   state.presentationGeneration++
   state.scopeGeneration++
@@ -1018,7 +1045,7 @@ async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
   state.effectStatusIndex = null
   state.canvas = null
   state.assetStates = new Map()
-  state.rafPending = false
+  state.rafHandle = null
   if (clearPluginBinding) pluginBinding = null
   usePreviewStatusStore.getState().resetPreviewStatus()
   useVideoScopesStore.getState().reset()

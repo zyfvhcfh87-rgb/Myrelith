@@ -27,7 +27,11 @@ export interface ExportAudioClipRequest {
   endSample: number
   sampleRate: number
   channelCount: typeof EXPORT_AUDIO_CHANNELS
-  /** Crossfade handle legs must never freeze or zero-fill missing PCM. */
+  /**
+   * Crossfade handle legs may zero-fill a bounded decoder-priming interval
+   * before the first PCM packet, but must not invent samples after that bound,
+   * after decode has started, or at EOF.
+   */
   requireComplete?: true
 }
 
@@ -54,6 +58,186 @@ export type MixedAudioBlockWriter = (
 function assertPositiveSafeInteger(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${label} must be a positive safe integer`)
+  }
+}
+
+/** Floor-scale a mix-grid sample index onto another integer sample rate. */
+export function scaleExportSampleIndex(
+  sample: number,
+  fromRate: number,
+  toRate: number,
+): number {
+  if (fromRate === toRate) return sample
+  if (!Number.isSafeInteger(sample) || sample < 0) {
+    throw new RangeError('Sample index must be a non-negative safe integer')
+  }
+  assertPositiveSafeInteger(fromRate, 'Source sample rate')
+  assertPositiveSafeInteger(toRate, 'Encoder sample rate')
+  const scaled = (BigInt(sample) * BigInt(toRate)) / BigInt(fromRate)
+  if (scaled > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError('Scaled sample index exceeds the safe integer range')
+  }
+  return Number(scaled)
+}
+
+/**
+ * Trailing 96 kHz mix samples held for the next 2:1 downsample block.
+ * Oldest sample first. Bounded by the anti-alias FIR length minus one; the
+ * last sample is the unpaired leftover when the exclusive end is odd.
+ */
+export interface ExportAudioResampleCarry {
+  readonly left: Float32Array
+  readonly right: Float32Array
+}
+
+export interface ResampledAudioBlock {
+  readonly encoded: MixedAudioBlock
+  readonly carry: ExportAudioResampleCarry | null
+}
+
+/** Hamming-windowed sinc length for 96 kHz → 48 kHz anti-alias. */
+const HALFRATE_LOWPASS_TAP_COUNT = 63
+/** Cutoff as a fraction of the input rate (22 kHz at 96 kHz, below 24 kHz). */
+const HALFRATE_LOWPASS_CUTOFF = 22_000 / 96_000
+
+function hammingSincLowpassTaps(
+  tapCount: number,
+  cutoff: number,
+): readonly number[] {
+  if (!Number.isSafeInteger(tapCount) || tapCount < 3 || tapCount % 2 === 0) {
+    throw new RangeError('Low-pass tap count must be an odd integer >= 3')
+  }
+  if (!(cutoff > 0) || !(cutoff < 0.5)) {
+    throw new RangeError('Low-pass cutoff must be between 0 and 0.5')
+  }
+  const mid = (tapCount - 1) / 2
+  const taps = new Array<number>(tapCount)
+  let sum = 0
+  for (let n = 0; n < tapCount; n++) {
+    const k = n - mid
+    const sinc = k === 0
+      ? 2 * cutoff
+      : Math.sin(2 * Math.PI * cutoff * k) / (Math.PI * k)
+    const window = 0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (tapCount - 1))
+    const tap = sinc * window
+    taps[n] = tap
+    sum += tap
+  }
+  for (let n = 0; n < tapCount; n++) taps[n] /= sum
+  return Object.freeze(taps)
+}
+
+const HALFRATE_LOWPASS_TAPS = hammingSincLowpassTaps(
+  HALFRATE_LOWPASS_TAP_COUNT,
+  HALFRATE_LOWPASS_CUTOFF,
+)
+
+function mixSampleAt(
+  channel: Float32Array,
+  localIndex: number,
+  history: Float32Array | null,
+): number {
+  if (localIndex >= 0 && localIndex < channel.length) {
+    return channel[localIndex]
+  }
+  if (history !== null && localIndex < 0) {
+    const historyIndex = history.length + localIndex
+    if (historyIndex >= 0 && historyIndex < history.length) {
+      return history[historyIndex]
+    }
+  }
+  return 0
+}
+
+function halfRateResampleCarry(
+  block: MixedAudioBlock,
+  previous: ExportAudioResampleCarry | null,
+): ExportAudioResampleCarry | null {
+  const historyNeeded = HALFRATE_LOWPASS_TAPS.length - 1
+  const prevLen = previous === null ? 0 : previous.left.length
+  const total = prevLen + block.sampleCount
+  if (total <= 0) return null
+  const keep = Math.min(historyNeeded, total)
+  const left = new Float32Array(keep)
+  const right = new Float32Array(keep)
+  const start = total - keep
+  for (let index = 0; index < keep; index++) {
+    const concatIndex = start + index
+    if (concatIndex < prevLen && previous !== null) {
+      left[index] = previous.left[concatIndex]
+      right[index] = previous.right[concatIndex]
+    } else {
+      const local = concatIndex - prevLen
+      left[index] = block.channels[0][local]
+      right[index] = block.channels[1][local]
+    }
+  }
+  return { left, right }
+}
+
+/**
+ * Convert one mixed block from the document sample grid to the encoder grid.
+ * 96 kHz → 48 kHz applies a Hamming-windowed sinc low-pass, then keeps every
+ * other sample. Trailing source samples carry into the next mix block so the
+ * 2:1 pairing and filter history stay exact when a block starts on an odd
+ * document sample. Other integer ratios pick the containing source sample.
+ */
+export function resampleMixedAudioBlock(
+  block: MixedAudioBlock,
+  fromRate: number,
+  toRate: number,
+  carry: ExportAudioResampleCarry | null = null,
+): ResampledAudioBlock {
+  if (fromRate === toRate) return { encoded: block, carry: null }
+  const startSample = scaleExportSampleIndex(block.startSample, fromRate, toRate)
+  const endSample = scaleExportSampleIndex(
+    block.startSample + block.sampleCount,
+    fromRate,
+    toRate,
+  )
+  const sampleCount = endSample - startSample
+  const halfRate = fromRate === toRate * 2
+  const nextCarry = halfRate ? halfRateResampleCarry(block, carry) : null
+  if (sampleCount <= 0) {
+    return {
+      encoded: {
+        startSample,
+        sampleCount: 0,
+        channels: [new Float32Array(0), new Float32Array(0)],
+      },
+      carry: nextCarry,
+    }
+  }
+
+  const left = new Float32Array(sampleCount)
+  const right = new Float32Array(sampleCount)
+  const tapCount = HALFRATE_LOWPASS_TAPS.length
+  const historyLeft = carry === null ? null : carry.left
+  const historyRight = carry === null ? null : carry.right
+  for (let index = 0; index < sampleCount; index++) {
+    const sourceIndex = scaleExportSampleIndex(startSample + index, toRate, fromRate)
+      - block.startSample
+    if (halfRate && sourceIndex + 1 < block.sampleCount) {
+      let accL = 0
+      let accR = 0
+      const oldest = sourceIndex + 1 - (tapCount - 1)
+      for (let tapIndex = 0; tapIndex < tapCount; tapIndex++) {
+        const tap = HALFRATE_LOWPASS_TAPS[tapIndex]
+        const localIndex = oldest + tapIndex
+        accL += tap * mixSampleAt(block.channels[0], localIndex, historyLeft)
+        accR += tap * mixSampleAt(block.channels[1], localIndex, historyRight)
+      }
+      left[index] = accL
+      right[index] = accR
+    } else {
+      const clamped = Math.max(0, Math.min(block.sampleCount - 1, sourceIndex))
+      left[index] = block.channels[0][clamped]
+      right[index] = block.channels[1][clamped]
+    }
+  }
+  return {
+    encoded: { startSample, sampleCount, channels: [left, right] },
+    carry: nextCarry,
   }
 }
 

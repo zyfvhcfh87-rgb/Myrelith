@@ -11,6 +11,7 @@ import type {
   TimelineDoc,
   Transition,
 } from './schema'
+import { clipAnimation } from './clipAnimation'
 import { resolveCrossfadeGeometry } from './crossfadePlan'
 import { sourceFrameAtTimelineFrame, sourceTimeAudioPolicy } from './sourceTimeMap'
 import { rangeContains, rangeEnd } from './time'
@@ -117,6 +118,30 @@ export function audibleTracks(doc: TimelineDoc): Track[] {
   return audio.filter((t) => !t.muted && (!anySolo || t.solo))
 }
 
+/**
+ * True when this clip can contribute pixels: authored opacity, or an opacity
+ * key that becomes visible. Text clips are not media sources.
+ */
+export function clipContributesVisualOutput(clip: Clip): boolean {
+  if (clip.text) return false
+  if (clip.opacity > 0) return true
+  return clipAnimation(clip).tracks.some((track) => (
+    track.property === 'opacity'
+    && track.keyframes.some((keyframe) => keyframe.value > 0)
+  ))
+}
+
+/** Visible video clips whose stacks contain a plugin-prefixed descriptor. */
+export function documentHasOutputPluginEffects(doc: TimelineDoc): boolean {
+  return doc.tracks.some((track) => (
+    track.kind === 'video'
+    && !track.hidden
+    && track.clips.some((clip) => (
+      clip.effects.some((effect) => effect.type.startsWith('plugin:'))
+    ))
+  ))
+}
+
 /** Media sources that can contribute pixels or optionally samples to export. */
 export function outputMediaAssetIds(
   doc: TimelineDoc,
@@ -126,7 +151,7 @@ export function outputMediaAssetIds(
   for (const track of doc.tracks) {
     if (track.kind !== 'video' || track.hidden) continue
     for (const clip of track.clips) {
-      if (!clip.text && clip.opacity > 0) ids.add(clip.assetId)
+      if (clipContributesVisualOutput(clip)) ids.add(clip.assetId)
     }
   }
   if (includeAudio) {
