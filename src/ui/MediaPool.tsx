@@ -1726,7 +1726,7 @@ export default function MediaPool() {
       </span>
       <span className="media-pool-sr-only" aria-live="polite">
         {effectiveSelectedAssetId
-          ? `Selected ${filteredItems[filteredIndexById.get(effectiveSelectedAssetId) ?? -1]?.fileName ?? 'media'}`
+          ? `Selected ${sortedItems[filteredIndexById.get(effectiveSelectedAssetId) ?? -1]?.fileName ?? 'media'}`
           : 'No media selected'}
       </span>
       {itemModels.length > 0 && (

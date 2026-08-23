@@ -1859,6 +1859,13 @@
   gap: 4px;
 }
 
+.media-list[data-view='compact-list'] .media-item[data-expanded='true'] {
+  grid-template-columns: minmax(0, 1fr) 22px;
+  grid-template-areas:
+    'details remove'
+    'compatibility compatibility';
+}
+
 .media-list[data-view='compact-list'] .media-meta {
   margin-top: 1px;
 }
