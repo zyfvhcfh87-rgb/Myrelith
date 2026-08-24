@@ -24,6 +24,10 @@ import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
+import {
+  INITIAL_SOURCE_MONITOR_STATE,
+  useSourceMonitorStore,
+} from '../state/sourceMonitorStore'
 import { useTransportStore } from '../state/transportStore'
 import {
   activateResumedProject,
@@ -534,6 +538,7 @@ beforeEach(async () => {
     collectionFuture: [],
   })
   useTransportStore.getState().resetTransport()
+  useSourceMonitorStore.getState().resetSourceMonitor()
 })
 
 describe('new-project activation', () => {
@@ -560,6 +565,10 @@ describe('new-project activation', () => {
       selectedClipId: 'clip-old',
       selectedClipIds: ['clip-old'],
     })
+    useSourceMonitorStore.getState().openSource({ asset: oldAsset })
+    useSourceMonitorStore.getState().setPlayhead(40)
+    useSourceMonitorStore.getState().setIn()
+    useSourceMonitorStore.getState().requestPlayback('source')
 
     const cleanupGate = deferred<void>()
     const previewGate = deferred<void>()
@@ -626,6 +635,9 @@ describe('new-project activation', () => {
       selectedClipId: null,
       selectedClipIds: [],
     })
+    expect(useSourceMonitorStore.getState()).toMatchObject(
+      INITIAL_SOURCE_MONITOR_STATE,
+    )
     expect(useProjectSessionStore.getState()).toMatchObject({
       screen: 'editor',
       activeProjectName: 'Cinema',
@@ -676,6 +688,9 @@ describe('active-project cleanup', () => {
       waveform: null,
     })
     useTransportStore.setState({ isPlaying: true, playheadFrame: 42 })
+    useSourceMonitorStore.getState().openSource({ asset })
+    useSourceMonitorStore.getState().setPlayhead(18)
+    useSourceMonitorStore.getState().requestPlayback('source')
     useProjectSessionStore.setState({
       screen: 'editor',
       activeProjectName: 'Leaving safely',
@@ -736,6 +751,9 @@ describe('active-project cleanup', () => {
       isPlaying: false,
       playheadFrame: 0,
     })
+    expect(useSourceMonitorStore.getState()).toMatchObject(
+      INITIAL_SOURCE_MONITOR_STATE,
+    )
     expect(useProjectSessionStore.getState()).toEqual(
       INITIAL_PROJECT_SESSION_STATE,
     )
