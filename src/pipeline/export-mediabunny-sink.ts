@@ -34,6 +34,10 @@ import {
   type ExportAudioResampleCarry,
   type MixedAudioBlock,
 } from './export-audio'
+import {
+  AacInputAssembler,
+  type AacInputChunk,
+} from './export-aac-input'
 import { createMediabunnyExportAudioSource } from './export-mediabunny-audio-source'
 import type { ExportAssetResolver } from './export-mediabunny-common'
 import {
@@ -327,6 +331,10 @@ export async function createMediabunnyExportSink(
   let cancelPromise: Promise<void> | null = null
   let nextFrame = 0
   let audioResampleCarry: ExportAudioResampleCarry | null = null
+  const aacAssembler = audioSettings?.audioCodec === 'aac'
+    && outputAudioChannels !== null
+    ? new AacInputAssembler(outputAudioChannels)
+    : null
   let transitionSurfaces: TransitionSurfaces | null = null
   let renderSurfacesReleased = false
 
@@ -394,6 +402,26 @@ export async function createMediabunnyExportSink(
     throw primary
   }
 
+  const writeEncodedAudioChunk = async (
+    chunk: AacInputChunk,
+  ): Promise<void> => {
+    if (!audioSource || outputAudioChannels === null) {
+      throw new Error('Export audio source is unavailable')
+    }
+    const sample = new AudioSample({
+      data: chunk.data,
+      format: 'f32',
+      numberOfChannels: outputAudioChannels,
+      sampleRate: encoderSampleRate,
+      timestamp: chunk.startSample / encoderSampleRate,
+    })
+    try {
+      await audioSource.add(sample)
+    } finally {
+      sample.close()
+    }
+  }
+
   const addFrame = async (
     timestampSec: number,
     durationSec: number,
@@ -413,17 +441,15 @@ export async function createMediabunnyExportSink(
               audioResampleCarry = resampled.carry
               const encoded = resampled.encoded
               if (encoded.sampleCount <= 0) return
-              const sample = new AudioSample({
+              const chunk = {
+                startSample: encoded.startSample,
+                sampleCount: encoded.sampleCount,
                 data: interleaveAudioBlock(encoded, outputAudioChannels),
-                format: 'f32',
-                numberOfChannels: outputAudioChannels,
-                sampleRate: encoderSampleRate,
-                timestamp: encoded.startSample / encoderSampleRate,
-              })
-              try {
-                await audioSource.add(sample)
-              } finally {
-                sample.close()
+              }
+              if (aacAssembler) {
+                await aacAssembler.add(chunk, writeEncodedAudioChunk)
+              } else {
+                await writeEncodedAudioChunk(chunk)
               }
             })
           : Promise.resolve()
@@ -453,6 +479,7 @@ export async function createMediabunnyExportSink(
       | null = null
     try {
       await mixer?.close()
+      await aacAssembler?.flush(writeEncodedAudioChunk)
       source.close()
       audioSource?.close()
       await output.finalize()

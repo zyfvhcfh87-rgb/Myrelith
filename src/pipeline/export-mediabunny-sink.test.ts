@@ -701,15 +701,13 @@ describe('createMediabunnyExportSink audio behavior', () => {
 
     const encoded = mb.encodedAudioSamples as FakeAudioSampleRecord[]
     expect(encoded.map((sample) => sample.numberOfFrames)).toEqual([
+      2_048,
       1_024,
-      578,
       1_024,
-      577,
-      1_024,
-      578,
+      709,
     ])
     expect(encoded.map((sample) => sample.timestamp)).toEqual(
-      [0, 1_024, 1_602, 2_626, 3_203, 4_227].map(
+      [0, 2_048, 3_072, 4_096].map(
         (sample) => sample / 48_000,
       ),
     )
@@ -745,6 +743,49 @@ describe('createMediabunnyExportSink audio behavior', () => {
     expect(outputAt().cancel).not.toHaveBeenCalled()
   })
 
+  test('assembles 60 fps mixer chunks before writing native AAC input', async () => {
+    const base = makeAudioDoc([
+      makeAudioTrack(
+        'A1',
+        makeAudioClip('60-fps-audio', 'audio-asset', 3),
+      ),
+    ])
+    const doc = {
+      ...base,
+      frameRate: { num: 60, den: 1 },
+    }
+    const decoded = decodedAudioSample(
+      [new Float32Array(3_000).fill(0.25)],
+      48_000,
+    )
+    mb.audioTracks.push(audioTrack())
+    mb.audioSinkSampleSequences.push([decoded])
+    const sink = await createMediabunnyExportSink(
+      doc,
+      SETTINGS,
+      async () => resolvedAsset(new Blob(['audio'])),
+    )
+
+    for (let frame = 0; frame < 3; frame++) {
+      await sink.addFrame(frame / 60, 1 / 60)
+    }
+    await sink.finalize()
+
+    const encoded = mb.encodedAudioSamples as FakeAudioSampleRecord[]
+    expect(encoded.map((sample) => sample.numberOfFrames)).toEqual([
+      2_048,
+      352,
+    ])
+    expect(encoded.map((sample) => sample.timestamp)).toEqual([
+      0,
+      2_048 / 48_000,
+    ])
+    expect(encoded.reduce(
+      (total, sample) => total + sample.numberOfFrames,
+      0,
+    )).toBe(audioSampleBoundary(3, doc))
+  })
+
   test('encodes a mono layout by averaging the bounded stereo mix bus', async () => {
     const doc = makeAudioDoc([
       makeAudioTrack('A1', makeAudioClip('mono-output', 'audio-asset', 1)),
@@ -775,11 +816,15 @@ describe('createMediabunnyExportSink audio behavior', () => {
       onEncodedPacket: expect.any(Function),
     })
     const encoded = mb.encodedAudioSamples as FakeAudioSampleRecord[]
-    expect(encoded).toHaveLength(2)
+    expect(encoded).toHaveLength(1)
     expect(encoded.every((sample) => sample.numberOfChannels === 1)).toBe(true)
-    expect(encoded.every((sample) => (
-      [...sample.data].every((value) => Math.abs(value - 0.5) < 1e-6)
-    ))).toBe(true)
+    const exactSamples = audioSampleBoundary(1, doc)
+    expect([...encoded[0].data.slice(0, exactSamples)].every(
+      (value) => Math.abs(value - 0.5) < 1e-6,
+    )).toBe(true)
+    expect([...encoded[0].data.slice(exactSamples)].every(
+      (value) => value === 0,
+    )).toBe(true)
     expect(result.profile.audioChannelLayout).toBe('mono')
   })
 
@@ -832,7 +877,8 @@ describe('createMediabunnyExportSink audio behavior', () => {
     )
 
     let settled = false
-    const pending = sink.addFrame(0, 1_001 / 30_000)
+    await sink.addFrame(0, 1_001 / 30_000)
+    const pending = sink.addFrame(1_001 / 30_000, 1_001 / 30_000)
     void pending.then(() => {
       settled = true
     })
@@ -861,18 +907,20 @@ describe('createMediabunnyExportSink audio behavior', () => {
 
   test('waits for the sibling audio write before cleaning up a failed video write', async () => {
     const doc = makeAudioDoc([
-      makeAudioTrack('A1', makeAudioClip('audio', 'audio-asset', 1)),
+      makeAudioTrack('A1', makeAudioClip('audio', 'audio-asset', 2)),
     ])
     const decoded = decodedAudioSample(
-      [new Float32Array(2_000).fill(0.25)],
+      [new Float32Array(4_000).fill(0.25)],
       48_000,
     )
     const audioAdd = deferred<void>()
     const primary = new Error('video write failed')
     mb.audioTracks.push(audioTrack())
     mb.audioSinkSampleSequences.push([decoded])
+    let videoWrites = 0
     mb.canvasSourceAddHandlers.push(async () => {
-      throw primary
+      videoWrites++
+      if (videoWrites === 2) throw primary
     })
     mb.audioSourceAddHandlers.push(async () => audioAdd.promise)
     const sink = await createMediabunnyExportSink(
@@ -882,7 +930,8 @@ describe('createMediabunnyExportSink audio behavior', () => {
     )
 
     let rejected = false
-    const pending = sink.addFrame(0, 1_001 / 30_000)
+    await sink.addFrame(0, 1_001 / 30_000)
+    const pending = sink.addFrame(1_001 / 30_000, 1_001 / 30_000)
     void pending.catch(() => {
       rejected = true
     })
@@ -938,8 +987,7 @@ describe('createMediabunnyExportSink audio behavior', () => {
     expect(outputAt().addAudioTrack).toHaveBeenCalledOnce()
     const encoded = mb.encodedAudioSamples as FakeAudioSampleRecord[]
     expect(encoded.map((sample) => sample.numberOfFrames)).toEqual([
-      1_024,
-      578,
+      2_048,
     ])
     expect(encoded.every((sample) => sample.data.every((value) => value === 0))).toBe(
       true,
