@@ -4834,3 +4834,26 @@ acceptance claims.
 - [x] Pass all 236 Vitest files / 3,364 tests plus all 17 repository runner
   checks, production build/typecheck, lint, production dependency audit, and
   diff hygiene.
+
+## Post-MVP issue #180 - Compatibility and HEVC export flush error
+
+**FIXED BY MERGED PR #178; REGRESSION LOCKED LOCALLY (2026-08-24).**
+
+- [x] Correlate the issue timestamp and affected-profile split with PR #178.
+  Compatibility/AVC and HEVC share MP4/AAC; the merged `f0165ed` fix already
+  maps 96 kHz document audio to the 48 kHz WebCodecs encoder boundary while
+  preserving document-rate mix math and the exact selected profile.
+- [x] Add an audio-bearing 96 kHz fresh-adapter regression for both affected
+  profiles. Reject any non-48 kHz probe sample with the reporter's exact
+  `Flushing error`; require a supported result, exact profile identity,
+  successful finalization, and no cancellation.
+- [x] Prove the causal differential in an isolated pre-fix worktree: the test
+  fails on `f53219c` with the exact MP4/AVC and MP4/HEVC unavailable messages,
+  then passes unchanged on the current branch with only 48 kHz probe samples.
+- [x] Browser-verify downloadable Compatibility and HEVC MP4 results from a
+  1920x1080, 30 fps, 96 kHz five-second title project. The browser path covers
+  visible selection/start/result behavior; the adapter differential covers the
+  load-bearing audio track.
+- [x] Pass all 236 Vitest files / 3,366 tests plus all 17 repository runner
+  checks, production build/typecheck, clean lint, production dependency audit,
+  and diff hygiene.

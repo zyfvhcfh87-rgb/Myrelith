@@ -130,6 +130,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #119 — bounded manual lens correction** | 🚧 implementation complete locally | schema-14 versioned intent; accessible Inspector/history controls; promoted source-space WebGL2 preview/export path; explicit coverage/unavailability; seven-surface 4K budget; local CI/review gates pending |
 | **Post-MVP #77 — signed sandboxed plugins** | 🚧 PR #123 remediation validated locally | production preview/export/migration wiring; fail-closed render and stale-generation gates; bounded host-acknowledged teardown; safe startup recovery; hostile-package and real Chromium acceptance; full/exact-head publication gates pending |
 | **Post-MVP #179 — marquee selection + grouped move** | ✅ implementation complete | Select-tool left-drag over empty lanes previews and commits box selection; selected/link-expanded clips move horizontally as one collision-safe, one-history edit; 3,364 tests + desktop Chromium interaction/undo/redo gate clean |
+| **Post-MVP #180 — Compatibility/HEVC export flush error** | ✅ fixed by #178; regression locked | 96 kHz project audio is probed/encoded at 48 kHz for exact AAC profiles; pre-#178 differential reproduces the reported AVC/HEVC `Flushing error`; 3,366 current tests and both browser profiles pass without substitution |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Current public preview — `v0.2.0-alpha.1` First Light** | ✅ published | annotated tag resolves to `2a845c8`; verified 43-file web archive `sha256:aef2445b…`; public Linux AMD64/ARM64 GHCR index `sha256:ee060a7e…`; exact-head PR + master CI, 3,335 Vitest tests, 17 runner tests, and 10 Chromium tests passed |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
@@ -5075,4 +5076,31 @@ surface; it is not a second zoom and never enters document history.
   both positions with one Undo/Redo; no console warnings or errors appeared.
 - The authoritative automated gate passes all 236 Vitest files / 3,364 tests
   plus all 17 repository runner checks, production build/typecheck, lint,
+  production dependency audit, and diff hygiene.
+
+## Post-MVP issue #180 - Compatibility and HEVC export flush error
+
+**ROOT CAUSE ALREADY FIXED BY MERGED PR #178; REGRESSION LOCKED LOCALLY
+(2026-08-24).**
+
+- Issue #180 was filed before PR #178 merged as `f0165ed`. Its affected-profile
+  split is the important clue: Compatibility and HEVC both use MP4/AAC, while
+  Web and Modern use WebM/Opus. A 96 kHz project was feeding its document rate
+  into the fresh AAC probe; the encoder then surfaced `Flushing error`, which
+  the fail-closed coordinator correctly reported against the selected video
+  profile.
+- The production fix already in this branch keeps document-rate mix math, then
+  probes and encodes AAC/Opus at the supported 48 kHz boundary. It does not
+  substitute the selected container, video codec, audio codec, or profile.
+- The new real-adapter regression covers an audio-bearing 96 kHz document for
+  both Compatibility/AVC and HEVC. Its sentinel rejects any non-48 kHz audio
+  sample with the reporter's exact `Flushing error`. The test fails on
+  pre-#178 `f53219c` with the exact MP4/AVC and MP4/HEVC unavailable messages,
+  and passes on the current branch with every probe sample at 48 kHz.
+- Current desktop Chromium also produced downloadable MP4 results for both
+  profiles from a 1920x1080, 30 fps, 96 kHz five-second title project. This
+  browser run verifies the visible profile/start/result flow; the differential
+  adapter test is the authoritative audio-bearing regression.
+- The authoritative current tree passes all 236 Vitest files / 3,366 tests plus
+  all 17 repository runner checks, production build/typecheck, clean lint,
   production dependency audit, and diff hygiene.

@@ -216,7 +216,10 @@ import {
   mediabunnyExportCapabilityProbe,
   runFreshMediabunnyExportProbe,
 } from './export-mediabunny-capabilities'
-import { checkExportProfileSupport } from './export-capabilities'
+import {
+  checkExportProfileSupport,
+  verifyExportProfileSupportFresh,
+} from './export-capabilities'
 
 function makeDoc({
   durationFrames = 30,
@@ -269,6 +272,34 @@ function makeDoc({
           solo: false,
           locked: false,
         }],
+  }
+}
+
+function make96KhzAudioDoc(): TimelineDoc {
+  const doc = makeDoc()
+  const videoClip = doc.tracks[0].clips[0]
+  return {
+    ...doc,
+    audioSampleRate: 96_000,
+    tracks: [
+      ...doc.tracks,
+      {
+        id: 'A1',
+        kind: 'audio',
+        name: 'A1',
+        clips: [{
+          ...videoClip,
+          id: 'audio-clip',
+          assetId: 'audio-asset',
+          name: 'audio.wav',
+        }],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      },
+    ],
   }
 }
 
@@ -405,6 +436,41 @@ describe('Mediabunny capability adapter', () => {
 })
 
 describe('runFreshMediabunnyExportProbe', () => {
+  test.each([
+    ['Compatibility', DEFAULT_EXPORT_PROFILE],
+    ['HEVC', exportPresetById('hevc').profile],
+  ])(
+    'keeps a 96 kHz project available for the %s fresh AAC probe',
+    async (_label, profile) => {
+      mb.audioAddHandlers.push(async (sample) => {
+        // Pre-#178 forwarded the 96 kHz document rate here; Chromium surfaced
+        // the resulting adapter failure as Issue #180's `Flushing error`.
+        if (sample.init.sampleRate !== 48_000) {
+          throw new Error('Flushing error')
+        }
+      })
+
+      const result = await verifyExportProfileSupportFresh(
+        make96KhzAudioDoc(),
+        profile,
+        mediabunnyExportCapabilityProbe,
+      )
+
+      expect(result).toMatchObject({
+        supported: true,
+        profile,
+        reason: null,
+      })
+      expect(mb.audioSamples.length).toBeGreaterThan(0)
+      expect(new Set(
+        mb.audioSamples.map((sample) => sample.init.sampleRate),
+      )).toEqual(new Set([48_000]))
+      expect(mb.audioSources[0].config).toMatchObject({ codec: 'aac' })
+      expect(mb.outputs[0].finalize).toHaveBeenCalledTimes(1)
+      expect(mb.outputs[0].cancel).not.toHaveBeenCalled()
+    },
+  )
+
   test('performs a disposable exact AVC/AAC encode with real profile fields', async () => {
     const doc = makeDoc()
 
