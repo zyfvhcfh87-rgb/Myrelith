@@ -7,6 +7,7 @@
 [![Release](https://img.shields.io/github/v/release/zyfvhcfh87-rgb/Myrelith?include_prereleases&label=release)](https://github.com/zyfvhcfh87-rgb/Myrelith/releases)
 [![CI](https://github.com/zyfvhcfh87-rgb/Myrelith/actions/workflows/ci.yml/badge.svg)](https://github.com/zyfvhcfh87-rgb/Myrelith/actions/workflows/ci.yml)
 [![Container](https://img.shields.io/badge/ghcr.io-myrelith-8a63d2)](https://github.com/zyfvhcfh87-rgb/Myrelith/pkgs/container/myrelith)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/lyn07)
 
 **[Open Myrelith](https://myrelith.pages.dev)** ·
 [Privacy](PRIVACY.md) ·
