@@ -52,6 +52,7 @@ import type {
 } from '../pipeline/playback-audio'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import { useTransportStore } from '../state/transportStore'
 import {
   useAudioMeterStore,
@@ -156,6 +157,32 @@ const state: ControllerState = {
   unsubscribes: [],
   playbackTasks: new Set(),
   cleanupTasks: new Set(),
+}
+
+let stopSourcePlaybackClock = (): void => {}
+
+/**
+ * Source Monitor registers its clock halt here so Program play/drain/dispose
+ * can stop Source first without importing the source controller (cycle).
+ */
+export function registerSourcePlaybackStop(stop: () => void): void {
+  stopSourcePlaybackClock = stop
+}
+
+function haltSourcePlaybackClock(): void {
+  stopSourcePlaybackClock()
+}
+
+function ensureClock(): ClockContext {
+  if (!state.clockCtx) {
+    state.clockCtx = state.deps.createContext()
+  }
+  return state.clockCtx
+}
+
+/** Shared audio-master clock. Source playback reuses this; never a second context. */
+export function getPlaybackClockContext(): ClockContext {
+  return ensureClock()
 }
 
 /** Last frame the playhead may rest on; 0 for an empty doc. */
@@ -357,9 +384,9 @@ function cancelPlaybackWork(): void {
 function ensureEngine(): PlaybackEngine {
   if (state.engine) return state.engine
 
-  state.clockCtx = state.deps.createContext()
+  const clock = ensureClock()
   state.engine = new PlaybackEngine({
-    clock: state.clockCtx,
+    clock,
     scheduleTick: state.deps.scheduleTick,
     cancelTick: state.deps.cancelTick,
     onFrame: (frame) => {
@@ -564,6 +591,8 @@ function restartPlayback(): void {
  * playhead already rests at/after the last frame. No-op on an empty doc.
  */
 export function play(): void {
+  haltSourcePlaybackClock()
+  useSourceMonitorStore.getState().requestPlayback('program')
   const transport = useTransportStore.getState()
   if (transport.isPlaying) return
 
@@ -589,6 +618,7 @@ export function pause(): void {
 
 /** Pause immediately, then wait until every playback decoder owner is gone. */
 export async function pauseAndDrainPlayback(): Promise<void> {
+  haltSourcePlaybackClock()
   pause()
   while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
     await Promise.all([
@@ -621,6 +651,7 @@ export function stepFrame(delta: number): void {
  * Project activation awaits this before revoking the outgoing media URLs.
  */
 export async function disposeTransport(): Promise<void> {
+  haltSourcePlaybackClock()
   cancelPlaybackWork()
   const context = state.clockCtx
   state.engine = null

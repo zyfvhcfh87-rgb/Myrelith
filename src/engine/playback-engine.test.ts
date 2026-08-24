@@ -224,4 +224,87 @@ describe('PlaybackEngine', () => {
     expect(h.ended()).toBe(1)
     expect(h.engine.isRunning).toBe(false)
   })
+
+  test('2x derives from the clock without accumulating seconds', () => {
+    const h = makeHarness()
+    h.engine.start(0, 300, FPS30, h.clock.currentTime, 2)
+
+    h.clock.currentTime = 0.5
+    h.pump()
+    expect(h.frames).toEqual([30])
+  })
+
+  test('2x NTSC stays exact: 1.001s at 30000/1001 is frame 60', () => {
+    const h = makeHarness()
+    h.engine.start(0, 300, NTSC, h.clock.currentTime, 2)
+    h.clock.currentTime = 1.001
+    h.pump()
+    expect(h.frames).toEqual([60])
+  })
+
+  test('2x emits the true doubled frame, not a doubled 1x tick', () => {
+    const h = makeHarness()
+    h.engine.start(0, 300, FPS30, h.clock.currentTime, 2)
+    h.clock.currentTime = 1.5 / 30
+    h.pump()
+    expect(h.frames).toEqual([3])
+  })
+
+  test('reverse walks toward frame 0 from the same NTSC reading', () => {
+    const h = makeHarness()
+    h.engine.start(30, 300, NTSC, h.clock.currentTime, -1)
+    h.clock.currentTime = 1.001
+    h.pump()
+    expect(h.frames).toEqual([0])
+    expect(h.ended()).toBe(0)
+    expect(h.engine.isRunning).toBe(true)
+  })
+
+  test('reverse parks on frame 0 after that frame receives its full duration', () => {
+    const h = makeHarness()
+    h.engine.start(10, 300, FPS30, h.clock.currentTime, -1)
+
+    h.clock.currentTime = 10 / 30
+    h.pump()
+    expect(h.frames).toEqual([0])
+    expect(h.ended()).toBe(0)
+    expect(h.engine.isRunning).toBe(true)
+
+    h.clock.currentTime = 11 / 30
+    h.pump()
+    expect(h.frames).toEqual([0])
+    expect(h.ended()).toBe(1)
+    expect(h.engine.isRunning).toBe(false)
+    expect(h.pendingCount()).toBe(0)
+  })
+
+  test('a large reverse jump emits only frame 0 then ends', () => {
+    const h = makeHarness()
+    h.engine.start(40, 300, FPS30, h.clock.currentTime, -4)
+    h.clock.currentTime = 2
+    h.pump()
+    expect(h.frames).toEqual([0])
+    expect(h.ended()).toBe(1)
+    expect(h.engine.isRunning).toBe(false)
+  })
+
+  test('reverse emits only newer (lower) frames and never re-emits', () => {
+    const h = makeHarness()
+    h.engine.start(30, 300, FPS30, h.clock.currentTime, -1)
+    h.clock.currentTime = 0.5
+    h.pump()
+    h.pump()
+    expect(h.frames).toEqual([15])
+  })
+
+  test('signed rate 0 never starts', () => {
+    const h = makeHarness()
+    h.engine.start(12, 300, FPS30, h.clock.currentTime, 0)
+    expect(h.engine.isRunning).toBe(false)
+    expect(h.pendingCount()).toBe(0)
+    h.clock.currentTime = 1
+    h.pump()
+    expect(h.frames).toEqual([])
+    expect(h.ended()).toBe(0)
+  })
 })
