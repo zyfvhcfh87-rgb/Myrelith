@@ -26,6 +26,7 @@
 import {
   clearClipSpeedRamp,
   moveClip,
+  moveClipsByDelta,
   removeClipSpeedPoint,
   rippleDelete,
   rippleTrim,
@@ -366,6 +367,34 @@ export function linkedMoveClip(
     next = applied
   }
   return next
+}
+
+/**
+ * Move an arbitrary clip selection horizontally as one atomic edit. Every
+ * selected root expands to its complete link group, duplicate members are
+ * collapsed, and the staged geometry operation validates the full closure
+ * before publishing anything.
+ */
+export function linkedMoveClips(
+  doc: TimelineDoc,
+  clipIds: readonly ClipId[],
+  deltaFrames: number,
+): TimelineDoc {
+  const op = 'linkedMoveClips'
+  if (clipIds.length === 0 || deltaFrames === 0) return doc
+
+  const memberIds: ClipId[] = []
+  const seen = new Set<ClipId>()
+  for (const clipId of clipIds) {
+    const members = groupMembers(doc, clipId)
+    if (members.length === 0) return reject(doc, op, `clip ${clipId} not found`)
+    for (const member of members) {
+      if (seen.has(member.id)) continue
+      seen.add(member.id)
+      memberIds.push(member.id)
+    }
+  }
+  return moveClipsByDelta(doc, memberIds, deltaFrames)
 }
 
 /**

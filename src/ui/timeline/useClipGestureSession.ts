@@ -33,6 +33,7 @@ import { useMediaStore } from '../../state/mediaStore'
 import { usePreferencesStore } from '../../state/preferencesStore'
 import { useTransportStore } from '../../state/transportStore'
 import {
+  gestureBoundsForClip,
   linkedGestureBounds,
   type GestureMode,
 } from './gestureBounds'
@@ -60,6 +61,10 @@ interface GestureSession {
   originFrame: number
   /** Link identity from the same fresh document snapshot as the bounds. */
   linkGroupId?: string
+  /** Selected roots committed by a multi-clip move; owner-only otherwise. */
+  moveRootClipIds: readonly ClipId[]
+  /** Exact owner/link closure used by bounds, snapping, and live preview. */
+  memberClipIds: readonly ClipId[]
   /** Current same-kind lane under the pointer during a move gesture. */
   targetTrackId: TrackId
   /** Target-lane top minus source-lane top, for the vertical ghost. */
@@ -78,20 +83,33 @@ interface SnapPreviewUpdate {
   guide: TimelineSnapGuide | null
 }
 
-function gestureMembers(doc: TimelineDoc, ownerClipId: ClipId): readonly Clip[] {
-  const owner = findClip(doc, ownerClipId)
-  return owner ? [owner, ...linkedPartners(doc, ownerClipId)] : []
+function gestureMembers(
+  doc: TimelineDoc,
+  rootClipIds: readonly ClipId[],
+): readonly Clip[] {
+  const members: Clip[] = []
+  const seen = new Set<ClipId>()
+  for (const rootClipId of rootClipIds) {
+    const owner = findClip(doc, rootClipId)
+    if (!owner) continue
+    for (const member of [owner, ...linkedPartners(doc, rootClipId)]) {
+      if (seen.has(member.id)) continue
+      seen.add(member.id)
+      members.push(member)
+    }
+  }
+  return members
 }
 
 /** Exact timeline points changed by one signed edit delta. */
 function movingSnapPoints(
   doc: TimelineDoc,
-  ownerClipId: ClipId,
+  memberClipIds: readonly ClipId[],
   mode: GestureMode,
   deltaFrames: number,
 ): readonly TimelineSnapMovingPoint[] {
   const points: TimelineSnapMovingPoint[] = []
-  for (const member of gestureMembers(doc, ownerClipId)) {
+  for (const member of gestureMembers(doc, memberClipIds)) {
     const track = trackOfClip(doc, member.id)
     if (!track) continue
     const trackIndex = doc.tracks.findIndex((candidate) => candidate.id === track.id)
@@ -197,6 +215,9 @@ export function useClipGestureSession({
         clipId,
         deltaFrames: update.deltaFrames,
         linkGroupId: active.linkGroupId,
+        ...(active.moveRootClipIds.length > 1
+          ? { clipIds: active.memberClipIds }
+          : {}),
         ...(crossTrack
           ? {
               targetTrackId: active.targetTrackId,
@@ -224,9 +245,10 @@ export function useClipGestureSession({
   const boundsFor = (
     currentDoc: TimelineDoc,
     mode: GestureMode,
+    memberClipIds?: readonly ClipId[],
   ): { minDelta: number; maxDelta: number } => {
     const media = useMediaStore.getState()
-    return linkedGestureBounds(currentDoc, clipId, mode, (member) => {
+    const durationFor = (member: Clip): number => {
       const connected = media.assets.get(member.assetId)
       if (connected) return connected.durationFrames
       const descriptor = media.descriptors.get(member.assetId)
@@ -236,7 +258,20 @@ export function useClipGestureSession({
             currentDoc.frameRate,
           )
         : 0
-    })
+    }
+    if (!memberClipIds) {
+      return linkedGestureBounds(currentDoc, clipId, mode, durationFor)
+    }
+    let minDelta = Number.NEGATIVE_INFINITY
+    let maxDelta = Number.POSITIVE_INFINITY
+    for (const member of gestureMembers(currentDoc, memberClipIds)) {
+      const bounds = gestureBoundsForClip(member, mode, durationFor(member))
+      minDelta = Math.max(minDelta, bounds.minDelta)
+      maxDelta = Math.min(maxDelta, bounds.maxDelta)
+    }
+    return minDelta <= maxDelta
+      ? { minDelta, maxDelta }
+      : { minDelta: 0, maxDelta: 0 }
   }
 
   const rawDeltaFromEvent = (event: ReactPointerEvent<HTMLDivElement>): number => {
@@ -260,7 +295,7 @@ export function useClipGestureSession({
       candidates: active.snapCandidates,
       movingPoints: movingSnapPoints(
         active.document,
-        clipId,
+        active.memberClipIds,
         active.mode,
         rawDeltaFrames,
       ),
@@ -324,7 +359,18 @@ export function useClipGestureSession({
     if (!currentClip || currentTrack?.id !== trackId) return false
     if (currentTrack.locked || currentTrack.hidden) return false
 
-    const members = gestureMembers(currentDoc, clipId)
+    const selectedClipIds = useTransportStore.getState().selectedClipIds
+    const moveRootClipIds = mode === 'move'
+      && selectedClipIds.length > 1
+      && selectedClipIds.includes(clipId)
+      ? selectedClipIds
+      : [clipId]
+    const members = gestureMembers(currentDoc, moveRootClipIds)
+    if (members.length === 0) return false
+    if (mode === 'move' && members.some((member) => {
+      const memberTrack = trackOfClip(currentDoc, member.id)
+      return !memberTrack || memberTrack.locked || memberTrack.hidden
+    })) return false
     const excludedClipIds = new Set(members.map((member) => member.id))
 
     session.current = {
@@ -335,9 +381,11 @@ export function useClipGestureSession({
       document: currentDoc,
       originFrame: currentClip.timelineRange.startFrame,
       linkGroupId: currentClip.linkGroupId,
+      moveRootClipIds,
+      memberClipIds: [...excludedClipIds],
       targetTrackId: trackId,
       trackOffsetY: 0,
-      ...boundsFor(currentDoc, mode),
+      ...boundsFor(currentDoc, mode, [...excludedClipIds]),
       snapCandidates: timelineSnapCandidates(currentDoc, {
         playheadFrame: useTransportStore.getState().playheadFrame,
         excludedClipIds,
@@ -354,6 +402,9 @@ export function useClipGestureSession({
         clipId,
         deltaFrames: 0,
         linkGroupId: currentClip.linkGroupId,
+        ...(moveRootClipIds.length > 1
+          ? { clipIds: [...excludedClipIds] }
+          : {}),
       })
     } else {
       setEditPreview({
@@ -391,19 +442,23 @@ export function useClipGestureSession({
       rawDeltaFromEvent(event),
       event.altKey,
     ).deltaFrames
+    const multiClipMove = active.moveRootClipIds.length > 1
     const moveTarget =
-      active.mode === 'move'
+      active.mode === 'move' && !multiClipMove
         ? trackTargetAt(event.clientX, event.clientY)
         : null
     // Commit exactly once, and only when something actually changed.
     if (delta !== 0 || moveTarget?.trackId !== trackId) {
       switch (active.mode) {
         case 'move':
-          store.moveClip(
-            clipId,
-            moveTarget?.trackId ?? trackId,
-            active.originFrame + delta,
-          )
+          if (multiClipMove) store.moveClips(active.moveRootClipIds, delta)
+          else {
+            store.moveClip(
+              clipId,
+              moveTarget?.trackId ?? trackId,
+              active.originFrame + delta,
+            )
+          }
           break
         case 'trim-start':
           store.trimClip(clipId, 'start', delta)
@@ -433,7 +488,11 @@ export function useClipGestureSession({
     if (delta === 0) return
     switch (active.mode) {
       case 'move':
-        store.moveClip(clipId, trackId, active.originFrame + delta)
+        if (active.moveRootClipIds.length > 1) {
+          store.moveClips(active.moveRootClipIds, delta)
+        } else {
+          store.moveClip(clipId, trackId, active.originFrame + delta)
+        }
         break
       case 'trim-start':
         store.trimClip(clipId, 'start', delta)
@@ -463,7 +522,7 @@ export function useClipGestureSession({
     if (!currentClip || currentTrack?.id !== trackId) return false
     if (currentTrack.locked || currentTrack.hidden) return false
     if (mode === 'slip' && currentClip.sourceMode === 'still') return false
-    const members = gestureMembers(currentDoc, clipId)
+    const members = gestureMembers(currentDoc, [clipId])
     session.current = {
       mode,
       origin: 'keyboard',
@@ -472,9 +531,11 @@ export function useClipGestureSession({
       document: currentDoc,
       originFrame: currentClip.timelineRange.startFrame,
       linkGroupId: currentClip.linkGroupId,
+      moveRootClipIds: [clipId],
+      memberClipIds: members.map((member) => member.id),
       targetTrackId: trackId,
       trackOffsetY: 0,
-      ...boundsFor(currentDoc, mode),
+      ...boundsFor(currentDoc, mode, members.map((member) => member.id)),
       snapCandidates: timelineSnapCandidates(currentDoc, {
         playheadFrame: useTransportStore.getState().playheadFrame,
         excludedClipIds: new Set(members.map((member) => member.id)),
@@ -603,7 +664,13 @@ export function useClipGestureSession({
           }
           return
         }
-        if (startGesture(event, 'move')) transport.setSelectedClip(clipId)
+        if (startGesture(event, 'move')) {
+          if (
+            transport.selectedClipIds.length > 1
+            && transport.selectedClipIds.includes(clipId)
+          ) transport.promoteContextClipSelection(clipId)
+          else transport.setSelectedClip(clipId)
+        }
         return
       case 'trim':
         if (findClip(useDocumentStore.getState().doc, clipId)) {
@@ -716,8 +783,18 @@ export function useClipGestureSession({
         || currentTrack.hidden
       ) return
       const rawDelta = event.key === 'ArrowLeft' ? -1 : 1
-      const bounds = boundsFor(currentDoc, 'move')
-      const members = gestureMembers(currentDoc, clipId)
+      const selectedClipIds = useTransportStore.getState().selectedClipIds
+      const moveRootClipIds = selectedClipIds.length > 1
+        && selectedClipIds.includes(clipId)
+        ? selectedClipIds
+        : [clipId]
+      const members = gestureMembers(currentDoc, moveRootClipIds)
+      if (members.some((member) => {
+        const memberTrack = trackOfClip(currentDoc, member.id)
+        return !memberTrack || memberTrack.locked || memberTrack.hidden
+      })) return
+      const memberClipIds = members.map((member) => member.id)
+      const bounds = boundsFor(currentDoc, 'move', memberClipIds)
       const active: GestureSession = {
         mode: 'move',
         origin: 'keyboard',
@@ -726,12 +803,14 @@ export function useClipGestureSession({
         document: currentDoc,
         originFrame: currentClip.timelineRange.startFrame,
         linkGroupId: currentClip.linkGroupId,
+        moveRootClipIds,
+        memberClipIds,
         targetTrackId: trackId,
         trackOffsetY: 0,
         ...bounds,
         snapCandidates: timelineSnapCandidates(currentDoc, {
           playheadFrame: useTransportStore.getState().playheadFrame,
-          excludedClipIds: new Set(members.map((member) => member.id)),
+          excludedClipIds: new Set(memberClipIds),
         }),
         currentDelta: 0,
       }
@@ -739,11 +818,15 @@ export function useClipGestureSession({
       const store = useDocumentStore.getState()
       const before = store.doc
       if (update.deltaFrames !== 0) {
-        store.moveClip(
-          clipId,
-          trackId,
-          currentClip.timelineRange.startFrame + update.deltaFrames,
-        )
+        if (moveRootClipIds.length > 1) {
+          store.moveClips(moveRootClipIds, update.deltaFrames)
+        } else {
+          store.moveClip(
+            clipId,
+            trackId,
+            currentClip.timelineRange.startFrame + update.deltaFrames,
+          )
+        }
       }
       const committed = useDocumentStore.getState().doc !== before
       const heldAtExistingSnap = update.deltaFrames === 0
@@ -793,7 +876,9 @@ export function useClipGestureSession({
       || active.pointerId !== event.pointerId
     ) return
     if (active.mode === 'move') {
-      const target = trackTargetAt(event.clientX, event.clientY)
+      const target = active.moveRootClipIds.length > 1
+        ? { trackId, offsetY: 0 }
+        : trackTargetAt(event.clientX, event.clientY)
       active.targetTrackId = target.trackId
       active.trackOffsetY = target.offsetY
       scheduleMovePreview(snapUpdate(

@@ -216,7 +216,10 @@ import {
   mediabunnyExportCapabilityProbe,
   runFreshMediabunnyExportProbe,
 } from './export-mediabunny-capabilities'
-import { checkExportProfileSupport } from './export-capabilities'
+import {
+  checkExportProfileSupport,
+  verifyExportProfileSupportFresh,
+} from './export-capabilities'
 
 function makeDoc({
   durationFrames = 30,
@@ -269,6 +272,34 @@ function makeDoc({
           solo: false,
           locked: false,
         }],
+  }
+}
+
+function make96KhzAudioDoc(): TimelineDoc {
+  const doc = makeDoc()
+  const videoClip = doc.tracks[0].clips[0]
+  return {
+    ...doc,
+    audioSampleRate: 96_000,
+    tracks: [
+      ...doc.tracks,
+      {
+        id: 'A1',
+        kind: 'audio',
+        name: 'A1',
+        clips: [{
+          ...videoClip,
+          id: 'audio-clip',
+          assetId: 'audio-asset',
+          name: 'audio.wav',
+        }],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      },
+    ],
   }
 }
 
@@ -405,6 +436,41 @@ describe('Mediabunny capability adapter', () => {
 })
 
 describe('runFreshMediabunnyExportProbe', () => {
+  test.each([
+    ['Compatibility', DEFAULT_EXPORT_PROFILE],
+    ['HEVC', exportPresetById('hevc').profile],
+  ])(
+    'keeps a 96 kHz project available for the %s fresh AAC probe',
+    async (_label, profile) => {
+      mb.audioAddHandlers.push(async (sample) => {
+        // Pre-#178 forwarded the 96 kHz document rate here; Chromium surfaced
+        // the resulting adapter failure as Issue #180's `Flushing error`.
+        if (sample.init.sampleRate !== 48_000) {
+          throw new Error('Flushing error')
+        }
+      })
+
+      const result = await verifyExportProfileSupportFresh(
+        make96KhzAudioDoc(),
+        profile,
+        mediabunnyExportCapabilityProbe,
+      )
+
+      expect(result).toMatchObject({
+        supported: true,
+        profile,
+        reason: null,
+      })
+      expect(mb.audioSamples.length).toBeGreaterThan(0)
+      expect(new Set(
+        mb.audioSamples.map((sample) => sample.init.sampleRate),
+      )).toEqual(new Set([48_000]))
+      expect(mb.audioSources[0].config).toMatchObject({ codec: 'aac' })
+      expect(mb.outputs[0].finalize).toHaveBeenCalledTimes(1)
+      expect(mb.outputs[0].cancel).not.toHaveBeenCalled()
+    },
+  )
+
   test('performs a disposable exact AVC/AAC encode with real profile fields', async () => {
     const doc = makeDoc()
 
@@ -453,7 +519,7 @@ describe('runFreshMediabunnyExportProbe', () => {
       bitrateMode: 'variable',
     })
     expect(mb.outputs[0].addAudioTrack).toHaveBeenCalledWith(mb.audioSources[0])
-    expect(mb.audioSamples).toHaveLength(4)
+    expect(mb.audioSamples).toHaveLength(3)
     expect(mb.audioSamples[0].init).toMatchObject({
       format: 'f32',
       numberOfChannels: 2,
@@ -461,16 +527,14 @@ describe('runFreshMediabunnyExportProbe', () => {
       timestamp: 0,
     })
     expect(mb.audioSamples.map((sample) => sample.init.data.length)).toEqual([
+      4_096,
       2_048,
-      1_156,
-      2_048,
-      1_154,
+      262,
     ])
     expect(mb.audioSamples.map((sample) => sample.init.timestamp)).toEqual([
       0,
-      1_024 / 48_000,
-      1_602 / 48_000,
-      2_626 / 48_000,
+      2_048 / 48_000,
+      3_072 / 48_000,
     ])
     for (const sample of mb.audioSamples) {
       expect(sample.close).toHaveBeenCalledTimes(1)
@@ -521,15 +585,14 @@ describe('runFreshMediabunnyExportProbe', () => {
       bitrate: 96_000,
       bitrateMode: 'constant',
     })
-    expect(mb.audioSamples).toHaveLength(4)
+    expect(mb.audioSamples).toHaveLength(3)
     for (const sample of mb.audioSamples) {
       expect(sample.init.numberOfChannels).toBe(1)
     }
     expect(mb.audioSamples.map((sample) => sample.init.data.length)).toEqual([
+      2_048,
       1_024,
-      578,
-      1_024,
-      577,
+      131,
     ])
   })
 
@@ -550,7 +613,7 @@ describe('runFreshMediabunnyExportProbe', () => {
     expect(mb.outputs[0].cancel).not.toHaveBeenCalled()
   })
 
-  test('uses the exact shorter timeline sample count and mixer chunking', async () => {
+  test('pads a shorter timeline to Chromium AAC startup input', async () => {
     const oneFrame60Fps = makeDoc({
       durationFrames: 1,
       frameRate: { num: 60, den: 1 },
@@ -568,11 +631,11 @@ describe('runFreshMediabunnyExportProbe', () => {
       sampleRate: 48_000,
       timestamp: 0,
     })
-    expect(mb.audioSamples[0].init.data).toHaveLength(1_600)
+    expect(mb.audioSamples[0].init.data).toHaveLength(4_096)
     expect(mb.canvasSources[0].add).toHaveBeenCalledTimes(1)
   })
 
-  test('uses whole document frames for a bounded representative probe', async () => {
+  test('assembles whole 60 fps document frames into stable AAC input', async () => {
     const long60Fps = makeDoc({ frameRate: { num: 60, den: 1 } })
 
     await runFreshMediabunnyExportProbe(
@@ -582,20 +645,18 @@ describe('runFreshMediabunnyExportProbe', () => {
     )
 
     expect(mb.canvasSources[0].add).toHaveBeenCalledTimes(3)
-    expect(mb.audioSamples).toHaveLength(3)
+    expect(mb.audioSamples).toHaveLength(2)
     expect(mb.audioSamples.map((sample) => sample.init.data.length)).toEqual([
-      1_600,
-      1_600,
-      1_600,
+      4_096,
+      704,
     ])
     expect(mb.audioSamples.map((sample) => sample.init.timestamp)).toEqual([
       0,
-      800 / 48_000,
-      1_600 / 48_000,
+      2_048 / 48_000,
     ])
   })
 
-  test('splits an exact short probe at the same 1024-sample boundary as the mixer', async () => {
+  test('pads a short 30 fps probe to Chromium AAC startup input', async () => {
     const oneFrame30Fps = makeDoc({
       durationFrames: 1,
       frameRate: { num: 30, den: 1 },
@@ -607,14 +668,12 @@ describe('runFreshMediabunnyExportProbe', () => {
       true,
     )
 
-    expect(mb.audioSamples).toHaveLength(2)
+    expect(mb.audioSamples).toHaveLength(1)
     expect(mb.audioSamples.map((sample) => sample.init.data.length)).toEqual([
-      2_048,
-      1_152,
+      4_096,
     ])
     expect(mb.audioSamples.map((sample) => sample.init.timestamp)).toEqual([
       0,
-      1_024 / 48_000,
     ])
   })
 
@@ -643,7 +702,7 @@ describe('runFreshMediabunnyExportProbe', () => {
 
     const pending = runFreshMediabunnyExportProbe(
       makeDoc(),
-      DEFAULT_EXPORT_PROFILE,
+      exportPresetById('web').profile,
       true,
     )
     const rejection = expect(pending).rejects.toThrow('fresh video encode failed')

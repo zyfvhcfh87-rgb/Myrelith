@@ -493,6 +493,72 @@ describe('selection (select tool)', () => {
     fireEvent.pointerUp(clipC, { pointerId: 1, clientX: 290 })
   })
 
+  test('dragging a selected member preserves and moves the complete selection in one history entry', async () => {
+    renderTrack()
+    act(() => {
+      transport().setClipSelection(['clipA', 'clipB'], 'clipB')
+    })
+    const before = doc().doc
+    const clipA = screen.getByTestId('clip-clipA')
+
+    fireEvent.pointerDown(clipA, { pointerId: 91, clientX: 120 })
+    expect(transport()).toMatchObject({
+      selectedClipIds: ['clipA', 'clipB'],
+      selectedClipId: 'clipA',
+    })
+    expect(transport().dragPreview).toMatchObject({
+      clipId: 'clipA',
+      clipIds: ['clipA', 'clipB'],
+      deltaFrames: 0,
+    })
+
+    fireEvent.pointerMove(clipA, { pointerId: 91, clientX: 140 })
+    await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(20))
+    expect(doc().doc).toBe(before)
+    expect(screen.getByTestId('clip-clipB')).toHaveStyle({
+      transform: 'translateX(170px)',
+    })
+
+    fireEvent.pointerUp(clipA, { pointerId: 91, clientX: 140 })
+    expect(v1().clips.map((clip) => clip.timelineRange.startFrame)).toEqual([
+      120,
+      170,
+      280,
+    ])
+    expect(doc().past).toEqual([before])
+    expect(transport().dragPreview).toBeNull()
+  })
+
+  test('Ctrl/Command plus Arrow moves the complete selected group by one frame', () => {
+    renderTrack()
+    act(() => {
+      transport().setClipSelection(['clipA', 'clipB'], 'clipA')
+    })
+    const before = doc().doc
+    const clipA = screen.getByTestId('clip-clipA')
+
+    fireEvent.keyDown(clipA, {
+      key: 'ArrowRight',
+      ctrlKey: true,
+      altKey: true,
+    })
+
+    expect(v1().clips.map((clip) => clip.timelineRange.startFrame)).toEqual([
+      101,
+      151,
+      280,
+    ])
+    expect(doc().past).toEqual([before])
+    expect(transport().selectedClipIds).toEqual(['clipA', 'clipB'])
+
+    act(() => doc().undo())
+    expect(v1().clips.map((clip) => clip.timelineRange.startFrame)).toEqual([
+      100,
+      150,
+      280,
+    ])
+  })
+
   test('clips expose pressed-button semantics and Enter/Space keyboard selection', () => {
     renderTrack()
     const clipA = screen.getByRole('button', { name: 'clipA, video clip' })

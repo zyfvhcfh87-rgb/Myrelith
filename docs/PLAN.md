@@ -4811,3 +4811,53 @@ acceptance claims.
   user-owned untracked `.worktrees/` directory, a production audit with zero
   vulnerabilities, production-isolation search, and diff checks. Chromium is
   not applicable because the gate adds no observable browser/runtime path.
+
+## Post-MVP issue #179 - marquee selection and grouped movement
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-24).**
+
+- [x] Add Select-tool primary left-drag marquee selection from empty timeline
+  lane space, with live translucent intersection feedback across visible,
+  unlocked lanes and robust release/cancel cleanup across the sticky gutter.
+- [x] Keep marquee and multi-selection truth ephemeral in transport state; no
+  document mutation, persistence, or undo entry occurs until a clip move is
+  committed.
+- [x] Add one pure atomic horizontal group-move operation, expand selected roots
+  through existing A/V link groups, and reject the entire edit on stale ids,
+  locks, bounds, or final-layout collisions while preserving transitions.
+- [x] Reuse the shared selected/link closure for drag preview, pointer commit,
+  and Ctrl/Cmd + Arrow. Preserve the existing single-clip cross-track path;
+  grouped clips remain on their current lanes.
+- [x] Browser-verify reverse cross-gutter box selection, live highlighting,
+  +40-frame grouped movement, one-step Undo/Redo, and a clean console in desktop
+  Chromium at 1280x720.
+- [x] Pass all 236 Vitest files / 3,364 tests plus all 17 repository runner
+  checks, production build/typecheck, lint, production dependency audit, and
+  diff hygiene.
+
+## Post-MVP issue #180 - Compatibility and HEVC export flush error
+
+**FIXED LOCALLY; NATIVE CHROME REGRESSION LOCKED (2026-08-24).**
+
+- [x] Preserve #178's independent 96→48 kHz encoder-boundary correction, then
+  reproduce the reporter's remaining failure in installed Chrome. The exact
+  fresh MP4/AAC probe passes at 30 fps and fails with `Flushing error` at both
+  59.94 and 60 fps, independent of canvas size and project sample rate.
+- [x] Minimize below the UI and source-media layers. At 48 kHz, 60 fps mixing
+  submits 800 samples per document frame. Native WebCodecs accepts AAC startup
+  after 2,048 contiguous samples and subsequent 1,024-sample blocks; the old
+  800/801-sample startup reaches `AudioEncoder.flush()` and fails despite a
+  successful support/configuration check.
+- [x] Add one bounded AAC input assembler shared by the disposable preflight
+  and real export sink. Preserve exact sample order/timestamps, cap retained
+  startup PCM at 2,048 samples per channel, emit 1,024-sample blocks after
+  startup, and pad only a too-short initial stream. Keep existing final-packet
+  duration trimming and never substitute the selected profile or codec.
+- [x] Lock pure and adapter regressions for 60 fps coalescing, short-stream
+  padding, 96→48 kHz conversion, exact totals, backpressure, cancellation, and
+  resource closure.
+- [x] Add a real browser regression that generates WAV input in memory and
+  exercises fresh preflight plus WAV decode → 60 fps mix → AAC encode → MP4
+  mux. Verify it in repository Chromium and installed Chrome 151.
+- [x] Pass all 237 Vitest files / 3,370 tests, all 17 repository runner checks,
+  all 12 repository Chromium tests, production build/typecheck, and clean lint.

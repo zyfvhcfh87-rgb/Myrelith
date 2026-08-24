@@ -46,6 +46,8 @@ import {
   planTimelineEdgeRebase,
 } from './timelineViewport'
 import { setMediaVisualTimelineViewport } from '../../app/mediaVisualsController'
+import SelectionMarquee from './SelectionMarquee'
+import { useTimelineMarqueeSelection } from './useTimelineMarqueeSelection'
 
 export default function Timeline() {
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -59,6 +61,7 @@ export default function Timeline() {
   const setTimelineOriginFrame = useTransportStore(
     (s) => s.setTimelineOriginFrame,
   )
+  const { surfaceRef, marqueePointerHandlers } = useTimelineMarqueeSelection()
 
   const totalFrames = timelineRunwayFrames(
     timelineDisplayDurationFrames(doc),
@@ -199,7 +202,12 @@ export default function Timeline() {
       </div>
       <div className="timeline-lanes">
         <Ruler />
-        <div className="timeline-tracks">
+        <div
+          ref={surfaceRef}
+          className="timeline-tracks"
+          data-testid="timeline-tracks"
+          {...marqueePointerHandlers}
+        >
           {ordered.map((track) => (
             <Track
               key={track.id}
@@ -210,6 +218,7 @@ export default function Timeline() {
               timelineWindowEndFrame={viewport.endFrame}
             />
           ))}
+          <SelectionMarquee />
         </div>
         <AlignmentGuide
           timelineOriginFrame={viewport.originFrame}

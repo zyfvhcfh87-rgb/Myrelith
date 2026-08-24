@@ -32,6 +32,11 @@ export interface DragPreview {
   clipId: ClipId
   /** Signed frame delta from every participating clip's committed start. */
   deltaFrames: number
+  /**
+   * Exact multi-selection/link closure sharing deltaFrames. Omitted for the
+   * established single-owner/link-group path to keep that contract compact.
+   */
+  clipIds?: readonly ClipId[]
   /** Same-kind lane currently under the gesture owner, when cross-track. */
   targetTrackId?: TrackId
   /** Pixel offset from the source lane used to ghost the owner vertically. */
@@ -104,6 +109,15 @@ export interface MediaPlacementPreview {
   phase: MediaPlacementPreviewPhase
 }
 
+/** Bounded-surface pixels plus live candidate ids for an empty-lane drag. */
+export interface SelectionMarqueePreview {
+  left: number
+  top: number
+  width: number
+  height: number
+  clipIds: readonly ClipId[]
+}
+
 /** Live preview-only geometry for a media clip direct-manipulation gesture. */
 export interface ClipVisualPreview {
   /** Named editor ownership prevents one mounted preview surface clearing another. */
@@ -144,6 +158,8 @@ export interface TransportState {
    * or null. When present it is always a member of selectedClipIds.
    */
   selectedClipId: ClipId | null
+  /** Live box-selection rectangle and membership preview, never history. */
+  selectionMarquee: SelectionMarqueePreview | null
   /** Primary sequence marker selection; mutually exclusive with clips. */
   selectedMarkerId: TimelineMarkerId | null
   /** Marker whose explicit edit popover is open, or null. */
@@ -188,6 +204,11 @@ export interface TransportState {
   setTool: (tool: TimelineTool) => void
   /** Replace the selection with one clip (or clear both fields with null). */
   setSelectedClip: (clipId: ClipId | null) => void
+  /** Replace the complete ordered clip selection in one transport update. */
+  setClipSelection: (
+    clipIds: readonly ClipId[],
+    primaryClipId?: ClipId | null,
+  ) => void
   /**
    * Context invocation promotes an already-selected clip without destroying
    * its multi-selection; an unselected clip becomes the sole selection.
@@ -201,6 +222,8 @@ export interface TransportState {
    * agnostic; surviving order and primary selection remain stable.
    */
   reconcileClipSelection: (existingClipIds: ReadonlySet<ClipId>) => void
+  /** Publish or clear the live empty-lane box-selection preview. */
+  setSelectionMarquee: (preview: SelectionMarqueePreview | null) => void
   /** Select/clear one sequence marker without adding document history. */
   setSelectedMarker: (markerId: TimelineMarkerId | null) => void
   /** Open/close the explicit sequence-marker editor. */
@@ -248,6 +271,7 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   tool: 'select' as TimelineTool,
   selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
   selectedClipId: null,
+  selectionMarquee: null,
   selectedMarkerId: null,
   editingMarkerId: null,
   editPreview: null,
@@ -381,6 +405,31 @@ export const useTransportStore = create<TransportState>()((set) => ({
             editingMarkerId: null,
           }
     }),
+  setClipSelection: (clipIds, primaryClipId) =>
+    set((state) => {
+      const selectedClipIds = [...new Set(clipIds)]
+      const selectedClipId = primaryClipId !== null
+        && primaryClipId !== undefined
+        && selectedClipIds.includes(primaryClipId)
+        ? primaryClipId
+        : (selectedClipIds[selectedClipIds.length - 1] ?? null)
+      const unchanged = selectedClipId === state.selectedClipId
+        && selectedClipIds.length === state.selectedClipIds.length
+        && selectedClipIds.every((clipId, index) => (
+          clipId === state.selectedClipIds[index]
+        ))
+        && state.selectedMarkerId === null
+        && state.editingMarkerId === null
+      if (unchanged) return state
+      return {
+        selectedClipIds: selectedClipIds.length === 0
+          ? EMPTY_SELECTED_CLIP_IDS
+          : selectedClipIds,
+        selectedClipId,
+        selectedMarkerId: null,
+        editingMarkerId: null,
+      }
+    }),
   promoteContextClipSelection: (clipId) =>
     set((state) => {
       if (!state.selectedClipIds.includes(clipId)) {
@@ -451,6 +500,25 @@ export const useTransportStore = create<TransportState>()((set) => ({
             ? EMPTY_SELECTED_CLIP_IDS
             : selectedClipIds,
         selectedClipId,
+      }
+    }),
+  setSelectionMarquee: (preview) =>
+    set((state) => {
+      if (preview === null) {
+        return state.selectionMarquee === null
+          ? state
+          : { selectionMarquee: null }
+      }
+      const values = [preview.left, preview.top, preview.width, preview.height]
+      if (!values.every(Number.isFinite)) return state
+      return {
+        selectionMarquee: {
+          left: preview.left,
+          top: preview.top,
+          width: Math.max(0, preview.width),
+          height: Math.max(0, preview.height),
+          clipIds: [...new Set(preview.clipIds)],
+        },
       }
     }),
   setSelectedMarker: (markerId) =>

@@ -20,6 +20,7 @@ import {
   audioSampleBoundary,
   EXPORT_AUDIO_BLOCK_SAMPLES,
 } from './export-audio'
+import { AacInputAssembler, type AacInputChunk } from './export-aac-input'
 import {
   createMediabunnyOutputFormat,
   mediabunnyExportImplementationUnavailableReason,
@@ -71,10 +72,11 @@ function audioProbeFrameCount(doc: TimelineDoc, totalFrames: number): number {
 }
 
 /**
- * Configure and encode one real-size video frame plus exact mixer-sized audio
- * blocks. Short timelines use their complete sample count; longer timelines
- * use enough whole frames to cross two blocks so Chromium must produce and
- * flush a representative packet with the writer's real per-frame chunking.
+ * Configure and encode one real-size video frame plus exact mixer-produced
+ * audio. AAC input passes through the same bounded startup assembler as the
+ * real sink, including zero-padding only when a very short timeline cannot
+ * supply Chromium's two-frame startup minimum. Longer timelines use enough
+ * whole frames to cross that minimum and flush representative packets.
  * Unlike canEncode*, each call creates new sources and therefore performs a
  * fresh native WebCodecs support check and actual encode.
  */
@@ -141,6 +143,30 @@ export async function runFreshMediabunnyExportProbe(
     output.addAudioTrack(audioSource)
   }
 
+  const audioChannelCount = audioProfile
+    ? exportAudioChannelCount(audioProfile)
+    : 0
+  const aacAssembler = audioProfile?.audioCodec === 'aac'
+    && audioChannelCount !== 0
+    ? new AacInputAssembler(audioChannelCount)
+    : null
+  const writeAudioProbeChunk = async (chunk: AacInputChunk): Promise<void> => {
+    if (!audioSource || !audioProfile) return
+    const channels = audioChannelCount
+    const audioSample = new AudioSample({
+      data: chunk.data,
+      format: 'f32',
+      numberOfChannels: channels,
+      sampleRate: encoderSampleRate,
+      timestamp: chunk.startSample / encoderSampleRate,
+    })
+    try {
+      await audioSource.add(audioSample)
+    } finally {
+      audioSample.close()
+    }
+  }
+
   try {
     await output.start()
     throwIfAborted(signal)
@@ -149,7 +175,7 @@ export async function runFreshMediabunnyExportProbe(
       throwIfAborted(signal)
       const audioWrite = async (): Promise<void> => {
         if (!audioSource || !audioProfile) return
-        const channels = exportAudioChannelCount(audioProfile)
+        const channels = audioChannelCount
         const frameEndSample = audioSampleBoundary(frame + 1, encoderDoc)
         for (
           let startSample = audioSampleBoundary(frame, encoderDoc);
@@ -157,21 +183,19 @@ export async function runFreshMediabunnyExportProbe(
           startSample += EXPORT_AUDIO_BLOCK_SAMPLES
         ) {
           throwIfAborted(signal)
-          const numberOfFrames = Math.min(
+          const sampleCount = Math.min(
             EXPORT_AUDIO_BLOCK_SAMPLES,
             frameEndSample - startSample,
           )
-          const audioSample = new AudioSample({
-            data: new Float32Array(numberOfFrames * channels),
-            format: 'f32',
-            numberOfChannels: channels,
-            sampleRate: encoderSampleRate,
-            timestamp: startSample / encoderSampleRate,
-          })
-          try {
-            await audioSource.add(audioSample)
-          } finally {
-            audioSample.close()
+          const chunk = {
+            startSample,
+            sampleCount,
+            data: new Float32Array(sampleCount * channels),
+          }
+          if (aacAssembler) {
+            await aacAssembler.add(chunk, writeAudioProbeChunk)
+          } else {
+            await writeAudioProbeChunk(chunk)
           }
         }
       }
@@ -184,6 +208,11 @@ export async function runFreshMediabunnyExportProbe(
         (entry): entry is PromiseRejectedResult => entry.status === 'rejected',
       )
       if (failure) throw failure.reason
+    }
+
+    if (aacAssembler) {
+      throwIfAborted(signal)
+      await aacAssembler.flush(writeAudioProbeChunk)
     }
 
     throwIfAborted(signal)

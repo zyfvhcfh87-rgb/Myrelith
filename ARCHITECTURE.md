@@ -907,6 +907,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   delta)`,
   `rippleTrim(clipId, edge, delta)`, `slipClip(clipId, delta)`,
   `slideClip(clipId, delta)`, `moveClip(clipId, toTrackId, toFrame)`,
+  `moveClips(clipIds, deltaFrames)` (same-lane horizontal group move; selected
+  roots and their linked partners validate and commit atomically as one history
+  entry),
   `retimeClip(clipId, rate)` (timed decoded media only; linked groups retime
   atomically through the pure linking wrapper), `setClipSpeedPoint(clipId,
   frame, rate, easing)`, `removeClipSpeedPoint(clipId, frame)`,
@@ -955,13 +958,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `customZoom`; `setTimelineOriginFrame` changes translation only. These
   geometry fields are ephemeral/non-history and reset deterministically. Also
   `inOut`,
-  `dragPreview` ({clipId, deltaFrames,
+  `dragPreview` ({clipId, clipIds?, deltaFrames,
   targetTrackId?, trackOffsetY?, linkGroupId?} | null — the live half of
   the scrubbing-vs-committed pattern for select-tool moves; every participating
   ClipView renders its own committed `timelineRange.startFrame + deltaFrames`.
   The optional target fields ghost only the gesture owner over a same-kind lane
-  while a linked partner stays on its own lane; pointerup commits ONE
-  documentStore.moveClip and clears it), `tool`
+  while a linked partner stays on its own lane. `clipIds` identifies the exact
+  multi-selection/link closure for a same-lane horizontal group preview;
+  pointerup commits ONE `documentStore.moveClip` or `moveClips` and clears it),
+  `selectionMarquee` (local surface rectangle plus intersecting clip ids; the
+  live, non-history box-selection preview), `tool`
   ('select'|'razor'|'trim'|'slip'|'slide'), `selectedClipIds` (ordered,
   unique, ephemeral, never in undo) plus `selectedClipId` (the primary member
   retained for single-clip surfaces such as Inspector), `editPreview`
@@ -984,15 +990,23 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   (`{frame, kind} | null`) is the equally ephemeral visible-alignment result;
   it is published with a drag/edit/ruler preview and cleared on commit, cancel,
   lost capture, or reset. It never enters project data or history.
+  `ui/timeline/useTimelineMarqueeSelection.ts` owns Select-tool left-button
+  drags that begin on an empty lane. It computes intersections against rendered
+  unlocked/visible clips, publishes only the ephemeral marquee preview while
+  moving, and commits ordered selection state on release; a window-level
+  release fallback prevents a marquee from sticking when the pointer crosses
+  the sticky track-header gutter. It never mutates the document or history.
   `ui/timeline/useClipGestureSession.ts` is the
   single owner of clip pointer/keyboard routing, pointer capture, cancellation,
   rAF-coalesced previews, and the one pointerup document dispatch. At
   pointerdown it delegates to pure `ui/timeline/gestureBounds.ts`, using one
-  fresh document/media snapshot to intersect every participating linked
-  member's legal signed-delta interval, so no owner can preview beyond a
+  fresh document/media snapshot to intersect every participating selected and
+  linked member's legal signed-delta interval, so no owner can preview beyond a
   partner's timeline, source, duration, and headroom bounds. It snapshots
   snapping candidates from that same document and uses the domain resolver for
-  pointer previews, pointer commits, and applicable Ctrl/Cmd+Arrow moves. A
+  pointer previews, pointer commits, and applicable Ctrl/Cmd+Arrow moves.
+  Multi-clip moves stay on their current lanes; the existing single-clip path
+  alone may target another compatible lane. A
   snapped zero-delta keyboard move may show the guide but dispatches no
   document action. The gesture
   session retains that exact pointer-down document reference and group
