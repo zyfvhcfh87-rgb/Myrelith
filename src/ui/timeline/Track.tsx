@@ -72,10 +72,11 @@ interface TrackProps {
 }
 
 // Authored link groups are pairs, while imported documents may contain a
-// defensive larger group. Keep the normal offscreen partner preview without
-// allowing one pathological lane to replace virtualization with thousands of
-// live ClipViews. Project files cap tracks at 256, so this also gives the
-// whole timeline a strict upper bound of 256 cold hosts per gesture.
+// defensive larger group. The link-group fallback mounts at most one cold
+// host per lane so a pathological import cannot replace virtualization with
+// thousands of live ClipViews. Explicit dragPreview.clipIds (Issue #179
+// selected/link closure) are the gesture participants themselves and all
+// mount; that set is already bounded by the user's selection.
 const MAX_COLD_LIVE_GESTURE_HOSTS_PER_TRACK = 1
 
 function pointerFrame(
@@ -187,13 +188,7 @@ function Track({
         rangeEnd(clip.timelineRange) > timelineOriginFrame
         && clip.timelineRange.startFrame < timelineWindowEndFrame
       if (intersectsWindow || clip.id === liveGestureClipId) return true
-      if (
-        liveGestureClipIds?.includes(clip.id) === true
-        && coldGestureHostCount < MAX_COLD_LIVE_GESTURE_HOSTS_PER_TRACK
-      ) {
-        coldGestureHostCount += 1
-        return true
-      }
+      if (liveGestureClipIds?.includes(clip.id) === true) return true
       if (
         liveGestureLinkGroupId === undefined
         || clip.linkGroupId !== liveGestureLinkGroupId

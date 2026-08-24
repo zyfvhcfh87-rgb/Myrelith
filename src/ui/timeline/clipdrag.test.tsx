@@ -462,6 +462,38 @@ describe('drag: scrub-preview then commit', () => {
 
     act(() => transport().setDragPreview(null))
   })
+
+  test('offscreen selected members all mount for a grouped-move preview', () => {
+    const track = makeTrack('grouped-track', [
+      makeClip('owner', 10, 20),
+      makeClip('offscreen-a', 1_000, 20),
+      makeClip('offscreen-b', 1_200, 20),
+      makeClip('unrelated', 1_400, 20),
+    ])
+
+    act(() => transport().setDragPreview({
+      clipId: 'owner',
+      deltaFrames: 8,
+      clipIds: ['owner', 'offscreen-a', 'offscreen-b'],
+    }))
+    render(
+      <Track track={track} timelineOriginFrame={0} timelineWindowEndFrame={200} />,
+    )
+
+    const first = screen.getByTestId('clip-offscreen-a')
+    const second = screen.getByTestId('clip-offscreen-b')
+    expect(first).toHaveAttribute('data-virtual-gesture-host', 'true')
+    expect(second).toHaveAttribute('data-virtual-gesture-host', 'true')
+    expect(first).toHaveClass('dragging')
+    expect(second).toHaveClass('dragging')
+    expect(first).toHaveStyle({ transform: 'translateX(199px)', width: '1px' })
+    expect(second).toHaveStyle({ transform: 'translateX(199px)', width: '1px' })
+    expect(screen.queryByTestId('clip-unrelated')).not.toBeInTheDocument()
+
+    act(() => transport().setDragPreview(null))
+    expect(screen.queryByTestId('clip-offscreen-a')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('clip-offscreen-b')).not.toBeInTheDocument()
+  })
 })
 
 describe('drag: same-kind track targeting', () => {
