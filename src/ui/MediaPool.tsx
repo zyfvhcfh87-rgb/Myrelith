@@ -117,6 +117,10 @@ import {
   type EditorContextMenuUiActions,
 } from '../app/editorContextMenuCommands'
 import {
+  openSourceAsset,
+  setSelectedPoolAssetId,
+} from '../app/sourceMonitorController'
+import {
   openEditorContextMenuFromEvent,
   useEditorContextMenu,
 } from './editorContextMenuController'
@@ -791,6 +795,7 @@ interface MediaPoolItemCardProps {
   readonly attention: boolean
   readonly detailsOpen: boolean
   readonly onSelect: (id: string) => void
+  readonly onOpen: (id: string) => void
   readonly onContextSelect: (id: string) => void
   readonly onToggleDetails: (id: string) => void
   readonly onReviewPartial: (
@@ -815,6 +820,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
   attention,
   detailsOpen,
   onSelect,
+  onOpen,
   onContextSelect,
   onToggleDetails,
   onReviewPartial,
@@ -885,6 +891,16 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
           && target.closest('button, input, label, select, textarea, a')
         ) return
         onSelect(id)
+      }}
+      onDoubleClick={(event) => {
+        const target = event.target
+        if (
+          target instanceof Element
+          && target.closest('button, input, label, select, textarea, a')
+        ) return
+        event.preventDefault()
+        onSelect(id)
+        onOpen(id)
       }}
       onContextMenu={(event) => {
         const row = event.currentTarget
@@ -1205,6 +1221,10 @@ export default function MediaPool() {
     && renderedItemIds.has(effectiveSelectedAssetId)
       ? `media-pool-row-${filteredIndexById.get(effectiveSelectedAssetId)}`
       : undefined
+
+  useEffect(() => {
+    setSelectedPoolAssetId(effectiveSelectedAssetId)
+  }, [effectiveSelectedAssetId])
   const offlineCount = useMemo(() => {
     let count = 0
     for (const descriptor of descriptors.values()) {
@@ -1375,7 +1395,16 @@ export default function MediaPool() {
     } else if (event.key === 'PageUp') {
       nextIndex = currentIndex - columnCount * 4
     }
-    if (nextIndex === null) return
+    if (nextIndex === null) {
+      if (event.key === 'Enter') {
+        const assetId = sortedItems[currentIndex]?.id
+        if (!assetId) return
+        event.preventDefault()
+        setSelectedAssetId(assetId)
+        openSourceAsset(assetId)
+      }
+      return
+    }
     event.preventDefault()
     if (
       (event.key === 'ArrowUp' || event.key === 'ArrowDown')
@@ -1683,6 +1712,7 @@ export default function MediaPool() {
               attention={item.expanded}
               detailsOpen={expandedItemId === id}
               onSelect={selectItem}
+              onOpen={openSourceAsset}
               onContextSelect={setSelectedAssetId}
               onToggleDetails={toggleItemDetails}
               onReviewPartial={openPartialReview}

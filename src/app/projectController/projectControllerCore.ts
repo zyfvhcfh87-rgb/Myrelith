@@ -15,6 +15,7 @@ import { useMediaStore } from '../../state/mediaStore';
 import { INITIAL_ACTIVE_MEDIA_RELINK, INITIAL_PROJECT_SESSION_STATE, type MediaRelinkAmbiguitySummary, type ResumeProjectSummary, useProjectSessionStore } from '../../state/projectSessionStore';
 import { useSourceMonitorStore } from '../../state/sourceMonitorStore';
 import { useTransportStore } from '../../state/transportStore';
+import { clearSelectedPoolAssetId } from '../sourceMonitorController';
 import { compatibilityItemForAsset, checkingCompatibilityItem } from '../mediaCompatibilityController';
 import { createActiveMediaRelinkCoordinator, type ActiveMediaRelinkTransactionResult } from '../activeMediaRelinkCoordinator';
 import { inspectionCandidateForDescriptor, matchingDescriptorCandidates, narrowedFolderCandidateIds, relinkedAsset, selectDescriptor, selectDescriptorByCompatibilityReport, selectDescriptorByFileIdentity } from '../projectMediaMatching';
@@ -323,6 +324,7 @@ export async function leaveActiveProject(
     useMediaStore.getState().clearAssets()
     useTransportStore.getState().resetTransport()
     useSourceMonitorStore.getState().resetSourceMonitor()
+    clearSelectedPoolAssetId()
     clearActiveLocalProjectBindingId()
     useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
     return { status: 'ready' }
@@ -380,6 +382,7 @@ async function activateProject(
     useDocumentStore.getState().setDoc(document)
     useTransportStore.getState().resetTransport()
     useSourceMonitorStore.getState().resetSourceMonitor()
+    clearSelectedPoolAssetId()
     useProjectSessionStore.setState({
       screen: 'editor',
       phase: 'idle',

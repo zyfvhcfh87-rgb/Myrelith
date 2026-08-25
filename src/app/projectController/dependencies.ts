@@ -4,6 +4,7 @@ import { resetMediaImportController } from '../mediaImportController';
 import { disposeMediaVisuals } from '../mediaVisualsController';
 import { discardProjectRecoverySession, pauseProjectPersistenceSession, resumeProjectPersistenceSession, startProjectPersistenceSession, suspendProjectPersistenceSession } from '../projectPersistenceController';
 import { disposePreview } from '../previewController';
+import { disposeSourcePreview } from '../sourceMonitorPreviewController';
 import { disposeSourcePlayback } from '../sourceMonitorPlaybackController';
 import { disposeTransport } from '../transportController';
 import { localMediaHandleRegistry, pickLocalMediaFolder, pickLocalMediaFiles, queryLocalMediaPermission, requestLocalMediaPermission } from '../localMediaHandles';
@@ -26,7 +27,10 @@ export const projectControllerRealDeps: ProjectControllerDeps = {
     await disposeSourcePlayback()
     await disposeTransport()
   },
-  disposePreview,
+  disposePreview: async () => {
+    await disposeSourcePreview()
+    await disposePreview()
+  },
   disposePlugins: disposeLoadedPlugins,
   disposeMediaVisuals,
   resetMediaImport: resetMediaImportController,

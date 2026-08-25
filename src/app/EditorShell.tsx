@@ -19,6 +19,7 @@ import Toolbar from '../ui/Toolbar'
 import ToolButtons from '../ui/ToolButtons'
 import MediaPool from '../ui/MediaPool'
 import Preview from '../ui/Preview'
+import SourceMonitor from '../ui/SourceMonitor'
 import Inspector from '../ui/Inspector'
 import TransportBar from '../ui/TransportBar'
 import Timeline from '../ui/timeline/Timeline'
@@ -278,6 +279,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
       />
       <main className="area-preview" inert={closing}>
         <Preview />
+        <SourceMonitor />
         <PluginPreviewSurface />
       </main>
       <WorkspaceResizeHandle

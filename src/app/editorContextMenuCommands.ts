@@ -44,6 +44,10 @@ import {
   removeProxy,
   requestProxyGeneration,
 } from './proxyController'
+import {
+  openSourceAsset,
+  sourceOpenDisabledReason,
+} from './sourceMonitorController'
 
 interface EditorContextTargetIdentity {
   readonly documentId: string
@@ -120,6 +124,7 @@ export type EditorContextMenuItemId =
   | 'asset.proxy-primary'
   | 'asset.proxy-remove'
   | 'asset.remove'
+  | 'asset.open-source'
 
 export interface ResolvedEditorContextMenuItem {
   readonly id: EditorContextMenuItemId
@@ -526,6 +531,11 @@ export function resolveEditorContextMenu(
         label: descriptor?.fileName ?? compatibility?.fileName ?? 'Media asset',
         items: [
           item(
+            'asset.open-source',
+            'Open in Source Monitor',
+            unavailable ?? busy ?? sourceOpenDisabledReason(target.assetId),
+          ),
+          item(
             'asset.relink-remember',
             'Relink & remember…',
             relinkBase ?? (canRememberImportedMedia()
@@ -681,6 +691,11 @@ export function executeEditorContextMenuItem(
       if (target.kind !== 'transition' || !target.transitionId) return executionFailure(null)
       document.removeTransition(target.trackId, target.transitionId)
       break
+    case 'asset.open-source':
+      if (target.kind !== 'asset') return executionFailure(null)
+      return openSourceAsset(target.assetId).status === 'ok'
+        ? { executed: true, reason: null }
+        : executionFailure(sourceOpenDisabledReason(target.assetId))
     case 'asset.relink-remember':
       if (target.kind !== 'asset') return executionFailure(null)
       // The facade is invoked synchronously here, before its first await.
