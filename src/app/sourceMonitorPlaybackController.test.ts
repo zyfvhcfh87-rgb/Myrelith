@@ -19,6 +19,7 @@ import {
   closeSource,
   configureSourcePlayback,
   disposeSourcePlayback,
+  getSourceAudioPlaybackDiagnostics,
   jumpToStart,
   requestPlayback,
   resetSession,
@@ -124,14 +125,8 @@ function compatibility(): MediaCompatibilityItem {
   }
 }
 
-function makeFakeDeps() {
-  const clock = {
-    currentTime: 0,
-    resume: vi.fn(async () => undefined),
-    close: vi.fn(async () => undefined),
-  }
-  const fetchBlob = vi.fn(async () => new Blob(['audio']))
-  const startAudio = vi.fn<TransportDeps['startAudio']>(async () => ({
+function makeStartAudio(clock: { currentTime: number }) {
+  return vi.fn<TransportDeps['startAudio']>(async () => ({
     anchorTime: clock.currentTime,
     stop: vi.fn(async () => undefined),
     diagnostics: vi.fn(() => ({
@@ -150,6 +145,17 @@ function makeFakeDeps() {
       scheduledThroughContextTime: clock.currentTime + 1,
     })),
   }))
+}
+
+function makeFakeDeps() {
+  const clock = {
+    currentTime: 0,
+    resume: vi.fn(async () => undefined),
+    close: vi.fn(async () => undefined),
+  }
+  const fetchBlob = vi.fn(async () => new Blob(['audio']))
+  const startAudio = makeStartAudio(clock)
+  const sourceStartAudio = makeStartAudio(clock)
   let nextId = 1
   const pending = new Map<number, () => void>()
   const deps = {
@@ -180,6 +186,7 @@ function makeFakeDeps() {
     clock,
     deps,
     startAudio,
+    sourceStartAudio,
     pump,
     pendingCount: () => pending.size,
   }
@@ -188,12 +195,31 @@ function makeFakeDeps() {
 const source = () => useSourceMonitorStore.getState()
 const transport = () => useTransportStore.getState()
 
-function openReadySource(): void {
+function openReadySource(over: Partial<MediaAsset> = {}): void {
+  const asset = makeAsset(over)
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map([
+      ['asset-1', makeAsset({ id: 'asset-1' })],
+      [asset.id, asset],
+    ]),
+    visuals: new Map(),
+    compatibility: new Map(),
+  })
   const result = source().openSource({
-    asset: makeAsset(),
+    asset,
     compatibility: compatibility(),
   })
   expect(result.status).toBe('ok')
+}
+
+async function waitForSourceClock(): Promise<void> {
+  await vi.waitFor(() => expect(fake.pendingCount()).toBeGreaterThan(0))
+}
+
+async function startedSourceAudio() {
+  expect(fake.sourceStartAudio).toHaveBeenCalledTimes(1)
+  return fake.sourceStartAudio.mock.results[0].value
 }
 
 let fake: ReturnType<typeof makeFakeDeps>
@@ -204,7 +230,10 @@ beforeEach(() => {
   useDocumentStore.getState().setDoc(makeDoc())
   useMediaStore.setState({
     descriptors: new Map(),
-    assets: new Map([['asset-1', makeAsset({ id: 'asset-1' })]]),
+    assets: new Map([
+      ['asset-1', makeAsset({ id: 'asset-1' })],
+      ['asset-source', makeAsset()],
+    ]),
     visuals: new Map(),
     compatibility: new Map(),
   })
@@ -213,6 +242,8 @@ beforeEach(() => {
   configureSourcePlayback({
     scheduleTick: fake.deps.scheduleTick,
     cancelTick: fake.deps.cancelTick,
+    fetchBlob: fake.deps.fetchBlob,
+    startAudio: fake.sourceStartAudio,
   })
 })
 
@@ -237,7 +268,30 @@ describe('source / program exclusive playback', () => {
     expect(transport().isPlaying).toBe(false)
     expect(source().playbackOwner).toBe('source')
     expect(source().session?.shuttleStep).toBe(1)
+    expect(fake.startAudio).not.toHaveBeenCalled()
+    expect(fake.sourceStartAudio).toHaveBeenCalledTimes(1)
+    const [clock, doc, fromFrame] = fake.sourceStartAudio.mock.calls[0]
+    expect(clock).toBe(fake.clock)
+    expect(doc.id).toBe('source-review:asset-source')
+    expect(doc.frameRate).toEqual({ num: 30, den: 1 })
+    expect(fromFrame).toBe(0)
+    expect(doc.tracks).toEqual([
+      expect.objectContaining({
+        kind: 'audio',
+        muted: false,
+        clips: [
+          expect.objectContaining({
+            assetId: 'asset-source',
+            volume: 1,
+            sourceRange: { startFrame: 0, durationFrames: 300 },
+            timelineRange: { startFrame: 0, durationFrames: 300 },
+          }),
+        ],
+      }),
+    ])
+    expect(useDocumentStore.getState().doc.id).toBe('doc-source-playback')
 
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
     fake.clock.currentTime = 1.5
     fake.pump()
     expect(source().session?.playheadFrame).toBe(15)
@@ -249,6 +303,8 @@ describe('source / program exclusive playback', () => {
     openReadySource()
     source().stepShuttle('l')
     requestPlayback('source')
+    const audio = await startedSourceAudio()
+    await waitForSourceClock()
     fake.clock.currentTime = 0.5
     fake.pump()
     expect(source().session?.playheadFrame).toBe(15)
@@ -257,6 +313,7 @@ describe('source / program exclusive playback', () => {
     expect(source().session?.shuttleStep).toBe(0)
     expect(source().playbackOwner).toBe('program')
     expect(transport().isPlaying).toBe(true)
+    await vi.waitFor(() => expect(audio.stop).toHaveBeenCalled())
 
     fake.clock.currentTime = 1
     fake.pump()
@@ -264,10 +321,11 @@ describe('source / program exclusive playback', () => {
     expect(source().session?.playheadFrame).toBe(15)
   })
 
-  test('requestPlayback(program) stops source without starting Program mix', () => {
+  test('requestPlayback(program) stops source without starting Program mix', async () => {
     openReadySource()
     source().stepShuttle('l')
     requestPlayback('source')
+    await waitForSourceClock()
     expect(fake.pendingCount()).toBe(1)
 
     const handoff = requestPlayback('program')
@@ -278,9 +336,10 @@ describe('source / program exclusive playback', () => {
     expect(fake.startAudio).not.toHaveBeenCalled()
   })
 
-  test('scrub, step, and jump cancel source timers', () => {
+  test('scrub, step, and jump cancel source timers', async () => {
     openReadySource()
     stepShuttle('l')
+    await waitForSourceClock()
     expect(fake.pendingCount()).toBe(1)
 
     scrubPlayhead(40)
@@ -291,6 +350,7 @@ describe('source / program exclusive playback', () => {
     expect(fake.pendingCount()).toBe(0)
 
     stepShuttle('l')
+    await waitForSourceClock()
     stepFrame(1)
     expect(source().session).toMatchObject({
       playheadFrame: 41,
@@ -299,6 +359,7 @@ describe('source / program exclusive playback', () => {
     expect(fake.pendingCount()).toBe(0)
 
     stepShuttle('l')
+    await waitForSourceClock()
     jumpToStart()
     expect(source().session).toMatchObject({
       playheadFrame: 0,
@@ -307,9 +368,10 @@ describe('source / program exclusive playback', () => {
     expect(fake.pendingCount()).toBe(0)
   })
 
-  test('close and reset stop source timers', () => {
+  test('close and reset stop source timers', async () => {
     openReadySource()
     stepShuttle('l')
+    await waitForSourceClock()
     closeSource()
     expect(source().session).toBeNull()
     expect(fake.pendingCount()).toBe(0)
@@ -324,10 +386,11 @@ describe('source / program exclusive playback', () => {
     expect(fake.pendingCount()).toBe(0)
   })
 
-  test('project replace invalidates in-flight source ticks', () => {
+  test('project replace invalidates in-flight source ticks', async () => {
     openReadySource()
     stepShuttle('l')
     const revision = getSourceMonitorResetRevision()
+    await waitForSourceClock()
     expect(fake.pendingCount()).toBe(1)
 
     source().resetSourceMonitor()
@@ -341,11 +404,15 @@ describe('source / program exclusive playback', () => {
     expect(source().session?.playheadFrame).toBe(0)
   })
 
-  test('2x shuttle follows the audio clock at signed rate 2', () => {
+  test('2x shuttle follows the audio clock at signed rate 2', async () => {
     openReadySource()
     stepShuttle('l')
+    const audio = await startedSourceAudio()
     stepShuttle('l')
     expect(source().session?.shuttleStep).toBe(2)
+    expect(fake.sourceStartAudio).toHaveBeenCalledTimes(1)
+    expect(getSourceAudioPlaybackDiagnostics()).toBeNull()
+    await vi.waitFor(() => expect(audio.stop).toHaveBeenCalled())
 
     fake.clock.currentTime = 0.5
     fake.pump()
@@ -368,11 +435,81 @@ describe('source / program exclusive playback', () => {
   test('dispose cancels source ticks and restores injected deps', async () => {
     openReadySource()
     stepShuttle('l')
+    await waitForSourceClock()
     expect(fake.pendingCount()).toBe(1)
     await disposeSourcePlayback()
     expect(fake.pendingCount()).toBe(0)
     fake.clock.currentTime = 2
     fake.pump()
     expect(source().session?.playheadFrame).toBe(0)
+  })
+})
+
+describe('source audio audition', () => {
+  test('reverse shuttle does not start source audio', () => {
+    openReadySource()
+    source().setPlayhead(10)
+    stepShuttle('j')
+    expect(source().session?.shuttleStep).toBe(-1)
+    expect(fake.sourceStartAudio).not.toHaveBeenCalled()
+    expect(fake.pendingCount()).toBe(1)
+  })
+
+  test('stills without audio stay silent at 1x', () => {
+    openReadySource({
+      kind: 'image',
+      fileName: 'still.png',
+      mimeType: 'image/png',
+      frameRate: null,
+      hasAudio: false,
+      audioSampleRate: null,
+      audioChannels: null,
+      sourceBounds: {
+        video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 5_000_000 },
+        audio: null,
+      },
+    })
+    stepShuttle('l')
+    expect(source().session?.shuttleStep).toBe(1)
+    expect(fake.sourceStartAudio).not.toHaveBeenCalled()
+    expect(fake.pendingCount()).toBe(1)
+  })
+
+  test('audio-only 1x still auditions on the shared clock', async () => {
+    openReadySource({
+      kind: 'audio',
+      fileName: 'tone.wav',
+      mimeType: 'audio/wav',
+      frameRate: null,
+      width: null,
+      height: null,
+      sourceBounds: {
+        video: null,
+        audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+      },
+    })
+    stepShuttle('l')
+    expect(fake.sourceStartAudio).toHaveBeenCalledTimes(1)
+    const doc = fake.sourceStartAudio.mock.calls[0][1]
+    expect(doc.id).toBe('source-review:asset-source')
+    expect(doc.frameRate).toEqual({ num: 30, den: 1 })
+    expect(fake.startAudio).not.toHaveBeenCalled()
+    await waitForSourceClock()
+  })
+
+  test('K stops the 1x source audio session', async () => {
+    openReadySource()
+    stepShuttle('l')
+    const audio = await startedSourceAudio()
+    await waitForSourceClock()
+    expect(getSourceAudioPlaybackDiagnostics()).toMatchObject({
+      activeDecoderCount: 1,
+      rms: 0.25,
+    })
+    stepShuttle('k')
+    expect(source().session?.shuttleStep).toBe(0)
+    expect(getSourceAudioPlaybackDiagnostics()).toBeNull()
+    await vi.waitFor(() => expect(audio.stop).toHaveBeenCalled())
+    expect(fake.pendingCount()).toBe(0)
   })
 })
