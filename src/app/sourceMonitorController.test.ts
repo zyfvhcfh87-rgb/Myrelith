@@ -361,4 +361,38 @@ describe('sourceMonitorController', () => {
       ],
     })
   })
+
+  test('relinking the open asset remaps playhead and marks onto the new clock', () => {
+    const asset = makeAsset({ frameRate: { num: 60, den: 1 } })
+    seed(asset, compatibility())
+    expect(openSourceAsset(asset.id).status).toBe('ok')
+    useSourceMonitorStore.getState().setPlayhead(120)
+    useSourceMonitorStore.getState().setIn()
+    useSourceMonitorStore.getState().setOut()
+    expect(useSourceMonitorStore.getState().session).toMatchObject({
+      source: { durationFrames: 600, rate: { num: 60, den: 1 } },
+      playheadFrame: 120,
+      inFrame: 120,
+      outFrameExclusive: 121,
+    })
+
+    seed(makeAsset({
+      durationMicroseconds: 5_000_000,
+      durationFrames: 150,
+      objectUrl: 'blob:relinked',
+    }), compatibility())
+
+    expect(useSourceMonitorStore.getState().session).toMatchObject({
+      source: {
+        assetId: 'asset-source',
+        durationFrames: 150,
+        rate: { num: 30, den: 1 },
+      },
+      playheadFrame: 60,
+      inFrame: 60,
+      outFrameExclusive: 61,
+      shuttleStep: 0,
+    })
+    expect(useTransportStore.getState().playheadFrame).toBe(48)
+  })
 })

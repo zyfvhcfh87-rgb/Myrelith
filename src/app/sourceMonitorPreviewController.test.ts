@@ -21,6 +21,7 @@ import { useTransportStore } from '../state/transportStore'
 import { openSourceAsset } from './sourceMonitorController'
 import {
   disposeSourcePreview,
+  drainSourcePreviewPlayback,
   initSourcePreview,
   setSourcePreviewViewport,
   type SourcePreviewBridge,
@@ -192,6 +193,14 @@ const flush = async (): Promise<void> => {
   for (let i = 0; i < 20; i++) await Promise.resolve()
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
 beforeEach(() => {
   useSourceMonitorStore.getState().resetSourceMonitor()
   useTransportStore.getState().resetTransport()
@@ -359,6 +368,73 @@ describe('sourceMonitorPreviewController', () => {
       assetId: 'asset-source',
       blob,
     })])
+  })
+
+  test('relinking the open asset rebuilds review on the remapped clock', async () => {
+    const { deps, bridge } = makeDeps()
+    seed(makeAsset({ frameRate: { num: 60, den: 1 } }))
+    initSourcePreview(canvasEl(), deps)
+    expect(openSourceAsset('asset-source').status).toBe('ok')
+    useSourceMonitorStore.getState().setPlayhead(120)
+    await nextFrame()
+    await flush()
+    expect(bridge.docs.at(-1)?.tracks[0]?.clips[0]?.timelineRange).toEqual({
+      startFrame: 0,
+      durationFrames: 600,
+    })
+
+    seed(makeAsset({
+      durationMicroseconds: 5_000_000,
+      durationFrames: 150,
+      objectUrl: 'blob:relinked',
+    }))
+    await nextFrame()
+    await flush()
+    expect(useSourceMonitorStore.getState().session).toMatchObject({
+      source: { durationFrames: 150, rate: { num: 30, den: 1 } },
+      playheadFrame: 60,
+    })
+    expect(bridge.docs.at(-1)?.tracks[0]?.clips[0]?.timelineRange).toEqual({
+      startFrame: 0,
+      durationFrames: 150,
+    })
+    expect(bridge.rendered.at(-1)).toEqual({ frame: 60, mode: 'seek' })
+    expect(deps.fetchBlob).toHaveBeenCalledWith('blob:relinked')
+  })
+
+  test('drains playback lanes onto a seek before another decoder owner starts', async () => {
+    const { deps, bridge } = makeDeps()
+    seed(makeAsset())
+    initSourcePreview(canvasEl(), deps)
+    expect(openSourceAsset('asset-source').status).toBe('ok')
+    useSourceMonitorStore.getState().stepShuttle('l')
+    await nextFrame()
+    await flush()
+    expect(bridge.rendered.at(-1)).toEqual({ frame: 0, mode: 'playback' })
+
+    const renderGate = deferred<RenderFrameResult>()
+    bridge.rendered.length = 0
+    bridge.renderFrame = async (plan, mode) => {
+      bridge.rendered.push({ frame: plan.frame, mode })
+      return renderGate.promise
+    }
+    const draining = drainSourcePreviewPlayback()
+    let settled = false
+    void draining.then(() => { settled = true })
+    await Promise.resolve()
+
+    expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
+    expect(settled).toBe(false)
+
+    renderGate.resolve({
+      status: 'drawn',
+      drawnClipIds: [],
+      missingClipIds: [],
+      renderMs: 1,
+    })
+    await draining
+    expect(settled).toBe(true)
+    expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
   })
 
   test('releases the review source when the session closes', async () => {

@@ -30,6 +30,7 @@ import {
 import {
   configureTransport,
   disposeTransport,
+  pauseAndDrainPlayback,
   play,
 } from './transportController'
 import type { TransportDeps } from './transportController'
@@ -194,6 +195,14 @@ function makeFakeDeps() {
 
 const source = () => useSourceMonitorStore.getState()
 const transport = () => useTransportStore.getState()
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
 
 function openReadySource(over: Partial<MediaAsset> = {}): void {
   const asset = makeAsset(over)
@@ -368,6 +377,29 @@ describe('source / program exclusive playback', () => {
     expect(fake.pendingCount()).toBe(0)
   })
 
+  test('reopening the same asset on a new clock stops the previous source audio', async () => {
+    openReadySource()
+    stepShuttle('l')
+    const audio = await startedSourceAudio()
+    await waitForSourceClock()
+    expect(fake.pendingCount()).toBe(1)
+
+    const remapped = source().openSource({
+      asset: makeAsset({
+        durationMicroseconds: 5_000_000,
+        durationFrames: 150,
+      }),
+      compatibility: compatibility(),
+    })
+    expect(remapped.status).toBe('ok')
+    expect(source().session).toMatchObject({
+      source: { durationFrames: 150 },
+      shuttleStep: 0,
+    })
+    expect(fake.pendingCount()).toBe(0)
+    await vi.waitFor(() => expect(audio.stop).toHaveBeenCalled())
+  })
+
   test('switching assets stops the previous source clock and audio', async () => {
     openReadySource()
     stepShuttle('l')
@@ -517,6 +549,29 @@ describe('source audio audition', () => {
     expect(doc.frameRate).toEqual({ num: 30, den: 1 })
     expect(fake.startAudio).not.toHaveBeenCalled()
     await waitForSourceClock()
+  })
+
+  test('pause-and-drain waits for source audio decoder cleanup', async () => {
+    openReadySource()
+    stepShuttle('l')
+    const audio = await startedSourceAudio()
+    await waitForSourceClock()
+    const stopGate = deferred<void>()
+    audio.stop.mockImplementationOnce(() => stopGate.promise)
+
+    const draining = pauseAndDrainPlayback()
+    let settled = false
+    void draining.then(() => { settled = true })
+    await Promise.resolve()
+
+    expect(audio.stop).toHaveBeenCalledOnce()
+    expect(source().session?.shuttleStep).toBe(0)
+    expect(settled).toBe(false)
+
+    stopGate.resolve()
+    await draining
+    expect(settled).toBe(true)
+    expect(fake.pendingCount()).toBe(0)
   })
 
   test('K stops the 1x source audio session', async () => {

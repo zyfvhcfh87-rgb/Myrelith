@@ -9,10 +9,13 @@ import {
   mediaCompatibilityRemediationLines,
   mediaCompatibilityStatusText,
 } from '../domain/mediaCompatibility'
+import type { MediaAsset } from '../domain/schema'
 import {
   openSourceMonitor,
+  sourceMonitorSourceFacts,
   type SourceMonitorOpenRejection,
   type SourceMonitorOpenResult,
+  type SourceMonitorSession,
 } from '../domain/sourceMonitor'
 import { useMediaStore } from '../state/mediaStore'
 import { useSourceMonitorStore } from '../state/sourceMonitorStore'
@@ -132,3 +135,27 @@ export function openSelectedSource(): SourceMonitorOpenResult {
   }
   return openSourceAsset(assetId)
 }
+
+function sourceFactsNeedRemap(
+  session: SourceMonitorSession,
+  asset: MediaAsset,
+): boolean {
+  const next = sourceMonitorSourceFacts(asset)
+  const current = session.source
+  return current.kind !== next.kind
+    || current.fileName !== next.fileName
+    || current.rate.num !== next.rate.num
+    || current.rate.den !== next.rate.den
+    || current.durationFrames !== next.durationFrames
+    || current.hasAudio !== next.hasAudio
+}
+
+function syncOpenSourceWithConnectedMedia(): void {
+  const session = useSourceMonitorStore.getState().session
+  if (!session) return
+  const asset = useMediaStore.getState().assets.get(session.source.assetId)
+  if (!asset || !sourceFactsNeedRemap(session, asset)) return
+  openSourceAsset(session.source.assetId)
+}
+
+useMediaStore.subscribe(syncOpenSourceWithConnectedMedia)

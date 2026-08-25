@@ -8,7 +8,8 @@
  *
  * Exclusive owner: requestPlayback('source') pauses Program first;
  * Program play() / pause-and-drain / dispose stop the source clock first
- * through registerSourcePlaybackStop. Forward 1x with imported audio
+ * through registerSourcePlaybackStop, and pause-and-drain waits for this
+ * controller's audio decoder teardown. Forward 1x with imported audio
  * auditions through the same AudioContext and startAudio pipeline as
  * Program, on a review TimelineDoc that never enters documentStore.
  * Reverse and 2/4/8 stay silent.
@@ -181,7 +182,7 @@ function subscribeSourceReset(): void {
     if (current.session === null) {
       haltSourceEngine()
     }
-    if (current.session?.source.assetId !== previous.session?.source.assetId) {
+    if (current.session?.source !== previous.session?.source) {
       haltSourceEngine()
     }
   })
@@ -477,7 +478,7 @@ function startSourceClock(): void {
   startSourceEngine(engine, session, context.currentTime)
 }
 
-registerSourcePlaybackStop(stopSourceClock)
+registerSourcePlaybackStop(stopSourceClock, drainSourcePlayback)
 
 /**
  * Swap the injected tick scheduler (tests). Must run before the first
@@ -554,6 +555,18 @@ export function closeSource(): void {
 export function resetSession(): void {
   haltSourceEngine()
   useSourceMonitorStore.getState().resetSession()
+}
+
+/** Stop Source playback and wait until its audio decoder owners are gone. */
+export async function drainSourcePlayback(): Promise<void> {
+  haltSourceEngine()
+  useSourceMonitorStore.getState().stopPlayback()
+  while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
+    await Promise.all([
+      ...state.playbackTasks,
+      ...state.cleanupTasks,
+    ])
+  }
 }
 
 /** Stop the source clock and drop the engine. Does not close Program's AudioContext. */

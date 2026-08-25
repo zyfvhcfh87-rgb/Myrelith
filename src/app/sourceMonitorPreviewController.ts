@@ -339,6 +339,30 @@ function isCurrentOwner(
   return state.bridge === bridge && state.renderGeneration === generation
 }
 
+/** Retire every Source preview playback lane before another decoder owner starts. */
+export async function drainSourcePreviewPlayback(): Promise<void> {
+  while (true) {
+    cancelScheduledRender()
+    const bridge = state.bridge
+    const planner = state.visualPlanner
+    if (!bridge || !planner) return
+    const session = useSourceMonitorStore.getState().session
+    if (!session) return
+    const generation = state.renderGeneration
+    const result = await bridge.renderFrame(
+      planner.planFrame(session.playheadFrame),
+      'seek',
+    )
+    if (state.bridge !== bridge || state.renderGeneration !== generation) continue
+    if (result.status === 'superseded') continue
+    cancelScheduledRender()
+    if (result.status === 'error') {
+      throw new Error(result.message ?? 'Source preview playback decoder teardown failed')
+    }
+    return
+  }
+}
+
 export function setSourcePreviewViewport(viewport: PresentationViewport | null): void {
   state.viewport = viewport
   const doc = state.reviewDoc

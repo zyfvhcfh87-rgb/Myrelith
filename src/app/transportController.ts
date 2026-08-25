@@ -160,13 +160,19 @@ const state: ControllerState = {
 }
 
 let stopSourcePlaybackClock = (): void => {}
+let drainSourcePlaybackOwners: () => Promise<void> = async () => {}
 
 /**
- * Source Monitor registers its clock halt here so Program play/drain/dispose
- * can stop Source first without importing the source controller (cycle).
+ * Source Monitor registers its clock halt and decoder drain here so Program
+ * play/drain/dispose can stop Source first without importing the source
+ * controller (cycle).
  */
-export function registerSourcePlaybackStop(stop: () => void): void {
+export function registerSourcePlaybackStop(
+  stop: () => void,
+  drain: () => Promise<void> = async () => {},
+): void {
   stopSourcePlaybackClock = stop
+  drainSourcePlaybackOwners = drain
 }
 
 function haltSourcePlaybackClock(): void {
@@ -620,6 +626,7 @@ export function pause(): void {
 export async function pauseAndDrainPlayback(): Promise<void> {
   haltSourcePlaybackClock()
   pause()
+  await drainSourcePlaybackOwners()
   while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
     await Promise.all([
       ...state.playbackTasks,

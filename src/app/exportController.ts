@@ -50,6 +50,8 @@ import { preflightExportProfile } from './exportCapabilitiesController'
 import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { registerLoadedExportDisposer } from './exportLifecycle'
 import { drainPreviewPlayback } from './previewController'
+import { drainSourcePlayback } from './sourceMonitorPlaybackController'
+import { drainSourcePreviewPlayback } from './sourceMonitorPreviewController'
 import { pauseAndDrainPlayback } from './transportController'
 /* The later app composition wave owns the concrete prepared-attempt lifecycle. */
 import {
@@ -106,7 +108,9 @@ const realDeps: ExportControllerDeps = {
   preparePlaybackForExport: async () => {
     await Promise.all([
       pauseAndDrainPlayback(),
+      drainSourcePlayback(),
       drainPreviewPlayback(),
+      drainSourcePreviewPlayback(),
     ])
   },
   preflightProfile: preflightExportProfile,
