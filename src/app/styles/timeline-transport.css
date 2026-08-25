@@ -156,6 +156,12 @@
   background: #1b1b1b;
 }
 
+.transport-button[aria-pressed='true'] {
+  background: #3d5a80;
+  border-color: #6b93c4;
+  color: #fff;
+}
+
 .transport-play {
   min-width: 44px;
   font-size: 14px;

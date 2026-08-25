@@ -15,9 +15,10 @@ export {
   setCrossfadeSettings,
   setCrossfadeSettingsWithSourceBounds,
 } from './operations/transitions'
-export { clipFromAsset, createTextClip, insertClip } from './operations/creation'
+export { clipFromAsset, clipFromAssetRange, createTextClip, insertClip } from './operations/creation'
 export {
   clearClipSpeedRamp,
+  deleteClip,
   moveClip,
   moveClipsByDelta,
   removeClipSpeedPoint,

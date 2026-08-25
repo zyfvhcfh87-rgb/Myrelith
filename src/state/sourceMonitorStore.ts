@@ -8,6 +8,7 @@
  */
 
 import { create } from 'zustand'
+import { defaultSourcePatch } from '../domain/threePointEdit'
 import {
   advanceSourcePlayhead,
   clearSourceIn,
@@ -42,6 +43,8 @@ export interface SourceMonitorState {
   readonly session: SourceMonitorSession | null
   readonly playbackOwner: MonitorPlaybackOwner
   readonly lastOpenRejection: SourceMonitorOpenRejection | null
+  readonly patchVideo: boolean
+  readonly patchAudio: boolean
 }
 
 export interface SourceMonitorStore extends SourceMonitorState {
@@ -65,6 +68,7 @@ export interface SourceMonitorStore extends SourceMonitorState {
   resetSession(): void
   stepShuttle(key: SourceMonitorShuttleKey): void
   requestPlayback(requested: 'program' | 'source'): MonitorPlaybackHandoff
+  setSourcePatch(patch: { video?: boolean; audio?: boolean }): void
   /** Drop every source-monitor field when the active project is replaced. */
   resetSourceMonitor(): void
 }
@@ -73,6 +77,8 @@ export const INITIAL_SOURCE_MONITOR_STATE: SourceMonitorState = Object.freeze({
   session: null,
   playbackOwner: 'none',
   lastOpenRejection: null,
+  patchVideo: true,
+  patchAudio: true,
 })
 
 let sourceMonitorResetRevision = 0
@@ -105,11 +111,21 @@ export const useSourceMonitorStore = create<SourceMonitorStore>()((set, get) => 
             ? state
             : { lastOpenRejection: result.reason }
         }
+        const patch = input.asset
+          ? defaultSourcePatch(input.asset)
+          : { video: true, audio: true }
         if (
           state.session === result.session
           && state.lastOpenRejection === null
+          && state.patchVideo === patch.video
+          && state.patchAudio === patch.audio
         ) return state
-        return { session: result.session, lastOpenRejection: null }
+        return {
+          session: result.session,
+          lastOpenRejection: null,
+          patchVideo: patch.video,
+          patchAudio: patch.audio,
+        }
       })
       return result
     },
@@ -151,6 +167,15 @@ export const useSourceMonitorStore = create<SourceMonitorStore>()((set, get) => 
     clearMarks: () => applySession(clearSourceMarks),
     resetSession: () => applySession(resetSourceSession),
     stepShuttle: (key) => applySession((session) => stepSourceShuttle(session, key)),
+
+    setSourcePatch: (patch) =>
+      set((state) => {
+        const patchVideo = patch.video ?? state.patchVideo
+        const patchAudio = patch.audio ?? state.patchAudio
+        return state.patchVideo === patchVideo && state.patchAudio === patchAudio
+          ? state
+          : { patchVideo, patchAudio }
+      }),
 
     requestPlayback: (requested) => {
       const state = get()

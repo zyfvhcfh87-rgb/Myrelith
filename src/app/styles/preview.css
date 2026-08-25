@@ -13,8 +13,6 @@
 
 .preview-panel {
   position: relative;
-  width: 100%;
-  height: 100%;
   display: flex;
   flex: 1 1 0;
   min-width: 0;
@@ -107,13 +105,12 @@
   margin-top: 4px;
 }
 
-.source-monitor-later {
+.source-monitor-edits {
+  display: flex;
   flex: 0 0 auto;
-  margin: 0;
+  flex-wrap: wrap;
+  gap: 6px;
   padding: 0 8px 8px;
-  color: #8d8d8d;
-  font-size: 11px;
-  line-height: 16px;
 }
 
 .source-monitor-readout {

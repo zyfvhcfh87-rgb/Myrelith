@@ -7,7 +7,12 @@
 
 import { useEffect, useRef } from 'react'
 import { CaretLeft, CaretRight, Pause, Play } from '@phosphor-icons/react'
-import { shortcutForCommand } from '../app/editorCommands'
+import {
+  executeEditorCommand,
+  resolveEditorCommand,
+  shortcutForCommand,
+} from '../app/editorCommands'
+import { focusSourceMonitor } from '../app/sequenceEditController'
 import { sourceMonitorStatusCopy } from '../app/sourceMonitorController'
 import {
   closeSource,
@@ -28,6 +33,7 @@ import {
 import { formatTimecode } from '../domain/time'
 import { useMediaStore } from '../state/mediaStore'
 import { useSourceMonitorStore } from '../state/sourceMonitorStore'
+import { useTransportStore } from '../state/transportStore'
 
 function markLabel(
   frame: number | null,
@@ -44,6 +50,13 @@ export default function SourceMonitor() {
   const session = useSourceMonitorStore((state) => state.session)
   const lastOpenRejection = useSourceMonitorStore((state) => state.lastOpenRejection)
   const playbackOwner = useSourceMonitorStore((state) => state.playbackOwner)
+  const patchVideo = useSourceMonitorStore((state) => state.patchVideo)
+  const patchAudio = useSourceMonitorStore((state) => state.patchAudio)
+  useTransportStore((state) => state.videoTargetTrackId)
+  useTransportStore((state) => state.audioTargetTrackId)
+  useTransportStore((state) => state.trackTargetsTouched)
+  useTransportStore((state) => state.timelineInFrame)
+  useTransportStore((state) => state.timelineOutExclusive)
   const asset = useMediaStore((state) => (
     session ? state.assets.get(session.source.assetId) ?? null : null
   ))
@@ -116,6 +129,10 @@ export default function SourceMonitor() {
   const outShortcut = shortcutForCommand('source.mark-out')
   const startShortcut = shortcutForCommand('source.jump-start')
   const endShortcut = shortcutForCommand('source.jump-end')
+  const insertCommand = resolveEditorCommand('timeline.insert')
+  const overwriteCommand = resolveEditorCommand('timeline.overwrite')
+  const insertDisabled = insertCommand.enabled ? null : insertCommand.disabledReason
+  const overwriteDisabled = overwriteCommand.enabled ? null : overwriteCommand.disabledReason
   const playing = (session?.shuttleStep ?? 0) !== 0
 
   return (
@@ -123,6 +140,7 @@ export default function SourceMonitor() {
       className="source-monitor"
       data-testid="source-monitor"
       aria-label="Source Monitor"
+      onPointerDown={focusSourceMonitor}
     >
       <header className="source-monitor-header">
         <h2 className="source-monitor-title">
@@ -281,9 +299,54 @@ export default function SourceMonitor() {
           Open a Media Pool asset ({openShortcut.label})
         </p>
       ) : null}
-      <p className="source-monitor-later">
-        Three-point insert and overwrite come later.
-      </p>
+      <div className="source-monitor-edits">
+        <button
+          type="button"
+          className={`transport-button${patchVideo ? ' active' : ''}`}
+          title="Patch source video onto the targeted video track"
+          aria-pressed={patchVideo}
+          aria-label="source video patch"
+          onClick={() => useSourceMonitorStore.getState().setSourcePatch({ video: !patchVideo })}
+        >
+          V
+        </button>
+        <button
+          type="button"
+          className={`transport-button${patchAudio ? ' active' : ''}`}
+          title="Patch source audio onto the targeted audio track"
+          aria-pressed={patchAudio}
+          aria-label="source audio patch"
+          onClick={() => useSourceMonitorStore.getState().setSourcePatch({ audio: !patchAudio })}
+        >
+          A
+        </button>
+        <button
+          type="button"
+          className="transport-button"
+          aria-keyshortcuts={shortcutForCommand('timeline.insert')?.ariaKeyShortcuts}
+          title={insertDisabled ?? 'Insert the marked source at the playhead'}
+          aria-disabled={insertDisabled !== null}
+          onClick={() => {
+            if (insertDisabled) return
+            executeEditorCommand('timeline.insert')
+          }}
+        >
+          Insert
+        </button>
+        <button
+          type="button"
+          className="transport-button"
+          aria-keyshortcuts={shortcutForCommand('timeline.overwrite')?.ariaKeyShortcuts}
+          title={overwriteDisabled ?? 'Overwrite the targeted tracks with the marked source'}
+          aria-disabled={overwriteDisabled !== null}
+          onClick={() => {
+            if (overwriteDisabled) return
+            executeEditorCommand('timeline.overwrite')
+          }}
+        >
+          Overwrite
+        </button>
+      </div>
     </section>
   )
 }

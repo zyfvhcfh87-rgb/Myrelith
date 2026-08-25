@@ -24,6 +24,11 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { Eye, LockSimple, PencilSimple, X } from '@phosphor-icons/react'
 import type { Track as TrackData } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
+import { useTransportStore } from '../../state/transportStore'
+import {
+  resolvedTrackTargets,
+  toggleTrackTarget,
+} from '../../app/sequenceEditController'
 import type { TrackFlagsPatch } from '../../domain/operations'
 import { editorContextMenuIdentity } from '../../app/editorContextMenuCommands'
 import {
@@ -36,6 +41,12 @@ interface TrackHeaderProps {
 }
 
 function TrackHeader({ track }: TrackHeaderProps) {
+  useTransportStore((state) => state.videoTargetTrackId)
+  useTransportStore((state) => state.audioTargetTrackId)
+  useTransportStore((state) => state.trackTargetsTouched)
+  const targeted = track.kind === 'video'
+    ? resolvedTrackTargets().videoTrackId === track.id
+    : resolvedTrackTargets().audioTrackId === track.id
   const contextMenu = useEditorContextMenu()
   const [renaming, setRenaming] = useState(false)
   const renameTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -124,6 +135,20 @@ function TrackHeader({ track }: TrackHeaderProps) {
         </div>
       )}
       <div className="track-header-toggles">
+        <button
+          type="button"
+          className={`track-toggle${targeted ? ' active' : ''}`}
+          title={
+            targeted
+              ? 'Remove this track as a sequence-edit destination'
+              : 'Target this track for insert, overwrite, lift, and extract'
+          }
+          aria-label={`target track ${track.name}`}
+          aria-pressed={targeted}
+          onClick={() => toggleTrackTarget(track.id, track.kind)}
+        >
+          T
+        </button>
         {!renaming ? (
           <button
             ref={renameTriggerRef}

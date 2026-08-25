@@ -17,6 +17,8 @@ import {
   addEffect,
   addTrack,
   clipFromAsset,
+  clipFromAssetRange,
+  deleteClip,
   insertClip,
   MAX_CLIP_VOLUME,
   moveClip,
@@ -613,6 +615,21 @@ describe('moveClip', () => {
 /* rippleDelete                                                         */
 /* ------------------------------------------------------------------ */
 
+describe('deleteClip', () => {
+  test('removes one clip and leaves the gap', () => {
+    const doc = makeDoc()
+    const out = deleteClip(doc, 'clipA')
+    expect(out).not.toBe(doc)
+    expect(clipsOf(out, 'V1').map((clip) => clip.id)).toEqual(['clipB', 'clipC'])
+    expect(clipIn(out, 'V1', 'clipB').timelineRange.startFrame).toBe(100)
+  })
+
+  test('rejects a locked track with the original document', () => {
+    const doc = makeDoc()
+    expect(deleteClip(doc, 'clipE')).toBe(doc)
+  })
+})
+
 describe('rippleDelete', () => {
   test('removes the clip and shifts later clips left by its duration', () => {
     const doc = makeDoc()
@@ -876,6 +893,13 @@ describe('clipFromAsset', () => {
 
   test('every call mints a fresh clip id', () => {
     expect(clipFromAsset(asset(), 0).id).not.toBe(clipFromAsset(asset(), 0).id)
+  })
+
+  test('clipFromAssetRange plays a timed subrange at 1x', () => {
+    const c = clipFromAssetRange(asset(), 40, 10, 30)
+    expect(c.timelineRange).toEqual({ startFrame: 40, durationFrames: 30 })
+    expect(c.sourceRange).toEqual({ startFrame: 10, durationFrames: 30 })
+    expect(c.sourceMode).toBe('timed')
   })
 
   test('an image gets one still source frame and a nominal editable timeline duration', () => {

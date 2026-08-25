@@ -37,6 +37,14 @@ import {
   stepShuttle,
 } from './sourceMonitorPlaybackController'
 import { stepFrame, togglePlayback } from './transportController'
+import {
+  executeFocusedClearIn,
+  executeFocusedClearOut,
+  executeFocusedMarkIn,
+  executeFocusedMarkOut,
+  executeSequenceEdit,
+  sequenceEditDisabledReason,
+} from './sequenceEditController'
 
 export type EditorCommandId =
   | 'history.undo'
@@ -48,6 +56,17 @@ export type EditorCommandId =
   | 'tool.slide'
   | 'timeline.split'
   | 'timeline.ripple-delete'
+  | 'timeline.insert'
+  | 'timeline.overwrite'
+  | 'timeline.lift'
+  | 'timeline.extract'
+  | 'timeline.replace'
+  | 'timeline.roll-left'
+  | 'timeline.roll-right'
+  | 'marks.mark-in'
+  | 'marks.mark-out'
+  | 'marks.clear-in'
+  | 'marks.clear-out'
   | 'marker.add'
   | 'marker.previous'
   | 'marker.next'
@@ -193,6 +212,94 @@ export const EDITOR_COMMAND_DEFINITIONS: readonly EditorCommandDefinition[] = [
       label: 'Delete or Backspace',
       ariaKeyShortcuts: 'Delete Backspace',
     },
+  },
+  {
+    id: 'timeline.insert',
+    category: 'Timeline',
+    label: 'Insert edit',
+    description: 'Insert the Source Monitor range at the playhead and ripple later clips.',
+    keywords: ['three-point', 'source', 'ripple'],
+    shortcut: { label: ',', ariaKeyShortcuts: 'Comma' },
+  },
+  {
+    id: 'timeline.overwrite',
+    category: 'Timeline',
+    label: 'Overwrite edit',
+    description: 'Overwrite the targeted tracks with the Source Monitor range.',
+    keywords: ['three-point', 'source'],
+    shortcut: { label: '.', ariaKeyShortcuts: 'Period' },
+  },
+  {
+    id: 'timeline.lift',
+    category: 'Timeline',
+    label: 'Lift',
+    description: 'Remove the timeline In/Out range and leave a gap.',
+    keywords: ['in', 'out', 'remove'],
+    shortcut: { label: ';', ariaKeyShortcuts: 'Semicolon' },
+  },
+  {
+    id: 'timeline.extract',
+    category: 'Timeline',
+    label: 'Extract',
+    description: 'Remove the timeline In/Out range and close the gap.',
+    keywords: ['in', 'out', 'ripple'],
+    shortcut: { label: '\'', ariaKeyShortcuts: "'" },
+  },
+  {
+    id: 'timeline.replace',
+    category: 'Timeline',
+    label: 'Replace edit',
+    description: 'Replace the selected clip from the Source Monitor without retiming.',
+    keywords: ['source', 'swap'],
+    shortcut: { label: 'R', ariaKeyShortcuts: 'R' },
+  },
+  {
+    id: 'timeline.roll-left',
+    category: 'Timeline',
+    label: 'Roll seam left',
+    description: 'Move the touching seam at the playhead one frame earlier.',
+    keywords: ['roll', 'seam', 'trim'],
+    shortcut: { label: '[', ariaKeyShortcuts: '[' },
+  },
+  {
+    id: 'timeline.roll-right',
+    category: 'Timeline',
+    label: 'Roll seam right',
+    description: 'Move the touching seam at the playhead one frame later.',
+    keywords: ['roll', 'seam', 'trim'],
+    shortcut: { label: ']', ariaKeyShortcuts: ']' },
+  },
+  {
+    id: 'marks.mark-in',
+    category: 'Timeline',
+    label: 'Mark In',
+    description: 'Set In on the focused Source or Program monitor.',
+    keywords: ['in', 'mark', 'source', 'timeline'],
+    shortcut: { label: 'I', ariaKeyShortcuts: 'I' },
+  },
+  {
+    id: 'marks.mark-out',
+    category: 'Timeline',
+    label: 'Mark Out',
+    description: 'Set Out on the focused Source or Program monitor.',
+    keywords: ['mark', 'out', 'source', 'timeline'],
+    shortcut: { label: 'O', ariaKeyShortcuts: 'O' },
+  },
+  {
+    id: 'marks.clear-in',
+    category: 'Timeline',
+    label: 'Clear In',
+    description: 'Clear In on the focused Source or Program monitor.',
+    keywords: ['clear', 'in', 'source', 'timeline'],
+    shortcut: { label: 'Shift+I', ariaKeyShortcuts: 'Shift+I' },
+  },
+  {
+    id: 'marks.clear-out',
+    category: 'Timeline',
+    label: 'Clear Out',
+    description: 'Clear Out on the focused Source or Program monitor.',
+    keywords: ['clear', 'out', 'source', 'timeline'],
+    shortcut: { label: 'Shift+O', ariaKeyShortcuts: 'Shift+O' },
   },
   {
     id: 'marker.add',
@@ -376,6 +483,17 @@ export const EDITOR_SHORTCUT_BINDINGS: readonly EditorShortcutBinding[] = [
   { commandId: 'timeline.split', scope: 'edit', key: 's', primary: false },
   { commandId: 'timeline.ripple-delete', scope: 'edit', key: 'delete', primary: false },
   { commandId: 'timeline.ripple-delete', scope: 'edit', key: 'backspace', primary: false },
+  { commandId: 'timeline.insert', scope: 'edit', key: ',', primary: false },
+  { commandId: 'timeline.overwrite', scope: 'edit', key: '.', primary: false },
+  { commandId: 'timeline.lift', scope: 'edit', key: ';', primary: false },
+  { commandId: 'timeline.extract', scope: 'edit', key: '\'', primary: false },
+  { commandId: 'timeline.replace', scope: 'edit', key: 'r', primary: false },
+  { commandId: 'timeline.roll-left', scope: 'edit', key: '[', primary: false },
+  { commandId: 'timeline.roll-right', scope: 'edit', key: ']', primary: false },
+  { commandId: 'marks.mark-in', scope: 'edit', key: 'i', primary: false, shift: false },
+  { commandId: 'marks.mark-out', scope: 'edit', key: 'o', primary: false, shift: false },
+  { commandId: 'marks.clear-in', scope: 'edit', key: 'i', primary: false, shift: true },
+  { commandId: 'marks.clear-out', scope: 'edit', key: 'o', primary: false, shift: true },
   { commandId: 'marker.add', scope: 'edit', key: 'm', primary: false, shift: false },
   { commandId: 'marker.next', scope: 'edit', key: 'm', primary: false, shift: true },
   { commandId: 'marker.previous', scope: 'edit', key: 'm', primary: true, shift: true },
@@ -385,10 +503,6 @@ export const EDITOR_SHORTCUT_BINDINGS: readonly EditorShortcutBinding[] = [
   { commandId: 'source.shuttle-j', scope: 'edit', key: 'j', primary: false, shift: false },
   { commandId: 'source.shuttle-k', scope: 'edit', key: 'k', primary: false, shift: false },
   { commandId: 'source.shuttle-l', scope: 'edit', key: 'l', primary: false, shift: false },
-  { commandId: 'source.mark-in', scope: 'edit', key: 'i', primary: false, shift: false },
-  { commandId: 'source.mark-out', scope: 'edit', key: 'o', primary: false, shift: false },
-  { commandId: 'source.clear-in', scope: 'edit', key: 'i', primary: false, shift: true },
-  { commandId: 'source.clear-out', scope: 'edit', key: 'o', primary: false, shift: true },
   { commandId: 'source.jump-start', scope: 'edit', key: 'home', primary: false, shift: false },
   { commandId: 'source.jump-end', scope: 'edit', key: 'end', primary: false, shift: false },
 ]
@@ -470,6 +584,25 @@ function commandDisabledReason(id: EditorCommandId): string | null {
         : 'Move the playhead inside an unlocked clip first.'
     case 'timeline.ripple-delete':
       return rippleDeleteDisabledReason(document.doc, transport.selectedClipId)
+    case 'timeline.insert':
+      return sequenceEditDisabledReason('insert')
+    case 'timeline.overwrite':
+      return sequenceEditDisabledReason('overwrite')
+    case 'timeline.lift':
+      return sequenceEditDisabledReason('lift')
+    case 'timeline.extract':
+      return sequenceEditDisabledReason('extract')
+    case 'timeline.replace':
+      return sequenceEditDisabledReason('replace')
+    case 'timeline.roll-left':
+      return sequenceEditDisabledReason('roll', { rollDeltaFrames: -1 })
+    case 'timeline.roll-right':
+      return sequenceEditDisabledReason('roll', { rollDeltaFrames: 1 })
+    case 'marks.mark-in':
+    case 'marks.mark-out':
+    case 'marks.clear-in':
+    case 'marks.clear-out':
+      return null
     case 'marker.add':
       return timelineMarkers(document.doc).length >= MAX_TIMELINE_MARKERS
         ? `This project already has ${MAX_TIMELINE_MARKERS} markers.`
@@ -560,6 +693,32 @@ export function executeEditorCommand(id: EditorCommandId): EditorCommandExecutio
       break
     case 'timeline.ripple-delete':
       document.rippleDelete(transport.selectedClipId!)
+      break
+    case 'timeline.insert':
+      return executeSequenceEdit('insert')
+    case 'timeline.overwrite':
+      return executeSequenceEdit('overwrite')
+    case 'timeline.lift':
+      return executeSequenceEdit('lift')
+    case 'timeline.extract':
+      return executeSequenceEdit('extract')
+    case 'timeline.replace':
+      return executeSequenceEdit('replace')
+    case 'timeline.roll-left':
+      return executeSequenceEdit('roll', { rollDeltaFrames: -1 })
+    case 'timeline.roll-right':
+      return executeSequenceEdit('roll', { rollDeltaFrames: 1 })
+    case 'marks.mark-in':
+      executeFocusedMarkIn()
+      break
+    case 'marks.mark-out':
+      executeFocusedMarkOut()
+      break
+    case 'marks.clear-in':
+      executeFocusedClearIn()
+      break
+    case 'marks.clear-out':
+      executeFocusedClearOut()
       break
     case 'marker.add': {
       const marker = createDefaultTimelineMarker(document.doc, transport.playheadFrame)

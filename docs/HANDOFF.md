@@ -5124,7 +5124,8 @@ surface; it is not a second zoom and never enters document history.
   (`mediaCompatibilityStatusText` / `mediaCompatibilityRemediationLines`).
   A compatibility-only unsupported file rejects as incompatible, not offline.
   Rejection copy stays on the attempted file when another source is already
-  open. The monitor names that three-point insert and overwrite come later.
+  open. Three-point insert/overwrite now live on Issue #187 rather than a
+  later-work note.
 - Asset switch, failed open, close, and project replace halt the source clock
   and release the previous visual loan. Program playhead and `TimelineDoc` stay
   put.
@@ -5139,3 +5140,26 @@ surface; it is not a second zoom and never enters document history.
 - The authoritative automated gate passes 244 Vitest files / 3,432 tests plus
   the 17 runner checks, production build/typecheck, lint, and diff hygiene.
   Do not tick GitHub #186 unless asked after a user pass.
+
+## Post-MVP issue #187 - three-point sequence edits slice 1
+
+**IMPLEMENTATION IN PROGRESS LOCALLY (2026-08-26); PUBLICATION AND ISSUE CLOSEOUT NOT AUTHORIZED.**
+
+- One browser-free planner owns insert, overwrite, lift, extract, replace,
+  and roll. Duration mapping is integer-microsecond and never guesses a
+  four-point mismatch. Apply is atomic: any rejected participant returns the
+  original TimelineDoc reference.
+- Insert ripples every unlocked track so later material stays in sync; a
+  locked track that would have to move rejects. Overwrite/lift/extract use
+  targeted tracks. Extract closes those gaps. Replace keeps clip duration
+  and refuses a differently marked source length. Roll moves a touching seam
+  without changing total duration.
+- Session targeting lives on track-header T buttons (untouched sessions use
+  the first unlocked video and audio lanes). Insert/Overwrite sit on the
+  transport bar so they stay visible while Source Monitor chrome is closed.
+  An open source also shows V/A patches and Insert/Overwrite on the monitor.
+  I/O follow the focused monitor. Shortcuts: `,` insert, `.` overwrite, `;`
+  lift, `'` extract, `R` replace, `[`/`]` roll.
+- Chromium source-review-to-insert/overwrite/lift/extract/roll acceptance
+  is still outstanding. Do not tick GitHub #187 unless asked after a user
+  pass.
