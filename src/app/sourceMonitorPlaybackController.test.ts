@@ -377,6 +377,27 @@ describe('source / program exclusive playback', () => {
     expect(fake.pendingCount()).toBe(0)
   })
 
+  test('non-clock remaps halt source playback and clear shuttle', async () => {
+    openReadySource()
+    stepShuttle('l')
+    const audio = await startedSourceAudio()
+    await waitForSourceClock()
+    expect(fake.pendingCount()).toBe(1)
+    expect(source().session?.shuttleStep).toBe(1)
+
+    const remapped = source().openSource({
+      asset: makeAsset({ fileName: 'renamed.mp4' }),
+      compatibility: compatibility(),
+    })
+    expect(remapped.status).toBe('ok')
+    expect(source().session).toMatchObject({
+      source: { fileName: 'renamed.mp4', durationFrames: 300 },
+      shuttleStep: 0,
+    })
+    expect(fake.pendingCount()).toBe(0)
+    await vi.waitFor(() => expect(audio.stop).toHaveBeenCalled())
+  })
+
   test('reopening the same asset on a new clock stops the previous source audio', async () => {
     openReadySource()
     stepShuttle('l')

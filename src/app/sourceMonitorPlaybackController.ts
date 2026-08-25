@@ -183,7 +183,7 @@ function subscribeSourceReset(): void {
       haltSourceEngine()
     }
     if (current.session?.source !== previous.session?.source) {
-      haltSourceEngine()
+      stopSourceClock()
     }
   })
 }
