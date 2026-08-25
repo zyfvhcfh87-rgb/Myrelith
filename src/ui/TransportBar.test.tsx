@@ -18,6 +18,8 @@ vi.mock('../app/transportController', () => ({
   togglePlayback: vi.fn(),
   stepFrame: vi.fn(),
   resetAudioMeterOverload: vi.fn(),
+  // editorCommands → source playback registers this at import time.
+  registerSourcePlaybackStop: vi.fn(),
 }))
 
 beforeEach(() => {

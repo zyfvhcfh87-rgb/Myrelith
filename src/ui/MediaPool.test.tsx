@@ -49,6 +49,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { INITIAL_MEDIA_IMPORT_STATE, useMediaImportStore } from '../state/mediaImportStore'
 import type { AssetVisuals } from '../state/mediaStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import { useProxyStore } from '../state/proxyStore'
 import {
   INITIAL_ACTIVE_MEDIA_RELINK,
@@ -427,6 +428,7 @@ beforeEach(() => {
     ...useDocumentStore.getState().doc,
     frameRate: { num: 30, den: 1 },
   })
+  useSourceMonitorStore.getState().resetSourceMonitor()
 })
 
 describe('MediaPool presentation', () => {
@@ -461,6 +463,24 @@ describe('MediaPool presentation', () => {
     expect(connectedRow).toHaveAttribute('aria-selected', 'true')
     expect(grid).toHaveAttribute('aria-activedescendant', connectedRow.id)
     expect(screen.getByRole('menu', { name: 'beach.mp4' })).toBeInTheDocument()
+  })
+
+  test('double-click and Enter open the selected asset in Source Monitor', () => {
+    seedAsset(makeAsset())
+    render(
+      <EditorContextMenuHost>
+        <MediaPool />
+      </EditorContextMenuHost>,
+    )
+    const row = screen.getByRole('row', { name: /beach\.mp4/ })
+    fireEvent.doubleClick(row)
+    expect(useSourceMonitorStore.getState().session?.source.assetId).toBe('asset-9')
+    useSourceMonitorStore.getState().closeSource()
+
+    const grid = screen.getByRole('grid', { name: 'Media assets' })
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'Enter' })
+    expect(useSourceMonitorStore.getState().session?.source.assetId).toBe('asset-9')
   })
 
   test('invokes the offline relink-once picker synchronously from its menu item', () => {

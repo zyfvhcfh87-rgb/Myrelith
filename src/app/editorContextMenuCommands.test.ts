@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
 import {
   INITIAL_PROJECT_SESSION_STATE,
   useProjectSessionStore,
 } from '../state/projectSessionStore'
 import { INITIAL_TRANSPORT_STATE, useTransportStore } from '../state/transportStore'
+import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import {
   editorContextMenuIdentity,
   editorContextMenuTargetExists,
@@ -113,6 +115,13 @@ beforeEach(() => {
   useProjectSessionStore.setState({
     ...INITIAL_PROJECT_SESSION_STATE,
     screen: 'editor',
+  })
+  useSourceMonitorStore.getState().resetSourceMonitor()
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+    compatibility: new Map(),
   })
 })
 
@@ -249,5 +258,68 @@ describe('editor context menu commands', () => {
     const markerTarget = target({ kind: 'marker', markerId: 'marker-removed' })
     useDocumentStore.getState().deleteTimelineMarker('marker-removed')
     expect(editorContextMenuTargetExists(markerTarget)).toBe(false)
+  })
+
+  test('opens a connected Media Pool asset in Source Monitor from the asset menu', () => {
+    const asset = {
+      id: 'asset-source',
+      fileName: 'clip.mp4',
+      mimeType: 'video/mp4',
+      size: 1_024,
+      lastModified: 1_725_000_000_000,
+      objectUrl: 'blob:source',
+      kind: 'video' as const,
+      durationFrames: 300,
+      durationMicroseconds: 10_000_000,
+      sourceBounds: {
+        video: { status: 'exact' as const, firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+        audio: { status: 'exact' as const, firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+      },
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      hasAudio: true,
+      audioSampleRate: 48_000,
+      audioChannels: 2,
+      decoderConfigB64: null,
+    }
+    useMediaStore.setState({
+      descriptors: new Map([[asset.id, {
+        id: asset.id,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        size: asset.size,
+        lastModified: asset.lastModified,
+        kind: asset.kind,
+        durationMicroseconds: asset.durationMicroseconds,
+        sourceBounds: asset.sourceBounds,
+        nativeFrameRate: asset.frameRate,
+        width: asset.width,
+        height: asset.height,
+        hasAudio: asset.hasAudio,
+        audioSampleRate: asset.audioSampleRate,
+        audioChannels: asset.audioChannels,
+      }]]),
+      assets: new Map([[asset.id, asset]]),
+      visuals: new Map(),
+      compatibility: new Map([[asset.id, {
+        id: asset.id,
+        requestId: 'req-source',
+        fileName: asset.fileName,
+        declaredMimeType: asset.mimeType,
+        size: asset.size,
+        lastModified: asset.lastModified,
+        status: 'ready',
+        report: null,
+      }]]),
+    })
+    const contextTarget = target({ kind: 'asset', assetId: asset.id })
+    expect(resolvedItem(contextTarget, 'asset.open-source').disabledReason).toBeNull()
+    expect(executeEditorContextMenuItem(contextTarget, 'asset.open-source')).toEqual({
+      executed: true,
+      reason: null,
+    })
+    expect(useSourceMonitorStore.getState().session?.source.assetId).toBe(asset.id)
+    expect(useDocumentStore.getState().doc.id).toBe('doc-context-menu')
   })
 })

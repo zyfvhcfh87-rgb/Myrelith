@@ -13,10 +13,11 @@
  *
  * Emission contract: only the NEWEST frame is emitted per tick (if the
  * clock jumped several frames, intermediates are skipped — latest-wins,
- * matching every other async layer). Playback ends at the exclusive document
- * boundary, after the final frame has received its full display duration.
- * Callbacks may reentrantly call stop()/start(); the loop never schedules
- * past a stop.
+ * matching every other async layer). Direction follows a signed integer
+ * playback rate: forward rates walk toward the exclusive end, reverse rates
+ * walk toward frame 0. In both directions the last displayed frame receives
+ * its full duration before the engine parks and ends. Callbacks may
+ * reentrantly call stop()/start(); the loop never schedules past a stop.
  *
  * No React, no stores, no browser globals — deps are injected
  * (app/transportController.ts wires the real ones).
@@ -44,7 +45,7 @@ export interface PlaybackEngineDeps {
   scheduleTick(cb: () => void): number
   /** Cancel a scheduled tick by its id. */
   cancelTick(id: number): void
-  /** A new integer frame is due (strictly increasing between emits). */
+  /** A new integer frame is due (monotonic in the signed playback direction). */
   onFrame(frame: number): void
   /** The exclusive end boundary was reached; the engine already stopped. */
   onEnded(): void
@@ -60,6 +61,7 @@ export class PlaybackEngine {
   private endFrameExclusive = 0
   private lastEmitted = 0
   private rate: FrameRate = { num: 30, den: 1 }
+  private playbackRate = 1
   private runGeneration = 0
 
   constructor(deps: PlaybackEngineDeps) {
@@ -74,20 +76,24 @@ export class PlaybackEngine {
    * Begin playing from `fromFrame` (integer, at `rate`) until the exclusive
    * `endFrameExclusive` boundary. `anchorTime` can be supplied by a scheduled
    * audio session so video and audio share one exact AudioContext origin.
-   * Calling while running restarts cleanly.
+   * `playbackRate` is a signed integer speed (...-8,-4,-2,-1,0,1,2,4,8);
+   * 0 does not start. Calling while running restarts cleanly.
    */
   start(
     fromFrame: number,
     endFrameExclusive: number,
     rate: FrameRate,
     anchorTime = this.deps.clock.currentTime,
+    playbackRate = 1,
   ): void {
     this.stop()
     this.anchorTime = anchorTime
     this.anchorFrame = fromFrame
     this.endFrameExclusive = endFrameExclusive
     this.rate = rate
+    this.playbackRate = Number.isSafeInteger(playbackRate) ? playbackRate : 1
     this.lastEmitted = fromFrame // already on screen; emit only what's new
+    if (this.playbackRate === 0) return
     this.running = true
     this.runGeneration++
     this.tickId = this.deps.scheduleTick(this.tick)
@@ -110,13 +116,27 @@ export class PlaybackEngine {
     const generation = this.runGeneration
 
     // Float seconds are legal exactly here (clock boundary); multiply by
-    // num before dividing by den so standard rates stay exact.
+    // num before dividing by den so standard rates stay exact. Signed speed
+    // scales that same product; the sign is applied after floor+epsilon so
+    // reverse NTSC does not walk one frame early.
     const elapsed = this.deps.clock.currentTime - this.anchorTime
-    const frame =
-      this.anchorFrame +
-      Math.floor((elapsed * this.rate.num) / this.rate.den + FRAME_EPSILON)
+    const magnitude = Math.abs(this.playbackRate)
+    const elapsedFrames = Math.max(
+      0,
+      Math.floor(
+        (elapsed * this.rate.num * magnitude) / this.rate.den + FRAME_EPSILON,
+      ),
+    )
+    const frame = this.anchorFrame + Math.sign(this.playbackRate) * elapsedFrames
 
-    if (frame >= this.endFrameExclusive) {
+    if (this.playbackRate < 0 && frame < 0) {
+      this.running = false
+      if (this.lastEmitted > 0) this.deps.onFrame(0)
+      if (generation !== this.runGeneration) return
+      this.deps.onEnded()
+      return
+    }
+    if (this.playbackRate > 0 && frame >= this.endFrameExclusive) {
       this.running = false
       const lastFrame = Math.max(this.anchorFrame, this.endFrameExclusive - 1)
       if (lastFrame > this.lastEmitted) this.deps.onFrame(lastFrame)
@@ -126,7 +146,10 @@ export class PlaybackEngine {
       this.deps.onEnded()
       return
     }
-    if (frame > this.lastEmitted) {
+    if (
+      (this.playbackRate > 0 && frame > this.lastEmitted)
+      || (this.playbackRate < 0 && frame < this.lastEmitted)
+    ) {
       this.lastEmitted = frame
       this.deps.onFrame(frame) // may reentrantly stop() — checked below
     }

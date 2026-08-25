@@ -10,6 +10,8 @@ import {
   useProjectSessionStore,
 } from '../state/projectSessionStore'
 import { INITIAL_TRANSPORT_STATE, useTransportStore } from '../state/transportStore'
+import { useMediaStore } from '../state/mediaStore'
+import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import { COMMAND_PALETTE_SHORTCUT } from './useCommandPaletteShortcut'
 import {
   EDITOR_COMMAND_DEFINITIONS,
@@ -19,6 +21,10 @@ import {
   resolveEditorCommand,
   shortcutBindingSignature,
 } from './editorCommands'
+import {
+  clearSelectedPoolAssetId,
+  setSelectedPoolAssetId,
+} from './sourceMonitorController'
 
 function clip(id: string, startFrame: number, durationFrames: number, linkGroupId?: string): Clip {
   return {
@@ -73,6 +79,14 @@ beforeEach(() => {
     screen: 'editor',
   })
   useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
+  useSourceMonitorStore.getState().resetSourceMonitor()
+  clearSelectedPoolAssetId()
+  useMediaStore.setState({
+    descriptors: new Map(),
+    assets: new Map(),
+    visuals: new Map(),
+    compatibility: new Map(),
+  })
 })
 
 describe('editor command catalog', () => {
@@ -226,5 +240,158 @@ describe('editor command catalog', () => {
     })
     expect(executeEditorCommand('timeline.ripple-delete').executed).toBe(false)
     expect(useDocumentStore.getState().doc.tracks[0]?.clips).toHaveLength(1)
+  })
+
+  test('opens the selected pool asset in Source Monitor without seeking Program', () => {
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true })
+    expect(matchEditorCommandShortcut(enter, 'edit')).toBe('source.open')
+    expect(resolveEditorCommand('source.open')).toMatchObject({
+      enabled: false,
+      disabledReason: 'Select a Media Pool asset first.',
+    })
+
+    const asset = {
+      id: 'asset-source',
+      fileName: 'clip.mp4',
+      mimeType: 'video/mp4',
+      size: 1_024,
+      lastModified: 1_725_000_000_000,
+      objectUrl: 'blob:source',
+      kind: 'video' as const,
+      durationFrames: 300,
+      durationMicroseconds: 10_000_000,
+      sourceBounds: {
+        video: { status: 'exact' as const, firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+        audio: { status: 'exact' as const, firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+      },
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      hasAudio: true,
+      audioSampleRate: 48_000,
+      audioChannels: 2,
+      decoderConfigB64: null,
+    }
+    useMediaStore.setState({
+      descriptors: new Map([[asset.id, {
+        id: asset.id,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        size: asset.size,
+        lastModified: asset.lastModified,
+        kind: asset.kind,
+        durationMicroseconds: asset.durationMicroseconds,
+        sourceBounds: asset.sourceBounds,
+        nativeFrameRate: asset.frameRate,
+        width: asset.width,
+        height: asset.height,
+        hasAudio: asset.hasAudio,
+        audioSampleRate: asset.audioSampleRate,
+        audioChannels: asset.audioChannels,
+      }]]),
+      assets: new Map([[asset.id, asset]]),
+      visuals: new Map(),
+      compatibility: new Map([[asset.id, {
+        id: asset.id,
+        requestId: 'req-source',
+        fileName: asset.fileName,
+        declaredMimeType: asset.mimeType,
+        size: asset.size,
+        lastModified: asset.lastModified,
+        status: 'ready',
+        report: null,
+      }]]),
+    })
+    setSelectedPoolAssetId(asset.id)
+    expect(executeEditorCommand('source.open').executed).toBe(true)
+    expect(useSourceMonitorStore.getState().session?.source.assetId).toBe(asset.id)
+    expect(useTransportStore.getState().playheadFrame).toBe(10)
+
+    expect(executeEditorCommand('source.mark-in').executed).toBe(true)
+    expect(matchEditorCommandShortcut(new KeyboardEvent('keydown', { key: 'l' }), 'edit'))
+      .toBe('source.shuttle-l')
+    expect(executeEditorCommand('source.shuttle-l').executed).toBe(true)
+    expect(useSourceMonitorStore.getState().session).toMatchObject({
+      inFrame: 0,
+      shuttleStep: 1,
+    })
+  })
+
+  test('Home and End jump the source playhead without seeking Program', () => {
+    expect(matchEditorCommandShortcut(
+      new KeyboardEvent('keydown', { key: 'Home' }),
+      'edit',
+    )).toBe('source.jump-start')
+    expect(matchEditorCommandShortcut(
+      new KeyboardEvent('keydown', { key: 'End' }),
+      'edit',
+    )).toBe('source.jump-end')
+    expect(resolveEditorCommand('source.jump-start')).toMatchObject({
+      enabled: false,
+      disabledReason: 'Open a source in the Source Monitor first.',
+    })
+
+    const asset = {
+      id: 'asset-source',
+      fileName: 'clip.mp4',
+      mimeType: 'video/mp4',
+      size: 1_024,
+      lastModified: 1_725_000_000_000,
+      objectUrl: 'blob:source',
+      kind: 'video' as const,
+      durationFrames: 300,
+      durationMicroseconds: 10_000_000,
+      sourceBounds: {
+        video: { status: 'exact' as const, firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+        audio: { status: 'exact' as const, firstTimestampUs: 0, endTimestampUs: 10_000_000 },
+      },
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      hasAudio: true,
+      audioSampleRate: 48_000,
+      audioChannels: 2,
+      decoderConfigB64: null,
+    }
+    useMediaStore.setState({
+      descriptors: new Map([[asset.id, {
+        id: asset.id,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        size: asset.size,
+        lastModified: asset.lastModified,
+        kind: asset.kind,
+        durationMicroseconds: asset.durationMicroseconds,
+        sourceBounds: asset.sourceBounds,
+        nativeFrameRate: asset.frameRate,
+        width: asset.width,
+        height: asset.height,
+        hasAudio: asset.hasAudio,
+        audioSampleRate: asset.audioSampleRate,
+        audioChannels: asset.audioChannels,
+      }]]),
+      assets: new Map([[asset.id, asset]]),
+      visuals: new Map(),
+      compatibility: new Map([[asset.id, {
+        id: asset.id,
+        requestId: 'req-source',
+        fileName: asset.fileName,
+        declaredMimeType: asset.mimeType,
+        size: asset.size,
+        lastModified: asset.lastModified,
+        status: 'ready',
+        report: null,
+      }]]),
+    })
+    setSelectedPoolAssetId(asset.id)
+    expect(executeEditorCommand('source.open').executed).toBe(true)
+    useSourceMonitorStore.getState().scrubPlayhead(90)
+    expect(useTransportStore.getState().playheadFrame).toBe(10)
+
+    expect(executeEditorCommand('source.jump-end').executed).toBe(true)
+    expect(useSourceMonitorStore.getState().session?.playheadFrame).toBe(299)
+    expect(executeEditorCommand('source.jump-start').executed).toBe(true)
+    expect(useSourceMonitorStore.getState().session?.playheadFrame).toBe(0)
+    expect(useTransportStore.getState().playheadFrame).toBe(10)
   })
 })

@@ -668,6 +668,10 @@ function scheduleRender(deps: PreviewDeps): void {
 }
 
 /** Retire every preview playback lane before another decoder owner starts. */
+export function beginPreviewPlaybackDrain(): Promise<void> | null {
+  return state.bridge && state.visualPlanner ? drainPreviewPlayback() : null
+}
+
 export async function drainPreviewPlayback(): Promise<void> {
   while (true) {
     cancelScheduledRender()

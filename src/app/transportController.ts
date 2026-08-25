@@ -52,6 +52,7 @@ import type {
 } from '../pipeline/playback-audio'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import { useTransportStore } from '../state/transportStore'
 import {
   useAudioMeterStore,
@@ -63,6 +64,7 @@ import {
   reportMediaRuntimeFailure,
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
+import { drainSourcePreviewPlayback } from './sourceMonitorPreviewController'
 
 /** The slice of AudioContext we use (fake-able in tests). */
 export interface ClockContext extends PlaybackClock {
@@ -156,6 +158,38 @@ const state: ControllerState = {
   unsubscribes: [],
   playbackTasks: new Set(),
   cleanupTasks: new Set(),
+}
+
+let stopSourcePlaybackClock = (): void => {}
+let drainSourcePlaybackClock = async (): Promise<void> => {}
+
+/**
+ * Source Monitor registers its clock halt and decoder drain here so Program
+ * play/drain/dispose can stop Source first without importing the source
+ * controller (cycle).
+ */
+export function registerSourcePlaybackStop(
+  stop: () => void,
+  drain: () => Promise<void> = async () => undefined,
+): void {
+  stopSourcePlaybackClock = stop
+  drainSourcePlaybackClock = drain
+}
+
+function haltSourcePlaybackClock(): void {
+  stopSourcePlaybackClock()
+}
+
+function ensureClock(): ClockContext {
+  if (!state.clockCtx) {
+    state.clockCtx = state.deps.createContext()
+  }
+  return state.clockCtx
+}
+
+/** Shared audio-master clock. Source playback reuses this; never a second context. */
+export function getPlaybackClockContext(): ClockContext {
+  return ensureClock()
 }
 
 /** Last frame the playhead may rest on; 0 for an empty doc. */
@@ -357,9 +391,9 @@ function cancelPlaybackWork(): void {
 function ensureEngine(): PlaybackEngine {
   if (state.engine) return state.engine
 
-  state.clockCtx = state.deps.createContext()
+  const clock = ensureClock()
   state.engine = new PlaybackEngine({
-    clock: state.clockCtx,
+    clock,
     scheduleTick: state.deps.scheduleTick,
     cancelTick: state.deps.cancelTick,
     onFrame: (frame) => {
@@ -424,7 +458,10 @@ export function configureTransport(deps: Partial<TransportDeps>): void {
   state.deps = { ...realDeps, ...deps }
 }
 
-function startPlayback(fromFrame: number): void {
+function startPlayback(
+  fromFrame: number,
+  unlockedContext?: Promise<unknown>,
+): void {
   const transport = useTransportStore.getState()
   const doc = useDocumentStore.getState().doc
   const durationFrames = docDurationFrames(doc)
@@ -470,7 +507,7 @@ function startPlayback(fromFrame: number): void {
   try {
     // Called synchronously inside the Play click so browser autoplay policy
     // can unlock the context before any asynchronous decode work.
-    resumePromise = Promise.resolve(context.resume())
+    resumePromise = unlockedContext ?? Promise.resolve(context.resume())
   } catch (cause) {
     resumePromise = Promise.reject(cause)
   }
@@ -564,6 +601,11 @@ function restartPlayback(): void {
  * playhead already rests at/after the last frame. No-op on an empty doc.
  */
 export function play(): void {
+  const source = useSourceMonitorStore.getState()
+  const sourceWasPlaying = source.playbackOwner === 'source'
+    || (source.session?.shuttleStep ?? 0) !== 0
+  haltSourcePlaybackClock()
+  useSourceMonitorStore.getState().requestPlayback('program')
   const transport = useTransportStore.getState()
   if (transport.isPlaying) return
 
@@ -578,7 +620,39 @@ export function play(): void {
   }
 
   transport.setIsPlaying(true)
-  startPlayback(from)
+  if (!sourceWasPlaying) {
+    startPlayback(from)
+    return
+  }
+
+  let unlockedContext: Promise<unknown>
+  try {
+    unlockedContext = Promise.resolve(ensureClock().resume())
+  } catch (cause) {
+    unlockedContext = Promise.reject(cause)
+  }
+  void unlockedContext.catch(() => undefined)
+  const admissionGeneration = state.playGeneration
+  const admissionTask = (async () => {
+    await Promise.all([
+      drainSourcePreviewPlayback(),
+      drainSourcePlaybackClock(),
+    ])
+    if (
+      admissionGeneration !== state.playGeneration
+      || !useTransportStore.getState().isPlaying
+    ) return
+    startPlayback(from, unlockedContext)
+  })().catch((cause) => {
+    if (
+      admissionGeneration !== state.playGeneration
+      || !useTransportStore.getState().isPlaying
+    ) return
+    warnAudio('Source playback handoff failed', cause)
+    useTransportStore.getState().setIsPlaying(false)
+  })
+  state.playbackTasks.add(admissionTask)
+  void admissionTask.then(() => state.playbackTasks.delete(admissionTask))
 }
 
 /** Stop advancing; the playhead stays exactly where it is. */
@@ -587,15 +661,33 @@ export function pause(): void {
   useTransportStore.getState().setIsPlaying(false)
 }
 
+/** Wait until Program's startup and audio-cleanup work has retired. */
+export async function drainProgramPlayback(): Promise<void> {
+  // Snapshot playback once. A later Program admission may wait on Source
+  // drain, which can wait on a Source admission that waits on this drain.
+  // Re-checking playbackTasks would pull that cycle in and hang.
+  await Promise.all([
+    ...state.playbackTasks,
+    ...state.cleanupTasks,
+  ])
+  while (state.cleanupTasks.size > 0) {
+    await Promise.all([...state.cleanupTasks])
+  }
+}
+
+/** Avoid an async handoff when Program has no outstanding resource owner. */
+export function beginProgramPlaybackDrain(): Promise<void> | null {
+  return state.playbackTasks.size > 0 || state.cleanupTasks.size > 0
+    ? drainProgramPlayback()
+    : null
+}
+
 /** Pause immediately, then wait until every playback decoder owner is gone. */
 export async function pauseAndDrainPlayback(): Promise<void> {
+  haltSourcePlaybackClock()
   pause()
-  while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
-    await Promise.all([
-      ...state.playbackTasks,
-      ...state.cleanupTasks,
-    ])
-  }
+  const sourceDrain = drainSourcePlaybackClock()
+  await Promise.all([sourceDrain, drainProgramPlayback()])
 }
 
 /** The play/pause button behavior. */
@@ -621,6 +713,8 @@ export function stepFrame(delta: number): void {
  * Project activation awaits this before revoking the outgoing media URLs.
  */
 export async function disposeTransport(): Promise<void> {
+  haltSourcePlaybackClock()
+  const sourceDrain = drainSourcePlaybackClock()
   cancelPlaybackWork()
   const context = state.clockCtx
   state.engine = null
@@ -636,6 +730,7 @@ export async function disposeTransport(): Promise<void> {
   state.deps = realDeps
 
   await Promise.all([
+    sourceDrain,
     ...state.playbackTasks,
     ...state.cleanupTasks,
   ])

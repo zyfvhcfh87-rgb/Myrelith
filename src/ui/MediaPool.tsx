@@ -54,11 +54,12 @@ import {
 } from '../domain/staticImage'
 import {
   compatibilityAllowsTimelineUse,
+  MEDIA_OFFLINE_STATUS,
+  mediaCompatibilityStatusText,
   mediaRuntimeSurfaceLabel,
   omittedPartialImportTracks,
   partialTrackImportOption,
   type MediaCompatibilityItem,
-  type MediaCompatibilityStatus,
   type MediaTrackCompatibility,
 } from '../domain/mediaCompatibility'
 import type {
@@ -116,6 +117,10 @@ import {
   editorContextMenuIdentity,
   type EditorContextMenuUiActions,
 } from '../app/editorContextMenuCommands'
+import {
+  openSourceAsset,
+  setSelectedPoolAssetId,
+} from '../app/sourceMonitorController'
 import {
   openEditorContextMenuFromEvent,
   useEditorContextMenu,
@@ -230,14 +235,6 @@ function formatAssetMetadata(
   return `${dimensions} · ${duration}${animation}`
 }
 
-const COMPATIBILITY_LABELS: Record<MediaCompatibilityStatus, string> = {
-  checking: 'Checking',
-  ready: 'Ready',
-  limited: 'Limited',
-  unsupported: 'Unsupported',
-  error: 'Error',
-}
-
 const DECODER_PATH_LABELS: Record<
   NonNullable<MediaTrackCompatibility['decoderPath']>,
   string
@@ -335,10 +332,7 @@ function CompatibilityDiagnostics({
           aria-live="polite"
           aria-atomic="true"
         >
-          Compatibility: {COMPATIBILITY_LABELS[item.status]}
-          {item.status === 'ready' && report?.partialImport
-            ? ` — ${report.partialImport.selection === 'video-only' ? 'video only' : 'audio only'}`
-            : ''}
+          {mediaCompatibilityStatusText(item)}
         </p>
         {retryable && onRetry ? (
           <button
@@ -791,6 +785,7 @@ interface MediaPoolItemCardProps {
   readonly attention: boolean
   readonly detailsOpen: boolean
   readonly onSelect: (id: string) => void
+  readonly onOpen: (id: string) => void
   readonly onContextSelect: (id: string) => void
   readonly onToggleDetails: (id: string) => void
   readonly onReviewPartial: (
@@ -815,6 +810,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
   attention,
   detailsOpen,
   onSelect,
+  onOpen,
   onContextSelect,
   onToggleDetails,
   onReviewPartial,
@@ -885,6 +881,16 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
           && target.closest('button, input, label, select, textarea, a')
         ) return
         onSelect(id)
+      }}
+      onDoubleClick={(event) => {
+        const target = event.target
+        if (
+          target instanceof Element
+          && target.closest('button, input, label, select, textarea, a')
+        ) return
+        event.preventDefault()
+        onSelect(id)
+        onOpen(id)
       }}
       onContextMenu={(event) => {
         const row = event.currentTarget
@@ -961,7 +967,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
         {descriptor && !connected ? (
           <div className="media-offline-actions">
             <span className="media-connection-badge" data-status="offline">
-              Offline · relink needed
+              {MEDIA_OFFLINE_STATUS}
             </span>
             {handlePickerAvailable ? (
               <button
@@ -1205,6 +1211,10 @@ export default function MediaPool() {
     && renderedItemIds.has(effectiveSelectedAssetId)
       ? `media-pool-row-${filteredIndexById.get(effectiveSelectedAssetId)}`
       : undefined
+
+  useEffect(() => {
+    setSelectedPoolAssetId(effectiveSelectedAssetId)
+  }, [effectiveSelectedAssetId])
   const offlineCount = useMemo(() => {
     let count = 0
     for (const descriptor of descriptors.values()) {
@@ -1375,7 +1385,16 @@ export default function MediaPool() {
     } else if (event.key === 'PageUp') {
       nextIndex = currentIndex - columnCount * 4
     }
-    if (nextIndex === null) return
+    if (nextIndex === null) {
+      if (event.key === 'Enter') {
+        const assetId = sortedItems[currentIndex]?.id
+        if (!assetId) return
+        event.preventDefault()
+        setSelectedAssetId(assetId)
+        openSourceAsset(assetId)
+      }
+      return
+    }
     event.preventDefault()
     if (
       (event.key === 'ArrowUp' || event.key === 'ArrowDown')
@@ -1683,6 +1702,7 @@ export default function MediaPool() {
               attention={item.expanded}
               detailsOpen={expandedItemId === id}
               onSelect={selectItem}
+              onOpen={openSourceAsset}
               onContextSelect={setSelectedAssetId}
               onToggleDetails={toggleItemDetails}
               onReviewPartial={openPartialReview}

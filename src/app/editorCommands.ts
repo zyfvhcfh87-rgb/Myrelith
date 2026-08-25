@@ -23,7 +23,19 @@ import { rangeEnd } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaImportStore } from '../state/mediaImportStore'
 import { useProjectSessionStore } from '../state/projectSessionStore'
+import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import { useTransportStore, type TimelineTool } from '../state/transportStore'
+import {
+  openSelectedSource,
+  sourceOpenDisabledReason,
+} from './sourceMonitorController'
+import {
+  closeSource,
+  jumpToEnd,
+  jumpToStart,
+  resetSession,
+  stepShuttle,
+} from './sourceMonitorPlaybackController'
 import { stepFrame, togglePlayback } from './transportController'
 
 export type EditorCommandId =
@@ -45,9 +57,27 @@ export type EditorCommandId =
   | 'transport.previous-frame'
   | 'transport.toggle-playback'
   | 'transport.next-frame'
+  | 'source.open'
+  | 'source.close'
+  | 'source.reset'
+  | 'source.shuttle-j'
+  | 'source.shuttle-k'
+  | 'source.shuttle-l'
+  | 'source.mark-in'
+  | 'source.mark-out'
+  | 'source.clear-in'
+  | 'source.clear-out'
+  | 'source.jump-start'
+  | 'source.jump-end'
 
 export type EditorCommandScope = 'edit' | 'history'
-export type EditorCommandCategory = 'History' | 'Tools' | 'Timeline' | 'Markers' | 'Transport'
+export type EditorCommandCategory =
+  | 'History'
+  | 'Tools'
+  | 'Timeline'
+  | 'Markers'
+  | 'Transport'
+  | 'Source'
 
 export interface EditorCommandShortcut {
   readonly label: string
@@ -235,6 +265,103 @@ export const EDITOR_COMMAND_DEFINITIONS: readonly EditorCommandDefinition[] = [
     keywords: ['forward', 'step', 'playhead'],
     shortcut: { label: '→', ariaKeyShortcuts: 'ArrowRight' },
   },
+  {
+    id: 'source.open',
+    category: 'Source',
+    label: 'Open in Source Monitor',
+    description: 'Open the selected Media Pool asset for source review.',
+    keywords: ['clip', 'monitor', 'review', 'source'],
+    shortcut: {
+      label: 'Shift+Enter',
+      ariaKeyShortcuts: 'Shift+Enter',
+    },
+  },
+  {
+    id: 'source.close',
+    category: 'Source',
+    label: 'Close Source Monitor',
+    description: 'Close the Source Monitor session without changing the timeline.',
+    keywords: ['monitor', 'review', 'source'],
+  },
+  {
+    id: 'source.reset',
+    category: 'Source',
+    label: 'Reset Source Monitor',
+    description: 'Clear In/Out marks and return the source playhead to the first frame.',
+    keywords: ['clear', 'marks', 'source'],
+  },
+  {
+    id: 'source.shuttle-j',
+    category: 'Source',
+    label: 'Source shuttle reverse',
+    description: 'Step Source Monitor shuttle toward reverse 1-2-4-8.',
+    keywords: ['jkl', 'shuttle', 'source'],
+    shortcut: { label: 'J', ariaKeyShortcuts: 'J' },
+  },
+  {
+    id: 'source.shuttle-k',
+    category: 'Source',
+    label: 'Source shuttle pause',
+    description: 'Stop Source Monitor shuttle.',
+    keywords: ['jkl', 'pause', 'source'],
+    shortcut: { label: 'K', ariaKeyShortcuts: 'K' },
+  },
+  {
+    id: 'source.shuttle-l',
+    category: 'Source',
+    label: 'Source shuttle forward',
+    description: 'Step Source Monitor shuttle toward forward 1-2-4-8.',
+    keywords: ['jkl', 'shuttle', 'source'],
+    shortcut: { label: 'L', ariaKeyShortcuts: 'L' },
+  },
+  {
+    id: 'source.mark-in',
+    category: 'Source',
+    label: 'Mark source In',
+    description: 'Set the Source Monitor In at the current source frame.',
+    keywords: ['in', 'mark', 'source'],
+    shortcut: { label: 'I', ariaKeyShortcuts: 'I' },
+  },
+  {
+    id: 'source.mark-out',
+    category: 'Source',
+    label: 'Mark source Out',
+    description: 'Set the Source Monitor Out to include the current source frame.',
+    keywords: ['mark', 'out', 'source'],
+    shortcut: { label: 'O', ariaKeyShortcuts: 'O' },
+  },
+  {
+    id: 'source.clear-in',
+    category: 'Source',
+    label: 'Clear source In',
+    description: 'Clear the Source Monitor In mark.',
+    keywords: ['clear', 'in', 'source'],
+    shortcut: { label: 'Shift+I', ariaKeyShortcuts: 'Shift+I' },
+  },
+  {
+    id: 'source.clear-out',
+    category: 'Source',
+    label: 'Clear source Out',
+    description: 'Clear the Source Monitor Out mark.',
+    keywords: ['clear', 'out', 'source'],
+    shortcut: { label: 'Shift+O', ariaKeyShortcuts: 'Shift+O' },
+  },
+  {
+    id: 'source.jump-start',
+    category: 'Source',
+    label: 'Jump to source start',
+    description: 'Move the Source Monitor playhead to the first source frame.',
+    keywords: ['begin', 'home', 'source', 'start'],
+    shortcut: { label: 'Home', ariaKeyShortcuts: 'Home' },
+  },
+  {
+    id: 'source.jump-end',
+    category: 'Source',
+    label: 'Jump to source end',
+    description: 'Move the Source Monitor playhead to the last source frame.',
+    keywords: ['end', 'last', 'source'],
+    shortcut: { label: 'End', ariaKeyShortcuts: 'End' },
+  },
 ]
 
 export const EDITOR_SHORTCUT_BINDINGS: readonly EditorShortcutBinding[] = [
@@ -254,6 +381,16 @@ export const EDITOR_SHORTCUT_BINDINGS: readonly EditorShortcutBinding[] = [
   { commandId: 'marker.previous', scope: 'edit', key: 'm', primary: true, shift: true },
   { commandId: 'transport.previous-frame', scope: 'edit', key: 'arrowleft', primary: false },
   { commandId: 'transport.next-frame', scope: 'edit', key: 'arrowright', primary: false },
+  { commandId: 'source.open', scope: 'edit', key: 'enter', primary: false, shift: true },
+  { commandId: 'source.shuttle-j', scope: 'edit', key: 'j', primary: false, shift: false },
+  { commandId: 'source.shuttle-k', scope: 'edit', key: 'k', primary: false, shift: false },
+  { commandId: 'source.shuttle-l', scope: 'edit', key: 'l', primary: false, shift: false },
+  { commandId: 'source.mark-in', scope: 'edit', key: 'i', primary: false, shift: false },
+  { commandId: 'source.mark-out', scope: 'edit', key: 'o', primary: false, shift: false },
+  { commandId: 'source.clear-in', scope: 'edit', key: 'i', primary: false, shift: true },
+  { commandId: 'source.clear-out', scope: 'edit', key: 'o', primary: false, shift: true },
+  { commandId: 'source.jump-start', scope: 'edit', key: 'home', primary: false, shift: false },
+  { commandId: 'source.jump-end', scope: 'edit', key: 'end', primary: false, shift: false },
 ]
 
 const TOOL_BY_COMMAND: Readonly<Partial<Record<EditorCommandId, TimelineTool>>> = {
@@ -359,6 +496,26 @@ function commandDisabledReason(id: EditorCommandId): string | null {
       return duration === 0
         ? 'Add a clip to the timeline before starting playback.'
         : null
+    case 'source.open':
+      return sourceOpenDisabledReason()
+    case 'source.close':
+      return useSourceMonitorStore.getState().session
+        || useSourceMonitorStore.getState().lastOpenRejection
+        ? null
+        : 'Open a source in the Source Monitor first.'
+    case 'source.reset':
+    case 'source.shuttle-j':
+    case 'source.shuttle-k':
+    case 'source.shuttle-l':
+    case 'source.mark-in':
+    case 'source.mark-out':
+    case 'source.clear-in':
+    case 'source.clear-out':
+    case 'source.jump-start':
+    case 'source.jump-end':
+      return useSourceMonitorStore.getState().session
+        ? null
+        : 'Open a source in the Source Monitor first.'
   }
   return null
 }
@@ -451,6 +608,42 @@ export function executeEditorCommand(id: EditorCommandId): EditorCommandExecutio
       break
     case 'transport.next-frame':
       stepFrame(1)
+      break
+    case 'source.open':
+      openSelectedSource()
+      break
+    case 'source.close':
+      closeSource()
+      break
+    case 'source.reset':
+      resetSession()
+      break
+    case 'source.shuttle-j':
+      stepShuttle('j')
+      break
+    case 'source.shuttle-k':
+      stepShuttle('k')
+      break
+    case 'source.shuttle-l':
+      stepShuttle('l')
+      break
+    case 'source.mark-in':
+      useSourceMonitorStore.getState().setIn()
+      break
+    case 'source.mark-out':
+      useSourceMonitorStore.getState().setOut()
+      break
+    case 'source.clear-in':
+      useSourceMonitorStore.getState().clearIn()
+      break
+    case 'source.clear-out':
+      useSourceMonitorStore.getState().clearOut()
+      break
+    case 'source.jump-start':
+      jumpToStart()
+      break
+    case 'source.jump-end':
+      jumpToEnd()
       break
   }
   return { executed: true, reason: null }
