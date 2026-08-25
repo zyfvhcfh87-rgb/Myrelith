@@ -308,6 +308,29 @@ describe('source / program exclusive playback', () => {
     expect(fake.startAudio).not.toHaveBeenCalled()
   })
 
+  test('Source start waits for Program audio cleanup', async () => {
+    useDocumentStore.getState().setDoc({
+      ...makeDoc(),
+      tracks: [makeTrack('A1', [makeClip('clipA', 120)], 'audio')],
+    })
+    openReadySource()
+    play()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+    const programAudio = await fake.startAudio.mock.results[0].value
+    await vi.waitFor(() => expect(fake.pendingCount()).toBeGreaterThan(0))
+    let releaseStop!: () => void
+    const stopGate = new Promise<void>((resolve) => { releaseStop = resolve })
+    programAudio.stop.mockReturnValueOnce(stopGate)
+
+    source().stepShuttle('l')
+    requestPlayback('source')
+    await vi.waitFor(() => expect(programAudio.stop).toHaveBeenCalled())
+    expect(fake.sourceStartAudio).not.toHaveBeenCalled()
+
+    releaseStop()
+    await vi.waitFor(() => expect(fake.sourceStartAudio).toHaveBeenCalledOnce())
+  })
+
   test('Program play() stops the source shuttle and clock first', async () => {
     openReadySource()
     source().stepShuttle('l')
@@ -317,12 +340,18 @@ describe('source / program exclusive playback', () => {
     fake.clock.currentTime = 0.5
     fake.pump()
     expect(source().session?.playheadFrame).toBe(15)
+    let releaseStop!: () => void
+    const stopGate = new Promise<void>((resolve) => { releaseStop = resolve })
+    audio.stop.mockReturnValueOnce(stopGate)
 
     play()
     expect(source().session?.shuttleStep).toBe(0)
     expect(source().playbackOwner).toBe('program')
     expect(transport().isPlaying).toBe(true)
     await vi.waitFor(() => expect(audio.stop).toHaveBeenCalled())
+    expect(fake.pendingCount()).toBe(0)
+    releaseStop()
+    await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
 
     fake.clock.currentTime = 1
     fake.pump()
@@ -518,6 +547,7 @@ describe('source / program exclusive playback', () => {
     fake.pump()
     expect(source().session?.playheadFrame).toBe(0)
   })
+
 })
 
 describe('source audio audition', () => {

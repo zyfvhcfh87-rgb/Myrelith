@@ -99,7 +99,15 @@ const realDeps: SourcePreviewDeps = {
   init: (bridge, offscreen) => {
     if (bridge instanceof RenderWorkerBridge) bridge.init(offscreen)
   },
-  fetchBlob: (url) => fetch(url).then((response) => response.blob()),
+  fetchBlob: async (url) => {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(
+        `Could not read source preview media (${response.status} ${response.statusText})`,
+      )
+    }
+    return response.blob()
+  },
 }
 
 interface ControllerState {
@@ -110,10 +118,13 @@ interface ControllerState {
   visualPlanner: VideoCompositionPlanner | null
   reviewDoc: TimelineDoc | null
   openedAssetId: AssetId | null
+  loadingAssetId: AssetId | null
   sourceKey: string | null
   unsubscribes: Array<() => void>
   rafHandle: number | null
   renderGeneration: number
+  sourceLoadGeneration: number
+  suspended: boolean
 }
 
 const state: ControllerState = {
@@ -124,10 +135,13 @@ const state: ControllerState = {
   visualPlanner: null,
   reviewDoc: null,
   openedAssetId: null,
+  loadingAssetId: null,
   sourceKey: null,
   unsubscribes: [],
   rafHandle: null,
   renderGeneration: 0,
+  sourceLoadGeneration: 0,
+  suspended: false,
 }
 
 function emptyReviewDoc(session: SourceMonitorSession): TimelineDoc {
@@ -239,17 +253,44 @@ function scheduleRender(): void {
     void bridge.renderFrame(
       planner.planFrame(session.playheadFrame),
       renderMode(session),
-    )
+    ).then((result) => {
+      if (!isCurrentOwner(bridge, generation) || result.status !== 'error') return
+      console.warn(
+        '[sourceMonitorPreviewController] render failed:',
+        result.message ?? 'Unknown render error',
+      )
+    }, (cause) => {
+      if (!isCurrentOwner(bridge, generation)) return
+      console.warn(
+        '[sourceMonitorPreviewController] render failed:',
+        cause instanceof Error ? cause.message : cause,
+      )
+    })
   })
   state.rafHandle = handle
 }
 
 function releaseOpenedSource(bridge: SourcePreviewBridge): void {
-  if (state.openedAssetId) {
-    bridge.releaseAsset(state.openedAssetId)
+  state.sourceLoadGeneration++
+  const assetIds = new Set<AssetId>()
+  if (state.openedAssetId) assetIds.add(state.openedAssetId)
+  if (state.loadingAssetId) assetIds.add(state.loadingAssetId)
+  for (const assetId of assetIds) {
+    bridge.releaseAsset(assetId)
   }
   state.openedAssetId = null
+  state.loadingAssetId = null
   state.sourceKey = null
+}
+
+function isCurrentSourceLoad(
+  bridge: SourcePreviewBridge,
+  sourceKey: string,
+  generation: number,
+): boolean {
+  return state.bridge === bridge
+    && state.sourceKey === sourceKey
+    && state.sourceLoadGeneration === generation
 }
 
 async function loadVisualSource(
@@ -261,21 +302,21 @@ async function loadVisualSource(
   if (!bridge) return
   const sourceKey = `original:${asset.objectUrl}`
   if (state.sourceKey === sourceKey) return
-  if (state.openedAssetId) {
-    bridge.releaseAsset(state.openedAssetId)
-    state.openedAssetId = null
-  }
+  releaseOpenedSource(bridge)
+  const loadGeneration = state.sourceLoadGeneration
   state.sourceKey = sourceKey
+  state.loadingAssetId = asset.id
   const guard = captureMediaRuntimeGuard(asset.id)
   if (!guard || guard.objectUrl !== asset.objectUrl) {
     state.sourceKey = null
+    state.loadingAssetId = null
     return
   }
   let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
   let failureTrackKind: 'video' | null = session.source.kind === 'video' ? 'video' : null
   try {
     const blob = await deps.fetchBlob(asset.objectUrl)
-    if (state.bridge !== bridge || state.sourceKey !== sourceKey) return
+    if (!isCurrentSourceLoad(bridge, sourceKey, loadGeneration)) return
     failureReason = 'decode-failed'
     if (session.source.kind === 'image') {
       await bridge.openImage(asset.id, blob, guard)
@@ -288,11 +329,13 @@ async function loadVisualSource(
         guard,
       )
     }
-    if (state.bridge !== bridge || state.sourceKey !== sourceKey) return
+    if (!isCurrentSourceLoad(bridge, sourceKey, loadGeneration)) return
+    state.loadingAssetId = null
     state.openedAssetId = asset.id
   } catch (cause) {
-    if (state.bridge !== bridge || state.sourceKey !== sourceKey) return
+    if (!isCurrentSourceLoad(bridge, sourceKey, loadGeneration)) return
     state.sourceKey = null
+    state.loadingAssetId = null
     state.openedAssetId = null
     if (cause instanceof RenderAssetOpenError) {
       failureReason = cause.failure.reason
@@ -309,7 +352,7 @@ function syncReview(deps: SourcePreviewDeps): void {
   const bridge = state.bridge
   if (!bridge) return
   const session = useSourceMonitorStore.getState().session
-  if (!session) {
+  if (!session || state.suspended) {
     releaseOpenedSource(bridge)
     state.reviewDoc = null
     state.visualPlanner = null
@@ -339,16 +382,25 @@ function isCurrentOwner(
   return state.bridge === bridge && state.renderGeneration === generation
 }
 
-/** Retire every Source preview playback lane before another decoder owner starts. */
+export function setSourcePreviewViewport(viewport: PresentationViewport | null): void {
+  state.viewport = viewport
+  const doc = state.reviewDoc
+  const bridge = state.bridge
+  if (!doc || !bridge) return
+  syncPresentationProfile(bridge, doc)
+  scheduleRender()
+}
+
+/** Retire any Source playback lane before another decoder owner starts. */
 export async function drainSourcePreviewPlayback(): Promise<void> {
   while (true) {
     cancelScheduledRender()
     const bridge = state.bridge
     const planner = state.visualPlanner
     if (!bridge || !planner) return
+    const generation = state.renderGeneration
     const session = useSourceMonitorStore.getState().session
     if (!session) return
-    const generation = state.renderGeneration
     const result = await bridge.renderFrame(
       planner.planFrame(session.playheadFrame),
       'seek',
@@ -357,19 +409,27 @@ export async function drainSourcePreviewPlayback(): Promise<void> {
     if (result.status === 'superseded') continue
     cancelScheduledRender()
     if (result.status === 'error') {
-      throw new Error(result.message ?? 'Source preview playback decoder teardown failed')
+      throw new Error(result.message ?? 'Source preview decoder teardown failed')
     }
     return
   }
 }
 
-export function setSourcePreviewViewport(viewport: PresentationViewport | null): void {
-  state.viewport = viewport
-  const doc = state.reviewDoc
-  const bridge = state.bridge
-  if (!doc || !bridge) return
-  syncPresentationProfile(bridge, doc)
-  scheduleRender()
+/** Release Source preview resources while the editor is backgrounded. */
+export function suspendSourcePreview(): void {
+  if (state.suspended) return
+  state.suspended = true
+  cancelScheduledRender()
+  if (state.bridge) releaseOpenedSource(state.bridge)
+  state.reviewDoc = null
+  state.visualPlanner = null
+}
+
+/** Re-open the current Source preview after the editor becomes visible. */
+export function resumeSourcePreview(): void {
+  if (!state.suspended) return
+  state.suspended = false
+  if (state.deps) syncReview(state.deps)
 }
 
 export function initSourcePreview(
@@ -394,6 +454,7 @@ export function initSourcePreview(
   state.canvas = canvas
   state.bridge = bridge
   state.deps = deps
+  state.suspended = false
   const ownerGeneration = state.renderGeneration
   bridge.onWorkerError = (message) => {
     if (!isCurrentOwner(bridge, ownerGeneration)) return
@@ -446,9 +507,7 @@ async function disposeSourcePreviewState(): Promise<void> {
   state.renderGeneration++
   for (const unsubscribe of state.unsubscribes) unsubscribe()
   state.unsubscribes = []
-  if (state.bridge && state.openedAssetId) {
-    state.bridge.releaseAsset(state.openedAssetId)
-  }
+  if (state.bridge) releaseOpenedSource(state.bridge)
   const close = state.bridge?.dispose()
   state.bridge = null
   state.deps = null
@@ -456,7 +515,9 @@ async function disposeSourcePreviewState(): Promise<void> {
   state.visualPlanner = null
   state.reviewDoc = null
   state.openedAssetId = null
+  state.loadingAssetId = null
   state.sourceKey = null
+  state.suspended = false
   state.canvas = null
   state.rafHandle = null
   await close

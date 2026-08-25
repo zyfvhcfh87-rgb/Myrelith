@@ -3,12 +3,13 @@
  * note, and Home/End shortcuts on the review transport.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { MediaCompatibilityItem } from '../domain/mediaCompatibility'
 import type { MediaAsset } from '../domain/schema'
 import { useMediaStore } from '../state/mediaStore'
 import { useSourceMonitorStore } from '../state/sourceMonitorStore'
+import { useTransportStore } from '../state/transportStore'
 import { openSourceAsset } from '../app/sourceMonitorController'
 import SourceMonitor from './SourceMonitor'
 
@@ -163,5 +164,28 @@ describe('SourceMonitor', () => {
       'aria-keyshortcuts',
       'End',
     )
+  })
+
+  test('scrubs the Source playhead without changing its marks or Program', () => {
+    seed(makeAsset(), compatibility())
+    expect(openSourceAsset('asset-source').status).toBe('ok')
+    const source = useSourceMonitorStore.getState()
+    source.scrubPlayhead(25)
+    source.setIn()
+    source.scrubPlayhead(125)
+    source.setOut()
+    useTransportStore.getState().setPlayheadFrame(48)
+    render(<SourceMonitor />)
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Source playhead' }), {
+      target: { value: '90' },
+    })
+
+    expect(useSourceMonitorStore.getState().session).toMatchObject({
+      playheadFrame: 90,
+      inFrame: 25,
+      outFrameExclusive: 126,
+    })
+    expect(useTransportStore.getState().playheadFrame).toBe(48)
   })
 })

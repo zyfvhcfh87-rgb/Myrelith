@@ -9,16 +9,18 @@ import {
   mediaCompatibilityRemediationLines,
   mediaCompatibilityStatusText,
 } from '../domain/mediaCompatibility'
-import type { MediaAsset } from '../domain/schema'
 import {
   openSourceMonitor,
-  sourceMonitorSourceFacts,
   type SourceMonitorOpenRejection,
   type SourceMonitorOpenResult,
-  type SourceMonitorSession,
 } from '../domain/sourceMonitor'
 import { useMediaStore } from '../state/mediaStore'
 import { useSourceMonitorStore } from '../state/sourceMonitorStore'
+import { suspendSourcePlayback } from './sourceMonitorPlaybackController'
+import {
+  resumeSourcePreview,
+  suspendSourcePreview,
+} from './sourceMonitorPreviewController'
 
 const OPEN_REJECTION_MESSAGES: Readonly<
   Record<SourceMonitorOpenRejection, string>
@@ -136,26 +138,71 @@ export function openSelectedSource(): SourceMonitorOpenResult {
   return openSourceAsset(assetId)
 }
 
-function sourceFactsNeedRemap(
-  session: SourceMonitorSession,
-  asset: MediaAsset,
-): boolean {
-  const next = sourceMonitorSourceFacts(asset)
-  const current = session.source
-  return current.kind !== next.kind
-    || current.fileName !== next.fileName
-    || current.rate.num !== next.rate.num
-    || current.rate.den !== next.rate.den
-    || current.durationFrames !== next.durationFrames
-    || current.hasAudio !== next.hasAudio
-}
+/**
+ * Keep an open Source session aligned with relinked media, and release its
+ * runtime owners while the editor is backgrounded. Session marks stay intact.
+ */
+export function initSourceMonitorLifecycle(): () => void {
+  let pendingRefreshAssetId: string | null = null
 
-function syncOpenSourceWithConnectedMedia(): void {
-  const session = useSourceMonitorStore.getState().session
-  if (!session) return
-  const asset = useMediaStore.getState().assets.get(session.source.assetId)
-  if (!asset || !sourceFactsNeedRemap(session, asset)) return
-  openSourceAsset(session.source.assetId)
-}
+  const refreshPendingSource = (): void => {
+    const session = useSourceMonitorStore.getState().session
+    if (!session || session.source.assetId !== pendingRefreshAssetId) {
+      pendingRefreshAssetId = null
+      return
+    }
+    const media = useMediaStore.getState()
+    const asset = media.assets.get(pendingRefreshAssetId)
+    if (!asset) return
+    const compatibility = media.compatibility.get(pendingRefreshAssetId)
+    if (compatibility && compatibility.status !== 'ready') {
+      if (compatibility.status !== 'checking') pendingRefreshAssetId = null
+      return
+    }
+    const result = useSourceMonitorStore.getState().openSource({
+      asset,
+      compatibility,
+    })
+    if (result.status === 'ok') pendingRefreshAssetId = null
+  }
 
-useMediaStore.subscribe(syncOpenSourceWithConnectedMedia)
+  const unsubscribeMedia = useMediaStore.subscribe((current, previous) => {
+    const session = useSourceMonitorStore.getState().session
+    if (!session) {
+      pendingRefreshAssetId = null
+      return
+    }
+    const assetId = session.source.assetId
+    if (current.assets.get(assetId) !== previous.assets.get(assetId)) {
+      pendingRefreshAssetId = assetId
+      suspendSourcePlayback()
+    }
+    if (pendingRefreshAssetId === assetId) refreshPendingSource()
+  })
+  const unsubscribeSource = useSourceMonitorStore.subscribe((current) => {
+    if (current.session?.source.assetId !== pendingRefreshAssetId) {
+      pendingRefreshAssetId = null
+    }
+  })
+
+  const suspend = (): void => {
+    suspendSourcePlayback()
+    suspendSourcePreview()
+  }
+  const onVisibilityChange = (): void => {
+    if (document.visibilityState === 'hidden') suspend()
+    else resumeSourcePreview()
+  }
+  const onPageShow = (): void => resumeSourcePreview()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('pagehide', suspend)
+  window.addEventListener('pageshow', onPageShow)
+
+  return () => {
+    unsubscribeMedia()
+    unsubscribeSource()
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    window.removeEventListener('pagehide', suspend)
+    window.removeEventListener('pageshow', onPageShow)
+  }
+}

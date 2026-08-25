@@ -136,6 +136,17 @@
   padding: 4px 8px 8px;
 }
 
+.source-monitor-scrubber {
+  display: flex;
+  flex: 0 0 auto;
+  padding: 0 8px 4px;
+}
+
+.source-monitor-scrubber input {
+  width: 100%;
+  accent-color: #79aee8;
+}
+
 .preview-canvas {
   max-width: 100%;
   max-height: 100%;

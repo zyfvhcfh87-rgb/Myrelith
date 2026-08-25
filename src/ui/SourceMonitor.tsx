@@ -16,6 +16,7 @@ import {
   jumpToOut,
   jumpToStart,
   resetSession,
+  scrubPlayhead,
   stepFrame,
   stepShuttle,
 } from '../app/sourceMonitorPlaybackController'
@@ -156,7 +157,7 @@ export default function SourceMonitor() {
       </div>
       {session ? (
         <>
-          <div className="source-monitor-readout" aria-live="polite">
+          <div className="source-monitor-readout">
             <span>{formatTimecode(session.playheadFrame, session.source.rate)}</span>
             <span aria-hidden="true">/</span>
             <span>
@@ -173,6 +174,17 @@ export default function SourceMonitor() {
               <span>Source Monitor owns playback. Program is paused.</span>
             ) : null}
           </div>
+          <label className="source-monitor-scrubber">
+            <span className="visually-hidden">Source playhead</span>
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0, session.source.durationFrames - 1)}
+              step={1}
+              value={session.playheadFrame}
+              onChange={(event) => scrubPlayhead(Number(event.currentTarget.value))}
+            />
+          </label>
           <div className="source-monitor-transport">
             <button
               type="button"

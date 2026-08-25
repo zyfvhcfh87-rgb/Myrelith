@@ -389,8 +389,8 @@ export const EDITOR_SHORTCUT_BINDINGS: readonly EditorShortcutBinding[] = [
   { commandId: 'source.mark-out', scope: 'edit', key: 'o', primary: false, shift: false },
   { commandId: 'source.clear-in', scope: 'edit', key: 'i', primary: false, shift: true },
   { commandId: 'source.clear-out', scope: 'edit', key: 'o', primary: false, shift: true },
-  { commandId: 'source.jump-start', scope: 'edit', key: 'home', primary: false },
-  { commandId: 'source.jump-end', scope: 'edit', key: 'end', primary: false },
+  { commandId: 'source.jump-start', scope: 'edit', key: 'home', primary: false, shift: false },
+  { commandId: 'source.jump-end', scope: 'edit', key: 'end', primary: false, shift: false },
 ]
 
 const TOOL_BY_COMMAND: Readonly<Partial<Record<EditorCommandId, TimelineTool>>> = {

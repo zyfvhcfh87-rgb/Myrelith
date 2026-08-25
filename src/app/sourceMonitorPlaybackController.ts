@@ -44,6 +44,7 @@ import {
   useSourceMonitorStore,
 } from '../state/sourceMonitorStore'
 import {
+  beginProgramPlaybackDrain,
   getPlaybackClockContext,
   pause,
   registerSourcePlaybackStop,
@@ -56,6 +57,7 @@ import {
   reportMediaRuntimeFailure,
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
+import { beginPreviewPlaybackDrain } from './previewController'
 
 export interface SourcePlaybackDeps {
   scheduleTick(cb: () => void): number
@@ -171,6 +173,11 @@ function haltSourceEngine(): void {
 function stopSourceClock(): void {
   haltSourceEngine()
   useSourceMonitorStore.getState().stopPlayback()
+}
+
+/** Stop Source immediately while retaining its session and marks. */
+export function suspendSourcePlayback(): void {
+  stopSourceClock()
 }
 
 function subscribeSourceReset(): void {
@@ -470,12 +477,39 @@ function startSourceClock(): void {
     useSourceMonitorStore.getState().stopPlayback()
   })
 
-  if (sourceMonitorAudioAudition(session)) {
-    startSourceAudio(engine, session, context, generation)
+  const startAdmittedSource = (): void => {
+    if (
+      generation !== state.playGeneration
+      || !isCurrentRun()
+    ) return
+    const live = useSourceMonitorStore.getState()
+    if (
+      live.playbackOwner !== 'source'
+      || !live.session
+      || live.session.shuttleStep === 0
+    ) return
+    if (sourceMonitorAudioAudition(live.session)) {
+      startSourceAudio(engine, live.session, context, generation)
+      return
+    }
+    startSourceEngine(engine, live.session, context.currentTime)
+  }
+  const previewDrain = beginPreviewPlaybackDrain()
+  const programDrain = beginProgramPlaybackDrain()
+  if (!previewDrain && !programDrain) {
+    startAdmittedSource()
     return
   }
-
-  startSourceEngine(engine, session, context.currentTime)
+  const admissionTask = Promise.all([
+    previewDrain ?? Promise.resolve(),
+    programDrain ?? Promise.resolve(),
+  ]).then(startAdmittedSource).catch((cause) => {
+    if (generation !== state.playGeneration || !isCurrentRun()) return
+    warnSourceAudio('Program playback handoff failed', cause)
+    stopSourceClock()
+  })
+  state.playbackTasks.add(admissionTask)
+  void admissionTask.then(() => state.playbackTasks.delete(admissionTask))
 }
 
 registerSourcePlaybackStop(stopSourceClock, drainSourcePlayback)
@@ -522,6 +556,15 @@ export function scrubPlayhead(frame: number): void {
   useSourceMonitorStore.getState().scrubPlayhead(frame)
 }
 
+/** Stop Source playback and wait until its startup, audio, and cleanup work retires. */
+export async function drainSourcePlayback(): Promise<void> {
+  stopSourceClock()
+  await Promise.all([
+    ...state.playbackTasks,
+    ...state.cleanupTasks,
+  ])
+}
+
 export function stepFrame(deltaFrames: number): void {
   haltSourceEngine()
   useSourceMonitorStore.getState().stepFrame(deltaFrames)
@@ -557,31 +600,14 @@ export function resetSession(): void {
   useSourceMonitorStore.getState().resetSession()
 }
 
-/** Stop Source playback and wait until its audio decoder owners are gone. */
-export async function drainSourcePlayback(): Promise<void> {
-  haltSourceEngine()
-  useSourceMonitorStore.getState().stopPlayback()
-  while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
-    await Promise.all([
-      ...state.playbackTasks,
-      ...state.cleanupTasks,
-    ])
-  }
-}
-
 /** Stop the source clock and drop the engine. Does not close Program's AudioContext. */
 export async function disposeSourcePlayback(): Promise<void> {
-  haltSourceEngine()
-  useSourceMonitorStore.getState().stopPlayback()
+  await drainSourcePlayback()
   state.engine = null
   state.activeGeneration = -1
   state.unsubscribeReset?.()
   state.unsubscribeReset = null
   state.deps = realDeps
-  await Promise.all([
-    ...state.playbackTasks,
-    ...state.cleanupTasks,
-  ])
 }
 
 /** Dev/browser verification hook; null while silent or still priming. */

@@ -17,6 +17,7 @@ import { useTransportStore } from '../state/transportStore'
 import {
   clearSelectedPoolAssetId,
   getSelectedPoolAssetId,
+  initSourceMonitorLifecycle,
   openSelectedSource,
   openSourceAsset,
   setSelectedPoolAssetId,
@@ -362,37 +363,56 @@ describe('sourceMonitorController', () => {
     })
   })
 
-  test('relinking the open asset remaps playhead and marks onto the new clock', () => {
-    const asset = makeAsset({ frameRate: { num: 60, den: 1 } })
-    seed(asset, compatibility())
-    expect(openSourceAsset(asset.id).status).toBe('ok')
-    useSourceMonitorStore.getState().setPlayhead(120)
-    useSourceMonitorStore.getState().setIn()
-    useSourceMonitorStore.getState().setOut()
-    expect(useSourceMonitorStore.getState().session).toMatchObject({
-      source: { durationFrames: 600, rate: { num: 60, den: 1 } },
-      playheadFrame: 120,
-      inFrame: 120,
-      outFrameExclusive: 121,
-    })
+  test('remaps an open session when its Media Pool asset is relinked', () => {
+    const original = makeAsset()
+    seed(original, compatibility())
+    expect(openSourceAsset(original.id).status).toBe('ok')
+    const source = useSourceMonitorStore.getState()
+    source.scrubPlayhead(30)
+    source.setIn()
+    source.scrubPlayhead(120)
+    source.setOut()
+    source.scrubPlayhead(90)
+    const dispose = initSourceMonitorLifecycle()
 
-    seed(makeAsset({
-      durationMicroseconds: 5_000_000,
-      durationFrames: 150,
+    const relinked = makeAsset({
       objectUrl: 'blob:relinked',
-    }), compatibility())
+      durationFrames: 600,
+      durationMicroseconds: 10_000_000,
+      frameRate: { num: 60, den: 1 },
+    })
+    useMediaStore.setState({
+      assets: new Map([[relinked.id, relinked]]),
+      compatibility: new Map([[relinked.id, compatibility({
+        requestId: 'req-relinked',
+      })]]),
+    })
 
     expect(useSourceMonitorStore.getState().session).toMatchObject({
       source: {
-        assetId: 'asset-source',
-        durationFrames: 150,
-        rate: { num: 30, den: 1 },
+        assetId: relinked.id,
+        rate: { num: 60, den: 1 },
+        durationFrames: 600,
       },
-      playheadFrame: 60,
+      playheadFrame: 180,
       inFrame: 60,
-      outFrameExclusive: 61,
+      outFrameExclusive: 242,
       shuttleStep: 0,
     })
-    expect(useTransportStore.getState().playheadFrame).toBe(48)
+    dispose()
+  })
+
+  test('parks Source playback when the page is hidden', () => {
+    const asset = makeAsset()
+    seed(asset, compatibility())
+    expect(openSourceAsset(asset.id).status).toBe('ok')
+    useSourceMonitorStore.getState().stepShuttle('l')
+    useSourceMonitorStore.getState().requestPlayback('source')
+    const dispose = initSourceMonitorLifecycle()
+
+    window.dispatchEvent(new PageTransitionEvent('pagehide'))
+
+    expect(useSourceMonitorStore.getState().session?.shuttleStep).toBe(0)
+    dispose()
   })
 })

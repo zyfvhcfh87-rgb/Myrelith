@@ -18,12 +18,17 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import { useTransportStore } from '../state/transportStore'
-import { openSourceAsset } from './sourceMonitorController'
+import {
+  initSourceMonitorLifecycle,
+  openSourceAsset,
+} from './sourceMonitorController'
 import {
   disposeSourcePreview,
   drainSourcePreviewPlayback,
   initSourcePreview,
+  resumeSourcePreview,
   setSourcePreviewViewport,
+  suspendSourcePreview,
   type SourcePreviewBridge,
   type SourcePreviewDeps,
 } from './sourceMonitorPreviewController'
@@ -54,6 +59,7 @@ class FakeBridge implements SourcePreviewBridge {
   released: string[] = []
   rendered: Array<{ frame: number; mode: RenderMode }> = []
   disposed = false
+  openAssetImpl: ((assetId: string) => Promise<void>) | null = null
 
   setDoc(doc: TimelineDoc): void {
     this.docs.push(doc)
@@ -71,6 +77,7 @@ class FakeBridge implements SourcePreviewBridge {
     runtimeToken: object,
   ): Promise<void> {
     this.opened.push({ assetId, blob, rate, budget, runtimeToken })
+    await this.openAssetImpl?.(assetId)
     this.onAssetReady?.(assetId)
   }
 
@@ -346,6 +353,85 @@ describe('sourceMonitorPreviewController', () => {
     expect(deps.fetchBlob).toHaveBeenCalledWith('blob:relinked')
   })
 
+  test('releases a pending source when a different asset opens', async () => {
+    const { deps, bridge } = makeDeps()
+    let releaseFirst!: () => void
+    const firstOpen = new Promise<void>((resolve) => { releaseFirst = resolve })
+    bridge.openAssetImpl = (assetId) => (
+      assetId === 'asset-a' ? firstOpen : Promise.resolve()
+    )
+    const first = makeAsset({ id: 'asset-a', objectUrl: 'blob:a' })
+    const second = makeAsset({
+      id: 'asset-b',
+      fileName: 'other.mp4',
+      objectUrl: 'blob:b',
+    })
+    seed(first)
+    initSourcePreview(canvasEl(), deps)
+    expect(openSourceAsset(first.id).status).toBe('ok')
+    await vi.waitFor(() => {
+      expect(bridge.opened.map((entry) => entry.assetId)).toContain('asset-a')
+    })
+
+    seed(second)
+    expect(openSourceAsset(second.id).status).toBe('ok')
+    await vi.waitFor(() => expect(bridge.released).toContain('asset-a'))
+    await vi.waitFor(() => {
+      expect(bridge.opened.map((entry) => entry.assetId)).toContain('asset-b')
+    })
+    releaseFirst()
+    await flush()
+
+    expect(bridge.released.filter((id) => id === 'asset-a')).toHaveLength(1)
+  })
+
+  test('drains playback with a seek and reopens after suspension', async () => {
+    const { deps, bridge } = makeDeps()
+    const asset = makeAsset()
+    seed(asset)
+    initSourcePreview(canvasEl(), deps)
+    expect(openSourceAsset(asset.id).status).toBe('ok')
+    await nextFrame()
+    await flush()
+
+    useSourceMonitorStore.getState().stepShuttle('l')
+    await nextFrame()
+    await flush()
+    expect(bridge.rendered.at(-1)?.mode).toBe('playback')
+
+    await drainSourcePreviewPlayback()
+    expect(bridge.rendered.at(-1)?.mode).toBe('seek')
+
+    suspendSourcePreview()
+    expect(bridge.released).toContain(asset.id)
+    const openCount = bridge.opened.length
+    resumeSourcePreview()
+    await flush()
+    expect(bridge.opened).toHaveLength(openCount + 1)
+  })
+
+  test('ignores an old fetch when suspension reopens the same source', async () => {
+    const { deps, bridge, blob } = makeDeps()
+    let releaseFetch!: (value: Blob) => void
+    const oldFetch = new Promise<Blob>((resolve) => { releaseFetch = resolve })
+    vi.mocked(deps.fetchBlob)
+      .mockReturnValueOnce(oldFetch)
+      .mockResolvedValue(blob)
+    const asset = makeAsset()
+    seed(asset)
+    initSourcePreview(canvasEl(), deps)
+    expect(openSourceAsset(asset.id).status).toBe('ok')
+    await vi.waitFor(() => expect(deps.fetchBlob).toHaveBeenCalledOnce())
+
+    suspendSourcePreview()
+    resumeSourcePreview()
+    await vi.waitFor(() => expect(bridge.opened).toHaveLength(1))
+    releaseFetch(blob)
+    await flush()
+
+    expect(bridge.opened).toHaveLength(1)
+  })
+
   test('clears a failed open so a later retry can decode', async () => {
     const { deps, bridge, blob } = makeDeps()
     const asset = makeAsset()
@@ -374,6 +460,7 @@ describe('sourceMonitorPreviewController', () => {
     const { deps, bridge } = makeDeps()
     seed(makeAsset({ frameRate: { num: 60, den: 1 } }))
     initSourcePreview(canvasEl(), deps)
+    const disposeLifecycle = initSourceMonitorLifecycle()
     expect(openSourceAsset('asset-source').status).toBe('ok')
     useSourceMonitorStore.getState().setPlayhead(120)
     await nextFrame()
@@ -400,6 +487,7 @@ describe('sourceMonitorPreviewController', () => {
     })
     expect(bridge.rendered.at(-1)).toEqual({ frame: 60, mode: 'seek' })
     expect(deps.fetchBlob).toHaveBeenCalledWith('blob:relinked')
+    disposeLifecycle()
   })
 
   test('drains playback lanes onto a seek before another decoder owner starts', async () => {
