@@ -4,7 +4,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import type { MediaCompatibilityItem } from '../domain/mediaCompatibility'
+import {
+  withMediaRuntimeFailure,
+  type MediaCompatibilityItem,
+  type MediaCompatibilityReport,
+} from '../domain/mediaCompatibility'
 import type { MediaAsset } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -17,6 +21,7 @@ import {
   openSourceAsset,
   setSelectedPoolAssetId,
   sourceMonitorOpenRejectionMessage,
+  sourceMonitorStatusCopy,
   sourceOpenDisabledReason,
 } from './sourceMonitorController'
 
@@ -58,6 +63,25 @@ function compatibility(
     lastModified: 1_725_000_000_000,
     status: 'ready',
     report: null,
+    ...over,
+  }
+}
+
+function makeReport(
+  status: MediaCompatibilityReport['status'] = 'unsupported',
+  over: Partial<MediaCompatibilityReport> = {},
+): MediaCompatibilityReport {
+  return {
+    status,
+    container: {
+      name: 'MPEG-4 Part 14',
+      mimeType: 'video/mp4',
+      fullMimeType: 'video/mp4',
+    },
+    durationMicroseconds: 10_000_000,
+    tracks: [],
+    reason: 'unsupported-codec',
+    detail: 'This browser cannot decode this video codec.',
     ...over,
   }
 }
@@ -181,5 +205,160 @@ describe('sourceMonitorController', () => {
       reason: 'incompatible',
     })
     expect(useSourceMonitorStore.getState().session).toBeNull()
+  })
+
+  test('reuses Media Pool offline, partial, unsupported, and failed copy', () => {
+    expect(sourceMonitorOpenRejectionMessage('offline')).toBe(
+      'Offline · relink needed',
+    )
+
+    const offline = makeAsset()
+    useMediaStore.setState({
+      descriptors: new Map([[offline.id, {
+        id: offline.id,
+        fileName: offline.fileName,
+        mimeType: offline.mimeType,
+        size: offline.size,
+        lastModified: offline.lastModified,
+        kind: offline.kind,
+        durationMicroseconds: offline.durationMicroseconds,
+        sourceBounds: offline.sourceBounds,
+        nativeFrameRate: offline.frameRate,
+        width: offline.width,
+        height: offline.height,
+        hasAudio: offline.hasAudio,
+        audioSampleRate: offline.audioSampleRate,
+        audioChannels: offline.audioChannels,
+      }]]),
+      assets: new Map(),
+      visuals: new Map(),
+      compatibility: new Map(),
+    })
+    expect(openSourceAsset(offline.id).status).toBe('rejected')
+    expect(sourceMonitorStatusCopy()).toEqual({
+      kind: 'offline',
+      lines: ['Offline · relink needed'],
+    })
+
+    seed(makeAsset(), compatibility({
+      status: 'limited',
+      report: makeReport('limited', {
+        reason: 'unsupported-codec',
+        detail: 'Some media tracks are not usable in this browser.',
+      }),
+    }))
+    expect(sourceOpenDisabledReason('asset-source')).toBe(
+      'Compatibility: Limited',
+    )
+    expect(openSourceAsset('asset-source').status).toBe('rejected')
+    expect(sourceMonitorStatusCopy()).toEqual({
+      kind: 'incompatible',
+      lines: [
+        'Compatibility: Limited',
+        'Some media tracks are not usable in this browser.',
+      ],
+    })
+
+    seed(makeAsset(), compatibility({
+      status: 'unsupported',
+      report: makeReport(),
+    }))
+    expect(sourceOpenDisabledReason('asset-source')).toBe(
+      'Compatibility: Unsupported',
+    )
+    expect(openSourceAsset('asset-source').status).toBe('rejected')
+    expect(sourceMonitorStatusCopy()).toEqual({
+      kind: 'incompatible',
+      lines: [
+        'Compatibility: Unsupported',
+        'This browser cannot decode this video codec.',
+      ],
+    })
+
+    const failed = withMediaRuntimeFailure(makeReport('ready', {
+      reason: null,
+      detail: null,
+    }), {
+      surface: 'preview',
+      trackKind: 'video',
+      reason: 'decode-failed',
+      detail: 'hardware decoder stopped',
+    })
+    seed(makeAsset(), compatibility({
+      status: 'error',
+      report: failed,
+    }))
+    expect(sourceOpenDisabledReason('asset-source')).toBe(
+      'Compatibility: Error',
+    )
+    expect(openSourceAsset('asset-source').status).toBe('rejected')
+    expect(sourceMonitorStatusCopy()).toEqual({
+      kind: 'incompatible',
+      lines: [
+        'Compatibility: Error',
+        'Preview: hardware decoder stopped',
+      ],
+    })
+  })
+
+  test('rejects a compatibility-only unsupported file with pool copy', () => {
+    const item = compatibility({
+      id: 'asset-broken',
+      fileName: 'broken.mp4',
+      status: 'unsupported',
+      report: makeReport(),
+    })
+    useMediaStore.setState({
+      descriptors: new Map(),
+      assets: new Map(),
+      visuals: new Map(),
+      compatibility: new Map([[item.id, item]]),
+    })
+
+    expect(sourceOpenDisabledReason(item.id)).toBe('Compatibility: Unsupported')
+    expect(openSourceAsset(item.id)).toMatchObject({
+      status: 'rejected',
+      reason: 'incompatible',
+    })
+    expect(sourceMonitorStatusCopy()).toEqual({
+      kind: 'incompatible',
+      lines: [
+        'Compatibility: Unsupported',
+        'This browser cannot decode this video codec.',
+      ],
+    })
+  })
+
+  test('keeps rejection copy on the attempted file when another source is already open', () => {
+    seed(makeAsset({ id: 'asset-png', fileName: 'still.png', kind: 'image' }), compatibility({
+      id: 'asset-png',
+      fileName: 'still.png',
+    }))
+    expect(openSourceAsset('asset-png').status).toBe('ok')
+
+    const item = compatibility({
+      id: 'asset-broken',
+      fileName: 'broken.mp4',
+      status: 'unsupported',
+      report: makeReport(),
+    })
+    const compatibilityMap = new Map(useMediaStore.getState().compatibility)
+    compatibilityMap.set(item.id, item)
+    useMediaStore.setState({ compatibility: compatibilityMap })
+
+    expect(openSourceAsset(item.id)).toMatchObject({
+      status: 'rejected',
+      reason: 'incompatible',
+    })
+    expect(useSourceMonitorStore.getState().session?.source.assetId).toBe(
+      'asset-png',
+    )
+    expect(sourceMonitorStatusCopy()).toEqual({
+      kind: 'incompatible',
+      lines: [
+        'Compatibility: Unsupported',
+        'This browser cannot decode this video codec.',
+      ],
+    })
   })
 })

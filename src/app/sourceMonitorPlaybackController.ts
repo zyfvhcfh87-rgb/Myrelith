@@ -174,11 +174,14 @@ function stopSourceClock(): void {
 
 function subscribeSourceReset(): void {
   if (state.unsubscribeReset) return
-  state.unsubscribeReset = useSourceMonitorStore.subscribe(() => {
+  state.unsubscribeReset = useSourceMonitorStore.subscribe((current, previous) => {
     if (state.startedRevision !== getSourceMonitorResetRevision()) {
       haltSourceEngine()
     }
-    if (useSourceMonitorStore.getState().session === null) {
+    if (current.session === null) {
+      haltSourceEngine()
+    }
+    if (current.session?.source.assetId !== previous.session?.source.assetId) {
       haltSourceEngine()
     }
   })

@@ -54,11 +54,12 @@ import {
 } from '../domain/staticImage'
 import {
   compatibilityAllowsTimelineUse,
+  MEDIA_OFFLINE_STATUS,
+  mediaCompatibilityStatusText,
   mediaRuntimeSurfaceLabel,
   omittedPartialImportTracks,
   partialTrackImportOption,
   type MediaCompatibilityItem,
-  type MediaCompatibilityStatus,
   type MediaTrackCompatibility,
 } from '../domain/mediaCompatibility'
 import type {
@@ -234,14 +235,6 @@ function formatAssetMetadata(
   return `${dimensions} · ${duration}${animation}`
 }
 
-const COMPATIBILITY_LABELS: Record<MediaCompatibilityStatus, string> = {
-  checking: 'Checking',
-  ready: 'Ready',
-  limited: 'Limited',
-  unsupported: 'Unsupported',
-  error: 'Error',
-}
-
 const DECODER_PATH_LABELS: Record<
   NonNullable<MediaTrackCompatibility['decoderPath']>,
   string
@@ -339,10 +332,7 @@ function CompatibilityDiagnostics({
           aria-live="polite"
           aria-atomic="true"
         >
-          Compatibility: {COMPATIBILITY_LABELS[item.status]}
-          {item.status === 'ready' && report?.partialImport
-            ? ` — ${report.partialImport.selection === 'video-only' ? 'video only' : 'audio only'}`
-            : ''}
+          {mediaCompatibilityStatusText(item)}
         </p>
         {retryable && onRetry ? (
           <button
@@ -977,7 +967,7 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
         {descriptor && !connected ? (
           <div className="media-offline-actions">
             <span className="media-connection-badge" data-status="offline">
-              Offline · relink needed
+              {MEDIA_OFFLINE_STATUS}
             </span>
             {handlePickerAvailable ? (
               <button

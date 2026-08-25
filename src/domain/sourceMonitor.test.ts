@@ -173,6 +173,22 @@ describe('openSourceMonitor', () => {
       reason: 'invalid-duration',
       session: live,
     })
+    expect(openSourceMonitor(null, {
+      asset: null,
+      compatibility: compatibility('unsupported'),
+    })).toEqual({
+      status: 'rejected',
+      reason: 'incompatible',
+      session: null,
+    })
+    expect(openSourceMonitor(null, {
+      asset: null,
+      compatibility: compatibility('limited'),
+    })).toEqual({
+      status: 'rejected',
+      reason: 'incompatible',
+      session: null,
+    })
   })
 
   test('reopening the same asset keeps marks; a different asset starts fresh', () => {

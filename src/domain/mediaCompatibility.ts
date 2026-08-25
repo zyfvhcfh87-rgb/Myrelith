@@ -297,6 +297,53 @@ export function mediaRuntimeSurfaceLabel(surface: MediaRuntimeSurface): string {
   return RUNTIME_SURFACE_LABELS[surface]
 }
 
+/** Exact Media Pool badge for a descriptor with no connected file. */
+export const MEDIA_OFFLINE_STATUS = 'Offline · relink needed'
+
+export const MEDIA_COMPATIBILITY_STATUS_LABELS: Readonly<
+  Record<MediaCompatibilityStatus, string>
+> = Object.freeze({
+  checking: 'Checking',
+  ready: 'Ready',
+  limited: 'Limited',
+  unsupported: 'Unsupported',
+  error: 'Error',
+})
+
+export function mediaCompatibilityStatusText(
+  item: MediaCompatibilityItem | undefined,
+): string {
+  if (!item) {
+    return `Compatibility: ${MEDIA_COMPATIBILITY_STATUS_LABELS.unsupported}`
+  }
+  const label = MEDIA_COMPATIBILITY_STATUS_LABELS[item.status]
+  if (item.status === 'ready' && item.report?.partialImport) {
+    const selection = item.report.partialImport.selection === 'video-only'
+      ? 'video only'
+      : 'audio only'
+    return `Compatibility: ${label} — ${selection}`
+  }
+  return `Compatibility: ${label}`
+}
+
+/** Status line plus the same detail Media Pool already shows. */
+export function mediaCompatibilityRemediationLines(
+  item: MediaCompatibilityItem | undefined,
+): string[] {
+  const lines = [mediaCompatibilityStatusText(item)]
+  const report = item?.report
+  if (!report) return lines
+  const runtimeFailures = report.runtimeFailures ?? []
+  if (runtimeFailures.length > 0) {
+    for (const failure of runtimeFailures) {
+      lines.push(`${mediaRuntimeSurfaceLabel(failure.surface)}: ${failure.detail}`)
+    }
+    return lines
+  }
+  if (report.detail) lines.push(report.detail)
+  return lines
+}
+
 /** A typed pipeline error that keeps asset identity out of message parsing. */
 export class MediaAssetRuntimeError extends Error {
   readonly assetId: string

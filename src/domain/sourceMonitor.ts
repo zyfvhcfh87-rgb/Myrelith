@@ -257,11 +257,11 @@ export function openSourceMonitor(
   input: SourceMonitorOpenInput,
 ): SourceMonitorOpenResult {
   const asset = input.asset
-  if (asset === null) {
-    return { status: 'rejected', reason: 'offline', session: current }
-  }
   if (!compatibilityAllowsTimelineUse(input.compatibility)) {
     return { status: 'rejected', reason: 'incompatible', session: current }
+  }
+  if (asset === null) {
+    return { status: 'rejected', reason: 'offline', session: current }
   }
   if (!isPositiveSafeInteger(asset.durationMicroseconds)) {
     return { status: 'rejected', reason: 'invalid-duration', session: current }

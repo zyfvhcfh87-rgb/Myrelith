@@ -368,6 +368,28 @@ describe('source / program exclusive playback', () => {
     expect(fake.pendingCount()).toBe(0)
   })
 
+  test('switching assets stops the previous source clock and audio', async () => {
+    openReadySource()
+    stepShuttle('l')
+    const audio = await startedSourceAudio()
+    await waitForSourceClock()
+    expect(fake.pendingCount()).toBe(1)
+
+    openReadySource({
+      id: 'asset-other',
+      fileName: 'other.mp4',
+      objectUrl: 'blob:other',
+    })
+    expect(source().session?.source.assetId).toBe('asset-other')
+    expect(source().session?.shuttleStep).toBe(0)
+    expect(fake.pendingCount()).toBe(0)
+    await vi.waitFor(() => expect(audio.stop).toHaveBeenCalled())
+
+    fake.clock.currentTime = 2
+    fake.pump()
+    expect(source().session?.playheadFrame).toBe(0)
+  })
+
   test('close and reset stop source timers', async () => {
     openReadySource()
     stepShuttle('l')

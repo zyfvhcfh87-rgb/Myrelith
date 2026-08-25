@@ -5113,3 +5113,29 @@ surface; it is not a second zoom and never enters document history.
 - The current tree passes all 237 Vitest files / 3,370 tests, all 17 repository
   runner checks, all 12 repository Chromium tests, production build/typecheck,
   and clean lint.
+
+## Post-MVP issue #186 - Source Monitor slice 6
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-25); PUBLICATION AND ISSUE CLOSEOUT NOT AUTHORIZED.**
+
+- Slice 6 is the last Source Monitor review slice. Home/End jump the source
+  playhead without stealing Media Pool first/last-row navigation. Offline,
+  Limited, Unsupported, and runtime-failure copy is the same Media Pool text
+  (`mediaCompatibilityStatusText` / `mediaCompatibilityRemediationLines`).
+  A compatibility-only unsupported file rejects as incompatible, not offline.
+  Rejection copy stays on the attempted file when another source is already
+  open. The monitor names that three-point insert and overwrite come later.
+- Asset switch, failed open, close, and project replace halt the source clock
+  and release the previous visual loan. Program playhead and `TimelineDoc` stay
+  put.
+- Exclusive Chromium on `http://127.0.0.1:42186/` opened an in-page 60-frame
+  AVC `slice6.mp4` and painted live frames; Start/End, marks, JKL, WAV
+  audition, PNG still, Close, and Program at `00:00:00:00` all held. Home on
+  the focused Media Pool list selected the first row and left the source
+  playhead at the last frame. `broken.mp4` showed `Compatibility: Unsupported`
+  plus `"broken.mp4" is not a supported media container.` Removing the open
+  MP4 showed `Offline · relink needed` and cleared the canvas. Layout kept
+  Program and Source side by side. Limited/partial was covered by tests only.
+- The authoritative automated gate passes 244 Vitest files / 3,432 tests plus
+  the 17 runner checks, production build/typecheck, lint, and diff hygiene.
+  Do not tick GitHub #186 unless asked after a user pass.

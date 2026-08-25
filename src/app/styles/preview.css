@@ -99,6 +99,23 @@
   color: #f3d2a4;
 }
 
+.source-monitor-hint p {
+  margin: 0;
+}
+
+.source-monitor-hint p + p {
+  margin-top: 4px;
+}
+
+.source-monitor-later {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 8px 8px;
+  color: #8d8d8d;
+  font-size: 11px;
+  line-height: 16px;
+}
+
 .source-monitor-readout {
   display: flex;
   flex: 0 0 auto;

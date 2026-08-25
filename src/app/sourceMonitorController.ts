@@ -5,6 +5,11 @@
  */
 
 import {
+  MEDIA_OFFLINE_STATUS,
+  mediaCompatibilityRemediationLines,
+  mediaCompatibilityStatusText,
+} from '../domain/mediaCompatibility'
+import {
   openSourceMonitor,
   type SourceMonitorOpenRejection,
   type SourceMonitorOpenResult,
@@ -15,18 +20,59 @@ import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 const OPEN_REJECTION_MESSAGES: Readonly<
   Record<SourceMonitorOpenRejection, string>
 > = Object.freeze({
-  offline: 'This source is offline. Reconnect it in the Media panel.',
-  incompatible:
-    'This source is not ready for review. Check compatibility in the Media panel.',
+  offline: MEDIA_OFFLINE_STATUS,
+  incompatible: mediaCompatibilityStatusText(undefined),
   'invalid-duration': 'This source has no reviewable duration.',
 })
 
+export interface SourceMonitorStatusCopy {
+  readonly kind: 'offline' | 'incompatible' | 'invalid-duration' | 'runtime'
+  readonly lines: readonly string[]
+}
+
 let selectedPoolAssetId: string | null = null
+let lastStatusAssetId: string | null = null
 
 export function sourceMonitorOpenRejectionMessage(
   reason: SourceMonitorOpenRejection,
 ): string {
   return OPEN_REJECTION_MESSAGES[reason]
+}
+
+export function sourceMonitorStatusCopy(): SourceMonitorStatusCopy | null {
+  const { session, lastOpenRejection } = useSourceMonitorStore.getState()
+  const media = useMediaStore.getState()
+  const liveAssetId = session?.source.assetId ?? null
+  const liveAsset = liveAssetId ? media.assets.get(liveAssetId) ?? null : null
+  const liveItem = liveAssetId
+    ? media.compatibility.get(liveAssetId)
+    : undefined
+  const rejectedItem = lastStatusAssetId
+    ? media.compatibility.get(lastStatusAssetId)
+    : undefined
+
+  if (session && !liveAsset) {
+    return { kind: 'offline', lines: [MEDIA_OFFLINE_STATUS] }
+  }
+  if (lastOpenRejection === 'offline') {
+    return { kind: 'offline', lines: [MEDIA_OFFLINE_STATUS] }
+  }
+  if (lastOpenRejection === 'invalid-duration') {
+    return {
+      kind: 'invalid-duration',
+      lines: [OPEN_REJECTION_MESSAGES['invalid-duration']],
+    }
+  }
+  if (lastOpenRejection === 'incompatible') {
+    return {
+      kind: 'incompatible',
+      lines: mediaCompatibilityRemediationLines(rejectedItem),
+    }
+  }
+  if (session && liveItem?.report?.runtimeFailures?.length) {
+    return { kind: 'runtime', lines: mediaCompatibilityRemediationLines(liveItem) }
+  }
+  return null
 }
 
 export function getSelectedPoolAssetId(): string | null {
@@ -58,12 +104,16 @@ export function sourceOpenDisabledReason(
     compatibility: media.compatibility.get(assetId),
   })
   if (probe.status === 'rejected') {
+    if (probe.reason === 'incompatible') {
+      return mediaCompatibilityStatusText(media.compatibility.get(assetId))
+    }
     return sourceMonitorOpenRejectionMessage(probe.reason)
   }
   return null
 }
 
 export function openSourceAsset(assetId: string): SourceMonitorOpenResult {
+  lastStatusAssetId = assetId
   const media = useMediaStore.getState()
   return useSourceMonitorStore.getState().openSource({
     asset: media.assets.get(assetId) ?? null,

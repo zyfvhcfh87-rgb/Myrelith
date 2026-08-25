@@ -297,6 +297,70 @@ describe('sourceMonitorPreviewController', () => {
     expect(audioDeps.bridge.rendered.at(-1)?.frame).toBe(0)
   })
 
+  test('releases the previous source when the asset or file changes', async () => {
+    const { deps, bridge } = makeDeps()
+    const first = makeAsset({ id: 'asset-a', objectUrl: 'blob:a' })
+    const second = makeAsset({
+      id: 'asset-b',
+      fileName: 'other.mp4',
+      objectUrl: 'blob:b',
+    })
+    seed(first)
+    initSourcePreview(canvasEl(), deps)
+    expect(openSourceAsset(first.id).status).toBe('ok')
+    await nextFrame()
+    await flush()
+    expect(bridge.opened.map((entry) => entry.assetId)).toEqual(['asset-a'])
+
+    seed(second)
+    expect(openSourceAsset(second.id).status).toBe('ok')
+    await nextFrame()
+    await flush()
+    expect(bridge.released).toContain('asset-a')
+    expect(bridge.opened.map((entry) => entry.assetId)).toEqual([
+      'asset-a',
+      'asset-b',
+    ])
+
+    seed(makeAsset({
+      id: 'asset-b',
+      fileName: 'other.mp4',
+      objectUrl: 'blob:relinked',
+    }))
+    await nextFrame()
+    await flush()
+    expect(bridge.released.filter((id) => id === 'asset-b')).toHaveLength(1)
+    expect(bridge.opened.at(-1)).toMatchObject({
+      assetId: 'asset-b',
+      blob: expect.any(Blob),
+    })
+    expect(deps.fetchBlob).toHaveBeenCalledWith('blob:relinked')
+  })
+
+  test('clears a failed open so a later retry can decode', async () => {
+    const { deps, bridge, blob } = makeDeps()
+    const asset = makeAsset()
+    seed(asset)
+    vi.mocked(deps.fetchBlob)
+      .mockRejectedValueOnce(new Error('source bytes unavailable'))
+      .mockResolvedValue(blob)
+    initSourcePreview(canvasEl(), deps)
+    expect(openSourceAsset(asset.id).status).toBe('ok')
+    await nextFrame()
+    await flush()
+    expect(bridge.opened).toEqual([])
+
+    useMediaStore.setState({
+      assets: new Map([[asset.id, { ...asset }]]),
+    })
+    await nextFrame()
+    await flush()
+    expect(bridge.opened).toEqual([expect.objectContaining({
+      assetId: 'asset-source',
+      blob,
+    })])
+  })
+
   test('releases the review source when the session closes', async () => {
     const { deps, bridge } = makeDeps()
     seed(makeAsset())

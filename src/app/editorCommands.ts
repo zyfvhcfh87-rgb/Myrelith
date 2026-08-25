@@ -31,6 +31,8 @@ import {
 } from './sourceMonitorController'
 import {
   closeSource,
+  jumpToEnd,
+  jumpToStart,
   resetSession,
   stepShuttle,
 } from './sourceMonitorPlaybackController'
@@ -65,6 +67,8 @@ export type EditorCommandId =
   | 'source.mark-out'
   | 'source.clear-in'
   | 'source.clear-out'
+  | 'source.jump-start'
+  | 'source.jump-end'
 
 export type EditorCommandScope = 'edit' | 'history'
 export type EditorCommandCategory =
@@ -342,6 +346,22 @@ export const EDITOR_COMMAND_DEFINITIONS: readonly EditorCommandDefinition[] = [
     keywords: ['clear', 'out', 'source'],
     shortcut: { label: 'Shift+O', ariaKeyShortcuts: 'Shift+O' },
   },
+  {
+    id: 'source.jump-start',
+    category: 'Source',
+    label: 'Jump to source start',
+    description: 'Move the Source Monitor playhead to the first source frame.',
+    keywords: ['begin', 'home', 'source', 'start'],
+    shortcut: { label: 'Home', ariaKeyShortcuts: 'Home' },
+  },
+  {
+    id: 'source.jump-end',
+    category: 'Source',
+    label: 'Jump to source end',
+    description: 'Move the Source Monitor playhead to the last source frame.',
+    keywords: ['end', 'last', 'source'],
+    shortcut: { label: 'End', ariaKeyShortcuts: 'End' },
+  },
 ]
 
 export const EDITOR_SHORTCUT_BINDINGS: readonly EditorShortcutBinding[] = [
@@ -369,6 +389,8 @@ export const EDITOR_SHORTCUT_BINDINGS: readonly EditorShortcutBinding[] = [
   { commandId: 'source.mark-out', scope: 'edit', key: 'o', primary: false, shift: false },
   { commandId: 'source.clear-in', scope: 'edit', key: 'i', primary: false, shift: true },
   { commandId: 'source.clear-out', scope: 'edit', key: 'o', primary: false, shift: true },
+  { commandId: 'source.jump-start', scope: 'edit', key: 'home', primary: false },
+  { commandId: 'source.jump-end', scope: 'edit', key: 'end', primary: false },
 ]
 
 const TOOL_BY_COMMAND: Readonly<Partial<Record<EditorCommandId, TimelineTool>>> = {
@@ -489,6 +511,8 @@ function commandDisabledReason(id: EditorCommandId): string | null {
     case 'source.mark-out':
     case 'source.clear-in':
     case 'source.clear-out':
+    case 'source.jump-start':
+    case 'source.jump-end':
       return useSourceMonitorStore.getState().session
         ? null
         : 'Open a source in the Source Monitor first.'
@@ -614,6 +638,12 @@ export function executeEditorCommand(id: EditorCommandId): EditorCommandExecutio
       break
     case 'source.clear-out':
       useSourceMonitorStore.getState().clearOut()
+      break
+    case 'source.jump-start':
+      jumpToStart()
+      break
+    case 'source.jump-end':
+      jumpToEnd()
       break
   }
   return { executed: true, reason: null }

@@ -260,14 +260,17 @@ async function loadVisualSource(
   const bridge = state.bridge
   if (!bridge) return
   const sourceKey = `original:${asset.objectUrl}`
-  if (state.openedAssetId === asset.id && state.sourceKey === sourceKey) return
-  if (state.openedAssetId && state.openedAssetId !== asset.id) {
+  if (state.sourceKey === sourceKey) return
+  if (state.openedAssetId) {
     bridge.releaseAsset(state.openedAssetId)
+    state.openedAssetId = null
   }
-  state.openedAssetId = asset.id
   state.sourceKey = sourceKey
   const guard = captureMediaRuntimeGuard(asset.id)
-  if (!guard || guard.objectUrl !== asset.objectUrl) return
+  if (!guard || guard.objectUrl !== asset.objectUrl) {
+    state.sourceKey = null
+    return
+  }
   let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
   let failureTrackKind: 'video' | null = session.source.kind === 'video' ? 'video' : null
   try {
@@ -285,8 +288,12 @@ async function loadVisualSource(
         guard,
       )
     }
+    if (state.bridge !== bridge || state.sourceKey !== sourceKey) return
+    state.openedAssetId = asset.id
   } catch (cause) {
     if (state.bridge !== bridge || state.sourceKey !== sourceKey) return
+    state.sourceKey = null
+    state.openedAssetId = null
     if (cause instanceof RenderAssetOpenError) {
       failureReason = cause.failure.reason
       failureTrackKind = cause.failure.trackKind
@@ -415,6 +422,9 @@ async function disposeSourcePreviewState(): Promise<void> {
   state.renderGeneration++
   for (const unsubscribe of state.unsubscribes) unsubscribe()
   state.unsubscribes = []
+  if (state.bridge && state.openedAssetId) {
+    state.bridge.releaseAsset(state.openedAssetId)
+  }
   const close = state.bridge?.dispose()
   state.bridge = null
   state.deps = null

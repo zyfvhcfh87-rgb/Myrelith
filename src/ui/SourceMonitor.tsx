@@ -8,7 +8,7 @@
 import { useEffect, useRef } from 'react'
 import { CaretLeft, CaretRight, Pause, Play } from '@phosphor-icons/react'
 import { shortcutForCommand } from '../app/editorCommands'
-import { sourceMonitorOpenRejectionMessage } from '../app/sourceMonitorController'
+import { sourceMonitorStatusCopy } from '../app/sourceMonitorController'
 import {
   closeSource,
   jumpToEnd,
@@ -46,6 +46,9 @@ export default function SourceMonitor() {
   const asset = useMediaStore((state) => (
     session ? state.assets.get(session.source.assetId) ?? null : null
   ))
+  useMediaStore((state) => state.assets)
+  useMediaStore((state) => state.compatibility)
+  const statusCopy = sourceMonitorStatusCopy()
   const showCanvas = Boolean(
     session
     && (session.source.kind === 'video' || session.source.kind === 'image'),
@@ -110,6 +113,8 @@ export default function SourceMonitor() {
   const openShortcut = shortcutForCommand('source.open')
   const inShortcut = shortcutForCommand('source.mark-in')
   const outShortcut = shortcutForCommand('source.mark-out')
+  const startShortcut = shortcutForCommand('source.jump-start')
+  const endShortcut = shortcutForCommand('source.jump-end')
   const playing = (session?.shuttleStep ?? 0) !== 0
 
   return (
@@ -141,15 +146,11 @@ export default function SourceMonitor() {
         {session?.source.kind === 'audio' ? (
           <div className="source-monitor-hint" role="status">Audio source</div>
         ) : null}
-        {session && !asset ? (
+        {statusCopy ? (
           <div className="source-monitor-hint source-monitor-hint-offline" role="status">
-            <strong>Source offline</strong>
-            <span>{sourceMonitorOpenRejectionMessage('offline')}</span>
-          </div>
-        ) : null}
-        {lastOpenRejection ? (
-          <div className="source-monitor-hint source-monitor-hint-offline" role="status">
-            {sourceMonitorOpenRejectionMessage(lastOpenRejection)}
+            {statusCopy.lines.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
           </div>
         ) : null}
       </div>
@@ -173,7 +174,12 @@ export default function SourceMonitor() {
             ) : null}
           </div>
           <div className="source-monitor-transport">
-            <button type="button" className="transport-button" onClick={jumpToStart}>
+            <button
+              type="button"
+              className="transport-button"
+              aria-keyshortcuts={startShortcut?.ariaKeyShortcuts}
+              onClick={jumpToStart}
+            >
               Start
             </button>
             <button
@@ -221,7 +227,12 @@ export default function SourceMonitor() {
             >
               <CaretRight aria-hidden="true" size={16} weight="fill" />
             </button>
-            <button type="button" className="transport-button" onClick={jumpToEnd}>
+            <button
+              type="button"
+              className="transport-button"
+              aria-keyshortcuts={endShortcut?.ariaKeyShortcuts}
+              onClick={jumpToEnd}
+            >
               End
             </button>
             <button
@@ -258,6 +269,9 @@ export default function SourceMonitor() {
           Open a Media Pool asset ({openShortcut.label})
         </p>
       ) : null}
+      <p className="source-monitor-later">
+        Three-point insert and overwrite come later.
+      </p>
     </section>
   )
 }
