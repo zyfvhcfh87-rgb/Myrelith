@@ -559,11 +559,15 @@ export function scrubPlayhead(frame: number): void {
 /** Stop Source playback and wait until its startup, audio, and cleanup work retires. */
 export async function drainSourcePlayback(): Promise<void> {
   stopSourceClock()
-  while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
-    await Promise.all([
-      ...state.playbackTasks,
-      ...state.cleanupTasks,
-    ])
+  // Snapshot playback once. A later Source admission may wait on Program
+  // drain, which can wait on a Program admission that waits on this drain.
+  // Re-checking playbackTasks would pull that cycle in and hang.
+  await Promise.all([
+    ...state.playbackTasks,
+    ...state.cleanupTasks,
+  ])
+  while (state.cleanupTasks.size > 0) {
+    await Promise.all([...state.cleanupTasks])
   }
 }
 

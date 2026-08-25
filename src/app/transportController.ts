@@ -663,11 +663,15 @@ export function pause(): void {
 
 /** Wait until Program's startup and audio-cleanup work has retired. */
 export async function drainProgramPlayback(): Promise<void> {
-  while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
-    await Promise.all([
-      ...state.playbackTasks,
-      ...state.cleanupTasks,
-    ])
+  // Snapshot playback once. A later Program admission may wait on Source
+  // drain, which can wait on a Source admission that waits on this drain.
+  // Re-checking playbackTasks would pull that cycle in and hang.
+  await Promise.all([
+    ...state.playbackTasks,
+    ...state.cleanupTasks,
+  ])
+  while (state.cleanupTasks.size > 0) {
+    await Promise.all([...state.cleanupTasks])
   }
 }
 

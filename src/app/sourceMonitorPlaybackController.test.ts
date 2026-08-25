@@ -331,6 +331,39 @@ describe('source / program exclusive playback', () => {
     await vi.waitFor(() => expect(fake.sourceStartAudio).toHaveBeenCalledOnce())
   })
 
+  test('overlapping Source start and Program play drains do not deadlock', async () => {
+    useDocumentStore.getState().setDoc({
+      ...makeDoc(),
+      tracks: [makeTrack('A1', [makeClip('clipA', 120)], 'audio')],
+    })
+    openReadySource()
+    play()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+    const programAudio = await fake.startAudio.mock.results[0].value
+    await vi.waitFor(() => expect(fake.pendingCount()).toBeGreaterThan(0))
+    let releaseStop!: () => void
+    const stopGate = new Promise<void>((resolve) => { releaseStop = resolve })
+    programAudio.stop.mockReturnValueOnce(stopGate)
+
+    source().stepShuttle('l')
+    requestPlayback('source')
+    await vi.waitFor(() => expect(programAudio.stop).toHaveBeenCalled())
+    expect(fake.sourceStartAudio).not.toHaveBeenCalled()
+
+    play()
+    const draining = pauseAndDrainPlayback()
+    let settled = false
+    void draining.then(() => { settled = true })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    releaseStop()
+    await draining
+    expect(settled).toBe(true)
+    expect(transport().isPlaying).toBe(false)
+    expect(fake.pendingCount()).toBe(0)
+  })
+
   test('Program play() stops the source shuttle and clock first', async () => {
     openReadySource()
     source().stepShuttle('l')
