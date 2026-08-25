@@ -663,10 +663,12 @@ export function pause(): void {
 
 /** Wait until Program's startup and audio-cleanup work has retired. */
 export async function drainProgramPlayback(): Promise<void> {
-  await Promise.all([
-    ...state.playbackTasks,
-    ...state.cleanupTasks,
-  ])
+  while (state.playbackTasks.size > 0 || state.cleanupTasks.size > 0) {
+    await Promise.all([
+      ...state.playbackTasks,
+      ...state.cleanupTasks,
+    ])
+  }
 }
 
 /** Avoid an async handoff when Program has no outstanding resource owner. */
