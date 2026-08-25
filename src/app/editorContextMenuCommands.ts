@@ -48,6 +48,10 @@ import {
   openSourceAsset,
   sourceOpenDisabledReason,
 } from './sourceMonitorController'
+import {
+  executeSequenceEdit,
+  sequenceEditDisabledReason,
+} from './sequenceEditController'
 
 interface EditorContextTargetIdentity {
   readonly documentId: string
@@ -101,10 +105,15 @@ export type EditorContextMenuItemId =
   | 'clip.split'
   | 'clip.link'
   | 'clip.unlink'
+  | 'clip.replace'
+  | 'clip.roll-left'
+  | 'clip.roll-right'
   | 'clip.ripple-delete'
   | 'timeline.move-playhead'
   | 'timeline.add-marker'
   | 'timeline.split'
+  | 'timeline.lift'
+  | 'timeline.extract'
   | 'timeline.add-video-track'
   | 'timeline.add-audio-track'
   | 'track.rename'
@@ -373,6 +382,32 @@ export function resolveEditorContextMenu(
           ),
           linkingItem,
           item(
+            'clip.replace',
+            'Replace edit',
+            common ?? sequenceEditDisabledReason('replace', {
+              selectedClipId: target.clipId,
+            }),
+            { separatorBefore: true },
+          ),
+          item(
+            'clip.roll-left',
+            'Roll seam left',
+            common ?? sequenceEditDisabledReason('roll', {
+              selectedClipId: target.clipId,
+              playheadFrame: target.frame,
+              rollDeltaFrames: -1,
+            }),
+          ),
+          item(
+            'clip.roll-right',
+            'Roll seam right',
+            common ?? sequenceEditDisabledReason('roll', {
+              selectedClipId: target.clipId,
+              playheadFrame: target.frame,
+              rollDeltaFrames: 1,
+            }),
+          ),
+          item(
             'clip.ripple-delete',
             'Ripple delete',
             common ?? rippleDeleteReason(doc, target.clipId),
@@ -405,6 +440,17 @@ export function resolveEditorContextMenu(
             'timeline.split',
             'Split eligible clips here',
             unavailable ?? splitEligibleClipsReason(doc, frame),
+          ),
+          item(
+            'timeline.lift',
+            'Lift In/Out',
+            unavailable ?? sequenceEditDisabledReason('lift'),
+            { separatorBefore: true },
+          ),
+          item(
+            'timeline.extract',
+            'Extract In/Out',
+            unavailable ?? sequenceEditDisabledReason('extract'),
           ),
           ...(!isRuler
             ? [
@@ -618,6 +664,17 @@ export function executeEditorContextMenuItem(
       break
     }
     case 'clip.unlink': document.unlinkClip(target.kind === 'clip' ? target.clipId : ''); break
+    case 'clip.replace':
+      if (target.kind !== 'clip') return executionFailure(null)
+      return executeSequenceEdit('replace', { selectedClipId: target.clipId })
+    case 'clip.roll-left':
+    case 'clip.roll-right':
+      if (target.kind !== 'clip') return executionFailure(null)
+      return executeSequenceEdit('roll', {
+        selectedClipId: target.clipId,
+        playheadFrame: target.frame,
+        rollDeltaFrames: itemId === 'clip.roll-left' ? -1 : 1,
+      })
     case 'clip.ripple-delete': document.rippleDelete(target.kind === 'clip' ? target.clipId : ''); break
     case 'timeline.move-playhead':
       if (target.kind !== 'ruler') return executionFailure(null)
@@ -635,6 +692,10 @@ export function executeEditorContextMenuItem(
       if (target.kind !== 'ruler' && target.kind !== 'lane') return executionFailure(null)
       document.splitClipAtPlayhead(target.frame)
       break
+    case 'timeline.lift':
+      return executeSequenceEdit('lift')
+    case 'timeline.extract':
+      return executeSequenceEdit('extract')
     case 'timeline.add-video-track': document.addTrack('video'); break
     case 'timeline.add-audio-track': document.addTrack('audio'); break
     case 'track.rename': return actions.openTrackRename?.()

@@ -5141,25 +5141,24 @@ surface; it is not a second zoom and never enters document history.
   the 17 runner checks, production build/typecheck, lint, and diff hygiene.
   Do not tick GitHub #186 unless asked after a user pass.
 
-## Post-MVP issue #187 - three-point sequence edits slice 1
+## Post-MVP issue #187 - three-point sequence edits slice 2
 
-**IMPLEMENTATION IN PROGRESS LOCALLY (2026-08-26); PUBLICATION AND ISSUE CLOSEOUT NOT AUTHORIZED.**
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-26); PUBLICATION AND ISSUE CLOSEOUT NOT AUTHORIZED.**
 
-- One browser-free planner owns insert, overwrite, lift, extract, replace,
-  and roll. Duration mapping is integer-microsecond and never guesses a
-  four-point mismatch. Apply is atomic: any rejected participant returns the
-  original TimelineDoc reference.
-- Insert ripples every unlocked track so later material stays in sync; a
-  locked track that would have to move rejects. Overwrite/lift/extract use
-  targeted tracks. Extract closes those gaps. Replace keeps clip duration
-  and refuses a differently marked source length. Roll moves a touching seam
-  without changing total duration.
-- Session targeting lives on track-header T buttons (untouched sessions use
-  the first unlocked video and audio lanes). Insert/Overwrite sit on the
-  transport bar so they stay visible while Source Monitor chrome is closed.
-  An open source also shows V/A patches and Insert/Overwrite on the monitor.
-  I/O follow the focused monitor. Shortcuts: `,` insert, `.` overwrite, `;`
-  lift, `'` extract, `R` replace, `[`/`]` roll.
-- Chromium source-review-to-insert/overwrite/lift/extract/roll acceptance
-  is still outstanding. Do not tick GitHub #187 unless asked after a user
-  pass.
+- Slice 1's planner/apply/commands remain. Slice 2 adds real
+  `SourceBoundsCatalog` handles for roll, keeps existing seam crossfades
+  preview/export-valid, and regroups leftover linked A/V after lift/extract
+  instead of failing the whole edit. Timeline In/Out draw on the ruler.
+  Lift, Extract, and Replace sit on the transport bar; Replace also sits on
+  the Source Monitor; clip/ruler context menus expose replace, roll, lift,
+  and extract with the same disabled reasons as the commands.
+- Roll of timed media without exact catalog bounds, unknown bounds, or
+  remaining handle is `insufficient-source-handle`. A roll that would drop
+  or starve a valid crossfade is `roll-transition-invalid`. Stills and text
+  may still grow. Four-point duration mismatches still never retime.
+- Focused Vitest, oxlint, and `tsc -b` plus production Vite build passed.
+  In-app Chromium on `http://localhost:42187/` imported a 2.000s 320×180
+  AVC/AAC file, opened Source Monitor, inserted a linked A/V pair, marked
+  Program In/Out, lifted and extracted, split and rolled the seam, overwrote
+  and replaced, played back, and undid/redid with an empty console.
+- Do not tick GitHub #187 unless asked after a user pass.

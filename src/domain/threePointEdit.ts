@@ -30,7 +30,9 @@
  * Replace keeps the target clip's timeline duration and refuses a marked
  * source range of a different length.
  * Roll moves a touching seam by a signed frame delta without changing
- * sequence duration.
+ * sequence duration. Timed clips need real SourceBoundsCatalog handles;
+ * still/text clips may grow. A roll that would drop or starve a valid
+ * crossfade is rejected.
  */
 
 import { compatibilityAllowsTimelineUse } from './mediaCompatibility'
@@ -54,7 +56,11 @@ import {
   rangeEnd,
   rateEquals,
 } from './time'
-import { applySequenceEdit as applyAcceptedSequenceEdit } from './threePointApply'
+import type { SourceBoundsCatalog } from './crossfadePlan'
+import {
+  applySequenceEdit as applyAcceptedSequenceEdit,
+  tryRollSequence,
+} from './threePointApply'
 
 export type SequenceEditKind =
   | 'insert'
@@ -91,6 +97,7 @@ export type SequenceEditRejection =
   | 'roll-seam-invalid'
   | 'roll-delta-invalid'
   | 'insufficient-source-handle'
+  | 'roll-transition-invalid'
   | 'linked-participant-locked'
 
 export const SEQUENCE_EDIT_REJECTION_MESSAGES: Readonly<
@@ -121,6 +128,8 @@ export const SEQUENCE_EDIT_REJECTION_MESSAGES: Readonly<
   'roll-delta-invalid': 'A roll edit needs a non-zero integer frame delta.',
   'insufficient-source-handle':
     'The roll needs more source handle than this media has.',
+  'roll-transition-invalid':
+    'This roll would make the seam transition invalid.',
   'linked-participant-locked':
     'A linked partner sits on a locked track, so the whole edit was rejected.',
 })
@@ -197,6 +206,7 @@ export interface SequenceEditInput {
   readonly patchAudio: boolean
   readonly selectedClipId: ClipId | null
   readonly rollDeltaFrames?: number
+  readonly sourceBoundsCatalog?: SourceBoundsCatalog
 }
 
 export interface TrackTargets {
@@ -841,6 +851,10 @@ function planRoll(input: SequenceEditInput): SequenceEditPlan {
     return rejectPlan('roll-seam-invalid')
   }
 
+  const catalog = input.sourceBoundsCatalog ?? new Map()
+  const attempt = tryRollSequence(input.doc, pairs, delta, catalog)
+  if (attempt.status === 'reject') return rejectPlan(attempt.reason)
+
   return {
     status: 'ok',
     kind: 'roll',
@@ -869,7 +883,8 @@ export function applySequenceEdit(
   doc: TimelineDoc,
   plan: SequenceEditPlan,
   asset: MediaAsset | null = null,
+  catalog: SourceBoundsCatalog = new Map(),
 ): TimelineDoc {
   if (plan.status === 'reject') return doc
-  return applyAcceptedSequenceEdit(doc, plan, asset)
+  return applyAcceptedSequenceEdit(doc, plan, asset, catalog)
 }

@@ -243,6 +243,7 @@ export interface DocumentState {
   applySequenceEdit: (
     plan: SequenceEditAcceptedPlan,
     asset: MediaAsset | null,
+    catalog?: SourceBoundsCatalog,
   ) => void
   /**
    * Add a centered crossfade between ordered touching video clips. A valid
@@ -589,10 +590,10 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   rippleDelete: (clipId) =>
     set((state) => commit(state, linkedRippleDelete(state.doc, clipId))),
 
-  applySequenceEdit: (plan, asset) =>
+  applySequenceEdit: (plan, asset, catalog) =>
     set((state) => commit(
       state,
-      applySequenceEditToDocument(state.doc, plan, asset),
+      applySequenceEditToDocument(state.doc, plan, asset, catalog),
     )),
 
   addCrossfade: (fromClipId, toClipId, durationFrames) =>

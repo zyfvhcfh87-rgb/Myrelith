@@ -57,6 +57,7 @@ export default function SourceMonitor() {
   useTransportStore((state) => state.trackTargetsTouched)
   useTransportStore((state) => state.timelineInFrame)
   useTransportStore((state) => state.timelineOutExclusive)
+  useTransportStore((state) => state.selectedClipId)
   const asset = useMediaStore((state) => (
     session ? state.assets.get(session.source.assetId) ?? null : null
   ))
@@ -131,8 +132,10 @@ export default function SourceMonitor() {
   const endShortcut = shortcutForCommand('source.jump-end')
   const insertCommand = resolveEditorCommand('timeline.insert')
   const overwriteCommand = resolveEditorCommand('timeline.overwrite')
+  const replaceCommand = resolveEditorCommand('timeline.replace')
   const insertDisabled = insertCommand.enabled ? null : insertCommand.disabledReason
   const overwriteDisabled = overwriteCommand.enabled ? null : overwriteCommand.disabledReason
+  const replaceDisabled = replaceCommand.enabled ? null : replaceCommand.disabledReason
   const playing = (session?.shuttleStep ?? 0) !== 0
 
   return (
@@ -345,6 +348,20 @@ export default function SourceMonitor() {
           }}
         >
           Overwrite
+        </button>
+        <button
+          type="button"
+          className="transport-button"
+          aria-label="Replace edit"
+          aria-keyshortcuts={shortcutForCommand('timeline.replace')?.ariaKeyShortcuts}
+          title={replaceDisabled ?? 'Replace the selected clip from the Source Monitor'}
+          aria-disabled={replaceDisabled !== null}
+          onClick={() => {
+            if (replaceDisabled) return
+            executeEditorCommand('timeline.replace')
+          }}
+        >
+          Replace
         </button>
       </div>
     </section>

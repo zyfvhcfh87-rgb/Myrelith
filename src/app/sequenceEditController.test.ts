@@ -152,4 +152,79 @@ describe('sequence edits', () => {
     expect(useTransportStore.getState().timelineInFrame).toBe(12)
     expect(useSourceMonitorStore.getState().session).toBeNull()
   })
+
+  test('overwrite, lift, extract, replace, and roll each undo to the original doc', () => {
+    const existing: MediaAsset = {
+      ...sourceAsset(),
+      id: 'asset-existing',
+      durationFrames: 180,
+      durationMicroseconds: 6_000_000,
+      sourceBounds: {
+        video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 6_000_000 },
+        audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 6_000_000 },
+      },
+    }
+    useDocumentStore.getState().setDoc({
+      ...documentFixture(),
+      tracks: [
+        track('V1', 'video', [
+          clip('left', 0, 40),
+          { ...clip('right', 40, 40), sourceRange: { startFrame: 40, durationFrames: 40 } },
+        ]),
+        track('A1', 'audio'),
+      ],
+    })
+    useMediaStore.setState({
+      descriptors: new Map(),
+      assets: new Map([[existing.id, existing]]),
+      visuals: new Map(),
+      compatibility: new Map(),
+    })
+    const transport = useTransportStore.getState()
+    transport.setPlayheadFrame(0)
+    transport.setTimelineIn()
+    transport.setPlayheadFrame(20)
+    transport.setTimelineOut()
+
+    const assertOneEntryRoundTrip = (run: () => void) => {
+      const before = useDocumentStore.getState().doc
+      const pastLength = useDocumentStore.getState().past.length
+      run()
+      const after = useDocumentStore.getState().doc
+      expect(after).not.toBe(before)
+      expect(useDocumentStore.getState().past).toHaveLength(pastLength + 1)
+      useDocumentStore.getState().undo()
+      expect(useDocumentStore.getState().doc).toBe(before)
+      useDocumentStore.getState().redo()
+      expect(useDocumentStore.getState().doc).toBe(after)
+      useDocumentStore.getState().undo()
+      expect(useDocumentStore.getState().doc).toBe(before)
+    }
+
+    assertOneEntryRoundTrip(() => {
+      expect(executeSequenceEdit('lift').executed).toBe(true)
+    })
+
+    assertOneEntryRoundTrip(() => {
+      expect(executeSequenceEdit('extract').executed).toBe(true)
+    })
+
+    transport.setPlayheadFrame(40)
+    assertOneEntryRoundTrip(() => {
+      expect(executeSequenceEdit('roll', { rollDeltaFrames: 5 }).executed).toBe(true)
+    })
+
+    openSource()
+    useTransportStore.getState().setSelectedClip('left')
+    assertOneEntryRoundTrip(() => {
+      expect(executeSequenceEdit('replace').executed).toBe(true)
+    })
+
+    useTransportStore.getState().setPlayheadFrame(80)
+    useTransportStore.getState().clearTimelineIn()
+    useTransportStore.getState().clearTimelineOut()
+    assertOneEntryRoundTrip(() => {
+      expect(executeSequenceEdit('overwrite').executed).toBe(true)
+    })
+  })
 })

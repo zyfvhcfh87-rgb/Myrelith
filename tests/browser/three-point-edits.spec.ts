@@ -40,6 +40,9 @@ test('exposes targeting, insert/overwrite, and focused-monitor In marks', async 
     'Open a source in the Source Monitor first.',
   )
   await expect(page.getByRole('button', { name: 'Overwrite edit' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Lift' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Extract' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Replace edit' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Commands' }).click()
   const dialog = page.getByRole('dialog', { name: 'Find a command' })
@@ -53,6 +56,9 @@ test('exposes targeting, insert/overwrite, and focused-monitor In marks', async 
   await page.keyboard.press('Escape')
 
   await page.keyboard.press('i')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('o')
+  await expect(page.getByTestId('timeline-in-out')).toBeVisible()
   await page.getByRole('button', { name: 'Commands' }).click()
   await search.fill('Clear In')
   await expect(dialog.getByRole('button', { name: 'Clear In', exact: true }))

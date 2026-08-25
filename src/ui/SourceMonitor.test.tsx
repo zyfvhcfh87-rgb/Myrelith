@@ -156,6 +156,7 @@ describe('SourceMonitor', () => {
 
     expect(screen.getByRole('button', { name: 'Insert' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Overwrite' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Replace edit' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'source video patch' }))
       .toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'source audio patch' }))

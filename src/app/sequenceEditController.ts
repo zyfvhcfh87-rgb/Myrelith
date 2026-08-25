@@ -5,6 +5,11 @@
  */
 
 import {
+  createSourceBoundsCatalog,
+  type SourceBoundsCatalog,
+} from '../domain/crossfadePlan'
+import type { ClipId } from '../domain/schema'
+import {
   defaultTrackTargets,
   planSequenceEdit,
   reconcileTrackTargets,
@@ -17,6 +22,16 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import { useTransportStore } from '../state/transportStore'
+
+export interface SequenceEditCommandExtras {
+  readonly rollDeltaFrames?: number
+  readonly playheadFrame?: number
+  readonly selectedClipId?: ClipId
+}
+
+function currentSourceBoundsCatalog(): SourceBoundsCatalog {
+  return createSourceBoundsCatalog(useMediaStore.getState().assets.values())
+}
 
 export function resolvedTrackTargets(): TrackTargets {
   const doc = useDocumentStore.getState().doc
@@ -47,7 +62,7 @@ export function toggleTrackTarget(trackId: string, kind: 'video' | 'audio'): voi
 
 export function currentSequenceEditInput(
   kind: SequenceEditKind,
-  extras: { rollDeltaFrames?: number } = {},
+  extras: SequenceEditCommandExtras = {},
 ): SequenceEditInput {
   const document = useDocumentStore.getState()
   const transport = useTransportStore.getState()
@@ -67,21 +82,22 @@ export function currentSequenceEditInput(
     asset,
     compatibility,
     sourceSession: session,
-    playheadFrame: transport.playheadFrame,
+    playheadFrame: extras.playheadFrame ?? transport.playheadFrame,
     timelineInFrame: transport.timelineInFrame,
     timelineOutExclusive: transport.timelineOutExclusive,
     videoTargetTrackId: targets.videoTrackId,
     audioTargetTrackId: targets.audioTrackId,
     patchVideo: source.patchVideo,
     patchAudio: source.patchAudio,
-    selectedClipId: transport.selectedClipId,
+    selectedClipId: extras.selectedClipId ?? transport.selectedClipId,
     rollDeltaFrames: extras.rollDeltaFrames,
+    sourceBoundsCatalog: currentSourceBoundsCatalog(),
   }
 }
 
 export function sequenceEditDisabledReason(
   kind: SequenceEditKind,
-  extras: { rollDeltaFrames?: number } = {},
+  extras: SequenceEditCommandExtras = {},
 ): string | null {
   const plan = planSequenceEdit(currentSequenceEditInput(kind, extras))
   return plan.status === 'reject' ? sequenceEditRejectionMessage(plan.reason) : null
@@ -89,7 +105,7 @@ export function sequenceEditDisabledReason(
 
 export function executeSequenceEdit(
   kind: SequenceEditKind,
-  extras: { rollDeltaFrames?: number } = {},
+  extras: SequenceEditCommandExtras = {},
 ): { executed: boolean; reason: string | null } {
   const input = currentSequenceEditInput(kind, extras)
   const plan = planSequenceEdit(input)
@@ -97,7 +113,11 @@ export function executeSequenceEdit(
     return { executed: false, reason: sequenceEditRejectionMessage(plan.reason) }
   }
   const before = useDocumentStore.getState().doc
-  useDocumentStore.getState().applySequenceEdit(plan, input.asset)
+  useDocumentStore.getState().applySequenceEdit(
+    plan,
+    input.asset,
+    input.sourceBoundsCatalog,
+  )
   const after = useDocumentStore.getState().doc
   if (after === before) {
     return {

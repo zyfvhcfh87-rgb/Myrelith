@@ -22,6 +22,7 @@ import {
   locateClip,
   reconcileTransitions,
   withClampedAudioFades,
+  withoutLinkGroupId,
   withTrack,
 } from './operations/operationInternals'
 import type { Clip, MediaAsset, TimeRange, TimelineDoc, TrackId } from './schema'
@@ -33,6 +34,12 @@ import {
   sourceTimeMapAtOffset,
   sourceTimeMapForTimelineDuration,
 } from './sourceTimeMap'
+import {
+  resolveCrossfadeGeometry,
+  resolveCrossfadePlan,
+  sourceHandleHeadroomFrames,
+  type SourceBoundsCatalog,
+} from './crossfadePlan'
 import { rangeEnd, rangeOverlap } from './time'
 import type {
   SequenceEditAcceptedPlan,
@@ -263,18 +270,78 @@ function liftCaptionsInRange(
   return current
 }
 
-function unlinkOrphans(
+function leftoverGroupMembers(
+  doc: TimelineDoc,
+  groupId: string,
+): Clip[] {
+  const members: Clip[] = []
+  for (const track of doc.tracks) {
+    for (const clip of track.clips) {
+      if (clip.linkGroupId === groupId) members.push(clip)
+    }
+  }
+  return members
+}
+
+/**
+ * After a targeted punch, leftover members of a touched link group are
+ * clustered by timeline start. A lone leftover is unlinked; co-timed
+ * leftovers keep a group (the earliest cluster keeps the original id).
+ */
+function regroupPunchedLinks(
   doc: TimelineDoc,
   removedGroups: ReadonlySet<string>,
 ): TimelineDoc | null {
   if (removedGroups.size === 0) return doc
   let current = doc
-  for (const track of current.tracks) {
-    for (const clip of track.clips) {
-      if (!clip.linkGroupId || !removedGroups.has(clip.linkGroupId)) continue
-      const next = unlinkClip(current, clip.id)
+  for (const groupId of removedGroups) {
+    const leftovers = leftoverGroupMembers(current, groupId)
+    if (leftovers.length === 0) continue
+    if (leftovers.length === 1) {
+      const next = unlinkClip(current, leftovers[0]!.id)
       if (next === current) return null
       current = next
+      continue
+    }
+    const byStart = new Map<number, Clip[]>()
+    for (const clip of leftovers) {
+      const start = clip.timelineRange.startFrame
+      const cluster = byStart.get(start)
+      if (cluster) cluster.push(clip)
+      else byStart.set(start, [clip])
+    }
+    const starts = [...byStart.keys()].sort((left, right) => left - right)
+    let keepOriginal = true
+    for (const start of starts) {
+      const cluster = byStart.get(start)!
+      if (cluster.length === 1) {
+        const loc = locateClip(current, cluster[0]!.id)
+        if (!loc) return null
+        if (!loc.clip.linkGroupId) continue
+        const clips = loc.track.clips.slice()
+        clips[loc.clipIndex] = withoutLinkGroupId(loc.clip)
+        current = withTrack(current, loc.trackIndex, { ...loc.track, clips })
+        continue
+      }
+      if (keepOriginal) {
+        keepOriginal = false
+        continue
+      }
+      const nextGroup = createLinkGroupId(current)
+      let changed = false
+      const ids = new Set(cluster.map((clip) => clip.id))
+      const tracks = current.tracks.map((track) => {
+        if (!track.clips.some((clip) => ids.has(clip.id))) return track
+        changed = true
+        return {
+          ...track,
+          clips: track.clips.map((clip) => (
+            ids.has(clip.id) ? { ...clip, linkGroupId: nextGroup } : clip
+          )),
+        }
+      })
+      if (!changed) return null
+      current = { ...current, tracks }
     }
   }
   return current
@@ -365,8 +432,8 @@ function applyLiftExtract(
   if (captions === null) return fail(original, 'could not update captions')
   current = captions
 
-  const unlinked = unlinkOrphans(current, groups)
-  if (unlinked === null) return fail(original, 'could not unlink leftover partners')
+  const unlinked = regroupPunchedLinks(current, groups)
+  if (unlinked === null) return fail(original, 'could not update leftover link groups')
   current = unlinked
 
   if (plan.kind === 'extract') {
@@ -455,11 +522,16 @@ function applyReplace(
   return current
 }
 
+function trackStream(kind: 'video' | 'audio'): 'video' | 'audio' {
+  return kind === 'audio' ? 'audio' : 'video'
+}
+
 function rollPair(
   doc: TimelineDoc,
   leftId: string,
   rightId: string,
   deltaFrames: number,
+  catalog: SourceBoundsCatalog,
 ): TimelineDoc | null {
   const leftLoc = locateClip(doc, leftId)
   const rightLoc = locateClip(doc, rightId)
@@ -473,6 +545,24 @@ function rollPair(
   const leftNewDur = left.timelineRange.durationFrames + deltaFrames
   const rightNewDur = right.timelineRange.durationFrames - deltaFrames
   if (leftNewDur < 1 || rightNewDur < 1) return null
+
+  const stream = trackStream(leftLoc.track.kind)
+  const growing = deltaFrames > 0
+    ? sourceHandleHeadroomFrames({
+        clip: left,
+        edge: 'end',
+        stream,
+        rate: doc.frameRate,
+        catalog,
+      })
+    : sourceHandleHeadroomFrames({
+        clip: right,
+        edge: 'start',
+        stream,
+        rate: doc.frameRate,
+        catalog,
+      })
+  if (growing === null || growing < Math.abs(deltaFrames)) return null
 
   const leftStill = left.sourceMode === 'still'
   const leftText = left.text !== undefined
@@ -530,28 +620,112 @@ function rollPair(
     sourceTimeMap: rightMap,
     animation: rightAnimation,
   })
-  const nextTrack = reconcileTransitions(leftLoc.track, { ...leftLoc.track, clips })
+  const previewTrack = { ...leftLoc.track, clips }
+  const nextLeft = clips[leftLoc.clipIndex]!
+  const nextRight = clips[rightLoc.clipIndex]!
+  if (
+    sourceHandleHeadroomFrames({
+      clip: nextLeft,
+      edge: 'end',
+      stream,
+      rate: doc.frameRate,
+      catalog,
+    }) === null
+    || sourceHandleHeadroomFrames({
+      clip: nextRight,
+      edge: 'start',
+      stream,
+      rate: doc.frameRate,
+      catalog,
+    }) === null
+  ) return null
+
+  const nextTrack = reconcileTransitions(leftLoc.track, previewTrack)
   return withTrack(doc, leftLoc.trackIndex, nextTrack)
+}
+
+function seamTransitionsRemainValid(
+  before: TimelineDoc,
+  after: TimelineDoc,
+  catalog: SourceBoundsCatalog,
+): boolean {
+  for (const beforeTrack of before.tracks) {
+    if (beforeTrack.transitions.length === 0) continue
+    const afterTrack = after.tracks.find((track) => track.id === beforeTrack.id)
+    if (!afterTrack) return false
+    if (afterTrack.transitions.length !== beforeTrack.transitions.length) return false
+    const afterIds = new Set(afterTrack.transitions.map((transition) => transition.id))
+    for (const transition of beforeTrack.transitions) {
+      if (!afterIds.has(transition.id)) return false
+      const beforeGeometry = resolveCrossfadeGeometry(beforeTrack, transition)
+      const afterGeometry = resolveCrossfadeGeometry(afterTrack, transition)
+      if (beforeGeometry && !afterGeometry) return false
+      const beforePlan = resolveCrossfadePlan(
+        before,
+        beforeTrack.id,
+        transition.id,
+        catalog,
+      )
+      const afterPlan = resolveCrossfadePlan(
+        after,
+        afterTrack.id,
+        transition.id,
+        catalog,
+      )
+      if (beforePlan.status === 'available' && afterPlan.status !== 'available') {
+        return false
+      }
+    }
+  }
+  return true
+}
+
+export type RollAttemptReason = 'insufficient-source-handle' | 'roll-transition-invalid'
+
+export type RollAttempt =
+  | { readonly status: 'ok'; readonly doc: TimelineDoc }
+  | { readonly status: 'reject'; readonly reason: RollAttemptReason }
+
+/** Apply a roll without warning; planner and apply share this path. */
+export function tryRollSequence(
+  doc: TimelineDoc,
+  pairs: readonly (readonly [string, string])[],
+  deltaFrames: number,
+  catalog: SourceBoundsCatalog,
+): RollAttempt {
+  let current = doc
+  for (const [leftId, rightId] of pairs) {
+    const next = rollPair(current, leftId, rightId, deltaFrames, catalog)
+    if (next === null) {
+      return { status: 'reject', reason: 'insufficient-source-handle' }
+    }
+    current = next
+  }
+  if (!seamTransitionsRemainValid(doc, current, catalog)) {
+    return { status: 'reject', reason: 'roll-transition-invalid' }
+  }
+  return { status: 'ok', doc: current }
 }
 
 function applyRoll(
   doc: TimelineDoc,
   plan: SequenceRollPlan,
+  catalog: SourceBoundsCatalog,
 ): TimelineDoc {
-  const original = doc
-  let current = doc
-  for (const [leftId, rightId] of plan.pairs) {
-    const next = rollPair(current, leftId, rightId, plan.deltaFrames)
-    if (next === null) return fail(original, 'could not roll the seam')
-    current = next
+  const attempt = tryRollSequence(doc, plan.pairs, plan.deltaFrames, catalog)
+  if (attempt.status === 'reject') {
+    return fail(doc, attempt.reason === 'roll-transition-invalid'
+      ? 'the roll would invalidate a seam transition'
+      : 'could not roll the seam')
   }
-  return current
+  return attempt.doc
 }
 
 export function applySequenceEdit(
   doc: TimelineDoc,
   plan: SequenceEditAcceptedPlan,
   asset: MediaAsset | null,
+  catalog: SourceBoundsCatalog = new Map(),
 ): TimelineDoc {
   switch (plan.kind) {
     case 'insert':
@@ -567,6 +741,6 @@ export function applySequenceEdit(
       if (!asset) return fail(doc, 'replace needs a source asset')
       return applyReplace(doc, plan, asset)
     case 'roll':
-      return applyRoll(doc, plan)
+      return applyRoll(doc, plan, catalog)
   }
 }

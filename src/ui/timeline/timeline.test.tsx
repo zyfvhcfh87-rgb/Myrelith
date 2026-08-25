@@ -158,6 +158,30 @@ describe('Playhead', () => {
     expect(rulerRenders.mock.calls.length).toBe(rulerBefore) // untouched!
   })
 
+  test('draws timeline In/Out marks without subscribing to the playhead', () => {
+    const rulerRenders = vi.fn()
+    render(
+      <Profiler id="ruler-inout" onRender={rulerRenders}>
+        <Ruler />
+      </Profiler>,
+    )
+    expect(screen.queryByTestId('timeline-in-out')).toBeNull()
+    act(() => {
+      useTransportStore.getState().setPlayheadFrame(10)
+      useTransportStore.getState().setTimelineIn()
+      useTransportStore.getState().setPlayheadFrame(40)
+      useTransportStore.getState().setTimelineOut()
+    })
+    expect(screen.getByTestId('timeline-in-out')).toBeInTheDocument()
+    expect(screen.getByText('I')).toBeInTheDocument()
+    expect(screen.getByText('O')).toBeInTheDocument()
+    const afterMarks = rulerRenders.mock.calls.length
+    act(() => {
+      useTransportStore.getState().setPlayheadFrame(41)
+    })
+    expect(rulerRenders.mock.calls.length).toBe(afterMarks)
+  })
+
   test('positions a far playhead from the bounded timeline origin', () => {
     act(() => {
       useTransportStore.getState().setZoom(2)

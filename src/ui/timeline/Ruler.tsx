@@ -123,6 +123,8 @@ export default function Ruler() {
   const frameRate = useDocumentStore((s) => s.doc.frameRate)
   const durationFrames = useDocumentStore((s) => timelineDisplayDurationFrames(s.doc))
   const markers = useDocumentStore((s) => timelineMarkers(s.doc))
+  const timelineInFrame = useTransportStore((s) => s.timelineInFrame)
+  const timelineOutExclusive = useTransportStore((s) => s.timelineOutExclusive)
 
   const [seekFocused, setSeekFocused] = useState(false)
   const playheadFrame = useTransportStore((s) => (
@@ -488,6 +490,55 @@ export default function Ruler() {
           </span>
         </div>
       ))}
+      {(timelineInFrame !== null || timelineOutExclusive !== null) ? (
+        <div className="timeline-in-out" data-testid="timeline-in-out" aria-hidden="true">
+          {timelineInFrame !== null
+            && timelineOutExclusive !== null
+            && timelineOutExclusive > timelineInFrame
+            ? (
+              <div
+                className="timeline-in-out-range"
+                style={{
+                  transform: `translateX(${frameToTimelineLocalPx(
+                    timelineInFrame,
+                    viewport.originFrame,
+                    zoom,
+                  )}px)`,
+                  width: (timelineOutExclusive - timelineInFrame) * zoom,
+                }}
+              />
+            )
+            : null}
+          {timelineInFrame !== null ? (
+            <div
+              className="timeline-in-out-mark timeline-in-out-mark-in"
+              style={{
+                transform: `translateX(${frameToTimelineLocalPx(
+                  timelineInFrame,
+                  viewport.originFrame,
+                  zoom,
+                )}px)`,
+              }}
+            >
+              <span className="timeline-in-out-mark-label">I</span>
+            </div>
+          ) : null}
+          {timelineOutExclusive !== null ? (
+            <div
+              className="timeline-in-out-mark timeline-in-out-mark-out"
+              style={{
+                transform: `translateX(${frameToTimelineLocalPx(
+                  timelineOutExclusive,
+                  viewport.originFrame,
+                  zoom,
+                )}px)`,
+              }}
+            >
+              <span className="timeline-in-out-mark-label">O</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <TimelineMarkers
         markers={markers}
         frameRate={frameRate}
