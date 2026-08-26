@@ -126,8 +126,8 @@ export default function SourceMonitor() {
   if (!session && !lastOpenRejection) return null
 
   const openShortcut = shortcutForCommand('source.open')
-  const inShortcut = shortcutForCommand('source.mark-in')
-  const outShortcut = shortcutForCommand('source.mark-out')
+  const inShortcut = shortcutForCommand('marks.mark-in')
+  const outShortcut = shortcutForCommand('marks.mark-out')
   const startShortcut = shortcutForCommand('source.jump-start')
   const endShortcut = shortcutForCommand('source.jump-end')
   const insertCommand = resolveEditorCommand('timeline.insert')

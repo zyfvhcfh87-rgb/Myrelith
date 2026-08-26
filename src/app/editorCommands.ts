@@ -427,7 +427,6 @@ export const EDITOR_COMMAND_DEFINITIONS: readonly EditorCommandDefinition[] = [
     label: 'Mark source In',
     description: 'Set the Source Monitor In at the current source frame.',
     keywords: ['in', 'mark', 'source'],
-    shortcut: { label: 'I', ariaKeyShortcuts: 'I' },
   },
   {
     id: 'source.mark-out',
@@ -435,7 +434,6 @@ export const EDITOR_COMMAND_DEFINITIONS: readonly EditorCommandDefinition[] = [
     label: 'Mark source Out',
     description: 'Set the Source Monitor Out to include the current source frame.',
     keywords: ['mark', 'out', 'source'],
-    shortcut: { label: 'O', ariaKeyShortcuts: 'O' },
   },
   {
     id: 'source.clear-in',
@@ -443,7 +441,6 @@ export const EDITOR_COMMAND_DEFINITIONS: readonly EditorCommandDefinition[] = [
     label: 'Clear source In',
     description: 'Clear the Source Monitor In mark.',
     keywords: ['clear', 'in', 'source'],
-    shortcut: { label: 'Shift+I', ariaKeyShortcuts: 'Shift+I' },
   },
   {
     id: 'source.clear-out',
@@ -451,7 +448,6 @@ export const EDITOR_COMMAND_DEFINITIONS: readonly EditorCommandDefinition[] = [
     label: 'Clear source Out',
     description: 'Clear the Source Monitor Out mark.',
     keywords: ['clear', 'out', 'source'],
-    shortcut: { label: 'Shift+O', ariaKeyShortcuts: 'Shift+O' },
   },
   {
     id: 'source.jump-start',

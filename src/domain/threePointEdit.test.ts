@@ -597,6 +597,51 @@ describe('lift and extract', () => {
     expect(video[0]!.linkGroupId).not.toBe(video[1]!.linkGroupId)
   })
 
+  test('video-only lift of a linked pair unlinks duration-mismatched leftovers', () => {
+    const empty = makeDoc([
+      makeTrack('V1', 'video'),
+      makeTrack('A1', 'audio'),
+    ])
+    const start = input({
+      doc: empty,
+      playheadFrame: 0,
+      videoTargetTrackId: 'V1',
+      audioTargetTrackId: 'A1',
+      patchVideo: true,
+      patchAudio: true,
+      sourceSession: session({ inFrame: 0, outFrameExclusive: 80 }),
+    })
+    const insertedPlan = planSequenceEdit(start)
+    expect(insertedPlan.status).toBe('ok')
+    if (insertedPlan.status !== 'ok') return
+    const inserted = applySequenceEdit(empty, insertedPlan, start.asset)
+    const liftPlan = planSequenceEdit(input({
+      kind: 'lift',
+      doc: inserted,
+      timelineInFrame: 20,
+      timelineOutExclusive: 40,
+      videoTargetTrackId: 'V1',
+      audioTargetTrackId: null,
+    }))
+    expect(liftPlan.status).toBe('ok')
+    if (liftPlan.status !== 'ok') return
+    const lifted = applySequenceEdit(inserted, liftPlan, null)
+    expect(lifted).not.toBe(inserted)
+    expect(console.warn).not.toHaveBeenCalled()
+    const video = clipsOf(lifted, 'V1')
+    const audio = clipsOf(lifted, 'A1')
+    expect(video.map((clip) => clip.timelineRange)).toEqual([
+      { startFrame: 0, durationFrames: 20 },
+      { startFrame: 40, durationFrames: 40 },
+    ])
+    expect(audio.map((clip) => clip.timelineRange)).toEqual([
+      { startFrame: 0, durationFrames: 80 },
+    ])
+    expect(video[0]!.linkGroupId).toBeUndefined()
+    expect(video[1]!.linkGroupId).toBeUndefined()
+    expect(audio[0]!.linkGroupId).toBeUndefined()
+  })
+
   test('extract closes the gap on the targeted track only', () => {
     const doc = makeDoc([
       makeTrack('V1', 'video', [makeClip('host', 0, 200)]),

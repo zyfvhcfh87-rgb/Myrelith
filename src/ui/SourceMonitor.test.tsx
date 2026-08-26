@@ -169,6 +169,14 @@ describe('SourceMonitor', () => {
       'aria-keyshortcuts',
       'End',
     )
+    expect(screen.getByRole('button', { name: 'I' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'I',
+    )
+    expect(screen.getByRole('button', { name: 'O' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'O',
+    )
   })
 
   test('scrubs the Source playhead without changing its marks or Program', () => {
