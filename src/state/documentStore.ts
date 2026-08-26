@@ -31,6 +31,7 @@ import type {
   Effect,
   EffectId,
   EffectParamValue,
+  MediaAsset,
   SourceTimeRate,
   SourceTimeSpeedEasing,
   TimelineDoc,
@@ -40,6 +41,10 @@ import type {
   TrackKind,
   TransitionId,
 } from '../domain/schema'
+import {
+  applySequenceEdit as applySequenceEditToDocument,
+  type SequenceEditAcceptedPlan,
+} from '../domain/threePointEdit'
 import {
   addCaptionItem as addCaptionCue,
   addCaptionTrack as addCaptionLane,
@@ -231,6 +236,15 @@ export interface DocumentState {
    * Linked partners follow (one entry); see domain/linking.
    */
   rippleDelete: (clipId: ClipId) => void
+  /**
+   * Commit one accepted three-point/sequence-edit plan. Rejected apply
+   * paths keep the current document reference and add no history entry.
+   */
+  applySequenceEdit: (
+    plan: SequenceEditAcceptedPlan,
+    asset: MediaAsset | null,
+    catalog?: SourceBoundsCatalog,
+  ) => void
   /**
    * Add a centered crossfade between ordered touching video clips. A valid
    * add is one undo entry; rejected geometry or a locked track adds none.
@@ -575,6 +589,12 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   rippleDelete: (clipId) =>
     set((state) => commit(state, linkedRippleDelete(state.doc, clipId))),
+
+  applySequenceEdit: (plan, asset, catalog) =>
+    set((state) => commit(
+      state,
+      applySequenceEditToDocument(state.doc, plan, asset, catalog),
+    )),
 
   addCrossfade: (fromClipId, toClipId, durationFrames) =>
     set((state) =>

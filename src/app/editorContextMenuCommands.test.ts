@@ -169,6 +169,58 @@ describe('editor context menu commands', () => {
       .every(({ linkGroupId }) => linkGroupId === undefined)).toBe(true)
   })
 
+  test('exposes lift/extract on the ruler and roll on a touching seam', () => {
+    const ruler = target({ kind: 'ruler', frame: 12 })
+    expect(resolvedItem(ruler, 'timeline.lift').disabledReason).toMatch(/Mark both timeline/)
+    expect(resolvedItem(ruler, 'timeline.extract').disabledReason).toMatch(/Mark both timeline/)
+
+    useDocumentStore.getState().setDoc(documentFixture({
+      tracks: [
+        track('V1', 'video', [clip('left', 0, 20), clip('right', 20, 20)]),
+        track('A1', 'audio', []),
+      ],
+    }))
+    const existing = {
+      id: 'asset-left',
+      fileName: 'left.mp4',
+      mimeType: 'video/mp4',
+      size: 1024,
+      lastModified: 1,
+      objectUrl: 'blob:left',
+      kind: 'video' as const,
+      durationFrames: 120,
+      durationMicroseconds: 4_000_000,
+      sourceBounds: {
+        video: { status: 'exact' as const, firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+        audio: { status: 'exact' as const, firstTimestampUs: 0, endTimestampUs: 4_000_000 },
+      },
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      hasAudio: true,
+      audioSampleRate: 48_000,
+      audioChannels: 2,
+      decoderConfigB64: null,
+    }
+    useMediaStore.setState({
+      descriptors: new Map(),
+      assets: new Map([
+        ['asset-left', existing],
+        ['asset-right', { ...existing, id: 'asset-right', fileName: 'right.mp4' }],
+      ]),
+      visuals: new Map(),
+      compatibility: new Map(),
+    })
+    const seam = target({ kind: 'clip', clipId: 'left', frame: 20 })
+    expect(resolvedItem(seam, 'clip.roll-right').disabledReason).toBeNull()
+    expect(executeEditorContextMenuItem(seam, 'clip.roll-right').executed).toBe(true)
+    expect(useDocumentStore.getState().doc.tracks[0]?.clips.map((item) => item.timelineRange))
+      .toEqual([
+        { startFrame: 0, durationFrames: 21 },
+        { startFrame: 21, durationFrames: 19 },
+      ])
+  })
+
   test('executes ruler and lane commands at their captured frame', () => {
     const ruler = target({ kind: 'ruler', frame: 12 })
     expect(executeEditorContextMenuItem(ruler, 'timeline.move-playhead').executed)

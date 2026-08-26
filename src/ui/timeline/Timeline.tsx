@@ -48,6 +48,7 @@ import {
 import { setMediaVisualTimelineViewport } from '../../app/mediaVisualsController'
 import SelectionMarquee from './SelectionMarquee'
 import { useTimelineMarqueeSelection } from './useTimelineMarqueeSelection'
+import { focusProgramMonitor } from '../../app/sequenceEditController'
 
 export default function Timeline() {
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -165,6 +166,7 @@ export default function Timeline() {
       ref={rootRef}
       className={`timeline-root tool-${tool}`}
       data-testid="timeline-root"
+      onPointerDown={focusProgramMonitor}
       data-timeline-origin-frame={viewport.originFrame}
       data-timeline-window-end-frame={viewport.endFrame}
       data-timeline-total-frames={viewport.totalFrames}

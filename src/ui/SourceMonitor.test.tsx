@@ -1,6 +1,6 @@
 /**
- * Source Monitor chrome: Media Pool remediation copy, later three-point
- * note, and Home/End shortcuts on the review transport.
+ * Source Monitor chrome: Media Pool remediation copy, insert/overwrite
+ * commands, and Home/End shortcuts on the review transport.
  */
 
 import { fireEvent, render, screen } from '@testing-library/react'
@@ -149,13 +149,18 @@ describe('SourceMonitor', () => {
     )
   })
 
-  test('names the later three-point work and exposes Home/End', () => {
+  test('exposes insert/overwrite and Home/End', () => {
     seed(makeAsset(), compatibility())
     expect(openSourceAsset('asset-source').status).toBe('ok')
     render(<SourceMonitor />)
 
-    expect(screen.getByText('Three-point insert and overwrite come later.'))
-      .toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Insert' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Overwrite' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Replace edit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'source video patch' }))
+      .toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'source audio patch' }))
+      .toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Start' })).toHaveAttribute(
       'aria-keyshortcuts',
       'Home',
@@ -163,6 +168,14 @@ describe('SourceMonitor', () => {
     expect(screen.getByRole('button', { name: 'End' })).toHaveAttribute(
       'aria-keyshortcuts',
       'End',
+    )
+    expect(screen.getByRole('button', { name: 'I' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'I',
+    )
+    expect(screen.getByRole('button', { name: 'O' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'O',
     )
   })
 

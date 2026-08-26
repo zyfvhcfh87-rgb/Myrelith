@@ -510,6 +510,22 @@ export function moveClipsByDelta(
 }
 
 /**
+ * Remove one clip and leave a gap. Transitions that used it are dropped by
+ * reconcile. Linked partners are not followed — range lift/extract owns
+ * that policy. Rejected on a missing clip or a locked track.
+ */
+export function deleteClip(doc: TimelineDoc, clipId: ClipId): TimelineDoc {
+  const op = 'deleteClip'
+  const loc = locateClip(doc, clipId)
+  if (!loc) return reject(doc, op, `clip ${clipId} not found`)
+  if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
+
+  const clips = loc.track.clips.filter((clip) => clip.id !== clipId)
+  const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
+  return withTrack(doc, loc.trackIndex, nextTrack)
+}
+
+/**
  * Delete a clip and close the gap: every clip on the SAME track that starts
  * at/after the deleted clip's end shifts left by the deleted duration.
  * (MVP scope: single-track ripple; other tracks are untouched.)

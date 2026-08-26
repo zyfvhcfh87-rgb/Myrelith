@@ -142,8 +142,23 @@ export interface TransportState {
   customZoom: number
   /** Integer global frame represented by local x=0 in the bounded DOM lane. */
   timelineOriginFrame: number
-  /** In/out selection for preview/export, or null when unset. */
+  /** Complete timeline In/Out range for preview/export, or null when either mark is unset. */
   inOut: TimeRange | null
+  /** Timeline In mark, document frames; independent of Out. */
+  timelineInFrame: number | null
+  /** Timeline Out exclusive mark, document frames; independent of In. */
+  timelineOutExclusive: number | null
+  /** Targeted video destination for sequence edits; null means none. */
+  videoTargetTrackId: TrackId | null
+  /** Targeted audio destination for sequence edits; null means none. */
+  audioTargetTrackId: TrackId | null
+  /**
+   * False until the user changes targeting. Untouched sessions use the first
+   * unlocked video and audio tracks as destinations.
+   */
+  trackTargetsTouched: boolean
+  /** Which monitor owns I/O marks: Program/timeline or Source. */
+  focusedMonitor: 'program' | 'source'
   /** Clip-drag preview, or null when no drag is in flight. */
   dragPreview: DragPreview | null
   /** Active timeline tool (Phase 4.2). */
@@ -192,8 +207,23 @@ export interface TransportState {
   setPresetZoom: (mode: PresetZoomMode, zoom: number) => void
   /** Rebase the browser-safe timeline surface; never changes zoom/history. */
   setTimelineOriginFrame: (frame: number) => void
-  /** Set or clear the in/out selection. */
+  /** Set or clear the complete in/out selection (both marks). */
   setInOut: (inOut: TimeRange | null) => void
+  /** Set timeline In at the playhead; clears Out when the range would invert. */
+  setTimelineIn: () => void
+  /** Set timeline Out to include the playhead; clears In when inverted. */
+  setTimelineOut: () => void
+  /** Clear only the timeline In mark. */
+  clearTimelineIn: () => void
+  /** Clear only the timeline Out mark. */
+  clearTimelineOut: () => void
+  /** Replace both destination tracks and mark targeting as user-authored. */
+  setTrackTargets: (targets: {
+    videoTrackId: TrackId | null
+    audioTrackId: TrackId | null
+  }) => void
+  /** Record which monitor should receive I/O shortcuts. */
+  setFocusedMonitor: (monitor: 'program' | 'source') => void
   /**
    * Update or clear the clip-drag preview. deltaFrames is rounded to an
    * integer and stays signed so linked members can each add it to their own
@@ -256,6 +286,21 @@ export interface TransportState {
   resetTransport: () => void
 }
 
+function completeTimelineInOut(
+  timelineInFrame: number | null,
+  timelineOutExclusive: number | null,
+): TimeRange | null {
+  if (
+    timelineInFrame === null
+    || timelineOutExclusive === null
+    || timelineOutExclusive <= timelineInFrame
+  ) return null
+  return {
+    startFrame: timelineInFrame,
+    durationFrames: timelineOutExclusive - timelineInFrame,
+  }
+}
+
 const EMPTY_SELECTED_CLIP_IDS: readonly ClipId[] = Object.freeze([])
 
 export const INITIAL_TRANSPORT_STATE = Object.freeze({
@@ -267,6 +312,12 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   customZoom: 1,
   timelineOriginFrame: 0,
   inOut: null,
+  timelineInFrame: null,
+  timelineOutExclusive: null,
+  videoTargetTrackId: null,
+  audioTargetTrackId: null,
+  trackTargetsTouched: false,
+  focusedMonitor: 'program' as const,
   dragPreview: null,
   tool: 'select' as TimelineTool,
   selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
@@ -368,7 +419,70 @@ export const useTransportStore = create<TransportState>()((set) => ({
         ? state
         : { timelineOriginFrame }
     }),
-  setInOut: (inOut) => set({ inOut }),
+  setInOut: (inOut) =>
+    set({
+      inOut,
+      timelineInFrame: inOut ? inOut.startFrame : null,
+      timelineOutExclusive: inOut
+        ? inOut.startFrame + inOut.durationFrames
+        : null,
+    }),
+  setTimelineIn: () =>
+    set((state) => {
+      const timelineInFrame = state.playheadFrame
+      const timelineOutExclusive = state.timelineOutExclusive !== null
+        && timelineInFrame >= state.timelineOutExclusive
+        ? null
+        : state.timelineOutExclusive
+      return {
+        timelineInFrame,
+        timelineOutExclusive,
+        inOut: completeTimelineInOut(timelineInFrame, timelineOutExclusive),
+      }
+    }),
+  setTimelineOut: () =>
+    set((state) => {
+      const timelineOutExclusive = state.playheadFrame + 1
+      const timelineInFrame = state.timelineInFrame !== null
+        && state.timelineInFrame >= timelineOutExclusive
+        ? null
+        : state.timelineInFrame
+      return {
+        timelineInFrame,
+        timelineOutExclusive,
+        inOut: completeTimelineInOut(timelineInFrame, timelineOutExclusive),
+      }
+    }),
+  clearTimelineIn: () =>
+    set((state) => (
+      state.timelineInFrame === null && state.inOut === null
+        ? state
+        : {
+            timelineInFrame: null,
+            inOut: null,
+            timelineOutExclusive: state.timelineOutExclusive,
+          }
+    )),
+  clearTimelineOut: () =>
+    set((state) => (
+      state.timelineOutExclusive === null && state.inOut === null
+        ? state
+        : {
+            timelineOutExclusive: null,
+            inOut: null,
+            timelineInFrame: state.timelineInFrame,
+          }
+    )),
+  setTrackTargets: (targets) =>
+    set({
+      videoTargetTrackId: targets.videoTrackId,
+      audioTargetTrackId: targets.audioTrackId,
+      trackTargetsTouched: true,
+    }),
+  setFocusedMonitor: (focusedMonitor) =>
+    set((state) => (
+      state.focusedMonitor === focusedMonitor ? state : { focusedMonitor }
+    )),
   setDragPreview: (preview) =>
     set({
       dragPreview: preview

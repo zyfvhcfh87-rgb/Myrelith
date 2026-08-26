@@ -286,6 +286,27 @@ function timelineCapacities(from: Clip, to: Clip): Capacities {
   }
 }
 
+/**
+ * Timeline frames a clip can still grow at `edge` from real source handles.
+ * Stills and text are unbounded. Missing/unknown bounds return null.
+ */
+export function sourceHandleHeadroomFrames(input: {
+  readonly clip: Clip
+  readonly edge: 'start' | 'end'
+  readonly stream: 'video' | 'audio'
+  readonly rate: FrameRate
+  readonly catalog: SourceBoundsCatalog
+}): number | null {
+  const { clip, edge, stream, rate, catalog } = input
+  if (clip.text !== undefined || clip.sourceMode === 'still') {
+    return Number.POSITIVE_INFINITY
+  }
+  const role: CrossfadeLegRole = edge === 'end' ? 'from' : 'to'
+  const resolved = sourceCapacities(clip, role, stream, rate, catalog)
+  if (resolved.status === 'unavailable') return null
+  return edge === 'end' ? resolved.capacities.right : resolved.capacities.left
+}
+
 function sourceCapacities(
   clip: Clip,
   role: CrossfadeLegRole,

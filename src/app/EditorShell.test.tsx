@@ -107,6 +107,7 @@ describe('EditorShell', () => {
     expect(screen.getByText('Myrelith')).toBeInTheDocument()
     expect(container.querySelector('.media-pool')).not.toBeNull()
     expect(screen.getByTestId('preview-canvas')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Insert edit' })).toBeInTheDocument()
     expect(container.querySelector('.inspector-empty-title')).not.toBeNull()
     expect(screen.getByTestId('timeline-root')).toBeInTheDocument()
     expect(

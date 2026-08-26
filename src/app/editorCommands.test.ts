@@ -20,6 +20,7 @@ import {
   matchEditorCommandShortcut,
   resolveEditorCommand,
   shortcutBindingSignature,
+  shortcutForCommand,
 } from './editorCommands'
 import {
   clearSelectedPoolAssetId,
@@ -99,6 +100,27 @@ describe('editor command catalog', () => {
     expect(signatures).not.toContain(COMMAND_PALETTE_SHORTCUT.signature)
     expect(EDITOR_SHORTCUT_BINDINGS.every(({ commandId }) => ids.includes(commandId)))
       .toBe(true)
+
+    const advertised = EDITOR_COMMAND_DEFINITIONS
+      .flatMap((definition) => (
+        definition.shortcut ? [definition.shortcut.ariaKeyShortcuts] : []
+      ))
+    expect(new Set(advertised).size).toBe(advertised.length)
+    expect(shortcutForCommand('source.mark-in')).toBeUndefined()
+    expect(shortcutForCommand('source.mark-out')).toBeUndefined()
+    expect(shortcutForCommand('source.clear-in')).toBeUndefined()
+    expect(shortcutForCommand('source.clear-out')).toBeUndefined()
+  })
+
+  test('advertises shortcuts only for commands with active bindings', () => {
+    const boundCommandIds = new Set(
+      EDITOR_SHORTCUT_BINDINGS.map(({ commandId }) => commandId),
+    )
+
+    for (const definition of EDITOR_COMMAND_DEFINITIONS) {
+      if (!definition.shortcut) continue
+      expect(boundCommandIds.has(definition.id), definition.id).toBe(true)
+    }
   })
 
   test('history and editing hooks resolve disjoint shortcuts', () => {

@@ -8,35 +8,35 @@ import { clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, sourceRang
 import { byStart, locateClip, newId, overlapsAny, reconcileTransitions, reject, withTrack } from './operationInternals';
 
 /**
- * Build a default Clip that plays `asset` in full, starting at timeline
- * frame `startFrame`. Pure factory — it does NOT validate against a doc
- * (insertClip does that); it only fills in the schema defaults (identity
- * transform, full opacity/volume, empty effect chain). Per the MVP
- * conformance note in schema.ts, asset.durationFrames is already measured
- * in document-rate frames. Still images receive a canonical one-frame source
- * and an independently editable nominal timeline duration. When `linkGroupId`
- * is given (the A/V drop path, pairing a video clip with its audio clip), it is
- * stamped onto the clip; omitted, the key is left absent.
+ * Build a Clip that plays `asset` for `durationFrames` timeline frames,
+ * starting at `timelineStartFrame`, from document-rate source frame
+ * `sourceStartFrame`. Pure factory — it does NOT validate against a doc
+ * (insertClip does that). Still images ignore `sourceStartFrame` and keep
+ * the canonical one-frame source. When `linkGroupId` is given (the A/V
+ * drop/insert path), it is stamped onto the clip; omitted, the key is left
+ * absent.
  */
-export function clipFromAsset(
+export function clipFromAssetRange(
   asset: MediaAsset,
-  startFrame: number,
+  timelineStartFrame: number,
+  sourceStartFrame: number,
+  durationFrames: number,
   linkGroupId?: string,
 ): Clip {
+  const still = asset.kind === 'image'
+  const sourceStart = still ? 0 : sourceStartFrame
+  const sourceDuration = still ? 1 : durationFrames
   return {
     id: newId('clip'),
     assetId: asset.id,
     name: asset.fileName,
-    sourceMode: asset.kind === 'image' ? 'still' : 'timed',
+    sourceMode: still ? 'still' : 'timed',
     sourceRange: {
-      startFrame: 0,
-      durationFrames: asset.kind === 'image' ? 1 : asset.durationFrames,
+      startFrame: sourceStart,
+      durationFrames: sourceDuration,
     },
-    sourceTimeMap: defaultSourceTimeMap(
-      0,
-      asset.kind === 'image' ? 1 : asset.durationFrames,
-    ),
-    timelineRange: { startFrame, durationFrames: asset.durationFrames },
+    sourceTimeMap: defaultSourceTimeMap(sourceStart, sourceDuration),
+    timelineRange: { startFrame: timelineStartFrame, durationFrames },
     transform: {
       x: 0,
       y: 0,
@@ -56,6 +56,26 @@ export function clipFromAsset(
     effects: [],
     ...(linkGroupId ? { linkGroupId } : {}),
   }
+}
+
+/**
+ * Build a default Clip that plays `asset` in full, starting at timeline
+ * frame `startFrame`. Delegates to {@link clipFromAssetRange}. Per the MVP
+ * conformance note in schema.ts, asset.durationFrames is already measured
+ * in document-rate frames.
+ */
+export function clipFromAsset(
+  asset: MediaAsset,
+  startFrame: number,
+  linkGroupId?: string,
+): Clip {
+  return clipFromAssetRange(
+    asset,
+    startFrame,
+    0,
+    asset.durationFrames,
+    linkGroupId,
+  )
 }
 
 /** Build one bounded procedural text clip at an explicit timeline range. */

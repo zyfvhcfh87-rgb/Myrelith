@@ -26,6 +26,7 @@ import TextOverlayControls from './TextOverlayControls'
 import VideoScopesPanel from './VideoScopesPanel'
 import VisualOverlayControls from './VisualOverlayControls'
 import MotionTrackingOverlay from './MotionTrackingOverlay'
+import { focusProgramMonitor } from '../app/sequenceEditController'
 
 export default function Preview() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -125,7 +126,11 @@ export default function Preview() {
   }, [docHeight, docWidth])
 
   return (
-    <div className="preview-panel" ref={panelRef}>
+    <div
+      className="preview-panel"
+      ref={panelRef}
+      onPointerDown={focusProgramMonitor}
+    >
       <button
         type="button"
         className="preview-scopes-toggle"

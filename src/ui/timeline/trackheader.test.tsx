@@ -16,6 +16,7 @@ import {
 } from '../../domain/projectSettings'
 import type { Clip, TimelineDoc, Track as TrackData } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
+import { resetTransportStoreForTest } from '../../test/storeFixtures'
 import Timeline from './Timeline'
 
 function makeClip(id: string, tlStart: number, duration: number): Clip {
@@ -61,6 +62,7 @@ const trackById = (id: string) =>
 
 beforeEach(() => {
   getState().setDoc(makeDoc())
+  resetTransportStoreForTest()
 })
 
 describe('header gutter', () => {
@@ -115,6 +117,9 @@ describe('header gutter', () => {
 
   test('video headers offer hide, audio headers offer mute, both offer lock', () => {
     render(<Timeline />)
+    expect(screen.getByLabelText('target track V1')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('target track V2')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByLabelText('target track A1')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('hide track V1')).toBeInTheDocument()
     expect(screen.queryByLabelText('mute track V1')).not.toBeInTheDocument()
     expect(screen.getByLabelText('mute track A1')).toBeInTheDocument()
@@ -125,6 +130,15 @@ describe('header gutter', () => {
 })
 
 describe('toggle wiring', () => {
+  test('target toggle is session-only and writes no history', () => {
+    render(<Timeline />)
+    expect(getState().past).toHaveLength(0)
+    fireEvent.click(screen.getByLabelText('target track V2'))
+    expect(screen.getByLabelText('target track V2')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('target track V1')).toHaveAttribute('aria-pressed', 'false')
+    expect(getState().past).toHaveLength(0)
+  })
+
   test('hide toggles doc.hidden; each real change is ONE undo entry', () => {
     render(<Timeline />)
     const hide = screen.getByLabelText('hide track V1')

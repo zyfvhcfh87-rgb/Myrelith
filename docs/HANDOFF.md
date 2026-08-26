@@ -5124,7 +5124,8 @@ surface; it is not a second zoom and never enters document history.
   (`mediaCompatibilityStatusText` / `mediaCompatibilityRemediationLines`).
   A compatibility-only unsupported file rejects as incompatible, not offline.
   Rejection copy stays on the attempted file when another source is already
-  open. The monitor names that three-point insert and overwrite come later.
+  open. Three-point insert/overwrite now live on Issue #187 rather than a
+  later-work note.
 - Asset switch, failed open, close, and project replace halt the source clock
   and release the previous visual loan. Program playhead and `TimelineDoc` stay
   put.
@@ -5139,3 +5140,25 @@ surface; it is not a second zoom and never enters document history.
 - The authoritative automated gate passes 244 Vitest files / 3,432 tests plus
   the 17 runner checks, production build/typecheck, lint, and diff hygiene.
   Do not tick GitHub #186 unless asked after a user pass.
+
+## Post-MVP issue #187 - three-point sequence edits slice 2
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-26); PUBLICATION AND ISSUE CLOSEOUT NOT AUTHORIZED.**
+
+- Slice 1's planner/apply/commands remain. Slice 2 adds real
+  `SourceBoundsCatalog` handles for roll, keeps existing seam crossfades
+  preview/export-valid, and regroups leftover linked A/V after lift/extract
+  instead of failing the whole edit. Timeline In/Out draw on the ruler.
+  Lift, Extract, and Replace sit on the transport bar; Replace also sits on
+  the Source Monitor; clip/ruler context menus expose replace, roll, lift,
+  and extract with the same disabled reasons as the commands.
+- Roll of timed media without exact catalog bounds, unknown bounds, or
+  remaining handle is `insufficient-source-handle`. A roll that would drop
+  or starve a valid crossfade is `roll-transition-invalid`. Stills and text
+  may still grow. Four-point duration mismatches still never retime.
+- Focused Vitest, oxlint, and `tsc -b` plus production Vite build passed.
+  In-app Chromium on `http://localhost:42187/` imported a 2.000s 320×180
+  AVC/AAC file, opened Source Monitor, inserted a linked A/V pair, marked
+  Program In/Out, lifted and extracted, split and rolled the seam, overwrote
+  and replaced, played back, and undid/redid with an empty console.
+- Do not tick GitHub #187 unless asked after a user pass.
