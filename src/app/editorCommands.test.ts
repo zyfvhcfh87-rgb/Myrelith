@@ -112,6 +112,17 @@ describe('editor command catalog', () => {
     expect(shortcutForCommand('source.clear-out')).toBeUndefined()
   })
 
+  test('advertises shortcuts only for commands with active bindings', () => {
+    const boundCommandIds = new Set(
+      EDITOR_SHORTCUT_BINDINGS.map(({ commandId }) => commandId),
+    )
+
+    for (const definition of EDITOR_COMMAND_DEFINITIONS) {
+      if (!definition.shortcut) continue
+      expect(boundCommandIds.has(definition.id), definition.id).toBe(true)
+    }
+  })
+
   test('history and editing hooks resolve disjoint shortcuts', () => {
     const undo = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true })
     const razor = new KeyboardEvent('keydown', { key: 'b' })
