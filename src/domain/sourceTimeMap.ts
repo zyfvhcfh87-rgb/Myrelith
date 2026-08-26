@@ -12,6 +12,7 @@
 import type {
   Clip,
   ClipAnimation,
+  FrameRate,
   SourceTimeMap,
   SourceTimeRate,
   SourceTimeSpeedCurve,
@@ -680,7 +681,7 @@ export function timelineOffsetAtSourceTicks(
   return low
 }
 
-export function sourceTimeMapIsAudioCompatible(map: SourceTimeMap): boolean {
+export function sourceTimeMapIsDirectAudioCompatible(map: SourceTimeMap): boolean {
   if (sourceTimeMapValidationError(map)) return false
   const curve = validSpeedCurve(map)
   return map.sourceStartTicks % SOURCE_TIME_TICKS_PER_FRAME === 0
@@ -917,31 +918,188 @@ export function retimeClipAnimation(
   return tracks && effectTracks ? { tracks, effectTracks } : null
 }
 
+declare const constantAudioStretchRate: unique symbol
+
+export type ConstantAudioStretchRate = Readonly<SourceTimeRate> & {
+  readonly [constantAudioStretchRate]: true
+}
+
 export type SourceTimeAudioPolicy =
-  | { status: 'supported' }
+  | { status: 'supported'; kind: 'direct' }
+  | {
+      status: 'supported'
+      kind: 'stretched'
+      rate: ConstantAudioStretchRate
+    }
   | {
       status: 'muted'
       reason:
-        | 'constant-speed-audio-unsupported'
-        | 'speed-ramp-audio-unsupported'
         | 'invalid-speed-curve'
+        | 'speed-ramp-audio-unsupported'
+        | 'freeze-audio-silence'
+        | 'sub-frame-origin-audio-unsupported'
     }
 
-/**
- * Current Web Audio/export readers do not time-stretch or pitch-shift. Any
- * non-unity (or sub-frame-origin) map is therefore omitted identically from
- * preview playback and export instead of inventing samples or losing sync.
- */
+export type StretchQualityBand = 'nominal' | 'edge'
+
+export type ClipAudioPresentation =
+  | { state: 'ready'; kind: 'direct' }
+  | {
+      state: 'ready'
+      kind: 'stretched'
+      rate: ConstantAudioStretchRate
+      quality: 'nominal'
+    }
+  | {
+      state: 'fallback'
+      kind: 'stretched'
+      rate: ConstantAudioStretchRate
+      quality: 'edge'
+    }
+  | {
+      state: 'silence'
+      reason: Extract<SourceTimeAudioPolicy, { status: 'muted' }>['reason']
+    }
+
+function sameSourceTimeRate(
+  left: SourceTimeRate,
+  right: SourceTimeRate,
+): boolean {
+  return left.numerator === right.numerator
+    && left.denominator === right.denominator
+}
+
+function createConstantAudioStretchRate(
+  rate: SourceTimeRate,
+): ConstantAudioStretchRate {
+  const canonical = canonicalSourceTimeRate(rate.numerator, rate.denominator)
+  if (!sameSourceTimeRate(canonical, rate)) {
+    throw new RangeError('Constant audio stretch rate must use canonical reduced form')
+  }
+  if (isUnitySourceTimeRate(canonical)) {
+    throw new RangeError('Constant audio stretch rate must not be unity')
+  }
+  return Object.freeze(canonical) as ConstantAudioStretchRate
+}
+
+function constantStretchRate(
+  map: SourceTimeMap,
+): ConstantAudioStretchRate | null {
+  if (sourceTimeMapValidationError(map)) return null
+  const curve = validSpeedCurve(map)
+  const rate = curve === null ? map.rate : curve.points[0]!.rate
+  if (
+    rate.numerator === 0
+    || isUnitySourceTimeRate(rate)
+    || (curve !== null
+      && !curve.points.every((point) => sameSourceTimeRate(point.rate, rate)))
+  ) return null
+  return createConstantAudioStretchRate(rate)
+}
+
+export function sourceTimeMapIsConstantStretchCompatible(
+  map: SourceTimeMap,
+): boolean {
+  return constantStretchRate(map) !== null
+}
+
 export function sourceTimeAudioPolicy(clip: Clip): SourceTimeAudioPolicy {
   const map = clipSourceTimeMap(clip)
   if (sourceTimeMapHasInvalidSpeedCurve(map)) {
     return { status: 'muted', reason: 'invalid-speed-curve' }
   }
-  if (sourceTimeMapIsAudioCompatible(map)) return { status: 'supported' }
-  return {
-    status: 'muted',
-    reason: sourceTimeMapUsesSpeedCurve(map)
-      ? 'speed-ramp-audio-unsupported'
-      : 'constant-speed-audio-unsupported',
+  if (sourceTimeMapIsDirectAudioCompatible(map)) {
+    return { status: 'supported', kind: 'direct' }
   }
+  const stretchRate = constantStretchRate(map)
+  if (stretchRate) {
+    return { status: 'supported', kind: 'stretched', rate: stretchRate }
+  }
+  const curve = validSpeedCurve(map)
+  if (curve) {
+    const positiveRates = curve.points
+      .filter((point) => point.rate.numerator > 0)
+      .map((point) => point.rate)
+    const firstPositiveRate = positiveRates[0]
+    if (
+      firstPositiveRate
+      && positiveRates.some((rate) => !sameSourceTimeRate(rate, firstPositiveRate))
+    ) {
+      return { status: 'muted', reason: 'speed-ramp-audio-unsupported' }
+    }
+    if (curve.points.some((point) => point.rate.numerator === 0)) {
+      return { status: 'muted', reason: 'freeze-audio-silence' }
+    }
+  }
+  return { status: 'muted', reason: 'sub-frame-origin-audio-unsupported' }
+}
+
+export function stretchQualityBand(
+  rate: SourceTimeRate,
+): StretchQualityBand {
+  const error = sourceTimeRateValidationError(rate)
+  if (error) throw new RangeError(error)
+  const atLeastThreeQuarters = rate.numerator * 4 >= rate.denominator * 3
+  const atMostThreeHalves = rate.numerator * 2 <= rate.denominator * 3
+  return atLeastThreeQuarters && atMostThreeHalves ? 'nominal' : 'edge'
+}
+
+export function clipAudioPresentation(clip: Clip): ClipAudioPresentation {
+  const policy = sourceTimeAudioPolicy(clip)
+  if (policy.status === 'muted') {
+    return { state: 'silence', reason: policy.reason }
+  }
+  if (policy.kind === 'direct') return { state: 'ready', kind: 'direct' }
+  const quality = stretchQualityBand(policy.rate)
+  return quality === 'nominal'
+    ? { state: 'ready', kind: 'stretched', rate: policy.rate, quality }
+    : { state: 'fallback', kind: 'stretched', rate: policy.rate, quality }
+}
+
+function assertPositiveRateTerms(rate: FrameRate, label: string): void {
+  if (
+    !Number.isSafeInteger(rate.num)
+    || !Number.isSafeInteger(rate.den)
+    || rate.num <= 0
+    || rate.den <= 0
+  ) {
+    throw new RangeError(`${label} must use positive safe-integer terms`)
+  }
+}
+
+/** Decoder-boundary seconds only. Same float role as framesToSeconds. */
+export function sourceTicksToSeconds(ticks: number, rate: FrameRate): number {
+  if (!Number.isSafeInteger(ticks)) {
+    throw new RangeError('Source ticks must be a safe integer')
+  }
+  assertPositiveRateTerms(rate, 'Frame rate')
+  return ticks * rate.den / (SOURCE_TIME_TICKS_PER_FRAME * rate.num)
+}
+
+/**
+ * Map exact source ticks onto the document audio sample grid. Half-sample
+ * ties move away from zero so a negative phase still cancels.
+ */
+export function audioSampleFromSourceTicks(
+  ticks: number,
+  frameRate: FrameRate,
+  audioSampleRate: number,
+): number {
+  if (!Number.isSafeInteger(ticks)) {
+    throw new RangeError('Source ticks must be a safe integer')
+  }
+  assertPositiveRateTerms(frameRate, 'Frame rate')
+  if (!Number.isSafeInteger(audioSampleRate) || audioSampleRate <= 0) {
+    throw new RangeError('Audio sample rate must be a positive safe integer')
+  }
+  const divisor = BigInt(SOURCE_TIME_TICKS_PER_FRAME) * BigInt(frameRate.num)
+  const numerator =
+    BigInt(ticks) * BigInt(frameRate.den) * BigInt(audioSampleRate)
+  const signed = numerator < 0n
+  const magnitude = signed ? -numerator : numerator
+  const rounded = (magnitude + divisor / 2n) / divisor
+  if (rounded > MAX_SAFE) {
+    throw new RangeError('Mapped audio sample exceeds the safe integer range')
+  }
+  return Number(signed ? -rounded : rounded)
 }

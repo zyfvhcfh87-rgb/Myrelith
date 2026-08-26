@@ -125,7 +125,7 @@ function unavailableAudioText(
     'audio-source-stream-absent': 'a linked source has no audio stream',
     'audio-source-bounds-unknown': 'exact linked audio bounds are unknown; relink the media to analyze it',
     'audio-source-boundary-unsafe': 'a linked audio endpoint has unsafe source timing',
-    'retimed-audio-unsupported': 'constant-speed audio is muted until pitch-safe time-stretch is available',
+    'retimed-audio-unsupported': 'a linked audio partner uses a speed ramp, freeze, or unsupported 1x origin',
     'duration-exceeds-audio-capacity': 'the linked audio handles are too short',
   }[reason]
   return `Linked audio unavailable: ${detail}. The visual crossfade remains available.`

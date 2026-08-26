@@ -856,7 +856,7 @@ describe('exportController wiring and completion', () => {
     expect(h.runExport).toHaveBeenCalledOnce()
   })
 
-  test('retimed audio-only output neither gates offline export nor fetches the source', async () => {
+  test('constant-stretch audio-only output requires reconnecting its offline source', async () => {
     const audioDoc = docWithSourceClipOn('audio')
     audioDoc.tracks[0].clips[0] = {
       ...audioDoc.tracks[0].clips[0],
@@ -872,13 +872,15 @@ describe('exportController wiring and completion', () => {
     useMediaStore.getState().disconnectAsset(ASSET.id)
     const h = makeHarness()
 
-    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      'Reconnect 1 offline source before exporting: source.mp4.',
+    )
     expect(h.fetchBlob).not.toHaveBeenCalled()
-    expect(h.createMediaSource).toHaveBeenCalledOnce()
-    expect(h.runExport).toHaveBeenCalledOnce()
+    expect(h.createMediaSource).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
   })
 
-  test('retimed audio-only output does not eagerly retain an online source blob', async () => {
+  test('constant-stretch audio-only output retains its online source blob', async () => {
     const audioDoc = docWithSourceClipOn('audio')
     audioDoc.tracks[0].clips[0] = {
       ...audioDoc.tracks[0].clips[0],
@@ -894,7 +896,7 @@ describe('exportController wiring and completion', () => {
     const h = makeHarness()
 
     await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
-    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
   })
 
   test('a retimed visual contributor still requires and retains its source', async () => {

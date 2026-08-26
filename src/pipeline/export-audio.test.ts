@@ -381,7 +381,7 @@ describe('TimelineAudioMixer selection and mapping', () => {
     await mixer.close()
   })
 
-  test('exports explicit silence without opening a reader for retimed audio', async () => {
+  test('opens and stretches a constant-rate retimed audio source', async () => {
     const clip = makeClip('retimed', 0, 1)
     clip.sourceRange = { startFrame: 0, durationFrames: 2 }
     clip.sourceTimeMap = {
@@ -402,10 +402,69 @@ describe('TimelineAudioMixer selection and mapping', () => {
       blocks.push(captureBlock(block))
     })
 
-    expect(h.requests).toEqual([])
-    expect(blocks.every((block) =>
-      block.channels.every((channel) => channel.every((sample) => sample === 0)),
+    expect(h.requests).toEqual([{
+      clipId: 'retimed',
+      assetId: 'asset-retimed',
+      startSample: 0,
+      endSample: 3_200,
+      sampleRate: 48_000,
+      channelCount: 2,
+    }])
+    expect(blocks.reduce((sum, block) => sum + block.sampleCount, 0)).toBe(1_600)
+    expect(blocks.some((block) =>
+      block.channels.some((channel) => channel.some((sample) => sample !== 0)),
     )).toBe(true)
+    await mixer.close()
+  })
+
+  test('rejects nine overlapping stretch sessions before opening media', () => {
+    const tracks = Array.from({ length: 9 }, (_value, index) => {
+      const clip = makeClip(`retimed-${index}`, 0, 1)
+      clip.sourceRange = { startFrame: 0, durationFrames: 2 }
+      clip.sourceTimeMap = {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 2_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      }
+      return makeTrack(`A${index + 1}`, 'audio', [clip])
+    })
+    const h = makeSource()
+
+    expect(() => new TimelineAudioMixer(makeDoc(tracks), h.source)).toThrow(
+      'at most 8 concurrent audio stretch sessions',
+    )
+    expect(h.requests).toEqual([])
+  })
+
+  test('skips decoder pre-roll before the stretch source index zero', async () => {
+    const clip = makeClip('trimmed-stretch', 0, 1, { sourceStart: 3 })
+    clip.sourceRange = { startFrame: 3, durationFrames: 2 }
+    clip.sourceTimeMap = {
+      sourceStartTicks: 3_000_000,
+      sourceDurationTicks: 2_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])])
+    const h = makeSource((request, sampleCount, offset) => {
+      const channel = Float32Array.from(
+        { length: sampleCount },
+        (_value, index) =>
+          request.startSample + offset + index >= 4_800 ? 1 : 0,
+      )
+      return [channel, channel.slice()]
+    })
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const blocks: CapturedBlock[] = []
+
+    await mixer.writeFrame(0, async (block) => {
+      blocks.push(captureBlock(block))
+    })
+
+    expect(h.requests[0]).toMatchObject({
+      startSample: 3_264,
+      endSample: 8_000,
+    })
+    expect(blocks[0].channels[0].some((sample) => sample > 0.9)).toBe(true)
     await mixer.close()
   })
 

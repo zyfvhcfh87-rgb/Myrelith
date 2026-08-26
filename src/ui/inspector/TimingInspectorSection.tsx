@@ -8,11 +8,11 @@ import type {
 } from '../../domain/schema'
 import { findClip, trackOfClip } from '../../domain/selectors'
 import {
+  clipAudioPresentation,
   clipSourceTimeMap,
   sourceTimeMapUsesSpeedCurve,
   sourceTimeSpeedAtTimelineOffset,
   sourceTimeSpeedPointsAtClip,
-  sourceTimeAudioPolicy,
   sourceTimeRateFromPercent,
   sourceTimeRatePercent,
   sourceTimeSpeedRateFromPercent,
@@ -26,6 +26,34 @@ const SPEED_PERCENT_OPTIONS = Object.freeze(
   Array.from({ length: 16 }, (_value, index) => (index + 1) * 25),
 )
 const RAMP_SPEED_PERCENT_OPTIONS = Object.freeze([0, ...SPEED_PERCENT_OPTIONS])
+
+function audioPresentationCopy(
+  clip: Clip,
+  rampActive: boolean,
+): string {
+  const presentation = clipAudioPresentation(clip)
+  if (presentation.state === 'ready') {
+    if (presentation.kind === 'direct') {
+      return rampActive
+        ? 'Audio stays enabled because every active speed point is exactly 100%.'
+        : 'Audio stays enabled at 100% speed.'
+    }
+    return `Audio plays time-stretched at ${sourceTimeRatePercent(presentation.rate)}% so pitch stays put.`
+  }
+  if (presentation.state === 'fallback') {
+    return `Audio plays time-stretched at ${sourceTimeRatePercent(presentation.rate)}%. Quality is limited at this speed.`
+  }
+  if (presentation.reason === 'invalid-speed-curve') {
+    return 'Audio is muted because the stored speed curve is invalid; video uses the preserved constant fallback.'
+  }
+  if (presentation.reason === 'speed-ramp-audio-unsupported') {
+    return 'Audio is muted because variable speed ramps are not supported for audio.'
+  }
+  if (presentation.reason === 'freeze-audio-silence') {
+    return 'Audio is muted because this timing map contains a freeze.'
+  }
+  return 'Audio is muted because its source starts between supported audio sample boundaries.'
+}
 
 function hasLaterPositiveSpeedPoint(
   points: readonly SourceTimeSpeedPoint[],
@@ -380,7 +408,6 @@ export default function TimingInspectorSection({
     )
   }
 
-  const audioPolicy = sourceTimeAudioPolicy(clip)
   const linkedNote = members.length > 1
     ? ` The ${members.length} linked clips change together.`
     : ''
@@ -444,13 +471,7 @@ export default function TimingInspectorSection({
       <span id="inspector-speed-audio" className="inspector-note">
         {!retimable
           ? 'Still images and text keep their authored duration without decoded source-time mapping.'
-          : audioPolicy.status === 'muted'
-          ? audioPolicy.reason === 'invalid-speed-curve'
-            ? 'Audio is muted because the stored speed curve is invalid; video uses the preserved constant fallback.'
-            : 'Audio is muted for this timing map in preview and export because pitch-safe time-stretch is not available.'
-          : rampActive
-            ? 'Audio stays enabled because every active speed point is exactly 100%.'
-            : 'Audio stays enabled at 100% speed.'}
+          : audioPresentationCopy(clip, rampActive)}
       </span>
       {retimable && (
         <SpeedRampEditor clip={clip} locked={locked} linkedCount={members.length} />

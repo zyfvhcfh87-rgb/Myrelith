@@ -1599,6 +1599,13 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
+- Issue #188 is implementation-complete in this worktree, not yet committed.
+  `SourceTimeAudioPolicy` admits constant stretch. `createTimelineAudioMixPlan`
+  emits tick windows. `pipeline/audioStretch.ts` is first-party WSOLA. Live
+  and export pull the same session after 4,096-frame rechunk. Exact 1× stays
+  on the old path. Ramps, freezes, invalid curves, and sub-frame 1× stay
+  silent. Inspector copy comes from `clipAudioPresentation`. Chromium speech,
+  music, slow/fast, export-reopen, cancel, and memory gates are still open.
 - Issue #72 is implementation-complete on `codex/issue-72-speed-ramps`.
   Timeline schema 12 adds an optional deterministic piecewise curve above the
   schema-11 constant fallback. Curves have one bounded integer origin, strictly
