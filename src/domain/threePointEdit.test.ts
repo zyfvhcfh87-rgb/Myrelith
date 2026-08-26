@@ -597,7 +597,7 @@ describe('lift and extract', () => {
     expect(video[0]!.linkGroupId).not.toBe(video[1]!.linkGroupId)
   })
 
-  test('video-only lift of a linked pair unlinks duration-mismatched leftovers', () => {
+  test('video-only lift keeps co-starting leftovers linked and unlinks the later orphan', () => {
     const empty = makeDoc([
       makeTrack('V1', 'video'),
       makeTrack('A1', 'audio'),
@@ -637,9 +637,10 @@ describe('lift and extract', () => {
     expect(audio.map((clip) => clip.timelineRange)).toEqual([
       { startFrame: 0, durationFrames: 80 },
     ])
-    expect(video[0]!.linkGroupId).toBeUndefined()
+    expect(video[0]!.linkGroupId).toBe(audio[0]!.linkGroupId)
+    expect(video[0]!.linkGroupId).toBeDefined()
     expect(video[1]!.linkGroupId).toBeUndefined()
-    expect(audio[0]!.linkGroupId).toBeUndefined()
+    expect('linkGroupId' in video[1]!).toBe(false)
   })
 
   test('extract closes the gap on the targeted track only', () => {

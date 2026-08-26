@@ -285,9 +285,8 @@ function leftoverGroupMembers(
 
 /**
  * After a targeted punch, leftover members of a touched link group are
- * clustered by identical timeline range. A lone leftover is unlinked;
- * leftovers that still share start and duration keep a group (the
- * earliest cluster keeps the original id).
+ * clustered by timeline start. A lone leftover is unlinked; co-timed
+ * leftovers keep a group (the earliest cluster keeps the original id).
  */
 function regroupPunchedLinks(
   doc: TimelineDoc,
@@ -304,24 +303,17 @@ function regroupPunchedLinks(
       current = next
       continue
     }
-    const byRange = new Map<string, Clip[]>()
+    const byStart = new Map<number, Clip[]>()
     for (const clip of leftovers) {
-      const range = clip.timelineRange
-      const key = `${range.startFrame}:${range.durationFrames}`
-      const cluster = byRange.get(key)
+      const start = clip.timelineRange.startFrame
+      const cluster = byStart.get(start)
       if (cluster) cluster.push(clip)
-      else byRange.set(key, [clip])
+      else byStart.set(start, [clip])
     }
-    const keys = [...byRange.keys()].sort((left, right) => {
-      const leftSep = left.indexOf(':')
-      const rightSep = right.indexOf(':')
-      const startDelta = Number(left.slice(0, leftSep)) - Number(right.slice(0, rightSep))
-      if (startDelta !== 0) return startDelta
-      return Number(left.slice(leftSep + 1)) - Number(right.slice(rightSep + 1))
-    })
+    const starts = [...byStart.keys()].sort((left, right) => left - right)
     let keepOriginal = true
-    for (const key of keys) {
-      const cluster = byRange.get(key)!
+    for (const start of starts) {
+      const cluster = byStart.get(start)!
       if (cluster.length === 1) {
         const loc = locateClip(current, cluster[0]!.id)
         if (!loc) return null
