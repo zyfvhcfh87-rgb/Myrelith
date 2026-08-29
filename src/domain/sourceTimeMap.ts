@@ -232,6 +232,39 @@ export function sourceTimeRatePercent(rate: SourceTimeRate): number {
   return (rate.numerator * 100) / rate.denominator
 }
 
+/**
+ * Speed the Whole-clip Inspector control should show. A playhead-authored
+ * constant curve keeps map.rate at the old fallback (often 100%), so the
+ * control must read the curve or picking 100% is a no-op.
+ */
+export type WholeClipSpeedDisplay =
+  | { kind: 'constant'; percent: number }
+  | { kind: 'mixed' }
+
+export function sourceTimeMapWholeClipSpeed(
+  map: SourceTimeMap,
+): WholeClipSpeedDisplay {
+  if (sourceTimeMapUsesSpeedCurve(map)) {
+    const points = sourceTimeSpeedPointsAtClip(map)
+    const first = points[0]
+    if (
+      first !== undefined
+      && first.rate.numerator > 0
+      && points.every((point) =>
+        point.rate.numerator === first.rate.numerator
+        && point.rate.denominator === first.rate.denominator
+      )
+    ) {
+      return {
+        kind: 'constant',
+        percent: sourceTimeSpeedRatePercent(first.rate),
+      }
+    }
+    return { kind: 'mixed' }
+  }
+  return { kind: 'constant', percent: sourceTimeRatePercent(map.rate) }
+}
+
 export function isUnitySourceTimeRate(rate: SourceTimeRate): boolean {
   return rate.numerator === rate.denominator
 }

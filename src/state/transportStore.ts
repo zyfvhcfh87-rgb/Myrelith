@@ -41,6 +41,8 @@ export interface DragPreview {
   targetTrackId?: TrackId
   /** Pixel offset from the source lane used to ghost the owner vertically. */
   trackOffsetY?: number
+  /** Vertical pixel offsets for linked partners that change lanes. */
+  partnerTrackOffsets?: Readonly<Record<ClipId, number>>
   /**
    * When the dragged clip is linked, the UI stamps its group id here so
    * partner ClipViews can ghost the same move; absent for unlinked clips.

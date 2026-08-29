@@ -15,6 +15,7 @@ import {
   sourceTimeSpeedPointsAtClip,
   sourceTimeRateFromPercent,
   sourceTimeRatePercent,
+  sourceTimeMapWholeClipSpeed,
   sourceTimeSpeedRateFromPercent,
   sourceTimeSpeedRatePercent,
 } from '../../domain/sourceTimeMap'
@@ -316,7 +317,10 @@ export default function TimingInspectorSection({
   doc: TimelineDoc
 }) {
   const map = clipSourceTimeMap(clip)
-  const wholeClipSpeedPercent = sourceTimeRatePercent(map.rate)
+  const wholeClipSpeed = sourceTimeMapWholeClipSpeed(map)
+  const wholeClipSpeedPercent = wholeClipSpeed.kind === 'constant'
+    ? wholeClipSpeed.percent
+    : null
   const rampActive = sourceTimeMapUsesSpeedCurve(map)
   const playheadFrame = useTransportStore((state) => state.playheadFrame)
   const localPlayhead = playheadFrame - clip.timelineRange.startFrame
@@ -330,9 +334,13 @@ export default function TimingInspectorSection({
     ? pointAtPlayhead
       ? sourceTimeSpeedRatePercent(pointAtPlayhead.rate)
       : Math.round(sourceTimeSpeedAtTimelineOffset(map, localPlayhead) * 10_000) / 100
-    : wholeClipSpeedPercent
+    : wholeClipSpeedPercent ?? sourceTimeRatePercent(map.rate)
   const playheadSpeedIsPreset = RAMP_SPEED_PERCENT_OPTIONS.includes(playheadSpeedPercent)
   const members = [clip, ...linkedPartners(doc, clip.id)]
+  const selectedClipIds = useTransportStore((state) => state.selectedClipIds)
+  const wholeClipTargets = selectedClipIds.includes(clip.id) && selectedClipIds.length > 1
+    ? selectedClipIds
+    : [clip.id]
   const retimable = members.every(
     (member) => member.sourceMode === 'timed' && member.text === undefined,
   )
@@ -353,19 +361,26 @@ export default function TimingInspectorSection({
       setMessage('This clip is no longer available. Select it again and retry.')
       return
     }
-    store.retimeClip(clip.id, sourceTimeRateFromPercent(percent))
+    if (wholeClipTargets.length > 1) {
+      store.retimeClips(wholeClipTargets, sourceTimeRateFromPercent(percent))
+    } else {
+      store.retimeClip(clip.id, sourceTimeRateFromPercent(percent))
+    }
     const after = useDocumentStore.getState().doc
     if (after === before) {
       setMessage(
-        'Speed change was not applied. Unlock linked tracks or make room beside the clip and try again.',
+        'Speed change was not applied. Unlock later clips and linked tracks, then try again.',
       )
       return
     }
     const updated = findClip(after, clip.id)
+    const selectionNote = wholeClipTargets.length > 1
+      ? ` Applied to ${wholeClipTargets.length} selected clips.`
+      : ''
     setMessage(
       updated
-        ? `Whole-clip speed changed to ${percent}%. Timeline duration is now ${updated.timelineRange.durationFrames} frames.`
-        : `Whole-clip speed changed to ${percent}%.`,
+        ? `Whole-clip speed changed to ${percent}%. Timeline duration is now ${updated.timelineRange.durationFrames} frames.${selectionNote}`
+        : `Whole-clip speed changed to ${percent}%.${selectionNote}`,
     )
   }
 
@@ -408,9 +423,11 @@ export default function TimingInspectorSection({
     )
   }
 
-  const linkedNote = members.length > 1
-    ? ` The ${members.length} linked clips change together.`
-    : ''
+  const linkedNote = wholeClipTargets.length > 1
+    ? ` The ${wholeClipTargets.length} selected clips change together.`
+    : members.length > 1
+      ? ` The ${members.length} linked clips change together.`
+      : ''
 
   return (
     <InspectorSection
@@ -454,10 +471,16 @@ export default function TimingInspectorSection({
         <select
           aria-describedby="inspector-speed-detail inspector-speed-audio inspector-speed-status"
           data-testid="inspector-whole-clip-speed"
-          value={wholeClipSpeedPercent}
+          value={wholeClipSpeedPercent ?? 'mixed'}
           disabled={locked || !retimable}
-          onChange={(event) => commitWholeClip(Number(event.target.value))}
+          onChange={(event) => {
+            if (event.target.value === 'mixed') return
+            commitWholeClip(Number(event.target.value))
+          }}
         >
+          {wholeClipSpeedPercent === null && (
+            <option value="mixed">Multiple speeds</option>
+          )}
           {SPEED_PERCENT_OPTIONS.map((percent) => (
             <option key={percent} value={percent}>{percent}%</option>
           ))}

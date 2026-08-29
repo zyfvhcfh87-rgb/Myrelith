@@ -43,21 +43,69 @@ import type {
   ClipId,
   SourceTimeRate,
   SourceTimeSpeedEasing,
+  TimeRange,
   TimelineDoc,
+  Track,
   TrackId,
+  TrackKind,
 } from './schema'
 import { findClip, trackOfClip } from './selectors'
 import {
   clipSourceTimeMap,
   sourceTimeMapUsesSpeedCurve,
+  sourceTimeMapWithSpeedPoint,
+  sourceTimeMapWithoutSpeedCurve,
+  sourceTimeRateValidationError,
   sourceTimeSpeedPointsAtClip,
+  timelineFramesWithinSourceMap,
 } from './sourceTimeMap'
-import { rangeEnd } from './time'
+import { rangeEnd, rangeOverlap } from './time'
 
 /** Rejection path: warn and hand back the SAME doc reference. */
 function reject(doc: TimelineDoc, op: string, why: string): TimelineDoc {
   console.warn(`[linking] ${op} rejected: ${why}`)
   return doc
+}
+
+function tracksOfKind(doc: TimelineDoc, kind: TrackKind): Track[] {
+  return doc.tracks.filter((track) => track.kind === kind)
+}
+
+function indexWithinKind(doc: TimelineDoc, trackId: TrackId): number {
+  const track = doc.tracks.find((candidate) => candidate.id === trackId)
+  if (!track) return -1
+  return tracksOfKind(doc, track.kind).findIndex((candidate) => candidate.id === trackId)
+}
+
+function trackAtKindIndex(
+  doc: TimelineDoc,
+  kind: TrackKind,
+  index: number,
+): Track | undefined {
+  if (!Number.isSafeInteger(index) || index < 0) return undefined
+  return tracksOfKind(doc, kind)[index]
+}
+
+/**
+ * Lane a linked partner should occupy after the owner moves from
+ * sourceTrackId to destTrackId. Uses the same kind-local index delta so
+ * V1→V2 takes A1→A2. If that lane does not exist, the partner stays put.
+ */
+export function linkedPartnerTrackAfterMove(
+  doc: TimelineDoc,
+  sourceTrackId: TrackId,
+  destTrackId: TrackId,
+  partnerTrackId: TrackId,
+): Track | undefined {
+  const partner = doc.tracks.find((track) => track.id === partnerTrackId)
+  if (!partner) return undefined
+  if (sourceTrackId === destTrackId) return partner
+  const sourceIdx = indexWithinKind(doc, sourceTrackId)
+  const destIdx = indexWithinKind(doc, destTrackId)
+  const partnerIdx = indexWithinKind(doc, partner.id)
+  if (sourceIdx < 0 || destIdx < 0 || partnerIdx < 0) return partner
+  return trackAtKindIndex(doc, partner.kind, partnerIdx + (destIdx - sourceIdx))
+    ?? partner
 }
 
 /* ------------------------------------------------------------------ */
@@ -174,6 +222,98 @@ function groupMembers(doc: TimelineDoc, clipId: ClipId): Clip[] {
   const clip = findClip(doc, clipId)
   if (!clip) return []
   return [clip, ...linkedPartners(doc, clipId)]
+}
+
+function durationAfterConstantRetime(
+  clip: Clip,
+  rate: SourceTimeRate,
+): number | null {
+  if (sourceTimeRateValidationError(rate)) return null
+  const nextMap = sourceTimeMapWithoutSpeedCurve(clipSourceTimeMap(clip))
+  nextMap.rate = { ...rate }
+  const durationFrames = timelineFramesWithinSourceMap(nextMap)
+  if (!Number.isSafeInteger(durationFrames) || durationFrames < 1) return null
+  return durationFrames
+}
+
+/**
+ * Push later clips, and each of their link groups, just far enough that
+ * newRange can sit on clipId's track. Touching is allowed. A locked or
+ * blocked partner aborts with null so the caller can roll back.
+ */
+function makeRoomForTimelineRange(
+  doc: TimelineDoc,
+  clipId: ClipId,
+  newRange: TimeRange,
+): TimelineDoc | null {
+  const track = trackOfClip(doc, clipId)
+  if (!track) return null
+  const blockers = track.clips.filter((candidate) => (
+    candidate.id !== clipId
+    && rangeOverlap(candidate.timelineRange, newRange)
+  ))
+  if (blockers.length === 0) return doc
+
+  const firstBlocker = blockers.reduce((earliest, candidate) => (
+    candidate.timelineRange.startFrame < earliest.timelineRange.startFrame
+      ? candidate
+      : earliest
+  ))
+  const shiftFrames = rangeEnd(newRange) - firstBlocker.timelineRange.startFrame
+  if (shiftFrames <= 0) return doc
+
+  const movingIds: ClipId[] = []
+  const seen = new Set<ClipId>()
+  for (const candidate of track.clips) {
+    if (candidate.id === clipId) continue
+    if (candidate.timelineRange.startFrame < firstBlocker.timelineRange.startFrame) {
+      continue
+    }
+    for (const member of groupMembers(doc, candidate.id)) {
+      if (seen.has(member.id)) continue
+      seen.add(member.id)
+      movingIds.push(member.id)
+    }
+  }
+  const moved = moveClipsByDelta(doc, movingIds, shiftFrames)
+  return moved === doc ? null : moved
+}
+
+function applyConstantRetimeWithRoom(
+  doc: TimelineDoc,
+  members: readonly Clip[],
+  rate: SourceTimeRate,
+  op: string,
+): TimelineDoc {
+  const ordered = [...members].sort((left, right) => (
+    left.timelineRange.startFrame - right.timelineRange.startFrame
+    || left.id.localeCompare(right.id)
+  ))
+  let next = doc
+  let changed = false
+  for (const member of ordered) {
+    const latest = findClip(next, member.id)
+    if (!latest) return reject(doc, op, 'partner could not follow')
+    const currentMap = clipSourceTimeMap(latest)
+    if (
+      !sourceTimeMapUsesSpeedCurve(currentMap)
+      && currentMap.rate.numerator === rate.numerator
+      && currentMap.rate.denominator === rate.denominator
+    ) continue
+    const newDurationFrames = durationAfterConstantRetime(latest, rate)
+    if (newDurationFrames === null) return reject(doc, op, 'partner could not follow')
+    const room = makeRoomForTimelineRange(next, latest.id, {
+      startFrame: latest.timelineRange.startFrame,
+      durationFrames: newDurationFrames,
+    })
+    if (room === null) return reject(doc, op, 'later clip could not make room')
+    next = room
+    const applied = retimeClip(next, latest.id, rate)
+    if (applied === next) return reject(doc, op, 'partner could not follow')
+    next = applied
+    changed = true
+  }
+  return changed ? next : doc
 }
 
 /* ------------------------------------------------------------------ */
@@ -334,13 +474,12 @@ export function unlinkClip(doc: TimelineDoc, clipId: ClipId): TimelineDoc {
 }
 
 /**
- * Move the TARGET clip to (toTrackId, toFrame); every partner moves by the
- * same frame delta on ITS OWN current track — partners never change
- * tracks, even when the target does. Delta is computed against the
- * target's PRE-EDIT timeline position, before any member moves. Degrades
- * to a plain moveClip when clipId is unknown or unlinked; rolls back to
- * the original doc if any member (the target included) cannot make the
- * move.
+ * Move the TARGET clip to (toTrackId, toFrame). Partners take the same
+ * frame delta and the same kind-local track-index delta (V1→V2 moves
+ * A1→A2). A missing destination lane leaves that partner on its current
+ * track. Delta is computed against the target's PRE-EDIT timeline
+ * position. Degrades to a plain moveClip when clipId is unknown or
+ * unlinked; rolls back to the original doc if any member cannot move.
  */
 export function linkedMoveClip(
   doc: TimelineDoc,
@@ -353,6 +492,8 @@ export function linkedMoveClip(
   if (members.length <= 1) return moveClip(doc, clipId, toTrackId, toFrame)
 
   const target = members[0]
+  const targetTrack = trackOfClip(doc, clipId)
+  if (!targetTrack) return moveClip(doc, clipId, toTrackId, toFrame)
   const delta = toFrame - target.timelineRange.startFrame
 
   let next = moveClip(doc, clipId, toTrackId, toFrame)
@@ -361,8 +502,15 @@ export function linkedMoveClip(
   for (const partner of members.slice(1)) {
     const partnerTrack = trackOfClip(doc, partner.id)
     if (!partnerTrack) return reject(doc, op, 'partner could not follow') // defensive: unreachable — partner came from doc's own tracks
+    const destTrack = linkedPartnerTrackAfterMove(
+      doc,
+      targetTrack.id,
+      toTrackId,
+      partnerTrack.id,
+    )
+    if (!destTrack) return reject(doc, op, 'partner could not follow')
     const partnerToFrame = partner.timelineRange.startFrame + delta
-    const applied = moveClip(next, partner.id, partnerTrack.id, partnerToFrame)
+    const applied = moveClip(next, partner.id, destTrack.id, partnerToFrame)
     if (applied === next) return reject(doc, op, 'partner could not follow')
     next = applied
   }
@@ -428,35 +576,60 @@ export function linkedRippleTrim(
   )
 }
 
-/** Apply one constant rate to every linked member as one atomic edit. */
+/** Apply one constant rate to every linked member as one atomic edit. Growing clips push later neighbors. */
 export function linkedRetimeClip(
   doc: TimelineDoc,
   clipId: ClipId,
   rate: SourceTimeRate,
 ): TimelineDoc {
   const members = groupMembers(doc, clipId)
+  if (members.length === 0) return retimeClip(doc, clipId, rate)
   if (
     members.some(
       (member) => member.sourceMode === 'still' || member.text !== undefined,
     )
   ) return doc
-  if (members.length <= 1) return retimeClip(doc, clipId, rate)
+  return applyConstantRetimeWithRoom(doc, members, rate, 'linkedRetimeClip')
+}
 
-  let next = doc
-  for (const member of members) {
-    const currentMap = clipSourceTimeMap(member)
-    const current = currentMap.rate
+/**
+ * Apply one constant rate to every selected clip and each clip's link
+ * group as one atomic edit. Still/text roots are skipped. An empty
+ * selection or an already-matching set returns the same doc reference.
+ */
+export function linkedRetimeClips(
+  doc: TimelineDoc,
+  clipIds: readonly ClipId[],
+  rate: SourceTimeRate,
+): TimelineDoc {
+  const op = 'linkedRetimeClips'
+  if (clipIds.length === 0) return doc
+
+  const memberIds: ClipId[] = []
+  const seen = new Set<ClipId>()
+  for (const clipId of clipIds) {
+    const members = groupMembers(doc, clipId)
+    if (members.length === 0) return reject(doc, op, `clip ${clipId} not found`)
     if (
-      !sourceTimeMapUsesSpeedCurve(currentMap)
-      &&
-      current.numerator === rate.numerator
-      && current.denominator === rate.denominator
+      members.some(
+        (member) => member.sourceMode === 'still' || member.text !== undefined,
+      )
     ) continue
-    const applied = retimeClip(next, member.id, rate)
-    if (applied === next) return reject(doc, 'linkedRetimeClip', 'partner could not follow')
-    next = applied
+    for (const member of members) {
+      if (seen.has(member.id)) continue
+      seen.add(member.id)
+      memberIds.push(member.id)
+    }
   }
-  return next
+  if (memberIds.length === 0) return doc
+
+  const members: Clip[] = []
+  for (const memberId of memberIds) {
+    const member = findClip(doc, memberId)
+    if (!member) return reject(doc, op, 'partner could not follow')
+    members.push(member)
+  }
+  return applyConstantRetimeWithRoom(doc, members, rate, op)
 }
 
 /** Add/replace the same local speed handle on every linked member atomically. */
@@ -484,6 +657,29 @@ export function linkedSetClipSpeedPoint(
       && existing.rate.denominator === rate.denominator
       && existing.easing === easing
     ) continue
+    const latest = findClip(next, member.id)
+    if (!latest) return reject(doc, 'linkedSetClipSpeedPoint', 'partner could not follow')
+    let newDurationFrames: number
+    try {
+      newDurationFrames = timelineFramesWithinSourceMap(
+        sourceTimeMapWithSpeedPoint(
+          clipSourceTimeMap(latest),
+          frame,
+          rate,
+          easing,
+        ),
+      )
+    } catch {
+      return reject(doc, 'linkedSetClipSpeedPoint', 'partner could not follow')
+    }
+    const room = makeRoomForTimelineRange(next, latest.id, {
+      startFrame: latest.timelineRange.startFrame,
+      durationFrames: newDurationFrames,
+    })
+    if (room === null) {
+      return reject(doc, 'linkedSetClipSpeedPoint', 'later clip could not make room')
+    }
+    next = room
     const applied = setClipSpeedPoint(next, member.id, frame, rate, easing)
     if (applied === next) {
       return reject(doc, 'linkedSetClipSpeedPoint', 'partner could not follow')

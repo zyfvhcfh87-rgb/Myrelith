@@ -66,6 +66,10 @@ class WsolaSession implements ConstantRateAudioStretcher {
   private overlapLeft: Float32Array | null
   private overlapRight: Float32Array | null
   private overlapWeight: Float32Array | null
+  private overlapRef: Float32Array | null
+  private overlapRefIndex: Int32Array | null
+  private searchLeft: Float32Array | null
+  private searchRight: Float32Array | null
   private retainedSourceStart = 0
   private sourceReadEnd = 0
   private nextSourceNominal = 0
@@ -96,6 +100,12 @@ class WsolaSession implements ConstantRateAudioStretcher {
     this.overlapLeft = new Float32Array(this.ringSamples)
     this.overlapRight = new Float32Array(this.ringSamples)
     this.overlapWeight = new Float32Array(this.ringSamples)
+    this.overlapRef = new Float32Array(constants.windowSamples)
+    this.overlapRefIndex = new Int32Array(constants.windowSamples)
+    this.searchLeft = new Float32Array(
+      constants.searchSamples * 2 + constants.windowSamples,
+    )
+    this.searchRight = new Float32Array(this.searchLeft.length)
     for (let index = 0; index < constants.windowSamples; index++) {
       this.hann[index] = 0.5 - 0.5 * Math.cos(
         2 * Math.PI * index / (constants.windowSamples - 1),
@@ -170,6 +180,10 @@ class WsolaSession implements ConstantRateAudioStretcher {
     this.overlapLeft = null
     this.overlapRight = null
     this.overlapWeight = null
+    this.overlapRef = null
+    this.overlapRefIndex = null
+    this.searchLeft = null
+    this.searchRight = null
   }
 
   private requiredSourceEnd(targetOutputEnd: number): number {
@@ -271,36 +285,60 @@ class WsolaSession implements ConstantRateAudioStretcher {
       previousReadEnd + newSource.left.length - this.windowSamples,
       this.nextSourceNominal + this.searchSamples,
     )
-    let bestStart = minimum
-    let bestDifference = Number.POSITIVE_INFINITY
+    if (maximum < minimum) return minimum
+
+    // Flatten overlap and source once. The live audio pump runs this on the
+    // main thread, so a per-candidate sourceSample walk stalls playhead rAF.
+
     const overlapLeft = this.overlapLeft!
     const overlapRight = this.overlapRight!
     const overlapWeight = this.overlapWeight!
+    const overlapRef = this.overlapRef!
+    const overlapRefIndex = this.overlapRefIndex!
     const comparisonSamples = this.windowSamples - this.nextOutputAdvance
+    let compactCount = 0
+    for (let index = 0; index < comparisonSamples; index++) {
+      const slot = (this.nextGrainOutputStart + index) % this.ringSamples
+      const weight = overlapWeight[slot]!
+      if (weight === 0) continue
+      overlapRef[compactCount] = (
+        overlapLeft[slot]! + overlapRight[slot]!
+      ) / (2 * weight)
+      overlapRefIndex[compactCount] = index
+      compactCount += 1
+    }
+
+    const searchLeft = this.searchLeft!
+    const searchRight = this.searchRight!
+    const regionLength = maximum - minimum + this.windowSamples
+    for (let index = 0; index < regionLength; index++) {
+      const sourceIndex = minimum + index
+      searchLeft[index] = this.sourceSample(
+        'left',
+        sourceIndex,
+        newSource,
+        previousReadEnd,
+      )
+      searchRight[index] = this.sourceSample(
+        'right',
+        sourceIndex,
+        newSource,
+        previousReadEnd,
+      )
+    }
+
+    let bestStart = minimum
+    let bestDifference = Number.POSITIVE_INFINITY
     for (let candidate = minimum; candidate <= maximum; candidate++) {
+      const origin = candidate - minimum
       let difference = 0
-      for (let index = 0; index < comparisonSamples; index++) {
-        const slot = (this.nextGrainOutputStart + index) % this.ringSamples
-        const weight = overlapWeight[slot]!
-        if (weight === 0) continue
-        const reference = (
-          overlapLeft[slot]! + overlapRight[slot]!
-        ) / (2 * weight)
+      for (let compact = 0; compact < compactCount; compact++) {
+        const sampleIndex = origin + overlapRefIndex[compact]!
         const candidateMid = (
-          this.sourceSample(
-            'left',
-            candidate + index,
-            newSource,
-            previousReadEnd,
-          )
-          + this.sourceSample(
-            'right',
-            candidate + index,
-            newSource,
-            previousReadEnd,
-          )
+          searchLeft[sampleIndex]! + searchRight[sampleIndex]!
         ) / 2
-        difference += Math.abs(reference - candidateMid)
+        difference += Math.abs(overlapRef[compact]! - candidateMid)
+        if (difference >= bestDifference) break
       }
       if (difference < bestDifference) {
         bestDifference = difference

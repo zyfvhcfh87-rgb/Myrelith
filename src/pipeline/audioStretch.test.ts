@@ -277,6 +277,38 @@ describe('constant-rate WSOLA output', () => {
     expect(output.left).toEqual(output.right)
   })
 
+  test('measures main-thread pull cost against a 100ms pump window', async () => {
+    const pumpSamples = SAMPLE_RATE / 10
+    const lookaheadSamples = Math.round(SAMPLE_RATE * 0.75)
+    const rows: Array<{ percent: number; pumpMs: number; lookaheadMs: number }> = []
+    for (const percent of [25, 50, 200, 400]) {
+      const pumpSession = createConstantRateAudioStretcher({
+        stretch: stretchAt(percent),
+        sampleRate: SAMPLE_RATE,
+        outputStartSample: 0,
+      })
+      const pumpStarted = performance.now()
+      await pumpSession.pull(pumpSamples, sineReader(440))
+      const pumpMs = performance.now() - pumpStarted
+      pumpSession.close()
+
+      const lookaheadSession = createConstantRateAudioStretcher({
+        stretch: stretchAt(percent),
+        sampleRate: SAMPLE_RATE,
+        outputStartSample: 0,
+      })
+      const lookaheadStarted = performance.now()
+      await lookaheadSession.pull(lookaheadSamples, sineReader(440))
+      const lookaheadMs = performance.now() - lookaheadStarted
+      lookaheadSession.close()
+      rows.push({ percent, pumpMs, lookaheadMs })
+    }
+    const slow = rows.find((row) => row.percent === 25)
+    expect(slow).toBeDefined()
+    expect(slow!.pumpMs).toBeLessThan(80)
+    expect(slow!.lookaheadMs).toBeLessThan(400)
+  })
+
   test('matches one large pull when sequential pulls concatenate', async () => {
     const sequential = createConstantRateAudioStretcher({
       stretch: stretchAt(200),

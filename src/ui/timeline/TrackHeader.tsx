@@ -1,9 +1,9 @@
 /**
  * ui/timeline/TrackHeader.tsx — One row of the timeline's header gutter
  * (timeline tracks upgrade): the track's badge (its name), kind + clip
- * count, and its buttons — rename, hide (video), solo + mute (audio),
- * lock, and delete. The Rename button (or double-click anywhere on the
- * row, buttons aside) opens the inline editor: Enter/blur commits,
+ * count, and a compact 3×2 control grid — rename, hide (video), solo +
+ * mute (audio), lock, and delete. The Rename button (or double-click
+ * anywhere on the row, buttons aside) opens the inline editor: Enter/blur commits,
  * Escape cancels; empty and unchanged names cancel silently (the domain
  * op would no-op/reject anyway, this just spares the console.warn).
  * Focus returns to Rename after commit or cancel. The global
@@ -158,7 +158,7 @@ function TrackHeader({ track }: TrackHeaderProps) {
             aria-label={`rename track ${track.name}`}
             onClick={beginRename}
           >
-            <PencilSimple aria-hidden="true" size={14} weight="bold" />
+            <PencilSimple aria-hidden="true" size={12} weight="bold" />
           </button>
         ) : null}
         {track.kind === 'video' ? (
@@ -170,7 +170,7 @@ function TrackHeader({ track }: TrackHeaderProps) {
             aria-pressed={track.hidden}
             onClick={() => setFlags({ hidden: !track.hidden })}
           >
-            <Eye aria-hidden="true" size={14} weight="bold" />
+            <Eye aria-hidden="true" size={12} weight="bold" />
           </button>
         ) : (
           <>
@@ -204,7 +204,7 @@ function TrackHeader({ track }: TrackHeaderProps) {
           aria-pressed={track.locked}
           onClick={() => setFlags({ locked: !track.locked })}
         >
-          <LockSimple aria-hidden="true" size={14} weight="bold" />
+          <LockSimple aria-hidden="true" size={12} weight="bold" />
         </button>
         <button
           type="button"
@@ -218,7 +218,7 @@ function TrackHeader({ track }: TrackHeaderProps) {
           disabled={track.locked}
           onClick={() => useDocumentStore.getState().removeTrack(track.id)}
         >
-          <X aria-hidden="true" size={14} weight="bold" />
+          <X aria-hidden="true" size={12} weight="bold" />
         </button>
       </div>
     </div>

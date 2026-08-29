@@ -89,11 +89,13 @@ function ClipView({
       ? s.dragPreview.deltaFrames
       : null,
   )
-  // Only the gesture owner changes lanes. A linked partner follows the
-  // horizontal frame delta on its own current track (domain/linking.ts).
-  const previewTrackOffsetY = useTransportStore((s) =>
-    s.dragPreview?.clipId === clip.id ? (s.dragPreview.trackOffsetY ?? 0) : 0,
-  )
+  // The gesture owner uses trackOffsetY. A linked partner uses the
+  // matching kind-index lane offset from partnerTrackOffsets.
+  const previewTrackOffsetY = useTransportStore((s) => {
+    if (!s.dragPreview) return 0
+    if (s.dragPreview.clipId === clip.id) return s.dragPreview.trackOffsetY ?? 0
+    return s.dragPreview.partnerTrackOffsets?.[clip.id] ?? 0
+  })
   const editPreview = useTransportStore((s) =>
     s.editPreview &&
     (s.editPreview.clipId === clip.id ||

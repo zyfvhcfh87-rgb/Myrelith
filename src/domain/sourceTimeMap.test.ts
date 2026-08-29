@@ -14,6 +14,8 @@ import {
   sourceTimeMapAtOffset,
   sourceTimeMapForTimelineDuration,
   sourceTimeMapValidationError,
+  sourceTimeMapWholeClipSpeed,
+  sourceTimeMapWithSpeedPoint,
   sourceTimeRateFromPercent,
   sourceTimeRatePercent,
   sourceTimeSpeedRateFromPercent,
@@ -410,6 +412,42 @@ describe('SourceTimeMap', () => {
       frame: 1,
       sourceTimeTicks: 11_000_000,
     })
+  })
+
+  test('whole-clip speed reads a constant playhead curve instead of the 100% fallback', () => {
+    const unity = defaultSourceTimeMap(0, 40)
+    expect(sourceTimeMapWholeClipSpeed(unity)).toEqual({
+      kind: 'constant',
+      percent: 100,
+    })
+    const curved = sourceTimeMapWithSpeedPoint(
+      unity,
+      0,
+      sourceTimeRateFromPercent(400),
+      'hold',
+    )
+    expect(curved.rate).toEqual({ numerator: 1, denominator: 1 })
+    expect(sourceTimeMapWholeClipSpeed(curved)).toEqual({
+      kind: 'constant',
+      percent: 400,
+    })
+  })
+
+  test('whole-clip speed reports mixed when ramp points disagree', () => {
+    const unity = defaultSourceTimeMap(0, 40)
+    const first = sourceTimeMapWithSpeedPoint(
+      unity,
+      0,
+      sourceTimeRateFromPercent(25),
+      'hold',
+    )
+    const mixed = sourceTimeMapWithSpeedPoint(
+      first,
+      10,
+      sourceTimeRateFromPercent(100),
+      'hold',
+    )
+    expect(sourceTimeMapWholeClipSpeed(mixed)).toEqual({ kind: 'mixed' })
   })
 
   test('maps source ticks onto decoder seconds and the audio sample grid', () => {

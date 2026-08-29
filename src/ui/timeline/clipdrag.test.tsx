@@ -929,20 +929,23 @@ describe('linked clip gestures (A/V pairs)', () => {
     warnSpy.mockRestore()
   })
 
-  test('cross-track video drag ghosts only the owner vertically while its linked audio partner stays on its lane', async () => {
+  test('cross-track video drag ghosts the linked audio partner onto the matching audio lane', async () => {
     const linked = makeLinkedDoc()
     linked.tracks.splice(1, 0, makeTrack('V2', []))
+    linked.tracks.push(makeTrack('A2', [], 'audio'))
     doc().setDoc(linked)
     render(
       <>
         <Track track={trackById('V2')} />
         <Track track={trackById('V1')} />
         <Track track={trackById('A1')} />
+        <Track track={trackById('A2')} />
       </>,
     )
     mockLaneRect('V2', 0)
     mockLaneRect('V1', 56)
     mockLaneRect('A1', 112)
+    mockLaneRect('A2', 168)
 
     const videoEl = screen.getByTestId('clip-vid')
     const audioEl = screen.getByTestId('clip-aud')
@@ -955,16 +958,18 @@ describe('linked clip gestures (A/V pairs)', () => {
         targetTrackId: 'V2',
         trackOffsetY: -56,
         linkGroupId: 'link_1',
+        partnerTrackOffsets: { aud: 56 },
       }),
     )
 
     expect(videoEl).toHaveStyle({ transform: 'translate(160px, -56px)' })
-    expect(audioEl).toHaveStyle({ transform: 'translateX(160px)' })
+    expect(audioEl).toHaveStyle({ transform: 'translate(160px, 56px)' })
     fireEvent.pointerUp(videoEl, { pointerId: 4, clientX: 560, clientY: 28 })
 
     expect(trackById('V1').clips).toHaveLength(0)
+    expect(trackById('A1').clips).toHaveLength(0)
     expect(trackById('V2').clips.find((clip) => clip.id === 'vid')?.timelineRange.startFrame).toBe(160)
-    expect(trackById('A1').clips.find((clip) => clip.id === 'aud')?.timelineRange.startFrame).toBe(160)
+    expect(trackById('A2').clips.find((clip) => clip.id === 'aud')?.timelineRange.startFrame).toBe(160)
     expect(doc().past).toHaveLength(1)
   })
 
