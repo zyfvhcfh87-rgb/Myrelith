@@ -1123,7 +1123,6 @@ export async function startTimelineAudioPlayback(
   const cursorStates = new Map<ClipId, ClipCursorState>()
   const failedClips = new Set<ClipId>()
   const exhaustedClips = new Set<ClipId>()
-  const unavailableClips = new Set<ClipId>()
   const admittedStretchClips = new Set<ClipId>()
 
   let anchorTime = output.currentTime()
@@ -1177,7 +1176,6 @@ export async function startTimelineAudioPlayback(
     if (
       failedClips.has(plan.clipId)
       || exhaustedClips.has(plan.clipId)
-      || unavailableClips.has(plan.clipId)
       || stopped
     ) return null
 
@@ -1190,7 +1188,6 @@ export async function startTimelineAudioPlayback(
       : plan.sourceStartTime + timelineOffset
     if (isStretchedPlaybackPlan(plan)) {
       if (admittedStretchClips.size >= AUDIO_STRETCH_MAX_SESSIONS) {
-        unavailableClips.add(plan.clipId)
         return null
       }
       admittedStretchClips.add(plan.clipId)
